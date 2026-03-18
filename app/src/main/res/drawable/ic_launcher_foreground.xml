@@ -1,0 +1,63 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Techy Sun Ring -->
+    <path
+        android:pathData="M54,54m-32,0a32,32 0,1 1,64 0a32,32 0,1 1,-64 0"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFD700"
+        android:strokeLineCap="round" />
+
+    <!-- Outer Orbit (Removed DashArray which caused build error) -->
+    <path
+        android:pathData="M54,54m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"
+        android:strokeWidth="0.5"
+        android:strokeColor="#4DFFD700" />
+
+    <!-- Techy Sun & Moon Combo -->
+    <!-- Sun Core -->
+    <path
+        android:pathData="M54,54m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="12"
+                android:type="radial">
+                <item android:color="#FFFFF0" android:offset="0.0" />
+                <item android:color="#FFD700" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Better Tech Sun/Moon -->
+    <path
+        android:pathData="M54,34 A20,20 0 1,0 74,54 A20,20 0 0,1 54,34 Z"
+        android:fillColor="#80FFFFFF" /> <!-- Moon -->
+
+    <path
+        android:pathData="M54,54m-18,0a18,18 0,1 1,36 0a18,18 0,1 1,-36 0"
+        android:strokeWidth="1"
+        android:strokeColor="#00E5FF" /> <!-- Tech Ring -->
+
+    <!-- Modern stylized Sun/Moon icon -->
+    <path
+        android:pathData="M42,54a12,12 0,1 0,24 0a12,12 0,1 0,-24 0"
+        android:fillColor="#FFD700" /> <!-- Sun -->
+
+    <path
+        android:pathData="M68,54a12,12 0,1 0,-12 -12a14,14 0,0 1,12 12z"
+        android:fillColor="#E0E0E0" /> <!-- Moon Crescent -->
+
+    <!-- Tech Accents -->
+    <path
+        android:pathData="M54,20L54,24M54,84L54,88M20,54L24,54M84,54L88,54"
+        android:strokeWidth="2"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round" />
+
+</vector>

@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.PicMe" parent="Theme.MaterialComponents.Light" />
+</resources>

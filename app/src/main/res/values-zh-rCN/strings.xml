@@ -1,0 +1,30 @@
+<resources>
+    <string name="app_name">PicMe</string>
+    <string name="camera">相机</string>
+    <string name="gallery">相册</string>
+    <string name="settings">设置</string>
+    <string name="dark_mode">暗黑模式</string>
+    <string name="language">语言</string>
+    <string name="system_default">系统默认</string>
+    <string name="light">浅色</string>
+    <string name="dark">深色</string>
+    <string name="english">英语</string>
+    <string name="chinese">中文</string>
+    <string name="no_media">未找到媒体文件</string>
+    <string name="selected">已选择 %1$d 项</string>
+    <string name="select_all">全选</string>
+    <string name="delete">删除</string>
+    <string name="close">关闭</string>
+    <string name="back">返回</string>
+    <string name="photo">照片</string>
+    <string name="video">视频</string>
+    <string name="flip_camera">翻转相机</string>
+    <string name="grant_permissions">授予权限</string>
+    <string name="theme_mode">主题模式</string>
+    <string name="filter_none">原图</string>
+    <string name="filter_grayscale">黑白</string>
+    <string name="filter_sepia">怀旧</string>
+    <string name="filter_vintage">复古</string>
+    <string name="filter_cool">冷色</string>
+    <string name="filter_warm">暖色</string>
+</resources>

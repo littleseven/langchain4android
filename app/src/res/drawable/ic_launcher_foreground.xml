@@ -1,0 +1,45 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Thin Tech Circle (Cyber Ring) -->
+    <path
+        android:pathData="M54,54m-42,0a42,42 0,1 1,84 0a42,42 0,1 1,-84 0"
+        android:strokeWidth="0.8"
+        android:strokeColor="#3300E5FF" />
+
+    <!-- Viewfinder Corners (Tech Feel) -->
+    <path
+        android:pathData="M30,30L20,30L20,20L30,20M78,20L88,20L88,30L78,30M88,78L88,88L78,88L78,78M30,88L20,88L20,78L30,78"
+        android:strokeWidth="1.5"
+        android:strokeColor="#00E5FF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- Abstract Flat Sun & Moon Combination -->
+    <!-- Sun (Gold Circle) -->
+    <path
+        android:pathData="M54,54m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0"
+        android:fillColor="#FFD700" />
+
+    <!-- Moon (Abstract Crescent Overlay) -->
+    <!-- This path subtracts a portion of the sun to create a crescent look in a flat way -->
+    <path
+        android:pathData="M54,30 A24,24 0 0,1 54,78 A18,18 0 0,0 54,30 Z"
+        android:fillColor="#F5F5F5" /> <!-- Soft Silver/White -->
+
+    <!-- Mechanical Lens/Iris Details (Flatter) -->
+    <path
+        android:pathData="M54,30L54,35M54,73L54,78M30,54L35,54M73,54L78,54"
+        android:strokeWidth="1.2"
+        android:strokeColor="#40000000"
+        android:strokeLineCap="round" />
+
+    <!-- Inner Tech Dot -->
+    <path
+        android:pathData="M54,54m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"
+        android:fillColor="#00E5FF" />
+
+</vector>
