@@ -50,6 +50,7 @@ fun GalleryScreen(
 ) {
     val mediaAssets by viewModel.allMedia.collectAsState()
     var selectedIndex by remember { mutableIntStateOf(-1) }
+    var editingAsset by remember { mutableStateOf<MediaAsset?>(null) }
     
     // Selection state
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -60,8 +61,10 @@ fun GalleryScreen(
         selectedIds.clear()
     }
 
-    BackHandler(enabled = isSelectionMode || selectedIndex != -1) {
-        if (selectedIndex != -1) {
+    BackHandler(enabled = isSelectionMode || selectedIndex != -1 || editingAsset != null) {
+        if (editingAsset != null) {
+            editingAsset = null
+        } else if (selectedIndex != -1) {
             selectedIndex = -1
         } else {
             closeSelection()
@@ -168,7 +171,19 @@ fun GalleryScreen(
         FullScreenPager(
             assets = mediaAssets,
             initialIndex = selectedIndex,
-            onDismiss = { selectedIndex = -1 }
+            onDismiss = { selectedIndex = -1 },
+            onEdit = { asset ->
+                editingAsset = asset
+            }
+        )
+    }
+
+    // Edit screen overlay
+    editingAsset?.let { asset ->
+        ImageEditScreen(
+            asset = asset,
+            viewModel = viewModel,
+            onDismiss = { editingAsset = null }
         )
     }
 }
@@ -237,7 +252,8 @@ fun MediaGridItem(
 fun FullScreenPager(
     assets: List<MediaAsset>,
     initialIndex: Int,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onEdit: (MediaAsset) -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex) { assets.size }
     
@@ -282,16 +298,28 @@ fun FullScreenPager(
                 Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close), tint = Color.White)
             }
             
-            Surface(
-                color = Color.Black.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Text(
-                    text = "${pagerState.currentPage + 1} / ${assets.size}",
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelLarge
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val currentAsset = assets[pagerState.currentPage]
+                if (currentAsset.type == MediaType.PHOTO) {
+                    IconButton(
+                        onClick = { onEdit(currentAsset) },
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit), tint = Color.White)
+                    }
+                }
+                
+                Surface(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${assets.size}",
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }

@@ -21,10 +21,25 @@
     <string name="flip_camera">Flip Camera</string>
     <string name="grant_permissions">Grant Permissions</string>
     <string name="theme_mode">Theme Mode</string>
+    <string name="filters">Filters</string>
+    <string name="beauty">Beauty</string>
+    <string name="smoothing">Smoothing</string>
+    <string name="slim_face">Slim Face</string>
+    <string name="big_eyes">Big Eyes</string>
+    <string name="youth">Youth</string>
     <string name="filter_none">Original</string>
+    <string name="filter_beauty">Beauty</string>
     <string name="filter_grayscale">B&amp;W</string>
     <string name="filter_sepia">Sepia</string>
     <string name="filter_vintage">Vintage</string>
     <string name="filter_cool">Cool</string>
     <string name="filter_warm">Warm</string>
+    <string name="edit">Edit</string>
+    <string name="save">Save</string>
+    <string name="doodle">Doodle</string>
+    <string name="mosaic">Mosaic</string>
+    <string name="undo">Undo</string>
+    <string name="color_red">Red</string>
+    <string name="color_green">Green</string>
+    <string name="color_blue">Blue</string>
 </resources>

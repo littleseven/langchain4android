@@ -21,10 +21,25 @@
     <string name="flip_camera">翻转相机</string>
     <string name="grant_permissions">授予权限</string>
     <string name="theme_mode">主题模式</string>
+    <string name="filters">滤镜</string>
+    <string name="beauty">美颜</string>
+    <string name="smoothing">磨皮</string>
+    <string name="slim_face">瘦脸</string>
+    <string name="big_eyes">大眼</string>
+    <string name="youth">年轻化</string>
     <string name="filter_none">原图</string>
+    <string name="filter_beauty">美颜</string>
     <string name="filter_grayscale">黑白</string>
     <string name="filter_sepia">怀旧</string>
     <string name="filter_vintage">复古</string>
     <string name="filter_cool">冷色</string>
     <string name="filter_warm">暖色</string>
+    <string name="edit">编辑</string>
+    <string name="save">保存</string>
+    <string name="doodle">涂鸦</string>
+    <string name="mosaic">马赛克</string>
+    <string name="undo">撤销</string>
+    <string name="color_red">红色</string>
+    <string name="color_green">绿色</string>
+    <string name="color_blue">蓝色</string>
 </resources>

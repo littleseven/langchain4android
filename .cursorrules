@@ -1,0 +1,31 @@
+# PicMe Project Rules & Guidelines
+
+## Architecture & Coding Standards
+- **MVVM Pattern**: Always follow the MVVM architecture. Business logic belongs in Repositories, UI state management in ViewModels, and UI in Compose Screens.
+- **Clean UI/Logic Separation**: Composable functions should remain focused on rendering. Pass lambdas for events to avoid bloating screens with logic.
+- **Resource Management**:
+    - Always use `strings.xml` for UI text (supports EN/CN).
+    - Use Material 3 `ColorScheme` and `Typography` from the `ui.theme` package.
+- **Concurrency**: Use Kotlin Coroutines and Flow. Use `viewModelScope` for lifecycle-aware operations.
+
+## Camera & AI Implementation
+- **CameraX Use Cases**: When adding new camera features, ensure they are bound to the `lifecycleOwner` and properly unbind existing cases.
+- **AI Processing**:
+    - AI-heavy tasks (like Mesh Warp beauty) must be performed on high-resolution Bitmaps *after* capture, not in the real-time preview analysis unless specifically optimized for high frame rates.
+    - Always handle front-camera mirroring manually for `Bitmap` processing.
+    - Close `ImageProxy` immediately after processing to avoid stalling the analysis pipeline.
+
+## Media & Data Handling
+- **Room Database**:
+    - `MediaAsset` is the source of truth for gallery items.
+    - Update the database immediately after a successful file save.
+- **Coil**: Use `VideoFrameDecoder` when loading thumbnails for video assets.
+- **Date Organization**: Maintain descending chronological order (`captureDate DESC`) for all media queries.
+
+## Navigation
+- Use `Screen` sealed class for route definitions.
+- Maintain consistency in screen transition animations (Fade + Slide).
+
+## Build System
+- Use Version Catalog (`libs.versions.toml`) for all dependency management.
+- Target SDK: 35, Min SDK: 24.
