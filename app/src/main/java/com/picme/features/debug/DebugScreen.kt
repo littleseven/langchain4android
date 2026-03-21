@@ -4,10 +4,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Female
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pool
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -59,6 +61,16 @@ fun DebugScreen(
                 SampleDataGenerator.populateLandscapeTestData(context, app.repository)
             }
         },
+        onPopulateSwimwear = {
+            scope.launch {
+                SampleDataGenerator.populateSwimwearTestData(context, app.repository)
+            }
+        },
+        onPopulateSexy = {
+            scope.launch {
+                SampleDataGenerator.populateSexyTestData(context, app.repository)
+            }
+        },
         onClearData = {
             scope.launch {
                 SampleDataGenerator.clearTestData(context, app.repository, allMedia)
@@ -78,6 +90,8 @@ private fun DebugContent(
     onStop: () -> Unit,
     onPopulatePerson: () -> Unit,
     onPopulateLandscape: () -> Unit,
+    onPopulateSwimwear: () -> Unit,
+    onPopulateSexy: () -> Unit,
     onClearData: () -> Unit
 ) {
     Scaffold(
@@ -139,28 +153,55 @@ private fun DebugContent(
                 style = MaterialTheme.typography.titleMedium
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = onPopulatePerson,
-                    enabled = !isGenerating,
-                    modifier = Modifier.weight(1f)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Person, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.person))
+                    Button(
+                        onClick = onPopulatePerson,
+                        enabled = !isGenerating,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Person, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.person))
+                    }
+
+                    Button(
+                        onClick = onPopulateLandscape,
+                        enabled = !isGenerating,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Landscape, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.landscape))
+                    }
                 }
 
-                Button(
-                    onClick = onPopulateLandscape,
-                    enabled = !isGenerating,
-                    modifier = Modifier.weight(1f)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Landscape, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.landscape))
+                    Button(
+                        onClick = onPopulateSwimwear,
+                        enabled = !isGenerating,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Pool, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.swimwear))
+                    }
+
+                    Button(
+                        onClick = onPopulateSexy,
+                        enabled = !isGenerating,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Female, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.sexy))
+                    }
                 }
             }
 
@@ -194,42 +235,8 @@ fun DebugScreenGeneratingPreview() {
             onStop = {},
             onPopulatePerson = {},
             onPopulateLandscape = {},
-            onClearData = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, name = "Idle State")
-@Composable
-fun DebugScreenIdlePreview() {
-    PicMeTheme {
-        DebugContent(
-            isGenerating = false,
-            isPaused = false,
-            progress = "",
-            onNavigateBack = {},
-            onPauseResume = {},
-            onStop = {},
-            onPopulatePerson = {},
-            onPopulateLandscape = {},
-            onClearData = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES, name = "Dark Mode")
-@Composable
-fun DebugScreenDarkPreview() {
-    PicMeTheme {
-        DebugContent(
-            isGenerating = true,
-            isPaused = true,
-            progress = "Paused at 42/100",
-            onNavigateBack = {},
-            onPauseResume = {},
-            onStop = {},
-            onPopulatePerson = {},
-            onPopulateLandscape = {},
+            onPopulateSwimwear = {},
+            onPopulateSexy = {},
             onClearData = {}
         )
     }

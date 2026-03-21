@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class GroupingMode {
-    NONE, DATE, FACE, PERSON, LANDSCAPE
+    NONE, DATE, FACE, PERSON, LANDSCAPE, SWIMWEAR, SEXY
 }
 
 data class MediaGroup(

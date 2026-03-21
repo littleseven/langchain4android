@@ -61,10 +61,14 @@
     <string name="data_generation">Data Generation</string>
     <string name="person">Person</string>
     <string name="landscape">Landscape</string>
-    <string name="group_none">None</string>
+    <string name="swimwear">Swimwear</string>
+    <string name="sexy">Sexy</string>
+    <string name="group_none">All</string>
     <string name="group_date">Date</string>
     <string name="group_face">Face</string>
     <string name="group_person">Person</string>
+    <string name="group_swimwear">Swimwear</string>
+    <string name="group_sexy">Sexy</string>
     <string name="with_faces">With Faces</string>
     <string name="no_faces">No Faces</string>
     <string name="unknown">Unknown</string>

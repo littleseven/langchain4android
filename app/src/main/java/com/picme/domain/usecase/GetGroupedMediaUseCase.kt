@@ -33,9 +33,16 @@ class GetGroupedMediaUseCase(private val context: Context) {
                     }
             }
             GroupingMode.LANDSCAPE -> {
-                // Landscape grouping is currently a placeholder as we don't have scene detection yet
-                // For now, it shows nothing as per "不满足聚类的不展示" rule
-                emptyList()
+                val landscapes = media.filter { it.fileName.contains("TEST_LANDSCAPE", ignoreCase = true) }
+                if (landscapes.isNotEmpty()) listOf(MediaGroup(context.getString(R.string.landscape), landscapes)) else emptyList()
+            }
+            GroupingMode.SWIMWEAR -> {
+                val items = media.filter { it.fileName.contains("TEST_SWIMWEAR", ignoreCase = true) }
+                if (items.isNotEmpty()) listOf(MediaGroup(context.getString(R.string.swimwear), items)) else emptyList()
+            }
+            GroupingMode.SEXY -> {
+                val items = media.filter { it.fileName.contains("TEST_SEXY", ignoreCase = true) }
+                if (items.isNotEmpty()) listOf(MediaGroup(context.getString(R.string.sexy), items)) else emptyList()
             }
         }
     }

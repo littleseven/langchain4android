@@ -30,6 +30,7 @@ import com.picme.features.gallery.components.MediaPager
 import com.picme.features.gallery.components.MediaGroupHeader
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import com.picme.features.gallery.GroupingMode.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,11 +108,13 @@ fun GalleryScreen(
                                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                                     GroupingMode.entries.forEach { mode ->
                                         val label = when(mode) {
-                                            GroupingMode.NONE -> stringResource(R.string.group_none)
-                                            GroupingMode.DATE -> stringResource(R.string.group_date)
-                                            GroupingMode.FACE -> stringResource(R.string.group_face)
-                                            GroupingMode.PERSON -> stringResource(R.string.group_person)
-                                            GroupingMode.LANDSCAPE -> stringResource(R.string.landscape)
+                                            NONE -> stringResource(R.string.group_none)
+                                            DATE -> stringResource(R.string.group_date)
+                                            FACE -> stringResource(R.string.group_face)
+                                            PERSON -> stringResource(R.string.group_person)
+                                            LANDSCAPE -> stringResource(R.string.landscape)
+                                            SWIMWEAR -> stringResource(R.string.swimwear)
+                                            SEXY -> stringResource(R.string.sexy)
                                         }
                                         DropdownMenuItem(
                                             text = { Text(label) },
