@@ -37,6 +37,8 @@
     <string name="filter_vintage">Vintage</string>
     <string name="filter_cool">Cool</string>
     <string name="filter_warm">Warm</string>
+    <string name="filter_leica_classic">Leica Authentic</string>
+    <string name="filter_leica_vibrant">Leica Vibrant</string>
     <string name="edit">Edit</string>
     <string name="save">Save</string>
     <string name="doodle">Doodle</string>
@@ -100,4 +102,28 @@
     <string name="wb_cloudy">Cloudy</string>
     <string name="wb_incandescent">Incandescent</string>
     <string name="wb_fluorescent">Fluorescent</string>
+
+    <!-- Scene & Composition -->
+    <string name="scene">Scene</string>
+    <string name="scene_none">None</string>
+    <string name="scene_night">Night Scene</string>
+    <string name="scene_moon">Moon (3.2x+)</string>
+    <string name="grid">Grid</string>
+    <string name="grid_none">Off</string>
+    <string name="grid_thirds">Rule of Thirds</string>
+    <string name="grid_golden">Golden Ratio</string>
+    <string name="leveler">Leveler</string>
+    <string name="tip_night">Xiaomi 15 Opt: Use a tripod for best results.</string>
+    <string name="tip_moon">Xiaomi 15 Opt: Using 3.2x Telephoto lens.</string>
+
+    <!-- Portrait Guidance -->
+    <string name="tip_portrait_center">Try placing the face in the center circle.</string>
+    <string name="tip_portrait_thirds">Place eyes at the top-third intersection.</string>
+    <string name="tip_portrait_headroom">Leave some space above the head.</string>
+    <string name="tip_portrait_full_body">Keep feet near the bottom frame.</string>
+
+    <!-- HyperOS Specific -->
+    <string name="live_recording">Recording…</string>
+    <string name="live_stable">Device Stable</string>
+    <string name="live_unstable">Keep Steady</string>
 </resources>

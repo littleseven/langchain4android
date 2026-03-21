@@ -10,6 +10,7 @@
     <string name="dark">深色</string>
     <string name="english">英语</string>
     <string name="chinese">简体中文</string>
+    <string name="traditional_chinese">繁体中文</string>
     <string name="no_media">未找到媒体文件</string>
     <string name="selected_items">已选择 %1$d 项</string>
     <string name="select_all">全选</string>
@@ -19,7 +20,7 @@
     <string name="photo">照片</string>
     <string name="video">视频</string>
     <string name="portrait">人像</string>
-    <string name="pro">专业</string>
+    <string name="pro">专业模式</string>
     <string name="flip_camera">翻转相机</string>
     <string name="grant_permissions">授予权限</string>
     <string name="theme_mode">主题模式</string>
@@ -36,6 +37,8 @@
     <string name="filter_vintage">复古</string>
     <string name="filter_cool">冷色</string>
     <string name="filter_warm">暖色</string>
+    <string name="filter_leica_classic">徕卡经典</string>
+    <string name="filter_leica_vibrant">徕卡生动</string>
     <string name="edit">编辑</string>
     <string name="save">保存</string>
     <string name="doodle">涂鸦</string>
@@ -99,4 +102,28 @@
     <string name="wb_cloudy">多云</string>
     <string name="wb_incandescent">白炽灯</string>
     <string name="wb_fluorescent">荧光灯</string>
+
+    <!-- Scene & Composition -->
+    <string name="scene">场景</string>
+    <string name="scene_none">无</string>
+    <string name="scene_night">夜景</string>
+    <string name="scene_moon">拍月亮 (3.2x+)</string>
+    <string name="grid">辅助线</string>
+    <string name="grid_none">关闭</string>
+    <string name="grid_thirds">九宫格</string>
+    <string name="grid_golden">黄金比例</string>
+    <string name="leveler">水平仪</string>
+    <string name="tip_night">小米15优化：请保持稳定以获得最佳效果。</string>
+    <string name="tip_moon">小米15优化：正在调用3.2x直立长焦镜头。</string>
+
+    <!-- Portrait Guidance -->
+    <string name="tip_portrait_center">尝试将人脸放在中心圆圈内。</string>
+    <string name="tip_portrait_thirds">将眼睛放在上方三分之一交点处。</string>
+    <string name="tip_portrait_headroom">头顶留出适量空间。</string>
+    <string name="tip_portrait_full_body">保持双脚靠近画面底部边缘。</string>
+
+    <!-- HyperOS Specific -->
+    <string name="live_recording">正在录制…</string>
+    <string name="live_stable">设备稳定</string>
+    <string name="live_unstable">请握紧手机</string>
 </resources>

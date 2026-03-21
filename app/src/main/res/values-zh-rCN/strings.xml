@@ -93,4 +93,17 @@
     <string name="wb_cloudy">多云</string>
     <string name="wb_incandescent">白炽灯</string>
     <string name="wb_fluorescent">荧光灯</string>
+
+    <!-- Scene & Composition -->
+    <string name="scene">场景</string>
+    <string name="scene_none">无</string>
+    <string name="scene_night">夜景</string>
+    <string name="scene_moon">拍月亮</string>
+    <string name="grid">辅助线</string>
+    <string name="grid_none">关闭</string>
+    <string name="grid_thirds">九宫格</string>
+    <string name="grid_golden">黄金比例</string>
+    <string name="leveler">水平仪</string>
+    <string name="tip_night">请保持手机稳定，建议使用三脚架。</string>
+    <string name="tip_moon">建议使用最大变焦，并点击月亮进行对焦。</string>
 </resources>
