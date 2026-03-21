@@ -1,31 +1,31 @@
-# PicMe Project Rules & Guidelines
+# PicMe 项目规范与指南
 
-## Architecture & Coding Standards
-- **MVVM Pattern**: Always follow the MVVM architecture. Business logic belongs in Repositories, UI state management in ViewModels, and UI in Compose Screens.
-- **Clean UI/Logic Separation**: Composable functions should remain focused on rendering. Pass lambdas for events to avoid bloating screens with logic.
-- **Resource Management**:
-    - Always use `strings.xml` for UI text (supports EN/CN).
-    - Use Material 3 `ColorScheme` and `Typography` from the `ui.theme` package.
-- **Concurrency**: Use Kotlin Coroutines and Flow. Use `viewModelScope` for lifecycle-aware operations.
+## 架构与代码标准
+- **MVVM 模式**: 始终遵循 MVVM 架构。业务逻辑放在 Repositories 中，UI 状态管理放在 ViewModels 中，UI 渲染放在 Compose Screens 中。
+- **UI 与逻辑解耦**: Composable 函数应专注于渲染。通过 lambda 表达式传递事件，避免在 Screen 中混入过多逻辑。
+- **资源管理**:
+    - 始终使用 `strings.xml` 管理 UI 文本（支持中/英/繁体）。
+    - 使用 `ui.theme` 包中的 Material 3 `ColorScheme` 和 `Typography`。
+- **并发处理**: 使用 Kotlin 协程和 Flow。使用 `viewModelScope` 处理生命周期感知的操作。
 
-## Camera & AI Implementation
-- **CameraX Use Cases**: When adding new camera features, ensure they are bound to the `lifecycleOwner` and properly unbind existing cases.
-- **AI Processing**:
-    - AI-heavy tasks (like Mesh Warp beauty) must be performed on high-resolution Bitmaps *after* capture, not in the real-time preview analysis unless specifically optimized for high frame rates.
-    - Always handle front-camera mirroring manually for `Bitmap` processing.
-    - Close `ImageProxy` immediately after processing to avoid stalling the analysis pipeline.
+## 相机与 AI 实现
+- **CameraX 用例**: 添加新功能时，确保其绑定到 `lifecycleOwner`，并正确解绑现有用例。
+- **AI 处理**:
+    - 高负载 AI 任务（如网格变形美颜）应在拍摄后的高分辨率 Bitmap 上执行，除非针对高帧率预览进行了专门优化。
+    - 始终手动处理前置摄像头的镜像 Bitmap 处理。
+    - 处理完成后立即关闭 `ImageProxy`，避免阻塞分析管线。
 
-## Media & Data Handling
-- **Room Database**:
-    - `MediaAsset` is the source of truth for gallery items.
-    - Update the database immediately after a successful file save.
-- **Coil**: Use `VideoFrameDecoder` when loading thumbnails for video assets.
-- **Date Organization**: Maintain descending chronological order (`captureDate DESC`) for all media queries.
+## 媒体与数据处理
+- **Room 数据库**:
+    - `MediaAsset` 是相册数据的唯一事实来源。
+    - 文件保存成功后，立即同步更新数据库。
+- **Coil**: 加载视频资源缩略图时使用 `VideoFrameDecoder`。
+- **日期排序**: 所有媒体查询必须保持降序排列 (`captureDate DESC`)。
 
-## Navigation
-- Use `Screen` sealed class for route definitions.
-- Maintain consistency in screen transition animations (Fade + Slide).
+## 导航
+- 使用 `Screen` 密封类定义路由。
+- 保持界面切换动画的一致性（淡入淡出 + 滑动）。
 
-## Build System
-- Use Version Catalog (`libs.versions.toml`) for all dependency management.
-- Target SDK: 35, Min SDK: 24.
+## 构建系统
+- 使用 Version Catalog (`libs.versions.toml`) 进行依赖管理。
+- 目标 SDK：35，最低 SDK：24。

@@ -37,7 +37,7 @@ data class BeautySettings(
 
 interface ImageProcessor {
     fun processPhoto(source: Bitmap, filter: FilterType, beauty: BeautySettings, faces: List<Face>): Bitmap
-    fun takePhoto(context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int)
+    fun takePhoto(context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int, mode: MediaType = MediaType.PHOTO)
     fun startVideoRecording(context: Context, videoCapture: VideoCapture<Recorder>, viewModel: MediaViewModel, onFinished: () -> Unit): Recording
 }
 
@@ -60,7 +60,7 @@ class ImageProcessorImpl : ImageProcessor {
         return output
     }
 
-    override fun takePhoto(context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int) {
+    override fun takePhoto(context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int, mode: MediaType) {
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         imageCapture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
@@ -81,9 +81,9 @@ class ImageProcessorImpl : ImageProcessor {
                         val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces)
                         // Simple Mock Face ID Logic: Use face count as a temporary "person group" id
                         val faceId = if (faces.isNotEmpty()) "person_${faces.size}" else null
-                        saveBitmapToMediaStore(context, finalBitmap, name, viewModel, faces.isNotEmpty(), faceId)
+                        saveBitmapToMediaStore(context, finalBitmap, name, viewModel, faces.isNotEmpty(), faceId, mode)
                     }
-                    .addOnFailureListener { saveBitmapToMediaStore(context, rotatedBitmap, name, viewModel, false, null) }
+                    .addOnFailureListener { saveBitmapToMediaStore(context, rotatedBitmap, name, viewModel, false, null, mode) }
             }
             override fun onError(exc: ImageCaptureException) { Log.e("ImageProcessor", "Photo capture failed", exc) }
         })
@@ -189,7 +189,7 @@ class ImageProcessorImpl : ImageProcessor {
         return output
     }
 
-    private fun saveBitmapToMediaStore(context: Context, bitmap: Bitmap, name: String, viewModel: MediaViewModel, hasFace: Boolean, faceId: String?) {
+    private fun saveBitmapToMediaStore(context: Context, bitmap: Bitmap, name: String, viewModel: MediaViewModel, hasFace: Boolean, faceId: String?, mode: MediaType) {
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
@@ -200,7 +200,7 @@ class ImageProcessorImpl : ImageProcessor {
             context.contentResolver.openOutputStream(it)?.use { stream -> bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream) }
             val asset = MediaAsset(
                 uri = it.toString(),
-                type = MediaType.PHOTO,
+                type = mode,
                 captureDate = System.currentTimeMillis(),
                 fileName = name,
                 hasFace = hasFace,

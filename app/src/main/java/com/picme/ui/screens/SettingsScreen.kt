@@ -137,7 +137,8 @@ fun LanguageSelection(
     val options = listOf(
         AppLanguage.SYSTEM to stringResource(R.string.system_default),
         AppLanguage.ENGLISH to stringResource(R.string.english),
-        AppLanguage.CHINESE to stringResource(R.string.chinese)
+        AppLanguage.CHINESE to stringResource(R.string.chinese),
+        AppLanguage.TRADITIONAL_CHINESE to stringResource(R.string.traditional_chinese)
     )
 
     Column(Modifier.selectableGroup()) {

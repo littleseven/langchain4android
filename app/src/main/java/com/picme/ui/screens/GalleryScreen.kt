@@ -65,8 +65,8 @@ fun GalleryScreen(
         onSetGroupingMode = { viewModel.setGroupingMode(it) },
         onDeleteMedia = { viewModel.deleteMediaByIds(it) },
         onNavigateBack = onNavigateBack,
-        onEditMedia = { /* handled via state in GalleryContent if needed, but here we can pass it down */ },
-        viewModel = viewModel // Still needed for ImageEditScreen inside GalleryContent if we keep it there
+        onEditMedia = { /* handled via state in GalleryContent if needed */ },
+        viewModel = viewModel
     )
 }
 
@@ -80,13 +80,18 @@ private fun GalleryContent(
     onDeleteMedia: (List<Long>) -> Unit,
     onNavigateBack: () -> Unit,
     onEditMedia: (MediaAsset) -> Unit,
-    viewModel: MediaViewModel? = null // Optional for preview
+    viewModel: MediaViewModel? = null
 ) {
     var selectedIndex by remember { mutableIntStateOf(-1) }
     var editingAsset by remember { mutableStateOf<MediaAsset?>(null) }
     
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
+
+    // Flatten assets based on the CURRENT groupedMedia to ensure pager matches grid order
+    val currentOrderedAssets = remember(groupedMedia) {
+        groupedMedia.flatMap { it.items }
+    }
 
     val closeSelection = {
         isSelectionMode = false
@@ -104,7 +109,7 @@ private fun GalleryContent(
             Column {
                 TopAppBar(
                     title = { 
-                        Text(if (isSelectionMode) stringResource(R.string.selected, selectedIds.size) else stringResource(R.string.gallery))
+                        Text(if (isSelectionMode) stringResource(R.string.selected_items, selectedIds.size) else stringResource(R.string.gallery))
                     },
                     navigationIcon = {
                         IconButton(onClick = { if (isSelectionMode) closeSelection() else onNavigateBack() }) {
@@ -132,10 +137,16 @@ private fun GalleryContent(
                     divider = {}
                 ) {
                     GroupingMode.entries.forEach { mode ->
+                        val label = when(mode) {
+                            GroupingMode.NONE -> stringResource(R.string.group_none)
+                            GroupingMode.DATE -> stringResource(R.string.group_date)
+                            GroupingMode.FACE -> stringResource(R.string.group_face)
+                            GroupingMode.PERSON -> stringResource(R.string.group_person)
+                        }
                         Tab(
                             selected = groupingMode == mode,
                             onClick = { onSetGroupingMode(mode) },
-                            text = { Text(mode.name, style = MaterialTheme.typography.labelLarge) }
+                            text = { Text(label, style = MaterialTheme.typography.labelLarge) }
                         )
                     }
                 }
@@ -177,7 +188,10 @@ private fun GalleryContent(
                                         selectedIds.remove(asset.id)
                                         if (selectedIds.isEmpty()) isSelectionMode = false
                                     } else selectedIds.add(asset.id)
-                                } else selectedIndex = allMedia.indexOf(asset)
+                                } else {
+                                    // Set index based on the current flattened order
+                                    selectedIndex = currentOrderedAssets.indexOf(asset)
+                                }
                             },
                             onLongClick = { if (!isSelectionMode) { isSelectionMode = true; selectedIds.add(asset.id) } }
                         )
@@ -188,7 +202,12 @@ private fun GalleryContent(
     }
 
     if (selectedIndex != -1) {
-        FullScreenPager(assets = allMedia, initialIndex = selectedIndex, onDismiss = { selectedIndex = -1 }, onEdit = { editingAsset = it })
+        FullScreenPager(
+            assets = currentOrderedAssets,
+            initialIndex = selectedIndex,
+            onDismiss = { selectedIndex = -1 },
+            onEdit = { editingAsset = it }
+        )
     }
 
     if (viewModel != null) {
@@ -216,7 +235,7 @@ fun MediaGridItem(
             contentScale = ContentScale.Crop
         )
         if (asset.type == MediaType.VIDEO) {
-            Icon(Icons.Default.PlayCircle, contentDescription = "Video", modifier = Modifier.align(Alignment.Center).size(32.dp), tint = Color.White.copy(alpha = 0.8f))
+            Icon(Icons.Default.PlayCircle, contentDescription = stringResource(R.string.video), modifier = Modifier.align(Alignment.Center).size(32.dp), tint = Color.White.copy(alpha = 0.8f))
         }
         if (isSelectionMode) {
             Box(modifier = Modifier.fillMaxSize().background(if (isSelected) Color.Black.copy(alpha = 0.3f) else Color.Transparent))

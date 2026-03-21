@@ -1,68 +1,75 @@
-# Project Plan
+# 项目计划
 
-Build PicMe, a camera and gallery app with photo/video capture and date-organized album.
+构建 PicMe，一款具备照片/视频拍摄功能及按日期排序相册的相机与画廊应用。
 
-## Project Brief
+## 项目简述
 
-App Name: PicMe
-A modern, high-performance camera application.
-Features:
-- Dual-Mode Camera (Photo/Video capture).
-- Real-time Camera Filters (B&W, Sepia, Vintage, Cool, Warm).
-- **Face Detection & Auto-Focus**: Automatically detects faces and focuses for sharp portraits.
-- **Capture Feedback**: Standard shutter sound effect on photo capture.
-- Front/Back camera switching.
-- Support for landscape and portrait orientations.
-- Smart Media Album (Organized by date) with Horizontal Pager for full-screen viewing.
-- Batch Media Management (Multi-select, Select All, and Batch Delete).
-- Material Design 3 (M3) with support for Dark/Light mode and Dynamic Color.
-- Multi-language support (English & Simplified Chinese) with runtime switching.
-- Smooth Navigation Transitions (Fade & Slide).
-- Tech-style Flat Adaptive Icon (Sun & Moon combination).
+应用名称：PicMe
+一款现代化、高性能的相机应用。
+功能特性：
+- **双模式相机**：支持拍照和视频录制。
+- **实时相机滤镜**：内置黑白、怀旧、复古、冷色、暖色等多种实时滤镜。
+- **专业模式 (PRO)**：手动控制曝光补偿 (EV) 和白平衡 (WB)，具备实时反馈。
+- **人脸检测与自动对焦**：自动识别画面中的人脸并进行精准对焦，确保人像清晰。
+- **拍摄反馈**：拍照时提供标准的快门音效。
+- **前后摄像头切换**：支持一键翻转镜头。
+- **屏幕方向适配**：完美支持横屏和竖屏拍摄。
+- **智能媒体相册**：按日期降序排列，提供全屏分页查看功能。
+- **分页顺序优化**：全屏预览的翻页顺序与网格视图的分组和排序完全匹配。
+- **批量媒体管理**：支持长按选择、多选、全选以及批量删除。
+- **Material Design 3 (M3)**：支持深色/浅色模式及动态配色。
+- **多语言支持**：全面支持英文、简体中文及繁体中文，并支持运行时无缝切换。
+- **预览全覆盖**：所有主界面均包含 `@Preview` 模块及模拟数据，便于 UI 快速迭代。
+- **流畅导航动画**：界面切换采用平滑的淡入淡出及滑动效果。
+- **动漫风格自适应图标**：基于古典美学设计的女性轮廓图标。
 
-Technical Stack:
+技术栈：
 - Kotlin & Jetpack Compose (Material Design 3)
-- CameraX (Image Capture, Video Capture, and Image Analysis)
-- **Google ML Kit** (Face Detection)
-- Navigation Compose with Animated Transitions
-- Room Database (KSP) for metadata persistence
-- DataStore for user preferences (Theme & Language)
-- Coil (with VideoFrameDecoder) for media loading
-- ExoPlayer (Media3) for high-performance video playback
-- MVVM Architecture
+- CameraX (Image Capture, Video Capture, Image Analysis)
+- **Google ML Kit** (人脸检测)
+- Navigation Compose (带动画过渡)
+- Room Database (KSP) 用于元数据持久化
+- DataStore 用于用户偏好设置 (主题与语言)
+- Coil (结合 VideoFrameDecoder) 用于媒体加载
+- ExoPlayer (Media3) 用于高性能视频播放
+- MVVM 架构
 
-## Implementation Steps
+## 实施步骤
 
-### Task_1_Foundation_Data: Set up the project foundation, data layer, and navigation.
-- **Status:** COMPLETED
-- **Updates:** 
-    *   Established Material Design 3 theme with "Energetic" palette.
-    *   Implemented Room database for `MediaAsset` persistence.
-    *   Set up `MediaRepository` and `MediaViewModel`.
-    *   Established basic navigation and `PicMeApplication`.
+### 任务 1：基础架构与数据层 (Foundation & Data)
+- **状态：** 已完成
+- **更新：** 
+    *   建立了基于 Material Design 3 的“活力”配色方案。
+    *   实现了用于 `MediaAsset` 持久化的 Room 数据库。
+    *   搭建了 `MediaRepository` 和 `MediaViewModel`。
+    *   确立了基础导航逻辑和 `PicMeApplication`。
 
-### Task_2_Camera_Feature: Implement the dual-mode camera screen with smart features.
-- **Status:** COMPLETED
-- **Updates:** 
-    *   Implemented dual-mode camera (Photo/Video) using CameraX.
-    *   **Real-time Filters**: Added 6 filter presets (Original, B&W, Sepia, Vintage, Cool, Warm) using ColorMatrix.
-    *   **Face Detection**: Integrated ML Kit to automatically detect faces and trigger auto-focus via `CameraControl`.
-    *   **Audio Feedback**: Added `MediaActionSound` for professional shutter click feedback.
-    *   **Photo Processing**: Filters are applied to captured photos before saving to the MediaStore.
+### 任务 2：相机功能实现 (Camera Feature)
+- **状态：** 已完成
+- **更新：** 
+    *   利用 CameraX 实现了拍照和录像功能。
+    *   **实时滤镜**：通过 ColorMatrix 添加了 6 种预设滤镜（原图、黑白、怀旧、复古、冷色、暖色）。
+    *   **专业模式**：新增了曝光补偿和白平衡的手动调节 UI 及逻辑。
+    *   **人脸检测**：集成 ML Kit 自动检测人脸，并通过 `CameraControl` 触发自动对焦。
+    *   **声音反馈**：添加了 `MediaActionSound` 以提供专业的快门反馈。
+    *   **照片处理**：照片在保存到 MediaStore 前会应用所选滤镜。
 
-### Task_3_Gallery_Feature: Implement the gallery and media management.
-- **Status:** COMPLETED
-- **Updates:**
-    *   Implemented grid layout for media items with Coil thumbnail loading.
-    *   **Horizontal Pager**: Added full-screen viewing with swipe-to-navigate functionality.
-    *   **ExoPlayer Integration**: Seamless video playback in full-screen mode.
-    *   **Batch Management**: Implemented long-press to enter selection mode, multi-select, "Select All", and batch deletion.
+### 任务 3：相册与媒体管理 (Gallery Feature)
+- **状态：** 已完成
+- **更新：**
+    *   实现了媒体项目的网格布局，并使用 Coil 加载缩略图。
+    *   **水平分页器**：添加了全屏查看功能，支持左右滑动切换。
+    *   **ExoPlayer 集成**：在全屏模式下实现无缝视频播放。
+    *   **批量管理**：实现了长按进入选择模式、多选、“全选”及批量删除功能。
+    *   **分页器优化**：统一了网格和分页的数据源，确保各种分组模式下的导航顺序一致。
 
-### Task_4_Polish_Verify: Finalize UI/UX, preferences, and internationalization.
-- **Status:** COMPLETED
-- **Updates:**
-    *   **Internationalization**: Added full support for English and Simplified Chinese.
-    *   **Settings & Preferences**: Added a settings screen with Theme (Light/Dark/System) and Language selection using DataStore.
-    *   **Visual Polish**: Implemented smooth fade and slide transitions between screens.
-    *   **App Icon**: Designed and implemented a flat, tech-style adaptive icon featuring a sun/moon combination.
-    *   Fixed experimental API warnings and verified build stability.
+### 任务 4：细节打磨与验证 (Polish & Verify)
+- **状态：** 进行中
+- **更新：**
+    *   **国际化**：添加了简体中文和繁体中文支持，所有 UI 字符串均已外部化。
+    *   **UI 布局优化**：重新设计了相机工具栏，采用左右平衡的拆分式布局。
+    *   **设置与偏好**：添加了设置界面，支持通过 DataStore 切换主题（浅色/深色/系统）和语言。
+    *   **视觉优化**：实现了界面间平滑的过渡动画。
+    *   **应用图标**：设计了简约的动漫风格图标，体现女性优雅美感。
+    *   **Compose 预览**：为 `CameraScreen`、`GalleryScreen`、`SettingsScreen` 等所有核心界面添加了完善的 `@Preview`。
+    *   修复了实验性 API 警告并验证了构建稳定性。

@@ -14,7 +14,7 @@ enum class ThemeMode {
 }
 
 enum class AppLanguage {
-    SYSTEM, ENGLISH, CHINESE
+    SYSTEM, ENGLISH, CHINESE, TRADITIONAL_CHINESE
 }
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")

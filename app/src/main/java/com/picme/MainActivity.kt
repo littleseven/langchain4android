@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
         return when (language) {
             AppLanguage.ENGLISH -> Locale.ENGLISH
             AppLanguage.CHINESE -> Locale.SIMPLIFIED_CHINESE
+            AppLanguage.TRADITIONAL_CHINESE -> Locale.TRADITIONAL_CHINESE
             AppLanguage.SYSTEM -> Locale.getDefault()
         }
     }
