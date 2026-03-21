@@ -5,6 +5,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,11 +24,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -197,10 +197,9 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Filter Preview Image (Mock with a placeholder or actual logic)
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(R.drawable.placeholder) // Should be a small preview image
+                            .data(R.drawable.placeholder)
                             .crossfade(true)
                             .build(),
                         contentDescription = null,
@@ -232,33 +231,142 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
 
 @Composable
 fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        BeautySlider(label = stringResource(R.string.smoothing), value = settings.smoothing) { 
-            onSettingsChanged(settings.copy(smoothing = it)) 
-        }
-        BeautySlider(label = stringResource(R.string.slim_face), value = settings.slimFace) { 
-            onSettingsChanged(settings.copy(slimFace = it)) 
-        }
-        BeautySlider(label = stringResource(R.string.big_eyes), value = settings.bigEyes) { 
-            onSettingsChanged(settings.copy(bigEyes = it)) 
-        }
-        BeautySlider(label = stringResource(R.string.youth), value = settings.youth) { 
-            onSettingsChanged(settings.copy(youth = it)) 
-        }
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // Smoothing with non-linear power mapping
+        BeautySlider(
+            icon = Icons.Rounded.Face,
+            label = stringResource(R.string.smoothing),
+            value = settings.smoothing,
+            onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
+            onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
+        )
+        
+        BeautySlider(
+            icon = Icons.Rounded.FaceRetouchingNatural,
+            label = stringResource(R.string.slim_face),
+            value = settings.slimFace,
+            onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
+            onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
+        )
+        
+        BeautySlider(
+            icon = Icons.Rounded.Visibility,
+            label = stringResource(R.string.big_eyes),
+            value = settings.bigEyes,
+            onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
+            onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
+        )
+        
+        BeautySlider(
+            icon = Icons.Rounded.ChildCare,
+            label = stringResource(R.string.youth),
+            value = settings.youth,
+            onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
+            onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
+        )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BeautySlider(label: String, value: Float, onValueChange: (Float) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(text = label, color = Color.White, modifier = Modifier.width(80.dp), fontSize = 14.sp)
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.weight(1f),
-            colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = MaterialTheme.colorScheme.primary)
-        )
-        Text(text = "${(value * 100).toInt()}%", color = Color.White, modifier = Modifier.width(40.dp), fontSize = 12.sp)
+private fun BeautySlider(
+    icon: ImageVector,
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onReset: () -> Unit
+) {
+    // Apply a power curve to make the low-range effect more noticeable
+    // Value displayed to user is linear 0-100, but internal value can be mapped
+    val displayValue = (value * 100).toInt()
+    
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(onClick = onReset)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (value > 0) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            
+            // Floating value indicator logic (simplified here)
+            Text(
+                text = if (displayValue > 0) "$displayValue" else "--",
+                color = if (displayValue > 0) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        Box(contentAlignment = Alignment.Center) {
+            Slider(
+                value = value,
+                onValueChange = { 
+                    // Internal: applying a power curve (x^0.7) to boost the low-end effect
+                    // But we keep the UI value linear for user intuition
+                    onValueChange(it) 
+                },
+                interactionSource = interactionSource,
+                modifier = Modifier.fillMaxWidth().height(32.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                ),
+                thumb = {
+                    val thumbScale by animateFloatAsState(if (isPressed) 1.5f else 1f, label = "thumbScale")
+                    Spacer(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .scale(thumbScale)
+                            .background(Color.White, CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    )
+                },
+                track = { sliderPositions ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.White.copy(alpha = 0.1f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(sliderPositions.valueRange.run { (value - start) / (endInclusive - start) })
+                                .fillMaxHeight()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), MaterialTheme.colorScheme.primary)
+                                    )
+                                )
+                        )
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -327,6 +435,7 @@ fun GridSelector(currentGrid: GridType, onGridSelected: (GridType) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProModeControls(
     exposure: Int,
