@@ -5,28 +5,20 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.picme.R
 import com.picme.data.repository.AppLanguage
 import com.picme.data.repository.ThemeMode
-import com.picme.ui.viewmodel.MediaViewModel
+import com.picme.ui.theme.PicMeTheme
 import com.picme.ui.viewmodel.SettingsViewModel
-import com.picme.util.SampleDataGenerator
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.picme.PicMeApplication
-import com.picme.ui.viewmodel.MediaViewModelFactory
-import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
@@ -34,12 +26,25 @@ fun SettingsScreen(
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val mediaViewModel: MediaViewModel = viewModel(
-        factory = MediaViewModelFactory((context.applicationContext as PicMeApplication).repository)
-    )
 
+    SettingsContent(
+        themeMode = themeMode,
+        appLanguage = appLanguage,
+        onThemeModeSelected = { viewModel.setThemeMode(it) },
+        onAppLanguageSelected = { viewModel.setAppLanguage(it) },
+        onNavigateBack = onNavigateBack
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsContent(
+    themeMode: ThemeMode,
+    appLanguage: AppLanguage,
+    onThemeModeSelected: (ThemeMode) -> Unit,
+    onAppLanguageSelected: (AppLanguage) -> Unit,
+    onNavigateBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -66,7 +71,7 @@ fun SettingsScreen(
             
             ThemeSelection(
                 currentMode = themeMode,
-                onModeSelected = { viewModel.setThemeMode(it) }
+                onModeSelected = onThemeModeSelected
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -79,53 +84,8 @@ fun SettingsScreen(
 
             LanguageSelection(
                 currentLanguage = appLanguage,
-                onLanguageSelected = { viewModel.setAppLanguage(it) }
+                onLanguageSelected = onAppLanguageSelected
             )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Debug Tools Section
-            Text(
-                text = "Debug Tools",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Generate Button
-                Button(
-                    onClick = {
-                        scope.launch {
-                            SampleDataGenerator.populateTestData(context, mediaViewModel)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
-                ) {
-                    Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.generate_test_data), style = MaterialTheme.typography.labelLarge)
-                }
-
-                // Clear Button
-                Button(
-                    onClick = {
-                        scope.launch {
-                            SampleDataGenerator.clearTestData(mediaViewModel)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
-                ) {
-                    Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.clear_test_data), style = MaterialTheme.typography.labelLarge)
-                }
-            }
         }
     }
 }
@@ -205,5 +165,19 @@ fun LanguageSelection(
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SettingsScreenPreview() {
+    PicMeTheme {
+        SettingsContent(
+            themeMode = ThemeMode.SYSTEM,
+            appLanguage = AppLanguage.ENGLISH,
+            onThemeModeSelected = {},
+            onAppLanguageSelected = {},
+            onNavigateBack = {}
+        )
     }
 }

@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
@@ -41,7 +42,9 @@ import coil.request.ImageRequest
 import com.picme.R
 import com.picme.data.model.MediaAsset
 import com.picme.data.model.MediaType
+import com.picme.ui.theme.PicMeTheme
 import com.picme.ui.viewmodel.GroupingMode
+import com.picme.ui.viewmodel.MediaGroup
 import com.picme.ui.viewmodel.MediaViewModel
 import kotlinx.coroutines.launch
 
@@ -55,6 +58,30 @@ fun GalleryScreen(
     val allMedia by viewModel.allMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
 
+    GalleryContent(
+        groupedMedia = groupedMedia,
+        allMedia = allMedia,
+        groupingMode = groupingMode,
+        onSetGroupingMode = { viewModel.setGroupingMode(it) },
+        onDeleteMedia = { viewModel.deleteMediaByIds(it) },
+        onNavigateBack = onNavigateBack,
+        onEditMedia = { /* handled via state in GalleryContent if needed, but here we can pass it down */ },
+        viewModel = viewModel // Still needed for ImageEditScreen inside GalleryContent if we keep it there
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, UnstableApi::class)
+@Composable
+private fun GalleryContent(
+    groupedMedia: List<MediaGroup>,
+    allMedia: List<MediaAsset>,
+    groupingMode: GroupingMode,
+    onSetGroupingMode: (GroupingMode) -> Unit,
+    onDeleteMedia: (List<Long>) -> Unit,
+    onNavigateBack: () -> Unit,
+    onEditMedia: (MediaAsset) -> Unit,
+    viewModel: MediaViewModel? = null // Optional for preview
+) {
     var selectedIndex by remember { mutableIntStateOf(-1) }
     var editingAsset by remember { mutableStateOf<MediaAsset?>(null) }
     
@@ -90,7 +117,7 @@ fun GalleryScreen(
                                 if (selectedIds.size == allMedia.size) selectedIds.clear()
                                 else { selectedIds.clear(); selectedIds.addAll(allMedia.map { it.id }) }
                             }) { Icon(Icons.Default.SelectAll, contentDescription = stringResource(R.string.select_all)) }
-                            IconButton(onClick = { viewModel.deleteMediaByIds(selectedIds.toList()); closeSelection() }) {
+                            IconButton(onClick = { onDeleteMedia(selectedIds.toList()); closeSelection() }) {
                                 Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete))
                             }
                         }
@@ -107,7 +134,7 @@ fun GalleryScreen(
                     GroupingMode.entries.forEach { mode ->
                         Tab(
                             selected = groupingMode == mode,
-                            onClick = { viewModel.setGroupingMode(mode) },
+                            onClick = { onSetGroupingMode(mode) },
                             text = { Text(mode.name, style = MaterialTheme.typography.labelLarge) }
                         )
                     }
@@ -164,8 +191,10 @@ fun GalleryScreen(
         FullScreenPager(assets = allMedia, initialIndex = selectedIndex, onDismiss = { selectedIndex = -1 }, onEdit = { editingAsset = it })
     }
 
-    editingAsset?.let { asset ->
-        ImageEditScreen(asset = asset, viewModel = viewModel, onDismiss = { editingAsset = null })
+    if (viewModel != null) {
+        editingAsset?.let { asset ->
+            ImageEditScreen(asset = asset, viewModel = viewModel, onDismiss = { editingAsset = null })
+        }
     }
 }
 
@@ -243,4 +272,28 @@ fun VideoPlayer(uri: Uri) {
         onDispose { exoPlayer.release() }
     }
     AndroidView(factory = { PlayerView(context).apply { player = exoPlayer; useController = true } }, modifier = Modifier.fillMaxSize())
+}
+
+@Preview(showBackground = true)
+@Composable
+fun GalleryScreenPreview() {
+    val sampleMedia = listOf(
+        MediaAsset(id = 1, uri = "content://media/external/images/media/1", type = MediaType.PHOTO, captureDate = System.currentTimeMillis(), fileName = "IMG_1.jpg"),
+        MediaAsset(id = 2, uri = "content://media/external/images/media/2", type = MediaType.VIDEO, captureDate = System.currentTimeMillis(), fileName = "VID_1.mp4"),
+        MediaAsset(id = 3, uri = "content://media/external/images/media/3", type = MediaType.PHOTO, captureDate = System.currentTimeMillis(), fileName = "IMG_2.jpg")
+    )
+    val groupedMedia = listOf(
+        MediaGroup("Today", sampleMedia)
+    )
+    PicMeTheme {
+        GalleryContent(
+            groupedMedia = groupedMedia,
+            allMedia = sampleMedia,
+            groupingMode = GroupingMode.DATE,
+            onSetGroupingMode = {},
+            onDeleteMedia = {},
+            onNavigateBack = {},
+            onEditMedia = {}
+        )
+    }
 }

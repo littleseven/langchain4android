@@ -48,4 +48,8 @@
     <string name="cancel">取消</string>
     <string name="generate_test_data">生成测试数据</string>
     <string name="clear_test_data">清除测试数据</string>
+    <string name="pause">暂停</string>
+    <string name="resume">继续</string>
+    <string name="stop">停止</string>
+    <string name="generating">正在生成…</string>
 </resources>

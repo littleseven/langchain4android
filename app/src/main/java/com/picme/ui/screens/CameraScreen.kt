@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.rounded.FlipCameraAndroid
@@ -32,6 +33,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +49,7 @@ import com.picme.domain.ImageProcessor
 import com.picme.domain.ImageProcessorImpl
 import com.picme.ui.components.*
 import com.picme.ui.model.FilterType
+import com.picme.ui.theme.PicMeTheme
 import com.picme.ui.viewmodel.MediaViewModel
 import com.picme.ui.viewmodel.MediaViewModelFactory
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -61,6 +64,7 @@ import java.util.concurrent.Executors
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToDebug: () -> Unit,
     viewModel: MediaViewModel = viewModel(
         factory = MediaViewModelFactory((LocalContext.current.applicationContext as PicMeApplication).repository)
     )
@@ -73,7 +77,7 @@ fun CameraScreen(
     )
 
     if (permissionsState.allPermissionsGranted) {
-        CameraContent(viewModel, onNavigateToGallery, onNavigateToSettings)
+        CameraContent(viewModel, onNavigateToGallery, onNavigateToSettings, onNavigateToDebug)
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Button(onClick = { permissionsState.launchMultiplePermissionRequest() }) {
@@ -88,7 +92,8 @@ fun CameraScreen(
 fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToDebug: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -131,7 +136,7 @@ fun CameraContent(
 
     LaunchedEffect(lensFacing, captureMode) {
         val cameraProvider = cameraProviderFuture.get()
-        val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+        val preview = androidx.camera.core.Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
         val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
         val imageAnalysis = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
 
@@ -172,9 +177,75 @@ fun CameraContent(
         }
     }
 
+    CameraPreviewContent(
+        previewView = { AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize()) },
+        selectedFilter = selectedFilter,
+        facePoint = facePoint,
+        focusIndicatorAlpha = focusIndicatorAlpha.value,
+        lastMedia = lastMedia,
+        zoomRatio = zoomRatio,
+        captureMode = captureMode,
+        isRecording = isRecording,
+        showFilterSelector = showFilterSelector,
+        showBeautySelector = showBeautySelector,
+        beautySettings = beautySettings,
+        onNavigateToSettings = onNavigateToSettings,
+        onNavigateToDebug = onNavigateToDebug,
+        onFlipCamera = { lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK },
+        onToggleBeauty = { showBeautySelector = !showBeautySelector; showFilterSelector = false },
+        onToggleFilter = { showFilterSelector = !showFilterSelector; showBeautySelector = false },
+        onZoomPresetClick = { cameraControl?.setZoomRatio(it) },
+        onGalleryClick = onNavigateToGallery,
+        onCaptureClick = {
+            if (captureMode == MediaType.PHOTO) {
+                imageProcessor.takePhoto(context, imageCapture, viewModel, selectedFilter, beautySettings, lensFacing)
+            } else {
+                if (isRecording) {
+                    recording?.stop()
+                    isRecording = false
+                } else {
+                    isRecording = true
+                    recording = imageProcessor.startVideoRecording(context, videoCapture, viewModel) { isRecording = false }
+                }
+            }
+        },
+        onModeChange = { captureMode = it },
+        onFilterSelected = { selectedFilter = it },
+        onBeautySettingsChanged = { beautySettings = it },
+        onDismissPanels = { showFilterSelector = false; showBeautySelector = false }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CameraPreviewContent(
+    previewView: @Composable () -> Unit,
+    selectedFilter: FilterType,
+    facePoint: Offset?,
+    focusIndicatorAlpha: Float,
+    lastMedia: MediaAsset?,
+    zoomRatio: Float,
+    captureMode: MediaType,
+    isRecording: Boolean,
+    showFilterSelector: Boolean,
+    showBeautySelector: Boolean,
+    beautySettings: BeautySettings,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToDebug: () -> Unit,
+    onFlipCamera: () -> Unit,
+    onToggleBeauty: () -> Unit,
+    onToggleFilter: () -> Unit,
+    onZoomPresetClick: (Float) -> Unit,
+    onGalleryClick: () -> Unit,
+    onCaptureClick: () -> Unit,
+    onModeChange: (MediaType) -> Unit,
+    onFilterSelected: (FilterType) -> Unit,
+    onBeautySettingsChanged: (BeautySettings) -> Unit,
+    onDismissPanels: () -> Unit
+) {
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         // 1. Camera Preview
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+        previewView()
 
         // 2. Filter Overlay
         if (selectedFilter != FilterType.NONE) {
@@ -184,14 +255,15 @@ fun CameraContent(
         }
 
         // 3. Face Focus Indicator
-        facePoint?.let { FaceFocusIndicator(offset = it, alpha = focusIndicatorAlpha.value) }
+        facePoint?.let { FaceFocusIndicator(offset = it, alpha = focusIndicatorAlpha) }
 
         // 4. Sidebar Controls
         CameraSideBar(
             onNavigateToSettings = onNavigateToSettings,
-            onFlipCamera = { lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK },
-            onToggleBeauty = { showBeautySelector = !showBeautySelector; showFilterSelector = false },
-            onToggleFilter = { showFilterSelector = !showFilterSelector; showBeautySelector = false },
+            onNavigateToDebug = onNavigateToDebug,
+            onFlipCamera = onFlipCamera,
+            onToggleBeauty = onToggleBeauty,
+            onToggleFilter = onToggleFilter,
             isBeautySelected = showBeautySelector,
             isFilterSelected = showFilterSelector,
             modifier = Modifier.align(Alignment.TopEnd)
@@ -203,22 +275,10 @@ fun CameraContent(
             zoomRatio = zoomRatio,
             captureMode = captureMode,
             isRecording = isRecording,
-            onZoomPresetClick = { cameraControl?.setZoomRatio(it) },
-            onGalleryClick = onNavigateToGallery,
-            onCaptureClick = {
-                if (captureMode == MediaType.PHOTO) {
-                    imageProcessor.takePhoto(context, imageCapture, viewModel, selectedFilter, beautySettings, lensFacing)
-                } else {
-                    if (isRecording) {
-                        recording?.stop()
-                        isRecording = false
-                    } else {
-                        isRecording = true
-                        recording = imageProcessor.startVideoRecording(context, videoCapture, viewModel) { isRecording = false }
-                    }
-                }
-            },
-            onModeChange = { captureMode = it },
+            onZoomPresetClick = onZoomPresetClick,
+            onGalleryClick = onGalleryClick,
+            onCaptureClick = onCaptureClick,
+            onModeChange = onModeChange,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
@@ -233,15 +293,15 @@ fun CameraContent(
                 title = if (showFilterSelector) stringResource(R.string.filters) else stringResource(
                     R.string.beauty
                 ),
-                onDismiss = { showFilterSelector = false; showBeautySelector = false }
+                onDismiss = onDismissPanels
             ) {
                 if (showFilterSelector) {
                     FilterSelector(selectedFilter) {
-                        selectedFilter = it
+                        onFilterSelected(it)
                     }
                 } else {
                     BeautySelector(beautySettings) {
-                        beautySettings = it
+                        onBeautySettingsChanged(it)
                     }
                 }
             }
@@ -252,6 +312,7 @@ fun CameraContent(
 @Composable
 fun CameraSideBar(
     onNavigateToSettings: () -> Unit,
+    onNavigateToDebug: () -> Unit,
     onFlipCamera: () -> Unit,
     onToggleBeauty: () -> Unit,
     onToggleFilter: () -> Unit,
@@ -287,6 +348,12 @@ fun CameraSideBar(
             contentDescription = "Filters",
             isSelected = isFilterSelected,
             onClick = onToggleFilter
+        )
+        // Debug Tools Entry below Filter icon
+        SideBarItem(
+            icon = Icons.Default.BugReport,
+            contentDescription = "Debug",
+            onClick = onNavigateToDebug
         )
     }
 }
@@ -434,4 +501,36 @@ private fun processImageProxy(
             }
         }.addOnCompleteListener { imageProxy.close() }
     } else imageProxy.close()
+}
+
+@Preview(showBackground = true)
+@Composable
+fun CameraScreenPreview() {
+    PicMeTheme {
+        CameraPreviewContent(
+            previewView = { Box(modifier = Modifier.fillMaxSize().background(Color.DarkGray), contentAlignment = Alignment.Center) { Text("Camera Preview Placeholder", color = Color.White) } },
+            selectedFilter = FilterType.VINTAGE,
+            facePoint = Offset(500f, 800f),
+            focusIndicatorAlpha = 1f,
+            lastMedia = null,
+            zoomRatio = 1f,
+            captureMode = MediaType.PHOTO,
+            isRecording = false,
+            showFilterSelector = false,
+            showBeautySelector = false,
+            beautySettings = BeautySettings(),
+            onNavigateToSettings = {},
+            onNavigateToDebug = {},
+            onFlipCamera = {},
+            onToggleBeauty = {},
+            onToggleFilter = {},
+            onZoomPresetClick = {},
+            onGalleryClick = {},
+            onCaptureClick = {},
+            onModeChange = {},
+            onFilterSelected = {},
+            onBeautySettingsChanged = {},
+            onDismissPanels = {}
+        )
+    }
 }

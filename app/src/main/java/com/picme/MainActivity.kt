@@ -24,6 +24,7 @@ import com.picme.ui.navigation.Screen
 import com.picme.ui.screens.CameraScreen
 import com.picme.ui.screens.GalleryScreen
 import com.picme.ui.screens.SettingsScreen
+import com.picme.ui.screens.DebugScreen
 import com.picme.ui.theme.PicMeTheme
 import com.picme.ui.viewmodel.*
 import java.util.*
@@ -84,6 +85,7 @@ class MainActivity : ComponentActivity() {
                             CameraScreen(
                                 onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                                onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
                                 viewModel = mediaViewModel
                             )
                         }
@@ -92,6 +94,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Screen.Settings.route) {
                             SettingsScreen(viewModel = settingsViewModel, onNavigateBack = { navController.popBackStack() })
+                        }
+                        composable(Screen.Debug.route) {
+                            DebugScreen(onNavigateBack = { navController.popBackStack() })
                         }
                     }
                 }

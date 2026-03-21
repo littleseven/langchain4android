@@ -18,6 +18,9 @@ interface MediaDao {
     @Query("DELETE FROM media_assets WHERE id IN (:ids)")
     suspend fun deleteMediaByIds(ids: List<Long>)
 
+    @Query("DELETE FROM media_assets WHERE fileName LIKE 'TEST_%'")
+    suspend fun clearAllTestData()
+
     @Query("SELECT * FROM media_assets WHERE id = :id")
     suspend fun getMediaById(id: Long): MediaAsset?
 }

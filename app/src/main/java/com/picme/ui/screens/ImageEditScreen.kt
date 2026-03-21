@@ -34,11 +34,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.picme.R
 import com.picme.data.model.MediaAsset
 import com.picme.data.model.MediaType
+import com.picme.ui.theme.PicMeTheme
 import com.picme.ui.viewmodel.MediaViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -66,12 +68,8 @@ fun ImageEditScreen(
     var mosaicShader by remember { mutableStateOf<BitmapShader?>(null) }
     
     val actions = remember { mutableStateListOf<DrawAction>() }
-    var currentPath by remember { mutableStateOf<Path?>(null) }
     var currentMode by remember { mutableStateOf(EditMode.DOODLE) }
     var currentColor by remember { mutableIntStateOf(android.graphics.Color.RED) }
-
-    // This state is crucial for forcing recomposition during dragging
-    var drawIteration by remember { mutableLongStateOf(0L) }
 
     val saveSuccessMsg = stringResource(R.string.save_success)
     val saveFailedMsg = stringResource(R.string.save_failed)
@@ -103,6 +101,43 @@ fun ImageEditScreen(
         }
     }
 
+    ImageEditContent(
+        originalBitmap = originalBitmap,
+        mosaicShader = mosaicShader,
+        actions = actions,
+        currentMode = currentMode,
+        currentColor = currentColor,
+        onModeChange = { currentMode = it },
+        onColorChange = { currentColor = it },
+        onUndo = { if (actions.isNotEmpty()) actions.removeAt(actions.size - 1) },
+        onSave = {
+            originalBitmap?.let { base ->
+                val result = applyActions(base, actions, mosaicShader)
+                saveEditedImage(context, result, viewModel, saveSuccessMsg, saveFailedMsg)
+                onDismiss()
+            }
+        },
+        onDismiss = onDismiss
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImageEditContent(
+    originalBitmap: Bitmap?,
+    mosaicShader: BitmapShader?,
+    actions: MutableList<DrawAction>,
+    currentMode: EditMode,
+    currentColor: Int,
+    onModeChange: (EditMode) -> Unit,
+    onColorChange: (Int) -> Unit,
+    onUndo: () -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var currentPath by remember { mutableStateOf<Path?>(null) }
+    var drawIteration by remember { mutableLongStateOf(0L) }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -112,36 +147,30 @@ fun ImageEditScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { if (actions.isNotEmpty()) { actions.removeAt(actions.size - 1); drawIteration++ } },
+                        onClick = { onUndo(); drawIteration++ },
                         enabled = actions.isNotEmpty()
                     ) { Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = stringResource(R.string.undo)) }
                     IconButton(
                         enabled = originalBitmap != null,
-                        onClick = {
-                            originalBitmap?.let { base ->
-                                val result = applyActions(base, actions, mosaicShader)
-                                saveEditedImage(context, result, viewModel, saveSuccessMsg, saveFailedMsg)
-                                onDismiss()
-                            }
-                        }
+                        onClick = onSave
                     ) { Icon(Icons.Default.Check, contentDescription = stringResource(R.string.save)) }
                 }
             )
         },
         bottomBar = {
             Column(modifier = Modifier.background(MaterialTheme.colorScheme.surface)) {
-                if (currentMode == EditMode.DOODLE) { ColorSelector(selectedColor = currentColor) { currentColor = it } }
+                if (currentMode == EditMode.DOODLE) { ColorSelector(selectedColor = currentColor) { onColorChange(it) } }
                 BottomAppBar {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         FilterChip(
                             selected = currentMode == EditMode.DOODLE,
-                            onClick = { currentMode = EditMode.DOODLE },
+                            onClick = { onModeChange(EditMode.DOODLE) },
                             label = { Text(stringResource(R.string.doodle)) },
                             leadingIcon = { Icon(Icons.Default.Brush, contentDescription = null) }
                         )
                         FilterChip(
                             selected = currentMode == EditMode.MOSAIC,
-                            onClick = { currentMode = EditMode.MOSAIC },
+                            onClick = { onModeChange(EditMode.MOSAIC) },
                             label = { Text(stringResource(R.string.mosaic)) },
                             leadingIcon = { Icon(Icons.Default.BlurOn, contentDescription = null) }
                         )
@@ -275,5 +304,31 @@ private fun saveEditedImage(context: Context, bitmap: Bitmap, viewModel: MediaVi
             viewModel.insertMedia(asset)
             Toast.makeText(context, successMsg, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) { Toast.makeText(context, failedMsg, Toast.LENGTH_SHORT).show() }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ImageEditScreenPreview() {
+    val bitmap = Bitmap.createBitmap(800, 1200, Bitmap.Config.ARGB_8888).apply {
+        val canvas = Canvas(this)
+        val paint = Paint().apply { color = android.graphics.Color.LTGRAY }
+        canvas.drawRect(0f, 0f, 800f, 1200f, paint)
+        paint.color = android.graphics.Color.BLUE
+        canvas.drawCircle(400f, 600f, 200f, paint)
+    }
+    PicMeTheme {
+        ImageEditContent(
+            originalBitmap = bitmap,
+            mosaicShader = null,
+            actions = mutableListOf(),
+            currentMode = EditMode.DOODLE,
+            currentColor = android.graphics.Color.RED,
+            onModeChange = {},
+            onColorChange = {},
+            onUndo = {},
+            onSave = {},
+            onDismiss = {}
+        )
     }
 }

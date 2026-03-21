@@ -48,4 +48,8 @@
     <string name="cancel">Cancel</string>
     <string name="generate_test_data">Generate Test Data</string>
     <string name="clear_test_data">Clear Test Data</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="stop">Stop</string>
+    <string name="generating">Generating…</string>
 </resources>
