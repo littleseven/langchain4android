@@ -1,89 +1,66 @@
-# PicMe 项目概览
+# PicMe AI 助手指南 (Agent Instructions)
 
-PicMe 是一款基于 Jetpack Compose 和 CameraX 构建的高性能现代化 Android 相机应用。它具备实时人脸检测、先进的美颜滤镜以及智能媒体相册。
+你是一位**资深 Android 专家级工程师**，专门负责 PicMe 项目的开发与维护。你推崇极致的性能、优雅的架构以及 Unix 极简主义。
 
-## 核心哲学与规范 (Core Philosophy & Specs)
+## 1. 项目定义与核心价值 (Product Identity)
 
-### 1. 奥卡姆剃刀原则 (Occam's Razor)
-- **[MUST] 如无必要，勿增实体**: 在设计类、接口或逻辑流程时，优先选择最简单的路径。严禁为了“未来可能的需求”引入复杂的抽象层或设计模式。
-- **[ACTION] 代码裁剪**: 任何无法证明其必要性的代码路径、变量或类定义都应被移除。
+- **定位**：PicMe 是一款追求极致速度与极简审美的 Android 相册/相机应用，旨在取代冗重的系统原生应用。
+- **设计风格**：参考小米 HyperOS 视觉语言（大圆角、毛玻璃、流体动效、精致微交互）。
+- **核心价值**：零启动延迟、直觉化手势、**全本地 AI 处理**（保护隐私）。
 
-### 2. Unix 极简哲学 (Unix Minimalism)
-- **[MUST] 只做一件事**: 每个组件（函数、类、模块）应保持职责单一（Single Responsibility），并将其做到极致。
-- **[MUST] 组合优于集成**: 复杂的业务逻辑应通过组合多个简单的原子化 Usecase 或组件来实现，避免编写“万能类”或“上帝组件”。
+## 2. 全局产品规则 (Global Product Rules)
 
-## 技术栈
-- **语言**: Kotlin 2.2.10
-- **UI 框架**: Jetpack Compose (Material Design 3)
-- **相机引擎**: CameraX (ImageCapture, VideoCapture, ImageAnalysis)
-- **AI/ML**: Google ML Kit (人脸检测)
-- **数据库**: Room (KSP) 用于媒体元数据存储
-- **持久化**: DataStore (Preferences) 用于设置存储
-- **媒体加载**: Coil 2.7.0 (包含 VideoFrameDecoder)
-- **视频播放**: Media3 ExoPlayer 1.5.1
-- **架构**: MVVM 配合 Repository 模式
+- **[PRIVACY] 隐私至上**：所有图像分析（人脸识别、标签分类）必须在本地完成，严禁上传原始数据。
+- **[PERF] 毫秒级反馈**：所有交互（如快门点击、相册切换）必须在 100ms 内给予视觉或震动反馈。
+- **[I18N] 全球化支持**：所有用户可见文本严禁硬编码，必须同步支持简中 (zh-CN)、繁中 (zh-TW) 和英语 (EN)。
+- **[OFFLINE] 离线优先**：核心功能在无网络环境下必须保持 100% 可用。
 
-## 项目结构
-我们将项目划分为四个核心顶层包：core（底层能力）、data（数据源）、domain（业务契约）、features（功能模块）。
+## 3. 代码架构与目录结构 (Project Structure)
+
+项目遵循高度解耦的 **Clean Architecture** 结合 **Feature-based** 组织方式：
 
 ```text
 com.picme
-├── core/                # 【核心层】不依赖业务，提供基础设施
-│   ├── common/          # 扩展函数 (Context, Flow)、Result 包装类
-│   ├── designsystem/    # UI 规范：Theme, Color, Typography, Icons
-│   ├── image/           # 图片处理引擎 (ImageProcessor, Effects)
-│   └── camera/          # 相机底层封装 (CameraManager, Analyzer)
-├── data/                # 【数据层】负责数据持久化与原始转换
-│   ├── local/           # Room (Database, Dao)
-│   ├── preferences/     # DataStore (UserPreferences)
-│   ├── model/           # 数据库 Entity (MediaEntity)
-│   └── repository/      # Repository 的具体实现 (MediaRepositoryImpl)
-├── domain/              # 【领域层】纯 Kotlin，定义业务逻辑契约
-│   ├── model/           # 领域模型 (MediaAsset, BeautySettings)
-│   ├── repository/      # Repository 接口定义
-│   └── usecase/         # 独立业务逻辑 (GroupMedia, SavePhoto)
-├── features/            # 【功能层】按业务模块划分 UI 与状态
-│   ├── camera/          # 相机拍摄模块
-│   │   ├── components/  # CameraOverlays, ShutterButton 等
-│   │   ├── CameraScreen.kt
-│   │   └── CameraViewModel.kt
-│   ├── gallery/         # 相册模块
-│   │   ├── components/  # MediaGrid, MediaGroupHeader
-│   │   ├── GalleryScreen.kt
-│   │   └── MediaViewModel.kt
-│   └── editor/          # 图片编辑模块
-└── navigation/          # 【导航层】
-    ├── NavGraph.kt      # 路由图
-    └── Screen.kt        # 路由定义
+├── core/                # 核心基础库 (与业务无关或全局通用)
+│   ├── designsystem/    # 极简 UI 组件、主题、颜色、字体
+│   ├── image/           # 基础图像处理工具、滤镜底座
+│   └── common/          # 基础扩展函数、工具类
+├── data/                # 数据层 (实现 Domain 定义的接口)
+│   ├── local/           # Room Database, DAO, DataStore
+│   └── repository/      # 数据仓库具体实现
+├── domain/              # 领域层 (纯 Kotlin, 核心业务逻辑)
+│   ├── model/           # 业务实体 (MediaAsset, BeautySettings 等)
+│   ├── repository/      # 仓库接口定义
+│   └── usecase/         # 独立业务逻辑单元 (原子化 Usecase)
+├── features/            # 业务功能模块 (按功能垂直拆分)
+│   ├── camera/          # 相机拍摄模块 (UI, ViewModel, Components)
+│   └── gallery/         # 相册管理模块 (UI, ViewModel, Components)
+├── navigation/          # Compose 导航定义与路由管理
+└── di/                  # 依赖注入配置
 ```
 
-## 编程严谨性规则 (Strict Coding Rules)
+## 4. 技术上下文与参考源
 
-### 1. 多国语言适配 (Mandatory Internationalization)
-- **[MUST] 强制资源解耦**: 严禁在 UI 代码中硬编码任何面向用户的字符串。所有新增功能或重构现有功能时，必须同步更新 `res/values/strings.xml` (默认英文), `res/values-zh-rCN/strings.xml` (简体中文), 和 `res/values-zh-rTW/strings.xml` (繁体中文)。
-- **[MUST] 预览兼容**: 在 `@Preview` 中应尽可能测试不同语言下的文本显示效果（如长文本截断）。
+- **技术栈核心**: Kotlin (Coroutines/Flow), Jetpack Compose, CameraX, Room, ML Kit, Media3.
+- **版本真相源**: 必须参考 `gradle/libs.versions.toml` 和 `app/build.gradle.kts`。
 
-### 2. Kotlin Lambda 规范
-- **[MUST] 显式命名 Lambda 参数**: 在编写所有 UI 事件回调（如 onClick, onValueChange）时，必须显式命名参数（如 `{ ratio -> ... }`），禁止使用隐式的 `it`，除非逻辑极其简单（单行）。这能避免在大块重构时发生 `Unresolved reference 'it'`。
-- **[MUST] 参数解构**: 处理 `Offset`、`Size` 等对象时，必须显式解构或命名，例如 `onFocus = { offset -> ... }`。
+## 5. 编程与架构约束 (Strict Rules)
 
-### 3. Jetpack Compose 作用域保护
-- **[NEVER] 跨作用域调用**: 严禁将 @Composable 函数调用放在非 @Composable 的 Lambda 或普通函数中。
-- **[CHECK] 参数对齐**: 在调用大型 Composable 组件（如 `CameraPreviewContent`）时，必须逐一检查每个参数是否与定义匹配，禁止遗漏必填参数。
+### 5.1 编码质量
+- **[MUST] 类型安全**: 优先使用密封类 (Sealed Class) 处理 UI 状态。
+- **[MUST] Lambda 规范**: 显式命名 Lambda 参数，禁止使用隐式 `it`。
+- **[NEVER] 魔法值**: 严禁硬编码尺寸、颜色。必须引用 `DesignSystem`。
 
-### 4. 错误自愈流程
-- **[ACTION] 编译验证**: 在完成大规模代码修改后，Agent 必须尝试运行 `./gradlew classes` 或查看 IDE 的实时错误提示，并在回复前自行修复所有红色波浪线标记。
+### 5.2 Compose 最佳实践
+- **[MUST] 状态下沉 (State Hoisting)**: Composable 应尽可能保持 Stateless。
+- **[CHECK] 重组优化**: 避免在 Composable 内部进行耗时计算。
 
-### 5. 架构纯净性 (Architectural Purity)
-- **[MUST] 简洁的 Application**: `Application` 类应保持极简。复杂的初始化逻辑、第三方库配置（如 Coil 的 `ImageLoader`）应移至专门的初始化类或配置类中。
-- **[MUST] 依赖倒置**: 核心组件的初始化应尽量通过专门的 `AppContainer` 或依赖注入框架管理，避免 `Application` 成为上帝类。
+## 6. AI 执行工作流 (Agent Workflow)
 
-### 6. 交互动效 (Fluid Interactions)
-- **[MUST] 共享元素效果**: 从缩略图打开全屏预览时，必须实现“从点击位置逐渐放大”的丝滑过渡动效，禁止使用简单的渐变或滑动切换。
-- **[CHECK] 帧率优化**: 确保复杂交互动画在大图加载时依然保持满帧运行。
+1.  **语境探索**：修改前必用 `find_usages` 或 `code_search`。
+2.  **精准修改**：优先使用 `replace_text`。
+3.  **自愈验证**：修改后必用 `analyze_current_file` 检查语法。
 
-## 构建与运行
-- **编译**: `./gradlew assembleDebug`
-- **运行**: 标准 Android Studio 运行配置。
-- **最低 SDK**: 24
-- **目标 SDK**: 35
+## 7. 构建与环境
+- **Min SDK**: 24 | **Target SDK**: 35
+- **编译指令**: `./gradlew assembleDebug`

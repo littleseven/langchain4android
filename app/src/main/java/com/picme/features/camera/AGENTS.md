@@ -1,32 +1,24 @@
-# 拍摄模块智能代理指南 (Camera Module Agents)
+# Camera 模块开发指令 (Module-Specific Instructions)
 
-本文件详细说明了相机模块的设计模式、技术实现和集成规范，指导 AI 代理进行功能优化和特性开发。
+你是相机功能专家。在处理 `features/camera/` 目录下的任务时，必须遵守以下指令。
 
-## 目录结构 (符合 AGENTS.md)
-根据全局 `AGENTS.md` 规范，相机模块位于 `features/camera/`：
-- `components/`: 包含 `CameraOverlays.kt` (对焦框、构图线), `CameraControls.kt` (底部控制) 等。
-- `CameraScreen.kt`: 顶层 Compose 页面，负责相机生命周期绑定与组件组合。
-- `CameraViewModel.kt`: 处理相机交互逻辑、传感器数据及拍照状态。
+## 1. 核心产品逻辑 (Camera Product Logic)
 
-## 核心功能
-- **混合拍照模式**: 支持标准拍照 (`PHOTO`)、视频录制 (`VIDEO`)、人像 (`PORTRAIT`) 及专业模式 (`PRO`)。
-- **AI 智能辅助**: 
-  - 集成 ML Kit 实现实时人脸检测。
-  - 自动触发人脸区域对焦 (`CameraControl.startFocusAndMetering`)。
-- **专业手动控制**: 实时调节曝光补偿 (EV)、白平衡 (WB) 和变焦。
-- **小米 HyperOS 体验**: 圆角 UI、动态提示卡片以及流体动效。
+### A. 智能模式触发规则 (Smart Mode Rules)
+- **[MOON_MODE] 月亮模式**：当缩放倍率 `zoomRatio >= 3.0x` 且识别到圆形高亮度物体时，必须建议或自动切换至月亮预设（降低曝光，增强对比度）。
+- **[NIGHT_MODE] 夜景自适应**：当 `ImageAnalysis` 反馈的光照强度低于阈值时，UI 应提示用户“保持稳定”，并自动增加 `exposureCompensation`。
+- **[FACE_FOCUS] 人脸优先**：只要 ML Kit 检测到人脸，必须锁定该区域对焦，并在 UI 上显示动态追踪框。
 
-## 技术实现
-- **CameraX 核心**: 使用 `ImageCapture`, `VideoCapture` 和 `ImageAnalysis`。
-- **传感器集成**: 监测设备稳定性以支持特定拍摄场景。
-- **状态管理**: 遵循 UDF 模式，由 `CameraViewModel` 统一管理。
+### B. 拍摄反馈三位一体 (The "Click" Feedback)
+- 每次拍摄必须同时触发：
+  1. **声**：播放系统快门音（或自定义轻快音效）。
+  2. **震**：触发一次短促的线性马达触感（Haptic Feedback）。
+  3. **画**：预览画面进行一次 50ms 的 0.8 透明度黑场闪烁。
 
-## 代理工作准则
-1. **CameraX 生命周期**: 确保所有用例正确绑定到 `LifecycleOwner`。
-2. **组件化**: 新增 UI 必须放入 `components/`，保持 `CameraScreen` 的简洁。
-3. **Xiaomi 风格**: 保持与 HyperOS 一致的视觉语言（圆角、动效）。
-4. **性能**: 图像分析回调中严禁耗时操作。
-5. **[MUST] 多语言适配**: 
-   - 严禁硬编码字符串。所有 UI 文本必须通过 `stringResource(R.string.xxx)` 获取。
-   - 新增功能时必须同步更新 `strings.xml` (EN), `strings.xml` (CN), `strings.xml` (TW)。
-   - 确保在繁体中文和英语环境下，UI 布局能正确适配不同长度的文本。
+## 2. 模块 SOP (标准作业程序)
+1. 修改预览逻辑前，必须检查 `CameraScreen.kt` 中的 `ProcessCameraProvider` 绑定，确保 `unbindAll()` 逻辑正确。
+2. 任何涉及到 CameraX 的配置更改，必须先调用 `analyze_current_file` 检查是否有生命周期悬空问题。
+
+## 3. 视觉规范
+- 控件必须使用 `PicMeTheme` 定义的 `BlurCard` 或 `Glassmorphism` 效果。
+- 按钮大圆角标准：`24.dp` 或 `CircleShape`。
