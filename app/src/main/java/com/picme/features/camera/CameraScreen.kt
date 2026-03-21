@@ -8,6 +8,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaActionSound
+import android.provider.MediaStore
 import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -351,11 +352,11 @@ fun CameraContent(
                     shutterSound.play(MediaActionSound.START_VIDEO_RECORDING)
                     val name = "PicMe_" + System.currentTimeMillis() + ".mp4"
                     val contentValues = android.content.ContentValues().apply {
-                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
-                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-                        put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                        put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
                     }
-                    val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(context.contentResolver, android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                    val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
                         .setContentValues(contentValues)
                         .build()
 
@@ -390,11 +391,11 @@ fun CameraContent(
                 shutterSound.play(MediaActionSound.SHUTTER_CLICK)
                 val name = "PicMe_" + System.currentTimeMillis() + ".jpg"
                 val contentValues = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
-                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                    put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
                 }
-                val outputOptions = ImageCapture.OutputFileOptions.Builder(context.contentResolver, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues).build()
+                val outputOptions = ImageCapture.OutputFileOptions.Builder(context.contentResolver, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues).build()
                 imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) { 
                         val savedUri = output.savedUri ?: return
@@ -488,7 +489,13 @@ fun CameraPreviewContent(
             focusAlpha = focusIndicatorAlpha,
             showInfo = showCameraInfo,
             lensFacing = lensFacing,
-            captureMode = captureMode
+            captureMode = captureMode,
+            zoomRatio = zoomRatio,
+            aspectRatio = aspectRatio,
+            selectedFilter = selectedFilter,
+            beautySettings = beautySettings,
+            exposureCompensation = exposureCompensation,
+            whiteBalanceMode = whiteBalanceMode
         )
 
         CameraLeftControls(

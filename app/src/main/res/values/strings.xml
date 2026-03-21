@@ -31,14 +31,14 @@
     <string name="big_eyes">Big Eyes</string>
     <string name="youth">Youth</string>
     <string name="filter_none">Original</string>
-    <string name="filter_beauty">Beauty</string>
-    <string name="filter_grayscale">B&amp;W</string>
-    <string name="filter_sepia">Sepia</string>
     <string name="filter_vintage">Vintage</string>
     <string name="filter_cool">Cool</string>
     <string name="filter_warm">Warm</string>
     <string name="filter_leica_classic">Leica Authentic</string>
     <string name="filter_leica_vibrant">Leica Vibrant</string>
+    <string name="filter_leica_bw">Leica B&amp;W</string>
+    <string name="filter_film_gold">Film Gold</string>
+    <string name="filter_film_fuji">Film Fuji</string>
     <string name="edit">Edit</string>
     <string name="save">Save</string>
     <string name="doodle">Doodle</string>

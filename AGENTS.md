@@ -12,7 +12,13 @@
 
 - **[PRIVACY] 隐私至上**：所有图像分析（人脸识别、标签分类）必须在本地完成，严禁上传原始数据。
 - **[PERF] 毫秒级反馈**：所有交互（如快门点击、相册切换）必须在 100ms 内给予视觉或震动反馈。
-- **[I18N] 全球化支持**：所有用户可见文本严禁硬编码，必须同步支持简中 (zh-CN)、繁中 (zh-TW) 和英语 (EN)。
+- **[I18N] 多语言适配规范**：
+    - **严禁硬编码**：所有用户可见字符串必须定义在 `strings.xml` 中。
+    - **同步更新**：新增功能时，必须同时更新：`res/values/strings.xml` (EN), `res/values-zh-rCN/strings.xml` (简中), `res/values-zh-rTW/strings.xml` (繁中)。
+    - **术语规范**：
+        - 简体 (CN)：相册、滤镜、设置、拍照。
+        - 繁体 (TW/HK)：相簿、濾鏡、設定、拍照。
+        - 英文 (EN)：Gallery, Filters, Settings, Camera/Capture.
 - **[OFFLINE] 离线优先**：核心功能在无网络环境下必须保持 100% 可用。
 
 ## 3. 代码架构与目录结构 (Project Structure)
@@ -39,28 +45,25 @@ com.picme
 └── di/                  # 依赖注入配置
 ```
 
-## 4. 技术上下文与参考源
+## 4. 编程与架构约束 (Strict Rules)
 
-- **技术栈核心**: Kotlin (Coroutines/Flow), Jetpack Compose, CameraX, Room, ML Kit, Media3.
-- **版本真相源**: 必须参考 `gradle/libs.versions.toml` 和 `app/build.gradle.kts`。
-
-## 5. 编程与架构约束 (Strict Rules)
-
-### 5.1 编码质量
+### 4.1 编码质量
 - **[MUST] 类型安全**: 优先使用密封类 (Sealed Class) 处理 UI 状态。
 - **[MUST] Lambda 规范**: 显式命名 Lambda 参数，禁止使用隐式 `it`。
+- **[MUST] I18N 意识**：使用 `stringResource(R.string.xxx)`。ViewModel 尽量传递 `StringRes ID`。
 - **[NEVER] 魔法值**: 严禁硬编码尺寸、颜色。必须引用 `DesignSystem`。
 
-### 5.2 Compose 最佳实践
+### 4.2 Compose 最佳实践
 - **[MUST] 状态下沉 (State Hoisting)**: Composable 应尽可能保持 Stateless。
-- **[CHECK] 重组优化**: 避免在 Composable 内部进行耗时计算。
+- **[CHECK] 重组优化**: 避免在 Composable 内部进行耗时计算，使用 `remember` 或 `derivedStateOf`。
 
-## 6. AI 执行工作流 (Agent Workflow)
+## 5. AI 执行工作流 (Agent Workflow)
 
 1.  **语境探索**：修改前必用 `find_usages` 或 `code_search`。
-2.  **精准修改**：优先使用 `replace_text`。
-3.  **自愈验证**：修改后必用 `analyze_current_file` 检查语法。
+2.  **多语言检查 (I18N Check)**：涉及文案修改时，必须同步更新各语言 `strings.xml`，并评估长文本 UI 溢出风险。
+3.  **精准修改**：优先使用 `replace_text`。
+4.  **自愈验证**：修改后必用 `analyze_current_file` 检查语法。
 
-## 7. 构建与环境
+## 6. 构建与环境
 - **Min SDK**: 24 | **Target SDK**: 35
 - **编译指令**: `./gradlew assembleDebug`

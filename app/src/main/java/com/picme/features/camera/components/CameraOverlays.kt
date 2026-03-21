@@ -42,6 +42,12 @@ fun CameraOverlays(
     showInfo: Boolean,
     lensFacing: Int,
     captureMode: MediaType,
+    zoomRatio: Float,
+    aspectRatio: Int,
+    selectedFilter: FilterType,
+    beautySettings: BeautySettings,
+    exposureCompensation: Int,
+    whiteBalanceMode: Int,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
@@ -54,12 +60,12 @@ fun CameraOverlays(
         if (showInfo) {
             CameraInfoOverlay(
                 lensFacing = lensFacing,
-                zoomRatio = 1f, // This should be passed from state if needed
-                aspectRatio = 0, // This should be passed from state if needed
-                filter = FilterType.NONE,
-                beautySettings = BeautySettings(),
-                exposureCompensation = 0,
-                whiteBalanceMode = 0,
+                zoomRatio = zoomRatio,
+                aspectRatio = aspectRatio,
+                filter = selectedFilter,
+                beautySettings = beautySettings,
+                exposureCompensation = exposureCompensation,
+                whiteBalanceMode = whiteBalanceMode,
                 modifier = Modifier.align(Alignment.CenterStart).padding(start = 70.dp)
             )
         }

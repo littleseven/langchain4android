@@ -8,16 +8,16 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
     NONE(R.string.filter_none),
     LEICA_CLASSIC(R.string.filter_leica_classic),
     LEICA_VIBRANT(R.string.filter_leica_vibrant),
-    BEAUTY(R.string.filter_beauty),
-    GRAYSCALE(R.string.filter_grayscale),
-    SEPIA(R.string.filter_sepia),
+    LEICA_BW(R.string.filter_leica_bw),
+    FILM_GOLD(R.string.filter_film_gold),
+    FILM_FUJI(R.string.filter_film_fuji),
     VINTAGE(R.string.filter_vintage),
     COOL(R.string.filter_cool),
     WARM(R.string.filter_warm);
 
     fun getColorMatrix(): ColorMatrix {
         return when (this) {
-            NONE, BEAUTY -> ColorMatrix()
+            NONE -> ColorMatrix()
             LEICA_CLASSIC -> ColorMatrix(floatArrayOf(
                 0.95f, 0f, 0f, 0f, 0f,
                 0f, 0.9f, 0f, 0f, 0f,
@@ -27,11 +27,17 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
             LEICA_VIBRANT -> ColorMatrix().apply {
                 setToSaturation(1.3f)
             }
-            GRAYSCALE -> ColorMatrix().apply { setToSaturation(0f) }
-            SEPIA -> ColorMatrix(floatArrayOf(
-                0.393f, 0.769f, 0.189f, 0f, 0f,
-                0.349f, 0.686f, 0.168f, 0f, 0f,
-                0.272f, 0.534f, 0.131f, 0f, 0f,
+            LEICA_BW -> ColorMatrix().apply { setToSaturation(0f) }
+            FILM_GOLD -> ColorMatrix(floatArrayOf(
+                1.1f, 0.1f, 0f, 0f, 0f,
+                0.1f, 1.0f, 0f, 0f, 0f,
+                0f, 0f, 0.8f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f
+            ))
+            FILM_FUJI -> ColorMatrix(floatArrayOf(
+                0.9f, 0f, 0.1f, 0f, 0f,
+                0f, 1.1f, 0f, 0f, 0f,
+                0.1f, 0f, 1.0f, 0f, 0f,
                 0f, 0f, 0f, 1f, 0f
             ))
             VINTAGE -> ColorMatrix(floatArrayOf(

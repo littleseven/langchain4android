@@ -32,12 +32,14 @@
     <string name="big_eyes">大眼</string>
     <string name="youth">年轻化</string>
     <string name="filter_none">原图</string>
-    <string name="filter_beauty">美颜</string>
-    <string name="filter_grayscale">黑白</string>
-    <string name="filter_sepia">怀旧</string>
     <string name="filter_vintage">复古</string>
     <string name="filter_cool">冷色</string>
     <string name="filter_warm">暖色</string>
+    <string name="filter_leica_classic">徕卡经典</string>
+    <string name="filter_leica_vibrant">徕卡生动</string>
+    <string name="filter_leica_bw">徕卡黑白</string>
+    <string name="filter_film_gold">胶片金</string>
+    <string name="filter_film_fuji">富士胶片</string>
     <string name="edit">编辑</string>
     <string name="save">保存</string>
     <string name="doodle">涂鸦</string>
