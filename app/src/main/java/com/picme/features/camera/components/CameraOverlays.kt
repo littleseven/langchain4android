@@ -28,9 +28,43 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
 import com.picme.domain.model.BeautySettings
+import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.GridType
 import java.util.Locale
+
+@Composable
+fun CameraOverlays(
+    isStable: Boolean,
+    gridType: GridType,
+    facePoint: Offset?,
+    focusAlpha: Float,
+    showInfo: Boolean,
+    lensFacing: Int,
+    captureMode: MediaType,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier.fillMaxSize()) {
+        CompositionGrid(gridType = gridType)
+        
+        facePoint?.let {
+            FaceFocusIndicator(offset = it, alpha = focusAlpha)
+        }
+
+        if (showInfo) {
+            CameraInfoOverlay(
+                lensFacing = lensFacing,
+                zoomRatio = 1f, // This should be passed from state if needed
+                aspectRatio = 0, // This should be passed from state if needed
+                filter = FilterType.NONE,
+                beautySettings = BeautySettings(),
+                exposureCompensation = 0,
+                whiteBalanceMode = 0,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 70.dp)
+            )
+        }
+    }
+}
 
 @Composable
 fun HyperOSLiveTile(

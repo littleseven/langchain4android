@@ -3,6 +3,7 @@ package com.picme.features.debug
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.Log
+import com.picme.R
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.domain.repository.MediaRepository
@@ -34,19 +35,19 @@ object SampleDataGenerator {
 
     private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
-    fun pause() {
+    fun pause(context: Context) {
         _isPaused.value = true
-        _progress.value = "已暂停"
+        _progress.value = context.getString(R.string.pause)
     }
 
     fun resume() {
         _isPaused.value = false
     }
 
-    fun stop() {
+    fun stop(context: Context) {
         _isGenerating.value = false
         _isPaused.value = false
-        _progress.value = "已停止"
+        _progress.value = context.getString(R.string.stop)
     }
 
     suspend fun populateTestData(context: Context, repository: MediaRepository) {
@@ -91,7 +92,7 @@ object SampleDataGenerator {
                 if (!_isGenerating.value) break
 
                 val faceId = if (isPerson) "person_${keyword}" else null
-                _progress.value = "正在搜索: $keyword"
+                _progress.value = keyword
                 val candidateUrls = searchImages(keyword)
                 Log.d(TAG, "Search results for $keyword: found ${candidateUrls.size} candidates")
                 
@@ -109,12 +110,12 @@ object SampleDataGenerator {
                     val prefix = if (isPerson) "TEST_PERSON" else "TEST_LANDSCAPE"
                     val fileName = "${prefix}_${keyword}_${downloadedCount + 1}_$timestamp.jpg"
                     
-                    _progress.value = "正在下载: $keyword (${downloadedCount + 1}/3)"
+                    _progress.value = "$keyword (${downloadedCount + 1}/3)"
                     val file = downloadAndValidateImage(url, context, fileName)
                     
                     if (file != null) {
                         calendar.timeInMillis = System.currentTimeMillis()
-                        calendar.add(Calendar.DAY_OF_YEAR, -random.nextInt(180)) // Longer range for variety
+                        calendar.add(Calendar.DAY_OF_YEAR, -random.nextInt(180)) 
                         
                         val asset = MediaAsset(
                             uri = UriPathUtil.getUriFromFile(file),
@@ -136,7 +137,7 @@ object SampleDataGenerator {
             }
             _isGenerating.value = false
             _isPaused.value = false
-            _progress.value = "完成"
+            _progress.value = ""
         }
     }
 
@@ -144,7 +145,7 @@ object SampleDataGenerator {
         val urls = mutableListOf<String>()
         val encodedKeyword = URLEncoder.encode(keyword, "UTF-8")
 
-        // 策略 1: Bing Image Search
+        // Strategy 1: Bing Image Search
         try {
             val searchUrl = "https://www.bing.com/images/search?q=$encodedKeyword&first=1"
             val connection = URL(searchUrl).openConnection() as HttpURLConnection
@@ -164,7 +165,7 @@ object SampleDataGenerator {
             Log.w(TAG, "Bing search failed: ${e.message}")
         }
 
-        // 策略 2: 百度图片
+        // Strategy 2: Baidu Images
         if (urls.size < 10) {
             try {
                 val searchUrl = "https://image.baidu.com/search/acjson?tn=resultjson_com&ipn=rj&ct=201326592&fp=result&queryWord=$encodedKeyword&cl=2&lm=-1&ie=utf-8&oe=utf-8&word=$encodedKeyword&pn=0&rn=30"
@@ -189,7 +190,7 @@ object SampleDataGenerator {
             }
         }
 
-        // 策略 3: Unsplash (With robust error handling)
+        // Strategy 3: Unsplash (With robust error handling)
         try {
             val unsplashUrl = "https://unsplash.com/napi/search/photos?query=$encodedKeyword&per_page=20"
             val connection = URL(unsplashUrl).openConnection() as HttpURLConnection

@@ -7,6 +7,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.io.IOException
 
 enum class ThemeMode {
@@ -17,11 +19,11 @@ enum class AppLanguage {
     SYSTEM, ENGLISH, CHINESE, TRADITIONAL_CHINESE
 }
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
 class UserPreferencesRepository(private val context: Context) {
 
-    private object PreferencesKeys {
+    object PreferencesKeys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
     }
@@ -51,6 +53,16 @@ class UserPreferencesRepository(private val context: Context) {
             val langName = preferences[PreferencesKeys.APP_LANGUAGE] ?: AppLanguage.SYSTEM.name
             AppLanguage.valueOf(langName)
         }
+
+    fun getAppLanguageBlocking(): AppLanguage = runBlocking {
+        try {
+            val preferences = context.dataStore.data.first()
+            val langName = preferences[PreferencesKeys.APP_LANGUAGE] ?: AppLanguage.SYSTEM.name
+            AppLanguage.valueOf(langName)
+        } catch (e: Exception) {
+            AppLanguage.SYSTEM
+        }
+    }
 
     suspend fun updateThemeMode(themeMode: ThemeMode) {
         context.dataStore.edit { preferences ->

@@ -1,5 +1,6 @@
 package com.picme.features.gallery
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,7 +11,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 enum class GroupingMode {
-    NONE, DATE, FACE, PERSON
+    NONE, DATE, FACE, PERSON, LANDSCAPE
 }
 
 data class MediaGroup(
@@ -20,7 +21,7 @@ data class MediaGroup(
 
 class MediaViewModel(
     private val repository: MediaRepository,
-    private val getGroupedMediaUseCase: GetGroupedMediaUseCase = GetGroupedMediaUseCase()
+    private val getGroupedMediaUseCase: GetGroupedMediaUseCase
 ) : ViewModel() {
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
@@ -48,11 +49,17 @@ class MediaViewModel(
     fun deleteMediaByIds(ids: List<Long>) = viewModelScope.launch { repository.deleteMediaByIds(ids) }
 }
 
-class MediaViewModelFactory(private val repository: MediaRepository) : ViewModelProvider.Factory {
+class MediaViewModelFactory(
+    private val context: Context,
+    private val repository: MediaRepository
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return MediaViewModel(repository) as T
+            return MediaViewModel(
+                repository,
+                GetGroupedMediaUseCase(context)
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

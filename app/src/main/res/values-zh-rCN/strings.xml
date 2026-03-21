@@ -13,7 +13,6 @@
     <string name="chinese">简体中文</string>
     <string name="traditional_chinese">繁体中文</string>
     <string name="no_media">未找到媒体文件</string>
-    <string name="selected">已选择 %1$d 项</string>
     <string name="selected_items">已选择 %1$d 项</string>
     <string name="select_all">全选</string>
     <string name="delete">删除</string>

@@ -25,6 +25,7 @@ import com.picme.R
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.GridType
 import com.picme.features.camera.ScenePreset
+import com.picme.features.camera.CameraAspectRatio
 import com.picme.features.camera.model.FilterType
 
 @Composable
@@ -75,7 +76,12 @@ fun CameraRightControls(
             isActive = isCameraInfoSelected
         )
         ControlButton(
-            icon = if (currentRatio == 0) Icons.Rounded.AspectRatio else Icons.Rounded.Crop169,
+            icon = when(currentRatio) {
+                0 -> Icons.Rounded.AspectRatio
+                1 -> Icons.Rounded.Crop169
+                2 -> Icons.Rounded.CropSquare
+                else -> Icons.Rounded.CropFree
+            },
             onClick = onToggleRatio,
             isActive = isRatioSelected
         )
@@ -205,10 +211,12 @@ private fun BeautySlider(label: String, value: Float, onValueChange: (Float) -> 
 }
 
 @Composable
-fun RatioSelector(selectedRatio: Int, onRatioSelected: (Int) -> Unit) {
+fun RatioSelector(selectedRatio: CameraAspectRatio, onRatioSelected: (CameraAspectRatio) -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        RatioItem(label = "4:3", isSelected = selectedRatio == 0) { onRatioSelected(0) }
-        RatioItem(label = "16:9", isSelected = selectedRatio == 1) { onRatioSelected(1) }
+        RatioItem(label = stringResource(R.string.ratio_4_3), isSelected = selectedRatio == CameraAspectRatio.RATIO_4_3) { onRatioSelected(CameraAspectRatio.RATIO_4_3) }
+        RatioItem(label = stringResource(R.string.ratio_16_9), isSelected = selectedRatio == CameraAspectRatio.RATIO_16_9) { onRatioSelected(CameraAspectRatio.RATIO_16_9) }
+        RatioItem(label = stringResource(R.string.ratio_1_1), isSelected = selectedRatio == CameraAspectRatio.RATIO_1_1) { onRatioSelected(CameraAspectRatio.RATIO_1_1) }
+        RatioItem(label = stringResource(R.string.ratio_full), isSelected = selectedRatio == CameraAspectRatio.RATIO_FULL) { onRatioSelected(CameraAspectRatio.RATIO_FULL) }
     }
 }
 
@@ -216,11 +224,12 @@ fun RatioSelector(selectedRatio: Int, onRatioSelected: (Int) -> Unit) {
 private fun RatioItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.DarkGray
         )
     ) {
-        Text(text = label, color = if (isSelected) Color.Black else Color.White)
+        Text(text = label, color = if (isSelected) Color.Black else Color.White, fontSize = 12.sp)
     }
 }
 
@@ -276,7 +285,7 @@ fun ProModeControls(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp).background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -285,7 +294,7 @@ fun ProModeControls(
                 value = exposure.toFloat(),
                 onValueChange = { onExposureChange(it.toInt()) },
                 valueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat(),
-                steps = exposureRange.last - exposureRange.first - 1,
+                steps = if (exposureRange.last > exposureRange.first) exposureRange.last - exposureRange.first - 1 else 0,
                 modifier = Modifier.weight(1f)
             )
             Text(text = if (exposure > 0) "+$exposure" else exposure.toString(), color = Color.White, modifier = Modifier.width(40.dp))

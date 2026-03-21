@@ -126,4 +126,8 @@
     <string name="live_recording">Recording…</string>
     <string name="live_stable">Device Stable</string>
     <string name="live_unstable">Keep Steady</string>
+
+    <string name="searching_for">Searching for: %1$s</string>
+    <string name="downloading">Downloading: %1$s</string>
+    <string name="generation_finished">Finished</string>
 </resources>

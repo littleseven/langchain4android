@@ -18,11 +18,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.picme.R
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 
@@ -45,7 +47,7 @@ fun CameraBottomControls(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        if (!isAnyPanelOpen) {
+        if (!isAnyPanelOpen && captureMode != MediaType.PRO) {
             ZoomControls(zoomRatio = zoomRatio, onZoomClick = onZoomPresetClick)
         }
 
@@ -111,8 +113,14 @@ private fun ModeSelector(currentMode: MediaType, onModeChange: (MediaType) -> Un
     ) {
         val modes = listOf(MediaType.VIDEO, MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO)
         modes.forEach { mode ->
+            val label = when(mode) {
+                MediaType.VIDEO -> stringResource(R.string.video)
+                MediaType.PHOTO -> stringResource(R.string.photo)
+                MediaType.PORTRAIT -> stringResource(R.string.portrait)
+                MediaType.PRO -> stringResource(R.string.pro)
+            }
             Text(
-                text = mode.name,
+                text = label,
                 color = if (currentMode == mode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
                 fontSize = 13.sp,
                 fontWeight = if (currentMode == mode) FontWeight.Bold else FontWeight.Normal,

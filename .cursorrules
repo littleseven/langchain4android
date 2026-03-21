@@ -3,9 +3,10 @@
 ## 架构与代码标准
 - **MVVM 模式**: 始终遵循 MVVM 架构。业务逻辑放在 Repositories 中，UI 状态管理放在 ViewModels 中，UI 渲染放在 Compose Screens 中。
 - **UI 与逻辑解耦**: Composable 函数应专注于渲染。通过 lambda 表达式传递事件，避免在 Screen 中混入过多逻辑。
-- **资源管理**:
-    - 始终使用 `strings.xml` 管理 UI 文本（支持中/英/繁体）。
-    - 使用 `ui.theme` 包中的 Material 3 `ColorScheme` 和 `Typography`。
+- **资源管理与国际化 (Mandatory I18N)**:
+    - **严禁硬编码**: 严禁在 UI 代码中硬编码任何面向用户的字符串。
+    - **必须适配**: **新增功能或重构现有功能时，必须同步适配所有支持的语言**：`strings.xml` (英文/默认), `strings.xml (zh-rCN)` (简体中文), `strings.xml (zh-rTW)` (繁体中文)。
+    - **样式统一**: 使用 `ui.theme` 包中的 Material 3 `ColorScheme` 和 `Typography`。
 - **并发处理**: 使用 Kotlin 协程和 Flow。使用 `viewModelScope` 处理生命周期感知的操作。
 
 ## 相机与 AI 实现

@@ -1,11 +1,13 @@
 package com.picme.features.camera
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.MediaActionSound
 import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -21,12 +23,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -34,13 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.picme.PicMeApplication
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.domain.model.BeautySettings
-import com.picme.core.image.ImageProcessor
-import com.picme.core.image.ImageProcessorImpl
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.gallery.MediaViewModel
@@ -58,10 +56,12 @@ import kotlin.math.sqrt
 
 enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
+enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_1_1, RATIO_FULL }
 
 object AspectRatio {
     const val RATIO_4_3 = 0
     const val RATIO_16_9 = 1
+    const val RATIO_FULL = 2
 }
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -71,7 +71,10 @@ fun CameraScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
     viewModel: MediaViewModel = viewModel(
-        factory = MediaViewModelFactory((LocalContext.current.applicationContext as PicMeApplication).repository)
+        factory = MediaViewModelFactory(
+            LocalContext.current,
+            (LocalContext.current.applicationContext as PicMeApplication).repository
+        )
     )
 ) {
     val permissionsState = rememberMultiplePermissionsState(
@@ -92,6 +95,7 @@ fun CameraScreen(
     }
 }
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraContent(
@@ -104,14 +108,14 @@ fun CameraContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
-    val imageProcessor: ImageProcessor = remember { ImageProcessorImpl() }
+    val shutterSound = remember { MediaActionSound() }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
     var isRecording by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
     var beautySettings by remember { mutableStateOf(BeautySettings()) }
-    var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_4_3) }
+    var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
 
     var showFilterSelector by remember { mutableStateOf(false) }
     var showBeautySelector by remember { mutableStateOf(false) }
@@ -147,7 +151,10 @@ fun CameraContent(
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
         sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_UI)
-        onDispose { sensorManager.unregisterListener(listener) }
+        onDispose { 
+            sensorManager.unregisterListener(listener)
+            shutterSound.release()
+        }
     }
 
     val previewView = remember { PreviewView(context) }
@@ -161,7 +168,7 @@ fun CameraContent(
     val recorder = remember { Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HIGHEST)).build() }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     var recording: Recording? by remember { mutableStateOf(null) }
-    var recordingTime by remember { mutableStateOf("00:00") }
+    val recordingTime by remember { mutableStateOf("00:00") }
 
     var cameraControl: CameraControl? by remember { mutableStateOf(null) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
@@ -282,45 +289,147 @@ fun CameraContent(
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToDebug = onNavigateToDebug,
         onFlipCamera = { lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK },
-        onToggleBeauty = { showBeautySelector = !showBeautySelector; showFilterSelector = false; showRatioSelector = false; showSceneSelector = false; showGridSelector = false },
-        onToggleFilter = { showFilterSelector = !showFilterSelector; showBeautySelector = false; showRatioSelector = false; showSceneSelector = false; showGridSelector = false },
-        onToggleRatio = { showRatioSelector = !showRatioSelector; showFilterSelector = false; showBeautySelector = false; showSceneSelector = false; showGridSelector = false },
+        onToggleBeauty = { 
+            showBeautySelector = !showBeautySelector
+            showFilterSelector = false
+            showRatioSelector = false
+            showSceneSelector = false
+            showGridSelector = false
+        },
+        onToggleFilter = { 
+            showFilterSelector = !showFilterSelector
+            showBeautySelector = false
+            showRatioSelector = false
+            showSceneSelector = false
+            showGridSelector = false
+        },
+        onToggleRatio = { 
+            showRatioSelector = !showRatioSelector
+            showFilterSelector = false
+            showBeautySelector = false
+            showSceneSelector = false
+            showGridSelector = false
+        },
         onToggleCameraInfo = { showCameraInfo = !showCameraInfo },
-        onToggleScene = { showSceneSelector = !showSceneSelector; showFilterSelector = false; showBeautySelector = false; showRatioSelector = false; showGridSelector = false },
-        onToggleGrid = { showGridSelector = !showGridSelector; showFilterSelector = false; showBeautySelector = false; showRatioSelector = false; showSceneSelector = false },
+        onToggleScene = { 
+            showSceneSelector = !showSceneSelector
+            showFilterSelector = false
+            showBeautySelector = false
+            showRatioSelector = false
+            showGridSelector = false
+        },
+        onToggleGrid = { 
+            showGridSelector = !showGridSelector
+            showFilterSelector = false
+            showBeautySelector = false
+            showRatioSelector = false
+            showSceneSelector = false
+        },
         onZoomPresetClick = { cameraControl?.setZoomRatio(it) },
         onExposureChange = { 
             exposureCompensation = it
             cameraControl?.setExposureCompensationIndex(it)
         },
         onWhiteBalanceChange = { whiteBalanceMode = it },
-        onSceneSelected = { currentScene = it; showSceneSelector = false },
-        onGridSelected = { currentGrid = it; showGridSelector = false },
+        onSceneSelected = { 
+            currentScene = it
+            showSceneSelector = false
+        },
+        onGridSelected = {
+            currentGrid = it
+            showGridSelector = false
+        },
         onGalleryClick = onNavigateToGallery,
         onCaptureClick = {
-            if (captureMode == MediaType.PHOTO || captureMode == MediaType.PORTRAIT || captureMode == MediaType.PRO) {
-                imageProcessor.takePhoto(context, imageCapture, viewModel, selectedFilter, beautySettings, lensFacing)
-            } else {
+            if (captureMode == MediaType.VIDEO) {
                 if (isRecording) {
+                    shutterSound.play(MediaActionSound.STOP_VIDEO_RECORDING)
                     recording?.stop()
+                    recording = null
                     isRecording = false
                 } else {
-                    isRecording = true
-                    recording = imageProcessor.startVideoRecording(context, videoCapture, viewModel) { isRecording = false }
+                    shutterSound.play(MediaActionSound.START_VIDEO_RECORDING)
+                    val name = "PicMe_" + System.currentTimeMillis() + ".mp4"
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                        put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                        put(android.provider.MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
+                    }
+                    val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(context.contentResolver, android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                        .setContentValues(contentValues)
+                        .build()
+
+                    recording = videoCapture.output
+                        .prepareRecording(context, mediaStoreOutputOptions)
+                        .withAudioEnabled()
+                        .start(ContextCompat.getMainExecutor(context)) { event ->
+                            when(event) {
+                                is VideoRecordEvent.Start -> {
+                                    isRecording = true
+                                }
+                                is VideoRecordEvent.Finalize -> {
+                                    if (!event.hasError()) {
+                                        viewModel.insertMedia(
+                                            MediaAsset(
+                                                uri = event.outputResults.outputUri.toString(),
+                                                type = MediaType.VIDEO,
+                                                captureDate = System.currentTimeMillis(),
+                                                fileName = name
+                                            )
+                                        )
+                                    } else {
+                                        recording?.close()
+                                        recording = null
+                                        isRecording = false
+                                    }
+                                }
+                            }
+                        }
                 }
+            } else {
+                shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+                val name = "PicMe_" + System.currentTimeMillis() + ".jpg"
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                    put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
+                }
+                val outputOptions = ImageCapture.OutputFileOptions.Builder(context.contentResolver, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues).build()
+                imageCapture.takePicture(outputOptions, ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(output: ImageCapture.OutputFileResults) { 
+                        val savedUri = output.savedUri ?: return
+                        viewModel.insertMedia(
+                            MediaAsset(
+                                uri = savedUri.toString(),
+                                type = captureMode,
+                                captureDate = System.currentTimeMillis(),
+                                fileName = name
+                            )
+                        )
+                    }
+                    override fun onError(exception: ImageCaptureException) { Log.e("CameraScreen", "Photo capture failed: ${exception.message}", exception) }
+                })
             }
         },
         onModeChange = { captureMode = it },
         onFilterSelected = { selectedFilter = it },
         onBeautySettingsChanged = { beautySettings = it },
-        onRatioSelected = { aspectRatio = it; showRatioSelector = false },
-        onDismissPanels = { showFilterSelector = false; showBeautySelector = false; showRatioSelector = false; showSceneSelector = false; showGridSelector = false }
+        onRatioSelected = { 
+            aspectRatio = it
+            showRatioSelector = false
+        },
+        onDismissPanels = {
+            showFilterSelector = false
+            showBeautySelector = false
+            showRatioSelector = false
+            showSceneSelector = false
+            showGridSelector = false
+        }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CameraPreviewContent(
+fun CameraPreviewContent(
     previewView: @Composable () -> Unit,
     selectedFilter: FilterType,
     facePoint: Offset?,
@@ -372,70 +481,21 @@ private fun CameraPreviewContent(
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         previewView()
 
-        if (currentGrid != GridType.NONE) {
-            CompositionGrid(gridType = currentGrid)
-        }
-
-        if (selectedFilter != FilterType.NONE) {
-            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-                drawRect(color = Color.White, alpha = 0.15f, colorFilter = ColorFilter.colorMatrix(selectedFilter.getColorMatrix()))
-            }
-        }
-
-        facePoint?.let { 
-            PortraitGuidance(faceOffset = it, alpha = focusIndicatorAlpha) 
-        }
-
-        HyperOSLiveTile(
-            isRecording = isRecording,
+        CameraOverlays(
             isStable = isStable,
-            recordingTime = recordingTime,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
+            gridType = currentGrid,
+            facePoint = facePoint,
+            focusAlpha = focusIndicatorAlpha,
+            showInfo = showCameraInfo,
+            lensFacing = lensFacing,
+            captureMode = captureMode
         )
-
-        if (currentScene != ScenePreset.NONE || facePoint != null) {
-            val tip = when {
-                currentScene == ScenePreset.NIGHT -> stringResource(R.string.tip_night)
-                currentScene == ScenePreset.MOON -> stringResource(R.string.tip_moon)
-                facePoint != null -> {
-                    if (facePoint.y < 300) stringResource(R.string.tip_portrait_headroom)
-                    else if (facePoint.x > 300 && facePoint.x < 700) stringResource(R.string.tip_portrait_center)
-                    else stringResource(R.string.tip_portrait_thirds)
-                }
-                else -> ""
-            }
-            if (tip.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 100.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(text = tip, color = Color.Yellow, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-
-        if (showCameraInfo) {
-            CameraInfoOverlay(
-                lensFacing = lensFacing,
-                zoomRatio = zoomRatio,
-                aspectRatio = aspectRatio,
-                filter = selectedFilter,
-                beautySettings = beautySettings,
-                exposureCompensation = exposureCompensation,
-                whiteBalanceMode = whiteBalanceMode,
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 100.dp, start = 16.dp)
-            )
-        }
 
         CameraLeftControls(
             onNavigateToSettings = onNavigateToSettings,
             onNavigateToDebug = onNavigateToDebug,
             onToggleGrid = onToggleGrid,
-            isGridActive = currentGrid != GridType.NONE,
+            isGridActive = showGridSelector,
             modifier = Modifier.align(Alignment.TopStart)
         )
 
@@ -501,7 +561,20 @@ private fun CameraPreviewContent(
                 when {
                     showFilterSelector -> FilterSelector(selectedFilter) { onFilterSelected(it) }
                     showBeautySelector -> BeautySelector(beautySettings) { onSettingsChanged -> onBeautySettingsChanged(onSettingsChanged) }
-                    showRatioSelector -> RatioSelector(aspectRatio) { onRatioSelected(it) }
+                    showRatioSelector -> RatioSelector(
+                        selectedRatio = when(aspectRatio) {
+                            AspectRatio.RATIO_4_3 -> CameraAspectRatio.RATIO_4_3
+                            AspectRatio.RATIO_16_9 -> CameraAspectRatio.RATIO_16_9
+                            else -> CameraAspectRatio.RATIO_FULL
+                        },
+                        onRatioSelected = { 
+                            onRatioSelected(when(it) {
+                                CameraAspectRatio.RATIO_4_3 -> AspectRatio.RATIO_4_3
+                                CameraAspectRatio.RATIO_16_9 -> AspectRatio.RATIO_16_9
+                                else -> AspectRatio.RATIO_FULL
+                            })
+                        }
+                    )
                     showSceneSelector -> SceneSelector(currentScene) { onSceneSelected(it) }
                     showGridSelector -> GridSelector(currentGrid) { onGridSelected(it) }
                 }

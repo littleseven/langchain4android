@@ -34,7 +34,7 @@ fun DebugScreen(
     val app = context.applicationContext as PicMeApplication
     val scope = app.applicationScope
     val mediaViewModel: MediaViewModel = viewModel(
-        factory = MediaViewModelFactory(app.repository)
+        factory = MediaViewModelFactory(context, app.repository)
     )
 
     val isGenerating by SampleDataGenerator.isGenerating.collectAsState()
@@ -47,8 +47,8 @@ fun DebugScreen(
         isPaused = isPaused,
         progress = progress,
         onNavigateBack = onNavigateBack,
-        onPauseResume = { if (isPaused) SampleDataGenerator.resume() else SampleDataGenerator.pause() },
-        onStop = { SampleDataGenerator.stop() },
+        onPauseResume = { if (isPaused) SampleDataGenerator.resume() else SampleDataGenerator.pause(context) },
+        onStop = { SampleDataGenerator.stop(context) },
         onPopulatePerson = {
             scope.launch {
                 SampleDataGenerator.populatePersonTestData(context, app.repository)
@@ -83,7 +83,7 @@ private fun DebugContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Debug Tools") },
+                title = { Text(stringResource(R.string.debug_tools)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
@@ -135,7 +135,7 @@ private fun DebugContent(
             }
 
             Text(
-                text = "Data Generation",
+                text = stringResource(R.string.data_generation),
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -150,7 +150,7 @@ private fun DebugContent(
                 ) {
                     Icon(Icons.Default.Person, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Person")
+                    Text(stringResource(R.string.person))
                 }
 
                 Button(
@@ -160,7 +160,7 @@ private fun DebugContent(
                 ) {
                     Icon(Icons.Default.Landscape, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Landscape")
+                    Text(stringResource(R.string.landscape))
                 }
             }
 

@@ -26,3 +26,7 @@
 2. **组件化**: 新增 UI 必须放入 `components/`，保持 `CameraScreen` 的简洁。
 3. **Xiaomi 风格**: 保持与 HyperOS 一致的视觉语言（圆角、动效）。
 4. **性能**: 图像分析回调中严禁耗时操作。
+5. **[MUST] 多语言适配**: 
+   - 严禁硬编码字符串。所有 UI 文本必须通过 `stringResource(R.string.xxx)` 获取。
+   - 新增功能时必须同步更新 `strings.xml` (EN), `strings.xml` (CN), `strings.xml` (TW)。
+   - 确保在繁体中文和英语环境下，UI 布局能正确适配不同长度的文本。
