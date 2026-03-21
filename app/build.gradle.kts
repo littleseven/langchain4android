@@ -32,27 +32,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    // Updated for AGP 9.0+ built-in Kotlin support
+    
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
         }
     }
+    
     buildFeatures {
         compose = true
     }
 }
 
-// Rename compiled APK artifacts
-// Using the legacy API as it is the most straightforward for renaming outputs in Kotlin DSL
-configure<com.android.build.gradle.AppExtension> {
-    applicationVariants.all {
-        val variant = this
-        variant.outputs.all {
-            val output = this as? com.android.build.gradle.api.ApkVariantOutput
-            output?.outputFileName = "picme-${variant.name}.apk"
-        }
-    }
+// Modern way to set the base name for the compiled APKs
+base {
+    archivesName.set("picme")
 }
 
 dependencies {
