@@ -19,23 +19,24 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.picme.data.repository.AppLanguage
-import com.picme.ui.navigation.Screen
-import com.picme.ui.screens.CameraScreen
-import com.picme.ui.screens.GalleryScreen
-import com.picme.ui.screens.SettingsScreen
-import com.picme.ui.screens.DebugScreen
-import com.picme.ui.theme.PicMeTheme
-import com.picme.ui.viewmodel.*
+import com.picme.data.preferences.AppLanguage
+import com.picme.navigation.Screen
+import com.picme.features.camera.CameraScreen
+import com.picme.features.gallery.GalleryScreen
+import com.picme.features.gallery.MediaViewModel
+import com.picme.features.gallery.MediaViewModelFactory
+import com.picme.features.settings.SettingsScreen
+import com.picme.features.settings.SettingsViewModel
+import com.picme.features.settings.SettingsViewModelFactory
+import com.picme.features.debug.DebugScreen
+import com.picme.core.designsystem.PicMeTheme
 import java.util.*
 
 class MainActivity : ComponentActivity() {
     
-    // Maintain a reference to the current language to detect changes
     private var currentLanguage: AppLanguage? = null
 
     override fun attachBaseContext(newBase: Context) {
-        // Read language from preferences synchronously for initial launch
         val sharedPrefs = newBase.getSharedPreferences("user_preferences", Context.MODE_PRIVATE)
         val languageName = sharedPrefs.getString("app_language", AppLanguage.SYSTEM.name) ?: AppLanguage.SYSTEM.name
         val language = try { AppLanguage.valueOf(languageName) } catch (e: Exception) { AppLanguage.SYSTEM }
@@ -58,7 +59,6 @@ class MainActivity : ComponentActivity() {
             val themeMode by settingsViewModel.themeMode.collectAsState()
             val appLanguage by settingsViewModel.appLanguage.collectAsState()
 
-            // Crucial: Recreate activity when language changes in settings
             LaunchedEffect(appLanguage) {
                 if (currentLanguage != null && currentLanguage != appLanguage) {
                     recreate()

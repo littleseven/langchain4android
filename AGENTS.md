@@ -14,16 +14,41 @@ PicMe 是一款基于 Jetpack Compose 和 CameraX 构建的高性能现代化 An
 - **架构**: MVVM 配合 Repository 模式
 
 ## 项目结构
-- `com.picme.data`:
-  - `local`: Room 数据库 (`AppDatabase`), DAO (`MediaDao`)。
-  - `model`: 数据实体 (`MediaAsset`)。
-  - `repository`: 数据抽象层 (`MediaRepository`, `UserPreferencesRepository`)。
-- `com.picme.ui`:
-  - `screens`: UI 界面 (`CameraScreen`, `GalleryScreen`, `SettingsScreen`)。
-  - `viewmodel`: 用于状态管理的 ViewModel。
-  - `model`: UI 特定模型 (例如 `FilterType`)。
-  - `navigation`: Compose 导航逻辑。
-  - `theme`: Material 3 主题定义。
+我们将项目划分为四个核心顶层包：core（底层能力）、data（数据源）、domain（业务契约）、features（功能模块）。
+
+
+com.picme
+├── core/                # 【核心层】不依赖业务，只提供基础设施
+│   ├── common/          # 扩展函数 (Context, Flow)、常量、Result 包装类
+│   ├── designsystem/    # UI 规范：Theme.kt, Color.kt, Typography.kt, Icons.kt
+│   ├── image/           # 图片处理引擎 (ImageProcessor, Effects)
+│   └── camera/          # 相机底层封装 (CameraManager, Analyzer)
+│
+├── data/                # 【数据层】负责数据持久化与原始转换
+│   ├── local/           # Room (Database, Dao)
+│   ├── preferences/     # DataStore (UserPreferences)
+│   ├── model/           # 数据库 Entity (MediaEntity)
+│   └── repository/      # Repository 的具体实现 (MediaRepositoryImpl)
+│
+├── domain/              # 【领域层】纯 Kotlin，定义业务逻辑契约
+│   ├── model/           # 领域模型 (MediaAsset, BeautySettings)
+│   ├── repository/      # Repository 接口定义
+│   └── usecase/         # 独立业务逻辑 (GroupMediaUseCase, SavePhotoUseCase)
+│
+├── features/            # 【功能层】按业务模块划分 UI 与状态
+│   ├── camera/          # 相机拍摄模块
+│   │   ├── components/  # CameraOverlays.kt, ShutterButton.kt
+│   │   ├── CameraScreen.kt
+│   │   └── CameraViewModel.kt
+│   ├── gallery/         # 相册模块
+│   │   ├── components/  # MediaGrid.kt, MediaGroupHeader.kt
+│   │   ├── GalleryScreen.kt
+│   │   └── MediaViewModel.kt
+│   └── editor/          # 图片编辑模块
+│
+└── navigation/          # 【导航层】
+├── NavGraph.kt      # 路由图
+└── Screen.kt        # 路由定义
 
 ## 核心功能与实现
 1. **多模式相机系统**: 

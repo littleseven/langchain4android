@@ -1,26 +1,23 @@
 package com.picme.data.local
 
 import androidx.room.*
-import com.picme.data.model.MediaAsset
+import com.picme.data.model.MediaEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface MediaDao {
     @Query("SELECT * FROM media_assets ORDER BY captureDate DESC")
-    fun getAllMedia(): Flow<List<MediaAsset>>
+    fun getAllMedia(): Flow<List<MediaEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertMedia(mediaAsset: MediaAsset): Long
+    suspend fun insertMedia(mediaEntity: MediaEntity): Long
 
     @Delete
-    suspend fun deleteMedia(mediaAsset: MediaAsset)
+    suspend fun deleteMedia(mediaEntity: MediaEntity)
 
     @Query("DELETE FROM media_assets WHERE id IN (:ids)")
     suspend fun deleteMediaByIds(ids: List<Long>)
 
-    @Query("DELETE FROM media_assets WHERE fileName LIKE 'TEST_%'")
-    suspend fun clearAllTestData()
-
     @Query("SELECT * FROM media_assets WHERE id = :id")
-    suspend fun getMediaById(id: Long): MediaAsset?
+    suspend fun getMediaById(id: Long): MediaEntity?
 }

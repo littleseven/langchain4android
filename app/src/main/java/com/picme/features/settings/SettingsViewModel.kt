@@ -1,0 +1,39 @@
+package com.picme.features.settings
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.picme.data.preferences.AppLanguage
+import com.picme.data.preferences.ThemeMode
+import com.picme.data.preferences.UserPreferencesRepository
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+class SettingsViewModel(private val repository: UserPreferencesRepository) : ViewModel() {
+
+    val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
+
+    val appLanguage: StateFlow<AppLanguage> = repository.appLanguageFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppLanguage.SYSTEM)
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { repository.updateThemeMode(mode) }
+    }
+
+    fun setAppLanguage(language: AppLanguage) {
+        viewModelScope.launch { repository.updateAppLanguage(language) }
+    }
+}
+
+class SettingsViewModelFactory(private val repository: UserPreferencesRepository) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return SettingsViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}

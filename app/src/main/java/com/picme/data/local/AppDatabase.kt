@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.picme.data.model.MediaAsset
+import com.picme.data.model.MediaEntity
 
-@Database(entities = [MediaAsset::class], version = 2, exportSchema = false)
+@Database(entities = [MediaEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
 
