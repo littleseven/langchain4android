@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.picme"
+    namespace = "com.picme"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.picme"
+        applicationId = "com.picme"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
