@@ -4,12 +4,8 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.LocationOn
-import androidx.compose.material.icons.rounded.Videocam
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,13 +20,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import com.picme.R
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.GridType
+import com.picme.features.camera.ScenePreset
 import java.util.Locale
 
 @Composable
@@ -48,10 +47,11 @@ fun CameraOverlays(
     beautySettings: BeautySettings,
     exposureCompensation: Int,
     whiteBalanceMode: Int,
+    currentScene: ScenePreset,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        CompositionGrid(gridType = gridType)
+         CompositionGrid(gridType = gridType)
         
         facePoint?.let {
             FaceFocusIndicator(offset = it, alpha = focusAlpha)
@@ -59,6 +59,7 @@ fun CameraOverlays(
 
         if (showInfo) {
             CameraInfoOverlay(
+                captureMode = captureMode,
                 lensFacing = lensFacing,
                 zoomRatio = zoomRatio,
                 aspectRatio = aspectRatio,
@@ -66,69 +67,110 @@ fun CameraOverlays(
                 beautySettings = beautySettings,
                 exposureCompensation = exposureCompensation,
                 whiteBalanceMode = whiteBalanceMode,
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = 70.dp)
+                currentScene = currentScene,
+                gridType = gridType,
+                isStable = isStable,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 100.dp) // Below top control bar
             )
         }
     }
 }
 
 @Composable
-fun HyperOSLiveTile(
-    isRecording: Boolean,
+fun CameraInfoOverlay(
+    captureMode: MediaType,
+    lensFacing: Int,
+    zoomRatio: Float,
+    aspectRatio: Int,
+    filter: FilterType,
+    beautySettings: BeautySettings,
+    exposureCompensation: Int,
+    whiteBalanceMode: Int,
+    currentScene: ScenePreset,
+    gridType: GridType,
     isStable: Boolean,
-    recordingTime: String,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
-        visible = isRecording || !isStable,
-        enter = expandVertically() + fadeIn(),
-        exit = shrinkVertically() + fadeOut(),
-        modifier = modifier
+    Surface(
+        modifier = modifier.widthIn(max = 280.dp),
+        color = Color.Black.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
     ) {
-        Surface(
-            modifier = Modifier
-                .height(36.dp)
-                .padding(horizontal = 16.dp),
-            color = Color.Black,
-            shape = RoundedCornerShape(18.dp),
-            shadowElevation = 8.dp
-        ) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isRecording) {
-                    Icon(
-                        imageVector = Icons.Rounded.Videocam,
-                        contentDescription = null,
-                        tint = Color.Red,
-                        modifier = Modifier.size(18.dp)
+                Text(
+                    text = stringResource(R.string.camera_info),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    letterSpacing = 1.sp
+                )
+                // Stability indicator
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(if (isStable) Color.Green else Color.Red, CircleShape)
+                )
+            }
+            
+            InfoGroup(title = stringResource(R.string.info_group_device)) {
+                InfoItem(
+                    label = stringResource(R.string.info_lens_facing),
+                    value = if (lensFacing == 1) stringResource(R.string.info_back) else stringResource(R.string.info_front)
+                )
+                InfoItem(
+                    label = stringResource(R.string.info_zoom),
+                    value = String.format(Locale.US, "%.1fx", zoomRatio)
+                )
+                InfoItem(
+                    label = stringResource(R.string.pro_mode),
+                    value = captureMode.name
+                )
+            }
+            
+            InfoGroup(title = stringResource(R.string.info_group_settings)) {
+                InfoItem(
+                    label = stringResource(R.string.info_aspect_ratio),
+                    value = when(aspectRatio) {
+                        0 -> "4:3"
+                        1 -> "16:9"
+                        else -> "FULL"
+                    }
+                )
+                InfoItem(
+                    label = stringResource(R.string.info_filter),
+                    value = stringResource(filter.displayNameRes)
+                )
+                InfoItem(
+                    label = stringResource(R.string.scene),
+                    value = currentScene.name
+                )
+                InfoItem(
+                    label = stringResource(R.string.grid),
+                    value = gridType.name
+                )
+                if (exposureCompensation != 0) {
+                    InfoItem(
+                        label = stringResource(R.string.ev),
+                        value = if (exposureCompensation > 0) "+$exposureCompensation" else exposureCompensation.toString()
                     )
-                    Text(
-                        text = recordingTime,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Icon(
-                        imageVector = Icons.Rounded.GraphicEq,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.6f),
-                        modifier = Modifier.size(14.dp)
-                    )
-                } else if (!isStable) {
-                    Icon(
-                        imageVector = Icons.Rounded.LocationOn,
-                        contentDescription = null,
-                        tint = Color.Yellow,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.live_unstable),
-                        color = Color.White,
-                        fontSize = 12.sp
-                    )
+                }
+                if (whiteBalanceMode != 0) {
+                    val wbLabel = when (whiteBalanceMode) {
+                        1 -> stringResource(R.string.wb_sunny)
+                        2 -> stringResource(R.string.wb_cloudy)
+                        3 -> stringResource(R.string.wb_incandescent)
+                        4 -> stringResource(R.string.wb_fluorescent)
+                        else -> stringResource(R.string.wb_auto)
+                    }
+                    InfoItem(label = stringResource(R.string.wb), value = wbLabel)
                 }
             }
         }
@@ -136,33 +178,24 @@ fun HyperOSLiveTile(
 }
 
 @Composable
-fun PortraitGuidance(faceOffset: Offset, alpha: Float) {
-    Canvas(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = alpha)) {
-        val color = Color.Cyan.copy(alpha = 0.6f)
-        val stroke = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f))
-        
-        drawCircle(
-            color = color,
-            radius = 80.dp.toPx(),
-            center = Offset(size.width / 2, size.height * 0.4f),
-            style = stroke
+private fun InfoGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title.uppercase(), 
+            color = Color.White.copy(alpha = 0.4f), 
+            fontSize = 9.sp, 
+            fontWeight = FontWeight.Black,
+            letterSpacing = 0.5.sp
         )
-        
-        drawLine(
-            color = color,
-            start = Offset(0f, size.height / 3),
-            end = Offset(size.width, size.height / 3),
-            strokeWidth = 1.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-        )
+        content()
+    }
+}
 
-        drawLine(
-            color = Color.Yellow.copy(alpha = 0.4f),
-            start = faceOffset,
-            end = Offset(size.width / 2, size.height * 0.4f),
-            strokeWidth = 2.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f), 0f)
-        )
+@Composable
+private fun InfoItem(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(text = label, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+        Text(text = value, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -228,90 +261,5 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
             drawLine(color, Offset(size.width, size.height), Offset(size.width-bracketLen, size.height), strokeWidth)
             drawLine(color, Offset(size.width, size.height), Offset(size.width, size.height-bracketLen), strokeWidth)
         }
-    }
-}
-
-@Composable
-fun CameraInfoOverlay(
-    lensFacing: Int,
-    zoomRatio: Float,
-    aspectRatio: Int,
-    filter: FilterType,
-    beautySettings: BeautySettings,
-    exposureCompensation: Int,
-    whiteBalanceMode: Int,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier.widthIn(max = 200.dp),
-        color = Color.Black.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = stringResource(R.string.camera_info),
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
-            )
-            
-            InfoGroup(title = stringResource(R.string.info_group_device)) {
-                InfoItem(
-                    label = stringResource(R.string.info_lens_facing),
-                    value = if (lensFacing == 1) stringResource(R.string.info_back) else stringResource(R.string.info_front)
-                )
-                InfoItem(
-                    label = stringResource(R.string.info_zoom),
-                    value = String.format(Locale.US, "%.1fx", zoomRatio)
-                )
-            }
-            
-            InfoGroup(title = stringResource(R.string.info_group_settings)) {
-                InfoItem(
-                    label = stringResource(R.string.info_aspect_ratio),
-                    value = if (aspectRatio == 0) "4:3" else "16:9"
-                )
-                InfoItem(
-                    label = stringResource(R.string.info_filter),
-                    value = stringResource(filter.displayNameRes)
-                )
-                InfoItem(
-                    label = stringResource(R.string.info_beauty),
-                    value = String.format(Locale.US, "%d%%", (beautySettings.smoothing * 100).toInt())
-                )
-                if (exposureCompensation != 0) {
-                    InfoItem(
-                        label = stringResource(R.string.ev),
-                        value = if (exposureCompensation > 0) "+$exposureCompensation" else exposureCompensation.toString()
-                    )
-                }
-                if (whiteBalanceMode != 0) {
-                    val wbLabel = when (whiteBalanceMode) {
-                        1 -> stringResource(R.string.wb_sunny)
-                        2 -> stringResource(R.string.wb_cloudy)
-                        3 -> stringResource(R.string.wb_incandescent)
-                        4 -> stringResource(R.string.wb_fluorescent)
-                        else -> stringResource(R.string.wb_auto)
-                    }
-                    InfoItem(label = stringResource(R.string.wb), value = wbLabel)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(text = title.uppercase(), color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        content()
-    }
-}
-
-@Composable
-private fun InfoItem(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(text = "$label:", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
-        Text(text = value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }

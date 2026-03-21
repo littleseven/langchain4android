@@ -495,7 +495,8 @@ fun CameraPreviewContent(
             selectedFilter = selectedFilter,
             beautySettings = beautySettings,
             exposureCompensation = exposureCompensation,
-            whiteBalanceMode = whiteBalanceMode
+            whiteBalanceMode = whiteBalanceMode,
+            currentScene = currentScene
         )
 
         CameraLeftControls(
