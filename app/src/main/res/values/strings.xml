@@ -42,4 +42,10 @@
     <string name="color_red">Red</string>
     <string name="color_green">Green</string>
     <string name="color_blue">Blue</string>
+    <string name="save_success">Saved successfully</string>
+    <string name="save_failed">Save failed</string>
+    <string name="load_failed">Load failed</string>
+    <string name="cancel">Cancel</string>
+    <string name="generate_test_data">Generate Test Data</string>
+    <string name="clear_test_data">Clear Test Data</string>
 </resources>

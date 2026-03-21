@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.picme.data.model.MediaAsset
 
-@Database(entities = [MediaAsset::class], version = 1, exportSchema = false)
+@Database(entities = [MediaAsset::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
 
@@ -20,7 +20,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "picme_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration() // 当版本不匹配时重建数据库，解决 schema 变更导致的 crash
+                .build()
                 INSTANCE = instance
                 instance
             }
