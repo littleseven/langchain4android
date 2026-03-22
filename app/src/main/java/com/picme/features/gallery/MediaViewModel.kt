@@ -7,7 +7,12 @@ import androidx.lifecycle.viewModelScope
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.GetGroupedMediaUseCase
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class GroupingMode {
@@ -39,20 +44,34 @@ class MediaViewModel(
     )
 
     val allMedia: StateFlow<List<MediaAsset>> = repository.allMedia
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     fun setGroupingMode(mode: GroupingMode) {
         _groupingMode.value = mode
     }
 
-    fun insertMedia(mediaAsset: MediaAsset) = viewModelScope.launch { repository.insertMedia(mediaAsset) }
-    fun deleteMediaByIds(ids: List<Long>) = viewModelScope.launch { repository.deleteMediaByIds(ids) }
+    fun insertMedia(mediaAsset: MediaAsset) {
+        viewModelScope.launch {
+            repository.insertMedia(mediaAsset)
+        }
+    }
+
+    fun deleteMediaByIds(ids: List<Long>) {
+        viewModelScope.launch {
+            repository.deleteMediaByIds(ids)
+        }
+    }
 }
 
 class MediaViewModelFactory(
     private val context: Context,
     private val repository: MediaRepository
 ) : ViewModelProvider.Factory {
+
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")

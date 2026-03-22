@@ -14,21 +14,36 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(private val repository: UserPreferencesRepository) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ThemeMode.SYSTEM)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ThemeMode.SYSTEM
+        )
 
     val appLanguage: StateFlow<AppLanguage> = repository.appLanguageFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppLanguage.SYSTEM)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AppLanguage.SYSTEM
+        )
 
     fun setThemeMode(mode: ThemeMode) {
-        viewModelScope.launch { repository.updateThemeMode(mode) }
+        viewModelScope.launch {
+            repository.updateThemeMode(mode)
+        }
     }
 
     fun setAppLanguage(language: AppLanguage) {
-        viewModelScope.launch { repository.updateAppLanguage(language) }
+        viewModelScope.launch {
+            repository.updateAppLanguage(language)
+        }
     }
 }
 
-class SettingsViewModelFactory(private val repository: UserPreferencesRepository) : ViewModelProvider.Factory {
+class SettingsViewModelFactory(
+    private val repository: UserPreferencesRepository
+) : ViewModelProvider.Factory {
+
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")

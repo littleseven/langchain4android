@@ -1,12 +1,28 @@
 package com.picme.features.settings
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -14,9 +30,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.picme.R
+import com.picme.core.designsystem.PicMeTheme
 import com.picme.data.preferences.AppLanguage
 import com.picme.data.preferences.ThemeMode
-import com.picme.core.designsystem.PicMeTheme
 
 @Composable
 fun SettingsScreen(
@@ -50,7 +66,10 @@ private fun SettingsContent(
                 title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back)
+                        )
                     }
                 }
             )
@@ -62,30 +81,42 @@ private fun SettingsContent(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            Text(
-                text = stringResource(R.string.theme_mode),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-            
-            ThemeSelection(
-                currentMode = themeMode,
-                onModeSelected = onThemeModeSelected
-            )
+            SettingsSection(title = stringResource(R.string.theme_mode)) {
+                ThemeSelection(
+                    currentMode = themeMode,
+                    onModeSelected = onThemeModeSelected
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text(
-                text = stringResource(R.string.language),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp)
-            )
-
-            LanguageSelection(
-                currentLanguage = appLanguage,
-                onLanguageSelected = onAppLanguageSelected
-            )
+            SettingsSection(title = stringResource(R.string.language)) {
+                LanguageSelection(
+                    currentLanguage = appLanguage,
+                    onLanguageSelected = onAppLanguageSelected
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        content()
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     }
 }
 
@@ -102,28 +133,11 @@ fun ThemeSelection(
 
     Column(Modifier.selectableGroup()) {
         options.forEach { (mode, label) ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .selectable(
-                        selected = (mode == currentMode),
-                        onClick = { onModeSelected(mode) },
-                        role = Role.RadioButton
-                    )
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(
-                    selected = (mode == currentMode),
-                    onClick = null
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(start = 16.dp)
-                )
-            }
+            SelectionRow(
+                isSelected = (mode == currentMode),
+                label = label,
+                onClick = { onModeSelected(mode) }
+            )
         }
     }
 }
@@ -142,29 +156,42 @@ fun LanguageSelection(
 
     Column(Modifier.selectableGroup()) {
         options.forEach { (lang, label) ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .selectable(
-                        selected = (lang == currentLanguage),
-                        onClick = { onLanguageSelected(lang) },
-                        role = Role.RadioButton
-                    )
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(
-                    selected = (lang == currentLanguage),
-                    onClick = null
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(start = 16.dp)
-                )
-            }
+            SelectionRow(
+                isSelected = (lang == currentLanguage),
+                label = label,
+                onClick = { onLanguageSelected(lang) }
+            )
         }
+    }
+}
+
+@Composable
+private fun SelectionRow(
+    isSelected: Boolean,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .selectable(
+                selected = isSelected,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isSelected,
+            onClick = null
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(start = 16.dp)
+        )
     }
 }
 
