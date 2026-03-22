@@ -1,184 +1,209 @@
-# PicMe AI Agent System
+# PicMe AI Agent System - LITE Team
 
-## 🎭 Available Agents
+## 🎯 Optimized for Small Projects (1-5 people)
 
-This project uses a multi-agent collaboration system for AI-powered software development.
+This project uses a **lean multi-agent collaboration system** focused on efficiency and simplicity.
 
-### Core Agents
+---
+
+## 👥 Core Team (4 Essential Roles)
 
 | Agent | File | Role | Keywords |
 |-------|------|------|----------|
-| **Product Agent** | `pm_agent.md` | Product Manager (PM) | requirements, UX, features, user value |
-| **Engineering Agent** | `rd_agent.md` | Software Engineer (RD) | implementation, architecture, code quality |
-| **Review Agent** | `review_agent.md` | Code Reviewer | code review, quality assurance, best practices |
-| **Testing Agent** | `qa_agent.md` | QA Engineer | testing strategy, test cases, bug prevention |
+| **PM** | `pm_agent.md` | Product Manager | requirements, UX, features |
+| **RD** | `rd_agent.md` | Software Engineer | implementation, architecture |
+| **Review** | `review_agent.md` | Code Reviewer | code review, quality |
+| **QA** | `qa_agent.md` | QA Engineer | testing, test cases |
+
+---
 
 ## 🚀 Quick Start
 
-### Activate Specific Agent
-Prefix your question with the agent name:
-
-```
-[Product] What's the user value of this feature?
-[Engineering] How to implement duplicate detection?
-[Review] Please review this code
-[Testing] What test cases should I write?
+### Activate by Prefix (Recommended)
+```bash
+[PM] ...      → Product Manager
+[RD] ...      → Software Engineer  
+[Review] ...  → Code Reviewer
+[QA] ...      → QA Engineer
 ```
 
-### Automatic Agent Selection
-Just describe your task, and the system will activate the appropriate agent:
-
+### Example Usage
 ```
-"I want to add a photo compression feature"
-→ Product Agent analyzes requirements
-→ Engineering Agent proposes solutions  
-→ Testing Agent designs test cases
-→ Review Agent validates code quality
-```
-
-## 📁 File Structure
-
-```
-PicMe/
-├── agents/                    # Agent configuration files
-│   ├── README.md             # This file - system overview
-│   ├── product_agent.md      # Product Manager role
-│   ├── engineering_agent.md  # Software Engineer role
-│   ├── review_agent.md       # Code Reviewer role
-│   └── testing_agent.md      # QA Engineer role
-├── .agent/                   # Legacy agent folder (deprecated)
-└── ...                       # Project source code
-```
-
-## 🔄 Collaboration Workflows
-
-### Feature Development Flow
-```
-User Request → Product Agent (Requirements)
-            → Engineering Agent (Implementation)
-            → Testing Agent (Quality Assurance)
-            → Review Agent (Code Review)
-            → User (Delivery)
-```
-
-### Bug Fix Flow
-```
-Bug Report → Testing Agent (Analysis)
-          → Engineering Agent (Fix)
-          → Review Agent (Validation)
-          → User (Confirmation)
-```
-
-## 💡 Best Practices
-
-### DO ✅
-- Be specific about your requirements
-- Provide context when asking questions
-- Review agent suggestions critically
-- Combine multiple agents for complex tasks
-
-### DON'T ❌
-- Skip requirement analysis
-- Ignore review comments
-- Merge without testing
-- Accept vague answers
-
-## 🎯 Agent Responsibilities
-
-### Product Agent
-- Requirement analysis and clarification
-- User experience design
-- Feature prioritization
-- Success metrics definition
-
-### Engineering Agent
-- Technical solution design
-- Clean Architecture implementation
-- Code quality and performance
-- Best practices application
-
-### Review Agent
-- Code quality scoring
-- Architecture compliance check
-- Performance optimization suggestions
-- Security and risk assessment
-
-### Testing Agent
-- Test strategy design
-- Test case creation
-- Bug severity classification
-- Quality metrics tracking
-
-## 📊 Quality Standards
-
-All agents follow these principles:
-
-1. **Clean Architecture**: Strict separation of Domain/Data/Presentation layers
-2. **Type Safety**: Kotlin best practices, sealed classes, data classes
-3. **Performance**: All operations < 100ms response time
-4. **Testing**: Core logic must have unit tests (≥80% coverage)
-5. **Documentation**: Clear comments, KDoc format
-
-## 🔧 For AI Assistants
-
-When assisting with this project:
-
-1. **Understand the role**: Check which agent is being activated
-2. **Follow the guidelines**: Each agent has specific responsibilities
-3. **Maintain consistency**: Use established patterns and conventions
-4. **Collaborate**: Work with other agents when needed
-5. **Quality first**: Never compromise on code quality or user experience
-
-## 📚 Documentation
-
-- **System Overview**: `agents/README.md` (this file)
-- **Usage Examples**: `agents/USAGE_EXAMPLES.md`
-- **Role Details**: See individual agent files
-
-## 🌟 Example Interactions
-
-### Example 1: New Feature
-```
-User: "I want to add smart album categorization"
-
-[Product Agent activates]
-Product: "Let me understand the requirements..."
-- Target users?
-- Categorization dimensions?
-- Expected value?
-
-[Engineering Agent joins]
-Engineering: "Based on the PRD, I suggest..."
-- ML Kit for image labeling
-- Background service for processing
-- Estimated: 16 hours
-
-[Testing Agent contributes]
-Testing: "Test strategy includes..."
-- Accuracy testing
-- Performance testing
-- Edge cases
-
-[Review Agent validates]
-Review: "Architecture looks good, score: 90/100"
-```
-
-### Example 2: Technical Question
-```
-User: "[Engineering] How to handle async image loading?"
-
-Engineering: "In PicMe, we use Coil with Compose..."
-- Automatic memory management
-- Lifecycle-aware
-- Built-in caching
-
-[Review Agent adds]
-Review: "Don't forget..."
-- Add placeholder images
-- Handle error states
-- Consider cross-thread calls
+[PM] "这个功能的用户价值是什么？"
+[RD] "如何用 Clean Architecture 实现图片缓存？"
+[Review] "请 review 这段 UseCase 代码"
+[QA] "需要设计什么测试用例？"
 ```
 
 ---
 
-**Remember**: Great teams use great tools. Multi-agent collaboration makes development faster and more reliable!
+## 📁 File Structure
+
+```
+agents/
+├── README.md                 # This file - LITE team overview
+├── LITE_TEAM_CONFIG.md       # Detailed lite configuration guide
+├── USAGE_EXAMPLES.md         # Usage examples (Chinese)
+│
+├── pm_agent.md               # Product Manager (必需)
+├── rd_agent.md               # Software Engineer (必需)
+├── review_agent.md           # Code Reviewer (必需)
+└── qa_agent.md               # QA Engineer (必需)
+│
+└── archived/                 # Archived roles (for reference)
+    ├── design_agent.md       # UI/UX Designer (按需激活)
+    ├── android_agent.md      # Android Framework Expert (按需激活)
+    ├── perf_agent.md         # Performance Expert (按需激活)
+    └── devops_agent.md       # Build Engineer (按需激活)
+```
+
+---
+
+## 🔄 Simple Workflow
+
+### Feature Development
+```
+User Request 
+    ↓
+[PM] Requirements (30 min)
+    ↓
+[RD] Implementation (2-4 hours)
+    ↓
+[Review] Code Review (15 min)
+    ↓
+[QA] Testing (30 min)
+    ↓
+Ship! ✨
+```
+
+### Bug Fix
+```
+Bug Report
+    ↓
+[QA] Reproduce
+    ↓
+[RD] Fix
+    ↓
+[Review] Verify
+    ↓
+Deploy ✨
+```
+
+---
+
+## 💡 When to Use Archived Roles
+
+The archived roles are available when needed:
+
+### Activate Design Agent
+When you need custom UI/UX design:
+```
+[Design] "设计一个带毛玻璃效果的底部工具栏"
+→ File: archived/design_agent.md
+```
+
+### Activate Android Agent
+When facing complex framework issues:
+```
+[Android] "CameraX 实时滤镜如何实现？"
+→ File: archived/android_agent.md
+```
+
+### Activate Perf Agent
+When performance becomes critical:
+```
+[Perf] "启动时间 3 秒，如何优化到 1.5 秒？"
+→ File: archived/perf_agent.md
+```
+
+### Activate DevOps Agent
+When you need CI/CD automation:
+```
+[DevOps] "如何配置 GitHub Actions 自动发布？"
+→ File: archived/devops_agent.md
+```
+
+---
+
+## 📊 Why LITE Team?
+
+### For Small Projects
+- ✅ **Lower Cost**: Less coordination overhead
+- ✅ **Faster Decisions**: Quick response time
+- ✅ **Simpler Learning**: Master 4 roles in 1 day
+- ✅ **Good Enough**: 90% coverage for daily needs
+
+### What About the Rest?
+- ⚠️ **Design**: Use Material Design components (good enough)
+- ⚠️ **Android**: RD can handle 90% of tasks (docs are clear)
+- ⚠️ **Performance**: Optimize when problems arise (not premature)
+- ⚠️ **DevOps**: Manual release is fine initially (1-2 times/month)
+
+---
+
+## 🎯 Best Practices
+
+### DO ✅
+1. Start simple with 4 core roles
+2. Iterate fast - ship first, optimize later
+3. One person can play multiple roles
+4. Focus on user value, not perfect code
+
+### DON'T ❌
+1. Don't over-engineer from day one
+2. Don't copy big company processes
+3. Don't optimize prematurely
+4. Don't learn all 8 roles at once
+
+---
+
+## 📈 Growth Path
+
+```
+Stage 1: LITE Team (Current)
+├── Team: 1-5 people
+├── Roles: PM + RD + Review + QA
+└── Goal: Validate product quickly
+
+       ↓ User growth
+
+Stage 2: Standard Team
+├── Team: 5-10 people  
+├── Roles: LITE + Design + Android
+└── Goal: Improve user experience
+
+       ↓ Scale up
+
+Stage 3: Full Team
+├── Team: 10+ people
+├── Roles: All 8 agents
+└── Goal: Refined operations
+```
+
+---
+
+## 📚 Documentation
+
+- **LITE Overview**: `README.md` (this file)
+- **Detailed Guide**: `LITE_TEAM_CONFIG.md`
+- **Usage Examples**: `USAGE_EXAMPLES.md`
+- **Role Details**: See individual agent files
+
+---
+
+## 🎉 Remember
+
+**Less is More!** 
+
+For small projects:
+- Simple = Fast
+- Flexible = Adaptive  
+- Practical = Solves Problems
+
+Start with 4 core roles, expand when truly needed.
+
+---
+
+**Last Updated**: March 22, 2026  
+**Version**: v4.0 (LITE Team Configuration)  
+**Best For**: Small teams (1-5 people), startups, indie developers
