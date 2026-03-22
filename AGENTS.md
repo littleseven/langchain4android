@@ -1,6 +1,7 @@
-# PicMe AI 助手指南 (Agent Instructions)
+# PicMe 全局开发规范 (Single Source of Truth)
 
-你是一位**资深 Android 专家级工程师、测试专家与爬虫架构师**，专门负责 PicMe 项目的开发与维护。你推崇极致的性能、优雅的架构以及 Unix 极简主义。你不仅关注业务实现，还负责管理实验数据生成系统，并维护全局日志观察系统。
+
+本文件是 PicMe 项目在架构、编码风格、日志记录等跨领域约束上的唯一权威来源。所有团队成员必须遵循此规范进行开发。
 
 ## 1. 项目定义与核心价值 (Product Identity)
 
@@ -55,51 +56,53 @@
 
 ## 5. 代码架构与目录结构 (Project Structure)
 
-项目遵循高度解耦的 **Clean Architecture** 结合 **Feature-based** 组织方式：
+
+项目严格遵循高度解耦的 **Clean Architecture**（清洁架构）模式，并结合 **Feature-based**（特性驱动）的方式进行组织，以保证模块间的低耦合和高内聚。具体结构如下：
 
 ```text
 com.picme
-├── core/                # 核心基础库
-│   ├── designsystem/    # UI 组件、主题、颜色、字体
-│   ├── image/           # 图像处理、滤镜底座、Coil 配置
-│   └── common/          # Logger、扩展函数、工具类
-├── data/                # 数据层
-│   ├── local/           # Room Database, DAO
-│   ├── model/           # Data Entity
-│   ├── preferences/     # DataStore (Theme, Language)
-│   └── repository/      # Repository 实现
-├── domain/              # 领域层 (纯 Kotlin)
-│   ├── model/           # Domain Model (MediaAsset 等)
-│   ├── repository/      # Repository 接口
-│   └── usecase/         # 原子化 Usecase
-├── features/            # 业务功能模块
-│   ├── camera/          # 相机 (UI, ViewModel, Components)
-│   ├── gallery/         # 相册 (UI, ViewModel, Components)
-│   ├── debug/           # 调试工具 (SampleGenerator, Overlay)
-│   └── settings/        # 设置中心
-└── navigation/          # Compose 导航
+├── core/                # 核心基础库，提供跨模块复用的基础组件和工具。
+│   ├── designsystem/    # UI 组件、主题、颜色、字体等设计系统资源。
+│   ├── image/           # 图像处理逻辑、滤镜实现、图片加载框架（如Coil）配置。
+│   └── common/          # 全局通用工具类、扩展函数、Logger 及其他公共基类。
+├── data/                # 数据层，负责数据的持久化和访问，与外部世界交互。
+│   ├── local/           # 本地数据库（Room）、DAOs 和文件 I/O 操作。
+│   ├── model/           # 数据实体（Data Entity），对应数据库表结构或网络模型。
+│   ├── preferences/     # 应用偏好设置（使用 DataStore 存储）。
+│   └── repository/      # Repository 的具体实现，整合多个数据源。
+├── domain/              # 领域层，包含纯粹的业务逻辑和规则，不依赖任何 Android SDK。
+│   ├── model/           # 领域模型（Domain Model），定义业务概念和状态（如 MediaAsset）。
+│   ├── repository/      # Repository 接口，定义领域层所需的数据契约。
+│   └── usecase/         # 原子化的 UseCase，封装单一业务操作，是连接领域层和表现层的桥梁。
+├── features/            # 业务功能模块，每个模块是一个独立的功能单元。
+│   ├── camera/          # 相机功能，包含其 UI、ViewModel 和相关组件。
+│   ├── gallery/         # 相册功能，包含其 UI、ViewModel 和相关组件。
+│   ├── debug/           # 调试工具，用于实验数据生成、日志监控等功能。
+│   └── settings/          # 设置中心，管理应用的所有用户可配置选项。
+└── navigation/          # 负责整个应用的 Compose 页面导航逻辑。
 ```
 
 ## 6. 编程与代码风格约束 (Strict Rules) [CORE]
 
 ### 6.1 代码质量
-- **[MUST] 类型安全**: 优先使用密封类 (Sealed Class) 处理 UI 状态。
-- **[MUST] Lambda 规范**: 显式命名参数，禁止隐式 `it`（除非是极其简单的单行转换）。
-- **[NEVER] 魔法值**: 严禁硬编码，字符串必入 `strings.xml`，数值必入常量。
+- **[MUST] 类型安全**: 在处理 UI 状态（如 Loading, Success, Error）时，必须优先使用密封类 (Sealed Class)，以利用编译器检查来杜绝空指针异常，提高代码健壮性。
+- **[MUST] Lambda 规范**: 在编写 lambda 表达式时，必须显式地为参数命名，禁止在复杂逻辑中使用隐式的 `it` 关键字，以增强代码的可读性和可维护性。仅在极简的单行转换中可例外。
+- **[NEVER] 魔法值**: 严禁在代码中出现“魔法值”（Magic Values）。所有用户可见的字符串必须提取到 `res/values/strings.xml` 中，所有魔法数字必须定义为具有明确语义的常量（const val 或 object 内部的 val）。
+- **[MUST] 单一职责**: 每个类、函数和模块都应只负责一项明确的职责。UseCase 必须是原子化的，函数长度建议不超过40行，过长的函数必须拆分为更小的逻辑单元。
 
 ### 6.2 代码风格与格式 (Code Style & Formatting) [STRICT]
-- **[MUST] 官方规范**: 严格遵守 [Google Kotlin Style Guide](https://developer.android.com/kotlin/style-guide)。
+- **[MUST] 官方规范**: 所有代码必须严格遵守 [Google Kotlin Style Guide](https://developer.android.com/kotlin/style-guide)，以保证团队协作的一致性。
 - **[MUST] 缩进规则**: 
-    - Kotlin/Java: 必须使用 **4 个空格** 缩进，禁止使用 Tab。
-    - XML/Json: 必须使用 **2 个空格** 缩进。
-- **[MUST] 导入管理**: 禁止使用通配符导入（如 `import a.b.*`），严禁残留无用导入。
-- **[MUST] 函数长度**: 尽量保持函数短小（建议不超过 40 行），超过时必须拆分为逻辑子组件。
-- **[MUST] 修饰符顺序**: 遵循 Kotlin 官方顺序（如 `private final`）。
+  - Kotlin/Java 源文件：必须使用 **4 个空格** 进行缩进，绝对禁止使用 Tab 字符。
+  - XML、JSON 等标记语言文件：必须使用 **2 个空格** 进行缩进。
+- **[MUST] 导入管理**: 禁止使用任何形式的通配符导入（例如 `import com.example.*`）。所有导入语句必须精确指定类名，并在每次提交前清理IDE产生的无用导入（Unused Imports）。
+- **[MUST] 函数长度**: 倡导编写短小精悍的函数。单一函数的长度应尽量控制在 40 行以内。如果函数过长或职责不单一，则必须将其重构为更小的、功能明确的私有函数。
+- **[MUST] 修饰符顺序**: 类和成员的修饰符必须遵循 Kotlin 官方推荐的顺序，例如 `private final override fun`。具体的顺序请参考官方文档。
 
 ### 6.3 Agent 执行规约
-- **网络监控**：涉及网络请求修改，必须在 `PicMe:Scraping` 下记录 URL 及状态码。
-- **统计汇总**：每一轮数据抓取结束，必须输出 `Round Statistics` 转换率汇总。
-- **UI 入口保护**：严禁在修改主界面时遮挡 Debug 按钮等系统入口。
+- **网络监控**：任何对网络请求逻辑的修改（包括新增、删除或变更URL），都必须确保在 `PicMe:Scraping` 日志标签下记录原始请求的完整URL以及返回的HTTP状态码，以便于问题追踪和调试。
+- **统计汇总**：每一个完整的数据抓取流程（从开始到结束）执行完毕后，Agent 必须自动生成并输出一份 `Round Statistics` 报告，其中包含各渠道的请求成功率、下载转换率等关键性能指标的汇总。
+- **UI 入口保护**：在进行 UI 相关的修改时，必须优先考虑系统的可调试性。严禁通过布局调整或动画等方式遮挡或移除用于唤起调试工具（如日志浮窗）的“Debug 按钮”或其他系统入口。
 
 ## 7. AI 执行工作流 (Agent Workflow)
 
