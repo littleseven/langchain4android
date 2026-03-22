@@ -21,7 +21,25 @@
         - 英文 (EN)：Gallery, Filters, Settings, Camera/Capture.
 - **[OFFLINE] 离线优先**：核心功能在无网络环境下必须保持 100% 可用。
 
-## 3. 代码架构与目录结构 (Project Structure)
+## 3. 全局日志系统规范 (Global Logging System) [NEW]
+
+为了提升系统的可观察性与调试效率，必须严格遵守以下日志规范：
+
+### A. 日志 Tag 设计
+所有日志 Tag 必须遵循 `PicMe:[Module]` 格式：
+- `PicMe:Camera`: 拍摄流、生命周期、配置变更。
+- `PicMe:Gallery`: 媒体加载、分组逻辑、Pager 索引。
+- `PicMe:Data`: 数据库事务、文件 IO、Room Migration。
+- `PicMe:Domain`: 业务逻辑、UseCase 执行。
+- `PicMe:AI`: ML Kit 人脸检测、内容校验、皮肤分析。
+- `PicMe:Nav`: 页面跳转、路由参数、返回栈管理。
+- `PicMe:Perf`: 启动耗时、帧率波动、内存占用。
+
+### B. 调试工具流
+- **[BUFFER] 内存缓存**：日志在控制台输出的同时，必须写入全局 `LogRepository` 的内存缓存（上限 500 条）。
+- **[OVERLAY] 浮窗检索**：Camera 和 Gallery 界面必须提供浮窗日志工具，支持 Grep 关键词筛选。
+
+## 4. 代码架构与目录结构 (Project Structure)
 
 项目遵循高度解耦的 **Clean Architecture** 结合 **Feature-based** 组织方式：
 
@@ -30,7 +48,7 @@ com.picme
 ├── core/                # 核心基础库 (与业务无关或全局通用)
 │   ├── designsystem/    # 极简 UI 组件、主题、颜色、字体
 │   ├── image/           # 基础图像处理工具、滤镜底座
-│   └── common/          # 基础扩展函数、工具类
+│   └── common/          # Logger、基础扩展函数、工具类
 ├── data/                # 数据层 (实现 Domain 定义的接口)
 │   ├── local/           # Room Database, DAO, DataStore
 │   └── repository/      # 数据仓库具体实现
@@ -45,25 +63,25 @@ com.picme
 └── di/                  # 依赖注入配置
 ```
 
-## 4. 编程与架构约束 (Strict Rules)
+## 5. 编程与架构约束 (Strict Rules)
 
-### 4.1 编码质量
-- **[MUST] 类型安全**: 优先使用密封类 (Sealed Class) 处理 UI 状态。
-- **[MUST] Lambda 规范**: 显式命名 Lambda 参数，禁止使用隐式 `it`。
-- **[MUST] I18N 意识**：使用 `stringResource(R.string.xxx)`。ViewModel 尽量传递 `StringRes ID`。
-- **[NEVER] 魔法值**: 严禁硬编码尺寸、颜色。必须引用 `DesignSystem`。
+### 5.1 编码质量
+- **[MUST] 类型安全**: 优先使用密封类处理 UI 状态。
+- **[MUST] Lambda 规范**: 显式命名参数，禁止隐式 `it`。
+- **[MUST] I18N 意识**：使用 `stringResource(R.string.xxx)`。
+- **[NEVER] 魔法值**: 严禁硬编码。
 
-### 4.2 Compose 最佳实践
+### 5.2 Compose 最佳实践
 - **[MUST] 状态下沉 (State Hoisting)**: Composable 应尽可能保持 Stateless。
 - **[CHECK] 重组优化**: 避免在 Composable 内部进行耗时计算，使用 `remember` 或 `derivedStateOf`。
 
-## 5. AI 执行工作流 (Agent Workflow)
+## 6. AI 执行工作流 (Agent Workflow)
 
 1.  **语境探索**：修改前必用 `find_usages` 或 `code_search`。
 2.  **多语言检查 (I18N Check)**：涉及文案修改时，必须同步更新各语言 `strings.xml`，并评估长文本 UI 溢出风险。
 3.  **精准修改**：优先使用 `replace_text`。
-4.  **自愈验证**：修改后必用 `analyze_current_file` 检查语法。
+4.  **自愈验证**：修改后必用 `analyze_current_file`。
 
-## 6. 构建与环境
+## 7. 构建与环境
 - **Min SDK**: 24 | **Target SDK**: 35
 - **编译指令**: `./gradlew assembleDebug`

@@ -27,10 +27,10 @@
 - **黑图过滤**：计算平均亮度，亮度 < 20 的纯黑图片必须剔除。
 - **坏图过滤**：计算色彩标准差，方差 < 5.0 的纯色占位图或损坏资源必须剔除。
 
-## 3. 测试观察与日志流 (Observability)
+## 3. 全局日志系统联动 [NEW]
 
-- **[TRACE] 全链路日志**：所有抓取步骤（Search, Download, Analysis, Filter, Save）必须记录带有 `Gallery` 标签的详细日志。
-- **[ROUND_REPORT] 一轮统计**：每一轮关键词抓取结束后，必须输出各渠道的成功入库率统计报告。
+- **[INTEGRATION] PicMeLogger 绑定**：Debug 模块的所有抓取、分析、入库动作必须通过 `PicMeLogger` 输出，以便于浮窗检索工具实时捕捉。
+- **[STATS] 质量画像**：每一轮抓取结束后，必须生成包含成功率、过滤原因分布的 `LogEntry`。
 
 ## 4. Agent 执行规约
 - 严禁删除已有的关键词库（STAR_NAMES, LANDSCAPE_KEYWORDS），仅支持扩充。
