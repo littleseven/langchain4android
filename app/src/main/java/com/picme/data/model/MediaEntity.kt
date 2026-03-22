@@ -14,5 +14,6 @@ data class MediaEntity(
     val fileName: String,
     val duration: Long? = null,
     val hasFace: Boolean = false,
-    val faceId: String? = null
+    val faceId: String? = null,
+    val source: String? = null
 )

@@ -1,6 +1,10 @@
 package com.picme.features.debug
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -10,15 +14,19 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pool
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.picme.PicMeApplication
 import com.picme.R
@@ -42,39 +50,31 @@ fun DebugScreen(
     val isGenerating by SampleDataGenerator.isGenerating.collectAsState()
     val isPaused by SampleDataGenerator.isPaused.collectAsState()
     val progress by SampleDataGenerator.progress.collectAsState()
+    val logs by SampleDataGenerator.logs.collectAsState()
     val allMedia by mediaViewModel.allMedia.collectAsState()
 
     DebugContent(
         isGenerating = isGenerating,
         isPaused = isPaused,
         progress = progress,
+        logs = logs,
         onNavigateBack = onNavigateBack,
         onPauseResume = { if (isPaused) SampleDataGenerator.resume() else SampleDataGenerator.pause(context) },
         onStop = { SampleDataGenerator.stop(context) },
         onPopulatePerson = {
-            scope.launch {
-                SampleDataGenerator.populatePersonTestData(context, app.repository)
-            }
+            scope.launch { SampleDataGenerator.populatePersonTestData(context, app.repository) }
         },
         onPopulateLandscape = {
-            scope.launch {
-                SampleDataGenerator.populateLandscapeTestData(context, app.repository)
-            }
+            scope.launch { SampleDataGenerator.populateLandscapeTestData(context, app.repository) }
         },
         onPopulateSwimwear = {
-            scope.launch {
-                SampleDataGenerator.populateSwimwearTestData(context, app.repository)
-            }
+            scope.launch { SampleDataGenerator.populateSwimwearTestData(context, app.repository) }
         },
         onPopulateSexy = {
-            scope.launch {
-                SampleDataGenerator.populateSexyTestData(context, app.repository)
-            }
+            scope.launch { SampleDataGenerator.populateSexyTestData(context, app.repository) }
         },
         onClearData = {
-            scope.launch {
-                SampleDataGenerator.clearTestData(context, app.repository, allMedia)
-            }
+            scope.launch { SampleDataGenerator.clearTestData(context, app.repository, allMedia) }
         }
     )
 }
@@ -85,6 +85,7 @@ private fun DebugContent(
     isGenerating: Boolean,
     isPaused: Boolean,
     progress: String,
+    logs: List<String>,
     onNavigateBack: () -> Unit,
     onPauseResume: () -> Unit,
     onStop: () -> Unit,
@@ -94,6 +95,12 @@ private fun DebugContent(
     onPopulateSexy: () -> Unit,
     onClearData: () -> Unit
 ) {
+    var filterText by remember { mutableStateOf("") }
+    val filteredLogs = remember(logs, filterText) {
+        if (filterText.isBlank()) logs
+        else logs.filter { it.contains(filterText, ignoreCase = true) }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -111,133 +118,99 @@ private fun DebugContent(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (isGenerating) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(16.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
                             Text(progress, style = MaterialTheme.typography.bodyMedium)
                         }
-                        Spacer(Modifier.height(16.dp))
+                        Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = onPauseResume,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause))
+                            Button(onClick = onPauseResume, modifier = Modifier.weight(1f), contentPadding = PaddingValues(0.dp)) {
+                                Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause), fontSize = 12.sp)
                             }
-                            Button(
-                                onClick = onStop,
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
-                            ) {
-                                Icon(Icons.Default.Stop, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.stop))
+                            Button(onClick = onStop, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer), contentPadding = PaddingValues(0.dp)) {
+                                Icon(Icons.Default.Stop, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.stop), fontSize = 12.sp)
                             }
                         }
                     }
                 }
             }
 
-            Text(
-                text = stringResource(R.string.data_generation),
-                style = MaterialTheme.typography.titleMedium
-            )
+            Text(stringResource(R.string.data_generation), style = MaterialTheme.typography.titleSmall)
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onPopulatePerson,
-                        enabled = !isGenerating,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Person, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.person))
-                    }
-
-                    Button(
-                        onClick = onPopulateLandscape,
-                        enabled = !isGenerating,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Landscape, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.landscape))
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DebugButton(Icons.Default.Person, stringResource(R.string.person), onPopulatePerson, !isGenerating, Modifier.weight(1f))
+                    DebugButton(Icons.Default.Landscape, stringResource(R.string.landscape), onPopulateLandscape, !isGenerating, Modifier.weight(1f))
                 }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onPopulateSwimwear,
-                        enabled = !isGenerating,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Pool, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.swimwear))
-                    }
-
-                    Button(
-                        onClick = onPopulateSexy,
-                        enabled = !isGenerating,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Female, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.sexy))
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DebugButton(Icons.Default.Pool, stringResource(R.string.swimwear), onPopulateSwimwear, !isGenerating, Modifier.weight(1f))
+                    DebugButton(Icons.Default.Female, stringResource(R.string.sexy), onPopulateSexy, !isGenerating, Modifier.weight(1f))
+                }
+                Button(onClick = onClearData, enabled = !isGenerating, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)) {
+                    Icon(Icons.Default.DeleteSweep, null); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.clear_test_data))
                 }
             }
 
-            Button(
-                onClick = onClearData,
-                enabled = !isGenerating,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
+            // Log GREP Window
+            Column(modifier = Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = filterText,
+                    onValueChange = { filterText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Grep logs...", fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(18.dp)) },
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp),
+                    shape = RoundedCornerShape(8.dp)
                 )
-            ) {
-                Icon(Icons.Default.DeleteSweep, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.clear_test_data))
+                
+                Spacer(Modifier.height(8.dp))
+                
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.Black.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.Black.copy(alpha = 0.1f))
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        items(filteredLogs) { log ->
+                            Text(
+                                text = log,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (log.contains("Saved")) Color(0xFF2E7D32) else if (log.contains("Error") || log.contains("failed") || log.contains("HTTP")) Color.Red else Color.Unspecified
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-@Preview(showBackground = true, name = "Generating State")
 @Composable
-fun DebugScreenGeneratingPreview() {
-    PicMeTheme {
-        DebugContent(
-            isGenerating = true,
-            isPaused = false,
-            progress = "Generating 10/100...",
-            onNavigateBack = {},
-            onPauseResume = {},
-            onStop = {},
-            onPopulatePerson = {},
-            onPopulateLandscape = {},
-            onPopulateSwimwear = {},
-            onPopulateSexy = {},
-            onClearData = {}
-        )
+private fun DebugButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, enabled: Boolean, modifier: Modifier) {
+    Button(onClick = onClick, enabled = enabled, modifier = modifier, contentPadding = PaddingValues(vertical = 8.dp)) {
+        Icon(icon, null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 12.sp)
     }
 }

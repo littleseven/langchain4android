@@ -37,7 +37,8 @@ class MediaRepositoryImpl(private val mediaDao: MediaDao) : MediaRepository {
         fileName = fileName,
         duration = duration,
         hasFace = hasFace,
-        faceId = faceId
+        faceId = faceId,
+        source = source
     )
 
     private fun MediaAsset.toEntity(): MediaEntity = MediaEntity(
@@ -48,6 +49,7 @@ class MediaRepositoryImpl(private val mediaDao: MediaDao) : MediaRepository {
         fileName = fileName,
         duration = duration,
         hasFace = hasFace,
-        faceId = faceId
+        faceId = faceId,
+        source = source
     )
 }

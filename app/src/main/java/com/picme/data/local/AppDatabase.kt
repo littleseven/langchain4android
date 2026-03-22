@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.picme.data.model.MediaEntity
 
-@Database(entities = [MediaEntity::class], version = 2, exportSchema = false)
+@Database(entities = [MediaEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
 
