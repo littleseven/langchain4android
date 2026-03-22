@@ -13,20 +13,26 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.FilterDrama
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
@@ -65,8 +71,10 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
+import com.picme.core.common.DuplicateImageDetector
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import java.io.File
 import com.picme.features.gallery.GroupingMode.DATE
 import com.picme.features.gallery.GroupingMode.FACE
 import com.picme.features.gallery.GroupingMode.LANDSCAPE
@@ -85,6 +93,9 @@ fun GalleryScreen(
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
+    val showDuplicateManager by viewModel.showDuplicateManager.collectAsState()
+    val duplicateGroups by viewModel.duplicateGroups.collectAsState()
+    val isScanningDuplicates by viewModel.isScanningDuplicates.collectAsState()
 
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -97,6 +108,7 @@ fun GalleryScreen(
 
     BackHandler {
         when {
+            showDuplicateManager -> viewModel.toggleDuplicateManager(false)
             selectedMediaIndex != null -> selectedMediaIndex = null
             isSelectionMode -> {
                 isSelectionMode = false
@@ -109,7 +121,7 @@ fun GalleryScreen(
 
     Scaffold(
         topBar = {
-            if (selectedMediaIndex == null) {
+            if (selectedMediaIndex == null && !showDuplicateManager) {
                 GalleryTopBar(
                     isSelectionMode = isSelectionMode,
                     selectedCount = selectedIds.size,
@@ -133,7 +145,13 @@ fun GalleryScreen(
                         isSelectionMode = false
                         selectedIds.clear()
                     },
-                    onGroupingModeSelected = { viewModel.setGroupingMode(it) }
+                    onGroupingModeSelected = { viewModel.setGroupingMode(it) },
+                    onManageDuplicates = { viewModel.toggleDuplicateManager(true) }
+                )
+            } else if (showDuplicateManager) {
+                DuplicateManagerTopBar(
+                    onNavigateBack = { viewModel.toggleDuplicateManager(false) },
+                    onDeleteAllDuplicates = { viewModel.deleteAllDuplicatesExceptOne() }
                 )
             }
         }
@@ -143,7 +161,14 @@ fun GalleryScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            if (allFlatMedia.isEmpty()) {
+            if (showDuplicateManager) {
+                DuplicateManagerScreen(
+                    duplicateGroups = duplicateGroups,
+                    isScanning = isScanningDuplicates,
+                    onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) },
+                    onDeleteAll = { viewModel.deleteAllDuplicatesExceptOne() }
+                )
+            } else if (allFlatMedia.isEmpty()) {
                 EmptyGalleryMessage()
             } else {
                 MediaGrid(
@@ -227,7 +252,8 @@ private fun GalleryTopBar(
     onToggleSelectionMode: () -> Unit,
     onSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
-    onGroupingModeSelected: (GroupingMode) -> Unit
+    onGroupingModeSelected: (GroupingMode) -> Unit,
+    onManageDuplicates: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -259,6 +285,9 @@ private fun GalleryTopBar(
                     Icon(Icons.Rounded.Delete, contentDescription = null)
                 }
             } else {
+                IconButton(onClick = onManageDuplicates) {
+                    Icon(Icons.Outlined.FilterDrama, contentDescription = "Manage Duplicates")
+                }
                 GroupingMenu(
                     currentMode = groupingMode,
                     onModeSelected = onGroupingModeSelected
@@ -314,6 +343,221 @@ private fun EmptyGalleryMessage() {
             style = MaterialTheme.typography.bodyLarge
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DuplicateManagerTopBar(
+    onNavigateBack: () -> Unit,
+    onDeleteAllDuplicates: () -> Unit
+) {
+    TopAppBar(
+        title = { Text(stringResource(R.string.manage_duplicates)) },
+        navigationIcon = {
+            IconButton(onClick = onNavigateBack) {
+                Icon(Icons.Rounded.Close, contentDescription = null)
+            }
+        },
+        actions = {
+            IconButton(onClick = onDeleteAllDuplicates) {
+                Icon(Icons.Rounded.Delete, contentDescription = "Delete All Duplicates")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DuplicateManagerScreen(
+    duplicateGroups: List<Any>,
+    isScanning: Boolean,
+    onDeleteGroup: (Any) -> Unit,
+    onDeleteAll: () -> Unit
+) {
+    if (isScanning) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            androidx.compose.material3.CircularProgressIndicator()
+        }
+    } else if (duplicateGroups.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stringResource(R.string.no_duplicates_found),
+                style = MaterialTheme.typography.bodyLarge
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Text(
+                    text = stringResource(R.string.duplicate_groups_found, duplicateGroups.size),
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            
+            items(
+                count = duplicateGroups.size,
+                key = { index -> index }
+            ) { index ->
+                val group = duplicateGroups[index]
+                DuplicateGroupCard(
+                    group = group,
+                    onDeleteGroup = onDeleteGroup
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DuplicateGroupCard(
+    group: Any,
+    onDeleteGroup: (Any) -> Unit
+) {
+    var showPreview by remember { mutableStateOf(false) }
+    val duplicateGroup = group as? DuplicateImageDetector.DuplicateGroup ?: return
+    
+    androidx.compose.material3.Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (duplicateGroup.isExactDuplicate) {
+                        stringResource(R.string.exact_duplicate)
+                    } else {
+                        stringResource(R.string.similar_image)
+                    },
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = stringResource(R.string.count_files, duplicateGroup.files.size),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            
+            // 显示前 3 张图片的缩略图
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                duplicateGroup.files.take(3).forEach { file ->
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(file.absolutePath)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+            
+            // 操作按钮
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { showPreview = true }
+                ) {
+                    Text(stringResource(R.string.preview_all))
+                }
+                androidx.compose.material3.Button(
+                    onClick = { onDeleteGroup(group) },
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text(stringResource(R.string.keep_first_delete_others))
+                }
+            }
+        }
+    }
+    
+    if (showPreview) {
+        DuplicatePreviewDialog(
+            files = duplicateGroup.files,
+            onDismiss = { showPreview = false },
+            onDelete = {
+                showPreview = false
+                onDeleteGroup(group)
+            }
+        )
+    }
+}
+
+@Composable
+private fun DuplicatePreviewDialog(
+    files: List<File>,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.duplicate_preview)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.will_keep_first_file))
+                Spacer(modifier = Modifier.padding(4.dp))
+                files.forEachIndexed { index, file ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (index == 0) {
+                            Icon(
+                                Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = file.name,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.Button(onClick = onDelete) {
+                Text(stringResource(R.string.confirm_delete))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable

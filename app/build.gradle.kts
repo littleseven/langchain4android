@@ -32,13 +32,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    
+
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
         }
     }
-    
+
     buildFeatures {
         compose = true
     }
@@ -89,8 +89,10 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.common)
 
-    // ML Kit Face Detection
+    // ML Kit
     implementation(libs.google.mlkit.face.detection)
+    implementation(libs.google.mlkit.text.recognition)
+    implementation(libs.google.mlkit.text.recognition.chinese)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -33,6 +33,7 @@ import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
+import com.picme.features.ocr.OcrScreen
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
@@ -122,6 +123,7 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                                     onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
+                                    onNavigateToOcr = { navController.navigate(Screen.Ocr.route) },
                                     viewModel = mediaViewModel
                                 )
                             }
@@ -139,6 +141,9 @@ class MainActivity : ComponentActivity() {
                             }
                             composable(Screen.Debug.route) {
                                 DebugScreen(onNavigateBack = { navController.popBackStack() })
+                            }
+                            composable(Screen.Ocr.route) {
+                                OcrScreen(onNavigateBack = { navController.popBackStack() })
                             }
                         }
                     }

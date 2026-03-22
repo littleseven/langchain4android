@@ -49,6 +49,10 @@
 - **[STRICT] 构图约束**：人脸高度占比必须 **< 40%**，拦截大头贴。
 - **[VALIDITY] 物理校验**：亮度 > 20 且 方差 > 5.0，彻底拦截全黑或损坏图。
 
+### C. 重复数据管理
+- **[DUPLICATE_DETECTION]** 系统必须提供基于 MD5（精确重复）和感知哈希（相似图片）的双重检测机制。
+- **[AUTO_CLEANUP]** 用户应能通过一键操作清理所有重复图片，保留每组的第一张。
+
 ## 5. 代码架构与目录结构 (Project Structure)
 
 项目遵循高度解耦的 **Clean Architecture** 结合 **Feature-based** 组织方式：
@@ -105,5 +109,5 @@ com.picme
 4.  **自愈验证**：修改后必用 `analyze_current_file` 检查潜在错误与代码风格警告，并运行 `./gradlew assembleDebug` 验证。
 
 ## 8. 构建与环境
-- **Min SDK**: 24 | **Target SDK**: 35
+- **Min SDK**: 24 | **Target SDK**: 36
 - **编译指令**: `./gradlew assembleDebug`

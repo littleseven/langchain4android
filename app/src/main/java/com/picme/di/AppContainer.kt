@@ -16,7 +16,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     private val database by lazy { AppDatabase.getDatabase(context) }
 
     override val repository: MediaRepository by lazy {
-        MediaRepositoryImpl(database.mediaDao())
+        MediaRepositoryImpl(database.mediaDao(), context)
     }
 
     override val userPreferencesRepository: UserPreferencesRepository by lazy {

@@ -118,4 +118,17 @@
     <string name="leveler">水平儀</string>
     <string name="tip_night">請保持手機穩定，建議使用三腳架。</string>
     <string name="tip_moon">建議使用最大變焦，並點擊月亮進行對焦。</string>
+    
+    <!-- Duplicate Management -->
+    <string name="manage_duplicates">管理重複照片</string>
+    <string name="no_duplicates_found">未找到重複圖片</string>
+    <string name="duplicate_groups_found">找到 %1$d 組重複圖片</string>
+    <string name="exact_duplicate">完全重複</string>
+    <string name="similar_image">相似圖片</string>
+    <string name="count_files">%1$d 張</string>
+    <string name="preview_all">預覽全部</string>
+    <string name="keep_first_delete_others">保留首張，刪除其餘</string>
+    <string name="duplicate_preview">重複預覽</string>
+    <string name="will_keep_first_file">將保留第一張圖片，刪除其餘：</string>
+    <string name="confirm_delete">確認刪除</string>
 </resources>

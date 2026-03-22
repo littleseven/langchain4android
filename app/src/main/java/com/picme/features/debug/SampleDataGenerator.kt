@@ -271,17 +271,18 @@ object SampleDataGenerator {
     }
 
     private fun sourceOrder(source: String) = when (source) {
-        "xiuren" -> 0
-        "tuchong" -> 1
-        "metcn" -> 2
-        "metart" -> 3
-        "500px" -> 4
-        "unsplash" -> 5
-        "natgeo" -> 6
-        "xiaohongshu" -> 7
-        "huaban" -> 8
-        "weibo" -> 9
-        else -> 10
+        "duitang" -> 0
+        "xiuren" -> 1
+        "tuchong" -> 2
+        "metcn" -> 3
+        "metart" -> 4
+        "500px" -> 5
+        "unsplash" -> 6
+        "natgeo" -> 7
+        "xiaohongshu" -> 8
+        "huaban" -> 9
+        "weibo" -> 10
+        else -> 11
     }
 
     private suspend fun searchImagesParallel(
@@ -303,6 +304,7 @@ object SampleDataGenerator {
             return@coroutineScope natgeo + unsplash + pexels + baidu.shuffled()
         }
 
+        val dDuitang = async { searchBaidu("site:duitang.com $keyword") }
         val dXiuren = async { searchBaidu("site:xiuren.org $keyword") }
         val dTuchong = async { searchBaidu("site:tuchong.com $keyword") }
         val dMetCn = async { searchBaidu("site:metcn.com $keyword") }
@@ -313,6 +315,7 @@ object SampleDataGenerator {
         val dWeibo = async { searchWeibo(keyword) }
         val dBaidu = async { searchBaidu(keyword) }
 
+        val duitang = dDuitang.await().map { ImageCandidate(it, "duitang") }
         val xiuren = dXiuren.await().map { ImageCandidate(it, "xiuren") }
         val tuchong = dTuchong.await().map { ImageCandidate(it, "tuchong") }
         val metcn = dMetCn.await().map { ImageCandidate(it, "metcn") }
@@ -324,10 +327,10 @@ object SampleDataGenerator {
         val baidu = dBaidu.await().map { ImageCandidate(it, "baidu") }
 
         addLog(
-            "Portrait Candidates -> PROFESSIONAL:${xiuren.size + tuchong.size + metcn.size + p500.size}, SOCIAL:${xhs.size + weibo.size}, HUABAN:${huaban.size}"
+            "Portrait Candidates -> DUITANG:${duitang.size}, PROFESSIONAL:${xiuren.size + tuchong.size + metcn.size + p500.size}, SOCIAL:${xhs.size + weibo.size}, HUABAN:${huaban.size}"
         )
 
-        xiuren + tuchong + metcn + metart + p500 + xhs + huaban + weibo + baidu.shuffled()
+        duitang + xiuren + tuchong + metcn + metart + p500 + xhs + huaban + weibo + baidu.shuffled()
     }
 
     private fun extractUrls(html: String): List<String> {

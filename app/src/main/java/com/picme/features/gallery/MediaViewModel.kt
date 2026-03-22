@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.picme.core.common.DuplicateImageDetector
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.GetGroupedMediaUseCase
@@ -31,6 +32,15 @@ class MediaViewModel(
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
     val groupingMode = _groupingMode.asStateFlow()
+    
+    private val _showDuplicateManager = MutableStateFlow(false)
+    val showDuplicateManager = _showDuplicateManager.asStateFlow()
+    
+    private val _duplicateGroups = MutableStateFlow<List<Any>>(emptyList())
+    val duplicateGroups = _duplicateGroups.asStateFlow()
+    
+    private val _isScanningDuplicates = MutableStateFlow(false)
+    val isScanningDuplicates = _isScanningDuplicates.asStateFlow()
 
     val groupedMedia: StateFlow<List<MediaGroup>> = combine(
         repository.allMedia,
@@ -63,6 +73,71 @@ class MediaViewModel(
     fun deleteMediaByIds(ids: List<Long>) {
         viewModelScope.launch {
             repository.deleteMediaByIds(ids)
+        }
+    }
+    
+    fun toggleDuplicateManager(show: Boolean) {
+        _showDuplicateManager.value = show
+        if (show && _duplicateGroups.value.isEmpty()) {
+            scanForDuplicates()
+        }
+    }
+    
+    private fun scanForDuplicates() {
+        viewModelScope.launch {
+            _isScanningDuplicates.value = true
+            try {
+                _duplicateGroups.value = repository.findDuplicateMedia()
+            } catch (e: Exception) {
+                _duplicateGroups.value = emptyList()
+            } finally {
+                _isScanningDuplicates.value = false
+            }
+        }
+    }
+    
+    fun deleteDuplicateGroup(group: Any, keepIndex: Int = 0) {
+        viewModelScope.launch {
+            // 需要转换为 DuplicateGroup
+            val duplicateGroup = group as? DuplicateImageDetector.DuplicateGroup ?: return@launch
+            
+            // 保留第一个，删除其他重复的
+            val idsToDelete = duplicateGroup.files.mapIndexedNotNull { index, file ->
+                if (index != keepIndex) {
+                    // 从 URI 查找对应的 MediaAsset ID
+                    allMedia.value.firstOrNull { asset ->
+                        asset.uri == "file://${file.absolutePath}"
+                    }?.id
+                } else null
+            }
+            if (idsToDelete.isNotEmpty()) {
+                deleteMediaByIds(idsToDelete)
+            }
+            // 从列表中移除已处理的组
+            _duplicateGroups.value = _duplicateGroups.value.filter { it !== group }
+        }
+    }
+    
+    fun deleteAllDuplicatesExceptOne() {
+        viewModelScope.launch {
+            val allIdsToDelete = mutableListOf<Long>()
+            
+            _duplicateGroups.value.forEach { group ->
+                val duplicateGroup = group as? DuplicateImageDetector.DuplicateGroup ?: return@forEach
+                val idsInGroup = duplicateGroup.files.mapIndexedNotNull { index, file ->
+                    if (index > 0) { // 保留每组的第一张
+                        allMedia.value.firstOrNull { asset ->
+                            asset.uri == "file://${file.absolutePath}"
+                        }?.id
+                    } else null
+                }
+                allIdsToDelete.addAll(idsInGroup)
+            }
+            
+            if (allIdsToDelete.isNotEmpty()) {
+                deleteMediaByIds(allIdsToDelete)
+                _duplicateGroups.value = emptyList()
+            }
         }
     }
 }

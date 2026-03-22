@@ -6,7 +6,7 @@
 
 ### A. 渠道优先级与命中率
 - **[PRIORITY] 渠道分级执行**：
-    1. **专业源**：`xiuren.org`, `tuchong.com`, `metcn.com`, `500px.com`。
+    1. **专业源与精选**：`duitang.com`, `xiuren.org`, `tuchong.com`, `metcn.com`, `500px.com`。
     2. **社交与平台**：`xiaohongshu.com`, `huaban.com`。
     3. **主渠道/垫后**：`weibo.com` (国产写真大片补充), `baidu.com` (全网兜底)。
 - **[TARGETED] 精准搜索**：必须使用 `site:domain.com keyword` 指令配合百度图片频道参数进行检索。
