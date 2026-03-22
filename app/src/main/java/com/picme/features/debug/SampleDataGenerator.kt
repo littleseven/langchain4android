@@ -43,6 +43,14 @@ object SampleDataGenerator {
         "秦岚", "王丽坤", "舒淇", "安以轩", "陈乔恩", "林依晨", "陈都灵", "章若楠", "田曦薇", "王佳怡"
     )
     
+    private val LANDSCAPE_KEYWORDS = listOf(
+        "雪山", "草原", "森林", "大海", "星空", "沙漠", "秋色", "雨林", "冰川", "极光",
+        "瀑布", "湖泊", "峡谷", "梯田", "海岛", "晚霞", "日出", "湿地", "溶洞", "戈壁",
+        "丹霞", "枫林", "花海", "向日葵", "竹林", "古村", "园林", "海滩", "礁石", "悬崖",
+        "云海", "绿洲", "雾凇", "冰湖", "古堡", "灯塔", "断桥", "稻田", "荷塘", "郁金香",
+        "银杏", "繁星", "晨曦", "夕阳", "平原", "火山", "泉水", "红叶", "翠竹", "山川"
+    )
+    
     private val SWIMWEAR_KEYWORDS = listOf(
         "泳装写真 高清", "比基尼 4k 摄影", "超模 泳装 唯美", "性感 泳衣 大片", 
         "三点式 摄影 写真", "沙滩 泳装 气质", "杂志 泳装 封面", "尤物 泳装 4k",
@@ -69,7 +77,13 @@ object SampleDataGenerator {
     private val roundStatsAttempts = ConcurrentHashMap<String, AtomicInteger>()
     private val roundStatsSuccess = ConcurrentHashMap<String, AtomicInteger>()
 
-    private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    private val USER_AGENTS = listOf(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.64 Mobile Safari/537.36"
+    )
+
+    private fun getRandomUA() = USER_AGENTS.random()
 
     private fun addLog(message: String) {
         Log.d(TAG, message)
@@ -103,7 +117,7 @@ object SampleDataGenerator {
     }
 
     suspend fun populateLandscapeTestData(context: Context, repository: MediaRepository) {
-        generateData(context, repository, listOf("雪山", "大海", "森林", "极光"), prefix = "TEST_LANDSCAPE")
+        generateData(context, repository, LANDSCAPE_KEYWORDS, prefix = "TEST_LANDSCAPE")
     }
 
     suspend fun populateSwimwearTestData(context: Context, repository: MediaRepository) {
@@ -127,7 +141,7 @@ object SampleDataGenerator {
         withContext(Dispatchers.IO) {
             val random = Random()
             val calendar = Calendar.getInstance()
-            val semaphore = Semaphore(3)
+            val semaphore = Semaphore(2)
 
             for (keyword in keywords) {
                 if (!_isGenerating.value) break
@@ -135,7 +149,7 @@ object SampleDataGenerator {
                 if (!_isGenerating.value) break
 
                 _progress.value = keyword
-                val candidates = searchImagesParallel(keyword)
+                val candidates = searchImagesParallel(keyword, isLandscape = prefix == "TEST_LANDSCAPE")
                 
                 val downloadedCount = AtomicInteger(0)
                 val targetCount = 10 
@@ -147,12 +161,12 @@ object SampleDataGenerator {
                             semaphore.withPermit {
                                 if (downloadedCount.get() >= targetCount || !_isGenerating.value) return@withPermit
                                 
-                                delay((500 + random.nextInt(1000)).toLong())
+                                delay((1000 + random.nextInt(2000)).toLong())
                                 roundStatsAttempts.getOrPut(candidate.source) { AtomicInteger(0) }.incrementAndGet()
 
                                 val timestamp = System.currentTimeMillis()
                                 val fileName = "${prefix}_${keyword.replace(" ", "_")}_${timestamp}.jpg"
-                                val file = downloadAndValidateImage(candidate.url, context, fileName)
+                                val file = downloadWithRetry(candidate.url, context, fileName)
                                 
                                 if (file != null) {
                                     val bitmap = decodeSampledBitmap(file, 400, 400)
@@ -162,7 +176,7 @@ object SampleDataGenerator {
                                             val faceResult = analyzeFace(bitmap)
                                             var isEligible = true
                                             if (prefix == "TEST_SWIMWEAR" || prefix == "TEST_SEXY") {
-                                                if (faceResult.count == 0 || faceResult.maxHeightRatio > 0.35f || analysis.skinRatio < 12.0f) {
+                                                if (faceResult.count == 0 || faceResult.maxHeightRatio > 0.4f || analysis.skinRatio < 10.0f) {
                                                     isEligible = false
                                                 }
                                             }
@@ -183,7 +197,10 @@ object SampleDataGenerator {
                                                 roundStatsSuccess.getOrPut(candidate.source) { AtomicInteger(0) }.incrementAndGet()
                                                 _progress.value = "$keyword (${downloadedCount.get()}/$targetCount)"
                                                 addLog("Saved from [${candidate.source.uppercase()}]: ${asset.fileName}")
-                                            } else { file.delete() }
+                                            } else { 
+                                                addLog("Filtered [${candidate.source.uppercase()}]: Skin ${String.format(Locale.US, "%.1f", analysis.skinRatio)}%")
+                                                file.delete() 
+                                            }
                                         } else { file.delete() }
                                         bitmap.recycle()
                                     } else { file.delete() }
@@ -195,7 +212,7 @@ object SampleDataGenerator {
             }
             
             val summary = StringBuilder("Round Quality Report:\n")
-            roundStatsAttempts.keys().toList().sorted().forEach { ch ->
+            roundStatsAttempts.keys().toList().sortedBy { sourceOrder(it) }.forEach { ch ->
                 val att = roundStatsAttempts[ch]?.get() ?: 0
                 val succ = roundStatsSuccess[ch]?.get() ?: 0
                 val rate = if (att > 0) (succ.toFloat() / att * 100).toInt() else 0
@@ -210,30 +227,59 @@ object SampleDataGenerator {
         }
     }
 
-    private suspend fun searchImagesParallel(keyword: String): List<ImageCandidate> = coroutineScope {
-        val dXhs = async { searchBaidu("site:xiaohongshu.com $keyword") }
-        val dHuaban = async { searchBaidu("site:huaban.com $keyword") }
-        val dWeibo = async { searchWeibo(keyword) }
-        val dTuchong = async { searchBaidu("site:tuchong.com $keyword") }
+    private fun sourceOrder(source: String) = when(source) {
+        "xiuren" -> 0
+        "tuchong" -> 1
+        "metcn" -> 2
+        "metart" -> 3
+        "500px" -> 4
+        "unsplash" -> 5
+        "natgeo" -> 6
+        "xiaohongshu" -> 7
+        "huaban" -> 8
+        "weibo" -> 9
+        else -> 10
+    }
+
+    private suspend fun searchImagesParallel(keyword: String, isLandscape: Boolean): List<ImageCandidate> = coroutineScope {
+        if (isLandscape) {
+            val dNatGeo = async { searchBaidu("site:nationalgeographic.com $keyword") }
+            val dUnsplash = async { searchBaidu("site:unsplash.com $keyword") }
+            val dPexels = async { searchBaidu("site:pexels.com $keyword") }
+            val dBaidu = async { searchBaidu(keyword) }
+            
+            val natgeo = dNatGeo.await().map { ImageCandidate(it, "natgeo") }
+            val unsplash = dUnsplash.await().map { ImageCandidate(it, "unsplash") }
+            val pexels = dPexels.await().map { ImageCandidate(it, "pexels") }
+            val baidu = dBaidu.await().map { ImageCandidate(it, "baidu") }
+            
+            addLog("Landscape Candidates -> NatGeo:${natgeo.size}, Unsplash:${unsplash.size}, Pexels:${pexels.size}")
+            return@coroutineScope natgeo + unsplash + pexels + baidu.shuffled()
+        }
+
         val dXiuren = async { searchBaidu("site:xiuren.org $keyword") }
+        val dTuchong = async { searchBaidu("site:tuchong.com $keyword") }
         val dMetCn = async { searchBaidu("site:metcn.com $keyword") }
         val dMetArt = async { searchBaidu("site:met-art.com $keyword") }
         val d500px = async { searchBaidu("site:500px.com $keyword") }
+        val dXhs = async { searchBaidu("site:xiaohongshu.com $keyword") }
+        val dHuaban = async { searchBaidu("site:huaban.com $keyword") }
+        val dWeibo = async { searchWeibo(keyword) }
         val dBaidu = async { searchBaidu(keyword) }
         
-        val xhs = dXhs.await().map { ImageCandidate(it, "xiaohongshu") }
-        val huaban = dHuaban.await().map { ImageCandidate(it, "huaban") }
-        val weibo = dWeibo.await().map { ImageCandidate(it, "weibo") }
-        val tuchong = dTuchong.await().map { ImageCandidate(it, "tuchong") }
         val xiuren = dXiuren.await().map { ImageCandidate(it, "xiuren") }
+        val tuchong = dTuchong.await().map { ImageCandidate(it, "tuchong") }
         val metcn = dMetCn.await().map { ImageCandidate(it, "metcn") }
         val metart = dMetArt.await().map { ImageCandidate(it, "metart") }
         val p500 = d500px.await().map { ImageCandidate(it, "500px") }
+        val xhs = dXhs.await().map { ImageCandidate(it, "xiaohongshu") }
+        val huaban = dHuaban.await().map { ImageCandidate(it, "huaban") }
+        val weibo = dWeibo.await().map { ImageCandidate(it, "weibo") }
         val baidu = dBaidu.await().map { ImageCandidate(it, "baidu") }
         
-        addLog("Candidates -> XHS:${xhs.size}, Huaban:${huaban.size}, Weibo:${weibo.size}, Tuchong:${tuchong.size}, Xiuren:${xiuren.size}, MET:${metcn.size+metart.size}, 500px:${p500.size}")
+        addLog("Portrait Candidates -> PROFESSIONAL:${xiuren.size+tuchong.size+metcn.size+p500.size}, SOCIAL:${xhs.size+weibo.size}, HUABAN:${huaban.size}")
         
-        xhs + huaban + weibo + tuchong + xiuren + metcn + metart + p500 + baidu.shuffled()
+        xiuren + tuchong + metcn + metart + p500 + xhs + huaban + weibo + baidu.shuffled()
     }
 
     private fun extractUrls(html: String): List<String> {
@@ -246,7 +292,7 @@ object SampleDataGenerator {
             val encoded = URLEncoder.encode(keyword, "UTF-8")
             val url = "https://image.baidu.com/search/acjson?tn=resultjson_com&ipn=rj&ct=201326592&word=$encoded&rn=30"
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("User-Agent", getRandomUA())
             conn.setRequestProperty("Referer", "https://image.baidu.com/")
             if (conn.responseCode == 200) extractUrls(conn.inputStream.bufferedReader().readText()) else emptyList()
         } catch (e: Exception) { emptyList() }
@@ -256,13 +302,58 @@ object SampleDataGenerator {
         try {
             val url = "https://m.weibo.cn/api/container/getIndex?containerid=100103type%3D1%26q%3D${URLEncoder.encode(keyword, "UTF-8")}"
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.setRequestProperty("User-Agent", USER_AGENT)
+            conn.setRequestProperty("User-Agent", getRandomUA())
             conn.setRequestProperty("X-Requested-With", "XMLHttpRequest")
             if (conn.responseCode == 200) {
                 extractUrls(conn.inputStream.bufferedReader().readText())
                     .map { it.replace("thumbnail", "large").replace("orj360", "large") }
             } else emptyList()
         } catch (e: Exception) { emptyList() }
+    }
+
+    private suspend fun downloadWithRetry(url: String, context: Context, fileName: String): File? {
+        var currentDelay = 2000L 
+        val maxRetries = 2
+        repeat(maxRetries) { attempt ->
+            try {
+                val result = downloadAndValidateImage(url, context, fileName)
+                if (result != null) return result
+            } catch (e: Exception) {
+                addLog("Retry $attempt failed: $url")
+            }
+            if (attempt < maxRetries - 1) {
+                delay(currentDelay)
+                currentDelay *= 2 
+            }
+        }
+        return null
+    }
+
+    private fun downloadAndValidateImage(urlString: String, context: Context, fileName: String): File? {
+        var connection: HttpURLConnection? = null
+        try {
+            val url = URL(urlString)
+            connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000; connection.readTimeout = 10000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty("User-Agent", getRandomUA())
+            
+            val host = url.host
+            connection.setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+            connection.setRequestProperty("Referer", when {
+                host.contains("sinaimg") -> "https://weibo.com/"
+                host.contains("baidu") -> "https://image.baidu.com/"
+                else -> "https://$host/"
+            })
+            
+            if (connection.responseCode != 200) return null
+            val file = File(context.filesDir, fileName)
+            connection.inputStream.use { input -> FileOutputStream(file).use { output -> input.copyTo(output) } }
+            if (file.length() < 5120) { file.delete(); return null }
+            return file
+        } catch (e: Exception) { 
+            return null 
+        } finally { connection?.disconnect() }
     }
 
     private fun analyzeContentAndSkin(bitmap: Bitmap): ContentAnalysis {
@@ -289,7 +380,7 @@ object SampleDataGenerator {
     private fun decodeSampledBitmap(file: File, reqW: Int, reqH: Int): Bitmap? {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, options)
-        options.inSampleSize = Math.max(1, Math.min(options.outHeight / reqH, options.outWidth / reqW))
+        options.inSampleSize = Math.max(1, Math.min(options.outHeight / reqW, options.outWidth / reqH))
         options.inJustDecodeBounds = false
         return try { BitmapFactory.decodeFile(file.absolutePath, options) } catch (e: Exception) { null }
     }
@@ -304,22 +395,6 @@ object SampleDataGenerator {
             }
             .addOnFailureListener { continuation.resume(FaceAnalysisResult(0, 0f)) }
             .addOnCompleteListener { detector.close() }
-    }
-
-    private fun downloadAndValidateImage(url: String, context: Context, fileName: String): File? {
-        var conn: HttpURLConnection? = null
-        try {
-            conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 10000; conn.readTimeout = 10000
-            conn.setRequestProperty("User-Agent", USER_AGENT)
-            val host = URL(url).host
-            conn.setRequestProperty("Referer", if (host.contains("sinaimg")) "https://weibo.com/" else "https://$host/")
-            if (conn.responseCode != 200) return null
-            val file = File(context.filesDir, fileName)
-            conn.inputStream.use { input -> FileOutputStream(file).use { output -> input.copyTo(output) } }
-            if (file.length() < 5120) { file.delete(); return null }
-            return file
-        } catch (e: Exception) { return null } finally { conn?.disconnect() }
     }
 
     suspend fun clearTestData(context: Context, repository: MediaRepository, allMedia: List<MediaAsset>) {
