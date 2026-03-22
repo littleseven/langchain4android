@@ -130,7 +130,12 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Gallery.route) {
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
-                                    onNavigateBack = { navController.popBackStack() }
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToOcr = { uri ->
+                                        // [NEW] Navigate to OCR screen with image Uri
+                                        val encodedUri = java.net.URLEncoder.encode(uri, "UTF-8")
+                                        navController.navigate(Screen.Ocr.createRoute(encodedUri))
+                                    }
                                 )
                             }
                             composable(Screen.Settings.route) {
@@ -142,8 +147,17 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Debug.route) {
                                 DebugScreen(onNavigateBack = { navController.popBackStack() })
                             }
-                            composable(Screen.Ocr.route) {
-                                OcrScreen(onNavigateBack = { navController.popBackStack() })
+                            composable(Screen.Ocr.route) { backStackEntry ->
+                                // [NEW] Check if coming from Gallery with image Uri
+                                val imageUri = backStackEntry.arguments?.getString("imageUri")
+                                val decodedUri = imageUri?.let {
+                                    java.net.URLDecoder.decode(it, "UTF-8")
+                                }
+                                OcrScreen(
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToCamera = { navController.popBackStack() },  // 返回相机页面
+                                    initialImageUri = decodedUri
+                                )
                             }
                         }
                     }

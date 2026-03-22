@@ -626,9 +626,6 @@ fun CameraPreviewContent(
         CameraLeftControls(
             onNavigateToSettings = onNavigateToSettings,
             onNavigateToDebug = onNavigateToDebug,
-            onToggleGrid = onToggleGrid,
-            onToggleLogs = onToggleLogs,
-            isGridActive = showGridSelector,
             modifier = Modifier.align(Alignment.TopStart)
         )
 
@@ -638,11 +635,15 @@ fun CameraPreviewContent(
             onToggleRatio = onToggleRatio,
             onToggleCameraInfo = onToggleCameraInfo,
             onToggleScene = onToggleScene,
+            onNavigateToOcr = onNavigateToOcr,
+            onToggleGrid = onToggleGrid,
+            onToggleLogs = onToggleLogs,
             isBeautySelected = showBeautySelector,
             isFilterSelected = showFilterSelector,
             isRatioSelected = showRatioSelector,
             isCameraInfoSelected = showCameraInfo,
             isSceneActive = currentScene != ScenePreset.NONE,
+            isGridActive = showGridSelector,
             currentRatio = aspectRatio,
             modifier = Modifier.align(Alignment.TopEnd)
         )
@@ -673,16 +674,6 @@ fun CameraPreviewContent(
             onModeChange = onModeChange,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
-
-        // [NEW] OCR Entry Button (Floating)
-        if (!isAnyPanelOpen && !isRecording) {
-            OcrEntryButton(
-                onClick = onNavigateToOcr,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp)
-            )
-        }
 
         AnimatedVisibility(
             visible = isAnyPanelOpen,

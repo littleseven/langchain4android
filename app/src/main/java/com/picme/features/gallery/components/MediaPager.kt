@@ -21,6 +21,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Info
@@ -59,7 +60,8 @@ fun MediaPager(
     assets: List<MediaAsset>,
     initialIndex: Int,
     onClose: () -> Unit,
-    onDelete: (MediaAsset) -> Unit
+    onDelete: (MediaAsset) -> Unit,
+    onNavigateToOcr: (MediaAsset) -> Unit  // [NEW] OCR 识别回调
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(true) }
@@ -88,7 +90,8 @@ fun MediaPager(
             onClose = onClose,
             showInfo = showInfo,
             onToggleInfo = { showInfo = !showInfo },
-            onDelete = { onDelete(assets[pagerState.currentPage]) }
+            onDelete = { onDelete(assets[pagerState.currentPage]) },
+            onOcrClick = { onNavigateToOcr(assets[pagerState.currentPage]) }  // [NEW]
         )
 
         // Source Info Overlay (Bottom Left)
@@ -105,7 +108,8 @@ private fun MediaPagerTopControls(
     onClose: () -> Unit,
     showInfo: Boolean,
     onToggleInfo: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOcrClick: () -> Unit  // [NEW]
 ) {
     Row(
         modifier = Modifier
@@ -125,6 +129,20 @@ private fun MediaPagerTopControls(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // OCR Button - [NEW]
+            IconButton(
+                onClick = onOcrClick,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f)
+                )
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.TextSnippet,
+                    contentDescription = "OCR 识别",
+                    tint = Color.White
+                )
+            }
+            
             // Info Toggle Switch
             IconButton(
                 onClick = onToggleInfo,

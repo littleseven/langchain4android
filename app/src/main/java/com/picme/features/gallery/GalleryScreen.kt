@@ -89,7 +89,8 @@ import com.picme.features.gallery.components.MediaPager
 @Composable
 fun GalleryScreen(
     viewModel: MediaViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToOcr: (String) -> Unit  // [NEW] OCR 识别回调，接收图片 Uri
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -233,6 +234,11 @@ fun GalleryScreen(
                             if (newAllFlat.isEmpty()) {
                                 selectedMediaIndex = null
                             }
+                        },
+                        onNavigateToOcr = { asset ->
+                            // [NEW] Navigate to OCR screen with selected image
+                            selectedMediaIndex = null  // 关闭预览
+                            onNavigateToOcr(asset.uri.toString())
                         }
                     )
                 }

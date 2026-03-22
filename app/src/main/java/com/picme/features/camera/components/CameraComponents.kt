@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BugReport
@@ -89,9 +90,6 @@ import com.picme.features.camera.model.FilterType
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
-    onToggleGrid: () -> Unit,
-    onToggleLogs: () -> Unit,
-    isGridActive: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -102,16 +100,6 @@ fun CameraLeftControls(
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
         ControlButton(icon = Icons.Rounded.BugReport, onClick = onNavigateToDebug)
-        ControlButton(
-            icon = Icons.Rounded.GridOn,
-            onClick = onToggleGrid,
-            isActive = isGridActive
-        )
-        // [NEW] Log Overlay Toggle Button
-        ControlButton(
-            icon = Icons.Rounded.Terminal,
-            onClick = onToggleLogs
-        )
     }
 }
 
@@ -122,11 +110,15 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleCameraInfo: () -> Unit,
     onToggleScene: () -> Unit,
+    onNavigateToOcr: () -> Unit,  // [NEW] OCR entry callback
+    onToggleGrid: () -> Unit,
+    onToggleLogs: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
     isRatioSelected: Boolean,
     isCameraInfoSelected: Boolean,
     isSceneActive: Boolean,
+    isGridActive: Boolean,
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -153,6 +145,15 @@ fun CameraRightControls(
             isActive = isRatioSelected
         )
         ControlButton(
+            icon = Icons.AutoMirrored.Rounded.TextSnippet,
+            onClick = onNavigateToOcr
+        )
+        ControlButton(
+            icon = Icons.Rounded.Landscape,
+            onClick = onToggleScene,
+            isActive = isSceneActive
+        )
+        ControlButton(
             icon = Icons.Rounded.AutoFixHigh,
             onClick = onToggleBeauty,
             isActive = isBeautySelected
@@ -163,9 +164,13 @@ fun CameraRightControls(
             isActive = isFilterSelected
         )
         ControlButton(
-            icon = Icons.Rounded.Landscape,
-            onClick = onToggleScene,
-            isActive = isSceneActive
+            icon = Icons.Rounded.GridOn,
+            onClick = onToggleGrid,
+            isActive = isGridActive
+        )
+        ControlButton(
+            icon = Icons.Rounded.Terminal,
+            onClick = onToggleLogs
         )
     }
 }
