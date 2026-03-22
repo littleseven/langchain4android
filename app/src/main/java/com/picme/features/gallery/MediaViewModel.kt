@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.picme.core.common.DuplicateImageDetector
+import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
+import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,7 +28,8 @@ data class MediaGroup(
 
 class MediaViewModel(
     private val repository: MediaRepository,
-    private val getGroupedMediaUseCase: GetGroupedMediaUseCase
+    private val getGroupedMediaUseCase: GetGroupedMediaUseCase,
+    private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase
 ) : ViewModel() {
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
@@ -36,7 +38,7 @@ class MediaViewModel(
     private val _showDuplicateManager = MutableStateFlow(false)
     val showDuplicateManager = _showDuplicateManager.asStateFlow()
     
-    private val _duplicateGroups = MutableStateFlow<List<Any>>(emptyList())
+    private val _duplicateGroups = MutableStateFlow<List<DuplicateGroup>>(emptyList())
     val duplicateGroups = _duplicateGroups.asStateFlow()
     
     private val _isScanningDuplicates = MutableStateFlow(false)
@@ -87,7 +89,7 @@ class MediaViewModel(
         viewModelScope.launch {
             _isScanningDuplicates.value = true
             try {
-                _duplicateGroups.value = repository.findDuplicateMedia()
+                _duplicateGroups.value = findDuplicateMediaUseCase()
             } catch (e: Exception) {
                 _duplicateGroups.value = emptyList()
             } finally {
@@ -96,25 +98,26 @@ class MediaViewModel(
         }
     }
     
-    fun deleteDuplicateGroup(group: Any, keepIndex: Int = 0) {
+    fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
         viewModelScope.launch {
-            // 需要转换为 DuplicateGroup
-            val duplicateGroup = group as? DuplicateImageDetector.DuplicateGroup ?: return@launch
-            
-            // 保留第一个，删除其他重复的
-            val idsToDelete = duplicateGroup.files.mapIndexedNotNull { index, file ->
-                if (index != keepIndex) {
-                    // 从 URI 查找对应的 MediaAsset ID
-                    allMedia.value.firstOrNull { asset ->
-                        asset.uri == "file://${file.absolutePath}"
-                    }?.id
-                } else null
+            // 获取需要删除的文件 URI
+            val urisToDelete = if (keepIndex == 0) {
+                group.getDeleteUris()
+            } else {
+                // 保留指定索引的文件，删除其他
+                group.fileUris.filterIndexed { index, _ -> index != keepIndex }
             }
+            
+            // 从 URI 查找对应的 MediaAsset ID
+            val idsToDelete = allMedia.value
+                .filter { asset -> asset.uri in urisToDelete }
+                .map { it.id }
+            
             if (idsToDelete.isNotEmpty()) {
                 deleteMediaByIds(idsToDelete)
+                // 从列表中移除已处理的组
+                _duplicateGroups.value = _duplicateGroups.value.filter { it.id != group.id }
             }
-            // 从列表中移除已处理的组
-            _duplicateGroups.value = _duplicateGroups.value.filter { it !== group }
         }
     }
     
@@ -123,14 +126,9 @@ class MediaViewModel(
             val allIdsToDelete = mutableListOf<Long>()
             
             _duplicateGroups.value.forEach { group ->
-                val duplicateGroup = group as? DuplicateImageDetector.DuplicateGroup ?: return@forEach
-                val idsInGroup = duplicateGroup.files.mapIndexedNotNull { index, file ->
-                    if (index > 0) { // 保留每组的第一张
-                        allMedia.value.firstOrNull { asset ->
-                            asset.uri == "file://${file.absolutePath}"
-                        }?.id
-                    } else null
-                }
+                val idsInGroup = allMedia.value
+                    .filter { asset -> asset.uri in group.getDeleteUris() }
+                    .map { it.id }
                 allIdsToDelete.addAll(idsInGroup)
             }
             
@@ -152,7 +150,8 @@ class MediaViewModelFactory(
             @Suppress("UNCHECKED_CAST")
             return MediaViewModel(
                 repository,
-                GetGroupedMediaUseCase(context)
+                GetGroupedMediaUseCase(context),
+                FindDuplicateMediaUseCase(repository)
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

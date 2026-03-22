@@ -71,7 +71,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
-import com.picme.core.common.DuplicateImageDetector
+import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import java.io.File
@@ -368,9 +368,9 @@ private fun DuplicateManagerTopBar(
 
 @Composable
 private fun DuplicateManagerScreen(
-    duplicateGroups: List<Any>,
+    duplicateGroups: List<DuplicateGroup>,
     isScanning: Boolean,
-    onDeleteGroup: (Any) -> Unit,
+    onDeleteGroup: (DuplicateGroup) -> Unit,
     onDeleteAll: () -> Unit
 ) {
     if (isScanning) {
@@ -419,11 +419,10 @@ private fun DuplicateManagerScreen(
 
 @Composable
 private fun DuplicateGroupCard(
-    group: Any,
-    onDeleteGroup: (Any) -> Unit
+    group: DuplicateGroup,
+    onDeleteGroup: (DuplicateGroup) -> Unit
 ) {
     var showPreview by remember { mutableStateOf(false) }
-    val duplicateGroup = group as? DuplicateImageDetector.DuplicateGroup ?: return
     
     androidx.compose.material3.Card(
         modifier = Modifier.fillMaxWidth()
@@ -437,7 +436,7 @@ private fun DuplicateGroupCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (duplicateGroup.isExactDuplicate) {
+                    text = if (group.isExactDuplicate) {
                         stringResource(R.string.exact_duplicate)
                     } else {
                         stringResource(R.string.similar_image)
@@ -445,7 +444,7 @@ private fun DuplicateGroupCard(
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = stringResource(R.string.count_files, duplicateGroup.files.size),
+                    text = stringResource(R.string.count_files, group.fileUris.size),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -457,10 +456,10 @@ private fun DuplicateGroupCard(
                     .padding(top = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                duplicateGroup.files.take(3).forEach { file ->
+                group.fileUris.take(3).forEach { uri ->
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
-                            .data(file.absolutePath)
+                            .data(uri)
                             .crossfade(true)
                             .build(),
                         contentDescription = null,
@@ -496,7 +495,7 @@ private fun DuplicateGroupCard(
     
     if (showPreview) {
         DuplicatePreviewDialog(
-            files = duplicateGroup.files,
+            fileUris = group.fileUris,
             onDismiss = { showPreview = false },
             onDelete = {
                 showPreview = false
@@ -508,7 +507,7 @@ private fun DuplicateGroupCard(
 
 @Composable
 private fun DuplicatePreviewDialog(
-    files: List<File>,
+    fileUris: List<String>,
     onDismiss: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -519,7 +518,7 @@ private fun DuplicatePreviewDialog(
             Column {
                 Text(stringResource(R.string.will_keep_first_file))
                 Spacer(modifier = Modifier.padding(4.dp))
-                files.forEachIndexed { index, file ->
+                fileUris.forEachIndexed { index, uri ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -540,7 +539,7 @@ private fun DuplicatePreviewDialog(
                             )
                         }
                         Text(
-                            text = file.name,
+                            text = File(uri).name,
                             modifier = Modifier.padding(start = 8.dp)
                         )
                     }

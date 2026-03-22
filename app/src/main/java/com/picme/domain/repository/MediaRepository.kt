@@ -13,6 +13,4 @@ interface MediaRepository {
     suspend fun deleteMediaByIds(ids: List<Long>)
 
     suspend fun getMediaById(id: Long): MediaAsset?
-    
-    suspend fun findDuplicateMedia(): List<Any>
 }

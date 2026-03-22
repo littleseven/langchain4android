@@ -1,9 +1,5 @@
 package com.picme.domain.model
 
-enum class MediaType {
-    PHOTO, VIDEO, PORTRAIT, PRO
-}
-
 data class MediaAsset(
     val id: Long = 0,
     val uri: String,
