@@ -8,6 +8,7 @@ import com.picme.data.model.MediaEntity
 
 @Database(entities = [MediaEntity::class], version = 3, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
+
     abstract fun mediaDao(): MediaDao
 
     companion object {
@@ -21,8 +22,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
-                .fallbackToDestructiveMigration()
-                .build()
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

@@ -1,9 +1,19 @@
 package com.picme.features.camera.components
 
-import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -15,21 +25,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.toSize
 import com.picme.R
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaType
-import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.GridType
 import com.picme.features.camera.ScenePreset
+import com.picme.features.camera.model.FilterType
 import java.util.Locale
 
 @Composable
@@ -51,8 +58,8 @@ fun CameraOverlays(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-         CompositionGrid(gridType = gridType)
-        
+        CompositionGrid(gridType = gridType)
+
         facePoint?.let {
             FaceFocusIndicator(offset = it, alpha = focusAlpha)
         }
@@ -97,33 +104,22 @@ fun CameraInfoOverlay(
         modifier = modifier.widthIn(max = 280.dp),
         color = Color.Black.copy(alpha = 0.5f),
         shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
     ) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.camera_info),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    letterSpacing = 1.sp
-                )
-                // Stability indicator
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(if (isStable) Color.Green else Color.Red, CircleShape)
-                )
-            }
-            
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CameraInfoTitle(isStable = isStable)
+
             InfoGroup(title = stringResource(R.string.info_group_device)) {
                 InfoItem(
                     label = stringResource(R.string.info_lens_facing),
-                    value = if (lensFacing == 1) stringResource(R.string.info_back) else stringResource(R.string.info_front)
+                    value = if (lensFacing == 1) {
+                        stringResource(R.string.info_back)
+                    } else {
+                        stringResource(R.string.info_front)
+                    }
                 )
                 InfoItem(
                     label = stringResource(R.string.info_zoom),
@@ -134,46 +130,92 @@ fun CameraInfoOverlay(
                     value = captureMode.name
                 )
             }
-            
+
             InfoGroup(title = stringResource(R.string.info_group_settings)) {
-                InfoItem(
-                    label = stringResource(R.string.info_aspect_ratio),
-                    value = when(aspectRatio) {
-                        0 -> "4:3"
-                        1 -> "16:9"
-                        else -> "FULL"
-                    }
+                SettingsInfoItems(
+                    aspectRatio = aspectRatio,
+                    filter = filter,
+                    currentScene = currentScene,
+                    gridType = gridType,
+                    exposureCompensation = exposureCompensation,
+                    whiteBalanceMode = whiteBalanceMode
                 )
-                InfoItem(
-                    label = stringResource(R.string.info_filter),
-                    value = stringResource(filter.displayNameRes)
-                )
-                InfoItem(
-                    label = stringResource(R.string.scene),
-                    value = currentScene.name
-                )
-                InfoItem(
-                    label = stringResource(R.string.grid),
-                    value = gridType.name
-                )
-                if (exposureCompensation != 0) {
-                    InfoItem(
-                        label = stringResource(R.string.ev),
-                        value = if (exposureCompensation > 0) "+$exposureCompensation" else exposureCompensation.toString()
-                    )
-                }
-                if (whiteBalanceMode != 0) {
-                    val wbLabel = when (whiteBalanceMode) {
-                        1 -> stringResource(R.string.wb_sunny)
-                        2 -> stringResource(R.string.wb_cloudy)
-                        3 -> stringResource(R.string.wb_incandescent)
-                        4 -> stringResource(R.string.wb_fluorescent)
-                        else -> stringResource(R.string.wb_auto)
-                    }
-                    InfoItem(label = stringResource(R.string.wb), value = wbLabel)
-                }
             }
         }
+    }
+}
+
+@Composable
+private fun CameraInfoTitle(isStable: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.camera_info),
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            letterSpacing = 1.sp
+        )
+        // Stability indicator
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(if (isStable) Color.Green else Color.Red, CircleShape)
+        )
+    }
+}
+
+@Composable
+private fun SettingsInfoItems(
+    aspectRatio: Int,
+    filter: FilterType,
+    currentScene: ScenePreset,
+    gridType: GridType,
+    exposureCompensation: Int,
+    whiteBalanceMode: Int
+) {
+    InfoItem(
+        label = stringResource(R.string.info_aspect_ratio),
+        value = when (aspectRatio) {
+            0 -> "4:3"
+            1 -> "16:9"
+            else -> "FULL"
+        }
+    )
+    InfoItem(
+        label = stringResource(R.string.info_filter),
+        value = stringResource(filter.displayNameRes)
+    )
+    InfoItem(
+        label = stringResource(R.string.scene),
+        value = currentScene.name
+    )
+    InfoItem(
+        label = stringResource(R.string.grid),
+        value = gridType.name
+    )
+    if (exposureCompensation != 0) {
+        InfoItem(
+            label = stringResource(R.string.ev),
+            value = if (exposureCompensation > 0) {
+                "+$exposureCompensation"
+            } else {
+                exposureCompensation.toString()
+            }
+        )
+    }
+    if (whiteBalanceMode != 0) {
+        val wbLabel = when (whiteBalanceMode) {
+            1 -> stringResource(R.string.wb_sunny)
+            2 -> stringResource(R.string.wb_cloudy)
+            3 -> stringResource(R.string.wb_incandescent)
+            4 -> stringResource(R.string.wb_fluorescent)
+            else -> stringResource(R.string.wb_auto)
+        }
+        InfoItem(label = stringResource(R.string.wb), value = wbLabel)
     }
 }
 
@@ -181,9 +223,9 @@ fun CameraInfoOverlay(
 private fun InfoGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = title.uppercase(), 
-            color = Color.White.copy(alpha = 0.4f), 
-            fontSize = 9.sp, 
+            text = title.uppercase(Locale.getDefault()),
+            color = Color.White.copy(alpha = 0.4f),
+            fontSize = 9.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 0.5.sp
         )
@@ -208,21 +250,87 @@ fun CompositionGrid(gridType: GridType) {
 
         when (gridType) {
             GridType.THIRDS -> {
-                drawLine(color, Offset(size.width / 3, 0f), Offset(size.width / 3, size.height), strokeWidth, pathEffect = pathEffect)
-                drawLine(color, Offset(size.width * 2 / 3, 0f), Offset(size.width * 2 / 3, size.height), strokeWidth, pathEffect = pathEffect)
-                drawLine(color, Offset(0f, size.height / 3), Offset(size.width, size.height / 3), strokeWidth, pathEffect = pathEffect)
-                drawLine(color, Offset(0f, size.height * 2 / 3), Offset(size.width, size.height * 2 / 3), strokeWidth, pathEffect = pathEffect)
+                drawThirdsGrid(color, strokeWidth, pathEffect)
             }
+
             GridType.GOLDEN -> {
-                val ratio = 0.618f
-                drawLine(color, Offset(size.width * (1 - ratio), 0f), Offset(size.width * (1 - ratio), size.height), strokeWidth, pathEffect = pathEffect)
-                drawLine(color, Offset(size.width * ratio, 0f), Offset(size.width * ratio, size.height), strokeWidth, pathEffect = pathEffect)
-                drawLine(color, Offset(0f, size.height * (1 - ratio)), Offset(size.width, size.height * (1 - ratio)), strokeWidth, pathEffect = pathEffect)
-                drawLine(color, Offset(0f, size.height * ratio), Offset(size.width, size.height * ratio), strokeWidth, pathEffect = pathEffect)
+                drawGoldenGrid(color, strokeWidth, pathEffect)
             }
+
             else -> {}
         }
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawThirdsGrid(
+    color: Color,
+    strokeWidth: Float,
+    pathEffect: PathEffect
+) {
+    drawLine(
+        color,
+        Offset(size.width / 3, 0f),
+        Offset(size.width / 3, size.height),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+    drawLine(
+        color,
+        Offset(size.width * 2 / 3, 0f),
+        Offset(size.width * 2 / 3, size.height),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+    drawLine(
+        color,
+        Offset(0f, size.height / 3),
+        Offset(size.width, size.height / 3),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+    drawLine(
+        color,
+        Offset(0f, size.height * 2 / 3),
+        Offset(size.width, size.height * 2 / 3),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
+    color: Color,
+    strokeWidth: Float,
+    pathEffect: PathEffect
+) {
+    val ratio = 0.618f
+    drawLine(
+        color,
+        Offset(size.width * (1 - ratio), 0f),
+        Offset(size.width * (1 - ratio), size.height),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+    drawLine(
+        color,
+        Offset(size.width * ratio, 0f),
+        Offset(size.width * ratio, size.height),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+    drawLine(
+        color,
+        Offset(0f, size.height * (1 - ratio)),
+        Offset(size.width, size.height * (1 - ratio)),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
+    drawLine(
+        color,
+        Offset(0f, size.height * ratio),
+        Offset(size.width, size.height * ratio),
+        strokeWidth,
+        pathEffect = pathEffect
+    )
 }
 
 @Composable
@@ -246,20 +354,54 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
             val color = Color.Yellow
             val strokeWidth = 2.dp.toPx()
             val bracketLen = 10.dp.toPx()
-            
-            drawLine(color, Offset(0f, size.height/2), Offset(size.width*0.3f, size.height/2), strokeWidth)
-            drawLine(color, Offset(size.width*0.7f, size.height/2), Offset(size.width, size.height/2), strokeWidth)
-            drawLine(color, Offset(size.width/2, 0f), Offset(size.width/2, size.height*0.3f), strokeWidth)
-            drawLine(color, Offset(size.width/2, size.height*0.7f), Offset(size.width/2, size.height), strokeWidth)
-            
-            drawLine(color, Offset(0f, 0f), Offset(bracketLen, 0f), strokeWidth)
-            drawLine(color, Offset(0f, 0f), Offset(0f, bracketLen), strokeWidth)
-            drawLine(color, Offset(size.width, 0f), Offset(size.width-bracketLen, 0f), strokeWidth)
-            drawLine(color, Offset(size.width, 0f), Offset(size.width, bracketLen), strokeWidth)
-            drawLine(color, Offset(0f, size.height), Offset(bracketLen, size.height), strokeWidth)
-            drawLine(color, Offset(0f, size.height), Offset(0f, size.height-bracketLen), strokeWidth)
-            drawLine(color, Offset(size.width, size.height), Offset(size.width-bracketLen, size.height), strokeWidth)
-            drawLine(color, Offset(size.width, size.height), Offset(size.width, size.height-bracketLen), strokeWidth)
+
+            // Center lines
+            drawLine(
+                color,
+                Offset(0f, size.height / 2),
+                Offset(size.width * 0.3f, size.height / 2),
+                strokeWidth
+            )
+            drawLine(
+                color,
+                Offset(size.width * 0.7f, size.height / 2),
+                Offset(size.width, size.height / 2),
+                strokeWidth
+            )
+            drawLine(
+                color,
+                Offset(size.width / 2, 0f),
+                Offset(size.width / 2, size.height * 0.3f),
+                strokeWidth
+            )
+            drawLine(
+                color,
+                Offset(size.width / 2, size.height * 0.7f),
+                Offset(size.width / 2, size.height),
+                strokeWidth
+            )
+
+            // Corners
+            drawCorners(color, strokeWidth, bracketLen)
         }
     }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCorners(
+    color: Color,
+    strokeWidth: Float,
+    bracketLen: Float
+) {
+    // Top-left
+    drawLine(color, Offset(0f, 0f), Offset(bracketLen, 0f), strokeWidth)
+    drawLine(color, Offset(0f, 0f), Offset(0f, bracketLen), strokeWidth)
+    // Top-right
+    drawLine(color, Offset(size.width, 0f), Offset(size.width - bracketLen, 0f), strokeWidth)
+    drawLine(color, Offset(size.width, 0f), Offset(size.width, bracketLen), strokeWidth)
+    // Bottom-left
+    drawLine(color, Offset(0f, size.height), Offset(bracketLen, size.height), strokeWidth)
+    drawLine(color, Offset(0f, size.height), Offset(0f, size.height - bracketLen), strokeWidth)
+    // Bottom-right
+    drawLine(color, Offset(size.width, size.height), Offset(size.width - bracketLen, size.height), strokeWidth)
+    drawLine(color, Offset(size.width, size.height), Offset(size.width, size.height - bracketLen), strokeWidth)
 }

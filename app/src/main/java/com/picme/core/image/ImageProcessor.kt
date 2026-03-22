@@ -2,8 +2,14 @@ package com.picme.core.image
 
 import android.content.ContentValues
 import android.content.Context
-import android.graphics.*
-import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
@@ -16,9 +22,9 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
+import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
-import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.model.FilterType
 import com.picme.features.gallery.MediaViewModel
 import com.google.mlkit.vision.common.InputImage
@@ -27,26 +33,62 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Locale
 
 interface ImageProcessor {
-    fun processPhoto(source: Bitmap, filter: FilterType, beauty: BeautySettings, faces: List<Face>): Bitmap
-    fun takePhoto(context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int, mode: MediaType = MediaType.PHOTO)
-    fun startVideoRecording(context: Context, videoCapture: VideoCapture<Recorder>, viewModel: MediaViewModel, onFinished: () -> Unit): Recording
+    fun processPhoto(
+        source: Bitmap,
+        filter: FilterType,
+        beauty: BeautySettings,
+        faces: List<Face>
+    ) : Bitmap
+
+    fun takePhoto(
+        context: Context,
+        imageCapture: ImageCapture,
+        viewModel: MediaViewModel,
+        filter: FilterType,
+        beauty: BeautySettings,
+        lensFacing: Int,
+        mode: MediaType = MediaType.PHOTO
+    )
+
+    fun startVideoRecording(
+        context: Context,
+        videoCapture: VideoCapture<Recorder>,
+        viewModel: MediaViewModel,
+        onFinished: () -> Unit
+    ) : Recording
 }
 
 class ImageProcessorImpl : ImageProcessor {
-    override fun processPhoto(source: Bitmap, filter: FilterType, beauty: BeautySettings, faces: List<Face>): Bitmap {
+    override fun processPhoto(
+        source: Bitmap,
+        filter: FilterType,
+        beauty: BeautySettings,
+        faces: List<Face>
+    ) : Bitmap {
         var processed = source.copy(Bitmap.Config.ARGB_8888, true)
-        if (beauty.smoothing > 0f) processed = applySmoothing(processed, beauty.smoothing)
-        if (faces.isNotEmpty() && (beauty.slimFace > 0f || beauty.bigEyes > 0f)) processed = applyMeshWarp(processed, faces, beauty)
+        if (beauty.smoothing > 0f) {
+            processed = applySmoothing(processed, beauty.smoothing)
+        }
+        if (faces.isNotEmpty() && (beauty.slimFace > 0f || beauty.bigEyes > 0f)) {
+            processed = applyMeshWarp(processed, faces, beauty)
+        }
         val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         val paint = Paint().apply {
             colorFilter = ColorMatrixColorFilter(ColorMatrix(filter.getColorMatrix().values))
             if (beauty.youth > 0f) {
                 val b = beauty.youth * 25f
-                val cm = ColorMatrix(floatArrayOf(1f, 0f, 0f, 0f, b, 0f, 1f, 0f, 0f, b * 0.8f, 0f, 0f, 1f, 0f, b * 0.5f, 0f, 0f, 0f, 1f, 0f))
+                val cm = ColorMatrix(
+                    floatArrayOf(
+                        1f, 0f, 0f, 0f, b,
+                        0f, 1f, 0f, 0f, b * 0.8f,
+                        0f, 0f, 1f, 0f, b * 0.5f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
                 colorFilter = ColorMatrixColorFilter(cm)
             }
         }
@@ -54,73 +96,118 @@ class ImageProcessorImpl : ImageProcessor {
         return output
     }
 
-    override fun takePhoto(context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int, mode: MediaType) {
+    override fun takePhoto(
+        context: Context,
+        imageCapture: ImageCapture,
+        viewModel: MediaViewModel,
+        filter: FilterType,
+        beauty: BeautySettings,
+        lensFacing: Int,
+        mode: MediaType
+    ) {
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
-        imageCapture.takePicture(ContextCompat.getMainExecutor(context), object : ImageCapture.OnImageCapturedCallback() {
-            override fun onCaptureSuccess(image: ImageProxy) {
-                val rotationDegrees = image.imageInfo.rotationDegrees
-                val originalBitmap = image.toBitmap()
-                image.close()
+        imageCapture.takePicture(
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageCapturedCallback() {
+                override fun onCaptureSuccess(image: ImageProxy) {
+                    val rotationDegrees = image.imageInfo.rotationDegrees
+                    val originalBitmap = image.toBitmap()
+                    image.close()
 
-                val matrix = Matrix().apply {
-                    postRotate(rotationDegrees.toFloat())
-                    if (lensFacing == 1) postScale(-1f, 1f)
-                }
-                val rotatedBitmap = Bitmap.createBitmap(originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true)
-
-                val faceDetector = FaceDetection.getClient(FaceDetectorOptions.Builder().setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE).setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL).build())
-                val inputImage = InputImage.fromBitmap(rotatedBitmap, 0)
-                faceDetector.process(inputImage)
-                    .addOnSuccessListener { faces ->
-                        val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces)
-                        // Simple Mock Face ID Logic: Use face count as a temporary "person group" id
-                        val faceId = if (faces.isNotEmpty()) "person_${faces.size}" else null
-                        saveBitmapToMediaStore(context, finalBitmap, name, viewModel, faces.isNotEmpty(), faceId, mode)
+                    val matrix = Matrix().apply {
+                        postRotate(rotationDegrees.toFloat())
+                        if (lensFacing == 1) postScale(-1f, 1f)
                     }
-                    .addOnFailureListener { saveBitmapToMediaStore(context, rotatedBitmap, name, viewModel, false, null, mode) }
-            }
-            override fun onError(exc: ImageCaptureException) { Log.e("ImageProcessor", "Photo capture failed", exc) }
-        })
+                    val rotatedBitmap = Bitmap.createBitmap(
+                        originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true
+                    )
+
+                    val faceDetector = FaceDetection.getClient(
+                        FaceDetectorOptions.Builder()
+                            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+                            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                            .build()
+                    )
+                    val inputImage = InputImage.fromBitmap(rotatedBitmap, 0)
+                    faceDetector.process(inputImage)
+                        .addOnSuccessListener { faces ->
+                            val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces)
+                            // Simple Mock Face ID Logic: Use face count as a temporary "person group" id
+                            val faceId = if (faces.isNotEmpty()) "person_${faces.size}" else null
+                            saveBitmapToMediaStore(
+                                context, finalBitmap, name, viewModel, faces.isNotEmpty(), faceId, mode
+                            )
+                        }
+                        .addOnFailureListener {
+                            saveBitmapToMediaStore(
+                                context, rotatedBitmap, name, viewModel, false, null, mode
+                            )
+                        }
+                }
+
+                override fun onError(exc: ImageCaptureException) {
+                    Log.e("ImageProcessor", "Photo capture failed", exc)
+                }
+            })
     }
 
-    override fun startVideoRecording(context: Context, videoCapture: VideoCapture<Recorder>, viewModel: MediaViewModel, onFinished: () -> Unit): Recording {
+    override fun startVideoRecording(
+        context: Context,
+        videoCapture: VideoCapture<Recorder>,
+        viewModel: MediaViewModel,
+        onFinished: () -> Unit
+    ) : Recording {
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
-        }
-        val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI).setContentValues(contentValues).build()
-        return videoCapture.output.prepareRecording(context, mediaStoreOutputOptions).withAudioEnabled().start(ContextCompat.getMainExecutor(context)) { recordEvent ->
-            if (recordEvent is VideoRecordEvent.Finalize) {
-                if (!recordEvent.hasError()) {
-                    val asset = MediaAsset(
-                        uri = recordEvent.outputResults.outputUri.toString(),
-                        type = MediaType.VIDEO,
-                        captureDate = System.currentTimeMillis(),
-                        fileName = name
-                    )
-                    viewModel.insertMedia(asset)
-                }
-                onFinished()
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
             }
         }
+        val mediaStoreOutputOptions = MediaStoreOutputOptions.Builder(
+            context.contentResolver,
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        ).setContentValues(contentValues).build()
+
+        return videoCapture.output
+            .prepareRecording(context, mediaStoreOutputOptions)
+            .withAudioEnabled()
+            .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
+                if (recordEvent is VideoRecordEvent.Finalize) {
+                    if (!recordEvent.hasError()) {
+                        val asset = MediaAsset(
+                            uri = recordEvent.outputResults.outputUri.toString(),
+                            type = MediaType.VIDEO,
+                            captureDate = System.currentTimeMillis(),
+                            fileName = name
+                        )
+                        viewModel.insertMedia(asset)
+                    }
+                    onFinished()
+                }
+            }
     }
 
-    private fun applySmoothing(source: Bitmap, intensity: Float): Bitmap {
+    private fun applySmoothing(source: Bitmap, intensity: Float) : Bitmap {
         val width = source.width
         val height = source.height
         val res = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val blurred = Bitmap.createScaledBitmap(source, (width / 4).coerceAtLeast(1), (height / 4).coerceAtLeast(1), true)
+        val blurred = Bitmap.createScaledBitmap(
+            source, (width / 4).coerceAtLeast(1), (height / 4).coerceAtLeast(1), true
+        )
         val finalBlur = Bitmap.createScaledBitmap(blurred, width, height, true)
         val canvas = Canvas(res)
         canvas.drawBitmap(source, 0f, 0f, null)
-        val paint = Paint().apply { alpha = (intensity * 180).toInt(); xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_OVER) }
+        val paint = Paint().apply {
+            alpha = (intensity * 180).toInt()
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_OVER)
+        }
         canvas.drawBitmap(finalBlur, 0f, 0f, paint)
         return res
     }
 
-    private fun applyMeshWarp(source: Bitmap, faces: List<Face>, beauty: BeautySettings): Bitmap {
+    private fun applyMeshWarp(source: Bitmap, faces: List<Face>, beauty: BeautySettings) : Bitmap {
         val width = source.width
         val height = source.height
         val meshWidth = 20
@@ -183,15 +270,29 @@ class ImageProcessorImpl : ImageProcessor {
         return output
     }
 
-    private fun saveBitmapToMediaStore(context: Context, bitmap: Bitmap, name: String, viewModel: MediaViewModel, hasFace: Boolean, faceId: String?, mode: MediaType) {
+    private fun saveBitmapToMediaStore(
+        context: Context,
+        bitmap: Bitmap,
+        name: String,
+        viewModel: MediaViewModel,
+        hasFace: Boolean,
+        faceId: String?,
+        mode: MediaType
+    ) {
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
+            }
         }
-        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+        val uri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues
+        )
         uri?.let {
-            context.contentResolver.openOutputStream(it)?.use { stream -> bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream) }
+            context.contentResolver.openOutputStream(it)?.use { stream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, stream)
+            }
             val asset = MediaAsset(
                 uri = it.toString(),
                 type = mode,

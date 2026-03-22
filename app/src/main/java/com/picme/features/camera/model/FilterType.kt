@@ -18,46 +18,67 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
     fun getColorMatrix(): ColorMatrix {
         return when (this) {
             NONE -> ColorMatrix()
-            LEICA_CLASSIC -> ColorMatrix(floatArrayOf(
-                0.95f, 0f, 0f, 0f, 0f,
-                0f, 0.9f, 0f, 0f, 0f,
-                0f, 0f, 0.85f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
+            LEICA_CLASSIC -> ColorMatrix(
+                floatArrayOf(
+                    0.95f, 0f, 0f, 0f, 0f,
+                    0f, 0.9f, 0f, 0f, 0f,
+                    0f, 0f, 0.85f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
             LEICA_VIBRANT -> ColorMatrix().apply {
                 setToSaturation(1.3f)
             }
-            LEICA_BW -> ColorMatrix().apply { setToSaturation(0f) }
-            FILM_GOLD -> ColorMatrix(floatArrayOf(
-                1.1f, 0.1f, 0f, 0f, 0f,
-                0.1f, 1.0f, 0f, 0f, 0f,
-                0f, 0f, 0.8f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            FILM_FUJI -> ColorMatrix(floatArrayOf(
-                0.9f, 0f, 0.1f, 0f, 0f,
-                0f, 1.1f, 0f, 0f, 0f,
-                0.1f, 0f, 1.0f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            VINTAGE -> ColorMatrix(floatArrayOf(
-                0.9f, 0f, 0f, 0f, 0f,
-                0f, 0.8f, 0f, 0f, 0f,
-                0f, 0.5f, 0f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            COOL -> ColorMatrix(floatArrayOf(
-                0.8f, 0f, 0f, 0f, 0f,
-                0f, 0.9f, 0f, 0f, 0f,
-                0f, 0f, 1.2f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
-            WARM -> ColorMatrix(floatArrayOf(
-                1.2f, 0f, 0f, 0f, 0f,
-                0f, 1.0f, 0f, 0f, 0f,
-                0f, 0f, 0.8f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f
-            ))
+
+            LEICA_BW -> ColorMatrix().apply {
+                setToSaturation(0f)
+            }
+
+            FILM_GOLD -> ColorMatrix(
+                floatArrayOf(
+                    1.1f, 0.1f, 0f, 0f, 0f,
+                    0.1f, 1.0f, 0f, 0f, 0f,
+                    0f, 0f, 0.8f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            FILM_FUJI -> ColorMatrix(
+                floatArrayOf(
+                    0.9f, 0f, 0.1f, 0f, 0f,
+                    0f, 1.1f, 0f, 0f, 0f,
+                    0.1f, 0f, 1.0f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            VINTAGE -> ColorMatrix(
+                floatArrayOf(
+                    0.9f, 0f, 0f, 0f, 0f,
+                    0f, 0.8f, 0f, 0f, 0f,
+                    0f, 0.5f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            COOL -> ColorMatrix(
+                floatArrayOf(
+                    0.8f, 0f, 0f, 0f, 0f,
+                    0f, 0.9f, 0f, 0f, 0f,
+                    0f, 0f, 1.2f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            WARM -> ColorMatrix(
+                floatArrayOf(
+                    1.2f, 0f, 0f, 0f, 0f,
+                    0f, 1.0f, 0f, 0f, 0f,
+                    0f, 0.5f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
         }
     }
 }

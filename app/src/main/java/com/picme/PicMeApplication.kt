@@ -11,7 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
 class PicMeApplication : Application(), ImageLoaderFactory {
-    
+
     val applicationScope = CoroutineScope(SupervisorJob())
 
     lateinit var container: AppContainer

@@ -1,22 +1,67 @@
 package com.picme.features.camera.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.ChildCare
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Crop169
+import androidx.compose.material.icons.rounded.CropFree
+import androidx.compose.material.icons.rounded.CropSquare
+import androidx.compose.material.icons.rounded.Face
+import androidx.compose.material.icons.rounded.FaceRetouchingNatural
+import androidx.compose.material.icons.rounded.FilterBAndW
+import androidx.compose.material.icons.rounded.GridOn
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Landscape
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,9 +80,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
 import com.picme.domain.model.BeautySettings
+import com.picme.features.camera.CameraAspectRatio
 import com.picme.features.camera.GridType
 import com.picme.features.camera.ScenePreset
-import com.picme.features.camera.CameraAspectRatio
 import com.picme.features.camera.model.FilterType
 
 @Composable
@@ -45,11 +90,14 @@ fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
     onToggleGrid: () -> Unit,
+    onToggleLogs: () -> Unit,
     isGridActive: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.padding(16.dp).statusBarsPadding(),
+        modifier = modifier
+            .padding(16.dp)
+            .statusBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
@@ -58,6 +106,11 @@ fun CameraLeftControls(
             icon = Icons.Rounded.GridOn,
             onClick = onToggleGrid,
             isActive = isGridActive
+        )
+        // [NEW] Log Overlay Toggle Button
+        ControlButton(
+            icon = Icons.Rounded.Terminal,
+            onClick = onToggleLogs
         )
     }
 }
@@ -78,7 +131,9 @@ fun CameraRightControls(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.padding(16.dp).statusBarsPadding(),
+        modifier = modifier
+            .padding(16.dp)
+            .statusBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.End
     ) {
@@ -88,7 +143,7 @@ fun CameraRightControls(
             isActive = isCameraInfoSelected
         )
         ControlButton(
-            icon = when(currentRatio) {
+            icon = when (currentRatio) {
                 0 -> Icons.Rounded.AspectRatio
                 1 -> Icons.Rounded.Crop169
                 2 -> Icons.Rounded.CropSquare
@@ -126,7 +181,11 @@ fun ControlButton(
         onClick = onClick,
         modifier = modifier.size(44.dp),
         colors = IconButtonDefaults.filledIconButtonColors(
-            containerColor = if (isActive) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.4f),
+            containerColor = if (isActive) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                Color.Black.copy(alpha = 0.4f)
+            },
             contentColor = if (isActive) Color.Black else Color.White
         )
     ) {
@@ -141,17 +200,26 @@ fun ControlPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
         color = Color.Black.copy(alpha = 0.85f),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Rounded.Close, contentDescription = null, tint = Color.White)
                 }
@@ -164,17 +232,19 @@ fun ControlPanel(
 @Composable
 fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) -> Unit) {
     val listState = rememberLazyListState()
-    
+
     LazyRow(
         state = listState,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(FilterType.values()) { filter ->
             val isSelected = selectedFilter == filter
             val scale by animateFloatAsState(if (isSelected) 1.15f else 1.0f, label = "scale")
-            
+
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -189,9 +259,13 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                         .border(
                             width = if (isSelected) 3.dp else 1.dp,
                             brush = if (isSelected) {
-                                Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, Color.White))
+                                Brush.linearGradient(
+                                    listOf(MaterialTheme.colorScheme.primary, Color.White)
+                                )
                             } else {
-                                Brush.linearGradient(listOf(Color.White.copy(0.3f), Color.White.copy(0.1f)))
+                                Brush.linearGradient(
+                                    listOf(Color.White.copy(0.3f), Color.White.copy(0.1f))
+                                )
                             },
                             shape = CircleShape
                         ),
@@ -207,7 +281,7 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                         modifier = Modifier.fillMaxSize(),
                         colorFilter = ColorFilter.colorMatrix(filter.getColorMatrix())
                     )
-                    
+
                     if (isSelected) {
                         Box(
                             modifier = Modifier
@@ -219,7 +293,11 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(filter.displayNameRes),
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White.copy(alpha = 0.7f)
+                    },
                     fontSize = 11.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1
@@ -243,7 +321,7 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
             onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
             onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
         )
-        
+
         BeautySlider(
             icon = Icons.Rounded.FaceRetouchingNatural,
             label = stringResource(R.string.slim_face),
@@ -251,7 +329,7 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
             onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
             onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
         )
-        
+
         BeautySlider(
             icon = Icons.Rounded.Visibility,
             label = stringResource(R.string.big_eyes),
@@ -259,7 +337,7 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
             onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
             onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
         )
-        
+
         BeautySlider(
             icon = Icons.Rounded.ChildCare,
             label = stringResource(R.string.youth),
@@ -282,10 +360,10 @@ private fun BeautySlider(
     // Apply a power curve to make the low-range effect more noticeable
     // Value displayed to user is linear 0-100, but internal value can be mapped
     val displayValue = (value * 100).toInt()
-    
+
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -299,7 +377,11 @@ private fun BeautySlider(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (value > 0) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+                    tint = if (value > 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White.copy(alpha = 0.6f)
+                    },
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -310,33 +392,42 @@ private fun BeautySlider(
                     fontWeight = FontWeight.Medium
                 )
             }
-            
+
             // Floating value indicator logic (simplified here)
             Text(
                 text = if (displayValue > 0) "$displayValue" else "--",
-                color = if (displayValue > 0) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.4f),
+                color = if (displayValue > 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.White.copy(alpha = 0.4f)
+                },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
         }
-        
+
         Box(contentAlignment = Alignment.Center) {
             Slider(
                 value = value,
-                onValueChange = { 
+                onValueChange = {
                     // Internal: applying a power curve (x^0.7) to boost the low-end effect
                     // But we keep the UI value linear for user intuition
-                    onValueChange(it) 
+                    onValueChange(it)
                 },
                 interactionSource = interactionSource,
-                modifier = Modifier.fillMaxWidth().height(32.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp),
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
                     inactiveTrackColor = Color.White.copy(alpha = 0.2f)
                 ),
                 thumb = {
-                    val thumbScale by animateFloatAsState(if (isPressed) 1.5f else 1f, label = "thumbScale")
+                    val thumbScale by animateFloatAsState(
+                        if (isPressed) 1.5f else 1f,
+                        label = "thumbScale"
+                    )
                     Spacer(
                         modifier = Modifier
                             .size(20.dp)
@@ -355,11 +446,18 @@ private fun BeautySlider(
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(sliderPositions.valueRange.run { (value - start) / (endInclusive - start) })
+                                .fillMaxWidth(
+                                    sliderPositions.valueRange.run {
+                                        (value - start) / (endInclusive - start)
+                                    }
+                                )
                                 .fillMaxHeight()
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), MaterialTheme.colorScheme.primary)
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                            MaterialTheme.colorScheme.primary
+                                        )
                                     )
                                 )
                         )
@@ -372,11 +470,34 @@ private fun BeautySlider(
 
 @Composable
 fun RatioSelector(selectedRatio: CameraAspectRatio, onRatioSelected: (CameraAspectRatio) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        RatioItem(label = stringResource(R.string.ratio_4_3), isSelected = selectedRatio == CameraAspectRatio.RATIO_4_3) { onRatioSelected(CameraAspectRatio.RATIO_4_3) }
-        RatioItem(label = stringResource(R.string.ratio_16_9), isSelected = selectedRatio == CameraAspectRatio.RATIO_16_9) { onRatioSelected(CameraAspectRatio.RATIO_16_9) }
-        RatioItem(label = stringResource(R.string.ratio_1_1), isSelected = selectedRatio == CameraAspectRatio.RATIO_1_1) { onRatioSelected(CameraAspectRatio.RATIO_1_1) }
-        RatioItem(label = stringResource(R.string.ratio_full), isSelected = selectedRatio == CameraAspectRatio.RATIO_FULL) { onRatioSelected(CameraAspectRatio.RATIO_FULL) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        RatioItem(
+            label = stringResource(R.string.ratio_4_3),
+            isSelected = selectedRatio == CameraAspectRatio.RATIO_4_3
+        ) {
+            onRatioSelected(CameraAspectRatio.RATIO_4_3)
+        }
+        RatioItem(
+            label = stringResource(R.string.ratio_16_9),
+            isSelected = selectedRatio == CameraAspectRatio.RATIO_16_9
+        ) {
+            onRatioSelected(CameraAspectRatio.RATIO_16_9)
+        }
+        RatioItem(
+            label = stringResource(R.string.ratio_1_1),
+            isSelected = selectedRatio == CameraAspectRatio.RATIO_1_1
+        ) {
+            onRatioSelected(CameraAspectRatio.RATIO_1_1)
+        }
+        RatioItem(
+            label = stringResource(R.string.ratio_full),
+            isSelected = selectedRatio == CameraAspectRatio.RATIO_FULL
+        ) {
+            onRatioSelected(CameraAspectRatio.RATIO_FULL)
+        }
     }
 }
 
@@ -389,13 +510,20 @@ private fun RatioItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
             containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.DarkGray
         )
     ) {
-        Text(text = label, color = if (isSelected) Color.Black else Color.White, fontSize = 12.sp)
+        Text(
+            text = label,
+            color = if (isSelected) Color.Black else Color.White,
+            fontSize = 12.sp
+        )
     }
 }
 
 @Composable
 fun SceneSelector(currentScene: ScenePreset, onSceneSelected: (ScenePreset) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         ScenePreset.values().forEach { scene ->
             val label = when (scene) {
                 ScenePreset.NONE -> stringResource(R.string.scene_none)
@@ -405,10 +533,17 @@ fun SceneSelector(currentScene: ScenePreset, onSceneSelected: (ScenePreset) -> U
             Button(
                 onClick = { onSceneSelected(scene) },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (currentScene == scene) MaterialTheme.colorScheme.primary else Color.DarkGray
+                    containerColor = if (currentScene == scene) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.DarkGray
+                    }
                 )
             ) {
-                Text(text = label, color = if (currentScene == scene) Color.Black else Color.White)
+                Text(
+                    text = label,
+                    color = if (currentScene == scene) Color.Black else Color.White
+                )
             }
         }
     }
@@ -416,7 +551,10 @@ fun SceneSelector(currentScene: ScenePreset, onSceneSelected: (ScenePreset) -> U
 
 @Composable
 fun GridSelector(currentGrid: GridType, onGridSelected: (GridType) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         GridType.values().forEach { grid ->
             val label = when (grid) {
                 GridType.NONE -> stringResource(R.string.grid_none)
@@ -426,10 +564,17 @@ fun GridSelector(currentGrid: GridType, onGridSelected: (GridType) -> Unit) {
             Button(
                 onClick = { onGridSelected(grid) },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (currentGrid == grid) MaterialTheme.colorScheme.primary else Color.DarkGray
+                    containerColor = if (currentGrid == grid) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.DarkGray
+                    }
                 )
             ) {
-                Text(text = label, color = if (currentGrid == grid) Color.Black else Color.White)
+                Text(
+                    text = label,
+                    color = if (currentGrid == grid) Color.Black else Color.White
+                )
             }
         }
     }
@@ -446,19 +591,35 @@ fun ProModeControls(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp).background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp)).padding(12.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(R.string.ev), color = Color.White, modifier = Modifier.width(40.dp))
+            Text(
+                stringResource(R.string.ev),
+                color = Color.White,
+                modifier = Modifier.width(40.dp)
+            )
             Slider(
                 value = exposure.toFloat(),
                 onValueChange = { onExposureChange(it.toInt()) },
                 valueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat(),
-                steps = if (exposureRange.last > exposureRange.first) exposureRange.last - exposureRange.first - 1 else 0,
+                steps = if (exposureRange.last > exposureRange.first) {
+                    exposureRange.last - exposureRange.first - 1
+                } else {
+                    0
+                },
                 modifier = Modifier.weight(1f)
             )
-            Text(text = if (exposure > 0) "+$exposure" else exposure.toString(), color = Color.White, modifier = Modifier.width(40.dp))
+            Text(
+                text = if (exposure > 0) "+$exposure" else exposure.toString(),
+                color = Color.White,
+                modifier = Modifier.width(40.dp)
+            )
         }
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

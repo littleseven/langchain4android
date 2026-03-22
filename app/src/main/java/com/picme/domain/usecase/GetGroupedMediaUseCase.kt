@@ -6,9 +6,11 @@ import com.picme.domain.model.MediaAsset
 import com.picme.features.gallery.GroupingMode
 import com.picme.features.gallery.MediaGroup
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 class GetGroupedMediaUseCase(private val context: Context) {
+
     operator fun invoke(media: List<MediaAsset>, mode: GroupingMode): List<MediaGroup> {
         return when (mode) {
             GroupingMode.NONE -> listOf(MediaGroup("", media))
@@ -33,16 +35,29 @@ class GetGroupedMediaUseCase(private val context: Context) {
                     }
             }
             GroupingMode.LANDSCAPE -> {
-                val landscapes = media.filter { it.fileName.contains("TEST_LANDSCAPE", ignoreCase = true) }
-                if (landscapes.isNotEmpty()) listOf(MediaGroup(context.getString(R.string.landscape), landscapes)) else emptyList()
+                val landscapes =
+                    media.filter { it.fileName.contains("TEST_LANDSCAPE", ignoreCase = true) }
+                if (landscapes.isNotEmpty()) {
+                    listOf(MediaGroup(context.getString(R.string.landscape), landscapes))
+                } else {
+                    emptyList()
+                }
             }
             GroupingMode.SWIMWEAR -> {
                 val items = media.filter { it.fileName.contains("TEST_SWIMWEAR", ignoreCase = true) }
-                if (items.isNotEmpty()) listOf(MediaGroup(context.getString(R.string.swimwear), items)) else emptyList()
+                if (items.isNotEmpty()) {
+                    listOf(MediaGroup(context.getString(R.string.swimwear), items))
+                } else {
+                    emptyList()
+                }
             }
             GroupingMode.SEXY -> {
                 val items = media.filter { it.fileName.contains("TEST_SEXY", ignoreCase = true) }
-                if (items.isNotEmpty()) listOf(MediaGroup(context.getString(R.string.sexy), items)) else emptyList()
+                if (items.isNotEmpty()) {
+                    listOf(MediaGroup(context.getString(R.string.sexy), items))
+                } else {
+                    emptyList()
+                }
             }
         }
     }

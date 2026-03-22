@@ -4,7 +4,7 @@
 
 ## 1. 项目定义与核心价值 (Product Identity)
 
-- **定位**：PicMe 是一款追求极致速度与极简审美的 Android 相册/相机应用，旨在取代冗重的系统原生应用。
+- **定位**：PicMe 是一款追求极致速度与极简审美的 Android 相册/相机 application，旨在取代冗重的系统原生应用。
 - **设计风格**：参考小米 HyperOS 视觉语言（大圆角、毛玻璃、流体动效、精致微交互）。
 - **核心价值**：零启动延迟、直觉化手势、**全本地 AI 处理**（保护隐私）。
 
@@ -19,7 +19,7 @@
         - 简体 (CN)：相册、滤镜、设置、拍照。
         - 繁体 (TW/HK)：相簿、濾鏡、設定、拍照。
         - 英文 (EN)：Gallery, Filters, Settings, Camera/Capture.
-- **[OFFLINE] 离线优先**：核心功能在无网络环境下必须保持 100% 可用。
+- **[OFFLINE] 离线优先**：核心功能在无网络环境下保持 100% 可用。
 
 ## 3. 全局日志系统规范 (Global Logging System) [NEW]
 
@@ -75,12 +75,22 @@ com.picme
 - **[MUST] 状态下沉 (State Hoisting)**: Composable 应尽可能保持 Stateless。
 - **[CHECK] 重组优化**: 避免在 Composable 内部进行耗时计算，使用 `remember` 或 `derivedStateOf`。
 
+### 5.3 代码风格与格式 (Code Style & Formatting) [STRICT]
+- **[MUST] 官方规范**: 必须严格遵守 [Google Kotlin Style Guide](https://developer.android.com/kotlin/style-guide) 和 [Android 官方代码规范](https://source.android.com/docs/setup/contribute/code-style)。
+- **[MUST] 缩进规则**: 
+    - Kotlin/Java: 必须使用 **4 个空格** 缩进，禁止使用 Tab。
+    - XML/Json: 必须使用 **2 个空格** 缩进。
+- **[MUST] 符号命名**: 遵循驼峰命名法（PascalCase 用于类，camelCase 用于函数和变量）。
+- **[MUST] 导入管理**: 禁止使用通配符导入（如 `import a.b.*`），严禁残留无用导入。
+- **[MUST] 函数长度**: 尽量保持函数短小（建议不超过 40 行），超过时必须考虑拆分。
+- **[MUST] 修饰符顺序**: 严格遵循 Kotlin 官方建议的修饰符顺序（如 `private final` 而不是 `final private`）。
+
 ## 6. AI 执行工作流 (Agent Workflow)
 
 1.  **语境探索**：修改前必用 `find_usages` 或 `code_search`。
 2.  **多语言检查 (I18N Check)**：涉及文案修改时，必须同步更新各语言 `strings.xml`，并评估长文本 UI 溢出风险。
-3.  **精准修改**：优先使用 `replace_text`。
-4.  **自愈验证**：修改后必用 `analyze_current_file`。
+3.  **精准修改**：优先使用 `replace_text`。修改后的代码必须进行格式化对齐。
+4.  **自愈验证**：修改后必用 `analyze_current_file` 检查潜在错误与代码风格警告。
 
 ## 7. 构建与环境
 - **Min SDK**: 24 | **Target SDK**: 35

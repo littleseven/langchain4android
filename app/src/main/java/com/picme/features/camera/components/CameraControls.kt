@@ -3,7 +3,15 @@ package com.picme.features.camera.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,7 +51,10 @@ fun CameraBottomControls(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 20.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
@@ -58,7 +69,9 @@ fun CameraBottomControls(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 40.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 40.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -79,8 +92,18 @@ private fun ZoomControls(zoomRatio: Float, onZoomClick: (Float) -> Unit) {
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         ZoomButton(label = "0.6x", isSelected = zoomRatio < 1f) { onZoomClick(0.6f) }
-        ZoomButton(label = "1x", isSelected = zoomRatio >= 1f && zoomRatio < 2f) { onZoomClick(1f) }
-        ZoomButton(label = "2x", isSelected = zoomRatio >= 2f && zoomRatio < 3.2f) { onZoomClick(2f) }
+        ZoomButton(
+            label = "1x",
+            isSelected = zoomRatio >= 1f && zoomRatio < 2f
+        ) {
+            onZoomClick(1f)
+        }
+        ZoomButton(
+            label = "2x",
+            isSelected = zoomRatio >= 2f && zoomRatio < 3.2f
+        ) {
+            onZoomClick(2f)
+        }
         ZoomButton(label = "3.2x", isSelected = zoomRatio >= 3.2f) { onZoomClick(3.2f) }
     }
 }
@@ -105,7 +128,11 @@ private fun ZoomButton(label: String, isSelected: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ModeSelector(currentMode: MediaType, onModeChange: (MediaType) -> Unit, modifier: Modifier = Modifier) {
+private fun ModeSelector(
+    currentMode: MediaType,
+    onModeChange: (MediaType) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
         modifier = modifier.padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
@@ -113,7 +140,7 @@ private fun ModeSelector(currentMode: MediaType, onModeChange: (MediaType) -> Un
     ) {
         val modes = listOf(MediaType.VIDEO, MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO)
         modes.forEach { mode ->
-            val label = when(mode) {
+            val label = when (mode) {
                 MediaType.VIDEO -> stringResource(R.string.video)
                 MediaType.PHOTO -> stringResource(R.string.photo)
                 MediaType.PORTRAIT -> stringResource(R.string.portrait)
@@ -121,7 +148,11 @@ private fun ModeSelector(currentMode: MediaType, onModeChange: (MediaType) -> Un
             }
             Text(
                 text = label,
-                color = if (currentMode == mode) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+                color = if (currentMode == mode) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.White.copy(alpha = 0.6f)
+                },
                 fontSize = 13.sp,
                 fontWeight = if (currentMode == mode) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier
@@ -146,7 +177,12 @@ private fun ShutterButton(isRecording: Boolean, mode: MediaType, onClick: () -> 
         contentAlignment = Alignment.Center
     ) {
         if (isRecording) {
-            Box(modifier = Modifier.size(28.dp).clip(RoundedCornerShape(4.dp)).background(Color.White))
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color.White)
+            )
         }
     }
 }
