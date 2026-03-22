@@ -7,7 +7,8 @@ enum class MediaType {
     PHOTO,      // 照片
     VIDEO,      // 视频
     PORTRAIT,   // 人像模式
-    PRO         // 专业模式
+    PRO,        // 专业模式
+    DOCUMENT    // 文档模式 (OCR)
 }
 
 /**

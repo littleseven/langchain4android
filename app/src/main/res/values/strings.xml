@@ -19,6 +19,7 @@
     <string name="back">Back</string>
     <string name="photo">PHOTO</string>
     <string name="video">VIDEO</string>
+    <string name="document">DOCUMENT</string>
     <string name="portrait">PORTRAIT</string>
     <string name="pro">PRO</string>
     <string name="flip_camera">Flip Camera</string>

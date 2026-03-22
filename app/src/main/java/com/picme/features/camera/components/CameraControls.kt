@@ -138,11 +138,12 @@ private fun ModeSelector(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val modes = listOf(MediaType.VIDEO, MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO)
+        val modes = listOf(MediaType.VIDEO, MediaType.PHOTO, MediaType.DOCUMENT, MediaType.PORTRAIT, MediaType.PRO)
         modes.forEach { mode ->
             val label = when (mode) {
                 MediaType.VIDEO -> stringResource(R.string.video)
                 MediaType.PHOTO -> stringResource(R.string.photo)
+                MediaType.DOCUMENT -> stringResource(R.string.document)
                 MediaType.PORTRAIT -> stringResource(R.string.portrait)
                 MediaType.PRO -> stringResource(R.string.pro)
             }

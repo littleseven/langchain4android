@@ -80,6 +80,7 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.components.BeautySelector
 import com.picme.features.camera.components.CameraBottomControls
+import com.picme.features.camera.components.DocumentDetectionOverlay
 import com.picme.features.camera.components.CameraLeftControls
 import com.picme.features.camera.components.CameraOverlays
 import com.picme.features.camera.components.CameraRightControls
@@ -177,6 +178,10 @@ fun CameraContent(
 
     var currentScene by remember { mutableStateOf(ScenePreset.NONE) }
     var currentGrid by remember { mutableStateOf(GridType.NONE) }
+    
+    // Document Detection
+    var documentBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+    var isDocumentDetected by remember { mutableStateOf(false) }
 
     var exposureCompensation by remember { mutableIntStateOf(0) }
     var exposureRange by remember { mutableStateOf(-2..2) }
@@ -297,23 +302,47 @@ fun CameraContent(
             .build()
 
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-            processImageProxy(
-                imageProxy = imageProxy,
-                detector = faceDetector,
-                cameraControl = cameraControl,
-                previewView = previewView,
-                onFaceDetected = { x, y ->
-                    facePoint = Offset(x, y)
-                    showFocusIndicator = true
-                },
-                onFocusStabilized = { showFocusIndicator = false }
-            )
+            val mediaImage = imageProxy.image
+            if (mediaImage != null) {
+                val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                faceDetector.process(image)
+                    .addOnSuccessListener { faces ->
+                        if (faces.isNotEmpty()) {
+                            val face = faces[0]
+                            val bounds = face.boundingBox
+        
+                            // Convert coordinates to PreviewView
+                            val x = (bounds.centerX().toFloat() / imageProxy.width) * previewView.width
+                            val y = (bounds.centerY().toFloat() / imageProxy.height) * previewView.height
+        
+                            facePoint = Offset(x, y)
+                            showFocusIndicator = true
+        
+                            // Auto Focus on face
+                            cameraControl?.let { control ->
+                                val factory = previewView.meteringPointFactory
+                                val point = factory.createPoint(x, y)
+                                val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                                    .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                                    .build()
+                                control.startFocusAndMetering(action)
+                            }
+                        } else {
+                            showFocusIndicator = false
+                        }
+                    }
+                    .addOnCompleteListener {
+                        imageProxy.close()
+                    }
+            } else {
+                imageProxy.close()
+            }
         }
 
         try {
             cameraProvider.unbindAll()
             val camera = when (captureMode) {
-                MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO -> {
+                MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
                     cameraProvider.bindToLifecycle(
                         lifecycleOwner,
                         cameraSelector,
@@ -466,84 +495,89 @@ fun CameraContent(
                         .setContentValues(contentValues)
                         .build()
 
-                    isRecording = true
-                    recording = videoCapture.output
-                        .prepareRecording(context, mediaStoreOutputOptions)
-                        .withAudioEnabled()
-                        .start(ContextCompat.getMainExecutor(context)) { event ->
-                            when (event) {
-                                is VideoRecordEvent.Finalize -> {
-                                    if (!event.hasError()) {
-                                        viewModel.insertMedia(
-                                            MediaAsset(
-                                                uri = event.outputResults.outputUri.toString(),
-                                                type = MediaType.VIDEO,
-                                                captureDate = System.currentTimeMillis(),
-                                                fileName = name
+                        isRecording = true
+                        recording = videoCapture.output
+                            .prepareRecording(context, mediaStoreOutputOptions)
+                            .withAudioEnabled()
+                            .start(ContextCompat.getMainExecutor(context)) { event ->
+                                when (event) {
+                                    is VideoRecordEvent.Finalize -> {
+                                        if (!event.hasError()) {
+                                            viewModel.insertMedia(
+                                                MediaAsset(
+                                                    uri = event.outputResults.outputUri.toString(),
+                                                    type = MediaType.VIDEO,
+                                                    captureDate = System.currentTimeMillis(),
+                                                    fileName = name
+                                                )
                                             )
-                                        )
-                                        PicMeLogger.i("Camera", "Video saved: $name")
-                                    } else {
-                                        recording?.close()
-                                        recording = null
-                                        isRecording = false
-                                        PicMeLogger.e("Camera", "Video error: ${event.error}")
+                                            PicMeLogger.i("Camera", "Video saved: $name")
+                                        } else {
+                                            recording?.close()
+                                            recording = null
+                                            isRecording = false
+                                            PicMeLogger.e("Camera", "Video error: ${event.error}")
+                                        }
                                     }
                                 }
                             }
-                        }
-                }
-            } else {
-                shutterSound.play(MediaActionSound.SHUTTER_CLICK)
-                val name = "PicMe_" + System.currentTimeMillis() + ".jpg"
-                val contentValues = android.content.ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
-                }
-                val outputOptions = ImageCapture.OutputFileOptions.Builder(
-                    context.contentResolver,
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    contentValues
-                ).build()
-                imageCapture.takePicture(
-                    outputOptions,
-                    ContextCompat.getMainExecutor(context),
-                    object : ImageCapture.OnImageSavedCallback {
-                        override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                            val savedUri = output.savedUri ?: return
-                            viewModel.insertMedia(
-                                MediaAsset(
-                                    uri = savedUri.toString(),
-                                    type = captureMode,
-                                    captureDate = System.currentTimeMillis(),
-                                    fileName = name
+                    }
+                } else {
+                    shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+                    val name = "PicMe_" + System.currentTimeMillis() + ".jpg"
+                    val contentValues = android.content.ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
+                    }
+                    val outputOptions = ImageCapture.OutputFileOptions.Builder(
+                        context.contentResolver,
+                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        contentValues
+                    ).build()
+                    imageCapture.takePicture(
+                        outputOptions,
+                        ContextCompat.getMainExecutor(context),
+                        object : ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                val savedUri = output.savedUri ?: return
+                                viewModel.insertMedia(
+                                    MediaAsset(
+                                        uri = savedUri.toString(),
+                                        type = captureMode,
+                                        captureDate = System.currentTimeMillis(),
+                                        fileName = name
+                                    )
                                 )
-                            )
-                            PicMeLogger.i("Camera", "Photo saved: $name")
-                        }
+                                PicMeLogger.i("Camera", "Photo saved: $name")
+                                    
+                                // [DOCUMENT MODE] Auto navigate to OCR after capture
+                                if (captureMode == MediaType.DOCUMENT) {
+                                    onNavigateToOcr()
+                                }
+                            }
 
-                        override fun onError(exception: ImageCaptureException) {
-                            PicMeLogger.e("Camera", "Photo failed", exception)
-                        }
-                    })
+                            override fun onError(exception: ImageCaptureException) {
+                                PicMeLogger.e("Camera", "Photo failed", exception)
+                            }
+                        })
+                }
+            },
+            onModeChange = { captureMode = it },
+            onFilterSelected = { selectedFilter = it },
+            onBeautySettingsChanged = { beautySettings = it },
+            onRatioSelected = {
+                aspectRatio = it
+                showRatioSelector = false
+            },
+            onDismissPanels = {
+                showFilterSelector = false
+                showBeautySelector = false
+                showRatioSelector = false
+                showSceneSelector = false
+                showGridSelector = false
             }
-        },
-        onModeChange = { captureMode = it },
-        onFilterSelected = { selectedFilter = it },
-        onBeautySettingsChanged = { beautySettings = it },
-        onRatioSelected = {
-            aspectRatio = it
-            showRatioSelector = false
-        },
-        onDismissPanels = {
-            showFilterSelector = false
-            showBeautySelector = false
-            showRatioSelector = false
-            showSceneSelector = false
-            showGridSelector = false
-        }
-    )
+        )
 
     if (showLogOverlay) {
         LogOverlay(onDismiss = { showLogOverlay = false })
@@ -674,6 +708,14 @@ fun CameraPreviewContent(
             onModeChange = onModeChange,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // [DOCUMENT MODE] Detection Overlay
+        if (captureMode == MediaType.DOCUMENT && !isAnyPanelOpen) {
+            DocumentDetectionOverlay(
+                documentBounds = androidx.compose.ui.geometry.Rect.Zero,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         AnimatedVisibility(
             visible = isAnyPanelOpen,
