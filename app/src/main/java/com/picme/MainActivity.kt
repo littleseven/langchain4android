@@ -123,7 +123,6 @@ class MainActivity : ComponentActivity() {
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                                     onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
-                                    onNavigateToOcr = { navController.navigate(Screen.Ocr.route) },
                                     viewModel = mediaViewModel
                                 )
                             }

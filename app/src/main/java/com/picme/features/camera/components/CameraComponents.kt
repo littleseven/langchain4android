@@ -110,7 +110,6 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleCameraInfo: () -> Unit,
     onToggleScene: () -> Unit,
-    onNavigateToOcr: () -> Unit,  // [NEW] OCR entry callback
     onToggleGrid: () -> Unit,
     onToggleLogs: () -> Unit,
     isBeautySelected: Boolean,
@@ -144,10 +143,7 @@ fun CameraRightControls(
             onClick = onToggleRatio,
             isActive = isRatioSelected
         )
-        ControlButton(
-            icon = Icons.AutoMirrored.Rounded.TextSnippet,
-            onClick = onNavigateToOcr
-        )
+                    // OCR入口已根据产品方案移除，仅在文档模式下保留
         ControlButton(
             icon = Icons.Rounded.Landscape,
             onClick = onToggleScene,
@@ -168,6 +164,7 @@ fun CameraRightControls(
             onClick = onToggleGrid,
             isActive = isGridActive
         )
+        // OCR入口已根据产品方案移除，仅在文档模式下保留
         ControlButton(
             icon = Icons.Rounded.Terminal,
             onClick = onToggleLogs

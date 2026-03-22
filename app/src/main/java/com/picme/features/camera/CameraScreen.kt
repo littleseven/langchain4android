@@ -113,7 +113,6 @@ fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
-    onNavigateToOcr: () -> Unit,
     viewModel: MediaViewModel = viewModel(
         factory = MediaViewModelFactory(
             LocalContext.current,
@@ -133,8 +132,7 @@ fun CameraScreen(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
             onNavigateToSettings = onNavigateToSettings,
-            onNavigateToDebug = onNavigateToDebug,
-            onNavigateToOcr = onNavigateToOcr
+            onNavigateToDebug = onNavigateToDebug
         )
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -152,8 +150,7 @@ fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit,
-    onNavigateToOcr: () -> Unit
+    onNavigateToDebug: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -415,7 +412,6 @@ fun CameraContent(
         whiteBalanceMode = whiteBalanceMode,
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToDebug = onNavigateToDebug,
-        onNavigateToOcr = onNavigateToOcr,
         onFlipCamera = {
             lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
                 CameraSelector.LENS_FACING_FRONT
@@ -552,9 +548,7 @@ fun CameraContent(
                                 PicMeLogger.i("Camera", "Photo saved: $name")
                                     
                                 // [DOCUMENT MODE] Auto navigate to OCR after capture
-                                if (captureMode == MediaType.DOCUMENT) {
-                                    onNavigateToOcr()
-                                }
+                                // OCR入口已根据产品方案移除，仅在文档模式下保留
                             }
 
                             override fun onError(exception: ImageCaptureException) {
@@ -612,7 +606,6 @@ fun CameraPreviewContent(
     whiteBalanceMode: Int,
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
-    onNavigateToOcr: () -> Unit,
     onFlipCamera: () -> Unit,
     onToggleBeauty: () -> Unit,
     onToggleFilter: () -> Unit,
@@ -669,7 +662,6 @@ fun CameraPreviewContent(
             onToggleRatio = onToggleRatio,
             onToggleCameraInfo = onToggleCameraInfo,
             onToggleScene = onToggleScene,
-            onNavigateToOcr = onNavigateToOcr,
             onToggleGrid = onToggleGrid,
             onToggleLogs = onToggleLogs,
             isBeautySelected = showBeautySelector,
@@ -767,28 +759,27 @@ fun CameraPreviewContent(
     }
 }
 
-@Composable
-private fun OcrEntryButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    FilledTonalIconButton(
-        onClick = onClick,
-        modifier = modifier.size(56.dp),
-        colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = Color.Black.copy(alpha = 0.4f),
-            contentColor = Color.White
-        )
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.TextSnippet,
-            contentDescription = stringResource(R.string.ocr),
-            modifier = Modifier.size(28.dp)
-        )
-    }
-}
+// @Composable
+// private fun OcrEntryButton(
+//     onClick: () -> Unit,
+//     modifier: Modifier = Modifier
+// ) {
+//     FilledTonalIconButton(
+//         onClick = onClick,
+//         modifier = modifier.size(56.dp),
+//         colors = IconButtonDefaults.filledTonalIconButtonColors(
+//             containerColor = Color.Black.copy(alpha = 0.4f),
+//             contentColor = Color.White
+//         )
+//     ) {
+//         Icon(
+//             imageVector = Icons.AutoMirrored.Rounded.TextSnippet,
+//             contentDescription = stringResource(R.string.ocr),
+//             modifier = Modifier.size(28.dp)
+//         )
+//     }
+// }
 
-@SuppressLint("UnsafeOptInUsageError")
 private fun processImageProxy(
     imageProxy: ImageProxy,
     detector: com.google.mlkit.vision.face.FaceDetector,
