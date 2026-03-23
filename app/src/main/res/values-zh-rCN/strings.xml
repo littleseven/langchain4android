@@ -128,6 +128,11 @@
     <string name="ocr_no_text">图片中未找到文字</string>
     <string name="ocr_copied">文字已复制</string>
     <string name="ocr_failed">提取失败</string>
+    <string name="ocr_share">分享</string>
+    <string name="ocr_copy">复制</string>
+
+    <!-- Media Pager -->
+    <string name="media_source">来源: %1$s</string>
 
     <!-- Duplicate Management -->
     <string name="manage_duplicates">管理重复照片</string>

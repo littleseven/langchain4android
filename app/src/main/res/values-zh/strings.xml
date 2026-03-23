@@ -61,7 +61,7 @@
     <string name="data_generation">数据生成</string>
     <string name="person">人像</string>
     <string name="landscape">风景</string>
-    <string name="group_none">无</string>
+    <string name="group_none">全部</string>
     <string name="group_date">日期</string>
     <string name="group_face">面部</string>
     <string name="group_person">人物</string>
@@ -133,4 +133,9 @@
     <string name="ocr_no_text">图片中未找到文字</string>
     <string name="ocr_copied">文字已复制</string>
     <string name="ocr_failed">提取失败</string>
+    <string name="ocr_share">分享</string>
+    <string name="ocr_copy">复制</string>
+
+    <!-- Media Pager -->
+    <string name="media_source">来源: %1$s</string>
 </resources>

@@ -157,4 +157,17 @@
     <string name="duplicate_preview">Duplicate Preview</string>
     <string name="will_keep_first_file">Will keep the first file and delete the rest:</string>
     <string name="confirm_delete">Confirm Delete</string>
+
+    <!-- Media Pager -->
+    <string name="media_source">Source: %1$s</string>
+<!-- /Users/guoshuai/AndroidStudioProjects/PicMe/app/src/main/res/values/strings.xml -->
+
+    <!-- ... 续接 confirm_delete -->
+    <string name="ocr_recognize">Extract Text</string>
+    <string name="ocr_copy_success">Text copied to clipboard</string>
+    <string name="ocr_share_title">Share Text</string>
+    <string name="media_details">Details</string>
+    <string name="media_info_path">Path: %1$s</string>
+    <string name="media_info_size">Size: %1$s</string>
+    <string name="media_info_resolution">Resolution: %1$s</string>
 </resources>

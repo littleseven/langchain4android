@@ -20,6 +20,7 @@
     <string name="back">返回</string>
     <string name="photo">照片</string>
     <string name="video">影片</string>
+    <string name="document">文件</string>
     <string name="portrait">人像</string>
     <string name="pro">專業</string>
     <string name="flip_camera">翻轉相機</string>
@@ -32,7 +33,7 @@
     <string name="big_eyes">大眼</string>
     <string name="youth">年輕化</string>
     <string name="filter_none">原圖</string>
-    <string name="filter_vintage">复古</string>
+    <string name="filter_vintage">復古</string>
     <string name="filter_cool">冷色</string>
     <string name="filter_warm">暖色</string>
     <string name="filter_leica_classic">徠卡經典</string>
@@ -58,6 +59,8 @@
     <string name="resume">繼續</string>
     <string name="stop">停止</string>
     <string name="generating">正在生成…</string>
+    <string name="debug_tools">調試工具</string>
+    <string name="data_generation">數據生成</string>
     <string name="person">人像</string>
     <string name="landscape">風景</string>
     <string name="swimwear">泳裝</string>
@@ -69,7 +72,7 @@
     <string name="group_swimwear">泳裝</string>
     <string name="group_sexy">性感</string>
     <string name="with_faces">有人臉</string>
-    <string name="no_faces">無人脸</string>
+    <string name="no_faces">無人臉</string>
     <string name="unknown">未知</string>
     <string name="person_group">人物分組 %1$s</string>
     <string name="debug">調試</string>
@@ -125,6 +128,11 @@
     <string name="ocr_no_text">圖片中未找到文字</string>
     <string name="ocr_copied">文字已複製</string>
     <string name="ocr_failed">提取失敗</string>
+    <string name="ocr_share">分享</string>
+    <string name="ocr_copy">複製</string>
+
+    <!-- Media Pager -->
+    <string name="media_source">來源: %1$s</string>
 
     <!-- Duplicate Management -->
     <string name="manage_duplicates">管理重複照片</string>

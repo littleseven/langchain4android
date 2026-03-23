@@ -139,7 +139,7 @@ private fun OcrResultOverlay(
     onDismiss: () -> Unit
 ) {
     val result by ocrState.collectAsState()
-    
+
     AnimatedVisibility(
         visible = result != null,
         enter = fadeIn(),
