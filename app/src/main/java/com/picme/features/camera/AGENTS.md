@@ -1,40 +1,73 @@
-# Camera 模块开发指令 (Module-Specific Instructions)
+# Camera 模块技术实现规范 (Camera Technical Implementation)
 
-你是相机功能专家。在处理 `features/camera/` 目录下的任务时，必须遵守以下指令。
+你是相机引擎专家。你负责确保 PicMe 的相机模块实现零延迟拍摄、智能场景识别和实时 HDR 处理。
 
-## 1. 核心产品逻辑 (Camera Product Logic)
+## 1. 核心技术选型
 
-### A. 智能模式触发规则 (Smart Mode Rules)
-- **[MOON_MODE] 月亮模式**：当缩放倍率 `zoomRatio >= 3.0x` 且识别到圆形高亮度物体时，必须建议或自动切换至月亮预设（降低曝光，增强对比度）。
-- **[NIGHT_MODE] 夜景自适应**：当 `ImageAnalysis` 反馈的光照强度低于阈值时，UI 应提示用户“保持稳定”，并自动增加 `exposureCompensation`。
-- **[FACE_FOCUS] 人脸优先**：只要 ML Kit 检测到人脸，必须锁定该区域对焦，并在 UI 上显示动态追踪框。
+### 1.1 CameraX 配置要求
+- **ImageCapture**：必须使用 `CAPTURE_MODE_MINIMIZE_LATENCY` 模式，JPEG 质量设为 85（平衡画质与体积）
+- **Preview**：锁定目标帧率 30fps，避免帧率波动导致卡顿
+- **闪光灯**：默认使用自动模式（FLASH_MODE_AUTO）
 
-### B. 拍摄反馈三位一体 (The "Click" Feedback)
-- 每次拍摄必须同时触发：
-  1. **声**：播放系统快门音（或自定义轻快音效）。
-  2. **震**：触发一次短促的线性马达触感（Haptic Feedback）。
-  3. **画**：预览画面进行一次 50ms 的 0.8 透明度黑场闪烁。
+### 1.2 场景识别实现逻辑
+- **夜景模式触发条件**：当环境光照度 (Lux) < 10.0 时建议自动触发
+- **月亮模式检测**：需同时满足三个条件：
+  - 变焦倍率 > 3.0x
+  - 检测到高对比度圆形物体
+  - 场景为逆光环境
 
-### C. 美颜交互规范 (BEAUTY_UX)
-- **弹性反馈**：所有美颜滑杆必须实现滑块按压缩放反馈，提升操控确定性。
-- **算法映射**：磨皮算法应通过非线性幂函数（如 x^0.7）增强低数值区间的感知度。
-- **快捷重置**：点击滑杆左侧的图标或标签，必须立即将该项参数重置为 0。
-- **精准隔离**：磨皮算法必须基于人脸分割（Face Segmentation），严禁全图模糊。
+## 2. OCR 引擎集成
 
-## 2. 多语言与术语规范 (I18N & Terminology)
-- **[MUST] 同步翻译**：新增拍摄模式（如“人像”、“专业”）时，必须检查 `res/values*/strings.xml` 确保四种语言对齐。
-- **术语对齐**：
-    - **PHOTO**: 拍照 / 拍照 / Photo
-    - **VIDEO**: 录像 / 錄影 / Video
-    - **PORTRAIT**: 人像 / 人像 / Portrait
-    - **PRO**: 专业 / 專業 / Pro
-- **[UI] 长度适配**：在繁体中文（字数可能较多）或英文环境下，确保模式切换条的文本不会重叠。
+### 2.1 ML Kit 配置要求
+- 使用离线 Document Scanner API，禁用相册选择功能（仅允许实时拍摄）
+- 设置设备源为 CAMERA，确保调用后置摄像头
 
-## 3. 模块 SOP (标准作业程序)
-1. 修改预览逻辑前，必须检查 `CameraScreen.kt` 中的 `ProcessCameraProvider` 绑定流程，确保 `unbindAll()` 逻辑正确。
-2. 任何涉及到 CameraX 的配置更改，必须先调用 `analyze_current_file` 检查是否有生命周期悬空问题。
-3. 性能核查：`ImageAnalysis` 的 `setAnalyzer` 内部逻辑必须在 `cameraExecutor` 中运行，严禁阻塞主线程。
+### 2.2 拍摄后自动 OCR 流程
+**执行顺序**：
+1. **拍摄完成回调** → `onCaptureSuccess(photoUri: Uri)`
+2. **立即触发后台 OCR 任务** → 调用 `viewModel.startOcrTask(photoUri)`，不阻塞 UI
+3. **同步显示拍照反馈** → 播放黑场、音效、触感三位一体反馈
+4. **OCR 结果展示** → 通过 TextOverlay 组件，使用 AnimatedVisibility 实现平滑出现/消失动画
 
-## 4. 视觉规范
-- 控件必须使用 `PicMeTheme` 定义的 `BlurCard` 或 `Glassmorphism` 效果。
-- 按钮大圆角标准：`24.dp` 或 `CircleShape`。
+## 3. 性能优化关键点
+
+### 3.1 启动速度优化 (< 500ms)
+**时间分配要求**：
+- **0-50ms**：Application 初始化，仅注册必要组件（ActivityLifecycleCallbacks）
+- **50-150ms**：权限检查与请求（相机、存储）
+- **150-300ms**：CameraX 初始化并绑定生命周期
+- **300-500ms**：首次预览帧渲染完成
+
+**禁止事项**：
+- ❌ 预加载相机模块
+- ❌ 初始化 AI 模型（应懒加载）
+- ❌ 执行数据库迁移或大量数据加载
+
+### 3.2 拍摄反馈同步机制
+**三位一体反馈必须同时触发**：
+1. **触感反馈**：调用 `HapticFeedback.performHapticFeedback()`，使用 LONG_PRESS 类型
+2. **音效播放**：启动 MediaPlayer 播放快门音（需低延迟播放器）
+3. **黑场动画**：通过 LaunchedEffect 实现 50ms 透明度渐变（1.0 → 0.0）
+
+**关键点**：三个反馈必须在同一帧内触发，任一反馈缺失都会导致用户感知"卡顿"
+
+## 4. 常见陷阱检查清单
+
+- [ ] 是否在拍摄时阻塞了 UI 线程？（保存操作必须在后台）
+- [ ] OCR 引擎是否在空闲 30s 后释放？（避免内存泄漏）
+- [ ] 夜景模式的曝光补偿是否正确应用？（+1.0 to +2.0）
+- [ ] 月亮模式是否锁定了最大焦距？（避免过度放大导致模糊）
+- [ ] 拍照音效是否使用了低延迟播放器？（MediaPlayer 延迟过高）
+- [ ] 权限被拒绝时是否有降级方案？（如无相机权限时引导设置）
+
+## 5. 与产品文档对照
+
+**必须满足的产品指标**：
+- ✅ 快门延迟 < 50ms → 使用 `CAPTURE_MODE_MINIMIZE_LATENCY`
+- ✅ 三位一体反馈 → 触感 + 音效 + 黑场同步触发
+- ✅ OCR 无感集成 → 后台异步处理，不阻塞拍摄流
+
+**技术决策记录**：
+- 选择 CameraX 而非 Camera2：简化生命周期管理，降低代码复杂度
+- 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
+- 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳

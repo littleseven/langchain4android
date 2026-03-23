@@ -1,31 +1,291 @@
-# Gallery 模块开发指令 (Module-Specific Instructions)
+# Gallery 模块技术实现规范 (Gallery Technical Implementation)
 
-你是媒体管理与相册专家。在处理 `features/gallery/` 目录下的任务时，必须遵守以下指令。
+你是相册性能专家。你负责确保 PicMe 的相册模块在千张照片规模下仍能保持 120fps 流畅滚动和秒级响应。
 
-## 1. 核心产品逻辑 (Gallery Product Logic)
+## 1. 核心技术架构
 
-### A. 智能分组与过滤 (Smart Grouping)
-- **[EXCLUSIVITY] 分组排他性**：当用户选择特定分组（如“风景”）时，ViewModel 必须过滤掉所有不含 `Landscape` 标签的媒体，严禁混合显示。
-- **[AUTO_SORT] 自动排序**：新增拍摄的媒体必须立即出现在“全部”和相应分组的最前端（`DATE_TAKEN DESC`）。
-- **[COUNT_SYNC] 计数同步**：分组标题旁的数字必须实时反映过滤后的结果数量。
-- **[DUPLICATE_DETECT] 重复检测**：必须提供基于 MD5 和感知哈希的双重检测机制，识别完全重复和相似图片。
+### 1.1 数据加载策略
+```kotlin
+// Repository 层 - 仅加载元数据，严禁加载大图
+@Query("SELECT * FROM media_assets ORDER BY date_taken DESC")
+fun getAllMediaMetadata(): Flow<List<MediaAsset>>
 
-### B. 交互行为规范 (UX Rules)
-- **[ZOOM_TRANSITION] 缩放过渡**：从网格点击到 Pager 必须使用基于 `Modifier.onGloballyPositioned` 获取的位置进行缩放动画。
-- **[MULTI_SELECT] 批量管理**：
-  - 长按触发：震动反馈 + 选中当前项 + 进入选择模式。
-  - 选择模式下：点击项仅切换选中状态，不打开预览。
-- **[DELETE_CONFIRM] 删除防呆**：执行删除前必须弹出对话框，并明确告知“此操作将从磁盘删除文件”。
-- **[DUPLICATE_UI] 重复管理界面**：
-  - 必须提供独立的重复管理器界面，通过顶部栏的图标入口访问。
-  - 每组重复图片必须显示缩略图预览（最多 3 张）。
-  - 必须支持单组快速删除（保留第一张，删除其余）。
-  - 必须支持批量删除所有重复项。
+// 延迟加载图片数据（仅在 UI 需要时）
+suspend fun loadThumbnail(assetId: Long): Bitmap {
+    return withContext(Dispatchers.IO) {
+        // 使用 Coil 或 Glide 加载缩略图
+        ImageLoader(context)
+            .load(assetUri)
+            .size(240) // 根据屏幕密度动态计算
+            .decode()
+    }
+}
+```
 
-## 2. 模块 SOP (标准作业程序)
-1. 修改 Pager 特性前，必须确认索引逻辑与 `MediaGrid` 点击位置的 `allFlatMedia` 索引完全一致。
-2. 任何涉及数据库的操作，必须通过 `MediaViewModel` 调用 `repository`，严禁在 UI 层直接操作 DAO。
+### 1.2 内存缓存管理
+```kotlin
+// LruCache 配置 - 占可用内存 1/8，上限 64MB
+val thumbnailCache = object : LruCache<String, Bitmap>(
+    (Runtime.getRuntime().maxMemory() / 8).toInt()
+    .coerceAtMost(64 * 1024 * 1024)
+) {
+    override fun sizeOf(key: String, bitmap: Bitmap): Int {
+        return bitmap.byteCount / 1024 // 以 KB 为单位
+    }
+}
 
-## 3. 技术约束
-- 图片加载必须配置 `crossfade(true)` 以保证视觉丝滑。
-- 视频缩略图若首帧为全黑，必须回退提取第 1 秒。
+// 缓存查找与插入
+fun getThumbnailFromCache(uri: String): Bitmap? {
+    return thumbnailCache[uri]
+}
+
+fun addThumbnailToCache(uri: String, bitmap: Bitmap) {
+    if (thumbnailCache[uri] == null) {
+        thumbnailCache.put(uri, bitmap)
+    }
+}
+```
+
+## 2. 智能聚类算法实现
+
+### 2.1 人脸分组逻辑
+```kotlin
+// 使用 ML Kit Face Detection + 特征点比对
+class FaceClusterAnalyzer {
+    
+    suspend fun clusterFaces(assets: List<MediaAsset>): Map<String, List<MediaAsset>> {
+        val faceGroups = mutableMapOf<String, MutableList<MediaAsset>>()
+        
+        for (asset in assets) {
+            val faces = detectFaces(asset.uri)
+            
+            for (face in faces) {
+                val matchedGroupId = findMatchingGroup(face)
+                
+                if (matchedGroupId != null) {
+                    faceGroups[matchedGroupId]?.add(asset)
+                } else {
+                    // 创建新分组
+                    val newGroupId = generateGroupId(face)
+                    faceGroups[newGroupId] = mutableListOf(asset)
+                }
+            }
+        }
+        
+        return faceGroups
+    }
+    
+    private fun findMatchingGroup(newFace: Face): String? {
+        // 产品定义阈值：特征距离 < 0.4 判定为同一人
+        for ((groupId, existingFace) in knownFaces) {
+            val distance = calculateFeatureDistance(newFace, existingFace)
+            if (distance < 0.4f) {
+                return groupId
+            }
+        }
+        return null
+    }
+}
+```
+
+### 2.2 重复照片检测
+```kotlin
+// 双重检测机制：MD5 + pHash
+class DuplicateDetector {
+    
+    // 精确重复检测（MD5）
+    suspend fun isExactDuplicate(uri: Uri): Boolean {
+        val md5 = calculateMD5(uri)
+        return database.queryExactMd5(md5) != null
+    }
+    
+    // 相似照片检测（感知哈希）
+    suspend fun isSimilarPhoto(uri: Uri): Boolean {
+        val phash = calculatePerceptualHash(uri)
+        
+        // 产品定义阈值：汉明距离 < 5
+        return database.querySimilarPHash(pHash, threshold = 5).isNotEmpty()
+    }
+    
+    // 一键清理实现
+    suspend fun cleanupDuplicates(): Int {
+        val duplicates = database.findAllDuplicates()
+        var deletedCount = 0
+        
+        for (group in duplicates) {
+            // 保留每组第一张，删除其余
+            group.drop(1).forEach { asset ->
+                deleteAsset(asset)
+                deletedCount++
+            }
+        }
+        
+        return deletedCount
+    }
+}
+```
+
+## 3. OCR 功能集成
+
+### 3.1 MediaPager OCR 入口
+```kotlin
+// ViewModel 中的 OCR 状态管理
+sealed class OcrResult {
+    object Loading : OcrResult()
+    data class Success(val text: String, val confidence: Float) : OcrResult()
+    data class Error(val message: String) : OcrResult()
+}
+
+class MediaViewModel : ViewModel() {
+    private val _ocrState = MutableStateFlow<OcrResult?>(null)
+    val ocrState: StateFlow<OcrResult?> = _ocrState
+    
+    fun startOcr(uri: String) {
+        viewModelScope.launch {
+            _ocrState.value = OcrResult.Loading
+            
+            try {
+                // 异步执行 OCR 识别
+                val result = ocrUseCase.execute(uri)
+                _ocrState.value = OcrResult.Success(
+                    text = result.text,
+                    confidence = result.confidence
+                )
+            } catch (e: Exception) {
+                _ocrState.value = OcrResult.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+    
+    fun dismissOcr() {
+        // 重置状态流
+        _ocrState.value = null
+    }
+}
+```
+
+### 3.2 OCR 结果展示组件
+```kotlin
+@Composable
+fun OcrResultOverlay(
+    ocrState: StateFlow<OcrResult?>,
+    onDismiss: () -> Unit
+) {
+    val result by ocrState.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
+    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    
+    AnimatedVisibility(
+        visible = result != null,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f))
+                .clickable(onClick = onDismiss) // 点击背景关闭
+        ) {
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .widthIn(max = 400.dp)
+                    .heightIn(max = 500.dp)
+                    .padding(horizontal = 24.dp)
+            ) {
+                when (val ocrResult = result) {
+                    is OcrResult.Success -> {
+                        OcrResultContent(
+                            text = ocrResult.text,
+                            onCopy = {
+                                clipboardManager.setText(AnnotatedString(ocrResult.text))
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.ocr_copy_success),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            },
+                            onShare = { shareText(context, ocrResult.text) },
+                            onClose = onDismiss
+                        )
+                    }
+                    else -> { /* Loading/Error states */ }
+                }
+            }
+        }
+    }
+}
+```
+
+## 4. 性能优化关键点
+
+### 4.1 RecyclerView 优化
+```kotlin
+// Compose Pager 的性能配置
+@OptIn(ExperimentalFoundationApi::class)
+HorizontalPager(
+    state = pagerState,
+    beyondBoundsPageCount = 3, // 预加载前后 3 页
+    pageSpacing = 16.dp,
+    contentPadding = PaddingValues(horizontal = 16.dp)
+) { page ->
+    // 懒加载图片
+    AsyncImage(
+        model = ImageRequest.Builder(LocalContext.current)
+            .data(assets[page].uri)
+            .crossfade(true)
+            .build(),
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize()
+    )
+}
+```
+
+### 4.2 后台线程管理
+```kotlin
+// 数据库操作必须在 IO 线程
+viewModelScope.launch(Dispatchers.IO) {
+    val allMedia = repository.getAllMedia()
+    
+    withContext(Dispatchers.Main) {
+        // UI 更新在主线程
+        updateUi(allMedia)
+    }
+}
+
+// 使用 Flow 实现自动刷新
+val uiState: StateFlow<UiState> = repository.allMedia
+    .map { media -> UiState.Success(media) }
+    .stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = UiState.Loading
+    )
+```
+
+## 5. 常见陷阱检查清单
+
+- [ ] 是否在 UI 线程中加载了大图？（必须使用 Dispatchers.IO）
+- [ ] LruCache 是否设置了合理的上限？（避免 OOM）
+- [ ] Face Detection 是否在后台线程执行？（ML Kit 很耗时）
+- [ ] OCR 引擎是否在使用后释放？（避免内存泄漏）
+- [ ] 滚动时是否频繁创建对象？（应在构造函数中初始化）
+- [ ] Flow 是否正确使用了 `stateIn`？（避免重复订阅）
+- [ ] 图片加载是否处理了异常？（避免崩溃）
+- [ ] 长按触发 OCR 时是否有防抖？（避免重复触发）
+
+## 6. 与产品文档对照
+
+**必须满足的产品指标**：
+- ✅ 120fps 滚动 → LruCache + 预加载 + beyondBoundsPageCount
+- ✅ 人脸分组特征距离 < 0.4 → ML Kit + 自定义比对算法
+- ✅ 重复检测汉明距离 < 5 → pHash + 数据库查询优化
+- ✅ OCR 秒级响应 → 异步执行 + 状态流管理
+
+**技术决策记录**：
+- 选择 Room 而非 Realm：更好的 Kotlin 协程支持，更小的包体积
+- 使用 Coil 而非 Glide：原生支持 Compose，API 更简洁
+- Flow 替代 LiveData：冷流特性更适合数据同步场景
