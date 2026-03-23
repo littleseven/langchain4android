@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,10 +35,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,13 +50,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import com.picme.features.gallery.MediaViewModel
+import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -61,7 +69,9 @@ fun MediaPager(
     initialIndex: Int,
     onClose: () -> Unit,
     onDelete: (MediaAsset) -> Unit,
-    onNavigateToOcr: (MediaAsset) -> Unit  // [NEW] OCR 识别回调
+    onNavigateToOcr: (MediaAsset) -> Unit,  // [NEW] 导航到独立OCR页面的回调
+    onStartOcr: (String) -> Unit, // [NEW] 启动OCR识别的回调
+    ocrState: StateFlow<MediaViewModel.OcrResult?> // 从ViewModel接收OCR结果
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(true) }
@@ -91,7 +101,8 @@ fun MediaPager(
             showInfo = showInfo,
             onToggleInfo = { showInfo = !showInfo },
             onDelete = { onDelete(assets[pagerState.currentPage]) },
-            onOcrClick = { onNavigateToOcr(assets[pagerState.currentPage]) }  // [NEW]
+            onNavigateToOcr = { onNavigateToOcr(assets[pagerState.currentPage]) },
+            onStartOcr = { onStartOcr(assets[pagerState.currentPage].uri) }
         )
 
         // Source Info Overlay (Bottom Left)
@@ -100,7 +111,85 @@ fun MediaPager(
             visible = showInfo && currentAsset.source != null,
             source = currentAsset.source
         )
+        
+        // OCR 识别结果浮层
+        OcrResultOverlay(
+            ocrState = ocrState,
+            onDismiss = { /* ViewModel 已管理状态，无需在此处重置 */ }
+        )
     }
+}
+
+@Composable
+private fun OcrResultOverlay(
+    ocrState: StateFlow<MediaViewModel.OcrResult?>,
+    onDismiss: () -> Unit
+) {
+    val result by ocrState.collectAsState()
+    
+    AnimatedVisibility(
+        visible = result != null,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(16.dp),
+                shadowElevation = 8.dp,
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    when (val r = result) {
+                        null -> {}
+                        MediaViewModel.OcrResult.Loading -> {
+                            androidx.compose.material3.CircularProgressIndicator()
+                            Text("正在识别中...")
+                        }
+                        is MediaViewModel.OcrResult.Success -> {
+                            Text(
+                                text = r.text,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                androidx.compose.material3.OutlinedButton(onClick = { /* 复制逻辑 */ }) {
+                                    Text("复制")
+                                }
+                                androidx.compose.material3.Button(onClick = { /* 分享逻辑 */ }) {
+                                    Text("分享")
+                                }
+                            }
+                        }
+                        is MediaViewModel.OcrResult.Error -> {
+                            Icon(Icons.Rounded.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Text(r.message, color = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "关闭", tint = Color.Gray)
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 @Composable
@@ -109,7 +198,8 @@ private fun MediaPagerTopControls(
     showInfo: Boolean,
     onToggleInfo: () -> Unit,
     onDelete: () -> Unit,
-    onOcrClick: () -> Unit  // [NEW]
+    onNavigateToOcr: () -> Unit, // 导航到独立OCR页面
+    onStartOcr: () -> Unit // 启动OCR识别
 ) {
     Row(
         modifier = Modifier
@@ -129,16 +219,16 @@ private fun MediaPagerTopControls(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // OCR Button - [NEW]
+            // OCR 识别按钮
             IconButton(
-                onClick = onOcrClick,
+                onClick = { onStartOcr() },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Black.copy(alpha = 0.5f)
                 )
             ) {
                 Icon(
                     Icons.AutoMirrored.Rounded.TextSnippet,
-                    contentDescription = "OCR 识别",
+                    contentDescription = "提取文字",
                     tint = Color.White
                 )
             }

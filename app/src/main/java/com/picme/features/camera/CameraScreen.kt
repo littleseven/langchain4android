@@ -92,6 +92,7 @@ import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
+import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
 import java.util.concurrent.Executors
@@ -116,7 +117,8 @@ fun CameraScreen(
     viewModel: MediaViewModel = viewModel(
         factory = MediaViewModelFactory(
             LocalContext.current,
-            (LocalContext.current.applicationContext as PicMeApplication).repository
+            (LocalContext.current.applicationContext as PicMeApplication).repository,
+            OcrUseCase()
         )
     )
 ) {

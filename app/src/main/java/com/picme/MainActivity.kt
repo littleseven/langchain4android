@@ -31,9 +31,10 @@ import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
+import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
-import com.picme.features.ocr.OcrScreen
+
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
@@ -61,8 +62,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = application as PicMeApplication
             val context = LocalContext.current
+            val ocrUseCase = OcrUseCase()
             val mediaViewModel: MediaViewModel = viewModel(
-                factory = MediaViewModelFactory(context, app.container.repository)
+                factory = MediaViewModelFactory(context, app.container.repository, ocrUseCase)
             )
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = SettingsViewModelFactory(app.container.userPreferencesRepository)
@@ -131,33 +133,25 @@ class MainActivity : ComponentActivity() {
                                     viewModel = mediaViewModel,
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToOcr = { uri ->
-                                        // [NEW] Navigate to OCR screen with image Uri
-                                        val encodedUri = java.net.URLEncoder.encode(uri, "UTF-8")
-                                        navController.navigate(Screen.Ocr.createRoute(encodedUri))
+                                        // OCR 已改为在相册内以浮层方式处理，不再导航到独立页面
+                                        viewModel.recognizeTextFromCurrentImage(LocalContext.current, android.net.Uri.parse(uri))
                                     }
                                 )
                             }
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
-                                    onNavigateBack = { navController.popBackStack() }
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToOcr = { uri ->
+                                        // OCR 已改为在相册内以浮层方式处理，不再导航到独立页面
+                                        viewModel.recognizeTextFromCurrentImage(LocalContext.current, android.net.Uri.parse(uri))
+                                    }
                                 )
                             }
                             composable(Screen.Debug.route) {
                                 DebugScreen(onNavigateBack = { navController.popBackStack() })
                             }
-                            composable(Screen.Ocr.route) { backStackEntry ->
-                                // [NEW] Check if coming from Gallery with image Uri
-                                val imageUri = backStackEntry.arguments?.getString("imageUri")
-                                val decodedUri = imageUri?.let {
-                                    java.net.URLDecoder.decode(it, "UTF-8")
-                                }
-                                OcrScreen(
-                                    onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToCamera = { navController.popBackStack() },  // 返回相机页面
-                                    initialImageUri = decodedUri
-                                )
-                            }
+
                         }
                     }
                 }

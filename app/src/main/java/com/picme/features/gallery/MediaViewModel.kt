@@ -1,6 +1,7 @@
 package com.picme.features.gallery
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,7 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
+import com.picme.domain.usecase.OcrUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,7 +31,8 @@ data class MediaGroup(
 class MediaViewModel(
     private val repository: MediaRepository,
     private val getGroupedMediaUseCase: GetGroupedMediaUseCase,
-    private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase
+    private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
+    private val ocrUseCase: OcrUseCase // 新增依赖
 ) : ViewModel() {
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
@@ -41,6 +44,33 @@ class MediaViewModel(
     private val _duplicateGroups = MutableStateFlow<List<DuplicateGroup>>(emptyList())
     val duplicateGroups = _duplicateGroups.asStateFlow()
     
+    // OCR 功能相关状态
+    private val _ocrState = MutableStateFlow<OcrResult?>(null)
+    val ocrState: StateFlow<OcrResult?> = _ocrState.asStateFlow()
+
+    sealed class OcrResult {
+        object Loading : OcrResult()
+        data class Success(val text: String) : OcrResult()
+        data class Error(val message: String) : OcrResult()
+    }
+
+    fun clearOcrResult() {
+        _ocrState.value = null
+    }
+
+    // 为当前预览的图片执行OCR识别
+    fun recognizeTextFromCurrentImage(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _ocrState.value = OcrResult.Loading
+            val result = ocrUseCase.recognizeFromUri(context, uri)
+            _ocrState.value = if (result != null) {
+                OcrResult.Success(result)
+            } else {
+                OcrResult.Error("识别失败")
+            }
+        }
+    }
+
     private val _isScanningDuplicates = MutableStateFlow(false)
     val isScanningDuplicates = _isScanningDuplicates.asStateFlow()
 
@@ -142,7 +172,8 @@ class MediaViewModel(
 
 class MediaViewModelFactory(
     private val context: Context,
-    private val repository: MediaRepository
+    private val repository: MediaRepository,
+    private val ocrUseCase: OcrUseCase // 新增OCR用例的依赖
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -151,7 +182,8 @@ class MediaViewModelFactory(
             return MediaViewModel(
                 repository,
                 GetGroupedMediaUseCase(context),
-                FindDuplicateMediaUseCase(repository)
+                FindDuplicateMediaUseCase(repository),
+                ocrUseCase
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

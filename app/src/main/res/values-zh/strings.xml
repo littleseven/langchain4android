@@ -126,4 +126,11 @@
     <string name="live_recording">正在录制…</string>
     <string name="live_stable">设备稳定</string>
     <string name="live_unstable">请握紧手机</string>
+
+    <!-- OCR Service (Integrated) -->
+    <string name="ocr_action_label">提取文字</string>
+    <string name="ocr_progress">正在提取文字…</string>
+    <string name="ocr_no_text">图片中未找到文字</string>
+    <string name="ocr_copied">文字已复制</string>
+    <string name="ocr_failed">提取失败</string>
 </resources>

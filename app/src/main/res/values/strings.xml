@@ -136,13 +136,12 @@
     <string name="downloading">Downloading: %1$s</string>
     <string name="generation_finished">Finished</string>
 
-    <!-- OCR -->
-    <string name="ocr">OCR</string>
-    <string name="ocr_scan">OCR Scan</string>
-    <string name="ocr_processing">Recognizing…</string>
-    <string name="ocr_no_text">No text detected</string>
-    <string name="ocr_copy_success">Text copied to clipboard</string>
-    <string name="ocr_error">Recognition failed: %1$s</string>
+    <!-- OCR Service (Integrated) -->
+    <string name="ocr_action_label">Extract Text</string>
+    <string name="ocr_progress">Extracting text…</string>
+    <string name="ocr_no_text">No text found in image</string>
+    <string name="ocr_copied">Text copied</string>
+    <string name="ocr_failed">Extraction failed</string>
     
     <!-- Duplicate Management -->
     <string name="manage_duplicates">Manage Duplicates</string>

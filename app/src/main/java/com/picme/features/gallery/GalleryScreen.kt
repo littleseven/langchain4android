@@ -1,5 +1,6 @@
 package com.picme.features.gallery
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -55,6 +56,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -82,6 +84,7 @@ import com.picme.features.gallery.GroupingMode.NONE
 import com.picme.features.gallery.GroupingMode.PERSON
 import com.picme.features.gallery.GroupingMode.SEXY
 import com.picme.features.gallery.GroupingMode.SWIMWEAR
+import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
 
@@ -90,7 +93,7 @@ import com.picme.features.gallery.components.MediaPager
 fun GalleryScreen(
     viewModel: MediaViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToOcr: (String) -> Unit  // [NEW] OCR 识别回调，接收图片 Uri
+    onNavigateToOcr: (String) -> Unit // [NEW] OCR 识别回调，接收图片 Uri
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -100,6 +103,8 @@ fun GalleryScreen(
 
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
+
+
     val selectedIds = remember { mutableStateListOf<Long>() }
 
     val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { it.items } }
@@ -236,10 +241,15 @@ fun GalleryScreen(
                             }
                         },
                         onNavigateToOcr = { asset ->
-                            // [NEW] Navigate to OCR screen with selected image
+                            // 导航到独立的OCR页面（原功能）
                             selectedMediaIndex = null  // 关闭预览
                             onNavigateToOcr(asset.uri.toString())
-                        }
+                        },
+                        onStartOcr = { uri ->
+                            // 在相册内启动OCR识别，由ViewModel管理
+                            viewModel.recognizeTextFromCurrentImage(LocalContext.current, android.net.Uri.parse(uri))
+                        },
+                        ocrState = viewModel.ocrState // 将ViewModel的OCR状态流传递下去
                     )
                 }
             }

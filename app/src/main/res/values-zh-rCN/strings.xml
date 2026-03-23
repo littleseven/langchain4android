@@ -122,6 +122,13 @@
     <string name="tip_night">请保持手机稳定，建议使用三脚架。</string>
     <string name="tip_moon">建议使用最大变焦，并点击月亮进行对焦。</string>
     
+    <!-- OCR Service (Integrated) -->
+    <string name="ocr_action_label">提取文字</string>
+    <string name="ocr_progress">正在提取文字…</string>
+    <string name="ocr_no_text">图片中未找到文字</string>
+    <string name="ocr_copied">文字已复制</string>
+    <string name="ocr_failed">提取失败</string>
+
     <!-- Duplicate Management -->
     <string name="manage_duplicates">管理重复照片</string>
     <string name="no_duplicates_found">未找到重复图片</string>
