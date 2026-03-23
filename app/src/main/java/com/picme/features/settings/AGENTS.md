@@ -1,10 +1,21 @@
 # Settings 模块技术实现规范 (Settings Technical Implementation)
 
-你是用户偏好管理专家。你负责确保 PicMe 的设置系统使用 DataStore 安全、高效地存储用户配置。
+**模块定位**：确保 PicMe 的设置系统使用 DataStore 安全、高效地存储用户配置。
 
-## 1. 核心技术架构
+**主要维护者**：[RD] 全栈工程师
 
-### 1.1 DataStore 定义规范
+**阅读对象**：RD、AI Agent
+
+## 1. 核心产品逻辑 (Core Product Logic)
+
+- **[LOCAL] 零云端存储**：所有设置本地化，不申请网络权限
+- **[I18N] 多语言支持**：英文、简体中文、繁体中文三语齐全
+- **[PRIVACY] 权限透明**：明确告知用途，提供降级方案
+- **[TYPE_SAFE] 类型安全**：使用 DataStore 和 Sealed Class 确保编译期检查
+
+## 2. 技术实现规范 (Technical Implementation)
+
+### 2.1 DataStore 定义规范
 - **Preference Key 命名**：使用 `intPreferencesKey`、`booleanPreferencesKey` 等类型安全 API
 - **Flow 暴露数据**：通过 `userPreferences.data.map{}`将偏好设置转换为 Flow 流
 - **Repository 封装**：所有读写操作必须经过 Repository 层，ViewModel 不直接调用 DataStore
@@ -15,7 +26,7 @@
 - **SliderSetting**：滑块型设置（如美颜程度），包含最小值、最大值、默认值、步长
 - **SelectorSetting**：选择器型设置（如滤镜风格），包含选项列表、默认索引
 
-## 2. 设置 UI 组件实现
+### 2.2 设置 UI 组件实现
 
 ### 2.1 通用设置项布局
 **使用 when 表达式根据类型渲染不同组件**：
@@ -29,7 +40,7 @@
 2. 通过 `stateIn`将合并后的 Flow 转换为 StateFlow，自动通知 UI 更新
 3. 用户修改设置时调用 Repository 的 suspend 函数，无需手动刷新 UI
 
-## 3. 权限管理实现
+### 2.3 权限管理实现
 
 ### 3.1 Android 13+ 权限适配
 **动态申请策略**：
@@ -43,7 +54,7 @@
 - **存储权限被拒**：进入受限模式，允许拍照但不允许保存（或保存到应用私有目录）
 - **部分权限被拒**：仅启用已授权功能，未授权功能隐藏或禁用
 
-## 4. I18N 多语言支持
+### 2.4 I18N 多语言支持
 
 ### 4.1 字符串资源组织规范
 **文件结构**：
@@ -58,7 +69,17 @@
 ### 4.2 动态语言切换（可选功能）
 **实现方式**：通过 `Context.createConfigurationContext()` 创建带特定 Locale 的 Context，支持应用内独立于系统设置的语言切换
 
-## 5. 常见陷阱检查清单
+## 3. Agent 执行规约 (Execution Rules)
+
+- **DataStore 操作**：必须使用协程（edit 是 suspend 函数）
+- **Flow 生命周期**：正确处理 Flow 的生命周期，使用 `stateIn` 管理
+- **权限请求时机**：首次使用时再请求，避免启动时全部请求
+- **默认值设置**：所有设置项必须有默认值，避免首次读取为 null
+- **多语言同步**：新增功能时必须同步更新三个语言文件
+- **深色模式**：必须使用 MaterialTheme.colorScheme 支持深色模式
+- **实时生效**：设置变更通过 Flow 自动通知订阅者，无需手动刷新
+
+## 4. 常见陷阱检查清单 (Checklist)
 
 - [ ] DataStore 操作是否使用了协程？（edit 是 suspend 函数）
 - [ ] 是否正确处理了 Flow 的生命周期？（使用 `stateIn`）
@@ -68,7 +89,7 @@
 - [ ] 是否支持深色模式？（使用 MaterialTheme.colorScheme）
 - [ ] 设置变更是否实时生效？（通过 Flow 自动通知订阅者）
 
-## 6. 与产品文档对照
+## 5. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
 - ✅ 零云端 → 所有设置本地存储，不申请网络权限

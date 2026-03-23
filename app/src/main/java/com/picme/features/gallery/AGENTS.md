@@ -1,10 +1,21 @@
 # Gallery 模块技术实现规范 (Gallery Technical Implementation)
 
-你是相册性能专家。你负责确保 PicMe 的相册模块在千张照片规模下仍能保持 120fps 流畅滚动和秒级响应。
+**模块定位**：确保 PicMe 的相册模块在千张照片规模下仍能保持 120fps 流畅滚动和秒级响应。
 
-## 1. 核心技术架构
+**主要维护者**：[RD] 全栈工程师
 
-### 1.1 数据加载策略
+**阅读对象**：RD、AI Agent
+
+## 1. 核心产品逻辑 (Core Product Logic)
+
+- **[PERF] 120fps 流畅滚动**：使用 LruCache + 预加载 + beyondBoundsPageCount 优化
+- **[ACCURACY] 人脸分组精度**：特征距离 < 0.4 判定为同一人
+- **[DUPLICATE] 重复检测**：MD5（精确重复）+ pHash（相似照片，汉明距离 < 5）
+- **[RESPONSE] OCR 秒级响应**：异步执行 + 状态流管理
+
+## 2. 技术实现规范 (Technical Implementation)
+
+### 2.1 数据加载策略
 ```kotlin
 // Repository 层 - 仅加载元数据，严禁加载大图
 @Query("SELECT * FROM media_assets ORDER BY date_taken DESC")
@@ -22,7 +33,7 @@ suspend fun loadThumbnail(assetId: Long): Bitmap {
 }
 ```
 
-### 1.2 内存缓存管理
+### 2.2 内存缓存管理
 ```kotlin
 // LruCache 配置 - 占可用内存 1/8，上限 64MB
 val thumbnailCache = object : LruCache<String, Bitmap>(
@@ -46,7 +57,7 @@ fun addThumbnailToCache(uri: String, bitmap: Bitmap) {
 }
 ```
 
-## 2. 智能聚类算法实现
+### 2.3 智能聚类算法实现
 
 ### 2.1 人脸分组逻辑
 ```kotlin
@@ -125,7 +136,7 @@ class DuplicateDetector {
 }
 ```
 
-## 3. OCR 功能集成
+### 2.4 OCR 功能集成
 
 ### 3.1 MediaPager OCR 入口
 ```kotlin
@@ -220,7 +231,7 @@ fun OcrResultOverlay(
 }
 ```
 
-## 4. 性能优化关键点
+### 2.5 性能优化关键点
 
 ### 4.1 RecyclerView 优化
 ```kotlin
@@ -266,7 +277,18 @@ val uiState: StateFlow<UiState> = repository.allMedia
     )
 ```
 
-## 5. 常见陷阱检查清单
+## 3. Agent 执行规约 (Execution Rules)
+
+- **图片加载**：必须在后台线程（Dispatchers.IO）加载大图，严禁在 UI 线程
+- **LruCache 管理**：必须设置合理上限（占可用内存 1/8，上限 64MB），避免 OOM
+- **Face Detection**：ML Kit 很耗时，必须在后台线程执行
+- **OCR 引擎**：使用后必须释放，避免内存泄漏
+- **对象创建**：滚动时避免频繁创建对象，应在构造函数中初始化
+- **Flow 订阅**：正确使用 `stateIn` 操作符，避免重复订阅
+- **异常处理**：图片加载必须处理异常情况，避免崩溃
+- **防抖优化**：长按触发 OCR 时必须加防抖，避免重复触发
+
+## 4. 常见陷阱检查清单 (Checklist)
 
 - [ ] 是否在 UI 线程中加载了大图？（必须使用 Dispatchers.IO）
 - [ ] LruCache 是否设置了合理的上限？（避免 OOM）
@@ -277,7 +299,7 @@ val uiState: StateFlow<UiState> = repository.allMedia
 - [ ] 图片加载是否处理了异常？（避免崩溃）
 - [ ] 长按触发 OCR 时是否有防抖？（避免重复触发）
 
-## 6. 与产品文档对照
+## 5. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
 - ✅ 120fps 滚动 → LruCache + 预加载 + beyondBoundsPageCount
