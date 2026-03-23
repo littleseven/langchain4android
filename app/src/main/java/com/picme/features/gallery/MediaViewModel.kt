@@ -58,18 +58,29 @@ class MediaViewModel(
         Log.d("PicMe:Gallery", "Clearing OCR result")
         _ocrState.value = null
     }
+    
+    override fun onCleared() {
+        super.onCleared()
+        Log.d("PicMe:Gallery", "MediaViewModel cleared, releasing OCR resources")
+        ocrUseCase.close()
+    }
 
     fun recognizeTextFromCurrentImage(context: Context, uri: Uri) {
         viewModelScope.launch {
             Log.d("PicMe:Gallery", "Starting OCR for URI: $uri")
             _ocrState.value = OcrResult.Loading
-            val result = ocrUseCase.recognizeFromUri(context, uri)
-            _ocrState.value = if (result != null) {
-                Log.d("PicMe:Gallery", "OCR Success: ${result.take(20)}...")
-                OcrResult.Success(result)
-            } else {
-                Log.w("PicMe:Gallery", "OCR Failed or no text found")
-                OcrResult.Error("识别失败")
+            try {
+                val result = ocrUseCase.recognizeFromUri(context, uri)
+                _ocrState.value = if (result != null) {
+                    Log.d("PicMe:Gallery", "OCR Success: ${result.take(20)}...")
+                    OcrResult.Success(result)
+                } else {
+                    Log.w("PicMe:Gallery", "OCR Failed or no text found")
+                    OcrResult.Error("未找到文字")
+                }
+            } catch (e: Exception) {
+                Log.e("PicMe:Gallery", "OCR Exception: ${e.message}", e)
+                _ocrState.value = OcrResult.Error("识别失败：${e.message}")
             }
         }
     }

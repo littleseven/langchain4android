@@ -16,9 +16,13 @@ class OcrUseCase {
             val visionText = textRecognizer.process(inputImage).await()
             visionText.text.trim().takeIf { it.isNotBlank() }
         } catch (e: Exception) {
-            null // 在 UseCase 层处理异常，返回 null 表示失败
-        } finally {
-            textRecognizer.close() // 确保资源被释放
+            e.printStackTrace()
+            null
         }
+        // 不在这里 close，让 recognizer 可以复用
+    }
+    
+    fun close() {
+        textRecognizer.close()
     }
 }
