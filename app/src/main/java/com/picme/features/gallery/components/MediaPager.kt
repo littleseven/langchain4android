@@ -1,5 +1,8 @@
 package com.picme.features.gallery.components
 
+import android.content.Intent
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -8,7 +11,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,27 +33,32 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,7 +81,6 @@ fun MediaPager(
     initialIndex: Int,
     onClose: () -> Unit,
     onDelete: (MediaAsset) -> Unit,
-    onNavigateToOcr: (MediaAsset) -> Unit,
     onStartOcr: (String) -> Unit,
     onDismissOcr: () -> Unit,
     ocrState: StateFlow<MediaViewModel.OcrResult?>
@@ -96,9 +105,12 @@ fun MediaPager(
                     modifier = Modifier
                         .fillMaxSize()
                         .combinedClickable(
-                            onClick = { showInfo = !showInfo },
+                            onClick = { 
+                                Log.d("PicMe:UX", "Toggle info visibility via click")
+                                showInfo = !showInfo 
+                            },
                             onLongClick = {
-                                // [RD] 按照 FEATURES.md 触发触感反馈并启动 OCR
+                                Log.d("PicMe:UX", "Trigger OCR via long press")
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onStartOcr(asset.uri)
                             }
@@ -112,10 +124,20 @@ fun MediaPager(
         MediaPagerTopControls(
             onClose = onClose,
             showInfo = showInfo,
-            onToggleInfo = { showInfo = !showInfo },
-            onDelete = { onDelete(assets[pagerState.currentPage]) },
-            onNavigateToOcr = { onNavigateToOcr(assets[pagerState.currentPage]) },
-            onStartOcr = { onStartOcr(assets[pagerState.currentPage].uri) }
+            onToggleInfo = { 
+                Log.d("PicMe:UX", "Toggle info visibility via button")
+                showInfo = !showInfo 
+            },
+            onDelete = { 
+                val currentAsset = assets[pagerState.currentPage]
+                Log.d("PicMe:UX", "Request delete media: ${currentAsset.id}")
+                onDelete(currentAsset) 
+            },
+            onStartOcr = { 
+                val currentAsset = assets[pagerState.currentPage]
+                Log.d("PicMe:UX", "Trigger OCR via toolbar button for asset: ${currentAsset.id}")
+                onStartOcr(currentAsset.uri) 
+            }
         )
 
         // Source Info Overlay (Bottom Left)
@@ -125,10 +147,13 @@ fun MediaPager(
             source = currentAsset.source
         )
         
-        // OCR 识别结果浮层
+        // OCR Result Overlay
         OcrResultOverlay(
             ocrState = ocrState,
-            onDismiss = onDismissOcr
+            onDismiss = {
+                Log.d("PicMe:UX", "Dismiss OCR result overlay")
+                onDismissOcr()
+            }
         )
     }
 }
@@ -139,6 +164,9 @@ private fun OcrResultOverlay(
     onDismiss: () -> Unit
 ) {
     val result by ocrState.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
+    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     AnimatedVisibility(
         visible = result != null,
@@ -146,14 +174,27 @@ private fun OcrResultOverlay(
         exit = fadeOut()
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.7f)),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { onDismiss() }
+                ),
             contentAlignment = Alignment.Center
         ) {
             Surface(
                 color = Color.White,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(28.dp),
                 shadowElevation = 8.dp,
-                modifier = Modifier.padding(32.dp)
+                modifier = Modifier
+                    .padding(32.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { /* Stop propagation */ }
+                    )
             ) {
                 Column(
                     modifier = Modifier
@@ -165,38 +206,78 @@ private fun OcrResultOverlay(
                     when (val ocrResult = result) {
                         null -> {}
                         MediaViewModel.OcrResult.Loading -> {
-                            androidx.compose.material3.CircularProgressIndicator()
-                            Text(stringResource(R.string.ocr_progress))
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                text = stringResource(R.string.ocr_progress),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                         is MediaViewModel.OcrResult.Success -> {
+                            Log.d("PicMe:UX", "OCR Result Displayed")
                             Text(
                                 text = ocrResult.text,
-                                modifier = Modifier.padding(horizontal = 16.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp),
                                 fontSize = 14.sp,
-                                lineHeight = 20.sp
+                                lineHeight = 20.sp,
+                                color = Color.Black,
+                                style = MaterialTheme.typography.bodyLarge
                             )
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.padding(top = 8.dp)
                             ) {
-                                androidx.compose.material3.OutlinedButton(onClick = { /* 复制逻辑 */ }) {
-                                    Text(stringResource(id = R.string.ocr_copy))
+                                OutlinedButton(
+                                    onClick = {
+                                        Log.d("PicMe:UX", "OCR Copy text action")
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        clipboardManager.setText(AnnotatedString(ocrResult.text))
+                                        Toast.makeText(context, context.getString(R.string.ocr_copied), Toast.LENGTH_SHORT).show()
+                                    },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(stringResource(R.string.ocr_copy))
                                 }
-                                androidx.compose.material3.Button(onClick = { /* 分享逻辑 */ }) {
-                                    Text(stringResource(id = R.string.ocr_share))
+                                Button(
+                                    onClick = {
+                                        Log.d("PicMe:UX", "OCR Share text action")
+                                        val sendIntent: Intent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, ocrResult.text)
+                                            type = "text/plain"
+                                        }
+                                        val shareIntent = Intent.createChooser(sendIntent, null)
+                                        context.startActivity(shareIntent)
+                                    },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(stringResource(R.string.ocr_share))
                                 }
                             }
                         }
                         is MediaViewModel.OcrResult.Error -> {
-                            Icon(Icons.Rounded.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Text(ocrResult.message, color = MaterialTheme.colorScheme.error)
+                            Log.e("PicMe:UX", "OCR Result Error: ${ocrResult.message}")
+                            Icon(
+                                imageVector = Icons.Rounded.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                text = ocrResult.message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
                         }
                     }
                     IconButton(
-                        onClick = onDismiss,
+                        onClick = { onDismiss() },
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.close), tint = Color.Gray)
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.close),
+                            tint = Color.Gray
+                        )
                     }
                 }
             }
@@ -210,7 +291,6 @@ private fun MediaPagerTopControls(
     showInfo: Boolean,
     onToggleInfo: () -> Unit,
     onDelete: () -> Unit,
-    onNavigateToOcr: () -> Unit,
     onStartOcr: () -> Unit
 ) {
     Row(
@@ -222,7 +302,10 @@ private fun MediaPagerTopControls(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
-            onClick = onClose,
+            onClick = { 
+                Log.d("PicMe:UX", "Close MediaPager")
+                onClose() 
+            },
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = Color.Black.copy(alpha = 0.5f)
             )
@@ -231,7 +314,6 @@ private fun MediaPagerTopControls(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // OCR 识别按钮
             IconButton(
                 onClick = { onStartOcr() },
                 colors = IconButtonDefaults.iconButtonColors(
@@ -245,9 +327,8 @@ private fun MediaPagerTopControls(
                 )
             }
             
-            // Info Toggle Switch
             IconButton(
-                onClick = onToggleInfo,
+                onClick = { onToggleInfo() },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = if (showInfo) {
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
@@ -264,7 +345,7 @@ private fun MediaPagerTopControls(
             }
 
             IconButton(
-                onClick = onDelete,
+                onClick = { onDelete() },
                 colors = IconButtonDefaults.iconButtonColors(
                     containerColor = Color.Black.copy(alpha = 0.5f)
                 )
@@ -305,7 +386,7 @@ private fun SourceInfoOverlay(
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
-                    text = "Source: ${source?.uppercase(Locale.getDefault())}",
+                    text = stringResource(R.string.media_source, source?.uppercase(Locale.getDefault()) ?: ""),
                     color = Color.White,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold

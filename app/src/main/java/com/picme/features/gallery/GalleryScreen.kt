@@ -1,6 +1,7 @@
 package com.picme.features.gallery
 
-import android.net.Uri
+import android.graphics.Rect
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -30,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.outlined.FilterDrama
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -38,7 +40,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.SelectAll
-import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,9 +58,10 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -69,13 +72,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
 import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
-import java.io.File
 import com.picme.features.gallery.GroupingMode.DATE
 import com.picme.features.gallery.GroupingMode.FACE
 import com.picme.features.gallery.GroupingMode.LANDSCAPE
@@ -85,31 +88,30 @@ import com.picme.features.gallery.GroupingMode.SEXY
 import com.picme.features.gallery.GroupingMode.SWIMWEAR
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
+import java.io.File
+import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(
     viewModel: MediaViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToOcr: (String) -> Unit // OCR 识别回调，接收图片 Uri
+    onNavigateToOcr: (String) -> Unit
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
     val showDuplicateManager by viewModel.showDuplicateManager.collectAsState()
     val duplicateGroups by viewModel.duplicateGroups.collectAsState()
     val isScanningDuplicates by viewModel.isScanningDuplicates.collectAsState()
-
     val context = LocalContext.current
 
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
-
     val selectedIds = remember { mutableStateListOf<Long>() }
 
     val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { it.items } }
 
     // Store thumbnail positions for zoom animation
-    val thumbnailPositions = remember { mutableStateMapOf<Long, Rect>() }
+    val thumbnailPositions = remember { mutableStateMapOf<Long, androidx.compose.ui.geometry.Rect>() }
 
     BackHandler {
         when {
@@ -122,7 +124,6 @@ fun GalleryScreen(
                 isSelectionMode = false
                 selectedIds.clear()
             }
-
             else -> onNavigateBack()
         }
     }
@@ -133,7 +134,6 @@ fun GalleryScreen(
                 GalleryTopBar(
                     isSelectionMode = isSelectionMode,
                     selectedCount = selectedIds.size,
-                    allMediaCount = allFlatMedia.size,
                     groupingMode = groupingMode,
                     onNavigateBack = onNavigateBack,
                     onToggleSelectionMode = {
@@ -173,8 +173,7 @@ fun GalleryScreen(
                 DuplicateManagerScreen(
                     duplicateGroups = duplicateGroups,
                     isScanning = isScanningDuplicates,
-                    onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) },
-                    onDeleteAll = { viewModel.deleteAllDuplicatesExceptOne() }
+                    onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) }
                 )
             } else if (allFlatMedia.isEmpty()) {
                 EmptyGalleryMessage()
@@ -245,18 +244,14 @@ fun GalleryScreen(
                                 selectedMediaIndex = null
                             }
                         },
-                        onNavigateToOcr = { asset: MediaAsset ->
-                            selectedMediaIndex = null
-                            onNavigateToOcr(asset.uri)
-                        },
-                        onStartOcr = { uriString: String ->
-                            // 在相册内启动 OCR 识别，由 ViewModel 管理
-                            viewModel.recognizeTextFromCurrentImage(context, android.net.Uri.parse(uriString))
+                        onStartOcr = { uriString ->
+                            Log.d("PicMe:UX", "Triggering OCR from Pager")
+                            viewModel.recognizeTextFromCurrentImage(context, uriString.toUri())
                         },
                         onDismissOcr = {
                             viewModel.clearOcrResult()
                         },
-                        ocrState = viewModel.ocrState // 将 ViewModel 的 OCR 状态流传递下去
+                        ocrState = viewModel.ocrState
                     )
                 }
             }
@@ -269,7 +264,6 @@ fun GalleryScreen(
 private fun GalleryTopBar(
     isSelectionMode: Boolean,
     selectedCount: Int,
-    allMediaCount: Int,
     groupingMode: GroupingMode,
     onNavigateBack: () -> Unit,
     onToggleSelectionMode: () -> Unit,
@@ -329,7 +323,7 @@ private fun GroupingMenu(
     var showMenu by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { showMenu = true }) {
-            Icon(Icons.Rounded.Sort, contentDescription = null)
+            Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null)
         }
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
             GroupingMode.entries.forEach { mode ->
@@ -394,15 +388,14 @@ private fun DuplicateManagerTopBar(
 private fun DuplicateManagerScreen(
     duplicateGroups: List<DuplicateGroup>,
     isScanning: Boolean,
-    onDeleteGroup: (DuplicateGroup) -> Unit,
-    onDeleteAll: () -> Unit
+    onDeleteGroup: (DuplicateGroup) -> Unit
 ) {
     if (isScanning) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            androidx.compose.material3.CircularProgressIndicator()
+            CircularProgressIndicator()
         }
     } else if (duplicateGroups.isEmpty()) {
         Box(
@@ -473,7 +466,6 @@ private fun DuplicateGroupCard(
                 )
             }
             
-            // 显示前 3 张图片的缩略图
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -495,7 +487,6 @@ private fun DuplicateGroupCard(
                 }
             }
             
-            // 操作按钮
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -586,9 +577,9 @@ private fun DuplicatePreviewDialog(
 @Composable
 private fun MediaGrid(
     groupedMedia: List<MediaGroup>,
-    selectedIds: List<Long>,
+    selectedIds: SnapshotStateList<Long>,
     isSelectionMode: Boolean,
-    onThumbnailPositioned: (Long, Rect) -> Unit,
+    onThumbnailPositioned: (Long, androidx.compose.ui.geometry.Rect) -> Unit,
     onMediaClick: (MediaAsset) -> Unit,
     onMediaLongClick: (MediaAsset) -> Unit
 ) {
@@ -615,7 +606,7 @@ private fun MediaGrid(
                     modifier = Modifier.onGloballyPositioned { coords ->
                         onThumbnailPositioned(
                             asset.id,
-                            Rect(coords.positionInWindow(), coords.size.toSize())
+                            androidx.compose.ui.geometry.Rect(coords.positionInWindow(), coords.size.toSize())
                         )
                     },
                     onClick = { onMediaClick(asset) },
