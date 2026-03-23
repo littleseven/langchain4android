@@ -298,42 +298,95 @@ fun CameraContent(
                 }
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
 
+        @OptIn(ExperimentalGetImage::class)
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
-            val mediaImage = imageProxy.image
-            if (mediaImage != null) {
-                val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                faceDetector.process(image)
-                    .addOnSuccessListener { faces ->
-                        if (faces.isNotEmpty()) {
-                            val face = faces[0]
-                            val bounds = face.boundingBox
-        
-                            // Convert coordinates to PreviewView
-                            val x = (bounds.centerX().toFloat() / imageProxy.width) * previewView.width
-                            val y = (bounds.centerY().toFloat() / imageProxy.height) * previewView.height
-        
-                            facePoint = Offset(x, y)
-                            showFocusIndicator = true
-        
-                            // Auto Focus on face
-                            cameraControl?.let { control ->
-                                val factory = previewView.meteringPointFactory
-                                val point = factory.createPoint(x, y)
-                                val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
-                                    .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
-                                    .build()
-                                control.startFocusAndMetering(action)
+            try {
+                val mediaImage = imageProxy.image
+                if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
+                    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                    faceDetector.process(image)
+                        .addOnSuccessListener { faces ->
+                            if (faces.isNotEmpty()) {
+                                val face = faces[0]
+                                val bounds = face.boundingBox
+
+                                // [OPTIMIZED] 精确坐标转换方案
+                                // 获取 PreviewView 的显示尺寸
+                                val previewWidth = previewView.width
+                                val previewHeight = previewView.height
+                                val imageSize = android.util.Size(imageProxy.width, imageProxy.height)
+                                
+                                // 1. 获取旋转角度并归一化
+                                val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                                
+                                // 2. 计算人脸中心点 (在 ImageProxy 坐标系)
+                                val faceCenterX = bounds.centerX().toFloat()
+                                val faceCenterY = bounds.centerY().toFloat()
+                                
+                                // 3. 根据旋转角度调整坐标
+                                val adjustedX = when (rotationDegrees) {
+                                    0 -> faceCenterX
+                                    90 -> faceCenterY
+                                    180 -> imageSize.width - faceCenterX
+                                    270 -> imageSize.height - faceCenterY
+                                    else -> faceCenterX
+                                }
+                                
+                                val adjustedY = when (rotationDegrees) {
+                                    0 -> faceCenterY
+                                    90 -> imageSize.height - faceCenterX
+                                    180 -> imageSize.height - faceCenterY
+                                    270 -> faceCenterX
+                                    else -> faceCenterY
+                                }
+                                
+                                // 4. 缩放到 PreviewView 尺寸
+                                val scaleX = previewWidth.toFloat() / imageSize.width.toFloat()
+                                val scaleY = previewHeight.toFloat() / imageSize.height.toFloat()
+                                
+                                var finalX = adjustedX * scaleX
+                                var finalY = adjustedY * scaleY
+                                
+                                // 5. 前置摄像头需要水平翻转
+                                if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                                    finalX = previewWidth - finalX
+                                }
+                                
+                                // 6. 应用缩放系数 (考虑 Crop 和 ScaleType)
+                                finalX *= previewView.scaleX
+                                finalY *= previewView.scaleY
+
+                                facePoint = Offset(finalX, finalY)
+                                showFocusIndicator = true
+
+                                // Auto Focus on face
+                                cameraControl?.let { control ->
+                                    val factory = previewView.meteringPointFactory
+                                    val point = factory.createPoint(finalX, finalY)
+                                    val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF)
+                                        .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                                        .build()
+                                    control.startFocusAndMetering(action)
+                                }
+                            } else {
+                                showFocusIndicator = false
                             }
-                        } else {
+                        }
+                        .addOnFailureListener { e ->
+                            PicMeLogger.e("Camera", "Face detection failed", e)
                             showFocusIndicator = false
                         }
-                    }
-                    .addOnCompleteListener {
-                        imageProxy.close()
-                    }
-            } else {
+                        .addOnCompleteListener {
+                            imageProxy.close()
+                        }
+                } else {
+                    imageProxy.close()
+                }
+            } catch (e: Exception) {
+                PicMeLogger.e("Camera", "Image analysis error", e)
                 imageProxy.close()
             }
         }
@@ -782,6 +835,7 @@ fun CameraPreviewContent(
 //     }
 // }
 
+@OptIn(ExperimentalGetImage::class)
 private fun processImageProxy(
     imageProxy: ImageProxy,
     detector: com.google.mlkit.vision.face.FaceDetector,

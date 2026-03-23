@@ -65,6 +65,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -240,26 +241,26 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(FilterType.values()) { filter ->
             val isSelected = selectedFilter == filter
-            val scale by animateFloatAsState(if (isSelected) 1.15f else 1.0f, label = "scale")
+            val scale by animateFloatAsState(if (isSelected) 1.1f else 1.0f, label = "scale")
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .width(72.dp)
+                    .width(60.dp)
                     .clickable { onFilterSelected(filter) }
                     .scale(scale)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
                         .border(
-                            width = if (isSelected) 3.dp else 1.dp,
+                            width = if (isSelected) 2.5.dp else 1.dp,
                             brush = if (isSelected) {
                                 Brush.linearGradient(
                                     listOf(MaterialTheme.colorScheme.primary, Color.White)
@@ -273,26 +274,18 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(R.drawable.placeholder)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                        colorFilter = ColorFilter.colorMatrix(filter.getColorMatrix())
-                    )
+                    // 使用渐变色代替图片，简洁表达滤镜效果
+                    FilterGradientPreview(filter = filter)
 
                     if (isSelected) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = stringResource(filter.displayNameRes),
                     color = if (isSelected) {
@@ -300,13 +293,44 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                     } else {
                         Color.White.copy(alpha = 0.7f)
                     },
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1
                 )
             }
         }
     }
+}
+
+/**
+ * 滤镜渐变预览组件
+ * 使用简单的渐变色表达不同滤镜的色调特征
+ */
+@Composable
+private fun FilterGradientPreview(filter: FilterType) {
+    val gradientColors = when (filter) {
+        FilterType.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
+        FilterType.VINTAGE -> listOf(Color(0xFFFFD54F), Color(0xFFFFA726))
+        FilterType.COOL -> listOf(Color(0xFF4FC3F7), Color(0xFF29B6F6))
+        FilterType.WARM -> listOf(Color(0xFFFFAB91), Color(0xFFFFCC80))
+        FilterType.LEICA_CLASSIC -> listOf(Color(0xFF90A4AE), Color(0xFF546E7A))
+        FilterType.LEICA_VIBRANT -> listOf(Color(0xFF26C6DA), Color(0xFF00ACC1))
+        FilterType.LEICA_BW -> listOf(Color(0xFFEEEEEE), Color(0xFF616161))
+        FilterType.FILM_GOLD -> listOf(Color(0xFFFFECB3), Color(0xFFFFCA28))
+        FilterType.FILM_FUJI -> listOf(Color(0xFFA5D6A7), Color(0xFF66BB6A))
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = gradientColors,
+                    start = Offset.Zero,
+                    end = Offset.Infinite
+                )
+            )
+    )
 }
 
 @Composable

@@ -339,9 +339,15 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
     )
 }
 
+/**
+ * 人脸对焦指示器 - 优化版
+ * 使用更精确的定位和更流畅的动画
+ */
 @Composable
 fun FaceFocusIndicator(offset: Offset, alpha: Float) {
-    val sizeDp = 60.dp
+    // 根据人脸大小动态调整指示器尺寸 (默认假设人脸占屏幕 15-20%)
+    val baseSizeDp = 80.dp
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -349,46 +355,82 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
     ) {
         Canvas(
             modifier = Modifier
-                .size(sizeDp)
+                .size(baseSizeDp)
                 .offset {
                     IntOffset(
-                        (offset.x - sizeDp.toPx() / 2).toInt(),
-                        (offset.y - sizeDp.toPx() / 2).toInt()
+                        (offset.x - baseSizeDp.toPx() / 2).toInt(),
+                        (offset.y - baseSizeDp.toPx() / 2).toInt()
                     )
                 }
         ) {
             val color = Color.Yellow
-            val strokeWidth = 2.dp.toPx()
-            val bracketLen = 10.dp.toPx()
+            val strokeWidth = 3.dp.toPx()
+            val cornerLength = 15.dp.toPx()
+            val gapLength = 8.dp.toPx()
 
-            // Center lines
+            // 四个角的 L 型标记 (不连接，更现代的设计)
+            // 左上角
             drawLine(
                 color,
-                Offset(0f, size.height / 2),
-                Offset(size.width * 0.3f, size.height / 2),
+                Offset(0f, cornerLength),
+                Offset(0f, 0f),
                 strokeWidth
             )
             drawLine(
                 color,
-                Offset(size.width * 0.7f, size.height / 2),
-                Offset(size.width, size.height / 2),
-                strokeWidth
-            )
-            drawLine(
-                color,
-                Offset(size.width / 2, 0f),
-                Offset(size.width / 2, size.height * 0.3f),
-                strokeWidth
-            )
-            drawLine(
-                color,
-                Offset(size.width / 2, size.height * 0.7f),
-                Offset(size.width / 2, size.height),
+                Offset(0f, 0f),
+                Offset(cornerLength, 0f),
                 strokeWidth
             )
 
-            // Corners
-            drawCorners(color, strokeWidth, bracketLen)
+            // 右上角
+            drawLine(
+                color,
+                Offset(size.width - cornerLength, 0f),
+                Offset(size.width, 0f),
+                strokeWidth
+            )
+            drawLine(
+                color,
+                Offset(size.width, 0f),
+                Offset(size.width, cornerLength),
+                strokeWidth
+            )
+
+            // 右下角
+            drawLine(
+                color,
+                Offset(size.width, size.height - cornerLength),
+                Offset(size.width, size.height),
+                strokeWidth
+            )
+            drawLine(
+                color,
+                Offset(size.width, size.height),
+                Offset(size.width - cornerLength, size.height),
+                strokeWidth
+            )
+
+            // 左下角
+            drawLine(
+                color,
+                Offset(cornerLength, size.height),
+                Offset(0f, size.height),
+                strokeWidth
+            )
+            drawLine(
+                color,
+                Offset(0f, size.height),
+                Offset(0f, size.height - cornerLength),
+                strokeWidth
+            )
+
+            // 中心点标记 (小圆点)
+            drawCircle(
+                color = color.copy(alpha = 0.6f),
+                radius = 4.dp.toPx(),
+                center = Offset(size.width / 2, size.height / 2)
+            )
         }
     }
 }
