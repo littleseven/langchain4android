@@ -101,6 +101,8 @@ fun GalleryScreen(
     val duplicateGroups by viewModel.duplicateGroups.collectAsState()
     val isScanningDuplicates by viewModel.isScanningDuplicates.collectAsState()
 
+    val context = LocalContext.current // 提前获取 Context
+
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
 
@@ -246,10 +248,10 @@ fun GalleryScreen(
                             onNavigateToOcr(asset.uri.toString())
                         },
                         onStartOcr = { uri ->
-                            // 在相册内启动OCR识别，由ViewModel管理
-                            viewModel.recognizeTextFromCurrentImage(LocalContext.current, android.net.Uri.parse(uri))
+                            // 在相册内启动 OCR 识别，由 ViewModel 管理
+                            viewModel.recognizeTextFromCurrentImage(context, android.net.Uri.parse(uri))
                         },
-                        ocrState = viewModel.ocrState // 将ViewModel的OCR状态流传递下去
+                        ocrState = viewModel.ocrState // 将 ViewModel 的 OCR 状态流传递下去
                     )
                 }
             }

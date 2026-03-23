@@ -133,19 +133,15 @@ class MainActivity : ComponentActivity() {
                                     viewModel = mediaViewModel,
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToOcr = { uri ->
-                                        // OCR 已改为在相册内以浮层方式处理，不再导航到独立页面
-                                        viewModel.recognizeTextFromCurrentImage(LocalContext.current, android.net.Uri.parse(uri))
+                                        // OCR 已改为在相册内以浮层方式处理，此回调不再使用
+                                        // 实际 OCR 由 GalleryScreen 内部直接调用 viewModel.onStartOcr 处理
                                     }
                                 )
                             }
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
-                                    onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToOcr = { uri ->
-                                        // OCR 已改为在相册内以浮层方式处理，不再导航到独立页面
-                                        viewModel.recognizeTextFromCurrentImage(LocalContext.current, android.net.Uri.parse(uri))
-                                    }
+                                    onNavigateBack = { navController.popBackStack() }
                                 )
                             }
                             composable(Screen.Debug.route) {
