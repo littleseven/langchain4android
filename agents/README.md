@@ -1,209 +1,26 @@
-# PicMe AI Agent System - LITE Team
+# PicMe AI Agent 团队执行手册 (V2.0)
 
-## 🎯 Optimized for Small Projects (1-5 people)
+## 1. 核心角色与前缀指令
+| 指令 | 角色 | 核心胜任力 | 负责文档 |
+| :--- | :--- | :--- | :--- |
+| **[PM]** | 产品经理 | 业务建模、UX 体验、I18N 文案 | `PRODUCT.md`, `docs/FEATURES.md` |
+| **[RD]** | 全栈工程师 | Android 开发、系统架构、**自愈修复** | `rd_agent.md`, `AGENTS.md` |
+| **[CR]** | 规范审计 | 代码风格、架构合规性、SSOT 验证 | `review_agent.md`, `AGENTS.md` |
+| **[QA]** | 质量专家 | 边界测试、性能验收、Bug 防控 | `qa_agent.md` |
 
-This project uses a **lean multi-agent collaboration system** focused on efficiency and simplicity.
+## 2. 唯一事实来源 (SSOT) 链条
+- **战略对齐**：所有变更必须符合 `PRODUCT.md` 的愿景。
+- **业务细节**：具体逻辑请查阅 `docs/FEATURES.md`。
+- **编程约束**：严禁违反 `AGENTS.md` 中的 [STRICT] 规则。
 
----
+## 3. 标准作业程序 (SOP)
+1. **指令接收**：识别前缀并切换至对应角色。
+2. **上下文检索**：读取相关代码及其引用链。
+3. **精准变更**：优先使用 `replace_text` 保持代码原子性。
+4. **闭环验证**：执行 `analyze_current_file` -> 执行 `gradlew` 构建。
+5. **交付审计**：任何代码交付前必须由 `[CR]` 视角进行 100% 规范符合性检查。
 
-## 👥 Core Team (4 Essential Roles)
-
-| Agent | File | Role | Keywords |
-|-------|------|------|----------|
-| **PM** | `pm_agent.md` | Product Manager | requirements, UX, features |
-| **RD** | `rd_agent.md` | Software Engineer | implementation, architecture |
-| **Review** | `review_agent.md` | Code Reviewer | code review, quality |
-| **QA** | `qa_agent.md` | QA Engineer | testing, test cases |
-
----
-
-## 🚀 Quick Start
-
-### Activate by Prefix (Recommended)
-```bash
-[PM] ...      → Product Manager
-[RD] ...      → Software Engineer  
-[Review] ...  → Code Reviewer
-[QA] ...      → QA Engineer
-```
-
-### Example Usage
-```
-[PM] "这个功能的用户价值是什么？"
-[RD] "如何用 Clean Architecture 实现图片缓存？"
-[Review] "请 review 这段 UseCase 代码"
-[QA] "需要设计什么测试用例？"
-```
-
----
-
-## 📁 File Structure
-
-```
-agents/
-├── README.md                 # This file - LITE team overview
-├── LITE_TEAM_CONFIG.md       # Detailed lite configuration guide
-├── USAGE_EXAMPLES.md         # Usage examples (Chinese)
-│
-├── pm_agent.md               # Product Manager (必需)
-├── rd_agent.md               # Software Engineer (必需)
-├── review_agent.md           # Code Reviewer (必需)
-└── qa_agent.md               # QA Engineer (必需)
-│
-└── archived/                 # Archived roles (for reference)
-    ├── design_agent.md       # UI/UX Designer (按需激活)
-    ├── android_agent.md      # Android Framework Expert (按需激活)
-    ├── perf_agent.md         # Performance Expert (按需激活)
-    └── devops_agent.md       # Build Engineer (按需激活)
-```
-
----
-
-## 🔄 Simple Workflow
-
-### Feature Development
-```
-User Request 
-    ↓
-[PM] Requirements (30 min)
-    ↓
-[RD] Implementation (2-4 hours)
-    ↓
-[Review] Code Review (15 min)
-    ↓
-[QA] Testing (30 min)
-    ↓
-Ship! ✨
-```
-
-### Bug Fix
-```
-Bug Report
-    ↓
-[QA] Reproduce
-    ↓
-[RD] Fix
-    ↓
-[Review] Verify
-    ↓
-Deploy ✨
-```
-
----
-
-## 💡 When to Use Archived Roles
-
-The archived roles are available when needed:
-
-### Activate Design Agent
-When you need custom UI/UX design:
-```
-[Design] "设计一个带毛玻璃效果的底部工具栏"
-→ File: archived/design_agent.md
-```
-
-### Activate Android Agent
-When facing complex framework issues:
-```
-[Android] "CameraX 实时滤镜如何实现？"
-→ File: archived/android_agent.md
-```
-
-### Activate Perf Agent
-When performance becomes critical:
-```
-[Perf] "启动时间 3 秒，如何优化到 1.5 秒？"
-→ File: archived/perf_agent.md
-```
-
-### Activate DevOps Agent
-When you need CI/CD automation:
-```
-[DevOps] "如何配置 GitHub Actions 自动发布？"
-→ File: archived/devops_agent.md
-```
-
----
-
-## 📊 Why LITE Team?
-
-### For Small Projects
-- ✅ **Lower Cost**: Less coordination overhead
-- ✅ **Faster Decisions**: Quick response time
-- ✅ **Simpler Learning**: Master 4 roles in 1 day
-- ✅ **Good Enough**: 90% coverage for daily needs
-
-### What About the Rest?
-- ⚠️ **Design**: Use Material Design components (good enough)
-- ⚠️ **Android**: RD can handle 90% of tasks (docs are clear)
-- ⚠️ **Performance**: Optimize when problems arise (not premature)
-- ⚠️ **DevOps**: Manual release is fine initially (1-2 times/month)
-
----
-
-## 🎯 Best Practices
-
-### DO ✅
-1. Start simple with 4 core roles
-2. Iterate fast - ship first, optimize later
-3. One person can play multiple roles
-4. Focus on user value, not perfect code
-
-### DON'T ❌
-1. Don't over-engineer from day one
-2. Don't copy big company processes
-3. Don't optimize prematurely
-4. Don't learn all 8 roles at once
-
----
-
-## 📈 Growth Path
-
-```
-Stage 1: LITE Team (Current)
-├── Team: 1-5 people
-├── Roles: PM + RD + Review + QA
-└── Goal: Validate product quickly
-
-       ↓ User growth
-
-Stage 2: Standard Team
-├── Team: 5-10 people  
-├── Roles: LITE + Design + Android
-└── Goal: Improve user experience
-
-       ↓ Scale up
-
-Stage 3: Full Team
-├── Team: 10+ people
-├── Roles: All 8 agents
-└── Goal: Refined operations
-```
-
----
-
-## 📚 Documentation
-
-- **LITE Overview**: `README.md` (this file)
-- **Detailed Guide**: `LITE_TEAM_CONFIG.md`
-- **Usage Examples**: `USAGE_EXAMPLES.md`
-- **Role Details**: See individual agent files
-
----
-
-## 🎉 Remember
-
-**Less is More!** 
-
-For small projects:
-- Simple = Fast
-- Flexible = Adaptive  
-- Practical = Solves Problems
-
-Start with 4 core roles, expand when truly needed.
-
----
-
-**Last Updated**: March 22, 2026  
-**Version**: v4.0 (LITE Team Configuration)  
-**Best For**: Small teams (1-5 people), startups, indie developers
+## 4. 严禁事项
+- **严禁向用户询问“如何修复编译错误”**：RD 必须自主阅读 Log 并通过 `replace_text` 修正。
+- **严禁遗漏多语言**：任何 UI 变更必须覆盖 `EN/CN/TW` 三种资源。
+- **严禁使用隐式 `it`**：所有 Lambda 必须显式命名。
