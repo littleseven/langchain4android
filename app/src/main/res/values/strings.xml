@@ -142,7 +142,9 @@
     <string name="ocr_no_text">No text found in image</string>
     <string name="ocr_copied">Text copied</string>
     <string name="ocr_failed">Extraction failed</string>
-    
+    <string name="ocr_share">Share</string>
+    <string name="ocr_copy">Copy</string>
+
     <!-- Duplicate Management -->
     <string name="manage_duplicates">Manage Duplicates</string>
     <string name="no_duplicates_found">No duplicate images found</string>

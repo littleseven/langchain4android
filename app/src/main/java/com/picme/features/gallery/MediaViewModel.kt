@@ -2,6 +2,7 @@ package com.picme.features.gallery
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -32,7 +33,7 @@ class MediaViewModel(
     private val repository: MediaRepository,
     private val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
-    private val ocrUseCase: OcrUseCase // 新增依赖
+    private val ocrUseCase: OcrUseCase
 ) : ViewModel() {
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
@@ -44,7 +45,6 @@ class MediaViewModel(
     private val _duplicateGroups = MutableStateFlow<List<DuplicateGroup>>(emptyList())
     val duplicateGroups = _duplicateGroups.asStateFlow()
     
-    // OCR 功能相关状态
     private val _ocrState = MutableStateFlow<OcrResult?>(null)
     val ocrState: StateFlow<OcrResult?> = _ocrState.asStateFlow()
 
@@ -55,17 +55,20 @@ class MediaViewModel(
     }
 
     fun clearOcrResult() {
+        Log.d("PicMe:Gallery", "Clearing OCR result")
         _ocrState.value = null
     }
 
-    // 为当前预览的图片执行OCR识别
     fun recognizeTextFromCurrentImage(context: Context, uri: Uri) {
         viewModelScope.launch {
+            Log.d("PicMe:Gallery", "Starting OCR for URI: $uri")
             _ocrState.value = OcrResult.Loading
             val result = ocrUseCase.recognizeFromUri(context, uri)
             _ocrState.value = if (result != null) {
+                Log.d("PicMe:Gallery", "OCR Success: ${result.take(20)}...")
                 OcrResult.Success(result)
             } else {
+                Log.w("PicMe:Gallery", "OCR Failed or no text found")
                 OcrResult.Error("识别失败")
             }
         }
@@ -93,6 +96,7 @@ class MediaViewModel(
         )
 
     fun setGroupingMode(mode: GroupingMode) {
+        Log.d("PicMe:Gallery", "Setting grouping mode to: $mode")
         _groupingMode.value = mode
     }
 
@@ -104,6 +108,7 @@ class MediaViewModel(
 
     fun deleteMediaByIds(ids: List<Long>) {
         viewModelScope.launch {
+            Log.d("PicMe:Gallery", "Deleting media items: $ids")
             repository.deleteMediaByIds(ids)
         }
     }
@@ -117,10 +122,13 @@ class MediaViewModel(
     
     private fun scanForDuplicates() {
         viewModelScope.launch {
+            Log.d("PicMe:Gallery", "Scanning for duplicates")
             _isScanningDuplicates.value = true
             try {
                 _duplicateGroups.value = findDuplicateMediaUseCase()
+                Log.d("PicMe:Gallery", "Found ${_duplicateGroups.value.size} duplicate groups")
             } catch (e: Exception) {
+                Log.e("PicMe:Gallery", "Error scanning for duplicates", e)
                 _duplicateGroups.value = emptyList()
             } finally {
                 _isScanningDuplicates.value = false
@@ -130,35 +138,32 @@ class MediaViewModel(
     
     fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
         viewModelScope.launch {
-            // 获取需要删除的文件 URI
             val urisToDelete = if (keepIndex == 0) {
                 group.getDeleteUris()
             } else {
-                // 保留指定索引的文件，删除其他
-                group.fileUris.filterIndexed { index, _ -> index != keepIndex }
+                group.fileUris.filterIndexed { index, uri -> index != keepIndex }
             }
             
-            // 从 URI 查找对应的 MediaAsset ID
             val idsToDelete = allMedia.value
                 .filter { asset -> asset.uri in urisToDelete }
-                .map { it.id }
+                .map { asset -> asset.id }
             
             if (idsToDelete.isNotEmpty()) {
                 deleteMediaByIds(idsToDelete)
-                // 从列表中移除已处理的组
-                _duplicateGroups.value = _duplicateGroups.value.filter { it.id != group.id }
+                _duplicateGroups.value = _duplicateGroups.value.filter { groupItem -> groupItem.id != group.id }
             }
         }
     }
     
     fun deleteAllDuplicatesExceptOne() {
         viewModelScope.launch {
+            Log.d("PicMe:Gallery", "Deleting all duplicates except one per group")
             val allIdsToDelete = mutableListOf<Long>()
             
             _duplicateGroups.value.forEach { group ->
                 val idsInGroup = allMedia.value
                     .filter { asset -> asset.uri in group.getDeleteUris() }
-                    .map { it.id }
+                    .map { asset -> asset.id }
                 allIdsToDelete.addAll(idsInGroup)
             }
             
@@ -173,7 +178,7 @@ class MediaViewModel(
 class MediaViewModelFactory(
     private val context: Context,
     private val repository: MediaRepository,
-    private val ocrUseCase: OcrUseCase // 新增OCR用例的依赖
+    private val ocrUseCase: OcrUseCase
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

@@ -56,7 +56,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -84,7 +83,6 @@ import com.picme.features.gallery.GroupingMode.NONE
 import com.picme.features.gallery.GroupingMode.PERSON
 import com.picme.features.gallery.GroupingMode.SEXY
 import com.picme.features.gallery.GroupingMode.SWIMWEAR
-import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
 
@@ -93,7 +91,7 @@ import com.picme.features.gallery.components.MediaPager
 fun GalleryScreen(
     viewModel: MediaViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToOcr: (String) -> Unit // [NEW] OCR 识别回调，接收图片 Uri
+    onNavigateToOcr: (String) -> Unit // OCR 识别回调，接收图片 Uri
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -101,11 +99,10 @@ fun GalleryScreen(
     val duplicateGroups by viewModel.duplicateGroups.collectAsState()
     val isScanningDuplicates by viewModel.isScanningDuplicates.collectAsState()
 
-    val context = LocalContext.current // 提前获取 Context
+    val context = LocalContext.current
 
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
-
 
     val selectedIds = remember { mutableStateListOf<Long>() }
 
@@ -117,7 +114,10 @@ fun GalleryScreen(
     BackHandler {
         when {
             showDuplicateManager -> viewModel.toggleDuplicateManager(false)
-            selectedMediaIndex != null -> selectedMediaIndex = null
+            selectedMediaIndex != null -> {
+                selectedMediaIndex = null
+                viewModel.clearOcrResult()
+            }
             isSelectionMode -> {
                 isSelectionMode = false
                 selectedIds.clear()
@@ -234,22 +234,27 @@ fun GalleryScreen(
                     MediaPager(
                         assets = allFlatMedia,
                         initialIndex = selectedMediaIndex!!,
-                        onClose = { selectedMediaIndex = null },
+                        onClose = { 
+                            selectedMediaIndex = null 
+                            viewModel.clearOcrResult()
+                        },
                         onDelete = { asset ->
                             viewModel.deleteMediaByIds(listOf(asset.id))
-                            val newAllFlat = allFlatMedia.filter { it.id != asset.id }
+                            val newAllFlat = allFlatMedia.filter { item -> item.id != asset.id }
                             if (newAllFlat.isEmpty()) {
                                 selectedMediaIndex = null
                             }
                         },
-                        onNavigateToOcr = { asset ->
-                            // 导航到独立的OCR页面（原功能）
-                            selectedMediaIndex = null  // 关闭预览
-                            onNavigateToOcr(asset.uri.toString())
+                        onNavigateToOcr = { asset: MediaAsset ->
+                            selectedMediaIndex = null
+                            onNavigateToOcr(asset.uri)
                         },
-                        onStartOcr = { uri ->
+                        onStartOcr = { uriString: String ->
                             // 在相册内启动 OCR 识别，由 ViewModel 管理
-                            viewModel.recognizeTextFromCurrentImage(context, android.net.Uri.parse(uri))
+                            viewModel.recognizeTextFromCurrentImage(context, android.net.Uri.parse(uriString))
+                        },
+                        onDismissOcr = {
+                            viewModel.clearOcrResult()
                         },
                         ocrState = viewModel.ocrState // 将 ViewModel 的 OCR 状态流传递下去
                     )
@@ -275,6 +280,7 @@ private fun GalleryTopBar(
 ) {
     TopAppBar(
         title = {
+            @Suppress("DEPRECATION")
             Text(
                 if (isSelectionMode) {
                     stringResource(R.string.selected_items, selectedCount)

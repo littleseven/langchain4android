@@ -16,13 +16,13 @@
 ## 3. 架构与代码风格规范
 - **架构模式**：Clean Architecture (Domain -> Data -> Features)。
 - **缩进标准**：Kotlin/Java 使用 **4 空格**；XML/JSON/MD 使用 **2 空格**。
-- **Lambda 规范**：必须显式命名 lambda 参数（如 `item ->`）。**严禁使用隐式 `it`**。
+- **Lambda 规范**：必须显式命名 lambda 参数（如 `item ->`）。**严禁使用 `it`**。
 - **状态管理**：UI 状态必须使用 `Sealed Class`。
 - **导入管理**：**严禁使用通配符导入 (`*`)**。
 
 ## 4. 结构化日志标准
 - **标签格式**：`PicMe:[ModuleName]` (例如 `PicMe:Camera`, `PicMe:AI`)。
-- **策略要求**：必须记录所有状态流转、核心业务节点和关键错误。`LogRepository` 缓存上限 500 条。
+- **策略要求**：必须记录所有状态流转、核心业务节点 and 关键错误。`LogRepository` 缓存上限 500 条。
 
 ## 5. AI 执行工作流：自愈循环 (Self-Healing Loop)
 1. **探索 (Explore)**：通过 `find_usages` 和 `grep` 绘制依赖地图。
@@ -31,7 +31,8 @@
 4. **自愈 (Self-Heal)**：
    - 运行 `analyze_current_file`。必须**立即修复**所有 Error 和相关 Warning。
    - 运行 `./gradlew assembleDebug`。若失败，阅读日志并自主修复，严禁打扰用户。
-5. **CR 审计**：由 CR 角色复核格式、命名和 I18N 是否完全达标。
+5. **上下文保护 (Context Protection)**：在修改大型文件前，仅读取受影响的类成员或函数块，避免一次性读取数千行代码导致上下文偏移。
+6. **CR 审计**：由 CR 角色复核格式、命名和 I18N 是否完全达标。
 
 ## 6. Few-Shot 示例 (最佳实践 vs. 反面典型)
 
