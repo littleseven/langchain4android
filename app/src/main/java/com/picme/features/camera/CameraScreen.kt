@@ -98,6 +98,14 @@ import com.picme.features.gallery.MediaViewModelFactory
 import java.util.concurrent.Executors
 import kotlin.math.sqrt
 
+// 用于存储 FIT_CENTER 显示信息的数据类
+private data class DisplayInfo(
+    val displayWidth: Float,
+    val displayHeight: Float,
+    val offsetX: Float,
+    val offsetY: Float
+)
+
 enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
 enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_1_1, RATIO_FULL }
@@ -219,9 +227,9 @@ fun CameraContent(
 
     val previewView = remember { 
         PreviewView(context).apply {
-            // [CRITICAL] 设置正确的 ScaleType，确保预览与分析器图像一致
-            // 使用 FILL_CENTER 避免 FIT_CENTER 产生的黑边和坐标偏移
-            scaleType = PreviewView.ScaleType.FILL_CENTER
+            // [CRITICAL] 使用 FIT_CENTER 保持正确的宽高比
+            // 虽然可能有黑边，但能确保 ImageAnalysis 和 Preview 的坐标一致
+            scaleType = PreviewView.ScaleType.FIT_CENTER
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
     }
@@ -331,7 +339,8 @@ fun CameraContent(
                                 PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
-                                // [REWRITTEN] 使用 CameraX 的 CoordinateTransform 进行精确转换
+                                // [REWRITTEN] ML Kit 返回的坐标已经是针对设备方向调整后的
+                                // 不需要再手动进行旋转变换，只需要映射到 PreviewView 尺寸并翻转前置摄像头
                                 val previewWidth = previewView.width.toFloat()
                                 val previewHeight = previewView.height.toFloat()
                                 val imageWidth = imageProxy.width.toFloat()
@@ -343,41 +352,12 @@ fun CameraContent(
                                 
                                 PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
                                 
-                                // 2. 根据旋转角度调整坐标系
-                                // CameraX 的 rotation 是传感器相对于设备自然方向的旋转角度
-                                // 需要先将归一化坐标映射到预览的物理像素
-                                var finalX: Float
-                                var finalY: Float
+                                // 2. 直接映射到 PreviewView 的物理像素坐标
+                                var finalX = normalizedX * previewWidth
+                                var finalY = normalizedY * previewHeight
                                 
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                                 PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
-                                
-                                when (rotationDegrees) {
-                                    0 -> {
-                                        // 无旋转，直接映射
-                                        finalX = normalizedX * previewWidth
-                                        finalY = normalizedY * previewHeight
-                                    }
-                                    90 -> {
-                                        // 顺时针 90 度：ImageProxy 的 Y → PreviewView 的 X, X → Y
-                                        finalX = normalizedY * previewWidth
-                                        finalY = (1f - normalizedX) * previewHeight
-                                    }
-                                    180 -> {
-                                        // 180 度翻转
-                                        finalX = (1f - normalizedX) * previewWidth
-                                        finalY = (1f - normalizedY) * previewHeight
-                                    }
-                                    270 -> {
-                                        // 逆时针 90 度：ImageProxy 的 Y → PreviewView 的 X, X → Y
-                                        finalX = (1f - normalizedY) * previewWidth
-                                        finalY = normalizedX * previewHeight
-                                    }
-                                    else -> {
-                                        finalX = normalizedX * previewWidth
-                                        finalY = normalizedY * previewHeight
-                                    }
-                                }
                                 
                                 // 3. 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
@@ -385,10 +365,35 @@ fun CameraContent(
                                     PicMeLogger.d("Camera", "Front camera flipped X: $finalX")
                                 }
                                 
-                                PicMeLogger.d("Camera", "After rotation & flip: ($finalX, $finalY)")
+                                PicMeLogger.d("Camera", "After flip: ($finalX, $finalY)")
+                                
+                                // [DEBUG] 计算 FIT_CENTER 下的实际显示区域和偏移
+                                val imageAspectRatio = imageWidth / imageHeight
+                                val previewAspectRatio = previewWidth / previewHeight
+                                
+                                // 计算实际显示尺寸和偏移量
+                                val displayInfo = if (imageAspectRatio > previewAspectRatio) {
+                                    // 图像更宽，以宽度为基准
+                                    val scaledHeight = previewWidth / imageAspectRatio
+                                    val offset = (previewHeight - scaledHeight) / 2
+                                    PicMeLogger.d("Camera", "FIT_CENTER: Width-based, displayH=$scaledHeight, offset=$offset")
+                                    DisplayInfo(previewWidth, scaledHeight, 0f, offset)
+                                } else {
+                                    // 图像更高，以高度为基准
+                                    val scaledWidth = previewHeight * imageAspectRatio
+                                    val offset = (previewWidth - scaledWidth) / 2
+                                    PicMeLogger.d("Camera", "FIT_CENTER: Height-based, displayW=$scaledWidth, offset=$offset")
+                                    DisplayInfo(scaledWidth, previewHeight, offset, 0f)
+                                }
+                                
+                                // 计算在 FIT_CENTER 下的正确坐标
+                                val fitFinalX = displayInfo.offsetX + normalizedX * displayInfo.displayWidth
+                                val fitFinalY = displayInfo.offsetY + normalizedY * displayInfo.displayHeight
+                                
+                                PicMeLogger.d("Camera", "FIT_CENTER corrected: ($fitFinalX, $fitFinalY)")
+                                PicMeLogger.d("Camera", "=================================")
 
-                                facePoint = Offset(finalX, finalY)
-                                showFocusIndicator = true
+                                facePoint = Offset(fitFinalX, fitFinalY)
 
                                 // Auto Focus on face
                                 cameraControl?.let { control ->
