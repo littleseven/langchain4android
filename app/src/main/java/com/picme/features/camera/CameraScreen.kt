@@ -343,10 +343,28 @@ fun CameraContent(
                                 // 不需要再手动进行旋转变换，只需要映射到 PreviewView 尺寸并翻转前置摄像头
                                 val previewWidth = previewView.width.toFloat()
                                 val previewHeight = previewView.height.toFloat()
-                                val imageWidth = imageProxy.width.toFloat()
-                                val imageHeight = imageProxy.height.toFloat()
                                 
-                                // 1. 计算人脸中心点在 ImageProxy 中的归一化坐标 (0-1)
+                                // 先获取旋转角度
+                                val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                                PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
+                                
+                                // [CRITICAL] ML Kit 使用了 rotationDegrees=270°，图像已经被旋转
+                                // 旋转后的 ImageProxy 尺寸是 720x1280(竖)，而不是原始的 1280x720(横)
+                                // 必须使用旋转后的尺寸来计算归一化坐标
+                                val imageWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
+                                    imageProxy.height.toFloat()  // 旋转 90/270 度时宽高交换
+                                } else {
+                                    imageProxy.width.toFloat()
+                                }
+                                val imageHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
+                                    imageProxy.width.toFloat()   // 旋转 90/270 度时宽高交换
+                                } else {
+                                    imageProxy.height.toFloat()
+                                }
+                                
+                                PicMeLogger.d("Camera", "Rotated Image: ${imageWidth}x${imageHeight}")
+                                
+                                // 1. 计算人脸中心点在旋转后图像中的归一化坐标 (0-1)
                                 val normalizedX = bounds.centerX().toFloat() / imageWidth
                                 val normalizedY = bounds.centerY().toFloat() / imageHeight
                                 
@@ -355,9 +373,6 @@ fun CameraContent(
                                 // 2. 直接映射到 PreviewView 的物理像素坐标
                                 var finalX = normalizedX * previewWidth
                                 var finalY = normalizedY * previewHeight
-                                
-                                val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                                PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
                                 
                                 // 3. 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
