@@ -339,48 +339,66 @@ fun CameraContent(
                                 PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
-                                // [REWRITTEN] ML Kit 返回的坐标已经是针对设备方向调整后的
-                                // 不需要再手动进行旋转变换，只需要映射到 PreviewView 尺寸并翻转前置摄像头
+                                // [SIMPLIFIED] 最简单的方法：直接使用 PreviewView 和 ImageProxy 的尺寸映射
+                                // 不手动处理旋转，因为 ML Kit 和 PreviewView 都会自动处理
                                 val previewWidth = previewView.width.toFloat()
                                 val previewHeight = previewView.height.toFloat()
                                 
-                                // 先获取旋转角度
+                                // 获取旋转角度用于调试
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                                 PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
                                 
-                                // [CRITICAL] ML Kit 使用了 rotationDegrees=270°，图像已经被旋转
-                                // 旋转后的 ImageProxy 尺寸是 720x1280(竖)，而不是原始的 1280x720(横)
-                                // 必须使用旋转后的尺寸来计算归一化坐标
-                                val imageWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
-                                    imageProxy.height.toFloat()  // 旋转 90/270 度时宽高交换
-                                } else {
-                                    imageProxy.width.toFloat()
+                                // 关键：使用 ImageProxy 的原始尺寸（不是旋转后的）
+                                val imageWidth = imageProxy.width.toFloat()
+                                val imageHeight = imageProxy.height.toFloat()
+                                
+                                PicMeLogger.d("Camera", "ImageProxy size: ${imageWidth}x${imageHeight}")
+                                PicMeLogger.d("Camera", "PreviewView size: ${previewWidth}x${previewHeight}")
+                                PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
+                                
+                                // 直接计算归一化坐标并映射
+                                val faceX = bounds.centerX().toFloat()
+                                val faceY = bounds.centerY().toFloat()
+                                
+                                // 尝试 1：假设 ML Kit 坐标基于 ImageProxy 原始尺寸
+                                var normalizedX = faceX / imageWidth
+                                var normalizedY = faceY / imageHeight
+                                
+                                PicMeLogger.d("Camera", "Normalized (raw): ($normalizedX, $normalizedY)")
+                                
+                                // 根据旋转角度调整归一化坐标
+                                when (rotationDegrees) {
+                                    90 -> {
+                                        // 图像顺时针旋转 90 度，交换 X 和 Y
+                                        val tempX = normalizedX
+                                        normalizedX = normalizedY
+                                        normalizedY = 1f - tempX
+                                    }
+                                    180 -> {
+                                        // 图像旋转 180 度，翻转 X 和 Y
+                                        normalizedX = 1f - normalizedX
+                                        normalizedY = 1f - normalizedY
+                                    }
+                                    270 -> {
+                                        // 图像逆时针旋转 90 度（顺时针 270 度）
+                                        val tempX = normalizedX
+                                        normalizedX = 1f - normalizedY
+                                        normalizedY = tempX
+                                    }
                                 }
-                                val imageHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
-                                    imageProxy.width.toFloat()   // 旋转 90/270 度时宽高交换
-                                } else {
-                                    imageProxy.height.toFloat()
-                                }
                                 
-                                PicMeLogger.d("Camera", "Rotated Image: ${imageWidth}x${imageHeight}")
+                                PicMeLogger.d("Camera", "Normalized (rotated): ($normalizedX, $normalizedY)")
                                 
-                                // 1. 计算人脸中心点在旋转后图像中的归一化坐标 (0-1)
-                                val normalizedX = bounds.centerX().toFloat() / imageWidth
-                                val normalizedY = bounds.centerY().toFloat() / imageHeight
-                                
-                                PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
-                                
-                                // 2. 直接映射到 PreviewView 的物理像素坐标
+                                // 映射到 PreviewView
                                 var finalX = normalizedX * previewWidth
                                 var finalY = normalizedY * previewHeight
                                 
-                                // 3. 前置摄像头水平翻转
+                                // 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
                                     finalX = previewWidth - finalX
-                                    PicMeLogger.d("Camera", "Front camera flipped X: $finalX")
                                 }
                                 
-                                PicMeLogger.d("Camera", "After flip: ($finalX, $finalY)")
+                                PicMeLogger.d("Camera", "Final position: ($finalX, $finalY)")
                                 
                                 // [DEBUG] 计算 FIT_CENTER 下的实际显示区域和偏移
                                 val imageAspectRatio = imageWidth / imageHeight
