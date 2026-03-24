@@ -306,7 +306,8 @@ fun CameraContent(
                 }
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            // [FIXED] ML Kit 仅支持 JPEG 和 YUV_420_888 格式，不能使用 RGBA_8888
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
             .build()
 
         @OptIn(ExperimentalGetImage::class)
