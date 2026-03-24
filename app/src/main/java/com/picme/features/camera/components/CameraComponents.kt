@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,9 +44,14 @@ import androidx.compose.material.icons.rounded.FaceRetouchingNatural
 import androidx.compose.material.icons.rounded.FilterBAndW
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Landscape
+import androidx.compose.material.icons.rounded.LineStyle
+import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -339,19 +346,37 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Smoothing with non-linear power mapping
+        // 面部精修
+        Text(
+            text = stringResource(R.string.facial_refinement),
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        
         BeautySlider(
             icon = Icons.Rounded.Face,
             label = stringResource(R.string.smoothing),
             value = settings.smoothing,
+            valueRange = 0f..100f,
             onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
             onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.AutoFixHigh,
+            label = stringResource(R.string.whitening),
+            value = settings.whitening,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
+            onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
         )
 
         BeautySlider(
             icon = Icons.Rounded.FaceRetouchingNatural,
             label = stringResource(R.string.slim_face),
             value = settings.slimFace,
+            valueRange = -50f..50f,
             onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
             onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
         )
@@ -360,6 +385,7 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
             icon = Icons.Rounded.Visibility,
             label = stringResource(R.string.big_eyes),
             value = settings.bigEyes,
+            valueRange = 0f..100f,
             onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
             onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
         )
@@ -368,8 +394,72 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
             icon = Icons.Rounded.ChildCare,
             label = stringResource(R.string.youth),
             value = settings.youth,
+            valueRange = 0f..100f,
             onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
             onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
+        )
+        
+        // 妆容调节
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.makeup_adjustment),
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        
+        // 唇色选择器
+        LipColorSelector(
+            strength = settings.lipColor,
+            colorIndex = settings.lipColorIndex,
+            onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+            onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+            onReset = { onSettingsChanged(settings.copy(lipColor = 0f, lipColorIndex = 0)) }
+        )
+        
+        BeautySlider(
+            icon = Icons.Rounded.FavoriteBorder,
+            label = stringResource(R.string.blush),
+            value = settings.blush,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+            onReset = { onSettingsChanged(settings.copy(blush = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.LineStyle,
+            label = stringResource(R.string.eyebrow),
+            value = settings.eyebrow,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+            onReset = { onSettingsChanged(settings.copy(eyebrow = 0f)) }
+        )
+        
+        // 身材管理
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.body_management),
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        
+        BeautySlider(
+            icon = Icons.Rounded.SelfImprovement,
+            label = stringResource(R.string.body_enhancement),
+            value = settings.bodyEnhancement,
+            valueRange = -30f..30f,
+            onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
+            onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.Timeline,
+            label = stringResource(R.string.leg_extension),
+            value = settings.legExtension,
+            valueRange = 0f..50f,
+            onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
+            onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
         )
     }
 }
@@ -380,12 +470,18 @@ private fun BeautySlider(
     icon: ImageVector,
     label: String,
     value: Float,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..100f,
     onValueChange: (Float) -> Unit,
     onReset: () -> Unit
 ) {
     // Apply a power curve to make the low-range effect more noticeable
     // Value displayed to user is linear 0-100, but internal value can be mapped
-    val displayValue = (value * 100).toInt()
+    val displayValue = if (valueRange.start < 0) {
+        // For negative ranges like slim face (-50 to 50)
+        value.toInt()
+    } else {
+        (value * 100 / valueRange.endInclusive).toInt()
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -403,7 +499,7 @@ private fun BeautySlider(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (value > 0) {
+                    tint = if (value != 0f) {
                         MaterialTheme.colorScheme.primary
                     } else {
                         Color.White.copy(alpha = 0.6f)
@@ -421,8 +517,8 @@ private fun BeautySlider(
 
             // Floating value indicator logic (simplified here)
             Text(
-                text = if (displayValue > 0) "$displayValue" else "--",
-                color = if (displayValue > 0) {
+                text = if (value != 0f) "$displayValue" else "--",
+                color = if (value != 0f) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     Color.White.copy(alpha = 0.4f)
@@ -435,6 +531,7 @@ private fun BeautySlider(
         Box(contentAlignment = Alignment.Center) {
             Slider(
                 value = value,
+                valueRange = valueRange,
                 onValueChange = {
                     // Internal: applying a power curve (x^0.7) to boost the low-end effect
                     // But we keep the UI value linear for user intuition
@@ -540,6 +637,117 @@ private fun RatioItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
             text = label,
             color = if (isSelected) Color.Black else Color.White,
             fontSize = 12.sp
+        )
+    }
+}
+
+/**
+ * 唇色选择器组件
+ * 包含强度滑块和 12 种色号选择
+ */
+@Composable
+fun LipColorSelector(
+    strength: Float,
+    colorIndex: Int,
+    onStrengthChanged: (Float) -> Unit,
+    onColorIndexChanged: (Int) -> Unit,
+    onReset: () -> Unit
+) {
+    val lipColors = listOf(
+        Color(0xFFD4757D), // 豆沙色
+        Color(0xFFC43343), // 正红色
+        Color(0xFFFF7F50), // 珊瑚色
+        Color(0xFFE0527C), // 玫瑰色
+        Color(0xFFFF6B9D), // 粉色
+        Color(0xFF9B2335), // 酒红色
+        Color(0xFFFFA07A), // 浅粉色
+        Color(0xFFCD5C5C), // 印度红
+        Color(0xFFDC143C), // 深红色
+        Color(0xFFFFB6C1), // 浅玫瑰色
+        Color(0xFFB22222), // 火砖色
+        Color(0xFFFF1493)  // 深粉色
+    )
+    
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // 色号选择 Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(onClick = onReset)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ColorLens,
+                    contentDescription = null,
+                    tint = if (strength > 0) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White.copy(alpha = 0.6f)
+                    },
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.lip_color),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            
+            Text(
+                text = if (strength > 0) "${(strength * 100).toInt()}" else "--",
+                color = if (strength > 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.White.copy(alpha = 0.4f)
+                },
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        // 12 色号网格
+        LazyHorizontalGrid(
+            rows = GridCells.Fixed(2),
+            contentPadding = PaddingValues(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.height(64.dp)
+        ) {
+            items(lipColors.size) { index ->
+                Box(
+                    modifier = Modifier
+                        .size(48.dp, 28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(lipColors[index])
+                        .border(
+                            width = if (index == colorIndex) 3.dp else 1.dp,
+                            color = if (index == colorIndex) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.White.copy(alpha = 0.3f)
+                            },
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .clickable { onColorIndexChanged(index) }
+                )
+            }
+        }
+        
+        // 强度滑块
+        Slider(
+            value = strength,
+            onValueChange = onStrengthChanged,
+            valueRange = 0f..100f,
+            modifier = Modifier.height(32.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+            )
         )
     }
 }

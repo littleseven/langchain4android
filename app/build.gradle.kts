@@ -85,6 +85,9 @@ dependencies {
     implementation(libs.google.mlkit.text.recognition)
     implementation(libs.google.mlkit.text.recognition.chinese)
 
+    // GPUImage for beauty effects
+    implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.core)

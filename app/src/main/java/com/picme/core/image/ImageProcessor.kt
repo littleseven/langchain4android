@@ -61,39 +61,79 @@ interface ImageProcessor {
     ) : Recording
 }
 
-class ImageProcessorImpl : ImageProcessor {
+class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImageProcessor {
     override fun processPhoto(
         source: Bitmap,
         filter: FilterType,
         beauty: BeautySettings,
         faces: List<Face>
     ) : Bitmap {
-        var processed = source.copy(Bitmap.Config.ARGB_8888, true)
-        if (beauty.smoothing > 0f) {
-            processed = applySmoothing(processed, beauty.smoothing)
-        }
-        if (faces.isNotEmpty() && (beauty.slimFace > 0f || beauty.bigEyes > 0f)) {
-            processed = applyMeshWarp(processed, faces, beauty)
-        }
-        val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        val paint = Paint().apply {
-            colorFilter = ColorMatrixColorFilter(ColorMatrix(filter.getColorMatrix().values))
-            if (beauty.youth > 0f) {
-                val b = beauty.youth * 25f
-                val cm = ColorMatrix(
-                    floatArrayOf(
-                        1f, 0f, 0f, 0f, b,
-                        0f, 1f, 0f, 0f, b * 0.8f,
-                        0f, 0f, 1f, 0f, b * 0.5f,
-                        0f, 0f, 0f, 1f, 0f
-                    )
-                )
-                colorFilter = ColorMatrixColorFilter(cm)
+        // 使用协程在后台线程处理
+        return java.util.concurrent.Executors.newSingleThreadExecutor().submit<Bitmap> {
+            var processed = source.copy(Bitmap.Config.ARGB_8888, true)
+            
+            // 使用 GpuBeautyProcessor 处理所有美颜效果
+            kotlinx.coroutines.runBlocking {
+                // 面部精修
+                if (beauty.smoothing > 0f) {
+                    processed = beautyProcessor.applySmoothing(processed, beauty.smoothing)
+                }
+                if (beauty.whitening > 0f) {
+                    processed = beautyProcessor.applyWhitening(processed, beauty.whitening)
+                }
+                if (faces.isNotEmpty()) {
+                    if (beauty.slimFace != 0f) {
+                        processed = beautyProcessor.applySlimFace(processed, beauty.slimFace)
+                    }
+                    if (beauty.bigEyes > 0f) {
+                        processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes)
+                    }
+                    if (beauty.youth > 0f) {
+                        processed = beautyProcessor.applyYouth(processed, beauty.youth)
+                    }
+                    // 妆容调节
+                    if (beauty.lipColor > 0f) {
+                        processed = beautyProcessor.applyLipColor(processed, beauty.lipColor, beauty.lipColorIndex)
+                    }
+                    if (beauty.blush > 0f) {
+                        processed = beautyProcessor.applyBlush(processed, beauty.blush)
+                    }
+                    if (beauty.eyebrow > 0f) {
+                        processed = beautyProcessor.applyEyebrow(processed, beauty.eyebrow)
+                    }
+                }
+                // 身材管理 (需要全身检测，当前仅当有人脸时应用)
+                if (faces.isNotEmpty() && (beauty.bodyEnhancement != 0f || beauty.legExtension > 0f)) {
+                    if (beauty.bodyEnhancement != 0f) {
+                        processed = beautyProcessor.applyBodyEnhancement(processed, beauty.bodyEnhancement)
+                    }
+                    if (beauty.legExtension > 0f) {
+                        processed = beautyProcessor.applyLegExtension(processed, beauty.legExtension)
+                    }
+                }
             }
-        }
-        canvas.drawBitmap(processed, 0f, 0f, paint)
-        return output
+            
+            // 应用滤镜
+            val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(output)
+            val paint = Paint().apply {
+                colorFilter = ColorMatrixColorFilter(ColorMatrix(filter.getColorMatrix().values))
+                if (beauty.youth > 0f) {
+                    val b = beauty.youth * 25f
+                    val cm = ColorMatrix(
+                        floatArrayOf(
+                            1f, 0f, 0f, 0f, b,
+                            0f, 1f, 0f, 0f, b * 0.8f,
+                            0f, 0f, 1f, 0f, b * 0.5f,
+                            0f, 0f, 0f, 1f, 0f
+                        )
+                    )
+                    colorFilter = ColorMatrixColorFilter(cm)
+                }
+            }
+            canvas.drawBitmap(processed, 0f, 0f, paint)
+            output
+        }.get()
     }
 
     override fun takePhoto(

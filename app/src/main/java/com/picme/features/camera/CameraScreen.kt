@@ -155,6 +155,8 @@ fun CameraContent(
     onNavigateToDebug: () -> Unit
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext as PicMeApplication
+    val imageProcessor = app.container.imageProcessor
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -575,41 +577,16 @@ fun CameraContent(
                     }
                 } else {
                     shutterSound.play(MediaActionSound.SHUTTER_CLICK)
-                    val name = "PicMe_" + System.currentTimeMillis() + ".jpg"
-                    val contentValues = android.content.ContentValues().apply {
-                        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
-                    }
-                    val outputOptions = ImageCapture.OutputFileOptions.Builder(
-                        context.contentResolver,
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        contentValues
-                    ).build()
-                    imageCapture.takePicture(
-                        outputOptions,
-                        ContextCompat.getMainExecutor(context),
-                        object : ImageCapture.OnImageSavedCallback {
-                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                                val savedUri = output.savedUri ?: return
-                                viewModel.insertMedia(
-                                    MediaAsset(
-                                        uri = savedUri.toString(),
-                                        type = captureMode,
-                                        captureDate = System.currentTimeMillis(),
-                                        fileName = name
-                                    )
-                                )
-                                PicMeLogger.i("Camera", "Photo saved: $name")
-                                    
-                                // [DOCUMENT MODE] Auto navigate to OCR after capture
-                                // OCR入口已根据产品方案移除，仅在文档模式下保留
-                            }
-
-                            override fun onError(exception: ImageCaptureException) {
-                                PicMeLogger.e("Camera", "Photo failed", exception)
-                            }
-                        })
+                    // 使用 ImageProcessor 处理美颜和滤镜
+                    imageProcessor.takePhoto(
+                        context = context,
+                        imageCapture = imageCapture,
+                        viewModel = viewModel,
+                        filter = selectedFilter,
+                        beauty = beautySettings,
+                        lensFacing = lensFacing,
+                        mode = captureMode
+                    )
                 }
             },
             onModeChange = { captureMode = it },
