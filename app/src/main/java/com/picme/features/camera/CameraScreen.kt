@@ -340,7 +340,7 @@ fun CameraContent(
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
                                 // [SIMPLIFIED] 最简单的方法：直接使用 PreviewView 和 ImageProxy 的尺寸映射
-                                // 不手动处理旋转，因为 ML Kit 和 PreviewView 都会自动处理
+                                // PreviewView 会自动处理旋转，我们只需要映射坐标即可
                                 val previewWidth = previewView.width.toFloat()
                                 val previewHeight = previewView.height.toFloat()
                                 
@@ -348,7 +348,7 @@ fun CameraContent(
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                                 PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
                                 
-                                // 关键：使用 ImageProxy 的原始尺寸（不是旋转后的）
+                                // 关键：使用 ImageProxy 的原始尺寸
                                 val imageWidth = imageProxy.width.toFloat()
                                 val imageHeight = imageProxy.height.toFloat()
                                 
@@ -360,34 +360,11 @@ fun CameraContent(
                                 val faceX = bounds.centerX().toFloat()
                                 val faceY = bounds.centerY().toFloat()
                                 
-                                // 尝试 1：假设 ML Kit 坐标基于 ImageProxy 原始尺寸
+                                // 假设 ML Kit 坐标基于 ImageProxy 原始尺寸
                                 var normalizedX = faceX / imageWidth
                                 var normalizedY = faceY / imageHeight
                                 
                                 PicMeLogger.d("Camera", "Normalized (raw): ($normalizedX, $normalizedY)")
-                                
-                                // 根据旋转角度调整归一化坐标
-                                when (rotationDegrees) {
-                                    90 -> {
-                                        // 图像顺时针旋转 90 度，交换 X 和 Y
-                                        val tempX = normalizedX
-                                        normalizedX = normalizedY
-                                        normalizedY = 1f - tempX
-                                    }
-                                    180 -> {
-                                        // 图像旋转 180 度，翻转 X 和 Y
-                                        normalizedX = 1f - normalizedX
-                                        normalizedY = 1f - normalizedY
-                                    }
-                                    270 -> {
-                                        // 图像逆时针旋转 90 度（顺时针 270 度）
-                                        val tempX = normalizedX
-                                        normalizedX = 1f - normalizedY
-                                        normalizedY = tempX
-                                    }
-                                }
-                                
-                                PicMeLogger.d("Camera", "Normalized (rotated): ($normalizedX, $normalizedY)")
                                 
                                 // 映射到 PreviewView
                                 var finalX = normalizedX * previewWidth
