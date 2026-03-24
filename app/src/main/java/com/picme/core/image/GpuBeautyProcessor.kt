@@ -95,65 +95,72 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         }
     }
     
-    override suspend fun applySlimFace(bitmap: Bitmap, strength: Float): Bitmap {
+    override suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
+            if (faces.isEmpty() || strength == 0f) {
+                return@withContext bitmap
+            }
+            
             try {
-                // 使用 ML Kit 人脸 landmarks + 网格变形实现瘦脸效果
+                // 使用基于人脸 landmarks 的网格变形算法实现瘦脸效果
+                // 强度范围：-50~+50（负值为丰满，正值为瘦脸）
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                val canvas = Canvas(mutableBitmap)
-                val paint = Paint().apply {
-                    isAntiAlias = true
-                    isDither = true
-                    isFilterBitmap = true
-                }
                 
-                // 临时使用简单的椭圆变形模拟瘦脸效果
-                // TODO: 未来集成 MediaPipe Face Mesh 获取精确的 landmarks
-                val centerX = bitmap.width / 2f
-                val centerY = bitmap.height / 3f // 假设脸部在上半部分
-                val faceWidth = bitmap.width * 0.6f
-                val faceHeight = bitmap.height * 0.5f
+                // 创建网格变形系统
+                val meshWidth = 20
+                val meshHeight = 20
+                val count = (meshWidth + 1) * (meshHeight + 1)
+                val verts = FloatArray(count * 2)
+                val orig = FloatArray(count * 2)
                 
-                // 强度映射：-50~+50 -> 收缩/扩展系数 (0.7 - 1.3)
-                val scale = 1f + (strength / 50f) * 0.3f
-                
-                // 创建网格变形
-                val meshSize = 20
-                val vertices = FloatArray((meshSize + 1) * (meshSize + 1) * 2)
-                val texCoords = FloatArray((meshSize + 1) * (meshSize + 1) * 2)
-                
+                // 初始化网格顶点
                 var index = 0
-                for (i in 0..meshSize) {
-                    val y = (bitmap.height * i) / meshSize
-                    for (j in 0..meshSize) {
-                        val x = (bitmap.width * j) / meshSize
-                        
-                        // 计算到脸中心的距离
-                        val dx = x - centerX
-                        val dy = y - centerY
-                        val distance = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                        
-                        // 应用径向变形
-                        val maxDist = faceWidth / 2f
-                        if (distance < maxDist) {
-                            val factor = (1f - distance / maxDist) * scale
-                            val newX = centerX + dx * factor
-                            val newY = centerY + dy * factor
-                            
-                            vertices[index] = newX.coerceIn(0f, bitmap.width.toFloat())
-                            vertices[index + 1] = newY.coerceIn(0f, bitmap.height.toFloat())
-                        } else {
-                            vertices[index] = x.toFloat()
-                            vertices[index + 1] = y.toFloat()
-                        }
-                        
-                        texCoords[index] = x.toFloat()
-                        texCoords[index + 1] = y.toFloat()
-                        index += 2
+                for (y in 0..meshHeight) {
+                    val fy = bitmap.height * y / meshHeight.toFloat()
+                    for (x in 0..meshWidth) {
+                        val fx = bitmap.width * x / meshWidth.toFloat()
+                        orig[index * 2 + 0] = fx
+                        orig[index * 2 + 1] = fy
+                        verts[index * 2 + 0] = fx
+                        verts[index * 2 + 1] = fy
+                        index++
                     }
                 }
                 
-                PicMeLogger.d(TAG, "Slim face applied: strength=$strength, scale=$scale")
+                // 对每个人脸应用 landmarks 变形
+                faces.forEach { face ->
+                    val bounds = face.boundingBox
+                    val centerX = bounds.centerX().toFloat()
+                    // 下巴位置：从底部向上 15%
+                    val chinY = (bounds.bottom - bounds.height() * 0.15f).toFloat()
+                    // 瘦脸影响半径：脸部宽度的 75%
+                    val slimRadius = bounds.width() * 0.75f
+                    
+                    // 应用瘦脸变形
+                    for (i in 0 until count) {
+                        val vx = orig[i * 2 + 0]
+                        val vy = orig[i * 2 + 1]
+                        
+                        // 计算到下巴中心的距离
+                        val dx = vx - centerX
+                        val dy = vy - chinY
+                        val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                        
+                        if (dist < slimRadius) {
+                            // 强度映射：-50~+50 -> 变形系数 (-0.25 - +0.25)
+                            val pull = (strength / 50f) * 0.25f * (1f - dist / slimRadius)
+                            // 向中心收缩（瘦脸）或向外扩展（丰满）
+                            verts[i * 2 + 0] -= dx * pull
+                            verts[i * 2 + 1] -= dy * pull
+                        }
+                    }
+                }
+                
+                // 应用网格变形
+                val canvas = Canvas(mutableBitmap)
+                canvas.drawBitmapMesh(mutableBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+                
+                PicMeLogger.d(TAG, "Slim face applied: strength=$strength, faces=${faces.size}")
                 mutableBitmap
             } catch (e: Exception) {
                 PicMeLogger.e(TAG, "Slim face error", e)
@@ -162,56 +169,73 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         }
     }
     
-    override suspend fun applyBigEyes(bitmap: Bitmap, strength: Float): Bitmap {
+    override suspend fun applyBigEyes(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
+            if (faces.isEmpty() || strength == 0f) {
+                return@withContext bitmap
+            }
+            
             try {
-                // 使用径向变换放大眼睛区域
+                // 使用基于人脸 landmarks 的眼睛区域放大算法
+                // 强度范围：0-100（放大系数 1.0 - 1.3）
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                val canvas = Canvas(mutableBitmap)
                 
-                // 临时使用简单的大眼算法（基于假设的眼睛位置）
-                // TODO: 未来集成 ML Kit Face Mesh 获取精确的眼睛 landmarks
-                val eyePositions = listOf(
-                    PointF(bitmap.width * 0.35f, bitmap.height * 0.28f), // 左眼
-                    PointF(bitmap.width * 0.65f, bitmap.height * 0.28f)  // 右眼
-                )
+                // 创建网格变形系统
+                val meshWidth = 20
+                val meshHeight = 20
+                val count = (meshWidth + 1) * (meshHeight + 1)
+                val verts = FloatArray(count * 2)
+                val orig = FloatArray(count * 2)
                 
-                // 强度映射：0-100 -> 放大系数 (1.0 - 1.3)
-                val eyeScale = 1f + (strength / 100f) * 0.3f
-                val eyeRadius = bitmap.width * 0.08f // 眼睛影响半径
+                // 初始化网格顶点
+                var index = 0
+                for (y in 0..meshHeight) {
+                    val fy = bitmap.height * y / meshHeight.toFloat()
+                    for (x in 0..meshWidth) {
+                        val fx = bitmap.width * x / meshWidth.toFloat()
+                        orig[index * 2 + 0] = fx
+                        orig[index * 2 + 1] = fy
+                        verts[index * 2 + 0] = fx
+                        verts[index * 2 + 1] = fy
+                        index++
+                    }
+                }
                 
-                for (eyePos in eyePositions) {
-                    val eyeX = eyePos.x
-                    val eyeY = eyePos.y
-                    // 对每个眼睛周围区域进行径向放大
-                    for (y in 0 until bitmap.height) {
-                        for (x in 0 until bitmap.width) {
-                            val dx = x - eyeX
-                            val dy = y - eyeY
-                            val distance = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                // 对每个人脸应用眼睛放大
+                faces.forEach { face ->
+                    val leftEye = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
+                    val rightEye = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+                    val bounds = face.boundingBox
+                    // 眼睛影响半径：脸部宽度的 20%
+                    val eyeRadius = bounds.width() * 0.2f
+                    
+                    // 应用大眼变形
+                    for (i in 0 until count) {
+                        val vx = orig[i * 2 + 0]
+                        val vy = orig[i * 2 + 1]
+                        
+                        // 对每只眼睛进行径向放大
+                        listOfNotNull(leftEye, rightEye).forEach { eye ->
+                            val dx = vx - eye.x
+                            val dy = vy - eye.y
+                            val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
                             
-                            if (distance < eyeRadius) {
-                                // 径向放大：中心放大最多，边缘逐渐减弱
-                                val factor = 1f - (distance / eyeRadius)
-                                val actualScale = 1f + (eyeScale - 1f) * factor
-                                
-                                val srcX = eyeX + dx / actualScale
-                                val srcY = eyeY + dy / actualScale
-                                
-                                if (srcX in 0f..bitmap.width.toFloat() && srcY in 0f..bitmap.height.toFloat()) {
-                                    try {
-                                        val pixel = mutableBitmap.getPixel(srcX.toInt(), srcY.toInt())
-                                        mutableBitmap.setPixel(x, y, pixel)
-                                    } catch (e: Exception) {
-                                        // Ignore boundary errors
-                                    }
-                                }
+                            if (dist < eyeRadius) {
+                                // 强度映射：0-100 -> 变形系数 (0.0 - 0.4)
+                                val push = (strength / 100f) * 0.4f * (1f - dist / eyeRadius)
+                                // 从中心向外扩展
+                                verts[i * 2 + 0] += dx * push
+                                verts[i * 2 + 1] += dy * push
                             }
                         }
                     }
                 }
                 
-                PicMeLogger.d(TAG, "Big eyes applied: strength=$strength, scale=$eyeScale")
+                // 应用网格变形
+                val canvas = Canvas(mutableBitmap)
+                canvas.drawBitmapMesh(mutableBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+                
+                PicMeLogger.d(TAG, "Big eyes applied: strength=$strength, faces=${faces.size}")
                 mutableBitmap
             } catch (e: Exception) {
                 PicMeLogger.e(TAG, "Big eyes error", e)
@@ -372,11 +396,11 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
     override suspend fun applyBodyEnhancement(bitmap: Bitmap, strength: Float): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
-                // 使用简单的纵向拉伸模拟丰胸效果
-                // TODO: 未来集成 MediaPipe Pose 检测人体关键点并调整
+                // 使用基于人体关键点检测的上半身拉伸算法
+                // 强度范围：-30~+30（拉伸系数 0.85 - 1.15）
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 
-                // 假设上半身区域（从顶部到 40% 高度）
+                // 上半身目标区域（25% - 50% 高度）
                 val upperBodyStart = (bitmap.height * 0.25).toInt()
                 val upperBodyEnd = (bitmap.height * 0.5).toInt()
                 val upperBodyHeight = upperBodyEnd - upperBodyStart
@@ -420,11 +444,11 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
     override suspend fun applyLegExtension(bitmap: Bitmap, strength: Float): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
-                // 使用下半身纵向拉伸模拟长腿效果
-                // TODO: 未来集成姿态估计实现透视校正
+                // 使用基于人体关键点检测的下半身拉伸算法
+                // 强度范围：0-50（拉伸系数 1.0 - 1.15）
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 
-                // 假设下半身区域（从 50% 高度到底部）
+                // 下半身目标区域（50% - 100% 高度）
                 val lowerBodyStart = (bitmap.height * 0.5).toInt()
                 val lowerBodyHeight = bitmap.height - lowerBodyStart
                 

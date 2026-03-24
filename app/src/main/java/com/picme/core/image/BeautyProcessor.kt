@@ -1,6 +1,7 @@
 package com.picme.core.image
 
 import android.graphics.Bitmap
+import com.google.mlkit.vision.face.Face
 import com.picme.domain.model.BeautySettings
 
 /**
@@ -29,17 +30,19 @@ interface BeautyProcessor {
      * 应用瘦脸效果
      * @param bitmap 原始图像
      * @param strength 强度 -50~+50 (负值为丰满)
+     * @param faces 人脸检测结果（用于 landmarks 定位）
      * @return 处理后的图像
      */
-    suspend fun applySlimFace(bitmap: Bitmap, strength: Float): Bitmap
+    suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
     
     /**
      * 应用大眼效果
      * @param bitmap 原始图像
      * @param strength 强度 0-100
+     * @param faces 人脸检测结果（用于 landmarks 定位）
      * @return 处理后的图像
      */
-    suspend fun applyBigEyes(bitmap: Bitmap, strength: Float): Bitmap
+    suspend fun applyBigEyes(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
     
     /**
      * 应用年轻化效果
@@ -94,9 +97,10 @@ interface BeautyProcessor {
      * 应用所有美颜效果
      * @param bitmap 原始图像
      * @param settings 美颜设置
+     * @param faces 人脸检测结果（用于 landmarks 定位）
      * @return 处理后的图像
      */
-    suspend fun applyAllEffects(bitmap: Bitmap, settings: BeautySettings): Bitmap {
+    suspend fun applyAllEffects(bitmap: Bitmap, settings: BeautySettings, faces: List<Face>): Bitmap {
         var result = bitmap
         
         // 面部精修
@@ -106,33 +110,35 @@ interface BeautyProcessor {
         if (settings.whitening > 0) {
             result = applyWhitening(result, settings.whitening)
         }
-        if (settings.slimFace != 0f) {
-            result = applySlimFace(result, settings.slimFace)
+        if (faces.isNotEmpty()) {
+            if (settings.slimFace != 0f) {
+                result = applySlimFace(result, settings.slimFace, faces)
+            }
+            if (settings.bigEyes > 0) {
+                result = applyBigEyes(result, settings.bigEyes, faces)
+            }
+            if (settings.youth > 0) {
+                result = applyYouth(result, settings.youth)
+            }
+            // 妆容调节
+            if (settings.lipColor > 0) {
+                result = applyLipColor(result, settings.lipColor, settings.lipColorIndex)
+            }
+            if (settings.blush > 0) {
+                result = applyBlush(result, settings.blush)
+            }
+            if (settings.eyebrow > 0) {
+                result = applyEyebrow(result, settings.eyebrow)
+            }
         }
-        if (settings.bigEyes > 0) {
-            result = applyBigEyes(result, settings.bigEyes)
-        }
-        if (settings.youth > 0) {
-            result = applyYouth(result, settings.youth)
-        }
-        
-        // 妆容调节
-        if (settings.lipColor > 0) {
-            result = applyLipColor(result, settings.lipColor, settings.lipColorIndex)
-        }
-        if (settings.blush > 0) {
-            result = applyBlush(result, settings.blush)
-        }
-        if (settings.eyebrow > 0) {
-            result = applyEyebrow(result, settings.eyebrow)
-        }
-        
-        // 身材管理
-        if (settings.bodyEnhancement != 0f) {
-            result = applyBodyEnhancement(result, settings.bodyEnhancement)
-        }
-        if (settings.legExtension > 0) {
-            result = applyLegExtension(result, settings.legExtension)
+        // 身材管理 (需要全身检测，当前仅当有人脸时应用)
+        if (faces.isNotEmpty() && (settings.bodyEnhancement != 0f || settings.legExtension > 0f)) {
+            if (settings.bodyEnhancement != 0f) {
+                result = applyBodyEnhancement(result, settings.bodyEnhancement)
+            }
+            if (settings.legExtension > 0f) {
+                result = applyLegExtension(result, settings.legExtension)
+            }
         }
         
         return result

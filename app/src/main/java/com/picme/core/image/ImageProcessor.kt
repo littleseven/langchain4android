@@ -83,10 +83,10 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 }
                 if (faces.isNotEmpty()) {
                     if (beauty.slimFace != 0f) {
-                        processed = beautyProcessor.applySlimFace(processed, beauty.slimFace)
+                        processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces)
                     }
                     if (beauty.bigEyes > 0f) {
-                        processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes)
+                        processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes, faces)
                     }
                     if (beauty.youth > 0f) {
                         processed = beautyProcessor.applyYouth(processed, beauty.youth)
