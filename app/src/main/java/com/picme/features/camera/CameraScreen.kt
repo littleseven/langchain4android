@@ -220,7 +220,8 @@ fun CameraContent(
     val previewView = remember { 
         PreviewView(context).apply {
             // [CRITICAL] 设置正确的 ScaleType，确保预览与分析器图像一致
-            scaleType = PreviewView.ScaleType.FIT_CENTER
+            // 使用 FILL_CENTER 避免 FIT_CENTER 产生的黑边和坐标偏移
+            scaleType = PreviewView.ScaleType.FILL_CENTER
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
     }
@@ -324,17 +325,23 @@ fun CameraContent(
                                 val bounds = face.boundingBox
 
                                 // [DEBUG] 输出原始数据
-                                PicMeLogger.d("Camera", "PreviewView: ${previewView.width}x${previewView.height}, ImageProxy: ${imageProxy.width}x${imageProxy.height}")
-                                PicMeLogger.d("Camera", "Face bounds: ${bounds.toShortString()}")
+                                PicMeLogger.d("Camera", "========== Face Debug ==========")
+                                PicMeLogger.d("Camera", "PreviewView: ${previewView.width}x${previewView.height}")
+                                PicMeLogger.d("Camera", "ImageProxy: ${imageProxy.width}x${imageProxy.height}")
+                                PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
+                                PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
                                 // [REWRITTEN] 使用 CameraX 的 CoordinateTransform 进行精确转换
-                                val previewWidth = previewView.width
-                                val previewHeight = previewView.height
-                                val imageSize = android.util.Size(imageProxy.width, imageProxy.height)
+                                val previewWidth = previewView.width.toFloat()
+                                val previewHeight = previewView.height.toFloat()
+                                val imageWidth = imageProxy.width.toFloat()
+                                val imageHeight = imageProxy.height.toFloat()
                                 
                                 // 1. 计算人脸中心点在 ImageProxy 中的归一化坐标 (0-1)
-                                val normalizedX = bounds.centerX().toFloat() / imageProxy.width.toFloat()
-                                val normalizedY = bounds.centerY().toFloat() / imageProxy.height.toFloat()
+                                val normalizedX = bounds.centerX().toFloat() / imageWidth
+                                val normalizedY = bounds.centerY().toFloat() / imageHeight
+                                
+                                PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
                                 
                                 // 2. 直接映射到 PreviewView 的物理像素坐标
                                 var finalX = normalizedX * previewWidth
@@ -342,6 +349,8 @@ fun CameraContent(
                                 
                                 // 3. 根据旋转角度调整（仅在后置摄像头时需要）
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                                PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
+                                
                                 if (lensFacing == CameraSelector.LENS_FACING_BACK && rotationDegrees != 0) {
                                     val tempX = finalX
                                     when (rotationDegrees) {
@@ -357,12 +366,12 @@ fun CameraContent(
                                 // 4. 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
                                     finalX = previewWidth - finalX
+                                    PicMeLogger.d("Camera", "Front camera flipped X: $finalX")
                                 }
                                 
                                 // [DEBUG] 输出计算结果
-                                PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
-                                PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
                                 PicMeLogger.d("Camera", "Final position: ($finalX, $finalY)")
+                                PicMeLogger.d("Camera", "=================================")
 
                                 facePoint = Offset(finalX, finalY)
                                 showFocusIndicator = true
