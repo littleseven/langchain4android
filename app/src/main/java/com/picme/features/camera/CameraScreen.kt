@@ -339,34 +339,37 @@ fun CameraContent(
                                 PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
-                                // [SIMPLIFIED] 最简单的方法：直接使用 PreviewView 和 ImageProxy 的尺寸映射
-                                // PreviewView 会自动处理旋转，我们只需要映射坐标即可
+                                // [FINAL] 正确方案：ML Kit 返回的坐标基于旋转后的图像尺寸
                                 val previewWidth = previewView.width.toFloat()
                                 val previewHeight = previewView.height.toFloat()
                                 
-                                // 获取旋转角度用于调试
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                                 PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
                                 
-                                // 关键：使用 ImageProxy 的原始尺寸
-                                val imageWidth = imageProxy.width.toFloat()
-                                val imageHeight = imageProxy.height.toFloat()
+                                // 关键：根据旋转角度确定 ML Kit 使用的图像尺寸
+                                // rotation=90/270 时，图像被旋转，宽高交换
+                                val mlKitImageWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
+                                    imageProxy.height.toFloat()  // 旋转后宽度 = 原始高度
+                                } else {
+                                    imageProxy.width.toFloat()
+                                }
                                 
-                                PicMeLogger.d("Camera", "ImageProxy size: ${imageWidth}x${imageHeight}")
-                                PicMeLogger.d("Camera", "PreviewView size: ${previewWidth}x${previewHeight}")
+                                val mlKitImageHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
+                                    imageProxy.width.toFloat()   // 旋转后高度 = 原始宽度
+                                } else {
+                                    imageProxy.height.toFloat()
+                                }
+                                
+                                PicMeLogger.d("Camera", "ML Kit image size: ${mlKitImageWidth}x${mlKitImageHeight}")
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
-                                // 直接计算归一化坐标并映射
-                                val faceX = bounds.centerX().toFloat()
-                                val faceY = bounds.centerY().toFloat()
+                                // 使用 ML Kit 的图像尺寸计算归一化坐标
+                                val normalizedX = bounds.centerX().toFloat() / mlKitImageWidth
+                                val normalizedY = bounds.centerY().toFloat() / mlKitImageHeight
                                 
-                                // 假设 ML Kit 坐标基于 ImageProxy 原始尺寸
-                                var normalizedX = faceX / imageWidth
-                                var normalizedY = faceY / imageHeight
+                                PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
                                 
-                                PicMeLogger.d("Camera", "Normalized (raw): ($normalizedX, $normalizedY)")
-                                
-                                // 映射到 PreviewView
+                                // 直接映射到 PreviewView
                                 var finalX = normalizedX * previewWidth
                                 var finalY = normalizedY * previewHeight
                                 
@@ -378,9 +381,9 @@ fun CameraContent(
                                 PicMeLogger.d("Camera", "Final position: ($finalX, $finalY)")
                                 
                                 // [DEBUG] 计算 FIT_CENTER 下的实际显示区域和偏移
-                                val imageAspectRatio = imageWidth / imageHeight
+                                val imageAspectRatio = mlKitImageWidth / mlKitImageHeight
                                 val previewAspectRatio = previewWidth / previewHeight
-                                
+
                                 // 计算实际显示尺寸和偏移量
                                 val displayInfo = if (imageAspectRatio > previewAspectRatio) {
                                     // 图像更宽，以宽度为基准
