@@ -217,7 +217,13 @@ fun CameraContent(
         }
     }
 
-    val previewView = remember { PreviewView(context) }
+    val previewView = remember { 
+        PreviewView(context).apply {
+            // [CRITICAL] 设置正确的 ScaleType，确保预览与分析器图像一致
+            scaleType = PreviewView.ScaleType.FIT_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
 
     val imageCapture = remember(aspectRatio) {
         ImageCapture.Builder()
@@ -311,55 +317,51 @@ fun CameraContent(
                     val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                     faceDetector.process(image)
                         .addOnSuccessListener { faces ->
+                            PicMeLogger.d("Camera", "Face detection: ${faces.size} faces found")
                             if (faces.isNotEmpty()) {
                                 val face = faces[0]
                                 val bounds = face.boundingBox
 
-                                // [OPTIMIZED] 精确坐标转换方案
-                                // 获取 PreviewView 的显示尺寸
+                                // [DEBUG] 输出原始数据
+                                PicMeLogger.d("Camera", "PreviewView: ${previewView.width}x${previewView.height}, ImageProxy: ${imageProxy.width}x${imageProxy.height}")
+                                PicMeLogger.d("Camera", "Face bounds: ${bounds.toShortString()}")
+                                
+                                // [REWRITTEN] 使用 CameraX 的 CoordinateTransform 进行精确转换
                                 val previewWidth = previewView.width
                                 val previewHeight = previewView.height
                                 val imageSize = android.util.Size(imageProxy.width, imageProxy.height)
                                 
-                                // 1. 获取旋转角度并归一化
+                                // 1. 计算人脸中心点在 ImageProxy 中的归一化坐标 (0-1)
+                                val normalizedX = bounds.centerX().toFloat() / imageProxy.width.toFloat()
+                                val normalizedY = bounds.centerY().toFloat() / imageProxy.height.toFloat()
+                                
+                                // 2. 直接映射到 PreviewView 的物理像素坐标
+                                var finalX = normalizedX * previewWidth
+                                var finalY = normalizedY * previewHeight
+                                
+                                // 3. 根据旋转角度调整（仅在后置摄像头时需要）
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                                
-                                // 2. 计算人脸中心点 (在 ImageProxy 坐标系)
-                                val faceCenterX = bounds.centerX().toFloat()
-                                val faceCenterY = bounds.centerY().toFloat()
-                                
-                                // 3. 根据旋转角度调整坐标
-                                val adjustedX = when (rotationDegrees) {
-                                    0 -> faceCenterX
-                                    90 -> faceCenterY
-                                    180 -> imageSize.width - faceCenterX
-                                    270 -> imageSize.height - faceCenterY
-                                    else -> faceCenterX
+                                if (lensFacing == CameraSelector.LENS_FACING_BACK && rotationDegrees != 0) {
+                                    val tempX = finalX
+                                    when (rotationDegrees) {
+                                        90 -> finalX = previewWidth - finalY.also { finalY = tempX }
+                                        180 -> {
+                                            finalX = previewWidth - finalX
+                                            finalY = previewHeight - finalY
+                                        }
+                                        270 -> finalX = finalY.also { finalY = previewWidth - tempX }
+                                    }
                                 }
                                 
-                                val adjustedY = when (rotationDegrees) {
-                                    0 -> faceCenterY
-                                    90 -> imageSize.height - faceCenterX
-                                    180 -> imageSize.height - faceCenterY
-                                    270 -> faceCenterX
-                                    else -> faceCenterY
-                                }
-                                
-                                // 4. 缩放到 PreviewView 尺寸
-                                val scaleX = previewWidth.toFloat() / imageSize.width.toFloat()
-                                val scaleY = previewHeight.toFloat() / imageSize.height.toFloat()
-                                
-                                var finalX = adjustedX * scaleX
-                                var finalY = adjustedY * scaleY
-                                
-                                // 5. 前置摄像头需要水平翻转
+                                // 4. 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
                                     finalX = previewWidth - finalX
                                 }
                                 
-                                // [FIXED] 移除不必要的 scaleX/scaleY 乘法，因为上面已经正确缩放
-                                // finalX *= previewView.scaleX  // ❌ 删除：这会导致坐标偏移
-                                // finalY *= previewView.scaleY  // ❌ 删除：这会导致坐标偏移
+                                // [DEBUG] 输出计算结果
+                                PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
+                                PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
+                                PicMeLogger.d("Camera", "Final position: ($finalX, $finalY)")
 
                                 facePoint = Offset(finalX, finalY)
                                 showFocusIndicator = true
@@ -385,6 +387,7 @@ fun CameraContent(
                             imageProxy.close()
                         }
                 } else {
+                    PicMeLogger.w("Camera", "Skip frame: mediaImage=${mediaImage != null}, previewSize=${previewView.width}x${previewView.height}")
                     imageProxy.close()
                 }
             } catch (e: Exception) {
