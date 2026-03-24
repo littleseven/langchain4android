@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import android.graphics.Matrix as AndroidMatrix
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -339,76 +340,40 @@ fun CameraContent(
                                 PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
-                                // [FINAL] 正确方案：ML Kit 返回的坐标基于旋转后的图像尺寸
+                                // [OFFICIAL] Google CameraX 官方方案：使用 Matrix 进行坐标变换
+                                // 参考：https://developer.android.com/training/camerax/transform-output
                                 val previewWidth = previewView.width.toFloat()
                                 val previewHeight = previewView.height.toFloat()
                                 
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                                 PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
                                 
-                                // 关键：根据旋转角度确定 ML Kit 使用的图像尺寸
-                                // rotation=90/270 时，图像被旋转，宽高交换
-                                val mlKitImageWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
-                                    imageProxy.height.toFloat()  // 旋转后宽度 = 原始高度
-                                } else {
-                                    imageProxy.width.toFloat()
-                                }
+                                // 创建变换矩阵
+                                val matrix = getCorrectionMatrix(imageProxy, previewView)
                                 
-                                val mlKitImageHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
-                                    imageProxy.width.toFloat()   // 旋转后高度 = 原始宽度
-                                } else {
-                                    imageProxy.height.toFloat()
-                                }
+                                // 将人脸中心点从 ImageProxy 坐标转换到 PreviewView 坐标
+                                val faceCenter = floatArrayOf(
+                                    bounds.centerX().toFloat(),
+                                    bounds.centerY().toFloat()
+                                )
                                 
-                                PicMeLogger.d("Camera", "ImageProxy size: ${imageProxy.width}x${imageProxy.height}")
-                                PicMeLogger.d("Camera", "ML Kit image size: ${mlKitImageWidth}x${mlKitImageHeight}")
-                                PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
-                                PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
+                                PicMeLogger.d("Camera", "Face center (original): (${faceCenter[0]}, ${faceCenter[1]})")
                                 
-                                // 使用 ML Kit 的图像尺寸计算归一化坐标
-                                val normalizedX = bounds.centerX().toFloat() / mlKitImageWidth
-                                val normalizedY = bounds.centerY().toFloat() / mlKitImageHeight
+                                // 应用矩阵变换
+                                matrix.mapPoints(faceCenter, faceCenter)
                                 
-                                PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
-                                
-                                // 直接映射到 PreviewView
-                                var finalX = normalizedX * previewWidth
-                                var finalY = normalizedY * previewHeight
+                                var finalX = faceCenter[0]
+                                var finalY = faceCenter[1]
                                 
                                 // 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
                                     finalX = previewWidth - finalX
                                 }
                                 
-                                PicMeLogger.d("Camera", "Final position: ($finalX, $finalY)")
+                                PicMeLogger.d("Camera", "Final position after matrix transform: ($finalX, $finalY)")
                                 
-                                // [DEBUG] 计算 FIT_CENTER 下的实际显示区域和偏移
-                                val imageAspectRatio = mlKitImageWidth / mlKitImageHeight
-                                val previewAspectRatio = previewWidth / previewHeight
-
-                                // 计算实际显示尺寸和偏移量
-                                val displayInfo = if (imageAspectRatio > previewAspectRatio) {
-                                    // 图像更宽，以宽度为基准
-                                    val scaledHeight = previewWidth / imageAspectRatio
-                                    val offset = (previewHeight - scaledHeight) / 2
-                                    PicMeLogger.d("Camera", "FIT_CENTER: Width-based, displayH=$scaledHeight, offset=$offset")
-                                    DisplayInfo(previewWidth, scaledHeight, 0f, offset)
-                                } else {
-                                    // 图像更高，以高度为基准
-                                    val scaledWidth = previewHeight * imageAspectRatio
-                                    val offset = (previewWidth - scaledWidth) / 2
-                                    PicMeLogger.d("Camera", "FIT_CENTER: Height-based, displayW=$scaledWidth, offset=$offset")
-                                    DisplayInfo(scaledWidth, previewHeight, offset, 0f)
-                                }
-                                
-                                // 计算在 FIT_CENTER 下的正确坐标
-                                val fitFinalX = displayInfo.offsetX + normalizedX * displayInfo.displayWidth
-                                val fitFinalY = displayInfo.offsetY + normalizedY * displayInfo.displayHeight
-                                
-                                PicMeLogger.d("Camera", "FIT_CENTER corrected: ($fitFinalX, $fitFinalY)")
-                                PicMeLogger.d("Camera", "=================================")
-
-                                facePoint = Offset(fitFinalX, fitFinalY)
+                                // 使用 Matrix 变换后的坐标就是最终坐标，不需要 FIT_CENTER 修正
+                                facePoint = Offset(finalX, finalY)
 
                                 // Auto Focus on face
                                 cameraControl?.let { control ->
@@ -902,4 +867,56 @@ private fun processImageProxy(
     } else {
         imageProxy.close()
     }
+}
+
+/**
+ * [OFFICIAL] Google CameraX 官方方案：创建坐标变换矩阵
+ * 将 ImageProxy 坐标系中的点映射到 PreviewView 坐标系
+ * 
+ * 参考文档：
+ * https://developer.android.com/training/camerax/transform-output#convert-coordinates
+ */
+private fun getCorrectionMatrix(imageProxy: ImageProxy, previewView: PreviewView): AndroidMatrix {
+    val cropRect = imageProxy.cropRect
+    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+    val matrix = AndroidMatrix()
+    
+    // 源顶点（ImageProxy 的 crop rect，顺时针顺序）
+    val source = floatArrayOf(
+        cropRect.left.toFloat(),
+        cropRect.top.toFloat(),
+        cropRect.right.toFloat(),
+        cropRect.top.toFloat(),
+        cropRect.right.toFloat(),
+        cropRect.bottom.toFloat(),
+        cropRect.left.toFloat(),
+        cropRect.bottom.toFloat()
+    )
+    
+    // 目标顶点（PreviewView 的四个角，顺时针顺序）
+    val destination = floatArrayOf(
+        0f,
+        0f,
+        previewView.width.toFloat(),
+        0f,
+        previewView.width.toFloat(),
+        previewView.height.toFloat(),
+        0f,
+        previewView.height.toFloat()
+    )
+    
+    // 根据旋转角度调整目标顶点顺序
+    // 每个顶点由 2 个 float 组成，每 90°旋转需要偏移 1 个顶点
+    val vertexSize = 2
+    val shiftOffset = rotationDegrees / 90 * vertexSize
+    val tempArray = destination.clone()
+    
+    for (toIndex in source.indices) {
+        val fromIndex = (toIndex + shiftOffset) % source.size
+        destination[toIndex] = tempArray[fromIndex]
+    }
+    
+    // 创建多边形到多边形的变换矩阵
+    matrix.setPolyToPoly(source, 0, destination, 0, 4)
+    return matrix
 }
