@@ -343,35 +343,49 @@ fun CameraContent(
                                 
                                 PicMeLogger.d("Camera", "Normalized: ($normalizedX, $normalizedY)")
                                 
-                                // 2. 直接映射到 PreviewView 的物理像素坐标
-                                var finalX = normalizedX * previewWidth
-                                var finalY = normalizedY * previewHeight
+                                // 2. 根据旋转角度调整坐标系
+                                // CameraX 的 rotation 是传感器相对于设备自然方向的旋转角度
+                                // 需要先将归一化坐标映射到预览的物理像素
+                                var finalX: Float
+                                var finalY: Float
                                 
-                                // 3. 根据旋转角度调整（仅在后置摄像头时需要）
                                 val rotationDegrees = imageProxy.imageInfo.rotationDegrees
                                 PicMeLogger.d("Camera", "Rotation: $rotationDegrees, Lens: $lensFacing")
                                 
-                                if (lensFacing == CameraSelector.LENS_FACING_BACK && rotationDegrees != 0) {
-                                    val tempX = finalX
-                                    when (rotationDegrees) {
-                                        90 -> finalX = previewWidth - finalY.also { finalY = tempX }
-                                        180 -> {
-                                            finalX = previewWidth - finalX
-                                            finalY = previewHeight - finalY
-                                        }
-                                        270 -> finalX = finalY.also { finalY = previewWidth - tempX }
+                                when (rotationDegrees) {
+                                    0 -> {
+                                        // 无旋转，直接映射
+                                        finalX = normalizedX * previewWidth
+                                        finalY = normalizedY * previewHeight
+                                    }
+                                    90 -> {
+                                        // 顺时针 90 度：ImageProxy 的 Y → PreviewView 的 X, X → Y
+                                        finalX = normalizedY * previewWidth
+                                        finalY = (1f - normalizedX) * previewHeight
+                                    }
+                                    180 -> {
+                                        // 180 度翻转
+                                        finalX = (1f - normalizedX) * previewWidth
+                                        finalY = (1f - normalizedY) * previewHeight
+                                    }
+                                    270 -> {
+                                        // 逆时针 90 度：ImageProxy 的 Y → PreviewView 的 X, X → Y
+                                        finalX = (1f - normalizedY) * previewWidth
+                                        finalY = normalizedX * previewHeight
+                                    }
+                                    else -> {
+                                        finalX = normalizedX * previewWidth
+                                        finalY = normalizedY * previewHeight
                                     }
                                 }
                                 
-                                // 4. 前置摄像头水平翻转
+                                // 3. 前置摄像头水平翻转
                                 if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
                                     finalX = previewWidth - finalX
                                     PicMeLogger.d("Camera", "Front camera flipped X: $finalX")
                                 }
                                 
-                                // [DEBUG] 输出计算结果
-                                PicMeLogger.d("Camera", "Final position: ($finalX, $finalY)")
-                                PicMeLogger.d("Camera", "=================================")
+                                PicMeLogger.d("Camera", "After rotation & flip: ($finalX, $finalY)")
 
                                 facePoint = Offset(finalX, finalY)
                                 showFocusIndicator = true
