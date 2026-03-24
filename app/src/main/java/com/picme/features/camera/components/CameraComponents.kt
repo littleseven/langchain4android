@@ -6,6 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -217,32 +218,82 @@ fun ControlPanel(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
+    // 抽屉式设计：从底部滑出，占据屏幕底部区域
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding(),
-        color = Color.Black.copy(alpha = 0.85f),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            .navigationBarsPadding()
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+        // 半透明遮罩：提升面板可读性，与预览区域分离
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(320.dp)  // 增加高度以容纳更多内容
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Black.copy(alpha = 0.7f),  // 底部更深，完全遮挡
+                            Color.Black.copy(alpha = 0.4f),  // 中间过渡
+                            Color.Transparent                 // 顶部透明
+                        ),
+                        startY = 0f,
+                        endY = 320f
+                    )
                 )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Rounded.Close, contentDescription = null, tint = Color.White)
+        )
+        
+        // 控制面板：完全不透明的白色卡片，清晰展示内容
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.96f)  // 96% 宽度，留白边
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 8.dp),  // 减小底部间距，更贴近底部
+            color = MaterialTheme.colorScheme.surface,  // 完全不透明的表面色
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
+            shadowElevation = 20.dp,  // 更强的阴影，增强层次感
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .fillMaxWidth()
+            ) {
+                // 标题栏 - 使用主题色
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
+                
+                // 内容区域 - 直接调用 content，在 Column 作用域内
+                content()
             }
-            content()
         }
     }
 }
