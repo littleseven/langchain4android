@@ -357,9 +357,9 @@ fun CameraContent(
                                     finalX = previewWidth - finalX
                                 }
                                 
-                                // 6. 应用缩放系数 (考虑 Crop 和 ScaleType)
-                                finalX *= previewView.scaleX
-                                finalY *= previewView.scaleY
+                                // [FIXED] 移除不必要的 scaleX/scaleY 乘法，因为上面已经正确缩放
+                                // finalX *= previewView.scaleX  // ❌ 删除：这会导致坐标偏移
+                                // finalY *= previewView.scaleY  // ❌ 删除：这会导致坐标偏移
 
                                 facePoint = Offset(finalX, finalY)
                                 showFocusIndicator = true

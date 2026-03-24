@@ -348,8 +348,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
  */
 @Composable
 fun FaceFocusIndicator(offset: Offset, alpha: Float) {
-    // [OPTIMIZED] 根据人脸大小动态调整指示器尺寸 (默认假设人脸占屏幕 15-20%)
-    val baseSizeDp = 100.dp // 增大尺寸，更明显
+    // [FIXED] 不再固定 Canvas 尺寸，而是填充整个屏幕进行定位
+    val indicatorSizeDp = 120.dp // 增大指示器尺寸
     
     Box(
         modifier = Modifier
@@ -358,101 +358,106 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
     ) {
         Canvas(
             modifier = Modifier
-                .size(baseSizeDp)
+                .fillMaxSize() // ✅ 使用全屏尺寸，而不是固定的 100dp
                 .offset {
-                    IntOffset(
-                        (offset.x - baseSizeDp.toPx() / 2).toInt(),
-                        (offset.y - baseSizeDp.toPx() / 2).toInt()
-                    )
+                    IntOffset(0, 0) // 不需要额外的 offset
                 }
         ) {
             val color = Color.Yellow
-            val strokeWidth = 4.dp.toPx() // 加粗线条
-            val cornerLength = 20.dp.toPx() // 增长角标
-            val gapLength = 8.dp.toPx()
+            val strokeWidth = 4.dp.toPx()
+            val cornerLength = 25.dp.toPx()
 
-            // [OPTIMIZED] 四个角的 L 型标记 + 中心十字星
+            // 计算十字星的左上角位置
+            val indicatorSize = indicatorSizeDp.toPx()
+            val centerX = offset.x
+            val centerY = offset.y
+            val left = centerX - indicatorSize / 2
+            val top = centerY - indicatorSize / 2
+            val right = left + indicatorSize
+            val bottom = top + indicatorSize
+
+            // [OPTIMIZED] 四个角的 L 型标记
             // 左上角
             drawLine(
                 color,
-                Offset(0f, cornerLength),
-                Offset(0f, 0f),
+                Offset(left, top + cornerLength),
+                Offset(left, top),
                 strokeWidth
             )
             drawLine(
                 color,
-                Offset(0f, 0f),
-                Offset(cornerLength, 0f),
+                Offset(left, top),
+                Offset(left + cornerLength, top),
                 strokeWidth
             )
 
             // 右上角
             drawLine(
                 color,
-                Offset(size.width - cornerLength, 0f),
-                Offset(size.width, 0f),
+                Offset(right - cornerLength, top),
+                Offset(right, top),
                 strokeWidth
             )
             drawLine(
                 color,
-                Offset(size.width, 0f),
-                Offset(size.width, cornerLength),
+                Offset(right, top),
+                Offset(right, top + cornerLength),
                 strokeWidth
             )
 
             // 右下角
             drawLine(
                 color,
-                Offset(size.width, size.height - cornerLength),
-                Offset(size.width, size.height),
+                Offset(right, bottom - cornerLength),
+                Offset(right, bottom),
                 strokeWidth
             )
             drawLine(
                 color,
-                Offset(size.width, size.height),
-                Offset(size.width - cornerLength, size.height),
+                Offset(right, bottom),
+                Offset(right - cornerLength, bottom),
                 strokeWidth
             )
 
             // 左下角
             drawLine(
                 color,
-                Offset(cornerLength, size.height),
-                Offset(0f, size.height),
+                Offset(left + cornerLength, bottom),
+                Offset(left, bottom),
                 strokeWidth
             )
             drawLine(
                 color,
-                Offset(0f, size.height),
-                Offset(0f, size.height - cornerLength),
+                Offset(left, bottom),
+                Offset(left, bottom - cornerLength),
                 strokeWidth
             )
 
-            // [OPTIMIZED] 中心十字星标记 (替换小圆点，更醒目)
-            val centerSize = 12.dp.toPx()
+            // [OPTIMIZED] 中心十字星标记
+            val centerSize = 16.dp.toPx()
             val lineThickness = 3.dp.toPx()
             
             // 水平线
             drawLine(
                 color = color.copy(alpha = 0.9f),
-                start = Offset((size.width - centerSize) / 2, size.height / 2),
-                end = Offset((size.width + centerSize) / 2, size.height / 2),
+                start = Offset(centerX - centerSize / 2, centerY),
+                end = Offset(centerX + centerSize / 2, centerY),
                 strokeWidth = lineThickness
             )
             
             // 垂直线
             drawLine(
                 color = color.copy(alpha = 0.9f),
-                start = Offset(size.width / 2, (size.height - centerSize) / 2),
-                end = Offset(size.width / 2, (size.height + centerSize) / 2),
+                start = Offset(centerX, centerY - centerSize / 2),
+                end = Offset(centerX, centerY + centerSize / 2),
                 strokeWidth = lineThickness
             )
             
             // 中心点
             drawCircle(
                 color = color.copy(alpha = 0.7f),
-                radius = 3.dp.toPx(),
-                center = Offset(size.width / 2, size.height / 2)
+                radius = 4.dp.toPx(),
+                center = Offset(centerX, centerY)
             )
         }
     }
