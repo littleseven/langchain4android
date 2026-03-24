@@ -67,6 +67,147 @@ AGENTS.md (AI Agent 操作规范)
 - **状态管理**：UI 状态必须使用 `Sealed Class`。
 - **导入管理**：**严禁使用通配符导入 (`*`)**。
 
+## 4.1 Import 最佳实践 [CR 重点检查]
+
+### ✅ 正确做法
+
+**1. 按功能模块分组排序**
+```kotlin
+// 第一组：Compose 核心库 (按字母顺序)
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+
+// 第二组：Material 组件 (按字母顺序)
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+
+// 第三组：Foundation 基础组件 (按字母顺序)
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+
+// 第四组：UI 工具类 (Modifier、颜色、图形等)
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+// 第五组：第三方库
+import coil.compose.AsyncImage
+
+// 第六组：项目内部类 (按层级排序)
+import com.picme.R
+import com.picme.domain.model.BeautySettings
+import com.picme.features.camera.CameraAspectRatio
+```
+
+**2. 使用 IDE 自动导入后手动整理**
+```kotlin
+// ✅ 步骤:
+// 1. 编写代码时使用 Android Studio 的 "Optimize Imports" (Ctrl+Alt+O)
+// 2. 手动调整导入顺序，确保同类库在一起
+// 3. 删除未使用的导入 (IDE 通常会自动完成)
+// 4. 最后检查是否有遗漏的必要导入
+```
+
+**3. 新增功能时的导入流程**
+```kotlin
+// ✅ 当需要使用新类时:
+// 1. 先写类名，让 IDE 提示导入
+// 2. 按 Alt+Enter 添加导入
+// 3. 运行 "Optimize Imports"
+// 4. 手动调整到新位置 (保持分组有序)
+
+// 示例：添加 AnimatedVisibility
+AnimatedVisibility(visible = true) { }  // 输入后按 Alt+Enter
+// IDE 自动添加：import androidx.compose.animation.AnimatedVisibility
+// 然后手动将其移动到 Compose 核心库分组的顶部
+```
+
+### ❌ 错误做法
+
+**1. 导入顺序混乱**
+```kotlin
+// ❌ 错误：不同库混在一起，难以查找
+import androidx.compose.runtime.mutableStateOf
+import com.picme.R
+import androidx.compose.material3.Text
+import coil.compose.AsyncImage
+import androidx.compose.foundation.layout.Column
+```
+
+**2. 遗漏必要导入**
+```kotlin
+// ❌ 错误：使用了 mutableStateOf 但未导入
+@Composable
+fun MyComponent() {
+    var state by remember { mutableStateOf(0) }  // 编译错误!
+}
+
+// ✅ 正确：确保所有使用的类都有导入
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+```
+
+**3. 重复导入**
+```kotlin
+// ❌ 错误：同一个类导入两次
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateOf  // 重复!
+
+// ✅ 解决：运行 "Optimize Imports" 自动清理
+```
+
+**4. 使用已废弃的导入**
+```kotlin
+// ❌ 错误：使用已重命名的 API
+import androidx.compose.material.Divider  // 已废弃
+
+// ✅ 正确：使用最新 API
+import androidx.compose.material3.HorizontalDivider
+```
+
+### 🔧 自愈流程 (Self-Heal)
+
+**编译错误快速定位**:
+```bash
+# 当遇到 "Unresolved reference" 错误时:
+1. 检查错误行使用的类名
+2. 搜索是否已导入该类
+3. 若未导入，添加对应的 import 语句
+4. 若已导入，检查类名拼写是否正确
+5. 重新编译验证
+
+# 常见错误及解决方案:
+e: Unresolved reference 'mutableStateOf'
+→ 添加：import androidx.compose.runtime.mutableStateOf
+
+e: Unresolved reference 'AnimatedVisibility'
+→ 添加：import androidx.compose.animation.AnimatedVisibility
+
+e: Unresolved reference 'rotate'
+→ 添加：import androidx.compose.ui.draw.rotate
+
+e: Type 'MutableState<String?>' has no method 'setValue'
+→ 检查是否正确使用委托属性 (var x by state vs val x = state)
+```
+
+### 📋 CR 检查清单
+
+每次代码审查时必须检查:
+- [ ] 所有导入都按功能模块分组
+- [ ] 每组内按字母顺序排列
+- [ ] 没有通配符导入 (`*`)
+- [ ] 没有重复导入
+- [ ] 没有未使用的导入
+- [ ] 所有使用的类都已导入
+- [ ] 导入顺序符合规范 (Compose → Material → Foundation → UI → Third-party → Project)
+- [ ] 没有使用已废弃的 API
+
 ## 5. 结构化日志标准
 - **标签格式**：`PicMe:[ModuleName]` (例如 `PicMe:Camera`, `PicMe:AI`)。
 - **策略要求**：必须记录所有状态流转、核心业务节点 and 关键错误。`LogRepository` 缓存上限 500 条。

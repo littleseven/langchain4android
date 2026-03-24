@@ -1,6 +1,11 @@
 package com.picme.features.camera.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,16 +41,17 @@ import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.CropSquare
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.FaceRetouchingNatural
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FilterBAndW
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material.icons.rounded.ColorLens
-import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Landscape
 import androidx.compose.material.icons.rounded.LineStyle
 import androidx.compose.material.icons.rounded.SelfImprovement
@@ -69,12 +75,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -342,125 +350,128 @@ private fun FilterGradientPreview(filter: FilterType) {
 
 @Composable
 fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+    val expandedCategoryState = remember { mutableStateOf<String?>("facial") }
+    
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 面部精修
-        Text(
-            text = stringResource(R.string.facial_refinement),
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-        
-        BeautySlider(
-            icon = Icons.Rounded.Face,
-            label = stringResource(R.string.smoothing),
-            value = settings.smoothing,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
-            onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
-        )
+        // 面部精修 - 可折叠
+        ExpandableSection(
+            title = stringResource(R.string.facial_refinement),
+            isExpanded = expandedCategoryState.value == "facial",
+            onToggle = { 
+                expandedCategoryState.value = if (expandedCategoryState.value == "facial") null else "facial"
+            }
+        ) {
+            BeautySlider(
+                icon = Icons.Rounded.Face,
+                label = stringResource(R.string.smoothing),
+                value = settings.smoothing,
+                valueRange = 0f..100f,
+                onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
+                onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
+            )
 
-        BeautySlider(
-            icon = Icons.Rounded.AutoFixHigh,
-            label = stringResource(R.string.whitening),
-            value = settings.whitening,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
-            onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
-        )
+            BeautySlider(
+                icon = Icons.Rounded.AutoFixHigh,
+                label = stringResource(R.string.whitening),
+                value = settings.whitening,
+                valueRange = 0f..100f,
+                onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
+                onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
+            )
 
-        BeautySlider(
-            icon = Icons.Rounded.FaceRetouchingNatural,
-            label = stringResource(R.string.slim_face),
-            value = settings.slimFace,
-            valueRange = -50f..50f,
-            onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
-            onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
-        )
+            BeautySlider(
+                icon = Icons.Rounded.FaceRetouchingNatural,
+                label = stringResource(R.string.slim_face),
+                value = settings.slimFace,
+                valueRange = -50f..50f,
+                onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
+                onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
+            )
 
-        BeautySlider(
-            icon = Icons.Rounded.Visibility,
-            label = stringResource(R.string.big_eyes),
-            value = settings.bigEyes,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
-            onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
-        )
+            BeautySlider(
+                icon = Icons.Rounded.Visibility,
+                label = stringResource(R.string.big_eyes),
+                value = settings.bigEyes,
+                valueRange = 0f..100f,
+                onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
+                onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
+            )
 
-        BeautySlider(
-            icon = Icons.Rounded.ChildCare,
-            label = stringResource(R.string.youth),
-            value = settings.youth,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
-            onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
-        )
+            BeautySlider(
+                icon = Icons.Rounded.ChildCare,
+                label = stringResource(R.string.youth),
+                value = settings.youth,
+                valueRange = 0f..100f,
+                onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
+                onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
+            )
+        }
         
-        // 妆容调节
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.makeup_adjustment),
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-        
-        // 唇色选择器
-        LipColorSelector(
-            strength = settings.lipColor,
-            colorIndex = settings.lipColorIndex,
-            onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
-            onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
-            onReset = { onSettingsChanged(settings.copy(lipColor = 0f, lipColorIndex = 0)) }
-        )
-        
-        BeautySlider(
-            icon = Icons.Rounded.FavoriteBorder,
-            label = stringResource(R.string.blush),
-            value = settings.blush,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
-            onReset = { onSettingsChanged(settings.copy(blush = 0f)) }
-        )
+        // 妆容调节 - 可折叠
+        ExpandableSection(
+            title = stringResource(R.string.makeup_adjustment),
+            isExpanded = expandedCategoryState.value == "makeup",
+            onToggle = { 
+                expandedCategoryState.value = if (expandedCategoryState.value == "makeup") null else "makeup"
+            }
+        ) {
+            // 唇色选择器
+            LipColorSelector(
+                strength = settings.lipColor,
+                colorIndex = settings.lipColorIndex,
+                onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+                onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+                onReset = { onSettingsChanged(settings.copy(lipColor = 0f, lipColorIndex = 0)) }
+            )
+            
+            BeautySlider(
+                icon = Icons.Rounded.FavoriteBorder,
+                label = stringResource(R.string.blush),
+                value = settings.blush,
+                valueRange = 0f..100f,
+                onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+                onReset = { onSettingsChanged(settings.copy(blush = 0f)) }
+            )
 
-        BeautySlider(
-            icon = Icons.Rounded.LineStyle,
-            label = stringResource(R.string.eyebrow),
-            value = settings.eyebrow,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
-            onReset = { onSettingsChanged(settings.copy(eyebrow = 0f)) }
-        )
+            BeautySlider(
+                icon = Icons.Rounded.LineStyle,
+                label = stringResource(R.string.eyebrow),
+                value = settings.eyebrow,
+                valueRange = 0f..100f,
+                onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+                onReset = { onSettingsChanged(settings.copy(eyebrow = 0f)) }
+            )
+        }
         
-        // 身材管理
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = stringResource(R.string.body_management),
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-        
-        BeautySlider(
-            icon = Icons.Rounded.SelfImprovement,
-            label = stringResource(R.string.body_enhancement),
-            value = settings.bodyEnhancement,
-            valueRange = -30f..30f,
-            onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
-            onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
-        )
+        // 身材管理 - 可折叠
+        ExpandableSection(
+            title = stringResource(R.string.body_management),
+            isExpanded = expandedCategoryState.value == "body",
+            onToggle = { 
+                expandedCategoryState.value = if (expandedCategoryState.value == "body") null else "body"
+            }
+        ) {
+            BeautySlider(
+                icon = Icons.Rounded.SelfImprovement,
+                label = stringResource(R.string.body_enhancement),
+                value = settings.bodyEnhancement,
+                valueRange = -30f..30f,
+                onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
+                onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
+            )
 
-        BeautySlider(
-            icon = Icons.Rounded.Timeline,
-            label = stringResource(R.string.leg_extension),
-            value = settings.legExtension,
-            valueRange = 0f..50f,
-            onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
-            onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
-        )
+            BeautySlider(
+                icon = Icons.Rounded.Timeline,
+                label = stringResource(R.string.leg_extension),
+                value = settings.legExtension,
+                valueRange = 0f..50f,
+                onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
+                onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
+            )
+        }
     }
 }
 
@@ -638,6 +649,75 @@ private fun RatioItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
             color = if (isSelected) Color.Black else Color.White,
             fontSize = 12.sp
         )
+    }
+}
+
+/**
+ * 可折叠分类组件
+ */
+@Composable
+private fun ExpandableSection(
+    title: String,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val rotation by animateFloatAsState(if (isExpanded) 180f else 0f, label = "rotation")
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .rotate(rotation),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                text = if (isExpanded) "收起" else "展开",
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically() + fadeIn(initialAlpha = 0.3f),
+            exit = shrinkVertically() + fadeOut(targetAlpha = 0.3f)
+        ) {
+            Column(
+                modifier = Modifier.padding(top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                content()
+            }
+        }
     }
 }
 
