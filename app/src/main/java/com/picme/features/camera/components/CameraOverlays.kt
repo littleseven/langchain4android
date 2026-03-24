@@ -66,8 +66,11 @@ fun CameraOverlays(
     Box(modifier = modifier.fillMaxSize()) {
         CompositionGrid(gridType = gridType)
 
-        facePoint?.let {
-            FaceFocusIndicator(offset = it, alpha = focusAlpha)
+        // [OPTIMIZED] 十字星显示优化：只要检测到人脸就显示，不受面板状态影响
+        facePoint?.let { point ->
+            if (focusAlpha > 0f) {
+                FaceFocusIndicator(offset = point, alpha = focusAlpha)
+            }
         }
 
         if (showInfo) {
@@ -345,8 +348,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
  */
 @Composable
 fun FaceFocusIndicator(offset: Offset, alpha: Float) {
-    // 根据人脸大小动态调整指示器尺寸 (默认假设人脸占屏幕 15-20%)
-    val baseSizeDp = 80.dp
+    // [OPTIMIZED] 根据人脸大小动态调整指示器尺寸 (默认假设人脸占屏幕 15-20%)
+    val baseSizeDp = 100.dp // 增大尺寸，更明显
     
     Box(
         modifier = Modifier
@@ -364,11 +367,11 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
                 }
         ) {
             val color = Color.Yellow
-            val strokeWidth = 3.dp.toPx()
-            val cornerLength = 15.dp.toPx()
+            val strokeWidth = 4.dp.toPx() // 加粗线条
+            val cornerLength = 20.dp.toPx() // 增长角标
             val gapLength = 8.dp.toPx()
 
-            // 四个角的 L 型标记 (不连接，更现代的设计)
+            // [OPTIMIZED] 四个角的 L 型标记 + 中心十字星
             // 左上角
             drawLine(
                 color,
@@ -425,10 +428,30 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
                 strokeWidth
             )
 
-            // 中心点标记 (小圆点)
+            // [OPTIMIZED] 中心十字星标记 (替换小圆点，更醒目)
+            val centerSize = 12.dp.toPx()
+            val lineThickness = 3.dp.toPx()
+            
+            // 水平线
+            drawLine(
+                color = color.copy(alpha = 0.9f),
+                start = Offset((size.width - centerSize) / 2, size.height / 2),
+                end = Offset((size.width + centerSize) / 2, size.height / 2),
+                strokeWidth = lineThickness
+            )
+            
+            // 垂直线
+            drawLine(
+                color = color.copy(alpha = 0.9f),
+                start = Offset(size.width / 2, (size.height - centerSize) / 2),
+                end = Offset(size.width / 2, (size.height + centerSize) / 2),
+                strokeWidth = lineThickness
+            )
+            
+            // 中心点
             drawCircle(
-                color = color.copy(alpha = 0.6f),
-                radius = 4.dp.toPx(),
+                color = color.copy(alpha = 0.7f),
+                radius = 3.dp.toPx(),
                 center = Offset(size.width / 2, size.height / 2)
             )
         }
