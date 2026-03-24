@@ -360,7 +360,9 @@ fun CameraContent(
                                     imageProxy.height.toFloat()
                                 }
                                 
+                                PicMeLogger.d("Camera", "ImageProxy size: ${imageProxy.width}x${imageProxy.height}")
                                 PicMeLogger.d("Camera", "ML Kit image size: ${mlKitImageWidth}x${mlKitImageHeight}")
+                                PicMeLogger.d("Camera", "Face bounds: left=${bounds.left}, top=${bounds.top}, right=${bounds.right}, bottom=${bounds.bottom}")
                                 PicMeLogger.d("Camera", "Face center: (${bounds.centerX()}, ${bounds.centerY()})")
                                 
                                 // 使用 ML Kit 的图像尺寸计算归一化坐标
