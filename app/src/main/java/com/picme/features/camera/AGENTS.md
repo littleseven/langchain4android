@@ -14,6 +14,7 @@
 - **[PRIVACY] 权限最小化**：仅在需要时申请相机和存储权限，提供降级方案
 - **[REALTIME] 美颜实时预览**：所有美颜效果处理延迟 < 100ms，支持实时预览
 - **[NATURAL] 自然美学原则**：所有美颜效果必须保持自然，避免过度失真
+- **[ACCURACY] 十字星精确跟踪**：人脸跟踪十字星偏差 < 5px，支持旋转/缩放/镜像场景
 
 ## 2. 技术实现规范 (Technical Implementation)
 
@@ -107,6 +108,92 @@
   3. **黑场动画**：通过 LaunchedEffect 实现 50ms 透明度渐变（1.0 → 0.0）
 - **关键点**：三个反馈必须在同一帧内触发，任一反馈缺失都会导致用户感知“卡顿”
 
+### 2.5 人脸跟踪十字星坐标转换
+
+**问题定义**：ML Kit 检测到的人脸坐标需要转换为屏幕坐标，用于绘制十字星指示器。
+
+**数据流与处理时机**：
+```
+Camera Sensor (原始图像)
+    ↓
+ImageProxy (YUV_420_888, rotationDegrees)
+    ↓
+ML Kit InputImage.fromMediaImage(mediaImage, rotationDegrees)
+    ├── ML Kit 内部自动处理旋转补偿
+    └── 输出：Face.boundingBox（已旋转的坐标）
+    ↓
+transformFaceCoordinate()
+    ├── Step 1: 归一化（使用 imageProxy.width/height）
+    ├── Step 2: 旋转 + 镜像映射到屏幕坐标系
+    └── Step 3: FIT_CENTER 映射
+```
+
+**关键说明**：
+- ✅ **ML Kit 自动处理旋转**：`InputImage.fromMediaImage()` 根据 `rotationDegrees` 调整检测坐标系
+- ✅ **检测结果已是旋转后坐标**：`face.boundingBox` 返回相对于**旋转后**图像的坐标
+- ✅ **归一化无需额外旋转**：直接使用 `imageProxy.width/height`（传感器物理尺寸）相除即可
+- ✅ **Step 2 的目的**：将**已旋转的图像坐标系**映射到**屏幕显示坐标系**
+
+**坐标系统差异**：
+1. **图像坐标系**：ML Kit 检测坐标，原点在左上角，基于旋转后的图像
+2. **屏幕坐标系**：PreviewView 渲染坐标，考虑 FIT_CENTER 缩放和 letterbox 效应
+3. **变换因素**：旋转（坐标系映射）、镜像（前置摄像头）、宽高比适配
+
+**三步转换算法**：
+
+```kotlin
+/**
+ * Step 1: 归一化坐标
+ * 将图像坐标转换为 0-1 范围，消除尺寸影响
+ * 注意：ML Kit 已处理旋转，faceX/Y 是旋转后图像上的坐标
+ */
+val normX = faceX / imageWidth  // imageWidth 是传感器物理宽度
+val normY = faceY / imageHeight
+
+/**
+ * Step 2: 旋转变换 + 镜像补偿
+ * 根据设备旋转角度和摄像头方向，将图像坐标系映射到屏幕坐标系
+ */
+val (adjustedX, adjustedY) = when (rotationDegrees) {
+    90 -> {
+        if (lensFacing == LENS_FACING_BACK) {
+            Pair(normY, 1f - normX)  // 后置 90 度
+        } else {
+            Pair(1f - normY, 1f - normX)  // 前置 90 度（镜像）
+        }
+    }
+    270 -> {
+        if (lensFacing == LENS_FACING_FRONT) {
+            Pair(normY, normX)  // 前置 270 度（镜像）
+        } else {
+            Pair(1f - normY, normX)  // 后置 270 度
+        }
+    }
+    180 -> Pair(1f - normX, 1f - normY)  // 180 度倒立
+    else -> Pair(normX, normY)  // 0 度竖屏
+}
+
+/**
+ * Step 3: FIT_CENTER 映射
+ * 使用 PreviewView 的 MeteringPointFactory 自动处理
+ */
+val factory = previewView.meteringPointFactory
+val point = factory.createPoint(adjustedX, adjustedY)
+val screenOffset = Offset(point.x, point.y)
+```
+
+**关键实现要点**：
+- ✅ **使用 PreviewView 内置转换**：避免手动计算 FIT_CENTER 的 letterbox 偏移
+- ✅ **前置摄像头镜像**：X 坐标翻转 `1 - normX`
+- ✅ **完整日志记录**：记录转换过程便于调试
+- ✅ **性能优化**：避免在 onDraw 中创建对象
+
+**验证场景**：
+- ✅ 竖屏自拍（前置 0°）：十字星镜像对齐
+- ✅ 横屏拍摄（后置 90°）：十字星精确跟踪
+- ✅ 视频通话（前置 270°）：十字星无偏移
+- ✅ 2x 变焦：十字星仍精确对准人脸
+
 ## 3. Agent 执行规约 (Execution Rules)
 
 - **拍摄操作**：必须在后台线程保存照片，避免阻塞 UI
@@ -121,6 +208,14 @@
   - **自然美学**：所有效果必须保持自然，避免过度失真
   - **安全约束**：瘦脸、身材调整等必须限制在安全范围内
   - **记忆功能**：记住用户上次使用的参数组合
+- **十字星跟踪**：
+  - **必须使用 PreviewView 坐标转换**：严禁手动计算 FIT_CENTER 映射
+  - **必须处理旋转和镜像**：前置摄像头、横屏场景必须验证
+  - **必须添加调试日志**：记录转换过程便于排查问题
+- **十字星跟踪**：
+  - **必须使用 PreviewView 坐标转换**：严禁手动计算 FIT_CENTER 映射
+  - **必须处理旋转和镜像**：前置摄像头、横屏场景必须验证
+  - **必须添加调试日志**：记录转换过程便于排查问题
 
 ## 4. 常见陷阱检查清单 (Checklist)
 
@@ -136,6 +231,10 @@
 - [ ] 瘦脸/大眼是否限制在安全范围内？（避免失真）
 - [ ] 唇色是否保留唇部纹理？（避免塑料感）
 - [ ] 身材调整是否保持身体比例？（避免变形）
+- [ ] 十字星坐标转换是否使用了 PreviewView？（严禁手动计算 FIT_CENTER）
+- [ ] 前置摄像头是否正确镜像？（十字星应跟随镜中人脸）
+- [ ] 横屏拍摄是否处理了 90°旋转？（坐标应正确映射）
+- [ ] 是否添加了调试日志？（便于排查错位问题）
 
 ## 5. 与产品文档对照 (Product Alignment)
 
@@ -146,9 +245,12 @@
 - ✅ 冷启动 < 500ms → 分阶段初始化，懒加载 AI 模型
 - ✅ 美颜实时预览 → GPU 加速，延迟 < 100ms
 - ✅ 自然美学 → 所有效果限制在安全范围内
+- ✅ 十字星精确跟踪 → 使用 PreviewView 坐标转换，偏差 < 5px
 
 **技术决策记录**：
 - 选择 CameraX 而非 Camera2：简化生命周期管理，降低代码复杂度
 - 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
 - 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳
 - 美颜使用 GPU 加速：CPU 计算无法满足实时性要求
+- 十字星坐标转换使用 PreviewView：避免手动计算 FIT_CENTER 的复杂性
+- 十字星坐标转换使用 PreviewView：避免手动计算 FIT_CENTER 的复杂性

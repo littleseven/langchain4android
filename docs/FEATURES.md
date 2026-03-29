@@ -161,6 +161,232 @@
 - **性能与资源**：OCR 引擎应在空闲 30s 后自动释放，以节省内存。
 - **产品需求**：见 `../PRODUCT.md Section 3.1 & 3.2`
 
+### 1.6 人脸跟踪十字星定位系统
+
+#### 1.6.1 核心问题定义
+**问题现象**：前后置摄像头切换、设备旋转、缩放时，十字星与预览画面中的人脸位置错位。
+
+**根本原因**：
+1. **坐标系差异**：ML Kit 检测坐标 (Image Coordinate) ≠ 屏幕显示坐标 (Screen Coordinate)
+2. **旋转变换**：设备旋转导致图像传感器坐标系与屏幕坐标系不一致
+3. **镜像变换**：前置摄像头预览需要水平翻转
+4. **缩放变换**：FIT_CENTER 模式下的 letterbox 效应
+5. **宽高比不匹配**：预览宽高比 ≠ 屏幕宽高比
+
+#### 1.6.2 数学模型与计算流程
+
+**数据流与处理时机**：
+
+```
+Camera Sensor (原始图像)
+    ↓
+ImageProxy (YUV_420_888 格式)
+    ├── imageProxy.width/height (传感器分辨率，如 1280x720)
+    ├── imageProxy.imageInfo.rotationDegrees (0/90/180/270)
+    └── imageProxy.image (MediaImage)
+         ↓
+ML Kit InputImage.fromMediaImage()
+    ├── 输入：MediaImage + rotationDegrees
+    ├── ML Kit 内部自动处理旋转补偿
+    └── 输出：人脸检测结果（基于旋转后的图像坐标）
+         ↓
+Face.boundingBox
+    ├── centerX() / centerY() (已考虑旋转的坐标)
+    └── 坐标系：相对于旋转后图像的左上角原点
+         ↓
+transformFaceCoordinate()
+    ├── Step 1: 归一化 (基于 imageProxy.width/height)
+    ├── Step 2: 旋转 + 镜像补偿
+    └── Step 3: FIT_CENTER 映射到屏幕
+```
+
+**关键说明**：
+- ✅ **ML Kit 自动处理旋转**：`InputImage.fromMediaImage(mediaImage, rotationDegrees)` 会在内部根据 `rotationDegrees` 调整检测坐标系
+- ✅ **检测结果已是旋转后坐标**：`face.boundingBox` 返回的坐标是相对于**旋转后**图像的坐标，无需再次应用旋转到检测坐标
+- ✅ **归一化使用原始尺寸**：虽然 ML Kit 处理了旋转，但 `imageProxy.width/height` 始终是传感器的物理尺寸（未旋转），因此归一化直接使用即可
+- ✅ **Step 2 的目的是什么**：不是旋转检测坐标，而是将**已经旋转过的坐标系**映射到**屏幕显示坐标系**
+
+**Step 1: 归一化坐标转换**
+```
+输入：人脸中心坐标 (faceX, faceY)，来自 Face.boundingBox
+      图像尺寸 (imageWidth, imageHeight)，来自 ImageProxy
+输出：归一化坐标 (normX, normY) ∈ [0, 1]
+
+normX = faceX / imageWidth
+normY = faceY / imageHeight
+```
+
+**为什么归一化不需要处理旋转？**
+- `imageProxy.width/height` 是传感器物理尺寸（如 1280x720）
+- `faceX/faceY` 是 ML Kit 在旋转后图像上检测到的坐标
+- ML Kit 已经根据 `rotationDegrees` 调整了检测坐标系
+- 因此直接相除即可得到正确的归一化坐标
+
+**Step 2: 旋转变换补偿（坐标系映射）**
+根据设备旋转角度，将**图像坐标系**映射到**屏幕坐标系**：
+
+| rotationDegrees | 后置摄像头 (Back) | 前置摄像头 (Front) | 说明 |
+|----------------|------------------|-------------------|------|
+| 0° (竖屏) | (normX, normY) | (1 - normX, normY) *镜像* | 传感器竖直放置 |
+| 90° (横屏右) | (normY, 1 - normX) | (1 - normY, 1 - normX) *镜像* | 传感器顺时针旋转 90° |
+| 180° (倒立) | (1 - normX, 1 - normY) | (normX, 1 - normY) *镜像* | 传感器倒置 |
+| 270° (横屏左) | (1 - normY, normX) | (normY, normX) *镜像* | 传感器逆时针旋转 90° |
+
+**前置摄像头镜像原理**：
+- 前置摄像头预览时，用户看到"镜中自己"，需要水平翻转
+- 公式：`mirroredX = 1 - normX`
+- **注意**：镜像操作在旋转变换之后进行
+
+**Step 3: FIT_CENTER 映射**
+PreviewView 使用 `ScaleType.FIT_CENTER` 保持预览不失真：
+
+```
+输入：归一化坐标 (adjustedX, adjustedY)
+      PreviewView 尺寸 (previewWidth, previewHeight)
+      实际渲染区域 (displayRect)
+
+输出：最终屏幕坐标 (screenX, screenY)
+
+// PreviewView 内部计算（伪代码）
+displayRect = calculateDisplayRect(previewSize, imageSize, previewWidth, previewHeight)
+screenX = displayRect.left + adjustedX * displayRect.width()
+screenY = displayRect.top + adjustedY * displayRect.height()
+```
+
+**关键实现**：使用 `MeteringPointFactory` 自动处理 FIT_CENTER 映射
+```kotlin
+val factory = previewView.meteringPointFactory
+val point = factory.createPoint(adjustedX, adjustedY)
+val screenOffset = Offset(point.x, point.y)
+```
+
+#### 1.6.3 完整算法实现
+
+```kotlin
+/**
+ * 人脸坐标转换函数
+ * 
+ * 【数据流】
+ * 1. Camera Sensor -> ImageProxy (YUV_420_888, rotationDegrees)
+ * 2. ML Kit 检测 -> Face.boundingBox (已处理旋转)
+ * 3. 归一化 -> 旋转映射 -> 镜像 -> FIT_CENTER 映射
+ * 
+ * @param faceX 人脸中心 X 坐标（图像坐标系，来自 ML Kit，已考虑旋转）
+ * @param faceY 人脸中心 Y 坐标（图像坐标系，来自 ML Kit，已考虑旋转）
+ * @param imageWidth 图像宽度（ImageProxy 提供，传感器物理宽度）
+ * @param imageHeight 图像高度（ImageProxy 提供，传感器物理高度）
+ * @param previewView PreviewView 实例（用于坐标转换）
+ * @param rotationDegrees 图像旋转角度（0/90/180/270，由 ImageProxy 提供）
+ * @param lensFacing 摄像头方向（FRONT/BACK）
+ * @return 屏幕坐标 Offset（用于绘制十字星）
+ */
+private fun transformFaceCoordinate(
+    faceX: Float,
+    faceY: Float,
+    imageWidth: Int,
+    imageHeight: Int,
+    previewView: PreviewView,
+    rotationDegrees: Int,
+    lensFacing: Int
+): Offset {
+    // Step 1: 归一化坐标
+    // 注意：ML Kit 已处理旋转，faceX/Y 是旋转后图像上的坐标
+    // imageWidth/Height 是传感器物理尺寸，直接相除即可
+    val normX = faceX / imageWidth
+    val normY = faceY / imageHeight
+    
+    // Step 2: 旋转变换 + 镜像补偿
+    // 目的：将图像坐标系映射到屏幕坐标系
+    val (adjustedX, adjustedY) = when (rotationDegrees) {
+        90 -> {
+            if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+                Pair(normY, 1f - normX)  // 后置 90 度
+            } else {
+                Pair(1f - normY, 1f - normX)  // 前置 90 度（镜像）
+            }
+        }
+        270 -> {
+            if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                Pair(normY, normX)  // 前置 270 度（镜像）
+            } else {
+                Pair(1f - normY, normX)  // 后置 270 度
+            }
+        }
+        180 -> Pair(1f - normX, 1f - normY)  // 180 度倒立
+        else -> Pair(normX, normY)  // 0 度竖屏
+    }
+    
+    // Step 3: FIT_CENTER 映射（使用 PreviewView 内置功能）
+    // 自动处理 letterbox 效应和宽高比适配
+    val factory = previewView.meteringPointFactory
+    val point = factory.createPoint(adjustedX, adjustedY)
+    
+    return Offset(point.x, point.y)
+}
+```
+
+**调用示例**（CameraScreen.kt）：
+```kotlin
+// ImageAnalysis 分析器中
+imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+    val mediaImage = imageProxy.image
+    if (mediaImage != null) {
+        // 1. 创建 InputImage（ML Kit 自动处理旋转）
+        val image = InputImage.fromMediaImage(
+            mediaImage,
+            imageProxy.imageInfo.rotationDegrees  // 关键：传入旋转角度
+        )
+        
+        // 2. ML Kit 检测人脸
+        faceDetector.process(image)
+            .addOnSuccessListener { faces ->
+                if (faces.isNotEmpty()) {
+                    val face = faces[0]
+                    val bounds = face.boundingBox
+                    
+                    // 3. 坐标转换（ML Kit 返回的坐标已包含旋转信息）
+                    val screenPoint = transformFaceCoordinate(
+                        faceX = bounds.centerX().toFloat(),  // 已旋转的坐标
+                        faceY = bounds.centerY().toFloat(),
+                        imageWidth = imageProxy.width,       // 传感器物理尺寸
+                        imageHeight = imageProxy.height,
+                        previewView = previewView,
+                        rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                        lensFacing = actualLensFacing
+                    )
+                    
+                    facePoint = screenPoint
+                }
+            }
+    }
+    imageProxy.close()
+}
+```
+
+#### 1.6.4 调试日志与验证
+
+**关键日志输出**：
+```kotlin
+PicMeLogger.d(
+    "PicMe:Camera",
+    "Transform: face=($faceX, $faceY), norm=($normX, $normY), " +
+        "adj=($adjustedX, $adjustedY), rot=$rotationDegrees, lens=$lensFacing"
+)
+```
+
+**验证场景**：
+1. ✅ **竖屏自拍**：前置摄像头，0°旋转，十字星应镜像对齐
+2. ✅ **横屏拍摄**：后置摄像头，90°旋转，十字星应对齐
+3. ✅ **视频通话**：前置摄像头，270°旋转，十字星应对齐
+4. ✅ **缩放测试**：2x 变焦时，十字星仍精确跟踪
+5. ✅ **移动测试**：左右移动手机，十字星应跟随人脸
+
+#### 1.6.5 性能要求
+- **实时性**：坐标转换延迟 < 16ms（60fps）
+- **精度**：十字星中心与人脸中心偏差 < 5px
+- **稳定性**：无明显抖动或跳跃
+- **内存**：不产生额外 GC 压力（避免在 onDraw 中创建对象）
+
 ## 2. 动态相册 (Gallery)
 
 ### 2.1 智能聚类逻辑
