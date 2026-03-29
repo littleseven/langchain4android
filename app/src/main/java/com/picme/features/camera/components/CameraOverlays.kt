@@ -1,5 +1,9 @@
 package com.picme.features.camera.components
 
+import android.util.Log
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,11 +24,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,7 +41,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
@@ -66,10 +72,14 @@ fun CameraOverlays(
     Box(modifier = modifier.fillMaxSize()) {
         CompositionGrid(gridType = gridType)
 
-        // [OPTIMIZED] 十字星显示优化：只要检测到人脸就显示，不受面板状态影响
+        // [RD] 人脸对焦十字星：使用 Primary 色，带弹簧动画
         facePoint?.let { point ->
             if (focusAlpha > 0f) {
-                FaceFocusIndicator(offset = point, alpha = focusAlpha)
+                FaceFocusCrosshair(
+                    offset = point,
+                    alpha = focusAlpha,
+                    isActive = true
+                )
             }
         }
 
@@ -343,124 +353,226 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
 }
 
 /**
- * 人脸对焦指示器 - 优化版
- * 使用更精确的定位和更流畅的动画
+ * [RD] 人脸对焦十字星组件 - 重构版
+ * 
+ * 设计规范：
+ * - 颜色：使用 Primary 色 (#00E5FF) 符合 HyperOS 设计系统
+ * - 动画：弹簧动画 (Spring Animation) 实现流畅出现/消失
+ * - 结构：四角 L 型标记 + 中心十字 + 中心点
+ * - 尺寸：100dp 外框 + 16dp 中心十字
+ * 
+ * @param offset 十字星中心点在屏幕上的坐标
+ * @param alpha 透明度 (0f - 1f)
+ * @param isActive 是否处于激活状态（影响颜色亮度）
  */
 @Composable
-fun FaceFocusIndicator(offset: Offset, alpha: Float) {
-    // [FIXED] 不再固定 Canvas 尺寸，而是填充整个屏幕进行定位
-    val indicatorSizeDp = 120.dp // 增大指示器尺寸
+fun FaceFocusCrosshair(
+    offset: Offset,
+    alpha: Float,
+    isActive: Boolean = true
+) {
+    // 弹簧动画：实现自然的出现/消失效果
+    val scaleAnimatable = remember { Animatable(0.6f) }
+    
+    LaunchedEffect(alpha) {
+        val targetScale = if (alpha > 0.5f) 1f else 0.6f
+        scaleAnimatable.animateTo(
+            targetValue = targetScale,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium
+            )
+        )
+    }
+    
+    // 颜色定义：使用 Primary 色系统
+    val primaryColor = Color(0xFF00E5FF)
+    val crosshairColor = if (isActive) {
+        primaryColor
+    } else {
+        primaryColor.copy(alpha = 0.5f)
+    }
     
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer(alpha = alpha)
+            .graphicsLayer(
+                alpha = alpha,
+                scaleX = scaleAnimatable.value,
+                scaleY = scaleAnimatable.value
+            )
     ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize() // ✅ 使用全屏尺寸，而不是固定的 100dp
-                .offset {
-                    IntOffset(0, 0) // 不需要额外的 offset
-                }
-        ) {
-            val color = Color.Yellow
-            val strokeWidth = 4.dp.toPx()
-            val cornerLength = 25.dp.toPx()
-
-            // 计算十字星的左上角位置
-            val indicatorSize = indicatorSizeDp.toPx()
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = 3.dp.toPx()
+            val cornerLength = 20.dp.toPx()
+            val indicatorSize = 100.dp.toPx()
+            
             val centerX = offset.x
             val centerY = offset.y
             val left = centerX - indicatorSize / 2
             val top = centerY - indicatorSize / 2
             val right = left + indicatorSize
             val bottom = top + indicatorSize
-
-            // [OPTIMIZED] 四个角的 L 型标记
-            // 左上角
-            drawLine(
-                color,
-                Offset(left, top + cornerLength),
-                Offset(left, top),
-                strokeWidth
+            
+            // 绘制四角 L 型标记
+            drawCrosshairCorner(
+                color = crosshairColor,
+                strokeWidth = strokeWidth,
+                cornerLength = cornerLength,
+                left = left,
+                top = top,
+                right = right,
+                bottom = bottom,
+                corner = Corner.TOP_LEFT
             )
-            drawLine(
-                color,
-                Offset(left, top),
-                Offset(left + cornerLength, top),
-                strokeWidth
+            drawCrosshairCorner(
+                color = crosshairColor,
+                strokeWidth = strokeWidth,
+                cornerLength = cornerLength,
+                left = left,
+                top = top,
+                right = right,
+                bottom = bottom,
+                corner = Corner.TOP_RIGHT
             )
-
-            // 右上角
-            drawLine(
-                color,
-                Offset(right - cornerLength, top),
-                Offset(right, top),
-                strokeWidth
+            drawCrosshairCorner(
+                color = crosshairColor,
+                strokeWidth = strokeWidth,
+                cornerLength = cornerLength,
+                left = left,
+                top = top,
+                right = right,
+                bottom = bottom,
+                corner = Corner.BOTTOM_RIGHT
             )
-            drawLine(
-                color,
-                Offset(right, top),
-                Offset(right, top + cornerLength),
-                strokeWidth
+            drawCrosshairCorner(
+                color = crosshairColor,
+                strokeWidth = strokeWidth,
+                cornerLength = cornerLength,
+                left = left,
+                top = top,
+                right = right,
+                bottom = bottom,
+                corner = Corner.BOTTOM_LEFT
             )
-
-            // 右下角
-            drawLine(
-                color,
-                Offset(right, bottom - cornerLength),
-                Offset(right, bottom),
-                strokeWidth
-            )
-            drawLine(
-                color,
-                Offset(right, bottom),
-                Offset(right - cornerLength, bottom),
-                strokeWidth
-            )
-
-            // 左下角
-            drawLine(
-                color,
-                Offset(left + cornerLength, bottom),
-                Offset(left, bottom),
-                strokeWidth
-            )
-            drawLine(
-                color,
-                Offset(left, bottom),
-                Offset(left, bottom - cornerLength),
-                strokeWidth
-            )
-
-            // [OPTIMIZED] 中心十字星标记
-            val centerSize = 16.dp.toPx()
-            val lineThickness = 3.dp.toPx()
+            
+            // 绘制中心十字
+            val centerCrossSize = 16.dp.toPx()
+            val crossStrokeWidth = 2.dp.toPx()
             
             // 水平线
             drawLine(
-                color = color.copy(alpha = 0.9f),
-                start = Offset(centerX - centerSize / 2, centerY),
-                end = Offset(centerX + centerSize / 2, centerY),
-                strokeWidth = lineThickness
+                color = crosshairColor.copy(alpha = 0.8f),
+                start = Offset(centerX - centerCrossSize / 2, centerY),
+                end = Offset(centerX + centerCrossSize / 2, centerY),
+                strokeWidth = crossStrokeWidth
             )
             
             // 垂直线
             drawLine(
-                color = color.copy(alpha = 0.9f),
-                start = Offset(centerX, centerY - centerSize / 2),
-                end = Offset(centerX, centerY + centerSize / 2),
-                strokeWidth = lineThickness
+                color = crosshairColor.copy(alpha = 0.8f),
+                start = Offset(centerX, centerY - centerCrossSize / 2),
+                end = Offset(centerX, centerY + centerCrossSize / 2),
+                strokeWidth = crossStrokeWidth
             )
             
             // 中心点
             drawCircle(
-                color = color.copy(alpha = 0.7f),
-                radius = 4.dp.toPx(),
+                color = crosshairColor,
+                radius = 3.dp.toPx(),
                 center = Offset(centerX, centerY)
             )
         }
     }
+}
+
+/**
+ * 四角位置枚举
+ */
+private enum class Corner {
+    TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT
+}
+
+/**
+ * 绘制十字星的单个角
+ */
+private fun DrawScope.drawCrosshairCorner(
+    color: Color,
+    strokeWidth: Float,
+    cornerLength: Float,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    corner: Corner
+) {
+    when (corner) {
+        Corner.TOP_LEFT -> {
+            drawLine(
+                color = color,
+                start = Offset(left, top + cornerLength),
+                end = Offset(left, top),
+                strokeWidth = strokeWidth
+            )
+            drawLine(
+                color = color,
+                start = Offset(left, top),
+                end = Offset(left + cornerLength, top),
+                strokeWidth = strokeWidth
+            )
+        }
+        Corner.TOP_RIGHT -> {
+            drawLine(
+                color = color,
+                start = Offset(right - cornerLength, top),
+                end = Offset(right, top),
+                strokeWidth = strokeWidth
+            )
+            drawLine(
+                color = color,
+                start = Offset(right, top),
+                end = Offset(right, top + cornerLength),
+                strokeWidth = strokeWidth
+            )
+        }
+        Corner.BOTTOM_RIGHT -> {
+            drawLine(
+                color = color,
+                start = Offset(right, bottom - cornerLength),
+                end = Offset(right, bottom),
+                strokeWidth = strokeWidth
+            )
+            drawLine(
+                color = color,
+                start = Offset(right, bottom),
+                end = Offset(right - cornerLength, bottom),
+                strokeWidth = strokeWidth
+            )
+        }
+        Corner.BOTTOM_LEFT -> {
+            drawLine(
+                color = color,
+                start = Offset(left + cornerLength, bottom),
+                end = Offset(left, bottom),
+                strokeWidth = strokeWidth
+            )
+            drawLine(
+                color = color,
+                start = Offset(left, bottom),
+                end = Offset(left, bottom - cornerLength),
+                strokeWidth = strokeWidth
+            )
+        }
+    }
+}
+
+/**
+ * [DEPRECATED] 旧版人脸对焦指示器 - 保留用于兼容性
+ * 请使用 FaceFocusCrosshair 替代
+ */
+@Composable
+fun FaceFocusIndicator(offset: Offset, alpha: Float) {
+    FaceFocusCrosshair(offset = offset, alpha = alpha, isActive = true)
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCorners(
@@ -517,7 +629,7 @@ private fun OcrTextPreviewOverlay(
                 )
             }
             
-            androidx.compose.material3.Divider(
+            HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
                 color = Color.White.copy(alpha = 0.2f)
             )

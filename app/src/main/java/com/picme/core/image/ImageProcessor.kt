@@ -13,6 +13,7 @@ import android.graphics.PorterDuffXfermode
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -156,7 +157,11 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
 
                     val matrix = Matrix().apply {
                         postRotate(rotationDegrees.toFloat())
-                        if (lensFacing == 1) postScale(-1f, 1f)
+                        // [FIXED] 前置摄像头需要水平翻转以匹配预览效果
+                        // 前置摄像头的预览是镜像的，拍照也需要保持镜像
+                        if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                            postScale(-1f, 1f)
+                        }
                     }
                     val rotatedBitmap = Bitmap.createBitmap(
                         originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true
