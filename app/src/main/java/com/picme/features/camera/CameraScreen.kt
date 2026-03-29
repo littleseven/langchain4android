@@ -105,36 +105,17 @@ object AspectRatio {
 }
 
 /**
- * [RD] 人脸坐标转换函数 - 重构版（符合最新文档）
+ * [RD] 人脸坐标转换函数 - 简化版（分离关注点）
  * 
- * 【核心原理】
- * 1. ML Kit 的 InputImage.fromMediaImage() 已自动处理旋转
- * 2. Face.boundingBox 返回的是相对于【旋转后图像】的坐标
- * 3. 归一化时必须使用【旋转后】的宽高，而不是传感器原始宽高
+ * 【核心思路】将复杂的变换分解为三个独立步骤：
+ * 1. 归一化：ML Kit 坐标 → [0,1] 归一化坐标
+ * 2. 镜像处理：前置摄像头需要水平翻转
+ * 3. 旋转补偿：根据设备旋转角度调整坐标系
  * 
- * 【数据流】
- * ImageProxy (width=1280, height=720, rotation=90°)
- *     ↓
- * ML Kit → 检测到人脸在旋转后图像上的坐标 (faceX, faceY)
- *     ↓
- * 归一化 → 使用旋转后的宽高（rotation=90° 时，宽=720, 高=1280）
- *     ↓
- * 旋转变换 → 将图像坐标系映射到屏幕坐标系
- *     ↓
- * 镜像处理 → 前置摄像头需要水平翻转
- *     ↓
- * FIT_CENTER 映射 → PreviewView 自动处理
- * 
- * @param faceX 人脸中心 X 坐标（ML Kit 检测值，已考虑旋转）
- * @param faceY 人脸中心 Y 坐标（ML Kit 检测值，已考虑旋转）
- * @param imageProxyWidth ImageProxy 的宽度（传感器物理宽度，未旋转）
- * @param imageProxyHeight ImageProxy 的高度（传感器物理高度，未旋转）
- * @param previewView PreviewView 实例
- * @param rotationDegrees 旋转角度（0/90/180/270）
- * @param lensFacing 摄像头方向
- * @return 屏幕坐标 Offset
+ * 【关键发现】所有坐标系都使用左上角原点，X 向右，Y 向下
+ * 因此只需要关注旋转和镜像，不需要考虑坐标轴翻转
  */
-private fun transformFaceCoordinate(
+internal fun transformFaceCoordinate(
     faceX: Float,
     faceY: Float,
     imageProxyWidth: Int,
@@ -143,104 +124,63 @@ private fun transformFaceCoordinate(
     rotationDegrees: Int,
     lensFacing: Int
 ): Offset {
-    // Step 1: 确定旋转后图像的宽高
-    // ML Kit 已经根据 rotationDegrees 旋转了图像
-    // Face.boundingBox 是相对于旋转后图像的坐标
+    // ========== Step 1: 归一化 ==========
     val (rotatedWidth, rotatedHeight) = when (rotationDegrees) {
-        90, 270 -> Pair(imageProxyHeight, imageProxyWidth)  // 横屏时宽高互换
-        else -> Pair(imageProxyWidth, imageProxyHeight)     // 竖屏时保持不变
+        90, 270 -> Pair(imageProxyHeight, imageProxyWidth)
+        else -> Pair(imageProxyWidth, imageProxyHeight)
     }
     
-    PicMeLogger.d(
-        "PicMe:Camera",
-        "Step1 Size: sensor=${imageProxyWidth}x${imageProxyHeight}, rotated=${rotatedWidth}x${rotatedHeight}, rot=$rotationDegrees"
-    )
-    
-    // Step 2: 归一化坐标（使用旋转后的宽高）
-    // 这是关键修复：必须使用旋转后的尺寸进行归一化
     val normX = faceX / rotatedWidth
     val normY = faceY / rotatedHeight
     
     PicMeLogger.d(
         "PicMe:Camera",
-        "Step2 Norm: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, norm=($normX,$normY)"
+        "Step1 [归一化]: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, " +
+            "norm=($normX,$normY)"
     )
     
-    // Step 3: 旋转变换 + 镜像补偿
-    // 目的：将【已旋转的图像坐标系】映射到【屏幕显示坐标系】
-    val (adjustedX, adjustedY) = when (rotationDegrees) {
-        0 -> {
-            // 竖屏状态
-            if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-                // 前置摄像头：需要水平镜像
-                // ML Kit 返回的是传感器坐标（未镜像），PreviewView 显示的是镜像画面
-                // 所以需要将坐标镜像一次才能匹配预览
-                Pair(1f - normX, normY)
-            } else {
-                // 后置摄像头：不需要镜像
-                Pair(normX, normY)
-            }
-        }
-        90 -> {
-            // 传感器顺时针旋转 90°
-            if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                // 后置 90 度：坐标系旋转即可
-                Pair(normY, 1f - normX)
-            } else {
-                // 前置 90 度：先旋转，再镜像
-                // 旋转后的 X 轴对应原来的 Y 轴，所以镜像 Y 方向
-                Pair(normY, normX)
-            }
-        }
-        180 -> {
-            // 倒立状态
-            if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-                // 前置 180 度：倒立 + 镜像
-                Pair(normX, 1f - normY)
-            } else {
-                // 后置 180 度：只需倒立
-                Pair(1f - normX, 1f - normY)
-            }
-        }
-        270 -> {
-            // 传感器逆时针旋转 90°（设备横屏，顶部朝左）
-            if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-                // 前置 270 度：左右相反，上下正确
-                // 需要翻转 X 轴
-                Pair(1f - normX, normY)
-            } else {
-                // 后置 270 度：只需旋转
-                // 旋转公式：(x, y) → (y, 1-x)
-                Pair(normY, 1f - normX)
-            }
-        }
-        else -> Pair(normX, normY)
+    // ========== Step 2: 镜像处理（前置摄像头） ==========
+    // 在旋转之前先镜像 X 轴（传感器坐标系）
+    val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+        1f - normX
+    } else {
+        normX
     }
     
     PicMeLogger.d(
         "PicMe:Camera",
-        "Step3 Adjust: rot=$rotationDegrees, lens=$lensFacing, adj=($adjustedX,$adjustedY)"
+        "Step2 [镜像]: lens=${if (lensFacing == CameraSelector.LENS_FACING_FRONT) "前" else "后"}, " +
+            "norm=($normX,$normY), mirrored=($mirroredX,$normY)"
     )
     
-    // Step 4: 将归一化坐标转换为 PreviewView 的物理像素坐标
-    // 注意：PreviewView 使用 FIT_CENTER，需要考虑 letterbox 效应
-    val previewWidth = previewView.width.toFloat()
-    val previewHeight = previewView.height.toFloat()
+    // ========== Step 3: 旋转补偿 ==========
+    // 根据旋转角度调整坐标方向
+    val (adjustedX, adjustedY) = when (rotationDegrees) {
+        0 -> Pair(mirroredX, normY)      // 竖屏：不需要调整
+        90 -> Pair(mirroredX, normY)     // 顺时针 90°: 不交换 XY
+        180 -> Pair(1f - mirroredX, 1f - normY) // 倒立：XY 都翻转
+        270 -> Pair(mirroredX, normY)    // 逆时针 90°: 不交换 XY
+        else -> Pair(mirroredX, normY)
+    }
     
     PicMeLogger.d(
         "PicMe:Camera",
-        "Step4 Screen: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}"
+        "Step3 [旋转补偿]: rot=$rotationDegrees, mirrored=($mirroredX,$normY), " +
+            "adjusted=($adjustedX,$adjustedY)"
     )
     
-    // TODO: 处理 letterbox 效应 - 暂时先直接相乘
+    // ========== Step 4: 转换为像素坐标 ==========
+    // 将归一化坐标转换为 PreviewView 的物理像素坐标
+    val previewWidth = previewView.width.toFloat()
+    val previewHeight = previewView.height.toFloat()
+    
     val screenX = adjustedX * previewWidth
     val screenY = adjustedY * previewHeight
     
     PicMeLogger.d(
         "PicMe:Camera",
-        "Transform: face=($faceX, $faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, " +
-            "norm=($normX, $normY), adj=($adjustedX, $adjustedY), " +
-            "screen=($screenX, $screenY), rot=$rotationDegrees, lens=$lensFacing"
+        "Step4 [像素转换]: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}, " +
+            "screen=($screenX,$screenY)"
     )
     
     return Offset(screenX, screenY)
