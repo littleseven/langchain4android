@@ -4,14 +4,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.opengl.GLES20
 import android.util.Log
-import androidx.camera.view.PreviewView
 import jp.co.cyberagent.android.gpuimage.GPUImage
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageFilter
 import kotlinx.coroutines.*
 
 class BeautyPreviewProcessor(
     private val context: Context,
-    private val previewView: PreviewView
+    private val beautyTextureView: BeautyTextureView
 ) {
     companion object {
         private const val TAG = "PicMe:BeautyPreview"
@@ -26,31 +25,8 @@ class BeautyPreviewProcessor(
     var bigEyesStrength: Float = 0f
     
     fun updateBeautyFilters() {
-        scope.launch {
-            val filters = mutableListOf<GPUImageFilter>()
-            
-            if (smoothingStrength > 0f) {
-                filters.add(GPUImageSmoothSkinFilter().apply {
-                    setIntensity(smoothingStrength / 100f)
-                })
-            }
-            
-            if (whiteningStrength > 0f) {
-                filters.add(GPUImageColorMatrixFilter().apply {
-                    setBrightness(whiteningStrength / 100f * 0.3f)
-                })
-            }
-            
-            withContext(Dispatchers.Main) {
-                if (filters.isEmpty()) {
-                    gpuImage.setFilter(null)
-                } else {
-                    val filterGroup = GPUImageFilterGroup()
-                    filters.forEach { filter -> filterGroup.addFilter(filter) }
-                    gpuImage.setFilter(filterGroup)
-                }
-            }
-        }
+        beautyTextureView.updateFilters()
+        Log.d(TAG, "Beauty filters updated: smoothing=${beautyTextureView.smoothingStrength}, whitening=${beautyTextureView.whiteningStrength}")
     }
     
     fun release() {
@@ -138,3 +114,4 @@ class GPUImageFilterGroup : jp.co.cyberagent.android.gpuimage.filter.GPUImageFil
         super.addFilter(filter)
     }
 }
+
