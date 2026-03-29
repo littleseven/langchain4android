@@ -89,7 +89,7 @@ import com.picme.features.camera.components.SceneSelector
 import com.picme.core.image.BeautyPreviewProcessor
 import com.picme.di.BeautyPreviewProviderFactory
 import com.picme.domain.preview.BeautyPreviewProvider
-import com.picme.core.image.BeautyTextureView
+import com.picme.core.image.GPUImageBeautyView
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
 import com.picme.domain.usecase.OcrUseCase
@@ -256,17 +256,14 @@ fun CameraContent(
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }
     
-    // [RD] 使用 PreviewView 显示相机预览（稳定可靠的方案）
-    // 美颜效果在拍照时通过 BeautyPreviewProcessor 应用
-    val previewView = remember {
-        PreviewView(context).apply {
+    // [RD] 使用 GPUImageBeautyView 实现实时美颜预览
+    val gpuImageBeautyView = remember {
+        GPUImageBeautyView(context).apply {
             layoutParams = android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
-            // 设置缩放类型
-            scaleType = PreviewView.ScaleType.FILL_CENTER
-            android.util.Log.d("PicMe:Camera", "PreviewView created")
+            android.util.Log.d("PicMe:Camera", "GPUImageBeautyView created")
         }
     }
 
@@ -375,34 +372,66 @@ fun CameraContent(
         }
     }
     
-    // [RD] 监听美颜参数变化，实时更新预览（拍照时应用）
-    // 注意：PreviewView 不支持实时美颜，只在拍照时处理
+    // [RD] 监听美颜参数变化，实时更新预览
     LaunchedEffect(beautySettings) {
-        android.util.Log.d("PicMe:Camera", "Beauty settings updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
-        // 美颜参数会传递给 BeautyPreviewProcessor，在拍照时应用
+        gpuImageBeautyView.smoothingStrength = beautySettings.smoothing.toFloat()
+        gpuImageBeautyView.whiteningStrength = beautySettings.whitening.toFloat()
+        gpuImageBeautyView.slimFaceStrength = beautySettings.slimFace.toFloat()
+        gpuImageBeautyView.bigEyesStrength = beautySettings.bigEyes.toFloat()
+        // 参数会直接在下一帧渲染时应用，不需要额外调用
+        android.util.Log.d("PicMe:Camera", "Beauty preview updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
     }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio) {
         val cameraProvider = cameraProviderFuture.get()
             
-        // [RD] 使用 PreviewView 的 SurfaceProvider
-        android.util.Log.d("PicMe:Camera", "Binding Preview to PreviewView")
-            
-        val preview = androidx.camera.core.Preview.Builder()
-            .setTargetAspectRatio(
-                if (aspectRatio == AspectRatio.RATIO_4_3) {
-                    androidx.camera.core.AspectRatio.RATIO_4_3
-                } else {
-                    androidx.camera.core.AspectRatio.RATIO_16_9
-                }
-            )
-            .build().also { previewUseCase ->
-                // 将 Preview 绑定到 PreviewView
-                previewUseCase.setSurfaceProvider(
-                    cameraExecutor,
-                    previewView.surfaceProvider
-                )
+        // [RD] 等待 GPUImageBeautyView 的 SurfaceTexture 准备好
+        var surfaceTexture = gpuImageBeautyView.getCameraSurfaceTexture()
+        var retryCount = 0
+        android.util.Log.d("PicMe:Camera", "Waiting for SurfaceTexture, initial=${surfaceTexture != null}")
+        
+        while (surfaceTexture == null && retryCount < 10) {
+            kotlinx.coroutines.delay(100)
+            retryCount++
+            surfaceTexture = gpuImageBeautyView.getCameraSurfaceTexture()
+            if (retryCount % 3 == 0) {
+                android.util.Log.d("PicMe:Camera", "Retry $retryCount: surfaceTexture=${surfaceTexture != null}")
             }
+        }
+        
+        android.util.Log.d("PicMe:Camera", "SurfaceTexture ready: ${surfaceTexture != null}, retries=$retryCount")
+            
+        val preview = if (surfaceTexture != null) {
+            android.util.Log.d("PicMe:Camera", "Binding Preview to GPUImageBeautyView surface: ${surfaceTexture.hashCode()}")
+            androidx.camera.core.Preview.Builder()
+                .setTargetAspectRatio(
+                    if (aspectRatio == AspectRatio.RATIO_4_3) {
+                        androidx.camera.core.AspectRatio.RATIO_4_3
+                    } else {
+                        androidx.camera.core.AspectRatio.RATIO_16_9
+                    }
+                )
+                .build().also { previewUseCase ->
+                    // 关键：将 CameraX 的输出定向到 GPUImageBeautyView 的 SurfaceTexture
+                    val surface = android.view.Surface(surfaceTexture)
+                    android.util.Log.d("PicMe:Camera", "Created Surface from texture: ${surface.hashCode()}")
+                    previewUseCase.setSurfaceProvider(cameraExecutor) { outputSurface ->
+                        android.util.Log.d("PicMe:Camera", "SurfaceProvider called, returning our surface: ${surface.hashCode()}")
+                        surface
+                    }
+                }
+        } else {
+            android.util.Log.e("PicMe:Camera", "GPUImageBeautyView not ready after $retryCount retries, using fallback")
+            androidx.camera.core.Preview.Builder()
+                .setTargetAspectRatio(
+                    if (aspectRatio == AspectRatio.RATIO_4_3) {
+                        androidx.camera.core.AspectRatio.RATIO_4_3
+                    } else {
+                        androidx.camera.core.AspectRatio.RATIO_16_9
+                    }
+                )
+                .build()
+        }
 
         val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
         // [FIXED] 不要在这里设置 actualLensFacing，等待相机绑定完成后从 cameraInfo 获取
@@ -423,7 +452,7 @@ fun CameraContent(
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
             try {
                 val mediaImage = imageProxy.image
-                if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
+                if (mediaImage != null && gpuImageBeautyView.width > 0 && gpuImageBeautyView.height > 0) {
                     val image = InputImage.fromMediaImage(
                         mediaImage,
                         imageProxy.imageInfo.rotationDegrees
@@ -448,8 +477,8 @@ fun CameraContent(
                                     faceY = bounds.centerY().toFloat(),
                                     imageProxyWidth = imageProxy.width,
                                     imageProxyHeight = imageProxy.height,
-                                    previewWidth = previewView.width.toFloat(),
-                                    previewHeight = previewView.height.toFloat(),
+                                    previewWidth = gpuImageBeautyView.width.toFloat(),
+                                    previewHeight = gpuImageBeautyView.height.toFloat(),
                                     rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                                     lensFacing = lensFacing
                                 )
@@ -530,9 +559,9 @@ fun CameraContent(
 
     CameraPreviewContent(
         previewView = { 
-            // [RD] 使用 PreviewView 显示相机预览
+            // [RD] 使用 GPUImageBeautyView 实现实时美颜预览
             AndroidView(
-                factory = { previewView },
+                factory = { gpuImageBeautyView },
                 modifier = Modifier.fillMaxSize()
             )
         },

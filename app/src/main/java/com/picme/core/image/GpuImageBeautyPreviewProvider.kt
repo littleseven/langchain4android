@@ -22,7 +22,7 @@ class GpuImageBeautyPreviewProvider(
     private val previewView: PreviewView
 ) : BeautyPreviewProvider {
     
-    private var beautyTextureView: BeautyTextureView? = null
+    private var gpuImageBeautyView: GPUImageBeautyView? = null
     private var surface: Surface? = null
     private var isInitialized = false
     
@@ -37,19 +37,19 @@ class GpuImageBeautyPreviewProvider(
     }
     
     override fun updateFilters(settings: BeautySettings) {
-        beautyTextureView?.apply {
-            smoothingStrength = settings.smoothing
-            whiteningStrength = settings.whitening
-            slimFaceStrength = settings.slimFace
-            bigEyesStrength = settings.bigEyes
-            updateFilters()
+        gpuImageBeautyView?.apply {
+            smoothingStrength = settings.smoothing.toFloat()
+            whiteningStrength = settings.whitening.toFloat()
+            slimFaceStrength = settings.slimFace.toFloat()
+            bigEyesStrength = settings.bigEyes.toFloat()
+            // 参数会直接在下一帧渲染时应用，不需要额外调用
         }
     }
     
     override fun release() {
-        beautyTextureView?.getCameraSurfaceTexture()?.release()
+        gpuImageBeautyView?.getCameraSurfaceTexture()?.release()
         surface?.release()
-        beautyTextureView = null
+        gpuImageBeautyView = null
         surface = null
         isInitialized = false
     }
@@ -59,36 +59,36 @@ class GpuImageBeautyPreviewProvider(
     }
     
     /**
-     * 获取 BeautyTextureView 实例
+     * 获取 GPUImageBeautyView 实例
      * 用于在 Compose 中添加到视图树
      */
-    fun getBeautyTextureView(): BeautyTextureView? {
-        return beautyTextureView
+    fun getGPUImageBeautyView(): GPUImageBeautyView? {
+        return gpuImageBeautyView
     }
     
     private fun initializeBeautyView() {
         if (isInitialized) return
         
-        // 创建 BeautyTextureView
-        beautyTextureView = BeautyTextureView(context).apply {
+        // 创建 GPUImageBeautyView
+        gpuImageBeautyView = GPUImageBeautyView(context).apply {
             id = previewView.id // 保持 ID 一致，便于替换
         }
         
         // 等待 SurfaceTexture 准备好
         var retryCount = 0
-        while (beautyTextureView?.getCameraSurfaceTexture() == null && retryCount < 10) {
+        while (gpuImageBeautyView?.getCameraSurfaceTexture() == null && retryCount < 10) {
             Thread.sleep(100)
             retryCount++
         }
         
         // 创建 Surface
-        beautyTextureView?.getCameraSurfaceTexture()?.let { texture ->
+        gpuImageBeautyView?.getCameraSurfaceTexture()?.let { texture ->
             surface = Surface(texture)
             isInitialized = true
         }
         
         if (!isInitialized) {
-            throw IllegalStateException("Failed to initialize BeautyTextureView")
+            throw IllegalStateException("Failed to initialize GPUImageBeautyView")
         }
     }
 }
