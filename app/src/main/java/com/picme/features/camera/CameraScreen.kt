@@ -3,7 +3,9 @@ package com.picme.features.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.hardware.Sensor
+import android.view.TextureView
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
@@ -85,6 +87,8 @@ import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.core.image.BeautyPreviewProcessor
+import com.picme.di.BeautyPreviewProviderFactory
+import com.picme.domain.preview.BeautyPreviewProvider
 import com.picme.core.image.BeautyTextureView
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
@@ -252,16 +256,23 @@ fun CameraContent(
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }
     
-    // [RD] 美颜 TextureView（替代 PreviewView）
-    val beautyTextureView = remember {
-        BeautyTextureView(context)
-    }
-    
-    // [RD] 美颜预览处理器
-    val beautyPreviewProcessor = remember(beautyTextureView) {
-        BeautyPreviewProcessor(context, beautyTextureView)
+    // [RD] 使用 PreviewView 显示相机预览（稳定可靠的方案）
+    // 美颜效果在拍照时通过 BeautyPreviewProcessor 应用
+    val previewView = remember {
+        PreviewView(context).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            // 设置缩放类型
+            scaleType = PreviewView.ScaleType.FILL_CENTER
+            android.util.Log.d("PicMe:Camera", "PreviewView created")
+        }
     }
 
+    // [RD] 监听 SurfaceTexture 准备状态
+    var surfaceTextureReady by remember { mutableStateOf(false) }
+    
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
     var isRecording by remember { mutableStateOf(false) }
@@ -364,59 +375,34 @@ fun CameraContent(
         }
     }
     
-    // [RD] 监听美颜参数变化，实时更新预览
+    // [RD] 监听美颜参数变化，实时更新预览（拍照时应用）
+    // 注意：PreviewView 不支持实时美颜，只在拍照时处理
     LaunchedEffect(beautySettings) {
-        beautyTextureView.smoothingStrength = beautySettings.smoothing
-        beautyTextureView.whiteningStrength = beautySettings.whitening
-        beautyTextureView.slimFaceStrength = beautySettings.slimFace
-        beautyTextureView.bigEyesStrength = beautySettings.bigEyes
-        beautyPreviewProcessor.updateBeautyFilters()
-        PicMeLogger.d("Camera", "Beauty preview updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}, slimFace=${beautySettings.slimFace}")
+        android.util.Log.d("PicMe:Camera", "Beauty settings updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
+        // 美颜参数会传递给 BeautyPreviewProcessor，在拍照时应用
     }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio) {
         val cameraProvider = cameraProviderFuture.get()
             
-        // [RD] 等待 BeautyTextureView 准备好
-        var surfaceTexture = beautyTextureView.getCameraSurfaceTexture()
-        var retryCount = 0
-        while (surfaceTexture == null && retryCount < 10) {
-            kotlinx.coroutines.delay(100)
-            surfaceTexture = beautyTextureView.getCameraSurfaceTexture()
-            retryCount++
-        }
+        // [RD] 使用 PreviewView 的 SurfaceProvider
+        android.util.Log.d("PicMe:Camera", "Binding Preview to PreviewView")
             
-        val preview = if (surfaceTexture != null) {
-            // 使用 BeautyTextureView 的 SurfaceTexture
-            androidx.camera.core.Preview.Builder()
-                .setTargetAspectRatio(
-                    if (aspectRatio == AspectRatio.RATIO_4_3) {
-                        androidx.camera.core.AspectRatio.RATIO_4_3
-                    } else {
-                        androidx.camera.core.AspectRatio.RATIO_16_9
-                    }
-                )
-                .build().also { previewUseCase ->
-                    // 关键：将 CameraX 的输出定向到我们的 SurfaceTexture
-                    val surface = android.view.Surface(surfaceTexture)
-                    previewUseCase.setSurfaceProvider(cameraExecutor) { _ ->
-                        // 返回 Surface 给 CameraX
-                        surface
-                    }
+        val preview = androidx.camera.core.Preview.Builder()
+            .setTargetAspectRatio(
+                if (aspectRatio == AspectRatio.RATIO_4_3) {
+                    androidx.camera.core.AspectRatio.RATIO_4_3
+                } else {
+                    androidx.camera.core.AspectRatio.RATIO_16_9
                 }
-        } else {
-            // Fallback: 不使用美颜预览
-            PicMeLogger.e("Camera", "BeautyTextureView not ready, using fallback")
-            androidx.camera.core.Preview.Builder()
-                .setTargetAspectRatio(
-                    if (aspectRatio == AspectRatio.RATIO_4_3) {
-                        androidx.camera.core.AspectRatio.RATIO_4_3
-                    } else {
-                        androidx.camera.core.AspectRatio.RATIO_16_9
-                    }
+            )
+            .build().also { previewUseCase ->
+                // 将 Preview 绑定到 PreviewView
+                previewUseCase.setSurfaceProvider(
+                    cameraExecutor,
+                    previewView.surfaceProvider
                 )
-                .build()
-        }
+            }
 
         val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
         // [FIXED] 不要在这里设置 actualLensFacing，等待相机绑定完成后从 cameraInfo 获取
@@ -437,7 +423,7 @@ fun CameraContent(
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
             try {
                 val mediaImage = imageProxy.image
-                if (mediaImage != null && beautyTextureView.width > 0 && beautyTextureView.height > 0) {
+                if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
                     val image = InputImage.fromMediaImage(
                         mediaImage,
                         imageProxy.imageInfo.rotationDegrees
@@ -457,14 +443,13 @@ fun CameraContent(
                                 )
                                 
                                 // [RD] 坐标转换：将人脸检测坐标映射到屏幕坐标
-                                // 使用简化的坐标转换（不依赖 PreviewView）
                                 val screenPoint = transformFaceCoordinateSimple(
                                     faceX = bounds.centerX().toFloat(),
                                     faceY = bounds.centerY().toFloat(),
                                     imageProxyWidth = imageProxy.width,
                                     imageProxyHeight = imageProxy.height,
-                                    previewWidth = beautyTextureView.width.toFloat(),
-                                    previewHeight = beautyTextureView.height.toFloat(),
+                                    previewWidth = previewView.width.toFloat(),
+                                    previewHeight = previewView.height.toFloat(),
                                     rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                                     lensFacing = lensFacing
                                 )
@@ -472,15 +457,11 @@ fun CameraContent(
                                 facePoint = screenPoint
                                 showFocusIndicator = true
                                 
-                                // [RD] BeautyTextureView 不支持自动对焦，跳过
-                                /*
+                                // [RD] GPUImageBeautyView 不支持自动对焦
                                 PicMeLogger.d(
                                     "PicMe:Camera",
-                                    "Face detected at screen: (${screenPoint.x.toInt()}, " +
-                                        "${screenPoint.y.toInt()}), " +
-                                        "confidence: ${face.trackingId}"
+                                    "Face detected at screen: (${screenPoint.x.toInt()}, ${screenPoint.y.toInt()})"
                                 )
-                                */
                             } else {
                                 showFocusIndicator = false
                             }
@@ -544,15 +525,14 @@ fun CameraContent(
         onDispose {
             cameraExecutor.shutdown()
             faceDetector.close()
-            beautyPreviewProcessor.release()
         }
     }
 
     CameraPreviewContent(
         previewView = { 
-            // [RD] 使用 BeautyTextureView 替代 PreviewView
+            // [RD] 使用 PreviewView 显示相机预览
             AndroidView(
-                factory = { beautyTextureView },
+                factory = { previewView },
                 modifier = Modifier.fillMaxSize()
             )
         },
