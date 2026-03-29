@@ -227,18 +227,53 @@ Screen Space (绝对像素):
 
 ### 重要推论
 
-由于所有坐标系的方向一致，我们只需要关注：
-1. **旋转补偿**（rotationDegrees）
-2. **镜像处理**（前置摄像头）
-3. **缩放映射**（FIT_CENTER）
+由于所有坐标系都使用左上角原点，X 向右为正，Y 向下为正：
 
-而**不需要**考虑坐标轴翻转、原点偏移等复杂情况！
+1. **ML Kit 返回的坐标已经是相对于旋转后图像的坐标**
+   - `faceX` 始终是水平方向（从左到右）
+   - `faceY` 始终是垂直方向（从上到下）
+
+2. **旋转补偿只需要调整方向，不需要交换 XY 轴**
+   - ❌ 错误：认为 rot=90°/270°需要交换 XY 轴
+   - ✅ 正确：无论什么角度，都保持 XY 轴独立
+
+3. **我们只需要关注**：
+   - **镜像处理**（前置摄像头在归一化后镜像 X 轴）
+   - **方向翻转**（根据 rotationDegrees 翻转 X 或 Y）
+   - **缩放映射**（FIT_CENTER）
+
+而**不需要**考虑坐标轴交换、原点偏移等复杂情况！
 
 ---
 
 ## 4. 坐标系转换详解
 
-### 前置摄像头 rot=270° 的完整转换流程
+### 完整的坐标转换公式表
+
+**前置摄像头**：
+
+| rotationDegrees | Step 1 归一化 | Step 2 镜像 | Step 3 旋转补偿 | 最终公式 |
+|----------------|-------------|-----------|---------------|---------|
+| **0°** (竖屏) | `normX, normY` | `mirroredX = 1 - normX` | `(mirroredX, normY)` | `adjustedX = 1 - normX` |
+| **90°** (横屏右) | `normX, normY` | `mirroredX = 1 - normX` | `(mirroredX, normY)` | `adjustedX = 1 - normX` |
+| **180°** (倒立) | `normX, normY` | `mirroredX = 1 - normX` | `(1 - mirroredX, 1 - normY)` | `adjustedX = normX` |
+| **270°** (横屏左) | `normX, normY` | `mirroredX = 1 - normX` | `(mirroredX, normY)` | `adjustedX = 1 - normX` |
+
+**后置摄像头**：
+
+| rotationDegrees | Step 1 归一化 | Step 2 镜像 | Step 3 旋转补偿 | 最终公式 |
+|----------------|-------------|-----------|---------------|---------|
+| **0°** (竖屏) | `normX, normY` | `mirroredX = normX` | `(mirroredX, normY)` | `adjustedX = normX` |
+| **90°** (横屏右) | `normX, normY` | `mirroredX = normX` | `(mirroredX, normY)` | `adjustedX = normX` |
+| **180°** (倒立) | `normX, normY` | `mirroredX = normX` | `(1 - mirroredX, 1 - normY)` | `adjustedX = 1 - normX` |
+| **270°** (横屏左) | `normX, normY` | `mirroredX = normX` | `(mirroredX, normY)` | `adjustedX = normX` |
+
+**核心规律**：
+- ✅ **前置摄像头**：在 X 轴方向总是镜像（除了 180°）
+- ✅ **后置摄像头**：只在 180°时翻转
+- ✅ **所有角度都不交换 XY 轴**：faceX 始终映射到 screenX，faceY 始终映射到 screenY
+
+---### 前置摄像头 rot=270° 的完整转换流程
 
 ```
 1. 原始图像坐标系 (Sensor Space)
@@ -300,12 +335,25 @@ Pair(1f - normX, normY)  // 翻转 X 轴匹配预览
 ### ❌ 错误 3：错误交换 XY 轴
 
 ```kotlin
-// ❌ 错误：认为 rot=270° 需要交换 XY
-Pair(normY, 1f - normX)  // 导致上下移动变左右移动！
+// ❌ 错误：认为 rot=90°或 rot=270°需要交换 XY 轴
+when (rotationDegrees) {
+    90 -> Pair(normY, mirroredX)   // 导致上下移动变左右移动！
+    270 -> Pair(1f - normY, mirroredX) // 同样会导致方向错误！
+}
 
-// ✅ 正确：只翻转 X 轴，不交换 XY
-Pair(1f - normX, normY)  // 保持 XY 轴独立
+// ✅ 正确：无论什么角度，都保持 XY 轴独立
+when (rotationDegrees) {
+    0 -> Pair(mirroredX, normY)
+    90 -> Pair(mirroredX, normY)   // 不交换 XY
+    180 -> Pair(1f - mirroredX, 1f - normY)
+    270 -> Pair(mirroredX, normY)  // 不交换 XY
+}
 ```
+
+**错误原因**：
+- ML Kit 返回的 `faceX` 已经是旋转后图像的水平坐标
+- ML Kit 返回的 `faceY` 已经是旋转后图像的垂直坐标
+- **不需要交换 XY 轴**，只需要根据旋转角度调整方向
 
 ---
 
@@ -355,13 +403,18 @@ PicMeLogger.d(
 ### 验证场景
 
 测试时应覆盖以下场景：
-1. ✅ **竖屏自拍**：前置摄像头，0°旋转，十字星应镜像对齐
-2. ✅ **横屏拍摄**：后置摄像头，90°旋转，十字星应对齐
-3. ✅ **视频通话**：前置摄像头，270°旋转，十字星应对齐
-4. ✅ **缩放测试**：2x 变焦时，十字星仍精确跟踪
-5. ✅ **移动测试**：左右移动手机，十字星应跟随人脸
+1. ✅ **竖屏自拍**（前置 0°）：人脸向右移动，十字星向左移动（镜像效果）
+2. ✅ **横屏右握持**（后置 90°）：人脸向右移动，十字星向右移动；人脸向下移动，十字星向下移动
+3. ✅ **视频通话**（前置 270°）：人脸向右移动，十字星向左移动（镜像）；人脸向下移动，十字星向下移动
+4. ✅ **倒立拍摄**（后置 180°）：人脸向右移动，十字星向左移动；人脸向下移动，十字星向上移动
+5. ✅ **缩放测试**：2x 变焦时，十字星仍精确跟踪人脸
+6. ✅ **移动测试**：左右/上下移动手机，十字星应跟随人脸
 
 ---
 
-**最后更新**：2026-03-29  
+**最后更新**：2026-03-29（修复 rot=90°/270°交换 XY 轴的错误）  
 **维护者**：RD 团队
+
+**更新历史**：
+- 2026-03-29：修复 rot=90°和 rot=270°时错误交换 XY 轴的问题
+- 2026-03-29：初始版本，建立四个坐标系的基本概念
