@@ -69,50 +69,70 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         beauty: BeautySettings,
         faces: List<Face>
     ) : Bitmap {
+        // [DEBUG] 记录传入的参数
+        android.util.Log.d("PicMe:Debug", "processPhoto called: smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
+        
         // 使用协程在后台线程处理
         return java.util.concurrent.Executors.newSingleThreadExecutor().submit<Bitmap> {
             var processed = source.copy(Bitmap.Config.ARGB_8888, true)
+            
+            android.util.Log.d("PicMe:Debug", "Starting beauty processing...")
             
             // 使用 GpuBeautyProcessor 处理所有美颜效果
             kotlinx.coroutines.runBlocking {
                 // 面部精修
                 if (beauty.smoothing > 0f) {
+                    android.util.Log.d("PicMe:Debug", "Applying smoothing: ${beauty.smoothing}")
                     processed = beautyProcessor.applySmoothing(processed, beauty.smoothing)
                 }
                 if (beauty.whitening > 0f) {
+                    android.util.Log.d("PicMe:Debug", "Applying whitening: ${beauty.whitening}")
                     processed = beautyProcessor.applyWhitening(processed, beauty.whitening)
                 }
                 if (faces.isNotEmpty()) {
+                    android.util.Log.d("PicMe:Debug", "Processing face beautification for ${faces.size} faces")
                     if (beauty.slimFace != 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying slim face: ${beauty.slimFace}")
                         processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces)
                     }
                     if (beauty.bigEyes > 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying big eyes: ${beauty.bigEyes}")
                         processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes, faces)
                     }
                     if (beauty.youth > 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying youth: ${beauty.youth}")
                         processed = beautyProcessor.applyYouth(processed, beauty.youth)
                     }
                     // 妆容调节
                     if (beauty.lipColor > 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying lip color: ${beauty.lipColor}")
                         processed = beautyProcessor.applyLipColor(processed, beauty.lipColor, beauty.lipColorIndex)
                     }
                     if (beauty.blush > 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying blush: ${beauty.blush}")
                         processed = beautyProcessor.applyBlush(processed, beauty.blush)
                     }
                     if (beauty.eyebrow > 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying eyebrow: ${beauty.eyebrow}")
                         processed = beautyProcessor.applyEyebrow(processed, beauty.eyebrow)
                     }
+                } else {
+                    android.util.Log.d("PicMe:Debug", "No faces detected, skipping face beautification")
                 }
                 // 身材管理 (需要全身检测，当前仅当有人脸时应用)
                 if (faces.isNotEmpty() && (beauty.bodyEnhancement != 0f || beauty.legExtension > 0f)) {
                     if (beauty.bodyEnhancement != 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying body enhancement: ${beauty.bodyEnhancement}")
                         processed = beautyProcessor.applyBodyEnhancement(processed, beauty.bodyEnhancement)
                     }
                     if (beauty.legExtension > 0f) {
+                        android.util.Log.d("PicMe:Debug", "Applying leg extension: ${beauty.legExtension}")
                         processed = beautyProcessor.applyLegExtension(processed, beauty.legExtension)
                     }
                 }
             }
+            
+            android.util.Log.d("PicMe:Debug", "Beauty processing completed")
             
             // 应用滤镜
             val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
@@ -146,11 +166,15 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         lensFacing: Int,
         mode: MediaType
     ) {
+        android.util.Log.d("PicMe:Debug", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing")
+        
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         imageCapture.takePicture(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
+                    android.util.Log.d("PicMe:Debug", "Photo captured successfully, rotation=${image.imageInfo.rotationDegrees}")
+                    
                     val rotationDegrees = image.imageInfo.rotationDegrees
                     val originalBitmap = image.toBitmap()
                     image.close()
@@ -174,8 +198,11 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                             .build()
                     )
                     val inputImage = InputImage.fromBitmap(rotatedBitmap, 0)
+                    android.util.Log.d("PicMe:Debug", "Starting face detection on bitmap ${rotatedBitmap.width}x${rotatedBitmap.height}")
+                    
                     faceDetector.process(inputImage)
                         .addOnSuccessListener { faces ->
+                            android.util.Log.d("PicMe:Debug", "Face detection success: ${faces.size} faces found")
                             val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces)
                             // Simple Mock Face ID Logic: Use face count as a temporary "person group" id
                             val faceId = if (faces.isNotEmpty()) "person_${faces.size}" else null
@@ -183,7 +210,8 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                                 context, finalBitmap, name, viewModel, faces.isNotEmpty(), faceId, mode
                             )
                         }
-                        .addOnFailureListener {
+                        .addOnFailureListener { e ->
+                            android.util.Log.e("PicMe:Debug", "Face detection failed: ${e.message}", e)
                             saveBitmapToMediaStore(
                                 context, rotatedBitmap, name, viewModel, false, null, mode
                             )

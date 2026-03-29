@@ -84,6 +84,7 @@ import com.picme.features.camera.components.GridSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
+import com.picme.core.image.BeautyPreviewProcessor
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
 import com.picme.domain.usecase.OcrUseCase
@@ -249,6 +250,19 @@ fun CameraContent(
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }
+    
+    val previewView = remember { 
+        PreviewView(context).apply {
+            // [RD] 使用 FIT_CENTER 确保预览画面不失真
+            scaleType = PreviewView.ScaleType.FIT_CENTER
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        }
+    }
+    
+    // [RD] 美颜预览处理器
+    val beautyPreviewProcessor = remember(previewView) {
+        BeautyPreviewProcessor(context, previewView)
+    }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
@@ -293,14 +307,6 @@ fun CameraContent(
         onDispose {
             sensorManager.unregisterListener(listener)
             shutterSound.release()
-        }
-    }
-
-    val previewView = remember { 
-        PreviewView(context).apply {
-            // [RD] 使用 FIT_CENTER 确保预览画面不失真
-            scaleType = PreviewView.ScaleType.FIT_CENTER
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
     }
 
@@ -358,6 +364,16 @@ fun CameraContent(
                 }
             }
         }
+    }
+    
+    // [RD] 监听美颜参数变化，实时更新预览
+    LaunchedEffect(beautySettings) {
+        beautyPreviewProcessor.smoothingStrength = beautySettings.smoothing
+        beautyPreviewProcessor.whiteningStrength = beautySettings.whitening
+        beautyPreviewProcessor.slimFaceStrength = beautySettings.slimFace
+        beautyPreviewProcessor.bigEyesStrength = beautySettings.bigEyes
+        beautyPreviewProcessor.updateBeautyFilters()
+        PicMeLogger.d("Camera", "Beauty preview updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
     }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio) {
@@ -506,6 +522,7 @@ fun CameraContent(
         onDispose {
             cameraExecutor.shutdown()
             faceDetector.close()
+            beautyPreviewProcessor.release()
         }
     }
 
