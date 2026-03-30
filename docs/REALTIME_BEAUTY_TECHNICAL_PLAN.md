@@ -1,485 +1,287 @@
-# PicMe 实时美颜预览技术方案 D
+# R 计划：实时美颜预览技术方案
 
-## 1. 技术选型
+## 1. 执行摘要
 
-### 方案 D：纯 OpenGL ES 2.0 + GLSurfaceView + 自定义 Shader
+**状态**: 🟡 进行中（遇到技术挑战）
 
-**技术栈**：
-- **渲染视图**：GLSurfaceView（Android 原生 OpenGL ES 视图）
-- **渲染管线**：OpenGL ES 2.0
-- **Shader 语言**：GLSL ES 1.0
-- **纹理格式**：GL_TEXTURE_EXTERNAL_OES（外部纹理，用于 CameraX）
-- **美颜算法**：自定义 GLSL Shader（磨皮 + 美白）
+**目标**: 实现 60fps 实时美颜预览（磨皮、美白）
 
-### 为什么不使用 GPUImage？
+**当前进展**:
+- ✅ EGL 初始化和上下文管理完成
+- ✅ Shader 编译系统完成
+- ✅ BeautyRenderer 美颜渲染器完成
+- ✅ CameraPreviewRenderer 渲染管线完成
+- ✅ BeautyPreviewView 自定义 View 完成
+- ✅ 集成到 CameraScreen
+- ❌ **相机帧无法到达 SurfaceTexture**（黑屏问题）
 
-1. **API 限制**：GPUImageFilter.onDraw 需要 FBO 和完整的渲染上下文
-2. **类型互操作问题**：Kotlin 的 FloatBuffer 与 Java 的 Buffer! 类型不兼容
-3. **架构冲突**：GPUImage 设计用于静态图片处理，不是实时视频流
-4. **性能开销**：GPUImage 的滤镜组机制引入额外的 FBO 绑定/解绑操作
+## 2. 架构设计
 
-### 为什么不回退到方案 C？
-
-1. **产品体验**：用户需要实时看到美颜效果，而不是拍照后才看到
-2. **技术挑战**：方案 D 是移动端实时美颜的标准解决方案
-3. **技术积累**：攻克方案 D 可以为未来更多特效打下基础
-
-## 2. 技术架构
+### 2.1 核心组件
 
 ```
-┌─────────────────────────────────────┐
-│   CameraX (相机帧源)                │
-│      ↓ SurfaceProvider              │
-└─────────────────────────────────────┘
-           ↓
-┌─────────────────────────────────────┐
-│   SurfaceTexture                    │
-│   GL_TEXTURE_EXTERNAL_OES (ID: 1)   │
-└─────────────────────────────────────┘
-           ↓
-┌─────────────────────────────────────┐
-│   GLSurfaceView.Renderer            │
-│   - onSurfaceCreated (初始化)       │
-│   - onSurfaceChanged (视口)         │
-│   - onDrawFrame (每帧渲染)          │
-└─────────────────────────────────────┘
-           ↓
-┌─────────────────────────────────────┐
-│   Shader Program                    │
-│   Vertex Shader (顶点)              │
-│   Fragment Shader (片元 + 美颜)     │
-└─────────────────────────────────────┘
-           ↓
-┌─────────────────────────────────────┐
-│   GLSurfaceView 显示                │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ CameraScreen (Compose UI)                               │
+│  └── BeautyPreviewView (FrameLayout)                    │
+│       └── TextureView (显示)                             │
+└─────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────┐
+│ BeautyPreviewView                                       │
+│  - displaySurfaceTexture: SurfaceTexture (显示用)       │
+│  - cameraSurfaceTexture: SurfaceTexture (相机用)        │
+│  - renderer: CameraPreviewRenderer                      │
+└─────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────┐
+│ CameraPreviewRenderer                                   │
+│  - eglCore: EGLCore                                     │
+│  - eglContext: EGLContext                               │
+│  - windowSurface: WindowSurface                          │
+│  - surfaceTexture: SurfaceTexture (相机输出目标)         │
+│  - textureId: Int (外部纹理 ID)                          │
+│  - beautyRenderer: BeautyRenderer                       │
+└─────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────┐
+│ BeautyRenderer                                          │
+│  - shaderProgram: ShaderProgram                         │
+│  - smoothingStrength: Float                             │
+│  - whiteningStrength: Float                             │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## 3. 核心实现
+### 2.2 数据流
 
-### 3.1 GLSurfaceView 初始化
+```
+相机传感器
+    ↓ YUV 数据
+CameraX Preview
+    ↓ Surface
+cameraSurfaceTexture (在 CameraPreviewRenderer 中创建)
+    ↓ updateTexImage()
+外部纹理 (GL_TEXTURE_EXTERNAL_OES)
+    ↓ BeautyRenderer Shader 处理
+WindowSurface
+    ↓ 显示
+TextureView (displaySurfaceTexture)
+```
+
+## 3. 当前问题诊断
+
+### 3.1 核心问题
+
+**现象**: 黑屏，日志显示：
+```
+✅ SurfaceTexture ready: true
+✅ Created Surface from renderer: 41865003, valid=true
+✅ SurfaceProvider called, returning our surface: 41865003
+✅ Camera bound: lensFacing=1, selector=1
+❌ Waiting for camera frame (attempt 1-60)
+❌ No camera frames received after 6 seconds, stopping render
+```
+
+**根本原因**: 
+- CameraX 调用了 SurfaceProvider，并接收到了我们返回的 Surface
+- 但是相机帧**没有输出到这个 Surface**
+- `updateTexImage()` 持续失败，因为 SurfaceTexture 是空的
+
+### 3.2 问题分析
+
+**问题 1**: 使用了错误的 SurfaceTexture
+- 我们使用了 TextureView 的 `surfaceTexture` 作为相机输出目标
+- 但 TextureView 需要自己管理这个 SurfaceTexture 进行显示
+- CameraX 的帧无法同时用于显示和渲染
+
+**问题 2**: EGL 上下文不匹配
+- 创建 cameraSurfaceTexture 时在一个 EGL 上下文中
+- CameraX 输出帧时可能需要另一个 EGL 上下文
+- 导致帧无法正确传递
+
+**问题 3**: SurfaceProvider 时序问题
+- `setSurfaceProvider` 是异步的
+- CameraX 可能在调用 provider 之前还没有准备好接收 Surface
+
+## 4. 技术方案对比
+
+### 方案 A：离屏渲染（当前方案）
+
+**原理**: 
+1. 创建独立的 SurfaceTexture 接收相机帧
+2. 在渲染线程中调用 `updateTexImage()` 更新纹理
+3. 使用 Shader 处理纹理
+4. 渲染到 WindowSurface（连接到 TextureView）
+
+**优点**:
+- 完全控制渲染管线
+- 可以自定义美颜算法
+- 性能最优（理论上）
+
+**缺点**:
+- 复杂度高
+- 需要精确管理 EGL 上下文
+- 当前遇到帧同步问题
+
+**状态**: ❌ 遇到技术壁垒
+
+### 方案 B：使用 TextureView 的 SurfaceTexture
+
+**原理**:
+1. 直接使用 TextureView 的 `surfaceTexture` 作为相机输出目标
+2. CameraX 输出帧到 surfaceTexture
+3. 在 `onSurfaceTextureUpdated` 中触发渲染
+4. 使用 OpenGL ES 读取并处理纹理
+
+**优点**:
+- 简单直接
+- 不需要管理多个 SurfaceTexture
+- TextureView 自动处理显示
+
+**缺点**:
+- 需要在正确的 EGL 上下文中操作
+- 可能需要共享 EGL 上下文
+
+**状态**: ⏸️ 待实施
+
+### 方案 C：使用 SurfaceView + OpenGL ES
+
+**原理**:
+1. 使用 SurfaceView 替代 TextureView
+2. CameraX 输出到 SurfaceView 的 Surface
+3. 在 Surface 的回调中处理渲染
+
+**优点**:
+- 性能更好（直接渲染到屏幕）
+- 不需要 TextureView 的中间层
+
+**缺点**:
+- SurfaceView 在 Compose 中使用复杂
+- 不支持 View 的动画和变换
+
+**状态**: ❌ 不适合当前架构
+
+## 5. 下一步行动计划
+
+### 阶段 1：修复当前架构（优先）
+
+**目标**: 解决相机帧同步问题
+
+**任务**:
+1. ✅ 修复 BeautyPreviewView 传递错误的 view 类型
+2. ✅ 添加详细的日志记录
+3. ✅ 实现错误恢复机制
+4. ⏳ **修复 EGL 上下文管理**
+5. ⏳ **确保相机帧正确输出到 cameraSurfaceTexture**
+
+**预计时间**: 2-4 小时
+
+### 阶段 2：降级方案（备选）
+
+如果阶段 1 失败，采用方案 B：
+1. 使用 TextureView 的 surfaceTexture 作为相机输出目标
+2. 在 `onSurfaceTextureUpdated` 中处理美颜
+3. 简化 EGL 管理
+
+**预计时间**: 4-6 小时
+
+### 阶段 3：优化和完善
+
+1. 性能优化（减少延迟）
+2. 美颜算法优化
+3. 添加更多美颜效果（锐化、滤镜等）
+
+**预计时间**: 8-12 小时
+
+## 6. 技术细节
+
+### 6.1 EGL 上下文管理
 
 ```kotlin
-class GPUImageBeautyView @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null
-) : GLSurfaceView(context, attrs), GLSurfaceView.Renderer {
+// 正确的 EGL 初始化流程
+eglCore.init()
+eglContext = eglCore.createContext()
 
-    init {
-        setEGLContextClientVersion(2)  // OpenGL ES 2.0
-        setRenderer(this)              // 设置渲染器
-        renderMode = RENDERMODE_CONTINUOUSLY  // 持续渲染
-    }
-}
+// 创建离屏 pbuffer surface 用于初始化
+pbufferSurface = eglCore.createSurface(null, 1, 1)
+eglCore.makeCurrent(pbufferSurface, eglContext)
+
+// 初始化 Shader 和渲染器
+beautyRenderer.onInit()
+
+// 创建外部纹理
+createExternalTexture()
+
+// 创建 cameraSurfaceTexture
+surfaceTexture = SurfaceTexture(textureId)
 ```
 
-### 3.2 创建外部纹理
+### 6.2 渲染循环
 
 ```kotlin
-private fun createExternalTextureId(): Int {
-    val textures = IntArray(1)
-    GLES20.glGenTextures(1, textures, 0)
-    val textureId = textures[0]
+while (isRendering) {
+    // 1. 更新相机帧
+    surfaceTexture.updateTexImage()
     
-    GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
+    // 2. 获取变换矩阵
+    surfaceTexture.getTransformMatrix(transformMatrix)
     
-    // 设置纹理参数
-    GLES20.glTexParameteri(
-        GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-        GLES20.GL_TEXTURE_MIN_FILTER,
-        GLES20.GL_LINEAR
-    )
-    GLES20.glTexParameteri(
-        GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-        GLES20.GL_TEXTURE_MAG_FILTER,
-        GLES20.GL_LINEAR
-    )
-    GLES20.glTexParameteri(
-        GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-        GLES20.GL_TEXTURE_WRAP_S,
-        GLES20.GL_CLAMP_TO_EDGE
-    )
-    GLES20.glTexParameteri(
-        GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-        GLES20.GL_TEXTURE_WRAP_T,
-        GLES20.GL_CLAMP_TO_EDGE
-    )
+    // 3. 绑定纹理
+    GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId)
     
-    return textureId
+    // 4. 设置为当前渲染目标
+    eglCore.makeCurrent(windowSurface.eglSurface, eglContext)
+    
+    // 5. 渲染
+    beautyRenderer.setTextureTransform(transformMatrix)
+    beautyRenderer.onRender()
+    
+    // 6. 交换缓冲区
+    windowSurface.swapBuffers()
 }
 ```
 
-### 3.3 创建 SurfaceTexture 给 CameraX
+### 6.3 关键日志
 
-```kotlin
-override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-    cameraTextureId = createExternalTextureId()
-    cameraSurfaceTexture = SurfaceTexture(cameraTextureId)
-}
-
-fun getCameraSurfaceTexture(): SurfaceTexture? {
-    return cameraSurfaceTexture
-}
+**成功标志**:
+```
+✅ Using TextureView's SurfaceTexture: 223250756
+✅ Camera SurfaceTexture: android.graphics.SurfaceTexture@xxx
+✅ Created Surface from renderer: 41865003, valid=true
+✅ SurfaceProvider called, returning our surface: 41865003
+✅ Camera bound: lensFacing=1, selector=1
+✅ First frame received! Starting render loop.
+✅ Rendered 30 frames, textureId=0
 ```
 
-### 3.4 CameraX 绑定
-
-```kotlin
-val surfaceTexture = gpuImageBeautyView.getCameraSurfaceTexture()
-val preview = Preview.Builder().build().also {
-    it.setSurfaceProvider(cameraExecutor) {
-        Surface(surfaceTexture)
-    }
-}
+**失败标志**:
 ```
-
-### 3.5 顶点缓冲和纹理坐标
-
-```kotlin
-private fun initBuffers() {
-    // 顶点坐标（标准化设备坐标）
-    val vertices = floatArrayOf(
-        -1f, -1f,  // 左下
-         1f, -1f,  // 右下
-        -1f,  1f,  // 左上
-         1f,  1f   // 右上
-    )
-    
-    // 纹理坐标
-    val textureCoords = floatArrayOf(
-        0f, 1f,  // 左下
-        1f, 1f,  // 右下
-        0f, 0f,  // 左上
-        1f, 0f   // 右上
-    )
-    
-    // 使用直接内存（Direct Buffer），避免 JNI 拷贝
-    vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
-        .order(ByteOrder.nativeOrder())
-        .asFloatBuffer()
-    vertexBuffer?.put(vertices)?.position(0)
-    
-    textureBuffer = ByteBuffer.allocateDirect(textureCoords.size * 4)
-        .order(ByteOrder.nativeOrder())
-        .asFloatBuffer()
-    textureBuffer?.put(textureCoords)?.position(0)
-}
+❌ Waiting for camera frame (attempt N)
+❌ Still waiting for camera frame after 1 second...
+❌ No camera frames received after 6 seconds, stopping render
+❌ Render thread stopped after 0 frames
 ```
-
-### 3.6 Shader 程序
-
-**顶点着色器**：
-```glsl
-uniform mat4 uTextureTransform;
-attribute vec4 aPosition;
-attribute vec4 aTextureCoord;
-varying vec2 vTextureCoord;
-
-void main() {
-    gl_Position = aPosition;
-    vTextureCoord = (uTextureTransform * aTextureCoord).xy;
-}
-```
-
-**片段着色器（带磨皮和美白）**：
-```glsl
-#extension GL_OES_EGL_image_external : require
-precision mediump float;
-uniform samplerExternalOES uTexture;
-uniform float uSmoothing;
-uniform float uWhitening;
-varying vec2 vTextureCoord;
-
-// 简单的磨皮算法：盒式模糊
-vec4 smoothSkin(vec2 uv, float intensity) {
-    vec4 color = texture2D(uTexture, uv);
-    vec4 color1 = texture2D(uTexture, uv + vec2(0.01, 0.0));
-    vec4 color2 = texture2D(uTexture, uv + vec2(-0.01, 0.0));
-    vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.01));
-    vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.01));
-    
-    vec4 avgColor = (color + color1 + color2 + color3 + color4) / 5.0;
-    return mix(color, avgColor, intensity);
-}
-
-// 美白算法：提高亮度
-vec4 whitenSkin(vec4 color, float intensity) {
-    vec3 whitened = color.rgb * (1.0 + intensity * 0.3);
-    return vec4(whitened, color.a);
-}
-
-void main() {
-    vec4 color = texture2D(uTexture, vTextureCoord);
-    vec4 smoothed = smoothSkin(vTextureCoord, uSmoothing);
-    vec4 whitened = whitenSkin(smoothed, uWhitening);
-    gl_FragColor = whitened;
-}
-```
-
-### 3.7 编译 Shader
-
-```kotlin
-private fun loadShader(type: Int, source: String): Int {
-    val shader = GLES20.glCreateShader(type)
-    GLES20.glShaderSource(shader, source)
-    GLES20.glCompileShader(shader)
-    
-    val compiled = IntArray(1)
-    GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0)
-    if (compiled[0] != GLES20.GL_TRUE) {
-        val error = GLES20.glGetShaderInfoLog(shader)
-        android.util.Log.e("PicMe:GPUImageBeautyView", "Shader compile error: $error")
-        GLES20.glDeleteShader(shader)
-        return 0
-    }
-    
-    return shader
-}
-
-private fun createProgram(): Int {
-    val vertexShader = loadShader(GLES20.GL_VERTEX_SHADER, vertexShaderSource)
-    val fragmentShader = loadShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderSource)
-    
-    val program = GLES20.glCreateProgram()
-    GLES20.glAttachShader(program, vertexShader)
-    GLES20.glAttachShader(program, fragmentShader)
-    GLES20.glLinkProgram(program)
-    
-    val linkStatus = IntArray(1)
-    GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
-    if (linkStatus[0] != GLES20.GL_TRUE) {
-        val error = GLES20.glGetProgramInfoLog(program)
-        android.util.Log.e("PicMe:GPUImageBeautyView", "Shader link error: $error")
-        GLES20.glDeleteProgram(program)
-        return -1
-    }
-    
-    return program
-}
-```
-
-### 3.8 渲染循环
-
-```kotlin
-override fun onDrawFrame(gl: GL10?) {
-    // 清除屏幕
-    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-    
-    if (cameraTextureId != -1 && programId != -1) {
-        // 1. 更新 SurfaceTexture（获取最新相机帧）
-        cameraSurfaceTexture?.updateTexImage()
-        
-        // 2. 使用 Shader 程序
-        GLES20.glUseProgram(programId)
-        
-        // 3. 绑定外部纹理
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTextureId)
-        GLES20.glUniform1i(uTextureLocation, 0)
-        
-        // 4. 设置美颜参数
-        GLES20.glUniform1f(uSmoothingLocation, smoothingStrength / 100f)
-        GLES20.glUniform1f(uWhiteningLocation, whiteningStrength / 100f)
-        
-        // 5. 启用顶点数组
-        GLES20.glEnableVertexAttribArray(aPositionLocation)
-        GLES20.glEnableVertexAttribArray(aTextureCoordLocation)
-        
-        // 6. 设置顶点坐标
-        val vb: java.nio.Buffer = vertexBuffer as java.nio.Buffer
-        vb.position(0)
-        GLES20.glVertexAttribPointer(
-            aPositionLocation, 2, GLES20.GL_FLOAT, false, 0, vb
-        )
-        
-        // 7. 设置纹理坐标
-        val tb: java.nio.Buffer = textureBuffer as java.nio.Buffer
-        tb.position(0)
-        GLES20.glVertexAttribPointer(
-            aTextureCoordLocation, 2, GLES20.GL_FLOAT, false, 0, tb
-        )
-        
-        // 8. 绘制四边形
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        
-        // 9. 禁用顶点数组
-        GLES20.glDisableVertexAttribArray(aPositionLocation)
-        GLES20.glDisableVertexAttribArray(aTextureCoordLocation)
-        
-        // 10. 解绑纹理
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
-    }
-}
-```
-
-## 4. 关键技术点
-
-### 4.1 Direct Buffer 的类型问题
-
-**问题**：Kotlin 的 `FloatBuffer` 与 Java 的 `Buffer!` 类型不兼容
-
-**解决方案**：使用显式的 `java.nio.Buffer` 类型声明
-```kotlin
-val vb: java.nio.Buffer = vertexBuffer as java.nio.Buffer
-GLES20.glVertexAttribPointer(..., vb)
-```
-
-### 4.2 SurfaceTexture 的生命周期
-
-- **创建**：在 `onSurfaceCreated` 中创建
-- **更新**：在 `onDrawFrame` 中调用 `updateTexImage()`
-- **销毁**：在 `onPause` 或 `onDestroy` 中 release
-
-### 4.3 Shader 性能优化
-
-1. **避免复杂数学运算**：磨皮使用简单的盒式模糊，而不是高斯模糊
-2. **减少纹理采样**：只采样 5 个像素（中心 + 上下左右）
-3. **使用 mediump 精度**：在移动设备上比 highp 快
-
-### 4.4 美颜参数范围
-
-- **磨皮**：0-100（0 = 无效果，100 = 最强）
-- **美白**：0-100（0 = 无效果，100 = 最亮）
-- **瘦脸/大眼**：保留接口，未来实现
-
-## 5. 编译和调试
-
-### 编译命令
-```bash
-./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/picme-debug.apk
-```
-
-### 日志查看
-```bash
-adb logcat | grep "PicMe:GPUImageBeautyView"
-```
-
-### 常见问题
-
-1. **黑屏**：
-   - 检查 Shader 编译是否成功
-   - 检查纹理绑定是否正确
-   - 检查 `glVertexAttribPointer` 的参数
-
-2. **颜色异常**：
-   - 检查纹理坐标是否正确
-   - 检查 Shader 中的 `samplerExternalOES` 是否声明
-
-3. **性能问题**：
-   - 使用 `adb shell dumpsys SurfaceTextureClient` 查看帧率
-   - 优化 Shader 复杂度
-
-## 6. 未来扩展
-
-### 6.1 更高级的美颜算法
-
-- **双边模糊**：更好的磨皮效果
-- **高通滤波**：锐化
-- **色调分离**：美白牙齿
-
-### 6.2 瘦脸和大眼
-
-需要人脸检测（ML Kit Face Detection）获取人脸关键点，然后在 Shader 中进行网格变形。
-
-### 6.3 滤镜效果
-
-可以扩展支持：
-- 复古滤镜
-- 黑白滤镜
-- 暖色/冷色滤镜
 
 ## 7. 参考资料
 
-- [OpenGL ES 2.0 官方文档](https://www.khronos.org/opengles/)
-- [Android GLSurfaceView 文档](https://developer.android.com/reference/android/opengl/GLSurfaceView)
-- [GPUImage 源码](https://github.com/cyberagent/android-gpuimage)
-- [GLSL 实时美颜教程](https://www.learnopengl.com/)
+- [Android CameraX 官方文档](https://developer.android.com/training/camerax)
+- [OpenGL ES 官方文档](https://developer.android.com/guide/topics/graphics/opengl)
+- [EGL 规范](https://www.khronos.org/egl/)
+- [GPUImage 开源项目](https://github.com/cyberagent/android-gpuimage)
 
-## 8. 项目文件清单
+## 8. 更新日志
 
-```
-app/src/main/java/com/picme/core/image/
-├── GPUImageBeautyView.kt      # 核心渲染 View
-├── BeautyPreviewProcessor.kt  # 美颜处理器（可选）
-└── GpuImageBeautyPreviewProvider.kt  # 预览提供者（可选）
+### 2026-03-29
 
-app/src/main/java/com/picme/features/camera/
-└── CameraScreen.kt            # 相机界面
-```
+**进展**:
+- ✅ 修复了 BeautyPreviewView 传递错误 view 的问题
+- ✅ 实现了详细的日志记录
+- ✅ 添加了错误恢复机制
+- ❌ 发现相机帧无法到达 SurfaceTexture
 
-## 9. 技术债务
+**问题**:
+- CameraX 调用了 SurfaceProvider，但帧没有输出
+- 怀疑 EGL 上下文不匹配或 SurfaceTexture 管理问题
 
-1. **Shader 精度**：当前使用 mediump，可能在某些设备上精度不够
-2. **磨皮算法**：盒式模糊较简单，可以升级为双边模糊
-3. **性能监控**：缺少 FPS 监控和性能分析工具
-
-## 10. 当前进展与下一步计划
-
-### 10.1 已完成的工作（✅ 2026-03-29）
-
-1. **纯 OpenGL ES 渲染管线**
-   - ✅ GLSurfaceView 初始化成功
-   - ✅ Renderer 实现完成
-   - ✅ 渲染循环稳定运行（60fps）
-   - ✅ Shader 编译和链接成功
-
-2. **CameraX 集成**
-   - ✅ SurfaceTexture 创建成功
-   - ✅ Surface 创建成功
-   - ✅ CameraX SurfaceProvider 被调用
-   - ✅ 相机绑定成功
-
-3. **美颜参数传递**
-   - ✅ smoothing 参数可传递到 Shader
-   - ✅ whitening 参数可传递到 Shader
-
-4. **代码实现**
-   - ✅ GPUImageBeautyView 核心类完成
-   - ✅ 顶点缓冲和纹理坐标缓冲初始化
-   - ✅ Shader 程序编译
-   - ✅ CameraX 绑定逻辑
-
-### 10.2 当前问题
-
-**现象**：渲染循环正常，但屏幕显示黑色
-
-**可能原因**：
-1. SurfaceTexture 更新时机问题
-2. 纹理坐标方向问题
-3. CameraX 帧格式与 Shader 不匹配
-4. GLSurfaceView 的 EGL 配置问题
-
-**调试日志**：
-```
-SurfaceTexture ready: true
-Binding Preview to GPUImageBeautyView surface
-SurfaceProvider called, returning our surface
-Camera bound: lensFacing=1
-Frame rendered successfully (60fps)
-```
-
-### 10.3 下一步计划
-
-#### 方案 D1：继续调试 OpenGL ES（高难度）
-- 检查纹理坐标方向
-- 添加更多调试日志
-- 尝试使用 EGL 直接渲染
-
-#### 方案 D2：使用 MediaCodec + OpenGL ES（推荐）
-- 使用 MediaCodec 编码相机帧
-- 使用 OpenGL ES 解码并渲染
-- 优点：性能更好，可控性更高
-
-#### 方案 D3：集成第三方美颜 SDK（最快）
-- FaceUnity
-- PerfectCorp
-- 商汤
-
-#### 方案 C：回退到 PreviewView + 拍照美颜（保底）
-
----
-
-**文档版本**：1.0  
-**最后更新**：2026-03-29  
-**维护者**：RD 团队
+**下一步**:
+- 深入分析 EGL 上下文管理
+- 考虑使用 TextureView 的 surfaceTexture 直接作为相机输出目标

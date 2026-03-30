@@ -86,15 +86,12 @@ import com.picme.features.camera.components.GridSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
-import com.picme.core.image.BeautyPreviewProcessor
-import com.picme.di.BeautyPreviewProviderFactory
-import com.picme.domain.preview.BeautyPreviewProvider
-import com.picme.core.image.GPUImageBeautyView
-import com.picme.features.camera.model.FilterType
-import com.picme.features.debug.LogOverlay
 import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
+import com.picme.features.camera.model.FilterType
+import com.picme.features.debug.LogOverlay
+import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -256,17 +253,6 @@ fun CameraContent(
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }
     
-    // [RD] 使用 GPUImageBeautyView 实现实时美颜预览
-    val gpuImageBeautyView = remember {
-        GPUImageBeautyView(context).apply {
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            android.util.Log.d("PicMe:Camera", "GPUImageBeautyView created")
-        }
-    }
-
     // [RD] 监听 SurfaceTexture 准备状态
     var surfaceTextureReady by remember { mutableStateOf(false) }
     
@@ -276,6 +262,82 @@ fun CameraContent(
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
     var beautySettings by remember { mutableStateOf(BeautySettings()) }
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
+
+    // [RD] 临时方案：先使用 TextureView 显示原始相机预览
+    // PixelFree SDK 实时美颜预览实现比较复杂，后续完善
+    val textureView = remember {
+        object : android.view.TextureView(context) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                // 【原理】相机预览比例的正確处理方式
+                // 
+                // 1. 传感器输出（横向）:
+                //    - 4:3 模式：640x480 (1.33)
+                //    - 16:9/FULL 模式：864x480 (1.8)
+                //
+                // 2. CameraX Preview 旋转 90°后（竖屏）:
+                //    - 4:3: 480x640 (0.75)
+                //    - 16:9/FULL: 480x864 (0.555)
+                //
+                // 3. 关键：CameraX 会自动缩放到匹配 Surface
+                //    - 如果 Surface 比例 = 画面比例 → 完美显示
+                //    - 如果 Surface 比例 ≠ 画面比例 → 会拉伸!
+                //
+                // 4. 正确策略：让 TextureView 的比例 = 传感器输出比例
+                
+                val width = MeasureSpec.getSize(widthMeasureSpec)
+                val height = MeasureSpec.getSize(heightMeasureSpec)
+                
+                when (aspectRatio) {
+                    AspectRatio.RATIO_4_3 -> {
+                        // 4:3 模式：传感器 640x480 → 旋转后 480x640 → 比例 0.75
+                        // 竖屏时：按宽度 1080 计算，高度应为 1080/0.75 = 1440
+                        if (height > width) {
+                            setMeasuredDimension(width, (width / 0.75f).toInt())
+                        } else {
+                            setMeasuredDimension((height * 0.75f).toInt(), height)
+                        }
+                    }
+                    AspectRatio.RATIO_16_9, AspectRatio.RATIO_FULL -> {
+                        // FULL mode: sensor output may be 1920x1080 or 864x480
+                        // CameraX rotates 90° for portrait
+                        // We need to match the ACTUAL output ratio from CameraX
+                        // 
+                        // If CameraX outputs 1920x1080 (ratio=16:9=1.777...)
+                        // After rotation: 1080x1920 (ratio=1.777...)
+                        // TextureView should be: width=1080, height=1080×(1920/1080)=1920
+                        //
+                        // If CameraX outputs 864x480 (ratio=1.8)
+                        // After rotation: 480x864 (ratio=1.8)
+                        // TextureView should be: width=1080, height=1080×(864/480)=1944
+                        //
+                        // [FIXED] Use 1920/1080 = 16:9 ratio to match actual CameraX output
+                        if (height > width) {
+                            // Portrait: fill width, height proportional
+                            val newHeight = (width * (1920f / 1080f)).toInt()
+                            setMeasuredDimension(width, newHeight)
+                        } else {
+                            // Landscape: fill height, width proportional
+                            val newWidth = (height * (1080f / 1920f)).toInt()
+                            setMeasuredDimension(newWidth, height)
+                        }
+                    }
+                    else -> setMeasuredDimension(width, height)
+                }
+                
+                // [调试] 输出测量结果
+                android.util.Log.d("PicMe:Camera", 
+                    "TextureView measured: ${measuredWidth}x${measuredHeight}, " +
+                    "ratio=${measuredHeight.toFloat()/measuredWidth}, expected=1.8"
+                )
+            }
+        }.apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            android.util.Log.d("PicMe:Camera", "TextureView created")
+        }
+    }
 
     var showFilterSelector by remember { mutableStateOf(false) }
     var showBeautySelector by remember { mutableStateOf(false) }
@@ -372,66 +434,58 @@ fun CameraContent(
         }
     }
     
-    // [RD] 监听美颜参数变化，实时更新预览
-    LaunchedEffect(beautySettings) {
-        gpuImageBeautyView.smoothingStrength = beautySettings.smoothing.toFloat()
-        gpuImageBeautyView.whiteningStrength = beautySettings.whitening.toFloat()
-        gpuImageBeautyView.slimFaceStrength = beautySettings.slimFace.toFloat()
-        gpuImageBeautyView.bigEyesStrength = beautySettings.bigEyes.toFloat()
-        // 参数会直接在下一帧渲染时应用，不需要额外调用
-        android.util.Log.d("PicMe:Camera", "Beauty preview updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
+    // [RD] 监听美颜参数变化（暂时注释，后续实现）
+    // LaunchedEffect(beautySettings) {
+    //     pixelFreeView.setSmoothingStrength(beautySettings.smoothing.toFloat())
+    //     pixelFreeView.setWhiteningStrength(beautySettings.whitening.toFloat())
+    //     pixelFreeView.setSlimFaceStrength(beautySettings.slimFace.toFloat())
+    //     pixelFreeView.setBigEyesStrength(beautySettings.bigEyes.toFloat())
+    //     android.util.Log.d("PicMe:Camera", "PixelFree beauty updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
+    // }
+    
+    // [RD] PixelFreeEffects 初始化
+    LaunchedEffect(Unit) {
+        // 等待 GLSurface 创建和初始化
+        kotlinx.coroutines.delay(500)
+        android.util.Log.d("PicMe:Camera", "PixelFree initialization requested")
     }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio) {
         val cameraProvider = cameraProviderFuture.get()
-            
-        // [RD] 等待 GPUImageBeautyView 的 SurfaceTexture 准备好
-        var surfaceTexture = gpuImageBeautyView.getCameraSurfaceTexture()
-        var retryCount = 0
-        android.util.Log.d("PicMe:Camera", "Waiting for SurfaceTexture, initial=${surfaceTexture != null}")
         
-        while (surfaceTexture == null && retryCount < 10) {
-            kotlinx.coroutines.delay(100)
-            retryCount++
-            surfaceTexture = gpuImageBeautyView.getCameraSurfaceTexture()
-            if (retryCount % 3 == 0) {
-                android.util.Log.d("PicMe:Camera", "Retry $retryCount: surfaceTexture=${surfaceTexture != null}")
-            }
-        }
-        
-        android.util.Log.d("PicMe:Camera", "SurfaceTexture ready: ${surfaceTexture != null}, retries=$retryCount")
+        // [RD] 临时方案：先使用普通 Preview 显示相机画面
+        // PixelFreeEffects 将在拍照时应用美颜效果
+        android.util.Log.d("PicMe:Camera", "Binding camera (temporary preview mode)")
             
-        val preview = if (surfaceTexture != null) {
-            android.util.Log.d("PicMe:Camera", "Binding Preview to GPUImageBeautyView surface: ${surfaceTexture.hashCode()}")
-            androidx.camera.core.Preview.Builder()
-                .setTargetAspectRatio(
-                    if (aspectRatio == AspectRatio.RATIO_4_3) {
-                        androidx.camera.core.AspectRatio.RATIO_4_3
-                    } else {
-                        androidx.camera.core.AspectRatio.RATIO_16_9
-                    }
-                )
-                .build().also { previewUseCase ->
-                    // 关键：将 CameraX 的输出定向到 GPUImageBeautyView 的 SurfaceTexture
-                    val surface = android.view.Surface(surfaceTexture)
-                    android.util.Log.d("PicMe:Camera", "Created Surface from texture: ${surface.hashCode()}")
-                    previewUseCase.setSurfaceProvider(cameraExecutor) { outputSurface ->
-                        android.util.Log.d("PicMe:Camera", "SurfaceProvider called, returning our surface: ${surface.hashCode()}")
-                        surface
+        val preview = androidx.camera.core.Preview.Builder()
+            .setTargetAspectRatio(
+                when (aspectRatio) {
+                    AspectRatio.RATIO_4_3 -> androidx.camera.core.AspectRatio.RATIO_4_3
+                    // [关键修复] FULL 和 16:9 都使用 RATIO_16_9
+                    // 但实际分辨率由相机硬件决定，可能是 1920x1080 或 864x480
+                    AspectRatio.RATIO_16_9, AspectRatio.RATIO_FULL -> androidx.camera.core.AspectRatio.RATIO_16_9
+                    else -> androidx.camera.core.AspectRatio.RATIO_4_3
+                }
+            )
+            .build()
+            .also { previewBuilder ->
+                // [关键修复] 使用自动适配的 SurfaceProvider
+                // CameraX 会根据 Surface 的尺寸自动缩放画面
+                previewBuilder.setSurfaceProvider(cameraExecutor) { surfaceRequest ->
+                    android.util.Log.d("PicMe:Camera", 
+                        "Preview SurfaceRequest: ${surfaceRequest.resolution?.width}x${surfaceRequest.resolution?.height}"
+                    )
+                    textureView.surfaceTexture?.let { surfaceTexture ->
+                        val surface = android.view.Surface(surfaceTexture)
+                        surfaceRequest.provideSurface(surface, cameraExecutor) {}
+                        android.util.Log.d("PicMe:Camera", 
+                            "Preview provided surface to TextureView(${textureView.width}x${textureView.height})"
+                        )
+                    } ?: run {
+                        android.util.Log.e("PicMe:Camera", "TextureView surfaceTexture is null")
                     }
                 }
-        } else {
-            android.util.Log.e("PicMe:Camera", "GPUImageBeautyView not ready after $retryCount retries, using fallback")
-            androidx.camera.core.Preview.Builder()
-                .setTargetAspectRatio(
-                    if (aspectRatio == AspectRatio.RATIO_4_3) {
-                        androidx.camera.core.AspectRatio.RATIO_4_3
-                    } else {
-                        androidx.camera.core.AspectRatio.RATIO_16_9
-                    }
-                )
-                .build()
-        }
+            }
 
         val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
         // [FIXED] 不要在这里设置 actualLensFacing，等待相机绑定完成后从 cameraInfo 获取
@@ -452,7 +506,14 @@ fun CameraContent(
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
             try {
                 val mediaImage = imageProxy.image
-                if (mediaImage != null && gpuImageBeautyView.width > 0 && gpuImageBeautyView.height > 0) {
+                // [调试] 输出实际帧信息
+                android.util.Log.d("PicMe:Camera", 
+                    "Frame: ${imageProxy.width}x${imageProxy.height}, " +
+                    "ratio=${imageProxy.width.toFloat()/imageProxy.height.toFloat()}, " +
+                    "rot=${imageProxy.imageInfo.rotationDegrees}, " +
+                    "TextureView: ${textureView.width}x${textureView.height}"
+                )
+                if (mediaImage != null && textureView.width > 0 && textureView.height > 0) {
                     val image = InputImage.fromMediaImage(
                         mediaImage,
                         imageProxy.imageInfo.rotationDegrees
@@ -477,8 +538,8 @@ fun CameraContent(
                                     faceY = bounds.centerY().toFloat(),
                                     imageProxyWidth = imageProxy.width,
                                     imageProxyHeight = imageProxy.height,
-                                    previewWidth = gpuImageBeautyView.width.toFloat(),
-                                    previewHeight = gpuImageBeautyView.height.toFloat(),
+                                    previewWidth = textureView.width.toFloat(),
+                                    previewHeight = textureView.height.toFloat(),
                                     rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                                     lensFacing = lensFacing
                                 )
@@ -486,7 +547,7 @@ fun CameraContent(
                                 facePoint = screenPoint
                                 showFocusIndicator = true
                                 
-                                // [RD] GPUImageBeautyView 不支持自动对焦
+                                // [RD] PixelFreeGLSurfaceView 不支持自动对焦
                                 PicMeLogger.d(
                                     "PicMe:Camera",
                                     "Face detected at screen: (${screenPoint.x.toInt()}, ${screenPoint.y.toInt()})"
@@ -509,6 +570,72 @@ fun CameraContent(
 
         try {
             cameraProvider.unbindAll()
+            
+            // [RD] 关键修复：使用 TextureView 显示预览
+            android.util.Log.d("PicMe:Camera", "Binding camera with TextureView display")
+            
+            // [RD] 复用 imageAnalysis 同时用于人脸检测和美颜预览
+            imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                try {
+                    android.util.Log.d("PicMe:Camera", "ImageAnalysis received frame: ${imageProxy.width}x${imageProxy.height}")
+                    
+                    val mediaImage = imageProxy.image
+                    if (mediaImage != null && textureView.width > 0 && textureView.height > 0) {
+                        val image = InputImage.fromMediaImage(
+                            mediaImage,
+                            imageProxy.imageInfo.rotationDegrees
+                        )
+                        faceDetector.process(image)
+                            .addOnSuccessListener { faces ->
+                                if (faces.isNotEmpty()) {
+                                    val face = faces[0]
+                                    val bounds = face.boundingBox
+                                    
+                                    PicMeLogger.d(
+                                        "PicMe:Camera",
+                                        "Face detected: bounds=(${bounds.centerX()},${bounds.centerY()}), " +
+                                            "imageSize=${imageProxy.width}x${imageProxy.height}, " +
+                                            "rot=${imageProxy.imageInfo.rotationDegrees}, " +
+                                            "lens=$lensFacing"
+                                    )
+                                    
+                                    // [RD] 坐标转换：将人脸检测坐标映射到屏幕坐标
+                                    val screenPoint = transformFaceCoordinateSimple(
+                                        faceX = bounds.centerX().toFloat(),
+                                        faceY = bounds.centerY().toFloat(),
+                                        imageProxyWidth = imageProxy.width,
+                                        imageProxyHeight = imageProxy.height,
+                                        previewWidth = textureView.width.toFloat(),
+                                        previewHeight = textureView.height.toFloat(),
+                                        rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                                        lensFacing = lensFacing
+                                    )
+                                    
+                                    facePoint = screenPoint
+                                    showFocusIndicator = true
+                                    
+                                    PicMeLogger.d(
+                                        "PicMe:Camera",
+                                        "Face detected at screen: (${screenPoint.x.toInt()}, ${screenPoint.y.toInt()})"
+                                    )
+                                } else {
+                                    showFocusIndicator = false
+                                }
+                            }
+                            .addOnCompleteListener {
+                                // [RD] 人脸检测完成后，关闭 imageProxy
+                                // TODO: 后续实现美颜预览
+                                imageProxy.close()
+                            }
+                    } else {
+                        imageProxy.close()
+                    }
+                } catch (e: Exception) {
+                    PicMeLogger.e("PicMe:Camera", "Face detection error", e)
+                    imageProxy.close()
+                }
+            }
+            
             val camera = when (captureMode) {
                 MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
                     cameraProvider.bindToLifecycle(
@@ -543,6 +670,62 @@ fun CameraContent(
         }
     }
 
+    // [RD] 处理美颜预览
+    fun processBeautyPreview(imageProxy: androidx.camera.core.ImageProxy, pixelFreeView: com.picme.core.image.pixelfree.PixelFreeGLSurfaceView) {
+        try {
+            val buffer = imageProxy.planes[0].buffer
+            val pixelCount = buffer.remaining() / 4 // RGBA, 每个像素 4 字节
+            
+            if (pixelCount > 0 && pixelFreeView.isCreate()) {
+                // 创建一个纹理用于存储图像数据
+                val textureIds = IntArray(1)
+                android.opengl.GLES20.glGenTextures(1, textureIds, 0)
+                val textureId = textureIds[0]
+                
+                // 绑定纹理
+                android.opengl.GLES20.glBindTexture(android.opengl.GLES20.GL_TEXTURE_2D, textureId)
+                
+                // 设置纹理参数
+                android.opengl.GLES20.glTexParameteri(
+                    android.opengl.GLES20.GL_TEXTURE_2D,
+                    android.opengl.GLES20.GL_TEXTURE_MIN_FILTER,
+                    android.opengl.GLES20.GL_LINEAR
+                )
+                android.opengl.GLES20.glTexParameteri(
+                    android.opengl.GLES20.GL_TEXTURE_2D,
+                    android.opengl.GLES20.GL_TEXTURE_MAG_FILTER,
+                    android.opengl.GLES20.GL_LINEAR
+                )
+                
+                // 加载图像数据到纹理 - 使用 ByteBuffer 版本
+                buffer.rewind()
+                android.opengl.GLES20.glTexImage2D(
+                    android.opengl.GLES20.GL_TEXTURE_2D,
+                    0,
+                    android.opengl.GLES20.GL_RGBA,
+                    imageProxy.width,
+                    imageProxy.height,
+                    0,
+                    android.opengl.GLES20.GL_RGBA,
+                    android.opengl.GLES20.GL_UNSIGNED_BYTE,
+                    buffer
+                )
+                
+                // 设置纹理到 PixelFreeGLSurfaceView
+                pixelFreeView.setCameraTextureId(textureId, imageProxy.width, imageProxy.height)
+                
+                android.util.Log.d("PicMe:Camera", "Beauty preview frame: ${imageProxy.width}x${imageProxy.height}, texture=$textureId")
+                
+                // 清理纹理
+                android.opengl.GLES20.glDeleteTextures(1, textureIds, 0)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PicMe:Camera", "Beauty preview error: ${e.message}", e)
+        } finally {
+            imageProxy.close()
+        }
+    }
+    
     LaunchedEffect(showFocusIndicator) {
         focusIndicatorAlpha.animateTo(
             if (showFocusIndicator) 1f else 0f,
@@ -558,13 +741,7 @@ fun CameraContent(
     }
 
     CameraPreviewContent(
-        previewView = { 
-            // [RD] 使用 GPUImageBeautyView 实现实时美颜预览
-            AndroidView(
-                factory = { gpuImageBeautyView },
-                modifier = Modifier.fillMaxSize()
-            )
-        },
+        textureView = textureView,
         selectedFilter = selectedFilter,
         facePoint = facePoint,
         focusIndicatorAlpha = focusIndicatorAlpha.value,
@@ -694,7 +871,8 @@ fun CameraContent(
                             }
                     }
                 } else {
-                    shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+                    // [RD] 临时注释掉拍照音
+                    // shutterSound.play(MediaActionSound.SHUTTER_CLICK)
                     imageProcessor.takePhoto(
                         context = context,
                         imageCapture = imageCapture,
@@ -729,7 +907,7 @@ fun CameraContent(
 
 @Composable
 fun CameraPreviewContent(
-    previewView: @Composable () -> Unit,
+    textureView: android.view.TextureView,
     selectedFilter: FilterType,
     facePoint: Offset?,
     focusIndicatorAlpha: Float,
@@ -780,7 +958,11 @@ fun CameraPreviewContent(
             showSceneSelector || showGridSelector
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        previewView()
+        // 使用 TextureView 显示相机预览
+        AndroidView(
+            factory = { textureView },
+            modifier = Modifier.fillMaxSize()
+        )
 
         CameraOverlays(
             isStable = isStable,
@@ -964,6 +1146,12 @@ private fun transformCoordinate(
 /**
  * [RD] 简化版人脸坐标转换（用于 BeautyTextureView）
  */
+/**
+ * [FIX] 简化版人脸坐标转换函数
+ * 
+ * 【问题】原函数没有考虑相机画面的实际显示比例，导致坐标偏移
+ * 【解决】使用与 transformFaceCoordinate 相同的逻辑，但适配 TextureView
+ */
 private fun transformFaceCoordinateSimple(
     faceX: Float,
     faceY: Float,
@@ -974,29 +1162,58 @@ private fun transformFaceCoordinateSimple(
     rotationDegrees: Int,
     lensFacing: Int
 ): Offset {
-    // 归一化
-    val normX = faceX / imageProxyWidth
-    val normY = faceY / imageProxyHeight
+    // ========== Step 1: 归一化 ==========
+    val (rotatedWidth, rotatedHeight) = when (rotationDegrees) {
+        90, 270 -> Pair(imageProxyHeight, imageProxyWidth)
+        else -> Pair(imageProxyWidth, imageProxyHeight)
+    }
     
-    // 镜像处理（前置摄像头）
+    val normX = faceX / rotatedWidth
+    val normY = faceY / rotatedHeight
+    
+    android.util.Log.d(
+        "PicMe:Camera",
+        "Step1 [归一化]: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, " +
+            "norm=($normX,$normY)"
+    )
+    
+    // ========== Step 2: 镜像处理（前置摄像头）==========
     val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
         1f - normX
     } else {
         normX
     }
     
-    // 旋转补偿
+    android.util.Log.d(
+        "PicMe:Camera",
+        "Step2 [镜像]: lens=${if (lensFacing == CameraSelector.LENS_FACING_FRONT) "前" else "后"}, " +
+            "norm=($normX,$normY), mirrored=($mirroredX,$normY)"
+    )
+    
+    // ========== Step 3: 旋转补偿 ==========
     val (adjustedX, adjustedY) = when (rotationDegrees) {
-        0 -> Pair(mirroredX, normY)
-        90 -> Pair(normY, 1f - mirroredX)
-        180 -> Pair(1f - mirroredX, 1f - normY)
-        270 -> Pair(1f - normY, mirroredX)
+        0 -> Pair(mirroredX, normY)      // 竖屏：不需要调整
+        90 -> Pair(mirroredX, normY)     // 顺时针 90°: 不交换 XY
+        180 -> Pair(1f - mirroredX, 1f - normY) // 倒立：XY 都翻转
+        270 -> Pair(mirroredX, normY)    // 逆时针 90°: 不交换 XY
         else -> Pair(mirroredX, normY)
     }
     
-    // 转换为像素坐标
+    android.util.Log.d(
+        "PicMe:Camera",
+        "Step3 [旋转补偿]: rot=$rotationDegrees, mirrored=($mirroredX,$normY), " +
+            "adjusted=($adjustedX,$adjustedY)"
+    )
+    
+    // ========== Step 4: 转换为像素坐标 ==========
     val screenX = adjustedX * previewWidth
     val screenY = adjustedY * previewHeight
+    
+    android.util.Log.d(
+        "PicMe:Camera",
+        "Step4 [像素转换]: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}, " +
+            "screen=($screenX,$screenY)"
+    )
     
     return Offset(screenX, screenY)
 }

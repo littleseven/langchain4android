@@ -55,6 +55,23 @@ AGENTS.md (AI Agent 操作规范)
 
 **注意**：模块 AGENTS.md 应聚焦技术实现细节，不得包含产品需求或交互规范（这些应在 FEATURES.md 中定义）。
 
+### 2.5 技术方案的文档化
+对于复杂的技术方案，需要创建独立的技术规范文档：
+- `docs/PIXELFREE_INTEGRATION.md` - PixelFreeEffects SDK 集成文档（**当前实施方案**）
+- `docs/R_PLAN_TECHNICAL_SPEC.md` - R 计划自主技术方案（**中长期规划**）
+- `docs/R_PLAN_IMPLEMENTATION_GUIDE.md` - R 计划实施指南
+
+**双轨策略说明**：
+- **短期（1-2 周）**：使用 PixelFreeEffects SDK 快速实现产品功能
+- **中期（1-2 月）**：并行运行，积累性能数据和用户反馈
+- **中长期（2-3 月）**：基于 R 计划自主研发，借鉴 PixelFreeEffects 技术方案
+
+**文档更新规则**：
+- 技术方案确定后 24 小时内必须完成文档化
+- 实施过程中遇到的问题必须更新到实施指南
+- 文档由 [RD] 创建，[CR] 审核
+- **技术路线调整后，旧文档必须标记为废弃或备选**
+
 ## 3. 核心操作约束 [严格执行]
 - **[PRIVACY] 隐私至上**：所有 AI 处理（人脸、OCR 等）必须 100% 本地化。严禁请求网络权限。
 - **[PERF] 极致反馈**：交互反馈必须在 100ms 内。拍摄快门延迟 < 50ms。
@@ -66,6 +83,419 @@ AGENTS.md (AI Agent 操作规范)
 - **Lambda 规范**：必须显式命名 lambda 参数（如 `item ->`）。**严禁使用 `it`**。
 - **状态管理**：UI 状态必须使用 `Sealed Class`。
 - **导入管理**：**严禁使用通配符导入 (`*`)**。
+
+## 4.2 PixelFreeEffects 架构规范（当前实施方案）
+
+### 4.2.1 核心组件职责
+
+**PixelFreeGLSurfaceView**：
+- 继承 `GLSurfaceView`，实现 `GLSurfaceView.Renderer`
+- 管理 PixelFree SDK 的生命周期
+- 提供 OpenGL ES 2.0 渲染环境
+- 支持实时美颜参数调整
+- **关键**：在 `onSurfaceCreated` 中初始化 SDK
+
+**PixelFreeBeautyEngine**：
+- SDK 包装类，提供高级 API
+- 封装底层 PixelFree SDK 调用
+- 支持多种图像格式处理（纹理/RGBA/YUV）
+- **禁止**：直接使用 PixelFree SDK 的底层 API，应通过包装类调用
+
+### 4.2.2 SDK 初始化流程
+
+**标准流程**：
+```kotlin
+// 1. 创建 PixelFreeGLSurfaceView
+val pixelFreeView = PixelFreeGLSurfaceView(context)
+
+// 2. 在 onSurfaceCreated 中自动初始化
+pixelFreeView.setRenderer(object : GLSurfaceView.Renderer {
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        pixelFreeView.initPixelFree()
+    }
+})
+
+// 3. 加载授权文件（如果有）
+val authData = pixelFreeView.readBundleFile(context, "pixelfreeAuth.lic")
+if (authData != null) {
+    pixelFreeView.auth(context, authData, authData.size)
+}
+
+// 4. 加载滤镜资源
+val filterData = pixelFreeView.readBundleFile(context, "filter_model.bundle")
+if (filterData != null) {
+    pixelFreeView.createBeautyItemFormBundle(
+        filterData,
+        filterData.size,
+        PFSrcType.PFSrcTypeFilter
+    )
+}
+```
+
+**关键原则**：
+- **必须在 GL 上下文中初始化**：在 `onSurfaceCreated` 中调用
+- **授权文件可选**：如果没有授权文件，SDK 仍可正常使用
+- **资源文件必须提前加载**：在应用启动时加载所有资源
+
+### 4.2.3 美颜参数设置
+
+**标准调用**：
+```kotlin
+// 磨皮（范围：0.0-1.0）
+pixelFreeView.setBeautyParam(
+    PFBeautyFilterType.PFBeautyFiterTypeFaceBlurStrength, 
+    0.5f
+)
+
+// 美白（范围：0.0-1.0）
+pixelFreeView.setBeautyParam(
+    PFBeautyFilterType.PFBeautyFiterTypeFaceWhitenStrength, 
+    0.3f
+)
+
+// 大眼（范围：0.0-1.0）
+pixelFreeView.setBeautyParam(
+    PFBeautyFilterType.PFBeautyFiterTypeFace_EyeStrength, 
+    0.3f
+)
+
+// 瘦脸（范围：0.0-1.0）
+pixelFreeView.setBeautyParam(
+    PFBeautyFilterType.PFBeautyFiterTypeFace_thinning, 
+    0.3f
+)
+```
+
+**参数范围**：
+- 所有美颜参数范围：`0.0` - `1.0`
+- 推荐值：`0.3` - `0.7`（自然美观）
+- **禁止**：超过 `0.8`（会导致不自然）
+
+### 4.2.4 图像处理流程
+
+**实时预览（纹理模式）**：
+```kotlin
+// 1. CameraX 生成 OpenGL 外部纹理
+val textureId = cameraXTextureId
+
+// 2. 调用 PixelFree SDK 处理纹理
+val processedTextureId = pixelFreeView.processTexture(
+    textureId, 
+    width, 
+    height
+)
+
+// 3. 渲染到屏幕
+// （可以使用默认的 GLSurfaceView 渲染，或自定义渲染）
+```
+
+**拍照处理（RGBA 模式）**：
+```kotlin
+// 1. 从 CameraX 获取 RGBA 数据
+val rgbaData = cameraXImageProxy.toByteBuffer()
+
+// 2. 调用 PixelFree SDK 处理
+val processedData = pixelFreeEngine.processRGBA(
+    rgbaData, 
+    width, 
+    height
+)
+
+// 3. 保存为照片
+val bitmap = processedData.toBitmap(width, height)
+savePhoto(bitmap)
+```
+
+**关键原则**：
+- **纹理模式性能最优**：适合实时预览
+- **RGBA 模式灵活**：适合拍照后处理
+- **YUV 模式最复杂**：不推荐使用
+
+### 4.2.5 资源管理
+
+**资源类型**：
+- **授权文件**：`pixelfreeAuth.lic`（可选）
+- **滤镜资源**：`filter_model.bundle`（必选）
+- **美妆资源**：`makeup_name.bundle`（可选）
+
+**加载时机**：
+- **应用启动时**：加载所有资源（推荐）
+- **按需加载**：首次使用时加载（节省内存）
+
+**释放时机**：
+- **Activity onDestroy**：调用 `release()`
+- **切换场景**：先调用 `clearMakeup()`，再加载新资源
+
+### 4.2.6 性能优化
+
+**渲染模式**：
+```kotlin
+// 设置为手动渲染（按需渲染）
+pixelFreeView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+
+// 在需要渲染时调用
+pixelFreeView.requestRender()
+```
+
+**分辨率选择**：
+- **实时预览**：720p（1280x720）- 性能优先
+- **拍照处理**：1080p（1920x1080）- 质量优先
+- **专业模式**：根据设备性能动态调整
+
+**内存管理**：
+- **基础占用**：~20MB（SDK 本身）
+- **滤镜资源**：~5-10MB
+- **美妆资源**：~10-20MB
+- **总占用**：控制在 60MB 以内
+
+### 4.2.7 技术借鉴与 R 计划衔接
+
+**R 计划将借鉴 PixelFreeEffects 的以下设计**：
+
+1. **渲染架构**
+   - GLSurfaceView + Renderer 模式
+   - 纹理处理流程（Texture Input → Process → Texture Output）
+   - 参数调节接口设计（PFBeautyFilterType 枚举）
+
+2. **美颜算法结构**
+   - 磨皮：盒式模糊 + 亮度提升
+   - 美白：RGB 通道调整
+   - 瘦脸：Vertex Shader 形变
+
+3. **性能优化**
+   - 离屏渲染（Pbuffer Surface）
+   - EGL 上下文共享
+   - 渲染线程优先级（MAX_PRIORITY）
+
+**自主替代目标**：
+- ✅ **零授权成本**：无需购买商业 SDK
+- ✅ **完全可控**：可定制化开发特殊效果
+- ✅ **技术积累**：构建团队核心技术能力
+- ⚠️ **时间周期**：预计需要 2-3 个月研发
+
+## 4.3 R 计划架构规范（中长期规划）
+
+### 4.3.1 核心组件职责
+
+**BeautyPreviewView**：
+- 继承 `FrameLayout`，封装 TextureView 和渲染管线
+- 管理 `CameraPreviewRenderer` 生命周期
+- 提供简单 API：`smoothingStrength`、`whiteningStrength`、`getSurfaceForCamera()`
+- **禁止**：在构造函数中启动渲染，必须等待 CameraX 请求 Surface
+
+**CameraPreviewRenderer**：
+- 管理 EGL 上下文、SurfaceTexture、渲染线程
+- 实现离屏渲染（Offscreen Rendering）
+- **关键**：使用 `eglContext` 字段保存共享上下文
+- **禁止**：在 `init()` 中启动渲染线程，必须等待 `setRenderSurface()` 调用
+
+**BeautyRenderer**：
+- 继承 `GLRenderer`，编译和使用美颜 Shader
+- 支持实时参数调整：`updateBeautyParams(smoothing, whitening)`
+- **Shader 要求**：使用盒式模糊（性能优化），禁止使用复杂的双边模糊
+
+### 4.3.2 EGL 上下文管理
+
+**标准流程**：
+```kotlin
+// 1. 创建共享上下文
+eglContext = eglCore.createContext()
+
+// 2. 离屏初始化（Pbuffer Surface）
+val pbufferSurface = eglCore.createSurface(null, 1, 1)
+eglCore.makeCurrent(pbufferSurface, eglContext!!)
+beautyRenderer.onInit()  // 编译 Shader
+
+// 3. 渲染线程（WindowSurface）
+val renderContext = eglCore.createContext()
+eglCore.makeCurrent(windowSurface.getEglSurface(), renderContext)
+beautyRenderer.onRender()
+```
+
+**关键原则**：
+- 所有上下文必须共享（通过 `eglCore.createContext()` 自动共享）
+- 离屏上下文用于初始化，渲染上下文用于实际渲染
+- **禁止**：在多个线程中同时调用 `eglMakeCurrent`
+
+### 4.3.3 SurfaceTexture 生命周期
+
+**标准流程**：
+```kotlin
+// BeautyPreviewView
+override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+    // 1. 保存 SurfaceTexture
+    this.surfaceTexture = surface
+    
+    // 2. 初始化 Renderer（不启动渲染）
+    renderer.init(this)
+    
+    // 3. 设置默认参数
+    updateBeautyParams()
+    
+    // 4. 等待 CameraX 请求 Surface（不立即启动渲染）
+}
+
+fun getSurfaceForCamera(): Surface? {
+    // 第一次调用时才创建 Surface 并启动渲染
+    if (!surfaceCreated) {
+        surfaceCreated = true
+        st.setDefaultBufferSize(1920, 1080)  // 关键！
+        renderer.setRenderSurface(Surface(st))
+    }
+    return Surface(st)
+}
+```
+
+**关键原则**：
+- **延迟初始化**：CameraX 请求时才启动渲染
+- **缓冲区大小**：必须调用 `setDefaultBufferSize()`
+- **单次创建**：使用 `surfaceCreated` 标志防止重复创建
+
+### 4.3.4 渲染线程同步
+
+**标准实现**：
+```kotlin
+private fun startRendering() {
+    renderThread = Thread {
+        var frameCount = 0
+        while (isRendering && !Thread.interrupted()) {
+            try {
+                // 1. 更新 SurfaceTexture（从相机获取帧）
+                surfaceTexture?.updateTexImage()
+                
+                // 2. 获取变换矩阵
+                val transformMatrix = FloatArray(16)
+                surfaceTexture?.getTransformMatrix(transformMatrix)
+                
+                // 3. 绑定外部纹理
+                GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId)
+                
+                // 4. 渲染
+                beautyRenderer.setTextureTransform(transformMatrix)
+                beautyRenderer.onRender()
+                
+                // 5. 交换缓冲区
+                windowSurface?.swapBuffers()
+                
+                frameCount++
+                if (frameCount % 30 == 0) {
+                    Log.d(TAG, "Rendered $frameCount frames")
+                }
+                
+                Thread.sleep(16)  // ~60fps
+                
+            } catch (e: IllegalStateException) {
+                // 错误恢复：SurfaceTexture 未就绪
+                Log.e(TAG, "Render error: ${e.message}")
+                Thread.sleep(100)
+            }
+        }
+    }.apply {
+        name = "CameraPreviewRender"
+        priority = Thread.MAX_PRIORITY
+        start()
+    }
+}
+```
+
+**关键原则**：
+- **错误恢复**：捕获 `IllegalStateException` 并重试
+- **帧率控制**：`Thread.sleep(16)` 锁定 60fps
+- **日志记录**：每 30 帧记录一次，避免日志泛滥
+
+### 4.3.5 性能指标
+
+**必须达到的指标**：
+- 启动时间：< 500ms（从打开相机到显示预览）
+- 渲染延迟：< 16ms（60fps）
+- 内存占用：< 50MB（额外）
+- 纹理 ID：必须是非 0 值
+
+**监控方法**：
+```kotlin
+// 在渲染线程中
+var lastFpsTime = System.currentTimeMillis()
+var frameCount = 0
+
+// 每帧计数
+frameCount++
+val currentTime = System.currentTimeMillis()
+if (currentTime - lastFpsTime >= 1000) {
+    Log.d(TAG, "FPS: $frameCount")
+    frameCount = 0
+    lastFpsTime = currentTime
+}
+```
+
+### 4.3.6 调试检查清单
+
+**启动阶段**：
+- [ ] `onSurfaceTextureAvailable` 被调用
+- [ ] `renderer.init()` 成功
+- [ ] 外部纹理 ID 创建（非 0）
+- [ ] SurfaceTexture 创建成功
+
+**CameraX 绑定**：
+- [ ] `getSurfaceForCamera()` 被调用
+- [ ] 返回的 Surface 非 null
+- [ ] `setSurfaceProvider` 被调用
+- [ ] SurfaceProvider 的回调执行
+- [ ] 有 "Camera bound" 日志
+
+**渲染阶段**：
+- [ ] 渲染线程启动
+- [ ] `updateTexImage()` 成功
+- [ ] 有 "New frame available" 回调
+- [ ] 渲染每 16ms 执行一次
+- [ ] TextureView 显示内容
+
+**关键日志标签**：
+```
+D/PicMe:BeautyPreviewView: Surface texture available
+D/PicMe:CameraPreview: External texture created: X (X != 0)
+D/PicMe:CameraPreview: SurfaceTexture created with texture ID: X
+D/PicMe:Camera: Creating Surface for CameraX
+D/PicMe:Camera: SurfaceProvider called
+D/PicMe:Camera: Camera bound
+D/PicMe:CameraPreview: Render thread started
+D/PicMe:CameraPreview: Rendered X frames
+```
+
+### 4.3.7 降级策略
+
+**检测到失败时的降级**：
+```kotlin
+// 在 CameraScreen 中
+var useFallbackPreview by remember { mutableStateOf(false) }
+
+LaunchedEffect(Unit) {
+    delay(5000)  // 等待 5 秒
+    if (!isRenderingSuccessfully) {
+        Log.e("PicMe:Camera", "R plan failed, switching to fallback")
+        useFallbackPreview = true
+    }
+}
+
+// 降级方案：使用普通 PreviewView（无美颜预览）
+val previewView = if (useFallbackPreview) {
+    PreviewView(context)
+} else {
+    beautyPreviewView
+}
+```
+
+**离线美颜实现**：
+```kotlin
+// 拍照时应用美颜
+fun capturePhoto(beautySettings: BeautySettings) {
+    imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+        val bitmap = imageProxy.toBitmap()
+        val processedBitmap = applyBeautyOnGPU(bitmap, beautySettings)
+        saveImage(processedBitmap)
+        imageProxy.close()
+    }
+}
+```
 
 ## 4.1 Import 最佳实践 [CR 重点检查]
 
