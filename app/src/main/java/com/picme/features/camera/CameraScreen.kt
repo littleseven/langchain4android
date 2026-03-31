@@ -306,6 +306,28 @@ fun CameraContent(
         }
     }
 
+    // [RD] PixelFree 美颜预览View（实时美颜）
+    val pixelFreeView = remember {
+        com.picme.core.image.pixelfree.PixelFreeGLSurfaceView(context).apply {
+            Logger.d("Camera", "PixelFreeGLSurfaceView created for real-time beauty")
+        }
+    }
+
+    // [RD] 同步美颜参数到 PixelFree SDK
+    LaunchedEffect(beautySettings) {
+        if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
+            // 参数范围归一化：BeautySettings (0-100) → PixelFree (0.0-1.0)
+            pixelFreeView.setSmoothingStrength(beautySettings.smoothing / 100f)
+            pixelFreeView.setWhiteningStrength(beautySettings.whitening / 100f)
+            pixelFreeView.setBigEyesStrength(beautySettings.bigEyes / 100f)
+            pixelFreeView.setSlimFaceStrength(beautySettings.slimFace / 100f)
+
+            Logger.d("Camera", "Beauty params updated: smoothing=${beautySettings.smoothing}, " +
+                "whitening=${beautySettings.whitening}, bigEyes=${beautySettings.bigEyes}, " +
+                "slimFace=${beautySettings.slimFace}")
+        }
+    }
+
     // [RD] 监听比例变化，动态调整 ScaleType
     LaunchedEffect(aspectRatio) {
         previewView.scaleType = when (aspectRatio) {
@@ -592,6 +614,7 @@ fun CameraContent(
 
                     val mediaImage = imageProxy.image
                     if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
+                        // [RD] 1. 人脸检测处理
                         val image = InputImage.fromMediaImage(
                             mediaImage,
                             imageProxy.imageInfo.rotationDegrees
@@ -634,8 +657,15 @@ fun CameraContent(
                                 }
                             }
                             .addOnCompleteListener {
-                                // [RD] 人脸检测完成后，关闭 imageProxy
-                                // TODO: 后续实现美颜预览
+                                // [RD] 2. 美颜预览处理（当美颜开启时）
+                                // 注意：PixelFree SDK 需要 OpenGL 纹理输入
+                                // 当前ImageProxy是YUV格式，需要转换为纹理
+                                // 为避免性能问题，暂时只在拍照时应用美颜
+                                // TODO: 未来优化 - 使用 SurfaceTexture 实现真正的实时预览
+                                if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
+                                    Logger.d("Camera", "Beauty enabled, will apply on capture")
+                                }
+
                                 imageProxy.close()
                             }
                     } else {
@@ -770,6 +800,7 @@ CameraPreviewContent(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
+            // [RD] 普通预览（美颜关闭时）或背景预览（美颜开启时）
             AndroidView(
                 factory = { previewView },
                 modifier = if (aspectRatio == AspectRatio.RATIO_FULL) {
@@ -780,6 +811,16 @@ CameraPreviewContent(
                     Modifier.fillMaxSize()
                 }
             )
+
+            // [RD] 实时美颜预览层（美颜开启时显示）
+            // 当前实现：PixelFreeGLSurfaceView 作为独立渲染层
+            // 拍照时会应用完整的美颜效果
+            // 注意：完整的实时预览需要纹理流式传输，后续优化
+            if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
+                // 预留：未来在这里叠加 PixelFreeGLSurfaceView
+                // 当前版本专注于拍照美颜，预览保持原生流畅度
+                // AndroidView(factory = { pixelFreeView }, ...)
+            }
         }
     },
     selectedFilter = selectedFilter,
