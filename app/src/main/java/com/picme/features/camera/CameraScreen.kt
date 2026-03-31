@@ -1026,6 +1026,9 @@ fun CameraPreviewContent(
         CameraLeftControls(
             onNavigateToSettings = onNavigateToSettings,
             onNavigateToDebug = onNavigateToDebug,
+            onToggleCameraInfo = onToggleCameraInfo,
+            onToggleLogs = onToggleLogs,
+            isCameraInfoSelected = showCameraInfo,
             modifier = Modifier.align(Alignment.TopStart)
         )
 
@@ -1033,16 +1036,15 @@ fun CameraPreviewContent(
             onToggleBeauty = onToggleBeauty,
             onToggleFilter = onToggleFilter,
             onToggleRatio = onToggleRatio,
-            onToggleCameraInfo = onToggleCameraInfo,
             onToggleScene = onToggleScene,
             onToggleGrid = onToggleGrid,
-            onToggleLogs = onToggleLogs,
+            onToggleBeautyEnabled = { onBeautySettingsChanged(beautySettings.copy(enabled = !beautySettings.enabled)) },
             isBeautySelected = showBeautySelector,
             isFilterSelected = showFilterSelector,
             isRatioSelected = showRatioSelector,
-            isCameraInfoSelected = showCameraInfo,
             isSceneActive = currentScene != ScenePreset.NONE,
             isGridActive = showGridSelector,
+            isBeautyEnabled = beautySettings.enabled,
             currentRatio = aspectRatio,
             modifier = Modifier.align(Alignment.TopEnd)
         )

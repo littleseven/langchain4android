@@ -113,7 +113,7 @@ private fun SettingsContent(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             SettingsSection(title = stringResource(R.string.theme_mode)) {
                 ThemeSelection(
@@ -122,7 +122,7 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             SettingsSection(title = stringResource(R.string.language)) {
                 LanguageSelection(
@@ -131,7 +131,7 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             SettingsSection(title = stringResource(R.string.beauty_engine)) {
                 BeautyStrategySelection(
@@ -153,11 +153,11 @@ private fun SettingsSection(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 4.dp)
         )
         content()
         HorizontalDivider(
-            modifier = Modifier.padding(top = 8.dp),
+            modifier = Modifier.padding(top = 4.dp),
             color = MaterialTheme.colorScheme.outlineVariant
         )
     }
@@ -238,13 +238,13 @@ private fun SelectionRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(44.dp)
             .selectable(
                 selected = isSelected,
                 onClick = onClick,
                 role = Role.RadioButton
             )
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         RadioButton(
@@ -254,7 +254,7 @@ private fun SelectionRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(start = 16.dp)
+            modifier = Modifier.padding(start = 12.dp)
         )
     }
 }

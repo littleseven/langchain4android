@@ -5,6 +5,9 @@ package com.picme.domain.model
  * 包含所有美颜功能的参数配置
  */
 data class BeautySettings(
+    // 美颜总开关
+    val enabled: Boolean = false,   // 美颜是否启用
+
     // 面部精修
     val smoothing: Float = 0f,      // 磨皮 0-100
     val whitening: Float = 0f,      // 美白 0-100
@@ -21,4 +24,13 @@ data class BeautySettings(
     // 身材管理
     val bodyEnhancement: Float = 0f, // 丰胸 -30~+30
     val legExtension: Float = 0f     // 长腿 0-50
-)
+) {
+    /**
+     * 检查是否有任何美颜参数被设置
+     */
+    fun hasAnyEffect(): Boolean {
+        return smoothing > 0 || whitening > 0 || slimFace != 0f || bigEyes > 0 ||
+                youth > 0 || lipColor > 0 || blush > 0 || eyebrow > 0 ||
+                bodyEnhancement != 0f || legExtension > 0
+    }
+}

@@ -101,6 +101,9 @@ import com.picme.features.camera.model.FilterType
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
+    onToggleCameraInfo: () -> Unit,
+    onToggleLogs: () -> Unit,
+    isCameraInfoSelected: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -111,6 +114,16 @@ fun CameraLeftControls(
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
         ControlButton(icon = Icons.Rounded.BugReport, onClick = onNavigateToDebug)
+        ControlButton(
+            icon = Icons.Rounded.Info,
+            onClick = onToggleCameraInfo,
+            isActive = isCameraInfoSelected
+        )
+        ControlButton(
+            icon = Icons.Rounded.Terminal,
+            onClick = onToggleLogs,
+            isActive = false
+        )
     }
 }
 
@@ -119,16 +132,15 @@ fun CameraRightControls(
     onToggleBeauty: () -> Unit,
     onToggleFilter: () -> Unit,
     onToggleRatio: () -> Unit,
-    onToggleCameraInfo: () -> Unit,
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
-    onToggleLogs: () -> Unit,
+    onToggleBeautyEnabled: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
     isRatioSelected: Boolean,
-    isCameraInfoSelected: Boolean,
     isSceneActive: Boolean,
     isGridActive: Boolean,
+    isBeautyEnabled: Boolean,
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -139,10 +151,11 @@ fun CameraRightControls(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.End
     ) {
+        // 美颜开关 - 使用不同的样式突出显示
         ControlButton(
-            icon = Icons.Rounded.Info,
-            onClick = onToggleCameraInfo,
-            isActive = isCameraInfoSelected
+            icon = Icons.Rounded.FaceRetouchingNatural,
+            onClick = onToggleBeautyEnabled,
+            isActive = isBeautyEnabled
         )
         ControlButton(
             icon = when (currentRatio) {
@@ -174,11 +187,6 @@ fun CameraRightControls(
             icon = Icons.Rounded.GridOn,
             onClick = onToggleGrid,
             isActive = isGridActive
-        )
-        // OCR入口已根据产品方案移除，仅在文档模式下保留
-        ControlButton(
-            icon = Icons.Rounded.Terminal,
-            onClick = onToggleLogs
         )
     }
 }

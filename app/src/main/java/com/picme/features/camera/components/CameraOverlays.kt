@@ -1,31 +1,24 @@
 package com.picme.features.camera.components
 
-import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -157,7 +150,8 @@ fun CameraInfoOverlay(
                     currentScene = currentScene,
                     gridType = gridType,
                     exposureCompensation = exposureCompensation,
-                    whiteBalanceMode = whiteBalanceMode
+                    whiteBalanceMode = whiteBalanceMode,
+                    beautySettings = beautySettings
                 )
             }
         }
@@ -194,7 +188,8 @@ private fun SettingsInfoItems(
     currentScene: ScenePreset,
     gridType: GridType,
     exposureCompensation: Int,
-    whiteBalanceMode: Int
+    whiteBalanceMode: Int,
+    beautySettings: BeautySettings
 ) {
     InfoItem(
         label = stringResource(R.string.info_aspect_ratio),
@@ -235,6 +230,39 @@ private fun SettingsInfoItems(
             else -> stringResource(R.string.wb_auto)
         }
         InfoItem(label = stringResource(R.string.wb), value = wbLabel)
+    }
+
+    // 美颜信息
+    InfoItem(
+        label = stringResource(R.string.beauty),
+        value = if (beautySettings.enabled) "ON" else "OFF"
+    )
+
+    if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
+        if (beautySettings.smoothing > 0f) {
+            InfoItem(
+                label = stringResource(R.string.smoothing),
+                value = String.format(Locale.US, "%.1f", beautySettings.smoothing)
+            )
+        }
+        if (beautySettings.whitening > 0f) {
+            InfoItem(
+                label = stringResource(R.string.whitening),
+                value = String.format(Locale.US, "%.1f", beautySettings.whitening)
+            )
+        }
+        if (beautySettings.bigEyes > 0f) {
+            InfoItem(
+                label = stringResource(R.string.big_eyes),
+                value = String.format(Locale.US, "%.1f", beautySettings.bigEyes)
+            )
+        }
+        if (beautySettings.slimFace > 0f) {
+            InfoItem(
+                label = stringResource(R.string.slim_face),
+                value = String.format(Locale.US, "%.1f", beautySettings.slimFace)
+            )
+        }
     }
 }
 

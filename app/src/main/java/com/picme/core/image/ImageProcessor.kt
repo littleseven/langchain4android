@@ -70,16 +70,18 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         faces: List<Face>
     ) : Bitmap {
         // [DEBUG] 记录传入的参数
-        Logger.d("ImageProcessor", "processPhoto called: smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
-        
+        Logger.d("ImageProcessor", "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
+
         // 使用协程在后台线程处理
         return java.util.concurrent.Executors.newSingleThreadExecutor().submit<Bitmap> {
             var processed = source.copy(Bitmap.Config.ARGB_8888, true)
             
-            Logger.d("ImageProcessor", "Starting beauty processing...")
-            
-            // 使用 GpuBeautyProcessor 处理所有美颜效果
-            kotlinx.coroutines.runBlocking {
+            // 检查美颜是否启用
+            if (beauty.enabled && beauty.hasAnyEffect()) {
+                Logger.d("ImageProcessor", "Starting beauty processing...")
+
+                // 使用 BeautyProcessor 处理所有美颜效果
+                kotlinx.coroutines.runBlocking {
                 // 面部精修
                 if (beauty.smoothing > 0f) {
                     Logger.d("ImageProcessor", "Applying smoothing: ${beauty.smoothing}")
@@ -130,9 +132,12 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                         processed = beautyProcessor.applyLegExtension(processed, beauty.legExtension)
                     }
                 }
+                }
+
+                Logger.d("ImageProcessor", "Beauty processing completed")
+            } else {
+                Logger.d("ImageProcessor", "Beauty processing skipped (enabled=${beauty.enabled}, hasEffect=${beauty.hasAnyEffect()})")
             }
-            
-            Logger.d("ImageProcessor", "Beauty processing completed")
             
             // 应用滤镜
             val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
