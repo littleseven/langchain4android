@@ -1,9 +1,9 @@
-# R 计划：实时美颜预览技术方案
+# R 计划：实时美颜完整指南
 
-**版本**：3.0  
-**状态**：规划中（中长期自主方案）  
-**最后更新**：2026-03-29  
-**技术路线**：离屏渲染（Offscreen Rendering）+ 手动 EGL 管理  
+**版本**：3.0
+**状态**：规划中（中长期自主方案）
+**最后更新**：2026-03-29
+**技术路线**：离屏渲染（Offscreen Rendering）+ 手动 EGL 管理
 **实施策略**：双轨并行 - 短期 PixelFreeEffects，中长期 R 计划自主实现
 
 ---
@@ -72,9 +72,7 @@ R 计划将借鉴 PixelFreeEffects 的以下技术方案：
 2. **处理流**：使用 GLSL Shader 在 GPU 上并行处理每个像素
 3. **显示流**：处理后的纹理必须直接输出到屏幕
 
-### 1.3 为什么 R 计划困难？
-
-**三大技术壁垒**：
+### 1.3 三大技术壁垒
 
 1. **EGL 上下文管理**
    - OpenGL ES 需要在正确的 EGL 上下文中操作
@@ -93,7 +91,7 @@ R 计划将借鉴 PixelFreeEffects 的以下技术方案：
 
 ---
 
-## 2. R 计划技术架构
+## 2. 技术架构
 
 ### 2.1 整体架构
 
@@ -130,44 +128,38 @@ R 计划将借鉴 PixelFreeEffects 的以下技术方案：
 
 ### 2.2 核心组件职责
 
-#### 2.2.1 BeautyPreviewView
+#### BeautyPreviewView
 **职责**：封装 TextureView 和渲染管线，提供简单 API
-- 继承 `FrameLayout`
-- 内部包含 `TextureView`
-- 管理 `CameraPreviewRenderer` 生命周期
-- 提供美颜参数设置接口
 
-**关键方法**：
 ```kotlin
 class BeautyPreviewView : FrameLayout {
     var smoothingStrength: Float  // 磨皮强度
     var whiteningStrength: Float  // 美白强度
-    
+
     fun getSurfaceForCamera(): Surface?  // 供 CameraX 使用
     fun getSurfaceTexture(): SurfaceTexture?  // 获取 SurfaceTexture
 }
 ```
 
-#### 2.2.2 CameraPreviewRenderer
-**职责**：管理完整的渲染管线
-- 初始化 EGL 上下文
-- 创建外部纹理（External Texture）
-- 启动渲染线程
-- 协调 CameraX 和 OpenGL
+**关键原则**：
+- **禁止**在构造函数中启动渲染，必须等待 CameraX 请求 Surface
+- 使用 `surfaceCreated` 标志防止重复创建
 
-**关键流程**：
+#### CameraPreviewRenderer
+**职责**：管理完整的渲染管线
+
 ```kotlin
 fun init(view: View) {
     // 1. 初始化 EGL
     eglCore.init()
     eglContext = eglCore.createContext()
-    
+
     // 2. 创建外部纹理（用于接收相机帧）
     createExternalTexture()
-    
+
     // 3. 创建 SurfaceTexture（绑定到外部纹理）
     surfaceTexture = SurfaceTexture(textureId)
-    
+
     // 4. 初始化 BeautyRenderer（离屏渲染）
     val pbufferSurface = eglCore.createSurface(null, 1, 1)
     eglCore.makeCurrent(pbufferSurface, eglContext!!)
@@ -177,19 +169,19 @@ fun init(view: View) {
 fun setRenderSurface(surface: Surface) {
     // 创建 WindowSurface（用于显示）
     windowSurface = WindowSurface(surface, eglCore)
-    
+
     // 启动渲染线程
     startRendering()
 }
 ```
 
-#### 2.2.3 BeautyRenderer
-**职责**：执行美颜渲染
-- 编译和使用美颜 Shader
-- 应用磨皮、美白等效果
-- 支持实时参数调整
+**关键原则**：
+- **禁止**在 `init()` 中启动渲染线程，必须等待 `setRenderSurface()` 调用
+- 使用 `eglContext` 字段保存共享上下文
 
-**Shader 结构**：
+#### BeautyRenderer
+**职责**：执行美颜渲染
+
 ```glsl
 #extension GL_OES_EGL_image_external : require
 precision mediump float;
@@ -202,16 +194,20 @@ varying vec2 vTextureCoord;
 void main() {
     // 1. 从外部纹理采样
     vec4 color = texture2D(uTexture, vTextureCoord);
-    
+
     // 2. 磨皮处理（盒式模糊）
     vec4 smoothed = smoothSkin(vTextureCoord, uSmoothing);
-    
+
     // 3. 美白处理（RGB 亮度提升）
     vec4 whitened = whitenSkin(smoothed, uWhitening);
-    
+
     gl_FragColor = whitened;
 }
 ```
+
+**关键原则**：
+- **Shader 要求**：使用盒式模糊（性能优化），禁止使用复杂的双边模糊
+- 支持实时参数调整：`updateBeautyParams(smoothing, whitening)`
 
 ---
 
@@ -219,12 +215,7 @@ void main() {
 
 ### 3.1 难点 1：EGL 上下文管理
 
-**问题**：
-- SurfaceTexture 的 `updateTexImage()` 必须在绑定它的 EGL 上下文中调用
-- 离屏渲染需要单独的 EGL 上下文
-- 显示到屏幕需要 WindowSurface 的 EGL 上下文
-
-**解决方案**：**EGL 上下文共享**
+**解决方案**：EGL 上下文共享
 
 ```kotlin
 // 1. 创建共享上下文
@@ -236,24 +227,17 @@ eglCore.makeCurrent(pbufferSurface, eglContext!!)
 beautyRenderer.onInit()  // 初始化 Shader
 
 // 3. 渲染线程中的上下文（用于实际渲染）
-// 在渲染线程中创建共享上下文
 val renderContext = eglCore.createContext()
 eglCore.makeCurrent(windowSurface.getEglSurface(), renderContext)
 ```
 
 **关键点**：
 - 所有上下文共享纹理和资源
-- 离屏上下文用于初始化
-- 渲染上下文用于实际渲染
+- **禁止**：在多个线程中同时调用 `eglMakeCurrent`
 
 ### 3.2 难点 2：SurfaceTexture 生命周期
 
-**问题**：
-- SurfaceTexture 必须在相机开始输出帧之前准备好
-- 渲染线程启动太早会导致 `updateTexImage()` 失败
-- 渲染线程启动太晚会导致延迟
-
-**解决方案**：**延迟初始化策略**
+**解决方案**：延迟初始化策略
 
 ```kotlin
 // BeautyPreviewView 中
@@ -262,61 +246,75 @@ private var surfaceCreated = false
 fun getSurfaceForCamera(): Surface? {
     val surfaceTexture = renderer.getSurfaceTexture()
     if (surfaceTexture == null) return null
-    
+
     // 第一次调用时才创建 Surface 并启动渲染
     if (!surfaceCreated) {
         surfaceCreated = true
+        surfaceTexture.setDefaultBufferSize(1920, 1080)  // 关键！
         renderer.setRenderSurface(Surface(surfaceTexture))
     }
-    
+
     return Surface(surfaceTexture)
 }
 ```
 
-**原理**：
-- CameraX 调用 `getSurfaceForCamera()` 时，说明它真正需要 Surface
-- 此时才启动渲染线程，确保时机正确
+**关键原则**：
+- **延迟初始化**：CameraX 请求时才启动渲染
+- **缓冲区大小**：必须调用 `setDefaultBufferSize()`
+- **单次创建**：使用 `surfaceCreated` 标志防止重复创建
 
 ### 3.3 难点 3：渲染线程同步
 
-**问题**：
-- 渲染线程必须在相机帧到达时立即渲染
-- 不能过早调用 `updateTexImage()`（会失败）
-- 不能过晚调用（会延迟）
-
-**解决方案**：**基于 SurfaceTexture 的帧可用监听**
+**解决方案**：基于 SurfaceTexture 的帧可用监听 + 错误恢复
 
 ```kotlin
-// 在 CameraPreviewRenderer 中
-surfaceTexture = SurfaceTexture(textureId).apply {
-    setOnFrameAvailableListener { st ->
-        // 新帧到达，触发渲染
-        // 注意：这个回调在主线程，需要通知渲染线程
+private fun startRendering() {
+    renderThread = Thread {
+        var frameCount = 0
+        while (isRendering && !Thread.interrupted()) {
+            try {
+                // 1. 更新 SurfaceTexture（从相机获取帧）
+                surfaceTexture?.updateTexImage()
+
+                // 2. 获取变换矩阵
+                val transformMatrix = FloatArray(16)
+                surfaceTexture?.getTransformMatrix(transformMatrix)
+
+                // 3. 绑定外部纹理
+                GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId)
+
+                // 4. 渲染
+                beautyRenderer.setTextureTransform(transformMatrix)
+                beautyRenderer.onRender()
+
+                // 5. 交换缓冲区
+                windowSurface?.swapBuffers()
+
+                frameCount++
+                if (frameCount % 30 == 0) {
+                    Log.d(TAG, "Rendered $frameCount frames")
+                }
+
+                Thread.sleep(16)  // ~60fps
+
+            } catch (e: IllegalStateException) {
+                // 错误恢复：SurfaceTexture 未就绪
+                Log.e(TAG, "Render error: ${e.message}")
+                Thread.sleep(100)
+            }
+        }
+    }.apply {
+        name = "CameraPreviewRender"
+        priority = Thread.MAX_PRIORITY
+        start()
     }
 }
-
-// 渲染线程中
-while (isRendering) {
-    // 1. 更新 SurfaceTexture（从相机获取新帧）
-    surfaceTexture?.updateTexImage()
-    
-    // 2. 获取变换矩阵
-    val transformMatrix = FloatArray(16)
-    surfaceTexture?.getTransformMatrix(transformMatrix)
-    
-    // 3. 绑定外部纹理
-    GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId)
-    
-    // 4. 渲染
-    beautyRenderer.setTextureTransform(transformMatrix)
-    beautyRenderer.onRender()
-    
-    // 5. 交换缓冲区
-    windowSurface?.swapBuffers()
-    
-    Thread.sleep(16)  // ~60fps
-}
 ```
+
+**关键原则**：
+- **错误恢复**：捕获 `IllegalStateException` 并重试
+- **帧率控制**：`Thread.sleep(16)` 锁定 60fps
+- **日志记录**：每 30 帧记录一次，避免日志泛滥
 
 ---
 
@@ -384,69 +382,166 @@ while (isRendering) {
 
 ---
 
-## 5. 性能优化策略
+## 5. 调试检查清单
 
-### 5.1 内存优化
+### 5.1 启动阶段
+- [ ] `onSurfaceTextureAvailable` 被调用
+- [ ] `renderer.init()` 成功
+- [ ] 外部纹理 ID 创建（非 0）
+- [ ] SurfaceTexture 创建成功
+
+### 5.2 CameraX 绑定
+- [ ] `getSurfaceForCamera()` 被调用
+- [ ] 返回的 Surface 非 null
+- [ ] `setSurfaceProvider` 被调用
+- [ ] SurfaceProvider 的回调执行
+- [ ] 有 "Camera bound" 日志
+
+### 5.3 渲染阶段
+- [ ] 渲染线程启动
+- [ ] `updateTexImage()` 成功
+- [ ] 有 "New frame available" 回调
+- [ ] 渲染每 16ms 执行一次
+- [ ] TextureView 显示内容
+
+### 5.4 关键日志标签
+
+```
+D/PicMe:BeautyPreviewView: Surface texture available
+D/PicMe:CameraPreview: External texture created: X (X != 0)
+D/PicMe:CameraPreview: SurfaceTexture created with texture ID: X
+D/PicMe:Camera: Creating Surface for CameraX
+D/PicMe:Camera: SurfaceProvider called
+D/PicMe:Camera: Camera bound
+D/PicMe:CameraPreview: Render thread started
+D/PicMe:CameraPreview: Rendered X frames
+```
+
+---
+
+## 6. 常见问题与解决方案
+
+### 问题 1：External texture created: 0
+**原因**：纹理 ID 为 0，说明纹理创建失败
+**解决**：检查 EGL 上下文是否正确初始化
+
+### 问题 2：SurfaceTexture 为 null
+**原因**：初始化顺序错误
+**解决**：确保先保存 SurfaceTexture，再初始化 Renderer
+
+### 问题 3：没有 "Camera bound" 日志
+**原因**：CameraX 绑定失败
+**解决**：检查 SurfaceProvider 是否正确配置，Surface 是否有效
+
+### 问题 4：渲染线程启动但立即停止
+**原因**：`updateTexImage()` 持续失败
+**解决**：添加重试机制，检查相机是否开始输出帧
+
+---
+
+## 7. 降级策略
+
+### 7.1 检测失败并降级
+
+```kotlin
+// 在 CameraScreen 中
+var useFallbackPreview by remember { mutableStateOf(false) }
+
+LaunchedEffect(Unit) {
+    delay(5000)  // 等待 5 秒
+    if (!isRenderingSuccessfully) {
+        Log.e("PicMe:Camera", "R plan failed, switching to fallback")
+        useFallbackPreview = true
+    }
+}
+
+// 降级方案：使用普通 PreviewView（无美颜预览）
+val previewView = if (useFallbackPreview) {
+    PreviewView(context)
+} else {
+    beautyPreviewView
+}
+```
+
+### 7.2 离线美颜实现
+
+```kotlin
+// 拍照时应用美颜
+fun capturePhoto(beautySettings: BeautySettings) {
+    imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+        val bitmap = imageProxy.toBitmap()
+        val processedBitmap = applyBeautyOnGPU(bitmap, beautySettings)
+        saveImage(processedBitmap)
+        imageProxy.close()
+    }
+}
+```
+
+---
+
+## 8. 性能指标
+
+### 8.1 必须达到的指标
+- 启动时间：< 500ms（从打开相机到显示预览）
+- 渲染延迟：< 16ms（60fps）
+- 内存占用：< 50MB（额外）
+- 纹理 ID：必须是非 0 值
+
+### 8.2 监控方法
+
+```kotlin
+// 在渲染线程中
+var lastFpsTime = System.currentTimeMillis()
+var frameCount = 0
+
+// 每帧计数
+frameCount++
+val currentTime = System.currentTimeMillis()
+if (currentTime - lastFpsTime >= 1000) {
+    Log.d(TAG, "FPS: $frameCount")
+    frameCount = 0
+    lastFpsTime = currentTime
+}
+```
+
+---
+
+## 9. 性能优化策略
+
+### 9.1 内存优化
 - **零拷贝**：SurfaceTexture 直接输出到 OpenGL 纹理
 - **纹理复用**：只创建一个外部纹理，重复使用
 - **离屏渲染**：使用 1x1 Pbuffer Surface，最小化内存占用
 
-### 5.2 性能优化
+### 9.2 性能优化
 - **渲染线程优先级**：`Thread.MAX_PRIORITY`
 - **固定帧率**：`Thread.sleep(16)` 锁定 60fps
 - **Shader 优化**：使用盒式模糊代替双边模糊（性能提升 10 倍）
 
-### 5.3 延迟优化
+### 9.3 延迟优化
 - **及时启动**：CameraX 请求 Surface 时立即启动渲染
 - **异步处理**：渲染在独立线程，不阻塞 UI
 - **直接显示**：TextureView 硬件加速，无额外拷贝
 
 ---
 
-## 6. 关键技术指标
+## 10. 技术风险与应对
 
-### 6.1 性能指标
-- **启动时间**：< 500ms（从打开相机到显示预览）
-- **快门延迟**：< 50ms
-- **渲染延迟**：< 16ms（60fps）
-- **内存占用**：< 50MB（额外）
-
-### 6.2 质量指标
-- **分辨率**：支持 1080p 实时渲染
-- **帧率**：稳定 60fps
-- **美颜效果**：磨皮、美白实时可调
-
----
-
-## 7. 技术风险与应对
-
-### 7.1 风险 1：设备兼容性
+### 风险 1：设备兼容性
 **风险**：不同厂商的 OpenGL ES 实现可能有差异
+**应对**：最低支持 OpenGL ES 3.0，在低端设备上降级到离线美颜
 
-**应对**：
-- 最低支持 OpenGL ES 3.0
-- 在低端设备上降级到离线美颜
-- 充分测试主流机型
-
-### 7.2 风险 2：SurfaceTexture 失效
+### 风险 2：SurfaceTexture 失效
 **风险**：`updateTexImage()` 可能因上下文不匹配而失败
+**应对**：严格的生命周期管理 + 错误恢复机制 + 降级到 PreviewView
 
-**应对**：
-- 严格的生命周期管理
-- 错误恢复机制
-- 降级到 PreviewView 方案
-
-### 7.3 风险 3：性能瓶颈
+### 风险 3：性能瓶颈
 **风险**：复杂 Shader 导致帧率下降
-
-**应对**：
-- 使用简化的磨皮算法
-- 支持性能模式（关闭美颜）
-- 动态调整渲染质量
+**应对**：使用简化的磨皮算法 + 支持性能模式（关闭美颜）
 
 ---
 
-## 8. 实施计划
+## 11. 实施计划
 
 ### Phase 1：基础架构（已完成）
 - [x] EGLCore 实现
@@ -474,24 +569,17 @@ while (isRendering) {
 
 ---
 
-## 9. 参考资料
+## 12. 相关文档
 
-### 9.1 官方文档
-- [OpenGL ES 编程指南](https://developer.android.com/guide/topics/graphics/opengl)
-- [CameraX 架构](https://developer.android.com/training/camerax/architecture)
-- [SurfaceTexture 详解](https://source.android.com/devices/graphics/arch-st)
-
-### 9.2 开源项目
-- [GPUImage](https://github.com/cyberagent/android-gpuimage)
-- [CameraX 示例](https://github.com/android/camera-samples)
-
-### 9.3 技术文章
-- [Android 图形系统架构](https://source.android.com/devices/graphics)
-- [OpenGL ES 最佳实践](https://developer.arm.com/solutions/graphics-and-gaming/arm-mali-gpu-training)
+- `PRODUCT.md` - 产品需求规格说明书
+- `FEATURES.md` - 功能交互规范
+- `AGENTS.md` - AI Agent 操作规范（包含 R 计划架构规范章节）
+- `PIXELFREE_INTEGRATION.md` - 当前实施方案（PixelFreeEffects SDK 集成）
+- `CAMERA_PREVIEW_GUIDE.md` - 相机预览完整指南
 
 ---
 
-## 10. 总结
+## 13. 总结
 
 R 计划的核心是**构建一个高效的 GPU 加速图像流处理管道**，通过：
 
@@ -500,4 +588,20 @@ R 计划的核心是**构建一个高效的 GPU 加速图像流处理管道**，
 3. **GLSL Shader**实现实时美颜算法
 4. **独立渲染线程**保证 60fps 流畅度
 
+**关键成功因素**：
+1. ✅ 正确的初始化顺序
+2. ✅ 合适的 Surface 创建时机
+3. ✅ EGL 上下文的正确管理
+4. ✅ 渲染线程与相机帧的同步
+
+**失败应对**：
+- 准备降级方案（离线美颜）
+- 充分的日志记录
+- 快速失败和恢复机制
+
+**预期结果**：
+- 成功：实现 60fps 实时美颜预览
+- 失败：降级到离线美颜，不影响拍照功能
+
 这是一个技术难度极高但性能最优的方案，成功实施后将使 PicMe 的美颜功能达到业界领先水平。
+

@@ -12,6 +12,12 @@
 
 **技术实现说明**：具体技术选型、架构设计、API 调用等实现细节由各功能模块的 `AGENTS.md` 定义，由 RD 团队决策。
 
+**相关技术文档**：
+- 相机预览实现 → [`CAMERA_PREVIEW_GUIDE.md`](CAMERA_PREVIEW_GUIDE.md)
+- 实时美颜方案 → [`R_PLAN_GUIDE.md`](R_PLAN_GUIDE.md)
+- PixelFree SDK → [`PIXELFREE_INTEGRATION.md`](PIXELFREE_INTEGRATION.md)
+- 代码规范 → [`../AGENTS.md`](../AGENTS.md)
+
 ## 目录
 1. [智能相机](#1-智能相机-camera)
    - [场景识别能力](#11-场景识别能力)
@@ -117,7 +123,7 @@
 - **记忆功能**：记住用户上次使用的参数组合
 - **技术实现**：
     - **短期（1-2 周）**：基于 PixelFreeEffects SDK 实现全功能实时预览
-    - **中长期（2-3 月）**：基于 R 计划自主研发，借鉴 PixelFreeEffects 技术方案
+    - **中长期（2-3 月）**：基于 R 计划自主研发，借鉴 PixelFreeEffects 技术方案（详见 [`R_PLAN_GUIDE.md`](R_PLAN_GUIDE.md)）
 
 ### 1.4 滤镜系统
 
@@ -211,7 +217,7 @@ transformFaceCoordinate()
 
 #### 1.6.2.1 四个坐标系的关系
 
-**详细技术文档请查看**：[`COORDINATE_SYSTEMS.md`](COORDINATE_SYSTEMS.md)
+**详细技术文档请查看**：[`CAMERA_PREVIEW_GUIDE.md`](CAMERA_PREVIEW_GUIDE.md) - 第 3 节：坐标系统与人脸跟踪
 
 **快速概览**：
 

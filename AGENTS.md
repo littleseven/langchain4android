@@ -56,21 +56,43 @@ AGENTS.md (AI Agent 操作规范)
 **注意**：模块 AGENTS.md 应聚焦技术实现细节，不得包含产品需求或交互规范（这些应在 FEATURES.md 中定义）。
 
 ### 2.5 技术方案的文档化
-对于复杂的技术方案，需要创建独立的技术规范文档：
-- `docs/PIXELFREE_INTEGRATION.md` - PixelFreeEffects SDK 集成文档（**当前实施方案**）
-- `docs/R_PLAN_TECHNICAL_SPEC.md` - R 计划自主技术方案（**中长期规划**）
-- `docs/R_PLAN_IMPLEMENTATION_GUIDE.md` - R 计划实施指南
 
-**双轨策略说明**：
-- **短期（1-2 周）**：使用 PixelFreeEffects SDK 快速实现产品功能
-- **中期（1-2 月）**：并行运行，积累性能数据和用户反馈
-- **中长期（2-3 月）**：基于 R 计划自主研发，借鉴 PixelFreeEffects 技术方案
+对于复杂的技术方案，需要创建独立的技术规范文档：
+
+#### 2.5.1 核心技术文档
+
+| 文档 | 定位 | 阅读对象 | 核心内容 |
+|------|------|----------|----------|
+| **CAMERA_PREVIEW_GUIDE.md** | 相机预览完整指南 | RD、UI 设计师 | - PreviewView + ScaleType 方案<br>- 传感器旋转机制<br>- 坐标系统与人脸跟踪<br>- ViewPort + UseCaseGroup 实现<br>- 常见问题解决方案 |
+| **R_PLAN_GUIDE.md** | 实时美颜完整指南<br>（中长期规划） | RD、架构师 | - 第一性原理分析<br>- EGL 上下文管理<br>- SurfaceTexture 生命周期<br>- 渲染线程同步<br>- 调试检查清单<br>- 降级策略 |
+| **PIXELFREE_INTEGRATION.md** | PixelFreeEffects SDK 集成<br>（当前实施方案） | RD | - SDK 初始化流程<br>- 美颜参数设置<br>- 图像处理流程<br>- 资源管理<br>- 性能优化 |
+
+#### 2.5.2 双轨策略说明
+
+```
+短期（1-2 周）          中期（1-2 月）           中长期（2-3 月）
+    ↓                      ↓                        ↓
+PixelFreeEffects      同时运行              R 计划自主研发
+SDK 接入            → 积累数据            → 完全替代 SDK
+- 快速上线           - 性能监控            - 技术可控
+- 验证产品           - Shader 优化         - 定制化能力
+- 用户反馈           - 算法迭代            - 零授权成本
+```
 
 **文档更新规则**：
 - 技术方案确定后 24 小时内必须完成文档化
-- 实施过程中遇到的问题必须更新到实施指南
+- 实施过程中遇到的问题必须更新到对应指南
 - 文档由 [RD] 创建，[CR] 审核
 - **技术路线调整后，旧文档必须标记为废弃或备选**
+
+#### 2.5.3 文档路径快速索引
+
+- 相机预览问题 → `docs/CAMERA_PREVIEW_GUIDE.md`
+- 实时美颜开发 → `docs/R_PLAN_GUIDE.md`
+- PixelFree SDK → `docs/PIXELFREE_INTEGRATION.md`
+- 产品需求 → `PRODUCT.md`
+- 交互细节 → `docs/FEATURES.md`
+- 代码规范 → `AGENTS.md`（本文件）
 
 ## 3. 核心操作约束 [严格执行]
 - **[PRIVACY] 隐私至上**：所有 AI 处理（人脸、OCR 等）必须 100% 本地化。严禁请求网络权限。
