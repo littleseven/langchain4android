@@ -23,16 +23,16 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
-import com.picme.domain.model.BeautySettings
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
-import com.picme.features.camera.model.FilterType
-import com.picme.features.gallery.MediaViewModel
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
+import com.picme.domain.model.BeautySettings
+import com.picme.domain.model.MediaAsset
+import com.picme.domain.model.MediaType
+import com.picme.features.camera.model.FilterType
+import com.picme.features.gallery.MediaViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -176,8 +176,29 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     android.util.Log.d("PicMe:Debug", "Photo captured successfully, rotation=${image.imageInfo.rotationDegrees}")
                     
                     val rotationDegrees = image.imageInfo.rotationDegrees
+
+                    // [关键] 检查ViewPort的CropRect
+                    val cropRect = image.cropRect
+                    android.util.Log.d("PicMe:Debug", "ImageProxy cropRect: $cropRect, imageSize: ${image.width}x${image.height}")
+
                     val originalBitmap = image.toBitmap()
                     image.close()
+
+                    // [修复1:1模式] 应用ViewPort的CropRect裁剪
+                    val croppedBitmap = if (cropRect.width() != originalBitmap.width || cropRect.height() != originalBitmap.height) {
+                        // 有裁剪区域，应用裁剪
+                        android.util.Log.d("PicMe:Debug", "Applying crop: ${cropRect.width()}x${cropRect.height()}")
+                        Bitmap.createBitmap(
+                            originalBitmap,
+                            cropRect.left,
+                            cropRect.top,
+                            cropRect.width(),
+                            cropRect.height()
+                        )
+                    } else {
+                        // 没有裁剪
+                        originalBitmap
+                    }
 
                     val matrix = Matrix().apply {
                         postRotate(rotationDegrees.toFloat())
@@ -188,8 +209,10 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                         }
                     }
                     val rotatedBitmap = Bitmap.createBitmap(
-                        originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true
+                        croppedBitmap, 0, 0, croppedBitmap.width, croppedBitmap.height, matrix, true
                     )
+
+                    android.util.Log.d("PicMe:Debug", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
                     val faceDetector = FaceDetection.getClient(
                         FaceDetectorOptions.Builder()

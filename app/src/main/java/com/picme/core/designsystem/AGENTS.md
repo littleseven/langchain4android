@@ -5,6 +5,13 @@
 ## 1. 核心设计准则 (Design Tokens)
 
 - **[TOKENS] 严禁硬编码**：禁止在 Compose 代码中直接使用 `Color(0xFF...)` 或 `16.dp`。必须引用 `PicMeTheme.colors` 和 `PicMeTheme.spacing`。
+- **[THEME] 主题色适配**：所有文字和图标颜色必须使用 Material 3 主题色：
+    - **前景色**：`MaterialTheme.colorScheme.onSurface` - 自动适配浅色/深色模式
+    - **主色**：`MaterialTheme.colorScheme.primary` - 强调和高亮
+    - **主色前景**：`MaterialTheme.colorScheme.onPrimary` - 主色上的文字
+    - **表面色**：`MaterialTheme.colorScheme.surface` - 组件背景
+    - **表面变体**：`MaterialTheme.colorScheme.surfaceVariant` - 次要背景
+    - **禁止使用硬编码的 `Color.White` 或 `Color.Black`**，这会导致浅色模式下文字不可见
 - **[BLUR] 毛玻璃规范**：所有悬浮面板（如控制栏、菜单）必须带动态模糊效果（使用 `RenderEffect` 或自定义毛玻璃层）。
 - **[SHAPE] 圆角标准**：
     - 顶层卡片/面板：`24.dp`。
@@ -18,3 +25,75 @@
 ## 3. Agent 校验项
 - 修改组件后，必须运行 `render_compose_preview` 验证在 Light/Dark 模式下的色彩对比度。
 - 确保所有自定义组件都提供了对应的 `@Preview` 函数。
+- **[THEME-CHECK] 主题色适配检查**：
+  - 检查所有文字颜色是否使用 `MaterialTheme.colorScheme.onSurface`
+  - 检查所有图标颜色是否使用主题色（`onSurface`、`primary` 等）
+  - 检查所有背景色是否使用 `MaterialTheme.colorScheme.surface` 或 `surfaceVariant`
+  - 检查是否有硬编码的 `Color.White` 或 `Color.Black`（仅允许在 Color Scheme 定义中使用）
+  - 在浅色模式和深色模式下都要验证文字可读性
+
+## 4. 常见主题色适配错误
+
+### ❌ 错误示例
+```kotlin
+// 错误：硬编码白色文字
+Text(
+    text = "磨皮",
+    color = Color.White  // ❌ 浅色模式下不可见
+)
+
+// 错误：硬编码黑色文字
+Text(
+    text = "保存",
+    color = Color.Black  // ❌ 深色模式下不可见
+)
+
+// 错误：硬编码半透明白色
+Icon(
+    imageVector = Icons.Rounded.Face,
+    tint = Color.White.copy(alpha = 0.6f)  // ❌ 不适配主题
+)
+```
+
+### ✅ 正确示例
+```kotlin
+// 正确：使用主题前景色
+Text(
+    text = "磨皮",
+    color = MaterialTheme.colorScheme.onSurface  // ✅ 自动适配
+)
+
+// 正确：使用主题色作为强调
+Text(
+    text = "保存",
+    color = MaterialTheme.colorScheme.primary  // ✅ 强调色
+)
+
+// 正确：使用主题色的半透明版本
+Icon(
+    imageVector = Icons.Rounded.Face,
+    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)  // ✅ 自动适配
+)
+
+// 正确：背景使用表面变体
+Box(
+    modifier = Modifier
+        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))  // ✅ 自动适配
+)
+```
+
+## 5. 主题色速查表
+
+| 使用场景 | 推荐色彩 | 说明 |
+|---------|---------|------|
+| 正文文字 | `onSurface` | 主要内容文字 |
+| 次要文字 | `onSurface.copy(alpha = 0.6f)` | 辅助说明文字 |
+| 禁用文字 | `onSurface.copy(alpha = 0.4f)` | 不可用状态 |
+| 强调文字 | `primary` | 需要突出的文字 |
+| 主色上的文字 | `onPrimary` | 按钮、高亮区域的文字 |
+| 图标（常规） | `onSurface` | 普通图标 |
+| 图标（激活） | `primary` | 选中、激活的图标 |
+| 图标（次要） | `onSurface.copy(alpha = 0.6f)` | 次要功能图标 |
+| 卡片背景 | `surface` | 主要表面 |
+| 次级背景 | `surfaceVariant` | 区分层级的背景 |
+| 半透明背景 | `surfaceVariant.copy(alpha = 0.3f)` | 悬浮面板等 |

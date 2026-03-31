@@ -3,9 +3,7 @@ package com.picme.features.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.SurfaceTexture
 import android.hardware.Sensor
-import android.view.TextureView
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
@@ -14,10 +12,8 @@ import android.provider.MediaStore
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Quality
@@ -38,7 +34,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -57,10 +52,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
@@ -74,32 +73,30 @@ import com.picme.core.common.PicMeLogger
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.camera.components.BeautySelector
 import com.picme.features.camera.components.CameraBottomControls
-import com.picme.features.camera.components.DocumentDetectionOverlay
 import com.picme.features.camera.components.CameraLeftControls
 import com.picme.features.camera.components.CameraOverlays
 import com.picme.features.camera.components.CameraRightControls
 import com.picme.features.camera.components.ControlPanel
+import com.picme.features.camera.components.DocumentDetectionOverlay
 import com.picme.features.camera.components.FilterSelector
 import com.picme.features.camera.components.GridSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
-import com.picme.domain.usecase.OcrUseCase
-import com.picme.features.gallery.MediaViewModel
-import com.picme.features.gallery.MediaViewModelFactory
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
-import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
+import com.picme.features.gallery.MediaViewModel
+import com.picme.features.gallery.MediaViewModelFactory
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
 
 enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
-enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_1_1, RATIO_FULL }
+enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
 
 object AspectRatio {
     const val RATIO_4_3 = 0
@@ -213,6 +210,28 @@ fun CameraScreen(
         )
     )
 ) {
+    // [RD] 沉浸式模式：隐藏系统栏
+    val view = LocalView.current
+    val context = LocalContext.current
+
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
+        val insetsController = WindowCompat.getInsetsController(window, view)
+
+        // 隐藏状态栏和导航栏
+        insetsController.hide(WindowInsetsCompat.Type.systemBars())
+        // 设置沉浸式模式，滑动边缘时显示系统栏
+        insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        PicMeLogger.d("PicMe:Camera", "Immersive mode enabled")
+
+        onDispose {
+            // 恢复系统栏显示
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+            PicMeLogger.d("PicMe:Camera", "Immersive mode disabled")
+        }
+    }
+
     val permissionsState = rememberMultiplePermissionsState(
         permissions = listOf(
             Manifest.permission.CAMERA,
@@ -263,80 +282,39 @@ fun CameraContent(
     var beautySettings by remember { mutableStateOf(BeautySettings()) }
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
 
-    // [RD] 临时方案：先使用 TextureView 显示原始相机预览
-    // PixelFree SDK 实时美颜预览实现比较复杂，后续完善
-    val textureView = remember {
-        object : android.view.TextureView(context) {
-            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                // 【原理】相机预览比例的正確处理方式
-                // 
-                // 1. 传感器输出（横向）:
-                //    - 4:3 模式：640x480 (1.33)
-                //    - 16:9/FULL 模式：864x480 (1.8)
-                //
-                // 2. CameraX Preview 旋转 90°后（竖屏）:
-                //    - 4:3: 480x640 (0.75)
-                //    - 16:9/FULL: 480x864 (0.555)
-                //
-                // 3. 关键：CameraX 会自动缩放到匹配 Surface
-                //    - 如果 Surface 比例 = 画面比例 → 完美显示
-                //    - 如果 Surface 比例 ≠ 画面比例 → 会拉伸!
-                //
-                // 4. 正确策略：让 TextureView 的比例 = 传感器输出比例
-                
-                val width = MeasureSpec.getSize(widthMeasureSpec)
-                val height = MeasureSpec.getSize(heightMeasureSpec)
-                
-                when (aspectRatio) {
-                    AspectRatio.RATIO_4_3 -> {
-                        // 4:3 模式：传感器 640x480 → 旋转后 480x640 → 比例 0.75
-                        // 竖屏时：按宽度 1080 计算，高度应为 1080/0.75 = 1440
-                        if (height > width) {
-                            setMeasuredDimension(width, (width / 0.75f).toInt())
-                        } else {
-                            setMeasuredDimension((height * 0.75f).toInt(), height)
-                        }
-                    }
-                    AspectRatio.RATIO_16_9, AspectRatio.RATIO_FULL -> {
-                        // FULL mode: sensor output may be 1920x1080 or 864x480
-                        // CameraX rotates 90° for portrait
-                        // We need to match the ACTUAL output ratio from CameraX
-                        // 
-                        // If CameraX outputs 1920x1080 (ratio=16:9=1.777...)
-                        // After rotation: 1080x1920 (ratio=1.777...)
-                        // TextureView should be: width=1080, height=1080×(1920/1080)=1920
-                        //
-                        // If CameraX outputs 864x480 (ratio=1.8)
-                        // After rotation: 480x864 (ratio=1.8)
-                        // TextureView should be: width=1080, height=1080×(864/480)=1944
-                        //
-                        // [FIXED] Use 1920/1080 = 16:9 ratio to match actual CameraX output
-                        if (height > width) {
-                            // Portrait: fill width, height proportional
-                            val newHeight = (width * (1920f / 1080f)).toInt()
-                            setMeasuredDimension(width, newHeight)
-                        } else {
-                            // Landscape: fill height, width proportional
-                            val newWidth = (height * (1080f / 1920f)).toInt()
-                            setMeasuredDimension(newWidth, height)
-                        }
-                    }
-                    else -> setMeasuredDimension(width, height)
-                }
-                
-                // [调试] 输出测量结果
-                android.util.Log.d("PicMe:Camera", 
-                    "TextureView measured: ${measuredWidth}x${measuredHeight}, " +
-                    "ratio=${measuredHeight.toFloat()/measuredWidth}, expected=1.8"
-                )
+    // [RD] 使用 PreviewView 替代 TextureView
+    // 优势：
+    // 1. CameraX 官方推荐，自动处理旋转和缩放
+    // 2. 支持 ScaleType 配置（FIT_CENTER, FILL_CENTER 等）
+    // 3. 后续可以通过 PreviewView.getBitmap() 获取帧数据实现美颜
+    // 4. 或者通过 Preview.SurfaceProvider 自定义 Surface 接入 PixelFree SDK
+    val previewView = remember {
+        PreviewView(context).apply {
+            // [关键配置] 根据比例模式设置 ScaleType
+            // - FIT_CENTER: 保持比例，画面完整显示（可能有黑边）
+            // - FILL_CENTER: 裁剪填充，铺满屏幕（FULL 模式）
+            scaleType = when (aspectRatio) {
+                AspectRatio.RATIO_FULL -> PreviewView.ScaleType.FILL_CENTER  // FULL: 铺满屏幕
+                else -> PreviewView.ScaleType.FIT_CENTER  // 其他: 保持比例
             }
-        }.apply {
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+
+            android.util.Log.d("PicMe:Camera",
+                "PreviewView created with scaleType=${scaleType}, aspectRatio=$aspectRatio"
             )
-            android.util.Log.d("PicMe:Camera", "TextureView created")
         }
+    }
+
+    // [RD] 监听比例变化，动态调整 ScaleType
+    LaunchedEffect(aspectRatio) {
+        previewView.scaleType = when (aspectRatio) {
+            AspectRatio.RATIO_FULL -> PreviewView.ScaleType.FILL_CENTER
+            else -> PreviewView.ScaleType.FIT_CENTER
+        }
+        android.util.Log.d("PicMe:Camera",
+            "ScaleType updated to ${previewView.scaleType} for aspectRatio=$aspectRatio"
+        )
     }
 
     var showFilterSelector by remember { mutableStateOf(false) }
@@ -378,18 +356,8 @@ fun CameraContent(
         }
     }
 
-    val imageCapture = remember(aspectRatio) {
-        ImageCapture.Builder()
-            .setTargetAspectRatio(
-                if (aspectRatio == AspectRatio.RATIO_4_3) {
-                    androidx.camera.core.AspectRatio.RATIO_4_3
-                } else {
-                    androidx.camera.core.AspectRatio.RATIO_16_9
-                }
-            )
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
-    }
+    // [RD] ImageCapture需要在LaunchedEffect中创建，以便1:1模式可以正确配置ViewPort
+    var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     val recorder = remember {
         Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HIGHEST)).build()
     }
@@ -453,56 +421,99 @@ fun CameraContent(
     LaunchedEffect(lensFacing, captureMode, aspectRatio) {
         val cameraProvider = cameraProviderFuture.get()
         
-        // [RD] 临时方案：先使用普通 Preview 显示相机画面
-        // PixelFreeEffects 将在拍照时应用美颜效果
-        android.util.Log.d("PicMe:Camera", "Binding camera (temporary preview mode)")
-            
-        val preview = androidx.camera.core.Preview.Builder()
+        android.util.Log.d("PicMe:Camera", "Binding camera with aspectRatio=$aspectRatio")
+
+        val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
+
+        // [RD] ImageAnalysis配置（用于人脸检测）
+        val imageAnalysis = ImageAnalysis.Builder()
             .setTargetAspectRatio(
                 when (aspectRatio) {
                     AspectRatio.RATIO_4_3 -> androidx.camera.core.AspectRatio.RATIO_4_3
-                    // [关键修复] FULL 和 16:9 都使用 RATIO_16_9
-                    // 但实际分辨率由相机硬件决定，可能是 1920x1080 或 864x480
                     AspectRatio.RATIO_16_9, AspectRatio.RATIO_FULL -> androidx.camera.core.AspectRatio.RATIO_16_9
                     else -> androidx.camera.core.AspectRatio.RATIO_4_3
-                }
-            )
-            .build()
-            .also { previewBuilder ->
-                // [关键修复] 使用自动适配的 SurfaceProvider
-                // CameraX 会根据 Surface 的尺寸自动缩放画面
-                previewBuilder.setSurfaceProvider(cameraExecutor) { surfaceRequest ->
-                    android.util.Log.d("PicMe:Camera", 
-                        "Preview SurfaceRequest: ${surfaceRequest.resolution?.width}x${surfaceRequest.resolution?.height}"
-                    )
-                    textureView.surfaceTexture?.let { surfaceTexture ->
-                        val surface = android.view.Surface(surfaceTexture)
-                        surfaceRequest.provideSurface(surface, cameraExecutor) {}
-                        android.util.Log.d("PicMe:Camera", 
-                            "Preview provided surface to TextureView(${textureView.width}x${textureView.height})"
-                        )
-                    } ?: run {
-                        android.util.Log.e("PicMe:Camera", "TextureView surfaceTexture is null")
-                    }
-                }
-            }
-
-        val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
-        // [FIXED] 不要在这里设置 actualLensFacing，等待相机绑定完成后从 cameraInfo 获取
-        // actualLensFacing = lensFacing  // ❌ 错误：这里的值可能不准确
-        
-        val imageAnalysis = ImageAnalysis.Builder()
-            .setTargetAspectRatio(
-                if (aspectRatio == AspectRatio.RATIO_4_3) {
-                    androidx.camera.core.AspectRatio.RATIO_4_3
-                } else {
-                    androidx.camera.core.AspectRatio.RATIO_16_9
                 }
             )
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
             .build()
 
+        // [RD] 创建ImageCapture（FULL模式会使用ViewPort）
+        imageCapture = ImageCapture.Builder()
+            .setTargetAspectRatio(
+                when (aspectRatio) {
+                    AspectRatio.RATIO_4_3 -> androidx.camera.core.AspectRatio.RATIO_4_3
+                    AspectRatio.RATIO_16_9, AspectRatio.RATIO_FULL -> androidx.camera.core.AspectRatio.RATIO_16_9
+                    else -> androidx.camera.core.AspectRatio.RATIO_4_3
+                }
+            )
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .build()
+
+        // [RD] FULL模式的特殊处理：使用ViewPort裁剪为屏幕比例
+        val useCaseGroup = if (aspectRatio == AspectRatio.RATIO_FULL) {
+            // [关键] 获取当前显示旋转角度
+            val rotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
+
+            val preview = androidx.camera.core.Preview.Builder()
+                .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
+                .setTargetRotation(rotation)
+                .build()
+                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+            // 同时设置ImageCapture的旋转
+            imageCapture!!.targetRotation = rotation
+
+            // FULL模式：根据屏幕比例裁剪
+            val displayMetrics = context.resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+
+            // 竖屏时，ViewPort的aspectRatio应该是 width/height
+            val viewport = androidx.camera.core.ViewPort.Builder(
+                android.util.Rational(screenWidth, screenHeight),
+                rotation
+            ).build()
+
+            android.util.Log.d("PicMe:Camera",
+                "Created FULL ViewPort: screenRatio=$screenWidth:$screenHeight, rotation=$rotation"
+            )
+
+            // ✅ 关键：将所有UseCase加入UseCaseGroup，ViewPort才会正确应用
+            androidx.camera.core.UseCaseGroup.Builder()
+                .addUseCase(preview)
+                .addUseCase(imageCapture!!)
+                .addUseCase(imageAnalysis)
+                .setViewPort(viewport)
+                .build()
+        } else {
+            null  // 其他比例不使用UseCaseGroup
+        }
+
+        // [RD] 非1:1模式：创建Preview（必须在UseCaseGroup之外）
+        val preview = if (useCaseGroup == null) {
+            androidx.camera.core.Preview.Builder()
+                .setTargetAspectRatio(
+                    when (aspectRatio) {
+                        AspectRatio.RATIO_4_3 -> androidx.camera.core.AspectRatio.RATIO_4_3
+                        AspectRatio.RATIO_16_9, AspectRatio.RATIO_FULL -> androidx.camera.core.AspectRatio.RATIO_16_9
+                        else -> androidx.camera.core.AspectRatio.RATIO_4_3
+                    }
+                )
+                .build()
+                .also { previewBuilder ->
+                    // [RD] 使用 PreviewView 的标准 SurfaceProvider
+                    // 这样CameraX会自动处理旋转、缩放和裁剪
+                    previewBuilder.setSurfaceProvider(previewView.surfaceProvider)
+                    android.util.Log.d("PicMe:Camera",
+                        "Preview connected to PreviewView with scaleType=${previewView.scaleType}"
+                    )
+                }
+        } else {
+            null  // 1:1模式已在UseCaseGroup中创建
+        }
+
+        // [RD] 设置ImageAnalysis的分析器（用于人脸检测）
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
             try {
                 val mediaImage = imageProxy.image
@@ -511,9 +522,9 @@ fun CameraContent(
                     "Frame: ${imageProxy.width}x${imageProxy.height}, " +
                     "ratio=${imageProxy.width.toFloat()/imageProxy.height.toFloat()}, " +
                     "rot=${imageProxy.imageInfo.rotationDegrees}, " +
-                    "TextureView: ${textureView.width}x${textureView.height}"
+                    "TextureView: ${previewView.width}x${previewView.height}"
                 )
-                if (mediaImage != null && textureView.width > 0 && textureView.height > 0) {
+                if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
                     val image = InputImage.fromMediaImage(
                         mediaImage,
                         imageProxy.imageInfo.rotationDegrees
@@ -538,8 +549,8 @@ fun CameraContent(
                                     faceY = bounds.centerY().toFloat(),
                                     imageProxyWidth = imageProxy.width,
                                     imageProxyHeight = imageProxy.height,
-                                    previewWidth = textureView.width.toFloat(),
-                                    previewHeight = textureView.height.toFloat(),
+                                    previewWidth = previewView.width.toFloat(),
+                                    previewHeight = previewView.height.toFloat(),
                                     rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                                     lensFacing = lensFacing
                                 )
@@ -580,7 +591,7 @@ fun CameraContent(
                     android.util.Log.d("PicMe:Camera", "ImageAnalysis received frame: ${imageProxy.width}x${imageProxy.height}")
                     
                     val mediaImage = imageProxy.image
-                    if (mediaImage != null && textureView.width > 0 && textureView.height > 0) {
+                    if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
                         val image = InputImage.fromMediaImage(
                             mediaImage,
                             imageProxy.imageInfo.rotationDegrees
@@ -605,8 +616,8 @@ fun CameraContent(
                                         faceY = bounds.centerY().toFloat(),
                                         imageProxyWidth = imageProxy.width,
                                         imageProxyHeight = imageProxy.height,
-                                        previewWidth = textureView.width.toFloat(),
-                                        previewHeight = textureView.height.toFloat(),
+                                        previewWidth = previewView.width.toFloat(),
+                                        previewHeight = previewView.height.toFloat(),
                                         rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                                         lensFacing = lensFacing
                                     )
@@ -636,24 +647,37 @@ fun CameraContent(
                 }
             }
             
-            val camera = when (captureMode) {
-                MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageCapture,
-                        imageAnalysis
-                    )
-                }
-                MediaType.VIDEO -> {
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        videoCapture,
-                        imageAnalysis
-                    )
+            // [RD] 根据是否使用UseCaseGroup来绑定相机
+            val camera = if (useCaseGroup != null) {
+                // 1:1模式和FULL模式：使用UseCaseGroup（已包含preview和imageCapture）
+                android.util.Log.d("PicMe:Camera", "Binding with UseCaseGroup for aspectRatio=$aspectRatio")
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    useCaseGroup
+                )
+            } else {
+                // 其他模式（4:3、16:9）：根据拍摄类型绑定
+                android.util.Log.d("PicMe:Camera", "Binding without UseCaseGroup for aspectRatio=$aspectRatio")
+                when (captureMode) {
+                    MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview!!,
+                            imageCapture!!,
+                            imageAnalysis
+                        )
+                    }
+                    MediaType.VIDEO -> {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview!!,
+                            videoCapture,
+                            imageAnalysis
+                        )
+                    }
                 }
             }
             cameraControl = camera.cameraControl
@@ -740,9 +764,25 @@ fun CameraContent(
         }
     }
 
-    CameraPreviewContent(
-        textureView = textureView,
-        selectedFilter = selectedFilter,
+CameraPreviewContent(
+    previewView = {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            AndroidView(
+                factory = { previewView },
+                modifier = if (aspectRatio == AspectRatio.RATIO_FULL) {
+                    // FULL模式：铺满全屏（配合FILL_CENTER裁剪）
+                    Modifier.fillMaxSize()
+                } else {
+                    // 其他模式：保持比例（配合FIT_CENTER）
+                    Modifier.fillMaxSize()
+                }
+            )
+        }
+    },
+    selectedFilter = selectedFilter,
         facePoint = facePoint,
         focusIndicatorAlpha = focusIndicatorAlpha.value,
         lastMedia = lastMedia,
@@ -873,15 +913,17 @@ fun CameraContent(
                 } else {
                     // [RD] 临时注释掉拍照音
                     // shutterSound.play(MediaActionSound.SHUTTER_CLICK)
-                    imageProcessor.takePhoto(
-                        context = context,
-                        imageCapture = imageCapture,
-                        viewModel = viewModel,
-                        filter = selectedFilter,
-                        beauty = beautySettings,
-                        lensFacing = lensFacing,
-                        mode = captureMode
-                    )
+                    imageCapture?.let { capture ->
+                        imageProcessor.takePhoto(
+                            context = context,
+                            imageCapture = capture,
+                            viewModel = viewModel,
+                            filter = selectedFilter,
+                            beauty = beautySettings,
+                            lensFacing = lensFacing,
+                            mode = captureMode
+                        )
+                    }
                 }
             },
             onModeChange = { captureMode = it },
@@ -907,7 +949,7 @@ fun CameraContent(
 
 @Composable
 fun CameraPreviewContent(
-    textureView: android.view.TextureView,
+    previewView: @Composable () -> Unit,
     selectedFilter: FilterType,
     facePoint: Offset?,
     focusIndicatorAlpha: Float,
@@ -957,12 +999,12 @@ fun CameraPreviewContent(
     val isAnyPanelOpen = showFilterSelector || showBeautySelector || showRatioSelector ||
             showSceneSelector || showGridSelector
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // 使用 TextureView 显示相机预览
-        AndroidView(
-            factory = { textureView },
-            modifier = Modifier.fillMaxSize()
-        )
+    Box(
+        modifier = Modifier.fillMaxSize().background(Color.Black),
+        contentAlignment = Alignment.Center  // ✅ 居中对齐
+    ) {
+        // 使用 PreviewView 显示相机预览
+        previewView()
 
         CameraOverlays(
             isStable = isStable,
@@ -1068,6 +1110,7 @@ fun CameraPreviewContent(
                         selectedRatio = when (aspectRatio) {
                             AspectRatio.RATIO_4_3 -> CameraAspectRatio.RATIO_4_3
                             AspectRatio.RATIO_16_9 -> CameraAspectRatio.RATIO_16_9
+                            AspectRatio.RATIO_FULL -> CameraAspectRatio.RATIO_FULL
                             else -> CameraAspectRatio.RATIO_FULL
                         },
                         onRatioSelected = {
@@ -1075,7 +1118,7 @@ fun CameraPreviewContent(
                                 when (it) {
                                     CameraAspectRatio.RATIO_4_3 -> AspectRatio.RATIO_4_3
                                     CameraAspectRatio.RATIO_16_9 -> AspectRatio.RATIO_16_9
-                                    else -> AspectRatio.RATIO_FULL
+                                    CameraAspectRatio.RATIO_FULL -> AspectRatio.RATIO_FULL
                                 }
                             )
                         }

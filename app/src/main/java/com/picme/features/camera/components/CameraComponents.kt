@@ -29,14 +29,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BugReport
@@ -86,16 +85,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.picme.R
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.CameraAspectRatio
@@ -329,11 +323,14 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                             width = if (isSelected) 2.5.dp else 1.dp,
                             brush = if (isSelected) {
                                 Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, Color.White)
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
                                 )
                             } else {
                                 Brush.linearGradient(
-                                    listOf(Color.White.copy(0.3f), Color.White.copy(0.1f))
+                                    listOf(
+                                        MaterialTheme.colorScheme.onSurface.copy(0.3f),
+                                        MaterialTheme.colorScheme.onSurface.copy(0.1f)
+                                    )
                                 )
                             },
                             shape = CircleShape
@@ -357,7 +354,7 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                     color = if (isSelected) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        Color.White.copy(alpha = 0.7f)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     },
                     fontSize = 10.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
@@ -564,14 +561,14 @@ private fun BeautySlider(
                     tint = if (value != 0f) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        Color.White.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     },
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = label,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -583,7 +580,7 @@ private fun BeautySlider(
                 color = if (value != 0f) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    Color.White.copy(alpha = 0.4f)
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
@@ -604,9 +601,9 @@ private fun BeautySlider(
                     .fillMaxWidth()
                     .height(32.dp),
                 colors = SliderDefaults.colors(
-                    thumbColor = Color.White,
+                    thumbColor = MaterialTheme.colorScheme.onSurface,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                    inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                 ),
                 thumb = {
                     val thumbScale by animateFloatAsState(
@@ -617,7 +614,7 @@ private fun BeautySlider(
                         modifier = Modifier
                             .size(20.dp)
                             .scale(thumbScale)
-                            .background(Color.White, CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface, CircleShape)
                             .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
                     )
                 },
@@ -672,12 +669,6 @@ fun RatioSelector(selectedRatio: CameraAspectRatio, onRatioSelected: (CameraAspe
             onRatioSelected(CameraAspectRatio.RATIO_16_9)
         }
         RatioItem(
-            label = stringResource(R.string.ratio_1_1),
-            isSelected = selectedRatio == CameraAspectRatio.RATIO_1_1
-        ) {
-            onRatioSelected(CameraAspectRatio.RATIO_1_1)
-        }
-        RatioItem(
             label = stringResource(R.string.ratio_full),
             isSelected = selectedRatio == CameraAspectRatio.RATIO_FULL
         ) {
@@ -697,7 +688,7 @@ private fun RatioItem(label: String, isSelected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            color = if (isSelected) Color.Black else Color.White,
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
             fontSize = 12.sp
         )
     }
@@ -719,7 +710,7 @@ private fun ExpandableSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
             .padding(12.dp)
     ) {
         Row(
@@ -744,7 +735,7 @@ private fun ExpandableSection(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = title,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -815,14 +806,14 @@ fun LipColorSelector(
                     tint = if (strength > 0) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        Color.White.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     },
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = stringResource(R.string.lip_color),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -833,7 +824,7 @@ fun LipColorSelector(
                 color = if (strength > 0) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    Color.White.copy(alpha = 0.4f)
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 },
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold

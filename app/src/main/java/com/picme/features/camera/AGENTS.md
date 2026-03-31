@@ -212,13 +212,41 @@ val screenOffset = Offset(point.x, point.y)
   - **必须使用 PreviewView 坐标转换**：严禁手动计算 FIT_CENTER 映射
   - **必须处理旋转和镜像**：前置摄像头、横屏场景必须验证
   - **必须添加调试日志**：记录转换过程便于排查问题
-- **十字星跟踪**：
-  - **必须使用 PreviewView 坐标转换**：严禁手动计算 FIT_CENTER 映射
-  - **必须处理旋转和镜像**：前置摄像头、横屏场景必须验证
-  - **必须添加调试日志**：记录转换过程便于排查问题
+- **UI 主题色适配**（新增 2026-03-31）：
+  - **严禁硬编码颜色**：所有文字、图标、背景必须使用 `MaterialTheme.colorScheme`
+  - **文字颜色规范**：
+    - 主要文字：`MaterialTheme.colorScheme.onSurface`
+    - 次要文字：`MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)`
+    - 强调文字：`MaterialTheme.colorScheme.primary`
+  - **图标颜色规范**：
+    - 常规图标：`MaterialTheme.colorScheme.onSurface`
+    - 激活图标：`MaterialTheme.colorScheme.primary`
+    - 次要图标：`MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)`
+  - **背景颜色规范**：
+    - 主背景：`MaterialTheme.colorScheme.surface`
+    - 次级背景：`MaterialTheme.colorScheme.surfaceVariant`
+    - 半透明背景：`MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)`
+  - **禁止使用**：`Color.White`、`Color.Black`（除了在 Color Scheme 定义中）
+  - **必须验证**：在浅色和深色模式下都要测试文字可读性
+- **沉浸式模式**（新增 2026-03-31）：
+  - **系统栏隐藏**：相机页面必须隐藏状态栏和导航栏，提供全屏拍摄体验
+  - **实现方式**：
+    - 使用 `WindowInsetsControllerCompat` 控制系统栏
+    - 调用 `hide(WindowInsetsCompat.Type.systemBars())` 隐藏系统栏
+    - 设置 `systemBarsBehavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` 允许滑动边缘临时显示
+  - **生命周期管理**：
+    - 在 `CameraScreen` 的 `DisposableEffect` 中配置
+    - 页面退出时必须恢复系统栏显示（`show(WindowInsetsCompat.Type.systemBars())`）
+  - **日志记录**：
+    - 进入沉浸式：`PicMeLogger.d("PicMe:Camera", "Immersive mode enabled")`
+    - 退出沉浸式：`PicMeLogger.d("PicMe:Camera", "Immersive mode disabled")`
+  - **注意事项**：
+    - 不需要手动调整UI元素的padding（EdgeToEdge已在MainActivity配置）
+    - 确保获取到Activity窗口引用（需要类型转换 `context as? Activity`）
 
 ## 4. 常见陷阱检查清单 (Checklist)
 
+### 4.1 功能与性能检查
 - [ ] 是否在拍摄时阻塞了 UI 线程？（保存操作必须在后台）
 - [ ] OCR 引擎是否在空闲 30s 后释放？（避免内存泄漏）
 - [ ] 夜景模式的曝光补偿是否正确应用？（+1.0 to +2.0）
@@ -235,6 +263,25 @@ val screenOffset = Offset(point.x, point.y)
 - [ ] 前置摄像头是否正确镜像？（十字星应跟随镜中人脸）
 - [ ] 横屏拍摄是否处理了 90°旋转？（坐标应正确映射）
 - [ ] 是否添加了调试日志？（便于排查错位问题）
+
+### 4.2 UI 主题色适配检查
+- [ ] 美颜面板文字颜色是否使用 `MaterialTheme.colorScheme.onSurface`？（不要硬编码 `Color.White`）
+- [ ] 滤镜选择器文字颜色是否使用主题色？（避免浅色模式下不可见）
+- [ ] 比例选择器文字颜色是否使用主题色？（选中/未选中状态都要检查）
+- [ ] 所有图标颜色是否使用 `onSurface` 或 `primary`？（避免硬编码白色）
+- [ ] 滑块组件颜色是否使用主题色？（thumbColor、trackColor 都要检查）
+- [ ] 背景颜色是否使用 `surfaceVariant`？（不要使用半透明白色）
+- [ ] 边框颜色是否使用主题色？（避免硬编码白色边框）
+- [ ] 是否在浅色和深色模式下都验证了文字可读性？（两种模式都要测试）
+
+### 4.3 沉浸式模式检查
+- [ ] 相机页面是否隐藏了状态栏和导航栏？（提供全屏拍摄体验）
+- [ ] 是否使用 `WindowInsetsControllerCompat` 控制系统栏？（不要使用已废弃的API）
+- [ ] 是否在 `DisposableEffect` 中管理沉浸式生命周期？（确保正确清理）
+- [ ] 页面退出时是否恢复了系统栏显示？（避免影响其他页面）
+- [ ] 是否正确获取了Activity窗口引用？（需要类型转换 `context as? Activity`）
+- [ ] 是否记录了沉浸式模式的启用和禁用日志？（便于调试）
+- [ ] UI元素是否正常显示？（不被系统栏遮挡，EdgeToEdge已在MainActivity配置）
 
 ## 5. 与产品文档对照 (Product Alignment)
 
