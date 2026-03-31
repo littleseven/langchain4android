@@ -575,7 +575,8 @@ fun CameraContent(
             null  // 1:1模式已在UseCaseGroup中创建
         }
 
-        // [RD] 设置ImageAnalysis的分析器（用于人脸检测）
+        // [RD] 设置 ImageAnalysis 的分析器（用于人脸检测）
+        @OptIn(markerClass = arrayOf(ExperimentalGetImage::class))
         imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
             try {
                 val mediaImage = imageProxy.image
@@ -648,6 +649,7 @@ fun CameraContent(
             Logger.d("Camera", "Binding camera with TextureView display")
 
             // [RD] 复用 imageAnalysis 同时用于人脸检测和美颜预览
+            @OptIn(markerClass = arrayOf(ExperimentalGetImage::class))
             imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
                 try {
                     Logger.d("Camera", "ImageAnalysis received frame: ${imageProxy.width}x${imageProxy.height}")
@@ -1146,6 +1148,9 @@ fun CameraPreviewContent(
             isSceneActive = currentScene != ScenePreset.NONE,
             isGridActive = showGridSelector,
             isBeautyEnabled = beautySettings.enabled,
+            isFacialRefinementSelected = showFacialRefinement,
+            isMakeupAdjustmentSelected = showMakeupAdjustment,
+            isBodyManagementSelected = showBodyManagement,
             currentRatio = aspectRatio,
             modifier = Modifier.align(Alignment.TopEnd)
         )

@@ -99,6 +99,9 @@ import com.picme.features.camera.GridType
 import com.picme.features.camera.ScenePreset
 import com.picme.features.camera.model.FilterType
 
+/** Panel height ratio relative to screen height */
+private const val PANEL_HEIGHT_RATIO = 0.5f
+
 @Composable
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
@@ -136,9 +139,9 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
-    onToggleFacialRefinement: () -> Unit,  // 面部精修
-    onToggleMakeupAdjustment: () -> Unit,   // 妆容调节
-    onToggleBodyManagement: () -> Unit,     // 身材管理
+    onToggleFacialRefinement: () -> Unit,  // Toggles facial refinement panel
+    onToggleMakeupAdjustment: () -> Unit,   // Toggles makeup adjustment panel
+    onToggleBodyManagement: () -> Unit,     // Toggles body management panel
     onToggleBeautyEnabled: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
@@ -146,6 +149,9 @@ fun CameraRightControls(
     isSceneActive: Boolean,
     isGridActive: Boolean,
     isBeautyEnabled: Boolean,
+    isFacialRefinementSelected: Boolean = false,  // Is facial refinement panel open
+    isMakeupAdjustmentSelected: Boolean = false,  // Is makeup adjustment panel open
+    isBodyManagementSelected: Boolean = false,    // Is body management panel open
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -167,21 +173,21 @@ fun CameraRightControls(
         ControlButton(
             icon = Icons.Rounded.Face,
             onClick = onToggleFacialRefinement,
-            isActive = false  // TODO: 后续添加选中状态
+            isActive = isFacialRefinementSelected
         )
         
         // 妆容调节
         ControlButton(
             icon = Icons.Rounded.ColorLens,
             onClick = onToggleMakeupAdjustment,
-            isActive = false  // TODO: 后续添加选中状态
+            isActive = isMakeupAdjustmentSelected
         )
         
         // 身材管理
         ControlButton(
             icon = Icons.Rounded.SelfImprovement,
             onClick = onToggleBodyManagement,
-            isActive = false  // TODO: 后续添加选中状态
+            isActive = isBodyManagementSelected
         )
         
         ControlButton(
@@ -242,9 +248,9 @@ fun ControlPanel(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // 抽屉式设计：从底部滑出，占据屏幕底部区域
+    // Drawer-style panel: slides in from bottom, occupies bottom area of screen
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val panelMaxHeight = screenHeight * 0.5f  // 半屏高度
+    val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO  // Half screen height
     
     Box(
         modifier = Modifier
