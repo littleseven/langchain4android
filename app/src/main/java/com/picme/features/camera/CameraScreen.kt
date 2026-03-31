@@ -75,14 +75,17 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.camera.components.BeautySelector
+import com.picme.features.camera.components.BodyManagementSelector
 import com.picme.features.camera.components.CameraBottomControls
 import com.picme.features.camera.components.CameraLeftControls
 import com.picme.features.camera.components.CameraOverlays
 import com.picme.features.camera.components.CameraRightControls
 import com.picme.features.camera.components.ControlPanel
 import com.picme.features.camera.components.DocumentDetectionOverlay
+import com.picme.features.camera.components.FacialRefinementSelector
 import com.picme.features.camera.components.FilterSelector
 import com.picme.features.camera.components.GridSelector
+import com.picme.features.camera.components.MakeupAdjustmentSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
@@ -346,6 +349,43 @@ fun CameraContent(
     var showSceneSelector by remember { mutableStateOf(false) }
     var showGridSelector by remember { mutableStateOf(false) }
     var showLogOverlay by remember { mutableStateOf(false) }
+    
+    // [RD] 新增美颜子功能面板状态
+    var showFacialRefinement by remember { mutableStateOf(false) }
+    var showMakeupAdjustment by remember { mutableStateOf(false) }
+    var showBodyManagement by remember { mutableStateOf(false) }
+    
+    // [RD] 定义美颜子功能回调函数
+    val onToggleFacialRefinement = {
+        showBeautySelector = false
+        showMakeupAdjustment = false
+        showBodyManagement = false
+        showFilterSelector = false
+        showRatioSelector = false
+        showSceneSelector = false
+        showGridSelector = false
+        showFacialRefinement = !showFacialRefinement
+    }
+    val onToggleMakeupAdjustment = {
+        showBeautySelector = false
+        showFacialRefinement = false
+        showBodyManagement = false
+        showFilterSelector = false
+        showRatioSelector = false
+        showSceneSelector = false
+        showGridSelector = false
+        showMakeupAdjustment = !showMakeupAdjustment
+    }
+    val onToggleBodyManagement = {
+        showBeautySelector = false
+        showFacialRefinement = false
+        showMakeupAdjustment = false
+        showFilterSelector = false
+        showRatioSelector = false
+        showSceneSelector = false
+        showGridSelector = false
+        showBodyManagement = !showBodyManagement
+    }
 
     var currentScene by remember { mutableStateOf(ScenePreset.NONE) }
     var currentGrid by remember { mutableStateOf(GridType.NONE) }
@@ -977,10 +1017,19 @@ CameraPreviewContent(
             onDismissPanels = {
                 showFilterSelector = false
                 showBeautySelector = false
+                showFacialRefinement = false
+                showMakeupAdjustment = false
+                showBodyManagement = false
                 showRatioSelector = false
                 showSceneSelector = false
                 showGridSelector = false
-            }
+            },
+            showFacialRefinement = showFacialRefinement,
+            showMakeupAdjustment = showMakeupAdjustment,
+            showBodyManagement = showBodyManagement,
+            onToggleFacialRefinement = onToggleFacialRefinement,
+            onToggleMakeupAdjustment = onToggleMakeupAdjustment,
+            onToggleBodyManagement = onToggleBodyManagement,
         )
 
     if (showLogOverlay) {
@@ -1006,6 +1055,13 @@ fun CameraPreviewContent(
     showCameraInfo: Boolean,
     showSceneSelector: Boolean,
     showGridSelector: Boolean,
+    showFacialRefinement: Boolean,
+    showMakeupAdjustment: Boolean,
+    showBodyManagement: Boolean,
+    onToggleFacialRefinement: () -> Unit,
+    onToggleMakeupAdjustment: () -> Unit,
+    onToggleBodyManagement: () -> Unit,
+
     currentScene: ScenePreset,
     currentGrid: GridType,
     beautySettings: BeautySettings,
@@ -1024,6 +1080,7 @@ fun CameraPreviewContent(
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
     onToggleLogs: () -> Unit,
+
     onZoomPresetClick: (Float) -> Unit,
     onExposureChange: (Int) -> Unit,
     onWhiteBalanceChange: (Int) -> Unit,
@@ -1079,8 +1136,11 @@ fun CameraPreviewContent(
             onToggleRatio = onToggleRatio,
             onToggleScene = onToggleScene,
             onToggleGrid = onToggleGrid,
+            onToggleFacialRefinement = onToggleFacialRefinement,
+            onToggleMakeupAdjustment = onToggleMakeupAdjustment,
+            onToggleBodyManagement = onToggleBodyManagement,
             onToggleBeautyEnabled = { onBeautySettingsChanged(beautySettings.copy(enabled = !beautySettings.enabled)) },
-            isBeautySelected = showBeautySelector,
+            isBeautySelected = showFacialRefinement || showMakeupAdjustment || showBodyManagement || showBeautySelector,
             isFilterSelected = showFilterSelector,
             isRatioSelected = showRatioSelector,
             isSceneActive = currentScene != ScenePreset.NONE,
@@ -1117,6 +1177,34 @@ fun CameraPreviewContent(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
+        // [RD] 美颜子功能面板显示
+        val isAnyBeautyPanelOpen = showFacialRefinement || showMakeupAdjustment || showBodyManagement
+        
+        AnimatedVisibility(
+            visible = isAnyBeautyPanelOpen,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            val title = when {
+                showFacialRefinement -> stringResource(R.string.facial_refinement)
+                showMakeupAdjustment -> stringResource(R.string.makeup_adjustment)
+                showBodyManagement -> stringResource(R.string.body_management)
+                else -> ""
+            }
+
+            ControlPanel(
+                title = title,
+                onDismiss = onDismissPanels
+            ) {
+                when {
+                    showFacialRefinement -> FacialRefinementSelector(beautySettings) { onBeautySettingsChanged(it) }
+                    showMakeupAdjustment -> MakeupAdjustmentSelector(beautySettings) { onBeautySettingsChanged(it) }
+                    showBodyManagement -> BodyManagementSelector(beautySettings) { onBeautySettingsChanged(it) }
+                }
+            }
+        }
+
         if (captureMode == MediaType.DOCUMENT && !isAnyPanelOpen) {
             DocumentDetectionOverlay(
                 documentBounds = androidx.compose.ui.geometry.Rect.Zero,
@@ -1148,7 +1236,6 @@ fun CameraPreviewContent(
                     showBeautySelector -> BeautySelector(beautySettings) { settings ->
                         onBeautySettingsChanged(settings)
                     }
-
                     showRatioSelector -> RatioSelector(
                         selectedRatio = when (aspectRatio) {
                             AspectRatio.RATIO_4_3 -> CameraAspectRatio.RATIO_4_3
@@ -1166,7 +1253,6 @@ fun CameraPreviewContent(
                             )
                         }
                     )
-
                     showSceneSelector -> SceneSelector(currentScene) { onSceneSelected(it) }
                     showGridSelector -> GridSelector(currentGrid) { onGridSelected(it) }
                 }

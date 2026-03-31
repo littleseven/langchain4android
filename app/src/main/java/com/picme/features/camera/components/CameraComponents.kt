@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -79,6 +80,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
@@ -134,6 +136,9 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
+    onToggleFacialRefinement: () -> Unit,  // 面部精修
+    onToggleMakeupAdjustment: () -> Unit,   // 妆容调节
+    onToggleBodyManagement: () -> Unit,     // 身材管理
     onToggleBeautyEnabled: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
@@ -148,7 +153,7 @@ fun CameraRightControls(
         modifier = modifier
             .padding(16.dp)
             .statusBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),  // 减小间距以容纳更多按钮
         horizontalAlignment = Alignment.End
     ) {
         // 美颜开关 - 使用不同的样式突出显示
@@ -157,6 +162,28 @@ fun CameraRightControls(
             onClick = onToggleBeautyEnabled,
             isActive = isBeautyEnabled
         )
+        
+        // 面部精修
+        ControlButton(
+            icon = Icons.Rounded.Face,
+            onClick = onToggleFacialRefinement,
+            isActive = false  // TODO: 后续添加选中状态
+        )
+        
+        // 妆容调节
+        ControlButton(
+            icon = Icons.Rounded.ColorLens,
+            onClick = onToggleMakeupAdjustment,
+            isActive = false  // TODO: 后续添加选中状态
+        )
+        
+        // 身材管理
+        ControlButton(
+            icon = Icons.Rounded.SelfImprovement,
+            onClick = onToggleBodyManagement,
+            isActive = false  // TODO: 后续添加选中状态
+        )
+        
         ControlButton(
             icon = when (currentRatio) {
                 0 -> Icons.Rounded.AspectRatio
@@ -167,16 +194,11 @@ fun CameraRightControls(
             onClick = onToggleRatio,
             isActive = isRatioSelected
         )
-                    // OCR入口已根据产品方案移除，仅在文档模式下保留
+                    // OCR 入口已根据产品方案移除，仅在文档模式下保留
         ControlButton(
             icon = Icons.Rounded.Landscape,
             onClick = onToggleScene,
             isActive = isSceneActive
-        )
-        ControlButton(
-            icon = Icons.Rounded.AutoFixHigh,
-            onClick = onToggleBeauty,
-            isActive = isBeautySelected
         )
         ControlButton(
             icon = Icons.Rounded.FilterBAndW,
@@ -221,6 +243,9 @@ fun ControlPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     // 抽屉式设计：从底部滑出，占据屏幕底部区域
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val panelMaxHeight = screenHeight * 0.5f  // 半屏高度
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -230,7 +255,7 @@ fun ControlPanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(320.dp)  // 增加高度以容纳更多内容
+                .height(panelMaxHeight)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
@@ -240,7 +265,7 @@ fun ControlPanel(
                             Color.Transparent                 // 顶部透明
                         ),
                         startY = 0f,
-                        endY = 320f
+                        endY = panelMaxHeight.value * 1f  // 转换为 Float
                     )
                 )
         )
@@ -250,7 +275,8 @@ fun ControlPanel(
             modifier = Modifier
                 .fillMaxWidth(0.96f)  // 96% 宽度，留白边
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp),  // 减小底部间距，更贴近底部
+                .padding(bottom = 8.dp)  // 减小底部间距，更贴近底部
+                .heightIn(max = panelMaxHeight - 16.dp),  // 限制最大高度为半屏减去遮罩边距
             color = MaterialTheme.colorScheme.surface,  // 完全不透明的表面色
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
             shadowElevation = 20.dp,  // 更强的阴影，增强层次感
@@ -259,10 +285,12 @@ fun ControlPanel(
                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
             )
         ) {
+            // 添加滚动支持，防止内容超出半屏高度
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .padding(horizontal = 24.dp, vertical = 16.dp)  // 略微减小垂直内边距
                     .fillMaxWidth()
+                    .heightIn(max = panelMaxHeight - 32.dp)  // 限制最大高度并留出内边距空间
             ) {
                 // 标题栏 - 使用主题色
                 Row(
@@ -406,7 +434,7 @@ private fun FilterGradientPreview(filter: FilterType) {
 
 @Composable
 fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
-    val expandedCategoryState = remember { mutableStateOf<String?>("facial") }
+    val expandedCategoryState = remember { mutableStateOf<String?>(null) }
     
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -528,6 +556,129 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
                 onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
             )
         }
+    }
+}
+
+/**
+ * 面部精修选择器 - 独立版本
+ */
+@Composable
+fun FacialRefinementSelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        BeautySlider(
+            icon = Icons.Rounded.Face,
+            label = stringResource(R.string.smoothing),
+            value = settings.smoothing,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
+            onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.AutoFixHigh,
+            label = stringResource(R.string.whitening),
+            value = settings.whitening,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
+            onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.FaceRetouchingNatural,
+            label = stringResource(R.string.slim_face),
+            value = settings.slimFace,
+            valueRange = -50f..50f,
+            onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
+            onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.Visibility,
+            label = stringResource(R.string.big_eyes),
+            value = settings.bigEyes,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
+            onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.ChildCare,
+            label = stringResource(R.string.youth),
+            value = settings.youth,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
+            onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
+        )
+    }
+}
+
+/**
+ * 妆容调节选择器 - 独立版本
+ */
+@Composable
+fun MakeupAdjustmentSelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 唇色选择器
+        LipColorSelector(
+            strength = settings.lipColor,
+            colorIndex = settings.lipColorIndex,
+            onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+            onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+            onReset = { onSettingsChanged(settings.copy(lipColor = 0f, lipColorIndex = 0)) }
+        )
+        
+        BeautySlider(
+            icon = Icons.Rounded.FavoriteBorder,
+            label = stringResource(R.string.blush),
+            value = settings.blush,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+            onReset = { onSettingsChanged(settings.copy(blush = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.LineStyle,
+            label = stringResource(R.string.eyebrow),
+            value = settings.eyebrow,
+            valueRange = 0f..100f,
+            onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+            onReset = { onSettingsChanged(settings.copy(eyebrow = 0f)) }
+        )
+    }
+}
+
+/**
+ * 身材管理选择器 - 独立版本
+ */
+@Composable
+fun BodyManagementSelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        BeautySlider(
+            icon = Icons.Rounded.SelfImprovement,
+            label = stringResource(R.string.body_enhancement),
+            value = settings.bodyEnhancement,
+            valueRange = -30f..30f,
+            onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
+            onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
+        )
+
+        BeautySlider(
+            icon = Icons.Rounded.Timeline,
+            label = stringResource(R.string.leg_extension),
+            value = settings.legExtension,
+            valueRange = 0f..50f,
+            onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
+            onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
+        )
     }
 }
 
