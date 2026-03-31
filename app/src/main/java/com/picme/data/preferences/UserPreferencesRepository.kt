@@ -22,6 +22,17 @@ enum class AppLanguage {
     SYSTEM, ENGLISH, CHINESE, TRADITIONAL_CHINESE
 }
 
+/**
+ * 美颜策略选择
+ *
+ * PIXEL_FREE: PixelFreeEffects SDK（短期方案，当前默认）
+ * R_PLAN: R 计划自主研发（中长期方案）
+ */
+enum class BeautyStrategy {
+    PIXEL_FREE,
+    R_PLAN
+}
+
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
 class UserPreferencesRepository(private val context: Context) {
@@ -29,6 +40,7 @@ class UserPreferencesRepository(private val context: Context) {
     private object PreferencesKeys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
+        val BEAUTY_STRATEGY = stringPreferencesKey("beauty_strategy")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -76,6 +88,35 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateAppLanguage(appLanguage: AppLanguage) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.APP_LANGUAGE] = appLanguage.name
+        }
+    }
+
+    val beautyStrategyFlow: Flow<BeautyStrategy> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.PIXEL_FREE.name
+            BeautyStrategy.valueOf(strategyName)
+        }
+
+    fun getBeautyStrategyBlocking(): BeautyStrategy = runBlocking {
+        try {
+            val preferences = context.dataStore.data.first()
+            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.PIXEL_FREE.name
+            BeautyStrategy.valueOf(strategyName)
+        } catch (e: Exception) {
+            BeautyStrategy.PIXEL_FREE
+        }
+    }
+
+    suspend fun updateBeautyStrategy(strategy: BeautyStrategy) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BEAUTY_STRATEGY] = strategy.name
         }
     }
 }

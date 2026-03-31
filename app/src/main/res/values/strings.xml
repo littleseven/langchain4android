@@ -25,6 +25,9 @@
     <string name="flip_camera">Flip Camera</string>
     <string name="grant_permissions">Grant Permissions</string>
     <string name="theme_mode">Theme Mode</string>
+    <string name="beauty_engine">Beauty Engine</string>
+    <string name="beauty_engine_pixelfree">PixelFree SDK (Default)</string>
+    <string name="beauty_engine_rplan">R Plan (Experimental)</string>
     <string name="filters">Filters</string>
     <string name="beauty">Beauty</string>
     <string name="smoothing">Smoothing</string>

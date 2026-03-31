@@ -69,7 +69,7 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.PicMeApplication
 import com.picme.R
-import com.picme.core.common.PicMeLogger
+import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
@@ -133,7 +133,7 @@ internal fun transformFaceCoordinate(
     val normX = faceX / rotatedWidth
     val normY = faceY / rotatedHeight
     
-    PicMeLogger.d(
+    Logger.d(
         "PicMe:Camera",
         "Step1 [归一化]: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, " +
             "norm=($normX,$normY)"
@@ -147,7 +147,7 @@ internal fun transformFaceCoordinate(
         normX
     }
     
-    PicMeLogger.d(
+    Logger.d(
         "PicMe:Camera",
         "Step2 [镜像]: lens=${if (lensFacing == CameraSelector.LENS_FACING_FRONT) "前" else "后"}, " +
             "norm=($normX,$normY), mirrored=($mirroredX,$normY)"
@@ -163,7 +163,7 @@ internal fun transformFaceCoordinate(
         else -> Pair(mirroredX, normY)
     }
     
-    PicMeLogger.d(
+    Logger.d(
         "PicMe:Camera",
         "Step3 [旋转补偿]: rot=$rotationDegrees, mirrored=($mirroredX,$normY), " +
             "adjusted=($adjustedX,$adjustedY)"
@@ -177,7 +177,7 @@ internal fun transformFaceCoordinate(
     val screenX = adjustedX * previewWidth
     val screenY = adjustedY * previewHeight
     
-    PicMeLogger.d(
+    Logger.d(
         "PicMe:Camera",
         "Step4 [像素转换]: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}, " +
             "screen=($screenX,$screenY)"
@@ -223,12 +223,12 @@ fun CameraScreen(
         // 设置沉浸式模式，滑动边缘时显示系统栏
         insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
-        PicMeLogger.d("PicMe:Camera", "Immersive mode enabled")
+        Logger.d("Camera", "Immersive mode enabled")
 
         onDispose {
             // 恢复系统栏显示
             insetsController.show(WindowInsetsCompat.Type.systemBars())
-            PicMeLogger.d("PicMe:Camera", "Immersive mode disabled")
+            Logger.d("Camera", "Immersive mode disabled")
         }
     }
 
@@ -300,7 +300,7 @@ fun CameraContent(
 
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
 
-            android.util.Log.d("PicMe:Camera",
+            Logger.d("Camera",
                 "PreviewView created with scaleType=${scaleType}, aspectRatio=$aspectRatio"
             )
         }
@@ -312,7 +312,7 @@ fun CameraContent(
             AspectRatio.RATIO_FULL -> PreviewView.ScaleType.FILL_CENTER
             else -> PreviewView.ScaleType.FIT_CENTER
         }
-        android.util.Log.d("PicMe:Camera",
+        Logger.d("Camera",
             "ScaleType updated to ${previewView.scaleType} for aspectRatio=$aspectRatio"
         )
     }
@@ -386,7 +386,7 @@ fun CameraContent(
 
     LaunchedEffect(currentScene) {
         cameraControl?.let { control ->
-            PicMeLogger.i("Camera", "Applying scene: $currentScene")
+            Logger.i("Camera", "Applying scene: $currentScene")
             when (currentScene) {
                 ScenePreset.NIGHT -> {
                     control.setExposureCompensationIndex(1)
@@ -408,20 +408,20 @@ fun CameraContent(
     //     pixelFreeView.setWhiteningStrength(beautySettings.whitening.toFloat())
     //     pixelFreeView.setSlimFaceStrength(beautySettings.slimFace.toFloat())
     //     pixelFreeView.setBigEyesStrength(beautySettings.bigEyes.toFloat())
-    //     android.util.Log.d("PicMe:Camera", "PixelFree beauty updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
+    //     Logger.d("Camera", "PixelFree beauty updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
     // }
     
     // [RD] PixelFreeEffects 初始化
     LaunchedEffect(Unit) {
         // 等待 GLSurface 创建和初始化
         kotlinx.coroutines.delay(500)
-        android.util.Log.d("PicMe:Camera", "PixelFree initialization requested")
+        Logger.d("Camera", "PixelFree initialization requested")
     }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio) {
         val cameraProvider = cameraProviderFuture.get()
         
-        android.util.Log.d("PicMe:Camera", "Binding camera with aspectRatio=$aspectRatio")
+        Logger.d("Camera", "Binding camera with aspectRatio=$aspectRatio")
 
         val cameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
 
@@ -475,7 +475,7 @@ fun CameraContent(
                 rotation
             ).build()
 
-            android.util.Log.d("PicMe:Camera",
+            Logger.d("Camera",
                 "Created FULL ViewPort: screenRatio=$screenWidth:$screenHeight, rotation=$rotation"
             )
 
@@ -505,7 +505,7 @@ fun CameraContent(
                     // [RD] 使用 PreviewView 的标准 SurfaceProvider
                     // 这样CameraX会自动处理旋转、缩放和裁剪
                     previewBuilder.setSurfaceProvider(previewView.surfaceProvider)
-                    android.util.Log.d("PicMe:Camera",
+                    Logger.d("Camera",
                         "Preview connected to PreviewView with scaleType=${previewView.scaleType}"
                     )
                 }
@@ -518,7 +518,7 @@ fun CameraContent(
             try {
                 val mediaImage = imageProxy.image
                 // [调试] 输出实际帧信息
-                android.util.Log.d("PicMe:Camera", 
+                Logger.d("Camera",
                     "Frame: ${imageProxy.width}x${imageProxy.height}, " +
                     "ratio=${imageProxy.width.toFloat()/imageProxy.height.toFloat()}, " +
                     "rot=${imageProxy.imageInfo.rotationDegrees}, " +
@@ -535,7 +535,7 @@ fun CameraContent(
                                 val face = faces[0]
                                 val bounds = face.boundingBox
                                 
-                                PicMeLogger.d(
+                                Logger.d(
                                     "PicMe:Camera",
                                     "Face detected: bounds=(${bounds.centerX()},${bounds.centerY()}), " +
                                         "imageSize=${imageProxy.width}x${imageProxy.height}, " +
@@ -559,7 +559,7 @@ fun CameraContent(
                                 showFocusIndicator = true
                                 
                                 // [RD] PixelFreeGLSurfaceView 不支持自动对焦
-                                PicMeLogger.d(
+                                Logger.d(
                                     "PicMe:Camera",
                                     "Face detected at screen: (${screenPoint.x.toInt()}, ${screenPoint.y.toInt()})"
                                 )
@@ -574,7 +574,7 @@ fun CameraContent(
                     imageProxy.close()
                 }
             } catch (e: Exception) {
-                PicMeLogger.e("PicMe:Camera", "Face detection error", e)
+                Logger.e("Camera", "Face detection error", e)
                 imageProxy.close()
             }
         }
@@ -583,13 +583,13 @@ fun CameraContent(
             cameraProvider.unbindAll()
             
             // [RD] 关键修复：使用 TextureView 显示预览
-            android.util.Log.d("PicMe:Camera", "Binding camera with TextureView display")
-            
+            Logger.d("Camera", "Binding camera with TextureView display")
+
             // [RD] 复用 imageAnalysis 同时用于人脸检测和美颜预览
             imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
                 try {
-                    android.util.Log.d("PicMe:Camera", "ImageAnalysis received frame: ${imageProxy.width}x${imageProxy.height}")
-                    
+                    Logger.d("Camera", "ImageAnalysis received frame: ${imageProxy.width}x${imageProxy.height}")
+
                     val mediaImage = imageProxy.image
                     if (mediaImage != null && previewView.width > 0 && previewView.height > 0) {
                         val image = InputImage.fromMediaImage(
@@ -602,7 +602,7 @@ fun CameraContent(
                                     val face = faces[0]
                                     val bounds = face.boundingBox
                                     
-                                    PicMeLogger.d(
+                                    Logger.d(
                                         "PicMe:Camera",
                                         "Face detected: bounds=(${bounds.centerX()},${bounds.centerY()}), " +
                                             "imageSize=${imageProxy.width}x${imageProxy.height}, " +
@@ -625,7 +625,7 @@ fun CameraContent(
                                     facePoint = screenPoint
                                     showFocusIndicator = true
                                     
-                                    PicMeLogger.d(
+                                    Logger.d(
                                         "PicMe:Camera",
                                         "Face detected at screen: (${screenPoint.x.toInt()}, ${screenPoint.y.toInt()})"
                                     )
@@ -642,7 +642,7 @@ fun CameraContent(
                         imageProxy.close()
                     }
                 } catch (e: Exception) {
-                    PicMeLogger.e("PicMe:Camera", "Face detection error", e)
+                    Logger.e("Camera", "Face detection error", e)
                     imageProxy.close()
                 }
             }
@@ -650,7 +650,7 @@ fun CameraContent(
             // [RD] 根据是否使用UseCaseGroup来绑定相机
             val camera = if (useCaseGroup != null) {
                 // 1:1模式和FULL模式：使用UseCaseGroup（已包含preview和imageCapture）
-                android.util.Log.d("PicMe:Camera", "Binding with UseCaseGroup for aspectRatio=$aspectRatio")
+                Logger.d("Camera", "Binding with UseCaseGroup for aspectRatio=$aspectRatio")
                 cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
@@ -658,7 +658,7 @@ fun CameraContent(
                 )
             } else {
                 // 其他模式（4:3、16:9）：根据拍摄类型绑定
-                android.util.Log.d("PicMe:Camera", "Binding without UseCaseGroup for aspectRatio=$aspectRatio")
+                Logger.d("Camera", "Binding without UseCaseGroup for aspectRatio=$aspectRatio")
                 when (captureMode) {
                     MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
                         cameraProvider.bindToLifecycle(
@@ -685,12 +685,12 @@ fun CameraContent(
                 zoomRatio = state.zoomRatio
             }
             actualLensFacing = camera.cameraInfo.lensFacing
-            PicMeLogger.d(
+            Logger.d(
                 "PicMe:Camera",
                 "Camera bound: lensFacing=$actualLensFacing, selector=$lensFacing"
             )
         } catch (e: Exception) {
-            PicMeLogger.e("Camera", "Binding failed", e)
+            Logger.e("Camera", "Binding failed", e)
         }
     }
 
@@ -738,13 +738,13 @@ fun CameraContent(
                 // 设置纹理到 PixelFreeGLSurfaceView
                 pixelFreeView.setCameraTextureId(textureId, imageProxy.width, imageProxy.height)
                 
-                android.util.Log.d("PicMe:Camera", "Beauty preview frame: ${imageProxy.width}x${imageProxy.height}, texture=$textureId")
-                
+                Logger.d("Camera", "Beauty preview frame: ${imageProxy.width}x${imageProxy.height}, texture=$textureId")
+
                 // 清理纹理
                 android.opengl.GLES20.glDeleteTextures(1, textureIds, 0)
             }
         } catch (e: Exception) {
-            android.util.Log.e("PicMe:Camera", "Beauty preview error: ${e.message}", e)
+            Logger.e("Camera", "Beauty preview error: ${e.message}", e)
         } finally {
             imageProxy.close()
         }

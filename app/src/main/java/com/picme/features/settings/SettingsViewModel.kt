@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.data.preferences.AppLanguage
+import com.picme.data.preferences.BeautyStrategy
 import com.picme.data.preferences.ThemeMode
 import com.picme.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +28,13 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
             initialValue = AppLanguage.SYSTEM
         )
 
+    val beautyStrategy: StateFlow<BeautyStrategy> = repository.beautyStrategyFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = BeautyStrategy.PIXEL_FREE
+        )
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -36,6 +44,12 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     fun setAppLanguage(language: AppLanguage) {
         viewModelScope.launch {
             repository.updateAppLanguage(language)
+        }
+    }
+
+    fun setBeautyStrategy(strategy: BeautyStrategy) {
+        viewModelScope.launch {
+            repository.updateBeautyStrategy(strategy)
         }
     }
 }

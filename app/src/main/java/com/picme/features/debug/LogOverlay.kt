@@ -1,7 +1,6 @@
 package com.picme.features.debug
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,14 +43,14 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.picme.core.common.LogEntry
 import com.picme.core.common.LogLevel
-import com.picme.core.common.PicMeLogger
+import com.picme.core.common.Logger
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogOverlay(
     onDismiss: () -> Unit
 ) {
-    val logs by PicMeLogger.logs.collectAsState()
+    val logs by Logger.logs.collectAsState()
     var filterText by remember { mutableStateOf("") }
 
     val filteredLogs = remember(logs, filterText) {
@@ -78,7 +77,7 @@ fun LogOverlay(
             border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                LogOverlayHeader(onClear = { PicMeLogger.clear() }, onDismiss = onDismiss)
+                LogOverlayHeader(onClear = { Logger.clear() }, onDismiss = onDismiss)
 
                 OutlinedTextField(
                     value = filterText,

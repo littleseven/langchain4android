@@ -5,8 +5,8 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
-import android.opengl.Matrix
 import android.util.AttributeSet
+import com.picme.core.common.Logger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -66,7 +66,7 @@ class GPUImageBeautyView @JvmOverloads constructor(
         // 持续渲染模式
         renderMode = RENDERMODE_CONTINUOUSLY
         
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Initialized with pure OpenGL ES")
+        Logger.d("GPUBeautyView", "Initialized with pure OpenGL ES")
     }
     
     /**
@@ -102,24 +102,24 @@ class GPUImageBeautyView @JvmOverloads constructor(
             .asFloatBuffer()
         textureBuffer?.put(textureCoords)?.position(0)
         
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Buffers initialized: vertices=${vertices.contentToString()}, texCoords=${textureCoords.contentToString()}")
+        Logger.d("GPUBeautyView", "Buffers initialized: vertices=${vertices.contentToString()}, texCoords=${textureCoords.contentToString()}")
     }
     
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        android.util.Log.d("PicMe:GPUImageBeautyView", "onSurfaceCreated")
-        
+        Logger.d("GPUBeautyView", "onSurfaceCreated")
+
         // 创建外部纹理 ID（用于 CameraX 输出）
         cameraTextureId = createExternalTextureId()
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Camera texture ID created: $cameraTextureId")
-        
+        Logger.d("GPUBeautyView", "Camera texture ID created: $cameraTextureId")
+
         // 创建 SurfaceTexture 给 CameraX
         cameraSurfaceTexture = SurfaceTexture(cameraTextureId)
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Camera SurfaceTexture created: ${cameraSurfaceTexture?.hashCode()}")
-        
+        Logger.d("GPUBeautyView", "Camera SurfaceTexture created: ${cameraSurfaceTexture?.hashCode()}")
+
         // 编译 Shader 程序
         programId = createProgram()
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Shader program created: $programId")
-        
+        Logger.d("GPUBeautyView", "Shader program created: $programId")
+
         // 获取 Shader 属性和 Uniform 位置
         aPositionLocation = GLES20.glGetAttribLocation(programId, "aPosition")
         aTextureCoordLocation = GLES20.glGetAttribLocation(programId, "aTextureCoord")
@@ -127,16 +127,16 @@ class GPUImageBeautyView @JvmOverloads constructor(
         uSmoothingLocation = GLES20.glGetUniformLocation(programId, "uSmoothing")
         uWhiteningLocation = GLES20.glGetUniformLocation(programId, "uWhitening")
         
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Shader locations: aPos=$aPositionLocation, aTex=$aTextureCoordLocation, uTex=$uTextureLocation, uSmooth=$uSmoothingLocation, uWhite=$uWhiteningLocation")
-        
+        Logger.d("GPUBeautyView", "Shader locations: aPos=$aPositionLocation, aTex=$aTextureCoordLocation, uTex=$uTextureLocation, uSmooth=$uSmoothingLocation, uWhite=$uWhiteningLocation")
+
         // 设置 OpenGL 状态
         GLES20.glClearColor(0f, 0f, 0f, 0f)
         GLES20.glEnable(GLES20.GL_TEXTURE_2D)
     }
     
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        android.util.Log.d("PicMe:GPUImageBeautyView", "onSurfaceChanged: ${width}x${height}")
-        
+        Logger.d("GPUBeautyView", "onSurfaceChanged: ${width}x${height}")
+
         // 设置 OpenGL 视口
         GLES20.glViewport(0, 0, width, height)
     }
@@ -200,10 +200,10 @@ class GPUImageBeautyView @JvmOverloads constructor(
                 // 11. 解绑纹理
                 GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
                 
-                android.util.Log.v("PicMe:GPUImageBeautyView", "Frame rendered successfully")
+                Logger.d("GPUBeautyView", "Frame rendered successfully")
             }
         } catch (e: Exception) {
-            android.util.Log.e("PicMe:GPUImageBeautyView", "Render error: ${e.message}", e)
+            Logger.e("GPUBeautyView", "Render error: ${e.message}", e)
         }
     }
     
@@ -299,7 +299,7 @@ class GPUImageBeautyView @JvmOverloads constructor(
         GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0)
         if (linkStatus[0] != GLES20.GL_TRUE) {
             val error = GLES20.glGetProgramInfoLog(program)
-            android.util.Log.e("PicMe:GPUImageBeautyView", "Shader program link error: $error")
+            Logger.e("GPUBeautyView", "Shader program link error: $error")
             GLES20.glDeleteProgram(program)
             return -1
         }
@@ -320,7 +320,7 @@ class GPUImageBeautyView @JvmOverloads constructor(
         GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0)
         if (compiled[0] != GLES20.GL_TRUE) {
             val error = GLES20.glGetShaderInfoLog(shader)
-            android.util.Log.e("PicMe:GPUImageBeautyView", "Shader compile error: $error")
+            Logger.e("GPUBeautyView", "Shader compile error: $error")
             GLES20.glDeleteShader(shader)
             return 0
         }
@@ -341,6 +341,6 @@ class GPUImageBeautyView @JvmOverloads constructor(
         if (programId != -1) {
             GLES20.glDeleteProgram(programId)
         }
-        android.util.Log.d("PicMe:GPUImageBeautyView", "Released")
+        Logger.d("GPUBeautyView", "Released")
     }
 }

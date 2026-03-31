@@ -33,7 +33,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.picme.core.common.PicMeLogger
+import com.picme.core.common.Logger
 
 /**
  * [RD] 相机预览屏幕 - 根据 PRODUCT.md 实现
@@ -74,7 +74,7 @@ fun CameraPreviewScreen(
 
     // 日志记录
     LaunchedEffect(Unit) {
-        PicMeLogger.d("PicMe:Camera", "CameraPreviewScreen launched")
+        Logger.d("PicMe:Camera", "CameraPreviewScreen launched")
     }
 
     // 权限检查
@@ -85,7 +85,7 @@ fun CameraPreviewScreen(
     // CameraX 初始化
     LaunchedEffect(lifecycleOwner, lensFacing) {
         if (!cameraPermission.allPermissionsGranted) {
-            PicMeLogger.w("PicMe:Camera", "Camera permissions not granted")
+            Logger.w("PicMe:Camera", "Camera permissions not granted")
             return@LaunchedEffect
         }
 
@@ -93,9 +93,9 @@ fun CameraPreviewScreen(
              val future = ProcessCameraProvider.getInstance(context)
              cameraProvider = future.get()  // Blocking call in background
 
-            PicMeLogger.d("PicMe:Camera", "CameraProvider initialized")
+            Logger.d("PicMe:Camera", "CameraProvider initialized")
         } catch (e: Exception) {
-            PicMeLogger.e("PicMe:Camera", "Failed to initialize CameraProvider: ${e.message}")
+            Logger.e("PicMe:Camera", "Failed to initialize CameraProvider: ${e.message}")
         }
     }
 
@@ -115,7 +115,7 @@ fun CameraPreviewScreen(
                 lensFacing = lensFacing,
                 beautyStrength = beautyStrength,
                 onCapture = { uri ->
-                    PicMeLogger.d("PicMe:Camera", "Photo captured: $uri")
+                    Logger.d("PicMe:Camera", "Photo captured: $uri")
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -214,13 +214,13 @@ private fun CameraPreviewViewComposable(
                     imageCapture
                 )
 
-                PicMeLogger.d(
+                Logger.d(
                     "PicMe:Camera",
                     "Camera bound: lensFacing=$lensFacing, beautyStrength=$beautyStrength"
                 )
 
             } catch (e: Exception) {
-                PicMeLogger.e("PicMe:Camera", "Failed to bind camera: ${e.message}")
+                Logger.e("PicMe:Camera", "Failed to bind camera: ${e.message}")
              }
          }
      )

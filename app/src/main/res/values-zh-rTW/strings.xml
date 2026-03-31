@@ -26,6 +26,9 @@
     <string name="flip_camera">翻轉相機</string>
     <string name="grant_permissions">授予權限</string>
     <string name="theme_mode">主題模式</string>
+    <string name="beauty_engine">美顏引擎</string>
+    <string name="beauty_engine_pixelfree">PixelFree SDK（預設）</string>
+    <string name="beauty_engine_rplan">R 計畫自主方案（實驗性）</string>
     <string name="filters">濾鏡</string>
     <string name="beauty">美顏</string>
     <string name="smoothing">磨皮</string>

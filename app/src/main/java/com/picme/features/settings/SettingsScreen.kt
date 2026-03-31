@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,17 +23,24 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.data.preferences.AppLanguage
+import com.picme.data.preferences.BeautyStrategy
 import com.picme.data.preferences.ThemeMode
 
 @Composable
@@ -39,14 +48,36 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit
 ) {
+    // 沉浸式模式
+    val view = LocalView.current
+    val context = LocalContext.current
+
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
+        val insetsController = WindowCompat.getInsetsController(window, view)
+
+        // 隐藏状态栏和导航栏
+        insetsController.hide(WindowInsetsCompat.Type.systemBars())
+        // 设置沉浸式模式，滑动边缘时显示系统栏
+        insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        onDispose {
+            // 恢复系统栏显示
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
     val themeMode by viewModel.themeMode.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
+    val beautyStrategy by viewModel.beautyStrategy.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
+        beautyStrategy = beautyStrategy,
         onThemeModeSelected = { viewModel.setThemeMode(it) },
         onAppLanguageSelected = { viewModel.setAppLanguage(it) },
+        onBeautyStrategySelected = { viewModel.setBeautyStrategy(it) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -56,8 +87,10 @@ fun SettingsScreen(
 private fun SettingsContent(
     themeMode: ThemeMode,
     appLanguage: AppLanguage,
+    beautyStrategy: BeautyStrategy,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
+    onBeautyStrategySelected: (BeautyStrategy) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -79,6 +112,7 @@ private fun SettingsContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             SettingsSection(title = stringResource(R.string.theme_mode)) {
@@ -94,6 +128,15 @@ private fun SettingsContent(
                 LanguageSelection(
                     currentLanguage = appLanguage,
                     onLanguageSelected = onAppLanguageSelected
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            SettingsSection(title = stringResource(R.string.beauty_engine)) {
+                BeautyStrategySelection(
+                    currentStrategy = beautyStrategy,
+                    onStrategySelected = onBeautyStrategySelected
                 )
             }
         }
@@ -166,6 +209,27 @@ fun LanguageSelection(
 }
 
 @Composable
+fun BeautyStrategySelection(
+    currentStrategy: BeautyStrategy,
+    onStrategySelected: (BeautyStrategy) -> Unit
+) {
+    val options = listOf(
+        BeautyStrategy.PIXEL_FREE to stringResource(R.string.beauty_engine_pixelfree),
+        BeautyStrategy.R_PLAN to stringResource(R.string.beauty_engine_rplan)
+    )
+
+    Column(Modifier.selectableGroup()) {
+        options.forEach { (strategy, label) ->
+            SelectionRow(
+                isSelected = (strategy == currentStrategy),
+                label = label,
+                onClick = { onStrategySelected(strategy) }
+            )
+        }
+    }
+}
+
+@Composable
 private fun SelectionRow(
     isSelected: Boolean,
     label: String,
@@ -202,8 +266,10 @@ fun SettingsScreenPreview() {
         SettingsContent(
             themeMode = ThemeMode.SYSTEM,
             appLanguage = AppLanguage.ENGLISH,
+            beautyStrategy = BeautyStrategy.PIXEL_FREE,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
+            onBeautyStrategySelected = {},
             onNavigateBack = {}
         )
     }

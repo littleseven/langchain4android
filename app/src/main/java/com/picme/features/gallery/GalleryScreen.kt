@@ -1,6 +1,5 @@
 package com.picme.features.gallery
 
-import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -50,6 +49,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -57,7 +57,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -68,16 +67,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
 import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
-import java.io.File
 import com.picme.features.gallery.GroupingMode.DATE
 import com.picme.features.gallery.GroupingMode.FACE
 import com.picme.features.gallery.GroupingMode.LANDSCAPE
@@ -85,9 +87,9 @@ import com.picme.features.gallery.GroupingMode.NONE
 import com.picme.features.gallery.GroupingMode.PERSON
 import com.picme.features.gallery.GroupingMode.SEXY
 import com.picme.features.gallery.GroupingMode.SWIMWEAR
-import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,6 +115,24 @@ fun GalleryScreen(
 
     // Store thumbnail positions for zoom animation
     val thumbnailPositions = remember { mutableStateMapOf<Long, Rect>() }
+
+    // 沉浸式模式
+    val view = LocalView.current
+
+    DisposableEffect(Unit) {
+        val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
+        val insetsController = WindowCompat.getInsetsController(window, view)
+
+        // 隐藏状态栏和导航栏
+        insetsController.hide(WindowInsetsCompat.Type.systemBars())
+        // 设置沉浸式模式，滑动边缘时显示系统栏
+        insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        onDispose {
+            // 恢复系统栏显示
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
 
     BackHandler {
         when {

@@ -5,22 +5,16 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
-import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.PointF
-import android.graphics.RectF
 import android.renderscript.Allocation
 import android.renderscript.Element
 import android.renderscript.RenderScript
 import android.renderscript.ScriptIntrinsicBlur
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceLandmark
-import com.picme.core.common.PicMeLogger
+import com.picme.core.common.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -56,7 +50,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 rs.destroy()
                 result
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Smoothing error", e)
+                Logger.e(TAG, "Smoothing error", e)
                 bitmap
             }
         }
@@ -89,7 +83,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Whitening error", e)
+                Logger.e(TAG, "Whitening error", e)
                 bitmap
             }
         }
@@ -160,10 +154,10 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 val canvas = Canvas(mutableBitmap)
                 canvas.drawBitmapMesh(mutableBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
                 
-                PicMeLogger.d(TAG, "Slim face applied: strength=$strength, faces=${faces.size}")
+                Logger.d(TAG, "Slim face applied: strength=$strength, faces=${faces.size}")
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Slim face error", e)
+                Logger.e(TAG, "Slim face error", e)
                 bitmap
             }
         }
@@ -235,10 +229,10 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 val canvas = Canvas(mutableBitmap)
                 canvas.drawBitmapMesh(mutableBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
                 
-                PicMeLogger.d(TAG, "Big eyes applied: strength=$strength, faces=${faces.size}")
+                Logger.d(TAG, "Big eyes applied: strength=$strength, faces=${faces.size}")
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Big eyes error", e)
+                Logger.e(TAG, "Big eyes error", e)
                 bitmap
             }
         }
@@ -271,7 +265,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Youth error", e)
+                Logger.e(TAG, "Youth error", e)
                 bitmap
             }
         }
@@ -321,7 +315,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "LipColor error", e)
+                Logger.e(TAG, "LipColor error", e)
                 bitmap
             }
         }
@@ -354,7 +348,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Blush error", e)
+                Logger.e(TAG, "Blush error", e)
                 bitmap
             }
         }
@@ -387,7 +381,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Eyebrow error", e)
+                Logger.e(TAG, "Eyebrow error", e)
                 bitmap
             }
         }
@@ -432,10 +426,10 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 stretchedRegion.recycle()
                 scaledRegion.recycle()
                 
-                PicMeLogger.d(TAG, "Body enhancement applied: strength=$strength, stretch=$stretchFactor")
+                Logger.d(TAG, "Body enhancement applied: strength=$strength, stretch=$stretchFactor")
                 mutableBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Body enhancement error", e)
+                Logger.e(TAG, "Body enhancement error", e)
                 bitmap
             }
         }
@@ -494,10 +488,10 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 scaledRegion.recycle()
                 mutableBitmap.recycle()
                 
-                PicMeLogger.d(TAG, "Leg extension applied: strength=$strength, stretch=$stretchFactor")
+                Logger.d(TAG, "Leg extension applied: strength=$strength, stretch=$stretchFactor")
                 finalBitmap
             } catch (e: Exception) {
-                PicMeLogger.e(TAG, "Leg extension error", e)
+                Logger.e(TAG, "Leg extension error", e)
                 bitmap
             }
         }
