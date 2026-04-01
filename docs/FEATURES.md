@@ -112,13 +112,20 @@
 #### 1.3.4 美颜交互规范
 
 ##### 1.3.4.1 入口与导航
-- **一级入口**：拍摄页右上角控制栏提供三个独立按钮
-    - **图标设计**：使用 Material Icons (Rounded)
-        - 面部精修：`Icons.Rounded.Face`
-        - 妆容调节：`Icons.Rounded.ColorLens`
-        - 身材管理：`Icons.Rounded.SelfImprovement`
-    - **按钮间距**：垂直间距 12dp，与原有控制按钮保持一致
-    - **选中状态**：当前打开的面板对应按钮高亮显示（Primary 色）
+- **一级入口**：拍摄页右上角控制栏采用“总开关 + 三类子功能”四按钮结构
+- **图标设计**：使用 Material Icons (Rounded)，避免相近人脸图标造成识别混淆
+- **图标与排序**（由上到下）：
+- 美颜总开关：`Icons.Rounded.AutoFixHigh`
+- 面部精修：`Icons.Rounded.Face`
+- 妆容调节：`Icons.Rounded.ColorLens`
+- 身材管理：`Icons.Rounded.SelfImprovement`
+- **布局逻辑**：先全局开关，再同层展示三类美颜子功能；控制栏进一步按“美颜组 -> 构图组 -> 风格组”分组
+- **组内顺序**：
+- 构图组：画幅 -> 网格
+- 风格组：场景 -> 滤镜
+- **按钮间距**：组内垂直间距 12dp，组间额外增加 6dp 视觉分隔
+- **选中状态**：总开关按美颜启停高亮；子功能按钮按当前打开面板高亮（Primary 色）
+
 
 ##### 1.3.4.2 面板设计
 - **面板高度**：半屏高度（屏幕高度的 50%），使用 `LocalConfiguration.current.screenHeightDp` 动态计算

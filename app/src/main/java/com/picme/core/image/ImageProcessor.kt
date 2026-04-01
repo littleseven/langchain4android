@@ -12,6 +12,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import android.graphics.RectF
 import android.os.Build
 import android.provider.MediaStore
 import androidx.camera.core.CameraSelector
@@ -97,7 +98,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
             maskFilter = BlurMaskFilter(featherRadius, BlurMaskFilter.Blur.NORMAL)
         }
 
-        var contourCount = 0
+        var regionCount = 0
         faces.forEach { face ->
             val contourPoints = face.getContour(FaceContour.FACE)?.points
             if (contourPoints != null && contourPoints.size >= 3) {
@@ -109,12 +110,35 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 }
                 facePath.close()
                 maskCanvas.drawPath(facePath, maskPaint)
-                contourCount++
+                regionCount++
+                return@forEach
+            }
+
+            val bounds = face.boundingBox
+            if (bounds.width() <= 1 || bounds.height() <= 1) {
+                return@forEach
+            }
+
+            // Landmark 模式下可能没有 FaceContour，回退为收敛的人脸椭圆蒙版
+            // 仅覆盖面中区域，避免出现整脸或外轮廓一圈发白
+            val insetX = bounds.width() * if (logPrefix.contains("Whitening")) 0.22f else 0.16f
+            val insetTop = bounds.height() * if (logPrefix.contains("Whitening")) 0.18f else 0.10f
+            val insetBottom = bounds.height() * if (logPrefix.contains("Whitening")) 0.24f else 0.16f
+            val ovalRect = RectF(
+                (bounds.left + insetX).coerceIn(0f, width.toFloat()),
+                (bounds.top + insetTop).coerceIn(0f, height.toFloat()),
+                (bounds.right - insetX).coerceIn(0f, width.toFloat()),
+                (bounds.bottom - insetBottom).coerceIn(0f, height.toFloat())
+            )
+
+            if (ovalRect.width() > 1f && ovalRect.height() > 1f) {
+                maskCanvas.drawOval(ovalRect, maskPaint)
+                regionCount++
             }
         }
 
-        return if (contourCount == 0) {
-            Logger.d("ImageProcessor", "$logPrefix skipped: no face contours")
+        return if (regionCount == 0) {
+            Logger.d("ImageProcessor", "$logPrefix skipped: no face regions")
             maskBitmap.recycle()
             null
         } else {
@@ -129,8 +153,8 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         }
 
         val ratio = safeStrength / 100f
-        val gain = 1f + ratio * 0.12f
-        val offset = ratio * 42f
+        val gain = 1f + ratio * 0.20f
+        val offset = ratio * 58f
 
         val colorMatrix = ColorMatrix(
             floatArrayOf(
@@ -173,7 +197,12 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         blendPaint.xfermode = null
 
         val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-        Canvas(output).drawBitmap(maskedWhitened, 0f, 0f, null)
+        Canvas(output).drawBitmap(
+            maskedWhitened,
+            0f,
+            0f,
+            Paint().apply { alpha = (130 + ratio * 100f).toInt().coerceIn(0, 255) }
+        )
 
         maskBitmap.recycle()
         maskedWhitened.recycle()
@@ -221,7 +250,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
             maskedSmooth,
             0f,
             0f,
-            Paint().apply { alpha = (90 + ratio * 140).toInt().coerceIn(0, 255) }
+            Paint().apply { alpha = (120 + ratio * 150).toInt().coerceIn(0, 255) }
         )
 
         maskBitmap.recycle()
@@ -258,30 +287,43 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
 
         faces.forEach { face ->
             val contourPoints = face.getContour(FaceContour.FACE)?.points
-            if (contourPoints == null || contourPoints.size < 8) {
-                return@forEach
-            }
 
-            var centerX = 0f
-            var centerY = 0f
-            contourPoints.forEach { point ->
-                centerX += point.x
-                centerY += point.y
-            }
-            centerX /= contourPoints.size
-            centerY /= contourPoints.size
+            val centerX: Float
+            val centerY: Float
+            val slimRadius: Float
 
-            var maxRadius = 1f
-            contourPoints.forEach { point ->
-                val dx = point.x - centerX
-                val dy = point.y - centerY
-                val distance = sqrt(dx * dx + dy * dy)
-                if (distance > maxRadius) {
-                    maxRadius = distance
+            if (contourPoints != null && contourPoints.size >= 8) {
+                var contourCenterX = 0f
+                var contourCenterY = 0f
+                contourPoints.forEach { point ->
+                    contourCenterX += point.x
+                    contourCenterY += point.y
                 }
-            }
+                contourCenterX /= contourPoints.size
+                contourCenterY /= contourPoints.size
 
-            val slimRadius = maxRadius * 1.3f
+                var maxRadius = 1f
+                contourPoints.forEach { point ->
+                    val dx = point.x - contourCenterX
+                    val dy = point.y - contourCenterY
+                    val distance = sqrt(dx * dx + dy * dy)
+                    if (distance > maxRadius) {
+                        maxRadius = distance
+                    }
+                }
+
+                centerX = contourCenterX
+                centerY = contourCenterY
+                slimRadius = maxRadius * 1.3f
+            } else {
+                val bounds = face.boundingBox
+                if (bounds.width() <= 1 || bounds.height() <= 1) {
+                    return@forEach
+                }
+                centerX = bounds.centerX().toFloat()
+                centerY = bounds.centerY().toFloat()
+                slimRadius = maxOf(bounds.width(), bounds.height()) * 0.65f
+            }
 
             for (vertexIndex in 0 until count) {
                 val vx = orig[vertexIndex * 2]
@@ -301,7 +343,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 }
 
                 val radialWeight = 1f - (distance / slimRadius)
-                val pull = normalizedStrength * 0.3f * radialWeight * lowerFaceWeight
+                val pull = normalizedStrength * 0.4f * radialWeight * lowerFaceWeight
 
                 verts[vertexIndex * 2] -= dx * pull
             }

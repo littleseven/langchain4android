@@ -168,9 +168,9 @@ fun CameraRightControls(
         verticalArrangement = Arrangement.spacedBy(12.dp),  // 减小间距以容纳更多按钮
         horizontalAlignment = Alignment.End
     ) {
-        // 美颜开关 - 使用不同的样式突出显示
+        // 美颜总开关（独立于子面板入口）
         ControlButton(
-            icon = Icons.Rounded.FaceRetouchingNatural,
+            icon = Icons.Rounded.AutoFixHigh,
             onClick = onToggleBeautyEnabled,
             isActive = isBeautyEnabled
         )
@@ -196,6 +196,10 @@ fun CameraRightControls(
             isActive = isBodyManagementSelected
         )
         
+        // 分组间距：美颜组 -> 构图组
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 构图类工具：画幅 -> 网格
         ControlButton(
             icon = when (currentRatio) {
                 0 -> Icons.Rounded.AspectRatio
@@ -206,7 +210,16 @@ fun CameraRightControls(
             onClick = onToggleRatio,
             isActive = isRatioSelected
         )
-                    // OCR 入口已根据产品方案移除，仅在文档模式下保留
+        ControlButton(
+            icon = Icons.Rounded.GridOn,
+            onClick = onToggleGrid,
+            isActive = isGridActive
+        )
+
+        // 分组间距：构图组 -> 风格组
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 风格类工具：场景 -> 滤镜
         ControlButton(
             icon = Icons.Rounded.Landscape,
             onClick = onToggleScene,
@@ -216,11 +229,6 @@ fun CameraRightControls(
             icon = Icons.Rounded.FilterBAndW,
             onClick = onToggleFilter,
             isActive = isFilterSelected
-        )
-        ControlButton(
-            icon = Icons.Rounded.GridOn,
-            onClick = onToggleGrid,
-            isActive = isGridActive
         )
     }
 }

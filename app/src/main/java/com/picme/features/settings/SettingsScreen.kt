@@ -141,7 +141,7 @@ private fun SettingsContent(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
             SettingsSection(title = stringResource(R.string.theme_mode)) {
                 ThemeSelection(
@@ -150,7 +150,7 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(title = stringResource(R.string.language)) {
                 LanguageSelection(
@@ -159,7 +159,7 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(title = stringResource(R.string.beauty_engine)) {
                 BeautyStrategySelection(
@@ -168,7 +168,7 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(title = stringResource(R.string.debug_tools)) {
                 DebugOptionRow(
@@ -205,13 +205,13 @@ private fun SettingsSection(
     Column {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(vertical = 4.dp)
+            modifier = Modifier.padding(vertical = 2.dp)
         )
         content()
         HorizontalDivider(
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = 2.dp),
             color = MaterialTheme.colorScheme.outlineVariant
         )
     }
@@ -298,7 +298,7 @@ private fun FaceDetectProfileSelection(
         text = stringResource(R.string.face_detect_profile_title),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
+        modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 0.dp)
     )
 
     Column(Modifier.selectableGroup()) {
@@ -321,13 +321,13 @@ private fun DebugOptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(44.dp)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f)
         )
         Switch(
@@ -346,7 +346,7 @@ private fun SelectionRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(40.dp)
             .selectable(
                 selected = isSelected,
                 onClick = onClick,
@@ -361,8 +361,8 @@ private fun SelectionRow(
         )
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(start = 12.dp)
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(start = 10.dp)
         )
     }
 }
