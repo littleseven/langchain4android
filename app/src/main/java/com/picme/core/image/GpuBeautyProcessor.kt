@@ -238,39 +238,6 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         }
     }
     
-    override suspend fun applyYouth(bitmap: Bitmap, strength: Float): Bitmap {
-        return withContext(Dispatchers.Default) {
-            try {
-                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
-                // 使用 ColorMatrix 增加皮肤光泽感
-                val youthIntensity = (strength / 100f) * 0.3f
-                
-                val colorMatrix = ColorMatrix().apply {
-                    set(floatArrayOf(
-                        1f + youthIntensity * 0.1f, 0f, 0f, 0f, youthIntensity * 10f,
-                        0f, 1f + youthIntensity * 0.08f, 0f, 0f, youthIntensity * 8f,
-                        0f, 0f, 1f + youthIntensity * 0.05f, 0f, youthIntensity * 5f,
-                        0f, 0f, 0f, 1f, 0f
-                    ))
-                }
-                
-                val paint = Paint().apply {
-                    colorFilter = ColorMatrixColorFilter(colorMatrix)
-                    isAntiAlias = true
-                }
-                
-                val canvas = android.graphics.Canvas(mutableBitmap)
-                canvas.drawBitmap(bitmap, 0f, 0f, paint)
-                
-                mutableBitmap
-            } catch (e: Exception) {
-                Logger.e(TAG, "Youth error", e)
-                bitmap
-            }
-        }
-    }
-    
     override suspend fun applyLipColor(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
         return withContext(Dispatchers.Default) {
             try {

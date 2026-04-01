@@ -229,18 +229,9 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
     }
 
     override suspend fun applyBigEyes(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
-        // 归一化：0-100 → 0.0-1.0
-        val normalizedStrength = strength / 100f
+        // 归一化：0-100 → 0.0-1.0，并做适度增益提升效果可见性
+        val normalizedStrength = (strength / 100f * 1.35f).coerceIn(0f, 1f)
         setBeautyParam(PFBeautyFilterType.PFBeautyFilterTypeFace_EyeStrength, normalizedStrength)
-        return processWithPixelFree(bitmap)
-    }
-
-    override suspend fun applyYouth(bitmap: Bitmap, strength: Float): Bitmap {
-        // PixelFree SDK 可能没有直接的"年轻化"参数
-        // 使用磨皮 + 美白的组合来实现
-        val normalizedStrength = strength / 100f
-        setBeautyParam(PFBeautyFilterType.PFBeautyFilterTypeFaceBlurStrength, normalizedStrength * 0.6f)
-        setBeautyParam(PFBeautyFilterType.PFBeautyFilterTypeFaceM_newWhitenStrength, normalizedStrength * 0.4f)
         return processWithPixelFree(bitmap)
     }
 

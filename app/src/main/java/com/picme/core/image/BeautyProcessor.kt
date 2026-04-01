@@ -45,14 +45,6 @@ interface BeautyProcessor {
     suspend fun applyBigEyes(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
     
     /**
-     * 应用年轻化效果
-     * @param bitmap 原始图像
-     * @param strength 强度 0-100
-     * @return 处理后的图像
-     */
-    suspend fun applyYouth(bitmap: Bitmap, strength: Float): Bitmap
-    
-    /**
      * 应用唇色效果
      * @param bitmap 原始图像
      * @param strength 强度 0-100
@@ -116,9 +108,6 @@ interface BeautyProcessor {
             }
             if (settings.bigEyes > 0) {
                 result = applyBigEyes(result, settings.bigEyes, faces)
-            }
-            if (settings.youth > 0) {
-                result = applyYouth(result, settings.youth)
             }
             // 妆容调节
             if (settings.lipColor > 0) {

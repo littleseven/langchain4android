@@ -81,11 +81,11 @@ class PixelFreeBeautyPreviewProvider(
             )
         }
 
-        // 大眼 (0-100 → 0.0-1.0)
+        // 大眼 (0-100 → 0.0-1.0)，适度增益提升可见度
         if (settings.bigEyes > 0) {
             view.setBeautyParam(
                 PFBeautyFilterType.PFBeautyFilterTypeFace_EyeStrength,
-                settings.bigEyes / 100f
+                (settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f)
             )
         }
 

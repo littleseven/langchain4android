@@ -40,7 +40,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material.icons.rounded.ChildCare
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Crop169
@@ -80,7 +79,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
@@ -88,6 +86,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -490,14 +489,6 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
                 onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
             )
 
-            BeautySlider(
-                icon = Icons.Rounded.ChildCare,
-                label = stringResource(R.string.youth),
-                value = settings.youth,
-                valueRange = 0f..100f,
-                onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
-                onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
-            )
         }
         
         // 妆容调节 - 可折叠
@@ -610,14 +601,6 @@ fun FacialRefinementSelector(settings: BeautySettings, onSettingsChanged: (Beaut
             onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
         )
 
-        BeautySlider(
-            icon = Icons.Rounded.ChildCare,
-            label = stringResource(R.string.youth),
-            value = settings.youth,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(youth = it)) },
-            onReset = { onSettingsChanged(settings.copy(youth = 0f)) }
-        )
     }
 }
 

@@ -9,6 +9,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaActionSound
+import android.os.Process
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
@@ -34,6 +36,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -60,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -333,7 +337,7 @@ fun CameraContent(
             // 参数范围归一化：BeautySettings (0-100) → PixelFree (0.0-1.0)
             pixelFreeView.setSmoothingStrength(beautySettings.smoothing / 100f)
             pixelFreeView.setWhiteningStrength(beautySettings.whitening / 100f)
-            pixelFreeView.setBigEyesStrength(beautySettings.bigEyes / 100f)
+            pixelFreeView.setBigEyesStrength((beautySettings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
             pixelFreeView.setSlimFaceStrength(beautySettings.slimFace / 100f)
 
             Logger.d("Camera", "Beauty params updated: smoothing=${beautySettings.smoothing}, " +
@@ -459,6 +463,11 @@ fun CameraContent(
     val lastMedia = mediaAssets.firstOrNull()
     var beautyPreviewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var beautyPreviewStatus by remember { mutableStateOf(BeautyPreviewStatus.SKIPPED) }
+    var beautyPreviewFps by remember { mutableFloatStateOf(0f) }
+    var beautyPreviewProcessingMs by remember { mutableIntStateOf(0) }
+    var beautyPreviewDelayMs by remember { mutableIntStateOf(100) }
+    var beautyPreviewCpuUsage by remember { mutableFloatStateOf(0f) }
+    var beautyPreviewNullFrames by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(currentScene) {
         cameraControl?.let { control ->
@@ -492,6 +501,11 @@ fun CameraContent(
             )
             beautyPreviewBitmap?.recycle()
             beautyPreviewBitmap = null
+            beautyPreviewFps = 0f
+            beautyPreviewProcessingMs = 0
+            beautyPreviewDelayMs = 0
+            beautyPreviewCpuUsage = 0f
+            beautyPreviewNullFrames = 0
             return@LaunchedEffect
         }
 
@@ -508,6 +522,8 @@ fun CameraContent(
         var frameCount = 0
         var nullFrameCount = 0
         var lastFpsLogTime = System.currentTimeMillis()
+        var lastCpuSampleTime = SystemClock.elapsedRealtime()
+        var lastCpuTimeMs = Process.getElapsedCpuTime()
 
         while (isActive) {
             val frameStartTime = System.currentTimeMillis()
@@ -560,11 +576,26 @@ fun CameraContent(
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastFpsLogTime >= 1000) {
                     val fps = frameCount * 1000f / (currentTime - lastFpsLogTime)
+                    val cpuNowMs = Process.getElapsedCpuTime()
+                    val cpuWallDeltaMs = (SystemClock.elapsedRealtime() - lastCpuSampleTime).coerceAtLeast(1L)
+                    val cpuDeltaMs = (cpuNowMs - lastCpuTimeMs).coerceAtLeast(0L)
+                    val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+                    val cpuUsage = ((cpuDeltaMs.toFloat() / cpuWallDeltaMs.toFloat()) / cores.toFloat() * 100f)
+                        .coerceIn(0f, 100f)
+
+                    beautyPreviewFps = fps
+                    beautyPreviewProcessingMs = processingTime.toInt()
+                    beautyPreviewDelayMs = adaptiveDelay.toInt()
+                    beautyPreviewCpuUsage = cpuUsage
+                    beautyPreviewNullFrames = nullFrameCount
+
                     Logger.d("Camera", "Beauty preview FPS: ${"%.1f".format(fps)}, " +
-                        "processing=${processingTime}ms, delay=${adaptiveDelay}ms, nullFrame=$nullFrameCount")
+                        "processing=${processingTime}ms, delay=${adaptiveDelay}ms, cpu=${"%.1f".format(cpuUsage)}%, nullFrame=$nullFrameCount")
                     frameCount = 0
                     nullFrameCount = 0
                     lastFpsLogTime = currentTime
+                    lastCpuSampleTime = SystemClock.elapsedRealtime()
+                    lastCpuTimeMs = cpuNowMs
                 }
             } else {
                 nullFrameCount++
@@ -1001,6 +1032,11 @@ CameraPreviewContent(
         currentGrid = currentGrid,
         beautySettings = beautySettings,
         beautyPreviewStatus = beautyPreviewStatus,
+        beautyPreviewFps = beautyPreviewFps,
+        beautyPreviewProcessingMs = beautyPreviewProcessingMs,
+        beautyPreviewDelayMs = beautyPreviewDelayMs,
+        beautyPreviewCpuUsage = beautyPreviewCpuUsage,
+        beautyPreviewNullFrames = beautyPreviewNullFrames,
         aspectRatio = aspectRatio,
         lensFacing = lensFacing,
         exposureCompensation = 0,
@@ -1186,6 +1222,11 @@ fun CameraPreviewContent(
     currentGrid: GridType,
     beautySettings: BeautySettings,
     beautyPreviewStatus: BeautyPreviewStatus,
+    beautyPreviewFps: Float,
+    beautyPreviewProcessingMs: Int,
+    beautyPreviewDelayMs: Int,
+    beautyPreviewCpuUsage: Float,
+    beautyPreviewNullFrames: Int,
     aspectRatio: Int,
     lensFacing: Int,
     exposureCompensation: Int,
@@ -1253,16 +1294,56 @@ fun CameraPreviewContent(
             Color(0xFFFFA000)
         }
 
-        Text(
-            text = statusText,
-            color = Color.White,
+        val activeEffects = mutableListOf<String>()
+        if (beautySettings.smoothing > 0f) {
+            activeEffects.add("SMOOTH")
+        }
+        if (beautySettings.whitening > 0f) {
+            activeEffects.add("WHITE")
+        }
+        if (beautySettings.slimFace != 0f) {
+            activeEffects.add("SLIM")
+        }
+        if (beautySettings.bigEyes > 0f) {
+            activeEffects.add("EYE")
+        }
+        val effectsText = if (activeEffects.isEmpty()) {
+            "Effects: None"
+        } else {
+            "Effects: " + activeEffects.joinToString(",")
+        }
+        val perfText = "Perf: ${"%.1f".format(beautyPreviewFps)}fps " +
+            "${beautyPreviewProcessingMs}ms ${beautyPreviewDelayMs}ms CPU ${"%.1f".format(beautyPreviewCpuUsage)}%"
+        val dropText = "Drop: ${beautyPreviewNullFrames}"
+
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
                 .padding(start = 76.dp, top = 18.dp)
                 .background(statusColor.copy(alpha = 0.75f))
                 .padding(horizontal = 10.dp, vertical = 4.dp)
-        )
+        ) {
+            Text(
+                text = statusText,
+                color = Color.White
+            )
+            Text(
+                text = effectsText,
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 10.sp
+            )
+            Text(
+                text = perfText,
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 10.sp
+            )
+            Text(
+                text = dropText,
+                color = Color.White.copy(alpha = 0.9f),
+                fontSize = 10.sp
+            )
+        }
 
         CameraLeftControls(
             onNavigateToSettings = onNavigateToSettings,

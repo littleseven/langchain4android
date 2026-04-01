@@ -38,6 +38,8 @@ import com.picme.features.camera.model.FilterType
 import com.picme.features.gallery.MediaViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 interface ImageProcessor {
     fun processPhoto(
@@ -68,6 +70,56 @@ interface ImageProcessor {
 class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImageProcessor {
     private val useWhiteningFallback by lazy {
         beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
+    }
+    private val useSlimFaceFallback by lazy {
+        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
+    }
+    private val useSmoothingFallback by lazy {
+        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
+    }
+    private val useBigEyesFallback by lazy {
+        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
+    }
+
+    private fun createFaceMaskBitmap(
+        width: Int,
+        height: Int,
+        faces: List<Face>,
+        featherRadius: Float,
+        logPrefix: String
+    ): Bitmap? {
+        val maskBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val maskCanvas = Canvas(maskBitmap)
+        val maskPaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.FILL
+            color = 0xFFFFFFFF.toInt()
+            maskFilter = BlurMaskFilter(featherRadius, BlurMaskFilter.Blur.NORMAL)
+        }
+
+        var contourCount = 0
+        faces.forEach { face ->
+            val contourPoints = face.getContour(FaceContour.FACE)?.points
+            if (contourPoints != null && contourPoints.size >= 3) {
+                val facePath = Path()
+                facePath.moveTo(contourPoints[0].x, contourPoints[0].y)
+                for (pointIndex in 1 until contourPoints.size) {
+                    val point = contourPoints[pointIndex]
+                    facePath.lineTo(point.x, point.y)
+                }
+                facePath.close()
+                maskCanvas.drawPath(facePath, maskPaint)
+                contourCount++
+            }
+        }
+
+        return if (contourCount == 0) {
+            Logger.d("ImageProcessor", "$logPrefix skipped: no face contours")
+            maskBitmap.recycle()
+            null
+        } else {
+            maskBitmap
+        }
     }
 
     private fun applyWhiteningFallback(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
@@ -100,35 +152,13 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
             }
         )
 
-        val maskBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-        val maskCanvas = Canvas(maskBitmap)
-        val featherRadius = 16f + ratio * 20f
-        val maskPaint = Paint().apply {
-            isAntiAlias = true
-            style = Paint.Style.FILL
-            color = 0xFFFFFFFF.toInt()
-            maskFilter = BlurMaskFilter(featherRadius, BlurMaskFilter.Blur.NORMAL)
-        }
-
-        var contourCount = 0
-        faces.forEach { face ->
-            val contourPoints = face.getContour(FaceContour.FACE)?.points
-            if (contourPoints != null && contourPoints.size >= 3) {
-                val facePath = Path()
-                facePath.moveTo(contourPoints[0].x, contourPoints[0].y)
-                for (pointIndex in 1 until contourPoints.size) {
-                    val point = contourPoints[pointIndex]
-                    facePath.lineTo(point.x, point.y)
-                }
-                facePath.close()
-                maskCanvas.drawPath(facePath, maskPaint)
-                contourCount++
-            }
-        }
-
-        if (contourCount == 0) {
-            Logger.d("ImageProcessor", "Whitening fallback skipped: no face contours")
-            maskBitmap.recycle()
+        val maskBitmap = createFaceMaskBitmap(
+            width = bitmap.width,
+            height = bitmap.height,
+            faces = faces,
+            featherRadius = 16f + ratio * 20f,
+            logPrefix = "Whitening fallback"
+        ) ?: run {
             whitenedBitmap.recycle()
             return bitmap
         }
@@ -148,6 +178,210 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         maskBitmap.recycle()
         maskedWhitened.recycle()
         whitenedBitmap.recycle()
+        return output
+    }
+
+    private fun applySmoothingFallback(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
+        val safeStrength = strength.coerceIn(0f, 100f)
+        if (safeStrength <= 0f || faces.isEmpty()) {
+            return bitmap
+        }
+
+        val ratio = safeStrength / 100f
+        val downsampleDivisor = (6f - ratio * 4f).coerceIn(2f, 6f)
+        val downscaledWidth = (bitmap.width / downsampleDivisor).toInt().coerceAtLeast(1)
+        val downscaledHeight = (bitmap.height / downsampleDivisor).toInt().coerceAtLeast(1)
+
+        val downscaled = Bitmap.createScaledBitmap(bitmap, downscaledWidth, downscaledHeight, true)
+        val smoothLayer = Bitmap.createScaledBitmap(downscaled, bitmap.width, bitmap.height, true)
+        downscaled.recycle()
+
+        val maskBitmap = createFaceMaskBitmap(
+            width = bitmap.width,
+            height = bitmap.height,
+            faces = faces,
+            featherRadius = 14f + ratio * 26f,
+            logPrefix = "Smoothing fallback"
+        ) ?: run {
+            smoothLayer.recycle()
+            return bitmap
+        }
+
+        val maskedSmooth = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val maskedCanvas = Canvas(maskedSmooth)
+        maskedCanvas.drawBitmap(smoothLayer, 0f, 0f, null)
+        val maskBlendPaint = Paint().apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        }
+        maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskBlendPaint)
+        maskBlendPaint.xfermode = null
+
+        val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        Canvas(output).drawBitmap(
+            maskedSmooth,
+            0f,
+            0f,
+            Paint().apply { alpha = (90 + ratio * 140).toInt().coerceIn(0, 255) }
+        )
+
+        maskBitmap.recycle()
+        smoothLayer.recycle()
+        maskedSmooth.recycle()
+        return output
+    }
+
+    private fun applySlimFaceFallback(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
+        if (faces.isEmpty() || strength == 0f) {
+            return bitmap
+        }
+
+        val meshWidth = 24
+        val meshHeight = 24
+        val count = (meshWidth + 1) * (meshHeight + 1)
+        val verts = FloatArray(count * 2)
+        val orig = FloatArray(count * 2)
+
+        var index = 0
+        for (rowIndex in 0..meshHeight) {
+            val fy = bitmap.height * rowIndex / meshHeight.toFloat()
+            for (columnIndex in 0..meshWidth) {
+                val fx = bitmap.width * columnIndex / meshWidth.toFloat()
+                orig[index * 2] = fx
+                orig[index * 2 + 1] = fy
+                verts[index * 2] = fx
+                verts[index * 2 + 1] = fy
+                index++
+            }
+        }
+
+        val normalizedStrength = (strength / 50f).coerceIn(-1f, 1f)
+
+        faces.forEach { face ->
+            val contourPoints = face.getContour(FaceContour.FACE)?.points
+            if (contourPoints == null || contourPoints.size < 8) {
+                return@forEach
+            }
+
+            var centerX = 0f
+            var centerY = 0f
+            contourPoints.forEach { point ->
+                centerX += point.x
+                centerY += point.y
+            }
+            centerX /= contourPoints.size
+            centerY /= contourPoints.size
+
+            var maxRadius = 1f
+            contourPoints.forEach { point ->
+                val dx = point.x - centerX
+                val dy = point.y - centerY
+                val distance = sqrt(dx * dx + dy * dy)
+                if (distance > maxRadius) {
+                    maxRadius = distance
+                }
+            }
+
+            val slimRadius = maxRadius * 1.3f
+
+            for (vertexIndex in 0 until count) {
+                val vx = orig[vertexIndex * 2]
+                val vy = orig[vertexIndex * 2 + 1]
+                val dx = vx - centerX
+                val dy = vy - centerY
+                val distance = sqrt(dx * dx + dy * dy)
+
+                if (distance >= slimRadius) {
+                    continue
+                }
+
+                // 主要作用在脸中下部，避免额头区域过度形变
+                val lowerFaceWeight = (((vy - centerY) / slimRadius) + 0.3f).coerceIn(0f, 1f)
+                if (lowerFaceWeight <= 0f) {
+                    continue
+                }
+
+                val radialWeight = 1f - (distance / slimRadius)
+                val pull = normalizedStrength * 0.3f * radialWeight * lowerFaceWeight
+
+                verts[vertexIndex * 2] -= dx * pull
+            }
+        }
+
+        val output = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        canvas.drawBitmapMesh(bitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+        return output
+    }
+
+    private fun applyBigEyesFallback(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
+        val safeStrength = strength.coerceIn(0f, 100f)
+        if (safeStrength <= 0f || faces.isEmpty()) {
+            return bitmap
+        }
+
+        val meshWidth = 30
+        val meshHeight = 30
+        val pointCount = (meshWidth + 1) * (meshHeight + 1)
+        val originalVertices = FloatArray(pointCount * 2)
+        val warpedVertices = FloatArray(pointCount * 2)
+
+        var pointIndex = 0
+        for (rowIndex in 0..meshHeight) {
+            val y = bitmap.height * rowIndex / meshHeight.toFloat()
+            for (columnIndex in 0..meshWidth) {
+                val x = bitmap.width * columnIndex / meshWidth.toFloat()
+                originalVertices[pointIndex * 2] = x
+                originalVertices[pointIndex * 2 + 1] = y
+                warpedVertices[pointIndex * 2] = x
+                warpedVertices[pointIndex * 2 + 1] = y
+                pointIndex++
+            }
+        }
+
+        val normalizedStrength = safeStrength / 100f
+        val radiusFactor = 0.14f + normalizedStrength * 0.10f
+        val pushFactor = 0.18f + normalizedStrength * 0.30f
+
+        faces.forEach { face ->
+            val eyeCenters = listOfNotNull(
+                face.getLandmark(FaceLandmark.LEFT_EYE)?.position,
+                face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+            )
+            if (eyeCenters.isEmpty()) {
+                return@forEach
+            }
+
+            val eyeRadius = face.boundingBox.width().coerceAtLeast(face.boundingBox.height()) * radiusFactor
+            if (eyeRadius <= 1f) {
+                return@forEach
+            }
+
+            for (vertexIndex in 0 until pointCount) {
+                val ox = originalVertices[vertexIndex * 2]
+                val oy = originalVertices[vertexIndex * 2 + 1]
+                var movedX = ox
+                var movedY = oy
+
+                eyeCenters.forEach { eyeCenter ->
+                    val dx = ox - eyeCenter.x
+                    val dy = oy - eyeCenter.y
+                    val distance = sqrt(dx * dx + dy * dy)
+                    if (distance < eyeRadius) {
+                        val radialWeight = 1f - (distance / eyeRadius)
+                        val push = pushFactor * radialWeight * radialWeight
+                        movedX += dx * push
+                        movedY += dy * push
+                    }
+                }
+
+                warpedVertices[vertexIndex * 2] = movedX.coerceIn(0f, bitmap.width.toFloat())
+                warpedVertices[vertexIndex * 2 + 1] = movedY.coerceIn(0f, bitmap.height.toFloat())
+            }
+        }
+
+        val output = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        canvas.drawBitmapMesh(bitmap, meshWidth, meshHeight, warpedVertices, 0, null, 0, null)
         return output
     }
 
@@ -174,6 +408,11 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 if (beauty.smoothing > 0f) {
                     Logger.d("ImageProcessor", "Applying smoothing: ${beauty.smoothing}")
                     processed = beautyProcessor.applySmoothing(processed, beauty.smoothing)
+
+                    if (useSmoothingFallback && faces.isNotEmpty()) {
+                        Logger.d("ImageProcessor", "Applying smoothing fallback boost: ${beauty.smoothing}")
+                        processed = applySmoothingFallback(processed, beauty.smoothing, faces)
+                    }
                 }
                 if (beauty.whitening > 0f) {
                     if (faces.isNotEmpty()) {
@@ -194,14 +433,20 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     if (beauty.slimFace != 0f) {
                         Logger.d("ImageProcessor", "Applying slim face: ${beauty.slimFace}")
                         processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces)
+
+                        if (useSlimFaceFallback && abs(beauty.slimFace) >= 1f) {
+                            Logger.d("ImageProcessor", "Applying slim face fallback warp: ${beauty.slimFace}")
+                            processed = applySlimFaceFallback(processed, beauty.slimFace, faces)
+                        }
                     }
                     if (beauty.bigEyes > 0f) {
                         Logger.d("ImageProcessor", "Applying big eyes: ${beauty.bigEyes}")
                         processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes, faces)
-                    }
-                    if (beauty.youth > 0f) {
-                        Logger.d("ImageProcessor", "Applying youth: ${beauty.youth}")
-                        processed = beautyProcessor.applyYouth(processed, beauty.youth)
+
+                        if (useBigEyesFallback && beauty.bigEyes >= 1f) {
+                            Logger.d("ImageProcessor", "Applying big eyes fallback boost: ${beauty.bigEyes}")
+                            processed = applyBigEyesFallback(processed, beauty.bigEyes, faces)
+                        }
                     }
                     // 妆容调节
                     if (beauty.lipColor > 0f) {
@@ -242,18 +487,6 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
             val canvas = Canvas(output)
             val paint = Paint().apply {
                 colorFilter = ColorMatrixColorFilter(ColorMatrix(filter.getColorMatrix().values))
-                if (beauty.youth > 0f) {
-                    val b = beauty.youth * 25f
-                    val cm = ColorMatrix(
-                        floatArrayOf(
-                            1f, 0f, 0f, 0f, b,
-                            0f, 1f, 0f, 0f, b * 0.8f,
-                            0f, 0f, 1f, 0f, b * 0.5f,
-                            0f, 0f, 0f, 1f, 0f
-                        )
-                    )
-                    colorFilter = ColorMatrixColorFilter(cm)
-                }
             }
             canvas.drawBitmap(processed, 0f, 0f, paint)
             output

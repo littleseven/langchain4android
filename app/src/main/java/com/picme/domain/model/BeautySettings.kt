@@ -13,8 +13,7 @@ data class BeautySettings(
     val whitening: Float = 0f,      // 美白 0-100
     val slimFace: Float = 0f,       // 瘦脸 -50~+50
     val bigEyes: Float = 0f,        // 大眼 0-100
-    val youth: Float = 0f,          // 年轻化 0-100
-    
+
     // 妆容调节
     val lipColor: Float = 0f,       // 唇色强度 0-100
     val lipColorIndex: Int = 0,     // 唇色色号索引 0-11
@@ -30,7 +29,7 @@ data class BeautySettings(
      */
     fun hasAnyEffect(): Boolean {
         return smoothing > 0 || whitening > 0 || slimFace != 0f || bigEyes > 0 ||
-                youth > 0 || lipColor > 0 || blush > 0 || eyebrow > 0 ||
+                lipColor > 0 || blush > 0 || eyebrow > 0 ||
                 bodyEnhancement != 0f || legExtension > 0
     }
 }
