@@ -86,7 +86,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -254,55 +256,62 @@ fun ControlPanel(
 ) {
     // Drawer-style panel: slides in from bottom, occupies bottom area of screen
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO  // Half screen height
+    val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO
+    val density = LocalDensity.current
+    val panelHeightState = remember { mutableStateOf(0.dp) }
     
+    val overlayHeight = panelHeightState.value
+        .plus(24.dp)
+        .coerceIn(160.dp, panelMaxHeight)
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
     ) {
-        // 半透明遮罩：提升面板可读性，与预览区域分离
+        // 遮罩高度跟随面板内容，避免内容较少时出现过高的背景
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(panelMaxHeight)
+                .height(overlayHeight)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.7f),  // 底部更深，完全遮挡
-                            Color.Black.copy(alpha = 0.4f),  // 中间过渡
-                            Color.Transparent                 // 顶部透明
+                            Color.Black.copy(alpha = 0.72f),
+                            Color.Black.copy(alpha = 0.42f),
+                            Color.Transparent
                         ),
                         startY = 0f,
-                        endY = panelMaxHeight.value * 1f  // 转换为 Float
+                        endY = with(density) { overlayHeight.toPx() }
                     )
                 )
         )
         
-        // 控制面板：完全不透明的白色卡片，清晰展示内容
+        // 控制面板：默认包裹内容，内容增多时最多占半屏
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.96f)  // 96% 宽度，留白边
+                .fillMaxWidth(0.96f)
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp)  // 减小底部间距，更贴近底部
-                .heightIn(max = panelMaxHeight - 16.dp),  // 限制最大高度为半屏减去遮罩边距
-            color = MaterialTheme.colorScheme.surface,  // 完全不透明的表面色
+                .padding(bottom = 8.dp)
+                .onSizeChanged { size ->
+                    panelHeightState.value = with(density) { size.height.toDp() }
+                }
+                .heightIn(max = panelMaxHeight - 16.dp),
+            color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
-            shadowElevation = 20.dp,  // 更强的阴影，增强层次感
+            shadowElevation = 20.dp,
             border = BorderStroke(
                 1.dp,
                 MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
             )
         ) {
-            // 添加滚动支持，防止内容超出半屏高度
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 24.dp, vertical = 16.dp)  // 略微减小垂直内边距
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
                     .fillMaxWidth()
-                    .heightIn(max = panelMaxHeight - 32.dp)  // 限制最大高度并留出内边距空间
+                    .heightIn(max = panelMaxHeight - 32.dp)
             ) {
-                // 标题栏 - 使用主题色
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
