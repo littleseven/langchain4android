@@ -3,6 +3,7 @@ package com.picme.features.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -30,10 +31,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
@@ -51,6 +54,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -64,6 +69,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
@@ -93,6 +99,10 @@ import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -100,6 +110,7 @@ import kotlin.math.sqrt
 enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
 enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
+enum class BeautyPreviewStatus { ACTIVE, SKIPPED }
 
 object AspectRatio {
     const val RATIO_4_3 = 0
@@ -439,12 +450,15 @@ fun CameraContent(
     val faceDetector = remember {
         val options = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
             .build()
         FaceDetection.getClient(options)
     }
 
     val mediaAssets by viewModel.allMedia.collectAsState()
     val lastMedia = mediaAssets.firstOrNull()
+    var beautyPreviewBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var beautyPreviewStatus by remember { mutableStateOf(BeautyPreviewStatus.SKIPPED) }
 
     LaunchedEffect(currentScene) {
         cameraControl?.let { control ->
@@ -464,6 +478,102 @@ fun CameraContent(
         }
     }
     
+    // [RD] 第二步优化版实时预览：自适应刷新频率 + 减少处理抖动
+    // 关键优化点：
+    // 1. 动态帧率：根据处理时间自适应调整（目标 10-15fps）
+    // 2. 性能监控：测量每帧处理时间，避免过载
+    // 3. 跳帧策略：处理耗时过长时自动跳帧
+    LaunchedEffect(beautySettings, selectedFilter) {
+        if (!beautySettings.enabled || !beautySettings.hasAnyEffect()) {
+            beautyPreviewStatus = BeautyPreviewStatus.SKIPPED
+            Logger.d(
+                "Camera",
+                "Beauty preview skipped: enabled=${beautySettings.enabled}, hasEffect=${beautySettings.hasAnyEffect()}"
+            )
+            beautyPreviewBitmap?.recycle()
+            beautyPreviewBitmap = null
+            return@LaunchedEffect
+        }
+
+        beautyPreviewStatus = BeautyPreviewStatus.ACTIVE
+        Logger.i(
+            "Camera",
+            "Beauty preview active: filter=$selectedFilter, smooth=${beautySettings.smoothing}, white=${beautySettings.whitening}, slim=${beautySettings.slimFace}, eye=${beautySettings.bigEyes}"
+        )
+
+        // 自适应参数
+        var adaptiveDelay = 100L  // 初始延迟 100ms（目标 10fps）
+        val minDelay = 67L        // 最小延迟 67ms（最高 15fps）
+        val maxDelay = 150L       // 最大延迟 150ms（最低 ~7fps）
+        var frameCount = 0
+        var nullFrameCount = 0
+        var lastFpsLogTime = System.currentTimeMillis()
+
+        while (isActive) {
+            val frameStartTime = System.currentTimeMillis()
+
+            val frameBitmap = previewView.bitmap
+            if (frameBitmap != null) {
+                val sourceBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, true)
+                frameBitmap.recycle()
+
+                val previewResult = withContext(Dispatchers.Default) {
+                    try {
+                        // 最小版实时预览也走一次人脸检测，确保大眼/瘦脸等效果可见
+                        val previewFaces = try {
+                            val inputImage = InputImage.fromBitmap(sourceBitmap, 0)
+                            Tasks.await(faceDetector.process(inputImage))
+                        } catch (e: Exception) {
+                            Logger.e("Camera", "Real-time preview face detect failed", e)
+                            emptyList()
+                        }
+
+                        imageProcessor.processPhoto(
+                            source = sourceBitmap,
+                            filter = selectedFilter,
+                            beauty = beautySettings,
+                            faces = previewFaces
+                        )
+                    } catch (e: Exception) {
+                        Logger.e("Camera", "Real-time beauty preview processing failed", e)
+                        sourceBitmap
+                    }
+                }
+
+                beautyPreviewBitmap?.takeIf { it != previewResult }?.recycle()
+                beautyPreviewBitmap = previewResult
+
+                // 性能监控：测量实际处理时间
+                val processingTime = System.currentTimeMillis() - frameStartTime
+
+                // 自适应延迟策略：
+                // - 处理快（< 80ms）：减少延迟，提升帧率
+                // - 处理慢（> 120ms）：增加延迟，避免卡顿
+                adaptiveDelay = when {
+                    processingTime < 80 -> maxOf(minDelay, adaptiveDelay - 10)
+                    processingTime > 120 -> minOf(maxDelay, adaptiveDelay + 10)
+                    else -> adaptiveDelay
+                }
+
+                // FPS 日志（每秒记录一次）
+                frameCount++
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastFpsLogTime >= 1000) {
+                    val fps = frameCount * 1000f / (currentTime - lastFpsLogTime)
+                    Logger.d("Camera", "Beauty preview FPS: ${"%.1f".format(fps)}, " +
+                        "processing=${processingTime}ms, delay=${adaptiveDelay}ms, nullFrame=$nullFrameCount")
+                    frameCount = 0
+                    nullFrameCount = 0
+                    lastFpsLogTime = currentTime
+                }
+            } else {
+                nullFrameCount++
+            }
+
+            delay(adaptiveDelay)
+        }
+    }
+
     // [RD] 监听美颜参数变化（暂时注释，后续实现）
     // LaunchedEffect(beautySettings) {
     //     pixelFreeView.setSmoothingStrength(beautySettings.smoothing.toFloat())
@@ -831,6 +941,8 @@ fun CameraContent(
 
     DisposableEffect(Unit) {
         onDispose {
+            beautyPreviewBitmap?.recycle()
+            beautyPreviewBitmap = null
             cameraExecutor.shutdown()
             faceDetector.close()
         }
@@ -859,9 +971,14 @@ CameraPreviewContent(
             // 拍照时会应用完整的美颜效果
             // 注意：完整的实时预览需要纹理流式传输，后续优化
             if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
-                // 预留：未来在这里叠加 PixelFreeGLSurfaceView
-                // 当前版本专注于拍照美颜，预览保持原生流畅度
-                // AndroidView(factory = { pixelFreeView }, ...)
+                beautyPreviewBitmap?.let { bitmap ->
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
             }
         }
     },
@@ -883,6 +1000,7 @@ CameraPreviewContent(
         currentScene = currentScene,
         currentGrid = currentGrid,
         beautySettings = beautySettings,
+        beautyPreviewStatus = beautyPreviewStatus,
         aspectRatio = aspectRatio,
         lensFacing = lensFacing,
         exposureCompensation = 0,
@@ -1067,6 +1185,7 @@ fun CameraPreviewContent(
     currentScene: ScenePreset,
     currentGrid: GridType,
     beautySettings: BeautySettings,
+    beautyPreviewStatus: BeautyPreviewStatus,
     aspectRatio: Int,
     lensFacing: Int,
     exposureCompensation: Int,
@@ -1121,6 +1240,28 @@ fun CameraPreviewContent(
             exposureCompensation = exposureCompensation,
             whiteBalanceMode = whiteBalanceMode,
             currentScene = currentScene
+        )
+
+        val statusText = if (beautyPreviewStatus == BeautyPreviewStatus.ACTIVE) {
+            "Beauty: ACTIVE"
+        } else {
+            "Beauty: SKIPPED"
+        }
+        val statusColor = if (beautyPreviewStatus == BeautyPreviewStatus.ACTIVE) {
+            Color(0xFF00C853)
+        } else {
+            Color(0xFFFFA000)
+        }
+
+        Text(
+            text = statusText,
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(start = 76.dp, top = 18.dp)
+                .background(statusColor.copy(alpha = 0.75f))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
         )
 
         CameraLeftControls(

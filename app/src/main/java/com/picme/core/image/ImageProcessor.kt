@@ -3,11 +3,13 @@ package com.picme.core.image
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.os.Build
@@ -24,6 +26,7 @@ import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
@@ -63,6 +66,91 @@ interface ImageProcessor {
 }
 
 class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImageProcessor {
+    private val useWhiteningFallback by lazy {
+        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
+    }
+
+    private fun applyWhiteningFallback(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
+        val safeStrength = strength.coerceIn(0f, 100f)
+        if (safeStrength <= 0f || faces.isEmpty()) {
+            return bitmap
+        }
+
+        val ratio = safeStrength / 100f
+        val gain = 1f + ratio * 0.12f
+        val offset = ratio * 42f
+
+        val colorMatrix = ColorMatrix(
+            floatArrayOf(
+                gain, 0f, 0f, 0f, offset,
+                0f, gain, 0f, 0f, offset,
+                0f, 0f, gain, 0f, offset,
+                0f, 0f, 0f, 1f, 0f
+            )
+        )
+
+        val whitenedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        Canvas(whitenedBitmap).drawBitmap(
+            bitmap,
+            0f,
+            0f,
+            Paint().apply {
+                colorFilter = ColorMatrixColorFilter(colorMatrix)
+                isAntiAlias = true
+            }
+        )
+
+        val maskBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val maskCanvas = Canvas(maskBitmap)
+        val featherRadius = 16f + ratio * 20f
+        val maskPaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.FILL
+            color = 0xFFFFFFFF.toInt()
+            maskFilter = BlurMaskFilter(featherRadius, BlurMaskFilter.Blur.NORMAL)
+        }
+
+        var contourCount = 0
+        faces.forEach { face ->
+            val contourPoints = face.getContour(FaceContour.FACE)?.points
+            if (contourPoints != null && contourPoints.size >= 3) {
+                val facePath = Path()
+                facePath.moveTo(contourPoints[0].x, contourPoints[0].y)
+                for (pointIndex in 1 until contourPoints.size) {
+                    val point = contourPoints[pointIndex]
+                    facePath.lineTo(point.x, point.y)
+                }
+                facePath.close()
+                maskCanvas.drawPath(facePath, maskPaint)
+                contourCount++
+            }
+        }
+
+        if (contourCount == 0) {
+            Logger.d("ImageProcessor", "Whitening fallback skipped: no face contours")
+            maskBitmap.recycle()
+            whitenedBitmap.recycle()
+            return bitmap
+        }
+
+        val maskedWhitened = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val maskedCanvas = Canvas(maskedWhitened)
+        maskedCanvas.drawBitmap(whitenedBitmap, 0f, 0f, null)
+        val blendPaint = Paint().apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        }
+        maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, blendPaint)
+        blendPaint.xfermode = null
+
+        val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        Canvas(output).drawBitmap(maskedWhitened, 0f, 0f, null)
+
+        maskBitmap.recycle()
+        maskedWhitened.recycle()
+        whitenedBitmap.recycle()
+        return output
+    }
+
     override fun processPhoto(
         source: Bitmap,
         filter: FilterType,
@@ -88,8 +176,18 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     processed = beautyProcessor.applySmoothing(processed, beauty.smoothing)
                 }
                 if (beauty.whitening > 0f) {
-                    Logger.d("ImageProcessor", "Applying whitening: ${beauty.whitening}")
-                    processed = beautyProcessor.applyWhitening(processed, beauty.whitening)
+                    if (faces.isNotEmpty()) {
+                        Logger.d("ImageProcessor", "Applying whitening on faces: ${beauty.whitening}, faceCount=${faces.size}")
+                        processed = beautyProcessor.applyWhitening(processed, beauty.whitening)
+
+                        // PixelFree 部分机型上美白参数回显不明显，补一层仅人脸区域增强
+                        if (useWhiteningFallback) {
+                            Logger.d("ImageProcessor", "Applying face-only whitening fallback boost: ${beauty.whitening}")
+                            processed = applyWhiteningFallback(processed, beauty.whitening, faces)
+                        }
+                    } else {
+                        Logger.d("ImageProcessor", "Whitening skipped: no face detected")
+                    }
                 }
                 if (faces.isNotEmpty()) {
                     Logger.d("ImageProcessor", "Processing face beautification for ${faces.size} faces")
