@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -23,7 +22,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -37,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -148,7 +145,10 @@ private fun SettingsContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            SettingsSection(title = stringResource(R.string.theme_mode)) {
+            SettingsSection(
+                title = stringResource(R.string.theme_mode),
+                description = stringResource(R.string.settings_theme_mode_desc)
+            ) {
                 ThemeSelection(
                     currentMode = themeMode,
                     onModeSelected = onThemeModeSelected
@@ -157,7 +157,10 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            SettingsSection(title = stringResource(R.string.language)) {
+            SettingsSection(
+                title = stringResource(R.string.language),
+                description = stringResource(R.string.settings_language_desc)
+            ) {
                 LanguageSelection(
                     currentLanguage = appLanguage,
                     onLanguageSelected = onAppLanguageSelected
@@ -166,7 +169,10 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            SettingsSection(title = stringResource(R.string.beauty_engine)) {
+            SettingsSection(
+                title = stringResource(R.string.beauty_engine),
+                description = stringResource(R.string.settings_beauty_engine_desc)
+            ) {
                 BeautyStrategySelection(
                     currentStrategy = beautyStrategy,
                     onStrategySelected = onBeautyStrategySelected
@@ -175,12 +181,10 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            SettingsSection(title = stringResource(R.string.debug_tools)) {
-                DebugOptionRow(
-                    title = stringResource(R.string.debug),
-                    checked = debugUiEnabled,
-                    onCheckedChange = onDebugUiEnabledChange
-                )
+            SettingsSection(
+                title = stringResource(R.string.beauty),
+                description = stringResource(R.string.settings_beauty_runtime_desc)
+            ) {
                 DebugOptionRow(
                     title = stringResource(R.string.face_landmark_mode),
                     checked = faceDetectionLandmarkModeEnabled,
@@ -198,6 +202,19 @@ private fun SettingsContent(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.debug_tools),
+                description = stringResource(R.string.settings_debug_tools_desc)
+            ) {
+                DebugOptionRow(
+                    title = stringResource(R.string.debug),
+                    checked = debugUiEnabled,
+                    onCheckedChange = onDebugUiEnabledChange
+                )
+            }
         }
     }
 }
@@ -205,6 +222,7 @@ private fun SettingsContent(
 @Composable
 private fun SettingsSection(
     title: String,
+    description: String? = null,
     content: @Composable () -> Unit
 ) {
     Column {
@@ -214,6 +232,14 @@ private fun SettingsSection(
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(vertical = 2.dp)
         )
+        if (!description.isNullOrBlank()) {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
         content()
         HorizontalDivider(
             modifier = Modifier.padding(top = 2.dp),
@@ -271,15 +297,12 @@ fun BeautyStrategySelection(
         BeautyStrategy.PIXEL_FREE to stringResource(R.string.beauty_engine_pixelfree)
     )
 
-    Column(Modifier.selectableGroup()) {
-        options.forEach { (strategy, label) ->
-            SelectionRow(
-                isSelected = (strategy == currentStrategy),
-                label = label,
-                onClick = { onStrategySelected(strategy) }
-            )
-        }
-    }
+    CompactOptionChips(
+        options = options,
+        currentValue = currentStrategy,
+        maxLines = 1,
+        onSelected = onStrategySelected
+    )
 }
 
 @Composable
@@ -365,36 +388,6 @@ private fun DebugOptionRow(
         Switch(
             checked = checked,
             onCheckedChange = { enabled -> onCheckedChange(enabled) }
-        )
-    }
-}
-
-@Composable
-private fun SelectionRow(
-    isSelected: Boolean,
-    label: String,
-    onClick: () -> Unit
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .selectable(
-                selected = isSelected,
-                onClick = onClick,
-                role = Role.RadioButton
-            )
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = isSelected,
-            onClick = null
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(start = 10.dp)
         )
     }
 }
