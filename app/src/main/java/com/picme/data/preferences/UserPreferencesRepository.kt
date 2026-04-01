@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -52,6 +53,7 @@ class UserPreferencesRepository(private val context: Context) {
         val FACE_DETECTION_LANDMARK_MODE = booleanPreferencesKey("face_detection_landmark_mode")
         val ADAPTIVE_FACE_DETECTION_INTERVAL = booleanPreferencesKey("adaptive_face_detection_interval")
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
+        val R_PLAN_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("r_plan_recovery_available_at_ms")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -128,6 +130,39 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateBeautyStrategy(strategy: BeautyStrategy) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = strategy.name
+        }
+    }
+
+    val rPlanRecoveryAvailableAtFlow: Flow<Long> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] ?: 0L
+        }
+
+    suspend fun persistRPlanFallback(cooldownMs: Long) {
+        val nowMs = System.currentTimeMillis()
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.PIXEL_FREE.name
+            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] = nowMs + cooldownMs
+        }
+    }
+
+    suspend fun triggerManualRPlanRecovery() {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.R_PLAN.name
+            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] = 0L
+        }
+    }
+
+    suspend fun clearRPlanRecoveryCooldown() {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] = 0L
         }
     }
 

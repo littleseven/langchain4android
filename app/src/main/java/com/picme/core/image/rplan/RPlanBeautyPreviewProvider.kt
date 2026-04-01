@@ -1,113 +1,109 @@
 package com.picme.core.image.rplan
 
 import android.content.Context
+import android.os.SystemClock
 import android.view.Surface
 import com.picme.core.common.Logger
+import com.picme.core.image.BeautyPreviewView
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.preview.BeautyPreviewProvider
 
 /**
- * [RD] R 计划自主研发的美颜预览提供者（中长期方案）
+ * RD R 计划美颜预览提供者
  *
- * 实施策略：中长期方案（2-3 月）
- * - 完全自主可控的技术方案
- * - 零授权成本
- * - 定制化能力强
- * - 技术积累与团队能力提升
- *
- * 技术特点：
- * - 基于 OpenGL ES 3.0 + 自研 Shader
- * - EGL 上下文管理 + 离屏渲染
- * - SurfaceTexture 生命周期管理
- * - 实时 60fps 美颜渲染
- *
- * 当前状态：预留接口，待实施
- * 详见：docs/R_PLAN_GUIDE.md
- *
- * @param context Android Context
- * @see com.picme.domain.preview.BeautyPreviewProvider
- * @see com.picme.core.image.BeautyPreviewView
+ * 当前实现目标：
+ * 1. 打通 R 计划参数链路
+ * 2. 提供可用 Surface 给 CameraX 绑定
+ * 3. 失败时抛出明确错误，便于上层回退
  */
 class RPlanBeautyPreviewProvider(
-    private val context: Context
+    context: Context
 ) : BeautyPreviewProvider {
 
-    // [TODO] 中长期实施
-    // private var beautyPreviewView: BeautyPreviewView? = null
-    // private var renderer: CameraPreviewRenderer? = null
-
+    private val appContext: Context = context.applicationContext
+    private var beautyPreviewView: BeautyPreviewView? = null
+    private var previewSurface: Surface? = null
     private var isInitialized = false
+    private var lastSettings: BeautySettings = BeautySettings()
 
-    /**
-     * 初始化 R 计划美颜渲染器
-     * 必须在 UI 线程调用
-     */
     fun initialize() {
-        if (isInitialized) return
+        if (isInitialized) {
+            return
+        }
 
-        // [TODO] 中长期实施
-        // beautyPreviewView = BeautyPreviewView(context).apply {
-        //     renderer = CameraPreviewRenderer(context)
-        //     renderer.init(this)
-        // }
-
+        beautyPreviewView = BeautyPreviewView(appContext)
+        applyBeautySettings(lastSettings)
         isInitialized = true
-        Logger.d("RPlan", "RPlanBeautyPreviewProvider initialized (stub)")
+
+        Logger.i("RPlan", "RPlanBeautyPreviewProvider initialized")
     }
 
     override fun createPreviewSurface(): Surface {
-        throw NotImplementedError(
-            "R Plan is not implemented yet. " +
-            "Please use PixelFreeBeautyPreviewProvider for now. " +
-            "See docs/R_PLAN_GUIDE.md for implementation details."
+        if (!isInitialized) {
+            initialize()
+        }
+
+        previewSurface?.let { cachedSurface ->
+            if (cachedSurface.isValid) {
+                return cachedSurface
+            }
+        }
+
+        val view = beautyPreviewView ?: throw IllegalStateException(
+            "RPlanBeautyPreviewProvider not initialized"
         )
 
-        // [TODO] 中长期实施
-        // val view = beautyPreviewView ?: throw IllegalStateException(
-        //     "RPlanBeautyPreviewProvider not initialized. Call initialize() first."
-        // )
-        //
-        // return view.getSurfaceForCamera() ?: throw IllegalStateException(
-        //     "BeautyPreviewView Surface not ready"
-        // )
+        repeat(24) { attemptIndex ->
+            val surface = view.getSurfaceForCamera()
+            if (surface != null && surface.isValid) {
+                previewSurface?.takeIf { it !== surface }?.release()
+                previewSurface = surface
+                Logger.i("RPlan", "R Plan preview surface ready on attempt=${attemptIndex + 1}")
+                return surface
+            }
+            SystemClock.sleep(30)
+        }
+
+        throw IllegalStateException("R Plan preview surface not ready")
     }
 
     override fun updateFilters(settings: BeautySettings) {
-        // [TODO] 中长期实施
-        // val view = beautyPreviewView ?: return
-        //
-        // // 更新自研 Shader 参数
-        // renderer?.updateBeautyParams(
-        //     smoothing = settings.smoothing / 100f,
-        //     whitening = settings.whitening / 100f
-        // )
+        lastSettings = settings
+        applyBeautySettings(settings)
 
-        Logger.d("RPlan",
-            "updateFilters (stub): smoothing=${settings.smoothing}, " +
-            "whitening=${settings.whitening}"
+        Logger.d(
+            "RPlan",
+            "updateFilters: enabled=${settings.enabled}, smoothing=${settings.smoothing}, whitening=${settings.whitening}"
         )
     }
 
     override fun release() {
-        // [TODO] 中长期实施
-        // renderer?.release()
-        // beautyPreviewView = null
-        // renderer = null
-
+        previewSurface?.release()
+        previewSurface = null
+        beautyPreviewView = null
         isInitialized = false
-        Logger.d("RPlan", "RPlanBeautyPreviewProvider released (stub)")
+
+        Logger.i("RPlan", "RPlanBeautyPreviewProvider released")
     }
 
     override fun isReady(): Boolean {
-        // [TODO] 中长期实施
-        // return isInitialized && beautyPreviewView != null
-
-        return false  // 当前未实现
+        val hasSurfaceTexture = beautyPreviewView?.getSurfaceTexture() != null
+        return isInitialized && hasSurfaceTexture
     }
 
-    /**
-     * [TODO] 获取 BeautyPreviewView 实例（供 UI 层渲染）
-     */
-    // fun getView(): BeautyPreviewView? = beautyPreviewView
+    fun getView(): BeautyPreviewView? = beautyPreviewView
+
+    private fun applyBeautySettings(settings: BeautySettings) {
+        val view = beautyPreviewView ?: return
+
+        if (!settings.enabled || !settings.hasAnyEffect()) {
+            view.smoothingStrength = 0f
+            view.whiteningStrength = 0f
+            return
+        }
+
+        view.smoothingStrength = (settings.smoothing / 100f).coerceIn(0f, 1f)
+        view.whiteningStrength = (settings.whitening / 100f).coerceIn(0f, 1f)
+    }
 }
 

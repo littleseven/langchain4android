@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -105,12 +106,14 @@ import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
+import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -119,6 +122,8 @@ enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
 enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
 enum class BeautyPreviewStatus { ACTIVE, SKIPPED }
+
+private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
 
 object AspectRatio {
     const val RATIO_4_3 = 0
@@ -289,15 +294,18 @@ fun CameraContent(
     val context = LocalContext.current
     val app = context.applicationContext as PicMeApplication
     val imageProcessor = app.container.imageProcessor
-    val beautyStrategy by app.container.userPreferencesRepository.beautyStrategyFlow.collectAsState(
+    val userPreferencesRepository = app.container.userPreferencesRepository
+    val coroutineScope = rememberCoroutineScope()
+    val beautyStrategy by userPreferencesRepository.beautyStrategyFlow.collectAsState(
         initial = BeautyStrategy.R_PLAN
     )
-    val debugUiEnabled by app.container.userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
-    val faceLandmarkModeEnabled by app.container.userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
-    val adaptiveFaceDetectIntervalEnabled by app.container.userPreferencesRepository.adaptiveFaceDetectionIntervalEnabledFlow.collectAsState(initial = true)
-    val faceDetectIntervalProfile by app.container.userPreferencesRepository.faceDetectIntervalProfileFlow.collectAsState(
+    val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
+    val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
+    val adaptiveFaceDetectIntervalEnabled by userPreferencesRepository.adaptiveFaceDetectionIntervalEnabledFlow.collectAsState(initial = true)
+    val faceDetectIntervalProfile by userPreferencesRepository.faceDetectIntervalProfileFlow.collectAsState(
         initial = FaceDetectIntervalProfile.BALANCED
     )
+    val rPlanRecoveryAvailableAtMs by userPreferencesRepository.rPlanRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(beautyStrategy) {
         val fallbackReason = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
@@ -322,7 +330,7 @@ fun CameraContent(
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
     var isRecording by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
-    var beautySettings by remember { mutableStateOf(BeautySettings()) }
+    var beautySettings by remember { mutableStateOf(BeautySettings(enabled = true)) }
     var debouncedBeautySettings by remember { mutableStateOf(beautySettings) }
     val effectiveBeautySettings by rememberUpdatedState(newValue = debouncedBeautySettings)
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
@@ -351,10 +359,82 @@ fun CameraContent(
         }
     }
 
-    // [RD] PixelFree 美颜预览View（实时美颜）
+    // [RD] PixelFree 美颜预览View（备用链路）
     val pixelFreeView = remember {
         com.picme.core.image.pixelfree.PixelFreeGLSurfaceView(context).apply {
             Logger.d("Camera", "PixelFreeGLSurfaceView created for real-time beauty")
+        }
+    }
+
+    // [RD] R 计划提供者（主引擎参数链路）
+    val rPlanPreviewProvider = remember {
+        RPlanBeautyPreviewProvider(context)
+    }
+
+    var persistedRPlanFallback by remember { mutableStateOf(false) }
+    var persistedRPlanFallbackReason by remember { mutableStateOf<String?>(null) }
+    var autoRecoveryRequestedAtMs by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(beautyStrategy, rPlanRecoveryAvailableAtMs) {
+        if (beautyStrategy == BeautyStrategy.R_PLAN) {
+            persistedRPlanFallback = false
+            persistedRPlanFallbackReason = null
+            autoRecoveryRequestedAtMs = 0L
+            return@LaunchedEffect
+        }
+
+        if (beautyStrategy != BeautyStrategy.PIXEL_FREE) {
+            return@LaunchedEffect
+        }
+
+        if (rPlanRecoveryAvailableAtMs <= 0L) {
+            return@LaunchedEffect
+        }
+
+        val nowMs = System.currentTimeMillis()
+        if (nowMs >= rPlanRecoveryAvailableAtMs && autoRecoveryRequestedAtMs != rPlanRecoveryAvailableAtMs) {
+            autoRecoveryRequestedAtMs = rPlanRecoveryAvailableAtMs
+            userPreferencesRepository.triggerManualRPlanRecovery()
+            Logger.i("Camera", "Cooldown ended, auto retry R Plan strategy")
+        }
+    }
+
+    val bindPreviewSurfaceProvider: (androidx.camera.core.Preview) -> Unit = { previewUseCase ->
+        when (beautyStrategy) {
+            BeautyStrategy.R_PLAN -> {
+                previewUseCase.setSurfaceProvider { request ->
+                    try {
+                        rPlanPreviewProvider.initialize()
+                        val surface = rPlanPreviewProvider.createPreviewSurface()
+                        request.provideSurface(surface, ContextCompat.getMainExecutor(context)) {
+                            Logger.d("Camera", "R Plan surface request completed")
+                        }
+                        Logger.i("Camera", "Preview connected via R Plan surface provider")
+                    } catch (error: Throwable) {
+                        Logger.w("Camera", "R Plan surface provider failed, fallback PreviewView", error)
+                        BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "surface provider error")
+
+                        if (!persistedRPlanFallback) {
+                            persistedRPlanFallback = true
+                            persistedRPlanFallbackReason = error.message ?: "surface provider error"
+                            coroutineScope.launch {
+                                userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+                                Logger.w(
+                                    "Camera",
+                                    "Beauty strategy persisted to PIXEL_FREE after R Plan failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
+                                )
+                            }
+                        }
+
+                        previewView.surfaceProvider.onSurfaceRequested(request)
+                    }
+                }
+            }
+
+            BeautyStrategy.PIXEL_FREE -> {
+                previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+                Logger.i("Camera", "Preview connected via PreviewView surface provider")
+            }
         }
     }
 
@@ -364,21 +444,33 @@ fun CameraContent(
         debouncedBeautySettings = beautySettings
     }
 
-    // [RD] 同步美颜参数到 PixelFree SDK（在 GL 线程执行，避免主线程阻塞）
-    LaunchedEffect(debouncedBeautySettings) {
+    // [RD] 同步美颜参数到当前引擎
+    LaunchedEffect(debouncedBeautySettings, beautyStrategy) {
         val settings = debouncedBeautySettings
-        if (settings.enabled && settings.hasAnyEffect()) {
-            pixelFreeView.queueEvent {
-                pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
-                pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
-                pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
-                pixelFreeView.setSlimFaceStrength(settings.slimFace / 100f)
+
+        when (beautyStrategy) {
+            BeautyStrategy.R_PLAN -> {
+                rPlanPreviewProvider.initialize()
+                rPlanPreviewProvider.updateFilters(settings)
             }
 
-            Logger.d("Camera", "Beauty params updated: smoothing=${settings.smoothing}, " +
-                "whitening=${settings.whitening}, bigEyes=${settings.bigEyes}, " +
-                "slimFace=${settings.slimFace}")
+            BeautyStrategy.PIXEL_FREE -> {
+                if (settings.enabled && settings.hasAnyEffect()) {
+                    pixelFreeView.queueEvent {
+                        pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
+                        pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
+                        pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
+                        pixelFreeView.setSlimFaceStrength(settings.slimFace / 100f)
+                    }
+                }
+            }
         }
+
+        Logger.d(
+            "Camera",
+            "Beauty params updated: engine=${beautyStrategy.name}, smoothing=${settings.smoothing}, " +
+                "whitening=${settings.whitening}, bigEyes=${settings.bigEyes}, slimFace=${settings.slimFace}"
+        )
     }
 
     // [RD] 监听比例变化，动态调整 ScaleType
@@ -761,7 +853,7 @@ fun CameraContent(
                 .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
                 .setTargetRotation(rotation)
                 .build()
-                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                .also { previewUseCase -> bindPreviewSurfaceProvider(previewUseCase) }
 
             // 同时设置ImageCapture的旋转
             imageCapture!!.targetRotation = rotation
@@ -803,14 +895,7 @@ fun CameraContent(
                     }
                 )
                 .build()
-                .also { previewBuilder ->
-                    // [RD] 使用 PreviewView 的标准 SurfaceProvider
-                    // 这样CameraX会自动处理旋转、缩放和裁剪
-                    previewBuilder.setSurfaceProvider(previewView.surfaceProvider)
-                    Logger.d("Camera",
-                        "Preview connected to PreviewView with scaleType=${previewView.scaleType}"
-                    )
-                }
+                .also { previewUseCase -> bindPreviewSurfaceProvider(previewUseCase) }
         } else {
             null  // 1:1模式已在UseCaseGroup中创建
         }
@@ -1073,6 +1158,7 @@ fun CameraContent(
         onDispose {
             beautyPreviewBitmap?.recycle()
             beautyPreviewBitmap = null
+            rPlanPreviewProvider.release()
             cameraExecutor.shutdown()
         }
     }
@@ -1142,6 +1228,10 @@ CameraPreviewContent(
         beautyPreviewDelayMs = beautyPreviewDelayMs,
         beautyPreviewCpuUsage = beautyPreviewCpuUsage,
         beautyPreviewNullFrames = beautyPreviewNullFrames,
+        persistedRPlanFallback = persistedRPlanFallback,
+        persistedRPlanFallbackReason = persistedRPlanFallbackReason,
+        beautyStrategy = beautyStrategy,
+        rPlanRecoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
         aspectRatio = aspectRatio,
         lensFacing = lensFacing,
         exposureCompensation = 0,
@@ -1350,6 +1440,10 @@ fun CameraPreviewContent(
     beautyPreviewDelayMs: Int,
     beautyPreviewCpuUsage: Float,
     beautyPreviewNullFrames: Int,
+    persistedRPlanFallback: Boolean,
+    persistedRPlanFallbackReason: String?,
+    beautyStrategy: BeautyStrategy,
+    rPlanRecoveryAvailableAtMs: Long,
     aspectRatio: Int,
     lensFacing: Int,
     exposureCompensation: Int,
@@ -1438,6 +1532,20 @@ fun CameraPreviewContent(
         val perfText = "Perf: ${"%.1f".format(beautyPreviewFps)}fps " +
             "${beautyPreviewProcessingMs}ms ${beautyPreviewDelayMs}ms CPU ${"%.1f".format(beautyPreviewCpuUsage)}%"
         val dropText = "Drop: ${beautyPreviewNullFrames}"
+        val nowMs = System.currentTimeMillis()
+        val hasPersistedFallback = beautyStrategy == BeautyStrategy.PIXEL_FREE && rPlanRecoveryAvailableAtMs > 0L
+        val fallbackStateText = if (hasPersistedFallback) {
+            val reasonText = persistedRPlanFallbackReason ?: "runtime failure"
+            val remainingMs = (rPlanRecoveryAvailableAtMs - nowMs).coerceAtLeast(0L)
+            val remainingSec = remainingMs / 1000L
+            if (remainingMs > 0L) {
+                "Fallback: PERSISTED -> PIXEL_FREE (${remainingSec}s, $reasonText)"
+            } else {
+                "Fallback: READY_TO_RECOVER ($reasonText)"
+            }
+        } else {
+            "Fallback: NONE"
+        }
 
         if (debugUiEnabled) {
             Column(
@@ -1465,6 +1573,15 @@ fun CameraPreviewContent(
                 Text(
                     text = dropText,
                     color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = fallbackStateText,
+                    color = if (hasPersistedFallback || persistedRPlanFallback) {
+                        Color(0xFFFFE082)
+                    } else {
+                        Color.White.copy(alpha = 0.9f)
+                    },
                     fontSize = 10.sp
                 )
             }
