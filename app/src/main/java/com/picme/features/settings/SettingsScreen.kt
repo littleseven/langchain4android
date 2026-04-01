@@ -20,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -70,14 +71,17 @@ fun SettingsScreen(
     val themeMode by viewModel.themeMode.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
     val beautyStrategy by viewModel.beautyStrategy.collectAsState()
+    val debugUiEnabled by viewModel.debugUiEnabled.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
         beautyStrategy = beautyStrategy,
-        onThemeModeSelected = { viewModel.setThemeMode(it) },
-        onAppLanguageSelected = { viewModel.setAppLanguage(it) },
-        onBeautyStrategySelected = { viewModel.setBeautyStrategy(it) },
+        debugUiEnabled = debugUiEnabled,
+        onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
+        onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
+        onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
+        onDebugUiEnabledChange = { enabled -> viewModel.setDebugUiEnabled(enabled) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -88,9 +92,11 @@ private fun SettingsContent(
     themeMode: ThemeMode,
     appLanguage: AppLanguage,
     beautyStrategy: BeautyStrategy,
+    debugUiEnabled: Boolean,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onBeautyStrategySelected: (BeautyStrategy) -> Unit,
+    onDebugUiEnabledChange: (Boolean) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -137,6 +143,16 @@ private fun SettingsContent(
                 BeautyStrategySelection(
                     currentStrategy = beautyStrategy,
                     onStrategySelected = onBeautyStrategySelected
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingsSection(title = stringResource(R.string.debug_tools)) {
+                DebugOptionRow(
+                    title = stringResource(R.string.debug),
+                    checked = debugUiEnabled,
+                    onCheckedChange = onDebugUiEnabledChange
                 )
             }
         }
@@ -230,6 +246,31 @@ fun BeautyStrategySelection(
 }
 
 @Composable
+private fun DebugOptionRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = { enabled -> onCheckedChange(enabled) }
+        )
+    }
+}
+
+@Composable
 private fun SelectionRow(
     isSelected: Boolean,
     label: String,
@@ -267,9 +308,11 @@ fun SettingsScreenPreview() {
             themeMode = ThemeMode.SYSTEM,
             appLanguage = AppLanguage.ENGLISH,
             beautyStrategy = BeautyStrategy.PIXEL_FREE,
+            debugUiEnabled = true,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
             onBeautyStrategySelected = {},
+            onDebugUiEnabledChange = {},
             onNavigateBack = {}
         )
     }

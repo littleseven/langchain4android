@@ -285,6 +285,7 @@ fun CameraContent(
     val context = LocalContext.current
     val app = context.applicationContext as PicMeApplication
     val imageProcessor = app.container.imageProcessor
+    val debugUiEnabled by app.container.userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -1028,6 +1029,7 @@ CameraPreviewContent(
         showCameraInfo = showCameraInfo,
         showSceneSelector = showSceneSelector,
         showGridSelector = showGridSelector,
+        debugUiEnabled = debugUiEnabled,
         currentScene = currentScene,
         currentGrid = currentGrid,
         beautySettings = beautySettings,
@@ -1089,7 +1091,11 @@ CameraPreviewContent(
             showRatioSelector = false
             showSceneSelector = false
         },
-        onToggleLogs = { showLogOverlay = !showLogOverlay },
+        onToggleLogs = {
+            if (debugUiEnabled) {
+                showLogOverlay = !showLogOverlay
+            }
+        },
         onZoomPresetClick = { cameraControl?.setZoomRatio(it) },
         onExposureChange = { cameraControl?.setExposureCompensationIndex(it) },
         onWhiteBalanceChange = { /* TODO */ },
@@ -1188,9 +1194,10 @@ CameraPreviewContent(
             onToggleBodyManagement = onToggleBodyManagement,
         )
 
-    if (showLogOverlay) {
-        LogOverlay(onDismiss = { showLogOverlay = false })
-    }
+        if (debugUiEnabled && showLogOverlay) {
+            LogOverlay(onDismiss = { showLogOverlay = false })
+        }
+
 }
 
 @Composable
@@ -1209,9 +1216,12 @@ fun CameraPreviewContent(
     showBeautySelector: Boolean,
     showRatioSelector: Boolean,
     showCameraInfo: Boolean,
-    showSceneSelector: Boolean,
+        showSceneSelector: Boolean,
     showGridSelector: Boolean,
+    debugUiEnabled: Boolean,
+
     showFacialRefinement: Boolean,
+
     showMakeupAdjustment: Boolean,
     showBodyManagement: Boolean,
     onToggleFacialRefinement: () -> Unit,
@@ -1316,33 +1326,35 @@ fun CameraPreviewContent(
             "${beautyPreviewProcessingMs}ms ${beautyPreviewDelayMs}ms CPU ${"%.1f".format(beautyPreviewCpuUsage)}%"
         val dropText = "Drop: ${beautyPreviewNullFrames}"
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .statusBarsPadding()
-                .padding(start = 76.dp, top = 18.dp)
-                .background(statusColor.copy(alpha = 0.75f))
-                .padding(horizontal = 10.dp, vertical = 4.dp)
-        ) {
-            Text(
-                text = statusText,
-                color = Color.White
-            )
-            Text(
-                text = effectsText,
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 10.sp
-            )
-            Text(
-                text = perfText,
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 10.sp
-            )
-            Text(
-                text = dropText,
-                color = Color.White.copy(alpha = 0.9f),
-                fontSize = 10.sp
-            )
+        if (debugUiEnabled) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(start = 76.dp, top = 18.dp)
+                    .background(statusColor.copy(alpha = 0.75f))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = statusText,
+                    color = Color.White
+                )
+                Text(
+                    text = effectsText,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = perfText,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = dropText,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 10.sp
+                )
+            }
         }
 
         CameraLeftControls(
@@ -1351,6 +1363,7 @@ fun CameraPreviewContent(
             onToggleCameraInfo = onToggleCameraInfo,
             onToggleLogs = onToggleLogs,
             isCameraInfoSelected = showCameraInfo,
+            showDebugTools = debugUiEnabled,
             modifier = Modifier.align(Alignment.TopStart)
         )
 

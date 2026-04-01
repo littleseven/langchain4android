@@ -108,6 +108,7 @@ fun CameraLeftControls(
     onToggleCameraInfo: () -> Unit,
     onToggleLogs: () -> Unit,
     isCameraInfoSelected: Boolean,
+    showDebugTools: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -117,17 +118,21 @@ fun CameraLeftControls(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
-        ControlButton(icon = Icons.Rounded.BugReport, onClick = onNavigateToDebug)
+        if (showDebugTools) {
+            ControlButton(icon = Icons.Rounded.BugReport, onClick = onNavigateToDebug)
+        }
         ControlButton(
             icon = Icons.Rounded.Info,
             onClick = onToggleCameraInfo,
             isActive = isCameraInfoSelected
         )
-        ControlButton(
-            icon = Icons.Rounded.Terminal,
-            onClick = onToggleLogs,
-            isActive = false
-        )
+        if (showDebugTools) {
+            ControlButton(
+                icon = Icons.Rounded.Terminal,
+                onClick = onToggleLogs,
+                isActive = false
+            )
+        }
     }
 }
 

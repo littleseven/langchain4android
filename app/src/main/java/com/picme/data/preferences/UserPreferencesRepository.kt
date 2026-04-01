@@ -3,6 +3,7 @@ package com.picme.data.preferences
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -41,6 +42,7 @@ class UserPreferencesRepository(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val BEAUTY_STRATEGY = stringPreferencesKey("beauty_strategy")
+        val DEBUG_UI_ENABLED = booleanPreferencesKey("debug_ui_enabled")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -117,6 +119,24 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateBeautyStrategy(strategy: BeautyStrategy) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = strategy.name
+        }
+    }
+
+    val debugUiEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.DEBUG_UI_ENABLED] ?: true
+        }
+
+    suspend fun updateDebugUiEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DEBUG_UI_ENABLED] = enabled
         }
     }
 }

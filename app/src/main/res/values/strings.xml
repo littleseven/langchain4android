@@ -71,6 +71,7 @@
     <string name="stop">Stop</string>
     <string name="generating">Generating…</string>
     <string name="debug_tools">Debug Tools</string>
+    <string name="show_debug_tools">Show debug entries</string>
     <string name="data_generation">Data Generation</string>
     <string name="person">Person</string>
     <string name="landscape">Landscape</string>

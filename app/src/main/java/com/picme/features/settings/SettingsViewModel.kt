@@ -35,6 +35,13 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
             initialValue = BeautyStrategy.PIXEL_FREE
         )
 
+    val debugUiEnabled: StateFlow<Boolean> = repository.debugUiEnabledFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -50,6 +57,12 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     fun setBeautyStrategy(strategy: BeautyStrategy) {
         viewModelScope.launch {
             repository.updateBeautyStrategy(strategy)
+        }
+    }
+
+    fun setDebugUiEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateDebugUiEnabled(enabled)
         }
     }
 }

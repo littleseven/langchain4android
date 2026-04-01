@@ -72,6 +72,7 @@
     <string name="stop">停止</string>
     <string name="generating">正在生成…</string>
     <string name="debug_tools">調試工具</string>
+    <string name="show_debug_tools">顯示調試入口</string>
     <string name="data_generation">數據生成</string>
     <string name="person">人像</string>
     <string name="landscape">風景</string>
