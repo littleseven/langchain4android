@@ -26,8 +26,8 @@ enum class AppLanguage {
 /**
  * 美颜策略选择
  *
- * PIXEL_FREE: PixelFreeEffects SDK（短期方案，当前默认）
- * R_PLAN: R 计划自主研发（中长期方案）
+ * PIXEL_FREE: PixelFreeEffects SDK（备用引擎）
+ * R_PLAN: R 计划自主研发（主引擎，默认）
  */
 enum class BeautyStrategy {
     PIXEL_FREE,
@@ -85,7 +85,7 @@ class UserPreferencesRepository(private val context: Context) {
             val preferences = context.dataStore.data.first()
             val langName = preferences[PreferencesKeys.APP_LANGUAGE] ?: AppLanguage.SYSTEM.name
             AppLanguage.valueOf(langName)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             AppLanguage.SYSTEM
         }
     }
@@ -111,17 +111,17 @@ class UserPreferencesRepository(private val context: Context) {
             }
         }
         .map { preferences ->
-            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.PIXEL_FREE.name
+            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.R_PLAN.name
             BeautyStrategy.valueOf(strategyName)
         }
 
     fun getBeautyStrategyBlocking(): BeautyStrategy = runBlocking {
         try {
             val preferences = context.dataStore.data.first()
-            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.PIXEL_FREE.name
+            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.R_PLAN.name
             BeautyStrategy.valueOf(strategyName)
-        } catch (e: Exception) {
-            BeautyStrategy.PIXEL_FREE
+        } catch (_: Exception) {
+            BeautyStrategy.R_PLAN
         }
     }
 

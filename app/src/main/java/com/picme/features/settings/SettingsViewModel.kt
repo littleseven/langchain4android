@@ -33,7 +33,7 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = BeautyStrategy.PIXEL_FREE
+            initialValue = BeautyStrategy.R_PLAN
         )
 
     val debugUiEnabled: StateFlow<Boolean> = repository.debugUiEnabledFlow

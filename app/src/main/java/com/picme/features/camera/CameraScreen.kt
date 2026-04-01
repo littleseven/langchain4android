@@ -81,7 +81,9 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.PicMeApplication
 import com.picme.R
 import com.picme.core.common.Logger
+import com.picme.data.preferences.BeautyStrategy
 import com.picme.data.preferences.FaceDetectIntervalProfile
+import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
@@ -287,6 +289,9 @@ fun CameraContent(
     val context = LocalContext.current
     val app = context.applicationContext as PicMeApplication
     val imageProcessor = app.container.imageProcessor
+    val beautyStrategy by app.container.userPreferencesRepository.beautyStrategyFlow.collectAsState(
+        initial = BeautyStrategy.R_PLAN
+    )
     val debugUiEnabled by app.container.userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
     val faceLandmarkModeEnabled by app.container.userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val adaptiveFaceDetectIntervalEnabled by app.container.userPreferencesRepository.adaptiveFaceDetectionIntervalEnabledFlow.collectAsState(initial = true)
@@ -294,6 +299,18 @@ fun CameraContent(
         initial = FaceDetectIntervalProfile.BALANCED
     )
     val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(beautyStrategy) {
+        val fallbackReason = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
+        if (fallbackReason != null) {
+            Logger.w(
+                "Camera",
+                "Beauty engine fallback active: strategy=${beautyStrategy.name}, reason=$fallbackReason"
+            )
+        } else {
+            Logger.i("Camera", "Beauty engine strategy active: ${beautyStrategy.name}")
+        }
+    }
+
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }

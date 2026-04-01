@@ -1,6 +1,9 @@
 package com.picme.features.settings
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -228,15 +233,12 @@ fun ThemeSelection(
         ThemeMode.DARK to stringResource(R.string.dark)
     )
 
-    Column(Modifier.selectableGroup()) {
-        options.forEach { (mode, label) ->
-            SelectionRow(
-                isSelected = (mode == currentMode),
-                label = label,
-                onClick = { onModeSelected(mode) }
-            )
-        }
-    }
+    CompactOptionChips(
+        options = options,
+        currentValue = currentMode,
+        maxLines = 1,
+        onSelected = onModeSelected
+    )
 }
 
 @Composable
@@ -251,15 +253,12 @@ fun LanguageSelection(
         AppLanguage.TRADITIONAL_CHINESE to stringResource(R.string.traditional_chinese)
     )
 
-    Column(Modifier.selectableGroup()) {
-        options.forEach { (lang, label) ->
-            SelectionRow(
-                isSelected = (lang == currentLanguage),
-                label = label,
-                onClick = { onLanguageSelected(lang) }
-            )
-        }
-    }
+    CompactOptionChips(
+        options = options,
+        currentValue = currentLanguage,
+        maxLines = 2,
+        onSelected = onLanguageSelected
+    )
 }
 
 @Composable
@@ -268,8 +267,8 @@ fun BeautyStrategySelection(
     onStrategySelected: (BeautyStrategy) -> Unit
 ) {
     val options = listOf(
-        BeautyStrategy.PIXEL_FREE to stringResource(R.string.beauty_engine_pixelfree),
-        BeautyStrategy.R_PLAN to stringResource(R.string.beauty_engine_rplan)
+        BeautyStrategy.R_PLAN to stringResource(R.string.beauty_engine_rplan),
+        BeautyStrategy.PIXEL_FREE to stringResource(R.string.beauty_engine_pixelfree)
     )
 
     Column(Modifier.selectableGroup()) {
@@ -301,12 +300,45 @@ private fun FaceDetectProfileSelection(
         modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 0.dp)
     )
 
-    Column(Modifier.selectableGroup()) {
-        options.forEach { (profile, label) ->
-            SelectionRow(
-                isSelected = profile == currentProfile,
-                label = label,
-                onClick = { onProfileSelected(profile) }
+    CompactOptionChips(
+        options = options,
+        currentValue = currentProfile,
+        maxLines = 1,
+        onSelected = onProfileSelected
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun <T> CompactOptionChips(
+    options: List<Pair<T, String>>,
+    currentValue: T,
+    maxLines: Int,
+    onSelected: (T) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        maxLines = maxLines
+    ) {
+        options.forEach { (value, label) ->
+            FilterChip(
+                selected = value == currentValue,
+                onClick = { onSelected(value) },
+                label = {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         }
     }

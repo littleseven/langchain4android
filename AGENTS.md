@@ -106,7 +106,244 @@ SDK 接入            → 积累数据            → 完全替代 SDK
 - **状态管理**：UI 状态必须使用 `Sealed Class`。
 - **导入管理**：**严禁使用通配符导入 (`*`)**。
 
-## 4.2 PixelFreeEffects 架构规范（当前实施方案）
+## 4.2 R 计划架构规范（当前重点实施）
+
+### 4.2.1 第一性原理目标
+
+从用户体验倒推技术要求：
+- **极致流畅**：预览帧率 ≥ 30fps，理想 60fps；单帧处理 ≤ 16ms
+- **零感延迟**：参数调节到画面变化的延迟 < 100ms
+- **技术可控**：自研管线，快速迭代；零授权成本
+- **容错可用**：渲染失败自动降级为离线美颜，拍照功能不受影响
+
+### 4.2.2 技术本质
+
+实时美颜预览的本质是 **GPU 加速的图像流处理管道**：
+
+```
+相机传感器 → YUV 数据 → GPU 纹理 → Shader 处理 → RGB 显示
+           (CameraX)   (OpenGL)  (GLSL)    (Surface)
+```
+
+关键约束：
+- 数据流必须零拷贝（直接纹理传递）
+- 处理流必须在 GPU（避免 CPU 瓶颈）
+- 显示流必须直通（避免额外 Surface 切换）
+
+### 4.2.3 核心组件职责
+
+**BeautyPreviewView**：
+- 继承 `FrameLayout`，封装 TextureView 和渲染管线
+- 管理 `CameraPreviewRenderer` 生命周期
+- 提供简洁 API：`smoothingStrength`、`whiteningStrength`、`getSurfaceForCamera()`
+- **禁止**：在构造函数中启动渲染，必须等待 CameraX 请求 Surface
+
+**CameraPreviewRenderer**：
+- 管理 EGL 上下文、SurfaceTexture、渲染线程
+- 实现离屏渲染（Offscreen Rendering）
+- 使用 `eglContext` 字段保存共享上下文
+- **禁止**：在 `init()` 中启动渲染线程，必须等待 `setRenderSurface()` 调用
+
+**BeautyRenderer**：
+- 继承 `GLRenderer`，编译和使用美颜 Shader
+- 支持实时参数调整：`updateBeautyParams(smoothing, whitening)`
+- **Shader 要求**：使用盒式模糊（性能优化），禁止使用复杂的双边模糊
+
+### 4.2.4 EGL 上下文管理
+
+**标准流程**：
+```kotlin
+// 1. 创建共享上下文（主线程）
+eglContext = eglCore.createContext()
+
+// 2. 离屏初始化（Pbuffer Surface）
+val pbufferSurface = eglCore.createSurface(null, 1, 1)
+eglCore.makeCurrent(pbufferSurface, eglContext!!)
+beautyRenderer.onInit()  // 编译 Shader
+
+// 3. 渲染线程（WindowSurface）
+val renderContext = eglCore.createContext(eglContext)  // 共享上下文
+eglCore.makeCurrent(windowSurface.getEglSurface(), renderContext)
+beautyRenderer.onRender()
+```
+
+**关键原则**：
+- 所有上下文必须共享（通过 `eglCore.createContext()` 自动共享）
+- 离屏上下文用于初始化，渲染上下文用于实际渲染
+- **禁止**：在多个线程中同时调用 `eglMakeCurrent`
+
+### 4.2.5 SurfaceTexture 生命周期
+
+**标准流程**：
+```kotlin
+// BeautyPreviewView
+override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+    // 1. 保存 SurfaceTexture
+    this.surfaceTexture = surface
+
+    // 2. 初始化 Renderer（不启动渲染）
+    renderer.init(this)
+
+    // 3. 设置默认参数
+    updateBeautyParams()
+
+    // 4. 等待 CameraX 请求 Surface（不立即启动渲染）
+}
+
+fun getSurfaceForCamera(): Surface? {
+    val st = surfaceTexture ?: return null
+    // 第一次调用时才创建 Surface 并启动渲染
+    if (!surfaceCreated) {
+        surfaceCreated = true
+        st.setDefaultBufferSize(1920, 1080)  // 关键！
+        renderer.setRenderSurface(Surface(st))
+    }
+    return Surface(st)
+}
+```
+
+**关键原则**：
+- **延迟初始化**：CameraX 请求时才启动渲染
+- **缓冲区大小**：必须调用 `setDefaultBufferSize()`
+- **单次创建**：使用 `surfaceCreated` 标志防止重复创建
+
+### 4.2.6 渲染线程同步
+
+**标准实现**：
+```kotlin
+private fun startRendering(surfaceTexture: SurfaceTexture) {
+    renderThread = Thread {
+        // 线程绑定 SurfaceTexture
+        surfaceTexture.setOnFrameAvailableListener { frameAvailable = true }
+
+        var frameCount = 0
+        var lastFpsTime = System.currentTimeMillis()
+
+        while (isRendering && !Thread.interrupted()) {
+            // 等待相机帧
+            if (!frameAvailable) {
+                Thread.sleep(1)
+                continue
+            }
+
+            try {
+                // 1. 更新 SurfaceTexture（从相机获取帧）
+                surfaceTexture.updateTexImage()
+                frameAvailable = false
+
+                // 2. 获取变换矩阵
+                val transformMatrix = FloatArray(16)
+                surfaceTexture.getTransformMatrix(transformMatrix)
+
+                // 3. 绑定外部纹理
+                GLES20.glBindTexture(GL_TEXTURE_EXTERNAL_OES, textureId)
+
+                // 4. 渲染
+                beautyRenderer.setTextureTransform(transformMatrix)
+                beautyRenderer.onRender()
+
+                // 5. 交换缓冲区
+                windowSurface?.swapBuffers()
+
+                // 6. 性能监控
+                frameCount++
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastFpsTime >= 1000) {
+                    Log.d(TAG, "FPS: $frameCount")
+                    frameCount = 0
+                    lastFpsTime = currentTime
+                }
+
+            } catch (e: IllegalStateException) {
+                // 错误恢复：SurfaceTexture 未就绪
+                Log.e(TAG, "Render error: ${e.message}")
+                Thread.sleep(100)
+            }
+        }
+    }.apply {
+        name = "CameraPreviewRender"
+        priority = Thread.MAX_PRIORITY
+        start()
+    }
+}
+```
+
+**关键原则**：
+- **帧可用监听**：使用 `setOnFrameAvailableListener` 唤醒渲染线程
+- **错误恢复**：捕获 `IllegalStateException` 并重试
+- **性能监控**：每秒记录 FPS，用于性能告警
+
+### 4.2.7 性能指标
+
+**必须达到的指标**：
+- 启动时间：< 500ms（从打开相机到显示预览）
+- 渲染延迟：< 16ms（60fps）
+- 内存占用：< 30MB（额外）
+- 纹理 ID：必须是非 0 值
+
+**性能告警**：
+- FPS < 25 或帧处理时间 > 20ms 时发出警告
+- FPS < 15 或帧处理时间 > 40ms 时自动降级
+
+### 4.2.8 降级策略
+
+**自动降级触发条件**：
+- 连续 3 秒 FPS < 15
+- 帧处理时间持续 > 40ms
+- OpenGL 错误（纹理创建失败、Shader 编译失败）
+- SurfaceTexture 不可用
+
+**降级方案**：
+```kotlin
+// 方案 A：降低预览分辨率
+surfaceTexture?.setDefaultBufferSize(1280, 720)
+
+// 方案 B：关闭实时美颜，使用离线美颜
+renderThread?.interrupt()
+renderThread = null
+useOfflineBeauty = true
+
+// 方案 C：完全降级到 PreviewView
+removeView(beautyPreviewView)
+addView(previewView)
+cameraXPreview.setSurfaceProvider(previewView.surfaceProvider)
+```
+
+### 4.2.9 调试检查清单
+
+**启动阶段**：
+- [ ] `onSurfaceTextureAvailable` 被调用
+- [ ] `renderer.init()` 成功
+- [ ] 外部纹理 ID 创建（非 0）
+- [ ] SurfaceTexture 创建成功
+
+**CameraX 绑定**：
+- [ ] `getSurfaceForCamera()` 被调用
+- [ ] 返回的 Surface 非 null
+- [ ] `setSurfaceProvider` 被调用
+- [ ] SurfaceProvider 的回调执行
+- [ ] 有 "Camera bound" 日志
+
+**渲染阶段**：
+- [ ] 渲染线程启动
+- [ ] `updateTexImage()` 成功
+- [ ] 有 "New frame available" 回调
+- [ ] FPS ≥ 30
+- [ ] TextureView 显示内容
+
+**关键日志标签**：
+```
+D/PicMe:BeautyPreviewView: Surface texture available
+D/PicMe:CameraPreview: External texture created: X (X != 0)
+D/PicMe:CameraPreview: SurfaceTexture created with texture ID: X
+D/PicMe:Camera: Creating Surface for CameraX
+D/PicMe:Camera: SurfaceProvider called
+D/PicMe:Camera: Camera bound
+D/PicMe:CameraPreview: Render thread started
+D/PicMe:CameraPreview: FPS: XX
+```
+
+## 4.3 PixelFreeEffects 架构规范（将被 R 计划替代）
 
 ### 4.2.1 核心组件职责
 

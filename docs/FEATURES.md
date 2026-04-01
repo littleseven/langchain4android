@@ -161,8 +161,12 @@
 - **记忆功能**：记住用户上次使用的参数组合
 
 ##### 1.3.4.5 技术实现
-- **短期（1-2 周）**：基于 PixelFreeEffects SDK 实现全功能实时预览
-- **中长期（2-3 月）**：基于 R 计划自主研发，借鉴 PixelFreeEffects 技术方案（详见 [`R_PLAN_GUIDE.md`](R_PLAN_GUIDE.md)）
+- **双引擎共存**：R 计划与 PixelFreeEffects 长期保留，支持配置开关切换
+- **默认引擎**：R 计划（自主实现，性能与可控性优先）
+- **备用引擎**：PixelFreeEffects（稳定兜底）
+- **切换入口**：设置页「美颜引擎」单选项（即时生效）
+- **故障回退**：R 计划初始化失败时自动回退至 PixelFreeEffects，并输出结构化日志
+- **技术细节**：详见 [`R_PLAN_GUIDE.md`](R_PLAN_GUIDE.md) 与 [`PIXELFREE_INTEGRATION.md`](PIXELFREE_INTEGRATION.md)
 
 ### 1.3.5 实时预览性能与调试控制（2026-04 更新）
 - **调试总开关（设置页）**：默认开启；关闭后统一隐藏拍摄页调试浮层、调试工具入口和 Log 入口。

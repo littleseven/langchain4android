@@ -1,6 +1,7 @@
 package com.picme.di
 
 import android.content.Context
+import com.picme.core.common.Logger
 import com.picme.core.image.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
 import com.picme.core.image.ImageProcessor
@@ -18,14 +19,31 @@ interface AppContainer {
     val imageProcessor: ImageProcessor
 }
 
+object BeautyEngineRuntimeState {
+    @Volatile
+    private var fallbackReason: String? = null
+
+    fun markRPlanFallback(reason: String) {
+        fallbackReason = reason
+    }
+
+    fun consumeRPlanFallbackReason(): String? {
+        val reason = fallbackReason
+        fallbackReason = null
+        return reason
+    }
+}
+
 class AppContainerImpl(private val context: Context) : AppContainer {
 
     private val database by lazy { AppDatabase.getDatabase(context) }
 
     /**
      * [RD] 美颜处理器 - 根据用户设置动态选择
-     * - BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor（短期方案）
-     * - BeautyStrategy.R_PLAN -> GpuBeautyProcessor（中长期自研方案，暂时使用 GPU 实现）
+     * - BeautyStrategy.R_PLAN -> GpuBeautyProcessor（主引擎）
+     * - BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor（备用引擎）
+     *
+     * 当 R_PLAN 初始化失败时，自动回退 PixelFree，保证可用性。
      */
     private val beautyProcessor: BeautyProcessor by lazy {
         val userPrefs = UserPreferencesRepository(context)
@@ -33,7 +51,17 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
         when (strategy) {
             BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor(context)
-            BeautyStrategy.R_PLAN -> GpuBeautyProcessor(context)
+            BeautyStrategy.R_PLAN -> {
+                try {
+                    GpuBeautyProcessor(context)
+                } catch (error: Throwable) {
+                    BeautyEngineRuntimeState.markRPlanFallback(
+                        error.message ?: "unknown"
+                    )
+                    Logger.w("DI", "R Plan init failed, fallback to PixelFree", error)
+                    PixelFreeBeautyProcessor(context)
+                }
+            }
         }
     }
 
