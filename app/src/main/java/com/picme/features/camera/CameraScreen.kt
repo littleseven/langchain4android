@@ -51,6 +51,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,11 +75,13 @@ import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.PicMeApplication
 import com.picme.R
 import com.picme.core.common.Logger
+import com.picme.data.preferences.FaceDetectIntervalProfile
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
@@ -285,6 +288,11 @@ fun CameraContent(
     val app = context.applicationContext as PicMeApplication
     val imageProcessor = app.container.imageProcessor
     val debugUiEnabled by app.container.userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
+    val faceLandmarkModeEnabled by app.container.userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
+    val adaptiveFaceDetectIntervalEnabled by app.container.userPreferencesRepository.adaptiveFaceDetectionIntervalEnabledFlow.collectAsState(initial = true)
+    val faceDetectIntervalProfile by app.container.userPreferencesRepository.faceDetectIntervalProfileFlow.collectAsState(
+        initial = FaceDetectIntervalProfile.BALANCED
+    )
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
@@ -298,6 +306,8 @@ fun CameraContent(
     var isRecording by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
     var beautySettings by remember { mutableStateOf(BeautySettings()) }
+    var debouncedBeautySettings by remember { mutableStateOf(beautySettings) }
+    val effectiveBeautySettings by rememberUpdatedState(newValue = debouncedBeautySettings)
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
 
     // [RD] 使用 PreviewView 替代 TextureView
@@ -331,18 +341,26 @@ fun CameraContent(
         }
     }
 
-    // [RD] 同步美颜参数到 PixelFree SDK
+    // [RD] 参数更新防抖：滑杆拖动时合并高频更新，减少实时处理抖动
     LaunchedEffect(beautySettings) {
-        if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
-            // 参数范围归一化：BeautySettings (0-100) → PixelFree (0.0-1.0)
-            pixelFreeView.setSmoothingStrength(beautySettings.smoothing / 100f)
-            pixelFreeView.setWhiteningStrength(beautySettings.whitening / 100f)
-            pixelFreeView.setBigEyesStrength((beautySettings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
-            pixelFreeView.setSlimFaceStrength(beautySettings.slimFace / 100f)
+        delay(90)
+        debouncedBeautySettings = beautySettings
+    }
 
-            Logger.d("Camera", "Beauty params updated: smoothing=${beautySettings.smoothing}, " +
-                "whitening=${beautySettings.whitening}, bigEyes=${beautySettings.bigEyes}, " +
-                "slimFace=${beautySettings.slimFace}")
+    // [RD] 同步美颜参数到 PixelFree SDK（在 GL 线程执行，避免主线程阻塞）
+    LaunchedEffect(debouncedBeautySettings) {
+        val settings = debouncedBeautySettings
+        if (settings.enabled && settings.hasAnyEffect()) {
+            pixelFreeView.queueEvent {
+                pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
+                pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
+                pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
+                pixelFreeView.setSlimFaceStrength(settings.slimFace / 100f)
+            }
+
+            Logger.d("Camera", "Beauty params updated: smoothing=${settings.smoothing}, " +
+                "whitening=${settings.whitening}, bigEyes=${settings.bigEyes}, " +
+                "slimFace=${settings.slimFace}")
         }
     }
 
@@ -451,12 +469,25 @@ fun CameraContent(
     var showFocusIndicator by remember { mutableStateOf(false) }
     val focusIndicatorAlpha = remember { Animatable(0f) }
 
-    val faceDetector = remember {
-        val options = FaceDetectorOptions.Builder()
+    val faceDetector = remember(faceLandmarkModeEnabled) {
+        val optionsBuilder = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
-            .build()
-        FaceDetection.getClient(options)
+
+        if (faceLandmarkModeEnabled) {
+            optionsBuilder
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
+        } else {
+            optionsBuilder
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+        }
+
+        Logger.i(
+            "Camera",
+            "Face detector mode=${if (faceLandmarkModeEnabled) "LANDMARK" else "CONTOUR"}"
+        )
+        FaceDetection.getClient(optionsBuilder.build())
     }
 
     val mediaAssets by viewModel.allMedia.collectAsState()
@@ -492,7 +523,7 @@ fun CameraContent(
     // 1. 动态帧率：根据处理时间自适应调整（目标 10-15fps）
     // 2. 性能监控：测量每帧处理时间，避免过载
     // 3. 跳帧策略：处理耗时过长时自动跳帧
-    LaunchedEffect(beautySettings, selectedFilter) {
+    LaunchedEffect(beautySettings.enabled, beautySettings.hasAnyEffect(), selectedFilter) {
         if (!beautySettings.enabled || !beautySettings.hasAnyEffect()) {
             beautyPreviewStatus = BeautyPreviewStatus.SKIPPED
             Logger.d(
@@ -510,9 +541,10 @@ fun CameraContent(
         }
 
         beautyPreviewStatus = BeautyPreviewStatus.ACTIVE
+        val initialBeautySettings = effectiveBeautySettings
         Logger.i(
             "Camera",
-            "Beauty preview active: filter=$selectedFilter, smooth=${beautySettings.smoothing}, white=${beautySettings.whitening}, slim=${beautySettings.slimFace}, eye=${beautySettings.bigEyes}"
+            "Beauty preview active: filter=$selectedFilter, smooth=${initialBeautySettings.smoothing}, white=${initialBeautySettings.whitening}, slim=${initialBeautySettings.slimFace}, eye=${initialBeautySettings.bigEyes}"
         )
 
         // 自适应参数
@@ -524,31 +556,60 @@ fun CameraContent(
         var lastFpsLogTime = System.currentTimeMillis()
         var lastCpuSampleTime = SystemClock.elapsedRealtime()
         var lastCpuTimeMs = Process.getElapsedCpuTime()
+        var cachedPreviewFaces: List<Face> = emptyList()
+        var lastFaceDetectAt = 0L
+        val intervalProfile = faceDetectIntervalProfile
+        val intervalParams = when (intervalProfile) {
+            FaceDetectIntervalProfile.CONSERVATIVE -> Quadruple(320L, 520L, 35L, 10L)
+            FaceDetectIntervalProfile.BALANCED -> Quadruple(280L, 450L, 25L, 15L)
+            FaceDetectIntervalProfile.AGGRESSIVE -> Quadruple(220L, 360L, 20L, 25L)
+        }
+        var faceDetectIntervalMs = intervalParams.first
+        val faceDetectIntervalMinMs = intervalParams.first
+        val faceDetectIntervalMaxMs = intervalParams.second
+        val detectIntervalSlowStepMs = intervalParams.third
+        val detectIntervalFastStepMs = intervalParams.fourth
 
         while (isActive) {
             val frameStartTime = System.currentTimeMillis()
 
             val frameBitmap = previewView.bitmap
             if (frameBitmap != null) {
-                val sourceBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, true)
-                frameBitmap.recycle()
+                val sourceBitmap = if (frameBitmap.config == Bitmap.Config.ARGB_8888 && frameBitmap.isMutable) {
+                    frameBitmap
+                } else {
+                    val copiedBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, true)
+                    frameBitmap.recycle()
+                    copiedBitmap
+                }
+
+                val currentBeautySettings = effectiveBeautySettings
+                val requiresFaceDetection = currentBeautySettings.bigEyes > 0f ||
+                    currentBeautySettings.slimFace != 0f
 
                 val previewResult = withContext(Dispatchers.Default) {
                     try {
-                        // 最小版实时预览也走一次人脸检测，确保大眼/瘦脸等效果可见
-                        val previewFaces = try {
-                            val inputImage = InputImage.fromBitmap(sourceBitmap, 0)
-                            Tasks.await(faceDetector.process(inputImage))
-                        } catch (e: Exception) {
-                            Logger.e("Camera", "Real-time preview face detect failed", e)
-                            emptyList()
+                        if (requiresFaceDetection) {
+                            val currentTimeMs = SystemClock.elapsedRealtime()
+                            if (currentTimeMs - lastFaceDetectAt >= faceDetectIntervalMs || cachedPreviewFaces.isEmpty()) {
+                                cachedPreviewFaces = try {
+                                    val inputImage = InputImage.fromBitmap(sourceBitmap, 0)
+                                    Tasks.await(faceDetector.process(inputImage))
+                                } catch (e: Exception) {
+                                    Logger.e("Camera", "Real-time preview face detect failed", e)
+                                    emptyList()
+                                }
+                                lastFaceDetectAt = currentTimeMs
+                            }
+                        } else {
+                            cachedPreviewFaces = emptyList()
                         }
 
                         imageProcessor.processPhoto(
                             source = sourceBitmap,
                             filter = selectedFilter,
-                            beauty = beautySettings,
-                            faces = previewFaces
+                            beauty = currentBeautySettings,
+                            faces = cachedPreviewFaces
                         )
                     } catch (e: Exception) {
                         Logger.e("Camera", "Real-time beauty preview processing failed", e)
@@ -556,7 +617,11 @@ fun CameraContent(
                     }
                 }
 
-                beautyPreviewBitmap?.takeIf { it != previewResult }?.recycle()
+                if (previewResult != sourceBitmap && !sourceBitmap.isRecycled) {
+                    sourceBitmap.recycle()
+                }
+
+                beautyPreviewBitmap?.takeIf { existingBitmap -> existingBitmap != previewResult }?.recycle()
                 beautyPreviewBitmap = previewResult
 
                 // 性能监控：测量实际处理时间
@@ -569,6 +634,23 @@ fun CameraContent(
                     processingTime < 80 -> maxOf(minDelay, adaptiveDelay - 10)
                     processingTime > 120 -> minOf(maxDelay, adaptiveDelay + 10)
                     else -> adaptiveDelay
+                }
+
+                // 第三轮微调：可选的动态人脸检测间隔（280~450ms）
+                if (adaptiveFaceDetectIntervalEnabled && requiresFaceDetection) {
+                    faceDetectIntervalMs = when {
+                        processingTime > 120 -> minOf(
+                            faceDetectIntervalMaxMs,
+                            faceDetectIntervalMs + detectIntervalSlowStepMs
+                        )
+                        processingTime < 80 -> maxOf(
+                            faceDetectIntervalMinMs,
+                            faceDetectIntervalMs - detectIntervalFastStepMs
+                        )
+                        else -> faceDetectIntervalMs
+                    }
+                } else {
+                    faceDetectIntervalMs = faceDetectIntervalMinMs
                 }
 
                 // FPS 日志（每秒记录一次）
@@ -590,7 +672,7 @@ fun CameraContent(
                     beautyPreviewNullFrames = nullFrameCount
 
                     Logger.d("Camera", "Beauty preview FPS: ${"%.1f".format(fps)}, " +
-                        "processing=${processingTime}ms, delay=${adaptiveDelay}ms, cpu=${"%.1f".format(cpuUsage)}%, nullFrame=$nullFrameCount")
+                        "processing=${processingTime}ms, delay=${adaptiveDelay}ms, profile=${intervalProfile.name}, faceDetectInterval=${faceDetectIntervalMs}ms, cpu=${"%.1f".format(cpuUsage)}%, nullFrame=$nullFrameCount")
                     frameCount = 0
                     nullFrameCount = 0
                     lastFpsLogTime = currentTime
@@ -975,6 +1057,11 @@ fun CameraContent(
             beautyPreviewBitmap?.recycle()
             beautyPreviewBitmap = null
             cameraExecutor.shutdown()
+        }
+    }
+
+    DisposableEffect(faceDetector) {
+        onDispose {
             faceDetector.close()
         }
     }
@@ -1170,7 +1257,17 @@ CameraPreviewContent(
             },
             onModeChange = { captureMode = it },
             onFilterSelected = { selectedFilter = it },
-            onBeautySettingsChanged = { beautySettings = it },
+            onBeautySettingsChanged = { updatedSettings ->
+                val onlyToggleChanged =
+                    beautySettings.copy(enabled = updatedSettings.enabled) == updatedSettings &&
+                        beautySettings.enabled != updatedSettings.enabled
+
+                beautySettings = when {
+                    onlyToggleChanged -> updatedSettings
+                    updatedSettings.hasAnyEffect() -> updatedSettings.copy(enabled = true)
+                    else -> updatedSettings.copy(enabled = false)
+                }
+            },
             onRatioSelected = {
                 aspectRatio = it
                 showRatioSelector = false

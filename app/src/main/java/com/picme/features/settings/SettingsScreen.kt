@@ -42,6 +42,7 @@ import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.data.preferences.AppLanguage
 import com.picme.data.preferences.BeautyStrategy
+import com.picme.data.preferences.FaceDetectIntervalProfile
 import com.picme.data.preferences.ThemeMode
 
 @Composable
@@ -72,16 +73,31 @@ fun SettingsScreen(
     val appLanguage by viewModel.appLanguage.collectAsState()
     val beautyStrategy by viewModel.beautyStrategy.collectAsState()
     val debugUiEnabled by viewModel.debugUiEnabled.collectAsState()
+    val faceDetectionLandmarkModeEnabled by viewModel.faceDetectionLandmarkModeEnabled.collectAsState()
+    val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
+    val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
         beautyStrategy = beautyStrategy,
         debugUiEnabled = debugUiEnabled,
+        faceDetectionLandmarkModeEnabled = faceDetectionLandmarkModeEnabled,
+        adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
+        faceDetectIntervalProfile = faceDetectIntervalProfile,
         onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
         onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
         onDebugUiEnabledChange = { enabled -> viewModel.setDebugUiEnabled(enabled) },
+        onFaceDetectionLandmarkModeEnabledChange = { enabled ->
+            viewModel.setFaceDetectionLandmarkModeEnabled(enabled)
+        },
+        onAdaptiveFaceDetectionIntervalEnabledChange = { enabled ->
+            viewModel.setAdaptiveFaceDetectionIntervalEnabled(enabled)
+        },
+        onFaceDetectIntervalProfileSelected = { profile ->
+            viewModel.setFaceDetectIntervalProfile(profile)
+        },
         onNavigateBack = onNavigateBack
     )
 }
@@ -93,10 +109,16 @@ private fun SettingsContent(
     appLanguage: AppLanguage,
     beautyStrategy: BeautyStrategy,
     debugUiEnabled: Boolean,
+    faceDetectionLandmarkModeEnabled: Boolean,
+    adaptiveFaceDetectionIntervalEnabled: Boolean,
+    faceDetectIntervalProfile: FaceDetectIntervalProfile,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onBeautyStrategySelected: (BeautyStrategy) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
+    onFaceDetectionLandmarkModeEnabledChange: (Boolean) -> Unit,
+    onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
+    onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -154,6 +176,22 @@ private fun SettingsContent(
                     checked = debugUiEnabled,
                     onCheckedChange = onDebugUiEnabledChange
                 )
+                DebugOptionRow(
+                    title = stringResource(R.string.face_landmark_mode),
+                    checked = faceDetectionLandmarkModeEnabled,
+                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
+                )
+                DebugOptionRow(
+                    title = stringResource(R.string.adaptive_face_detect_interval),
+                    checked = adaptiveFaceDetectionIntervalEnabled,
+                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
+                )
+                if (adaptiveFaceDetectionIntervalEnabled) {
+                    FaceDetectProfileSelection(
+                        currentProfile = faceDetectIntervalProfile,
+                        onProfileSelected = onFaceDetectIntervalProfileSelected
+                    )
+                }
             }
         }
     }
@@ -246,6 +284,35 @@ fun BeautyStrategySelection(
 }
 
 @Composable
+private fun FaceDetectProfileSelection(
+    currentProfile: FaceDetectIntervalProfile,
+    onProfileSelected: (FaceDetectIntervalProfile) -> Unit
+) {
+    val options = listOf(
+        FaceDetectIntervalProfile.CONSERVATIVE to stringResource(R.string.face_detect_profile_conservative),
+        FaceDetectIntervalProfile.BALANCED to stringResource(R.string.face_detect_profile_balanced),
+        FaceDetectIntervalProfile.AGGRESSIVE to stringResource(R.string.face_detect_profile_aggressive)
+    )
+
+    Text(
+        text = stringResource(R.string.face_detect_profile_title),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
+    )
+
+    Column(Modifier.selectableGroup()) {
+        options.forEach { (profile, label) ->
+            SelectionRow(
+                isSelected = profile == currentProfile,
+                label = label,
+                onClick = { onProfileSelected(profile) }
+            )
+        }
+    }
+}
+
+@Composable
 private fun DebugOptionRow(
     title: String,
     checked: Boolean,
@@ -309,10 +376,16 @@ fun SettingsScreenPreview() {
             appLanguage = AppLanguage.ENGLISH,
             beautyStrategy = BeautyStrategy.PIXEL_FREE,
             debugUiEnabled = true,
+            faceDetectionLandmarkModeEnabled = true,
+            adaptiveFaceDetectionIntervalEnabled = true,
+            faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
             onBeautyStrategySelected = {},
             onDebugUiEnabledChange = {},
+            onFaceDetectionLandmarkModeEnabledChange = {},
+            onAdaptiveFaceDetectionIntervalEnabledChange = {},
+            onFaceDetectIntervalProfileSelected = {},
             onNavigateBack = {}
         )
     }

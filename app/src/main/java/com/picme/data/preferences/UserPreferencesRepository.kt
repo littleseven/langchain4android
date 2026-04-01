@@ -34,6 +34,12 @@ enum class BeautyStrategy {
     R_PLAN
 }
 
+enum class FaceDetectIntervalProfile {
+    CONSERVATIVE,
+    BALANCED,
+    AGGRESSIVE
+}
+
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
 class UserPreferencesRepository(private val context: Context) {
@@ -43,6 +49,9 @@ class UserPreferencesRepository(private val context: Context) {
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val BEAUTY_STRATEGY = stringPreferencesKey("beauty_strategy")
         val DEBUG_UI_ENABLED = booleanPreferencesKey("debug_ui_enabled")
+        val FACE_DETECTION_LANDMARK_MODE = booleanPreferencesKey("face_detection_landmark_mode")
+        val ADAPTIVE_FACE_DETECTION_INTERVAL = booleanPreferencesKey("adaptive_face_detection_interval")
+        val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -137,6 +146,62 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateDebugUiEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DEBUG_UI_ENABLED] = enabled
+        }
+    }
+
+    val faceDetectionLandmarkModeFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.FACE_DETECTION_LANDMARK_MODE] ?: true
+        }
+
+    suspend fun updateFaceDetectionLandmarkMode(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FACE_DETECTION_LANDMARK_MODE] = enabled
+        }
+    }
+
+    val adaptiveFaceDetectionIntervalEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.ADAPTIVE_FACE_DETECTION_INTERVAL] ?: true
+        }
+
+    suspend fun updateAdaptiveFaceDetectionIntervalEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ADAPTIVE_FACE_DETECTION_INTERVAL] = enabled
+        }
+    }
+
+    val faceDetectIntervalProfileFlow: Flow<FaceDetectIntervalProfile> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val profileName = preferences[PreferencesKeys.FACE_DETECT_INTERVAL_PROFILE]
+                ?: FaceDetectIntervalProfile.BALANCED.name
+            FaceDetectIntervalProfile.valueOf(profileName)
+        }
+
+    suspend fun updateFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FACE_DETECT_INTERVAL_PROFILE] = profile.name
         }
     }
 }

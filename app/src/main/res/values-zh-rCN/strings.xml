@@ -73,6 +73,12 @@
     <string name="generating">正在生成…</string>
     <string name="debug_tools">调试工具</string>
     <string name="show_debug_tools">显示调试入口</string>
+    <string name="face_landmark_mode">人脸关键点模式（更快）</string>
+    <string name="adaptive_face_detect_interval">动态人脸检测间隔</string>
+    <string name="face_detect_profile_title">动态间隔强度档位</string>
+    <string name="face_detect_profile_conservative">保守</string>
+    <string name="face_detect_profile_balanced">平衡</string>
+    <string name="face_detect_profile_aggressive">激进</string>
     <string name="data_generation">数据生成</string>
     <string name="person">人像</string>
     <string name="landscape">风景</string>

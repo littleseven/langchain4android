@@ -72,6 +72,12 @@
     <string name="generating">Generating…</string>
     <string name="debug_tools">Debug Tools</string>
     <string name="show_debug_tools">Show debug entries</string>
+    <string name="face_landmark_mode">Face landmark mode (faster)</string>
+    <string name="adaptive_face_detect_interval">Adaptive face detect interval</string>
+    <string name="face_detect_profile_title">Adaptive interval profile</string>
+    <string name="face_detect_profile_conservative">Conservative</string>
+    <string name="face_detect_profile_balanced">Balanced</string>
+    <string name="face_detect_profile_aggressive">Aggressive</string>
     <string name="data_generation">Data Generation</string>
     <string name="person">Person</string>
     <string name="landscape">Landscape</string>

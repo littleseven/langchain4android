@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.data.preferences.AppLanguage
 import com.picme.data.preferences.BeautyStrategy
+import com.picme.data.preferences.FaceDetectIntervalProfile
 import com.picme.data.preferences.ThemeMode
 import com.picme.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,6 +43,27 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
             initialValue = true
         )
 
+    val faceDetectionLandmarkModeEnabled: StateFlow<Boolean> = repository.faceDetectionLandmarkModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
+    val adaptiveFaceDetectionIntervalEnabled: StateFlow<Boolean> = repository.adaptiveFaceDetectionIntervalEnabledFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
+        )
+
+    val faceDetectIntervalProfile: StateFlow<FaceDetectIntervalProfile> = repository.faceDetectIntervalProfileFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = FaceDetectIntervalProfile.BALANCED
+        )
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -63,6 +85,24 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     fun setDebugUiEnabled(enabled: Boolean) {
         viewModelScope.launch {
             repository.updateDebugUiEnabled(enabled)
+        }
+    }
+
+    fun setFaceDetectionLandmarkModeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateFaceDetectionLandmarkMode(enabled)
+        }
+    }
+
+    fun setAdaptiveFaceDetectionIntervalEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateAdaptiveFaceDetectionIntervalEnabled(enabled)
+        }
+    }
+
+    fun setFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile) {
+        viewModelScope.launch {
+            repository.updateFaceDetectIntervalProfile(profile)
         }
     }
 }
