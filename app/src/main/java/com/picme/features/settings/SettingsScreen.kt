@@ -300,7 +300,7 @@ fun BeautyStrategySelection(
     CompactOptionChips(
         options = options,
         currentValue = currentStrategy,
-        maxLines = 1,
+        maxLines = 2,
         onSelected = onStrategySelected
     )
 }
