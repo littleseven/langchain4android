@@ -5,7 +5,6 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.TextureView
 import android.view.View
-import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.camera.view.PreviewView
 
@@ -83,6 +82,10 @@ class BeautyPreviewView @JvmOverloads constructor(
      * 备选方案：直接创建 TextureView
      */
     private fun fallbackToTextureView() {
+        if (isInitialized && surfaceTexture != null) {
+            return
+        }
+
         Log.d(TAG, "Falling back to direct TextureView creation")
         
         val textureView = TextureView(context).apply {
@@ -111,6 +114,17 @@ class BeautyPreviewView @JvmOverloads constructor(
         }
     }
     
+    /**
+     * 预热离屏链路：用于未 attach 到窗口时仍可提供 CameraX Surface。
+     */
+    fun ensureOffscreenReady() {
+        if (surfaceTexture != null) {
+            return
+        }
+
+        fallbackToTextureView()
+    }
+
     init {
         // 创建 PreviewView（CameraX 官方）
         previewView = PreviewView(context).apply {
@@ -177,6 +191,10 @@ class BeautyPreviewView @JvmOverloads constructor(
     private var cameraSurface: android.view.Surface? = null
     
     fun getSurfaceForCamera(): android.view.Surface? {
+        if (surfaceTexture == null) {
+            ensureOffscreenReady()
+        }
+
         if (surfaceTexture == null) {
             Log.w(TAG, "Camera SurfaceTexture not ready, cannot create Surface")
             return null

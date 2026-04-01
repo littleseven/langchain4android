@@ -82,6 +82,7 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.PicMeApplication
 import com.picme.R
 import com.picme.core.common.Logger
+import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.data.preferences.FaceDetectIntervalProfile
 import com.picme.di.BeautyEngineRuntimeState
@@ -106,14 +107,13 @@ import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
-import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -402,31 +402,26 @@ fun CameraContent(
     val bindPreviewSurfaceProvider: (androidx.camera.core.Preview) -> Unit = { previewUseCase ->
         when (beautyStrategy) {
             BeautyStrategy.R_PLAN -> {
-                previewUseCase.setSurfaceProvider { request ->
-                    try {
-                        rPlanPreviewProvider.initialize()
-                        val surface = rPlanPreviewProvider.createPreviewSurface()
-                        request.provideSurface(surface, ContextCompat.getMainExecutor(context)) {
-                            Logger.d("Camera", "R Plan surface request completed")
-                        }
-                        Logger.i("Camera", "Preview connected via R Plan surface provider")
-                    } catch (error: Throwable) {
-                        Logger.w("Camera", "R Plan surface provider failed, fallback PreviewView", error)
-                        BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "surface provider error")
+                // R 计划当前仍处于逐步替换阶段，预览先走稳定的 PreviewView，
+                // 避免将 CameraX 输出面切到离屏 Surface 导致黑屏。
+                previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+                try {
+                    rPlanPreviewProvider.initialize()
+                    Logger.i("Camera", "Preview connected via PreviewView, R Plan pipeline warmed up")
+                } catch (error: Throwable) {
+                    Logger.w("Camera", "R Plan warm-up failed, fallback strategy persisted", error)
+                    BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "warm-up error")
 
-                        if (!persistedRPlanFallback) {
-                            persistedRPlanFallback = true
-                            persistedRPlanFallbackReason = error.message ?: "surface provider error"
-                            coroutineScope.launch {
-                                userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
-                                Logger.w(
-                                    "Camera",
-                                    "Beauty strategy persisted to PIXEL_FREE after R Plan failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
-                                )
-                            }
+                    if (!persistedRPlanFallback) {
+                        persistedRPlanFallback = true
+                        persistedRPlanFallbackReason = error.message ?: "warm-up error"
+                        coroutineScope.launch {
+                            userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+                            Logger.w(
+                                "Camera",
+                                "Beauty strategy persisted to PIXEL_FREE after R Plan warm-up failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
+                            )
                         }
-
-                        previewView.surfaceProvider.onSurfaceRequested(request)
                     }
                 }
             }
@@ -450,8 +445,12 @@ fun CameraContent(
 
         when (beautyStrategy) {
             BeautyStrategy.R_PLAN -> {
-                rPlanPreviewProvider.initialize()
-                rPlanPreviewProvider.updateFilters(settings)
+                try {
+                    rPlanPreviewProvider.initialize()
+                    rPlanPreviewProvider.updateFilters(settings)
+                } catch (error: Throwable) {
+                    Logger.w("Camera", "R Plan update failed, keep preview on PreviewView", error)
+                }
             }
 
             BeautyStrategy.PIXEL_FREE -> {

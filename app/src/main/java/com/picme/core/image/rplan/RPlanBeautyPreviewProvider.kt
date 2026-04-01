@@ -31,7 +31,9 @@ class RPlanBeautyPreviewProvider(
             return
         }
 
-        beautyPreviewView = BeautyPreviewView(appContext)
+        beautyPreviewView = BeautyPreviewView(appContext).apply {
+            ensureOffscreenReady()
+        }
         applyBeautySettings(lastSettings)
         isInitialized = true
 
