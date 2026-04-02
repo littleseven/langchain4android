@@ -188,6 +188,23 @@ class EGLCore {
     }
 
     /**
+     * 清除当前线程绑定的 EGL 上下文
+     */
+    fun clearCurrent(): Boolean {
+        if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
+            Log.e(TAG, "EGL not initialized")
+            return false
+        }
+
+        return EGL14.eglMakeCurrent(
+            eglDisplay,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_CONTEXT
+        )
+    }
+
+    /**
      * 交换缓冲区
      *
      * @param surface EGL Surface

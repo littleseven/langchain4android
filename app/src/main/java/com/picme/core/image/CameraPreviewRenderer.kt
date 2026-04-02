@@ -1,11 +1,8 @@
 package com.picme.core.image
 
 import android.graphics.SurfaceTexture
-import android.opengl.EGLContext
 import android.util.Log
 import android.view.SurfaceHolder
-import android.view.SurfaceView
-import android.view.TextureView
 import android.view.View
 
 /**
@@ -97,14 +94,16 @@ class CameraPreviewRenderer {
         eglContext = eglCore.createContext()
         Log.d(TAG, "EGL context created: ${eglContext?.hashCode()}")
         
-        // 3. 创建外部纹理
-        createExternalTexture()
-        
-        // 4. 使 EGL 上下文当前化（关键！必须在创建 SurfaceTexture 之前）
+        // 3. 使 EGL 上下文当前化（关键！必须在创建 GL 纹理之前）
         val pbufferSurface = eglCore.createSurface(null, 1, 1)
-        eglCore.makeCurrent(pbufferSurface, eglContext!!)
-        Log.d(TAG, "EGL context made current before creating SurfaceTexture")
-        
+        if (!eglCore.makeCurrent(pbufferSurface, eglContext!!)) {
+            throw RuntimeException("Failed to make EGL context current before texture creation")
+        }
+        Log.d(TAG, "EGL context made current before creating texture")
+
+        // 4. 创建外部纹理
+        createExternalTexture()
+
         // 5. 创建 SurfaceTexture 绑定到外部纹理（关键修复！）
         // 注意：不使用 TextureView 的 surfaceTexture，而是创建新的 SurfaceTexture
         // 这个 SurfaceTexture 会接收相机帧并更新到我们的外部纹理
@@ -115,6 +114,9 @@ class CameraPreviewRenderer {
         beautyRenderer.onInit()
         Log.d(TAG, "BeautyRenderer initialized: ${beautyRenderer.isInitialized}")
         
+        // 释放主线程 EGL 绑定，避免与渲染线程争用同一 Context
+        eglCore.clearCurrent()
+
         // 通知监听器
         textureListener?.onTextureAvailable(surfaceTexture!!, DEFAULT_WIDTH, DEFAULT_HEIGHT)
         
@@ -129,6 +131,10 @@ class CameraPreviewRenderer {
         android.opengl.GLES20.glGenTextures(1, textures, 0)
         textureId = textures[0]
         
+        if (textureId == 0) {
+            throw RuntimeException("Failed to create external texture, textureId=0")
+        }
+
         android.opengl.GLES20.glBindTexture(
             android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
             textureId
@@ -175,11 +181,7 @@ class CameraPreviewRenderer {
             create()
         }
         
-        // 关键：立即使 EGL 上下文当前化，确保 SurfaceTexture 可以接收帧
-        eglCore.makeCurrent(windowSurface!!.getEglSurface(), eglContext!!)
-        Log.d(TAG, "EGL context made current for WindowSurface")
-            
-        // 启动渲染线程
+        // 启动渲染线程（由渲染线程独占 EGL 上下文）
         startRendering()
     }
         
@@ -244,6 +246,11 @@ class CameraPreviewRenderer {
                     // 4. 设置纹理变换矩阵
                     beautyRenderer.setTextureTransform(transformMatrix)
                     
+                    // 关键：每帧刷新 viewport，避免部分设备默认 viewport 为 0 导致黑屏
+                    val outputWidth = renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
+                    val outputHeight = renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
+                    android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
+
                     // 5. 渲染
                     beautyRenderer.onRender()
                     
@@ -255,8 +262,10 @@ class CameraPreviewRenderer {
                         Log.d(TAG, "Rendered $frameCount frames, textureId=$textureId")
                     }
                     
-                    Thread.sleep(16) // ~60fps
-                    
+                    if (!safeSleep(16)) {
+                        break
+                    } // ~60fps
+
                 } catch (e: IllegalStateException) {
                     // SurfaceTexture 未就绪，等待相机帧
                     consecutiveErrors++
@@ -271,8 +280,10 @@ class CameraPreviewRenderer {
                         break
                     }
                     
-                    Thread.sleep(100)  // 等待相机帧
-                    
+                    if (!safeSleep(100)) {
+                        break
+                    }  // 等待相机帧
+
                 } catch (e: Exception) {
                     Log.e(TAG, "Render error at frame $frameCount: ${e.message}", e)
                     consecutiveErrors++
@@ -287,16 +298,61 @@ class CameraPreviewRenderer {
         }
     }
     
+    private fun safeSleep(ms: Long): Boolean {
+        return try {
+            Thread.sleep(ms)
+            true
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            Log.i(TAG, "Render thread interrupted while sleeping")
+            false
+        }
+    }
+
     /**
      * 更新美颜参数
      * 
      * @param smoothing 磨皮强度 (0.0 - 1.0)
      * @param whitening 美白强度 (0.0 - 1.0)
+     * @param bigEyes 大眼强度 (0.0 - 1.0)
+     * @param slimFace 瘦脸强度 (-1.0 - 1.0)
      */
-    fun updateBeautyParams(smoothing: Float, whitening: Float) {
-        beautyRenderer.updateBeautyParams(smoothing, whitening)
+    fun updateBeautyParams(
+        smoothing: Float,
+        whitening: Float,
+        bigEyes: Float = 0f,
+        slimFace: Float = 0f
+    ) {
+        beautyRenderer.updateBeautyParams(
+            smoothing = smoothing,
+            whitening = whitening,
+            bigEyes = bigEyes,
+            slimFace = slimFace
+        )
     }
     
+    fun updateFaceWarpParams(
+        faceCenterX: Float,
+        faceCenterY: Float,
+        leftEyeX: Float,
+        leftEyeY: Float,
+        rightEyeX: Float,
+        rightEyeY: Float,
+        faceRadius: Float,
+        hasFace: Boolean
+    ) {
+        beautyRenderer.updateFaceWarpParams(
+            faceCenterX = faceCenterX,
+            faceCenterY = faceCenterY,
+            leftEyeX = leftEyeX,
+            leftEyeY = leftEyeY,
+            rightEyeX = rightEyeX,
+            rightEyeY = rightEyeY,
+            faceRadius = faceRadius,
+            hasFace = hasFace
+        )
+    }
+
     /**
      * 设置渲染模式
      * 

@@ -48,52 +48,74 @@ object BeautyShaders {
         uniform samplerExternalOES uTexture;
         uniform float uSmoothing;
         uniform float uWhitening;
+        uniform float uBigEyes;
+        uniform float uSlimFace;
+        uniform vec2 uFaceCenter;
+        uniform vec2 uLeftEye;
+        uniform vec2 uRightEye;
+        uniform float uFaceRadius;
+        uniform float uHasFace;
         varying vec2 vTextureCoord;
         
-        /**
-         * 盒式模糊磨皮
-         * 采样周围 5 个像素取平均
-         */
+        vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
+            vec2 dir = uv - eyeCenter;
+            float dist = length(dir);
+            if (dist >= radius) {
+                return uv;
+            }
+            float percent = 1.0 - dist / radius;
+            float factor = 1.0 - intensity * percent * 0.38;
+            return eyeCenter + dir * factor;
+        }
+            
+        vec2 applySlimFace(vec2 uv, vec2 center, float radius, float intensity) {
+            vec2 dir = uv - center;
+            float dist = length(dir);
+            if (dist >= radius) {
+                return uv;
+            }
+            float percent = 1.0 - dist / radius;
+            float horizontal = intensity * percent * 0.12;
+            uv.x -= sign(dir.x) * abs(dir.x) * horizontal;
+            return uv;
+        }
+            
+        vec2 warpCoord(vec2 uv) {
+            if (uHasFace < 0.5) {
+                return uv;
+            }
+            float eyeRadius = max(uFaceRadius * 0.22, 0.05);
+            vec2 warped = uv;
+            if (uBigEyes > 0.001) {
+                warped = applyBigEye(warped, uLeftEye, eyeRadius, uBigEyes);
+                warped = applyBigEye(warped, uRightEye, eyeRadius, uBigEyes);
+            }
+            if (abs(uSlimFace) > 0.001) {
+                warped = applySlimFace(warped, uFaceCenter, uFaceRadius, uSlimFace);
+            }
+            return clamp(warped, 0.0, 1.0);
+        }
+            
         vec4 smoothSkin(vec2 uv, float intensity) {
             vec4 color = texture2D(uTexture, uv);
-            
-            // 采样周围像素
-            vec4 color1 = texture2D(uTexture, uv + vec2(0.01, 0.0));
-            vec4 color2 = texture2D(uTexture, uv + vec2(-0.01, 0.0));
-            vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.01));
-            vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.01));
-            
-            // 计算平均值
+            vec4 color1 = texture2D(uTexture, uv + vec2(0.008, 0.0));
+            vec4 color2 = texture2D(uTexture, uv + vec2(-0.008, 0.0));
+            vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.008));
+            vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.008));
             vec4 avgColor = (color + color1 + color2 + color3 + color4) / 5.0;
-            
-            // 混合原始颜色和平滑颜色
             return mix(color, avgColor, intensity);
         }
         
-        /**
-         * 美白算法
-         * 提高 RGB 亮度
-         */
         vec4 whitenSkin(vec4 color, float intensity) {
-            // 提高亮度
             vec3 whitened = color.rgb * (1.0 + intensity * 0.3);
-            
-            // 限制在 [0, 1] 范围
             whitened = clamp(whitened, 0.0, 1.0);
-            
             return vec4(whitened, color.a);
         }
         
         void main() {
-            // 采样原始颜色
-            vec4 color = texture2D(uTexture, vTextureCoord);
-            
-            // 应用磨皮
-            vec4 smoothed = smoothSkin(vTextureCoord, uSmoothing);
-            
-            // 应用美白
+            vec2 warpedUv = warpCoord(vTextureCoord);
+            vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
             vec4 whitened = whitenSkin(smoothed, uWhitening);
-            
             gl_FragColor = whitened;
         }
     """.trimIndent()
@@ -112,40 +134,78 @@ object BeautyShaders {
         uniform samplerExternalOES uTexture;
         uniform float uSmoothing;
         uniform float uWhitening;
+        uniform float uBigEyes;
+        uniform float uSlimFace;
+        uniform vec2 uFaceCenter;
+        uniform vec2 uLeftEye;
+        uniform vec2 uRightEye;
+        uniform float uFaceRadius;
+        uniform float uHasFace;
         uniform float uWarmth;
         uniform float uContrast;
         varying vec2 vTextureCoord;
         
+        vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
+            vec2 dir = uv - eyeCenter;
+            float dist = length(dir);
+            if (dist >= radius) {
+                return uv;
+            }
+            float percent = 1.0 - dist / radius;
+            float factor = 1.0 - intensity * percent * 0.38;
+            return eyeCenter + dir * factor;
+        }
+
+        vec2 applySlimFace(vec2 uv, vec2 center, float radius, float intensity) {
+            vec2 dir = uv - center;
+            float dist = length(dir);
+            if (dist >= radius) {
+                return uv;
+            }
+            float percent = 1.0 - dist / radius;
+            float horizontal = intensity * percent * 0.12;
+            uv.x -= sign(dir.x) * abs(dir.x) * horizontal;
+            return uv;
+        }
+
+        vec2 warpCoord(vec2 uv) {
+            if (uHasFace < 0.5) {
+                return uv;
+            }
+            float eyeRadius = max(uFaceRadius * 0.22, 0.05);
+            vec2 warped = uv;
+            if (uBigEyes > 0.001) {
+                warped = applyBigEye(warped, uLeftEye, eyeRadius, uBigEyes);
+                warped = applyBigEye(warped, uRightEye, eyeRadius, uBigEyes);
+            }
+            if (abs(uSlimFace) > 0.001) {
+                warped = applySlimFace(warped, uFaceCenter, uFaceRadius, uSlimFace);
+            }
+            return clamp(warped, 0.0, 1.0);
+        }
+
         vec4 smoothSkin(vec2 uv, float intensity) {
             vec4 color = texture2D(uTexture, uv);
-            vec4 color1 = texture2D(uTexture, uv + vec2(0.01, 0.0));
-            vec4 color2 = texture2D(uTexture, uv + vec2(-0.01, 0.0));
-            vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.01));
-            vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.01));
-            
+            vec4 color1 = texture2D(uTexture, uv + vec2(0.008, 0.0));
+            vec4 color2 = texture2D(uTexture, uv + vec2(-0.008, 0.0));
+            vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.008));
+            vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.008));
             vec4 avgColor = (color + color1 + color2 + color3 + color4) / 5.0;
             return mix(color, avgColor, intensity);
         }
         
         vec4 adjustTone(vec4 color, float warmth, float contrast) {
             vec3 rgb = color.rgb;
-            
-            // 色调调整：增加暖色
             rgb.r += warmth * 0.05;
             rgb.b -= warmth * 0.05;
-            
-            // 对比度调整
             rgb = (rgb - 0.5) * contrast + 0.5;
-            
-            // 限制范围
             rgb = clamp(rgb, 0.0, 1.0);
-            
             return vec4(rgb, color.a);
         }
         
         void main() {
-            vec4 color = texture2D(uTexture, vTextureCoord);
-            vec4 smoothed = smoothSkin(vTextureCoord, uSmoothing);
+            vec2 warpedUv = warpCoord(vTextureCoord);
+            vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
             vec4 whitened = smoothed * (1.0 + uWhitening * 0.3);
             vec4 toned = adjustTone(whitened, uWarmth, uContrast);
             gl_FragColor = toned;

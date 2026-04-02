@@ -40,6 +40,22 @@ class BeautyRenderer : GLRenderer() {
     /** 美白强度 (0.0 - 1.0) */
     private var whiteningStrength: Float = 0.5f
     
+    /** 大眼强度 (0.0 - 1.0) */
+    private var bigEyesStrength: Float = 0f
+
+    /** 瘦脸强度 (-1.0 - 1.0) */
+    private var slimFaceStrength: Float = 0f
+
+    /** 人脸中心与眼睛关键点（归一化坐标） */
+    private var faceCenterX: Float = 0.5f
+    private var faceCenterY: Float = 0.5f
+    private var leftEyeX: Float = 0.4f
+    private var leftEyeY: Float = 0.45f
+    private var rightEyeX: Float = 0.6f
+    private var rightEyeY: Float = 0.45f
+    private var faceRadius: Float = 0.18f
+    private var hasFace: Float = 0f
+
     /** 暖色调强度 (0.0 - 1.0) */
     private var warmthStrength: Float = 0.0f
     
@@ -49,6 +65,13 @@ class BeautyRenderer : GLRenderer() {
     /** Uniform 位置缓存 */
     private var uSmoothingLocation: Int = -1
     private var uWhiteningLocation: Int = -1
+    private var uBigEyesLocation: Int = -1
+    private var uSlimFaceLocation: Int = -1
+    private var uFaceCenterLocation: Int = -1
+    private var uLeftEyeLocation: Int = -1
+    private var uRightEyeLocation: Int = -1
+    private var uFaceRadiusLocation: Int = -1
+    private var uHasFaceLocation: Int = -1
     private var uWarmthLocation: Int = -1
     private var uContrastLocation: Int = -1
     
@@ -79,12 +102,43 @@ class BeautyRenderer : GLRenderer() {
     /**
      * 更新美颜参数
      */
-    fun updateBeautyParams(smoothing: Float, whitening: Float) {
+    fun updateBeautyParams(
+        smoothing: Float,
+        whitening: Float,
+        bigEyes: Float = 0f,
+        slimFace: Float = 0f
+    ) {
         smoothingStrength = smoothing.coerceIn(0f, 1f)
         whiteningStrength = whitening.coerceIn(0f, 1f)
-        Log.v(TAG, "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength")
+        bigEyesStrength = bigEyes.coerceIn(0f, 1f)
+        slimFaceStrength = slimFace.coerceIn(-1f, 1f)
+        Log.v(
+            TAG,
+            "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
+                "bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength"
+        )
     }
     
+    fun updateFaceWarpParams(
+        faceCenterX: Float,
+        faceCenterY: Float,
+        leftEyeX: Float,
+        leftEyeY: Float,
+        rightEyeX: Float,
+        rightEyeY: Float,
+        faceRadius: Float,
+        hasFace: Boolean
+    ) {
+        this.faceCenterX = faceCenterX.coerceIn(0f, 1f)
+        this.faceCenterY = faceCenterY.coerceIn(0f, 1f)
+        this.leftEyeX = leftEyeX.coerceIn(0f, 1f)
+        this.leftEyeY = leftEyeY.coerceIn(0f, 1f)
+        this.rightEyeX = rightEyeX.coerceIn(0f, 1f)
+        this.rightEyeY = rightEyeY.coerceIn(0f, 1f)
+        this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
+        this.hasFace = if (hasFace) 1f else 0f
+    }
+
     /**
      * 更新高级参数
      */
@@ -119,10 +173,24 @@ class BeautyRenderer : GLRenderer() {
             MODE_BEAUTY -> {
                 shaderProgram.setFloat("uSmoothing", smoothingStrength)
                 shaderProgram.setFloat("uWhitening", whiteningStrength)
+                shaderProgram.setFloat("uBigEyes", bigEyesStrength)
+                shaderProgram.setFloat("uSlimFace", slimFaceStrength)
+                shaderProgram.setFloat("uFaceRadius", faceRadius)
+                shaderProgram.setFloat("uHasFace", hasFace)
+                shaderProgram.setVec2("uFaceCenter", faceCenterX, faceCenterY)
+                shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
+                shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
             }
             MODE_ADVANCED -> {
                 shaderProgram.setFloat("uSmoothing", smoothingStrength)
                 shaderProgram.setFloat("uWhitening", whiteningStrength)
+                shaderProgram.setFloat("uBigEyes", bigEyesStrength)
+                shaderProgram.setFloat("uSlimFace", slimFaceStrength)
+                shaderProgram.setFloat("uFaceRadius", faceRadius)
+                shaderProgram.setFloat("uHasFace", hasFace)
+                shaderProgram.setVec2("uFaceCenter", faceCenterX, faceCenterY)
+                shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
+                shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
                 shaderProgram.setFloat("uWarmth", warmthStrength)
                 shaderProgram.setFloat("uContrast", contrast)
             }
@@ -139,6 +207,13 @@ class BeautyRenderer : GLRenderer() {
     private fun initUniformLocations() {
         uSmoothingLocation = shaderProgram.getUniformLocation("uSmoothing")
         uWhiteningLocation = shaderProgram.getUniformLocation("uWhitening")
+        uBigEyesLocation = shaderProgram.getUniformLocation("uBigEyes")
+        uSlimFaceLocation = shaderProgram.getUniformLocation("uSlimFace")
+        uFaceCenterLocation = shaderProgram.getUniformLocation("uFaceCenter")
+        uLeftEyeLocation = shaderProgram.getUniformLocation("uLeftEye")
+        uRightEyeLocation = shaderProgram.getUniformLocation("uRightEye")
+        uFaceRadiusLocation = shaderProgram.getUniformLocation("uFaceRadius")
+        uHasFaceLocation = shaderProgram.getUniformLocation("uHasFace")
         uWarmthLocation = shaderProgram.getUniformLocation("uWarmth")
         uContrastLocation = shaderProgram.getUniformLocation("uContrast")
     }

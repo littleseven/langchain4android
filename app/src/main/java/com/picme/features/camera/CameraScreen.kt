@@ -2,15 +2,14 @@ package com.picme.features.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaActionSound
-import android.os.Process
-import android.os.SystemClock
 import android.provider.MediaStore
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -33,7 +32,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,14 +51,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -75,18 +70,16 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import com.google.mlkit.vision.face.FaceLandmark
 import com.picme.PicMeApplication
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
-import com.picme.data.preferences.FaceDetectIntervalProfile
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
@@ -111,12 +104,7 @@ import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -127,40 +115,73 @@ enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
 enum class BeautyPreviewStatus { ACTIVE, SKIPPED }
 
 private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
+private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 1800L
 
 private interface BeautyPreviewEngineStrategy {
-    val strategy: BeautyStrategy
+val strategy: BeautyStrategy
 
-    fun bindPreview(previewUseCase: Preview)
+/**
+* @return true 表示预览绑定到了自定义渲染 Surface，需要显示 provider 自带 View。
+*/
+fun bindPreview(previewUseCase: Preview): Boolean
 
-    fun applyBeautySettings(settings: BeautySettings)
+fun applyBeautySettings(settings: BeautySettings)
 
-    fun release()
+fun applyFaceWarpParams(params: FaceWarpParams)
+
+fun release()
 }
 
 private class PixelFreePreviewStrategy(
     private val previewView: PreviewView,
-    private val pixelFreeView: PixelFreeGLSurfaceView
+    private val pixelFreeView: PixelFreeGLSurfaceView,
+    private val rPlanPreviewProvider: RPlanBeautyPreviewProvider
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.PIXEL_FREE
 
-    override fun bindPreview(previewUseCase: Preview) {
-        previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
-        Logger.i("Camera", "Preview connected via PreviewView surface provider")
-    }
+override fun bindPreview(previewUseCase: Preview): Boolean {
+previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+runCatching {
+rPlanPreviewProvider.initialize()
+}.onFailure { error ->
+Logger.w("Camera", "PixelFree bridge warm-up failed", error)
+}
+Logger.i("Camera", "Preview connected via PreviewView for PixelFree strategy")
+return false
+}
 
-    override fun applyBeautySettings(settings: BeautySettings) {
-        if (!settings.enabled || !settings.hasAnyEffect()) {
-            return
-        }
+override fun applyBeautySettings(settings: BeautySettings) {
+pixelFreeView.queueEvent {
+pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
+pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
+pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
+pixelFreeView.setSlimFaceStrength(((settings.slimFace + 50f) / 100f).coerceIn(0f, 1f))
+}
 
-        pixelFreeView.queueEvent {
-            pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
-            pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
-            pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
-            pixelFreeView.setSlimFaceStrength(settings.slimFace / 100f)
-        }
-    }
+runCatching {
+rPlanPreviewProvider.initialize()
+rPlanPreviewProvider.updateFilters(settings)
+}.onFailure { error ->
+Logger.w("Camera", "PixelFree bridge update failed", error)
+}
+}
+
+override fun applyFaceWarpParams(params: FaceWarpParams) {
+runCatching {
+rPlanPreviewProvider.updateFaceWarpParams(
+faceCenterX = params.faceCenterX,
+faceCenterY = params.faceCenterY,
+leftEyeX = params.leftEyeX,
+leftEyeY = params.leftEyeY,
+rightEyeX = params.rightEyeX,
+rightEyeY = params.rightEyeY,
+faceRadius = params.faceRadius,
+hasFace = params.hasFace
+)
+}.onFailure { error ->
+Logger.w("Camera", "PixelFree bridge face params update failed", error)
+}
+}
 
     override fun release() = Unit
 }
@@ -172,29 +193,53 @@ private class RPlanPreviewStrategy(
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.R_PLAN
 
-    override fun bindPreview(previewUseCase: Preview) {
-        // R_PLAN 仍在逐步替换阶段，预览显示先固定走稳定链路。
-        previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+override fun bindPreview(previewUseCase: Preview): Boolean {
+return try {
+rPlanPreviewProvider.initialize()
+val previewSurface = rPlanPreviewProvider.createPreviewSurface()
+val mainExecutor = ContextCompat.getMainExecutor(previewView.context)
+previewUseCase.setSurfaceProvider { request ->
+request.provideSurface(previewSurface, mainExecutor) { result ->
+Logger.d("Camera", "R Plan surface request completed: $result")
+}
+}
+Logger.i("Camera", "Preview connected via R Plan provider surface")
+true
+} catch (error: Throwable) {
+Logger.w("Camera", "R Plan warm-up failed, fallback to PreviewView", error)
+previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+onWarmUpFallback(error.message ?: "warm-up error")
+false
+}
+}
 
-        try {
-            rPlanPreviewProvider.initialize()
-            Logger.i("Camera", "Preview connected via PreviewView, R Plan pipeline warmed up")
-        } catch (error: Throwable) {
-            Logger.w("Camera", "R Plan warm-up failed, fallback strategy persisted", error)
-            onWarmUpFallback(error.message ?: "warm-up error")
-        }
-    }
+override fun applyBeautySettings(settings: BeautySettings) {
+try {
+rPlanPreviewProvider.initialize()
+rPlanPreviewProvider.updateFilters(settings)
+} catch (error: Throwable) {
+Logger.w("Camera", "R Plan update failed", error)
+}
+}
 
-    override fun applyBeautySettings(settings: BeautySettings) {
-        try {
-            rPlanPreviewProvider.initialize()
-            rPlanPreviewProvider.updateFilters(settings)
-        } catch (error: Throwable) {
-            Logger.w("Camera", "R Plan update failed, keep preview on PreviewView", error)
-        }
-    }
+override fun applyFaceWarpParams(params: FaceWarpParams) {
+runCatching {
+rPlanPreviewProvider.updateFaceWarpParams(
+faceCenterX = params.faceCenterX,
+faceCenterY = params.faceCenterY,
+leftEyeX = params.leftEyeX,
+leftEyeY = params.leftEyeY,
+rightEyeX = params.rightEyeX,
+rightEyeY = params.rightEyeY,
+faceRadius = params.faceRadius,
+hasFace = params.hasFace
+)
+}.onFailure { error ->
+Logger.w("Camera", "R Plan face params update failed", error)
+}
+}
 
-    override fun release() {
+override fun release() {
         rPlanPreviewProvider.release()
     }
 }
@@ -220,10 +265,11 @@ private fun rememberPreviewStrategyBundle(
             onWarmUpFallback = onRPlanWarmUpFallback
         )
     }
-    val pixelFreeStrategy = remember(previewView, pixelFreeView) {
+    val pixelFreeStrategy = remember(previewView, pixelFreeView, rPlanPreviewProvider) {
         PixelFreePreviewStrategy(
             previewView = previewView,
-            pixelFreeView = pixelFreeView
+            pixelFreeView = pixelFreeView,
+            rPlanPreviewProvider = rPlanPreviewProvider
         )
     }
 
@@ -327,16 +373,6 @@ internal fun transformFaceCoordinate(
     return Offset(screenX, screenY)
 }
 
-/**
- * 四元组数据类，用于返回多个值
- */
-private data class Quadruple<A, B, C, D>(
-    val first: A,
-    val second: B,
-    val third: C,
-    val fourth: D
-)
-
 private data class BeautyDebugState(
     val status: BeautyPreviewStatus,
     val fps: Float,
@@ -378,6 +414,17 @@ private data class CameraPreviewUiState(
     val exposureCompensation: Int,
     val exposureRange: IntRange,
     val whiteBalanceMode: Int
+)
+
+private data class FaceWarpParams(
+    val faceCenterX: Float = 0.5f,
+    val faceCenterY: Float = 0.5f,
+    val leftEyeX: Float = 0.4f,
+    val leftEyeY: Float = 0.45f,
+    val rightEyeX: Float = 0.6f,
+    val rightEyeY: Float = 0.45f,
+    val faceRadius: Float = 0.18f,
+    val hasFace: Boolean = false
 )
 
 private data class CameraPreviewActions(
@@ -488,10 +535,6 @@ fun CameraContent(
     )
     val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
-    val adaptiveFaceDetectIntervalEnabled by userPreferencesRepository.adaptiveFaceDetectionIntervalEnabledFlow.collectAsState(initial = true)
-    val faceDetectIntervalProfile by userPreferencesRepository.faceDetectIntervalProfileFlow.collectAsState(
-        initial = FaceDetectIntervalProfile.BALANCED
-    )
     val rPlanRecoveryAvailableAtMs by userPreferencesRepository.rPlanRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(beautyStrategy) {
@@ -510,16 +553,13 @@ fun CameraContent(
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }
     
-    // [RD] 监听 SurfaceTexture 准备状态
-    var surfaceTextureReady by remember { mutableStateOf(false) }
-    
+    var previewRebindSignal by remember { mutableIntStateOf(0) }
+
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
     var isRecording by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
     var beautySettings by remember { mutableStateOf(BeautySettings(enabled = true)) }
-    var debouncedBeautySettings by remember { mutableStateOf(beautySettings) }
-    val effectiveBeautySettings by rememberUpdatedState(newValue = debouncedBeautySettings)
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
 
     // [RD] 使用 PreviewView 替代 TextureView
@@ -611,19 +651,37 @@ fun CameraContent(
     )
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
+    var useProviderRenderView by remember { mutableStateOf(false) }
+
     val bindPreviewSurfaceProvider: (Preview) -> Unit = { previewUseCase ->
-        activePreviewStrategy.bindPreview(previewUseCase)
+        useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase)
     }
 
-    // [RD] 参数更新防抖：滑杆拖动时合并高频更新，减少实时处理抖动
-    LaunchedEffect(beautySettings) {
-        delay(90)
-        debouncedBeautySettings = beautySettings
+    LaunchedEffect(useProviderRenderView, beautyStrategy, previewRebindSignal) {
+        if (!useProviderRenderView) {
+            return@LaunchedEffect
+        }
+
+        kotlinx.coroutines.delay(PROVIDER_VIEW_BIND_TIMEOUT_MS)
+        if (!useProviderRenderView) {
+            return@LaunchedEffect
+        }
+
+        if (!rPlanPreviewProvider.isReady()) {
+            Logger.w(
+                "Camera",
+                "Provider view bind timeout, fallback to PreviewView and request rebind"
+            )
+            useProviderRenderView = false
+            previewRebindSignal += 1
+        }
     }
 
-    // [RD] 同步美颜参数到当前引擎
-    LaunchedEffect(debouncedBeautySettings, beautyStrategy) {
-        val settings = debouncedBeautySettings
+    var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
+
+    // [RD] 快路径：参数变更立即下发到当前预览引擎，保证滑杆跟手性。
+    LaunchedEffect(beautySettings, beautyStrategy) {
+        val settings = beautySettings
         activePreviewStrategy.applyBeautySettings(settings)
 
         Logger.d(
@@ -631,6 +689,10 @@ fun CameraContent(
             "Beauty params updated: engine=${activePreviewStrategy.strategy.name}, smoothing=${settings.smoothing}, " +
                 "whitening=${settings.whitening}, bigEyes=${settings.bigEyes}, slimFace=${settings.slimFace}"
         )
+    }
+
+    LaunchedEffect(faceWarpParams, beautyStrategy) {
+        activePreviewStrategy.applyFaceWarpParams(faceWarpParams)
     }
 
     // [RD] 监听比例变化，动态调整 ScaleType
@@ -765,13 +827,11 @@ fun CameraContent(
 
     val mediaAssets by viewModel.allMedia.collectAsState()
     val lastMedia = mediaAssets.firstOrNull()
-    var beautyPreviewBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var beautyPreviewStatus by remember { mutableStateOf(BeautyPreviewStatus.SKIPPED) }
-    var beautyPreviewFps by remember { mutableFloatStateOf(0f) }
-    var beautyPreviewProcessingMs by remember { mutableIntStateOf(0) }
-    var beautyPreviewDelayMs by remember { mutableIntStateOf(100) }
-    var beautyPreviewCpuUsage by remember { mutableFloatStateOf(0f) }
-    var beautyPreviewNullFrames by remember { mutableIntStateOf(0) }
+    val beautyPreviewStatus = if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
+        BeautyPreviewStatus.ACTIVE
+    } else {
+        BeautyPreviewStatus.SKIPPED
+    }
 
     LaunchedEffect(currentScene) {
         cameraControl?.let { control ->
@@ -791,47 +851,6 @@ fun CameraContent(
         }
     }
     
-    // [RD] 第二阶段瘦身：将实时预览循环与性能监控下沉到独立函数
-    LaunchedEffect(beautySettings.enabled, beautySettings.hasAnyEffect(), selectedFilter) {
-        if (!beautySettings.enabled || !beautySettings.hasAnyEffect()) {
-            beautyPreviewStatus = BeautyPreviewStatus.SKIPPED
-            Logger.d(
-                "Camera",
-                "Beauty preview skipped: enabled=${beautySettings.enabled}, hasEffect=${beautySettings.hasAnyEffect()}"
-            )
-            beautyPreviewBitmap?.recycle()
-            beautyPreviewBitmap = null
-            beautyPreviewFps = 0f
-            beautyPreviewProcessingMs = 0
-            beautyPreviewDelayMs = 0
-            beautyPreviewCpuUsage = 0f
-            beautyPreviewNullFrames = 0
-            return@LaunchedEffect
-        }
-
-        beautyPreviewStatus = BeautyPreviewStatus.ACTIVE
-        runRealtimeBeautyPreviewLoop(
-            previewView = previewView,
-            faceDetector = faceDetector,
-            imageProcessor = imageProcessor,
-            selectedFilter = selectedFilter,
-            faceDetectIntervalProfile = faceDetectIntervalProfile,
-            adaptiveFaceDetectIntervalEnabled = adaptiveFaceDetectIntervalEnabled,
-            beautySettingsProvider = { effectiveBeautySettings },
-            onPreviewBitmapReady = { previewResult ->
-                beautyPreviewBitmap?.takeIf { existingBitmap -> existingBitmap != previewResult }?.recycle()
-                beautyPreviewBitmap = previewResult
-            },
-            onPerfUpdated = { fps, processingMs, delayMs, cpuUsage, nullFrames ->
-                beautyPreviewFps = fps
-                beautyPreviewProcessingMs = processingMs
-                beautyPreviewDelayMs = delayMs
-                beautyPreviewCpuUsage = cpuUsage
-                beautyPreviewNullFrames = nullFrames
-            }
-        )
-    }
-
     // [RD] 监听美颜参数变化（暂时注释，后续实现）
     // LaunchedEffect(beautySettings) {
     //     pixelFreeView.setSmoothingStrength(beautySettings.smoothing.toFloat())
@@ -848,7 +867,7 @@ fun CameraContent(
         Logger.d("Camera", "PixelFree initialization requested")
     }
 
-    LaunchedEffect(lensFacing, captureMode, aspectRatio) {
+    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal) {
         bindCameraUseCases(
             context = context,
             lifecycleOwner = lifecycleOwner,
@@ -867,6 +886,7 @@ fun CameraContent(
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },
             onActualLensFacingChanged = { facing -> actualLensFacing = facing },
             onFacePointChanged = { point -> facePoint = point },
+            onFaceWarpParamsChanged = { params -> faceWarpParams = params },
             onShowFocusIndicatorChanged = { show -> showFocusIndicator = show }
         )
     }
@@ -882,8 +902,6 @@ fun CameraContent(
 
     DisposableEffect(Unit) {
         onDispose {
-            beautyPreviewBitmap?.recycle()
-            beautyPreviewBitmap = null
             previewStrategyBundle.rPlanStrategy.release()
             previewStrategyBundle.pixelFreeStrategy.release()
             cameraExecutor.shutdown()
@@ -902,21 +920,39 @@ CameraPreviewContent(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
+            val rPlanPreviewView = remember(rPlanPreviewProvider) {
+                runCatching {
+                    rPlanPreviewProvider.initialize()
+                    rPlanPreviewProvider.getView()
+                }.getOrNull()
+            }
+
             AndroidView(
-                factory = { previewView },
-                modifier = Modifier.fillMaxSize()
+                factory = { context ->
+                    FrameLayout(context)
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { container ->
+                    val targetView = if (useProviderRenderView) {
+                        rPlanPreviewView ?: previewView
+                    } else {
+                        previewView
+                    }
+
+                    if (targetView.parent !== container) {
+                        (targetView.parent as? ViewGroup)?.removeView(targetView)
+                        container.removeAllViews()
+                        container.addView(
+                            targetView,
+                            FrameLayout.LayoutParams(
+                                FrameLayout.LayoutParams.MATCH_PARENT,
+                                FrameLayout.LayoutParams.MATCH_PARENT
+                            )
+                        )
+                    }
+                }
             )
 
-            if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
-                beautyPreviewBitmap?.let { bitmap ->
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
         }
     },
     uiState = CameraPreviewUiState(
@@ -943,11 +979,11 @@ CameraPreviewContent(
         beautySettings = beautySettings,
         beautyDebugState = BeautyDebugState(
             status = beautyPreviewStatus,
-            fps = beautyPreviewFps,
-            processingMs = beautyPreviewProcessingMs,
-            delayMs = beautyPreviewDelayMs,
-            cpuUsage = beautyPreviewCpuUsage,
-            nullFrames = beautyPreviewNullFrames,
+            fps = 0f,
+            processingMs = 0,
+            delayMs = 0,
+            cpuUsage = 0f,
+            nullFrames = 0,
             persistedFallback = persistedRPlanFallback,
             persistedFallbackReason = persistedRPlanFallbackReason,
             strategy = beautyStrategy,
@@ -1089,6 +1125,7 @@ private fun bindCameraUseCases(
     onZoomRatioChanged: (Float) -> Unit,
     onActualLensFacingChanged: (Int) -> Unit,
     onFacePointChanged: (Offset) -> Unit,
+    onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit
 ) {
     val cameraProvider = cameraProviderFuture.get()
@@ -1151,6 +1188,7 @@ private fun bindCameraUseCases(
             lensFacing = lensFacing,
             beautySettings = beautySettings,
             onFacePointChanged = onFacePointChanged,
+            onFaceWarpParamsChanged = onFaceWarpParamsChanged,
             onShowFocusIndicatorChanged = onShowFocusIndicatorChanged
         )
     }
@@ -1206,6 +1244,7 @@ private fun handleImageAnalysisFrame(
     lensFacing: Int,
     beautySettings: BeautySettings,
     onFacePointChanged: (Offset) -> Unit,
+    onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit
 ) {
     try {
@@ -1219,21 +1258,83 @@ private fun handleImageAnalysisFrame(
         faceDetector.process(image)
             .addOnSuccessListener { faces ->
                 if (faces.isNotEmpty()) {
-                    val bounds = faces[0].boundingBox
+                    val face = faces[0]
+                    val bounds = face.boundingBox
+                    val previewWidth = previewView.width.toFloat()
+                    val previewHeight = previewView.height.toFloat()
+                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
                     val screenPoint = transformFaceCoordinateSimple(
                         faceX = bounds.centerX().toFloat(),
                         faceY = bounds.centerY().toFloat(),
                         imageProxyWidth = imageProxy.width,
                         imageProxyHeight = imageProxy.height,
-                        previewWidth = previewView.width.toFloat(),
-                        previewHeight = previewView.height.toFloat(),
-                        rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                        previewWidth = previewWidth,
+                        previewHeight = previewHeight,
+                        rotationDegrees = rotationDegrees,
                         lensFacing = lensFacing
                     )
                     onFacePointChanged(screenPoint)
                     onShowFocusIndicatorChanged(true)
+
+                    val leftEyeLandmark = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
+                    val rightEyeLandmark = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+
+                    val leftEyePoint = if (leftEyeLandmark != null) {
+                        transformFaceCoordinateSimple(
+                            faceX = leftEyeLandmark.x,
+                            faceY = leftEyeLandmark.y,
+                            imageProxyWidth = imageProxy.width,
+                            imageProxyHeight = imageProxy.height,
+                            previewWidth = previewWidth,
+                            previewHeight = previewHeight,
+                            rotationDegrees = rotationDegrees,
+                            lensFacing = lensFacing
+                        )
+                    } else {
+                        Offset(
+                            screenPoint.x - bounds.width().toFloat() * 0.16f,
+                            screenPoint.y - bounds.height().toFloat() * 0.10f
+                        )
+                    }
+
+                    val rightEyePoint = if (rightEyeLandmark != null) {
+                        transformFaceCoordinateSimple(
+                            faceX = rightEyeLandmark.x,
+                            faceY = rightEyeLandmark.y,
+                            imageProxyWidth = imageProxy.width,
+                            imageProxyHeight = imageProxy.height,
+                            previewWidth = previewWidth,
+                            previewHeight = previewHeight,
+                            rotationDegrees = rotationDegrees,
+                            lensFacing = lensFacing
+                        )
+                    } else {
+                        Offset(
+                            screenPoint.x + bounds.width().toFloat() * 0.16f,
+                            screenPoint.y - bounds.height().toFloat() * 0.10f
+                        )
+                    }
+
+                    val faceRadius = (
+                        maxOf(bounds.width().toFloat() / imageProxy.width.toFloat(), 0.16f)
+                    ).coerceIn(0.12f, 0.38f)
+
+                    onFaceWarpParamsChanged(
+                        FaceWarpParams(
+                            faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
+                            faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
+                            leftEyeX = (leftEyePoint.x / previewWidth).coerceIn(0f, 1f),
+                            leftEyeY = (leftEyePoint.y / previewHeight).coerceIn(0f, 1f),
+                            rightEyeX = (rightEyePoint.x / previewWidth).coerceIn(0f, 1f),
+                            rightEyeY = (rightEyePoint.y / previewHeight).coerceIn(0f, 1f),
+                            faceRadius = faceRadius,
+                            hasFace = true
+                        )
+                    )
                 } else {
                     onShowFocusIndicatorChanged(false)
+                    onFaceWarpParamsChanged(FaceWarpParams())
                 }
             }
             .addOnCompleteListener {
@@ -1245,157 +1346,6 @@ private fun handleImageAnalysisFrame(
     } catch (error: Exception) {
         Logger.e("Camera", "Face detection error", error)
         imageProxy.close()
-    }
-}
-
-private suspend fun runRealtimeBeautyPreviewLoop(
-    previewView: PreviewView,
-    faceDetector: com.google.mlkit.vision.face.FaceDetector,
-    imageProcessor: com.picme.core.image.ImageProcessor,
-    selectedFilter: FilterType,
-    faceDetectIntervalProfile: FaceDetectIntervalProfile,
-    adaptiveFaceDetectIntervalEnabled: Boolean,
-    beautySettingsProvider: () -> BeautySettings,
-    onPreviewBitmapReady: (Bitmap) -> Unit,
-    onPerfUpdated: (fps: Float, processingMs: Int, delayMs: Int, cpuUsage: Float, nullFrames: Int) -> Unit
-) {
-    val initialBeautySettings = beautySettingsProvider()
-    Logger.i(
-        "Camera",
-        "Beauty preview active: filter=$selectedFilter, smooth=${initialBeautySettings.smoothing}, white=${initialBeautySettings.whitening}, slim=${initialBeautySettings.slimFace}, eye=${initialBeautySettings.bigEyes}"
-    )
-
-    var adaptiveDelay = 100L
-    val minDelay = 67L
-    val maxDelay = 150L
-    var frameCount = 0
-    var nullFrameCount = 0
-    var lastFpsLogTime = System.currentTimeMillis()
-    var lastCpuSampleTime = SystemClock.elapsedRealtime()
-    var lastCpuTimeMs = Process.getElapsedCpuTime()
-    var cachedPreviewFaces: List<Face> = emptyList()
-    var lastFaceDetectAt = 0L
-    val intervalParams = when (faceDetectIntervalProfile) {
-        FaceDetectIntervalProfile.CONSERVATIVE -> Quadruple(320L, 520L, 35L, 10L)
-        FaceDetectIntervalProfile.BALANCED -> Quadruple(280L, 450L, 25L, 15L)
-        FaceDetectIntervalProfile.AGGRESSIVE -> Quadruple(220L, 360L, 20L, 25L)
-    }
-    var faceDetectIntervalMs = intervalParams.first
-    val faceDetectIntervalMinMs = intervalParams.first
-    val faceDetectIntervalMaxMs = intervalParams.second
-    val detectIntervalSlowStepMs = intervalParams.third
-    val detectIntervalFastStepMs = intervalParams.fourth
-
-    while (currentCoroutineContext().isActive) {
-        val frameStartTime = System.currentTimeMillis()
-        val frameBitmap = previewView.bitmap
-
-        if (frameBitmap != null) {
-            val sourceBitmap = if (frameBitmap.config == Bitmap.Config.ARGB_8888 && frameBitmap.isMutable) {
-                frameBitmap
-            } else {
-                val copiedBitmap = frameBitmap.copy(Bitmap.Config.ARGB_8888, true)
-                frameBitmap.recycle()
-                copiedBitmap
-            }
-
-            val currentBeautySettings = beautySettingsProvider()
-            val requiresFaceDetection = currentBeautySettings.bigEyes > 0f ||
-                currentBeautySettings.slimFace != 0f
-
-            val previewResult = withContext(Dispatchers.Default) {
-                try {
-                    if (requiresFaceDetection) {
-                        val currentTimeMs = SystemClock.elapsedRealtime()
-                        if (currentTimeMs - lastFaceDetectAt >= faceDetectIntervalMs || cachedPreviewFaces.isEmpty()) {
-                            cachedPreviewFaces = try {
-                                val inputImage = InputImage.fromBitmap(sourceBitmap, 0)
-                                Tasks.await(faceDetector.process(inputImage))
-                            } catch (error: Exception) {
-                                Logger.e("Camera", "Real-time preview face detect failed", error)
-                                emptyList()
-                            }
-                            lastFaceDetectAt = currentTimeMs
-                        }
-                    } else {
-                        cachedPreviewFaces = emptyList()
-                    }
-
-                    imageProcessor.processPhoto(
-                        source = sourceBitmap,
-                        filter = selectedFilter,
-                        beauty = currentBeautySettings,
-                        faces = cachedPreviewFaces
-                    )
-                } catch (error: Exception) {
-                    Logger.e("Camera", "Real-time beauty preview processing failed", error)
-                    sourceBitmap
-                }
-            }
-
-            if (previewResult != sourceBitmap && !sourceBitmap.isRecycled) {
-                sourceBitmap.recycle()
-            }
-
-            onPreviewBitmapReady(previewResult)
-
-            val processingTime = System.currentTimeMillis() - frameStartTime
-            adaptiveDelay = when {
-                processingTime < 80 -> maxOf(minDelay, adaptiveDelay - 10)
-                processingTime > 120 -> minOf(maxDelay, adaptiveDelay + 10)
-                else -> adaptiveDelay
-            }
-
-            if (adaptiveFaceDetectIntervalEnabled && requiresFaceDetection) {
-                faceDetectIntervalMs = when {
-                    processingTime > 120 -> minOf(
-                        faceDetectIntervalMaxMs,
-                        faceDetectIntervalMs + detectIntervalSlowStepMs
-                    )
-                    processingTime < 80 -> maxOf(
-                        faceDetectIntervalMinMs,
-                        faceDetectIntervalMs - detectIntervalFastStepMs
-                    )
-                    else -> faceDetectIntervalMs
-                }
-            } else {
-                faceDetectIntervalMs = faceDetectIntervalMinMs
-            }
-
-            frameCount++
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastFpsLogTime >= 1000) {
-                val fps = frameCount * 1000f / (currentTime - lastFpsLogTime)
-                val cpuNowMs = Process.getElapsedCpuTime()
-                val cpuWallDeltaMs = (SystemClock.elapsedRealtime() - lastCpuSampleTime).coerceAtLeast(1L)
-                val cpuDeltaMs = (cpuNowMs - lastCpuTimeMs).coerceAtLeast(0L)
-                val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-                val cpuUsage = ((cpuDeltaMs.toFloat() / cpuWallDeltaMs.toFloat()) / cores.toFloat() * 100f)
-                    .coerceIn(0f, 100f)
-
-                onPerfUpdated(
-                    fps,
-                    processingTime.toInt(),
-                    adaptiveDelay.toInt(),
-                    cpuUsage,
-                    nullFrameCount
-                )
-
-                Logger.d(
-                    "Camera",
-                    "Beauty preview FPS: ${"%.1f".format(fps)}, processing=${processingTime}ms, delay=${adaptiveDelay}ms, profile=${faceDetectIntervalProfile.name}, faceDetectInterval=${faceDetectIntervalMs}ms, cpu=${"%.1f".format(cpuUsage)}%, nullFrame=$nullFrameCount"
-                )
-                frameCount = 0
-                nullFrameCount = 0
-                lastFpsLogTime = currentTime
-                lastCpuSampleTime = SystemClock.elapsedRealtime()
-                lastCpuTimeMs = cpuNowMs
-            }
-        } else {
-            nullFrameCount++
-        }
-
-        delay(adaptiveDelay)
     }
 }
 

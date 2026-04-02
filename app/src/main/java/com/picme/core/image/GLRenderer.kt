@@ -99,10 +99,10 @@ abstract class GLRenderer {
         
         // 纹理坐标（0 到 1）
         val textureCoords = floatArrayOf(
-            0f, 1f,  // 0: 左下
-            1f, 1f,  // 1: 右下
-            0f, 0f,  // 2: 左上
-            1f, 0f   // 3: 右上
+            0f, 0f,  // 0: 左下
+            1f, 0f,  // 1: 右下
+            0f, 1f,  // 2: 左上
+            1f, 1f   // 3: 右上
         )
         
         // 分配直接内存

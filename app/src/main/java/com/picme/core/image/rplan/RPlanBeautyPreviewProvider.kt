@@ -75,7 +75,29 @@ class RPlanBeautyPreviewProvider(
 
         Logger.d(
             "RPlan",
-            "updateFilters: enabled=${settings.enabled}, smoothing=${settings.smoothing}, whitening=${settings.whitening}"
+            "updateFilters: enabled=${settings.enabled}, smoothing=${settings.smoothing}, whitening=${settings.whitening}, bigEyes=${settings.bigEyes}, slimFace=${settings.slimFace}"
+        )
+    }
+
+    fun updateFaceWarpParams(
+        faceCenterX: Float,
+        faceCenterY: Float,
+        leftEyeX: Float,
+        leftEyeY: Float,
+        rightEyeX: Float,
+        rightEyeY: Float,
+        faceRadius: Float,
+        hasFace: Boolean
+    ) {
+        beautyPreviewView?.updateFaceWarpParams(
+            faceCenterX = faceCenterX,
+            faceCenterY = faceCenterY,
+            leftEyeX = leftEyeX,
+            leftEyeY = leftEyeY,
+            rightEyeX = rightEyeX,
+            rightEyeY = rightEyeY,
+            faceRadius = faceRadius,
+            hasFace = hasFace
         )
     }
 
@@ -101,11 +123,15 @@ class RPlanBeautyPreviewProvider(
         if (!settings.enabled || !settings.hasAnyEffect()) {
             view.smoothingStrength = 0f
             view.whiteningStrength = 0f
+            view.bigEyesStrength = 0f
+            view.slimFaceStrength = 0f
             return
         }
 
         view.smoothingStrength = (settings.smoothing / 100f).coerceIn(0f, 1f)
         view.whiteningStrength = (settings.whitening / 100f).coerceIn(0f, 1f)
+        view.bigEyesStrength = (settings.bigEyes / 100f).coerceIn(0f, 1f)
+        view.slimFaceStrength = (settings.slimFace / 50f).coerceIn(-1f, 1f)
     }
 }
 
