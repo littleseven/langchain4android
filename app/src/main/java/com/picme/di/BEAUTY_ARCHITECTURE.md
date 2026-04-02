@@ -262,7 +262,8 @@ class CameraViewModel(
         // 2. 配置 CameraX Preview
         val preview = Preview.Builder().build().also {
             it.setSurfaceProvider { request ->
-                request.provideSurface(previewSurface, ...)
+                request.provideSurface(previewSurface, cameraExecutor) { }
+                // 省略 Surface release 等收尾逻辑
             }
         }
 
@@ -389,9 +390,39 @@ fun CameraScreen(viewModel: CameraViewModel) {
 
 ---
 
-## 9. 总结
+## 9. 代码清理与架构收敛（2026-04）
 
-### 9.1 架构优势
+### 9.1 已清理的冗余实现
+
+为降低维护成本并遵循单一事实来源（SSOT），已移除以下未接入主链路的历史实验实现：
+
+- `features/camera/CameraPreviewScreen.kt`
+- `core/image/GpuImageBeautyPreviewProvider.kt`
+- `core/image/GPUImageBeautyView.kt`
+- `core/image/BeautyPreviewProcessor.kt`
+
+这些实现与当前主链路（`CameraScreen` + `PixelFree/RPlan` 双引擎策略）并行存在，但未被实际引用。
+
+### 9.2 策略切换逻辑修正
+
+设置页在切换美颜引擎时，统一先持久化策略，再按需触发 R_PLAN 手动恢复逻辑：
+
+```kotlin
+fun setBeautyStrategy(strategy: BeautyStrategy) {
+    viewModelScope.launch {
+        repository.updateBeautyStrategy(strategy)
+        if (strategy == BeautyStrategy.R_PLAN) {
+            repository.triggerManualRPlanRecovery()
+        }
+    }
+}
+```
+
+该顺序可确保设置页、DataStore 与运行时策略状态一致，避免 UI 选项与实际引擎偏差。
+
+## 10. 总结
+
+### 10.1 架构优势
 
 ✅ **灵活切换**：修改一行配置即可切换实现
 ✅ **风险可控**：短期方案快速验证，中长期方案稳步推进
@@ -399,7 +430,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
 ✅ **易于测试**：接口便于 Mock，提升测试覆盖率
 ✅ **团队成长**：积累核心技术能力
 
-### 9.2 关键成功因素
+### 10.2 关键成功因素
 
 1. **严格遵守接口契约**：所有实现必须符合 BeautyPreviewProvider 规范
 2. **充分文档化**：每次技术决策都更新文档
@@ -410,6 +441,6 @@ fun CameraScreen(viewModel: CameraViewModel) {
 ---
 
 **[RD] 设计者**：PicMe 全栈工程师团队
-**最后更新**：2026-03-31
-**版本**：1.0
+**最后更新**：2026-04-02
+**版本**：1.1
 

@@ -112,6 +112,7 @@ import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -358,7 +359,6 @@ private data class CameraPreviewUiState(
     val captureMode: MediaType,
     val isRecording: Boolean,
     val isStable: Boolean,
-    val recordingTime: String,
     val showFilterSelector: Boolean,
     val showBeautySelector: Boolean,
     val showRatioSelector: Boolean,
@@ -409,6 +409,7 @@ private data class CameraPreviewActions(
 )
 
 @OptIn(ExperimentalPermissionsApi::class)
+@ExperimentalGetImage
 @Composable
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
@@ -468,7 +469,8 @@ fun CameraScreen(
 }
 
 @SuppressLint("MissingPermission", "UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalGetImage::class)
+@OptIn(ExperimentalMaterial3Api::class)
+@ExperimentalGetImage
 @Composable
 fun CameraContent(
     viewModel: MediaViewModel,
@@ -730,7 +732,6 @@ fun CameraContent(
     }
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     var recording: Recording? by remember { mutableStateOf(null) }
-    val recordingTime by remember { mutableStateOf("00:00") }
 
     var cameraControl: CameraControl? by remember { mutableStateOf(null) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
@@ -927,7 +928,6 @@ CameraPreviewContent(
         captureMode = captureMode,
         isRecording = isRecording,
         isStable = isStable,
-        recordingTime = recordingTime,
         showFilterSelector = showFilterSelector,
         showBeautySelector = showBeautySelector,
         showRatioSelector = showRatioSelector,
@@ -1286,7 +1286,7 @@ private suspend fun runRealtimeBeautyPreviewLoop(
     val detectIntervalSlowStepMs = intervalParams.third
     val detectIntervalFastStepMs = intervalParams.fourth
 
-    while (kotlin.coroutines.coroutineContext.isActive) {
+    while (currentCoroutineContext().isActive) {
         val frameStartTime = System.currentTimeMillis()
         val frameBitmap = previewView.bitmap
 
@@ -1742,60 +1742,6 @@ private fun CameraPreviewContent(
         }
     }
 }
-}
-
-/**
- * [RD] 人脸坐标转换函数 - 重构版
- * 
- * 将 ML Kit 人脸检测坐标转换为屏幕坐标，用于十字星定位。
- * 
- * 处理流程：
- * 1. 归一化：将人脸坐标转换为 0-1 范围
- * 2. 旋转补偿：根据设备旋转角度调整坐标
- * 3. 镜像处理：前置摄像头需要水平翻转
- * 4. FIT_CENTER 映射：计算 PreviewView 实际渲染区域
- * 5. 输出屏幕坐标
- * 
- * @param faceX 人脸中心 X 坐标（图像坐标系）
- * @param faceY 人脸中心 Y 坐标（图像坐标系）
- * @param imageWidth 图像宽度
- * @param imageHeight 图像高度
- * @param previewView PreviewView 实例
- * @param rotationDegrees 图像旋转角度
- * @param lensFacing 摄像头方向
- * @return 屏幕坐标 Offset
- */
-private fun transformCoordinate(
-    x: Float,
-    y: Float,
-    imageWidth: Int,
-    imageHeight: Int,
-    previewWidth: Int,
-    previewHeight: Int,
-    rotationDegrees: Int,
-    lensFacing: Int
-): Pair<Float, Float> {
-    // 简化版坐标转换（用于兼容性调用）
-    val normalizedX = x / imageWidth
-    val normalizedY = y / imageHeight
-    
-    val (rotatedX, rotatedY) = when (rotationDegrees) {
-        90 -> Pair(normalizedY, 1f - normalizedX)
-        180 -> Pair(1f - normalizedX, 1f - normalizedY)
-        270 -> Pair(1f - normalizedY, normalizedX)
-        else -> Pair(normalizedX, normalizedY)
-    }
-    
-    val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-        1f - rotatedX
-    } else {
-        rotatedX
-    }
-    
-    val finalX = mirroredX * previewWidth
-    val finalY = rotatedY * previewHeight
-    
-    return Pair(finalX, finalY)
 }
 
 /**
