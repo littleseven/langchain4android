@@ -2,7 +2,6 @@ package com.picme.core.image
 
 import android.graphics.SurfaceTexture
 import android.util.Log
-import android.view.SurfaceHolder
 import android.view.View
 
 /**
@@ -56,9 +55,9 @@ class CameraPreviewRenderer {
     /** 渲染视图（TextureView 或 SurfaceView） */
     private var renderView: View? = null
     
-    /** 表面回调（SurfaceView 用） */
-    private var surfaceCallback: SurfaceHolder.Callback? = null
-    
+    @Volatile
+    private var frameAvailable: Boolean = false
+
     /** 纹理可用监听器 */
     interface OnTextureAvailableListener {
         fun onTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int)
@@ -107,7 +106,11 @@ class CameraPreviewRenderer {
         // 5. 创建 SurfaceTexture 绑定到外部纹理（关键修复！）
         // 注意：不使用 TextureView 的 surfaceTexture，而是创建新的 SurfaceTexture
         // 这个 SurfaceTexture 会接收相机帧并更新到我们的外部纹理
-        surfaceTexture = SurfaceTexture(textureId)
+        surfaceTexture = SurfaceTexture(textureId).apply {
+            setOnFrameAvailableListener {
+                frameAvailable = true
+            }
+        }
         Log.d(TAG, "Created SurfaceTexture bound to external texture: ${surfaceTexture.hashCode()}, textureId=$textureId")
         
         // 6. 初始化 BeautyRenderer（离屏渲染）
@@ -171,8 +174,13 @@ class CameraPreviewRenderer {
      * @param surface 输出 Surface
      */
     fun setRenderSurface(surface: android.view.Surface) {
-        Log.d(TAG, "Setting render surface")
-            
+        if (!surface.isValid) {
+            Log.w(TAG, "Ignore invalid render surface")
+            return
+        }
+
+        Log.d(TAG, "Setting render surface: hash=${surface.hashCode()}")
+
         // 释放旧的 Surface
         windowSurface?.release()
             
@@ -189,7 +197,7 @@ class CameraPreviewRenderer {
      * 启动渲染线程
      */
     private fun startRendering() {
-        if (isRendering) {
+        if (renderThread?.isAlive == true) {
             Log.d(TAG, "Render thread already running")
             return
         }
@@ -200,97 +208,97 @@ class CameraPreviewRenderer {
             Log.d(TAG, "Render thread started")
                 
             var frameCount = 0
-            var consecutiveErrors = 0
             var framesReceived = 0
-            var lastFrameTime = 0L
-            
-            while (isRendering && !Thread.interrupted()) {
-                try {
-                    // 关键：先使 WindowSurface 的 EGL 上下文当前化
-                    windowSurface?.let { ws ->
-                        eglCore.makeCurrent(ws.getEglSurface(), eglContext!!)
-                    }
-                    
-                    // 1. 更新 SurfaceTexture（从相机获取新帧）
-                    surfaceTexture?.updateTexImage()
-                    framesReceived++
-                    consecutiveErrors = 0  // 成功，重置错误计数
-                    
-                    val currentTime = System.currentTimeMillis()
-                    if (framesReceived == 1) {
-                        Log.d(TAG, "=========================================")
-                        Log.d(TAG, "🎉 First frame received! Starting render loop.")
-                        Log.d(TAG, "Total frames: $framesReceived, textureId=$textureId")
-                        Log.d(TAG, "=========================================")
-                    }
-                    
-                    // 统计帧率
-                    if (framesReceived % 30 == 0) {
-                        val elapsed = currentTime - lastFrameTime
-                        val fps = if (elapsed > 0) 30000 / elapsed else 0
-                        Log.d(TAG, "Received $framesReceived frames in ${elapsed}ms (~${fps}fps)")
-                        lastFrameTime = currentTime
-                    }
-                    
-                    // 2. 获取变换矩阵
-                    val transformMatrix = FloatArray(16)
-                    surfaceTexture?.getTransformMatrix(transformMatrix)
-                    
-                    // 3. 绑定外部纹理（注意：textureId 已经在 init 时绑定到 SurfaceTexture）
-                    android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
-                    android.opengl.GLES20.glBindTexture(
-                        android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                        textureId
-                    )
-                    
-                    // 4. 设置纹理变换矩阵
-                    beautyRenderer.setTextureTransform(transformMatrix)
-                    
-                    // 关键：每帧刷新 viewport，避免部分设备默认 viewport 为 0 导致黑屏
-                    val outputWidth = renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
-                    val outputHeight = renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
-                    android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
+            var lastFrameTime = System.currentTimeMillis()
 
-                    // 5. 渲染
-                    beautyRenderer.onRender()
-                    
-                    // 6. 交换缓冲区
-                    windowSurface?.swapBuffers()
-                    
-                    frameCount++
-                    if (frameCount % 30 == 0) {
-                        Log.d(TAG, "Rendered $frameCount frames, textureId=$textureId")
+            try {
+                while (isRendering && !Thread.interrupted()) {
+                    if (!frameAvailable) {
+                        if (!safeSleep(1)) {
+                            break
+                        }
+                        continue
                     }
                     
-                    if (!safeSleep(16)) {
-                        break
-                    } // ~60fps
+                    try {
+                        val ws = windowSurface
+                        val context = eglContext
+                        if (ws == null || context == null) {
+                            if (!safeSleep(5)) {
+                                break
+                            }
+                            continue
+                        }
 
-                } catch (e: IllegalStateException) {
-                    // SurfaceTexture 未就绪，等待相机帧
-                    consecutiveErrors++
-                    if (consecutiveErrors <= 10) {
-                        Log.v(TAG, "Waiting for camera frame (attempt $consecutiveErrors)")
-                    } else if (consecutiveErrors == 11) {
-                        Log.w(TAG, "Still waiting for camera frame after 1 second...")
-                    }
-                    
-                    if (consecutiveErrors > 60) {
-                        Log.e(TAG, "No camera frames received after 6 seconds, stopping render")
-                        break
-                    }
-                    
-                    if (!safeSleep(100)) {
-                        break
-                    }  // 等待相机帧
+                        // 关键：先使 WindowSurface 的 EGL 上下文当前化
+                        eglCore.makeCurrent(ws.getEglSurface(), context)
 
-                } catch (e: Exception) {
-                    Log.e(TAG, "Render error at frame $frameCount: ${e.message}", e)
-                    consecutiveErrors++
+                        // 1. 更新 SurfaceTexture（从相机获取新帧）
+                        surfaceTexture?.updateTexImage()
+                        frameAvailable = false
+                        framesReceived++
+
+                        val currentTime = System.currentTimeMillis()
+                        if (framesReceived == 1) {
+                            Log.d(TAG, "First frame received, rendering started. textureId=$textureId")
+                        }
+
+                        // 统计帧率
+                        if (framesReceived % 30 == 0) {
+                            val elapsed = currentTime - lastFrameTime
+                            val fps = if (elapsed > 0) 30000 / elapsed else 0
+                            Log.d(TAG, "Received $framesReceived frames in ${elapsed}ms (~${fps}fps)")
+                            lastFrameTime = currentTime
+                        }
+
+                        // 2. 获取变换矩阵
+                        val transformMatrix = FloatArray(16)
+                        surfaceTexture?.getTransformMatrix(transformMatrix)
+
+                        // 3. 绑定外部纹理
+                        android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
+                        android.opengl.GLES20.glBindTexture(
+                            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                            textureId
+                        )
+
+                        // 4. 设置纹理变换矩阵
+                        beautyRenderer.setTextureTransform(transformMatrix)
+
+                        // 5. 刷新 viewport，避免默认 viewport 为 0 导致黑屏
+                        val outputWidth = renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
+                        val outputHeight = renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
+                        android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
+
+                        // 6. 渲染与交换缓冲
+                        beautyRenderer.onRender()
+                        ws.swapBuffers()
+
+                        frameCount++
+                        if (frameCount % 30 == 0) {
+                            Log.d(TAG, "Rendered $frameCount frames, textureId=$textureId")
+                        }
+                    } catch (e: IllegalStateException) {
+                        // SurfaceTexture 未就绪，等待下一帧
+                        frameAvailable = false
+                        if (frameCount == 0 || frameCount % 60 == 0) {
+                            Log.w(TAG, "SurfaceTexture not ready yet: ${e.message}")
+                        }
+                        if (!safeSleep(16)) {
+                            break
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Render error at frame $frameCount: ${e.message}", e)
+                        if (!safeSleep(16)) {
+                            break
+                        }
+                    }
                 }
+            } finally {
+                isRendering = false
+                renderThread = null
+                Log.d(TAG, "Render thread stopped after $frameCount frames")
             }
-            
-            Log.d(TAG, "Render thread stopped after $frameCount frames")
         }.apply {
             name = "CameraPreviewRender"
             priority = Thread.MAX_PRIORITY
@@ -386,6 +394,7 @@ class CameraPreviewRenderer {
         
         // 停止渲染线程
         isRendering = false
+        frameAvailable = false
         renderThread?.interrupt()
         renderThread = null
         
@@ -401,6 +410,7 @@ class CameraPreviewRenderer {
         }
         
         // 释放 SurfaceTexture
+        surfaceTexture?.setOnFrameAvailableListener(null)
         surfaceTexture?.release()
         surfaceTexture = null
         

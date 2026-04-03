@@ -867,7 +867,7 @@ fun CameraContent(
         Logger.d("Camera", "PixelFree initialization requested")
     }
 
-    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal) {
+    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal, faceDetector) {
         bindCameraUseCases(
             context = context,
             lifecycleOwner = lifecycleOwner,
@@ -929,17 +929,21 @@ CameraPreviewContent(
 
             AndroidView(
                 factory = { context ->
+                    android.util.Log.d("PicMe:Camera", "AndroidView factory creating FrameLayout")
                     FrameLayout(context)
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { container ->
                     val targetView = if (useProviderRenderView) {
+                        android.util.Log.d("PicMe:Camera", "AndroidView update: useProviderRenderView=true, rPlanPreviewView=$rPlanPreviewView")
                         rPlanPreviewView ?: previewView
                     } else {
+                        android.util.Log.d("PicMe:Camera", "AndroidView update: useProviderRenderView=false, using previewView")
                         previewView
                     }
 
                     if (targetView.parent !== container) {
+                        android.util.Log.d("PicMe:Camera", "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
                         (targetView.parent as? ViewGroup)?.removeView(targetView)
                         container.removeAllViews()
                         container.addView(
@@ -949,6 +953,8 @@ CameraPreviewContent(
                                 FrameLayout.LayoutParams.MATCH_PARENT
                             )
                         )
+                    } else {
+                        android.util.Log.d("PicMe:Camera", "AndroidView update: targetView already in container, skip adding")
                     }
                 }
             )
@@ -1128,6 +1134,7 @@ private fun bindCameraUseCases(
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit
 ) {
+    android.util.Log.d("PicMe:Camera", "bindCameraUseCases START: aspectRatio=$aspectRatio, captureMode=$captureMode")
     val cameraProvider = cameraProviderFuture.get()
     Logger.d("Camera", "Binding camera with aspectRatio=$aspectRatio")
 
@@ -1180,7 +1187,13 @@ private fun bindCameraUseCases(
         null
     }
 
+    var frameCount = 0
     imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+        frameCount++
+        if (frameCount % 30 == 0) {
+            android.util.Log.d("PicMe:Camera", "ImageAnalysis frame received: #${frameCount}")
+            Logger.d("Camera", "ImageAnalysis frame received: #${frameCount}")
+        }
         handleImageAnalysisFrame(
             imageProxy = imageProxy,
             previewView = previewView,
@@ -1230,7 +1243,11 @@ private fun bindCameraUseCases(
             onZoomRatioChanged(state.zoomRatio)
         }
         onActualLensFacingChanged(camera.cameraInfo.lensFacing)
-        Logger.d("PicMe:Camera", "Camera bound: lensFacing=${camera.cameraInfo.lensFacing}, selector=$lensFacing")
+        Logger.d(
+            "PicMe:Camera",
+            "Camera bound: lensFacing=${camera.cameraInfo.lensFacing}, selector=$lensFacing, " +
+                "useCaseGroup=${useCaseGroup != null}, aspectRatio=$aspectRatio"
+        )
     } catch (error: Exception) {
         Logger.e("Camera", "Binding failed", error)
     }
@@ -1249,19 +1266,26 @@ private fun handleImageAnalysisFrame(
 ) {
     try {
         val mediaImage = imageProxy.image
-        if (mediaImage == null || previewView.width <= 0 || previewView.height <= 0) {
+        if (mediaImage == null) {
             imageProxy.close()
             return
         }
 
+        val fallbackPreviewWidth = previewView.width.takeIf { width -> width > 0 }?.toFloat()
+            ?: imageProxy.width.toFloat()
+        val fallbackPreviewHeight = previewView.height.takeIf { height -> height > 0 }?.toFloat()
+            ?: imageProxy.height.toFloat()
+
         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+
         faceDetector.process(image)
             .addOnSuccessListener { faces ->
+                android.util.Log.d("PicMe:Camera", "Face detection success: ${faces.size} faces found")
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val bounds = face.boundingBox
-                    val previewWidth = previewView.width.toFloat()
-                    val previewHeight = previewView.height.toFloat()
+                    val previewWidth = fallbackPreviewWidth
+                    val previewHeight = fallbackPreviewHeight
                     val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
                     val screenPoint = transformFaceCoordinateSimple(
@@ -1320,22 +1344,29 @@ private fun handleImageAnalysisFrame(
                         maxOf(bounds.width().toFloat() / imageProxy.width.toFloat(), 0.16f)
                     ).coerceIn(0.12f, 0.38f)
 
-                    onFaceWarpParamsChanged(
-                        FaceWarpParams(
-                            faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
-                            faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
-                            leftEyeX = (leftEyePoint.x / previewWidth).coerceIn(0f, 1f),
-                            leftEyeY = (leftEyePoint.y / previewHeight).coerceIn(0f, 1f),
-                            rightEyeX = (rightEyePoint.x / previewWidth).coerceIn(0f, 1f),
-                            rightEyeY = (rightEyePoint.y / previewHeight).coerceIn(0f, 1f),
-                            faceRadius = faceRadius,
-                            hasFace = true
-                        )
+                    val faceWarpParams = FaceWarpParams(
+                        faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
+                        faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
+                        leftEyeX = (leftEyePoint.x / previewWidth).coerceIn(0f, 1f),
+                        leftEyeY = (leftEyePoint.y / previewHeight).coerceIn(0f, 1f),
+                        rightEyeX = (rightEyePoint.x / previewWidth).coerceIn(0f, 1f),
+                        rightEyeY = (rightEyePoint.y / previewHeight).coerceIn(0f, 1f),
+                        faceRadius = faceRadius,
+                        hasFace = true
+                    )
+                    onFaceWarpParamsChanged(faceWarpParams)
+                    android.util.Log.d(
+                        "PicMe:Camera",
+                        "Face warp params updated: center=(${faceWarpParams.faceCenterX},${faceWarpParams.faceCenterY}), " +
+                            "radius=${faceWarpParams.faceRadius}, hasFace=${faceWarpParams.hasFace}"
                     )
                 } else {
                     onShowFocusIndicatorChanged(false)
                     onFaceWarpParamsChanged(FaceWarpParams())
                 }
+            }
+            .addOnFailureListener { e ->
+                android.util.Log.e("PicMe:Camera", "Face detection failed: ${e.message}", e)
             }
             .addOnCompleteListener {
                 if (beautySettings.enabled && beautySettings.hasAnyEffect()) {

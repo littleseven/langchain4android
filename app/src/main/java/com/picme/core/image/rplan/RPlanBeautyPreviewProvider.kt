@@ -131,7 +131,7 @@ class RPlanBeautyPreviewProvider(
         view.smoothingStrength = (settings.smoothing / 100f).coerceIn(0f, 1f)
         view.whiteningStrength = (settings.whitening / 100f).coerceIn(0f, 1f)
         view.bigEyesStrength = (settings.bigEyes / 100f).coerceIn(0f, 1f)
-        view.slimFaceStrength = (settings.slimFace / 50f).coerceIn(-1f, 1f)
+        view.slimFaceStrength = (settings.slimFace / 50f * 1.35f).coerceIn(-1f, 1f)
     }
 }
 

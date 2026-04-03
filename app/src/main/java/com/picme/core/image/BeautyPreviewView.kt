@@ -5,14 +5,15 @@ import android.graphics.SurfaceTexture
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Surface
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
 
 /**
  * R Plan 预览视图：
  * - CameraX 输入 Surface 与显示 Surface 明确分离
- * - 显示层固定为本视图内部 TextureView，避免依赖 PreviewView 内部实现
+ * - 显示层使用 SurfaceView，确保 Surface 创建可靠
  */
 class BeautyPreviewView @JvmOverloads constructor(
     context: Context,
@@ -24,7 +25,7 @@ class BeautyPreviewView @JvmOverloads constructor(
     }
     
     private val renderer: CameraPreviewRenderer = CameraPreviewRenderer()
-    private val textureView: TextureView = TextureView(context)
+    private val surfaceView: SurfaceView = SurfaceView(context)
 
     private var cameraSurface: Surface? = null
     private var displaySurface: Surface? = null
@@ -66,36 +67,34 @@ class BeautyPreviewView @JvmOverloads constructor(
         }
     
     init {
-        textureView.layoutParams = LayoutParams(
+        surfaceView.layoutParams = LayoutParams(
             LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT
         )
-        textureView.setLayerType(LAYER_TYPE_HARDWARE, null)
-        addView(textureView)
+        // 关键：设置 Z-order 确保 SurfaceView 正确参与 Surface 合成
+        surfaceView.setZOrderMediaOverlay(true)
+        addView(surfaceView)
 
-        textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                Log.d(TAG, "Display TextureView ready: ${width}x${height}")
+        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                val surface = holder.surface
+                Log.d(TAG, "Display SurfaceView ready: ${surfaceView.width}x${surfaceView.height}, surface=$surface")
                 ensureRendererInitialized()
                 bindDisplaySurface(surface)
             }
 
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-                Log.d(TAG, "Display TextureView resized: ${width}x${height}")
-                bindDisplaySurface(surface)
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                Log.d(TAG, "Display SurfaceView changed: ${width}x${height}")
+                bindDisplaySurface(holder.surface)
             }
 
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                Log.d(TAG, "Display TextureView destroyed")
-                displaySurface?.release()
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                Log.d(TAG, "Display SurfaceView destroyed")
                 displaySurface = null
-                return true
             }
+        })
 
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
-        }
-        
-        Log.d(TAG, "BeautyPreviewView created with dedicated TextureView")
+        Log.d(TAG, "BeautyPreviewView created with dedicated SurfaceView")
     }
     
     /** 预热链路：用于 CameraX 请求输入 Surface 前初始化 renderer */
@@ -108,20 +107,23 @@ class BeautyPreviewView @JvmOverloads constructor(
             return
         }
 
-        renderer.init(textureView)
+        renderer.init(surfaceView)
         isRendererInitialized = true
         updateBeautyParams()
         Log.d(TAG, "Renderer initialized")
     }
 
-    private fun bindDisplaySurface(surfaceTexture: SurfaceTexture) {
-        if (!isRendererInitialized) {
+    private fun bindDisplaySurface(surface: Surface) {
+        if (!isRendererInitialized || !surface.isValid) {
             return
         }
         
-        displaySurface?.release()
-        displaySurface = Surface(surfaceTexture)
-        renderer.setRenderSurface(displaySurface!!)
+        if (displaySurface === surface) {
+            return
+        }
+
+        displaySurface = surface
+        renderer.setRenderSurface(surface)
     }
     
     fun getSurfaceTexture(): SurfaceTexture? {
@@ -179,19 +181,32 @@ class BeautyPreviewView @JvmOverloads constructor(
         )
     }
     
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        Log.d(TAG, "BeautyPreviewView attached to window")
+
+        // 关键：在视图附加到窗口后，强制检查 SurfaceView 的 Surface 状态
+        // 某些设备上 SurfaceView 的 surfaceCreated 回调可能不会立即触发
+        post {
+            val holder = surfaceView.holder
+            val surface = holder.surface
+            Log.d(TAG, "Post check: surface=$surface, isValid=${surface?.isValid}")
+            if (surface != null && surface.isValid) {
+                Log.d(TAG, "Surface already valid, binding display surface")
+                ensureRendererInitialized()
+                bindDisplaySurface(surface)
+            } else {
+                Log.w(TAG, "Surface not yet valid, waiting for surfaceCreated callback")
+            }
+        }
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-
-        displaySurface?.release()
+        Log.d(TAG, "BeautyPreviewView detached from window")
+        // 注意：不要在这里释放渲染器，因为视图可能会被重新附加
+        // SurfaceView 的 Surface 会自动释放
         displaySurface = null
-
-        cameraSurface?.release()
-        cameraSurface = null
-
-        renderer.release()
-        isRendererInitialized = false
-
-        Log.d(TAG, "BeautyPreviewView released")
     }
     
     override fun onVisibilityChanged(changedView: View, visibility: Int) {

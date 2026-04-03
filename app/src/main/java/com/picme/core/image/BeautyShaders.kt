@@ -75,8 +75,9 @@ object BeautyShaders {
                 return uv;
             }
             float percent = 1.0 - dist / radius;
-            float horizontal = intensity * percent * 0.12;
-            uv.x -= sign(dir.x) * abs(dir.x) * horizontal;
+            // 使用二次衰减并按半径归一化位移，提升瘦脸可见度
+            float horizontal = intensity * percent * percent * 0.45;
+            uv.x -= sign(dir.x) * horizontal * radius;
             return uv;
         }
             
@@ -163,8 +164,9 @@ object BeautyShaders {
                 return uv;
             }
             float percent = 1.0 - dist / radius;
-            float horizontal = intensity * percent * 0.12;
-            uv.x -= sign(dir.x) * abs(dir.x) * horizontal;
+            // 使用二次衰减并按半径归一化位移，提升瘦脸可见度
+            float horizontal = intensity * percent * percent * 0.45;
+            uv.x -= sign(dir.x) * horizontal * radius;
             return uv;
         }
 

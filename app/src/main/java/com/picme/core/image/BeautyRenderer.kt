@@ -62,6 +62,9 @@ class BeautyRenderer : GLRenderer() {
     /** 对比度 (0.5 - 1.5, 1.0 为原始) */
     private var contrast: Float = 1.0f
     
+    /** 渲染帧计数器 */
+    private var renderFrameCount: Long = 0
+
     /** Uniform 位置缓存 */
     private var uSmoothingLocation: Int = -1
     private var uWhiteningLocation: Int = -1
@@ -112,7 +115,7 @@ class BeautyRenderer : GLRenderer() {
         whiteningStrength = whitening.coerceIn(0f, 1f)
         bigEyesStrength = bigEyes.coerceIn(0f, 1f)
         slimFaceStrength = slimFace.coerceIn(-1f, 1f)
-        Log.v(
+        Log.d(
             TAG,
             "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
                 "bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength"
@@ -137,6 +140,12 @@ class BeautyRenderer : GLRenderer() {
         this.rightEyeY = rightEyeY.coerceIn(0f, 1f)
         this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
         this.hasFace = if (hasFace) 1f else 0f
+        Log.d(
+            TAG,
+            "FaceWarp params received: center=(${this.faceCenterX}, ${this.faceCenterY}), " +
+                "leftEye=(${this.leftEyeX}, ${this.leftEyeY}), rightEye=(${this.rightEyeX}, ${this.rightEyeY}), " +
+                "radius=${this.faceRadius}, hasFace=${this.hasFace}, slimFace=$slimFaceStrength, bigEyes=$bigEyesStrength"
+        )
     }
 
     /**
@@ -168,6 +177,13 @@ class BeautyRenderer : GLRenderer() {
         // 初始化 Uniform 位置
         initUniformLocations()
         
+        // 关键日志：每60帧输出一次当前状态
+        if (renderFrameCount % 60 == 0L) {
+            Log.d(TAG, "onBeforeRender: hasFace=$hasFace, slimFace=$slimFaceStrength, bigEyes=$bigEyesStrength, " +
+                "center=($faceCenterX, $faceCenterY), radius=$faceRadius")
+        }
+        renderFrameCount++
+
         // 设置 Uniform 值
         when (renderMode) {
             MODE_BEAUTY -> {
