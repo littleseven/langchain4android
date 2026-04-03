@@ -25,6 +25,9 @@ class RPlanBeautyPreviewProvider(
     private var previewSurface: Surface? = null
     private var isInitialized = false
     private var lastSettings: BeautySettings = BeautySettings()
+    private var cameraInputWidth: Int = 1280
+    private var cameraInputHeight: Int = 720
+    private var isFillCenter: Boolean = true
 
     fun initialize() {
         if (isInitialized) {
@@ -41,6 +44,8 @@ class RPlanBeautyPreviewProvider(
     }
 
     override fun createPreviewSurface(): Surface {
+        beautyPreviewView?.setScaleMode(isFillCenter)
+        beautyPreviewView?.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
         if (!isInitialized) {
             initialize()
         }
@@ -116,6 +121,20 @@ class RPlanBeautyPreviewProvider(
     }
 
     fun getView(): BeautyPreviewView? = beautyPreviewView
+
+    fun setCameraInputBufferSize(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) {
+            return
+        }
+        cameraInputWidth = width
+        cameraInputHeight = height
+        beautyPreviewView?.setCameraInputBufferSize(width, height)
+    }
+
+    fun setScaleMode(isFillCenter: Boolean) {
+        this.isFillCenter = isFillCenter
+        beautyPreviewView?.setScaleMode(isFillCenter)
+    }
 
     private fun applyBeautySettings(settings: BeautySettings) {
         val view = beautyPreviewView ?: return

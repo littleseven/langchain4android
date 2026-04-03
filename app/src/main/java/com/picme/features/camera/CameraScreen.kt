@@ -123,7 +123,7 @@ val strategy: BeautyStrategy
 /**
 * @return true 表示预览绑定到了自定义渲染 Surface，需要显示 provider 自带 View。
 */
-fun bindPreview(previewUseCase: Preview): Boolean
+fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean
 
 fun applyBeautySettings(settings: BeautySettings)
 
@@ -139,7 +139,7 @@ private class PixelFreePreviewStrategy(
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.PIXEL_FREE
 
-override fun bindPreview(previewUseCase: Preview): Boolean {
+override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
 previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
 runCatching {
 rPlanPreviewProvider.initialize()
@@ -193,24 +193,32 @@ private class RPlanPreviewStrategy(
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.R_PLAN
 
-override fun bindPreview(previewUseCase: Preview): Boolean {
-return try {
-rPlanPreviewProvider.initialize()
-val previewSurface = rPlanPreviewProvider.createPreviewSurface()
-val mainExecutor = ContextCompat.getMainExecutor(previewView.context)
-previewUseCase.setSurfaceProvider { request ->
-request.provideSurface(previewSurface, mainExecutor) { result ->
-Logger.d("Camera", "R Plan surface request completed: $result")
-}
-}
-Logger.i("Camera", "Preview connected via R Plan provider surface")
-true
-} catch (error: Throwable) {
-Logger.w("Camera", "R Plan warm-up failed, fallback to PreviewView", error)
-previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
-onWarmUpFallback(error.message ?: "warm-up error")
-false
-}
+override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
+    return try {
+        rPlanPreviewProvider.initialize()
+        rPlanPreviewProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
+
+        val mainExecutor = ContextCompat.getMainExecutor(previewView.context)
+        previewUseCase.setSurfaceProvider { request ->
+            val resolution = request.resolution
+            rPlanPreviewProvider.setCameraInputBufferSize(
+                width = resolution.width,
+                height = resolution.height
+            )
+            val previewSurface = rPlanPreviewProvider.createPreviewSurface()
+            request.provideSurface(previewSurface, mainExecutor) { result ->
+                Logger.d("Camera", "R Plan surface request completed: $result")
+            }
+        }
+
+        Logger.i("Camera", "Preview connected via R Plan provider surface, aspectRatio=$aspectRatio")
+        true
+    } catch (error: Throwable) {
+        Logger.w("Camera", "R Plan warm-up failed, fallback to PreviewView", error)
+        previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+        onWarmUpFallback(error.message ?: "warm-up error")
+        false
+    }
 }
 
 override fun applyBeautySettings(settings: BeautySettings) {
@@ -654,7 +662,7 @@ fun CameraContent(
     var useProviderRenderView by remember { mutableStateOf(false) }
 
     val bindPreviewSurfaceProvider: (Preview) -> Unit = { previewUseCase ->
-        useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase)
+        useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase, aspectRatio)
     }
 
     LaunchedEffect(useProviderRenderView, beautyStrategy, previewRebindSignal) {

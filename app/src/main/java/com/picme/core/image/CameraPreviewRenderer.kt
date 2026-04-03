@@ -52,6 +52,15 @@ class CameraPreviewRenderer {
     /** OpenGL 纹理 ID */
     private var textureId: Int = -1
     
+    @Volatile
+    private var cameraInputWidth: Int = DEFAULT_WIDTH
+
+    @Volatile
+    private var cameraInputHeight: Int = DEFAULT_HEIGHT
+
+    @Volatile
+    private var isFillCenter: Boolean = true
+
     /** 渲染视图（TextureView 或 SurfaceView） */
     private var renderView: View? = null
     
@@ -265,10 +274,10 @@ class CameraPreviewRenderer {
                         // 4. 设置纹理变换矩阵
                         beautyRenderer.setTextureTransform(transformMatrix)
 
-                        // 5. 刷新 viewport，避免默认 viewport 为 0 导致黑屏
+                        // 5. 根据输入输出比例设置 viewport，避免拉伸
                         val outputWidth = renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
                         val outputHeight = renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
-                        android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
+                        applyViewport(outputWidth, outputHeight)
 
                         // 6. 渲染与交换缓冲
                         beautyRenderer.onRender()
@@ -315,6 +324,62 @@ class CameraPreviewRenderer {
             Log.i(TAG, "Render thread interrupted while sleeping")
             false
         }
+    }
+
+    fun setCameraInputBufferSize(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) {
+            return
+        }
+        cameraInputWidth = width
+        cameraInputHeight = height
+    }
+
+    fun setScaleMode(isFillCenter: Boolean) {
+        this.isFillCenter = isFillCenter
+    }
+
+    private fun applyViewport(outputWidth: Int, outputHeight: Int) {
+        val safeOutputWidth = outputWidth.coerceAtLeast(1)
+        val safeOutputHeight = outputHeight.coerceAtLeast(1)
+
+        val rawSourceAspect = cameraInputWidth.toFloat() / cameraInputHeight.toFloat()
+        val rotatedSourceAspect = cameraInputHeight.toFloat() / cameraInputWidth.toFloat()
+        val outputAspect = safeOutputWidth.toFloat() / safeOutputHeight.toFloat()
+
+        // SurfaceRequest.resolution 在竖屏下可能仍按传感器横向返回，
+        // 这里选择更接近当前输出容器的比例，避免人物横向拉伸。
+        val sourceAspect = if (
+            kotlin.math.abs(rotatedSourceAspect - outputAspect) < kotlin.math.abs(rawSourceAspect - outputAspect)
+        ) {
+            rotatedSourceAspect
+        } else {
+            rawSourceAspect
+        }
+
+        val viewportWidth: Int
+        val viewportHeight: Int
+
+        if (isFillCenter) {
+            if (sourceAspect > outputAspect) {
+                viewportHeight = safeOutputHeight
+                viewportWidth = (safeOutputHeight * sourceAspect).toInt().coerceAtLeast(1)
+            } else {
+                viewportWidth = safeOutputWidth
+                viewportHeight = (safeOutputWidth / sourceAspect).toInt().coerceAtLeast(1)
+            }
+        } else {
+            if (sourceAspect > outputAspect) {
+                viewportWidth = safeOutputWidth
+                viewportHeight = (safeOutputWidth / sourceAspect).toInt().coerceAtLeast(1)
+            } else {
+                viewportHeight = safeOutputHeight
+                viewportWidth = (safeOutputHeight * sourceAspect).toInt().coerceAtLeast(1)
+            }
+        }
+
+        val x = (safeOutputWidth - viewportWidth) / 2
+        val y = (safeOutputHeight - viewportHeight) / 2
+        android.opengl.GLES20.glViewport(x, y, viewportWidth, viewportHeight)
     }
 
     /**

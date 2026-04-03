@@ -30,6 +30,9 @@ class BeautyPreviewView @JvmOverloads constructor(
     private var cameraSurface: Surface? = null
     private var displaySurface: Surface? = null
     private var isRendererInitialized = false
+    private var cameraInputWidth: Int = 1280
+    private var cameraInputHeight: Int = 720
+    private var isFillCenter: Boolean = true
 
     /** 磨皮强度 */
     var smoothingStrength: Float = 0.5f
@@ -108,6 +111,8 @@ class BeautyPreviewView @JvmOverloads constructor(
         }
 
         renderer.init(surfaceView)
+        renderer.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
+        renderer.setScaleMode(isFillCenter)
         isRendererInitialized = true
         updateBeautyParams()
         Log.d(TAG, "Renderer initialized")
@@ -133,10 +138,15 @@ class BeautyPreviewView @JvmOverloads constructor(
     fun getSurfaceForCamera(): Surface? {
         ensureRendererInitialized()
 
+        renderer.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
+        renderer.getSurfaceTexture()?.setDefaultBufferSize(cameraInputWidth, cameraInputHeight)
+
         if (cameraSurface == null) {
-            renderer.getSurfaceTexture()?.setDefaultBufferSize(1920, 1080)
             cameraSurface = renderer.getSurfaceForCamera()
-            Log.d(TAG, "Created camera input surface: ${cameraSurface?.hashCode()}")
+            Log.d(
+                TAG,
+                "Created camera input surface: ${cameraSurface?.hashCode()}, buffer=${cameraInputWidth}x$cameraInputHeight"
+            )
         }
         
         return cameraSurface
@@ -155,6 +165,27 @@ class BeautyPreviewView @JvmOverloads constructor(
         )
     }
     
+    fun setCameraInputBufferSize(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) {
+            return
+        }
+
+        cameraInputWidth = width
+        cameraInputHeight = height
+        if (isRendererInitialized) {
+            renderer.setCameraInputBufferSize(width, height)
+            renderer.getSurfaceTexture()?.setDefaultBufferSize(width, height)
+        }
+    }
+
+    fun setScaleMode(isFillCenter: Boolean) {
+        this.isFillCenter = isFillCenter
+        if (!isRendererInitialized) {
+            return
+        }
+        renderer.setScaleMode(isFillCenter)
+    }
+
     fun updateFaceWarpParams(
         faceCenterX: Float,
         faceCenterY: Float,
