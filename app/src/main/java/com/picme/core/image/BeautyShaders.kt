@@ -97,6 +97,25 @@ object BeautyShaders {
             return clamp(warped, 0.0, 1.0);
         }
             
+        float skinMask(vec2 uv) {
+            if (uHasFace < 0.5) {
+                return 0.0;
+            }
+
+            // 使用椭圆区域近似人脸皮肤区域，避免整帧被磨皮。
+            vec2 delta = uv - uFaceCenter;
+            delta.y *= 1.22;
+            float faceDist = length(delta) / max(uFaceRadius, 0.001);
+            float faceArea = 1.0 - smoothstep(0.72, 1.05, faceDist);
+
+            // 保留眼周细节，避免大眼区域被过度磨平。
+            float eyeRadius = max(uFaceRadius * 0.18, 0.04);
+            float leftEyeKeep = smoothstep(eyeRadius, eyeRadius * 0.55, length(uv - uLeftEye));
+            float rightEyeKeep = smoothstep(eyeRadius, eyeRadius * 0.55, length(uv - uRightEye));
+
+            return clamp(faceArea * leftEyeKeep * rightEyeKeep, 0.0, 1.0);
+        }
+
         vec4 smoothSkin(vec2 uv, float intensity) {
             vec4 color = texture2D(uTexture, uv);
             vec4 color1 = texture2D(uTexture, uv + vec2(0.008, 0.0));
@@ -104,19 +123,21 @@ object BeautyShaders {
             vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.008));
             vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.008));
             vec4 avgColor = (color + color1 + color2 + color3 + color4) / 5.0;
-            return mix(color, avgColor, intensity);
+            float mask = skinMask(uv);
+            return mix(color, avgColor, intensity * mask);
         }
         
-        vec4 whitenSkin(vec4 color, float intensity) {
-            vec3 whitened = color.rgb * (1.0 + intensity * 0.3);
+        vec4 whitenSkin(vec4 color, float intensity, float mask) {
+            vec3 whitened = color.rgb * (1.0 + intensity * 0.3 * mask);
             whitened = clamp(whitened, 0.0, 1.0);
             return vec4(whitened, color.a);
         }
         
         void main() {
             vec2 warpedUv = warpCoord(vTextureCoord);
+            float mask = skinMask(warpedUv);
             vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
-            vec4 whitened = whitenSkin(smoothed, uWhitening);
+            vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
             gl_FragColor = whitened;
         }
     """.trimIndent()
@@ -186,6 +207,23 @@ object BeautyShaders {
             return clamp(warped, 0.0, 1.0);
         }
 
+        float skinMask(vec2 uv) {
+            if (uHasFace < 0.5) {
+                return 0.0;
+            }
+
+            vec2 delta = uv - uFaceCenter;
+            delta.y *= 1.22;
+            float faceDist = length(delta) / max(uFaceRadius, 0.001);
+            float faceArea = 1.0 - smoothstep(0.72, 1.05, faceDist);
+
+            float eyeRadius = max(uFaceRadius * 0.18, 0.04);
+            float leftEyeKeep = smoothstep(eyeRadius, eyeRadius * 0.55, length(uv - uLeftEye));
+            float rightEyeKeep = smoothstep(eyeRadius, eyeRadius * 0.55, length(uv - uRightEye));
+
+            return clamp(faceArea * leftEyeKeep * rightEyeKeep, 0.0, 1.0);
+        }
+
         vec4 smoothSkin(vec2 uv, float intensity) {
             vec4 color = texture2D(uTexture, uv);
             vec4 color1 = texture2D(uTexture, uv + vec2(0.008, 0.0));
@@ -193,7 +231,8 @@ object BeautyShaders {
             vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.008));
             vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.008));
             vec4 avgColor = (color + color1 + color2 + color3 + color4) / 5.0;
-            return mix(color, avgColor, intensity);
+            float mask = skinMask(uv);
+            return mix(color, avgColor, intensity * mask);
         }
         
         vec4 adjustTone(vec4 color, float warmth, float contrast) {
@@ -207,8 +246,9 @@ object BeautyShaders {
         
         void main() {
             vec2 warpedUv = warpCoord(vTextureCoord);
+            float mask = skinMask(warpedUv);
             vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
-            vec4 whitened = smoothed * (1.0 + uWhitening * 0.3);
+            vec4 whitened = smoothed * (1.0 + uWhitening * 0.3 * mask);
             vec4 toned = adjustTone(whitened, uWarmth, uContrast);
             gl_FragColor = toned;
         }
