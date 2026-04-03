@@ -28,6 +28,14 @@ class CameraPreviewRenderer {
         const val DEFAULT_HEIGHT = 720
     }
     
+    data class PerfStats(
+        val fps: Float = 0f,
+        val processingMs: Int = 0,
+        val delayMs: Int = 0,
+        val cpuUsage: Float = 0f,
+        val nullFrames: Int = 0
+    )
+
     /** EGL 核心管理类 */
     private val eglCore = EGLCore()
     
@@ -90,6 +98,9 @@ class CameraPreviewRenderer {
     private val latestTextureTransformMatrix = FloatArray(16).apply {
         Matrix.setIdentityM(this, 0)
     }
+
+    @Volatile
+    private var latestPerfStats: PerfStats = PerfStats()
 
     /** 纹理可用监听器 */
     interface OnTextureAvailableListener {
@@ -243,6 +254,10 @@ class CameraPreviewRenderer {
             var frameCount = 0
             var framesReceived = 0
             var lastFrameTime = System.currentTimeMillis()
+            var statsWindowStartMs = System.currentTimeMillis()
+            var statsFrameCount = 0
+            var statsProcessingTotalMs = 0L
+            var statsNullFrames = 0
 
             try {
                 while (isRendering && !Thread.interrupted()) {
@@ -253,6 +268,7 @@ class CameraPreviewRenderer {
                         continue
                     }
                     
+                    val frameStartNs = System.nanoTime()
                     try {
                         val ws = windowSurface
                         val context = eglContext
@@ -316,12 +332,47 @@ class CameraPreviewRenderer {
                         ws.swapBuffers()
 
                         frameCount++
+                        statsFrameCount++
+                        val frameProcessingMs = ((System.nanoTime() - frameStartNs) / 1_000_000L).coerceAtLeast(0L)
+                        statsProcessingTotalMs += frameProcessingMs
+
+                        val statsNowMs = System.currentTimeMillis()
+                        val statsElapsedMs = (statsNowMs - statsWindowStartMs).coerceAtLeast(1L)
+                        if (statsElapsedMs >= 1000L) {
+                            val fps = statsFrameCount * 1000f / statsElapsedMs.toFloat()
+                            val avgProcessingMs = if (statsFrameCount > 0) {
+                                (statsProcessingTotalMs / statsFrameCount).toInt()
+                            } else {
+                                0
+                            }
+                            val frameBudgetMs = if (fps > 0.1f) {
+                                (1000f / fps).toInt()
+                            } else {
+                                0
+                            }
+                            val delayMs = (frameBudgetMs - avgProcessingMs).coerceAtLeast(0)
+                            val cpuUsage = (statsProcessingTotalMs * 100f / statsElapsedMs.toFloat()).coerceIn(0f, 100f)
+                            latestPerfStats = PerfStats(
+                                fps = fps,
+                                processingMs = avgProcessingMs,
+                                delayMs = delayMs,
+                                cpuUsage = cpuUsage,
+                                nullFrames = statsNullFrames
+                            )
+
+                            statsWindowStartMs = statsNowMs
+                            statsFrameCount = 0
+                            statsProcessingTotalMs = 0L
+                            statsNullFrames = 0
+                        }
+
                         if (frameCount % 30 == 0) {
                             Log.d(TAG, "Rendered $frameCount frames, textureId=$textureId")
                         }
                     } catch (e: IllegalStateException) {
                         // SurfaceTexture 未就绪，等待下一帧
                         frameAvailable = false
+                        statsNullFrames++
                         if (frameCount == 0 || frameCount % 60 == 0) {
                             Log.w(TAG, "SurfaceTexture not ready yet: ${e.message}")
                         }
@@ -329,6 +380,7 @@ class CameraPreviewRenderer {
                             break
                         }
                     } catch (e: Exception) {
+                        statsNullFrames++
                         Log.e(TAG, "Render error at frame $frameCount: ${e.message}", e)
                         if (!safeSleep(16)) {
                             break
@@ -515,6 +567,10 @@ class CameraPreviewRenderer {
         beautyRenderer.setRenderMode(mode)
     }
     
+    fun getPerfStats(): PerfStats {
+        return latestPerfStats
+    }
+
     /**
      * 获取 SurfaceTexture（用于 CameraX 绑定）
      */

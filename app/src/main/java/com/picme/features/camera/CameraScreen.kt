@@ -108,6 +108,8 @@ import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -851,6 +853,20 @@ fun CameraContent(
     } else {
         BeautyPreviewStatus.SKIPPED
     }
+    var renderPerfStats by remember {
+        mutableStateOf(com.picme.core.image.CameraPreviewRenderer.PerfStats())
+    }
+
+    LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
+        while (isActive) {
+            renderPerfStats = if (beautyStrategy == BeautyStrategy.R_PLAN && useProviderRenderView) {
+                rPlanPreviewProvider.getPerfStats() ?: com.picme.core.image.CameraPreviewRenderer.PerfStats()
+            } else {
+                com.picme.core.image.CameraPreviewRenderer.PerfStats()
+            }
+            delay(250)
+        }
+    }
 
     LaunchedEffect(currentScene) {
         cameraControl?.let { control ->
@@ -1006,11 +1022,11 @@ CameraPreviewContent(
         beautySettings = beautySettings,
         beautyDebugState = BeautyDebugState(
             status = beautyPreviewStatus,
-            fps = 0f,
-            processingMs = 0,
-            delayMs = 0,
-            cpuUsage = 0f,
-            nullFrames = 0,
+            fps = renderPerfStats.fps,
+            processingMs = renderPerfStats.processingMs,
+            delayMs = renderPerfStats.delayMs,
+            cpuUsage = renderPerfStats.cpuUsage,
+            nullFrames = renderPerfStats.nullFrames,
             persistedFallback = persistedRPlanFallback,
             persistedFallbackReason = persistedRPlanFallbackReason,
             strategy = beautyStrategy,

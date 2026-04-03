@@ -131,6 +131,10 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.setRenderSurface(surface)
     }
     
+    fun getPerfStats(): CameraPreviewRenderer.PerfStats {
+        return renderer.getPerfStats()
+    }
+
     fun getSurfaceTexture(): SurfaceTexture? {
         return renderer.getSurfaceTexture()
     }

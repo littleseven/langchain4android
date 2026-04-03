@@ -136,6 +136,10 @@ class RPlanBeautyPreviewProvider(
         beautyPreviewView?.setScaleMode(isFillCenter)
     }
 
+    fun getPerfStats(): com.picme.core.image.CameraPreviewRenderer.PerfStats? {
+        return beautyPreviewView?.getPerfStats()
+    }
+
     private fun applyBeautySettings(settings: BeautySettings) {
         val view = beautyPreviewView ?: return
 
