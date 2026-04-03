@@ -274,12 +274,17 @@ class CameraPreviewRenderer {
                         // 4. 设置纹理变换矩阵
                         beautyRenderer.setTextureTransform(transformMatrix)
 
-                        // 5. 根据输入输出比例设置 viewport，避免拉伸
+                        // 5. 先清空整屏为黑色，避免比例切换后边缘残影
                         val outputWidth = renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
                         val outputHeight = renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
+                        android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
+                        android.opengl.GLES20.glClearColor(0f, 0f, 0f, 1f)
+                        android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+
+                        // 6. 根据输入输出比例设置 viewport，避免拉伸
                         applyViewport(outputWidth, outputHeight)
 
-                        // 6. 渲染与交换缓冲
+                        // 7. 渲染与交换缓冲
                         beautyRenderer.onRender()
                         ws.swapBuffers()
 
