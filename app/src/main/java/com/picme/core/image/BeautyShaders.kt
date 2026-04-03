@@ -74,11 +74,18 @@ object BeautyShaders {
             if (dist >= radius) {
                 return uv;
             }
+
+            // 使用双眼连线定义脸部“水平”方向，避免竖屏下沿错误轴形变。
+            vec2 eyeAxis = normalize(uRightEye - uLeftEye);
+            if (length(eyeAxis) < 0.0001) {
+                eyeAxis = vec2(1.0, 0.0);
+            }
+
             float percent = 1.0 - dist / radius;
-            // 使用二次衰减并按半径归一化位移，提升瘦脸可见度
-            float horizontal = intensity * percent * percent * 0.45;
-            uv.x -= sign(dir.x) * horizontal * radius;
-            return uv;
+            float strength = intensity * percent * percent * 0.45;
+            float axisOffset = dot(dir, eyeAxis) / max(radius, 0.0001);
+            vec2 offset = eyeAxis * axisOffset * strength * radius;
+            return uv - offset;
         }
             
         vec2 warpCoord(vec2 uv) {
@@ -184,11 +191,18 @@ object BeautyShaders {
             if (dist >= radius) {
                 return uv;
             }
+
+            // 使用双眼连线定义脸部“水平”方向，避免竖屏下沿错误轴形变。
+            vec2 eyeAxis = normalize(uRightEye - uLeftEye);
+            if (length(eyeAxis) < 0.0001) {
+                eyeAxis = vec2(1.0, 0.0);
+            }
+
             float percent = 1.0 - dist / radius;
-            // 使用二次衰减并按半径归一化位移，提升瘦脸可见度
-            float horizontal = intensity * percent * percent * 0.45;
-            uv.x -= sign(dir.x) * horizontal * radius;
-            return uv;
+            float strength = intensity * percent * percent * 0.45;
+            float axisOffset = dot(dir, eyeAxis) / max(radius, 0.0001);
+            vec2 offset = eyeAxis * axisOffset * strength * radius;
+            return uv - offset;
         }
 
         vec2 warpCoord(vec2 uv) {

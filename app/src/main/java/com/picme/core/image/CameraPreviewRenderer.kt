@@ -1,6 +1,7 @@
 package com.picme.core.image
 
 import android.graphics.SurfaceTexture
+import android.opengl.Matrix
 import android.util.Log
 import android.view.View
 
@@ -66,6 +67,29 @@ class CameraPreviewRenderer {
     
     @Volatile
     private var frameAvailable: Boolean = false
+
+    @Volatile
+    private var currentOutputWidth: Int = DEFAULT_WIDTH
+
+    @Volatile
+    private var currentOutputHeight: Int = DEFAULT_HEIGHT
+
+    @Volatile
+    private var currentViewportX: Int = 0
+
+    @Volatile
+    private var currentViewportY: Int = 0
+
+    @Volatile
+    private var currentViewportWidth: Int = DEFAULT_WIDTH
+
+    @Volatile
+    private var currentViewportHeight: Int = DEFAULT_HEIGHT
+
+    private val textureMatrixLock = Any()
+    private val latestTextureTransformMatrix = FloatArray(16).apply {
+        Matrix.setIdentityM(this, 0)
+    }
 
     /** 纹理可用监听器 */
     interface OnTextureAvailableListener {
@@ -263,6 +287,9 @@ class CameraPreviewRenderer {
                         // 2. 获取变换矩阵
                         val transformMatrix = FloatArray(16)
                         surfaceTexture?.getTransformMatrix(transformMatrix)
+                        synchronized(textureMatrixLock) {
+                            System.arraycopy(transformMatrix, 0, latestTextureTransformMatrix, 0, 16)
+                        }
 
                         // 3. 绑定外部纹理
                         android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
@@ -384,7 +411,51 @@ class CameraPreviewRenderer {
 
         val x = (safeOutputWidth - viewportWidth) / 2
         val y = (safeOutputHeight - viewportHeight) / 2
+
+        currentOutputWidth = safeOutputWidth
+        currentOutputHeight = safeOutputHeight
+        currentViewportX = x
+        currentViewportY = y
+        currentViewportWidth = viewportWidth
+        currentViewportHeight = viewportHeight
+
         android.opengl.GLES20.glViewport(x, y, viewportWidth, viewportHeight)
+    }
+
+    private fun mapViewNormalizedToUv(x: Float, y: Float): Pair<Float, Float> {
+        val outputW = currentOutputWidth.coerceAtLeast(1)
+        val outputH = currentOutputHeight.coerceAtLeast(1)
+        val viewportW = currentViewportWidth.coerceAtLeast(1)
+        val viewportH = currentViewportHeight.coerceAtLeast(1)
+
+        val pixelX = x.coerceIn(0f, 1f) * outputW
+        val pixelY = y.coerceIn(0f, 1f) * outputH
+
+        // 第一步：屏幕坐标 -> 顶点纹理坐标（aTextureCoord）
+        // 屏幕 Y 是 top->bottom，GL 纹理坐标 Y 是 bottom->top，需要翻转一次。
+        val preTransformUvX = ((pixelX - currentViewportX) / viewportW).coerceIn(0f, 1f)
+        val preTransformUvY = (1f - ((pixelY - currentViewportY) / viewportH)).coerceIn(0f, 1f)
+
+        // 第二步：与 shader 保持一致，应用同一份 uTextureTransform
+        // 这样 uFaceCenter/uEye 与 vTextureCoord 一定在同一坐标空间。
+        val transformed = FloatArray(4)
+        val matrixCopy = FloatArray(16)
+        synchronized(textureMatrixLock) {
+            System.arraycopy(latestTextureTransformMatrix, 0, matrixCopy, 0, 16)
+        }
+        Matrix.multiplyMV(
+            transformed,
+            0,
+            matrixCopy,
+            0,
+            floatArrayOf(preTransformUvX, preTransformUvY, 0f, 1f),
+            0
+        )
+
+        return Pair(
+            transformed[0].coerceIn(0f, 1f),
+            transformed[1].coerceIn(0f, 1f)
+        )
     }
 
     /**
@@ -419,13 +490,17 @@ class CameraPreviewRenderer {
         faceRadius: Float,
         hasFace: Boolean
     ) {
+        val mappedFaceCenter = mapViewNormalizedToUv(faceCenterX, faceCenterY)
+        val mappedLeftEye = mapViewNormalizedToUv(leftEyeX, leftEyeY)
+        val mappedRightEye = mapViewNormalizedToUv(rightEyeX, rightEyeY)
+
         beautyRenderer.updateFaceWarpParams(
-            faceCenterX = faceCenterX,
-            faceCenterY = faceCenterY,
-            leftEyeX = leftEyeX,
-            leftEyeY = leftEyeY,
-            rightEyeX = rightEyeX,
-            rightEyeY = rightEyeY,
+            faceCenterX = mappedFaceCenter.first,
+            faceCenterY = mappedFaceCenter.second,
+            leftEyeX = mappedLeftEye.first,
+            leftEyeY = mappedLeftEye.second,
+            rightEyeX = mappedRightEye.first,
+            rightEyeY = mappedRightEye.second,
             faceRadius = faceRadius,
             hasFace = hasFace
         )

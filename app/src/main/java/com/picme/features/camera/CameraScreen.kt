@@ -32,6 +32,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +57,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -71,6 +74,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
@@ -397,6 +401,8 @@ private data class BeautyDebugState(
 private data class CameraPreviewUiState(
     val selectedFilter: FilterType,
     val facePoint: Offset?,
+    val faceWarpParams: FaceWarpParams,
+    val showFaceDebugOverlay: Boolean,
     val focusIndicatorAlpha: Float,
     val lastMedia: MediaAsset?,
     val zoomRatio: Float,
@@ -432,7 +438,10 @@ private data class FaceWarpParams(
     val rightEyeX: Float = 0.6f,
     val rightEyeY: Float = 0.45f,
     val faceRadius: Float = 0.18f,
-    val hasFace: Boolean = false
+    val hasFace: Boolean = false,
+    val contourPoints: List<Offset> = emptyList(),
+    val leftEyeContourPoints: List<Offset> = emptyList(),
+    val rightEyeContourPoints: List<Offset> = emptyList()
 )
 
 private data class CameraPreviewActions(
@@ -446,6 +455,7 @@ private data class CameraPreviewActions(
     val onToggleScene: () -> Unit,
     val onToggleGrid: () -> Unit,
     val onToggleLogs: () -> Unit,
+    val onToggleFaceDebugOverlay: () -> Unit,
     val onToggleFacialRefinement: () -> Unit,
     val onToggleMakeupAdjustment: () -> Unit,
     val onToggleBodyManagement: () -> Unit,
@@ -721,7 +731,8 @@ fun CameraContent(
     var showSceneSelector by remember { mutableStateOf(false) }
     var showGridSelector by remember { mutableStateOf(false) }
     var showLogOverlay by remember { mutableStateOf(false) }
-    
+    var showFaceDebugOverlay by remember { mutableStateOf(false) }
+
     // [RD] 新增美颜子功能面板状态
     var showFacialRefinement by remember { mutableStateOf(false) }
     var showMakeupAdjustment by remember { mutableStateOf(false) }
@@ -812,23 +823,23 @@ fun CameraContent(
     var showFocusIndicator by remember { mutableStateOf(false) }
     val focusIndicatorAlpha = remember { Animatable(0f) }
 
-    val faceDetector = remember(faceLandmarkModeEnabled) {
+    val faceDetector = remember(faceLandmarkModeEnabled, showFaceDebugOverlay) {
         val optionsBuilder = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
 
-        if (faceLandmarkModeEnabled) {
-            optionsBuilder
-                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
-        } else {
-            optionsBuilder
-                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
-        }
+        val useContour = showFaceDebugOverlay || !faceLandmarkModeEnabled
+        optionsBuilder.setContourMode(
+            if (useContour) {
+                FaceDetectorOptions.CONTOUR_MODE_ALL
+            } else {
+                FaceDetectorOptions.CONTOUR_MODE_NONE
+            }
+        )
 
         Logger.i(
             "Camera",
-            "Face detector mode=${if (faceLandmarkModeEnabled) "LANDMARK" else "CONTOUR"}"
+            "Face detector mode=${if (useContour) "CONTOUR" else "LANDMARK"}, debugOverlay=$showFaceDebugOverlay"
         )
         FaceDetection.getClient(optionsBuilder.build())
     }
@@ -972,6 +983,8 @@ CameraPreviewContent(
     uiState = CameraPreviewUiState(
         selectedFilter = selectedFilter,
         facePoint = facePoint,
+        faceWarpParams = faceWarpParams,
+        showFaceDebugOverlay = showFaceDebugOverlay,
         focusIndicatorAlpha = focusIndicatorAlpha.value,
         lastMedia = lastMedia,
         zoomRatio = zoomRatio,
@@ -1050,6 +1063,9 @@ CameraPreviewContent(
             if (debugUiEnabled) {
                 showLogOverlay = !showLogOverlay
             }
+        },
+        onToggleFaceDebugOverlay = {
+            showFaceDebugOverlay = !showFaceDebugOverlay
         },
         onToggleFacialRefinement = onToggleFacialRefinement,
         onToggleMakeupAdjustment = onToggleMakeupAdjustment,
@@ -1352,6 +1368,63 @@ private fun handleImageAnalysisFrame(
                         maxOf(bounds.width().toFloat() / imageProxy.width.toFloat(), 0.16f)
                     ).coerceIn(0.12f, 0.38f)
 
+                    val contourPoints = face.getContour(FaceContour.FACE)?.points
+                        ?.map { contourPoint ->
+                            val mappedPoint = transformFaceCoordinateSimple(
+                                faceX = contourPoint.x,
+                                faceY = contourPoint.y,
+                                imageProxyWidth = imageProxy.width,
+                                imageProxyHeight = imageProxy.height,
+                                previewWidth = previewWidth,
+                                previewHeight = previewHeight,
+                                rotationDegrees = rotationDegrees,
+                                lensFacing = lensFacing
+                            )
+                            Offset(
+                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
+                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
+                            )
+                        }
+                        ?: emptyList()
+
+                    val leftEyeContourPoints = face.getContour(FaceContour.LEFT_EYE)?.points
+                        ?.map { contourPoint ->
+                            val mappedPoint = transformFaceCoordinateSimple(
+                                faceX = contourPoint.x,
+                                faceY = contourPoint.y,
+                                imageProxyWidth = imageProxy.width,
+                                imageProxyHeight = imageProxy.height,
+                                previewWidth = previewWidth,
+                                previewHeight = previewHeight,
+                                rotationDegrees = rotationDegrees,
+                                lensFacing = lensFacing
+                            )
+                            Offset(
+                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
+                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
+                            )
+                        }
+                        ?: emptyList()
+
+                    val rightEyeContourPoints = face.getContour(FaceContour.RIGHT_EYE)?.points
+                        ?.map { contourPoint ->
+                            val mappedPoint = transformFaceCoordinateSimple(
+                                faceX = contourPoint.x,
+                                faceY = contourPoint.y,
+                                imageProxyWidth = imageProxy.width,
+                                imageProxyHeight = imageProxy.height,
+                                previewWidth = previewWidth,
+                                previewHeight = previewHeight,
+                                rotationDegrees = rotationDegrees,
+                                lensFacing = lensFacing
+                            )
+                            Offset(
+                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
+                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
+                            )
+                        }
+                        ?: emptyList()
+
                     val faceWarpParams = FaceWarpParams(
                         faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
                         faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
@@ -1360,7 +1433,10 @@ private fun handleImageAnalysisFrame(
                         rightEyeX = (rightEyePoint.x / previewWidth).coerceIn(0f, 1f),
                         rightEyeY = (rightEyePoint.y / previewHeight).coerceIn(0f, 1f),
                         faceRadius = faceRadius,
-                        hasFace = true
+                        hasFace = true,
+                        contourPoints = contourPoints,
+                        leftEyeContourPoints = leftEyeContourPoints,
+                        rightEyeContourPoints = rightEyeContourPoints
                     )
                     onFaceWarpParamsChanged(faceWarpParams)
                     android.util.Log.d(
@@ -1500,6 +1576,13 @@ private fun CameraPreviewContent(
             currentScene = currentScene
         )
 
+        if (showFaceDebugOverlay) {
+            FaceDebugOverlay(
+                faceWarpParams = faceWarpParams,
+                slimFaceValue = beautySettings.slimFace
+            )
+        }
+
         val statusText = if (beautyDebugState.status == BeautyPreviewStatus.ACTIVE) {
             "Beauty: ACTIVE"
         } else {
@@ -1592,7 +1675,9 @@ private fun CameraPreviewContent(
             onNavigateToDebug = onNavigateToDebug,
             onToggleCameraInfo = onToggleCameraInfo,
             onToggleLogs = onToggleLogs,
+            onToggleFaceDebug = onToggleFaceDebugOverlay,
             isCameraInfoSelected = showCameraInfo,
+            isFaceDebugSelected = showFaceDebugOverlay,
             showDebugTools = debugUiEnabled,
             modifier = Modifier.align(Alignment.TopStart)
         )
@@ -1742,6 +1827,194 @@ private fun CameraPreviewContent(
  * 【问题】原函数没有考虑相机画面的实际显示比例，导致坐标偏移
  * 【解决】使用与 transformFaceCoordinate 相同的逻辑，但适配 TextureView
  */
+@Composable
+private fun FaceDebugOverlay(
+    faceWarpParams: FaceWarpParams,
+    slimFaceValue: Float
+) {
+    if (!faceWarpParams.hasFace) {
+        return
+    }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val centerNorm = Offset(
+            x = faceWarpParams.faceCenterX.coerceIn(0f, 1f),
+            y = faceWarpParams.faceCenterY.coerceIn(0f, 1f)
+        )
+        val leftEyeNorm = Offset(
+            x = faceWarpParams.leftEyeX.coerceIn(0f, 1f),
+            y = faceWarpParams.leftEyeY.coerceIn(0f, 1f)
+        )
+        val rightEyeNorm = Offset(
+            x = faceWarpParams.rightEyeX.coerceIn(0f, 1f),
+            y = faceWarpParams.rightEyeY.coerceIn(0f, 1f)
+        )
+        val faceRadiusNorm = faceWarpParams.faceRadius.coerceIn(0f, 1f)
+        val slimFaceIntensity = (slimFaceValue / 50f).coerceIn(-1f, 1f)
+
+        fun toCanvasPoint(point: Offset): Offset {
+            return Offset(
+                x = point.x.coerceIn(0f, 1f) * size.width,
+                y = point.y.coerceIn(0f, 1f) * size.height
+            )
+        }
+
+        val center = toCanvasPoint(centerNorm)
+        val leftEye = toCanvasPoint(leftEyeNorm)
+        val rightEye = toCanvasPoint(rightEyeNorm)
+        val radiusPx = faceRadiusNorm * size.width
+
+        // 人脸 contour 轮廓（用于核对作用区域是否偏移）
+        val contourPoints = faceWarpParams.contourPoints.map { contourPoint ->
+            toCanvasPoint(contourPoint)
+        }
+        val leftEyeContourPoints = faceWarpParams.leftEyeContourPoints.map { contourPoint ->
+            toCanvasPoint(contourPoint)
+        }
+        val rightEyeContourPoints = faceWarpParams.rightEyeContourPoints.map { contourPoint ->
+            toCanvasPoint(contourPoint)
+        }
+
+        fun drawClosedContour(points: List<Offset>, color: Color, strokeWidth: Float) {
+            if (points.size < 2) {
+                return
+            }
+            points.zipWithNext().forEach { (start, end) ->
+                drawLine(
+                    color = color,
+                    start = start,
+                    end = end,
+                    strokeWidth = strokeWidth
+                )
+            }
+            drawLine(
+                color = color,
+                start = points.last(),
+                end = points.first(),
+                strokeWidth = strokeWidth
+            )
+        }
+
+        fun applySlimFaceDebug(point: Offset): Offset {
+            val dirX = point.x - centerNorm.x
+            val dirY = point.y - centerNorm.y
+            val distance = sqrt(dirX * dirX + dirY * dirY)
+            if (distance >= faceRadiusNorm || faceRadiusNorm <= 0.0001f) {
+                return point
+            }
+
+            val eyeAxisXRaw = rightEyeNorm.x - leftEyeNorm.x
+            val eyeAxisYRaw = rightEyeNorm.y - leftEyeNorm.y
+            val eyeAxisLen = sqrt(eyeAxisXRaw * eyeAxisXRaw + eyeAxisYRaw * eyeAxisYRaw)
+            val eyeAxisX = if (eyeAxisLen > 0.0001f) eyeAxisXRaw / eyeAxisLen else 1f
+            val eyeAxisY = if (eyeAxisLen > 0.0001f) eyeAxisYRaw / eyeAxisLen else 0f
+
+            val percent = 1f - distance / faceRadiusNorm
+            val strength = slimFaceIntensity * percent * percent * 0.45f
+            val axisOffset = (dirX * eyeAxisX + dirY * eyeAxisY) / faceRadiusNorm
+            val offsetX = eyeAxisX * axisOffset * strength * faceRadiusNorm
+            val offsetY = eyeAxisY * axisOffset * strength * faceRadiusNorm
+
+            return Offset(
+                x = (point.x - offsetX).coerceIn(0f, 1f),
+                y = (point.y - offsetY).coerceIn(0f, 1f)
+            )
+        }
+
+        drawClosedContour(
+            points = contourPoints,
+            color = Color.Magenta.copy(alpha = 0.9f),
+            strokeWidth = 2.dp.toPx()
+        )
+        drawClosedContour(
+            points = leftEyeContourPoints,
+            color = Color.Yellow.copy(alpha = 0.95f),
+            strokeWidth = 2.dp.toPx()
+        )
+        drawClosedContour(
+            points = rightEyeContourPoints,
+            color = Color.Green.copy(alpha = 0.95f),
+            strokeWidth = 2.dp.toPx()
+        )
+
+        // 瘦脸形变区域可视化（与 shader 的作用半径一致）
+        drawCircle(
+            color = Color(0xFFFF6D00).copy(alpha = 0.12f),
+            radius = radiusPx,
+            center = center,
+            style = Fill
+        )
+        drawCircle(
+            color = Color(0xFFFF6D00).copy(alpha = 0.18f),
+            radius = radiusPx * 0.58f,
+            center = center,
+            style = Fill
+        )
+        drawCircle(
+            color = Color.Cyan.copy(alpha = 0.75f),
+            radius = radiusPx,
+            center = center,
+            style = Stroke(width = 2.dp.toPx())
+        )
+
+        // 瘦脸位移向量：原点(橙) -> 变形后(青)
+        // 为了可视化更明显，调试展示使用放大后的位移终点。
+        val debugWarpAmplifier = 6f
+        val yRatios = listOf(-0.45f, -0.2f, 0f, 0.2f, 0.45f)
+        yRatios.forEach { ratio ->
+            val sampleY = (centerNorm.y + faceRadiusNorm * ratio).coerceIn(0f, 1f)
+            val leftSample = Offset(
+                x = (centerNorm.x - faceRadiusNorm * 0.72f).coerceIn(0f, 1f),
+                y = sampleY
+            )
+            val rightSample = Offset(
+                x = (centerNorm.x + faceRadiusNorm * 0.72f).coerceIn(0f, 1f),
+                y = sampleY
+            )
+            listOf(leftSample, rightSample).forEach { samplePoint ->
+                val warpedPoint = applySlimFaceDebug(samplePoint)
+                val sampleCanvasPoint = toCanvasPoint(samplePoint)
+                val warpedCanvasPoint = toCanvasPoint(warpedPoint)
+                val debugWarpedCanvasPoint = Offset(
+                    x = (
+                        sampleCanvasPoint.x +
+                            (warpedCanvasPoint.x - sampleCanvasPoint.x) * debugWarpAmplifier
+                        ).coerceIn(0f, size.width),
+                    y = (
+                        sampleCanvasPoint.y +
+                            (warpedCanvasPoint.y - sampleCanvasPoint.y) * debugWarpAmplifier
+                        ).coerceIn(0f, size.height)
+                )
+
+                drawLine(
+                    color = Color(0xFFFF6D00),
+                    start = sampleCanvasPoint,
+                    end = debugWarpedCanvasPoint,
+                    strokeWidth = 3.dp.toPx()
+                )
+                drawCircle(
+                    color = Color(0xFFFF6D00),
+                    radius = 3.dp.toPx(),
+                    center = sampleCanvasPoint
+                )
+                drawCircle(
+                    color = Color(0xFF00E5FF),
+                    radius = 4.dp.toPx(),
+                    center = debugWarpedCanvasPoint
+                )
+            }
+        }
+
+        // 连线用于快速判断映射偏移
+        drawLine(
+            color = Color.White.copy(alpha = 0.8f),
+            start = leftEye,
+            end = rightEye,
+            strokeWidth = 1.5.dp.toPx()
+        )
+    }
+}
+
 private fun transformFaceCoordinateSimple(
     faceX: Float,
     faceY: Float,

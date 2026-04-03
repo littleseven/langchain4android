@@ -109,7 +109,9 @@ fun CameraLeftControls(
     onNavigateToDebug: () -> Unit,
     onToggleCameraInfo: () -> Unit,
     onToggleLogs: () -> Unit,
+    onToggleFaceDebug: () -> Unit,
     isCameraInfoSelected: Boolean,
+    isFaceDebugSelected: Boolean,
     showDebugTools: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -127,6 +129,11 @@ fun CameraLeftControls(
             icon = Icons.Rounded.Info,
             onClick = onToggleCameraInfo,
             isActive = isCameraInfoSelected
+        )
+        ControlButton(
+            icon = Icons.Rounded.FaceRetouchingNatural,
+            onClick = onToggleFaceDebug,
+            isActive = isFaceDebugSelected
         )
         if (showDebugTools) {
             ControlButton(
