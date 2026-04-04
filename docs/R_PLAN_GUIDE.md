@@ -15,6 +15,9 @@
 - **备用引擎**：PixelFreeEffects SDK
 - **切换方式**：设置页「美颜引擎」配置开关
 - **容灾策略**：R 计划初始化失败或运行异常时，自动回退 PixelFreeEffects
+- **长期定位**：R Plan 从 App 内部能力逐步演进为独立视觉能力基础库。
+- **能力范围**：基础库统一承载美颜、滤镜、妆容能力及参数协议。
+- **接入方式**：App 侧通过稳定 API 接入，不直接依赖底层 OpenGL/CameraX 实现。
 
 ### 0.1 现状问题
 
@@ -436,6 +439,9 @@ while (isRendering && !Thread.interrupted()) {
 - [ ] 将自动回退结果提示与 I18N 文案在 UI 层彻底打通（当前以日志和调试态为主）。
 - [ ] 补充低端机专项压测基线（720p/1080p，前后置，连续 5 分钟）。
 - [ ] 针对 `nullFrames` 异常波动增加告警阈值与自动抓日志能力。
+- [ ] 抽离 `beauty-core`（纯 Kotlin）：策略模型、参数映射、回退/恢复状态机。
+- [ ] 抽离 `beauty-engine-rplan`：R Plan 渲染适配层（Surface/CameraX/OpenGL）。
+- [ ] 定义库级稳定 API（含语义版本），确保 App 仅依赖能力接口。
 
 ---
 
