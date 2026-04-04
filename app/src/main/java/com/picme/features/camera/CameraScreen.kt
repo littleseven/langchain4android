@@ -62,6 +62,8 @@ import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
+import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.features.camera.preview.core.rememberPreviewStrategyBundle
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
@@ -208,20 +210,6 @@ internal data class CameraPreviewUiState(
     val exposureCompensation: Int,
     val exposureRange: IntRange,
     val whiteBalanceMode: Int
-)
-
-internal data class FaceWarpParams(
-    val faceCenterX: Float = 0.5f,
-    val faceCenterY: Float = 0.5f,
-    val leftEyeX: Float = 0.4f,
-    val leftEyeY: Float = 0.45f,
-    val rightEyeX: Float = 0.6f,
-    val rightEyeY: Float = 0.45f,
-    val faceRadius: Float = 0.18f,
-    val hasFace: Boolean = false,
-    val contourPoints: List<Offset> = emptyList(),
-    val leftEyeContourPoints: List<Offset> = emptyList(),
-    val rightEyeContourPoints: List<Offset> = emptyList()
 )
 
 internal data class CameraPreviewActions(
@@ -515,7 +503,8 @@ fun CameraContent(
 
     val previewRuntimeViews = rememberPreviewRuntimeViews(
         context = context,
-        aspectRatio = aspectRatio
+        aspectRatio = aspectRatio,
+        beautyStrategy = beautyStrategy
     )
     val previewView = previewRuntimeViews.previewView
     val pixelFreeView = previewRuntimeViews.pixelFreeView
@@ -555,7 +544,7 @@ fun CameraContent(
             return@LaunchedEffect
         }
 
-        if (!rPlanPreviewProvider.isReady()) {
+        if (rPlanPreviewProvider?.isReady() != true) {
             Logger.w(
                 "Camera",
                 "Provider view bind timeout, fallback to PreviewView and request rebind"
@@ -680,7 +669,7 @@ fun CameraContent(
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
         while (isActive) {
             renderPerfStats = if (beautyStrategy == BeautyStrategy.R_PLAN && useProviderRenderView) {
-                rPlanPreviewProvider.getPerfStats() ?: com.picme.core.image.CameraPreviewRenderer.PerfStats()
+                rPlanPreviewProvider?.getPerfStats() ?: com.picme.core.image.CameraPreviewRenderer.PerfStats()
             } else {
                 com.picme.core.image.CameraPreviewRenderer.PerfStats()
             }
@@ -715,9 +704,12 @@ fun CameraContent(
     //     Logger.d("Camera", "PixelFree beauty updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
     // }
     
-    // RD PixelFreeEffects 初始化
-    LaunchedEffect(Unit) {
-        // 等待 GLSurface 创建和初始化
+    // 仅在 PixelFree 策略下执行 PixelFree 初始化日志。
+    LaunchedEffect(beautyStrategy, pixelFreeView) {
+        if (beautyStrategy != BeautyStrategy.PIXEL_FREE || pixelFreeView == null) {
+            return@LaunchedEffect
+        }
+
         delay(500)
         Logger.d("Camera", "PixelFree initialization requested")
     }
@@ -757,10 +749,14 @@ fun CameraContent(
         )
     }
 
+    DisposableEffect(activePreviewStrategy) {
+        onDispose {
+            activePreviewStrategy.release()
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
-            previewStrategyBundle.rPlanStrategy.release()
-            previewStrategyBundle.pixelFreeStrategy.release()
             cameraExecutor.shutdown()
         }
     }
@@ -778,10 +774,12 @@ CameraPreviewContent(
             contentAlignment = Alignment.Center
         ) {
             val rPlanPreviewView = remember(rPlanPreviewProvider) {
-                runCatching {
-                    rPlanPreviewProvider.initialize()
-                    rPlanPreviewProvider.getView()
-                }.getOrNull()
+                rPlanPreviewProvider?.let { provider ->
+                    runCatching {
+                        provider.initialize()
+                        provider.getView()
+                    }.getOrNull()
+                }
             }
 
             AndroidView(

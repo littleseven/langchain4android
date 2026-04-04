@@ -18,6 +18,8 @@ import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.di.BeautyEngineRuntimeState
+import com.picme.features.camera.preview.pixelfree.rememberPixelFreePreviewView
+import com.picme.features.camera.preview.rplan.rememberRPlanPreviewProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -68,8 +70,8 @@ internal data class RPlanRecoveryUiState(
 
 internal data class PreviewRuntimeViews(
     val previewView: PreviewView,
-    val pixelFreeView: PixelFreeGLSurfaceView,
-    val rPlanPreviewProvider: RPlanBeautyPreviewProvider
+    val pixelFreeView: PixelFreeGLSurfaceView?,
+    val rPlanPreviewProvider: RPlanBeautyPreviewProvider?
 )
 
 @Stable
@@ -130,7 +132,11 @@ internal fun rememberCameraPanelState(): CameraPanelState {
 }
 
 @Composable
-internal fun rememberPreviewRuntimeViews(context: Context, aspectRatio: Int): PreviewRuntimeViews {
+internal fun rememberPreviewRuntimeViews(
+    context: Context,
+    aspectRatio: Int,
+    beautyStrategy: BeautyStrategy
+): PreviewRuntimeViews {
     val previewView = remember {
         PreviewView(context).apply {
             scaleType = when (aspectRatio) {
@@ -142,15 +148,15 @@ internal fun rememberPreviewRuntimeViews(context: Context, aspectRatio: Int): Pr
         }
     }
 
-    val pixelFreeView = remember {
-        PixelFreeGLSurfaceView(context).apply {
-            Logger.d("Camera", "PixelFreeGLSurfaceView created for real-time beauty")
-        }
-    }
+    val pixelFreeView = rememberPixelFreePreviewView(
+        context = context,
+        beautyStrategy = beautyStrategy
+    )
 
-    val rPlanPreviewProvider = remember {
-        RPlanBeautyPreviewProvider(context)
-    }
+    val rPlanPreviewProvider = rememberRPlanPreviewProvider(
+        context = context,
+        beautyStrategy = beautyStrategy
+    )
 
     return PreviewRuntimeViews(
         previewView = previewView,

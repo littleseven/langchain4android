@@ -17,6 +17,7 @@ import com.google.mlkit.vision.face.FaceDetector
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaType
+import com.picme.features.camera.preview.core.FaceWarpParams
 import java.util.concurrent.ExecutorService
 
 @ExperimentalGetImage

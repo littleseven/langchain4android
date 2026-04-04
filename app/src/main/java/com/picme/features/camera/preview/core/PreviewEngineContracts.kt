@@ -1,14 +1,31 @@
-package com.picme.features.camera
+package com.picme.features.camera.preview.core
 
+import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
-import com.picme.features.camera.preview.core.PreviewStrategyBundle
+import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.preview.pixelfree.PixelFreePreviewStrategy
 import com.picme.features.camera.preview.rplan.RPlanPreviewStrategy
+
+internal interface BeautyPreviewEngineStrategy {
+    val strategy: BeautyStrategy
+
+    fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean
+
+    fun applyBeautySettings(settings: BeautySettings)
+
+    fun applyFaceWarpParams(params: FaceWarpParams)
+
+    fun release()
+}
+
+internal data class PreviewStrategyBundle(
+    val activeStrategy: BeautyPreviewEngineStrategy
+)
 
 @Composable
 internal fun rememberPreviewStrategyBundle(

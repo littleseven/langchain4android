@@ -10,6 +10,7 @@ import com.google.mlkit.vision.face.FaceDetector
 import com.google.mlkit.vision.face.FaceLandmark
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
+import com.picme.features.camera.preview.core.FaceWarpParams
 
 @ExperimentalGetImage
 internal fun handleImageAnalysisFrame(
