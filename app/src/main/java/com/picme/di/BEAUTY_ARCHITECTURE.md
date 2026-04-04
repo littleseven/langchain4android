@@ -122,7 +122,7 @@ class PixelFreeBeautyPreviewProvider(context: Context) : BeautyPreviewProvider {
 }
 ```
 
-**技术文档**：`docs/PIXELFREE_INTEGRATION.md`
+**技术文档**：`docs/PIXELFREE_FALLBACK_TECH_SPEC.md`
 
 ### 3.2 中长期方案：R 计划自主研发
 
@@ -154,7 +154,7 @@ class RPlanBeautyPreviewProvider(context: Context) : BeautyPreviewProvider {
 }
 ```
 
-**技术文档**：`docs/R_PLAN_GUIDE.md`
+**技术文档**：`docs/R_PLAN_TECH_SPEC.md`
 
 ---
 
@@ -380,9 +380,9 @@ fun CameraScreen(viewModel: CameraViewModel) {
 - `docs/FEATURES.md` - 功能交互规范
 
 ### 8.2 技术文档
-- `docs/CAMERA_PREVIEW_GUIDE.md` - 相机预览完整指南
-- `docs/PIXELFREE_INTEGRATION.md` - PixelFree SDK 集成文档
-- `docs/R_PLAN_GUIDE.md` - R 计划实时美颜完整指南
+- `docs/CAMERA_PREVIEW_TECH_SPEC.md` - 相机预览完整规范
+- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` - PixelFree SDK 集成规范
+- `docs/R_PLAN_TECH_SPEC.md` - R 计划实时美颜完整规范
 
 ### 8.3 代码规范
 - `AGENTS.md` - AI Agent 操作规范

@@ -7,6 +7,13 @@
 
 ---
 
+## 文档边界与导航
+
+- 本文档聚焦 R Plan 主引擎：渲染链路、容灾回退、冷却恢复与观测指标。
+- 预览比例与坐标转换细节：见 `CAMERA_PREVIEW_TECH_SPEC.md`。
+- PixelFree 兜底引擎集成细节：见 `PIXELFREE_FALLBACK_TECH_SPEC.md`。
+- 产品交互与验收口径：见 `FEATURES.md`。
+
 ## 0. 背景与目标
 
 ### 0.0 双引擎定位
@@ -619,9 +626,9 @@ suspend fun triggerManualRPlanRecovery() {
 
 ### 7.4 QA 与回归检查
 
-为避免 `R_PLAN_GUIDE.md` 过长，QA 相关内容已提取到独立文档：
+为避免 `R_PLAN_TECH_SPEC.md` 过长，QA 相关内容已提取到独立文档：
 
-- `docs/R_PLAN_QA_CHECKLIST.md`
+- `docs/R_PLAN_QA_EXECUTION_CHECKLIST.md`
 
 该文档包含：
 - 测试基线（功能 / 性能 / 兼容性）
@@ -670,9 +677,9 @@ suspend fun triggerManualRPlanRecovery() {
 - `PRODUCT.md` - 产品需求规格说明书（R Plan 产品策略）
 - `FEATURES.md` - 功能交互规范（重点：`1.3.5` R Plan 性能与验收）
 - `AGENTS.md` - AI Agent 操作规范与双引擎约束
-- `CAMERA_PREVIEW_GUIDE.md` - 相机预览与坐标系统指南
-- `PIXELFREE_INTEGRATION.md` - PixelFreeEffects SDK 集成（备用引擎）
-- `R_PLAN_QA_CHECKLIST.md` - R Plan QA 独立执行清单
+- `CAMERA_PREVIEW_TECH_SPEC.md` - 相机预览与坐标系统规范
+- `PIXELFREE_FALLBACK_TECH_SPEC.md` - PixelFreeEffects SDK 集成（备用引擎）
+- `R_PLAN_QA_EXECUTION_CHECKLIST.md` - R Plan QA 独立执行清单
 - `app/src/main/java/com/picme/core/image/BeautyPreviewView.kt` - R Plan 预览视图实现
 - `app/src/main/java/com/picme/core/image/CameraPreviewRenderer.kt` - R Plan 渲染主链路
 - `app/src/main/java/com/picme/core/image/rplan/RPlanBeautyPreviewProvider.kt` - R Plan Provider 封装

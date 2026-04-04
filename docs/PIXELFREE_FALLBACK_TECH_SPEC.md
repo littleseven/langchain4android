@@ -5,10 +5,16 @@
 **最后更新**：2026-04（按双引擎现状更新）
 **实施周期**：持续维护
 
+## 0. 文档边界与导航
+
+- 本文档聚焦 **PixelFree 作为稳定兜底引擎** 的集成与维护。
+- R Plan 主链路（Provider 渲染、回退状态机、冷却恢复）见 `R_PLAN_TECH_SPEC.md`。
+- 预览比例与坐标映射见 `CAMERA_PREVIEW_TECH_SPEC.md`。
+
 ## 1. 技术选型决策
 
 ### 1.1 背景
-当前项目采用双引擎策略：`R_PLAN` 作为默认主引擎，`PIXEL_FREE` 作为稳定兜底引擎。PixelFree 文档用于说明兜底链路的集成、维护与兼容性要求；R Plan 主链路详见 `R_PLAN_GUIDE.md`。
+当前项目采用双引擎策略：`R_PLAN` 作为默认主引擎，`PIXEL_FREE` 作为稳定兜底引擎。PixelFree 文档用于说明兜底链路的集成、维护与兼容性要求；R Plan 主链路详见 `R_PLAN_TECH_SPEC.md`。
 
 ### 1.2 双轨策略
 
@@ -50,32 +56,29 @@
 
 ## 2. SDK 集成架构
 
-### 2.1 整体架构
+### 2.1 整体架构（当前实现）
 
 ```
-┌─────────────────────────────────────────┐
-│          CameraX (相机采集)              │
-│              ↓                          │
-│         YUV/RGBA 数据                    │
-│              ↓                          │
-└─────────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────────┐
-│    PixelFreeGLSurfaceView               │
-│  ┌─────────────────────────────────┐   │
-│  │  PixelFree SDK (美颜处理)        │   │
-│  │  - 磨皮/美白/红润               │   │
-│  │  - 大眼/瘦脸/美型               │   │
-│  │  - 滤镜/美妆/贴纸               │   │
-│  └─────────────────────────────────┘   │
-│              ↓                          │
-│         OpenGL 纹理处理                 │
-└─────────────────────────────────────────┘
-              ↓
-┌─────────────────────────────────────────┐
-│         显示到屏幕                       │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│ CameraX Preview                          │
+│   └─ PreviewView.surfaceProvider         │
+└──────────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────┐
+│ Preview Strategy Layer                   │
+│   ├─ RPlanPreviewStrategy   (主引擎)      │
+│   └─ PixelFreePreviewStrategy (兜底引擎)  │
+└──────────────────────────────────────────┘
+                     ↓
+┌──────────────────────────────────────────┐
+│ PixelFree Engine Runtime                 │
+│   ├─ 参数映射（0~100 -> 0~1）            │
+│   ├─ queueEvent 同步到 GL 线程           │
+│   └─ 美颜/美型能力执行                    │
+└──────────────────────────────────────────┘
 ```
+
+> 说明：在当前策略化绑定中，Preview Surface 由 `PreviewView` 统一承接；PixelFree 侧重点是能力执行与参数处理。
 
 ### 2.2 核心组件
 
@@ -91,8 +94,9 @@ class PixelFreeGLSurfaceView : GLSurfaceView, GLSurfaceView.Renderer {
 **职责**：
 - 管理 PixelFree SDK 的生命周期
 - 提供 OpenGL ES 2.0 渲染环境
-- 处理相机纹理的美颜渲染
+- 承接 PixelFree 能力执行与参数生效
 - 支持自定义美颜参数
+- 不直接承接 CameraX 的 `SurfaceRequest`
 
 #### 2.2.2 PixelFreeBeautyEngine
 ```kotlin
@@ -109,33 +113,32 @@ class PixelFreeBeautyEngine(context: Context) {
 - 支持多种图像格式处理（纹理/RGBA/YUV）
 - 管理 SDK 资源生命周期
 
-### 2.3 数据流
+### 2.3 数据流（当前实现）
 
-**实时预览流程**：
+**预览绑定流程**：
 ```
-1. CameraX 采集相机帧
+1. CameraX 创建 Preview UseCase
    ↓
-2. 生成 OpenGL 外部纹理 (GL_TEXTURE_EXTERNAL_OES)
+2. PixelFreePreviewStrategy.bindPreview(...)
    ↓
-3. PixelFreeGLSurfaceView 接收纹理
+3. PreviewUseCase.setSurfaceProvider(previewView.surfaceProvider)
    ↓
-4. PixelFree SDK 处理纹理（美颜、美型、滤镜）
-   ↓
-5. 渲染到屏幕显示
+4. UI 保持 PreviewView 容器展示（bindPreview 返回 false）
 ```
 
-**拍照处理流程**：
+**参数生效流程**：
 ```
-1. 从 CameraX 获取 YUV/RGBA 数据
+1. 业务侧输出 BeautySettings（0~100）
    ↓
-2. 调用 processYUV() 或 processRGBA()
+2. PixelFreePreviewStrategy.applyBeautySettings(...)
    ↓
-3. PixelFree SDK 处理图像数据
+3. queueEvent 切到 GL 线程
    ↓
-4. 获取处理后的数据
-   ↓
-5. 保存为照片
+4. PixelFree SDK 执行参数更新并生效
 ```
+
+**拍照链路说明**：
+- 当前文档重点是预览兜底链路；拍照后处理以业务实际实现为准。
 
 ## 3. 实施细节
 
@@ -152,7 +155,7 @@ dependencies {
 }
 ```
 
-### 3.2 初始化流程
+### 3.2 初始化流程（SDK 能力侧）
 
 **Step 1: 创建 PixelFreeGLSurfaceView**
 ```kotlin

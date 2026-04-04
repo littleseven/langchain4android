@@ -8,11 +8,11 @@
 ## 1. 核心解决方案
 
 ### 1.1 核心原则
-**使用 CameraX 官方推荐的 `PreviewView` + `ScaleType`**，让 CameraX 自动处理所有复杂的比例计算。
+**采用策略化预览绑定（R Plan Provider + PreviewView 兜底）**，并在 `PreviewView` 路径下使用 `ScaleType` 处理比例。
 
-> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `RPlanPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换，R Plan 的 `SurfaceView + Provider` 细节见 `R_PLAN_GUIDE.md`。
+> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `RPlanPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换。R Plan 的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `R_PLAN_TECH_SPEC.md`。
 
-### 1.2 技术方案
+### 1.2 PreviewView 路径技术方案（兜底与通用预览）
 
 #### PreviewView 配置
 ```kotlin
@@ -297,6 +297,6 @@ DisposableEffect(previewView) {
 - `PRODUCT.md` - 产品需求规格说明书
 - `FEATURES.md` - 功能交互规范
 - `AGENTS.md` - AI Agent 操作规范
-- `PIXELFREE_INTEGRATION.md` - 实时美颜集成文档
-- `R_PLAN_GUIDE.md` - R 计划实时美颜自主方案
+- `PIXELFREE_FALLBACK_TECH_SPEC.md` - 实时美颜集成规范
+- `R_PLAN_TECH_SPEC.md` - R 计划实时美颜自主方案
 

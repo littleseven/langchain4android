@@ -2,7 +2,17 @@
 
 **适用范围**：R Plan 主引擎 + PixelFree 兜底链路
 **最后更新**：2026-04
-**关联文档**：`R_PLAN_GUIDE.md`
+**关联文档**：`R_PLAN_TECH_SPEC.md`、`CAMERA_PREVIEW_TECH_SPEC.md`、`PIXELFREE_FALLBACK_TECH_SPEC.md`、`FEATURES.md`
+
+---
+
+## 0. 术语与状态定义（执行前必读）
+
+- **引擎策略枚举**：`R_PLAN`（主引擎）/ `PIXEL_FREE`（兜底引擎）。
+- **统一回退入口**：`onRPlanWarmUpFallback(reason)`。
+- **策略持久化键**：`beauty_strategy`、`r_plan_recovery_available_at_ms`。
+- **自动恢复触发**：`triggerManualRPlanRecovery()`。
+- **Provider 视图切换状态**：`useProviderRenderView=true` 表示使用 R Plan Provider View；`false` 表示回落 `PreviewView`。
 
 ---
 
@@ -59,9 +69,10 @@
 - [ ] `isReady()` 在 `SurfaceTexture` 可用后返回 true。
 
 ### 2.4 `CameraScreen` 容灾链路
-- [ ] warm-up 失败时触发 `persistRPlanFallback()` 并切到 `PIXEL_FREE`。
+- [ ] warm-up 失败时统一走 `onRPlanWarmUpFallback(reason)`，并最终持久化到 `PIXEL_FREE`。
 - [ ] 冷却到期后触发 `triggerManualRPlanRecovery()` 自动重试。
 - [ ] `PROVIDER_VIEW_BIND_TIMEOUT_MS` 超时后回落 `PreviewView` 并请求重绑。
+- [ ] `useProviderRenderView` 状态与实际渲染容器一致（Provider View / PreviewView）。
 
 ---
 
@@ -69,10 +80,11 @@
 
 1. 设置策略为 `R_PLAN`，进入相机，确认 R Plan 预览可见。
 2. 人工注入初始化失败（例如抛异常），确认回退到 `PIXEL_FREE`。
-3. 验证 DataStore 写入：`beauty_strategy=PIXEL_FREE` 且有 `r_plan_recovery_available_at_ms`。
-4. 等待冷却窗口结束，确认自动触发 `triggerManualRPlanRecovery()`。
-5. 重试成功时恢复到 `R_PLAN`；重试失败时再次回退且可继续拍照。
-6. 全程观察调试浮层与日志：`PerfStats`、fallback reason、剩余冷却秒数。
+3. 验证持久化写入：`beauty_strategy=PIXEL_FREE` 且有 `r_plan_recovery_available_at_ms`。
+4. 验证 `useProviderRenderView=false`，确认当前展示容器为 `PreviewView`。
+5. 等待冷却窗口结束，确认自动触发 `triggerManualRPlanRecovery()`。
+6. 重试成功时恢复到 `R_PLAN`；重试失败时再次回退且可继续拍照。
+7. 全程观察调试浮层与日志：`PerfStats`、fallback reason、剩余冷却秒数。
 
 ---
 
@@ -95,6 +107,8 @@
 ### 4.3 执行记录模板
 - 设备型号 / 系统版本：
 - 引擎策略：`R_PLAN` / `PIXEL_FREE`
+- `useProviderRenderView`：true / false
+- 持久化状态：`beauty_strategy` / `r_plan_recovery_available_at_ms`
 - 测试用例：`P0-01` ~ `P1-05`
 - 结果：Pass / Fail
 - 失败现象：
@@ -136,9 +150,9 @@
 | 用例 ID | 自动化层级 | 测试类（当前/目标） | 断言要点 | 状态 |
 |--------|------------|---------------------|----------|------|
 | P0-01 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraScreenStartupTest` | 5 秒内预览容器可见，应用无崩溃 | 已建骨架 |
-| P0-02 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraBeautySliderLatencyTest` | 参数变更触发 UI 状态与 provider 更新 | 已建骨架 |
-| P0-03 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `BeautyPreviewProviderFactoryTest` | R Plan init 失败后落到 PixelFree | 已建骨架 |
-| P0-04 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `UserPreferencesRepositoryRecoveryInstrumentedTest` | 冷却到期触发恢复，失败后再次回退 | 已建骨架 |
+| P0-02 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraBeautySliderLatencyTest` | 参数变更触发 UI 状态与 Provider 更新 | 已建骨架 |
+| P0-03 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `BeautyPreviewProviderFactoryTest` | R Plan init 失败后落到 `PIXEL_FREE`，且 `useProviderRenderView=false` | 已建骨架 |
+| P0-04 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `UserPreferencesRepositoryRecoveryInstrumentedTest` | 冷却到期触发恢复，失败后再次回退并更新持久化状态 | 已建骨架 |
 | P0-05 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraDebugOverlayMetricsTest` | 调试浮层可读到 `PerfStats` 五个字段 | 已建骨架 |
 | P1-01 | unit | `CameraPreviewRendererViewportTest` | 4:3 / 16:9 / FULL 视口比例正确 | 待实现 |
 | P1-02 | androidTest(UI) | `CameraLensSwitchStabilityTest` | 切前后摄 10 次无挂死 | 待实现 |
@@ -154,7 +168,7 @@
 
 1. RD Agent：补齐缺失测试类与 fake provider/fake clock。
 2. QA Agent：将 `P0-01` ~ `P1-05` 写入流水线执行列表。
-3. CR Agent：校验测试覆盖是否匹配本清单与 `R_PLAN_GUIDE.md`。
+3. CR Agent：校验测试覆盖是否匹配本清单与 `R_PLAN_TECH_SPEC.md`。
 4. PM Agent：仅验收结果，不介入手工测试。
 5. 发布门禁：P0 全通过 + 无崩溃日志 + 报告归档完整。
 

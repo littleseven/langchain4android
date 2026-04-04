@@ -63,9 +63,9 @@ AGENTS.md (AI Agent 操作规范)
 
 | 文档 | 定位 | 阅读对象 | 核心内容 |
 |------|------|----------|----------|
-| **CAMERA_PREVIEW_GUIDE.md** | 相机预览完整指南 | RD、UI 设计师 | - PreviewView + ScaleType 方案<br>- 传感器旋转机制<br>- 坐标系统与人脸跟踪<br>- ViewPort + UseCaseGroup 实现<br>- 常见问题解决方案 |
-| **R_PLAN_GUIDE.md** | 实时美颜完整指南<br>（中长期规划） | RD、架构师 | - 第一性原理分析<br>- EGL 上下文管理<br>- SurfaceTexture 生命周期<br>- 渲染线程同步<br>- 调试检查清单<br>- 降级策略 |
-| **PIXELFREE_INTEGRATION.md** | PixelFreeEffects SDK 集成<br>（当前实施方案） | RD | - SDK 初始化流程<br>- 美颜参数设置<br>- 图像处理流程<br>- 资源管理<br>- 性能优化 |
+| **CAMERA_PREVIEW_TECH_SPEC.md** | 相机预览完整规范 | RD、UI 设计师 | - PreviewView + ScaleType 方案<br>- 传感器旋转机制<br>- 坐标系统与人脸跟踪<br>- ViewPort + UseCaseGroup 实现<br>- 常见问题解决方案 |
+| **R_PLAN_TECH_SPEC.md** | 实时美颜完整规范<br>（中长期规划） | RD、架构师 | - 第一性原理分析<br>- EGL 上下文管理<br>- SurfaceTexture 生命周期<br>- 渲染线程同步<br>- 调试检查清单<br>- 降级策略 |
+| **PIXELFREE_FALLBACK_TECH_SPEC.md** | PixelFreeEffects SDK 集成规范<br>（当前实施方案） | RD | - SDK 初始化流程<br>- 美颜参数设置<br>- 图像处理流程<br>- 资源管理<br>- 性能优化 |
 
 #### 2.5.2 双轨策略说明
 
@@ -87,9 +87,9 @@ SDK 接入            → 积累数据            → 完全替代 SDK
 
 #### 2.5.3 文档路径快速索引
 
-- 相机预览问题 → `docs/CAMERA_PREVIEW_GUIDE.md`
-- 实时美颜开发 → `docs/R_PLAN_GUIDE.md`
-- PixelFree SDK → `docs/PIXELFREE_INTEGRATION.md`
+- 相机预览问题 → `docs/CAMERA_PREVIEW_TECH_SPEC.md`
+- 实时美颜开发 → `docs/R_PLAN_TECH_SPEC.md`
+- PixelFree SDK → `docs/PIXELFREE_FALLBACK_TECH_SPEC.md`
 - 产品需求 → `PRODUCT.md`
 - 交互细节 → `docs/FEATURES.md`
 - 代码规范 → `AGENTS.md`（本文件）
