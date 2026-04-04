@@ -1,3 +1,5 @@
+@file:Suppress("OPT_IN_USAGE_ERROR")
+
 package com.picme.features.camera
 import android.Manifest
 import android.annotation.SuppressLint
@@ -70,7 +72,6 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.mlkit.vision.common.InputImage
@@ -106,7 +107,6 @@ import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.model.FilterType
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
-import com.picme.features.gallery.MediaViewModelFactory
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -305,8 +305,8 @@ object AspectRatio {
 }
 
 /**
- * [RD] 人脸坐标转换函数 - 简化版（分离关注点）
- * 
+ * RD 人脸坐标转换函数 - 简化版（分离关注点）
+ *
  * 【核心思路】将复杂的变换分解为三个独立步骤：
  * 1. 归一化：ML Kit 坐标 → [0,1] 归一化坐标
  * 2. 镜像处理：前置摄像头需要水平翻转
@@ -474,6 +474,139 @@ private data class CameraPreviewActions(
     val onDismissPanels: () -> Unit
 )
 
+private data class CameraRuntimeContext(
+    val imageProcessor: com.picme.core.image.ImageProcessor,
+    val userPreferencesRepository: com.picme.data.preferences.UserPreferencesRepository,
+    val coroutineScope: kotlinx.coroutines.CoroutineScope,
+    val beautyStrategy: BeautyStrategy,
+    val debugUiEnabled: Boolean,
+    val faceLandmarkModeEnabled: Boolean,
+    val rPlanRecoveryAvailableAtMs: Long,
+    val lifecycleOwner: androidx.lifecycle.LifecycleOwner
+)
+
+@Composable
+private fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContext {
+    val app = context.applicationContext as PicMeApplication
+    val imageProcessor = app.container.imageProcessor
+    val userPreferencesRepository = app.container.userPreferencesRepository
+    val coroutineScope = rememberCoroutineScope()
+    val beautyStrategy by userPreferencesRepository.beautyStrategyFlow.collectAsState(
+        initial = BeautyStrategy.R_PLAN
+    )
+    val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
+    val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
+    val rPlanRecoveryAvailableAtMs by userPreferencesRepository.rPlanRecoveryAvailableAtFlow.collectAsState(initial = 0L)
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    return CameraRuntimeContext(
+        imageProcessor = imageProcessor,
+        userPreferencesRepository = userPreferencesRepository,
+        coroutineScope = coroutineScope,
+        beautyStrategy = beautyStrategy,
+        debugUiEnabled = debugUiEnabled,
+        faceLandmarkModeEnabled = faceLandmarkModeEnabled,
+        rPlanRecoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
+        lifecycleOwner = lifecycleOwner
+    )
+}
+
+private data class RPlanRecoveryUiState(
+    val persistedFallback: Boolean,
+    val persistedFallbackReason: String?,
+    val onRPlanWarmUpFallback: (String) -> Unit
+)
+
+private data class PreviewRuntimeViews(
+    val previewView: PreviewView,
+    val pixelFreeView: PixelFreeGLSurfaceView,
+    val rPlanPreviewProvider: RPlanBeautyPreviewProvider
+)
+
+@Composable
+private fun rememberPreviewRuntimeViews(context: Context, aspectRatio: Int): PreviewRuntimeViews {
+    val previewView = remember {
+        PreviewView(context).apply {
+            scaleType = when (aspectRatio) {
+                AspectRatio.RATIO_FULL -> PreviewView.ScaleType.FILL_CENTER
+                else -> PreviewView.ScaleType.FIT_CENTER
+            }
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            Logger.d("Camera", "PreviewView created with scaleType=${scaleType}, aspectRatio=$aspectRatio")
+        }
+    }
+
+    val pixelFreeView = remember {
+        PixelFreeGLSurfaceView(context).apply {
+            Logger.d("Camera", "PixelFreeGLSurfaceView created for real-time beauty")
+        }
+    }
+
+    val rPlanPreviewProvider = remember {
+        RPlanBeautyPreviewProvider(context)
+    }
+
+    return PreviewRuntimeViews(
+        previewView = previewView,
+        pixelFreeView = pixelFreeView,
+        rPlanPreviewProvider = rPlanPreviewProvider
+    )
+}
+
+@Composable
+private fun rememberRPlanRecoveryState(
+    beautyStrategy: BeautyStrategy,
+    rPlanRecoveryAvailableAtMs: Long,
+    userPreferencesRepository: com.picme.data.preferences.UserPreferencesRepository,
+    coroutineScope: kotlinx.coroutines.CoroutineScope
+): RPlanRecoveryUiState {
+    var persistedFallback by remember { mutableStateOf(false) }
+    var persistedFallbackReason by remember { mutableStateOf<String?>(null) }
+    var autoRecoveryRequestedAtMs by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(beautyStrategy, rPlanRecoveryAvailableAtMs) {
+        if (beautyStrategy == BeautyStrategy.R_PLAN) {
+            persistedFallback = false
+            persistedFallbackReason = null
+            autoRecoveryRequestedAtMs = 0L
+            return@LaunchedEffect
+        }
+
+        if (beautyStrategy != BeautyStrategy.PIXEL_FREE || rPlanRecoveryAvailableAtMs <= 0L) {
+            return@LaunchedEffect
+        }
+
+        val nowMs = System.currentTimeMillis()
+        if (nowMs >= rPlanRecoveryAvailableAtMs && autoRecoveryRequestedAtMs != rPlanRecoveryAvailableAtMs) {
+            autoRecoveryRequestedAtMs = rPlanRecoveryAvailableAtMs
+            userPreferencesRepository.triggerManualRPlanRecovery()
+            Logger.i("Camera", "Cooldown ended, auto retry R Plan strategy")
+        }
+    }
+
+    val onRPlanWarmUpFallback: (String) -> Unit = { reason ->
+        BeautyEngineRuntimeState.markRPlanFallback(reason)
+
+        if (!persistedFallback) {
+            persistedFallback = true
+            persistedFallbackReason = reason
+            coroutineScope.launch {
+                userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+                Logger.w(
+                    "Camera",
+                    "Beauty strategy persisted to PIXEL_FREE after R Plan warm-up failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
+                )
+            }
+        }
+    }
+
+    return RPlanRecoveryUiState(
+        persistedFallback = persistedFallback,
+        persistedFallbackReason = persistedFallbackReason,
+        onRPlanWarmUpFallback = onRPlanWarmUpFallback
+    )
+}
+
 @OptIn(ExperimentalPermissionsApi::class)
 @ExperimentalGetImage
 @Composable
@@ -481,15 +614,9 @@ fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit,
-    viewModel: MediaViewModel = viewModel(
-        factory = MediaViewModelFactory(
-            dependencies = (LocalContext.current.applicationContext as PicMeApplication)
-                .container
-                .createMediaViewModelDependencies(LocalContext.current.resources)
-        )
-    )
+    viewModel: MediaViewModel
 ) {
-    // [RD] 沉浸式模式：隐藏系统栏
+    // RD 沉浸式模式：隐藏系统栏
     val view = LocalView.current
     val context = LocalContext.current
 
@@ -545,17 +672,15 @@ fun CameraContent(
     onNavigateToDebug: () -> Unit
 ) {
     val context = LocalContext.current
-    val app = context.applicationContext as PicMeApplication
-    val imageProcessor = app.container.imageProcessor
-    val userPreferencesRepository = app.container.userPreferencesRepository
-    val coroutineScope = rememberCoroutineScope()
-    val beautyStrategy by userPreferencesRepository.beautyStrategyFlow.collectAsState(
-        initial = BeautyStrategy.R_PLAN
-    )
-    val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
-    val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
-    val rPlanRecoveryAvailableAtMs by userPreferencesRepository.rPlanRecoveryAvailableAtFlow.collectAsState(initial = 0L)
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val runtimeContext = rememberCameraRuntimeContext(context)
+    val imageProcessor = runtimeContext.imageProcessor
+    val userPreferencesRepository = runtimeContext.userPreferencesRepository
+    val coroutineScope = runtimeContext.coroutineScope
+    val beautyStrategy = runtimeContext.beautyStrategy
+    val debugUiEnabled = runtimeContext.debugUiEnabled
+    val faceLandmarkModeEnabled = runtimeContext.faceLandmarkModeEnabled
+    val rPlanRecoveryAvailableAtMs = runtimeContext.rPlanRecoveryAvailableAtMs
+    val lifecycleOwner = runtimeContext.lifecycleOwner
     LaunchedEffect(beautyStrategy) {
         val fallbackReason = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
         if (fallbackReason != null) {
@@ -581,92 +706,29 @@ fun CameraContent(
     var beautySettings by remember { mutableStateOf(BeautySettings(enabled = true)) }
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
 
-    // [RD] 使用 PreviewView 替代 TextureView
-    // 优势：
-    // 1. CameraX 官方推荐，自动处理旋转和缩放
-    // 2. 支持 ScaleType 配置（FIT_CENTER, FILL_CENTER 等）
-    // 3. 后续可以通过 PreviewView.getBitmap() 获取帧数据实现美颜
-    // 4. 或者通过 Preview.SurfaceProvider 自定义 Surface 接入 PixelFree SDK
-    val previewView = remember {
-        PreviewView(context).apply {
-            // [关键配置] 根据比例模式设置 ScaleType
-            // - FIT_CENTER: 保持比例，画面完整显示（可能有黑边）
-            // - FILL_CENTER: 裁剪填充，铺满屏幕（FULL 模式）
-            scaleType = when (aspectRatio) {
-                AspectRatio.RATIO_FULL -> PreviewView.ScaleType.FILL_CENTER  // FULL: 铺满屏幕
-                else -> PreviewView.ScaleType.FIT_CENTER  // 其他: 保持比例
-            }
+    val previewRuntimeViews = rememberPreviewRuntimeViews(
+        context = context,
+        aspectRatio = aspectRatio
+    )
+    val previewView = previewRuntimeViews.previewView
+    val pixelFreeView = previewRuntimeViews.pixelFreeView
+    val rPlanPreviewProvider = previewRuntimeViews.rPlanPreviewProvider
 
-            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-
-            Logger.d("Camera",
-                "PreviewView created with scaleType=${scaleType}, aspectRatio=$aspectRatio"
-            )
-        }
-    }
-
-    // [RD] PixelFree 美颜预览View（备用链路）
-    val pixelFreeView = remember {
-        PixelFreeGLSurfaceView(context).apply {
-            Logger.d("Camera", "PixelFreeGLSurfaceView created for real-time beauty")
-        }
-    }
-
-    // [RD] R 计划提供者（主引擎参数链路）
-    val rPlanPreviewProvider = remember {
-        RPlanBeautyPreviewProvider(context)
-    }
-
-    var persistedRPlanFallback by remember { mutableStateOf(false) }
-    var persistedRPlanFallbackReason by remember { mutableStateOf<String?>(null) }
-    var autoRecoveryRequestedAtMs by remember { mutableStateOf(0L) }
-
-    LaunchedEffect(beautyStrategy, rPlanRecoveryAvailableAtMs) {
-        if (beautyStrategy == BeautyStrategy.R_PLAN) {
-            persistedRPlanFallback = false
-            persistedRPlanFallbackReason = null
-            autoRecoveryRequestedAtMs = 0L
-            return@LaunchedEffect
-        }
-
-        if (beautyStrategy != BeautyStrategy.PIXEL_FREE) {
-            return@LaunchedEffect
-        }
-
-        if (rPlanRecoveryAvailableAtMs <= 0L) {
-            return@LaunchedEffect
-        }
-
-        val nowMs = System.currentTimeMillis()
-        if (nowMs >= rPlanRecoveryAvailableAtMs && autoRecoveryRequestedAtMs != rPlanRecoveryAvailableAtMs) {
-            autoRecoveryRequestedAtMs = rPlanRecoveryAvailableAtMs
-            userPreferencesRepository.triggerManualRPlanRecovery()
-            Logger.i("Camera", "Cooldown ended, auto retry R Plan strategy")
-        }
-    }
-
-    val onRPlanWarmUpFallback: (String) -> Unit = { reason ->
-        BeautyEngineRuntimeState.markRPlanFallback(reason)
-
-        if (!persistedRPlanFallback) {
-            persistedRPlanFallback = true
-            persistedRPlanFallbackReason = reason
-            coroutineScope.launch {
-                userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
-                Logger.w(
-                    "Camera",
-                    "Beauty strategy persisted to PIXEL_FREE after R Plan warm-up failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
-                )
-            }
-        }
-    }
+    val recoveryState = rememberRPlanRecoveryState(
+        beautyStrategy = beautyStrategy,
+        rPlanRecoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
+        userPreferencesRepository = userPreferencesRepository,
+        coroutineScope = coroutineScope
+    )
+    val persistedRPlanFallback = recoveryState.persistedFallback
+    val persistedRPlanFallbackReason = recoveryState.persistedFallbackReason
 
     val previewStrategyBundle = rememberPreviewStrategyBundle(
         beautyStrategy = beautyStrategy,
         previewView = previewView,
         pixelFreeView = pixelFreeView,
         rPlanPreviewProvider = rPlanPreviewProvider,
-        onRPlanWarmUpFallback = onRPlanWarmUpFallback
+        onRPlanWarmUpFallback = recoveryState.onRPlanWarmUpFallback
     )
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
@@ -698,7 +760,7 @@ fun CameraContent(
 
     var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
 
-    // [RD] 快路径：参数变更立即下发到当前预览引擎，保证滑杆跟手性。
+    // RD 快路径：参数变更立即下发到当前预览引擎，保证滑杆跟手性。
     LaunchedEffect(beautySettings, beautyStrategy) {
         val settings = beautySettings
         activePreviewStrategy.applyBeautySettings(settings)
@@ -714,7 +776,7 @@ fun CameraContent(
         activePreviewStrategy.applyFaceWarpParams(faceWarpParams)
     }
 
-    // [RD] 监听比例变化，动态调整 ScaleType
+    // RD 监听比例变化，动态调整 ScaleType
     LaunchedEffect(aspectRatio) {
         previewView.scaleType = when (aspectRatio) {
             AspectRatio.RATIO_FULL -> PreviewView.ScaleType.FILL_CENTER
@@ -734,7 +796,7 @@ fun CameraContent(
     var showLogOverlay by remember { mutableStateOf(false) }
     var showFaceDebugOverlay by remember { mutableStateOf(false) }
 
-    // [RD] 新增美颜子功能面板状态
+    // RD 新增美颜子功能面板状态
     var showFacialRefinement by remember { mutableStateOf(false) }
     var showMakeupAdjustment by remember { mutableStateOf(false) }
     var showBodyManagement by remember { mutableStateOf(false) }
@@ -756,7 +818,7 @@ fun CameraContent(
         closeBeautySubPanels()
     }
 
-    // [RD] 定义美颜子功能回调函数
+    // RD 定义美颜子功能回调函数
     val onToggleFacialRefinement = {
         closePrimaryPanels()
         showMakeupAdjustment = false
@@ -807,7 +869,7 @@ fun CameraContent(
         }
     }
 
-    // [RD] ImageCapture需要在LaunchedEffect中创建，以便1:1模式可以正确配置ViewPort
+    // RD ImageCapture需要在LaunchedEffect中创建，以便1:1模式可以正确配置ViewPort
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     val recorder = remember {
         Recorder.Builder().setQualitySelector(QualitySelector.from(Quality.HIGHEST)).build()
@@ -885,7 +947,7 @@ fun CameraContent(
         }
     }
     
-    // [RD] 监听美颜参数变化（暂时注释，后续实现）
+    // RD 监听美颜参数变化（暂时注释，后续实现）
     // LaunchedEffect(beautySettings) {
     //     pixelFreeView.setSmoothingStrength(beautySettings.smoothing.toFloat())
     //     pixelFreeView.setWhiteningStrength(beautySettings.whitening.toFloat())
@@ -894,7 +956,7 @@ fun CameraContent(
     //     Logger.d("Camera", "PixelFree beauty updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
     // }
     
-    // [RD] PixelFreeEffects 初始化
+    // RD PixelFreeEffects 初始化
     LaunchedEffect(Unit) {
         // 等待 GLSurface 创建和初始化
         kotlinx.coroutines.delay(500)
@@ -1747,7 +1809,7 @@ private fun CameraPreviewContent(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        // [RD] 美颜子功能面板显示
+        // RD 美颜子功能面板显示
         val isAnyBeautyPanelOpen = showFacialRefinement || showMakeupAdjustment || showBodyManagement
         
         AnimatedVisibility(
@@ -1834,11 +1896,11 @@ private fun CameraPreviewContent(
 }
 
 /**
- * [RD] 简化版人脸坐标转换（用于 BeautyTextureView）
+ * RD 简化版人脸坐标转换（用于 BeautyTextureView）
  */
 /**
- * [FIX] 简化版人脸坐标转换函数
- * 
+ * FIX 简化版人脸坐标转换函数
+ *
  * 【问题】原函数没有考虑相机画面的实际显示比例，导致坐标偏移
  * 【解决】使用与 transformFaceCoordinate 相同的逻辑，但适配 TextureView
  */

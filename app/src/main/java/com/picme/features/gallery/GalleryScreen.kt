@@ -1,5 +1,6 @@
 package com.picme.features.gallery
 
+import android.content.Context
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -71,6 +72,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -78,6 +80,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
 import com.picme.domain.model.DuplicateGroup
+import com.picme.domain.model.GroupTitleType
+import com.picme.domain.model.GroupedMedia
 import com.picme.domain.model.GroupingMode
 import com.picme.domain.model.GroupingMode.DATE
 import com.picme.domain.model.GroupingMode.FACE
@@ -92,12 +96,24 @@ import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
 import java.io.File
 
+private fun resolveGroupTitle(context: Context, group: GroupedMedia): String {
+    return when (group.titleType) {
+        GroupTitleType.NONE -> group.titleValue
+        GroupTitleType.DATE -> group.titleValue
+        GroupTitleType.WITH_FACES -> context.getString(R.string.with_faces)
+        GroupTitleType.NO_FACES -> context.getString(R.string.no_faces)
+        GroupTitleType.PERSON -> context.getString(R.string.person_group, group.titleValue)
+        GroupTitleType.LANDSCAPE -> context.getString(R.string.landscape)
+        GroupTitleType.SWIMWEAR -> context.getString(R.string.swimwear)
+        GroupTitleType.SEXY -> context.getString(R.string.sexy)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(
     viewModel: MediaViewModel,
-    onNavigateBack: () -> Unit,
-    onNavigateToOcr: (String) -> Unit // [NEW] OCR 识别回调，接收图片 Uri
+    onNavigateBack: () -> Unit
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -201,6 +217,7 @@ fun GalleryScreen(
                 EmptyGalleryMessage()
             } else {
                 MediaGrid(
+                    context = context,
                     groupedMedia = groupedMedia,
                     selectedIds = selectedIds,
                     isSelectionMode = isSelectionMode,
@@ -265,7 +282,7 @@ fun GalleryScreen(
                         },
                         onStartOcr = { uriString ->
                             Log.d("PicMe:UX", "Triggering OCR from Pager")
-                            viewModel.recognizeTextFromCurrentImage(context, android.net.Uri.parse(uriString))
+                            viewModel.recognizeTextFromCurrentImage(context, uriString.toUri())
                         },
                         onDismissOcr = {
                             viewModel.clearOcrResult()
@@ -598,7 +615,8 @@ private fun DuplicatePreviewDialog(
 
 @Composable
 private fun MediaGrid(
-    groupedMedia: List<MediaGroup>,
+    context: Context,
+    groupedMedia: List<GroupedMedia>,
     selectedIds: List<Long>,
     isSelectionMode: Boolean,
     onThumbnailPositioned: (Long, Rect) -> Unit,
@@ -612,10 +630,11 @@ private fun MediaGrid(
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         groupedMedia.forEach { group ->
-            if (group.title.isNotEmpty()) {
+            val groupTitle = resolveGroupTitle(context, group)
+            if (groupTitle.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     MediaGroupHeader(
-                        title = group.title,
+                        title = groupTitle,
                         count = group.items.size
                     )
                 }

@@ -57,26 +57,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.picme.PicMeApplication
 import com.picme.R
 import com.picme.features.gallery.MediaViewModel
-import com.picme.features.gallery.MediaViewModelFactory
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DebugScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    mediaViewModel: MediaViewModel
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as PicMeApplication
     val scope = app.applicationScope
-    val mediaViewModel: MediaViewModel = viewModel(
-        factory = MediaViewModelFactory(
-            dependencies = app.container.createMediaViewModelDependencies(context.resources)
-        )
-    )
 
     val isGenerating by SampleDataGenerator.isGenerating.collectAsState()
     val isPaused by SampleDataGenerator.isPaused.collectAsState()

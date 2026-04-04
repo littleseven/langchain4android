@@ -1,3 +1,5 @@
+@file:Suppress("OPT_IN_USAGE_ERROR")
+
 package com.picme
 
 import android.content.Context
@@ -32,7 +34,6 @@ import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
-import com.picme.features.gallery.MediaViewModelFactory
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
@@ -52,8 +53,11 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(context)
     }
 
+    @androidx.camera.core.ExperimentalGetImage
+    @Suppress("OPT_IN_USAGE_ERROR")
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
@@ -61,9 +65,7 @@ class MainActivity : ComponentActivity() {
             val app = application as PicMeApplication
             val context = LocalContext.current
             val mediaViewModel: MediaViewModel = viewModel(
-                factory = MediaViewModelFactory(
-                    dependencies = app.container.createMediaViewModelDependencies(context.resources)
-                )
+                factory = app.container.createMediaViewModelFactory()
             )
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = SettingsViewModelFactory(app.container.userPreferencesRepository)
@@ -130,11 +132,7 @@ class MainActivity : ComponentActivity() {
                             composable(Screen.Gallery.route) {
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
-                                    onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToOcr = { uri ->
-                                        // OCR 已改为在相册内以浮层方式处理，此回调不再使用
-                                        // 实际 OCR 由 GalleryScreen 内部直接调用 viewModel.onStartOcr 处理
-                                    }
+                                    onNavigateBack = { navController.popBackStack() }
                                 )
                             }
                             composable(Screen.Settings.route) {
@@ -144,7 +142,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Screen.Debug.route) {
-                                DebugScreen(onNavigateBack = { navController.popBackStack() })
+                                DebugScreen(
+                                    onNavigateBack = { navController.popBackStack() },
+                                    mediaViewModel = mediaViewModel
+                                )
                             }
 
                         }

@@ -1,7 +1,7 @@
 package com.picme.di
 
 import android.content.Context
-import android.content.res.Resources
+import androidx.lifecycle.ViewModelProvider
 import com.picme.core.common.Logger
 import com.picme.core.image.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
@@ -15,24 +15,41 @@ import com.picme.data.repository.MediaRepositoryImpl
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
+import com.picme.domain.usecase.OcrProcessor
 import com.picme.domain.usecase.OcrUseCase
+import com.picme.features.gallery.MediaViewModel
 
 data class MediaViewModelDependencies(
-    val resources: Resources,
     val repository: MediaRepository,
     val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
-    val ocrUseCase: OcrUseCase
+    val ocrUseCase: OcrProcessor
 )
+
+class MediaViewModelFactory(
+    private val dependencies: MediaViewModelDependencies
+) : ViewModelProvider.Factory {
+
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return MediaViewModel(
+                repository = dependencies.repository,
+                getGroupedMediaUseCase = dependencies.getGroupedMediaUseCase,
+                findDuplicateMediaUseCase = dependencies.findDuplicateMediaUseCase,
+                ocrUseCase = dependencies.ocrUseCase
+            ) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
 
 interface AppContainer {
     val repository: MediaRepository
     val userPreferencesRepository: UserPreferencesRepository
     val imageProcessor: ImageProcessor
 
-    fun createOcrUseCase(): OcrUseCase
-
-    fun createMediaViewModelDependencies(resources: Resources): MediaViewModelDependencies
+    fun createMediaViewModelFactory(): ViewModelProvider.Factory
 }
 
 object BeautyEngineRuntimeState {
@@ -93,17 +110,24 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         ImageProcessorImpl(beautyProcessor)
     }
 
-    override fun createOcrUseCase(): OcrUseCase {
-        return OcrUseCase()
+    private val ocrProcessor: OcrProcessor by lazy {
+        OcrUseCase()
     }
 
-    override fun createMediaViewModelDependencies(resources: Resources): MediaViewModelDependencies {
-        return MediaViewModelDependencies(
-            resources = resources,
+    private val mediaViewModelDependencies: MediaViewModelDependencies by lazy {
+        MediaViewModelDependencies(
             repository = repository,
             getGroupedMediaUseCase = GetGroupedMediaUseCase(),
             findDuplicateMediaUseCase = FindDuplicateMediaUseCase(repository),
-            ocrUseCase = createOcrUseCase()
+            ocrUseCase = ocrProcessor
         )
+    }
+
+    private val mediaViewModelFactory: ViewModelProvider.Factory by lazy {
+        MediaViewModelFactory(mediaViewModelDependencies)
+    }
+
+    override fun createMediaViewModelFactory(): ViewModelProvider.Factory {
+        return mediaViewModelFactory
     }
 }

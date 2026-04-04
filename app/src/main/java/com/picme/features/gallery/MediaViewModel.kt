@@ -1,23 +1,18 @@
 package com.picme.features.gallery
 
 import android.content.Context
-import android.content.res.Resources
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.picme.R
-import com.picme.di.MediaViewModelDependencies
 import com.picme.domain.model.DuplicateGroup
-import com.picme.domain.model.GroupTitleType
 import com.picme.domain.model.GroupedMedia
 import com.picme.domain.model.GroupingMode
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
-import com.picme.domain.usecase.OcrUseCase
+import com.picme.domain.usecase.OcrProcessor
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,17 +21,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-data class MediaGroup(
-    val title: String,
-    val items: List<MediaAsset>
-)
-
 class MediaViewModel(
-    private val resources: Resources,
     private val repository: MediaRepository,
     private val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
-    private val ocrUseCase: OcrUseCase
+    private val ocrUseCase: OcrProcessor
 ) : ViewModel() {
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
@@ -91,13 +80,11 @@ class MediaViewModel(
     private val _isScanningDuplicates = MutableStateFlow(false)
     val isScanningDuplicates = _isScanningDuplicates.asStateFlow()
 
-    val groupedMedia: StateFlow<List<MediaGroup>> = combine(
+    val groupedMedia: StateFlow<List<GroupedMedia>> = combine(
         repository.allMedia,
         _groupingMode
     ) { allMedia, mode ->
-        getGroupedMediaUseCase(allMedia, mode).map { groupedMedia ->
-            mapToUiGroup(groupedMedia)
-        }
+        getGroupedMediaUseCase(allMedia, mode)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -114,21 +101,6 @@ class MediaViewModel(
     fun setGroupingMode(mode: GroupingMode) {
         Log.d("PicMe:Gallery", "Setting grouping mode to: $mode")
         _groupingMode.value = mode
-    }
-
-    private fun mapToUiGroup(groupedMedia: GroupedMedia): MediaGroup {
-        val title = when (groupedMedia.titleType) {
-            GroupTitleType.NONE -> groupedMedia.titleValue
-            GroupTitleType.DATE -> groupedMedia.titleValue
-            GroupTitleType.WITH_FACES -> resources.getString(R.string.with_faces)
-            GroupTitleType.NO_FACES -> resources.getString(R.string.no_faces)
-            GroupTitleType.PERSON -> resources.getString(R.string.person_group, groupedMedia.titleValue)
-            GroupTitleType.LANDSCAPE -> resources.getString(R.string.landscape)
-            GroupTitleType.SWIMWEAR -> resources.getString(R.string.swimwear)
-            GroupTitleType.SEXY -> resources.getString(R.string.sexy)
-        }
-
-        return MediaGroup(title = title, items = groupedMedia.items)
     }
 
     fun insertMedia(mediaAsset: MediaAsset) {
@@ -203,24 +175,5 @@ class MediaViewModel(
                 _duplicateGroups.value = emptyList()
             }
         }
-    }
-}
-
-class MediaViewModelFactory(
-    private val dependencies: MediaViewModelDependencies
-) : ViewModelProvider.Factory {
-
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
-            @Suppress("UNCHECKED_CAST")
-            return MediaViewModel(
-                resources = dependencies.resources,
-                repository = dependencies.repository,
-                getGroupedMediaUseCase = dependencies.getGroupedMediaUseCase,
-                findDuplicateMediaUseCase = dependencies.findDuplicateMediaUseCase,
-                ocrUseCase = dependencies.ocrUseCase
-            ) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
