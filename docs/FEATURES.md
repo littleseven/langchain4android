@@ -305,10 +305,11 @@ Face.boundingBox
     ├── centerX() / centerY() (已考虑旋转的坐标)
     └── 坐标系：相对于旋转后图像的左上角原点
          ↓
-transformFaceCoordinate()
-    ├── Step 1: 归一化 (基于 imageProxy.width/height)
-    ├── Step 2: 旋转 + 镜像补偿
-    └── Step 3: FIT_CENTER 映射到屏幕
+transformFaceCoordinate() / transformFaceCoordinateSimple()
+    ├── Step 1: 按 rotationDegrees 交换宽高并归一化
+    ├── Step 2: 前置镜像补偿（x = 1 - x）
+    ├── Step 3: 旋转补偿
+    └── Step 4: 映射为 Preview 像素坐标
 ```
 
 **关键说明**：
@@ -624,42 +625,33 @@ normY = faceY / imageHeight
 - ML Kit 已经根据 `rotationDegrees` 调整了检测坐标系
 - 因此直接相除即可得到正确的归一化坐标
 
-**Step 2: 旋转变换补偿（坐标系映射）**
-根据设备旋转角度，将**图像坐标系**映射到**屏幕坐标系**：
-
-| rotationDegrees | 后置摄像头 (Back) | 前置摄像头 (Front) | 说明 |
-|----------------|------------------|-------------------|------|
-| 0° (竖屏) | (normX, normY) | (1 - normX, normY) *镜像* | 传感器竖直放置 |
-| 90° (横屏右) | (normY, 1 - normX) | (1 - normY, 1 - normX) *镜像* | 传感器顺时针旋转 90° |
-| 180° (倒立) | (1 - normX, 1 - normY) | (normX, 1 - normY) *镜像* | 传感器倒置 |
-| 270° (横屏左) | (1 - normY, normX) | (normY, normX) *镜像* | 传感器逆时针旋转 90° |
-
-**前置摄像头镜像原理**：
+**Step 2: 镜像补偿（前置摄像头）**
 - 前置摄像头预览时，用户看到"镜中自己"，需要水平翻转
 - 公式：`mirroredX = 1 - normX`
-- **注意**：镜像操作在旋转变换之后进行
 
-**Step 3: FIT_CENTER 映射**
-PreviewView 使用 `ScaleType.FIT_CENTER` 保持预览不失真：
+**Step 3: 旋转补偿（当前实现）**
+当前代码中，`rotationDegrees` 的处理策略为：
+
+| rotationDegrees | 变换结果 |
+|----------------|----------|
+| 0° / 90° / 270° | `(mirroredX, normY)` |
+| 180° | `(1 - mirroredX, 1 - normY)` |
+
+> 说明：`90°/270°` 的方向差异通过 Step1 的宽高交换吸收，后续统一按同一补偿逻辑处理。
+
+**Step 4: 像素映射**
+将补偿后的归一化坐标映射到预览像素坐标：
 
 ```
-输入：归一化坐标 (adjustedX, adjustedY)
-      PreviewView 尺寸 (previewWidth, previewHeight)
-      实际渲染区域 (displayRect)
-
-输出：最终屏幕坐标 (screenX, screenY)
-
-// PreviewView 内部计算（伪代码）
-displayRect = calculateDisplayRect(previewSize, imageSize, previewWidth, previewHeight)
-screenX = displayRect.left + adjustedX * displayRect.width()
-screenY = displayRect.top + adjustedY * displayRect.height()
+screenX = adjustedX * previewWidth
+screenY = adjustedY * previewHeight
 ```
 
-**关键实现**：使用 `MeteringPointFactory` 自动处理 FIT_CENTER 映射
+**关键实现**：分析链路与绘制链路统一使用四步法，避免多套坐标算法并存。
 ```kotlin
-val factory = previewView.meteringPointFactory
-val point = factory.createPoint(adjustedX, adjustedY)
-val screenOffset = Offset(point.x, point.y)
+val screenX = adjustedX * previewWidth
+val screenY = adjustedY * previewHeight
+val screenOffset = Offset(screenX, screenY)
 ```
 
 #### 1.6.3 完整算法实现
@@ -671,7 +663,7 @@ val screenOffset = Offset(point.x, point.y)
  * 【数据流】
  * 1. Camera Sensor -> ImageProxy (YUV_420_888, rotationDegrees)
  * 2. ML Kit 检测 -> Face.boundingBox (已处理旋转)
- * 3. 归一化 -> 旋转映射 -> 镜像 -> FIT_CENTER 映射
+ * 3. 宽高交换归一化 -> 镜像 -> 旋转补偿 -> 像素映射
  * 
  * @param faceX 人脸中心 X 坐标（图像坐标系，来自 ML Kit，已考虑旋转）
  * @param faceY 人脸中心 Y 坐标（图像坐标系，来自 ML Kit，已考虑旋转）
@@ -691,39 +683,31 @@ private fun transformFaceCoordinate(
     rotationDegrees: Int,
     lensFacing: Int
 ): Offset {
-    // Step 1: 归一化坐标
-    // 注意：ML Kit 已处理旋转，faceX/Y 是旋转后图像上的坐标
-    // imageWidth/Height 是传感器物理尺寸，直接相除即可
-    val normX = faceX / imageWidth
-    val normY = faceY / imageHeight
+    // Step 1: 按旋转角交换宽高并归一化
+    val (rotatedWidth, rotatedHeight) = when (rotationDegrees) {
+        90, 270 -> Pair(imageHeight, imageWidth)
+        else -> Pair(imageWidth, imageHeight)
+    }
+    val normX = faceX / rotatedWidth
+    val normY = faceY / rotatedHeight
     
-    // Step 2: 旋转变换 + 镜像补偿
-    // 目的：将图像坐标系映射到屏幕坐标系
+    // Step 2: 前置镜像补偿
+    val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+        1f - normX
+    } else {
+        normX
+    }
+
+    // Step 3: 旋转补偿
     val (adjustedX, adjustedY) = when (rotationDegrees) {
-        90 -> {
-            if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                Pair(normY, 1f - normX)  // 后置 90 度
-            } else {
-                Pair(1f - normY, 1f - normX)  // 前置 90 度（镜像）
-            }
-        }
-        270 -> {
-            if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-                Pair(normY, normX)  // 前置 270 度（镜像）
-            } else {
-                Pair(1f - normY, normX)  // 后置 270 度
-            }
-        }
-        180 -> Pair(1f - normX, 1f - normY)  // 180 度倒立
-        else -> Pair(normX, normY)  // 0 度竖屏
+        180 -> Pair(1f - mirroredX, 1f - normY)
+        else -> Pair(mirroredX, normY)
     }
     
-    // Step 3: FIT_CENTER 映射（使用 PreviewView 内置功能）
-    // 自动处理 letterbox 效应和宽高比适配
-    val factory = previewView.meteringPointFactory
-    val point = factory.createPoint(adjustedX, adjustedY)
-    
-    return Offset(point.x, point.y)
+    // Step 4: 映射为 Preview 像素坐标
+    val screenX = adjustedX * previewView.width
+    val screenY = adjustedY * previewView.height
+    return Offset(screenX, screenY)
 }
 ```
 

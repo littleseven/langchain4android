@@ -1,7 +1,7 @@
 # 相机预览完整指南
 
-**最后更新**：2026-04（补充 R Plan 双链路说明）
-**状态**：生产稳定版（PreviewView 主链路 + R Plan Provider 链路并存）
+**最后更新**：2026-04（按预览策略重构对齐）
+**状态**：生产稳定版（策略化预览链路：R Plan Provider + PreviewView）
 
 ---
 
@@ -10,7 +10,7 @@
 ### 1.1 核心原则
 **使用 CameraX 官方推荐的 `PreviewView` + `ScaleType`**，让 CameraX 自动处理所有复杂的比例计算。
 
-> 说明：本指南聚焦 `PreviewView` 比例与坐标问题；R Plan 的 `SurfaceView + Provider` 渲染链路请参考 `R_PLAN_GUIDE.md`。
+> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `RPlanPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换，R Plan 的 `SurfaceView + Provider` 细节见 `R_PLAN_GUIDE.md`。
 
 ### 1.2 技术方案
 
@@ -175,88 +175,59 @@ val croppedBitmap = if (cropRect.width() != originalBitmap.width ||
 
 ---
 
-## 3. 坐标系统与人脸跟踪
+## 3. 坐标系统与人脸跟踪（重构对齐）
 
-### 3.1 四个坐标系
+### 3.1 当前实现的转换模型
 
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│  原始图像坐标系  │      │   ML Kit 坐标系   │      │    窗口坐标系    │      │   屏幕坐标系     │
-│ (Sensor Space)  │ ───► │ (Image Space)   │ ───► │ (Window Space)  │ ───► │ (Screen Space)  │
-└─────────────────┘      └─────────────────┘      └─────────────────┘      └─────────────────┘
-     ▲                        ▲                        ▲                        ▲
-     │                        │                        │                        │
-Camera Sensor          ML Kit 检测后           PreviewView            Compose Canvas
-YUV_420_888            Face.boundingBox       FIT_CENTER             绘制十字星
-```
+当前实现不再依赖 `PreviewView.getImageTransform()`，而是使用统一函数：
 
-### 3.2 坐标转换流程
+- `transformFaceCoordinateSimple(...)`（分析链路）
+- `transformFaceCoordinate(...)`（屏幕绘制链路）
 
-#### 步骤 1：ML Kit 坐标系 → 窗口坐标系
+两者都遵循同一套四步法：
+
+1. **归一化**：按旋转后的宽高将人脸点位映射到 `0~1`
+2. **镜像补偿**：前置摄像头执行 `x = 1 - x`
+3. **旋转补偿**：根据 `rotationDegrees` 做方向修正
+4. **像素映射**：乘以 `previewWidth/previewHeight` 得到屏幕坐标
+
+### 3.2 当前代码实现（简化版）
+
 ```kotlin
-val sourceCoords = floatArrayOf(
-    face.boundingBox.left.toFloat(),
-    face.boundingBox.top.toFloat(),
-    face.boundingBox.right.toFloat(),
-    face.boundingBox.bottom.toFloat()
-)
-
-val destCoords = FloatArray(4)
-coordinateTransform.mapPoints(destCoords, sourceCoords)
-```
-
-**关键**：`coordinateTransform` 由 `PreviewView.getImageTransform()` 提供，自动处理旋转和缩放。
-
-#### 步骤 2：窗口坐标系 → 屏幕坐标系
-```kotlin
-val screenX = destCoords[0] + previewViewLeft
-val screenY = destCoords[1] + previewViewTop
-```
-
-**关键**：加上 `PreviewView` 在屏幕中的偏移量。
-
-### 3.3 完整实现示例
-```kotlin
-@Composable
-fun FaceTrackingOverlay(
-    faces: List<Face>,
-    previewView: PreviewView
-) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val transform = previewView.getImageTransform()
-        val viewLocation = IntArray(2)
-        previewView.getLocationOnScreen(viewLocation)
-
-        faces.forEach { face ->
-            // 1. ML Kit → 窗口坐标
-            val sourceCoords = floatArrayOf(
-                face.boundingBox.centerX().toFloat(),
-                face.boundingBox.centerY().toFloat()
-            )
-            val destCoords = FloatArray(2)
-            transform.mapPoints(destCoords, sourceCoords)
-
-            // 2. 窗口坐标 → 屏幕坐标
-            val screenX = destCoords[0] + viewLocation[0]
-            val screenY = destCoords[1] + viewLocation[1]
-
-            // 3. 绘制十字星
-            drawLine(
-                color = Color.White,
-                start = Offset(screenX - 20f, screenY),
-                end = Offset(screenX + 20f, screenY),
-                strokeWidth = 2.dp.toPx()
-            )
-            drawLine(
-                color = Color.White,
-                start = Offset(screenX, screenY - 20f),
-                end = Offset(screenX, screenY + 20f),
-                strokeWidth = 2.dp.toPx()
-            )
-        }
+internal fun transformFaceCoordinateSimple(
+    faceX: Float,
+    faceY: Float,
+    imageProxyWidth: Int,
+    imageProxyHeight: Int,
+    previewWidth: Float,
+    previewHeight: Float,
+    rotationDegrees: Int,
+    lensFacing: Int
+): Offset {
+    val (rotatedWidth, rotatedHeight) = when (rotationDegrees) {
+        90, 270 -> Pair(imageProxyHeight, imageProxyWidth)
+        else -> Pair(imageProxyWidth, imageProxyHeight)
     }
+
+    val normX = faceX / rotatedWidth
+    val normY = faceY / rotatedHeight
+    val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) 1f - normX else normX
+
+    val (adjustedX, adjustedY) = when (rotationDegrees) {
+        180 -> Pair(1f - mirroredX, 1f - normY)
+        else -> Pair(mirroredX, normY)
+    }
+
+    return Offset(adjustedX * previewWidth, adjustedY * previewHeight)
 }
 ```
+
+### 3.3 重构后注意事项
+
+- `rotationDegrees=90/270` 时先交换 `imageProxy` 的宽高再归一化。
+- 前置镜像与旋转补偿顺序不可颠倒。
+- 该链路服务于十字星绘制与 `FaceWarpParams`，两者必须共用同一转换逻辑。
+- 调试日志固定输出 `Step1~Step4`，用于回归比对坐标偏移。
 
 ---
 
@@ -312,8 +283,8 @@ DisposableEffect(previewView) {
 **解决**：使用 `UseCaseGroup` + `ViewPort`，并在 `ImageProcessor` 中手动裁剪
 
 ### 问题 3：人脸跟踪十字星位置偏移
-**原因**：坐标转换不正确
-**解决**：使用 `PreviewView.getImageTransform()` + `getLocationOnScreen()`
+**原因**：归一化宽高、前置镜像或旋转补偿顺序不一致
+**解决**：统一走 `transformFaceCoordinateSimple()` / `transformFaceCoordinate()` 四步法，并核对 `Step1~Step4` 日志
 
 ### 问题 4：FULL 模式黑边
 **原因**：传感器比例与屏幕比例不匹配

@@ -429,10 +429,12 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 4.2 双引擎容灾现状
 
-- [x] 默认策略为 `R_PLAN`，失败自动回退 `PIXEL_FREE`。
-- [x] 回退状态持久化到 DataStore，包含恢复时间戳 `r_plan_recovery_available_at_ms`。
+- [x] `rememberPreviewStrategyBundle(...)` 按 `BeautyStrategy` 选择 `RPlanPreviewStrategy` 或 `PixelFreePreviewStrategy`。
+- [x] `RPlanPreviewStrategy.bindPreview(...)` 成功时返回 `true`，由 `useProviderRenderView` 驱动 UI 切换到 Provider View。
+- [x] R Plan warm-up 失败会触发 `onRPlanWarmUpFallback(reason)`，并持久化回退到 `PIXEL_FREE`。
+- [x] 回退状态写入 DataStore，包含恢复时间戳 `r_plan_recovery_available_at_ms`。
 - [x] 冷却窗口结束后自动触发 `triggerManualRPlanRecovery()` 重试 R Plan。
-- [x] 支持 warm-up 超时兜底：Provider 绑定超时后自动回落 `PreviewView` 并请求重绑。
+- [x] 支持 provider 绑定超时兜底：超过 `PROVIDER_VIEW_BIND_TIMEOUT_MS=1800ms` 时自动回落 `PreviewView` 并请求重绑。
 
 ### 4.3 下一步技术项（RD）
 
@@ -547,17 +549,21 @@ runCatching {
 ### 6.2 回退执行链路
 
 ```kotlin
-// BeautyPreviewProviderFactory / AppContainer
-try {
-    RPlanBeautyPreviewProvider(context).initialize()
-} catch (error: Throwable) {
-    BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "unknown")
-    return PixelFreeBeautyPreviewProvider(context).apply { initialize() }
+// CameraRuntimeState.rememberRPlanRecoveryState
+val onRPlanWarmUpFallback: (String) -> Unit = { reason ->
+    BeautyEngineRuntimeState.markRPlanFallback(reason)
+    if (!persistedFallback) {
+        persistedFallback = true
+        persistedFallbackReason = reason
+        coroutineScope.launch {
+            userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+        }
+    }
 }
 ```
 
 - 回退目标为 `PIXEL_FREE`（稳定兜底引擎），不是离线拍照后处理。
-- 回退原因通过 `BeautyEngineRuntimeState` 暂存，供相机页消费。
+- 回退由 `onRPlanWarmUpFallback(reason)` 统一收敛，避免多处写策略状态。
 - 调试浮层展示 fallback 状态、剩余冷却时间与失败原因。
 
 ### 6.3 持久化冷却与自动恢复

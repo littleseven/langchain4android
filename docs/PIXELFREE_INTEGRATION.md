@@ -196,36 +196,37 @@ pixelFreeView.setBeautyParam(PFBeautyFilterType.PFBeautyFiterTypeFace_EyeStrengt
 pixelFreeView.setBeautyParam(PFBeautyFilterType.PFBeautyFiterTypeFace_thinning, 0.3f)
 ```
 
-### 3.3 相机集成
+### 3.3 相机集成（重构后实现）
 
-**使用 CameraX + PixelFreeGLSurfaceView**：
+当前代码已切到**策略化预览绑定**，PixelFree 作为兜底策略时采用以下链路：
+
 ```kotlin
-// 1. 创建 PixelFreeGLSurfaceView
-val pixelFreeView = PixelFreeGLSurfaceView(context)
+internal class PixelFreePreviewStrategy(
+    private val previewView: PreviewView,
+    private val pixelFreeView: PixelFreeGLSurfaceView
+) : BeautyPreviewEngineStrategy {
 
-// 2. 设置渲染回调
-pixelFreeView.setRenderCallback { textureId, width, height ->
-    // 调用 PixelFree SDK 处理纹理
-    pixelFreeView.processTexture(textureId, width, height)
+    override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
+        previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
+        return false
+    }
+
+    override fun applyBeautySettings(settings: BeautySettings) {
+        pixelFreeView.queueEvent {
+            pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
+            pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
+            pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
+            pixelFreeView.setSlimFaceStrength(((settings.slimFace + 50f) / 100f).coerceIn(0f, 1f))
+        }
+    }
 }
-
-// 3. CameraX 绑定到 PixelFreeView
-val preview = Preview.Builder()
-    .setTargetAspectRatio(AspectRatio.RATIO_16_9)
-    .build()
-
-preview.setSurfaceProvider(cameraExecutor) { outputSurface ->
-    // 将相机输出发送到 PixelFreeView
-    pixelFreeView.setCameraTextureId(textureId, width, height)
-}
-
-// 4. 绑定到生命周期
-cameraProvider.bindToLifecycle(
-    lifecycleOwner,
-    cameraSelector,
-    preview
-)
 ```
+
+实现要点：
+
+- CameraX 预览 Surface 统一走 `PreviewView.surfaceProvider`。
+- PixelFree 仍负责参数处理与渲染能力，不直接承接 CameraX 的 SurfaceRequest。
+- `bindPreview(...)` 返回 `false`，表示 UI 继续显示 `PreviewView` 容器。
 
 ### 3.4 美颜参数详解
 

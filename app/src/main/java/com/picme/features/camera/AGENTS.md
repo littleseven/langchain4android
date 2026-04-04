@@ -122,10 +122,11 @@ ML Kit InputImage.fromMediaImage(mediaImage, rotationDegrees)
     ├── ML Kit 内部自动处理旋转补偿
     └── 输出：Face.boundingBox（已旋转的坐标）
     ↓
-transformFaceCoordinate()
-    ├── Step 1: 归一化（使用 imageProxy.width/height）
-    ├── Step 2: 旋转 + 镜像映射到屏幕坐标系
-    └── Step 3: FIT_CENTER 映射
+transformFaceCoordinate() / transformFaceCoordinateSimple()
+    ├── Step 1: 按 rotationDegrees 交换宽高并归一化
+    ├── Step 2: 前置镜像补偿（x = 1 - x）
+    ├── Step 3: 旋转补偿
+    └── Step 4: 映射为 Preview 像素坐标
 ```
 
 **关键说明**：
@@ -139,54 +140,43 @@ transformFaceCoordinate()
 2. **屏幕坐标系**：PreviewView 渲染坐标，考虑 FIT_CENTER 缩放和 letterbox 效应
 3. **变换因素**：旋转（坐标系映射）、镜像（前置摄像头）、宽高比适配
 
-**三步转换算法**：
+**四步转换算法**：
 
 ```kotlin
-/**
- * Step 1: 归一化坐标
- * 将图像坐标转换为 0-1 范围，消除尺寸影响
- * 注意：ML Kit 已处理旋转，faceX/Y 是旋转后图像上的坐标
- */
-val normX = faceX / imageWidth  // imageWidth 是传感器物理宽度
-val normY = faceY / imageHeight
-
-/**
- * Step 2: 旋转变换 + 镜像补偿
- * 根据设备旋转角度和摄像头方向，将图像坐标系映射到屏幕坐标系
- */
-val (adjustedX, adjustedY) = when (rotationDegrees) {
-    90 -> {
-        if (lensFacing == LENS_FACING_BACK) {
-            Pair(normY, 1f - normX)  // 后置 90 度
-        } else {
-            Pair(1f - normY, 1f - normX)  // 前置 90 度（镜像）
-        }
-    }
-    270 -> {
-        if (lensFacing == LENS_FACING_FRONT) {
-            Pair(normY, normX)  // 前置 270 度（镜像）
-        } else {
-            Pair(1f - normY, normX)  // 后置 270 度
-        }
-    }
-    180 -> Pair(1f - normX, 1f - normY)  // 180 度倒立
-    else -> Pair(normX, normY)  // 0 度竖屏
+val (rotatedWidth, rotatedHeight) = when (rotationDegrees) {
+    90, 270 -> Pair(imageProxyHeight, imageProxyWidth)
+    else -> Pair(imageProxyWidth, imageProxyHeight)
 }
 
-/**
- * Step 3: FIT_CENTER 映射
- * 使用 PreviewView 的 MeteringPointFactory 自动处理
- */
-val factory = previewView.meteringPointFactory
-val point = factory.createPoint(adjustedX, adjustedY)
-val screenOffset = Offset(point.x, point.y)
+// Step1: 归一化
+val normX = faceX / rotatedWidth
+val normY = faceY / rotatedHeight
+
+// Step2: 前置镜像
+val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+    1f - normX
+} else {
+    normX
+}
+
+// Step3: 旋转补偿
+val (adjustedX, adjustedY) = when (rotationDegrees) {
+    180 -> Pair(1f - mirroredX, 1f - normY)
+    else -> Pair(mirroredX, normY)
+}
+
+// Step4: 像素映射
+val screenX = adjustedX * previewWidth
+val screenY = adjustedY * previewHeight
 ```
 
+> 约束：`transformFaceCoordinateSimple()` 与 `transformFaceCoordinate()` 必须保持同构，避免分析链路和绘制链路出现偏移差异。
+
 **关键实现要点**：
-- ✅ **使用 PreviewView 内置转换**：避免手动计算 FIT_CENTER 的 letterbox 偏移
+- ✅ **统一转换函数**：分析链路使用 `transformFaceCoordinateSimple()`，屏幕绘制链路使用 `transformFaceCoordinate()`
 - ✅ **前置摄像头镜像**：X 坐标翻转 `1 - normX`
-- ✅ **完整日志记录**：记录转换过程便于调试
-- ✅ **性能优化**：避免在 onDraw 中创建对象
+- ✅ **旋转宽高先交换**：`rotationDegrees` 为 90/270 时先交换宽高再归一化
+- ✅ **完整日志记录**：固定输出 `Step1~Step4` 便于调试
 
 **验证场景**：
 - ✅ 竖屏自拍（前置 0°）：十字星镜像对齐
@@ -209,9 +199,9 @@ val screenOffset = Offset(point.x, point.y)
   - **安全约束**：瘦脸、身材调整等必须限制在安全范围内
   - **记忆功能**：记住用户上次使用的参数组合
 - **十字星跟踪**：
-  - **必须使用 PreviewView 坐标转换**：严禁手动计算 FIT_CENTER 映射
+  - **必须使用统一转换函数**：严禁在业务代码散落不同坐标算法
   - **必须处理旋转和镜像**：前置摄像头、横屏场景必须验证
-  - **必须添加调试日志**：记录转换过程便于排查问题
+  - **必须添加调试日志**：记录 `Step1~Step4` 便于排查问题
 - **UI 主题色适配**（新增 2026-03-31）：
   - **严禁硬编码颜色**：所有文字、图标、背景必须使用 `MaterialTheme.colorScheme`
   - **文字颜色规范**：
@@ -259,7 +249,7 @@ val screenOffset = Offset(point.x, point.y)
 - [ ] 瘦脸/大眼是否限制在安全范围内？（避免失真）
 - [ ] 唇色是否保留唇部纹理？（避免塑料感）
 - [ ] 身材调整是否保持身体比例？（避免变形）
-- [ ] 十字星坐标转换是否使用了 PreviewView？（严禁手动计算 FIT_CENTER）
+- [ ] 十字星坐标转换是否统一走 `transformFaceCoordinateSimple()` / `transformFaceCoordinate()`？（严禁多套算法并存）
 - [ ] 前置摄像头是否正确镜像？（十字星应跟随镜中人脸）
 - [ ] 横屏拍摄是否处理了 90°旋转？（坐标应正确映射）
 - [ ] 是否添加了调试日志？（便于排查错位问题）
@@ -292,12 +282,12 @@ val screenOffset = Offset(point.x, point.y)
 - ✅ 冷启动 < 500ms → 分阶段初始化，懒加载 AI 模型
 - ✅ 美颜实时预览 → GPU 加速，延迟 < 100ms
 - ✅ 自然美学 → 所有效果限制在安全范围内
-- ✅ 十字星精确跟踪 → 使用 PreviewView 坐标转换，偏差 < 5px
+- ✅ 十字星精确跟踪 → 统一四步坐标转换，偏差 < 5px
 
 **技术决策记录**：
 - 选择 CameraX 而非 Camera2：简化生命周期管理，降低代码复杂度
 - 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
 - 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳
 - 美颜使用 GPU 加速：CPU 计算无法满足实时性要求
-- 十字星坐标转换使用 PreviewView：避免手动计算 FIT_CENTER 的复杂性
-- 十字星坐标转换使用 PreviewView：避免手动计算 FIT_CENTER 的复杂性
+- 十字星坐标转换统一为四步法：避免分析链路与绘制链路偏移
+- 坐标调试日志固定 Step1~Step4：便于快速定位旋转/镜像问题
