@@ -1,12 +1,17 @@
 package com.picme.features.gallery
 
 import android.content.Context
+import android.content.res.Resources
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.picme.R
 import com.picme.domain.model.DuplicateGroup
+import com.picme.domain.model.GroupTitleType
+import com.picme.domain.model.GroupedMedia
+import com.picme.domain.model.GroupingMode
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
@@ -20,16 +25,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class GroupingMode {
-    NONE, DATE, FACE, PERSON, LANDSCAPE, SWIMWEAR, SEXY
-}
-
 data class MediaGroup(
     val title: String,
     val items: List<MediaAsset>
 )
 
 class MediaViewModel(
+    private val resources: Resources,
     private val repository: MediaRepository,
     private val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
@@ -92,7 +94,9 @@ class MediaViewModel(
         repository.allMedia,
         _groupingMode
     ) { allMedia, mode ->
-        getGroupedMediaUseCase(allMedia, mode)
+        getGroupedMediaUseCase(allMedia, mode).map { groupedMedia ->
+            mapToUiGroup(groupedMedia)
+        }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -109,6 +113,21 @@ class MediaViewModel(
     fun setGroupingMode(mode: GroupingMode) {
         Log.d("PicMe:Gallery", "Setting grouping mode to: $mode")
         _groupingMode.value = mode
+    }
+
+    private fun mapToUiGroup(groupedMedia: GroupedMedia): MediaGroup {
+        val title = when (groupedMedia.titleType) {
+            GroupTitleType.NONE -> groupedMedia.titleValue
+            GroupTitleType.DATE -> groupedMedia.titleValue
+            GroupTitleType.WITH_FACES -> resources.getString(R.string.with_faces)
+            GroupTitleType.NO_FACES -> resources.getString(R.string.no_faces)
+            GroupTitleType.PERSON -> resources.getString(R.string.person_group, groupedMedia.titleValue)
+            GroupTitleType.LANDSCAPE -> resources.getString(R.string.landscape)
+            GroupTitleType.SWIMWEAR -> resources.getString(R.string.swimwear)
+            GroupTitleType.SEXY -> resources.getString(R.string.sexy)
+        }
+
+        return MediaGroup(title = title, items = groupedMedia.items)
     }
 
     fun insertMedia(mediaAsset: MediaAsset) {
@@ -196,10 +215,11 @@ class MediaViewModelFactory(
         if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
             return MediaViewModel(
-                repository,
-                GetGroupedMediaUseCase(context),
-                FindDuplicateMediaUseCase(repository),
-                ocrUseCase
+                resources = context.resources,
+                repository = repository,
+                getGroupedMediaUseCase = GetGroupedMediaUseCase(),
+                findDuplicateMediaUseCase = FindDuplicateMediaUseCase(repository),
+                ocrUseCase = ocrUseCase
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")

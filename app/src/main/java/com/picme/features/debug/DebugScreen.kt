@@ -1,7 +1,6 @@
 package com.picme.features.debug
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -58,7 +57,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.domain.usecase.OcrUseCase
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.picme.PicMeApplication
 import com.picme.R
@@ -74,7 +72,7 @@ fun DebugScreen(
     val context = LocalContext.current
     val app = context.applicationContext as PicMeApplication
     val scope = app.applicationScope
-    val ocrUseCase = OcrUseCase()
+    val ocrUseCase = app.container.createOcrUseCase()
     val mediaViewModel: MediaViewModel = viewModel(
         factory = MediaViewModelFactory(context, app.repository, ocrUseCase)
     )

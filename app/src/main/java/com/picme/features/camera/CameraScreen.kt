@@ -88,7 +88,6 @@ import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
-import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.camera.components.BeautySelector
 import com.picme.features.camera.components.BodyManagementSelector
 import com.picme.features.camera.components.CameraBottomControls
@@ -486,7 +485,7 @@ fun CameraScreen(
         factory = MediaViewModelFactory(
             LocalContext.current,
             (LocalContext.current.applicationContext as PicMeApplication).repository,
-            OcrUseCase()
+            (LocalContext.current.applicationContext as PicMeApplication).container.createOcrUseCase()
         )
     )
 ) {

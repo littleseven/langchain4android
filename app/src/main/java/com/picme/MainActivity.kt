@@ -7,9 +7,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -31,10 +31,8 @@ import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
-import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.gallery.MediaViewModelFactory
-
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
@@ -62,7 +60,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = application as PicMeApplication
             val context = LocalContext.current
-            val ocrUseCase = OcrUseCase()
+            val ocrUseCase = app.container.createOcrUseCase()
             val mediaViewModel: MediaViewModel = viewModel(
                 factory = MediaViewModelFactory(context, app.container.repository, ocrUseCase)
             )

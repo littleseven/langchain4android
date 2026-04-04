@@ -12,11 +12,14 @@ import com.picme.data.preferences.BeautyStrategy
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.data.repository.MediaRepositoryImpl
 import com.picme.domain.repository.MediaRepository
+import com.picme.domain.usecase.OcrUseCase
 
 interface AppContainer {
     val repository: MediaRepository
     val userPreferencesRepository: UserPreferencesRepository
     val imageProcessor: ImageProcessor
+
+    fun createOcrUseCase(): OcrUseCase
 }
 
 object BeautyEngineRuntimeState {
@@ -75,5 +78,9 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     override val imageProcessor: ImageProcessor by lazy {
         ImageProcessorImpl(beautyProcessor)
+    }
+
+    override fun createOcrUseCase(): OcrUseCase {
+        return OcrUseCase()
     }
 }
