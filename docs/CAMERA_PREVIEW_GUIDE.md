@@ -1,7 +1,7 @@
 # 相机预览完整指南
 
-**最后更新**：2026-03-29
-**状态**：生产稳定版
+**最后更新**：2026-04（补充 R Plan 双链路说明）
+**状态**：生产稳定版（PreviewView 主链路 + R Plan Provider 链路并存）
 
 ---
 
@@ -9,6 +9,8 @@
 
 ### 1.1 核心原则
 **使用 CameraX 官方推荐的 `PreviewView` + `ScaleType`**，让 CameraX 自动处理所有复杂的比例计算。
+
+> 说明：本指南聚焦 `PreviewView` 比例与坐标问题；R Plan 的 `SurfaceView + Provider` 渲染链路请参考 `R_PLAN_GUIDE.md`。
 
 ### 1.2 技术方案
 
