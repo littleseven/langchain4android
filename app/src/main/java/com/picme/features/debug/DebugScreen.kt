@@ -72,9 +72,10 @@ fun DebugScreen(
     val context = LocalContext.current
     val app = context.applicationContext as PicMeApplication
     val scope = app.applicationScope
-    val ocrUseCase = app.container.createOcrUseCase()
     val mediaViewModel: MediaViewModel = viewModel(
-        factory = MediaViewModelFactory(context, app.repository, ocrUseCase)
+        factory = MediaViewModelFactory(
+            dependencies = app.container.createMediaViewModelDependencies(context.resources)
+        )
     )
 
     val isGenerating by SampleDataGenerator.isGenerating.collectAsState()

@@ -1,6 +1,7 @@
 package com.picme.di
 
 import android.content.Context
+import android.content.res.Resources
 import com.picme.core.common.Logger
 import com.picme.core.image.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
@@ -12,7 +13,17 @@ import com.picme.data.preferences.BeautyStrategy
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.data.repository.MediaRepositoryImpl
 import com.picme.domain.repository.MediaRepository
+import com.picme.domain.usecase.FindDuplicateMediaUseCase
+import com.picme.domain.usecase.GetGroupedMediaUseCase
 import com.picme.domain.usecase.OcrUseCase
+
+data class MediaViewModelDependencies(
+    val resources: Resources,
+    val repository: MediaRepository,
+    val getGroupedMediaUseCase: GetGroupedMediaUseCase,
+    val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
+    val ocrUseCase: OcrUseCase
+)
 
 interface AppContainer {
     val repository: MediaRepository
@@ -20,6 +31,8 @@ interface AppContainer {
     val imageProcessor: ImageProcessor
 
     fun createOcrUseCase(): OcrUseCase
+
+    fun createMediaViewModelDependencies(resources: Resources): MediaViewModelDependencies
 }
 
 object BeautyEngineRuntimeState {
@@ -42,7 +55,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     private val database by lazy { AppDatabase.getDatabase(context) }
 
     /**
-     * [RD] 美颜处理器 - 根据用户设置动态选择
+     * RD 美颜处理器 - 根据用户设置动态选择
      * - BeautyStrategy.R_PLAN -> GpuBeautyProcessor（主引擎）
      * - BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor（备用引擎）
      *
@@ -82,5 +95,15 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     override fun createOcrUseCase(): OcrUseCase {
         return OcrUseCase()
+    }
+
+    override fun createMediaViewModelDependencies(resources: Resources): MediaViewModelDependencies {
+        return MediaViewModelDependencies(
+            resources = resources,
+            repository = repository,
+            getGroupedMediaUseCase = GetGroupedMediaUseCase(),
+            findDuplicateMediaUseCase = FindDuplicateMediaUseCase(repository),
+            ocrUseCase = createOcrUseCase()
+        )
     }
 }

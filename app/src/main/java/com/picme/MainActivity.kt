@@ -60,9 +60,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = application as PicMeApplication
             val context = LocalContext.current
-            val ocrUseCase = app.container.createOcrUseCase()
             val mediaViewModel: MediaViewModel = viewModel(
-                factory = MediaViewModelFactory(context, app.container.repository, ocrUseCase)
+                factory = MediaViewModelFactory(
+                    dependencies = app.container.createMediaViewModelDependencies(context.resources)
+                )
             )
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = SettingsViewModelFactory(app.container.userPreferencesRepository)

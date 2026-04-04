@@ -483,9 +483,9 @@ fun CameraScreen(
     onNavigateToDebug: () -> Unit,
     viewModel: MediaViewModel = viewModel(
         factory = MediaViewModelFactory(
-            LocalContext.current,
-            (LocalContext.current.applicationContext as PicMeApplication).repository,
-            (LocalContext.current.applicationContext as PicMeApplication).container.createOcrUseCase()
+            dependencies = (LocalContext.current.applicationContext as PicMeApplication)
+                .container
+                .createMediaViewModelDependencies(LocalContext.current.resources)
         )
     )
 ) {

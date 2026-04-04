@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.R
+import com.picme.di.MediaViewModelDependencies
 import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.GroupTitleType
 import com.picme.domain.model.GroupedMedia
@@ -171,7 +172,7 @@ class MediaViewModel(
             val urisToDelete = if (keepIndex == 0) {
                 group.getDeleteUris()
             } else {
-                group.fileUris.filterIndexed { index, uri -> index != keepIndex }
+                group.fileUris.filterIndexed { index, _ -> index != keepIndex }
             }
             
             val idsToDelete = allMedia.value
@@ -206,20 +207,18 @@ class MediaViewModel(
 }
 
 class MediaViewModelFactory(
-    private val context: Context,
-    private val repository: MediaRepository,
-    private val ocrUseCase: OcrUseCase
+    private val dependencies: MediaViewModelDependencies
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
             return MediaViewModel(
-                resources = context.resources,
-                repository = repository,
-                getGroupedMediaUseCase = GetGroupedMediaUseCase(),
-                findDuplicateMediaUseCase = FindDuplicateMediaUseCase(repository),
-                ocrUseCase = ocrUseCase
+                resources = dependencies.resources,
+                repository = dependencies.repository,
+                getGroupedMediaUseCase = dependencies.getGroupedMediaUseCase,
+                findDuplicateMediaUseCase = dependencies.findDuplicateMediaUseCase,
+                ocrUseCase = dependencies.ocrUseCase
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
