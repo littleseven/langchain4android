@@ -69,27 +69,39 @@ internal class PixelFreePreviewStrategy(
     }
 
     override fun applyBeautySettings(settings: BeautySettings) {
-        rPlanPreviewProvider?.updateFilters(settings)
+        runCatching {
+            rPlanPreviewProvider?.updateFilters(settings)
+        }.onFailure { error ->
+            Logger.w("Camera", "PixelFree provider beauty update failed", error)
+        }
 
-        pixelFreeView.queueEvent {
-            pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
-            pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
-            pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
-            pixelFreeView.setSlimFaceStrength(((settings.slimFace + 50f) / 100f).coerceIn(0f, 1f))
+        runCatching {
+            pixelFreeView.queueEvent {
+                pixelFreeView.setSmoothingStrength(settings.smoothing / 100f)
+                pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
+                pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
+                pixelFreeView.setSlimFaceStrength(((settings.slimFace + 50f) / 100f).coerceIn(0f, 1f))
+            }
+        }.onFailure { error ->
+            Logger.w("Camera", "PixelFree sdk beauty update failed", error)
         }
     }
 
     override fun applyFaceWarpParams(params: FaceWarpParams) {
-        rPlanPreviewProvider?.updateFaceWarpParams(
-            faceCenterX = params.faceCenterX,
-            faceCenterY = params.faceCenterY,
-            leftEyeX = params.leftEyeX,
-            leftEyeY = params.leftEyeY,
-            rightEyeX = params.rightEyeX,
-            rightEyeY = params.rightEyeY,
-            faceRadius = params.faceRadius,
-            hasFace = params.hasFace
-        )
+        runCatching {
+            rPlanPreviewProvider?.updateFaceWarpParams(
+                faceCenterX = params.faceCenterX,
+                faceCenterY = params.faceCenterY,
+                leftEyeX = params.leftEyeX,
+                leftEyeY = params.leftEyeY,
+                rightEyeX = params.rightEyeX,
+                rightEyeY = params.rightEyeY,
+                faceRadius = params.faceRadius,
+                hasFace = params.hasFace
+            )
+        }.onFailure { error ->
+            Logger.w("Camera", "PixelFree provider face params update failed", error)
+        }
     }
 
     override fun release() {

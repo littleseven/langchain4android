@@ -9,6 +9,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaActionSound
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.camera.core.CameraControl
@@ -402,6 +403,54 @@ private fun buildCameraPreviewActions(
             panelState.showRatioSelector = false
         },
         onDismissPanels = panelState::closeAllPanels
+    )
+}
+
+private data class PreviewTargetDecision(
+    val targetView: View,
+    val scheduleProviderFallback: Boolean
+)
+
+private fun resolvePreviewTargetView(
+    useProviderRenderView: Boolean,
+    activeStrategy: BeautyStrategy,
+    pixelFreeLinkMode: PixelFreePreviewLinkMode?,
+    runtimeProviderView: View?,
+    pixelFreeView: View?,
+    previewView: View
+): PreviewTargetDecision {
+    if (!useProviderRenderView) {
+        return PreviewTargetDecision(
+            targetView = previewView,
+            scheduleProviderFallback = false
+        )
+    }
+
+    val providerView = when (activeStrategy) {
+        BeautyStrategy.R_PLAN -> runtimeProviderView
+        BeautyStrategy.PIXEL_FREE -> when (pixelFreeLinkMode) {
+            PixelFreePreviewLinkMode.PROVIDER -> runtimeProviderView
+            PixelFreePreviewLinkMode.RAW -> pixelFreeView
+            PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> previewView
+            null -> pixelFreeView
+        }
+    }
+
+    val requiresProviderView =
+        activeStrategy == BeautyStrategy.R_PLAN ||
+            (activeStrategy == BeautyStrategy.PIXEL_FREE &&
+                pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER)
+
+    if (requiresProviderView && providerView == null) {
+        return PreviewTargetDecision(
+            targetView = previewView,
+            scheduleProviderFallback = true
+        )
+    }
+
+    return PreviewTargetDecision(
+        targetView = providerView ?: previewView,
+        scheduleProviderFallback = false
     )
 }
 
@@ -803,42 +852,36 @@ CameraPreviewContent(
                         }
                     }.getOrNull()
 
-                    val targetView = if (useProviderRenderView) {
-                        val providerView = when (activePreviewStrategy.strategy) {
-                            BeautyStrategy.R_PLAN -> runtimeProviderView
-                            BeautyStrategy.PIXEL_FREE -> when (pixelFreeLinkMode) {
-                                PixelFreePreviewLinkMode.PROVIDER -> runtimeProviderView
-                                PixelFreePreviewLinkMode.RAW -> pixelFreeView
-                                PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> previewView
-                                null -> pixelFreeView
+                    val targetDecision = resolvePreviewTargetView(
+                        useProviderRenderView = useProviderRenderView,
+                        activeStrategy = activePreviewStrategy.strategy,
+                        pixelFreeLinkMode = pixelFreeLinkMode,
+                        runtimeProviderView = runtimeProviderView,
+                        pixelFreeView = pixelFreeView,
+                        previewView = previewView
+                    )
+
+                    android.util.Log.d(
+                        "PicMe:Camera",
+                        "AndroidView update: useProviderRenderView=$useProviderRenderView, strategy=${activePreviewStrategy.strategy}, " +
+                            "pixelFreeLinkMode=$pixelFreeLinkMode, targetView=${targetDecision.targetView}"
+                    )
+
+                    if (targetDecision.scheduleProviderFallback) {
+                        Logger.w("Camera", "Provider render view missing, fallback to PreviewView and request rebind")
+                        container.post {
+                            if (useProviderRenderView) {
+                                if (activePreviewStrategy.strategy == BeautyStrategy.PIXEL_FREE) {
+                                    pixelFreeLinkMode = PixelFreePreviewLinkMode.PREVIEW_FALLBACK
+                                    pixelFreeLinkReason = "provider view is null"
+                                }
+                                useProviderRenderView = false
+                                previewRebindSignal += 1
                             }
                         }
-                        val requiresProviderView =
-                            activePreviewStrategy.strategy == BeautyStrategy.R_PLAN ||
-                                (activePreviewStrategy.strategy == BeautyStrategy.PIXEL_FREE &&
-                                    pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER)
-
-                        android.util.Log.d(
-                            "PicMe:Camera",
-                            "AndroidView update: useProviderRenderView=true, strategy=${activePreviewStrategy.strategy}, pixelFreeLinkMode=$pixelFreeLinkMode, providerView=$providerView"
-                        )
-
-                        if (requiresProviderView && providerView == null) {
-                            Logger.w("Camera", "Provider render view missing, fallback to PreviewView and request rebind")
-                            if (activePreviewStrategy.strategy == BeautyStrategy.PIXEL_FREE) {
-                                pixelFreeLinkMode = PixelFreePreviewLinkMode.PREVIEW_FALLBACK
-                                pixelFreeLinkReason = "provider view is null"
-                            }
-                            useProviderRenderView = false
-                            previewRebindSignal += 1
-                            previewView
-                        } else {
-                            providerView ?: previewView
-                        }
-                    } else {
-                        android.util.Log.d("PicMe:Camera", "AndroidView update: useProviderRenderView=false, using previewView")
-                        previewView
                     }
+
+                    val targetView = targetDecision.targetView
 
                     if (targetView.parent !== container) {
                         android.util.Log.d("PicMe:Camera", "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
