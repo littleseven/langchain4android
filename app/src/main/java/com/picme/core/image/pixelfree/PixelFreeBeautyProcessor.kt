@@ -195,12 +195,17 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
      * 设置美颜参数
      */
     private fun setBeautyParam(type: PFBeautyFilterType, value: Float) {
+        initializeIfNeeded()
         val engine = pixelFree ?: return
-        if (!isInitialized) return
+        if (!isInitialized) {
+            Logger.w(TAG, "Skip beauty param update because PixelFree is not initialized")
+            return
+        }
 
         try {
-            engine.pixelFreeSetBeautyFiterParam(type, value.coerceIn(0f, 1f))
-            Logger.d(TAG, "Set beauty param: $type = $value")
+            val normalizedValue = value.coerceIn(0f, 1f)
+            engine.pixelFreeSetBeautyFiterParam(type, normalizedValue)
+            Logger.d(TAG, "Set beauty param: $type = $normalizedValue")
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to set beauty param", e)
         }

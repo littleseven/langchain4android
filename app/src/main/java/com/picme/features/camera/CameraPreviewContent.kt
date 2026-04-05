@@ -184,6 +184,21 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "Fallback: NONE"
     }
 
+    val pixelFreeLinkText = if (uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE) {
+        when (uiState.beautyDebugState.pixelFreeLinkMode) {
+            com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> "PixelFree Link: PROVIDER(realtime)"
+            com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> "PixelFree Link: RAW(no warp realtime)"
+            com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> "PixelFree Link: PREVIEW_FALLBACK"
+            null -> "PixelFree Link: UNKNOWN"
+        }
+    } else {
+        "PixelFree Link: N/A"
+    }
+    val pixelFreeLinkReasonText = uiState.beautyDebugState.pixelFreeLinkReason?.let { reason ->
+        val mappedReason = mapProviderFailReason(reason)
+        "Provider失败: $mappedReason"
+    }
+
     Column(
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -205,6 +220,37 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
             },
             fontSize = 10.sp
         )
+        Text(
+            text = pixelFreeLinkText,
+            color = when (uiState.beautyDebugState.pixelFreeLinkMode) {
+                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> Color(0xFF80D8FF)
+                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> Color(0xFFFFCC80)
+                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> Color(0xFFE57373)
+                null -> Color.White.copy(alpha = 0.85f)
+            },
+            fontSize = 10.sp
+        )
+        if (pixelFreeLinkReasonText != null) {
+            Text(
+                text = pixelFreeLinkReasonText,
+                color = Color(0xFFFFCDD2),
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+private fun mapProviderFailReason(reason: String): String {
+    val normalizedReason = reason.lowercase()
+    return when {
+        normalizedReason.contains("provider view is null") -> "Provider视图缺失"
+        normalizedReason.contains("surface not ready") || normalizedReason.contains("surface unavailable") -> "相机Surface未就绪"
+        normalizedReason.contains("egl") -> "EGL初始化/绑定失败"
+        normalizedReason.contains("timeout") -> "Provider启动超时"
+        normalizedReason.contains("resolution") || normalizedReason.contains("buffer") -> "相机缓冲区配置失败"
+        normalizedReason.contains("provider unavailable") -> "Provider不可用"
+        normalizedReason.contains("stability mode") -> "稳定模式：使用PreviewView"
+        else -> "未知Provider失败"
     }
 }
 

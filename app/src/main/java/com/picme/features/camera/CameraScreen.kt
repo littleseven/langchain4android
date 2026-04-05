@@ -64,6 +64,7 @@ import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.preview.core.FaceWarpParams
 import com.picme.features.camera.preview.core.rememberPreviewStrategyBundle
+import com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
@@ -177,7 +178,9 @@ internal data class BeautyDebugState(
     val persistedFallback: Boolean,
     val persistedFallbackReason: String?,
     val strategy: BeautyStrategy,
-    val recoveryAvailableAtMs: Long
+    val recoveryAvailableAtMs: Long,
+    val pixelFreeLinkMode: PixelFreePreviewLinkMode?,
+    val pixelFreeLinkReason: String?
 )
 
 internal data class CameraPreviewUiState(
@@ -519,12 +522,17 @@ fun CameraContent(
     val persistedRPlanFallback = recoveryState.persistedFallback
     val persistedRPlanFallbackReason = recoveryState.persistedFallbackReason
 
+    var pixelFreeLinkMode by remember { mutableStateOf<PixelFreePreviewLinkMode?>(null) }
+    var pixelFreeLinkReason by remember { mutableStateOf<String?>(null) }
+
     val previewStrategyBundle = rememberPreviewStrategyBundle(
         beautyStrategy = beautyStrategy,
         previewView = previewView,
         pixelFreeView = pixelFreeView,
         rPlanPreviewProvider = rPlanPreviewProvider,
-        onRPlanWarmUpFallback = recoveryState.onRPlanWarmUpFallback
+        onRPlanWarmUpFallback = recoveryState.onRPlanWarmUpFallback,
+        onPixelFreePreviewLinkModeChanged = { mode -> pixelFreeLinkMode = mode },
+        onPixelFreePreviewLinkReasonChanged = { reason -> pixelFreeLinkReason = reason }
     )
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
@@ -534,8 +542,16 @@ fun CameraContent(
         useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase, aspectRatio)
     }
 
-    LaunchedEffect(useProviderRenderView, beautyStrategy, previewRebindSignal) {
+    LaunchedEffect(useProviderRenderView, beautyStrategy, previewRebindSignal, pixelFreeLinkMode) {
         if (!useProviderRenderView) {
+            return@LaunchedEffect
+        }
+
+        val shouldCheckProviderReady = when (beautyStrategy) {
+            BeautyStrategy.R_PLAN -> true
+            BeautyStrategy.PIXEL_FREE -> pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER
+        }
+        if (!shouldCheckProviderReady) {
             return@LaunchedEffect
         }
 
@@ -773,15 +789,6 @@ CameraPreviewContent(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            val rPlanPreviewView = remember(rPlanPreviewProvider) {
-                rPlanPreviewProvider?.let { provider ->
-                    runCatching {
-                        provider.initialize()
-                        provider.getView()
-                    }.getOrNull()
-                }
-            }
-
             AndroidView(
                 factory = { context ->
                     android.util.Log.d("PicMe:Camera", "AndroidView factory creating FrameLayout")
@@ -789,9 +796,45 @@ CameraPreviewContent(
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { container ->
+                    val runtimeProviderView = runCatching {
+                        rPlanPreviewProvider?.getView() ?: run {
+                            rPlanPreviewProvider?.initialize()
+                            rPlanPreviewProvider?.getView()
+                        }
+                    }.getOrNull()
+
                     val targetView = if (useProviderRenderView) {
-                        android.util.Log.d("PicMe:Camera", "AndroidView update: useProviderRenderView=true, rPlanPreviewView=$rPlanPreviewView")
-                        rPlanPreviewView ?: previewView
+                        val providerView = when (activePreviewStrategy.strategy) {
+                            BeautyStrategy.R_PLAN -> runtimeProviderView
+                            BeautyStrategy.PIXEL_FREE -> when (pixelFreeLinkMode) {
+                                PixelFreePreviewLinkMode.PROVIDER -> runtimeProviderView
+                                PixelFreePreviewLinkMode.RAW -> pixelFreeView
+                                PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> previewView
+                                null -> pixelFreeView
+                            }
+                        }
+                        val requiresProviderView =
+                            activePreviewStrategy.strategy == BeautyStrategy.R_PLAN ||
+                                (activePreviewStrategy.strategy == BeautyStrategy.PIXEL_FREE &&
+                                    pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER)
+
+                        android.util.Log.d(
+                            "PicMe:Camera",
+                            "AndroidView update: useProviderRenderView=true, strategy=${activePreviewStrategy.strategy}, pixelFreeLinkMode=$pixelFreeLinkMode, providerView=$providerView"
+                        )
+
+                        if (requiresProviderView && providerView == null) {
+                            Logger.w("Camera", "Provider render view missing, fallback to PreviewView and request rebind")
+                            if (activePreviewStrategy.strategy == BeautyStrategy.PIXEL_FREE) {
+                                pixelFreeLinkMode = PixelFreePreviewLinkMode.PREVIEW_FALLBACK
+                                pixelFreeLinkReason = "provider view is null"
+                            }
+                            useProviderRenderView = false
+                            previewRebindSignal += 1
+                            previewView
+                        } else {
+                            providerView ?: previewView
+                        }
                     } else {
                         android.util.Log.d("PicMe:Camera", "AndroidView update: useProviderRenderView=false, using previewView")
                         previewView
@@ -843,7 +886,9 @@ CameraPreviewContent(
             persistedFallback = persistedRPlanFallback,
             persistedFallbackReason = persistedRPlanFallbackReason,
             strategy = beautyStrategy,
-            recoveryAvailableAtMs = rPlanRecoveryAvailableAtMs
+            recoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
+            pixelFreeLinkMode = pixelFreeLinkMode,
+            pixelFreeLinkReason = pixelFreeLinkReason
         ),
         aspectRatio = aspectRatio,
         lensFacing = lensFacing,

@@ -10,13 +10,10 @@ import com.picme.data.preferences.BeautyStrategy
 internal fun rememberRPlanPreviewProvider(
     context: Context,
     beautyStrategy: BeautyStrategy
-): RPlanBeautyPreviewProvider? {
-    return remember(beautyStrategy) {
-        if (beautyStrategy == BeautyStrategy.R_PLAN) {
-            RPlanBeautyPreviewProvider(context)
-        } else {
-            null
-        }
+): RPlanBeautyPreviewProvider {
+    // PixelFree 实时预览借用 R Plan 的渲染管线以保证瘦脸/大眼即时生效。
+    return remember(context) {
+        RPlanBeautyPreviewProvider(context)
     }
 }
 

@@ -8,6 +8,7 @@ import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.domain.model.BeautySettings
+import com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode
 import com.picme.features.camera.preview.pixelfree.PixelFreePreviewStrategy
 import com.picme.features.camera.preview.rplan.RPlanPreviewStrategy
 
@@ -33,7 +34,9 @@ internal fun rememberPreviewStrategyBundle(
     previewView: PreviewView,
     pixelFreeView: PixelFreeGLSurfaceView?,
     rPlanPreviewProvider: RPlanBeautyPreviewProvider?,
-    onRPlanWarmUpFallback: (String) -> Unit
+    onRPlanWarmUpFallback: (String) -> Unit,
+    onPixelFreePreviewLinkModeChanged: (PixelFreePreviewLinkMode) -> Unit,
+    onPixelFreePreviewLinkReasonChanged: (String?) -> Unit
 ): PreviewStrategyBundle {
     val activeStrategy = remember(beautyStrategy, previewView, pixelFreeView, rPlanPreviewProvider) {
         when (beautyStrategy) {
@@ -51,7 +54,10 @@ internal fun rememberPreviewStrategyBundle(
                     previewView = previewView,
                     pixelFreeView = requireNotNull(pixelFreeView) {
                         "PixelFree strategy requires PixelFreeGLSurfaceView"
-                    }
+                    },
+                    rPlanPreviewProvider = rPlanPreviewProvider,
+                    onPreviewLinkModeChanged = onPixelFreePreviewLinkModeChanged,
+                    onPreviewLinkReasonChanged = onPixelFreePreviewLinkReasonChanged
                 )
             }
         }

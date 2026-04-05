@@ -5,6 +5,7 @@ import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 import android.util.Log
+import android.view.Surface
 import com.hapi.pixelfree.PFBeautyFilterType
 import com.hapi.pixelfree.PFDetectFormat
 import com.hapi.pixelfree.PFImageInput
@@ -46,6 +47,9 @@ class PixelFreeGLSurfaceView @JvmOverloads constructor(
     /** 当前纹理 ID */
     private var currentTextureId = 0
     
+    /** CameraX 输入 Surface */
+    private var cameraInputSurface: Surface? = null
+
     /** 图像宽度 */
     private var imageWidth = 0
     
@@ -315,11 +319,21 @@ class PixelFreeGLSurfaceView @JvmOverloads constructor(
      * 获取 Surface（用于 CameraX 绑定）
      * 注意：PixelFreeEffects 不直接使用 Surface
      */
-    fun getSurfaceForCamera(): android.view.Surface? {
-        // PixelFreeEffects SDK 不直接接收 Surface
-        // 需要在 CameraX 的 ImageAnalysis 中获取纹理并调用 processTexture
-        Log.w(TAG, "getSurfaceForCamera() called - PixelFree uses texture processing instead")
-        return null
+    fun getSurfaceForCamera(): Surface? {
+        val holderSurface = holder.surface
+        if (holderSurface == null || !holderSurface.isValid) {
+            Log.w(TAG, "getSurfaceForCamera() called before holder surface is ready")
+            return null
+        }
+
+        val cachedSurface = cameraInputSurface
+        if (cachedSurface != null && cachedSurface.isValid) {
+            return cachedSurface
+        }
+
+        cameraInputSurface = holderSurface
+        Log.d(TAG, "Camera input surface ready for PixelFree preview")
+        return cameraInputSurface
     }
     
     /**
@@ -333,6 +347,8 @@ class PixelFreeGLSurfaceView @JvmOverloads constructor(
      * 释放资源
      */
     fun release() {
+        cameraInputSurface = null
+
         if (!isInitialized) {
             return
         }
