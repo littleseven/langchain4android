@@ -233,6 +233,61 @@ fun OcrResultOverlay(
 
 ### 2.5 性能优化关键点
 
+### 2.6 预览缩放与分享实现规范（2026-04）
+
+```kotlin
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun ZoomableImage(
+    uri: String,
+    onZoomStateChanged: (Float) -> Unit
+) {
+    var scale by remember(uri) { mutableStateOf(1f) }
+    var offset by remember(uri) { mutableStateOf(Offset.Zero) }
+
+    Box(
+        modifier = Modifier
+            .pointerInput(uri) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val nextScale = (scale * zoom).coerceIn(1f, 4f)
+                    scale = nextScale
+                    offset = if (nextScale <= 1.01f) Offset.Zero else offset + pan
+                }
+            }
+    ) {
+        AsyncImage(
+            model = uri,
+            contentDescription = null,
+            modifier = Modifier.graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = offset.x
+                translationY = offset.y
+            }
+        )
+    }
+
+    SideEffect {
+        onZoomStateChanged(scale)
+    }
+}
+
+HorizontalPager(
+    state = pagerState,
+    userScrollEnabled = !currentPageZoomed
+) { page ->
+    // scale > 1f 时禁用翻页，避免手势冲突
+}
+```
+
+**实现约束**：
+- **缩放范围**：必须限制在 `1.0x~4.0x`，防止过度放大导致性能劣化。
+- **手势冲突**：放大态优先平移图片，禁止触发 `HorizontalPager` 翻页。
+- **单图分享**：预览页使用 `Intent.ACTION_SEND` + `EXTRA_STREAM`，并授予 `FLAG_GRANT_READ_URI_PERMISSION`。
+- **批量分享**：相册选择模式下，单张使用 `ACTION_SEND`，多张使用 `ACTION_SEND_MULTIPLE`。
+- **媒体类型**：图片用 `image/*`，视频用 `video/*`；多媒体混合批量可回退为 `*/*`。
+- **日志规范**：分享触发、批选状态切换需记录 `PicMe:UX` 日志。
+
 ### 4.1 RecyclerView 优化
 ```kotlin
 // Compose Pager 的性能配置

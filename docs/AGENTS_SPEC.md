@@ -1,7 +1,7 @@
 # PicMe AGENTS.md 文档编写规范
 
-**版本**: 1.0  
-**最后更新**: 2026-03-23  
+**版本**: 1.1
+**最后更新**: 2026-04-06
 **维护者**: [CR] 规范守护者
 
 ---
@@ -28,6 +28,26 @@ AGENTS.md (技术实现规范 - Implementation)
 - **格式统一**: 所有模块遵循相同的 5 章结构
 - **可执行性**: 包含具体的检查清单和执行规约
 - **可追溯性**: 明确对照 PRODUCT.md 和 FEATURES.md 的产品要求
+
+### 1.4 顶层 AGENTS 与模块 AGENTS 的边界（2026-04）
+
+**顶层 `AGENTS.md` 只保留**：
+- 角色与协作机制（CO/PM/RD/CR/QA）
+- 文档治理规则（SSOT、更新顺序、引用链）
+- 全局红线（PRIVACY / PERF / I18N）
+- 跨模块工程基线（架构、日志、导入、状态管理）
+- Self-Heal 执行流程与统一验收口径
+
+**禁止放在顶层 `AGENTS.md` 的内容**：
+- 业务功能细节（应放 `PRODUCT.md`、`docs/FEATURES.md`）
+- 模块级实现策略、代码片段、参数表（应放模块 `AGENTS.md`）
+- 专项技术长文（应放 `docs/*_TECH_SPEC.md`）
+
+**内容分流原则**：
+- `What`（目标/指标）-> `PRODUCT.md`
+- `How`（交互/体验）-> `docs/FEATURES.md`
+- `Implementation`（代码/架构/检查清单）-> 模块 `AGENTS.md`
+- `Deep Dive`（专项机制）-> 技术规范文档
 
 ---
 
@@ -356,6 +376,19 @@ cp app/src/main/java/com/picme/core/AGENTS.md \
 - [ ] I18N、PRIVACY、PERF 等全局要求是否体现
 - [ ] 与其他模块 AGENTS.md 是否存在冲突
 
+### 4.4 顶层 AGENTS 瘦身流程（新增）
+
+当顶层 `AGENTS.md` 出现“细节过载”时，按以下步骤治理：
+1. **识别超域内容**：标记业务细节、模块实现细节、专项技术细节。
+2. **执行分流**：
+   - 业务目标与验收口径 -> `PRODUCT.md`
+   - 交互规则与体验说明 -> `docs/FEATURES.md`
+   - 实现细节与检查清单 -> 模块 `AGENTS.md`
+   - 长链路技术方案 -> `docs/*_TECH_SPEC.md`
+3. **保留治理骨架**：顶层文档仅保留角色、红线、流程、审计清单。
+4. **双向链接补齐**：在来源与去向文档都加“见 xxx 文档”指引。
+5. **一致性复核**：确保三层文档术语、指标、顺序一致。
+
 ---
 
 ## 5. 常见错误与反模式
@@ -520,9 +553,9 @@ ImageLoader(context)
 
 ## 7. 参考文档
 
-- [PROJECT.md](../PROJECT.md) - 产品需求规格说明书
+- [PRODUCT.md](../PRODUCT.md) - 产品需求规格说明书
 - [FEATURES.md](./FEATURES.md) - 功能交互细节规范
-- [AGENTS.md](../app/src/main/java/com/picme/core/AGENTS.md) - Core 模块技术实现规范
+- [AGENTS.md](../AGENTS.md) - 顶层 Agent 治理规范
 - [Google Kotlin Style Guide](https://developer.android.com/kotlin/style-guide) - Kotlin 官方风格指南
 
 ---
@@ -531,4 +564,5 @@ ImageLoader(context)
 
 | 版本 | 日期 | 修订内容 | 修订者 |
 |------|------|---------|--------|
+| 1.1 | 2026-04-06 | 新增顶层 AGENTS 边界与瘦身流程，修正参考链接 | [CR] |
 | 1.0 | 2026-03-23 | 初始版本，统一 AGENTS.md 格式规范 | [CR] |
