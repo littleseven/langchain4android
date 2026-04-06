@@ -249,6 +249,18 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         }
         
         // 唇色调试信息
+        val lipRealtimePreviewSupported = when (uiState.beautyDebugState.strategy) {
+            com.picme.data.preferences.BeautyStrategy.R_PLAN -> uiState.beautyDebugState.providerRenderActive
+            com.picme.data.preferences.BeautyStrategy.PIXEL_FREE -> {
+                when (uiState.beautyDebugState.pixelFreeLinkMode) {
+                    com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER,
+                    com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> true
+                    com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> false
+                    null -> uiState.beautyDebugState.providerRenderActive
+                }
+            }
+        }
+
         val lipDebugText = buildString {
             append("LIP: ${uiState.beautySettings.lipColor.toInt()}% #${uiState.beautySettings.lipColorIndex}")
             if (uiState.beautySettings.lipColor > 0) {
@@ -256,8 +268,8 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                 if (uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE) {
                     append(":${uiState.beautyDebugState.pixelFreeLinkMode?.name ?: "N/A"}")
                 }
-                // 提示：预览不支持唇色，只在拍照后处理
-                append(" | Preview:NOT_SUPPORTED")
+                append(" | Preview:")
+                append(if (lipRealtimePreviewSupported) "SUPPORTED" else "FALLBACK")
             }
         }
         Text(
@@ -266,10 +278,9 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
             fontSize = 10.sp
         )
         
-        // 提示信息
-        if (uiState.beautySettings.lipColor > 0) {
+        if (uiState.beautySettings.lipColor > 0 && !lipRealtimePreviewSupported) {
             Text(
-                text = "Note: Lip color only works in captured photo",
+                text = "Lip realtime preview unavailable: provider fallback",
                 color = Color(0xFFFFB74D),
                 fontSize = 9.sp
             )

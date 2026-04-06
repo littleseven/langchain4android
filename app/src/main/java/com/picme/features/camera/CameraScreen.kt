@@ -181,7 +181,8 @@ internal data class BeautyDebugState(
     val strategy: BeautyStrategy,
     val recoveryAvailableAtMs: Long,
     val pixelFreeLinkMode: PixelFreePreviewLinkMode?,
-    val pixelFreeLinkReason: String?
+    val pixelFreeLinkReason: String?,
+    val providerRenderActive: Boolean
 )
 
 internal data class CameraPreviewUiState(
@@ -931,7 +932,8 @@ CameraPreviewContent(
             strategy = beautyStrategy,
             recoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
             pixelFreeLinkMode = pixelFreeLinkMode,
-            pixelFreeLinkReason = pixelFreeLinkReason
+            pixelFreeLinkReason = pixelFreeLinkReason,
+            providerRenderActive = useProviderRenderView
         ),
         aspectRatio = aspectRatio,
         lensFacing = lensFacing,

@@ -23,6 +23,8 @@ internal data class FaceWarpParams(
     val hasFace: Boolean = false,
     val contourPoints: List<Offset> = emptyList(),
     val leftEyeContourPoints: List<Offset> = emptyList(),
-    val rightEyeContourPoints: List<Offset> = emptyList()
+    val rightEyeContourPoints: List<Offset> = emptyList(),
+    val lipOuterContourPoints: List<Offset> = emptyList(),
+    val lipInnerContourPoints: List<Offset> = emptyList()
 )
 

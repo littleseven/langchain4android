@@ -29,6 +29,8 @@ class BeautyRenderer : GLRenderer() {
         
         /** 高级模式：美颜 + 色调调整 */
         const val MODE_ADVANCED = 3
+
+        private const val MAX_LIP_CONTOUR_POINTS = 20
     }
     
     /** 当前渲染模式 */
@@ -69,6 +71,10 @@ class BeautyRenderer : GLRenderer() {
     private var upperLipCenterY: Float = 0.60f
     private var lowerLipCenterX: Float = 0.5f
     private var lowerLipCenterY: Float = 0.66f
+    private val lipOuterContourBuffer = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private var lipOuterContourCount: Int = 0
+    private val lipInnerContourBuffer = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private var lipInnerContourCount: Int = 0
     private var faceRadius: Float = 0.18f
     private var hasFace: Float = 0f
 
@@ -96,6 +102,10 @@ class BeautyRenderer : GLRenderer() {
     private var uMouthRightLocation: Int = -1
     private var uUpperLipCenterLocation: Int = -1
     private var uLowerLipCenterLocation: Int = -1
+    private var uLipOuterContourPointsLocation: Int = -1
+    private var uLipOuterContourCountLocation: Int = -1
+    private var uLipInnerContourPointsLocation: Int = -1
+    private var uLipInnerContourCountLocation: Int = -1
     private var uWarmthLocation: Int = -1
     private var uContrastLocation: Int = -1
     private var uLipColorLocation: Int = -1
@@ -198,6 +208,35 @@ class BeautyRenderer : GLRenderer() {
         )
     }
 
+    fun updateLipMaskPoints(
+        outerPoints: List<Pair<Float, Float>>,
+        innerPoints: List<Pair<Float, Float>>
+    ) {
+        lipOuterContourCount = outerPoints.size.coerceIn(0, MAX_LIP_CONTOUR_POINTS)
+        lipInnerContourCount = innerPoints.size.coerceIn(0, MAX_LIP_CONTOUR_POINTS)
+
+        for (index in 0 until MAX_LIP_CONTOUR_POINTS) {
+            val base = index * 2
+            if (index < lipOuterContourCount) {
+                val point = outerPoints[index]
+                lipOuterContourBuffer[base] = point.first.coerceIn(0f, 1f)
+                lipOuterContourBuffer[base + 1] = point.second.coerceIn(0f, 1f)
+            } else {
+                lipOuterContourBuffer[base] = 0f
+                lipOuterContourBuffer[base + 1] = 0f
+            }
+
+            if (index < lipInnerContourCount) {
+                val point = innerPoints[index]
+                lipInnerContourBuffer[base] = point.first.coerceIn(0f, 1f)
+                lipInnerContourBuffer[base + 1] = point.second.coerceIn(0f, 1f)
+            } else {
+                lipInnerContourBuffer[base] = 0f
+                lipInnerContourBuffer[base + 1] = 0f
+            }
+        }
+    }
+
     /**
      * 更新高级参数
      */
@@ -251,6 +290,10 @@ class BeautyRenderer : GLRenderer() {
                 shaderProgram.setVec2("uMouthRight", mouthRightX, mouthRightY)
                 shaderProgram.setVec2("uUpperLipCenter", upperLipCenterX, upperLipCenterY)
                 shaderProgram.setVec2("uLowerLipCenter", lowerLipCenterX, lowerLipCenterY)
+                shaderProgram.setFloat("uLipOuterContourCount", lipOuterContourCount.toFloat())
+                shaderProgram.setVec2Array("uLipOuterContourPoints", lipOuterContourBuffer, MAX_LIP_CONTOUR_POINTS)
+                shaderProgram.setFloat("uLipInnerContourCount", lipInnerContourCount.toFloat())
+                shaderProgram.setVec2Array("uLipInnerContourPoints", lipInnerContourBuffer, MAX_LIP_CONTOUR_POINTS)
                 shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
                 shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
             }
@@ -269,6 +312,10 @@ class BeautyRenderer : GLRenderer() {
                 shaderProgram.setVec2("uMouthRight", mouthRightX, mouthRightY)
                 shaderProgram.setVec2("uUpperLipCenter", upperLipCenterX, upperLipCenterY)
                 shaderProgram.setVec2("uLowerLipCenter", lowerLipCenterX, lowerLipCenterY)
+                shaderProgram.setFloat("uLipOuterContourCount", lipOuterContourCount.toFloat())
+                shaderProgram.setVec2Array("uLipOuterContourPoints", lipOuterContourBuffer, MAX_LIP_CONTOUR_POINTS)
+                shaderProgram.setFloat("uLipInnerContourCount", lipInnerContourCount.toFloat())
+                shaderProgram.setVec2Array("uLipInnerContourPoints", lipInnerContourBuffer, MAX_LIP_CONTOUR_POINTS)
                 shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
                 shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
                 shaderProgram.setFloat("uWarmth", warmthStrength)
@@ -299,6 +346,10 @@ class BeautyRenderer : GLRenderer() {
         uMouthRightLocation = shaderProgram.getUniformLocation("uMouthRight")
         uUpperLipCenterLocation = shaderProgram.getUniformLocation("uUpperLipCenter")
         uLowerLipCenterLocation = shaderProgram.getUniformLocation("uLowerLipCenter")
+        uLipOuterContourPointsLocation = shaderProgram.getUniformLocation("uLipOuterContourPoints")
+        uLipOuterContourCountLocation = shaderProgram.getUniformLocation("uLipOuterContourCount")
+        uLipInnerContourPointsLocation = shaderProgram.getUniformLocation("uLipInnerContourPoints")
+        uLipInnerContourCountLocation = shaderProgram.getUniformLocation("uLipInnerContourCount")
         uWarmthLocation = shaderProgram.getUniformLocation("uWarmth")
         uContrastLocation = shaderProgram.getUniformLocation("uContrast")
         uLipColorLocation = shaderProgram.getUniformLocation("uLipColor")

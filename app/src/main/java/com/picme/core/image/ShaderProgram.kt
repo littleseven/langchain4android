@@ -211,6 +211,16 @@ class ShaderProgram {
     }
     
     /**
+     * 设置 vec2 数组 Uniform
+     */
+    fun setVec2Array(name: String, values: FloatArray, vec2Count: Int) {
+        val location = getUniformLocation(name)
+        if (location != -1 && values.isNotEmpty() && vec2Count > 0) {
+            GLES20.glUniform2fv(location, vec2Count, values, 0)
+        }
+    }
+
+    /**
      * 设置 mat4 Uniform
      */
     fun setMat4(name: String, value: FloatArray) {

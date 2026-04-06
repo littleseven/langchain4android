@@ -58,6 +58,10 @@ uniform vec2 uMouthLeft;
 uniform vec2 uMouthRight;
 uniform vec2 uUpperLipCenter;
 uniform vec2 uLowerLipCenter;
+uniform vec2 uLipOuterContourPoints[20];
+uniform float uLipOuterContourCount;
+uniform vec2 uLipInnerContourPoints[20];
+uniform float uLipInnerContourCount;
 uniform float uFaceRadius;
         uniform float uHasFace;
         uniform float uLipColor;
@@ -162,7 +166,112 @@ uniform float uFaceRadius;
             return vec3(0.83, 0.46, 0.49);
         }
 
-        vec4 applyLipTint(vec4 color, vec2 uv) {
+        float distancePointToSegment(vec2 point, vec2 a, vec2 b) {
+vec2 ab = b - a;
+float len2 = dot(ab, ab);
+if (len2 < 0.000001) {
+return length(point - a);
+}
+float t = clamp(dot(point - a, ab) / len2, 0.0, 1.0);
+vec2 projection = a + ab * t;
+return length(point - projection);
+}
+
+float contourMaskFromOuterPolygon(vec2 uv) {
+if (uLipOuterContourCount < 6.0) {
+return 0.0;
+}
+
+bool inside = false;
+float minDist = 10.0;
+vec2 firstPoint = vec2(0.0, 0.0);
+vec2 prevPoint = vec2(0.0, 0.0);
+bool hasPrev = false;
+
+for (int i = 0; i < 20; i++) {
+if (float(i) >= uLipOuterContourCount) {
+continue;
+}
+vec2 current = uLipOuterContourPoints[i];
+if (!hasPrev) {
+firstPoint = current;
+prevPoint = current;
+hasPrev = true;
+continue;
+}
+
+bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
+(uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
+prevPoint = current;
+}
+
+if (hasPrev) {
+bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
+(uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
+}
+
+float feather = max(uFaceRadius * 0.025, 0.004);
+float edgeSoft = smoothstep(0.0, feather, minDist);
+return (inside ? 1.0 : 0.0) * edgeSoft;
+}
+
+float contourMaskFromInnerPolygon(vec2 uv) {
+if (uLipInnerContourCount < 6.0) {
+return 0.0;
+}
+
+bool inside = false;
+float minDist = 10.0;
+vec2 firstPoint = vec2(0.0, 0.0);
+vec2 prevPoint = vec2(0.0, 0.0);
+bool hasPrev = false;
+
+for (int i = 0; i < 20; i++) {
+if (float(i) >= uLipInnerContourCount) {
+continue;
+}
+vec2 current = uLipInnerContourPoints[i];
+if (!hasPrev) {
+firstPoint = current;
+prevPoint = current;
+hasPrev = true;
+continue;
+}
+
+bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
+(uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
+prevPoint = current;
+}
+
+if (hasPrev) {
+bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
+(uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
+}
+
+float feather = max(uFaceRadius * 0.025, 0.004);
+float edgeSoft = smoothstep(0.0, feather, minDist);
+return (inside ? 1.0 : 0.0) * edgeSoft;
+}
+
+vec4 applyLipTint(vec4 color, vec2 uv) {
             if (uHasFace < 0.5 || uLipColor < 0.01) {
                 return color;
             }
@@ -213,7 +322,11 @@ float upperSideMask = smoothstep(-sideSwitch, sideSwitch, localY);
 float lowerSideMask = smoothstep(-sideSwitch, sideSwitch, -localY);
 float seamFade = 1.0 - smoothstep(0.0, seamWidth, abs(localY));
 float splitMask = max(upperMask * upperSideMask, lowerMask * lowerSideMask);
-float lipMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+float fallbackMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+float outerContourMask = contourMaskFromOuterPolygon(uv);
+float innerContourMask = contourMaskFromInnerPolygon(uv);
+float contourMask = clamp(outerContourMask - innerContourMask, 0.0, 1.0);
+float lipMask = mix(fallbackMask, contourMask, step(6.0, uLipOuterContourCount));
 
             vec3 target = lipColorByIndex(uLipColorIndex);
             float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
@@ -255,6 +368,10 @@ uniform vec2 uMouthLeft;
 uniform vec2 uMouthRight;
 uniform vec2 uUpperLipCenter;
 uniform vec2 uLowerLipCenter;
+uniform vec2 uLipOuterContourPoints[20];
+uniform float uLipOuterContourCount;
+uniform vec2 uLipInnerContourPoints[20];
+uniform float uLipInnerContourCount;
 uniform float uFaceRadius;
         uniform float uHasFace;
         uniform float uWarmth;
@@ -362,7 +479,112 @@ uniform float uFaceRadius;
             return vec3(0.83, 0.46, 0.49);
         }
 
-        vec4 applyLipTint(vec4 color, vec2 uv) {
+        float distancePointToSegment(vec2 point, vec2 a, vec2 b) {
+vec2 ab = b - a;
+float len2 = dot(ab, ab);
+if (len2 < 0.000001) {
+return length(point - a);
+}
+float t = clamp(dot(point - a, ab) / len2, 0.0, 1.0);
+vec2 projection = a + ab * t;
+return length(point - projection);
+}
+
+float contourMaskFromOuterPolygon(vec2 uv) {
+if (uLipOuterContourCount < 6.0) {
+return 0.0;
+}
+
+bool inside = false;
+float minDist = 10.0;
+vec2 firstPoint = vec2(0.0, 0.0);
+vec2 prevPoint = vec2(0.0, 0.0);
+bool hasPrev = false;
+
+for (int i = 0; i < 20; i++) {
+if (float(i) >= uLipOuterContourCount) {
+continue;
+}
+vec2 current = uLipOuterContourPoints[i];
+if (!hasPrev) {
+firstPoint = current;
+prevPoint = current;
+hasPrev = true;
+continue;
+}
+
+bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
+(uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
+prevPoint = current;
+}
+
+if (hasPrev) {
+bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
+(uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
+}
+
+float feather = max(uFaceRadius * 0.025, 0.004);
+float edgeSoft = smoothstep(0.0, feather, minDist);
+return (inside ? 1.0 : 0.0) * edgeSoft;
+}
+
+float contourMaskFromInnerPolygon(vec2 uv) {
+if (uLipInnerContourCount < 6.0) {
+return 0.0;
+}
+
+bool inside = false;
+float minDist = 10.0;
+vec2 firstPoint = vec2(0.0, 0.0);
+vec2 prevPoint = vec2(0.0, 0.0);
+bool hasPrev = false;
+
+for (int i = 0; i < 20; i++) {
+if (float(i) >= uLipInnerContourCount) {
+continue;
+}
+vec2 current = uLipInnerContourPoints[i];
+if (!hasPrev) {
+firstPoint = current;
+prevPoint = current;
+hasPrev = true;
+continue;
+}
+
+bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
+(uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
+prevPoint = current;
+}
+
+if (hasPrev) {
+bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
+(uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
+if (cross) {
+inside = !inside;
+}
+minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
+}
+
+float feather = max(uFaceRadius * 0.025, 0.004);
+float edgeSoft = smoothstep(0.0, feather, minDist);
+return (inside ? 1.0 : 0.0) * edgeSoft;
+}
+
+vec4 applyLipTint(vec4 color, vec2 uv) {
             if (uHasFace < 0.5 || uLipColor < 0.01) {
                 return color;
             }
@@ -413,7 +635,11 @@ float upperSideMask = smoothstep(-sideSwitch, sideSwitch, localY);
 float lowerSideMask = smoothstep(-sideSwitch, sideSwitch, -localY);
 float seamFade = 1.0 - smoothstep(0.0, seamWidth, abs(localY));
 float splitMask = max(upperMask * upperSideMask, lowerMask * lowerSideMask);
-float lipMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+float fallbackMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+float outerContourMask = contourMaskFromOuterPolygon(uv);
+float innerContourMask = contourMaskFromInnerPolygon(uv);
+float contourMask = clamp(outerContourMask - innerContourMask, 0.0, 1.0);
+float lipMask = mix(fallbackMask, contourMask, step(6.0, uLipOuterContourCount));
 
             vec3 target = lipColorByIndex(uLipColorIndex);
             float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;

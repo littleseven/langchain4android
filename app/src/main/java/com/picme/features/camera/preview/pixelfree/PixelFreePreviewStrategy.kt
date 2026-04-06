@@ -112,6 +112,14 @@ internal class PixelFreePreviewStrategy(
                 faceRadius = params.faceRadius,
                 hasFace = params.hasFace
             )
+            rPlanPreviewProvider?.updateLipMaskPoints(
+                outerPoints = params.lipOuterContourPoints.map { contourPoint ->
+                    Pair(contourPoint.x, contourPoint.y)
+                },
+                innerPoints = params.lipInnerContourPoints.map { contourPoint ->
+                    Pair(contourPoint.x, contourPoint.y)
+                }
+            )
         }.onFailure { error ->
             Logger.w("Camera", "PixelFree provider face params update failed", error)
         }

@@ -13,6 +13,8 @@ import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.preview.core.FaceWarpParams
 
+private const val LIP_CONTOUR_POINT_COUNT = 20
+
 @ExperimentalGetImage
 internal fun handleImageAnalysisFrame(
     imageProxy: androidx.camera.core.ImageProxy,
@@ -228,6 +230,39 @@ internal fun handleImageAnalysisFrame(
                         }
                         ?: emptyList()
 
+                    val lipOuterContourRaw = if (upperLipTopPoints.isNotEmpty() && lowerLipBottomPoints.isNotEmpty()) {
+                        upperLipTopPoints + lowerLipBottomPoints.reversed()
+                    } else {
+                        allLipPoints
+                    }
+                    val lipInnerContourRaw = if (upperLipBottomPoints.isNotEmpty() && lowerLipTopPoints.isNotEmpty()) {
+                        upperLipBottomPoints + lowerLipTopPoints.reversed()
+                    } else {
+                        emptyList()
+                    }
+
+                    fun mapContourPoints(rawPoints: List<PointF>): List<Offset> {
+                        return resampleContourPoints(rawPoints).map { lipPoint ->
+                            val mappedPoint = transformFaceCoordinateSimple(
+                                faceX = lipPoint.x,
+                                faceY = lipPoint.y,
+                                imageProxyWidth = imageProxy.width,
+                                imageProxyHeight = imageProxy.height,
+                                previewWidth = previewWidth,
+                                previewHeight = previewHeight,
+                                rotationDegrees = rotationDegrees,
+                                lensFacing = lensFacing
+                            )
+                            Offset(
+                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
+                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
+                            )
+                        }
+                    }
+
+                    val lipOuterContourPoints = mapContourPoints(lipOuterContourRaw)
+                    val lipInnerContourPoints = mapContourPoints(lipInnerContourRaw)
+
                     val faceWarpParams = FaceWarpParams(
                         faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
                         faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
@@ -249,7 +284,9 @@ internal fun handleImageAnalysisFrame(
                         hasFace = true,
                         contourPoints = contourPoints,
                         leftEyeContourPoints = leftEyeContourPoints,
-                        rightEyeContourPoints = rightEyeContourPoints
+                        rightEyeContourPoints = rightEyeContourPoints,
+                        lipOuterContourPoints = lipOuterContourPoints,
+                        lipInnerContourPoints = lipInnerContourPoints
                     )
                     onFaceWarpParamsChanged(faceWarpParams)
                     android.util.Log.d(
@@ -285,6 +322,56 @@ private fun averagePoint(points: List<PointF>): PointF? {
     val sumX = points.sumOf { point -> point.x.toDouble() }.toFloat()
     val sumY = points.sumOf { point -> point.y.toDouble() }.toFloat()
     return PointF(sumX / points.size, sumY / points.size)
+}
+
+private fun resampleContourPoints(points: List<PointF>): List<PointF> {
+    if (points.size < 2 || LIP_CONTOUR_POINT_COUNT <= 1) {
+        return points
+    }
+
+    val source = points + points.first()
+
+    val cumulative = ArrayList<Float>(source.size)
+    cumulative.add(0f)
+    for (index in 1 until source.size) {
+        val dx = source[index].x - source[index - 1].x
+        val dy = source[index].y - source[index - 1].y
+        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+        cumulative.add(cumulative.last() + distance)
+    }
+
+    val totalLength = cumulative.last()
+    if (totalLength <= 0.0001f) {
+        return List(LIP_CONTOUR_POINT_COUNT) { points.first() }
+    }
+
+    val sampleCount = LIP_CONTOUR_POINT_COUNT
+    val step = totalLength / sampleCount
+
+    val result = ArrayList<PointF>(sampleCount)
+    var segmentIndex = 1
+    for (sampleIndex in 0 until sampleCount) {
+        val targetDistance = sampleIndex * step
+        while (segmentIndex < cumulative.size - 1 && cumulative[segmentIndex] < targetDistance) {
+            segmentIndex++
+        }
+
+        val prevDistance = cumulative[segmentIndex - 1]
+        val nextDistance = cumulative[segmentIndex]
+        val distanceRange = (nextDistance - prevDistance).coerceAtLeast(0.0001f)
+        val t = ((targetDistance - prevDistance) / distanceRange).coerceIn(0f, 1f)
+
+        val start = source[segmentIndex - 1]
+        val end = source[segmentIndex]
+        result.add(
+            PointF(
+                start.x + (end.x - start.x) * t,
+                start.y + (end.y - start.y) * t
+            )
+        )
+    }
+
+    return result
 }
 
 internal fun transformFaceCoordinateSimple(

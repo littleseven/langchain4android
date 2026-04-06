@@ -126,6 +126,13 @@ class RPlanBeautyPreviewProvider(
         )
     }
 
+    fun updateLipMaskPoints(
+        outerPoints: List<Pair<Float, Float>>,
+        innerPoints: List<Pair<Float, Float>>
+    ) {
+        beautyPreviewView?.updateLipMaskPoints(outerPoints, innerPoints)
+    }
+
     override fun release() {
         previewSurface?.release()
         previewSurface = null

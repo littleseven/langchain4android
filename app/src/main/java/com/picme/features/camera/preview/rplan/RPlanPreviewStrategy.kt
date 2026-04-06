@@ -77,6 +77,14 @@ internal class RPlanPreviewStrategy(
                 faceRadius = params.faceRadius,
                 hasFace = params.hasFace
             )
+            rPlanPreviewProvider.updateLipMaskPoints(
+                outerPoints = params.lipOuterContourPoints.map { contourPoint ->
+                    Pair(contourPoint.x, contourPoint.y)
+                },
+                innerPoints = params.lipInnerContourPoints.map { contourPoint ->
+                    Pair(contourPoint.x, contourPoint.y)
+                }
+            )
         }.onFailure { error ->
             Logger.w("Camera", "R Plan face params update failed", error)
         }

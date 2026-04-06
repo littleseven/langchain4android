@@ -589,6 +589,19 @@ class CameraPreviewRenderer {
         )
     }
 
+    fun updateLipMaskPoints(
+        outerPoints: List<Pair<Float, Float>>,
+        innerPoints: List<Pair<Float, Float>>
+    ) {
+        val mappedOuterPoints = outerPoints.map { point ->
+            mapViewNormalizedToUv(point.first, point.second)
+        }
+        val mappedInnerPoints = innerPoints.map { point ->
+            mapViewNormalizedToUv(point.first, point.second)
+        }
+        beautyRenderer.updateLipMaskPoints(mappedOuterPoints, mappedInnerPoints)
+    }
+
     /**
      * 设置渲染模式
      * 
