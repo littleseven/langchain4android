@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
@@ -50,6 +51,8 @@ import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.FaceRetouchingNatural
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FilterBAndW
+import androidx.compose.material.icons.rounded.Face3
+import androidx.compose.material.icons.rounded.FormatColorFill
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Landscape
@@ -89,14 +92,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.CameraAspectRatio
 import com.picme.features.camera.GridType
+import com.picme.features.camera.MakeupEntry
 import com.picme.features.camera.ScenePreset
 import com.picme.features.camera.model.FilterType
 
@@ -152,9 +158,11 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
-    onToggleFacialRefinement: () -> Unit,  // Toggles facial refinement panel
-    onToggleMakeupAdjustment: () -> Unit,   // Toggles makeup adjustment panel
-    onToggleBodyManagement: () -> Unit,     // Toggles body management panel
+    onToggleFacialRefinement: () -> Unit,
+    onToggleLipColor: () -> Unit,
+    onToggleBlush: () -> Unit,
+    onToggleEyebrow: () -> Unit,
+    onToggleBodyManagement: () -> Unit,
     onToggleBeautyEnabled: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
@@ -162,9 +170,11 @@ fun CameraRightControls(
     isSceneActive: Boolean,
     isGridActive: Boolean,
     isBeautyEnabled: Boolean,
-    isFacialRefinementSelected: Boolean = false,  // Is facial refinement panel open
-    isMakeupAdjustmentSelected: Boolean = false,  // Is makeup adjustment panel open
-    isBodyManagementSelected: Boolean = false,    // Is body management panel open
+    isFacialRefinementSelected: Boolean = false,
+    isLipColorSelected: Boolean = false,
+    isBlushSelected: Boolean = false,
+    isEyebrowSelected: Boolean = false,
+    isBodyManagementSelected: Boolean = false,
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -189,13 +199,23 @@ fun CameraRightControls(
             isActive = isFacialRefinementSelected
         )
         
-        // 妆容调节
-        ControlButton(
-            icon = Icons.Rounded.ColorLens,
-            onClick = onToggleMakeupAdjustment,
-            isActive = isMakeupAdjustmentSelected
+        // 拍摄页并列妆容入口：唇色 / 腮红 / 眉毛
+        ControlPainterButton(
+            iconRes = R.drawable.ic_makeup_lips,
+            onClick = onToggleLipColor,
+            isActive = isLipColorSelected
         )
-        
+        ControlPainterButton(
+            iconRes = R.drawable.ic_makeup_cheek,
+            onClick = onToggleBlush,
+            isActive = isBlushSelected
+        )
+        ControlPainterButton(
+            iconRes = R.drawable.ic_makeup_eyebrow,
+            onClick = onToggleEyebrow,
+            isActive = isEyebrowSelected
+        )
+
         // 身材管理
         ControlButton(
             icon = Icons.Rounded.SelfImprovement,
@@ -260,6 +280,33 @@ fun ControlButton(
         )
     ) {
         Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))
+    }
+}
+
+@Composable
+fun ControlPainterButton(
+    @DrawableRes iconRes: Int,
+    onClick: () -> Unit,
+    isActive: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    FilledIconButton(
+        onClick = onClick,
+        modifier = modifier.size(44.dp),
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = if (isActive) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                Color.Black.copy(alpha = 0.4f)
+            },
+            contentColor = if (isActive) Color.Black else Color.White
+        )
+    ) {
+        Icon(
+            painter = painterResource(id = iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
@@ -534,16 +581,30 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
                 colorIndex = settings.lipColorIndex,
                 onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
                 onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
-                onReset = { onSettingsChanged(settings.copy(lipColor = 0f, lipColorIndex = 0)) }
+                onReset = {
+                    onSettingsChanged(
+                        settings.copy(
+                            lipColor = BeautySettings.DEFAULT_LIP_COLOR,
+                            lipColorIndex = 0
+                        )
+                    )
+                }
             )
             
+            BlushColorFamilySelector(
+                selectedFamily = settings.blushColorFamily,
+                onFamilyChanged = { family ->
+                    onSettingsChanged(settings.copy(blushColorFamily = family))
+                }
+            )
+
             BeautySlider(
                 icon = Icons.Rounded.FavoriteBorder,
                 label = stringResource(R.string.blush),
                 value = settings.blush,
                 valueRange = 0f..100f,
                 onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
-                onReset = { onSettingsChanged(settings.copy(blush = 0f)) }
+                onReset = { onSettingsChanged(settings.copy(blush = BeautySettings.DEFAULT_BLUSH)) }
             )
 
             BeautySlider(
@@ -552,7 +613,7 @@ fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings)
                 value = settings.eyebrow,
                 valueRange = 0f..100f,
                 onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
-                onReset = { onSettingsChanged(settings.copy(eyebrow = 0f)) }
+                onReset = { onSettingsChanged(settings.copy(eyebrow = BeautySettings.DEFAULT_EYEBROW)) }
             )
         }
         
@@ -637,37 +698,104 @@ fun FacialRefinementSelector(settings: BeautySettings, onSettingsChanged: (Beaut
  * 妆容调节选择器 - 独立版本
  */
 @Composable
-fun MakeupAdjustmentSelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+internal fun MakeupAdjustmentSelector(
+    settings: BeautySettings,
+    activeEntry: MakeupEntry? = null,
+    onSettingsChanged: (BeautySettings) -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 唇色选择器
-        LipColorSelector(
-            strength = settings.lipColor,
-            colorIndex = settings.lipColorIndex,
-            onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
-            onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
-            onReset = { onSettingsChanged(settings.copy(lipColor = 0f, lipColorIndex = 0)) }
-        )
-        
-        BeautySlider(
-            icon = Icons.Rounded.FavoriteBorder,
-            label = stringResource(R.string.blush),
-            value = settings.blush,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
-            onReset = { onSettingsChanged(settings.copy(blush = 0f)) }
-        )
+        when (activeEntry) {
+            MakeupEntry.LIP_COLOR -> {
+                LipColorSelector(
+                    strength = settings.lipColor,
+                    colorIndex = settings.lipColorIndex,
+                    onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+                    onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+                    onReset = {
+                        onSettingsChanged(
+                            settings.copy(
+                                lipColor = BeautySettings.DEFAULT_LIP_COLOR,
+                                lipColorIndex = 0
+                            )
+                        )
+                    }
+                )
+            }
 
-        BeautySlider(
-            icon = Icons.Rounded.LineStyle,
-            label = stringResource(R.string.eyebrow),
-            value = settings.eyebrow,
-            valueRange = 0f..100f,
-            onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
-            onReset = { onSettingsChanged(settings.copy(eyebrow = 0f)) }
-        )
+            MakeupEntry.BLUSH -> {
+                BlushColorFamilySelector(
+                    selectedFamily = settings.blushColorFamily,
+                    onFamilyChanged = { family ->
+                        onSettingsChanged(settings.copy(blushColorFamily = family))
+                    }
+                )
+
+                BeautySlider(
+                    icon = Icons.Rounded.FavoriteBorder,
+                    label = stringResource(R.string.blush),
+                    value = settings.blush,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+                    onReset = { onSettingsChanged(settings.copy(blush = BeautySettings.DEFAULT_BLUSH)) }
+                )
+            }
+
+            MakeupEntry.EYEBROW -> {
+                BeautySlider(
+                    icon = Icons.Rounded.LineStyle,
+                    label = stringResource(R.string.eyebrow),
+                    value = settings.eyebrow,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+                    onReset = { onSettingsChanged(settings.copy(eyebrow = BeautySettings.DEFAULT_EYEBROW)) }
+                )
+            }
+
+            null -> {
+                LipColorSelector(
+                    strength = settings.lipColor,
+                    colorIndex = settings.lipColorIndex,
+                    onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+                    onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+                    onReset = {
+                        onSettingsChanged(
+                            settings.copy(
+                                lipColor = BeautySettings.DEFAULT_LIP_COLOR,
+                                lipColorIndex = 0
+                            )
+                        )
+                    }
+                )
+
+                BlushColorFamilySelector(
+                    selectedFamily = settings.blushColorFamily,
+                    onFamilyChanged = { family ->
+                        onSettingsChanged(settings.copy(blushColorFamily = family))
+                    }
+                )
+
+                BeautySlider(
+                    icon = Icons.Rounded.FavoriteBorder,
+                    label = stringResource(R.string.blush),
+                    value = settings.blush,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+                    onReset = { onSettingsChanged(settings.copy(blush = BeautySettings.DEFAULT_BLUSH)) }
+                )
+
+                BeautySlider(
+                    icon = Icons.Rounded.LineStyle,
+                    label = stringResource(R.string.eyebrow),
+                    value = settings.eyebrow,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+                    onReset = { onSettingsChanged(settings.copy(eyebrow = BeautySettings.DEFAULT_EYEBROW)) }
+                )
+            }
+        }
     }
 }
 
@@ -941,6 +1069,82 @@ private fun ExpandableSection(
 }
 
 /**
+ * 腮红色系选择器
+ * 提供粉色、橙色、梅子色三种色系。
+ */
+@Composable
+fun BlushColorFamilySelector(
+    selectedFamily: Int,
+    onFamilyChanged: (Int) -> Unit
+) {
+    val familyLabels = listOf(
+        stringResource(R.string.blush_family_pink),
+        stringResource(R.string.blush_family_orange),
+        stringResource(R.string.blush_family_plum)
+    )
+    val familyColors = listOf(
+        Color(0xFFFF8DAA),
+        Color(0xFFFFA85C),
+        Color(0xFF9B3D6A)
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.blush_color_family),
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            familyLabels.forEachIndexed { index, label ->
+                val isSelected = selectedFamily == index
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                            }
+                        )
+                        .border(
+                            width = if (isSelected) 1.5.dp else 1.dp,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .clickable { onFamilyChanged(index) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(familyColors[index])
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                        },
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * 唇色选择器组件
  * 包含强度滑块和 12 种色号选择
  */
@@ -997,7 +1201,7 @@ fun LipColorSelector(
             }
             
             Text(
-                text = if (strength > 0) "${(strength * 100).toInt()}" else "--",
+                text = if (strength > 0) "${strength.toInt()}" else "--",
                 color = if (strength > 0) {
                     MaterialTheme.colorScheme.primary
                 } else {
@@ -1038,8 +1242,10 @@ fun LipColorSelector(
         
         // 强度滑块
         Slider(
-            value = strength,
-            onValueChange = onStrengthChanged,
+            value = strength.coerceIn(0f, 100f),
+            onValueChange = { value ->
+                onStrengthChanged(value.coerceIn(0f, 100f))
+            },
             valueRange = 0f..100f,
             modifier = Modifier.height(32.dp),
             colors = SliderDefaults.colors(

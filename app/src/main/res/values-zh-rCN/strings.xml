@@ -43,6 +43,10 @@
     <string name="youth">年轻化</string>
     <string name="lip_color">唇色</string>
     <string name="blush">腮红</string>
+    <string name="blush_color_family">腮红色系</string>
+    <string name="blush_family_pink">粉色</string>
+    <string name="blush_family_orange">橙色</string>
+    <string name="blush_family_plum">梅子色</string>
     <string name="eyebrow">眉毛</string>
     <string name="body_enhancement">丰胸</string>
     <string name="leg_extension">长腿</string>

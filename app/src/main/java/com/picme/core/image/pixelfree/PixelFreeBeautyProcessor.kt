@@ -444,16 +444,70 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
         return result
     }
 
-    override suspend fun applyBlush(bitmap: Bitmap, strength: Float): Bitmap {
-        // PixelFree SDK 可能需要美妆资源
-        Logger.w(TAG, "Blush not supported without makeup bundle")
-        return bitmap
+    override suspend fun applyBlush(bitmap: Bitmap, strength: Float, colorFamily: Int): Bitmap {
+        return withContext(Dispatchers.Default) {
+            try {
+                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val intensity = (strength / 100f).coerceIn(0f, 1f) * 0.4f
+
+                val (rOffset, gOffset, bOffset) = when (colorFamily.coerceIn(0, 2)) {
+                    1 -> Triple(26f, 18f, 8f)   // 橙色系
+                    2 -> Triple(18f, 8f, 24f)   // 梅子色系
+                    else -> Triple(30f, 10f, 20f) // 粉色系
+                }
+
+                val colorMatrix = android.graphics.ColorMatrix().apply {
+                    set(floatArrayOf(
+                        1f, 0f, 0f, 0f, intensity * rOffset,
+                        0f, 1f, 0f, 0f, intensity * gOffset,
+                        0f, 0f, 1f, 0f, intensity * bOffset,
+                        0f, 0f, 0f, 1f, 0f
+                    ))
+                }
+
+                val paint = android.graphics.Paint().apply {
+                    colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+                    isAntiAlias = true
+                }
+
+                val canvas = android.graphics.Canvas(mutableBitmap)
+                canvas.drawBitmap(bitmap, 0f, 0f, paint)
+                mutableBitmap
+            } catch (e: Exception) {
+                Logger.e(TAG, "Blush error", e)
+                bitmap
+            }
+        }
     }
 
     override suspend fun applyEyebrow(bitmap: Bitmap, strength: Float): Bitmap {
-        // PixelFree SDK 可能需要美妆资源
-        Logger.w(TAG, "Eyebrow not supported without makeup bundle")
-        return bitmap
+        return withContext(Dispatchers.Default) {
+            try {
+                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val intensity = (strength / 100f).coerceIn(0f, 1f) * 0.5f
+
+                val colorMatrix = android.graphics.ColorMatrix().apply {
+                    set(floatArrayOf(
+                        1f - intensity * 0.2f, 0f, 0f, 0f, -intensity * 20f,
+                        0f, 1f - intensity * 0.2f, 0f, 0f, -intensity * 20f,
+                        0f, 0f, 1f - intensity * 0.2f, 0f, -intensity * 20f,
+                        0f, 0f, 0f, 1f, 0f
+                    ))
+                }
+
+                val paint = android.graphics.Paint().apply {
+                    colorFilter = android.graphics.ColorMatrixColorFilter(colorMatrix)
+                    isAntiAlias = true
+                }
+
+                val canvas = android.graphics.Canvas(mutableBitmap)
+                canvas.drawBitmap(bitmap, 0f, 0f, paint)
+                mutableBitmap
+            } catch (e: Exception) {
+                Logger.e(TAG, "Eyebrow error", e)
+                bitmap
+            }
+        }
     }
 
     override suspend fun applyBodyEnhancement(bitmap: Bitmap, strength: Float): Bitmap {
@@ -486,7 +540,7 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
                 result = applyLipColor(result, settings.lipColor, settings.lipColorIndex, faces)
             }
             if (settings.blush > 0) {
-                result = applyBlush(result, settings.blush)
+                result = applyBlush(result, settings.blush, settings.blushColorFamily)
             }
             if (settings.eyebrow > 0) {
                 result = applyEyebrow(result, settings.eyebrow)

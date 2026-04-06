@@ -500,8 +500,15 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     processed = beautyProcessor.applyLipColor(processed, beauty.lipColor, beauty.lipColorIndex, faces)
                 }
                 if (beauty.blush > 0f) {
-                    Logger.d("ImageProcessor", "Applying blush: ${beauty.blush}")
-                    processed = beautyProcessor.applyBlush(processed, beauty.blush)
+                    Logger.d(
+                        "ImageProcessor",
+                        "Applying blush: ${beauty.blush}, family=${beauty.blushColorFamily}"
+                    )
+                    processed = beautyProcessor.applyBlush(
+                        processed,
+                        beauty.blush,
+                        beauty.blushColorFamily
+                    )
                 }
                 if (beauty.eyebrow > 0f) {
                     Logger.d("ImageProcessor", "Applying eyebrow: ${beauty.eyebrow}")

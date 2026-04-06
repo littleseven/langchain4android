@@ -526,7 +526,9 @@ class CameraPreviewRenderer {
         bigEyes: Float = 0f,
         slimFace: Float = 0f,
         lipColor: Float = 0f,
-        lipColorIndex: Int = 0
+        lipColorIndex: Int = 0,
+        blush: Float = 0f,
+        blushColorFamily: Int = 0
     ) {
         beautyRenderer.updateBeautyParams(
             smoothing = smoothing,
@@ -534,7 +536,9 @@ class CameraPreviewRenderer {
             bigEyes = bigEyes,
             slimFace = slimFace,
             lipColor = lipColor,
-            lipColorIndex = lipColorIndex
+            lipColorIndex = lipColorIndex,
+            blush = blush,
+            blushColorFamily = blushColorFamily
         )
     }
     

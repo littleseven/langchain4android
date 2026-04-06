@@ -79,7 +79,7 @@ enum class GridType { NONE, THIRDS, GOLDEN }
 enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
 enum class BeautyPreviewStatus { ACTIVE, SKIPPED }
 
-private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 1800L
+private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 
 object AspectRatio {
     const val RATIO_4_3 = 0
@@ -205,6 +205,7 @@ internal data class CameraPreviewUiState(
     val debugUiEnabled: Boolean,
     val showFacialRefinement: Boolean,
     val showMakeupAdjustment: Boolean,
+    val activeMakeupEntry: MakeupEntry,
     val showBodyManagement: Boolean,
     val currentScene: ScenePreset,
     val currentGrid: GridType,
@@ -231,6 +232,9 @@ internal data class CameraPreviewActions(
     val onToggleFaceDebugOverlay: () -> Unit,
     val onToggleFacialRefinement: () -> Unit,
     val onToggleMakeupAdjustment: () -> Unit,
+    val onToggleLipColor: () -> Unit,
+    val onToggleBlush: () -> Unit,
+    val onToggleEyebrow: () -> Unit,
     val onToggleBodyManagement: () -> Unit,
     val onZoomPresetClick: (Float) -> Unit,
     val onExposureChange: (Int) -> Unit,
@@ -290,6 +294,7 @@ private fun buildCameraPreviewUiState(
         debugUiEnabled = debugUiEnabled,
         showFacialRefinement = panelState.showFacialRefinement,
         showMakeupAdjustment = panelState.showMakeupAdjustment,
+        activeMakeupEntry = panelState.activeMakeupEntry,
         showBodyManagement = panelState.showBodyManagement,
         currentScene = currentScene,
         currentGrid = currentGrid,
@@ -382,6 +387,9 @@ private fun buildCameraPreviewActions(
         },
         onToggleFacialRefinement = panelState::toggleFacialRefinement,
         onToggleMakeupAdjustment = panelState::toggleMakeupAdjustment,
+        onToggleLipColor = { panelState.openMakeupEntry(MakeupEntry.LIP_COLOR) },
+        onToggleBlush = { panelState.openMakeupEntry(MakeupEntry.BLUSH) },
+        onToggleEyebrow = { panelState.openMakeupEntry(MakeupEntry.EYEBROW) },
         onToggleBodyManagement = panelState::toggleBodyManagement,
         onZoomPresetClick = { ratio -> cameraControl?.setZoomRatio(ratio) },
         onExposureChange = { exposure -> cameraControl?.setExposureCompensationIndex(exposure) },
@@ -587,6 +595,7 @@ fun CameraContent(
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
     var useProviderRenderView by remember { mutableStateOf(false) }
+    var lipRealtimeRecoveryRequested by remember { mutableStateOf(false) }
 
     val bindPreviewSurfaceProvider: (Preview) -> Unit = { previewUseCase ->
         useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase, aspectRatio)
@@ -636,6 +645,29 @@ fun CameraContent(
 
     LaunchedEffect(faceWarpParams, beautyStrategy) {
         activePreviewStrategy.applyFaceWarpParams(faceWarpParams)
+    }
+
+    LaunchedEffect(beautyStrategy, pixelFreeLinkMode, beautySettings.lipColor, beautySettings.enabled) {
+        val shouldForceRPlanForLipPreview =
+            beautySettings.enabled && beautySettings.lipColor > 0f &&
+                beautyStrategy == BeautyStrategy.PIXEL_FREE &&
+                pixelFreeLinkMode == PixelFreePreviewLinkMode.PREVIEW_FALLBACK
+
+        if (!shouldForceRPlanForLipPreview) {
+            lipRealtimeRecoveryRequested = false
+            return@LaunchedEffect
+        }
+
+        if (lipRealtimeRecoveryRequested) {
+            return@LaunchedEffect
+        }
+
+        lipRealtimeRecoveryRequested = true
+        Logger.w(
+            "Camera",
+            "Lip realtime preview requires provider path, trigger R Plan recovery"
+        )
+        userPreferencesRepository.triggerManualRPlanRecovery()
     }
 
     // RD 监听比例变化，动态调整 ScaleType
@@ -697,15 +729,16 @@ fun CameraContent(
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     
     var facePoint by remember { mutableStateOf(Offset.Zero) }
-    var showFocusIndicator by remember { mutableStateOf(false) }
+    var isFaceLocked by remember { mutableStateOf(false) }
     val focusIndicatorAlpha = remember { Animatable(0f) }
 
-    val faceDetector = remember(faceLandmarkModeEnabled, showFaceDebugOverlay) {
+    val shouldEnableLipContour = beautySettings.enabled && beautySettings.lipColor > 0f
+    val faceDetector = remember(faceLandmarkModeEnabled, showFaceDebugOverlay, shouldEnableLipContour) {
         val optionsBuilder = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
             .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
 
-        val useContour = showFaceDebugOverlay || !faceLandmarkModeEnabled
+        val useContour = showFaceDebugOverlay || !faceLandmarkModeEnabled || shouldEnableLipContour
         optionsBuilder.setContourMode(
             if (useContour) {
                 FaceDetectorOptions.CONTOUR_MODE_ALL
@@ -716,7 +749,8 @@ fun CameraContent(
 
         Logger.i(
             "Camera",
-            "Face detector mode=${if (useContour) "CONTOUR" else "LANDMARK"}, debugOverlay=$showFaceDebugOverlay"
+            "Face detector mode=${if (useContour) "CONTOUR" else "LANDMARK"}, " +
+                "debugOverlay=$showFaceDebugOverlay, lipContour=$shouldEnableLipContour"
         )
         FaceDetection.getClient(optionsBuilder.build())
     }
@@ -802,16 +836,35 @@ fun CameraContent(
             },
             onFacePointChanged = { point -> facePoint = point },
             onFaceWarpParamsChanged = { params -> faceWarpParams = params },
-            onShowFocusIndicatorChanged = { show -> showFocusIndicator = show }
+            onShowFocusIndicatorChanged = { show ->
+                isFaceLocked = show
+            }
         )
     }
 
     // 第二阶段瘦身后：实时预览在 runRealtimeBeautyPreviewLoop 中统一处理。
 
-    LaunchedEffect(showFocusIndicator) {
+    LaunchedEffect(isFaceLocked, isStable) {
+        if (!isFaceLocked) {
+            focusIndicatorAlpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 220)
+            )
+            return@LaunchedEffect
+        }
+
+        if (!isStable) {
+            focusIndicatorAlpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 160)
+            )
+            return@LaunchedEffect
+        }
+
+        delay(320)
         focusIndicatorAlpha.animateTo(
-            if (showFocusIndicator) 1f else 0f,
-            animationSpec = tween(if (showFocusIndicator) 200 else 500)
+            targetValue = 0f,
+            animationSpec = tween(durationMillis = 420)
         )
     }
 

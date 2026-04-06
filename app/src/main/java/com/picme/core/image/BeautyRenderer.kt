@@ -54,6 +54,12 @@ class BeautyRenderer : GLRenderer() {
     /** 唇色色号索引 (0 - 11) */
     private var lipColorIndex: Int = 0
 
+    /** 腮红强度 (0.0 - 1.0) */
+    private var blushStrength: Float = 0f
+
+    /** 腮红色系 (0=粉色,1=橙色,2=梅子色) */
+    private var blushColorFamily: Int = 0
+
     /** 人脸中心与眼睛关键点（归一化坐标） */
     private var faceCenterX: Float = 0.5f
     private var faceCenterY: Float = 0.5f
@@ -110,7 +116,9 @@ class BeautyRenderer : GLRenderer() {
     private var uContrastLocation: Int = -1
     private var uLipColorLocation: Int = -1
     private var uLipColorIndexLocation: Int = -1
-    
+    private var uBlushLocation: Int = -1
+    private var uBlushColorFamilyLocation: Int = -1
+
     /**
      * 设置渲染模式
      */
@@ -144,7 +152,9 @@ class BeautyRenderer : GLRenderer() {
         bigEyes: Float = 0f,
         slimFace: Float = 0f,
         lipColor: Float = 0f,
-        lipColorIndex: Int = 0
+        lipColorIndex: Int = 0,
+        blush: Float = 0f,
+        blushColorFamily: Int = 0
     ) {
         smoothingStrength = smoothing.coerceIn(0f, 1f)
         whiteningStrength = whitening.coerceIn(0f, 1f)
@@ -152,11 +162,13 @@ class BeautyRenderer : GLRenderer() {
         slimFaceStrength = slimFace.coerceIn(-1f, 1f)
         lipColorStrength = lipColor.coerceIn(0f, 1f)
         this.lipColorIndex = lipColorIndex.coerceIn(0, 11)
+        blushStrength = blush.coerceIn(0f, 1f)
+        this.blushColorFamily = blushColorFamily.coerceIn(0, 2)
         Log.d(
             TAG,
             "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
                 "bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength, lipColor=$lipColorStrength, " +
-                "lipColorIndex=${this.lipColorIndex}"
+                "lipColorIndex=${this.lipColorIndex}, blush=$blushStrength, blushFamily=${this.blushColorFamily}"
         )
     }
     
@@ -284,6 +296,8 @@ class BeautyRenderer : GLRenderer() {
                 shaderProgram.setFloat("uHasFace", hasFace)
                 shaderProgram.setFloat("uLipColor", lipColorStrength)
                 shaderProgram.setInt("uLipColorIndex", lipColorIndex)
+                shaderProgram.setFloat("uBlush", blushStrength)
+                shaderProgram.setInt("uBlushColorFamily", blushColorFamily)
                 shaderProgram.setVec2("uFaceCenter", faceCenterX, faceCenterY)
                 shaderProgram.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
                 shaderProgram.setVec2("uMouthLeft", mouthLeftX, mouthLeftY)
@@ -306,6 +320,8 @@ class BeautyRenderer : GLRenderer() {
                 shaderProgram.setFloat("uHasFace", hasFace)
                 shaderProgram.setFloat("uLipColor", lipColorStrength)
                 shaderProgram.setInt("uLipColorIndex", lipColorIndex)
+                shaderProgram.setFloat("uBlush", blushStrength)
+                shaderProgram.setInt("uBlushColorFamily", blushColorFamily)
                 shaderProgram.setVec2("uFaceCenter", faceCenterX, faceCenterY)
                 shaderProgram.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
                 shaderProgram.setVec2("uMouthLeft", mouthLeftX, mouthLeftY)
@@ -354,6 +370,8 @@ class BeautyRenderer : GLRenderer() {
         uContrastLocation = shaderProgram.getUniformLocation("uContrast")
         uLipColorLocation = shaderProgram.getUniformLocation("uLipColor")
         uLipColorIndexLocation = shaderProgram.getUniformLocation("uLipColorIndex")
+        uBlushLocation = shaderProgram.getUniformLocation("uBlush")
+        uBlushColorFamilyLocation = shaderProgram.getUniformLocation("uBlushColorFamily")
     }
     
     override fun release() {

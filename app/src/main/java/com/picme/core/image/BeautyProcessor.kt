@@ -58,10 +58,11 @@ interface BeautyProcessor {
      * 应用腮红效果
      * @param bitmap 原始图像
      * @param strength 强度 0-100
+     * @param colorFamily 色系 0=粉色,1=橙色,2=梅子色
      * @return 处理后的图像
      */
-    suspend fun applyBlush(bitmap: Bitmap, strength: Float): Bitmap
-    
+    suspend fun applyBlush(bitmap: Bitmap, strength: Float, colorFamily: Int): Bitmap
+
     /**
      * 应用眉毛加深效果
      * @param bitmap 原始图像
@@ -115,7 +116,7 @@ interface BeautyProcessor {
                 result = applyLipColor(result, settings.lipColor, settings.lipColorIndex, faces)
             }
             if (settings.blush > 0) {
-                result = applyBlush(result, settings.blush)
+                result = applyBlush(result, settings.blush, settings.blushColorFamily)
             }
             if (settings.eyebrow > 0) {
                 result = applyEyebrow(result, settings.eyebrow)

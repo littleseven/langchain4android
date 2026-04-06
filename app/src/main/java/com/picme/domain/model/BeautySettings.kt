@@ -15,10 +15,11 @@ data class BeautySettings(
     val bigEyes: Float = 0f,        // 大眼 0-100
 
     // 妆容调节
-    val lipColor: Float = 0f,       // 唇色强度 0-100
-    val lipColorIndex: Int = 0,     // 唇色色号索引 0-11
-    val blush: Float = 0f,          // 腮红 0-100
-    val eyebrow: Float = 0f,        // 眉毛 0-100
+    val lipColor: Float = DEFAULT_LIP_COLOR,       // 唇色强度 0-100，默认 40
+    val lipColorIndex: Int = 0,                    // 唇色色号索引 0-11
+    val blush: Float = DEFAULT_BLUSH,              // 腮红 0-100，默认 20
+    val blushColorFamily: Int = 0,                 // 腮红色系 0-2（粉/橙/梅）
+    val eyebrow: Float = DEFAULT_EYEBROW,          // 眉毛 0-100，默认 15
     
     // 身材管理
     val bodyEnhancement: Float = 0f, // 丰胸 -30~+30
@@ -29,7 +30,13 @@ data class BeautySettings(
      */
     fun hasAnyEffect(): Boolean {
         return smoothing > 0 || whitening > 0 || slimFace != 0f || bigEyes > 0 ||
-                lipColor > 0 || blush > 0 || eyebrow > 0 ||
-                bodyEnhancement != 0f || legExtension > 0
+            lipColor > 0 || blush > 0 || eyebrow > 0 ||
+            bodyEnhancement != 0f || legExtension > 0
+    }
+
+    companion object {
+        const val DEFAULT_LIP_COLOR: Float = 40f
+        const val DEFAULT_BLUSH: Float = 20f
+        const val DEFAULT_EYEBROW: Float = 15f
     }
 }

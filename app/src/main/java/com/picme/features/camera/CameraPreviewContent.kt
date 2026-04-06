@@ -6,17 +6,25 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -167,16 +175,6 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         activeEffects.add("BROW")
     }
 
-    val effectsText = if (activeEffects.isEmpty()) {
-        "Effects: None"
-    } else {
-        "Effects: " + activeEffects.joinToString(",")
-    }
-
-    val perfText = "Perf: ${"%.1f".format(uiState.beautyDebugState.fps)}fps " +
-        "${uiState.beautyDebugState.processingMs}ms ${uiState.beautyDebugState.delayMs}ms " +
-        "CPU ${"%.1f".format(uiState.beautyDebugState.cpuUsage)}%"
-    val dropText = "Drop: ${uiState.beautyDebugState.nullFrames}"
     val nowMs = System.currentTimeMillis()
     val hasPersistedFallback =
         uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE &&
@@ -209,97 +207,100 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "Provider失败: $mappedReason"
     }
 
+    val lipRealtimePreviewSupported = when (uiState.beautyDebugState.strategy) {
+        com.picme.data.preferences.BeautyStrategy.R_PLAN -> uiState.beautyDebugState.providerRenderActive
+        com.picme.data.preferences.BeautyStrategy.PIXEL_FREE -> {
+            when (uiState.beautyDebugState.pixelFreeLinkMode) {
+                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER,
+                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> true
+                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> false
+                null -> uiState.beautyDebugState.providerRenderActive
+            }
+        }
+    }
+
+    val lipCompactText = buildString {
+        append("LIP ${uiState.beautySettings.lipColor.toInt()}% #${uiState.beautySettings.lipColorIndex}")
+        append(" M:${uiState.faceWarpParams.lipOuterContourPoints.size}/${uiState.faceWarpParams.lipInnerContourPoints.size}")
+        append(" P:${if (lipRealtimePreviewSupported) "OK" else "FB"}")
+    }
+
+    val hasFace = uiState.faceWarpParams.hasFace
+    val faceCompactText = if (hasFace) {
+        "Face OK C(${"%.2f".format(uiState.faceWarpParams.faceCenterX)},${"%.2f".format(uiState.faceWarpParams.faceCenterY)}) R${"%.2f".format(uiState.faceWarpParams.faceRadius)}"
+    } else {
+        "Face NONE"
+    }
+
+    val effectsCompact = if (activeEffects.isEmpty()) {
+        "FX None"
+    } else {
+        "FX ${activeEffects.joinToString("/")}"
+    }
+    val perfCompact = "FPS ${"%.1f".format(uiState.beautyDebugState.fps)} | ${uiState.beautyDebugState.processingMs}ms/${uiState.beautyDebugState.delayMs}ms | D${uiState.beautyDebugState.nullFrames}"
+
+    var debugExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
-            .align(Alignment.TopStart)
+            .align(Alignment.TopCenter)
             .statusBarsPadding()
-            .padding(start = 76.dp, top = 18.dp)
-            .background(statusColor.copy(alpha = 0.75f))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .padding(top = 14.dp)
+            .width(248.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.42f))
+            .clickable { debugExpanded = !debugExpanded }
+            .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
-        Text(text = statusText, color = Color.White)
-        Text(text = effectsText, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp)
-        Text(text = perfText, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp)
-        Text(text = dropText, color = Color.White.copy(alpha = 0.9f), fontSize = 10.sp)
+        val compactTitle = "$statusText  ${"%.1f".format(uiState.beautyDebugState.fps)}fps"
         Text(
-            text = fallbackStateText,
-            color = if (hasPersistedFallback || uiState.beautyDebugState.persistedFallback) {
-                Color(0xFFFFE082)
-            } else {
-                Color.White.copy(alpha = 0.9f)
-            },
+            text = if (debugExpanded) "$compactTitle  ▲" else "$compactTitle  ▼",
+            color = statusColor,
             fontSize = 10.sp
         )
-        Text(
-            text = pixelFreeLinkText,
-            color = when (uiState.beautyDebugState.pixelFreeLinkMode) {
-                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> Color(0xFF80D8FF)
-                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> Color(0xFFFFCC80)
-                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> Color(0xFFE57373)
-                null -> Color.White.copy(alpha = 0.85f)
-            },
-            fontSize = 10.sp
-        )
-        if (pixelFreeLinkReasonText != null) {
-            Text(
-                text = pixelFreeLinkReasonText,
-                color = Color(0xFFFFCDD2),
-                fontSize = 10.sp
-            )
-        }
-        
-        // 唇色调试信息
-        val lipRealtimePreviewSupported = when (uiState.beautyDebugState.strategy) {
-            com.picme.data.preferences.BeautyStrategy.R_PLAN -> uiState.beautyDebugState.providerRenderActive
-            com.picme.data.preferences.BeautyStrategy.PIXEL_FREE -> {
-                when (uiState.beautyDebugState.pixelFreeLinkMode) {
-                    com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER,
-                    com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> true
-                    com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> false
-                    null -> uiState.beautyDebugState.providerRenderActive
-                }
-            }
-        }
 
-        val lipDebugText = buildString {
-            append("LIP: ${uiState.beautySettings.lipColor.toInt()}% #${uiState.beautySettings.lipColorIndex}")
-            if (uiState.beautySettings.lipColor > 0) {
-                append(" | ${uiState.beautyDebugState.strategy.name}")
-                if (uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE) {
-                    append(":${uiState.beautyDebugState.pixelFreeLinkMode?.name ?: "N/A"}")
+        AnimatedVisibility(visible = debugExpanded) {
+            Column {
+                Text(text = effectsCompact, color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp)
+                Text(text = perfCompact, color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp)
+                Text(
+                    text = fallbackStateText,
+                    color = if (hasPersistedFallback || uiState.beautyDebugState.persistedFallback) {
+                        Color(0xFFFFE082)
+                    } else {
+                        Color.White.copy(alpha = 0.9f)
+                    },
+                    fontSize = 9.sp
+                )
+                Text(
+                    text = pixelFreeLinkText,
+                    color = when (uiState.beautyDebugState.pixelFreeLinkMode) {
+                        com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> Color(0xFF80D8FF)
+                        com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> Color(0xFFFFCC80)
+                        com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> Color(0xFFE57373)
+                        null -> Color.White.copy(alpha = 0.85f)
+                    },
+                    fontSize = 9.sp
+                )
+                if (pixelFreeLinkReasonText != null) {
+                    Text(
+                        text = pixelFreeLinkReasonText,
+                        color = Color(0xFFFFCDD2),
+                        fontSize = 9.sp
+                    )
                 }
-                append(" | Preview:")
-                append(if (lipRealtimePreviewSupported) "SUPPORTED" else "FALLBACK")
+                Text(
+                    text = lipCompactText,
+                    color = if (uiState.beautySettings.lipColor > 0) Color(0xFFFF80AB) else Color.White.copy(alpha = 0.6f),
+                    fontSize = 9.sp
+                )
+                Text(
+                    text = faceCompactText,
+                    color = if (hasFace) Color(0xFF80D8FF) else Color(0xFFFFA000),
+                    fontSize = 9.sp
+                )
             }
         }
-        Text(
-            text = lipDebugText,
-            color = if (uiState.beautySettings.lipColor > 0) Color(0xFFFF80AB) else Color.White.copy(alpha = 0.6f),
-            fontSize = 10.sp
-        )
-        
-        if (uiState.beautySettings.lipColor > 0 && !lipRealtimePreviewSupported) {
-            Text(
-                text = "Lip realtime preview unavailable: provider fallback",
-                color = Color(0xFFFFB74D),
-                fontSize = 9.sp
-            )
-        }
-        
-        // 人脸检测调试信息
-        val hasFace = uiState.faceWarpParams.hasFace
-        val faceDebugText = buildString {
-            append("Face: ${if (hasFace) "DETECTED" else "NONE"}")
-            if (hasFace) {
-                append(" | Center: (${"%.2f".format(uiState.faceWarpParams.faceCenterX)}, ${"%.2f".format(uiState.faceWarpParams.faceCenterY)})")
-                append(" | Radius: ${"%.2f".format(uiState.faceWarpParams.faceRadius)}")
-            }
-        }
-        Text(
-            text = faceDebugText,
-            color = if (hasFace) Color(0xFF80D8FF) else Color(0xFFFFA000),
-            fontSize = 10.sp
-        )
     }
 }
 
@@ -341,7 +342,9 @@ private fun BoxScope.CameraPreviewSideControls(
         onToggleScene = actions.onToggleScene,
         onToggleGrid = actions.onToggleGrid,
         onToggleFacialRefinement = actions.onToggleFacialRefinement,
-        onToggleMakeupAdjustment = actions.onToggleMakeupAdjustment,
+        onToggleLipColor = actions.onToggleLipColor,
+        onToggleBlush = actions.onToggleBlush,
+        onToggleEyebrow = actions.onToggleEyebrow,
         onToggleBodyManagement = actions.onToggleBodyManagement,
         onToggleBeautyEnabled = {
             actions.onBeautySettingsChanged(
@@ -358,7 +361,9 @@ private fun BoxScope.CameraPreviewSideControls(
         isGridActive = uiState.showGridSelector,
         isBeautyEnabled = uiState.beautySettings.enabled,
         isFacialRefinementSelected = uiState.showFacialRefinement,
-        isMakeupAdjustmentSelected = uiState.showMakeupAdjustment,
+        isLipColorSelected = uiState.showMakeupAdjustment && uiState.activeMakeupEntry == MakeupEntry.LIP_COLOR,
+        isBlushSelected = uiState.showMakeupAdjustment && uiState.activeMakeupEntry == MakeupEntry.BLUSH,
+        isEyebrowSelected = uiState.showMakeupAdjustment && uiState.activeMakeupEntry == MakeupEntry.EYEBROW,
         isBodyManagementSelected = uiState.showBodyManagement,
         currentRatio = uiState.aspectRatio,
         modifier = Modifier.align(Alignment.TopEnd)
@@ -381,7 +386,11 @@ private fun BoxScope.BeautySubPanels(
     ) {
         val title = when {
             uiState.showFacialRefinement -> stringResource(R.string.facial_refinement)
-            uiState.showMakeupAdjustment -> stringResource(R.string.makeup_adjustment)
+            uiState.showMakeupAdjustment -> when (uiState.activeMakeupEntry) {
+                MakeupEntry.LIP_COLOR -> stringResource(R.string.lip_color)
+                MakeupEntry.BLUSH -> stringResource(R.string.blush)
+                MakeupEntry.EYEBROW -> stringResource(R.string.eyebrow)
+            }
             uiState.showBodyManagement -> stringResource(R.string.body_management)
             else -> ""
         }
@@ -394,7 +403,10 @@ private fun BoxScope.BeautySubPanels(
                     }
                 }
                 uiState.showMakeupAdjustment -> {
-                    MakeupAdjustmentSelector(uiState.beautySettings) { updatedSettings ->
+                    MakeupAdjustmentSelector(
+                        settings = uiState.beautySettings,
+                        activeEntry = uiState.activeMakeupEntry
+                    ) { updatedSettings ->
                         actions.onBeautySettingsChanged(updatedSettings)
                     }
                 }

@@ -74,6 +74,12 @@ internal data class PreviewRuntimeViews(
     val rPlanPreviewProvider: RPlanBeautyPreviewProvider?
 )
 
+internal enum class MakeupEntry {
+    LIP_COLOR,
+    BLUSH,
+    EYEBROW
+}
+
 @Stable
 internal class CameraPanelState {
     var showFilterSelector by mutableStateOf(false)
@@ -83,6 +89,7 @@ internal class CameraPanelState {
     var showGridSelector by mutableStateOf(false)
     var showFacialRefinement by mutableStateOf(false)
     var showMakeupAdjustment by mutableStateOf(false)
+    var activeMakeupEntry by mutableStateOf(MakeupEntry.LIP_COLOR)
     var showBodyManagement by mutableStateOf(false)
 
     fun closePrimaryPanels() {
@@ -112,10 +119,22 @@ internal class CameraPanelState {
     }
 
     fun toggleMakeupAdjustment() {
+        openMakeupEntry(activeMakeupEntry)
+    }
+
+    fun openMakeupEntry(entry: MakeupEntry) {
         closePrimaryPanels()
         showFacialRefinement = false
         showBodyManagement = false
-        showMakeupAdjustment = !showMakeupAdjustment
+
+        val isSameEntryOpen = showMakeupAdjustment && activeMakeupEntry == entry
+        if (isSameEntryOpen) {
+            showMakeupAdjustment = false
+            return
+        }
+
+        activeMakeupEntry = entry
+        showMakeupAdjustment = true
     }
 
     fun toggleBodyManagement() {

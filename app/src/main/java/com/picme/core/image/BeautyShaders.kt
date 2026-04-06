@@ -64,8 +64,10 @@ uniform vec2 uLipInnerContourPoints[20];
 uniform float uLipInnerContourCount;
 uniform float uFaceRadius;
         uniform float uHasFace;
-        uniform float uLipColor;
-        uniform int uLipColorIndex;
+uniform float uLipColor;
+uniform int uLipColorIndex;
+uniform float uBlush;
+uniform int uBlushColorFamily;
         varying vec2 vTextureCoord;
         
         vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
@@ -271,6 +273,58 @@ float edgeSoft = smoothstep(0.0, feather, minDist);
 return (inside ? 1.0 : 0.0) * edgeSoft;
 }
 
+vec3 blushColorByFamily(int family) {
+if (family == 1) return vec3(1.00, 0.62, 0.45);
+if (family == 2) return vec3(0.67, 0.31, 0.52);
+return vec3(1.00, 0.56, 0.67);
+}
+
+float blushMaskFromCheeks(vec2 uv) {
+if (uHasFace < 0.5 || uBlush < 0.001) {
+return 0.0;
+}
+
+vec2 faceRight = normalize(uRightEye - uLeftEye);
+if (length(faceRight) < 0.0001) {
+faceRight = vec2(1.0, 0.0);
+}
+
+vec2 eyeCenter = (uLeftEye + uRightEye) * 0.5;
+vec2 mouthCenter = (uMouthLeft + uMouthRight) * 0.5;
+vec2 faceUp = normalize(eyeCenter - mouthCenter);
+if (length(faceUp) < 0.0001) {
+faceUp = vec2(-faceRight.y, faceRight.x);
+}
+
+float mouthWidth = max(length(uMouthRight - uMouthLeft), 0.08);
+float cheekOffsetX = max(mouthWidth * 0.42, uFaceRadius * 0.24);
+float cheekOffsetY = max(length(eyeCenter - mouthCenter) * 0.20, uFaceRadius * 0.08);
+
+vec2 cheekBase = mouthCenter + faceUp * cheekOffsetY;
+vec2 leftCheekCenter = cheekBase - faceRight * cheekOffsetX;
+vec2 rightCheekCenter = cheekBase + faceRight * cheekOffsetX;
+
+float radiusX = max(uFaceRadius * 0.17, 0.06);
+float radiusY = max(uFaceRadius * 0.14, 0.05);
+
+vec2 leftDelta = uv - leftCheekCenter;
+float leftX = dot(leftDelta, faceRight) / radiusX;
+float leftY = dot(leftDelta, faceUp) / radiusY;
+float leftEllipse = leftX * leftX + leftY * leftY;
+float leftMask = 1.0 - smoothstep(0.55, 1.0, leftEllipse);
+
+vec2 rightDelta = uv - rightCheekCenter;
+float rightX = dot(rightDelta, faceRight) / radiusX;
+float rightY = dot(rightDelta, faceUp) / radiusY;
+float rightEllipse = rightX * rightX + rightY * rightY;
+float rightMask = 1.0 - smoothstep(0.55, 1.0, rightEllipse);
+
+float noseGap = smoothstep(uFaceRadius * 0.10, uFaceRadius * 0.18, abs(dot(uv - cheekBase, faceRight)));
+float cheekMask = max(leftMask, rightMask) * noseGap;
+
+return clamp(cheekMask, 0.0, 1.0);
+}
+
 vec4 applyLipTint(vec4 color, vec2 uv) {
             if (uHasFace < 0.5 || uLipColor < 0.01) {
                 return color;
@@ -334,14 +388,20 @@ float lipMask = mix(fallbackMask, contourMask, step(6.0, uLipOuterContourCount))
             return vec4(clamp(tinted, 0.0, 1.0), color.a);
         }
 
-        void main() {
-            vec2 warpedUv = warpCoord(vTextureCoord);
-            float mask = skinMask(warpedUv);
-            vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
-            vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
-            vec4 lipTinted = applyLipTint(whitened, warpedUv);
-            gl_FragColor = lipTinted;
-        }
+void main() {
+vec2 warpedUv = warpCoord(vTextureCoord);
+float mask = skinMask(warpedUv);
+vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
+vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
+vec4 lipTinted = applyLipTint(whitened, warpedUv);
+
+float blushMask = blushMaskFromCheeks(warpedUv);
+float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
+vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
+vec3 makeupColor = mix(lipTinted.rgb, blushTarget, blushBlend);
+
+gl_FragColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
+}
     """.trimIndent()
     
     /**
@@ -376,8 +436,10 @@ uniform float uFaceRadius;
         uniform float uHasFace;
         uniform float uWarmth;
         uniform float uContrast;
-        uniform float uLipColor;
-        uniform int uLipColorIndex;
+uniform float uLipColor;
+uniform int uLipColorIndex;
+uniform float uBlush;
+uniform int uBlushColorFamily;
         varying vec2 vTextureCoord;
         
         vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
@@ -584,6 +646,58 @@ float edgeSoft = smoothstep(0.0, feather, minDist);
 return (inside ? 1.0 : 0.0) * edgeSoft;
 }
 
+vec3 blushColorByFamily(int family) {
+if (family == 1) return vec3(1.00, 0.62, 0.45);
+if (family == 2) return vec3(0.67, 0.31, 0.52);
+return vec3(1.00, 0.56, 0.67);
+}
+
+float blushMaskFromCheeks(vec2 uv) {
+if (uHasFace < 0.5 || uBlush < 0.001) {
+return 0.0;
+}
+
+vec2 faceRight = normalize(uRightEye - uLeftEye);
+if (length(faceRight) < 0.0001) {
+faceRight = vec2(1.0, 0.0);
+}
+
+vec2 eyeCenter = (uLeftEye + uRightEye) * 0.5;
+vec2 mouthCenter = (uMouthLeft + uMouthRight) * 0.5;
+vec2 faceUp = normalize(eyeCenter - mouthCenter);
+if (length(faceUp) < 0.0001) {
+faceUp = vec2(-faceRight.y, faceRight.x);
+}
+
+float mouthWidth = max(length(uMouthRight - uMouthLeft), 0.08);
+float cheekOffsetX = max(mouthWidth * 0.42, uFaceRadius * 0.24);
+float cheekOffsetY = max(length(eyeCenter - mouthCenter) * 0.20, uFaceRadius * 0.08);
+
+vec2 cheekBase = mouthCenter + faceUp * cheekOffsetY;
+vec2 leftCheekCenter = cheekBase - faceRight * cheekOffsetX;
+vec2 rightCheekCenter = cheekBase + faceRight * cheekOffsetX;
+
+float radiusX = max(uFaceRadius * 0.17, 0.06);
+float radiusY = max(uFaceRadius * 0.14, 0.05);
+
+vec2 leftDelta = uv - leftCheekCenter;
+float leftX = dot(leftDelta, faceRight) / radiusX;
+float leftY = dot(leftDelta, faceUp) / radiusY;
+float leftEllipse = leftX * leftX + leftY * leftY;
+float leftMask = 1.0 - smoothstep(0.55, 1.0, leftEllipse);
+
+vec2 rightDelta = uv - rightCheekCenter;
+float rightX = dot(rightDelta, faceRight) / radiusX;
+float rightY = dot(rightDelta, faceUp) / radiusY;
+float rightEllipse = rightX * rightX + rightY * rightY;
+float rightMask = 1.0 - smoothstep(0.55, 1.0, rightEllipse);
+
+float noseGap = smoothstep(uFaceRadius * 0.10, uFaceRadius * 0.18, abs(dot(uv - cheekBase, faceRight)));
+float cheekMask = max(leftMask, rightMask) * noseGap;
+
+return clamp(cheekMask, 0.0, 1.0);
+}
+
 vec4 applyLipTint(vec4 color, vec2 uv) {
             if (uHasFace < 0.5 || uLipColor < 0.01) {
                 return color;
@@ -647,15 +761,21 @@ float lipMask = mix(fallbackMask, contourMask, step(6.0, uLipOuterContourCount))
             return vec4(clamp(tinted, 0.0, 1.0), color.a);
         }
 
-        void main() {
-            vec2 warpedUv = warpCoord(vTextureCoord);
-            float mask = skinMask(warpedUv);
-            vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
-            vec4 whitened = smoothed * (1.0 + uWhitening * 0.3 * mask);
-            vec4 lipTinted = applyLipTint(whitened, warpedUv);
-            vec4 toned = adjustTone(lipTinted, uWarmth, uContrast);
-            gl_FragColor = toned;
-        }
+void main() {
+vec2 warpedUv = warpCoord(vTextureCoord);
+float mask = skinMask(warpedUv);
+vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
+vec4 whitened = smoothed * (1.0 + uWhitening * 0.3 * mask);
+vec4 lipTinted = applyLipTint(whitened, warpedUv);
+
+float blushMask = blushMaskFromCheeks(warpedUv);
+float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
+vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
+vec4 makeupTinted = vec4(mix(lipTinted.rgb, blushTarget, blushBlend), lipTinted.a);
+
+vec4 toned = adjustTone(makeupTinted, uWarmth, uContrast);
+gl_FragColor = toned;
+}
     """.trimIndent()
     
     /**

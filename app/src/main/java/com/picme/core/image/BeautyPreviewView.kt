@@ -76,6 +76,20 @@ class BeautyPreviewView @JvmOverloads constructor(
             updateBeautyParams()
         }
 
+    /** 腮红强度（0.0 ~ 1.0） */
+    var blushStrength: Float = 0f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            updateBeautyParams()
+        }
+
+    /** 腮红色系（0=粉色,1=橙色,2=梅子色） */
+    var blushColorFamily: Int = 0
+        set(value) {
+            field = value.coerceIn(0, 2)
+            updateBeautyParams()
+        }
+
     /** 渲染模式 */
     var renderMode: Int = BeautyRenderer.MODE_BEAUTY
         set(value) {
@@ -181,7 +195,9 @@ class BeautyPreviewView @JvmOverloads constructor(
             bigEyes = bigEyesStrength,
             slimFace = slimFaceStrength,
             lipColor = lipColorStrength,
-            lipColorIndex = lipColorIndex
+            lipColorIndex = lipColorIndex,
+            blush = blushStrength,
+            blushColorFamily = blushColorFamily
         )
     }
     

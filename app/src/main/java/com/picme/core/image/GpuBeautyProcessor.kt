@@ -446,19 +446,23 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         return result
     }
     
-    override suspend fun applyBlush(bitmap: Bitmap, strength: Float): Bitmap {
+    override suspend fun applyBlush(bitmap: Bitmap, strength: Float, colorFamily: Int): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
-                // 使用 ColorMatrix 添加腮红效果 (粉色系)
-                val intensity = (strength / 100f) * 0.4f
-                
+                val intensity = (strength / 100f).coerceIn(0f, 1f) * 0.4f
+
+                val (rOffset, gOffset, bOffset) = when (colorFamily.coerceIn(0, 2)) {
+                    1 -> Triple(26f, 18f, 8f)   // 橙色系
+                    2 -> Triple(18f, 8f, 24f)   // 梅子色系
+                    else -> Triple(30f, 10f, 20f) // 粉色系
+                }
+
                 val colorMatrix = ColorMatrix().apply {
                     set(floatArrayOf(
-                        1f, 0f, 0f, 0f, intensity * 30f,
-                        0f, 1f, 0f, 0f, intensity * 10f,
-                        0f, 0f, 1f, 0f, intensity * 20f,
+                        1f, 0f, 0f, 0f, intensity * rOffset,
+                        0f, 1f, 0f, 0f, intensity * gOffset,
+                        0f, 0f, 1f, 0f, intensity * bOffset,
                         0f, 0f, 0f, 1f, 0f
                     ))
                 }

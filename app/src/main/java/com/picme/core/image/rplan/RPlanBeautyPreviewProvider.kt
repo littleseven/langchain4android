@@ -60,7 +60,7 @@ class RPlanBeautyPreviewProvider(
             "RPlanBeautyPreviewProvider not initialized"
         )
 
-        repeat(24) { attemptIndex ->
+        repeat(120) { attemptIndex ->
             val surface = view.getSurfaceForCamera()
             if (surface != null && surface.isValid) {
                 previewSurface?.takeIf { it !== surface }?.release()
@@ -143,8 +143,9 @@ class RPlanBeautyPreviewProvider(
     }
 
     override fun isReady(): Boolean {
-        val hasSurfaceTexture = beautyPreviewView?.getSurfaceTexture() != null
-        return isInitialized && hasSurfaceTexture
+        // Provider 已初始化且输入 Surface 有效即可认为就绪，
+        // 避免个别机型 SurfaceTexture 异步创建导致误判回退。
+        return isInitialized && (previewSurface?.isValid == true)
     }
 
     fun getView(): BeautyPreviewView? = beautyPreviewView
@@ -177,6 +178,8 @@ class RPlanBeautyPreviewProvider(
             view.slimFaceStrength = 0f
             view.lipColorStrength = 0f
             view.lipColorIndex = 0
+            view.blushStrength = 0f
+            view.blushColorFamily = 0
             return
         }
 
@@ -186,6 +189,8 @@ class RPlanBeautyPreviewProvider(
         view.slimFaceStrength = (settings.slimFace / 50f * 1.35f).coerceIn(-1f, 1f)
         view.lipColorStrength = (settings.lipColor / 100f).coerceIn(0f, 1f)
         view.lipColorIndex = settings.lipColorIndex.coerceIn(0, 11)
+        view.blushStrength = (settings.blush / 100f).coerceIn(0f, 1f)
+        view.blushColorFamily = settings.blushColorFamily.coerceIn(0, 2)
     }
 }
 
