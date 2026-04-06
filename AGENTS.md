@@ -3,10 +3,17 @@
 本文件定义了 PicMe 项目所有 AI Agent 的严格操作标准。**违反此规范将被视为严重错误。**
 
 ## 1. 角色定义与层级
+- **[CO] 协调者**：负责任务分级、流程路由、状态板维护与最终交付汇总。
 - **[PM] 产品经理**：`PRODUCT.md` 的权威维护者。负责业务价值、交互逻辑（UX Flow）和多语言文案（I18N）。
 - **[RD] 全栈工程师**：负责从领域模型（Domain）到 UI 的完整实现。整合了 Android 框架专家职能。核心要求是具备"自愈（Self-Healing）"能力。
 - **[CR] 规范守护者**：(Code Reviewer) 负责验证代码是否符合 Section 3, 4, 6 的规范。是代码"正确性"和"风格一致性"的最终裁决者。
 - **[QA] 质量专家**：负责边界情况测试、性能基准测试和端到端功能验证。
+
+### 1.1 当前团队运行模式（2026-04）
+- **单实例多角色**：同一会话内按 `CO -> PM -> RD -> CR -> QA` 串行流转。
+- **触发口令**：`自动执行`（默认 AUTO_MAX 自动推进）、`保守执行`（关键节点确认）。
+- **自愈预算**：RD 单任务最多自愈 2 次，超限必须上报并给备选方案。
+- **红线暂停**：仅在隐私风险、不可逆操作或缺失外部输入时请求用户确认。
 
 ## 2. 项目文档体系与关系
 
@@ -25,7 +32,7 @@ AGENTS.md (AI Agent 操作规范)
 |------|------|------------|----------|----------|
 | **PRODUCT.md** | 产品需求 SSOT<br>(Single Source of Truth) | **[PM]** 产品经理 | PM、UI 设计师、<br>测试工程师、RD | - 产品愿景与使命<br>- 核心功能规范（相机、相册、滤镜等）<br>- 设计系统与 UX 准则<br>- 性能指标（启动<500ms、拍摄<50ms）<br>- 隐私与安全约束 |
 | **FEATURES.md** | 功能交互细节规范 | **[PM]** 产品经理<br>**[RD]** 全栈工程师 | UI 设计师、<br>测试工程师、RD | - 用户交互流程（UX Flow）<br>- 体验规范和反馈规则<br>- 业务场景和判定规则（人脸分组、重复检测）<br>- 视觉风格指引（HyperOS 风格）<br>- 多语言词汇表（I18N） |
-| **AGENTS.md** | AI Agent 操作规范 | **[CR]** 规范守护者 | AI Agent、RD | - 角色定义与职责<br>- 核心操作约束<br>- 架构与代码风格规范<br>- 结构化日志标准<br>- AI 执行工作流（Self-Heal Loop）<br>- 最佳实践示例 |
+| **AGENTS.md** | AI Agent 操作规范 | **[CR]** 规范守护者 | AI Agent、RD | - 角色定义与职责<br>- 核心操作约束<br>- 架构与代码风格规范<br>- 结构化日志标准<br>- AI 执行工作流（单实例多角色 + Self-Heal Loop）<br>- 最佳实践示例 |
 
 ### 2.3 文档使用规则
 - **[MUST] 单一可信源原则**：
@@ -911,15 +918,16 @@ e: Type 'MutableState<String?>' has no method 'setValue'
 - **标签格式**：`PicMe:[ModuleName]` (例如 `PicMe:Camera`, `PicMe:AI`)。
 - **策略要求**：必须记录所有状态流转、核心业务节点 and 关键错误。`LogRepository` 缓存上限 500 条。
 
-## 6. AI 执行工作流：自愈循环 (Self-Healing Loop)
-1. **探索 (Explore)**：通过 `find_usages` 和 `grep` 绘制依赖地图。
-2. **对齐 (Align)**：确保逻辑与 `PRODUCT.md` 和 `AGENTS.md` 100% 契合。
-3. **执行 (Execute)**：使用 `replace_text` 进行原子化、精准的代码修改。
-4. **自愈 (Self-Heal)**：
-   - 运行 `analyze_current_file`。必须**立即修复**所有 Error 和相关 Warning。
-   - 运行 `./gradlew assembleDebug`。若失败，阅读日志并自主修复，严禁打扰用户。
-5. **上下文保护 (Context Protection)**：在修改大型文件前，仅读取受影响的类成员或函数块，避免一次性读取数千行代码导致上下文偏移。
-6. **CR 审计**：由 CR 角色复核格式、命名和 I18N 是否完全达标。
+## 6. AI 执行工作流：单实例多角色自愈循环
+1. **触发 (Trigger)**：使用 `自动执行`（默认）或 `保守执行`（关键节点确认）启动任务。
+2. **路由 (Route)**：`CO` 按任务复杂度分级并维护状态板，串行流转 `CO -> PM -> RD -> CR -> QA`。
+3. **对齐 (Align)**：`PM/RD` 确保逻辑与 `PRODUCT.md`、`FEATURES.md`、`AGENTS.md` 100% 契合。
+4. **执行 (Execute)**：`RD` 使用 `replace_text` 进行原子化、精准的代码修改。
+5. **自愈 (Self-Heal)**：
+   - 运行 `analyze_current_file`，必须**立即修复**所有 Error 和相关 Warning。
+   - 运行 `./gradlew assembleDebug`；若失败，阅读日志并自主修复，严禁打扰用户。
+   - 单任务自愈最多 2 次，超限必须上报并提供备选方案。
+6. **审计与验收 (Review & QA)**：`CR` 复核格式、命名和 I18N；`QA` 完成核心验证后由 `CO` 统一对外汇总。
 
 ## 7. Few-Shot 示例 (最佳实践 vs. 反面典型)
 
