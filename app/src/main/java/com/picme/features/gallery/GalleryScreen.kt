@@ -13,6 +13,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,10 +62,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -128,10 +132,13 @@ fun GalleryScreen(
     val selectedIds = remember { mutableStateListOf<Long>() }
 
     val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { it.items } }
+    val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { mediaAsset -> mediaAsset.id } }
     val context = LocalContext.current
 
     // Store thumbnail positions for zoom animation
     val thumbnailPositions = remember { mutableStateMapOf<Long, Rect>() }
+    var dragSelectionTargetSelected by remember { mutableStateOf(true) }
+    val dragSelectionVisitedIds = remember { hashSetOf<Long>() }
 
     // 沉浸式模式
     val view = LocalView.current
@@ -221,6 +228,8 @@ fun GalleryScreen(
                     groupedMedia = groupedMedia,
                     selectedIds = selectedIds,
                     isSelectionMode = isSelectionMode,
+                    thumbnailPositions = thumbnailPositions,
+                    mediaById = mediaById,
                     onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                     onMediaClick = { asset ->
                         if (isSelectionMode) {
@@ -238,6 +247,36 @@ fun GalleryScreen(
                             isSelectionMode = true
                             selectedIds.add(asset.id)
                         }
+                    },
+                    onDragSelectionStart = { asset ->
+                        if (!isSelectionMode) {
+                            isSelectionMode = true
+                        }
+                        dragSelectionVisitedIds.clear()
+                        dragSelectionTargetSelected = !selectedIds.contains(asset.id)
+                        if (dragSelectionTargetSelected) {
+                            if (!selectedIds.contains(asset.id)) {
+                                selectedIds.add(asset.id)
+                            }
+                        } else {
+                            selectedIds.remove(asset.id)
+                        }
+                        dragSelectionVisitedIds.add(asset.id)
+                    },
+                    onDragSelectionItem = { asset ->
+                        if (!dragSelectionVisitedIds.add(asset.id)) {
+                            return@MediaGrid
+                        }
+                        if (dragSelectionTargetSelected) {
+                            if (!selectedIds.contains(asset.id)) {
+                                selectedIds.add(asset.id)
+                            }
+                        } else {
+                            selectedIds.remove(asset.id)
+                        }
+                    },
+                    onDragSelectionEnd = {
+                        dragSelectionVisitedIds.clear()
                     }
                 )
             }
@@ -619,11 +658,57 @@ private fun MediaGrid(
     groupedMedia: List<GroupedMedia>,
     selectedIds: List<Long>,
     isSelectionMode: Boolean,
+    thumbnailPositions: Map<Long, Rect>,
+    mediaById: Map<Long, MediaAsset>,
     onThumbnailPositioned: (Long, Rect) -> Unit,
     onMediaClick: (MediaAsset) -> Unit,
-    onMediaLongClick: (MediaAsset) -> Unit
+    onMediaLongClick: (MediaAsset) -> Unit,
+    onDragSelectionStart: (MediaAsset) -> Unit,
+    onDragSelectionItem: (MediaAsset) -> Unit,
+    onDragSelectionEnd: () -> Unit
 ) {
+    var gridPositionInWindow by remember { mutableStateOf(Offset.Zero) }
+
+    fun resolveDraggedAsset(localPoint: Offset): MediaAsset? {
+        val windowPoint = localPoint + gridPositionInWindow
+        val hitId = thumbnailPositions.entries.firstOrNull { (_, rect) ->
+            windowPoint.x in rect.left..rect.right && windowPoint.y in rect.top..rect.bottom
+        }?.key
+        return hitId?.let { mediaById[it] }
+    }
+
     LazyVerticalGrid(
+        modifier = Modifier
+            .onGloballyPositioned { coordinates ->
+                gridPositionInWindow = coordinates.positionInWindow()
+            }
+            .pointerInput(isSelectionMode, thumbnailPositions.size) {
+                if (isSelectionMode) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            resolveDraggedAsset(offset)?.let(onDragSelectionStart)
+                        },
+                        onDragEnd = onDragSelectionEnd,
+                        onDragCancel = onDragSelectionEnd,
+                        onDrag = { change, _ ->
+                            change.consume()
+                            resolveDraggedAsset(change.position)?.let(onDragSelectionItem)
+                        }
+                    )
+                } else {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            resolveDraggedAsset(offset)?.let(onDragSelectionStart)
+                        },
+                        onDragEnd = onDragSelectionEnd,
+                        onDragCancel = onDragSelectionEnd,
+                        onDrag = { change, _ ->
+                            change.consume()
+                            resolveDraggedAsset(change.position)?.let(onDragSelectionItem)
+                        }
+                    )
+                }
+            },
         columns = GridCells.Adaptive(110.dp),
         contentPadding = PaddingValues(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),

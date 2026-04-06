@@ -611,12 +611,13 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
 
                     Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
-                    val faceDetector = FaceDetection.getClient(
-                        FaceDetectorOptions.Builder()
-                            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-                            .build()
-                    )
+                val faceDetector = FaceDetection.getClient(
+                    FaceDetectorOptions.Builder()
+                        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+                        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+                        .build()
+                )
                     val inputImage = InputImage.fromBitmap(rotatedBitmap, 0)
                     Logger.d("ImageProcessor", "Starting face detection on bitmap ${rotatedBitmap.width}x${rotatedBitmap.height}")
                     

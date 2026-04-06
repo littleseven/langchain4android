@@ -320,19 +320,125 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
         )
     }
 
-    private fun averagePoint(points: List<PointF>): PointF? {
-        if (points.isEmpty()) {
-            return null
-        }
+private fun averagePoint(points: List<PointF>): PointF? {
+if (points.isEmpty()) {
+return null
+}
 
-        val avgX = points.sumOf { point -> point.x.toDouble() }.toFloat() / points.size
-        val avgY = points.sumOf { point -> point.y.toDouble() }.toFloat() / points.size
-        return PointF(avgX, avgY)
-    }
+val avgX = points.sumOf { point -> point.x.toDouble() }.toFloat() / points.size
+val avgY = points.sumOf { point -> point.y.toDouble() }.toFloat() / points.size
+return PointF(avgX, avgY)
+}
 
-    /**
-     * 模拟唇色效果 - 基于关键点定位，避免全局矩形误着色
-     */
+private data class LipContours(
+val outerPoints: List<PointF>,
+val innerPoints: List<PointF>
+)
+
+private fun extractLipContours(face: Face): LipContours? {
+val upperLipTop = face.getContour(FaceContour.UPPER_LIP_TOP)?.points ?: emptyList()
+val upperLipBottom = face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points ?: emptyList()
+val lowerLipTop = face.getContour(FaceContour.LOWER_LIP_TOP)?.points ?: emptyList()
+val lowerLipBottom = face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points ?: emptyList()
+
+val outer = if (upperLipTop.isNotEmpty() && lowerLipBottom.isNotEmpty()) {
+upperLipTop + lowerLipBottom.reversed()
+} else {
+emptyList()
+}
+if (outer.size < 6) {
+return null
+}
+
+val inner = if (upperLipBottom.isNotEmpty() && lowerLipTop.isNotEmpty()) {
+upperLipBottom + lowerLipTop.reversed()
+} else {
+emptyList()
+}
+return LipContours(outerPoints = outer, innerPoints = inner)
+}
+
+private fun smoothStep(edge0: Float, edge1: Float, value: Float): Float {
+if (edge1 - edge0 <= 0.000001f) {
+return if (value >= edge1) 1f else 0f
+}
+val t = ((value - edge0) / (edge1 - edge0)).coerceIn(0f, 1f)
+return t * t * (3f - 2f * t)
+}
+
+private fun pointInPolygon(x: Float, y: Float, points: List<PointF>): Boolean {
+if (points.size < 3) {
+return false
+}
+var inside = false
+var prev = points.last()
+points.forEach { point ->
+val intersect = ((point.y > y) != (prev.y > y)) &&
+(x < (prev.x - point.x) * (y - point.y) / ((prev.y - point.y) + 0.000001f) + point.x)
+if (intersect) {
+inside = !inside
+}
+prev = point
+}
+return inside
+}
+
+private fun distancePointToSegment(px: Float, py: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
+val abx = bx - ax
+val aby = by - ay
+val len2 = abx * abx + aby * aby
+if (len2 <= 0.000001f) {
+val dx = px - ax
+val dy = py - ay
+return kotlin.math.sqrt(dx * dx + dy * dy)
+}
+val t = (((px - ax) * abx + (py - ay) * aby) / len2).coerceIn(0f, 1f)
+val projX = ax + abx * t
+val projY = ay + aby * t
+val dx = px - projX
+val dy = py - projY
+return kotlin.math.sqrt(dx * dx + dy * dy)
+}
+
+private fun contourMaskFromPolygon(px: Float, py: Float, points: List<PointF>, feather: Float): Float {
+if (points.size < 3) {
+return 0f
+}
+if (!pointInPolygon(px, py, points)) {
+return 0f
+}
+
+var minDist = Float.MAX_VALUE
+var prev = points.last()
+points.forEach { point ->
+val dist = distancePointToSegment(px, py, prev.x, prev.y, point.x, point.y)
+if (dist < minDist) {
+minDist = dist
+}
+prev = point
+}
+return smoothStep(0f, feather, minDist)
+}
+
+private fun lipColorMaskFromPixel(r: Int, g: Int, b: Int): Float {
+val rf = r / 255f
+val gf = g / 255f
+val bf = b / 255f
+val luma = rf * 0.299f + gf * 0.587f + bf * 0.114f
+val maxChannel = maxOf(rf, gf, bf)
+val minChannel = minOf(rf, gf, bf)
+val saturation = maxChannel - minChannel
+val redness = rf - maxOf(gf, bf)
+val redGate = smoothStep(0.02f, 0.16f, redness)
+val satGate = smoothStep(0.05f, 0.24f, saturation)
+val darkGate = 1f - smoothStep(0.78f, 0.98f, luma)
+return (redGate * satGate * darkGate).coerceIn(0f, 1f)
+}
+
+/**
+* 模拟唇色效果 - 基于关键点定位，避免全局矩形误着色
+*/
+
     private fun applyLipColorSimulation(
         bitmap: Bitmap,
         strength: Float,
@@ -358,8 +464,9 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
             0xFFFF1493.toInt()
         )
 
-        val targetColor = lipColors.getOrElse(colorIndex) { lipColors[0] }
-        val normalizedStrength = (strength / 100f * 0.9f).coerceIn(0f, 0.9f)
+val targetColor = lipColors.getOrElse(colorIndex) { lipColors[0] }
+val normalizedStrength = (strength / 100f).coerceIn(0f, 1f)
+
 
         val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val width = result.width
@@ -373,70 +480,91 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
 
         var processedPixelCount = 0
         
-        faces.forEach { face ->
-            val region = resolveLipRegion(face) ?: return@forEach
+faces.forEach { face ->
+val region = resolveLipRegion(face) ?: return@forEach
+val lipContours = extractLipContours(face)
+val hasContours = lipContours != null
+val contourFeather = kotlin.math.max(1f, kotlin.math.max(region.halfHeightUpper, region.halfHeightLower) * 0.18f)
 
-            val maxHalfWidth = maxOf(region.halfWidthLeft, region.halfWidthRight)
-            val maxHalfHeight = maxOf(region.halfHeightUpper, region.halfHeightLower)
-            val padX = maxHalfWidth * 1.35f
-            val padY = maxHalfHeight * 1.45f
-            val startX = (region.centerX - padX).toInt().coerceIn(0, width - 1)
-            val endX = (region.centerX + padX).toInt().coerceIn(0, width - 1)
-            val startY = (region.centerY - padY).toInt().coerceIn(0, height - 1)
-            val endY = (region.centerY + padY).toInt().coerceIn(0, height - 1)
+val maxHalfWidth = maxOf(region.halfWidthLeft, region.halfWidthRight)
+val maxHalfHeight = maxOf(region.halfHeightUpper, region.halfHeightLower)
+val padX = maxHalfWidth * 1.35f
+val padY = maxHalfHeight * 1.45f
+val startX = (region.centerX - padX).toInt().coerceIn(0, width - 1)
+val endX = (region.centerX + padX).toInt().coerceIn(0, width - 1)
+val startY = (region.centerY - padY).toInt().coerceIn(0, height - 1)
+val endY = (region.centerY + padY).toInt().coerceIn(0, height - 1)
 
-            for (py in startY..endY) {
-                for (px in startX..endX) {
-                    val index = py * width + px
-                    if (index >= pixels.size) {
-                        continue
-                    }
+for (py in startY..endY) {
+for (px in startX..endX) {
+val index = py * width + px
+if (index >= pixels.size) {
+continue
+}
 
-                    val dx = px - region.centerX
-                    val dy = py - region.centerY
-                    val localX = dx * region.cosAngle + dy * region.sinAngle
-                    val localY = -dx * region.sinAngle + dy * region.cosAngle
+val dx = px - region.centerX
+val dy = py - region.centerY
+val localX = dx * region.cosAngle + dy * region.sinAngle
+val localY = -dx * region.sinAngle + dy * region.cosAngle
 
-                    val activeHalfWidth = if (localX < 0f) {
-                        region.halfWidthLeft
-                    } else {
-                        region.halfWidthRight
-                    }
-                    val normalizedX = localX / activeHalfWidth
-                    val ellipse = if (localY >= 0f) {
-                        val normalizedUpperY = localY / region.halfHeightUpper
-                        normalizedX * normalizedX + normalizedUpperY * normalizedUpperY
-                    } else {
-                        val normalizedLowerY = localY / region.halfHeightLower
-                        normalizedX * normalizedX + normalizedLowerY * normalizedLowerY
-                    }
-                    if (ellipse > 1f) {
-                        continue
-                    }
+val activeHalfWidth = if (localX < 0f) {
+region.halfWidthLeft
+} else {
+region.halfWidthRight
+}
+val normalizedX = localX / activeHalfWidth
+val ellipse = if (localY >= 0f) {
+val normalizedUpperY = localY / region.halfHeightUpper
+normalizedX * normalizedX + normalizedUpperY * normalizedUpperY
+} else {
+val normalizedLowerY = localY / region.halfHeightLower
+normalizedX * normalizedX + normalizedLowerY * normalizedLowerY
+}
+val fallbackMask = (1f - smoothStep(0.45f, 1.0f, ellipse)).coerceIn(0f, 1f)
 
-                    val pixel = pixels[index]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    val hasLipLikeColor = r > 18 && g > 5 && b > 4 && (r + g + b) < 735
-                    if (!hasLipLikeColor) {
-                        continue
-                    }
+val contourPreferredMask = if (hasContours) {
+val contours = lipContours!!
+val outerMask = contourMaskFromPolygon(
+px = px.toFloat(),
+py = py.toFloat(),
+points = contours.outerPoints,
+feather = contourFeather
+)
+val innerMask = contourMaskFromPolygon(
+px = px.toFloat(),
+py = py.toFloat(),
+points = contours.innerPoints,
+feather = contourFeather
+)
+val contourMask = (outerMask - innerMask).coerceIn(0f, 1f)
+kotlin.math.max(contourMask, fallbackMask * 0.78f)
+} else {
+fallbackMask
+}
 
-                    val feather = (1f - ellipse).coerceIn(0f, 1f)
-                    val blend = (normalizedStrength * feather * feather).coerceIn(0f, 0.92f)
-                    if (blend <= 0.01f) {
-                        continue
-                    }
+val lipMask = if (hasContours) contourPreferredMask else fallbackMask
 
-                    val newR = (r * (1f - blend) + targetR * blend).toInt().coerceIn(0, 255)
-                    val newG = (g * (1f - blend) + targetG * blend).toInt().coerceIn(0, 255)
-                    val newB = (b * (1f - blend) + targetB * blend).toInt().coerceIn(0, 255)
-                    pixels[index] = (pixel and 0xFF000000.toInt()) or (newR shl 16) or (newG shl 8) or newB
-                    processedPixelCount++
-                }
-            }
-        }
+val pixel = pixels[index]
+val r = (pixel shr 16) and 0xFF
+val g = (pixel shr 8) and 0xFF
+val b = pixel and 0xFF
+
+val colorMask = lipColorMaskFromPixel(r, g, b)
+val edgeAwareLipMask = lipMask * (0.42f + (1f - 0.42f) * colorMask)
+val blend = (normalizedStrength * 0.78f * edgeAwareLipMask).coerceIn(0f, 1f)
+if (blend <= 0.01f) {
+continue
+}
+
+val newR = (r * (1f - blend) + targetR * blend).toInt().coerceIn(0, 255)
+val newG = (g * (1f - blend) + targetG * blend).toInt().coerceIn(0, 255)
+val newB = (b * (1f - blend) + targetB * blend).toInt().coerceIn(0, 255)
+pixels[index] = (pixel and 0xFF000000.toInt()) or (newR shl 16) or (newG shl 8) or newB
+processedPixelCount++
+}
+}
+}
+
 
         Logger.d(TAG, "Lip color: processed=$processedPixelCount, strength=$strength, faces=${faces.size}")
 

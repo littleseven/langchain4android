@@ -279,6 +279,18 @@ if (family == 2) return vec3(0.67, 0.31, 0.52);
 return vec3(1.00, 0.56, 0.67);
 }
 
+float lipColorMaskFromPixel(vec3 baseColor) {
+float luma = dot(baseColor, vec3(0.299, 0.587, 0.114));
+float maxChannel = max(baseColor.r, max(baseColor.g, baseColor.b));
+float minChannel = min(baseColor.r, min(baseColor.g, baseColor.b));
+float saturation = maxChannel - minChannel;
+float redness = baseColor.r - max(baseColor.g, baseColor.b);
+float redGate = smoothstep(0.02, 0.16, redness);
+float satGate = smoothstep(0.05, 0.24, saturation);
+float darkGate = 1.0 - smoothstep(0.78, 0.98, luma);
+return clamp(redGate * satGate * darkGate, 0.0, 1.0);
+}
+
 float blushMaskFromCheeks(vec2 uv) {
 if (uHasFace < 0.5 || uBlush < 0.001) {
 return 0.0;
@@ -415,7 +427,9 @@ float contourPreferredMask = max(contourMask, fallbackMask * 0.78);
 float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterContourCount));
 
             vec3 target = lipColorByIndex(uLipColorIndex);
-            float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
+            float colorMask = lipColorMaskFromPixel(color.rgb);
+            float edgeAwareLipMask = lipMask * mix(0.42, 1.0, colorMask);
+            float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * edgeAwareLipMask;
             vec3 tinted = mix(color.rgb, target, blend);
             return vec4(clamp(tinted, 0.0, 1.0), color.a);
         }
@@ -684,6 +698,18 @@ if (family == 2) return vec3(0.67, 0.31, 0.52);
 return vec3(1.00, 0.56, 0.67);
 }
 
+float lipColorMaskFromPixel(vec3 baseColor) {
+float luma = dot(baseColor, vec3(0.299, 0.587, 0.114));
+float maxChannel = max(baseColor.r, max(baseColor.g, baseColor.b));
+float minChannel = min(baseColor.r, min(baseColor.g, baseColor.b));
+float saturation = maxChannel - minChannel;
+float redness = baseColor.r - max(baseColor.g, baseColor.b);
+float redGate = smoothstep(0.02, 0.16, redness);
+float satGate = smoothstep(0.05, 0.24, saturation);
+float darkGate = 1.0 - smoothstep(0.78, 0.98, luma);
+return clamp(redGate * satGate * darkGate, 0.0, 1.0);
+}
+
 float blushMaskFromCheeks(vec2 uv) {
 if (uHasFace < 0.5 || uBlush < 0.001) {
 return 0.0;
@@ -820,7 +846,9 @@ float contourPreferredMask = max(contourMask, fallbackMask * 0.78);
 float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterContourCount));
 
             vec3 target = lipColorByIndex(uLipColorIndex);
-            float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
+            float colorMask = lipColorMaskFromPixel(color.rgb);
+            float edgeAwareLipMask = lipMask * mix(0.42, 1.0, colorMask);
+            float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * edgeAwareLipMask;
             vec3 tinted = mix(color.rgb, target, blend);
             return vec4(clamp(tinted, 0.0, 1.0), color.a);
         }
