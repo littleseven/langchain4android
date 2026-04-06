@@ -603,7 +603,54 @@ class CameraPreviewRenderer {
         val mappedInnerPoints = innerPoints.map { point ->
             mapViewNormalizedToUv(point.first, point.second)
         }
-        beautyRenderer.updateLipMaskPoints(mappedOuterPoints, mappedInnerPoints)
+
+        val normalizedInnerPoints = normalizeInnerLipContour(
+            outerPoints = mappedOuterPoints,
+            innerPoints = mappedInnerPoints
+        )
+
+        beautyRenderer.updateLipMaskPoints(mappedOuterPoints, normalizedInnerPoints)
+    }
+
+    private fun normalizeInnerLipContour(
+        outerPoints: List<Pair<Float, Float>>,
+        innerPoints: List<Pair<Float, Float>>
+    ): List<Pair<Float, Float>> {
+        if (innerPoints.size < 6 || outerPoints.size < 6) {
+            return innerPoints
+        }
+
+        val outerArea = polygonArea(outerPoints)
+        val innerArea = polygonArea(innerPoints)
+        if (outerArea <= 0.000001f) {
+            return innerPoints
+        }
+
+        val areaRatio = innerArea / outerArea
+        return if (areaRatio > 0.55f) {
+            Log.w(
+                TAG,
+                "Lip inner contour area too large (ratio=$areaRatio), fallback to outer-only lip mask"
+            )
+            emptyList()
+        } else {
+            innerPoints
+        }
+    }
+
+    private fun polygonArea(points: List<Pair<Float, Float>>): Float {
+        if (points.size < 3) {
+            return 0f
+        }
+
+        var sum = 0f
+        for (index in points.indices) {
+            val nextIndex = (index + 1) % points.size
+            val currentPoint = points[index]
+            val nextPoint = points[nextIndex]
+            sum += currentPoint.first * nextPoint.second - nextPoint.first * currentPoint.second
+        }
+        return kotlin.math.abs(sum) * 0.5f
     }
 
     /**

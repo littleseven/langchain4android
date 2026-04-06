@@ -476,9 +476,19 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                         Logger.d("ImageProcessor", "Applying slim face: ${beauty.slimFace}")
                         processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces)
 
-                        if (useSlimFaceFallback && abs(beauty.slimFace) >= 1f) {
+                        val shouldApplySlimFaceFallback =
+                            useSlimFaceFallback &&
+                                abs(beauty.slimFace) >= 1f &&
+                                beauty.lipColor <= 0f
+
+                        if (shouldApplySlimFaceFallback) {
                             Logger.d("ImageProcessor", "Applying slim face fallback warp: ${beauty.slimFace}")
                             processed = applySlimFaceFallback(processed, beauty.slimFace, faces)
+                        } else if (useSlimFaceFallback && beauty.lipColor > 0f) {
+                            Logger.d(
+                                "ImageProcessor",
+                                "Skip slim fallback warp when lip color is enabled to avoid facial tearing"
+                            )
                         }
                     }
                     if (beauty.bigEyes > 0f) {

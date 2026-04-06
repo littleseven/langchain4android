@@ -103,8 +103,8 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             try {
                 // 使用基于人脸 landmarks 的网格变形算法实现瘦脸效果
                 // 强度范围：-50~+50（负值为丰满，正值为瘦脸）
-                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
+                val sourceBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+
                 // 创建网格变形系统
                 val meshWidth = 20
                 val meshHeight = 20
@@ -155,12 +155,14 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     }
                 }
                 
-                // 应用网格变形
-                val canvas = Canvas(mutableBitmap)
-                canvas.drawBitmapMesh(mutableBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+                // 应用网格变形，避免在同一位图上读写导致裂纹伪影
+                val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(outputBitmap)
+                canvas.drawBitmapMesh(sourceBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+                sourceBitmap.recycle()
                 
                 Logger.d(TAG, "Slim face applied: strength=$strength, faces=${faces.size}")
-                mutableBitmap
+                outputBitmap
             } catch (e: Exception) {
                 Logger.e(TAG, "Slim face error", e)
                 bitmap
@@ -177,7 +179,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             try {
                 // 使用基于人脸 landmarks 的眼睛区域放大算法
                 // 强度范围：0-100（放大系数 1.0 - 1.3）
-                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val sourceBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
                 
                 // 创建网格变形系统
                 val meshWidth = 20
@@ -230,12 +232,14 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     }
                 }
                 
-                // 应用网格变形
-                val canvas = Canvas(mutableBitmap)
-                canvas.drawBitmapMesh(mutableBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+                // 应用网格变形，避免在同一位图上读写导致裂纹伪影
+                val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(outputBitmap)
+                canvas.drawBitmapMesh(sourceBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
+                sourceBitmap.recycle()
                 
                 Logger.d(TAG, "Big eyes applied: strength=$strength, faces=${faces.size}")
-                mutableBitmap
+                outputBitmap
             } catch (e: Exception) {
                 Logger.e(TAG, "Big eyes error", e)
                 bitmap

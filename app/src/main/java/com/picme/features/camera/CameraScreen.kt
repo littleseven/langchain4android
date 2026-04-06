@@ -15,6 +15,7 @@ import android.widget.FrameLayout
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -71,6 +72,7 @@ import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -596,6 +598,7 @@ fun CameraContent(
 
     var useProviderRenderView by remember { mutableStateOf(false) }
     var lipRealtimeRecoveryRequested by remember { mutableStateOf(false) }
+    var lastLipPreviewRebindRequestMs by remember { mutableStateOf(0L) }
 
     val bindPreviewSurfaceProvider: (Preview) -> Unit = { previewUseCase ->
         useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase, aspectRatio)
@@ -630,6 +633,8 @@ fun CameraContent(
     }
 
     var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
+    var previewFaceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
+    var lastFaceWarpDetectedAtMs by remember { mutableStateOf(0L) }
 
     // RD 快路径：参数变更立即下发到当前预览引擎，保证滑杆跟手性。
     LaunchedEffect(beautySettings, beautyStrategy) {
@@ -643,31 +648,66 @@ fun CameraContent(
         )
     }
 
-    LaunchedEffect(faceWarpParams, beautyStrategy) {
-        activePreviewStrategy.applyFaceWarpParams(faceWarpParams)
+    LaunchedEffect(faceWarpParams, beautyStrategy, beautySettings.enabled, beautySettings.lipColor) {
+        val lipRealtimeRequired = beautySettings.enabled && beautySettings.lipColor > 0f
+        val nowMs = System.currentTimeMillis()
+
+        val nextPreviewParams = when {
+            faceWarpParams.hasFace -> {
+                lastFaceWarpDetectedAtMs = nowMs
+                faceWarpParams
+            }
+            lipRealtimeRequired && previewFaceWarpParams.hasFace &&
+                nowMs - lastFaceWarpDetectedAtMs <= 320L -> {
+                previewFaceWarpParams
+            }
+            else -> faceWarpParams
+        }
+
+        if (nextPreviewParams != previewFaceWarpParams) {
+            previewFaceWarpParams = nextPreviewParams
+        }
+
+        activePreviewStrategy.applyFaceWarpParams(nextPreviewParams)
     }
 
-    LaunchedEffect(beautyStrategy, pixelFreeLinkMode, beautySettings.lipColor, beautySettings.enabled) {
-        val shouldForceRPlanForLipPreview =
-            beautySettings.enabled && beautySettings.lipColor > 0f &&
-                beautyStrategy == BeautyStrategy.PIXEL_FREE &&
-                pixelFreeLinkMode == PixelFreePreviewLinkMode.PREVIEW_FALLBACK
-
-        if (!shouldForceRPlanForLipPreview) {
+    LaunchedEffect(
+        beautyStrategy,
+        pixelFreeLinkMode,
+        beautySettings.lipColor,
+        beautySettings.enabled,
+        useProviderRenderView
+    ) {
+        val lipRealtimeRequired = beautySettings.enabled && beautySettings.lipColor > 0f
+        if (!lipRealtimeRequired) {
             lipRealtimeRecoveryRequested = false
             return@LaunchedEffect
         }
 
-        if (lipRealtimeRecoveryRequested) {
+        if (useProviderRenderView) {
+            lipRealtimeRecoveryRequested = false
             return@LaunchedEffect
         }
 
-        lipRealtimeRecoveryRequested = true
-        Logger.w(
-            "Camera",
-            "Lip realtime preview requires provider path, trigger R Plan recovery"
-        )
-        userPreferencesRepository.triggerManualRPlanRecovery()
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastLipPreviewRebindRequestMs >= 1500L) {
+            lastLipPreviewRebindRequestMs = nowMs
+            Logger.w(
+                "Camera",
+                "Lip realtime preview unavailable, request provider rebind: strategy=${beautyStrategy.name}, link=$pixelFreeLinkMode"
+            )
+            previewRebindSignal += 1
+        }
+
+        val shouldForceRPlanRecovery =
+            beautyStrategy == BeautyStrategy.PIXEL_FREE &&
+                pixelFreeLinkMode == PixelFreePreviewLinkMode.PREVIEW_FALLBACK
+
+        if (shouldForceRPlanRecovery && !lipRealtimeRecoveryRequested) {
+            lipRealtimeRecoveryRequested = true
+            Logger.w("Camera", "Lip realtime preview requires provider path, trigger R Plan recovery")
+            userPreferencesRepository.triggerManualRPlanRecovery()
+        }
     }
 
     // RD 监听比例变化，动态调整 ScaleType
@@ -730,6 +770,8 @@ fun CameraContent(
     
     var facePoint by remember { mutableStateOf(Offset.Zero) }
     var isFaceLocked by remember { mutableStateOf(false) }
+    var lastAutoFocusAtMs by remember { mutableStateOf(0L) }
+    var lastFocusPoint by remember { mutableStateOf<Offset?>(null) }
     val focusIndicatorAlpha = remember { Animatable(0f) }
 
     val shouldEnableLipContour = beautySettings.enabled && beautySettings.lipColor > 0f
@@ -843,6 +885,73 @@ fun CameraContent(
     }
 
     // 第二阶段瘦身后：实时预览在 runRealtimeBeautyPreviewLoop 中统一处理。
+
+    LaunchedEffect(cameraControl, previewView.width, previewView.height, lensFacing) {
+        val control = cameraControl ?: return@LaunchedEffect
+        if (previewView.width <= 0 || previewView.height <= 0) {
+            return@LaunchedEffect
+        }
+
+        delay(320)
+        val centerPoint = previewView.meteringPointFactory.createPoint(
+            previewView.width * 0.5f,
+            previewView.height * 0.5f
+        )
+        val centerAction = FocusMeteringAction.Builder(centerPoint, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+            .setAutoCancelDuration(2, TimeUnit.SECONDS)
+            .build()
+
+        runCatching {
+            control.startFocusAndMetering(centerAction)
+        }.onSuccess {
+            lastAutoFocusAtMs = System.currentTimeMillis()
+            lastFocusPoint = Offset(previewView.width * 0.5f, previewView.height * 0.5f)
+            Logger.d("Camera", "Initial autofocus triggered at preview center")
+        }.onFailure { error ->
+            Logger.w("Camera", "Initial autofocus request failed", error)
+        }
+    }
+
+    LaunchedEffect(isFaceLocked, facePoint, cameraControl, previewView.width, previewView.height) {
+        val control = cameraControl ?: return@LaunchedEffect
+        if (!isFaceLocked || previewView.width <= 0 || previewView.height <= 0) {
+            return@LaunchedEffect
+        }
+
+        val nowMs = System.currentTimeMillis()
+        val minIntervalMs = 1100L
+        if (nowMs - lastAutoFocusAtMs < minIntervalMs) {
+            return@LaunchedEffect
+        }
+
+        val clampedX = facePoint.x.coerceIn(0f, previewView.width.toFloat())
+        val clampedY = facePoint.y.coerceIn(0f, previewView.height.toFloat())
+        val nextPoint = Offset(clampedX, clampedY)
+        val previousPoint = lastFocusPoint
+        val distance = if (previousPoint == null) {
+            Float.MAX_VALUE
+        } else {
+            kotlin.math.hypot(nextPoint.x - previousPoint.x, nextPoint.y - previousPoint.y)
+        }
+        if (distance < 42f) {
+            return@LaunchedEffect
+        }
+
+        val meteringPoint = previewView.meteringPointFactory.createPoint(clampedX, clampedY)
+        val focusAction = FocusMeteringAction.Builder(meteringPoint, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
+            .setAutoCancelDuration(2, TimeUnit.SECONDS)
+            .build()
+
+        runCatching {
+            control.startFocusAndMetering(focusAction)
+        }.onSuccess {
+            lastAutoFocusAtMs = nowMs
+            lastFocusPoint = nextPoint
+            Logger.d("Camera", "Autofocus triggered: x=$clampedX, y=$clampedY, distance=$distance")
+        }.onFailure { error ->
+            Logger.w("Camera", "Autofocus request failed", error)
+        }
+    }
 
     LaunchedEffect(isFaceLocked, isStable) {
         if (!isFaceLocked) {

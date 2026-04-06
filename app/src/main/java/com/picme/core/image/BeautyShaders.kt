@@ -411,7 +411,8 @@ float fallbackMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0
 float outerContourMask = contourMaskFromOuterPolygon(uv);
 float innerContourMask = contourMaskFromInnerPolygon(uv);
 float contourMask = clamp(outerContourMask - innerContourMask, 0.0, 1.0);
-float lipMask = mix(fallbackMask, contourMask, step(6.0, uLipOuterContourCount));
+float contourPreferredMask = max(contourMask, fallbackMask * 0.78);
+float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterContourCount));
 
             vec3 target = lipColorByIndex(uLipColorIndex);
             float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
@@ -815,7 +816,8 @@ float fallbackMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0
 float outerContourMask = contourMaskFromOuterPolygon(uv);
 float innerContourMask = contourMaskFromInnerPolygon(uv);
 float contourMask = clamp(outerContourMask - innerContourMask, 0.0, 1.0);
-float lipMask = mix(fallbackMask, contourMask, step(6.0, uLipOuterContourCount));
+float contourPreferredMask = max(contourMask, fallbackMask * 0.78);
+float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterContourCount));
 
             vec3 target = lipColorByIndex(uLipColorIndex);
             float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
