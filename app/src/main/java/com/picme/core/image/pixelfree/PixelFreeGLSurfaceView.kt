@@ -104,10 +104,11 @@ class PixelFreeGLSurfaceView @JvmOverloads constructor(
                 Log.d(TAG, "Filter bundle loaded")
             }
             
-            // 加载美妆资源（使用 JSON 配置方式）
-            loadMakeupFromJson("makeup/lip_colors/makeup.json")
-            
             isInitialized = true
+
+            // 加载美妆资源（使用 JSON 配置方式）
+            // 需要在初始化标志置位后执行，否则会被 loadMakeupFromJson 的保护逻辑提前返回。
+            loadMakeupFromJson("makeup/lip_colors/makeup.json")
             Log.d(TAG, "PixelFree initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize PixelFree: ${e.message}", e)

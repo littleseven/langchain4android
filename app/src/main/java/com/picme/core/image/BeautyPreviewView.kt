@@ -62,6 +62,20 @@ class BeautyPreviewView @JvmOverloads constructor(
             updateBeautyParams()
         }
 
+    /** 唇色强度（0.0 ~ 1.0） */
+    var lipColorStrength: Float = 0f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            updateBeautyParams()
+        }
+
+    /** 唇色色号索引（0 ~ 11） */
+    var lipColorIndex: Int = 0
+        set(value) {
+            field = value.coerceIn(0, 11)
+            updateBeautyParams()
+        }
+
     /** 渲染模式 */
     var renderMode: Int = BeautyRenderer.MODE_BEAUTY
         set(value) {
@@ -165,7 +179,9 @@ class BeautyPreviewView @JvmOverloads constructor(
             smoothing = smoothingStrength,
             whitening = whiteningStrength,
             bigEyes = bigEyesStrength,
-            slimFace = slimFaceStrength
+            slimFace = slimFaceStrength,
+            lipColor = lipColorStrength,
+            lipColorIndex = lipColorIndex
         )
     }
     
@@ -197,6 +213,16 @@ class BeautyPreviewView @JvmOverloads constructor(
         leftEyeY: Float,
         rightEyeX: Float,
         rightEyeY: Float,
+        mouthCenterX: Float,
+        mouthCenterY: Float,
+        mouthLeftX: Float,
+        mouthLeftY: Float,
+        mouthRightX: Float,
+        mouthRightY: Float,
+        upperLipCenterX: Float,
+        upperLipCenterY: Float,
+        lowerLipCenterX: Float,
+        lowerLipCenterY: Float,
         faceRadius: Float,
         hasFace: Boolean
     ) {
@@ -211,6 +237,16 @@ class BeautyPreviewView @JvmOverloads constructor(
             leftEyeY = leftEyeY,
             rightEyeX = rightEyeX,
             rightEyeY = rightEyeY,
+            mouthCenterX = mouthCenterX,
+            mouthCenterY = mouthCenterY,
+            mouthLeftX = mouthLeftX,
+            mouthLeftY = mouthLeftY,
+            mouthRightX = mouthRightX,
+            mouthRightY = mouthRightY,
+            upperLipCenterX = upperLipCenterX,
+            upperLipCenterY = upperLipCenterY,
+            lowerLipCenterX = lowerLipCenterX,
+            lowerLipCenterY = lowerLipCenterY,
             faceRadius = faceRadius,
             hasFace = hasFace
         )

@@ -490,22 +490,24 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                             processed = applyBigEyesFallback(processed, beauty.bigEyes, faces)
                         }
                     }
-                    // 妆容调节
-                    if (beauty.lipColor > 0f) {
-                        Logger.d("ImageProcessor", "Applying lip color: ${beauty.lipColor}")
-                        processed = beautyProcessor.applyLipColor(processed, beauty.lipColor, beauty.lipColorIndex)
-                    }
-                    if (beauty.blush > 0f) {
-                        Logger.d("ImageProcessor", "Applying blush: ${beauty.blush}")
-                        processed = beautyProcessor.applyBlush(processed, beauty.blush)
-                    }
-                    if (beauty.eyebrow > 0f) {
-                        Logger.d("ImageProcessor", "Applying eyebrow: ${beauty.eyebrow}")
-                        processed = beautyProcessor.applyEyebrow(processed, beauty.eyebrow)
-                    }
                 } else {
                     Logger.d("ImageProcessor", "No faces detected, skipping face beautification")
                 }
+
+                // 妆容调节不依赖人脸检测结果，避免检测波动导致唇色/腮红/眉毛完全失效。
+                if (beauty.lipColor > 0f) {
+                    Logger.d("ImageProcessor", "Applying lip color: ${beauty.lipColor}")
+                    processed = beautyProcessor.applyLipColor(processed, beauty.lipColor, beauty.lipColorIndex, faces)
+                }
+                if (beauty.blush > 0f) {
+                    Logger.d("ImageProcessor", "Applying blush: ${beauty.blush}")
+                    processed = beautyProcessor.applyBlush(processed, beauty.blush)
+                }
+                if (beauty.eyebrow > 0f) {
+                    Logger.d("ImageProcessor", "Applying eyebrow: ${beauty.eyebrow}")
+                    processed = beautyProcessor.applyEyebrow(processed, beauty.eyebrow)
+                }
+
                 // 身材管理 (需要全身检测，当前仅当有人脸时应用)
                 if (faces.isNotEmpty() && (beauty.bodyEnhancement != 0f || beauty.legExtension > 0f)) {
                     if (beauty.bodyEnhancement != 0f) {

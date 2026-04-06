@@ -2,7 +2,10 @@ package com.picme.core.image.pixelfree
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.PointF
 import com.google.mlkit.vision.face.Face
+import com.google.mlkit.vision.face.FaceContour
+import com.google.mlkit.vision.face.FaceLandmark
 import com.hapi.pixelfree.PFBeautyFilterType
 import com.hapi.pixelfree.PFDetectFormat
 import com.hapi.pixelfree.PFImageInput
@@ -15,6 +18,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * [RD] PixelFreeEffects SDK 实现的美颜处理器
@@ -240,96 +246,199 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
         return processWithPixelFree(bitmap)
     }
 
-    override suspend fun applyLipColor(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
-        // 由于 PixelFree SDK 需要美妆 bundle 资源，当前使用色彩叠加模拟唇色效果
-        // 使用超宽松的检测条件确保效果可见
-        return applyLipColorSimulation(bitmap, strength, colorIndex)
+    override suspend fun applyLipColor(
+        bitmap: Bitmap,
+        strength: Float,
+        colorIndex: Int,
+        faces: List<Face>
+    ): Bitmap {
+        // PixelFree 离线链路优先使用关键点定位，避免出现固定矩形着色。
+        return applyLipColorSimulation(bitmap, strength, colorIndex, faces)
+    }
+
+    private data class LipRegion(
+        val centerX: Float,
+        val centerY: Float,
+        val halfWidthLeft: Float,
+        val halfWidthRight: Float,
+        val halfHeightUpper: Float,
+        val halfHeightLower: Float,
+        val cosAngle: Float,
+        val sinAngle: Float
+    )
+
+    private fun resolveLipRegion(face: Face): LipRegion? {
+        val upperLipTop = face.getContour(FaceContour.UPPER_LIP_TOP)?.points ?: emptyList()
+        val upperLipBottom = face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points ?: emptyList()
+        val lowerLipTop = face.getContour(FaceContour.LOWER_LIP_TOP)?.points ?: emptyList()
+        val lowerLipBottom = face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points ?: emptyList()
+        val allLip = upperLipTop + upperLipBottom + lowerLipTop + lowerLipBottom
+
+        val mouthLeft = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
+            ?: allLip.minByOrNull { point -> point.x }
+            ?: return null
+        val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
+            ?: allLip.maxByOrNull { point -> point.x }
+            ?: return null
+        val mouthBottom = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
+        val faceBounds = face.boundingBox
+
+        val upperCenter = averagePoint(upperLipTop + upperLipBottom)
+            ?: PointF((mouthLeft.x + mouthRight.x) * 0.5f, (mouthLeft.y + mouthRight.y) * 0.5f)
+        val lowerCenter = averagePoint(lowerLipTop + lowerLipBottom)
+            ?: mouthBottom
+            ?: PointF(upperCenter.x, upperCenter.y + faceBounds.height() * 0.06f)
+
+        val centerX = (upperCenter.x + lowerCenter.x) * 0.5f
+        val centerY = (upperCenter.y + lowerCenter.y) * 0.5f
+
+        val angle = atan2(mouthRight.y - mouthLeft.y, mouthRight.x - mouthLeft.x)
+        val cosAngle = cos(angle)
+        val sinAngle = sin(angle)
+        val normalX = -sinAngle
+        val normalY = cosAngle
+
+        val leftWidth = kotlin.math.abs((mouthLeft.x - centerX) * cosAngle + (mouthLeft.y - centerY) * sinAngle)
+            .coerceAtLeast(faceBounds.width() * 0.055f)
+        val rightWidth = kotlin.math.abs((mouthRight.x - centerX) * cosAngle + (mouthRight.y - centerY) * sinAngle)
+            .coerceAtLeast(faceBounds.width() * 0.055f)
+
+        val upperHeight = kotlin.math.abs((upperCenter.x - centerX) * normalX + (upperCenter.y - centerY) * normalY)
+            .coerceAtLeast(faceBounds.height() * 0.02f)
+        val lowerHeight = kotlin.math.abs((lowerCenter.x - centerX) * normalX + (lowerCenter.y - centerY) * normalY)
+            .coerceAtLeast(faceBounds.height() * 0.028f)
+
+        return LipRegion(
+            centerX = centerX,
+            centerY = centerY,
+            halfWidthLeft = (leftWidth * 1.08f).coerceAtLeast(4f),
+            halfWidthRight = (rightWidth * 1.08f).coerceAtLeast(4f),
+            halfHeightUpper = (upperHeight * 1.8f).coerceAtLeast(3f),
+            halfHeightLower = (lowerHeight * 1.9f).coerceAtLeast(4f),
+            cosAngle = cosAngle,
+            sinAngle = sinAngle
+        )
+    }
+
+    private fun averagePoint(points: List<PointF>): PointF? {
+        if (points.isEmpty()) {
+            return null
+        }
+
+        val avgX = points.sumOf { point -> point.x.toDouble() }.toFloat() / points.size
+        val avgY = points.sumOf { point -> point.y.toDouble() }.toFloat() / points.size
+        return PointF(avgX, avgY)
     }
 
     /**
-     * 模拟唇色效果 - 基于色彩叠加
-     * 使用超宽松的条件确保效果可见，后续可优化为基于人脸关键点
+     * 模拟唇色效果 - 基于关键点定位，避免全局矩形误着色
      */
-    private fun applyLipColorSimulation(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
-        if (strength <= 0) return bitmap
+    private fun applyLipColorSimulation(
+        bitmap: Bitmap,
+        strength: Float,
+        colorIndex: Int,
+        faces: List<Face>
+    ): Bitmap {
+        if (strength <= 0f || faces.isEmpty()) {
+            return bitmap
+        }
 
-        // 12 种预设唇色 (ARGB)
         val lipColors = intArrayOf(
-            0xFFD4757D.toInt(), // 0: 豆沙色
-            0xFFC43343.toInt(), // 1: 正红色
-            0xFFFF7F50.toInt(), // 2: 珊瑚色
-            0xFFE0527C.toInt(), // 3: 玫瑰色
-            0xFFFF6B9D.toInt(), // 4: 粉色
-            0xFF9B2335.toInt(), // 5: 酒红色
-            0xFFFFA07A.toInt(), // 6: 浅粉色
-            0xFFCD5C5C.toInt(), // 7: 印度红
-            0xFFDC143C.toInt(), // 8: 深红色
-            0xFFFFB6C1.toInt(), // 9: 浅玫瑰色
-            0xFFB22222.toInt(), // 10: 火砖色
-            0xFFFF1493.toInt()  // 11: 深粉色
+            0xFFD4757D.toInt(),
+            0xFFC43343.toInt(),
+            0xFFFF7F50.toInt(),
+            0xFFE0527C.toInt(),
+            0xFFFF6B9D.toInt(),
+            0xFF9B2335.toInt(),
+            0xFFFFA07A.toInt(),
+            0xFFCD5C5C.toInt(),
+            0xFFDC143C.toInt(),
+            0xFFFFB6C1.toInt(),
+            0xFFB22222.toInt(),
+            0xFFFF1493.toInt()
         )
 
         val targetColor = lipColors.getOrElse(colorIndex) { lipColors[0] }
-        // 增加强度确保效果可见
-        val normalizedStrength = (strength / 100f * 0.85f).coerceIn(0f, 0.85f)
+        val normalizedStrength = (strength / 100f * 0.9f).coerceIn(0f, 0.9f)
 
         val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val width = result.width
         val height = result.height
         val pixels = IntArray(width * height)
-
         result.getPixels(pixels, 0, width, 0, 0, width, height)
 
         val targetR = (targetColor shr 16) and 0xFF
         val targetG = (targetColor shr 8) and 0xFF
         val targetB = targetColor and 0xFF
 
-        var lipPixelCount = 0
         var processedPixelCount = 0
         
-        // 处理区域：图像下半部分的中间区域（嘴部区域）
-        val startY = (height * 0.6).toInt()
-        val endY = (height * 0.8).toInt()
-        val centerX = width / 2
-        val maxRadius = width * 0.3
+        faces.forEach { face ->
+            val region = resolveLipRegion(face) ?: return@forEach
 
-        for (py in startY until endY) {
-            for (px in 0 until width) {
-                val i = py * width + px
-                if (i >= pixels.size) continue
-                
-                val distFromCenter = kotlin.math.abs(px - centerX)
-                if (distFromCenter > maxRadius) continue
-                
-                val pixel = pixels[i]
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
+            val maxHalfWidth = maxOf(region.halfWidthLeft, region.halfWidthRight)
+            val maxHalfHeight = maxOf(region.halfHeightUpper, region.halfHeightLower)
+            val padX = maxHalfWidth * 1.35f
+            val padY = maxHalfHeight * 1.45f
+            val startX = (region.centerX - padX).toInt().coerceIn(0, width - 1)
+            val endX = (region.centerX + padX).toInt().coerceIn(0, width - 1)
+            val startY = (region.centerY - padY).toInt().coerceIn(0, height - 1)
+            val endY = (region.centerY + padY).toInt().coerceIn(0, height - 1)
 
-                // 超宽松检测：只要有一定颜色就处理
-                val hasColor = r > 40 && g > 20 && b > 15
-                val notTooBright = (r + g + b) < 600
-                
-                if (hasColor && notTooBright) {
-                    lipPixelCount++
-                    
-                    val positionFactor = 1.0f - (distFromCenter / maxRadius) * 0.4f
-                    val effectiveStrength = normalizedStrength * positionFactor
-
-                    if (effectiveStrength > 0.08f) {
-                        processedPixelCount++
-                        
-                        val newR = (r * (1 - effectiveStrength) + targetR * effectiveStrength).toInt().coerceIn(0, 255)
-                        val newG = (g * (1 - effectiveStrength) + targetG * effectiveStrength).toInt().coerceIn(0, 255)
-                        val newB = (b * (1 - effectiveStrength) + targetB * effectiveStrength).toInt().coerceIn(0, 255)
-
-                        pixels[i] = (pixel and 0xFF000000.toInt()) or (newR shl 16) or (newG shl 8) or newB
+            for (py in startY..endY) {
+                for (px in startX..endX) {
+                    val index = py * width + px
+                    if (index >= pixels.size) {
+                        continue
                     }
+
+                    val dx = px - region.centerX
+                    val dy = py - region.centerY
+                    val localX = dx * region.cosAngle + dy * region.sinAngle
+                    val localY = -dx * region.sinAngle + dy * region.cosAngle
+
+                    val activeHalfWidth = if (localX < 0f) {
+                        region.halfWidthLeft
+                    } else {
+                        region.halfWidthRight
+                    }
+                    val normalizedX = localX / activeHalfWidth
+                    val ellipse = if (localY >= 0f) {
+                        val normalizedUpperY = localY / region.halfHeightUpper
+                        normalizedX * normalizedX + normalizedUpperY * normalizedUpperY
+                    } else {
+                        val normalizedLowerY = localY / region.halfHeightLower
+                        normalizedX * normalizedX + normalizedLowerY * normalizedLowerY
+                    }
+                    if (ellipse > 1f) {
+                        continue
+                    }
+
+                    val pixel = pixels[index]
+                    val r = (pixel shr 16) and 0xFF
+                    val g = (pixel shr 8) and 0xFF
+                    val b = pixel and 0xFF
+                    val hasLipLikeColor = r > 18 && g > 5 && b > 4 && (r + g + b) < 735
+                    if (!hasLipLikeColor) {
+                        continue
+                    }
+
+                    val feather = (1f - ellipse).coerceIn(0f, 1f)
+                    val blend = (normalizedStrength * feather * feather).coerceIn(0f, 0.92f)
+                    if (blend <= 0.01f) {
+                        continue
+                    }
+
+                    val newR = (r * (1f - blend) + targetR * blend).toInt().coerceIn(0, 255)
+                    val newG = (g * (1f - blend) + targetG * blend).toInt().coerceIn(0, 255)
+                    val newB = (b * (1f - blend) + targetB * blend).toInt().coerceIn(0, 255)
+                    pixels[index] = (pixel and 0xFF000000.toInt()) or (newR shl 16) or (newG shl 8) or newB
+                    processedPixelCount++
                 }
             }
         }
 
-        Logger.d(TAG, "Lip color: detected=$lipPixelCount, processed=$processedPixelCount, strength=$strength")
+        Logger.d(TAG, "Lip color: processed=$processedPixelCount, strength=$strength, faces=${faces.size}")
 
         result.setPixels(pixels, 0, width, 0, 0, width, height)
         return result
@@ -374,7 +483,7 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
         if (faces.isNotEmpty()) {
             if (settings.lipColor > 0) {
                 Logger.d(TAG, "Applying lip color BEFORE PixelFree processing: ${settings.lipColor}")
-                result = applyLipColor(result, settings.lipColor, settings.lipColorIndex)
+                result = applyLipColor(result, settings.lipColor, settings.lipColorIndex, faces)
             }
             if (settings.blush > 0) {
                 result = applyBlush(result, settings.blush)

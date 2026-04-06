@@ -64,6 +64,16 @@ internal class RPlanPreviewStrategy(
                 leftEyeY = params.leftEyeY,
                 rightEyeX = params.rightEyeX,
                 rightEyeY = params.rightEyeY,
+                mouthCenterX = params.mouthCenterX,
+                mouthCenterY = params.mouthCenterY,
+                mouthLeftX = params.mouthLeftX,
+                mouthLeftY = params.mouthLeftY,
+                mouthRightX = params.mouthRightX,
+                mouthRightY = params.mouthRightY,
+                upperLipCenterX = params.upperLipCenterX,
+                upperLipCenterY = params.upperLipCenterY,
+                lowerLipCenterX = params.lowerLipCenterX,
+                lowerLipCenterY = params.lowerLipCenterY,
                 faceRadius = params.faceRadius,
                 hasFace = params.hasFace
             )

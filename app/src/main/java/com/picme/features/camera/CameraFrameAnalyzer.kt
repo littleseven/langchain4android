@@ -1,5 +1,6 @@
 package com.picme.features.camera
 
+import android.graphics.PointF
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.view.PreviewView
@@ -99,6 +100,73 @@ internal fun handleImageAnalysisFrame(
                         )
                     }
 
+                    val mouthLeftLandmark = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
+                    val mouthRightLandmark = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
+                    val mouthBottomLandmark = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
+
+                    val upperLipTopPoints = face.getContour(FaceContour.UPPER_LIP_TOP)?.points ?: emptyList()
+                    val upperLipBottomPoints = face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points ?: emptyList()
+                    val lowerLipTopPoints = face.getContour(FaceContour.LOWER_LIP_TOP)?.points ?: emptyList()
+                    val lowerLipBottomPoints = face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points ?: emptyList()
+                    val allLipPoints = upperLipTopPoints + upperLipBottomPoints + lowerLipTopPoints + lowerLipBottomPoints
+
+                    val upperLipFallback = if (mouthLeftLandmark != null && mouthRightLandmark != null) {
+                        PointF(
+                            (mouthLeftLandmark.x + mouthRightLandmark.x) * 0.5f,
+                            (mouthLeftLandmark.y + mouthRightLandmark.y) * 0.5f
+                        )
+                    } else {
+                        PointF(
+                            bounds.centerX().toFloat(),
+                            bounds.centerY().toFloat() + bounds.height().toFloat() * 0.18f
+                        )
+                    }
+                    val lowerLipFallback = mouthBottomLandmark ?: PointF(
+                        upperLipFallback.x,
+                        upperLipFallback.y + bounds.height().toFloat() * 0.06f
+                    )
+
+                    val mouthLeftRaw = mouthLeftLandmark
+                        ?: allLipPoints.minByOrNull { lipPoint -> lipPoint.x }
+                        ?: PointF(
+                            upperLipFallback.x - bounds.width().toFloat() * 0.12f,
+                            upperLipFallback.y
+                        )
+                    val mouthRightRaw = mouthRightLandmark
+                        ?: allLipPoints.maxByOrNull { lipPoint -> lipPoint.x }
+                        ?: PointF(
+                            upperLipFallback.x + bounds.width().toFloat() * 0.12f,
+                            upperLipFallback.y
+                        )
+
+                    val upperLipCenterRaw = averagePoint(upperLipTopPoints + upperLipBottomPoints)
+                        ?: upperLipFallback
+                    val lowerLipCenterRaw = averagePoint(lowerLipTopPoints + lowerLipBottomPoints)
+                        ?: lowerLipFallback
+                    val mouthCenterRaw = PointF(
+                        (upperLipCenterRaw.x + lowerLipCenterRaw.x) * 0.5f,
+                        (upperLipCenterRaw.y + lowerLipCenterRaw.y) * 0.5f
+                    )
+
+                    fun mapLipPoint(rawPoint: PointF): Offset {
+                        return transformFaceCoordinateSimple(
+                            faceX = rawPoint.x,
+                            faceY = rawPoint.y,
+                            imageProxyWidth = imageProxy.width,
+                            imageProxyHeight = imageProxy.height,
+                            previewWidth = previewWidth,
+                            previewHeight = previewHeight,
+                            rotationDegrees = rotationDegrees,
+                            lensFacing = lensFacing
+                        )
+                    }
+
+                    val mouthCenterPoint = mapLipPoint(mouthCenterRaw)
+                    val mouthLeftPoint = mapLipPoint(mouthLeftRaw)
+                    val mouthRightPoint = mapLipPoint(mouthRightRaw)
+                    val upperLipCenterPoint = mapLipPoint(upperLipCenterRaw)
+                    val lowerLipCenterPoint = mapLipPoint(lowerLipCenterRaw)
+
                     val faceRadius = (
                         maxOf(bounds.width().toFloat() / imageProxy.width.toFloat(), 0.16f)
                     ).coerceIn(0.12f, 0.38f)
@@ -167,6 +235,16 @@ internal fun handleImageAnalysisFrame(
                         leftEyeY = (leftEyePoint.y / previewHeight).coerceIn(0f, 1f),
                         rightEyeX = (rightEyePoint.x / previewWidth).coerceIn(0f, 1f),
                         rightEyeY = (rightEyePoint.y / previewHeight).coerceIn(0f, 1f),
+                        mouthCenterX = (mouthCenterPoint.x / previewWidth).coerceIn(0f, 1f),
+                        mouthCenterY = (mouthCenterPoint.y / previewHeight).coerceIn(0f, 1f),
+                        mouthLeftX = (mouthLeftPoint.x / previewWidth).coerceIn(0f, 1f),
+                        mouthLeftY = (mouthLeftPoint.y / previewHeight).coerceIn(0f, 1f),
+                        mouthRightX = (mouthRightPoint.x / previewWidth).coerceIn(0f, 1f),
+                        mouthRightY = (mouthRightPoint.y / previewHeight).coerceIn(0f, 1f),
+                        upperLipCenterX = (upperLipCenterPoint.x / previewWidth).coerceIn(0f, 1f),
+                        upperLipCenterY = (upperLipCenterPoint.y / previewHeight).coerceIn(0f, 1f),
+                        lowerLipCenterX = (lowerLipCenterPoint.x / previewWidth).coerceIn(0f, 1f),
+                        lowerLipCenterY = (lowerLipCenterPoint.y / previewHeight).coerceIn(0f, 1f),
                         faceRadius = faceRadius,
                         hasFace = true,
                         contourPoints = contourPoints,
@@ -197,6 +275,16 @@ internal fun handleImageAnalysisFrame(
         Logger.e("Camera", "Face detection error", error)
         imageProxy.close()
     }
+}
+
+private fun averagePoint(points: List<PointF>): PointF? {
+    if (points.isEmpty()) {
+        return null
+    }
+
+    val sumX = points.sumOf { point -> point.x.toDouble() }.toFloat()
+    val sumY = points.sumOf { point -> point.y.toDouble() }.toFloat()
+    return PointF(sumX / points.size, sumY / points.size)
 }
 
 internal fun transformFaceCoordinateSimple(

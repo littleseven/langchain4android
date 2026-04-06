@@ -46,6 +46,12 @@ class BeautyRenderer : GLRenderer() {
     /** 瘦脸强度 (-1.0 - 1.0) */
     private var slimFaceStrength: Float = 0f
 
+    /** 唇色强度 (0.0 - 1.0) */
+    private var lipColorStrength: Float = 0f
+
+    /** 唇色色号索引 (0 - 11) */
+    private var lipColorIndex: Int = 0
+
     /** 人脸中心与眼睛关键点（归一化坐标） */
     private var faceCenterX: Float = 0.5f
     private var faceCenterY: Float = 0.5f
@@ -53,6 +59,16 @@ class BeautyRenderer : GLRenderer() {
     private var leftEyeY: Float = 0.45f
     private var rightEyeX: Float = 0.6f
     private var rightEyeY: Float = 0.45f
+    private var mouthCenterX: Float = 0.5f
+    private var mouthCenterY: Float = 0.62f
+    private var mouthLeftX: Float = 0.42f
+    private var mouthLeftY: Float = 0.62f
+    private var mouthRightX: Float = 0.58f
+    private var mouthRightY: Float = 0.62f
+    private var upperLipCenterX: Float = 0.5f
+    private var upperLipCenterY: Float = 0.60f
+    private var lowerLipCenterX: Float = 0.5f
+    private var lowerLipCenterY: Float = 0.66f
     private var faceRadius: Float = 0.18f
     private var hasFace: Float = 0f
 
@@ -75,8 +91,15 @@ class BeautyRenderer : GLRenderer() {
     private var uRightEyeLocation: Int = -1
     private var uFaceRadiusLocation: Int = -1
     private var uHasFaceLocation: Int = -1
+    private var uMouthCenterLocation: Int = -1
+    private var uMouthLeftLocation: Int = -1
+    private var uMouthRightLocation: Int = -1
+    private var uUpperLipCenterLocation: Int = -1
+    private var uLowerLipCenterLocation: Int = -1
     private var uWarmthLocation: Int = -1
     private var uContrastLocation: Int = -1
+    private var uLipColorLocation: Int = -1
+    private var uLipColorIndexLocation: Int = -1
     
     /**
      * 设置渲染模式
@@ -109,16 +132,21 @@ class BeautyRenderer : GLRenderer() {
         smoothing: Float,
         whitening: Float,
         bigEyes: Float = 0f,
-        slimFace: Float = 0f
+        slimFace: Float = 0f,
+        lipColor: Float = 0f,
+        lipColorIndex: Int = 0
     ) {
         smoothingStrength = smoothing.coerceIn(0f, 1f)
         whiteningStrength = whitening.coerceIn(0f, 1f)
         bigEyesStrength = bigEyes.coerceIn(0f, 1f)
         slimFaceStrength = slimFace.coerceIn(-1f, 1f)
+        lipColorStrength = lipColor.coerceIn(0f, 1f)
+        this.lipColorIndex = lipColorIndex.coerceIn(0, 11)
         Log.d(
             TAG,
             "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
-                "bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength"
+                "bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength, lipColor=$lipColorStrength, " +
+                "lipColorIndex=${this.lipColorIndex}"
         )
     }
     
@@ -129,6 +157,16 @@ class BeautyRenderer : GLRenderer() {
         leftEyeY: Float,
         rightEyeX: Float,
         rightEyeY: Float,
+        mouthCenterX: Float,
+        mouthCenterY: Float,
+        mouthLeftX: Float,
+        mouthLeftY: Float,
+        mouthRightX: Float,
+        mouthRightY: Float,
+        upperLipCenterX: Float,
+        upperLipCenterY: Float,
+        lowerLipCenterX: Float,
+        lowerLipCenterY: Float,
         faceRadius: Float,
         hasFace: Boolean
     ) {
@@ -138,12 +176,24 @@ class BeautyRenderer : GLRenderer() {
         this.leftEyeY = leftEyeY.coerceIn(0f, 1f)
         this.rightEyeX = rightEyeX.coerceIn(0f, 1f)
         this.rightEyeY = rightEyeY.coerceIn(0f, 1f)
+        this.mouthCenterX = mouthCenterX.coerceIn(0f, 1f)
+        this.mouthCenterY = mouthCenterY.coerceIn(0f, 1f)
+        this.mouthLeftX = mouthLeftX.coerceIn(0f, 1f)
+        this.mouthLeftY = mouthLeftY.coerceIn(0f, 1f)
+        this.mouthRightX = mouthRightX.coerceIn(0f, 1f)
+        this.mouthRightY = mouthRightY.coerceIn(0f, 1f)
+        this.upperLipCenterX = upperLipCenterX.coerceIn(0f, 1f)
+        this.upperLipCenterY = upperLipCenterY.coerceIn(0f, 1f)
+        this.lowerLipCenterX = lowerLipCenterX.coerceIn(0f, 1f)
+        this.lowerLipCenterY = lowerLipCenterY.coerceIn(0f, 1f)
         this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
         this.hasFace = if (hasFace) 1f else 0f
         Log.d(
             TAG,
             "FaceWarp params received: center=(${this.faceCenterX}, ${this.faceCenterY}), " +
-                "leftEye=(${this.leftEyeX}, ${this.leftEyeY}), rightEye=(${this.rightEyeX}, ${this.rightEyeY}), " +
+                "mouth=(${this.mouthCenterX}, ${this.mouthCenterY}), " +
+                "mouthL=(${this.mouthLeftX}, ${this.mouthLeftY}), mouthR=(${this.mouthRightX}, ${this.mouthRightY}), " +
+                "upper=(${this.upperLipCenterX}, ${this.upperLipCenterY}), lower=(${this.lowerLipCenterX}, ${this.lowerLipCenterY}), " +
                 "radius=${this.faceRadius}, hasFace=${this.hasFace}, slimFace=$slimFaceStrength, bigEyes=$bigEyesStrength"
         )
     }
@@ -193,7 +243,14 @@ class BeautyRenderer : GLRenderer() {
                 shaderProgram.setFloat("uSlimFace", slimFaceStrength)
                 shaderProgram.setFloat("uFaceRadius", faceRadius)
                 shaderProgram.setFloat("uHasFace", hasFace)
+                shaderProgram.setFloat("uLipColor", lipColorStrength)
+                shaderProgram.setInt("uLipColorIndex", lipColorIndex)
                 shaderProgram.setVec2("uFaceCenter", faceCenterX, faceCenterY)
+                shaderProgram.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
+                shaderProgram.setVec2("uMouthLeft", mouthLeftX, mouthLeftY)
+                shaderProgram.setVec2("uMouthRight", mouthRightX, mouthRightY)
+                shaderProgram.setVec2("uUpperLipCenter", upperLipCenterX, upperLipCenterY)
+                shaderProgram.setVec2("uLowerLipCenter", lowerLipCenterX, lowerLipCenterY)
                 shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
                 shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
             }
@@ -204,7 +261,14 @@ class BeautyRenderer : GLRenderer() {
                 shaderProgram.setFloat("uSlimFace", slimFaceStrength)
                 shaderProgram.setFloat("uFaceRadius", faceRadius)
                 shaderProgram.setFloat("uHasFace", hasFace)
+                shaderProgram.setFloat("uLipColor", lipColorStrength)
+                shaderProgram.setInt("uLipColorIndex", lipColorIndex)
                 shaderProgram.setVec2("uFaceCenter", faceCenterX, faceCenterY)
+                shaderProgram.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
+                shaderProgram.setVec2("uMouthLeft", mouthLeftX, mouthLeftY)
+                shaderProgram.setVec2("uMouthRight", mouthRightX, mouthRightY)
+                shaderProgram.setVec2("uUpperLipCenter", upperLipCenterX, upperLipCenterY)
+                shaderProgram.setVec2("uLowerLipCenter", lowerLipCenterX, lowerLipCenterY)
                 shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
                 shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
                 shaderProgram.setFloat("uWarmth", warmthStrength)
@@ -230,8 +294,15 @@ class BeautyRenderer : GLRenderer() {
         uRightEyeLocation = shaderProgram.getUniformLocation("uRightEye")
         uFaceRadiusLocation = shaderProgram.getUniformLocation("uFaceRadius")
         uHasFaceLocation = shaderProgram.getUniformLocation("uHasFace")
+        uMouthCenterLocation = shaderProgram.getUniformLocation("uMouthCenter")
+        uMouthLeftLocation = shaderProgram.getUniformLocation("uMouthLeft")
+        uMouthRightLocation = shaderProgram.getUniformLocation("uMouthRight")
+        uUpperLipCenterLocation = shaderProgram.getUniformLocation("uUpperLipCenter")
+        uLowerLipCenterLocation = shaderProgram.getUniformLocation("uLowerLipCenter")
         uWarmthLocation = shaderProgram.getUniformLocation("uWarmth")
         uContrastLocation = shaderProgram.getUniformLocation("uContrast")
+        uLipColorLocation = shaderProgram.getUniformLocation("uLipColor")
+        uLipColorIndexLocation = shaderProgram.getUniformLocation("uLipColorIndex")
     }
     
     override fun release() {

@@ -81,11 +81,9 @@ internal class PixelFreePreviewStrategy(
                 pixelFreeView.setWhiteningStrength(settings.whitening / 100f)
                 pixelFreeView.setBigEyesStrength((settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f))
                 pixelFreeView.setSlimFaceStrength(((settings.slimFace + 50f) / 100f).coerceIn(0f, 1f))
-                
+
                 // 设置唇色（妆容调节）
-                if (settings.lipColor > 0) {
-                    pixelFreeView.setLipColorStrength(settings.lipColor / 100f)
-                }
+                pixelFreeView.setLipColorStrength((settings.lipColor / 100f).coerceIn(0f, 1f))
             }
         }.onFailure { error ->
             Logger.w("Camera", "PixelFree sdk beauty update failed", error)
@@ -101,6 +99,16 @@ internal class PixelFreePreviewStrategy(
                 leftEyeY = params.leftEyeY,
                 rightEyeX = params.rightEyeX,
                 rightEyeY = params.rightEyeY,
+                mouthCenterX = params.mouthCenterX,
+                mouthCenterY = params.mouthCenterY,
+                mouthLeftX = params.mouthLeftX,
+                mouthLeftY = params.mouthLeftY,
+                mouthRightX = params.mouthRightX,
+                mouthRightY = params.mouthRightY,
+                upperLipCenterX = params.upperLipCenterX,
+                upperLipCenterY = params.upperLipCenterY,
+                lowerLipCenterX = params.lowerLipCenterX,
+                lowerLipCenterY = params.lowerLipCenterY,
                 faceRadius = params.faceRadius,
                 hasFace = params.hasFace
             )

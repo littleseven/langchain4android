@@ -51,10 +51,17 @@ object BeautyShaders {
         uniform float uBigEyes;
         uniform float uSlimFace;
         uniform vec2 uFaceCenter;
-        uniform vec2 uLeftEye;
-        uniform vec2 uRightEye;
-        uniform float uFaceRadius;
+uniform vec2 uLeftEye;
+uniform vec2 uRightEye;
+uniform vec2 uMouthCenter;
+uniform vec2 uMouthLeft;
+uniform vec2 uMouthRight;
+uniform vec2 uUpperLipCenter;
+uniform vec2 uLowerLipCenter;
+uniform float uFaceRadius;
         uniform float uHasFace;
+        uniform float uLipColor;
+        uniform int uLipColorIndex;
         varying vec2 vTextureCoord;
         
         vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
@@ -140,12 +147,87 @@ object BeautyShaders {
             return vec4(whitened, color.a);
         }
         
+        vec3 lipColorByIndex(int index) {
+            if (index == 1) return vec3(0.77, 0.20, 0.26);
+            if (index == 2) return vec3(1.00, 0.50, 0.31);
+            if (index == 3) return vec3(0.88, 0.32, 0.49);
+            if (index == 4) return vec3(1.00, 0.42, 0.62);
+            if (index == 5) return vec3(0.61, 0.14, 0.21);
+            if (index == 6) return vec3(1.00, 0.63, 0.48);
+            if (index == 7) return vec3(0.80, 0.36, 0.36);
+            if (index == 8) return vec3(0.86, 0.08, 0.24);
+            if (index == 9) return vec3(1.00, 0.71, 0.76);
+            if (index == 10) return vec3(0.70, 0.13, 0.13);
+            if (index == 11) return vec3(1.00, 0.08, 0.58);
+            return vec3(0.83, 0.46, 0.49);
+        }
+
+        vec4 applyLipTint(vec4 color, vec2 uv) {
+            if (uHasFace < 0.5 || uLipColor < 0.01) {
+                return color;
+            }
+
+vec2 eyeAxis = normalize(uRightEye - uLeftEye);
+if (length(eyeAxis) < 0.0001) {
+    eyeAxis = vec2(1.0, 0.0);
+}
+
+vec2 mouthLeft = uMouthLeft;
+vec2 mouthRight = uMouthRight;
+vec2 upperLipCenter = uUpperLipCenter;
+vec2 lowerLipCenter = uLowerLipCenter;
+vec2 mouthCenter = (mouthLeft + mouthRight + upperLipCenter + lowerLipCenter) * 0.25;
+
+vec2 mouthAxisRaw = mouthRight - mouthLeft;
+float mouthAxisLen = length(mouthAxisRaw);
+vec2 mouthAxis = mouthAxisLen > 0.0001 ? normalize(mouthAxisRaw) : eyeAxis;
+vec2 mouthNormal = vec2(-mouthAxis.y, mouthAxis.x);
+if (dot(lowerLipCenter - upperLipCenter, mouthNormal) < 0.0) {
+    mouthNormal = -mouthNormal;
+}
+
+vec2 delta = uv - mouthCenter;
+float localX = dot(delta, mouthAxis);
+float localY = dot(delta, mouthNormal);
+
+float leftWidth = max(abs(dot(mouthCenter - mouthLeft, mouthAxis)) * 1.06, uFaceRadius * 0.11);
+float rightWidth = max(abs(dot(mouthRight - mouthCenter, mouthAxis)) * 1.06, uFaceRadius * 0.11);
+float activeHalfWidth = localX >= 0.0 ? rightWidth : leftWidth;
+
+float upperHeight = max(abs(dot(upperLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.038);
+float lowerHeight = max(abs(dot(lowerLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.05);
+
+float x = localX / max(activeHalfWidth, 0.0001);
+float upperY = max(localY, 0.0) / max(upperHeight, 0.0001);
+float lowerY = max(-localY, 0.0) / max(lowerHeight, 0.0001);
+
+float upperEllipse = x * x + upperY * upperY;
+float lowerEllipse = x * x + lowerY * lowerY;
+
+float upperMask = 1.0 - smoothstep(0.45, 1.0, upperEllipse);
+float lowerMask = 1.0 - smoothstep(0.45, 1.0, lowerEllipse);
+float cornerMask = 1.0 - smoothstep(0.92, 1.22, abs(x));
+float seamWidth = max((upperHeight + lowerHeight) * 0.08, uFaceRadius * 0.006);
+float sideSwitch = max((upperHeight + lowerHeight) * 0.06, uFaceRadius * 0.004);
+float upperSideMask = smoothstep(-sideSwitch, sideSwitch, localY);
+float lowerSideMask = smoothstep(-sideSwitch, sideSwitch, -localY);
+float seamFade = 1.0 - smoothstep(0.0, seamWidth, abs(localY));
+float splitMask = max(upperMask * upperSideMask, lowerMask * lowerSideMask);
+float lipMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+
+            vec3 target = lipColorByIndex(uLipColorIndex);
+            float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
+            vec3 tinted = mix(color.rgb, target, blend);
+            return vec4(clamp(tinted, 0.0, 1.0), color.a);
+        }
+
         void main() {
             vec2 warpedUv = warpCoord(vTextureCoord);
             float mask = skinMask(warpedUv);
             vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
             vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
-            gl_FragColor = whitened;
+            vec4 lipTinted = applyLipTint(whitened, warpedUv);
+            gl_FragColor = lipTinted;
         }
     """.trimIndent()
     
@@ -166,12 +248,19 @@ object BeautyShaders {
         uniform float uBigEyes;
         uniform float uSlimFace;
         uniform vec2 uFaceCenter;
-        uniform vec2 uLeftEye;
-        uniform vec2 uRightEye;
-        uniform float uFaceRadius;
+uniform vec2 uLeftEye;
+uniform vec2 uRightEye;
+uniform vec2 uMouthCenter;
+uniform vec2 uMouthLeft;
+uniform vec2 uMouthRight;
+uniform vec2 uUpperLipCenter;
+uniform vec2 uLowerLipCenter;
+uniform float uFaceRadius;
         uniform float uHasFace;
         uniform float uWarmth;
         uniform float uContrast;
+        uniform float uLipColor;
+        uniform int uLipColorIndex;
         varying vec2 vTextureCoord;
         
         vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
@@ -258,12 +347,87 @@ object BeautyShaders {
             return vec4(rgb, color.a);
         }
         
+        vec3 lipColorByIndex(int index) {
+            if (index == 1) return vec3(0.77, 0.20, 0.26);
+            if (index == 2) return vec3(1.00, 0.50, 0.31);
+            if (index == 3) return vec3(0.88, 0.32, 0.49);
+            if (index == 4) return vec3(1.00, 0.42, 0.62);
+            if (index == 5) return vec3(0.61, 0.14, 0.21);
+            if (index == 6) return vec3(1.00, 0.63, 0.48);
+            if (index == 7) return vec3(0.80, 0.36, 0.36);
+            if (index == 8) return vec3(0.86, 0.08, 0.24);
+            if (index == 9) return vec3(1.00, 0.71, 0.76);
+            if (index == 10) return vec3(0.70, 0.13, 0.13);
+            if (index == 11) return vec3(1.00, 0.08, 0.58);
+            return vec3(0.83, 0.46, 0.49);
+        }
+
+        vec4 applyLipTint(vec4 color, vec2 uv) {
+            if (uHasFace < 0.5 || uLipColor < 0.01) {
+                return color;
+            }
+
+vec2 eyeAxis = normalize(uRightEye - uLeftEye);
+if (length(eyeAxis) < 0.0001) {
+    eyeAxis = vec2(1.0, 0.0);
+}
+
+vec2 mouthLeft = uMouthLeft;
+vec2 mouthRight = uMouthRight;
+vec2 upperLipCenter = uUpperLipCenter;
+vec2 lowerLipCenter = uLowerLipCenter;
+vec2 mouthCenter = (mouthLeft + mouthRight + upperLipCenter + lowerLipCenter) * 0.25;
+
+vec2 mouthAxisRaw = mouthRight - mouthLeft;
+float mouthAxisLen = length(mouthAxisRaw);
+vec2 mouthAxis = mouthAxisLen > 0.0001 ? normalize(mouthAxisRaw) : eyeAxis;
+vec2 mouthNormal = vec2(-mouthAxis.y, mouthAxis.x);
+if (dot(lowerLipCenter - upperLipCenter, mouthNormal) < 0.0) {
+    mouthNormal = -mouthNormal;
+}
+
+vec2 delta = uv - mouthCenter;
+float localX = dot(delta, mouthAxis);
+float localY = dot(delta, mouthNormal);
+
+float leftWidth = max(abs(dot(mouthCenter - mouthLeft, mouthAxis)) * 1.06, uFaceRadius * 0.11);
+float rightWidth = max(abs(dot(mouthRight - mouthCenter, mouthAxis)) * 1.06, uFaceRadius * 0.11);
+float activeHalfWidth = localX >= 0.0 ? rightWidth : leftWidth;
+
+float upperHeight = max(abs(dot(upperLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.038);
+float lowerHeight = max(abs(dot(lowerLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.05);
+
+float x = localX / max(activeHalfWidth, 0.0001);
+float upperY = max(localY, 0.0) / max(upperHeight, 0.0001);
+float lowerY = max(-localY, 0.0) / max(lowerHeight, 0.0001);
+
+float upperEllipse = x * x + upperY * upperY;
+float lowerEllipse = x * x + lowerY * lowerY;
+
+float upperMask = 1.0 - smoothstep(0.45, 1.0, upperEllipse);
+float lowerMask = 1.0 - smoothstep(0.45, 1.0, lowerEllipse);
+float cornerMask = 1.0 - smoothstep(0.92, 1.22, abs(x));
+float seamWidth = max((upperHeight + lowerHeight) * 0.08, uFaceRadius * 0.006);
+float sideSwitch = max((upperHeight + lowerHeight) * 0.06, uFaceRadius * 0.004);
+float upperSideMask = smoothstep(-sideSwitch, sideSwitch, localY);
+float lowerSideMask = smoothstep(-sideSwitch, sideSwitch, -localY);
+float seamFade = 1.0 - smoothstep(0.0, seamWidth, abs(localY));
+float splitMask = max(upperMask * upperSideMask, lowerMask * lowerSideMask);
+float lipMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+
+            vec3 target = lipColorByIndex(uLipColorIndex);
+            float blend = clamp(uLipColor, 0.0, 1.0) * 0.78 * lipMask;
+            vec3 tinted = mix(color.rgb, target, blend);
+            return vec4(clamp(tinted, 0.0, 1.0), color.a);
+        }
+
         void main() {
             vec2 warpedUv = warpCoord(vTextureCoord);
             float mask = skinMask(warpedUv);
             vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
             vec4 whitened = smoothed * (1.0 + uWhitening * 0.3 * mask);
-            vec4 toned = adjustTone(whitened, uWarmth, uContrast);
+            vec4 lipTinted = applyLipTint(whitened, warpedUv);
+            vec4 toned = adjustTone(lipTinted, uWarmth, uContrast);
             gl_FragColor = toned;
         }
     """.trimIndent()

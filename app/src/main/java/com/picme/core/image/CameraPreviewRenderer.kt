@@ -517,18 +517,24 @@ class CameraPreviewRenderer {
      * @param whitening 美白强度 (0.0 - 1.0)
      * @param bigEyes 大眼强度 (0.0 - 1.0)
      * @param slimFace 瘦脸强度 (-1.0 - 1.0)
+     * @param lipColor 唇色强度 (0.0 - 1.0)
+     * @param lipColorIndex 唇色色号索引 (0 - 11)
      */
     fun updateBeautyParams(
         smoothing: Float,
         whitening: Float,
         bigEyes: Float = 0f,
-        slimFace: Float = 0f
+        slimFace: Float = 0f,
+        lipColor: Float = 0f,
+        lipColorIndex: Int = 0
     ) {
         beautyRenderer.updateBeautyParams(
             smoothing = smoothing,
             whitening = whitening,
             bigEyes = bigEyes,
-            slimFace = slimFace
+            slimFace = slimFace,
+            lipColor = lipColor,
+            lipColorIndex = lipColorIndex
         )
     }
     
@@ -539,12 +545,27 @@ class CameraPreviewRenderer {
         leftEyeY: Float,
         rightEyeX: Float,
         rightEyeY: Float,
+        mouthCenterX: Float,
+        mouthCenterY: Float,
+        mouthLeftX: Float,
+        mouthLeftY: Float,
+        mouthRightX: Float,
+        mouthRightY: Float,
+        upperLipCenterX: Float,
+        upperLipCenterY: Float,
+        lowerLipCenterX: Float,
+        lowerLipCenterY: Float,
         faceRadius: Float,
         hasFace: Boolean
     ) {
         val mappedFaceCenter = mapViewNormalizedToUv(faceCenterX, faceCenterY)
         val mappedLeftEye = mapViewNormalizedToUv(leftEyeX, leftEyeY)
         val mappedRightEye = mapViewNormalizedToUv(rightEyeX, rightEyeY)
+        val mappedMouthCenter = mapViewNormalizedToUv(mouthCenterX, mouthCenterY)
+        val mappedMouthLeft = mapViewNormalizedToUv(mouthLeftX, mouthLeftY)
+        val mappedMouthRight = mapViewNormalizedToUv(mouthRightX, mouthRightY)
+        val mappedUpperLipCenter = mapViewNormalizedToUv(upperLipCenterX, upperLipCenterY)
+        val mappedLowerLipCenter = mapViewNormalizedToUv(lowerLipCenterX, lowerLipCenterY)
 
         beautyRenderer.updateFaceWarpParams(
             faceCenterX = mappedFaceCenter.first,
@@ -553,6 +574,16 @@ class CameraPreviewRenderer {
             leftEyeY = mappedLeftEye.second,
             rightEyeX = mappedRightEye.first,
             rightEyeY = mappedRightEye.second,
+            mouthCenterX = mappedMouthCenter.first,
+            mouthCenterY = mappedMouthCenter.second,
+            mouthLeftX = mappedMouthLeft.first,
+            mouthLeftY = mappedMouthLeft.second,
+            mouthRightX = mappedMouthRight.first,
+            mouthRightY = mappedMouthRight.second,
+            upperLipCenterX = mappedUpperLipCenter.first,
+            upperLipCenterY = mappedUpperLipCenter.second,
+            lowerLipCenterX = mappedLowerLipCenter.first,
+            lowerLipCenterY = mappedLowerLipCenter.second,
             faceRadius = faceRadius,
             hasFace = hasFace
         )

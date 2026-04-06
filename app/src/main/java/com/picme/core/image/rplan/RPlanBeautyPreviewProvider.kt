@@ -91,6 +91,16 @@ class RPlanBeautyPreviewProvider(
         leftEyeY: Float,
         rightEyeX: Float,
         rightEyeY: Float,
+        mouthCenterX: Float,
+        mouthCenterY: Float,
+        mouthLeftX: Float,
+        mouthLeftY: Float,
+        mouthRightX: Float,
+        mouthRightY: Float,
+        upperLipCenterX: Float,
+        upperLipCenterY: Float,
+        lowerLipCenterX: Float,
+        lowerLipCenterY: Float,
         faceRadius: Float,
         hasFace: Boolean
     ) {
@@ -101,6 +111,16 @@ class RPlanBeautyPreviewProvider(
             leftEyeY = leftEyeY,
             rightEyeX = rightEyeX,
             rightEyeY = rightEyeY,
+            mouthCenterX = mouthCenterX,
+            mouthCenterY = mouthCenterY,
+            mouthLeftX = mouthLeftX,
+            mouthLeftY = mouthLeftY,
+            mouthRightX = mouthRightX,
+            mouthRightY = mouthRightY,
+            upperLipCenterX = upperLipCenterX,
+            upperLipCenterY = upperLipCenterY,
+            lowerLipCenterX = lowerLipCenterX,
+            lowerLipCenterY = lowerLipCenterY,
             faceRadius = faceRadius,
             hasFace = hasFace
         )
@@ -148,6 +168,8 @@ class RPlanBeautyPreviewProvider(
             view.whiteningStrength = 0f
             view.bigEyesStrength = 0f
             view.slimFaceStrength = 0f
+            view.lipColorStrength = 0f
+            view.lipColorIndex = 0
             return
         }
 
@@ -155,6 +177,8 @@ class RPlanBeautyPreviewProvider(
         view.whiteningStrength = (settings.whitening / 100f).coerceIn(0f, 1f)
         view.bigEyesStrength = (settings.bigEyes / 100f).coerceIn(0f, 1f)
         view.slimFaceStrength = (settings.slimFace / 50f * 1.35f).coerceIn(-1f, 1f)
+        view.lipColorStrength = (settings.lipColor / 100f).coerceIn(0f, 1f)
+        view.lipColorIndex = settings.lipColorIndex.coerceIn(0, 11)
     }
 }
 

@@ -49,10 +49,11 @@ interface BeautyProcessor {
      * @param bitmap 原始图像
      * @param strength 强度 0-100
      * @param colorIndex 色号索引 0-11
+     * @param faces 人脸检测结果（用于嘴部定位）
      * @return 处理后的图像
      */
-    suspend fun applyLipColor(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap
-    
+    suspend fun applyLipColor(bitmap: Bitmap, strength: Float, colorIndex: Int, faces: List<Face>): Bitmap
+
     /**
      * 应用腮红效果
      * @param bitmap 原始图像
@@ -111,7 +112,7 @@ interface BeautyProcessor {
             }
             // 妆容调节
             if (settings.lipColor > 0) {
-                result = applyLipColor(result, settings.lipColor, settings.lipColorIndex)
+                result = applyLipColor(result, settings.lipColor, settings.lipColorIndex, faces)
             }
             if (settings.blush > 0) {
                 result = applyBlush(result, settings.blush)
