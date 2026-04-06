@@ -1,4 +1,4 @@
-# DI (依赖注入) 模块指令 (Architecture Guard)
+# 依赖注入模块技术实现规范 (Dependency Injection)
 
 > **边界声明（Boundary Statement）**
 > - 本文档仅承载本模块的实现细节（架构、代码约束、检查清单）。
@@ -20,36 +20,149 @@
 
 ## 2. 技术实现规范 (Technical Implementation)
 
-### 2.1 Hilt 模块定义
-- **@Singleton 作用域**：Database、ImageLoader、OcrEngine 等全局单例必须使用 `@Singleton` 标注
-- **@ViewModelScoped 作用域**：ViewModel 相关的依赖必须使用 `@HiltViewModel`和`@ViewModelScoped`
-- **接口绑定**：在 `AppContainer` 或 DI 配置中，必须明确接口（Repository）与实现类（RepositoryImpl）的映射关系
+### 2.1 AppContainer 架构
 
-### 2.2 依赖注入方式
-- **构造函数注入优先**：优先使用构造函数注入，避免在类内部通过 `AppContainer` 手动获取依赖
-- **字段注入限制**：仅在 Fragment 和 Activity 中使用 `@Inject` 字段注入
-- **方法注入场景**：需要在 Module 中提供复杂依赖时使用 `@Provides` 方法注入
+**技术规范**:
+- **接口定义**: `AppContainer` 接口暴露全局依赖（Repository、ImageProcessor、UserPreferences）
+- **实现类**: `AppContainerImpl` 使用 `by lazy` 延迟初始化，确保单例且线程安全
+- **ViewModel Factory**: 通过 `MediaViewModelFactory` 注入 ViewModel 依赖，避免直接访问 Container
+- **依赖数据结构**: `MediaViewModelDependencies` 封装 ViewModel 所需的全部依赖
 
-### 2.3 AppContainer 管理
-- **职责单一**：`AppContainer.kt`仅负责注册全局单例，不包含业务逻辑
-- **同步更新**：新增全局 Service 或 Repository 后，必须同步更新 `AppContainer.kt`
-- **依赖顺序**：先注册 Database，再注册依赖 Database 的 Repository
+**代码示例**:
+```kotlin
+interface AppContainer {
+    val repository: MediaRepository
+    val userPreferencesRepository: UserPreferencesRepository
+    val imageProcessor: ImageProcessor
+    
+    fun createMediaViewModelFactory(): ViewModelProvider.Factory
+}
+
+class AppContainerImpl(private val context: Context) : AppContainer {
+    private val database by lazy { AppDatabase.getDatabase(context) }
+    
+    override val repository: MediaRepository by lazy {
+        MediaRepositoryImpl(database.mediaDao(), context)
+    }
+    
+    override val imageProcessor: ImageProcessor by lazy {
+        ImageProcessorImpl(beautyProcessor)
+    }
+}
+```
+
+### 2.2 美颜引擎动态切换
+
+**技术规范**:
+- **策略模式**: 根据 `BeautyStrategy` 枚举动态选择美颜引擎
+  - `R_PLAN`: 主引擎 (`GpuBeautyProcessor`)
+  - `PIXEL_FREE`: 备用引擎 (`PixelFreeBeautyProcessor`)
+- **故障回退**: R Plan 初始化失败时自动回退到 PixelFree，记录回退原因
+- **运行时状态**: 使用 `BeautyEngineRuntimeState` 单例管理回退状态，支持 UI 层查询
+- **阻塞读取**: 使用 `getBeautyStrategyBlocking()` 确保初始化时获取最新配置
+
+**代码示例**:
+```kotlin
+private val beautyProcessor: BeautyProcessor by lazy {
+    val userPrefs = UserPreferencesRepository(context)
+    val strategy = userPrefs.getBeautyStrategyBlocking()
+    
+    when (strategy) {
+        BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor(context)
+        BeautyStrategy.R_PLAN -> {
+            try {
+                GpuBeautyProcessor(context)
+            } catch (error: Throwable) {
+                BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "unknown")
+                Logger.w("DI", "R Plan init failed, fallback to PixelFree", error)
+                PixelFreeBeautyProcessor(context)
+            }
+        }
+    }
+}
+
+object BeautyEngineRuntimeState {
+    @Volatile
+    private var fallbackReason: String? = null
+    
+    fun markRPlanFallback(reason: String) {
+        fallbackReason = reason
+    }
+    
+    fun consumeRPlanFallbackReason(): String? {
+        val reason = fallbackReason
+        fallbackReason = null
+        return reason
+    }
+}
+```
+
+### 2.3 UseCase 与 OCR 集成
+
+**技术规范**:
+- **UseCase 实例化**: 在 Container 中创建单例 UseCase（`GetGroupedMediaUseCase`、`FindDuplicateMediaUseCase`）
+- **OCR 处理器**: `OcrUseCase` 作为单例注入 ViewModel，生命周期由 ViewModel 管理
+- **依赖封装**: 通过 `MediaViewModelDependencies` 数据结构聚合 ViewModel 所需依赖
+- **Factory 模式**: `MediaViewModelFactory` 负责创建 ViewModel 并注入依赖
+
+**代码示例**:
+```kotlin
+data class MediaViewModelDependencies(
+    val repository: MediaRepository,
+    val getGroupedMediaUseCase: GetGroupedMediaUseCase,
+    val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
+    val ocrUseCase: OcrProcessor
+)
+
+class MediaViewModelFactory(
+    private val dependencies: MediaViewModelDependencies
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return MediaViewModel(
+                repository = dependencies.repository,
+                getGroupedMediaUseCase = dependencies.getGroupedMediaUseCase,
+                findDuplicateMediaUseCase = dependencies.findDuplicateMediaUseCase,
+                ocrUseCase = dependencies.ocrUseCase
+            ) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+```
+
+### 2.4 Hilt 模块定义（预留扩展）
+
+**技术规范**:
+- **@Singleton 作用域**: Database、ImageLoader、OcrEngine 等全局单例必须使用 `@Singleton` 标注
+- **@ViewModelScoped 作用域**: ViewModel 相关依赖使用 `@HiltViewModel` 和 `@ViewModelScoped`
+- **接口绑定**: 在 Module 中明确接口（Repository）与实现类（RepositoryImpl）的映射关系
+- **当前状态**: 项目采用手动 DI（AppContainer），Hilt 为预留扩展方案
 
 ## 3. Agent 执行规约 (Execution Rules)
 
-- **构造函数注入**：优先使用构造函数注入，避免在类内部通过 `AppContainer` 手动获取依赖
-- **接口绑定**：在 `AppContainer` 或 DI 配置中，必须明确接口（Repository）与实现类（RepositoryImpl）的映射关系
-- **[MUST]** 新增全局 Service 或 Repository 后，必须同步更新 `AppContainer.kt`
-- **[MUST]** 修改 Entity 或 Repository 后，检查是否需要更新 Database 版本号
+- **延迟初始化**: 所有全局依赖必须使用 `by lazy` 确保单例且线程安全
+- **故障回退**: 美颜引擎初始化失败时必须自动回退，严禁崩溃
+- **状态管理**: 回退原因必须通过 `BeautyEngineRuntimeState` 记录，支持 UI 层查询与消费
+- **依赖封装**: ViewModel 依赖必须通过 `MediaViewModelDependencies` 数据结构聚合
+- **Factory 模式**: 禁止直接在 Activity/Fragment 中实例化 ViewModel，必须使用 Factory
+- **I18N**: 回退提示文案必须提取到 strings.xml，支持多语言
+- **日志规范**: 引擎切换、回退事件需记录 `PicMe:DI` 日志
+- **生命周期对齐**: OCR Processor 必须在 ViewModel `onCleared()` 时释放资源
 
 ## 4. 常见陷阱检查清单 (Checklist)
 
-- [ ] 是否在 ViewModel 中通过依赖注入获取了 Context？（警告：可能导致内存泄漏，应注入 ApplicationContext）
-- [ ] 单例对象是否真的需要全局唯一？（过度使用单例会增状态管理的复杂度）
-- [ ] 是否正确使用了 `@Singleton` 和 `@ViewModelScoped`？（避免作用域混淆）
-- [ ] 新增的 Repository 是否已在 `AppContainer.kt` 中注册？
-- [ ] 接口与实现的绑定关系是否清晰？（避免直接实例化实现类）
-- [ ] 是否避免了循环依赖？（A 依赖 B，B 又依赖 A）
+- [ ] 是否对所有全局依赖使用了 by lazy？(确保单例与线程安全)
+- [ ] 美颜引擎初始化失败是否有回退机制？(try-catch + PixelFree 兜底)
+- [ ] 回退原因是否正确记录到 BeautyEngineRuntimeState？(支持 UI 查询)
+- [ ] ViewModel Factory 是否正确注入了全部依赖？(检查 Dependencies 数据类)
+- [ ] 是否在 ViewModel onCleared 中释放了 OCR 资源？(避免内存泄漏)
+- [ ] 新增 Repository 后是否更新了 AppContainer？(保持依赖完整性)
+- [ ] 是否避免了在 ViewModel 中直接注入 Activity Context？(应使用 ApplicationContext)
+- [ ] 单例对象是否真的需要全局唯一？(过度使用会增加状态管理复杂度)
+- [ ] 是否正确区分了 Singleton 与 ViewModelScoped？(避免作用域混淆)
+- [ ] 是否避免了循环依赖？(A 依赖 B，B 又依赖 A)
 
 ## 5. 与产品文档对照 (Product Alignment)
 
@@ -58,7 +171,9 @@
 - ✅ 易于测试 → 所有依赖都可轻松替换为 Mock 实现
 - ✅ 无内存泄漏 → 生命周期严格对齐，避免不当引用
 
-**技术决策记录**：
-- 选择 Hilt 而非 Koin：编译期检查、更好的性能、官方推荐
-- 构造函数注入优先：依赖显式声明，更易测试和维护
-- 严格作用域管理：避免内存泄漏，确保组件生命周期正确
+**技术决策记录**:
+- 选择手动 DI 而非 Hilt：项目规模适中，手动 DI 更轻量、易理解；Hilt 作为预留扩展
+- 使用 by lazy 延迟初始化：确保单例、线程安全，避免启动时不必要的资源分配
+- 策略模式实现引擎切换：支持运行时动态切换，便于灰度发布与 A/B 测试
+- 故障回退机制：R Plan 异常时自动降级到 PixelFree，保证核心功能可用
+- 依赖数据结构封装：通过 MediaViewModelDependencies 聚合依赖，简化 Factory 构造
