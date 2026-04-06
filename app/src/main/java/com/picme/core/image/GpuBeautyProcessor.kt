@@ -241,51 +241,101 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
     override suspend fun applyLipColor(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
-                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
-                // 预设 12 种唇色
-                val lipColors = listOf(
-                    intArrayOf(212, 117, 125), // 豆沙色
-                    intArrayOf(196, 51, 67),   // 正红色
-                    intArrayOf(255, 127, 80),  // 珊瑚色
-                    intArrayOf(204, 51, 102),  // 玫瑰色
-                    intArrayOf(230, 102, 102), // 樱花粉
-                    intArrayOf(153, 51, 76),   // 梅子色
-                    intArrayOf(217, 89, 89),   // 西柚色
-                    intArrayOf(191, 64, 89),   // 枫叶红
-                    intArrayOf(242, 128, 128), // 水红色
-                    intArrayOf(179, 38, 64),   // 姨妈红
-                    intArrayOf(224, 107, 97),  // 番茄红
-                    intArrayOf(209, 77, 107)   // 浆果色
-                )
-                
-                val color = lipColors[colorIndex.coerceIn(0, lipColors.size - 1)]
-                val intensity = (strength / 100f) * 0.5f  // 控制强度
-                
-                // 使用 ColorMatrix 添加唇色效果
-                val colorMatrix = ColorMatrix().apply {
-                    set(floatArrayOf(
-                        1f, 0f, 0f, 0f, (color[0] / 255f - 0.5f) * intensity * 100f,
-                        0f, 1f, 0f, 0f, (color[1] / 255f - 0.5f) * intensity * 100f,
-                        0f, 0f, 1f, 0f, (color[2] / 255f - 0.5f) * intensity * 100f,
-                        0f, 0f, 0f, 1f, 0f
-                    ))
-                }
-                
-                val paint = Paint().apply {
-                    colorFilter = ColorMatrixColorFilter(colorMatrix)
-                    isAntiAlias = true
-                }
-                
-                val canvas = android.graphics.Canvas(mutableBitmap)
-                canvas.drawBitmap(bitmap, 0f, 0f, paint)
-                
-                mutableBitmap
+                // 使用区域着色算法，只处理嘴部区域
+                applyLipColorRegional(bitmap, strength, colorIndex)
             } catch (e: Exception) {
                 Logger.e(TAG, "LipColor error", e)
                 bitmap
             }
         }
+    }
+    
+    /**
+     * 区域唇色算法 - 只处理图像下半部分的中间区域（嘴部区域）
+     */
+    private fun applyLipColorRegional(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
+        if (strength <= 0) return bitmap
+
+        // 12 种预设唇色 (ARGB)
+        val lipColors = intArrayOf(
+            0xFFD4757D.toInt(), // 0: 豆沙色
+            0xFFC43343.toInt(), // 1: 正红色
+            0xFFFF7F50.toInt(), // 2: 珊瑚色
+            0xFFE0527C.toInt(), // 3: 玫瑰色
+            0xFFFF6B9D.toInt(), // 4: 粉色
+            0xFF9B2335.toInt(), // 5: 酒红色
+            0xFFFFA07A.toInt(), // 6: 浅粉色
+            0xFFCD5C5C.toInt(), // 7: 印度红
+            0xFFDC143C.toInt(), // 8: 深红色
+            0xFFFFB6C1.toInt(), // 9: 浅玫瑰色
+            0xFFB22222.toInt(), // 10: 火砖色
+            0xFFFF1493.toInt()  // 11: 深粉色
+        )
+
+        val targetColor = lipColors.getOrElse(colorIndex) { lipColors[0] }
+        // 增加强度确保效果可见
+        val normalizedStrength = (strength / 100f * 0.85f).coerceIn(0f, 0.85f)
+
+        val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val width = result.width
+        val height = result.height
+        val pixels = IntArray(width * height)
+
+        result.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val targetR = (targetColor shr 16) and 0xFF
+        val targetG = (targetColor shr 8) and 0xFF
+        val targetB = targetColor and 0xFF
+
+        var lipPixelCount = 0
+        var processedPixelCount = 0
+        
+        // 处理区域：图像下半部分的中间区域（嘴部区域）
+        val startY = (height * 0.6).toInt()
+        val endY = (height * 0.8).toInt()
+        val centerX = width / 2
+        val maxRadius = width * 0.3
+
+        for (py in startY until endY) {
+            for (px in 0 until width) {
+                val i = py * width + px
+                if (i >= pixels.size) continue
+                
+                val distFromCenter = kotlin.math.abs(px - centerX)
+                if (distFromCenter > maxRadius) continue
+                
+                val pixel = pixels[i]
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+
+                // 超宽松检测：只要有一定颜色就处理
+                val hasColor = r > 40 && g > 20 && b > 15
+                val notTooBright = (r + g + b) < 600
+                
+                if (hasColor && notTooBright) {
+                    lipPixelCount++
+                    
+                    val positionFactor = 1.0f - (distFromCenter / maxRadius) * 0.4f
+                    val effectiveStrength = normalizedStrength * positionFactor
+
+                    if (effectiveStrength > 0.08f) {
+                        processedPixelCount++
+                        
+                        val newR = (r * (1 - effectiveStrength) + targetR * effectiveStrength).toInt().coerceIn(0, 255)
+                        val newG = (g * (1 - effectiveStrength) + targetG * effectiveStrength).toInt().coerceIn(0, 255)
+                        val newB = (b * (1 - effectiveStrength) + targetB * effectiveStrength).toInt().coerceIn(0, 255)
+
+                        pixels[i] = (pixel and 0xFF000000.toInt()) or (newR shl 16) or (newG shl 8) or newB
+                    }
+                }
+            }
+        }
+
+        Logger.d(TAG, "Lip color (R_PLAN): detected=$lipPixelCount, processed=$processedPixelCount, strength=$strength")
+
+        result.setPixels(pixels, 0, width, 0, 0, width, height)
+        return result
     }
     
     override suspend fun applyBlush(bitmap: Bitmap, strength: Float): Bitmap {

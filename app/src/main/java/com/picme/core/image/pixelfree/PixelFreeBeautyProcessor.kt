@@ -241,10 +241,98 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
     }
 
     override suspend fun applyLipColor(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
-        // PixelFree SDK 可能需要美妆资源
-        // 如果没有加载美妆资源，返回原图
-        Logger.w(TAG, "Lip color not supported without makeup bundle")
-        return bitmap
+        // 由于 PixelFree SDK 需要美妆 bundle 资源，当前使用色彩叠加模拟唇色效果
+        // 使用超宽松的检测条件确保效果可见
+        return applyLipColorSimulation(bitmap, strength, colorIndex)
+    }
+
+    /**
+     * 模拟唇色效果 - 基于色彩叠加
+     * 使用超宽松的条件确保效果可见，后续可优化为基于人脸关键点
+     */
+    private fun applyLipColorSimulation(bitmap: Bitmap, strength: Float, colorIndex: Int): Bitmap {
+        if (strength <= 0) return bitmap
+
+        // 12 种预设唇色 (ARGB)
+        val lipColors = intArrayOf(
+            0xFFD4757D.toInt(), // 0: 豆沙色
+            0xFFC43343.toInt(), // 1: 正红色
+            0xFFFF7F50.toInt(), // 2: 珊瑚色
+            0xFFE0527C.toInt(), // 3: 玫瑰色
+            0xFFFF6B9D.toInt(), // 4: 粉色
+            0xFF9B2335.toInt(), // 5: 酒红色
+            0xFFFFA07A.toInt(), // 6: 浅粉色
+            0xFFCD5C5C.toInt(), // 7: 印度红
+            0xFFDC143C.toInt(), // 8: 深红色
+            0xFFFFB6C1.toInt(), // 9: 浅玫瑰色
+            0xFFB22222.toInt(), // 10: 火砖色
+            0xFFFF1493.toInt()  // 11: 深粉色
+        )
+
+        val targetColor = lipColors.getOrElse(colorIndex) { lipColors[0] }
+        // 增加强度确保效果可见
+        val normalizedStrength = (strength / 100f * 0.85f).coerceIn(0f, 0.85f)
+
+        val result = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val width = result.width
+        val height = result.height
+        val pixels = IntArray(width * height)
+
+        result.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val targetR = (targetColor shr 16) and 0xFF
+        val targetG = (targetColor shr 8) and 0xFF
+        val targetB = targetColor and 0xFF
+
+        var lipPixelCount = 0
+        var processedPixelCount = 0
+        
+        // 处理区域：图像下半部分的中间区域（嘴部区域）
+        val startY = (height * 0.6).toInt()
+        val endY = (height * 0.8).toInt()
+        val centerX = width / 2
+        val maxRadius = width * 0.3
+
+        for (py in startY until endY) {
+            for (px in 0 until width) {
+                val i = py * width + px
+                if (i >= pixels.size) continue
+                
+                val distFromCenter = kotlin.math.abs(px - centerX)
+                if (distFromCenter > maxRadius) continue
+                
+                val pixel = pixels[i]
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+
+                // 超宽松检测：只要有一定颜色就处理
+                val hasColor = r > 40 && g > 20 && b > 15
+                val notTooBright = (r + g + b) < 600
+                
+                if (hasColor && notTooBright) {
+                    lipPixelCount++
+                    
+                    val positionFactor = 1.0f - (distFromCenter / maxRadius) * 0.4f
+                    val effectiveStrength = normalizedStrength * positionFactor
+
+                    if (effectiveStrength > 0.08f) {
+                        processedPixelCount++
+                        
+                        val newR = (r * (1 - effectiveStrength) + targetR * effectiveStrength).toInt().coerceIn(0, 255)
+                        val newG = (g * (1 - effectiveStrength) + targetG * effectiveStrength).toInt().coerceIn(0, 255)
+                        val newB = (b * (1 - effectiveStrength) + targetB * effectiveStrength).toInt().coerceIn(0, 255)
+
+                        pixels[i] = (pixel and 0xFF000000.toInt()) or (newR shl 16) or (newG shl 8) or newB
+                    }
+                }
+            }
+        }
+
+        Logger.d(TAG, "Lip color: detected=$lipPixelCount, processed=$processedPixelCount, strength=$strength")
+
+        result.setPixels(pixels, 0, width, 0, 0, width, height)
+        return result
     }
 
     override suspend fun applyBlush(bitmap: Bitmap, strength: Float): Bitmap {
@@ -278,7 +366,25 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
     ): Bitmap {
         initializeIfNeeded()
 
-        // 一次性设置所有美颜参数，然后统一处理
+        var result = bitmap
+
+        // ========== 第一步：妆容调节（唇色、腮红、眉毛）==========
+        // 注意：必须在 PixelFree 处理之前应用，因为 PixelFree 的美白/磨皮
+        // 会改变肤色特征，导致唇色检测失效
+        if (faces.isNotEmpty()) {
+            if (settings.lipColor > 0) {
+                Logger.d(TAG, "Applying lip color BEFORE PixelFree processing: ${settings.lipColor}")
+                result = applyLipColor(result, settings.lipColor, settings.lipColorIndex)
+            }
+            if (settings.blush > 0) {
+                result = applyBlush(result, settings.blush)
+            }
+            if (settings.eyebrow > 0) {
+                result = applyEyebrow(result, settings.eyebrow)
+            }
+        }
+
+        // ========== 第二步：PixelFree SDK 基础美颜（磨皮、美白、瘦脸、大眼）==========
         if (settings.smoothing > 0) {
             setBeautyParam(PFBeautyFilterType.PFBeautyFilterTypeFaceBlurStrength, settings.smoothing / 100f)
         }
@@ -295,8 +401,20 @@ class PixelFreeBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
 
-        // 处理一次
-        return processWithPixelFree(bitmap)
+        // 处理基础美颜
+        result = processWithPixelFree(result)
+
+        // ========== 第三步：身材管理 ==========
+        if (faces.isNotEmpty() && (settings.bodyEnhancement != 0f || settings.legExtension > 0f)) {
+            if (settings.bodyEnhancement != 0f) {
+                result = applyBodyEnhancement(result, settings.bodyEnhancement)
+            }
+            if (settings.legExtension > 0) {
+                result = applyLegExtension(result, settings.legExtension)
+            }
+        }
+
+        return result
     }
 
     /**

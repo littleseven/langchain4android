@@ -156,6 +156,16 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     if (uiState.beautySettings.bigEyes > 0f) {
         activeEffects.add("EYE")
     }
+    // 妆容调节
+    if (uiState.beautySettings.lipColor > 0f) {
+        activeEffects.add("LIP(${uiState.beautySettings.lipColor.toInt()})#${uiState.beautySettings.lipColorIndex}")
+    }
+    if (uiState.beautySettings.blush > 0f) {
+        activeEffects.add("BLUSH")
+    }
+    if (uiState.beautySettings.eyebrow > 0f) {
+        activeEffects.add("BROW")
+    }
 
     val effectsText = if (activeEffects.isEmpty()) {
         "Effects: None"
@@ -237,6 +247,48 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                 fontSize = 10.sp
             )
         }
+        
+        // 唇色调试信息
+        val lipDebugText = buildString {
+            append("LIP: ${uiState.beautySettings.lipColor.toInt()}% #${uiState.beautySettings.lipColorIndex}")
+            if (uiState.beautySettings.lipColor > 0) {
+                append(" | ${uiState.beautyDebugState.strategy.name}")
+                if (uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE) {
+                    append(":${uiState.beautyDebugState.pixelFreeLinkMode?.name ?: "N/A"}")
+                }
+                // 提示：预览不支持唇色，只在拍照后处理
+                append(" | Preview:NOT_SUPPORTED")
+            }
+        }
+        Text(
+            text = lipDebugText,
+            color = if (uiState.beautySettings.lipColor > 0) Color(0xFFFF80AB) else Color.White.copy(alpha = 0.6f),
+            fontSize = 10.sp
+        )
+        
+        // 提示信息
+        if (uiState.beautySettings.lipColor > 0) {
+            Text(
+                text = "Note: Lip color only works in captured photo",
+                color = Color(0xFFFFB74D),
+                fontSize = 9.sp
+            )
+        }
+        
+        // 人脸检测调试信息
+        val hasFace = uiState.faceWarpParams.hasFace
+        val faceDebugText = buildString {
+            append("Face: ${if (hasFace) "DETECTED" else "NONE"}")
+            if (hasFace) {
+                append(" | Center: (${"%.2f".format(uiState.faceWarpParams.faceCenterX)}, ${"%.2f".format(uiState.faceWarpParams.faceCenterY)})")
+                append(" | Radius: ${"%.2f".format(uiState.faceWarpParams.faceRadius)}")
+            }
+        }
+        Text(
+            text = faceDebugText,
+            color = if (hasFace) Color(0xFF80D8FF) else Color(0xFFFFA000),
+            fontSize = 10.sp
+        )
     }
 }
 

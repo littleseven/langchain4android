@@ -9,6 +9,7 @@ import android.view.Surface
 import com.hapi.pixelfree.PFBeautyFilterType
 import com.hapi.pixelfree.PFDetectFormat
 import com.hapi.pixelfree.PFImageInput
+import com.hapi.pixelfree.PFMakeupPart
 import com.hapi.pixelfree.PFRotationMode
 import com.hapi.pixelfree.PFSrcType
 import com.hapi.pixelfree.PixelFree
@@ -103,16 +104,8 @@ class PixelFreeGLSurfaceView @JvmOverloads constructor(
                 Log.d(TAG, "Filter bundle loaded")
             }
             
-            // 加载美妆资源（如果有）
-            val makeupData = pixelFree.readBundleFile(context, "makeup_name.bundle")
-            if (makeupData != null) {
-                pixelFree.createBeautyItemFormBundle(
-                    makeupData,
-                    makeupData.size,
-                    PFSrcType.PFSrcTypeMakeup
-                )
-                Log.d(TAG, "Makeup bundle loaded")
-            }
+            // 加载美妆资源（使用 JSON 配置方式）
+            loadMakeupFromJson("makeup/lip_colors/makeup.json")
             
             isInitialized = true
             Log.d(TAG, "PixelFree initialized successfully")
@@ -248,6 +241,79 @@ class PixelFreeGLSurfaceView @JvmOverloads constructor(
      */
     fun setBigEyesStrength(value: Float) {
         setBeautyParam(PFBeautyFilterType.PFBeautyFilterTypeFace_EyeStrength, value.coerceIn(0f, 1f))
+    }
+    
+    /**
+     * 从 JSON 配置文件加载美妆资源
+     * @param makeupJsonPath makeup.json 文件路径（assets 目录下）
+     */
+    fun loadMakeupFromJson(makeupJsonPath: String) {
+        if (!isInitialized) {
+            Log.w(TAG, "Cannot load makeup: PixelFree not initialized")
+            return
+        }
+        
+        try {
+            // 使用 setMakeupPath 加载美妆 JSON 配置
+            val result = pixelFree.setMakeupPath(makeupJsonPath)
+            if (result == 0) {
+                Log.d(TAG, "Makeup loaded successfully from: $makeupJsonPath")
+            } else {
+                Log.w(TAG, "Failed to load makeup from: $makeupJsonPath, result=$result")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading makeup from JSON: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * 设置唇色强度
+     * @param strength 强度值 (0.0 - 1.0)
+     * 
+     * 注意：PixelFree SDK 需要美妆资源 bundle 才能支持唇色功能。
+     * 当前实现仅记录日志，实际效果需要通过其他方式实现（如后期处理）。
+     */
+    fun setLipColorStrength(strength: Float) {
+        if (!isInitialized) {
+            Log.w(TAG, "Cannot set lip color: PixelFree not initialized")
+            return
+        }
+        
+        // 检查是否已加载美妆资源
+        val normalizedStrength = strength.coerceIn(0f, 1f)
+        
+        try {
+            // 尝试使用 setMakeupPartDegree，但需要先加载美妆资源
+            val result = pixelFree.setMakeupPartDegree(PFMakeupPart.PFMakeupPartLip, normalizedStrength)
+            if (result == 0) {
+                Log.d(TAG, "Set lip color strength: $normalizedStrength (makeup resource loaded)")
+            } else {
+                // 资源未加载，记录警告
+                Log.w(TAG, "Lip color requires makeup bundle resource. Result=$result. " +
+                        "Please ensure makeup bundle is loaded via createBeautyItemFormBundle()")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting lip color: ${e.message}. " +
+                    "Makeup functionality may not be available in this SDK version.", e)
+        }
+    }
+    
+    /**
+     * 清除美妆效果
+     */
+    fun clearMakeup() {
+        if (!isInitialized) {
+            return
+        }
+        
+        try {
+            val result = pixelFree.clearMakeup()
+            if (result == 0) {
+                Log.d(TAG, "Makeup cleared")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error clearing makeup: ${e.message}", e)
+        }
     }
     
     // ========== 公开方法 ==========
