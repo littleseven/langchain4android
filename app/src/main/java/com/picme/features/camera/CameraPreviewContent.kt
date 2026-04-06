@@ -90,16 +90,19 @@ internal fun CameraPreviewContent(
         CameraPreviewDebugStatus(uiState = uiState)
         CameraPreviewSideControls(uiState = uiState, actions = actions)
 
+        // Pro Mode Controls - MUST be before CameraBottomControls to be on top layer
         if (uiState.captureMode == MediaType.PRO && !isAnyPanelOpen) {
+            android.util.Log.d("ProMode", "=== ProModeControls RENDERING === exposure=${uiState.exposureCompensation}, range=${uiState.exposureRange}")
             ProModeControls(
                 exposure = uiState.exposureCompensation,
                 exposureRange = uiState.exposureRange,
                 onExposureChange = actions.onExposureChange,
                 whiteBalance = uiState.whiteBalanceMode,
                 onWhiteBalanceChange = actions.onWhiteBalanceChange,
+                onClose = { actions.onModeChange(MediaType.PHOTO) },  // Close pro mode, switch to photo
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 200.dp)
+                    .padding(bottom = 260.dp)
             )
         }
 

@@ -75,6 +75,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -122,7 +123,7 @@ fun CameraLeftControls(
         modifier = modifier
             .padding(16.dp)
             .statusBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
         if (showDebugTools) {
@@ -179,7 +180,7 @@ fun CameraRightControls(
         modifier = modifier
             .padding(16.dp)
             .statusBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),  // 减小间距以容纳更多按钮
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.End
     ) {
         // 美颜总开关（独立于子面板入口）
@@ -221,7 +222,7 @@ fun CameraRightControls(
         )
         
         // 分组间距：美颜组 -> 构图组
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // 构图类工具：画幅 -> 网格
         ControlButton(
@@ -241,7 +242,7 @@ fun CameraRightControls(
         )
 
         // 分组间距：构图组 -> 风格组
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // 风格类工具：场景 -> 滤镜
         ControlButton(
@@ -266,12 +267,12 @@ fun ControlButton(
 ) {
     FilledIconButton(
         onClick = onClick,
-        modifier = modifier.size(44.dp),
+        modifier = modifier.size(48.dp),
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = if (isActive) {
                 MaterialTheme.colorScheme.primary
             } else {
-                Color.Black.copy(alpha = 0.4f)
+                Color.Black.copy(alpha = 0.5f)
             },
             contentColor = if (isActive) Color.Black else Color.White
         )
@@ -289,12 +290,12 @@ fun ControlPainterButton(
 ) {
     FilledIconButton(
         onClick = onClick,
-        modifier = modifier.size(44.dp),
+        modifier = modifier.size(48.dp),
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = if (isActive) {
                 MaterialTheme.colorScheme.primary
             } else {
-                Color.Black.copy(alpha = 0.4f)
+                Color.Black.copy(alpha = 0.5f)
             },
             contentColor = if (isActive) Color.Black else Color.White
         )
@@ -462,7 +463,7 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(filter.displayNameRes),
                     color = if (isSelected) {
@@ -1324,40 +1325,131 @@ fun ProModeControls(
     onExposureChange: (Int) -> Unit,
     whiteBalance: Int,
     onWhiteBalanceChange: (Int) -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                stringResource(R.string.ev),
-                color = Color.White,
-                modifier = Modifier.width(40.dp)
-            )
+        // Header with title and close button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.AutoFixHigh,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.pro_mode),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            // Close button
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Box(contentAlignment = Alignment.Center) {
+            // Debug: Log exposure range
+            LaunchedEffect(exposureRange) {
+                android.util.Log.d("ProMode", "Exposure range: ${exposureRange.first} to ${exposureRange.last}, current: $exposure")
+            }
+            
             Slider(
                 value = exposure.toFloat(),
-                onValueChange = { onExposureChange(it.toInt()) },
                 valueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat(),
                 steps = if (exposureRange.last > exposureRange.first) {
                     exposureRange.last - exposureRange.first - 1
                 } else {
                     0
                 },
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = if (exposure > 0) "+$exposure" else exposure.toString(),
-                color = Color.White,
-                modifier = Modifier.width(40.dp)
+                onValueChange = { newValue ->
+                    android.util.Log.d("ProMode", "Exposure changed to: ${newValue.toInt()}")
+                    onExposureChange(newValue.toInt())
+                },
+                enabled = true,
+                interactionSource = interactionSource,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),  // Increase touch target
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.onSurface,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                ),
+                thumb = {
+                    val thumbScale by animateFloatAsState(
+                        if (isPressed) 1.5f else 1f,
+                        label = "thumbScale"
+                    )
+                    Spacer(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .scale(thumbScale)
+                            .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    )
+                },
+                track = { sliderPositions ->
+                    val fraction = if (exposureRange.last > exposureRange.first) {
+                        (exposure.toFloat() - exposureRange.first.toFloat()) / (exposureRange.last.toFloat() - exposureRange.first.toFloat())
+                    } else {
+                        0f
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color.White.copy(alpha = 0.1f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(fraction)
+                                .fillMaxHeight()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                            MaterialTheme.colorScheme.primary
+                                        )
+                                    )
+                                )
+                        )
+                    }
+                }
             )
         }
 
+        // White Balance Control
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(listOf(0, 1, 2, 3, 4)) { mode ->
                 val label = when (mode) {

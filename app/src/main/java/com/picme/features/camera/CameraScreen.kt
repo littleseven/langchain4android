@@ -331,7 +331,9 @@ private fun buildCameraPreviewActions(
     onCaptureModeChanged: (MediaType) -> Unit,
     onSelectedFilterChanged: (FilterType) -> Unit,
     onBeautySettingsChanged: (BeautySettings) -> Unit,
-    onAspectRatioChanged: (Int) -> Unit
+    onAspectRatioChanged: (Int) -> Unit,
+    onExposureCompensationChanged: (Int) -> Unit,
+    onWhiteBalanceModeChanged: (Int) -> Unit
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,
@@ -394,8 +396,15 @@ private fun buildCameraPreviewActions(
         onToggleEyebrow = { panelState.openMakeupEntry(MakeupEntry.EYEBROW) },
         onToggleBodyManagement = panelState::toggleBodyManagement,
         onZoomPresetClick = { ratio -> cameraControl?.setZoomRatio(ratio) },
-        onExposureChange = { exposure -> cameraControl?.setExposureCompensationIndex(exposure) },
-        onWhiteBalanceChange = { _ -> },
+        onExposureChange = { exposure -> 
+            onExposureCompensationChanged(exposure)
+            cameraControl?.setExposureCompensationIndex(exposure)
+            android.util.Log.d("ProMode", "Local state updated: exposure=$exposure")
+        },
+        onWhiteBalanceChange = { wb ->
+            onWhiteBalanceModeChanged(wb)
+            android.util.Log.d("ProMode", "White balance updated: $wb")
+        },
         onSceneSelected = { scene ->
             onCurrentSceneChanged(scene)
             panelState.showSceneSelector = false
@@ -563,6 +572,8 @@ fun CameraContent(
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
     var beautySettings by remember { mutableStateOf(BeautySettings(enabled = true)) }
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
+    var exposureCompensation by remember { mutableIntStateOf(0) }
+    var whiteBalanceMode by remember { mutableIntStateOf(0) }
 
     val previewRuntimeViews = rememberPreviewRuntimeViews(
         context = context,
@@ -1099,9 +1110,9 @@ CameraPreviewContent(
         ),
         aspectRatio = aspectRatio,
         lensFacing = lensFacing,
-        exposureCompensation = 0,
+        exposureCompensation = exposureCompensation,
         exposureRange = -2..2,
-        whiteBalanceMode = 0
+        whiteBalanceMode = whiteBalanceMode
     ),
     actions = buildCameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,
@@ -1147,7 +1158,9 @@ CameraPreviewContent(
                 updatedSettings = updatedSettings
             )
         },
-        onAspectRatioChanged = { ratio -> aspectRatio = ratio }
+        onAspectRatioChanged = { ratio -> aspectRatio = ratio },
+        onExposureCompensationChanged = { exposure -> exposureCompensation = exposure },
+        onWhiteBalanceModeChanged = { wb -> whiteBalanceMode = wb }
     )
 )
 
