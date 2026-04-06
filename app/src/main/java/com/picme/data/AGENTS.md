@@ -1,5 +1,11 @@
 # Data 层开发指令 (Data Consistency & Performance)
 
+> **边界声明（Boundary Statement）**
+> - 本文档仅承载本模块的实现细节（架构、代码约束、检查清单）。
+> - 产品目标与验收口径以 `PRODUCT.md` 为准；交互流程与体验规则以 `docs/FEATURES.md` 为准。
+> - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
+> - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
+
 **模块定位**：确保 PicMe 的媒体元数据和用户设置在任何情况下都安全、高效地存储。
 
 **主要维护者**：[RD] 全栈工程师
