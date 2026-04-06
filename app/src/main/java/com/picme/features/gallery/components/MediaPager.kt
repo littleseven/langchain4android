@@ -13,6 +13,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,6 +55,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,19 +64,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -84,6 +92,7 @@ import com.picme.domain.model.MediaType
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
+import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -98,35 +107,41 @@ fun MediaPager(
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(true) }
+    var currentPageZoomed by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+
+    LaunchedEffect(pagerState.currentPage) {
+        currentPageZoomed = false
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
-            pageSpacing = 16.dp
+            pageSpacing = 16.dp,
+            userScrollEnabled = !currentPageZoomed
         ) { pageIndex ->
             val asset = assets[pageIndex]
             if (asset.type == MediaType.VIDEO) {
                 VideoPlayer(uri = asset.uri)
             } else {
-                AsyncImage(
-                    model = asset.uri,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .combinedClickable(
-                            onClick = { 
-                                Log.d("PicMe:UX", "Toggle info visibility via click")
-                                showInfo = !showInfo 
-                            },
-                            onLongClick = {
-                                Log.d("PicMe:UX", "Trigger OCR via long press")
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onStartOcr(asset.uri)
-                            }
-                        ),
-                    contentScale = ContentScale.Fit
+                ZoomableImage(
+                    uri = asset.uri,
+                    onClick = {
+                        Log.d("PicMe:UX", "Toggle info visibility via click")
+                        showInfo = !showInfo
+                    },
+                    onLongClick = {
+                        Log.d("PicMe:UX", "Trigger OCR via long press")
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onStartOcr(asset.uri)
+                    },
+                    onZoomStateChanged = { scale ->
+                        if (pageIndex == pagerState.currentPage) {
+                            currentPageZoomed = scale > 1.02f
+                        }
+                    }
                 )
             }
         }
@@ -144,7 +159,17 @@ fun MediaPager(
                 Log.d("PicMe:UX", "Request delete media: ${currentAsset.id}")
                 onDelete(currentAsset) 
             },
-            onStartOcr = { 
+            onShare = {
+                val currentAsset = assets[pagerState.currentPage]
+                Log.d("PicMe:UX", "Share media from pager: ${currentAsset.id}")
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    putExtra(Intent.EXTRA_STREAM, currentAsset.uri.toUri())
+                    type = if (currentAsset.type == MediaType.VIDEO) "video/*" else "image/*"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, null))
+            },
+            onStartOcr = {
                 val currentAsset = assets[pagerState.currentPage]
                 Log.d("PicMe:UX", "Trigger OCR via toolbar button for asset: ${currentAsset.id}")
                 onStartOcr(currentAsset.uri) 
@@ -165,6 +190,74 @@ fun MediaPager(
                 Log.d("PicMe:UX", "Dismiss OCR result overlay")
                 onDismissOcr()
             }
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ZoomableImage(
+    uri: String,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onZoomStateChanged: (Float) -> Unit
+) {
+    var scale by remember(uri) { mutableStateOf(1f) }
+    var offset by remember(uri) { mutableStateOf(Offset.Zero) }
+    var containerSize by remember(uri) { mutableStateOf(IntSize.Zero) }
+
+    fun clampOffset(nextOffset: Offset, nextScale: Float): Offset {
+        if (nextScale <= 1f || containerSize.width == 0 || containerSize.height == 0) {
+            return Offset.Zero
+        }
+        val maxX = (containerSize.width * (nextScale - 1f)) / 2f
+        val maxY = (containerSize.height * (nextScale - 1f)) / 2f
+        return Offset(
+            x = nextOffset.x.coerceIn(-maxX, maxX),
+            y = nextOffset.y.coerceIn(-maxY, maxY)
+        )
+    }
+
+    SideEffect {
+        onZoomStateChanged(scale)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { size ->
+                containerSize = size
+                offset = clampOffset(offset, scale)
+            }
+            .pointerInput(uri) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val nextScale = (scale * zoom).coerceIn(1f, 4f)
+                    val nextOffset = clampOffset(offset + pan, nextScale)
+                    scale = nextScale
+                    offset = if (abs(nextScale - 1f) < 0.01f) {
+                        Offset.Zero
+                    } else {
+                        nextOffset
+                    }
+                }
+            }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+    ) {
+        AsyncImage(
+            model = uri,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                },
+            contentScale = ContentScale.Fit
         )
     }
 }
@@ -369,6 +462,7 @@ private fun MediaPagerTopControls(
     showInfo: Boolean,
     onToggleInfo: () -> Unit,
     onDelete: () -> Unit,
+    onShare: () -> Unit,
     onStartOcr: () -> Unit
 ) {
     Row(
@@ -419,6 +513,19 @@ private fun MediaPagerTopControls(
                     Icons.Rounded.Info,
                     contentDescription = null,
                     tint = if (showInfo) Color.Black else Color.White
+                )
+            }
+
+            IconButton(
+                onClick = { onShare() },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f)
+                )
+            ) {
+                Icon(
+                    Icons.Rounded.Share,
+                    contentDescription = stringResource(R.string.ocr_share),
+                    tint = Color.White
                 )
             }
 

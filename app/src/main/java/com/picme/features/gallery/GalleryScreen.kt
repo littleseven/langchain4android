@@ -1,6 +1,7 @@
 package com.picme.features.gallery
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.SelectAll
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -111,6 +113,30 @@ private fun resolveGroupTitle(context: Context, group: GroupedMedia): String {
         GroupTitleType.SWIMWEAR -> context.getString(R.string.swimwear)
         GroupTitleType.SEXY -> context.getString(R.string.sexy)
     }
+}
+
+private fun shareMediaAssets(context: Context, assets: List<MediaAsset>) {
+    if (assets.isEmpty()) {
+        return
+    }
+
+    val uris = assets.map { mediaAsset -> mediaAsset.uri.toUri() }
+    val shareIntent = if (uris.size == 1) {
+        val firstAsset = assets.first()
+        Intent(Intent.ACTION_SEND).apply {
+            putExtra(Intent.EXTRA_STREAM, uris.first())
+            type = if (firstAsset.type == MediaType.VIDEO) "video/*" else "image/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            type = "*/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
+
+    context.startActivity(Intent.createChooser(shareIntent, null))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,7 +223,11 @@ fun GalleryScreen(
                         isSelectionMode = false
                         selectedIds.clear()
                     },
-                    onGroupingModeSelected = { viewModel.setGroupingMode(it) },
+                    onShareSelected = {
+                        val selectedAssets = selectedIds.mapNotNull { id -> mediaById[id] }
+                        shareMediaAssets(context, selectedAssets)
+                    },
+                    onGroupingModeSelected = { mode -> viewModel.setGroupingMode(mode) },
                     onManageDuplicates = { viewModel.toggleDuplicateManager(true) }
                 )
             } else if (showDuplicateManager) {
@@ -345,6 +375,7 @@ private fun GalleryTopBar(
     onToggleSelectionMode: () -> Unit,
     onSelectAll: () -> Unit,
     onDeleteSelected: () -> Unit,
+    onShareSelected: () -> Unit,
     onGroupingModeSelected: (GroupingMode) -> Unit,
     onManageDuplicates: () -> Unit
 ) {
@@ -372,10 +403,13 @@ private fun GalleryTopBar(
         actions = {
             if (isSelectionMode) {
                 IconButton(onClick = onSelectAll) {
-                    Icon(Icons.Rounded.SelectAll, contentDescription = null)
+                    Icon(Icons.Rounded.SelectAll, contentDescription = stringResource(R.string.select_all))
+                }
+                IconButton(onClick = onShareSelected) {
+                    Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.ocr_share))
                 }
                 IconButton(onClick = onDeleteSelected) {
-                    Icon(Icons.Rounded.Delete, contentDescription = null)
+                    Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete))
                 }
             } else {
                 IconButton(onClick = onManageDuplicates) {
