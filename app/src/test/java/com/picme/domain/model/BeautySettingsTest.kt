@@ -12,7 +12,7 @@ class BeautySettingsTest {
     // ==================== 默认值测试 ====================
 
     @Test
-    fun `default BeautySettings has all values at zero or false`() {
+    fun `default BeautySettings has correct default values`() {
         val settings = BeautySettings()
 
         assertFalse(settings.enabled)
@@ -20,10 +20,11 @@ class BeautySettingsTest {
         assertEquals(0f, settings.whitening, 0.001f)
         assertEquals(0f, settings.slimFace, 0.001f)
         assertEquals(0f, settings.bigEyes, 0.001f)
-        assertEquals(0f, settings.lipColor, 0.001f)
+        assertEquals(BeautySettings.DEFAULT_LIP_COLOR, settings.lipColor, 0.001f)
         assertEquals(0, settings.lipColorIndex)
-        assertEquals(0f, settings.blush, 0.001f)
-        assertEquals(0f, settings.eyebrow, 0.001f)
+        assertEquals(BeautySettings.DEFAULT_BLUSH, settings.blush, 0.001f)
+        assertEquals(0, settings.blushColorFamily)
+        assertEquals(BeautySettings.DEFAULT_EYEBROW, settings.eyebrow, 0.001f)
         assertEquals(0f, settings.bodyEnhancement, 0.001f)
         assertEquals(0f, settings.legExtension, 0.001f)
     }
@@ -60,8 +61,22 @@ class BeautySettingsTest {
     // ==================== hasAnyEffect() 测试 ====================
 
     @Test
-    fun `hasAnyEffect returns false for default settings`() {
+    fun `hasAnyEffect returns true for default settings due to non-zero defaults`() {
         val settings = BeautySettings()
+
+        // 由于 lipColor, blush, eyebrow 有非零默认值，所以 hasAnyEffect 应该返回 true
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns false when only enabled is true and others are zero`() {
+        // 手动设置为零值（覆盖默认值）
+        val settings = BeautySettings(
+            enabled = true,
+            lipColor = 0f,
+            blush = 0f,
+            eyebrow = 0f
+        )
 
         assertFalse(settings.hasAnyEffect())
     }
@@ -144,17 +159,27 @@ class BeautySettingsTest {
     }
 
     @Test
-    fun `hasAnyEffect returns false when only lipColorIndex is set`() {
+    fun `hasAnyEffect returns false when only lipColorIndex is set and other effects are zero`() {
         // lipColorIndex 不影响 hasAnyEffect 结果
-        val settings = BeautySettings(lipColorIndex = 5)
+        val settings = BeautySettings(
+            lipColorIndex = 5,
+            lipColor = 0f,
+            blush = 0f,
+            eyebrow = 0f
+        )
 
         assertFalse(settings.hasAnyEffect())
     }
 
     @Test
-    fun `hasAnyEffect returns false when only enabled is true`() {
+    fun `hasAnyEffect returns false when only enabled is true with zeroed defaults`() {
         // enabled 标志不影响 hasAnyEffect 结果
-        val settings = BeautySettings(enabled = true)
+        val settings = BeautySettings(
+            enabled = true,
+            lipColor = 0f,
+            blush = 0f,
+            eyebrow = 0f
+        )
 
         assertFalse(settings.hasAnyEffect())
     }
@@ -163,18 +188,19 @@ class BeautySettingsTest {
 
     @Test
     fun `hasAnyEffect with smoothing at boundary values`() {
-        assertFalse(BeautySettings(smoothing = 0f).hasAnyEffect())
-        assertTrue(BeautySettings(smoothing = 0.1f).hasAnyEffect())
-        assertTrue(BeautySettings(smoothing = 100f).hasAnyEffect())
+        // 需要显式设置其他默认值为0
+        assertFalse(BeautySettings(smoothing = 0f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
+        assertTrue(BeautySettings(smoothing = 0.1f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
+        assertTrue(BeautySettings(smoothing = 100f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
     }
 
     @Test
     fun `hasAnyEffect with slimFace at boundary values`() {
-        assertFalse(BeautySettings(slimFace = 0f).hasAnyEffect())
-        assertTrue(BeautySettings(slimFace = 0.1f).hasAnyEffect())
-        assertTrue(BeautySettings(slimFace = -0.1f).hasAnyEffect())
-        assertTrue(BeautySettings(slimFace = 50f).hasAnyEffect())
-        assertTrue(BeautySettings(slimFace = -50f).hasAnyEffect())
+        assertFalse(BeautySettings(slimFace = 0f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
+        assertTrue(BeautySettings(slimFace = 0.1f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
+        assertTrue(BeautySettings(slimFace = -0.1f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
+        assertTrue(BeautySettings(slimFace = 50f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
+        assertTrue(BeautySettings(slimFace = -50f, lipColor = 0f, blush = 0f, eyebrow = 0f).hasAnyEffect())
     }
 
     @Test
