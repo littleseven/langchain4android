@@ -103,6 +103,9 @@
     <string name="unknown">Unknown</string>
     <string name="person_group">Person Group %1$s</string>
     <string name="debug">Debug</string>
+    <string name="show_camera_info">Show Camera Info</string>
+    <string name="show_face_debug">Show Face Debug</string>
+    <string name="show_log_overlay">Show Log Overlay</string>
     <string name="aspect_ratio">Aspect Ratio</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>

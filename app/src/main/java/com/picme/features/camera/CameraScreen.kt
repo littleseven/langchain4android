@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,7 @@ import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -312,17 +314,10 @@ private fun buildCameraPreviewUiState(
 
 private fun buildCameraPreviewActions(
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit,
     lensFacing: Int,
     onLensFacingChanged: (Int) -> Unit,
     onActualLensFacingChanged: (Int) -> Unit,
     panelState: CameraPanelState,
-    showCameraInfo: Boolean,
-    onShowCameraInfoChanged: (Boolean) -> Unit,
-    debugUiEnabled: Boolean,
-    onLogOverlayToggleRequested: () -> Unit,
-    showFaceDebugOverlay: Boolean,
-    onShowFaceDebugOverlayChanged: (Boolean) -> Unit,
     cameraControl: CameraControl?,
     onCurrentSceneChanged: (ScenePreset) -> Unit,
     onCurrentGridChanged: (GridType) -> Unit,
@@ -337,7 +332,7 @@ private fun buildCameraPreviewActions(
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,
-        onNavigateToDebug = onNavigateToDebug,
+        onNavigateToDebug = {}, // 已废弃,保留空实现以兼容
         onFlipCamera = {
             val nextLens = nextLensFacing(lensFacing)
             onLensFacingChanged(nextLens)
@@ -364,9 +359,7 @@ private fun buildCameraPreviewActions(
                 onPanelVisibilityChanged = { isVisible -> panelState.showRatioSelector = isVisible }
             )
         },
-        onToggleCameraInfo = {
-            onShowCameraInfoChanged(!showCameraInfo)
-        },
+        onToggleCameraInfo = {}, // 已废弃,由设置页控制
         onToggleScene = {
             togglePrimaryPanel(
                 isCurrentlyVisible = panelState.showSceneSelector,
@@ -381,14 +374,8 @@ private fun buildCameraPreviewActions(
                 onPanelVisibilityChanged = { isVisible -> panelState.showGridSelector = isVisible }
             )
         },
-        onToggleLogs = {
-            if (debugUiEnabled) {
-                onLogOverlayToggleRequested()
-            }
-        },
-        onToggleFaceDebugOverlay = {
-            onShowFaceDebugOverlayChanged(!showFaceDebugOverlay)
-        },
+        onToggleLogs = {}, // 已废弃,由设置页控制
+        onToggleFaceDebugOverlay = {}, // 已废弃,由设置页控制
         onToggleFacialRefinement = panelState::toggleFacialRefinement,
         onToggleMakeupAdjustment = panelState::toggleMakeupAdjustment,
         onToggleLipColor = { panelState.openMakeupEntry(MakeupEntry.LIP_COLOR) },
@@ -480,7 +467,6 @@ private fun resolvePreviewTargetView(
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit,
     viewModel: MediaViewModel
 ) {
     // RD 沉浸式模式：隐藏系统栏
@@ -516,8 +502,7 @@ fun CameraScreen(
         CameraContent(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
-            onNavigateToSettings = onNavigateToSettings,
-            onNavigateToDebug = onNavigateToDebug
+            onNavigateToSettings = onNavigateToSettings
         )
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -535,8 +520,7 @@ fun CameraScreen(
 fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit
+    onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val runtimeContext = rememberCameraRuntimeContext(context)
@@ -545,6 +529,9 @@ fun CameraContent(
     val coroutineScope = runtimeContext.coroutineScope
     val beautyStrategy = runtimeContext.beautyStrategy
     val debugUiEnabled = runtimeContext.debugUiEnabled
+    val showCameraInfoInPreview = runtimeContext.showCameraInfoInPreview
+    val showFaceDebugOverlay = runtimeContext.showFaceDebugOverlay
+    val showLogOverlay = runtimeContext.showLogOverlay
     val faceLandmarkModeEnabled = runtimeContext.faceLandmarkModeEnabled
     val rPlanRecoveryAvailableAtMs = runtimeContext.rPlanRecoveryAvailableAtMs
     val lifecycleOwner = runtimeContext.lifecycleOwner
@@ -733,9 +720,11 @@ fun CameraContent(
     }
 
     val panelState = rememberCameraPanelState()
-    var showCameraInfo by remember { mutableStateOf(false) }
-    var showLogOverlay by remember { mutableStateOf(false) }
-    var showFaceDebugOverlay by remember { mutableStateOf(false) }
+    val logOverlayScope = rememberCoroutineScope()
+    // 移除本地 state,改用设置页配置
+    // var showCameraInfo by remember { mutableStateOf(false) }
+    // var showLogOverlay by remember { mutableStateOf(false) }
+    // var showFaceDebugOverlay by remember { mutableStateOf(false) }
 
     var currentScene by remember { mutableStateOf(ScenePreset.NONE) }
     var currentGrid by remember { mutableStateOf(GridType.NONE) }
@@ -1088,7 +1077,7 @@ CameraPreviewContent(
         isRecording = isRecording,
         isStable = isStable,
         panelState = panelState,
-        showCameraInfo = showCameraInfo,
+        showCameraInfo = showCameraInfoInPreview,
         debugUiEnabled = debugUiEnabled,
         currentScene = currentScene,
         currentGrid = currentGrid,
@@ -1116,19 +1105,12 @@ CameraPreviewContent(
     ),
     actions = buildCameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,
-        onNavigateToDebug = onNavigateToDebug,
         lensFacing = lensFacing,
         onLensFacingChanged = { updatedLensFacing -> lensFacing = updatedLensFacing },
         onActualLensFacingChanged = { updatedLensFacing ->
             Logger.d("Camera", "Action lens sync: $updatedLensFacing")
         },
         panelState = panelState,
-        showCameraInfo = showCameraInfo,
-        onShowCameraInfoChanged = { showInfo -> showCameraInfo = showInfo },
-        debugUiEnabled = debugUiEnabled,
-        onLogOverlayToggleRequested = { showLogOverlay = !showLogOverlay },
-        showFaceDebugOverlay = showFaceDebugOverlay,
-        onShowFaceDebugOverlayChanged = { showDebug -> showFaceDebugOverlay = showDebug },
         cameraControl = cameraControl,
         onCurrentSceneChanged = { scene -> currentScene = scene },
         onCurrentGridChanged = { grid -> currentGrid = grid },
@@ -1165,7 +1147,11 @@ CameraPreviewContent(
 )
 
         if (debugUiEnabled && showLogOverlay) {
-            LogOverlay(onDismiss = { showLogOverlay = false })
+            LogOverlay(onDismiss = { 
+                logOverlayScope.launch {
+                    userPreferencesRepository.updateShowLogOverlay(false)
+                }
+            })
         }
 
 }
