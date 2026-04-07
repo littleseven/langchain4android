@@ -50,6 +50,9 @@ class UserPreferencesRepository(private val context: Context) {
         val APP_LANGUAGE = stringPreferencesKey("app_language")
         val BEAUTY_STRATEGY = stringPreferencesKey("beauty_strategy")
         val DEBUG_UI_ENABLED = booleanPreferencesKey("debug_ui_enabled")
+        val SHOW_CAMERA_INFO_IN_PREVIEW = booleanPreferencesKey("show_camera_info_in_preview")
+        val SHOW_FACE_DEBUG_OVERLAY = booleanPreferencesKey("show_face_debug_overlay")
+        val SHOW_LOG_OVERLAY = booleanPreferencesKey("show_log_overlay")
         val FACE_DETECTION_LANDMARK_MODE = booleanPreferencesKey("face_detection_landmark_mode")
         val ADAPTIVE_FACE_DETECTION_INTERVAL = booleanPreferencesKey("adaptive_face_detection_interval")
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
@@ -181,6 +184,60 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun updateDebugUiEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DEBUG_UI_ENABLED] = enabled
+        }
+    }
+
+    val showCameraInfoInPreviewFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.SHOW_CAMERA_INFO_IN_PREVIEW] ?: false
+        }
+
+    suspend fun updateShowCameraInfoInPreview(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SHOW_CAMERA_INFO_IN_PREVIEW] = show
+        }
+    }
+
+    val showFaceDebugOverlayFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.SHOW_FACE_DEBUG_OVERLAY] ?: false
+        }
+
+    suspend fun updateShowFaceDebugOverlay(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SHOW_FACE_DEBUG_OVERLAY] = show
+        }
+    }
+
+    val showLogOverlayFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.SHOW_LOG_OVERLAY] ?: false
+        }
+
+    suspend fun updateShowLogOverlay(show: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SHOW_LOG_OVERLAY] = show
         }
     }
 

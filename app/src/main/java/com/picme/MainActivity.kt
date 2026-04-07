@@ -125,7 +125,6 @@ class MainActivity : ComponentActivity() {
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route) },
                                     viewModel = mediaViewModel
                                 )
                             }

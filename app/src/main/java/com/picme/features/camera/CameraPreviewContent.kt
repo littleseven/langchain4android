@@ -328,13 +328,6 @@ private fun BoxScope.CameraPreviewSideControls(
 ) {
     CameraLeftControls(
         onNavigateToSettings = actions.onNavigateToSettings,
-        onNavigateToDebug = actions.onNavigateToDebug,
-        onToggleCameraInfo = actions.onToggleCameraInfo,
-        onToggleLogs = actions.onToggleLogs,
-        onToggleFaceDebug = actions.onToggleFaceDebugOverlay,
-        isCameraInfoSelected = uiState.showCameraInfo,
-        isFaceDebugSelected = uiState.showFaceDebugOverlay,
-        showDebugTools = uiState.debugUiEnabled,
         modifier = Modifier.align(Alignment.TopStart)
     )
 

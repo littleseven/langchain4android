@@ -31,6 +31,9 @@ internal data class CameraRuntimeContext(
     val coroutineScope: CoroutineScope,
     val beautyStrategy: BeautyStrategy,
     val debugUiEnabled: Boolean,
+    val showCameraInfoInPreview: Boolean,
+    val showFaceDebugOverlay: Boolean,
+    val showLogOverlay: Boolean,
     val faceLandmarkModeEnabled: Boolean,
     val rPlanRecoveryAvailableAtMs: Long,
     val lifecycleOwner: androidx.lifecycle.LifecycleOwner
@@ -46,6 +49,9 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         initial = BeautyStrategy.R_PLAN
     )
     val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
+    val showCameraInfoInPreview by userPreferencesRepository.showCameraInfoInPreviewFlow.collectAsState(initial = false)
+    val showFaceDebugOverlay by userPreferencesRepository.showFaceDebugOverlayFlow.collectAsState(initial = false)
+    val showLogOverlay by userPreferencesRepository.showLogOverlayFlow.collectAsState(initial = false)
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val rPlanRecoveryAvailableAtMs by userPreferencesRepository.rPlanRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -56,6 +62,9 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         coroutineScope = coroutineScope,
         beautyStrategy = beautyStrategy,
         debugUiEnabled = debugUiEnabled,
+        showCameraInfoInPreview = showCameraInfoInPreview,
+        showFaceDebugOverlay = showFaceDebugOverlay,
+        showLogOverlay = showLogOverlay,
         faceLandmarkModeEnabled = faceLandmarkModeEnabled,
         rPlanRecoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
         lifecycleOwner = lifecycleOwner

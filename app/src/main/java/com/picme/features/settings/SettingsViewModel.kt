@@ -64,6 +64,27 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
             initialValue = FaceDetectIntervalProfile.BALANCED
         )
 
+    val showCameraInfoInPreview: StateFlow<Boolean> = repository.showCameraInfoInPreviewFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    val showFaceDebugOverlay: StateFlow<Boolean> = repository.showFaceDebugOverlayFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
+    val showLogOverlay: StateFlow<Boolean> = repository.showLogOverlayFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -88,6 +109,12 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     fun setDebugUiEnabled(enabled: Boolean) {
         viewModelScope.launch {
             repository.updateDebugUiEnabled(enabled)
+            // 关闭总开关时,同时关闭所有子选项
+            if (!enabled) {
+                repository.updateShowCameraInfoInPreview(false)
+                repository.updateShowFaceDebugOverlay(false)
+                repository.updateShowLogOverlay(false)
+            }
         }
     }
 
@@ -106,6 +133,24 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
     fun setFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile) {
         viewModelScope.launch {
             repository.updateFaceDetectIntervalProfile(profile)
+        }
+    }
+
+    fun setShowCameraInfoInPreview(show: Boolean) {
+        viewModelScope.launch {
+            repository.updateShowCameraInfoInPreview(show)
+        }
+    }
+
+    fun setShowFaceDebugOverlay(show: Boolean) {
+        viewModelScope.launch {
+            repository.updateShowFaceDebugOverlay(show)
+        }
+    }
+
+    fun setShowLogOverlay(show: Boolean) {
+        viewModelScope.launch {
+            repository.updateShowLogOverlay(show)
         }
     }
 }

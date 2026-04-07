@@ -110,13 +110,6 @@ private const val PANEL_HEIGHT_RATIO = 0.5f
 @Composable
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit,
-    onToggleCameraInfo: () -> Unit,
-    onToggleLogs: () -> Unit,
-    onToggleFaceDebug: () -> Unit,
-    isCameraInfoSelected: Boolean,
-    isFaceDebugSelected: Boolean,
-    showDebugTools: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -126,26 +119,6 @@ fun CameraLeftControls(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
-        if (showDebugTools) {
-            ControlButton(icon = Icons.Rounded.BugReport, onClick = onNavigateToDebug)
-        }
-        ControlButton(
-            icon = Icons.Rounded.Info,
-            onClick = onToggleCameraInfo,
-            isActive = isCameraInfoSelected
-        )
-        ControlButton(
-            icon = Icons.Rounded.FaceRetouchingNatural,
-            onClick = onToggleFaceDebug,
-            isActive = isFaceDebugSelected
-        )
-        if (showDebugTools) {
-            ControlButton(
-                icon = Icons.Rounded.Terminal,
-                onClick = onToggleLogs,
-                isActive = false
-            )
-        }
     }
 }
 

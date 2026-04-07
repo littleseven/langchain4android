@@ -104,6 +104,9 @@
     <string name="unknown">未知</string>
     <string name="person_group">人物分組 %1$s</string>
     <string name="debug">調試</string>
+    <string name="show_camera_info">顯示相機資訊</string>
+    <string name="show_face_debug">顯示人臉調試</string>
+    <string name="show_log_overlay">顯示日誌浮層</string>
     <string name="aspect_ratio">畫面比例</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>

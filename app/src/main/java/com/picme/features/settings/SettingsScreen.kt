@@ -75,6 +75,9 @@ fun SettingsScreen(
     val appLanguage by viewModel.appLanguage.collectAsState()
     val beautyStrategy by viewModel.beautyStrategy.collectAsState()
     val debugUiEnabled by viewModel.debugUiEnabled.collectAsState()
+    val showCameraInfoInPreview by viewModel.showCameraInfoInPreview.collectAsState()
+    val showFaceDebugOverlay by viewModel.showFaceDebugOverlay.collectAsState()
+    val showLogOverlay by viewModel.showLogOverlay.collectAsState()
     val faceDetectionLandmarkModeEnabled by viewModel.faceDetectionLandmarkModeEnabled.collectAsState()
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
@@ -84,6 +87,9 @@ fun SettingsScreen(
         appLanguage = appLanguage,
         beautyStrategy = beautyStrategy,
         debugUiEnabled = debugUiEnabled,
+        showCameraInfoInPreview = showCameraInfoInPreview,
+        showFaceDebugOverlay = showFaceDebugOverlay,
+        showLogOverlay = showLogOverlay,
         faceDetectionLandmarkModeEnabled = faceDetectionLandmarkModeEnabled,
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
@@ -91,6 +97,9 @@ fun SettingsScreen(
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
         onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
         onDebugUiEnabledChange = { enabled -> viewModel.setDebugUiEnabled(enabled) },
+        onShowCameraInfoInPreviewChange = { show -> viewModel.setShowCameraInfoInPreview(show) },
+        onShowFaceDebugOverlayChange = { show -> viewModel.setShowFaceDebugOverlay(show) },
+        onShowLogOverlayChange = { show -> viewModel.setShowLogOverlay(show) },
         onFaceDetectionLandmarkModeEnabledChange = { enabled ->
             viewModel.setFaceDetectionLandmarkModeEnabled(enabled)
         },
@@ -111,6 +120,9 @@ private fun SettingsContent(
     appLanguage: AppLanguage,
     beautyStrategy: BeautyStrategy,
     debugUiEnabled: Boolean,
+    showCameraInfoInPreview: Boolean,
+    showFaceDebugOverlay: Boolean,
+    showLogOverlay: Boolean,
     faceDetectionLandmarkModeEnabled: Boolean,
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
@@ -118,6 +130,9 @@ private fun SettingsContent(
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onBeautyStrategySelected: (BeautyStrategy) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
+    onShowCameraInfoInPreviewChange: (Boolean) -> Unit,
+    onShowFaceDebugOverlayChange: (Boolean) -> Unit,
+    onShowLogOverlayChange: (Boolean) -> Unit,
     onFaceDetectionLandmarkModeEnabledChange: (Boolean) -> Unit,
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
@@ -214,6 +229,23 @@ private fun SettingsContent(
                     checked = debugUiEnabled,
                     onCheckedChange = onDebugUiEnabledChange
                 )
+                if (debugUiEnabled) {
+                    DebugOptionRow(
+                        title = stringResource(R.string.show_camera_info),
+                        checked = showCameraInfoInPreview,
+                        onCheckedChange = onShowCameraInfoInPreviewChange
+                    )
+                    DebugOptionRow(
+                        title = stringResource(R.string.show_face_debug),
+                        checked = showFaceDebugOverlay,
+                        onCheckedChange = onShowFaceDebugOverlayChange
+                    )
+                    DebugOptionRow(
+                        title = stringResource(R.string.show_log_overlay),
+                        checked = showLogOverlay,
+                        onCheckedChange = onShowLogOverlayChange
+                    )
+                }
             }
         }
     }
@@ -401,6 +433,9 @@ fun SettingsScreenPreview() {
             appLanguage = AppLanguage.ENGLISH,
             beautyStrategy = BeautyStrategy.PIXEL_FREE,
             debugUiEnabled = true,
+            showCameraInfoInPreview = false,
+            showFaceDebugOverlay = false,
+            showLogOverlay = false,
             faceDetectionLandmarkModeEnabled = true,
             adaptiveFaceDetectionIntervalEnabled = true,
             faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
@@ -408,6 +443,9 @@ fun SettingsScreenPreview() {
             onAppLanguageSelected = {},
             onBeautyStrategySelected = {},
             onDebugUiEnabledChange = {},
+            onShowCameraInfoInPreviewChange = {},
+            onShowFaceDebugOverlayChange = {},
+            onShowLogOverlayChange = {},
             onFaceDetectionLandmarkModeEnabledChange = {},
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
