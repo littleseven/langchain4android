@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -77,7 +78,8 @@ fun CameraBottomControls(
         ) {
             GalleryThumbnail(lastMedia = lastMedia, onClick = onGalleryClick)
             ShutterButton(isRecording = isRecording, mode = captureMode, onClick = onCaptureClick)
-            FlipCameraButton(onClick = onFlipCamera)
+            // 翻转摄像头已移至左侧控制栏,此处留空保持布局平衡
+            Spacer(modifier = Modifier.size(48.dp))
         }
     }
 }
