@@ -328,6 +328,8 @@ private fun BoxScope.CameraPreviewSideControls(
 ) {
     CameraLeftControls(
         onNavigateToSettings = actions.onNavigateToSettings,
+        onFlipCamera = actions.onFlipCamera,
+        isFrontCamera = uiState.lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT,
         modifier = Modifier.align(Alignment.TopStart)
     )
 
@@ -337,30 +339,17 @@ private fun BoxScope.CameraPreviewSideControls(
         onToggleRatio = actions.onToggleRatio,
         onToggleScene = actions.onToggleScene,
         onToggleGrid = actions.onToggleGrid,
-        onToggleFacialRefinement = actions.onToggleFacialRefinement,
-        onToggleLipColor = actions.onToggleLipColor,
-        onToggleBlush = actions.onToggleBlush,
-        onToggleEyebrow = actions.onToggleEyebrow,
-        onToggleBodyManagement = actions.onToggleBodyManagement,
         onToggleBeautyEnabled = {
             actions.onBeautySettingsChanged(
                 uiState.beautySettings.copy(enabled = !uiState.beautySettings.enabled)
             )
         },
-        isBeautySelected = uiState.showFacialRefinement ||
-            uiState.showMakeupAdjustment ||
-            uiState.showBodyManagement ||
-            uiState.showBeautySelector,
+        isBeautySelected = uiState.showBeautySelector,
         isFilterSelected = uiState.showFilterSelector,
         isRatioSelected = uiState.showRatioSelector,
         isSceneActive = uiState.currentScene != ScenePreset.NONE,
         isGridActive = uiState.showGridSelector,
         isBeautyEnabled = uiState.beautySettings.enabled,
-        isFacialRefinementSelected = uiState.showFacialRefinement,
-        isLipColorSelected = uiState.showMakeupAdjustment && uiState.activeMakeupEntry == MakeupEntry.LIP_COLOR,
-        isBlushSelected = uiState.showMakeupAdjustment && uiState.activeMakeupEntry == MakeupEntry.BLUSH,
-        isEyebrowSelected = uiState.showMakeupAdjustment && uiState.activeMakeupEntry == MakeupEntry.EYEBROW,
-        isBodyManagementSelected = uiState.showBodyManagement,
         currentRatio = uiState.aspectRatio,
         modifier = Modifier.align(Alignment.TopEnd)
     )

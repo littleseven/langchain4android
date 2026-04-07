@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Cameraswitch
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Crop169
@@ -110,6 +111,8 @@ private const val PANEL_HEIGHT_RATIO = 0.5f
 @Composable
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
+    onFlipCamera: () -> Unit,
+    isFrontCamera: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -118,7 +121,15 @@ fun CameraLeftControls(
             .statusBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // 设置
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
+        
+        // 翻转摄像头
+        ControlButton(
+            icon = Icons.Rounded.Cameraswitch,
+            onClick = onFlipCamera,
+            isActive = false
+        )
     }
 }
 
@@ -129,11 +140,6 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
-    onToggleFacialRefinement: () -> Unit,
-    onToggleLipColor: () -> Unit,
-    onToggleBlush: () -> Unit,
-    onToggleEyebrow: () -> Unit,
-    onToggleBodyManagement: () -> Unit,
     onToggleBeautyEnabled: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
@@ -141,11 +147,6 @@ fun CameraRightControls(
     isSceneActive: Boolean,
     isGridActive: Boolean,
     isBeautyEnabled: Boolean,
-    isFacialRefinementSelected: Boolean = false,
-    isLipColorSelected: Boolean = false,
-    isBlushSelected: Boolean = false,
-    isEyebrowSelected: Boolean = false,
-    isBodyManagementSelected: Boolean = false,
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -156,45 +157,20 @@ fun CameraRightControls(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.End
     ) {
-        // 美颜总开关（独立于子面板入口）
+        // 美颜总开关（核心功能）
         ControlButton(
             icon = Icons.Rounded.AutoFixHigh,
             onClick = onToggleBeautyEnabled,
             isActive = isBeautyEnabled
         )
         
-        // 面部精修
+        // 美颜面板入口
         ControlButton(
             icon = Icons.Rounded.Face,
-            onClick = onToggleFacialRefinement,
-            isActive = isFacialRefinementSelected
+            onClick = onToggleBeauty,
+            isActive = isBeautySelected
         )
         
-        // 拍摄页并列妆容入口：唇色 / 腮红 / 眉毛
-        ControlPainterButton(
-            iconRes = R.drawable.ic_makeup_lips,
-            onClick = onToggleLipColor,
-            isActive = isLipColorSelected
-        )
-        ControlPainterButton(
-            iconRes = R.drawable.ic_makeup_cheek,
-            onClick = onToggleBlush,
-            isActive = isBlushSelected
-        )
-        ControlPainterButton(
-            iconRes = R.drawable.ic_makeup_eyebrow,
-            onClick = onToggleEyebrow,
-            isActive = isEyebrowSelected
-        )
-
-        // 身材管理
-        ControlButton(
-            icon = Icons.Rounded.SelfImprovement,
-            onClick = onToggleBodyManagement,
-            isActive = isBodyManagementSelected
-        )
-        
-        // 分组间距：美颜组 -> 构图组
         Spacer(modifier = Modifier.height(8.dp))
 
         // 构图类工具：画幅 -> 网格
@@ -214,7 +190,6 @@ fun CameraRightControls(
             isActive = isGridActive
         )
 
-        // 分组间距：构图组 -> 风格组
         Spacer(modifier = Modifier.height(8.dp))
 
         // 风格类工具：场景 -> 滤镜
