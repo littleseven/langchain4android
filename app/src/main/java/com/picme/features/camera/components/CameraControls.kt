@@ -41,6 +41,8 @@ import com.picme.domain.model.MediaType
 fun CameraBottomControls(
     lastMedia: MediaAsset?,
     zoomRatio: Float,
+    minZoomRatio: Float,
+    maxZoomRatio: Float,
     captureMode: MediaType,
     isRecording: Boolean,
     isAnyPanelOpen: Boolean,
@@ -60,7 +62,12 @@ fun CameraBottomControls(
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         if (!isAnyPanelOpen && captureMode != MediaType.PRO) {
-            ZoomControls(zoomRatio = zoomRatio, onZoomClick = onZoomPresetClick)
+            ZoomControls(
+                zoomRatio = zoomRatio,
+                minZoomRatio = minZoomRatio,
+                maxZoomRatio = maxZoomRatio,
+                onZoomClick = onZoomPresetClick
+            )
         }
 
         ModeSelector(
@@ -85,7 +92,12 @@ fun CameraBottomControls(
 }
 
 @Composable
-private fun ZoomControls(zoomRatio: Float, onZoomClick: (Float) -> Unit) {
+private fun ZoomControls(
+    zoomRatio: Float,
+    minZoomRatio: Float,
+    maxZoomRatio: Float,
+    onZoomClick: (Float) -> Unit
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier
@@ -93,20 +105,32 @@ private fun ZoomControls(zoomRatio: Float, onZoomClick: (Float) -> Unit) {
             .background(Color.Black.copy(alpha = 0.4f))
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        ZoomButton(label = "0.6x", isSelected = zoomRatio < 1f) { onZoomClick(0.6f) }
+        // 0.6x 按钮：仅在设备支持最小变焦比 <= 0.6 时显示
+        if (minZoomRatio <= 0.6f) {
+            ZoomButton(
+                label = "0.6x",
+                isSelected = zoomRatio < 0.9f
+            ) { onZoomClick(0.6f) }
+        }
         ZoomButton(
             label = "1x",
-            isSelected = zoomRatio >= 1f && zoomRatio < 2f
+            isSelected = zoomRatio >= 0.9f && zoomRatio < 1.5f
         ) {
             onZoomClick(1f)
         }
         ZoomButton(
             label = "2x",
-            isSelected = zoomRatio >= 2f && zoomRatio < 3.2f
+            isSelected = zoomRatio >= 1.5f && zoomRatio < 2.8f
         ) {
             onZoomClick(2f)
         }
-        ZoomButton(label = "3.2x", isSelected = zoomRatio >= 3.2f) { onZoomClick(3.2f) }
+        // 3.2x 按钮：仅在设备支持最大变焦比 >= 3.2 时显示
+        if (maxZoomRatio >= 3.2f) {
+            ZoomButton(
+                label = "3.2x",
+                isSelected = zoomRatio >= 2.8f
+            ) { onZoomClick(3.2f) }
+        }
     }
 }
 

@@ -37,6 +37,7 @@ internal fun bindCameraUseCases(
     onImageCaptureChanged: (ImageCapture) -> Unit,
     onCameraControlChanged: (CameraControl) -> Unit,
     onZoomRatioChanged: (Float) -> Unit,
+    onZoomRangeChanged: (minZoom: Float, maxZoom: Float) -> Unit,
     onActualLensFacingChanged: (Int) -> Unit,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
@@ -149,6 +150,7 @@ internal fun bindCameraUseCases(
         onCameraControlChanged(camera.cameraControl)
         camera.cameraInfo.zoomState.observe(lifecycleOwner) { state ->
             onZoomRatioChanged(state.zoomRatio)
+            onZoomRangeChanged(state.minZoomRatio, state.maxZoomRatio)
         }
         onActualLensFacingChanged(camera.cameraInfo.lensFacing)
         Logger.d(
