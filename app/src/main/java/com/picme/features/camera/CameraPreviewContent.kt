@@ -30,18 +30,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
 import com.picme.domain.model.MediaType
-import com.picme.features.camera.components.BeautySelector
-import com.picme.features.camera.components.BodyManagementSelector
+import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
 import com.picme.features.camera.components.CameraLeftControls
 import com.picme.features.camera.components.CameraOverlays
 import com.picme.features.camera.components.CameraRightControls
 import com.picme.features.camera.components.ControlPanel
 import com.picme.features.camera.components.DocumentDetectionOverlay
-import com.picme.features.camera.components.FacialRefinementSelector
 import com.picme.features.camera.components.FilterSelector
 import com.picme.features.camera.components.GridSelector
-import com.picme.features.camera.components.MakeupAdjustmentSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
@@ -52,13 +49,20 @@ internal fun CameraPreviewContent(
     uiState: CameraPreviewUiState,
     actions: CameraPreviewActions
 ) {
-    val isAnyPanelOpen = uiState.showFilterSelector || uiState.showBeautySelector || uiState.showRatioSelector ||
+    // 非美颜类面板开启状态（美颜面板用独立的 BeautyPanel 渲染，不走 PrimaryControlPanels）
+    val isAnyPanelOpen = uiState.showFilterSelector || uiState.showRatioSelector ||
         uiState.showSceneSelector || uiState.showGridSelector
+    val isBeautyPanelOpen = uiState.showBeautySelector
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            // 点击取景区空白处关闭所有面板
+            .clickable(
+                enabled = isAnyPanelOpen || isBeautyPanelOpen,
+                onClick = actions.onDismissPanels
+            ),
         contentAlignment = Alignment.Center
     ) {
         previewView()
@@ -120,7 +124,19 @@ internal fun CameraPreviewContent(
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        BeautySubPanels(uiState = uiState, actions = actions)
+        // 美颜面板（统一入口：使用美图秀秀风格 Tab 标签页）
+        AnimatedVisibility(
+            visible = isBeautyPanelOpen,
+            enter = slideInVertically(initialOffsetY = { offsetY -> offsetY }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { offsetY -> offsetY }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            BeautyPanel(
+                settings = uiState.beautySettings,
+                onSettingsChanged = actions.onBeautySettingsChanged,
+                onDismiss = actions.onDismissPanels
+            )
+        }
 
         if (uiState.captureMode == MediaType.DOCUMENT && !isAnyPanelOpen) {
             DocumentDetectionOverlay(
@@ -356,56 +372,6 @@ private fun BoxScope.CameraPreviewSideControls(
 }
 
 @Composable
-private fun BoxScope.BeautySubPanels(
-    uiState: CameraPreviewUiState,
-    actions: CameraPreviewActions
-) {
-    val isAnyBeautyPanelOpen =
-        uiState.showFacialRefinement || uiState.showMakeupAdjustment || uiState.showBodyManagement
-
-    AnimatedVisibility(
-        visible = isAnyBeautyPanelOpen,
-        enter = slideInVertically(initialOffsetY = { offsetY -> offsetY }) + fadeIn(),
-        exit = slideOutVertically(targetOffsetY = { offsetY -> offsetY }) + fadeOut(),
-        modifier = Modifier.align(Alignment.BottomCenter)
-    ) {
-        val title = when {
-            uiState.showFacialRefinement -> stringResource(R.string.facial_refinement)
-            uiState.showMakeupAdjustment -> when (uiState.activeMakeupEntry) {
-                MakeupEntry.LIP_COLOR -> stringResource(R.string.lip_color)
-                MakeupEntry.BLUSH -> stringResource(R.string.blush)
-                MakeupEntry.EYEBROW -> stringResource(R.string.eyebrow)
-            }
-            uiState.showBodyManagement -> stringResource(R.string.body_management)
-            else -> ""
-        }
-
-        ControlPanel(title = title, onDismiss = actions.onDismissPanels) {
-            when {
-                uiState.showFacialRefinement -> {
-                    FacialRefinementSelector(uiState.beautySettings) { updatedSettings ->
-                        actions.onBeautySettingsChanged(updatedSettings)
-                    }
-                }
-                uiState.showMakeupAdjustment -> {
-                    MakeupAdjustmentSelector(
-                        settings = uiState.beautySettings,
-                        activeEntry = uiState.activeMakeupEntry
-                    ) { updatedSettings ->
-                        actions.onBeautySettingsChanged(updatedSettings)
-                    }
-                }
-                uiState.showBodyManagement -> {
-                    BodyManagementSelector(uiState.beautySettings) { updatedSettings ->
-                        actions.onBeautySettingsChanged(updatedSettings)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun BoxScope.PrimaryControlPanels(
     uiState: CameraPreviewUiState,
     actions: CameraPreviewActions,
@@ -417,24 +383,10 @@ private fun BoxScope.PrimaryControlPanels(
         exit = slideOutVertically(targetOffsetY = { offsetY -> offsetY }) + fadeOut(),
         modifier = Modifier.align(Alignment.BottomCenter)
     ) {
-        val title = when {
-            uiState.showFilterSelector -> stringResource(R.string.filters)
-            uiState.showBeautySelector -> stringResource(R.string.beauty)
-            uiState.showRatioSelector -> stringResource(R.string.aspect_ratio)
-            uiState.showSceneSelector -> stringResource(R.string.scene)
-            uiState.showGridSelector -> stringResource(R.string.grid)
-            else -> ""
-        }
-
-        ControlPanel(title = title, onDismiss = actions.onDismissPanels) {
+        ControlPanel(onDismiss = actions.onDismissPanels) {
             when {
                 uiState.showFilterSelector -> {
                     FilterSelector(uiState.selectedFilter) { selected -> actions.onFilterSelected(selected) }
-                }
-                uiState.showBeautySelector -> {
-                    BeautySelector(uiState.beautySettings) { updatedSettings ->
-                        actions.onBeautySettingsChanged(updatedSettings)
-                    }
                 }
                 uiState.showRatioSelector -> {
                     RatioSelector(
