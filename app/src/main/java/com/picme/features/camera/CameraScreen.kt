@@ -197,6 +197,8 @@ internal data class CameraPreviewUiState(
     val focusIndicatorAlpha: Float,
     val lastMedia: MediaAsset?,
     val zoomRatio: Float,
+    val minZoomRatio: Float,
+    val maxZoomRatio: Float,
     val captureMode: MediaType,
     val isRecording: Boolean,
     val isStable: Boolean,
@@ -262,6 +264,8 @@ private fun buildCameraPreviewUiState(
     focusIndicatorAlpha: Float,
     lastMedia: MediaAsset?,
     zoomRatio: Float,
+    minZoomRatio: Float,
+    maxZoomRatio: Float,
     captureMode: MediaType,
     isRecording: Boolean,
     isStable: Boolean,
@@ -286,6 +290,8 @@ private fun buildCameraPreviewUiState(
         focusIndicatorAlpha = focusIndicatorAlpha,
         lastMedia = lastMedia,
         zoomRatio = zoomRatio,
+        minZoomRatio = minZoomRatio,
+        maxZoomRatio = maxZoomRatio,
         captureMode = captureMode,
         isRecording = isRecording,
         isStable = isStable,
@@ -767,6 +773,8 @@ fun CameraContent(
 
     var cameraControl: CameraControl? by remember { mutableStateOf(null) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
+    var minZoomRatio by remember { mutableFloatStateOf(1f) }
+    var maxZoomRatio by remember { mutableFloatStateOf(1f) }
     
     var facePoint by remember { mutableStateOf(Offset.Zero) }
     var isFaceLocked by remember { mutableStateOf(false) }
@@ -873,6 +881,10 @@ fun CameraContent(
             onImageCaptureChanged = { capture -> imageCapture = capture },
             onCameraControlChanged = { control -> cameraControl = control },
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },
+            onZoomRangeChanged = { minZoom, maxZoom ->
+                minZoomRatio = minZoom
+                maxZoomRatio = maxZoom
+            },
             onActualLensFacingChanged = { ignoredLensFacing ->
                 Logger.d("Camera", "Actual lens changed: $ignoredLensFacing")
             },
@@ -1073,6 +1085,8 @@ CameraPreviewContent(
         focusIndicatorAlpha = focusIndicatorAlpha.value,
         lastMedia = lastMedia,
         zoomRatio = zoomRatio,
+        minZoomRatio = minZoomRatio,
+        maxZoomRatio = maxZoomRatio,
         captureMode = captureMode,
         isRecording = isRecording,
         isStable = isStable,

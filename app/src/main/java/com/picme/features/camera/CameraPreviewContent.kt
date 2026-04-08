@@ -113,6 +113,8 @@ internal fun CameraPreviewContent(
         CameraBottomControls(
             lastMedia = uiState.lastMedia,
             zoomRatio = uiState.zoomRatio,
+            minZoomRatio = uiState.minZoomRatio,
+            maxZoomRatio = uiState.maxZoomRatio,
             captureMode = uiState.captureMode,
             isRecording = uiState.isRecording,
             isAnyPanelOpen = isAnyPanelOpen,
