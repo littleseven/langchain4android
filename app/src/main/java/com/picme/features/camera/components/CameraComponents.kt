@@ -39,6 +39,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
@@ -79,6 +80,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,9 +90,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -156,18 +156,12 @@ fun CameraRightControls(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.End
     ) {
-        // 美颜总开关（核心功能）
-        ControlButton(
-            icon = Icons.Rounded.AutoFixHigh,
-            onClick = onToggleBeautyEnabled,
-            isActive = isBeautyEnabled
-        )
-        
-        // 美颜面板入口
-        ControlButton(
-            icon = Icons.Rounded.Face,
-            onClick = onToggleBeauty,
-            isActive = isBeautySelected
+        // 美颜入口：单击展开面板，图标颜色区分开关状态
+        BeautyEntryButton(
+            isEnabled = isBeautyEnabled,
+            isPanelOpen = isBeautySelected,
+            onTogglePanel = onToggleBeauty,
+            onToggleEnabled = onToggleBeautyEnabled
         )
         
         Spacer(modifier = Modifier.height(8.dp))
@@ -202,6 +196,57 @@ fun CameraRightControls(
             onClick = onToggleFilter,
             isActive = isFilterSelected
         )
+    }
+}
+
+/**
+ * 美颜入口按钮
+ * - 单击：展开/收起美颜面板
+ * - 图标颜色：开启=主题色，关闭=灰色
+ * - 右上角小圆点：美颜已开启时显示，提示用户当前美颜状态
+ */
+@Composable
+private fun BeautyEntryButton(
+    isEnabled: Boolean,
+    isPanelOpen: Boolean,
+    onTogglePanel: () -> Unit,
+    onToggleEnabled: () -> Unit
+) {
+    Box(contentAlignment = Alignment.TopEnd) {
+        FilledIconButton(
+            onClick = onTogglePanel,
+            modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = when {
+                    isPanelOpen -> MaterialTheme.colorScheme.primary
+                    isEnabled -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                    else -> Color.Black.copy(alpha = 0.5f)
+                },
+                contentColor = when {
+                    isPanelOpen -> Color.Black
+                    isEnabled -> MaterialTheme.colorScheme.primary
+                    else -> Color.White.copy(alpha = 0.55f)
+                }
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.AutoFixHigh,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        // 美颜开启指示点（右上角绿点）
+        if (isEnabled && !isPanelOpen) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp, end = 4.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(1.dp, Color.Black.copy(alpha = 0.6f), CircleShape)
+            )
+        }
     }
 }
 
@@ -257,101 +302,62 @@ fun ControlPainterButton(
 
 @Composable
 fun ControlPanel(
-    title: String,
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    // Drawer-style panel: slides in from bottom, occupies bottom area of screen
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO
-    val density = LocalDensity.current
-    val panelHeightState = remember { mutableStateOf(0.dp) }
-    
-    val overlayHeight = panelHeightState.value
-        .plus(24.dp)
-        .coerceIn(160.dp, panelMaxHeight)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
     ) {
-        // 遮罩高度跟随面板内容，避免内容较少时出现过高的背景
+        // 半透明渐变背景遮罩（与 BeautyPanel 一致）
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(overlayHeight)
+                .height(panelMaxHeight + 24.dp)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.Black.copy(alpha = 0.72f),
-                            Color.Black.copy(alpha = 0.42f),
-                            Color.Transparent
-                        ),
-                        startY = 0f,
-                        endY = with(density) { overlayHeight.toPx() }
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.55f),
+                            Color.Black.copy(alpha = 0.82f)
+                        )
                     )
                 )
         )
         
-        // 控制面板：默认包裹内容，内容增多时最多占半屏
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.96f)
+                .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 8.dp)
-                .onSizeChanged { size ->
-                    panelHeightState.value = with(density) { size.height.toDp() }
-                }
-                .heightIn(max = panelMaxHeight - 16.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 16.dp, bottomEnd = 16.dp),
-            shadowElevation = 20.dp,
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-            )
+                .heightIn(max = panelMaxHeight),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shadowElevation = 16.dp,
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
-                    .fillMaxWidth()
-            ) {
-                // 固定标题栏：不随内容滚动
-                Row(
+            Column(modifier = Modifier.fillMaxWidth()) {
+
+                // ── 拖拽把手（与 BeautyPanel 一致，替代标题栏+关闭按钮）──
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(
-                        onClick = onDismiss,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Icon(
-                            Icons.Rounded.Close,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-                
-                // 内容区域：超高时可滚动，避免叠压和裁切
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 10.dp, bottom = 4.dp)
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                )
+
+                // 内容区域：超高时可滚动
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
                 ) {
                     content()
                 }
@@ -464,135 +470,356 @@ private fun FilterGradientPreview(filter: FilterType) {
     )
 }
 
+/**
+ * Beauty tabs enum - used by BeautyPanel for tab navigation.
+ * 3 tabs: Face (smoothing/whitening/slim/eyes) / Makeup (lip/blush/eyebrow) / Body (shape/legs)
+ */
+private enum class BeautyTab(val labelRes: Int, val icon: ImageVector) {
+    FACE(R.string.facial_refinement, Icons.Rounded.FaceRetouchingNatural),
+    MAKEUP(R.string.makeup_adjustment, Icons.Rounded.ColorLens),
+    BODY(R.string.body_management, Icons.Rounded.SelfImprovement)
+}
+
+/**
+ * 美颜面板（参考美图秀秀风格）
+ *
+ * 交互逻辑：
+ * - 底部横向分类 Tab，点击切换当前分类
+ * - 每个 Tab 下只展示本分类的 Slider / 色板
+ * - 点击取景区空白区域（onDismiss）关闭面板
+ */
 @Composable
-fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
-    val expandedCategoryState = remember { mutableStateOf<String?>(null) }
-    
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+fun BeautyPanel(
+    settings: BeautySettings,
+    onSettingsChanged: (BeautySettings) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO
+    var selectedTab by remember { mutableIntStateOf(0) }
+    val tabs = BeautyTab.values()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
     ) {
-        // 面部精修 - 可折叠
-        ExpandableSection(
-            title = stringResource(R.string.facial_refinement),
-            isExpanded = expandedCategoryState.value == "facial",
-            onToggle = { 
-                expandedCategoryState.value = if (expandedCategoryState.value == "facial") null else "facial"
-            }
-        ) {
-            BeautySlider(
-                icon = Icons.Rounded.Face,
-                label = stringResource(R.string.smoothing),
-                value = settings.smoothing,
-                valueRange = 0f..100f,
-                onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
-                onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
-            )
-
-            BeautySlider(
-                icon = Icons.Rounded.AutoFixHigh,
-                label = stringResource(R.string.whitening),
-                value = settings.whitening,
-                valueRange = 0f..100f,
-                onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
-                onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
-            )
-
-            BeautySlider(
-                icon = Icons.Rounded.FaceRetouchingNatural,
-                label = stringResource(R.string.slim_face),
-                value = settings.slimFace,
-                valueRange = -50f..50f,
-                onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
-                onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
-            )
-
-            BeautySlider(
-                icon = Icons.Rounded.Visibility,
-                label = stringResource(R.string.big_eyes),
-                value = settings.bigEyes,
-                valueRange = 0f..100f,
-                onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
-                onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
-            )
-
-        }
-        
-        // 妆容调节 - 可折叠
-        ExpandableSection(
-            title = stringResource(R.string.makeup_adjustment),
-            isExpanded = expandedCategoryState.value == "makeup",
-            onToggle = { 
-                expandedCategoryState.value = if (expandedCategoryState.value == "makeup") null else "makeup"
-            }
-        ) {
-            // 唇色选择器
-            LipColorSelector(
-                strength = settings.lipColor,
-                colorIndex = settings.lipColorIndex,
-                onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
-                onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
-                onReset = {
-                    onSettingsChanged(
-                        settings.copy(
-                            lipColor = BeautySettings.DEFAULT_LIP_COLOR,
-                            lipColorIndex = 0
+        // 半透明渐变背景遮罩
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(panelMaxHeight + 24.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.55f),
+                            Color.Black.copy(alpha = 0.82f)
                         )
                     )
-                }
-            )
-            
-            BlushColorFamilySelector(
-                selectedFamily = settings.blushColorFamily,
-                onFamilyChanged = { family ->
-                    onSettingsChanged(settings.copy(blushColorFamily = family))
-                }
-            )
+                )
+        )
 
-            BeautySlider(
-                icon = Icons.Rounded.FavoriteBorder,
-                label = stringResource(R.string.blush),
-                value = settings.blush,
-                valueRange = 0f..100f,
-                onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
-                onReset = { onSettingsChanged(settings.copy(blush = BeautySettings.DEFAULT_BLUSH)) }
-            )
-
-            BeautySlider(
-                icon = Icons.Rounded.LineStyle,
-                label = stringResource(R.string.eyebrow),
-                value = settings.eyebrow,
-                valueRange = 0f..100f,
-                onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
-                onReset = { onSettingsChanged(settings.copy(eyebrow = BeautySettings.DEFAULT_EYEBROW)) }
-            )
-        }
-        
-        // 身材管理 - 可折叠
-        ExpandableSection(
-            title = stringResource(R.string.body_management),
-            isExpanded = expandedCategoryState.value == "body",
-            onToggle = { 
-                expandedCategoryState.value = if (expandedCategoryState.value == "body") null else "body"
-            }
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .heightIn(max = panelMaxHeight),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shadowElevation = 16.dp,
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
         ) {
-            BeautySlider(
-                icon = Icons.Rounded.SelfImprovement,
-                label = stringResource(R.string.body_enhancement),
-                value = settings.bodyEnhancement,
-                valueRange = -30f..30f,
-                onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
-                onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
-            )
+            Column(modifier = Modifier.fillMaxWidth()) {
 
-            BeautySlider(
-                icon = Icons.Rounded.Timeline,
-                label = stringResource(R.string.leg_extension),
-                value = settings.legExtension,
-                valueRange = 0f..50f,
-                onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
-                onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
-            )
+                // ── 拖拽把手 ──
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 10.dp, bottom = 4.dp)
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                )
+
+                // ── 当前分类内容区（可滚动）──
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    when (tabs[selectedTab]) {
+                        BeautyTab.FACE -> {
+                            BeautySlider(
+                                icon = Icons.Rounded.Face,
+                                label = stringResource(R.string.smoothing),
+                                value = settings.smoothing,
+                                valueRange = 0f..100f,
+                                onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
+                                onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
+                            )
+                            BeautySlider(
+                                icon = Icons.Rounded.AutoFixHigh,
+                                label = stringResource(R.string.whitening),
+                                value = settings.whitening,
+                                valueRange = 0f..100f,
+                                onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
+                                onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
+                            )
+                            BeautySlider(
+                                icon = Icons.Rounded.FaceRetouchingNatural,
+                                label = stringResource(R.string.slim_face),
+                                value = settings.slimFace,
+                                valueRange = -50f..50f,
+                                onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
+                                onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
+                            )
+                            BeautySlider(
+                                icon = Icons.Rounded.Visibility,
+                                label = stringResource(R.string.big_eyes),
+                                value = settings.bigEyes,
+                                valueRange = 0f..100f,
+                                onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
+                                onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
+                            )
+                        }
+                        BeautyTab.MAKEUP -> {
+                            LipColorSelector(
+                                strength = settings.lipColor,
+                                colorIndex = settings.lipColorIndex,
+                                onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+                                onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+                                onReset = {
+                                    onSettingsChanged(
+                                        settings.copy(
+                                            lipColor = BeautySettings.DEFAULT_LIP_COLOR,
+                                            lipColorIndex = 0
+                                        )
+                                    )
+                                }
+                            )
+                            BlushColorFamilySelector(
+                                selectedFamily = settings.blushColorFamily,
+                                onFamilyChanged = { family ->
+                                    onSettingsChanged(settings.copy(blushColorFamily = family))
+                                }
+                            )
+                            BeautySlider(
+                                icon = Icons.Rounded.FavoriteBorder,
+                                label = stringResource(R.string.blush),
+                                value = settings.blush,
+                                valueRange = 0f..100f,
+                                onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+                                onReset = { onSettingsChanged(settings.copy(blush = BeautySettings.DEFAULT_BLUSH)) }
+                            )
+                            BeautySlider(
+                                icon = Icons.Rounded.LineStyle,
+                                label = stringResource(R.string.eyebrow),
+                                value = settings.eyebrow,
+                                valueRange = 0f..100f,
+                                onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+                                onReset = { onSettingsChanged(settings.copy(eyebrow = BeautySettings.DEFAULT_EYEBROW)) }
+                            )
+                        }
+                        BeautyTab.BODY -> {
+                            BeautySlider(
+                                icon = Icons.Rounded.SelfImprovement,
+                                label = stringResource(R.string.body_enhancement),
+                                value = settings.bodyEnhancement,
+                                valueRange = -30f..30f,
+                                onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
+                                onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
+                            )
+                            BeautySlider(
+                                icon = Icons.Rounded.Timeline,
+                                label = stringResource(R.string.leg_extension),
+                                value = settings.legExtension,
+                                valueRange = 0f..50f,
+                                onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
+                                onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
+                            )
+                        }
+                    }
+                }
+
+                // ── 底部横向分类 Tab 栏（3 个 Tab 均分宽度）──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(vertical = 8.dp)
+                ) {
+                    tabs.forEach { tab ->
+                        val index = tab.ordinal
+                        val isSelected = selectedTab == index
+                        val tabLabel = stringResource(tab.labelRes)
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    else Color.Transparent
+                                )
+                                .clickable { selectedTab = index }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tabLabel,
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+    // 保留兼容签名，内部委托给 BeautyPanel（不带 dismiss 的内嵌场景）
+    BeautyPanelContent(settings = settings, onSettingsChanged = onSettingsChanged)
+}
+
+/**
+ * 内嵌版内容（供 ControlPanel 内部复用，无 dismiss 按钮）
+ */
+@Composable
+private fun BeautyPanelContent(settings: BeautySettings, onSettingsChanged: (BeautySettings) -> Unit) {
+    val tabs = BeautyTab.values()
+    var selectedTab by remember { mutableIntStateOf(0) }
+
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // 横向 Tab 栏（均分宽度）
+        Row(modifier = Modifier.fillMaxWidth()) {
+            tabs.forEach { tab ->
+                val index = tab.ordinal
+                val isSelected = selectedTab == index
+                val tabLabel = stringResource(tab.labelRes)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            else Color.Transparent
+                        )
+                        .clickable { selectedTab = index }
+                        .padding(vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = tab.icon,
+                        contentDescription = tabLabel,
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
+
+        // 当前 Tab 内容
+        when (tabs[selectedTab]) {
+            BeautyTab.FACE -> {
+                BeautySlider(
+                    icon = Icons.Rounded.Face,
+                    label = stringResource(R.string.smoothing),
+                    value = settings.smoothing,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(smoothing = it)) },
+                    onReset = { onSettingsChanged(settings.copy(smoothing = 0f)) }
+                )
+                BeautySlider(
+                    icon = Icons.Rounded.AutoFixHigh,
+                    label = stringResource(R.string.whitening),
+                    value = settings.whitening,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(whitening = it)) },
+                    onReset = { onSettingsChanged(settings.copy(whitening = 0f)) }
+                )
+                BeautySlider(
+                    icon = Icons.Rounded.FaceRetouchingNatural,
+                    label = stringResource(R.string.slim_face),
+                    value = settings.slimFace,
+                    valueRange = -50f..50f,
+                    onValueChange = { onSettingsChanged(settings.copy(slimFace = it)) },
+                    onReset = { onSettingsChanged(settings.copy(slimFace = 0f)) }
+                )
+                BeautySlider(
+                    icon = Icons.Rounded.Visibility,
+                    label = stringResource(R.string.big_eyes),
+                    value = settings.bigEyes,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(bigEyes = it)) },
+                    onReset = { onSettingsChanged(settings.copy(bigEyes = 0f)) }
+                )
+            }
+            BeautyTab.MAKEUP -> {
+                LipColorSelector(
+                    strength = settings.lipColor,
+                    colorIndex = settings.lipColorIndex,
+                    onStrengthChanged = { onSettingsChanged(settings.copy(lipColor = it)) },
+                    onColorIndexChanged = { onSettingsChanged(settings.copy(lipColorIndex = it)) },
+                    onReset = {
+                        onSettingsChanged(
+                            settings.copy(
+                                lipColor = BeautySettings.DEFAULT_LIP_COLOR,
+                                lipColorIndex = 0
+                            )
+                        )
+                    }
+                )
+                BlushColorFamilySelector(
+                    selectedFamily = settings.blushColorFamily,
+                    onFamilyChanged = { family ->
+                        onSettingsChanged(settings.copy(blushColorFamily = family))
+                    }
+                )
+                BeautySlider(
+                    icon = Icons.Rounded.FavoriteBorder,
+                    label = stringResource(R.string.blush),
+                    value = settings.blush,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(blush = it)) },
+                    onReset = { onSettingsChanged(settings.copy(blush = BeautySettings.DEFAULT_BLUSH)) }
+                )
+                BeautySlider(
+                    icon = Icons.Rounded.LineStyle,
+                    label = stringResource(R.string.eyebrow),
+                    value = settings.eyebrow,
+                    valueRange = 0f..100f,
+                    onValueChange = { onSettingsChanged(settings.copy(eyebrow = it)) },
+                    onReset = { onSettingsChanged(settings.copy(eyebrow = BeautySettings.DEFAULT_EYEBROW)) }
+                )
+            }
+            BeautyTab.BODY -> {
+                BeautySlider(
+                    icon = Icons.Rounded.SelfImprovement,
+                    label = stringResource(R.string.body_enhancement),
+                    value = settings.bodyEnhancement,
+                    valueRange = -30f..30f,
+                    onValueChange = { onSettingsChanged(settings.copy(bodyEnhancement = it)) },
+                    onReset = { onSettingsChanged(settings.copy(bodyEnhancement = 0f)) }
+                )
+                BeautySlider(
+                    icon = Icons.Rounded.Timeline,
+                    label = stringResource(R.string.leg_extension),
+                    value = settings.legExtension,
+                    valueRange = 0f..50f,
+                    onValueChange = { onSettingsChanged(settings.copy(legExtension = it)) },
+                    onReset = { onSettingsChanged(settings.copy(legExtension = 0f)) }
+                )
+            }
         }
     }
 }
