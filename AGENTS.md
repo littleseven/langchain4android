@@ -86,7 +86,7 @@ docs/FEATURES.md (How: 交互与体验规则)
 
 ### 6.2 专项技术文档
 - 相机预览：`docs/CAMERA_PREVIEW_TECH_SPEC.md`
-- R 计划：`docs/R_PLAN_TECH_SPEC.md`
+- 大美丽：`docs/BIG_BEAUTY_TECH_SPEC.md`
 - PixelFree 兜底：`docs/PIXELFREE_FALLBACK_TECH_SPEC.md`
 
 ### 6.3 文档写作与审查规范

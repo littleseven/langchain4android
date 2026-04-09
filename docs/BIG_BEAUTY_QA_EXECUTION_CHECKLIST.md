@@ -1,8 +1,8 @@
-# R Plan QA 执行清单
+# 大美丽 QA 执行清单
 
-**适用范围**：R Plan 主引擎 + PixelFree 兜底链路
+**适用范围**：大美丽 主引擎 + PixelFree 兜底链路
 **最后更新**：2026-04-09
-**关联文档**：`R_PLAN_TECH_SPEC.md`、`CAMERA_PREVIEW_TECH_SPEC.md`、`PIXELFREE_FALLBACK_TECH_SPEC.md`、`FEATURES.md`
+**关联文档**：`BIG_BEAUTY_TECH_SPEC.md`、`CAMERA_PREVIEW_TECH_SPEC.md`、`PIXELFREE_FALLBACK_TECH_SPEC.md`、`FEATURES.md`
 
 ---
 
@@ -12,7 +12,7 @@
 - **统一回退入口**：`onGlWarmUpFallback(reason)`。
 - **策略持久化键**：`beauty_strategy`、`gl_engine_recovery_available_at_ms`。
 - **自动恢复触发**：`triggerManualGlEngineRecovery()`。
-- **Provider 视图切换状态**：`useProviderRenderView=true` 表示使用 R Plan Provider View；`false` 表示回落 `PreviewView`。
+- **Provider 视图切换状态**：`useProviderRenderView=true` 表示使用 大美丽 Provider View；`false` 表示回落 `PreviewView`。
 
 ---
 
@@ -78,7 +78,7 @@
 
 ## 3. 容灾回归步骤（手工）
 
-1. 设置策略为 `BIG_BEAUTY`，进入相机，确认 R Plan 预览可见。
+1. 设置策略为 `BIG_BEAUTY`，进入相机，确认 大美丽 预览可见。
 2. 人工注入初始化失败（例如抛异常），确认回退到 `PIXEL_FREE`。
 3. 验证持久化写入：`beauty_strategy=PIXEL_FREE` 且有 `gl_engine_recovery_available_at_ms`。
 4. 验证 `useProviderRenderView=false`，确认当前展示容器为 `PreviewView`。
@@ -93,8 +93,8 @@
 ### 4.1 P0（发布阻断）
 - [ ] `P0-01` 冷启动进入相机后，5s 内有可见预览，无黑屏无卡死。
 - [ ] `P0-02` 美颜参数滑杆调整后 100ms 内体感可见变化。
-- [ ] `P0-03` R Plan warm-up 失败可自动回退 PixelFree，且拍照功能可用。
-- [ ] `P0-04` 冷却结束后可自动重试 R Plan，不出现循环崩溃。
+- [ ] `P0-03` 大美丽 warm-up 失败可自动回退 PixelFree，且拍照功能可用。
+- [ ] `P0-04` 冷却结束后可自动重试 大美丽，不出现循环崩溃。
 - [ ] `P0-05` 调试浮层关键指标可读：`fps/processingMs/delayMs/cpuUsage/nullFrames`。
 
 ### 4.2 P1（质量增强）
@@ -151,7 +151,7 @@
 |--------|------------|---------------------|----------|------|
 | P0-01 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraScreenStartupTest` | 5 秒内预览容器可见，应用无崩溃 | 已建骨架 |
 | P0-02 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraBeautySliderLatencyTest` | 参数变更触发 UI 状态与 Provider 更新 | 已建骨架 |
-| P0-03 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `BeautyPreviewProviderFactoryTest` | R Plan init 失败后落到 `PIXEL_FREE`，且 `useProviderRenderView=false` | 已建骨架 |
+| P0-03 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `BeautyPreviewProviderFactoryTest` | 大美丽 init 失败后落到 `PIXEL_FREE`，且 `useProviderRenderView=false` | 已建骨架 |
 | P0-04 | unit + androidTest | `CameraP0AutomationSkeletonTest` + `UserPreferencesRepositoryRecoveryInstrumentedTest` | 冷却到期触发恢复，失败后再次回退并更新持久化状态 | 已建骨架 |
 | P0-05 | androidTest(UI) | `CameraP0AutomationSkeletonTest` / `CameraDebugOverlayMetricsTest` | 调试浮层可读到 `PerfStats` 五个字段 | 已建骨架 |
 | P1-01 | unit | `CameraPreviewRendererViewportTest` | 4:3 / 16:9 / FULL 视口比例正确 | 待实现 |
@@ -168,7 +168,7 @@
 
 1. RD Agent：补齐缺失测试类与 fake provider/fake clock。
 2. QA Agent：将 `P0-01` ~ `P1-05` 写入流水线执行列表。
-3. CR Agent：校验测试覆盖是否匹配本清单与 `R_PLAN_TECH_SPEC.md`。
+3. CR Agent：校验测试覆盖是否匹配本清单与 `BIG_BEAUTY_TECH_SPEC.md`。
 4. PM Agent：仅验收结果，不介入手工测试。
 5. 发布门禁：P0 全通过 + 无崩溃日志 + 报告归档完整。
 

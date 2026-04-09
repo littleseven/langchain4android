@@ -34,7 +34,7 @@
             │                         │
             ↓                         ↓
 ┌───────────────────────┐   ┌────────────────────────┐
-│ PixelFree 实现（短期）│   │ R 计划实现（中长期）    │
+│ PixelFree 实现（短期）│   │ 大美丽实现（中长期）    │
 ├───────────────────────┤   ├────────────────────────┤
 │ PixelFreeBeauty       │   │ GlBeauty               │
 │ PreviewProvider       │   │ PreviewProvider        │
@@ -124,7 +124,7 @@ class PixelFreeBeautyPreviewProvider(context: Context) : BeautyPreviewProvider {
 
 **技术文档**：`docs/PIXELFREE_FALLBACK_TECH_SPEC.md`
 
-### 3.2 中长期方案：R 计划自主研发
+### 3.2 中长期方案：大美丽自主研发
 
 **文件**：`app/src/main/java/com/picme/core/image/gl/GlBeautyPreviewProvider.kt`（App 层适配器）
 **模块**：`beauty-engine/src/main/java/com/picme/beauty/egl/`（渲染管线核心）
@@ -151,7 +151,7 @@ class GlBeautyPreviewProvider(context: Context) : BeautyPreviewProvider, BeautyP
 }
 ```
 
-**技术文档**：`docs/R_PLAN_TECH_SPEC.md`
+**技术文档**：`docs/BIG_BEAUTY_TECH_SPEC.md`
 
 ---
 
@@ -338,7 +338,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
 - [ ] 实现自研美颜 Shader
 - [ ] 性能优化（60fps 稳定）
 - [ ] 灰度测试（小范围切换）
-- [ ] 全量切换到 R 计划
+- [ ] 全量切换到 大美丽
 
 ---
 
@@ -352,11 +352,11 @@ fun CameraScreen(viewModel: CameraViewModel) {
 - SDK 功能不满足需求
 
 **应对**：
-- 尽快实施 R 计划
+- 尽快实施 大美丽
 - 保留 SDK 作为备选方案
 - 降级策略：SDK 失败时关闭美颜预览，仅拍照后处理
 
-### 7.2 中长期风险：R 计划实施失败
+### 7.2 中长期风险：大美丽实施失败
 
 **风险**：
 - 技术难度超预期
@@ -379,7 +379,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
 ### 8.2 技术文档
 - `docs/CAMERA_PREVIEW_TECH_SPEC.md` - 相机预览完整规范
 - `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` - PixelFree SDK 集成规范
-- `docs/R_PLAN_TECH_SPEC.md` - R 计划实时美颜完整规范
+- `docs/BIG_BEAUTY_TECH_SPEC.md` - 大美丽实时美颜完整规范
 
 ### 8.3 代码规范
 - `AGENTS.md` - AI Agent 操作规范
