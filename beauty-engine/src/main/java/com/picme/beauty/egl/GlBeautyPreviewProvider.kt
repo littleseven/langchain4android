@@ -1,90 +1,86 @@
-package com.picme.core.image.rplan
+package com.picme.beauty.egl
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import android.view.Surface
-import com.picme.core.common.Logger
-import com.picme.core.image.BeautyPreviewView
-import com.picme.domain.model.BeautySettings
-import com.picme.domain.preview.BeautyPreviewProvider
+import com.picme.beauty.api.BeautyParams
+import com.picme.beauty.api.BeautyPreviewCapability
+import com.picme.beauty.api.BeautyPreviewProvider
 
 /**
- * RD R 计划美颜预览提供者
+ * GL 渲染美颜预览提供者
  *
- * 当前实现目标：
- * 1. 打通 R 计划参数链路
- * 2. 提供可用 Surface 给 CameraX 绑定
- * 3. 失败时抛出明确错误，便于上层回退
+ * 实现 [BeautyPreviewProvider] 和 [BeautyPreviewCapability]，
+ * 封装 EGL/GL Shader 渲染管线。
+ *
+ * 参数接受 [BeautyParams]，解耦对 app 层 BeautySettings 的依赖，
+ * app 层负责将 BeautySettings 转换后传入。
  */
-class RPlanBeautyPreviewProvider(
+class GlBeautyPreviewProvider(
     context: Context
-) : BeautyPreviewProvider {
+) : BeautyPreviewProvider, BeautyPreviewCapability {
+
+    companion object {
+        private const val TAG = "PicMe:GlBeautyProvider"
+    }
 
     private val appContext: Context = context.applicationContext
     private var beautyPreviewView: BeautyPreviewView? = null
     private var previewSurface: Surface? = null
     private var isInitialized = false
-    private var lastSettings: BeautySettings = BeautySettings()
+    private var lastParams: BeautyParams = BeautyParams.EMPTY
     private var cameraInputWidth: Int = 1280
     private var cameraInputHeight: Int = 720
     private var isFillCenter: Boolean = true
 
     fun initialize() {
-        if (isInitialized) {
-            return
-        }
-
+        if (isInitialized) return
         beautyPreviewView = BeautyPreviewView(appContext).apply {
             ensureOffscreenReady()
         }
-        applyBeautySettings(lastSettings)
+        applyParams(lastParams)
         isInitialized = true
-
-        Logger.i("RPlan", "RPlanBeautyPreviewProvider initialized")
+        Log.i(TAG, "GlBeautyPreviewProvider initialized")
     }
 
     override fun createPreviewSurface(): Surface {
         beautyPreviewView?.setScaleMode(isFillCenter)
         beautyPreviewView?.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
-        if (!isInitialized) {
-            initialize()
-        }
+        if (!isInitialized) initialize()
 
         previewSurface?.let { cachedSurface ->
-            if (cachedSurface.isValid) {
-                return cachedSurface
-            }
+            if (cachedSurface.isValid) return cachedSurface
         }
 
-        val view = beautyPreviewView ?: throw IllegalStateException(
-            "RPlanBeautyPreviewProvider not initialized"
-        )
+        val view = beautyPreviewView
+            ?: throw IllegalStateException("GlBeautyPreviewProvider not initialized")
 
         repeat(120) { attemptIndex ->
             val surface = view.getSurfaceForCamera()
             if (surface != null && surface.isValid) {
                 previewSurface?.takeIf { it !== surface }?.release()
                 previewSurface = surface
-                Logger.i("RPlan", "R Plan preview surface ready on attempt=${attemptIndex + 1}")
+                Log.i(TAG, "GL beauty preview surface ready on attempt=${attemptIndex + 1}")
                 return surface
             }
             SystemClock.sleep(30)
         }
 
-        throw IllegalStateException("R Plan preview surface not ready")
+        throw IllegalStateException("GL beauty preview surface not ready")
     }
 
-    override fun updateFilters(settings: BeautySettings) {
-        lastSettings = settings
-        applyBeautySettings(settings)
-
-        Logger.d(
-            "RPlan",
-            "updateFilters: enabled=${settings.enabled}, smoothing=${settings.smoothing}, whitening=${settings.whitening}, bigEyes=${settings.bigEyes}, slimFace=${settings.slimFace}"
+    override fun updateFilters(params: BeautyParams) {
+        lastParams = params
+        applyParams(params)
+        Log.d(
+            TAG,
+            "updateFilters: enabled=${params.enabled}, smoothing=${params.smoothing}, " +
+                "whitening=${params.whitening}, bigEyes=${params.bigEyes}, slimFace=${params.slimFace}"
         )
     }
 
-    fun updateFaceWarpParams(
+    override fun updateFaceWarpParams(
         faceCenterX: Float,
         faceCenterY: Float,
         leftEyeX: Float,
@@ -126,7 +122,7 @@ class RPlanBeautyPreviewProvider(
         )
     }
 
-    fun updateLipMaskPoints(
+    override fun updateLipMaskPoints(
         outerPoints: List<Pair<Float, Float>>,
         innerPoints: List<Pair<Float, Float>>
     ) {
@@ -138,40 +134,33 @@ class RPlanBeautyPreviewProvider(
         previewSurface = null
         beautyPreviewView = null
         isInitialized = false
-
-        Logger.i("RPlan", "RPlanBeautyPreviewProvider released")
+        Log.i(TAG, "GlBeautyPreviewProvider released")
     }
 
     override fun isReady(): Boolean {
-        // Provider 已初始化且输入 Surface 有效即可认为就绪，
-        // 避免个别机型 SurfaceTexture 异步创建导致误判回退。
         return isInitialized && (previewSurface?.isValid == true)
     }
 
     fun getView(): BeautyPreviewView? = beautyPreviewView
 
-    fun setCameraInputBufferSize(width: Int, height: Int) {
-        if (width <= 0 || height <= 0) {
-            return
-        }
+    override fun setCameraInputBufferSize(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
         cameraInputWidth = width
         cameraInputHeight = height
         beautyPreviewView?.setCameraInputBufferSize(width, height)
     }
 
-    fun setScaleMode(isFillCenter: Boolean) {
+    override fun setScaleMode(isFillCenter: Boolean) {
         this.isFillCenter = isFillCenter
         beautyPreviewView?.setScaleMode(isFillCenter)
     }
 
-    fun getPerfStats(): com.picme.core.image.CameraPreviewRenderer.PerfStats? {
-        return beautyPreviewView?.getPerfStats()
-    }
+    fun getPerfStats(): CameraPreviewRenderer.PerfStats? = beautyPreviewView?.getPerfStats()
 
-    private fun applyBeautySettings(settings: BeautySettings) {
+    private fun applyParams(params: BeautyParams) {
         val view = beautyPreviewView ?: return
 
-        if (!settings.enabled || !settings.hasAnyEffect()) {
+        if (!params.enabled) {
             view.smoothingStrength = 0f
             view.whiteningStrength = 0f
             view.bigEyesStrength = 0f
@@ -183,14 +172,14 @@ class RPlanBeautyPreviewProvider(
             return
         }
 
-        view.smoothingStrength = (settings.smoothing / 100f).coerceIn(0f, 1f)
-        view.whiteningStrength = (settings.whitening / 100f).coerceIn(0f, 1f)
-        view.bigEyesStrength = (settings.bigEyes / 100f).coerceIn(0f, 1f)
-        view.slimFaceStrength = (settings.slimFace / 50f * 1.35f).coerceIn(-1f, 1f)
-        view.lipColorStrength = (settings.lipColor / 100f).coerceIn(0f, 1f)
-        view.lipColorIndex = settings.lipColorIndex.coerceIn(0, 11)
-        view.blushStrength = (settings.blush / 100f).coerceIn(0f, 1f)
-        view.blushColorFamily = settings.blushColorFamily.coerceIn(0, 2)
+        view.smoothingStrength = params.smoothing.coerceIn(0f, 1f)
+        view.whiteningStrength = params.whitening.coerceIn(0f, 1f)
+        view.bigEyesStrength = params.bigEyes.coerceIn(0f, 1f)
+        view.slimFaceStrength = params.slimFace.coerceIn(-1f, 1f)
+        view.lipColorStrength = params.lipColor.coerceIn(0f, 1f)
+        view.lipColorIndex = params.lipColorIndex.coerceIn(0, 11)
+        view.blushStrength = params.blush.coerceIn(0f, 1f)
+        view.blushColorFamily = params.blushColorFamily.coerceIn(0, 2)
     }
 }
 

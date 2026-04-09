@@ -8,10 +8,10 @@ class BeautyEngineRuntimeStateTest {
 
     @Test
     fun markAndConsume_fallbackReason_isOneShot() {
-        BeautyEngineRuntimeState.markRPlanFallback("init failed")
+        BeautyEngineRuntimeState.markGlEngineFallback("init failed")
 
-        val first = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
-        val second = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
+        val first = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
+        val second = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
 
         assertEquals("init failed", first)
         assertNull(second)

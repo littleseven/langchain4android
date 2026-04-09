@@ -101,7 +101,7 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
         viewModelScope.launch {
             repository.updateBeautyStrategy(strategy)
             if (strategy == BeautyStrategy.R_PLAN) {
-                repository.triggerManualRPlanRecovery()
+                repository.triggerManualGlEngineRecovery()
             }
         }
     }

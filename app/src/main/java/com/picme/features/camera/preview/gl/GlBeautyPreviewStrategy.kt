@@ -1,45 +1,46 @@
-package com.picme.features.camera.preview.rplan
+package com.picme.features.camera.preview.gl
 
 import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.picme.core.common.Logger
-import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
+import com.picme.core.image.gl.GlBeautyPreviewProvider
+import com.picme.core.image.gl.toBeautyParams
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.AspectRatio
 import com.picme.features.camera.preview.core.BeautyPreviewEngineStrategy
 import com.picme.features.camera.preview.core.FaceWarpParams
 
-internal class RPlanPreviewStrategy(
+internal class GlBeautyPreviewStrategy(
     private val previewView: PreviewView,
-    private val rPlanPreviewProvider: RPlanBeautyPreviewProvider,
+    private val glBeautyPreviewProvider: GlBeautyPreviewProvider,
     private val onWarmUpFallback: (String) -> Unit
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.R_PLAN
 
     override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
         return try {
-            rPlanPreviewProvider.initialize()
-            rPlanPreviewProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
+            glBeautyPreviewProvider.initialize()
+            glBeautyPreviewProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
 
             val mainExecutor = ContextCompat.getMainExecutor(previewView.context)
             previewUseCase.setSurfaceProvider { request ->
                 val resolution = request.resolution
-                rPlanPreviewProvider.setCameraInputBufferSize(
+                glBeautyPreviewProvider.setCameraInputBufferSize(
                     width = resolution.width,
                     height = resolution.height
                 )
-                val previewSurface = rPlanPreviewProvider.createPreviewSurface()
+                val previewSurface = glBeautyPreviewProvider.createPreviewSurface()
                 request.provideSurface(previewSurface, mainExecutor) { result ->
-                    Logger.d("Camera", "R Plan surface request completed: $result")
+                    Logger.d("Camera", "GL beauty surface request completed: $result")
                 }
             }
 
-            Logger.i("Camera", "Preview connected via R Plan provider surface, aspectRatio=$aspectRatio")
+            Logger.i("Camera", "Preview connected via GL beauty provider surface, aspectRatio=$aspectRatio")
             true
         } catch (error: Throwable) {
-            Logger.w("Camera", "R Plan warm-up failed, fallback to PreviewView", error)
+            Logger.w("Camera", "GL beauty warm-up failed, fallback to PreviewView", error)
             previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
             onWarmUpFallback(error.message ?: "warm-up error")
             false
@@ -48,16 +49,16 @@ internal class RPlanPreviewStrategy(
 
     override fun applyBeautySettings(settings: BeautySettings) {
         try {
-            rPlanPreviewProvider.initialize()
-            rPlanPreviewProvider.updateFilters(settings)
+            glBeautyPreviewProvider.initialize()
+            glBeautyPreviewProvider.updateFilters(settings.toBeautyParams())
         } catch (error: Throwable) {
-            Logger.w("Camera", "R Plan update failed", error)
+            Logger.w("Camera", "GL beauty update failed", error)
         }
     }
 
     override fun applyFaceWarpParams(params: FaceWarpParams) {
         runCatching {
-            rPlanPreviewProvider.updateFaceWarpParams(
+            glBeautyPreviewProvider.updateFaceWarpParams(
                 faceCenterX = params.faceCenterX,
                 faceCenterY = params.faceCenterY,
                 leftEyeX = params.leftEyeX,
@@ -77,7 +78,7 @@ internal class RPlanPreviewStrategy(
                 faceRadius = params.faceRadius,
                 hasFace = params.hasFace
             )
-            rPlanPreviewProvider.updateLipMaskPoints(
+            glBeautyPreviewProvider.updateLipMaskPoints(
                 outerPoints = params.lipOuterContourPoints.map { contourPoint ->
                     Pair(contourPoint.x, contourPoint.y)
                 },
@@ -86,12 +87,12 @@ internal class RPlanPreviewStrategy(
                 }
             )
         }.onFailure { error ->
-            Logger.w("Camera", "R Plan face params update failed", error)
+            Logger.w("Camera", "GL beauty face params update failed", error)
         }
     }
 
     override fun release() {
-        rPlanPreviewProvider.release()
+        glBeautyPreviewProvider.release()
     }
 }
 

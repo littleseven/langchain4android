@@ -32,19 +32,19 @@ class CameraP0AutomationSkeletonTest {
     }
 
     @Test
-    fun p0_03_rPlanWarmupFailure_shouldFallbackToPixelFree_skeleton() {
+    fun p0_03_glEngineWarmupFailure_shouldFallbackToPixelFree_skeleton() {
         // 骨架阶段先验证 fallback reason 的可观测链路可被测试捕获。
-        BeautyEngineRuntimeState.markRPlanFallback("warm-up timeout")
-        val fallbackReason = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
+        BeautyEngineRuntimeState.markGlEngineFallback("warm-up timeout")
+        val fallbackReason = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
         assertEquals("warm-up timeout", fallbackReason)
     }
 
     @Test
-    fun p0_04_cooldownFinished_shouldRetryRPlan_skeleton() {
+    fun p0_04_cooldownFinished_shouldRetryGlEngine_skeleton() {
         // 骨架阶段先校验 one-shot 语义，避免后续自动重试链路出现脏状态。
-        BeautyEngineRuntimeState.markRPlanFallback("recovering")
-        val firstConsume = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
-        val secondConsume = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
+        BeautyEngineRuntimeState.markGlEngineFallback("recovering")
+        val firstConsume = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
+        val secondConsume = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
 
         assertEquals("recovering", firstConsume)
         assertNull(secondConsume)

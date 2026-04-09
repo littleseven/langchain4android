@@ -52,21 +52,6 @@ interface AppContainer {
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
 }
 
-object BeautyEngineRuntimeState {
-    @Volatile
-    private var fallbackReason: String? = null
-
-    fun markRPlanFallback(reason: String) {
-        fallbackReason = reason
-    }
-
-    fun consumeRPlanFallbackReason(): String? {
-        val reason = fallbackReason
-        fallbackReason = null
-        return reason
-    }
-}
-
 class AppContainerImpl(private val context: Context) : AppContainer {
 
     private val database by lazy { AppDatabase.getDatabase(context) }
@@ -88,7 +73,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
                 try {
                     GpuBeautyProcessor(context)
                 } catch (error: Throwable) {
-                    BeautyEngineRuntimeState.markRPlanFallback(
+                    BeautyEngineRuntimeState.markGlEngineFallback(
                         error.message ?: "unknown"
                     )
                     Logger.w("DI", "R Plan init failed, fallback to PixelFree", error)
