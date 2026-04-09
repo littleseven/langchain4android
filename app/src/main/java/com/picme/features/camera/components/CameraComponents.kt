@@ -1510,147 +1510,195 @@ fun ProModeControls(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    
-    Column(
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+    val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .navigationBarsPadding()
     ) {
-        // Header with title and close button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.AutoFixHigh,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+        // 半透明渐变背景遮罩（与其他面板一致）
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(panelMaxHeight + 24.dp)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.55f),
+                            Color.Black.copy(alpha = 0.82f)
+                        )
+                    )
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.pro_mode),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            // Close button
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
+        )
 
-        Box(contentAlignment = Alignment.Center) {
-            // Debug: Log exposure range
-            LaunchedEffect(exposureRange) {
-                android.util.Log.d("ProMode", "Exposure range: ${exposureRange.first} to ${exposureRange.last}, current: $exposure")
-            }
-            
-            Slider(
-                value = exposure.toFloat(),
-                valueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat(),
-                steps = if (exposureRange.last > exposureRange.first) {
-                    exposureRange.last - exposureRange.first - 1
-                } else {
-                    0
-                },
-                onValueChange = { newValue ->
-                    android.util.Log.d("ProMode", "Exposure changed to: ${newValue.toInt()}")
-                    onExposureChange(newValue.toInt())
-                },
-                enabled = true,
-                interactionSource = interactionSource,
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .heightIn(max = panelMaxHeight),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            shadowElevation = 16.dp,
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+        ) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),  // Increase touch target
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.onSurface,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                ),
-                thumb = {
-                    val thumbScale by animateFloatAsState(
-                        if (isPressed) 1.5f else 1f,
-                        label = "thumbScale"
-                    )
-                    Spacer(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .scale(thumbScale)
-                            .background(MaterialTheme.colorScheme.onSurface, CircleShape)
-                            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                    )
-                },
-                track = { sliderPositions ->
-                    val fraction = if (exposureRange.last > exposureRange.first) {
-                        (exposure.toFloat() - exposureRange.first.toFloat()) / (exposureRange.last.toFloat() - exposureRange.first.toFloat())
-                    } else {
-                        0f
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = 0.1f))
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // ── 拖拽把手（与其他面板一致）──
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 10.dp, bottom = 4.dp)
+                        .size(width = 36.dp, height = 4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                )
+
+                // ── 曝光控制 ──
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(fraction)
-                                .fillMaxHeight()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                            MaterialTheme.colorScheme.primary
-                                        )
-                                    )
-                                )
+                        Text(
+                            text = stringResource(R.string.exposure),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = if (exposure >= 0) "+$exposure" else "$exposure",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                }
-            )
-        }
 
-        // White Balance Control
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(listOf(0, 1, 2, 3, 4)) { mode ->
-                val label = when (mode) {
-                    0 -> stringResource(R.string.wb_auto)
-                    1 -> stringResource(R.string.wb_sunny)
-                    2 -> stringResource(R.string.wb_cloudy)
-                    3 -> stringResource(R.string.wb_incandescent)
-                    4 -> stringResource(R.string.wb_fluorescent)
-                    else -> ""
-                }
-                FilterChip(
-                    selected = whiteBalance == mode,
-                    onClick = { onWhiteBalanceChange(mode) },
-                    label = { Text(label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color.Transparent,
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        labelColor = Color.White,
-                        selectedLabelColor = Color.Black
+                    LaunchedEffect(exposureRange) {
+                        android.util.Log.d("ProMode", "Exposure range: ${exposureRange.first} to ${exposureRange.last}, current: $exposure")
+                    }
+
+                    Slider(
+                        value = exposure.toFloat(),
+                        valueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat(),
+                        steps = if (exposureRange.last > exposureRange.first) {
+                            exposureRange.last - exposureRange.first - 1
+                        } else {
+                            0
+                        },
+                        onValueChange = { newValue ->
+                            android.util.Log.d("ProMode", "Exposure changed to: ${newValue.toInt()}")
+                            onExposureChange(newValue.toInt())
+                        },
+                        enabled = true,
+                        interactionSource = interactionSource,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = MaterialTheme.colorScheme.onSurface,
+                            activeTrackColor = MaterialTheme.colorScheme.primary,
+                            inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                        ),
+                        thumb = {
+                            val thumbScale by animateFloatAsState(
+                                if (isPressed) 1.5f else 1f,
+                                label = "thumbScale"
+                            )
+                            Spacer(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .scale(thumbScale)
+                                    .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+                                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            )
+                        },
+                        track = { _ ->
+                            val fraction = if (exposureRange.last > exposureRange.first) {
+                                (exposure.toFloat() - exposureRange.first.toFloat()) / (exposureRange.last.toFloat() - exposureRange.first.toFloat())
+                            } else {
+                                0f
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(fraction)
+                                        .fillMaxHeight()
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                                    MaterialTheme.colorScheme.primary
+                                                )
+                                            )
+                                        )
+                                )
+                            }
+                        }
                     )
-                )
+                }
+
+                // ── 白平衡控制 ──
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.white_balance),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(listOf(0, 1, 2, 3, 4)) { mode ->
+                            val label = when (mode) {
+                                0 -> stringResource(R.string.wb_auto)
+                                1 -> stringResource(R.string.wb_sunny)
+                                2 -> stringResource(R.string.wb_cloudy)
+                                3 -> stringResource(R.string.wb_incandescent)
+                                4 -> stringResource(R.string.wb_fluorescent)
+                                else -> ""
+                            }
+                            FilterChip(
+                                selected = whiteBalance == mode,
+                                onClick = { onWhiteBalanceChange(mode) },
+                                label = {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    selectedLabelColor = Color.Black
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
     }

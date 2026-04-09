@@ -98,6 +98,8 @@
     <string name="focus">对焦</string>
     <string name="auto">自动</string>
     <string name="manual">手动</string>
+    <string name="exposure">曝光</string>
+    <string name="white_balance">白平衡</string>
     <string name="wb_auto">自动</string>
     <string name="wb_sunny">晴天</string>
     <string name="wb_cloudy">多云</string>

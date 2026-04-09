@@ -94,22 +94,6 @@ internal fun CameraPreviewContent(
         CameraPreviewDebugStatus(uiState = uiState)
         CameraPreviewSideControls(uiState = uiState, actions = actions)
 
-        // Pro Mode Controls - MUST be before CameraBottomControls to be on top layer
-        if (uiState.captureMode == MediaType.PRO && !isAnyPanelOpen) {
-            android.util.Log.d("ProMode", "=== ProModeControls RENDERING === exposure=${uiState.exposureCompensation}, range=${uiState.exposureRange}")
-            ProModeControls(
-                exposure = uiState.exposureCompensation,
-                exposureRange = uiState.exposureRange,
-                onExposureChange = actions.onExposureChange,
-                whiteBalance = uiState.whiteBalanceMode,
-                onWhiteBalanceChange = actions.onWhiteBalanceChange,
-                onClose = { actions.onModeChange(MediaType.PHOTO) },  // Close pro mode, switch to photo
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 260.dp)
-            )
-        }
-
         CameraBottomControls(
             lastMedia = uiState.lastMedia,
             zoomRatio = uiState.zoomRatio,
@@ -125,6 +109,21 @@ internal fun CameraPreviewContent(
             onModeChange = actions.onModeChange,
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // Pro Mode Controls - 底部 Sheet 风格，与其他面板保持一致
+        // 必须在 CameraBottomControls 之后声明，确保浮层盖在固定按钮之上
+        if (uiState.captureMode == MediaType.PRO && !isAnyPanelOpen) {
+            android.util.Log.d("ProMode", "=== ProModeControls RENDERING === exposure=${uiState.exposureCompensation}, range=${uiState.exposureRange}")
+            ProModeControls(
+                exposure = uiState.exposureCompensation,
+                exposureRange = uiState.exposureRange,
+                onExposureChange = actions.onExposureChange,
+                whiteBalance = uiState.whiteBalanceMode,
+                onWhiteBalanceChange = actions.onWhiteBalanceChange,
+                onClose = { actions.onModeChange(MediaType.PHOTO) },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
 
         // 美颜面板（统一入口：使用美图秀秀风格 Tab 标签页）
         AnimatedVisibility(
