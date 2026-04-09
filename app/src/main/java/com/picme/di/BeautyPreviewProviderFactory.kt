@@ -52,7 +52,7 @@ object BeautyPreviewProviderFactory {
                 }
             }
 
-            BeautyStrategy.R_PLAN -> {
+            BeautyStrategy.BIG_BEAUTY -> {
                 Logger.i("Factory", "Using R Plan (user preference: ${selectedStrategy.name})")
                 try {
                     GlBeautyPreviewProvider(context).apply {

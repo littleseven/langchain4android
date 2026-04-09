@@ -70,7 +70,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
         when (strategy) {
             BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor(context)
-            BeautyStrategy.R_PLAN -> {
+            BeautyStrategy.BIG_BEAUTY -> {
                 try {
                     GpuBeautyProcessor(context)
                 } catch (error: Throwable) {

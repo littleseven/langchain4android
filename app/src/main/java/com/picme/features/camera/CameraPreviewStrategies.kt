@@ -23,7 +23,7 @@ internal fun rememberPreviewStrategyBundle(
 ): PreviewStrategyBundle {
     val activeStrategy = remember(beautyStrategy, previewView, pixelFreeView, glPreviewProvider) {
         when (beautyStrategy) {
-            BeautyStrategy.R_PLAN -> {
+            BeautyStrategy.BIG_BEAUTY -> {
                 GlBeautyPreviewStrategy(
                     previewView = previewView,
                     glBeautyPreviewProvider = requireNotNull(glPreviewProvider) {

@@ -33,7 +33,7 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = BeautyStrategy.R_PLAN
+            initialValue = BeautyStrategy.BIG_BEAUTY
         )
 
     val debugUiEnabled: StateFlow<Boolean> = repository.debugUiEnabledFlow
@@ -100,7 +100,7 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
     fun setBeautyStrategy(strategy: BeautyStrategy) {
         viewModelScope.launch {
             repository.updateBeautyStrategy(strategy)
-            if (strategy == BeautyStrategy.R_PLAN) {
+            if (strategy == BeautyStrategy.BIG_BEAUTY) {
                 repository.triggerManualGlEngineRecovery()
             }
         }

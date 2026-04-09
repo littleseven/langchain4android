@@ -22,7 +22,7 @@ enum class AppLanguage {
  */
 enum class BeautyStrategy {
     PIXEL_FREE,
-    R_PLAN
+    BIG_BEAUTY
 }
 
 /**

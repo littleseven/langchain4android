@@ -17,7 +17,7 @@ internal class GlBeautyPreviewStrategy(
     private val glBeautyPreviewProvider: GlBeautyPreviewProvider,
     private val onWarmUpFallback: (String) -> Unit
 ) : BeautyPreviewEngineStrategy {
-    override val strategy: BeautyStrategy = BeautyStrategy.R_PLAN
+    override val strategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY
 
     override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
         return try {

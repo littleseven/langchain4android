@@ -47,7 +47,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val userPreferencesRepository = app.container.userPreferencesRepository
     val coroutineScope = rememberCoroutineScope()
     val beautyStrategy by userPreferencesRepository.beautyStrategyFlow.collectAsState(
-        initial = BeautyStrategy.R_PLAN
+        initial = BeautyStrategy.BIG_BEAUTY
     )
     val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
     val showCameraInfoInPreview by userPreferencesRepository.showCameraInfoInPreviewFlow.collectAsState(initial = false)
@@ -206,7 +206,7 @@ internal fun rememberGlRecoveryState(
     var autoRecoveryRequestedAtMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(beautyStrategy, glRecoveryAvailableAtMs) {
-        if (beautyStrategy == BeautyStrategy.R_PLAN) {
+        if (beautyStrategy == BeautyStrategy.BIG_BEAUTY) {
             persistedFallback = false
             persistedFallbackReason = null
             autoRecoveryRequestedAtMs = 0L

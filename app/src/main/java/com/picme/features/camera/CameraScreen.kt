@@ -441,7 +441,7 @@ private fun resolvePreviewTargetView(
     }
 
     val providerView = when (activeStrategy) {
-        BeautyStrategy.R_PLAN -> runtimeProviderView
+        BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
         BeautyStrategy.PIXEL_FREE -> when (pixelFreeLinkMode) {
             PixelFreePreviewLinkMode.PROVIDER -> runtimeProviderView
             PixelFreePreviewLinkMode.RAW -> pixelFreeView
@@ -451,7 +451,7 @@ private fun resolvePreviewTargetView(
     }
 
     val requiresProviderView =
-        activeStrategy == BeautyStrategy.R_PLAN ||
+        activeStrategy == BeautyStrategy.BIG_BEAUTY ||
             (activeStrategy == BeautyStrategy.PIXEL_FREE &&
                 pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER)
 
@@ -615,7 +615,7 @@ fun CameraContent(
         }
 
         val shouldCheckProviderReady = when (beautyStrategy) {
-            BeautyStrategy.R_PLAN -> true
+            BeautyStrategy.BIG_BEAUTY -> true
             BeautyStrategy.PIXEL_FREE -> pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER
         }
         if (!shouldCheckProviderReady) {
@@ -819,7 +819,7 @@ fun CameraContent(
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
         while (isActive) {
-            renderPerfStats = if (beautyStrategy == BeautyStrategy.R_PLAN && useProviderRenderView) {
+            renderPerfStats = if (beautyStrategy == BeautyStrategy.BIG_BEAUTY && useProviderRenderView) {
                 glPreviewProvider?.getPerfStats() ?: BeautyPerfStats()
             } else {
                 BeautyPerfStats()
