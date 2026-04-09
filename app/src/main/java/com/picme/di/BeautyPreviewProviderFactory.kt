@@ -1,15 +1,15 @@
 package com.picme.di
 
 import android.content.Context
+import com.picme.beauty.egl.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
-import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeBeautyPreviewProvider
-import com.picme.domain.model.BeautyStrategy
 import com.picme.data.preferences.UserPreferencesRepository
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.preview.BeautyPreviewProvider
 
 /**
- * RD 美颜预览提供者工厂
+ * 美颜预览提供者工厂
  *
  * 职责：
  * 1. 集中管理 BeautyPreviewProvider 的创建
@@ -17,16 +17,14 @@ import com.picme.domain.preview.BeautyPreviewProvider
  * 3. 便于单元测试时替换为 Mock
  *
  * 双引擎策略：
- * - 主引擎：R 计划自主方案（R_PLAN）
+ * - 主引擎：R 计划自主方案（R_PLAN）——使用 beauty-engine 模块的 [GlBeautyPreviewProvider]
  * - 备用引擎：PixelFreeEffects SDK（PIXEL_FREE）
  *
  * 切换方式：设置页「美颜引擎」配置开关
+ * 策略枚举已迁移至 [com.picme.domain.model.BeautyStrategy]
  *
- * 注意：策略枚举统一使用 [com.picme.data.preferences.BeautyStrategy]，
- * 工厂内部不再重复定义。
- *
+ * @see com.picme.beauty.egl.GlBeautyPreviewProvider
  * @see com.picme.core.image.pixelfree.PixelFreeBeautyPreviewProvider
- * @see com.picme.core.image.gl.GlBeautyPreviewProvider
  */
 object BeautyPreviewProviderFactory {
     
@@ -35,7 +33,6 @@ object BeautyPreviewProviderFactory {
      * 
      * @param context 应用上下文
      * @param strategy 实现策略（null 则从用户设置中读取）
-     *
      * @return BeautyPreviewProvider 实例
      */
     fun create(

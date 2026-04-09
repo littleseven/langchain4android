@@ -14,7 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.PicMeApplication
 import com.picme.core.common.Logger
-import com.picme.core.image.gl.GlBeautyPreviewProvider
+import com.picme.beauty.egl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy

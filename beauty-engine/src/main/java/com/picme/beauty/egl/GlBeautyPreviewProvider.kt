@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import com.picme.beauty.api.BeautyParams
+import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.BeautyPreviewCapability
 import com.picme.beauty.api.BeautyPreviewProvider
 
@@ -155,7 +156,7 @@ class GlBeautyPreviewProvider(
         beautyPreviewView?.setScaleMode(isFillCenter)
     }
 
-    fun getPerfStats(): CameraPreviewRenderer.PerfStats? = beautyPreviewView?.getPerfStats()
+    override fun getPerfStats(): BeautyPerfStats = beautyPreviewView?.getPerfStats() ?: BeautyPerfStats.EMPTY
 
     private fun applyParams(params: BeautyParams) {
         val view = beautyPreviewView ?: return
