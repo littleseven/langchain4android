@@ -56,7 +56,7 @@ class UserPreferencesRepository(private val context: Context) {
         val FACE_DETECTION_LANDMARK_MODE = booleanPreferencesKey("face_detection_landmark_mode")
         val ADAPTIVE_FACE_DETECTION_INTERVAL = booleanPreferencesKey("adaptive_face_detection_interval")
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
-        val R_PLAN_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("r_plan_recovery_available_at_ms")
+        val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
     }
 
     val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -136,7 +136,7 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    val rPlanRecoveryAvailableAtFlow: Flow<Long> = context.dataStore.data
+    val glEngineRecoveryAvailableAtFlow: Flow<Long> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -145,27 +145,27 @@ class UserPreferencesRepository(private val context: Context) {
             }
         }
         .map { preferences ->
-            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] ?: 0L
+            preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] ?: 0L
         }
 
-    suspend fun persistRPlanFallback(cooldownMs: Long) {
+    suspend fun persistGlEngineFallback(cooldownMs: Long) {
         val nowMs = System.currentTimeMillis()
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.PIXEL_FREE.name
-            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] = nowMs + cooldownMs
+            preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = nowMs + cooldownMs
         }
     }
 
-    suspend fun triggerManualRPlanRecovery() {
+    suspend fun triggerManualGlEngineRecovery() {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.R_PLAN.name
-            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] = 0L
+            preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
         }
     }
 
-    suspend fun clearRPlanRecoveryCooldown() {
+    suspend fun clearGlEngineRecoveryCooldown() {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.R_PLAN_RECOVERY_AVAILABLE_AT_MS] = 0L
+            preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
         }
     }
 

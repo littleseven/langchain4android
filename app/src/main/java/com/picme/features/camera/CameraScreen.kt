@@ -539,10 +539,10 @@ fun CameraContent(
     val showFaceDebugOverlay = runtimeContext.showFaceDebugOverlay
     val showLogOverlay = runtimeContext.showLogOverlay
     val faceLandmarkModeEnabled = runtimeContext.faceLandmarkModeEnabled
-    val rPlanRecoveryAvailableAtMs = runtimeContext.rPlanRecoveryAvailableAtMs
+    val glRecoveryAvailableAtMs = runtimeContext.glRecoveryAvailableAtMs
     val lifecycleOwner = runtimeContext.lifecycleOwner
     LaunchedEffect(beautyStrategy) {
-        val fallbackReason = BeautyEngineRuntimeState.consumeRPlanFallbackReason()
+        val fallbackReason = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
         if (fallbackReason != null) {
             Logger.w(
                 "Camera",
@@ -575,16 +575,16 @@ fun CameraContent(
     )
     val previewView = previewRuntimeViews.previewView
     val pixelFreeView = previewRuntimeViews.pixelFreeView
-    val rPlanPreviewProvider = previewRuntimeViews.rPlanPreviewProvider
+    val glPreviewProvider = previewRuntimeViews.glPreviewProvider
 
-    val recoveryState = rememberRPlanRecoveryState(
+    val recoveryState = rememberGlRecoveryState(
         beautyStrategy = beautyStrategy,
-        rPlanRecoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
+        glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
         userPreferencesRepository = userPreferencesRepository,
         coroutineScope = coroutineScope
     )
-    val persistedRPlanFallback = recoveryState.persistedFallback
-    val persistedRPlanFallbackReason = recoveryState.persistedFallbackReason
+    val persistedGlFallback = recoveryState.persistedFallback
+    val persistedGlFallbackReason = recoveryState.persistedFallbackReason
 
     var pixelFreeLinkMode by remember { mutableStateOf<PixelFreePreviewLinkMode?>(null) }
     var pixelFreeLinkReason by remember { mutableStateOf<String?>(null) }
@@ -593,8 +593,8 @@ fun CameraContent(
         beautyStrategy = beautyStrategy,
         previewView = previewView,
         pixelFreeView = pixelFreeView,
-        rPlanPreviewProvider = rPlanPreviewProvider,
-        onRPlanWarmUpFallback = recoveryState.onRPlanWarmUpFallback,
+        glPreviewProvider = glPreviewProvider,
+        onGlWarmUpFallback = recoveryState.onGlWarmUpFallback,
         onPixelFreePreviewLinkModeChanged = { mode -> pixelFreeLinkMode = mode },
         onPixelFreePreviewLinkReasonChanged = { reason -> pixelFreeLinkReason = reason }
     )
@@ -626,7 +626,7 @@ fun CameraContent(
             return@LaunchedEffect
         }
 
-        if (rPlanPreviewProvider?.isReady() != true) {
+        if (glPreviewProvider?.isReady() != true) {
             Logger.w(
                 "Camera",
                 "Provider view bind timeout, fallback to PreviewView and request rebind"
@@ -703,14 +703,14 @@ fun CameraContent(
             previewRebindSignal += 1
         }
 
-        val shouldForceRPlanRecovery =
+        val shouldForceGlRecovery =
             beautyStrategy == BeautyStrategy.PIXEL_FREE &&
                 pixelFreeLinkMode == PixelFreePreviewLinkMode.PREVIEW_FALLBACK
 
-        if (shouldForceRPlanRecovery && !lipRealtimeRecoveryRequested) {
+        if (shouldForceGlRecovery && !lipRealtimeRecoveryRequested) {
             lipRealtimeRecoveryRequested = true
             Logger.w("Camera", "Lip realtime preview requires provider path, trigger R Plan recovery")
-            userPreferencesRepository.triggerManualRPlanRecovery()
+            userPreferencesRepository.triggerManualGlEngineRecovery()
         }
     }
 
@@ -813,15 +813,15 @@ fun CameraContent(
         BeautyPreviewStatus.SKIPPED
     }
     var renderPerfStats by remember {
-        mutableStateOf(com.picme.core.image.CameraPreviewRenderer.PerfStats())
+        mutableStateOf(com.picme.beauty.egl.CameraPreviewRenderer.PerfStats())
     }
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
         while (isActive) {
             renderPerfStats = if (beautyStrategy == BeautyStrategy.R_PLAN && useProviderRenderView) {
-                rPlanPreviewProvider?.getPerfStats() ?: com.picme.core.image.CameraPreviewRenderer.PerfStats()
+                glPreviewProvider?.getPerfStats() ?: com.picme.beauty.egl.CameraPreviewRenderer.PerfStats()
             } else {
-                com.picme.core.image.CameraPreviewRenderer.PerfStats()
+                com.picme.beauty.egl.CameraPreviewRenderer.PerfStats()
             }
             delay(250)
         }
@@ -1021,9 +1021,9 @@ CameraPreviewContent(
                 modifier = Modifier.fillMaxSize(),
                 update = { container ->
                     val runtimeProviderView = runCatching {
-                        rPlanPreviewProvider?.getView() ?: run {
-                            rPlanPreviewProvider?.initialize()
-                            rPlanPreviewProvider?.getView()
+                        glPreviewProvider?.getView() ?: run {
+                            glPreviewProvider?.initialize()
+                            glPreviewProvider?.getView()
                         }
                     }.getOrNull()
 
@@ -1103,10 +1103,10 @@ CameraPreviewContent(
             delayMs = renderPerfStats.delayMs,
             cpuUsage = renderPerfStats.cpuUsage,
             nullFrames = renderPerfStats.nullFrames,
-            persistedFallback = persistedRPlanFallback,
-            persistedFallbackReason = persistedRPlanFallbackReason,
+            persistedFallback = persistedGlFallback,
+            persistedFallbackReason = persistedGlFallbackReason,
             strategy = beautyStrategy,
-            recoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
+            recoveryAvailableAtMs = glRecoveryAvailableAtMs,
             pixelFreeLinkMode = pixelFreeLinkMode,
             pixelFreeLinkReason = pixelFreeLinkReason,
             providerRenderActive = useProviderRenderView

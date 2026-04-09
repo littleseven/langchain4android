@@ -3,8 +3,8 @@ package com.picme.core.image.pixelfree
 import android.content.Context
 import android.view.Surface
 import com.hapi.pixelfree.PFBeautyFilterType
+import com.picme.beauty.api.BeautyParams
 import com.picme.core.common.Logger
-import com.picme.domain.model.BeautySettings
 import com.picme.domain.preview.BeautyPreviewProvider
 
 /**
@@ -59,47 +59,48 @@ class PixelFreeBeautyPreviewProvider(
         )
     }
 
-    override fun updateFilters(settings: BeautySettings) {
+    override fun updateFilters(params: BeautyParams) {
         val view = pixelFreeView ?: return
 
-        // 映射 BeautySettings 到 PixelFree SDK 参数
-        // 注意：PixelFree 参数范围是 0.0-1.0，需要归一化
+        if (!params.enabled) {
+            return
+        }
 
-        // 磨皮 (0-100 → 0.0-1.0)
-        if (settings.smoothing > 0) {
+        // 磨皮（RplanBeautyParams 已归一化 0.0-1.0）
+        if (params.smoothing > 0) {
             view.setBeautyParam(
                 PFBeautyFilterType.PFBeautyFilterTypeFaceBlurStrength,
-                settings.smoothing / 100f
+                params.smoothing
             )
         }
 
-        // 美白 (0-100 → 0.0-1.0)
-        if (settings.whitening > 0) {
+        // 美白
+        if (params.whitening > 0) {
             view.setBeautyParam(
                 PFBeautyFilterType.PFBeautyFilterTypeFaceM_newWhitenStrength,
-                settings.whitening / 100f
+                params.whitening
             )
         }
 
-        // 大眼 (0-100 → 0.0-1.0)，适度增益提升可见度
-        if (settings.bigEyes > 0) {
+        // 大眼（适度增益提升可见度）
+        if (params.bigEyes > 0) {
             view.setBeautyParam(
                 PFBeautyFilterType.PFBeautyFilterTypeFace_EyeStrength,
-                (settings.bigEyes / 100f * 1.35f).coerceIn(0f, 1f)
+                (params.bigEyes * 1.35f).coerceIn(0f, 1f)
             )
         }
 
-        // 瘦脸 (-50~+50 → 0.0-1.0)
-        // 映射规则：-50 → 0.0, 0 → 0.5, +50 → 1.0
-        val slimFaceNormalized = (settings.slimFace + 50f) / 100f
+        // 瘦脸（RplanBeautyParams.slimFace 已是 -1.0~1.0，映射到 0.0-1.0）
+        val slimFaceNormalized = (params.slimFace + 1f) / 2f
         view.setBeautyParam(
             PFBeautyFilterType.PFBeautyFilterTypeFace_thinning,
             slimFaceNormalized
         )
 
-        Logger.d("PixelFree",
-            "Updated filters: smoothing=${settings.smoothing}, whitening=${settings.whitening}, " +
-            "bigEyes=${settings.bigEyes}, slimFace=${settings.slimFace}"
+        Logger.d(
+            "PixelFree",
+            "Updated filters: smoothing=${params.smoothing}, whitening=${params.whitening}, " +
+                "bigEyes=${params.bigEyes}, slimFace=${params.slimFace}"
         )
     }
 

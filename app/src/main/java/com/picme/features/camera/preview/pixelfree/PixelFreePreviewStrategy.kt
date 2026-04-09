@@ -4,8 +4,9 @@ import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.picme.core.common.Logger
+import com.picme.core.image.gl.GlBeautyPreviewProvider
+import com.picme.core.image.gl.toBeautyParams
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
-import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.AspectRatio
@@ -21,14 +22,14 @@ internal enum class PixelFreePreviewLinkMode {
 internal class PixelFreePreviewStrategy(
     private val previewView: PreviewView,
     private val pixelFreeView: PixelFreeGLSurfaceView,
-    private val rPlanPreviewProvider: RPlanBeautyPreviewProvider?,
+    private val glPreviewProvider: GlBeautyPreviewProvider?,
     private val onPreviewLinkModeChanged: (PixelFreePreviewLinkMode) -> Unit,
     private val onPreviewLinkReasonChanged: (String?) -> Unit
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.PIXEL_FREE
 
     override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
-        val provider = rPlanPreviewProvider
+        val provider = glPreviewProvider
         if (provider == null) {
             return bindPreviewFallback(previewUseCase, "provider unavailable")
         }
@@ -70,7 +71,7 @@ internal class PixelFreePreviewStrategy(
 
     override fun applyBeautySettings(settings: BeautySettings) {
         runCatching {
-            rPlanPreviewProvider?.updateFilters(settings)
+            glPreviewProvider?.updateFilters(settings.toBeautyParams())
         }.onFailure { error ->
             Logger.w("Camera", "PixelFree provider beauty update failed", error)
         }
@@ -92,7 +93,7 @@ internal class PixelFreePreviewStrategy(
 
     override fun applyFaceWarpParams(params: FaceWarpParams) {
         runCatching {
-            rPlanPreviewProvider?.updateFaceWarpParams(
+            glPreviewProvider?.updateFaceWarpParams(
                 faceCenterX = params.faceCenterX,
                 faceCenterY = params.faceCenterY,
                 leftEyeX = params.leftEyeX,
@@ -112,7 +113,7 @@ internal class PixelFreePreviewStrategy(
                 faceRadius = params.faceRadius,
                 hasFace = params.hasFace
             )
-            rPlanPreviewProvider?.updateLipMaskPoints(
+            glPreviewProvider?.updateLipMaskPoints(
                 outerPoints = params.lipOuterContourPoints.map { contourPoint ->
                     Pair(contourPoint.x, contourPoint.y)
                 },
@@ -127,7 +128,7 @@ internal class PixelFreePreviewStrategy(
 
     override fun release() {
         pixelFreeView.release()
-        rPlanPreviewProvider?.release()
+        glPreviewProvider?.release()
     }
 }
 

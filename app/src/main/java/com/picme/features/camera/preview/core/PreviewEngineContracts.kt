@@ -4,13 +4,13 @@ import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
-import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.domain.model.BeautySettings
+import com.picme.features.camera.preview.gl.GlBeautyPreviewStrategy
 import com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode
 import com.picme.features.camera.preview.pixelfree.PixelFreePreviewStrategy
-import com.picme.features.camera.preview.rplan.RPlanPreviewStrategy
 
 internal interface BeautyPreviewEngineStrategy {
     val strategy: BeautyStrategy
@@ -33,20 +33,20 @@ internal fun rememberPreviewStrategyBundle(
     beautyStrategy: BeautyStrategy,
     previewView: PreviewView,
     pixelFreeView: PixelFreeGLSurfaceView?,
-    rPlanPreviewProvider: RPlanBeautyPreviewProvider?,
-    onRPlanWarmUpFallback: (String) -> Unit,
+    glPreviewProvider: GlBeautyPreviewProvider?,
+    onGlWarmUpFallback: (String) -> Unit,
     onPixelFreePreviewLinkModeChanged: (PixelFreePreviewLinkMode) -> Unit,
     onPixelFreePreviewLinkReasonChanged: (String?) -> Unit
 ): PreviewStrategyBundle {
-    val activeStrategy = remember(beautyStrategy, previewView, pixelFreeView, rPlanPreviewProvider) {
+    val activeStrategy = remember(beautyStrategy, previewView, pixelFreeView, glPreviewProvider) {
         when (beautyStrategy) {
             BeautyStrategy.R_PLAN -> {
-                RPlanPreviewStrategy(
+                GlBeautyPreviewStrategy(
                     previewView = previewView,
-                    rPlanPreviewProvider = requireNotNull(rPlanPreviewProvider) {
-                        "R Plan strategy requires RPlanBeautyPreviewProvider"
+                    glBeautyPreviewProvider = requireNotNull(glPreviewProvider) {
+                        "GL beauty strategy requires GlBeautyPreviewProvider"
                     },
-                    onWarmUpFallback = onRPlanWarmUpFallback
+                    onWarmUpFallback = onGlWarmUpFallback
                 )
             }
             BeautyStrategy.PIXEL_FREE -> {
@@ -55,7 +55,7 @@ internal fun rememberPreviewStrategyBundle(
                     pixelFreeView = requireNotNull(pixelFreeView) {
                         "PixelFree strategy requires PixelFreeGLSurfaceView"
                     },
-                    rPlanPreviewProvider = rPlanPreviewProvider,
+                    glPreviewProvider = glPreviewProvider,
                     onPreviewLinkModeChanged = onPixelFreePreviewLinkModeChanged,
                     onPreviewLinkReasonChanged = onPixelFreePreviewLinkReasonChanged
                 )

@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PicMe"
 include(":app")
+include(":beauty-engine")

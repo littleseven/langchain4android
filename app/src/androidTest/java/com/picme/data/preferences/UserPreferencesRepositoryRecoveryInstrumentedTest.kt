@@ -19,8 +19,8 @@ class UserPreferencesRepositoryRecoveryInstrumentedTest {
     }
 
     private suspend fun resetRepositoryState(repository: UserPreferencesRepository) {
-        repository.triggerManualRPlanRecovery()
-        repository.clearRPlanRecoveryCooldown()
+        repository.triggerManualGlEngineRecovery()
+        repository.clearGlEngineRecoveryCooldown()
     }
 
     @After
@@ -33,18 +33,18 @@ class UserPreferencesRepositoryRecoveryInstrumentedTest {
         val repository = createRepository()
         resetRepositoryState(repository)
 
-        repository.persistRPlanFallback(cooldownMs = 60_000L)
+        repository.persistGlEngineFallback(cooldownMs = 60_000L)
 
         val fallbackStrategy = repository.beautyStrategyFlow.first()
-        val fallbackRecoveryAt = repository.rPlanRecoveryAvailableAtFlow.first()
+        val fallbackRecoveryAt = repository.glEngineRecoveryAvailableAtFlow.first()
 
         assertEquals(BeautyStrategy.PIXEL_FREE, fallbackStrategy)
         assertTrue(fallbackRecoveryAt > System.currentTimeMillis())
 
-        repository.triggerManualRPlanRecovery()
+        repository.triggerManualGlEngineRecovery()
 
         val recoveredStrategy = repository.beautyStrategyFlow.first()
-        val recoveredRecoveryAt = repository.rPlanRecoveryAvailableAtFlow.first()
+        val recoveredRecoveryAt = repository.glEngineRecoveryAvailableAtFlow.first()
 
         assertEquals(BeautyStrategy.R_PLAN, recoveredStrategy)
         assertEquals(0L, recoveredRecoveryAt)

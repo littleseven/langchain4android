@@ -14,12 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.PicMeApplication
 import com.picme.core.common.Logger
+import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
-import com.picme.core.image.rplan.RPlanBeautyPreviewProvider
 import com.picme.data.preferences.BeautyStrategy
 import com.picme.di.BeautyEngineRuntimeState
+import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import com.picme.features.camera.preview.pixelfree.rememberPixelFreePreviewView
-import com.picme.features.camera.preview.rplan.rememberRPlanPreviewProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -35,7 +35,7 @@ internal data class CameraRuntimeContext(
     val showFaceDebugOverlay: Boolean,
     val showLogOverlay: Boolean,
     val faceLandmarkModeEnabled: Boolean,
-    val rPlanRecoveryAvailableAtMs: Long,
+    val glRecoveryAvailableAtMs: Long,
     val lifecycleOwner: androidx.lifecycle.LifecycleOwner
 )
 
@@ -53,7 +53,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val showFaceDebugOverlay by userPreferencesRepository.showFaceDebugOverlayFlow.collectAsState(initial = false)
     val showLogOverlay by userPreferencesRepository.showLogOverlayFlow.collectAsState(initial = false)
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
-    val rPlanRecoveryAvailableAtMs by userPreferencesRepository.rPlanRecoveryAvailableAtFlow.collectAsState(initial = 0L)
+    val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val lifecycleOwner = LocalLifecycleOwner.current
 
     return CameraRuntimeContext(
@@ -66,21 +66,21 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         showFaceDebugOverlay = showFaceDebugOverlay,
         showLogOverlay = showLogOverlay,
         faceLandmarkModeEnabled = faceLandmarkModeEnabled,
-        rPlanRecoveryAvailableAtMs = rPlanRecoveryAvailableAtMs,
+        glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
         lifecycleOwner = lifecycleOwner
     )
 }
 
-internal data class RPlanRecoveryUiState(
+internal data class GlRecoveryUiState(
     val persistedFallback: Boolean,
     val persistedFallbackReason: String?,
-    val onRPlanWarmUpFallback: (String) -> Unit
+    val onGlWarmUpFallback: (String) -> Unit
 )
 
 internal data class PreviewRuntimeViews(
     val previewView: PreviewView,
     val pixelFreeView: PixelFreeGLSurfaceView?,
-    val rPlanPreviewProvider: RPlanBeautyPreviewProvider?
+    val glPreviewProvider: GlBeautyPreviewProvider?
 )
 
 internal enum class MakeupEntry {
@@ -181,7 +181,7 @@ internal fun rememberPreviewRuntimeViews(
         beautyStrategy = beautyStrategy
     )
 
-    val rPlanPreviewProvider = rememberRPlanPreviewProvider(
+    val glPreviewProvider = rememberGlBeautyPreviewProvider(
         context = context,
         beautyStrategy = beautyStrategy
     )
@@ -189,22 +189,22 @@ internal fun rememberPreviewRuntimeViews(
     return PreviewRuntimeViews(
         previewView = previewView,
         pixelFreeView = pixelFreeView,
-        rPlanPreviewProvider = rPlanPreviewProvider
+        glPreviewProvider = glPreviewProvider
     )
 }
 
 @Composable
-internal fun rememberRPlanRecoveryState(
+internal fun rememberGlRecoveryState(
     beautyStrategy: BeautyStrategy,
-    rPlanRecoveryAvailableAtMs: Long,
+    glRecoveryAvailableAtMs: Long,
     userPreferencesRepository: com.picme.data.preferences.UserPreferencesRepository,
     coroutineScope: CoroutineScope
-): RPlanRecoveryUiState {
+): GlRecoveryUiState {
     var persistedFallback by remember { mutableStateOf(false) }
     var persistedFallbackReason by remember { mutableStateOf<String?>(null) }
     var autoRecoveryRequestedAtMs by remember { mutableStateOf(0L) }
 
-    LaunchedEffect(beautyStrategy, rPlanRecoveryAvailableAtMs) {
+    LaunchedEffect(beautyStrategy, glRecoveryAvailableAtMs) {
         if (beautyStrategy == BeautyStrategy.R_PLAN) {
             persistedFallback = false
             persistedFallbackReason = null
@@ -212,26 +212,26 @@ internal fun rememberRPlanRecoveryState(
             return@LaunchedEffect
         }
 
-        if (beautyStrategy != BeautyStrategy.PIXEL_FREE || rPlanRecoveryAvailableAtMs <= 0L) {
+        if (beautyStrategy != BeautyStrategy.PIXEL_FREE || glRecoveryAvailableAtMs <= 0L) {
             return@LaunchedEffect
         }
 
         val nowMs = System.currentTimeMillis()
-        if (nowMs >= rPlanRecoveryAvailableAtMs && autoRecoveryRequestedAtMs != rPlanRecoveryAvailableAtMs) {
-            autoRecoveryRequestedAtMs = rPlanRecoveryAvailableAtMs
-            userPreferencesRepository.triggerManualRPlanRecovery()
+        if (nowMs >= glRecoveryAvailableAtMs && autoRecoveryRequestedAtMs != glRecoveryAvailableAtMs) {
+            autoRecoveryRequestedAtMs = glRecoveryAvailableAtMs
+            userPreferencesRepository.triggerManualGlEngineRecovery()
             Logger.i("Camera", "Cooldown ended, auto retry R Plan strategy")
         }
     }
 
-    val onRPlanWarmUpFallback: (String) -> Unit = { reason ->
-        BeautyEngineRuntimeState.markRPlanFallback(reason)
+    val onGlWarmUpFallback: (String) -> Unit = { reason ->
+        BeautyEngineRuntimeState.markGlEngineFallback(reason)
 
         if (!persistedFallback) {
             persistedFallback = true
             persistedFallbackReason = reason
             coroutineScope.launch {
-                userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+                userPreferencesRepository.persistGlEngineFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
                 Logger.w(
                     "Camera",
                     "Beauty strategy persisted to PIXEL_FREE after R Plan warm-up failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
@@ -240,10 +240,10 @@ internal fun rememberRPlanRecoveryState(
         }
     }
 
-    return RPlanRecoveryUiState(
+    return GlRecoveryUiState(
         persistedFallback = persistedFallback,
         persistedFallbackReason = persistedFallbackReason,
-        onRPlanWarmUpFallback = onRPlanWarmUpFallback
+        onGlWarmUpFallback = onGlWarmUpFallback
     )
 }
 
