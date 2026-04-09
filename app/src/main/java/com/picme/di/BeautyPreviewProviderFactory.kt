@@ -4,7 +4,7 @@ import android.content.Context
 import com.picme.core.common.Logger
 import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeBeautyPreviewProvider
-import com.picme.data.preferences.BeautyStrategy
+import com.picme.domain.model.BeautyStrategy
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.preview.BeautyPreviewProvider
 

@@ -7,7 +7,7 @@ import com.picme.core.common.Logger
 import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.gl.toBeautyParams
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
-import com.picme.data.preferences.BeautyStrategy
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.AspectRatio
 import com.picme.features.camera.preview.core.BeautyPreviewEngineStrategy

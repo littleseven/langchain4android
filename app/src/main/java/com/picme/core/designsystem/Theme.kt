@@ -9,7 +9,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import com.picme.data.preferences.ThemeMode
+import com.picme.domain.model.ThemeMode
 
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryLight,

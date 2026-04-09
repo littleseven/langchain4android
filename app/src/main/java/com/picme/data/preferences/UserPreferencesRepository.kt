@@ -9,6 +9,11 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.picme.domain.model.AppLanguage
+import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.ThemeMode
+import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -16,34 +21,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
 
-enum class ThemeMode {
-    SYSTEM, LIGHT, DARK
-}
-
-enum class AppLanguage {
-    SYSTEM, ENGLISH, CHINESE, TRADITIONAL_CHINESE
-}
-
-/**
- * 美颜策略选择
- *
- * PIXEL_FREE: PixelFreeEffects SDK（备用引擎）
- * R_PLAN: R 计划自主研发（主引擎，默认）
- */
-enum class BeautyStrategy {
-    PIXEL_FREE,
-    R_PLAN
-}
-
-enum class FaceDetectIntervalProfile {
-    CONSERVATIVE,
-    BALANCED,
-    AGGRESSIVE
-}
+// 枚举已迁移至 domain.model.UserPreferences，调用方请从 com.picme.domain.model 导入
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_preferences")
 
-class UserPreferencesRepository(private val context: Context) {
+class UserPreferencesRepository(private val context: Context) : UserSettingsRepository {
 
     private object PreferencesKeys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -59,7 +41,7 @@ class UserPreferencesRepository(private val context: Context) {
         val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
     }
 
-    val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
+    override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -72,7 +54,7 @@ class UserPreferencesRepository(private val context: Context) {
             ThemeMode.valueOf(themeName)
         }
 
-    val appLanguageFlow: Flow<AppLanguage> = context.dataStore.data
+    override val appLanguageFlow: Flow<AppLanguage> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -85,7 +67,7 @@ class UserPreferencesRepository(private val context: Context) {
             AppLanguage.valueOf(langName)
         }
 
-    fun getAppLanguageBlocking(): AppLanguage = runBlocking {
+    override fun getAppLanguageBlocking(): AppLanguage = runBlocking {
         try {
             val preferences = context.dataStore.data.first()
             val langName = preferences[PreferencesKeys.APP_LANGUAGE] ?: AppLanguage.SYSTEM.name
@@ -95,19 +77,19 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun updateThemeMode(themeMode: ThemeMode) {
+    override suspend fun updateThemeMode(mode: ThemeMode) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.THEME_MODE] = themeMode.name
+            preferences[PreferencesKeys.THEME_MODE] = mode.name
         }
     }
 
-    suspend fun updateAppLanguage(appLanguage: AppLanguage) {
+    override suspend fun updateAppLanguage(language: AppLanguage) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.APP_LANGUAGE] = appLanguage.name
+            preferences[PreferencesKeys.APP_LANGUAGE] = language.name
         }
     }
 
-    val beautyStrategyFlow: Flow<BeautyStrategy> = context.dataStore.data
+    override val beautyStrategyFlow: Flow<BeautyStrategy> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -120,7 +102,7 @@ class UserPreferencesRepository(private val context: Context) {
             BeautyStrategy.valueOf(strategyName)
         }
 
-    fun getBeautyStrategyBlocking(): BeautyStrategy = runBlocking {
+    override fun getBeautyStrategyBlocking(): BeautyStrategy = runBlocking {
         try {
             val preferences = context.dataStore.data.first()
             val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.R_PLAN.name
@@ -130,13 +112,13 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun updateBeautyStrategy(strategy: BeautyStrategy) {
+    override suspend fun updateBeautyStrategy(strategy: BeautyStrategy) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = strategy.name
         }
     }
 
-    val glEngineRecoveryAvailableAtFlow: Flow<Long> = context.dataStore.data
+    override val glEngineRecoveryAvailableAtFlow: Flow<Long> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -148,7 +130,7 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] ?: 0L
         }
 
-    suspend fun persistGlEngineFallback(cooldownMs: Long) {
+    override suspend fun persistGlEngineFallback(cooldownMs: Long) {
         val nowMs = System.currentTimeMillis()
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.PIXEL_FREE.name
@@ -156,20 +138,20 @@ class UserPreferencesRepository(private val context: Context) {
         }
     }
 
-    suspend fun triggerManualGlEngineRecovery() {
+    override suspend fun triggerManualGlEngineRecovery() {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.R_PLAN.name
             preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
         }
     }
 
-    suspend fun clearGlEngineRecoveryCooldown() {
+    override suspend fun clearGlEngineRecoveryCooldown() {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
         }
     }
 
-    val debugUiEnabledFlow: Flow<Boolean> = context.dataStore.data
+    override val debugUiEnabledFlow: Flow<Boolean> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -181,13 +163,13 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.DEBUG_UI_ENABLED] ?: true
         }
 
-    suspend fun updateDebugUiEnabled(enabled: Boolean) {
+    override suspend fun updateDebugUiEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DEBUG_UI_ENABLED] = enabled
         }
     }
 
-    val showCameraInfoInPreviewFlow: Flow<Boolean> = context.dataStore.data
+    override val showCameraInfoInPreviewFlow: Flow<Boolean> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -199,13 +181,13 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.SHOW_CAMERA_INFO_IN_PREVIEW] ?: false
         }
 
-    suspend fun updateShowCameraInfoInPreview(show: Boolean) {
+    override suspend fun updateShowCameraInfoInPreview(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SHOW_CAMERA_INFO_IN_PREVIEW] = show
         }
     }
 
-    val showFaceDebugOverlayFlow: Flow<Boolean> = context.dataStore.data
+    override val showFaceDebugOverlayFlow: Flow<Boolean> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -217,13 +199,13 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.SHOW_FACE_DEBUG_OVERLAY] ?: false
         }
 
-    suspend fun updateShowFaceDebugOverlay(show: Boolean) {
+    override suspend fun updateShowFaceDebugOverlay(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SHOW_FACE_DEBUG_OVERLAY] = show
         }
     }
 
-    val showLogOverlayFlow: Flow<Boolean> = context.dataStore.data
+    override val showLogOverlayFlow: Flow<Boolean> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -235,13 +217,13 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.SHOW_LOG_OVERLAY] ?: false
         }
 
-    suspend fun updateShowLogOverlay(show: Boolean) {
+    override suspend fun updateShowLogOverlay(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SHOW_LOG_OVERLAY] = show
         }
     }
 
-    val faceDetectionLandmarkModeFlow: Flow<Boolean> = context.dataStore.data
+    override val faceDetectionLandmarkModeFlow: Flow<Boolean> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -253,13 +235,13 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.FACE_DETECTION_LANDMARK_MODE] ?: true
         }
 
-    suspend fun updateFaceDetectionLandmarkMode(enabled: Boolean) {
+    override suspend fun updateFaceDetectionLandmarkMode(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.FACE_DETECTION_LANDMARK_MODE] = enabled
         }
     }
 
-    val adaptiveFaceDetectionIntervalEnabledFlow: Flow<Boolean> = context.dataStore.data
+    override val adaptiveFaceDetectionIntervalEnabledFlow: Flow<Boolean> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -271,13 +253,13 @@ class UserPreferencesRepository(private val context: Context) {
             preferences[PreferencesKeys.ADAPTIVE_FACE_DETECTION_INTERVAL] ?: true
         }
 
-    suspend fun updateAdaptiveFaceDetectionIntervalEnabled(enabled: Boolean) {
+    override suspend fun updateAdaptiveFaceDetectionIntervalEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.ADAPTIVE_FACE_DETECTION_INTERVAL] = enabled
         }
     }
 
-    val faceDetectIntervalProfileFlow: Flow<FaceDetectIntervalProfile> = context.dataStore.data
+    override val faceDetectIntervalProfileFlow: Flow<FaceDetectIntervalProfile> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -291,7 +273,7 @@ class UserPreferencesRepository(private val context: Context) {
             FaceDetectIntervalProfile.valueOf(profileName)
         }
 
-    suspend fun updateFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile) {
+    override suspend fun updateFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.FACE_DETECT_INTERVAL_PROFILE] = profile.name
         }

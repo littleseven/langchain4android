@@ -12,11 +12,12 @@ enum class MediaType {
 }
 
 /**
- * 相机镜头方向
+ * 相机镜头方向（纯 Kotlin 领域模型，与 CameraX 无关）
+ * Features 层在使用时自行映射到 CameraSelector.LENS_FACING_* 常量。
  */
-enum class LensFacing(val cameraSelector: Int) {
-    FRONT(androidx.camera.core.CameraSelector.LENS_FACING_FRONT),
-    BACK(androidx.camera.core.CameraSelector.LENS_FACING_BACK)
+enum class LensFacing {
+    FRONT,
+    BACK
 }
 
 /**

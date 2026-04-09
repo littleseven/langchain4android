@@ -196,7 +196,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
 
     val nowMs = System.currentTimeMillis()
     val hasPersistedFallback =
-        uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE &&
+        uiState.beautyDebugState.strategy == com.picme.domain.model.BeautyStrategy.PIXEL_FREE &&
             uiState.beautyDebugState.recoveryAvailableAtMs > 0L
     val fallbackStateText = if (hasPersistedFallback) {
         val reasonText = uiState.beautyDebugState.persistedFallbackReason ?: "runtime failure"
@@ -211,7 +211,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "Fallback: NONE"
     }
 
-    val pixelFreeLinkText = if (uiState.beautyDebugState.strategy == com.picme.data.preferences.BeautyStrategy.PIXEL_FREE) {
+    val pixelFreeLinkText = if (uiState.beautyDebugState.strategy == com.picme.domain.model.BeautyStrategy.PIXEL_FREE) {
         when (uiState.beautyDebugState.pixelFreeLinkMode) {
             com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> "PixelFree Link: PROVIDER(realtime)"
             com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> "PixelFree Link: RAW(no warp realtime)"
@@ -227,8 +227,8 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     }
 
     val lipRealtimePreviewSupported = when (uiState.beautyDebugState.strategy) {
-        com.picme.data.preferences.BeautyStrategy.R_PLAN -> uiState.beautyDebugState.providerRenderActive
-        com.picme.data.preferences.BeautyStrategy.PIXEL_FREE -> {
+        com.picme.domain.model.BeautyStrategy.R_PLAN -> uiState.beautyDebugState.providerRenderActive
+        com.picme.domain.model.BeautyStrategy.PIXEL_FREE -> {
             when (uiState.beautyDebugState.pixelFreeLinkMode) {
                 com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER,
                 com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> true

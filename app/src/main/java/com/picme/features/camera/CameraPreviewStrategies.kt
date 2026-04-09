@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
-import com.picme.data.preferences.BeautyStrategy
+import com.picme.domain.model.BeautyStrategy
 import com.picme.features.camera.preview.core.PreviewStrategyBundle
 import com.picme.features.camera.preview.gl.GlBeautyPreviewStrategy
 import com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode
