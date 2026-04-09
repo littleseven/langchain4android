@@ -8,7 +8,12 @@
 - 项目根目录 `AGENTS.md`: 顶层治理文档（跨模块通用规则）
 - 本文件: OpenClaw 运行时配置（工具、快捷方式）
 
-## OpenClaw + kimi-cli 集成命令
+## kimi-cli 使用方式
+
+### 启动会话
+```bash
+# 进入项目目录
+cd ~/AndroidStudioProjects/PicMe
 
 # 启动交互式会话
 kimi-cli chat
@@ -94,20 +99,9 @@ kimi-cli chat
 - 快捷键: Cmd+Shift+L
 
 ### kimi-cli 集成
-- **本地模式**: 在项目目录下运行 `kimi-cli chat`
-- **Agent 模式**: 发送自然语言指令激活 CO/PM/RD/CR/QA 角色链
-
-#### 启动方式
-```bash
-# 进入项目目录
-cd ~/AndroidStudioProjects/PicMe
-
-# 启动交互式会话
-kimi-cli chat
-
-# 或使用项目脚本
-./kimi-cli.sh
-```
+- **启动**: 在项目目录下运行 `kimi-cli chat`
+- **交互**: 发送自然语言指令，Agent 团队自动响应
+- **查看命令**: 输入 `/` 列出所有内置命令
 
 ---
 

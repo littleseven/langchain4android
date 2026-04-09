@@ -14,19 +14,16 @@ kimi-cli chat --context .
 # 发送消息: "激活我的团队"
 ```
 
-### kimi-cli 专用命令
+### 在 kimi-cli 中执行任务
 ```bash
-# 代码生成
-kimi-cli generate "创建相机预览 Composable"
+# 进入项目目录并启动 kimi-cli
+cd ~/AndroidStudioProjects/PicMe
+kimi-cli chat
 
-# 代码审查
-kimi-cli review --file app/src/main/java/com/picme/features/camera/CameraScreen.kt
-
-# 智能重构
-kimi-cli refactor --target features/camera --pattern "提取状态到 ViewModel"
-
-# 批量测试生成
-kimi-cli test --module data --coverage 80
+# 然后直接用自然语言描述需求，例如：
+# "帮我重构 CameraScreen，把状态提取到 ViewModel"
+# "给 data 模块添加单元测试"
+# "审查 camera 模块的代码"
 ```
 
 ### 远程开发工作流
@@ -35,12 +32,8 @@ kimi-cli test --module data --coverage 80
 cd ~/AndroidStudioProjects/PicMe
 kimi-cli chat
 
-# 方式 2: 通过 SSH 远程开发
-kimi-cli connect ssh://user@host --workspace ~/AndroidStudioProjects/PicMe
-
-# 方式 3: 守护进程模式
-kimi-cli daemon --port 3456 &
-kimi-cli client --port 3456
+# 方式 2: 使用项目脚本
+./kimi-cli.sh
 ```
 
 ### 常用 Gradle 命令（在 kimi-cli 中执行）

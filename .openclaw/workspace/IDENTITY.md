@@ -51,26 +51,25 @@ cd ~/AndroidStudioProjects/PicMe
 - **默认模型**: kimi/kimi-code（快速响应）
 - **深度分析**: kimi/kimi-k2.5（复杂问题）
 
-## OpenClaw + kimi-cli 远程开发
+## kimi-cli 远程开发
 
 ### 环境要求
-- **OpenClaw**: 已安装并配置工作区
 - **kimi-cli**: 已安装 (`npm install -g @kimi/kimi-cli`)
-- **远程连接**: SSH 或本地守护进程模式
+- **项目路径**: `~/AndroidStudioProjects/PicMe`
 
 ### 远程开发配置
 ```bash
-# 启动 kimi-cli 守护进程（本地模式）
-kimi-cli daemon --port 3456
+# 启动 kimi-cli 会话（推荐）
+cd ~/AndroidStudioProjects/PicMe
+kimi-cli chat
 
-# 或通过 SSH 远程连接
-kimi-cli connect ssh://user@remote-host:22 --workspace ~/AndroidStudioProjects/PicMe
+# 或使用项目脚本
+./kimi-cli.sh
 ```
 
-### OpenClaw 工作区路径
-- **本地路径**: `/Users/guoshuai/AndroidStudioProjects/PicMe`
-- **工作区配置**: `.openclaw/workspace/`
-- **远程缓存**: `~/.openclaw/cache/PicMe/`
+### 工作区路径
+- **项目路径**: `/Users/guoshuai/AndroidStudioProjects/PicMe`
+- **配置目录**: `.openclaw/workspace/`
 
 ### 快捷入口
 ```bash
@@ -80,7 +79,4 @@ kimi-cli chat
 
 # 方式 2: 使用脚本启动（如果已配置）
 ./kimi-cli.sh
-
-# 方式 3: 守护进程模式
-kimi-cli daemon --port 3456
 ```
