@@ -1,8 +1,9 @@
 package com.picme.features.camera
 
 import androidx.compose.ui.geometry.Offset
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.Assert.*
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
@@ -194,6 +195,9 @@ class FacePositionAccuracyTest(
                 ),
 
                 // ========== 测试用例 7: 旋转 270 度 ==========
+                // 【注意】当前 transformFaceCoordinateTest 实现中，270° 与 90° 走同一分支：
+                // Pair(mirroredX, normY)，即不做额外轴翻转。
+                // 若业务上 270° 场景需要不同于 90° 的坐标变换，应修改生产代码并更新此用例。
                 arrayOf(
                     "后置-270度-人脸中心",
                     PREVIEW_RES_WIDTH, PREVIEW_RES_HEIGHT,
@@ -205,6 +209,7 @@ class FacePositionAccuracyTest(
                         rightEyeX = 680f, rightEyeY = 320f
                     ),
                     FaceOutput(
+                        // 当前实现与 90° 结果相同（270° 未做额外翻转）
                         faceCenter = Offset(960f, 540f),
                         leftEye = Offset(900f, 480f),
                         rightEye = Offset(1020f, 480f),

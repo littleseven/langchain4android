@@ -25,10 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.R
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
@@ -87,7 +85,8 @@ internal fun CameraPreviewContent(
         if (uiState.showFaceDebugOverlay) {
             FaceDebugOverlay(
                 faceWarpParams = uiState.faceWarpParams,
-                slimFaceValue = uiState.beautySettings.slimFace
+                slimFaceValue = uiState.beautySettings.slimFace,
+                aspectRatio = uiState.aspectRatio
             )
         }
 

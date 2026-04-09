@@ -15,7 +15,8 @@ import kotlin.math.sqrt
 @Composable
 internal fun FaceDebugOverlay(
     faceWarpParams: FaceWarpParams,
-    slimFaceValue: Float
+    slimFaceValue: Float,
+    aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
     if (!faceWarpParams.hasFace) {
         return
@@ -37,17 +38,57 @@ internal fun FaceDebugOverlay(
         val faceRadiusNorm = faceWarpParams.faceRadius.coerceIn(0f, 1f)
         val slimFaceIntensity = (slimFaceValue / 50f).coerceIn(-1f, 1f)
 
+        // 计算 FIT_CENTER 模式下图像内容在 Canvas 中的实际显示区域
+        // 4:3/16:9 比例时 PreviewView 使用 FIT_CENTER，有上下或左右黑边
+        // normY 是基于全屏高度归一化的，需要映射到内容区域才能与视觉画面对齐
+        val contentOffsetX: Float
+        val contentOffsetY: Float
+        val contentWidth: Float
+        val contentHeight: Float
+
+        if (aspectRatio == AspectRatio.RATIO_FULL) {
+            // FILL_CENTER：内容填满 Canvas，无黑边，直接用全屏坐标
+            contentOffsetX = 0f
+            contentOffsetY = 0f
+            contentWidth = size.width
+            contentHeight = size.height
+        } else {
+            // FIT_CENTER：根据目标宽高比计算内容区域
+            // 4:3 竖屏旋转后：图像内容宽高比 = 3/4 = 0.75（高 > 宽，高不是更大，而是比例上竖向更长）
+            // 16:9 竖屏旋转后：图像内容宽高比 = 9/16 = 0.5625
+            val imageContentAspect = when (aspectRatio) {
+                AspectRatio.RATIO_4_3 -> 3f / 4f   // 竖屏时 width/height = 3/4
+                AspectRatio.RATIO_16_9 -> 9f / 16f  // 竖屏时 width/height = 9/16
+                else -> size.width / size.height
+            }
+            val canvasAspect = size.width / size.height
+            if (imageContentAspect < canvasAspect) {
+                // 内容比 Canvas 更窄：上下填满，左右有黑边
+                contentHeight = size.height
+                contentWidth = size.height * imageContentAspect
+                contentOffsetX = (size.width - contentWidth) / 2f
+                contentOffsetY = 0f
+            } else {
+                // 内容比 Canvas 更宽：左右填满，上下有黑边
+                contentWidth = size.width
+                contentHeight = size.width / imageContentAspect
+                contentOffsetX = 0f
+                contentOffsetY = (size.height - contentHeight) / 2f
+            }
+        }
+
+        // 将归一化坐标（基于 previewView 全尺寸）映射到内容区域实际像素坐标
         fun toCanvasPoint(point: Offset): Offset {
             return Offset(
-                x = point.x.coerceIn(0f, 1f) * size.width,
-                y = point.y.coerceIn(0f, 1f) * size.height
+                x = contentOffsetX + point.x.coerceIn(0f, 1f) * contentWidth,
+                y = contentOffsetY + point.y.coerceIn(0f, 1f) * contentHeight
             )
         }
 
         val center = toCanvasPoint(centerNorm)
         val leftEye = toCanvasPoint(leftEyeNorm)
         val rightEye = toCanvasPoint(rightEyeNorm)
-        val radiusPx = faceRadiusNorm * size.width
+        val radiusPx = faceRadiusNorm * contentWidth
 
         val contourPoints = faceWarpParams.contourPoints.map { contourPoint ->
             toCanvasPoint(contourPoint)
