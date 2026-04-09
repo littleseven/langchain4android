@@ -14,7 +14,7 @@
 ## 1. 技术选型决策
 
 ### 1.1 背景
-当前项目采用双引擎策略：`R_PLAN` 作为默认主引擎，`PIXEL_FREE` 作为稳定兜底引擎。PixelFree 文档用于说明兜底链路的集成、维护与兼容性要求；R Plan 主链路详见 `R_PLAN_TECH_SPEC.md`。
+当前项目采用双引擎策略：`BIG_BEAUTY` 作为默认主引擎，`PIXEL_FREE` 作为稳定兜底引擎。PixelFree 文档用于说明兜底链路的集成、维护与兼容性要求；R Plan 主链路详见 `R_PLAN_TECH_SPEC.md`。
 
 ### 1.2 双轨策略
 

@@ -2,7 +2,7 @@
 
 **版本**：4.1
 **状态**：实施中（R Plan 主引擎 + PixelFree 稳定兜底）
-**最后更新**：2026-04（按当前实现对齐）
+**最后更新**：2026-04-09（按当前实现对齐）
 **技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + 运行时自动回退
 
 ---
@@ -18,8 +18,8 @@
 
 ### 0.0 双引擎定位
 
-- **主引擎（默认）**：R 计划
-- **备用引擎**：PixelFreeEffects SDK
+- **主引擎（默认）**：R 计划（`BIG_BEAUTY`）
+- **备用引擎**：PixelFreeEffects SDK（`PIXEL_FREE`）
 - **切换方式**：设置页「美颜引擎」配置开关
 - **容灾策略**：R 计划初始化失败或运行异常时，自动回退 PixelFreeEffects
 - **长期定位**：R Plan 从 App 内部能力逐步演进为独立视觉能力基础库。
@@ -392,7 +392,7 @@ private fun bindDisplaySurface(surface: Surface) {
 
 ```kotlin
 @Volatile private var frameAvailable: Boolean = false
-@Volatile private var latestPerfStats: PerfStats = PerfStats()
+@Volatile private var latestPerfStats: BeautyPerfStats = BeautyPerfStats()
 
 surfaceTexture?.setOnFrameAvailableListener {
     frameAvailable = true
@@ -591,7 +591,7 @@ suspend fun persistGlEngineFallback(cooldownMs: Long) {
 }
 
 suspend fun triggerManualGlEngineRecovery() {
-    preferences[BEAUTY_STRATEGY] = BeautyStrategy.R_PLAN.name
+    preferences[BEAUTY_STRATEGY] = BeautyStrategy.BIG_BEAUTY.name
     preferences[GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
 }
 ```
