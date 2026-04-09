@@ -4,6 +4,7 @@ import android.graphics.SurfaceTexture
 import android.opengl.Matrix
 import android.util.Log
 import android.view.View
+import com.picme.beauty.api.BeautyPerfStats
 
 /**
  * R 计划 - 相机预览渲染器
@@ -22,13 +23,7 @@ class CameraPreviewRenderer {
         const val DEFAULT_HEIGHT = 720
     }
 
-    data class PerfStats(
-        val fps: Float = 0f,
-        val processingMs: Int = 0,
-        val delayMs: Int = 0,
-        val cpuUsage: Float = 0f,
-        val nullFrames: Int = 0
-    )
+    // PerfStats 已迁移到 api 层，保留向后兼容：PerfStats = BeautyPerfStats（见包级别 typealias）
 
     private val eglCore = EGLCore()
     private var eglContext: android.opengl.EGLContext? = null
@@ -80,7 +75,7 @@ class CameraPreviewRenderer {
     }
 
     @Volatile
-    private var latestPerfStats: PerfStats = PerfStats()
+    private var latestPerfStats: BeautyPerfStats = BeautyPerfStats()
 
     interface OnTextureAvailableListener {
         fun onTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int)
@@ -262,7 +257,7 @@ class CameraPreviewRenderer {
                             val delayMs = (frameBudgetMs - avgProcessingMs).coerceAtLeast(0)
                             val cpuUsage =
                                 (statsProcessingTotalMs * 100f / statsElapsedMs.toFloat()).coerceIn(0f, 100f)
-                            latestPerfStats = PerfStats(
+                            latestPerfStats = BeautyPerfStats(
                                 fps = fps,
                                 processingMs = avgProcessingMs,
                                 delayMs = delayMs,
@@ -512,7 +507,7 @@ class CameraPreviewRenderer {
         beautyRenderer.setRenderMode(mode)
     }
 
-    fun getPerfStats(): PerfStats = latestPerfStats
+    fun getPerfStats(): BeautyPerfStats = latestPerfStats
 
     fun getSurfaceTexture(): SurfaceTexture? = surfaceTexture
 

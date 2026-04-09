@@ -58,10 +58,11 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.R
+import com.picme.beauty.api.BeautyPerfStats
 import com.picme.core.common.Logger
-import com.picme.domain.model.BeautyStrategy
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
@@ -813,15 +814,15 @@ fun CameraContent(
         BeautyPreviewStatus.SKIPPED
     }
     var renderPerfStats by remember {
-        mutableStateOf(com.picme.beauty.egl.CameraPreviewRenderer.PerfStats())
+        mutableStateOf(BeautyPerfStats())
     }
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
         while (isActive) {
             renderPerfStats = if (beautyStrategy == BeautyStrategy.R_PLAN && useProviderRenderView) {
-                glPreviewProvider?.getPerfStats() ?: com.picme.beauty.egl.CameraPreviewRenderer.PerfStats()
+                glPreviewProvider?.getPerfStats() ?: BeautyPerfStats()
             } else {
-                com.picme.beauty.egl.CameraPreviewRenderer.PerfStats()
+                BeautyPerfStats()
             }
             delay(250)
         }

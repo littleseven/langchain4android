@@ -3,7 +3,7 @@ package com.picme.features.camera.preview.gl
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import com.picme.core.image.gl.GlBeautyPreviewProvider
+import com.picme.beauty.egl.GlBeautyPreviewProvider
 import com.picme.domain.model.BeautyStrategy
 
 @Composable

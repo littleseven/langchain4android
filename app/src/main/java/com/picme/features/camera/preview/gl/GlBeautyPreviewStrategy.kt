@@ -4,7 +4,7 @@ import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.picme.core.common.Logger
-import com.picme.core.image.gl.GlBeautyPreviewProvider
+import com.picme.beauty.egl.GlBeautyPreviewProvider
 import com.picme.core.image.gl.toBeautyParams
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.BeautySettings

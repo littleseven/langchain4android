@@ -9,6 +9,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
+import com.picme.beauty.api.BeautyPerfStats
 
 /**
  * R Plan 预览视图：
@@ -139,7 +140,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.setRenderSurface(surface)
     }
 
-    fun getPerfStats(): CameraPreviewRenderer.PerfStats = renderer.getPerfStats()
+    fun getPerfStats(): BeautyPerfStats = renderer.getPerfStats()
 
     fun getSurfaceTexture(): SurfaceTexture? = renderer.getSurfaceTexture()
 
