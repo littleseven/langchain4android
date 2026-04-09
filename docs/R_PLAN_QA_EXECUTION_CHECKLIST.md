@@ -1,14 +1,14 @@
 # R Plan QA 执行清单
 
 **适用范围**：R Plan 主引擎 + PixelFree 兜底链路
-**最后更新**：2026-04
+**最后更新**：2026-04-09
 **关联文档**：`R_PLAN_TECH_SPEC.md`、`CAMERA_PREVIEW_TECH_SPEC.md`、`PIXELFREE_FALLBACK_TECH_SPEC.md`、`FEATURES.md`
 
 ---
 
 ## 0. 术语与状态定义（执行前必读）
 
-- **引擎策略枚举**：`R_PLAN`（主引擎）/ `PIXEL_FREE`（兜底引擎）。
+- **引擎策略枚举**：`BIG_BEAUTY`（主引擎）/ `PIXEL_FREE`（兜底引擎）。
 - **统一回退入口**：`onGlWarmUpFallback(reason)`。
 - **策略持久化键**：`beauty_strategy`、`gl_engine_recovery_available_at_ms`。
 - **自动恢复触发**：`triggerManualGlEngineRecovery()`。
@@ -78,12 +78,12 @@
 
 ## 3. 容灾回归步骤（手工）
 
-1. 设置策略为 `R_PLAN`，进入相机，确认 R Plan 预览可见。
+1. 设置策略为 `BIG_BEAUTY`，进入相机，确认 R Plan 预览可见。
 2. 人工注入初始化失败（例如抛异常），确认回退到 `PIXEL_FREE`。
 3. 验证持久化写入：`beauty_strategy=PIXEL_FREE` 且有 `gl_engine_recovery_available_at_ms`。
 4. 验证 `useProviderRenderView=false`，确认当前展示容器为 `PreviewView`。
 5. 等待冷却窗口结束，确认自动触发 `triggerManualGlEngineRecovery()`。
-6. 重试成功时恢复到 `R_PLAN`；重试失败时再次回退且可继续拍照。
+6. 重试成功时恢复到 `BIG_BEAUTY`；重试失败时再次回退且可继续拍照。
 7. 全程观察调试浮层与日志：`PerfStats`、fallback reason、剩余冷却秒数。
 
 ---
@@ -106,7 +106,7 @@
 
 ### 4.3 执行记录模板
 - 设备型号 / 系统版本：
-- 引擎策略：`R_PLAN` / `PIXEL_FREE`
+- 引擎策略：`BIG_BEAUTY` / `PIXEL_FREE`
 - `useProviderRenderView`：true / false
 - 持久化状态：`beauty_strategy` / `gl_engine_recovery_available_at_ms`
 - 测试用例：`P0-01` ~ `P1-05`

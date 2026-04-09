@@ -18,7 +18,7 @@ enum class AppLanguage {
  * 美颜引擎策略（领域模型）
  *
  * PIXEL_FREE: PixelFreeEffects SDK（备用兜底引擎）
- * R_PLAN: R 计划自研 OpenGL ES 管线（默认主引擎）
+ * BIG_BEAUTY: R 计划自研 OpenGL ES 管线（默认主引擎）
  */
 enum class BeautyStrategy {
     PIXEL_FREE,

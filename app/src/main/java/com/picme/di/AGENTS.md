@@ -55,8 +55,8 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
 **技术规范**:
 - **策略模式**: 根据 `BeautyStrategy` 枚举动态选择美颜引擎
-  - `R_PLAN`: 主引擎 (`GpuBeautyProcessor`)
-  - `PIXEL_FREE`: 备用引擎 (`PixelFreeBeautyProcessor`)
+  - `BIG_BEAUTY`: 主引擎 (`GlBeautyPreviewProvider`)
+  - `PIXEL_FREE`: 备用引擎 (`PixelFreeBeautyPreviewProvider`)
 - **故障回退**: R Plan 初始化失败时自动回退到 PixelFree，记录回退原因
 - **运行时状态**: 使用 `BeautyEngineRuntimeState` 单例管理回退状态，支持 UI 层查询
 - **阻塞读取**: 使用 `getBeautyStrategyBlocking()` 确保初始化时获取最新配置
@@ -69,13 +69,13 @@ private val beautyProcessor: BeautyProcessor by lazy {
     
     when (strategy) {
         BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor(context)
-        BeautyStrategy.R_PLAN -> {
+        BeautyStrategy.BIG_BEAUTY -> {
             try {
-                GpuBeautyProcessor(context)
+                GlBeautyPreviewProvider(context)
             } catch (error: Throwable) {
                 BeautyEngineRuntimeState.markGlEngineFallback(error.message ?: "unknown")
                 Logger.w("DI", "R Plan init failed, fallback to PixelFree", error)
-                PixelFreeBeautyProcessor(context)
+                PixelFreeBeautyPreviewProvider(context)
             }
         }
     }

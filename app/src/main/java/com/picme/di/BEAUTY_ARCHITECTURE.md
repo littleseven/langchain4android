@@ -53,7 +53,7 @@
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │ enum BeautyStrategy {                                │   │
 │  │     PIXEL_FREE,  // 短期方案                         │   │
-│  │     R_PLAN       // 中长期方案                       │   │
+│  │     BIG_BEAUTY   // 中长期方案                       │   │
 │  │ }                                                    │   │
 │  │                                                      │   │
 │  │ fun create(strategy: BeautyStrategy): Provider      │   │
@@ -166,7 +166,7 @@ class GlBeautyPreviewProvider(context: Context) : BeautyPreviewProvider, BeautyP
 object BeautyPreviewProviderFactory {
     enum class BeautyStrategy {
         PIXEL_FREE,  // 短期方案
-        R_PLAN       // 中长期方案
+        BIG_BEAUTY   // 中长期方案
     }
 
     // 配置默认策略（一键切换）
@@ -175,7 +175,7 @@ object BeautyPreviewProviderFactory {
     fun create(context: Context, strategy: BeautyStrategy? = null): BeautyPreviewProvider {
         return when (strategy ?: getCurrentStrategy()) {
             BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyPreviewProvider(context)
-            BeautyStrategy.R_PLAN -> GlBeautyPreviewProvider(context)
+            BeautyStrategy.BIG_BEAUTY -> GlBeautyPreviewProvider(context)
         }
     }
 }
@@ -208,7 +208,7 @@ fun create(context: Context): BeautyPreviewProvider {
 
     return when (userStrategy) {
         BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyPreviewProvider(context)
-        BeautyStrategy.R_PLAN -> GlBeautyPreviewProvider(context)
+        BeautyStrategy.BIG_BEAUTY -> GlBeautyPreviewProvider(context)
     }
 }
 ```
@@ -224,14 +224,14 @@ fun create(context: Context): BeautyPreviewProvider {
 // 在特定场景强制使用某个策略
 val provider = BeautyPreviewProviderFactory.create(
     context,
-    strategy = BeautyStrategy.R_PLAN
+    strategy = BeautyStrategy.BIG_BEAUTY
 )
 ```
 
 #### 方式 3：降级策略（容错机制）
 ```kotlin
 val provider = try {
-    BeautyPreviewProviderFactory.create(context, BeautyStrategy.R_PLAN)
+    BeautyPreviewProviderFactory.create(context, BeautyStrategy.BIG_BEAUTY)
 } catch (e: Throwable) {
     Log.w(TAG, "GL engine init failed, fallback to PixelFree")
     BeautyPreviewProviderFactory.create(context, BeautyStrategy.PIXEL_FREE)
@@ -402,13 +402,13 @@ fun CameraScreen(viewModel: CameraViewModel) {
 
 ### 9.2 策略切换逻辑修正
 
-设置页在切换美颜引擎时，统一先持久化策略，再按需触发 R_PLAN 手动恢复逻辑：
+设置页在切换美颜引擎时，统一先持久化策略，再按需触发 BIG_BEAUTY 手动恢复逻辑：
 
 ```kotlin
 fun setBeautyStrategy(strategy: BeautyStrategy) {
     viewModelScope.launch {
         repository.updateBeautyStrategy(strategy)
-        if (strategy == BeautyStrategy.R_PLAN) {
+        if (strategy == BeautyStrategy.BIG_BEAUTY) {
             repository.triggerManualGlEngineRecovery()
         }
     }
@@ -438,6 +438,6 @@ fun setBeautyStrategy(strategy: BeautyStrategy) {
 ---
 
 **[RD] 设计者**：PicMe 全栈工程师团队
-**最后更新**：2026-04-02
+**最后更新**：2026-04-09
 **版本**：1.1
 
