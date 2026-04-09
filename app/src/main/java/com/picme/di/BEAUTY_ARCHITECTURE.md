@@ -36,11 +36,11 @@
 ┌───────────────────────┐   ┌────────────────────────┐
 │ PixelFree 实现（短期）│   │ R 计划实现（中长期）    │
 ├───────────────────────┤   ├────────────────────────┤
-│ PixelFreeBeauty       │   │ RPlanBeauty            │
+│ PixelFreeBeauty       │   │ GlBeauty               │
 │ PreviewProvider       │   │ PreviewProvider        │
 │                       │   │                        │
-│ ✅ 快速上线           │   │ ⏳ 待实施（预留接口）   │
-│ ✅ SDK 集成           │   │ ✅ 架构已设计          │
+│ ✅ 备用兜底引擎         │   │ ✅ 已落地实现           │
+│ ✅ SDK 集成           │   │ ✅ 模块化(:beauty-engine)│
 │ ✅ 实时预览           │   │ ✅ 可自由切换          │
 └───────────────────────┘   └────────────────────────┘
             │                         │
@@ -126,30 +126,27 @@ class PixelFreeBeautyPreviewProvider(context: Context) : BeautyPreviewProvider {
 
 ### 3.2 中长期方案：R 计划自主研发
 
-**文件**：`core/image/rplan/RPlanBeautyPreviewProvider.kt`
+**文件**：`app/src/main/java/com/picme/core/image/gl/GlBeautyPreviewProvider.kt`（App 层适配器）
+**模块**：`beauty-engine/src/main/java/com/picme/beauty/egl/`（渲染管线核心）
 
 **特点**：
 - ✅ **完全自主**：技术可控，零授权成本
-- ✅ **定制化**：可根据产品需求定制特殊效果
-- ✅ **技术积累**：团队核心能力提升
-- ⏳ **周期较长**：预计 2-3 个月
+- ✅ **已落地**：EGL/OpenGL ES 渲染管线完整实现
+- ✅ **模块化**：封装为独立 Gradle 模块 `:beauty-engine`
+- ✅ **接口解耦**：App 侧通过 `BeautyPreviewProvider` 接口消费，不直接依赖 EGL 实现
 
-**当前状态**：预留接口框架，待实施
-
-**核心实现**（预留）：
+**核心实现**：
 ```kotlin
-class RPlanBeautyPreviewProvider(context: Context) : BeautyPreviewProvider {
-    // [TODO] 中长期实施
-    // private var beautyPreviewView: BeautyPreviewView? = null
-    // private var renderer: CameraPreviewRenderer? = null
+// App 层适配器（core/image/gl/GlBeautyPreviewProvider.kt）
+class GlBeautyPreviewProvider(context: Context) : BeautyPreviewProvider, BeautyPreviewCapability {
+    private var beautyPreviewView: BeautyPreviewView? = null
 
     override fun createPreviewSurface(): Surface {
-        throw NotImplementedError("R Plan is not implemented yet")
-        // [TODO] 返回自研渲染器的 Surface
+        return beautyPreviewView!!.getSurfaceForCamera()!!
     }
 
-    override fun updateFilters(settings: BeautySettings) {
-        // [TODO] 更新自研 Shader 参数
+    override fun updateFilters(params: BeautyParams) {
+        beautyPreviewView?.updateFilters(params)
     }
 }
 ```
@@ -178,7 +175,7 @@ object BeautyPreviewProviderFactory {
     fun create(context: Context, strategy: BeautyStrategy? = null): BeautyPreviewProvider {
         return when (strategy ?: getCurrentStrategy()) {
             BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyPreviewProvider(context)
-            BeautyStrategy.R_PLAN -> RPlanBeautyPreviewProvider(context)
+            BeautyStrategy.R_PLAN -> GlBeautyPreviewProvider(context)
         }
     }
 }
@@ -211,7 +208,7 @@ fun create(context: Context): BeautyPreviewProvider {
 
     return when (userStrategy) {
         BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyPreviewProvider(context)
-        BeautyStrategy.R_PLAN -> RPlanBeautyPreviewProvider(context)
+        BeautyStrategy.R_PLAN -> GlBeautyPreviewProvider(context)
     }
 }
 ```
@@ -227,7 +224,7 @@ fun create(context: Context): BeautyPreviewProvider {
 // 在特定场景强制使用某个策略
 val provider = BeautyPreviewProviderFactory.create(
     context,
-    strategy = BeautyPreviewProviderFactory.BeautyStrategy.R_PLAN
+    strategy = BeautyStrategy.R_PLAN
 )
 ```
 
@@ -235,8 +232,8 @@ val provider = BeautyPreviewProviderFactory.create(
 ```kotlin
 val provider = try {
     BeautyPreviewProviderFactory.create(context, BeautyStrategy.R_PLAN)
-} catch (e: NotImplementedError) {
-    Log.w(TAG, "R Plan not ready, fallback to PixelFree")
+} catch (e: Throwable) {
+    Log.w(TAG, "GL engine init failed, fallback to PixelFree")
     BeautyPreviewProviderFactory.create(context, BeautyStrategy.PIXEL_FREE)
 }
 ```
@@ -336,7 +333,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
 - [ ] 优化 Shader 代码
 
 ### Phase 3：中长期方案（2-3 月）
-- [ ] 实现 RPlanBeautyPreviewProvider
+- [x] 实现 GlBeautyPreviewProvider（已完成，封装于 `:beauty-engine` 模块）
 - [ ] 完成 EGL 上下文管理
 - [ ] 实现自研美颜 Shader
 - [ ] 性能优化（60fps 稳定）
@@ -401,7 +398,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
 - `core/image/GPUImageBeautyView.kt`
 - `core/image/BeautyPreviewProcessor.kt`
 
-这些实现与当前主链路（`CameraScreen` + `PixelFree/RPlan` 双引擎策略）并行存在，但未被实际引用。
+这些实现与当前主链路（`CameraScreen` + `PixelFree/GL` 双引擎策略）并行存在，但未被实际引用。
 
 ### 9.2 策略切换逻辑修正
 
@@ -412,7 +409,7 @@ fun setBeautyStrategy(strategy: BeautyStrategy) {
     viewModelScope.launch {
         repository.updateBeautyStrategy(strategy)
         if (strategy == BeautyStrategy.R_PLAN) {
-            repository.triggerManualRPlanRecovery()
+            repository.triggerManualGlEngineRecovery()
         }
     }
 }
