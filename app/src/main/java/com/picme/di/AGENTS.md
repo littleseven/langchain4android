@@ -73,7 +73,7 @@ private val beautyProcessor: BeautyProcessor by lazy {
             try {
                 GpuBeautyProcessor(context)
             } catch (error: Throwable) {
-                BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "unknown")
+                BeautyEngineRuntimeState.markGlEngineFallback(error.message ?: "unknown")
                 Logger.w("DI", "R Plan init failed, fallback to PixelFree", error)
                 PixelFreeBeautyProcessor(context)
             }
@@ -85,11 +85,11 @@ object BeautyEngineRuntimeState {
     @Volatile
     private var fallbackReason: String? = null
     
-    fun markRPlanFallback(reason: String) {
+    fun markGlEngineFallback(reason: String) {
         fallbackReason = reason
     }
     
-    fun consumeRPlanFallbackReason(): String? {
+    fun consumeGlEngineFallbackReason(): String? {
         val reason = fallbackReason
         fallbackReason = null
         return reason

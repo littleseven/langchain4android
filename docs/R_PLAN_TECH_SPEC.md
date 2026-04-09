@@ -436,11 +436,11 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 4.2 双引擎容灾现状
 
-- [x] `rememberPreviewStrategyBundle(...)` 按 `BeautyStrategy` 选择 `RPlanPreviewStrategy` 或 `PixelFreePreviewStrategy`。
-- [x] `RPlanPreviewStrategy.bindPreview(...)` 成功时返回 `true`，由 `useProviderRenderView` 驱动 UI 切换到 Provider View。
-- [x] R Plan warm-up 失败会触发 `onRPlanWarmUpFallback(reason)`，并持久化回退到 `PIXEL_FREE`。
-- [x] 回退状态写入 DataStore，包含恢复时间戳 `r_plan_recovery_available_at_ms`。
-- [x] 冷却窗口结束后自动触发 `triggerManualRPlanRecovery()` 重试 R Plan。
+- [x] `rememberPreviewStrategyBundle(...)` 按 `BeautyStrategy` 选择 `GlBeautyPreviewStrategy` 或 `PixelFreePreviewStrategy`。
+- [x] `GlBeautyPreviewStrategy.bindPreview(...)` 成功时返回 `true`，由 `useProviderRenderView` 驱动 UI 切换到 Provider View。
+- [x] GL 引擎 warm-up 失败会触发 `onGlWarmUpFallback(reason)`，并持久化回退到 `PIXEL_FREE`。
+- [x] 回退状态写入 DataStore，包含恢复时间戳 `gl_engine_recovery_available_at_ms`。
+- [x] 冷却窗口结束后自动触发 `triggerManualGlEngineRecovery()` 重试主引擎。
 - [x] 支持 provider 绑定超时兜底：超过 `PROVIDER_VIEW_BIND_TIMEOUT_MS=1800ms` 时自动回落 `PreviewView` 并请求重绑。
 
 ### 4.3 下一步技术项（RD）
@@ -449,7 +449,7 @@ while (isRendering && !Thread.interrupted()) {
 - [ ] 补充低端机专项压测基线（720p/1080p，前后置，连续 5 分钟）。
 - [ ] 针对 `nullFrames` 异常波动增加告警阈值与自动抓日志能力。
 - [ ] 抽离 `beauty-core`（纯 Kotlin）：策略模型、参数映射、回退/恢复状态机。
-- [ ] 抽离 `beauty-engine-rplan`：R Plan 渲染适配层（Surface/CameraX/OpenGL）。
+- [ ] 持续迭代 `:beauty-engine` 模块：R Plan 渲染适配层（Surface/CameraX/OpenGL）。
 - [ ] 定义库级稳定 API（含语义版本），确保 App 仅依赖能力接口。
 
 ### 4.4 三大目标驱动的重构路线（技术视角）
@@ -472,7 +472,7 @@ while (isRendering && !Thread.interrupted()) {
 - 目标对齐：形成可独立发布的视觉能力底座（目标 3）。
 - 技术动作：
   - `beauty-core`：沉淀策略模型、参数协议、状态机与能力契约。
-  - `beauty-engine-rplan`：实现 R Plan 引擎适配并对接能力契约。
+  - `:beauty-engine`：实现 R Plan 引擎适配并对接能力契约。
   - App 侧改为消费者模式：仅通过稳定 API 接入，避免直接依赖引擎实现。
 
 #### 跨阶段验收标准
@@ -536,10 +536,10 @@ if (fps < 25 || processingMs > 20) {
 
 // 预览链路异常时交给双引擎容灾链路处理
 runCatching {
-    bindRPlanPreview()
+    bindGlEnginePreview()
 }.onFailure { error ->
-    BeautyEngineRuntimeState.markRPlanFallback(error.message ?: "runtime error")
-    userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+    BeautyEngineRuntimeState.markGlEngineFallback(error.message ?: "runtime error")
+    userPreferencesRepository.persistGlEngineFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
 }
 ```
 
@@ -549,47 +549,47 @@ runCatching {
 
 ### 6.1 自动回退触发点
 
-- `RPlanBeautyPreviewProvider.initialize()` 抛出异常。
+- `GlBeautyPreviewProvider.initialize()` 抛出异常。
 - `createPreviewSurface()` 在重试窗口内仍未拿到可用 Surface。
 - 预览 warm-up 期间 Provider 绑定失败，或超过 `PROVIDER_VIEW_BIND_TIMEOUT_MS`。
 
 ### 6.2 回退执行链路
 
 ```kotlin
-// CameraRuntimeState.rememberRPlanRecoveryState
-val onRPlanWarmUpFallback: (String) -> Unit = { reason ->
-    BeautyEngineRuntimeState.markRPlanFallback(reason)
+// CameraRuntimeState.rememberGlRecoveryState
+val onGlWarmUpFallback: (String) -> Unit = { reason ->
+    BeautyEngineRuntimeState.markGlEngineFallback(reason)
     if (!persistedFallback) {
         persistedFallback = true
         persistedFallbackReason = reason
         coroutineScope.launch {
-            userPreferencesRepository.persistRPlanFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
+            userPreferencesRepository.persistGlEngineFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
         }
     }
 }
 ```
 
 - 回退目标为 `PIXEL_FREE`（稳定兜底引擎），不是离线拍照后处理。
-- 回退由 `onRPlanWarmUpFallback(reason)` 统一收敛，避免多处写策略状态。
+- 回退由 `onGlWarmUpFallback(reason)` 统一收敛，避免多处写策略状态。
 - 调试浮层展示 fallback 状态、剩余冷却时间与失败原因。
 
 ### 6.3 持久化冷却与自动恢复
 
 ```kotlin
 // UserPreferencesRepository
-suspend fun persistRPlanFallback(cooldownMs: Long) {
+suspend fun persistGlEngineFallback(cooldownMs: Long) {
     preferences[BEAUTY_STRATEGY] = BeautyStrategy.PIXEL_FREE.name
-    preferences[R_PLAN_RECOVERY_AVAILABLE_AT_MS] = now + cooldownMs
+    preferences[GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = now + cooldownMs
 }
 
-suspend fun triggerManualRPlanRecovery() {
+suspend fun triggerManualGlEngineRecovery() {
     preferences[BEAUTY_STRATEGY] = BeautyStrategy.R_PLAN.name
-    preferences[R_PLAN_RECOVERY_AVAILABLE_AT_MS] = 0L
+    preferences[GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
 }
 ```
 
 - 当前冷却窗口：`R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L`。
-- 冷却结束后自动触发 `triggerManualRPlanRecovery()`，重新尝试主引擎。
+- 冷却结束后自动触发 `triggerManualGlEngineRecovery()`，重新尝试主引擎。
 - 若重试再次失败，继续按同链路回退并进入下一轮冷却。
 
 ---
@@ -682,7 +682,8 @@ suspend fun triggerManualRPlanRecovery() {
 - `R_PLAN_QA_EXECUTION_CHECKLIST.md` - R Plan QA 独立执行清单
 - `app/src/main/java/com/picme/core/image/BeautyPreviewView.kt` - R Plan 预览视图实现
 - `app/src/main/java/com/picme/core/image/CameraPreviewRenderer.kt` - R Plan 渲染主链路
-- `app/src/main/java/com/picme/core/image/rplan/RPlanBeautyPreviewProvider.kt` - R Plan Provider 封装
+- `app/src/main/java/com/picme/core/image/gl/GlBeautyPreviewProvider.kt` - GL 引擎 Provider 封装（App 层适配器）
+- `beauty-engine/src/main/java/com/picme/beauty/egl/` - GL 渲染管线核心实现
 - `app/src/main/java/com/picme/features/camera/CameraScreen.kt` - 预览绑定、容灾回退与调试浮层
 
 ---

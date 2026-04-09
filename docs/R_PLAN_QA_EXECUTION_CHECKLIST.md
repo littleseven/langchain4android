@@ -9,9 +9,9 @@
 ## 0. 术语与状态定义（执行前必读）
 
 - **引擎策略枚举**：`R_PLAN`（主引擎）/ `PIXEL_FREE`（兜底引擎）。
-- **统一回退入口**：`onRPlanWarmUpFallback(reason)`。
-- **策略持久化键**：`beauty_strategy`、`r_plan_recovery_available_at_ms`。
-- **自动恢复触发**：`triggerManualRPlanRecovery()`。
+- **统一回退入口**：`onGlWarmUpFallback(reason)`。
+- **策略持久化键**：`beauty_strategy`、`gl_engine_recovery_available_at_ms`。
+- **自动恢复触发**：`triggerManualGlEngineRecovery()`。
 - **Provider 视图切换状态**：`useProviderRenderView=true` 表示使用 R Plan Provider View；`false` 表示回落 `PreviewView`。
 
 ---
@@ -63,14 +63,14 @@
 - [ ] `updateFaceWarpParams()` 与 `uTextureTransform` 坐标空间一致。
 - [ ] `getPerfStats()` 连续输出 `fps/processingMs/delayMs/cpuUsage/nullFrames`。
 
-### 2.3 `RPlanBeautyPreviewProvider`
+### 2.3 `GlBeautyPreviewProvider`
 - [ ] `createPreviewSurface()` 在重试窗口内拿到有效 Surface。
 - [ ] `updateFilters()` 参数范围映射正确（如 `slimFace / 50f * 1.35f`）。
 - [ ] `isReady()` 在 `SurfaceTexture` 可用后返回 true。
 
 ### 2.4 `CameraScreen` 容灾链路
-- [ ] warm-up 失败时统一走 `onRPlanWarmUpFallback(reason)`，并最终持久化到 `PIXEL_FREE`。
-- [ ] 冷却到期后触发 `triggerManualRPlanRecovery()` 自动重试。
+- [ ] warm-up 失败时统一走 `onGlWarmUpFallback(reason)`，并最终持久化到 `PIXEL_FREE`。
+- [ ] 冷却到期后触发 `triggerManualGlEngineRecovery()` 自动重试。
 - [ ] `PROVIDER_VIEW_BIND_TIMEOUT_MS` 超时后回落 `PreviewView` 并请求重绑。
 - [ ] `useProviderRenderView` 状态与实际渲染容器一致（Provider View / PreviewView）。
 
@@ -80,9 +80,9 @@
 
 1. 设置策略为 `R_PLAN`，进入相机，确认 R Plan 预览可见。
 2. 人工注入初始化失败（例如抛异常），确认回退到 `PIXEL_FREE`。
-3. 验证持久化写入：`beauty_strategy=PIXEL_FREE` 且有 `r_plan_recovery_available_at_ms`。
+3. 验证持久化写入：`beauty_strategy=PIXEL_FREE` 且有 `gl_engine_recovery_available_at_ms`。
 4. 验证 `useProviderRenderView=false`，确认当前展示容器为 `PreviewView`。
-5. 等待冷却窗口结束，确认自动触发 `triggerManualRPlanRecovery()`。
+5. 等待冷却窗口结束，确认自动触发 `triggerManualGlEngineRecovery()`。
 6. 重试成功时恢复到 `R_PLAN`；重试失败时再次回退且可继续拍照。
 7. 全程观察调试浮层与日志：`PerfStats`、fallback reason、剩余冷却秒数。
 
@@ -108,7 +108,7 @@
 - 设备型号 / 系统版本：
 - 引擎策略：`R_PLAN` / `PIXEL_FREE`
 - `useProviderRenderView`：true / false
-- 持久化状态：`beauty_strategy` / `r_plan_recovery_available_at_ms`
+- 持久化状态：`beauty_strategy` / `gl_engine_recovery_available_at_ms`
 - 测试用例：`P0-01` ~ `P1-05`
 - 结果：Pass / Fail
 - 失败现象：

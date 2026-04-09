@@ -66,7 +66,7 @@
                      ↓
 ┌──────────────────────────────────────────┐
 │ Preview Strategy Layer                   │
-│   ├─ RPlanPreviewStrategy   (主引擎)      │
+│   ├─ GlBeautyPreviewStrategy (主引擎)     │
 │   └─ PixelFreePreviewStrategy (兜底引擎)  │
 └──────────────────────────────────────────┘
                      ↓

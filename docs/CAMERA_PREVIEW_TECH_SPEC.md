@@ -10,7 +10,7 @@
 ### 1.1 核心原则
 **采用策略化预览绑定（R Plan Provider + PreviewView 兜底）**，并在 `PreviewView` 路径下使用 `ScaleType` 处理比例。
 
-> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `RPlanPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换。R Plan 的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `R_PLAN_TECH_SPEC.md`。
+> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `GlBeautyPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `R_PLAN_TECH_SPEC.md`。
 
 ### 1.2 PreviewView 路径技术方案（兜底与通用预览）
 
