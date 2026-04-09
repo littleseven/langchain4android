@@ -16,8 +16,9 @@ import com.picme.PicMeApplication
 import com.picme.core.common.Logger
 import com.picme.core.image.gl.GlBeautyPreviewProvider
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
-import com.picme.data.preferences.BeautyStrategy
 import com.picme.di.BeautyEngineRuntimeState
+import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.repository.UserSettingsRepository
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import com.picme.features.camera.preview.pixelfree.rememberPixelFreePreviewView
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,7 @@ private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
 
 internal data class CameraRuntimeContext(
     val imageProcessor: com.picme.core.image.ImageProcessor,
-    val userPreferencesRepository: com.picme.data.preferences.UserPreferencesRepository,
+    val userPreferencesRepository: UserSettingsRepository,
     val coroutineScope: CoroutineScope,
     val beautyStrategy: BeautyStrategy,
     val debugUiEnabled: Boolean,
@@ -197,7 +198,7 @@ internal fun rememberPreviewRuntimeViews(
 internal fun rememberGlRecoveryState(
     beautyStrategy: BeautyStrategy,
     glRecoveryAvailableAtMs: Long,
-    userPreferencesRepository: com.picme.data.preferences.UserPreferencesRepository,
+    userPreferencesRepository: UserSettingsRepository,
     coroutineScope: CoroutineScope
 ): GlRecoveryUiState {
     var persistedFallback by remember { mutableStateOf(false) }

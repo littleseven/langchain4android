@@ -9,14 +9,15 @@ import com.picme.core.image.ImageProcessor
 import com.picme.core.image.ImageProcessorImpl
 import com.picme.core.image.pixelfree.PixelFreeBeautyProcessor
 import com.picme.data.local.AppDatabase
-import com.picme.data.preferences.BeautyStrategy
+import com.picme.data.local.MlKitOcrProcessor
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.data.repository.MediaRepositoryImpl
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.repository.MediaRepository
+import com.picme.domain.repository.UserSettingsRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
 import com.picme.domain.usecase.OcrProcessor
-import com.picme.domain.usecase.OcrUseCase
 import com.picme.features.gallery.MediaViewModel
 
 data class MediaViewModelDependencies(
@@ -46,7 +47,7 @@ class MediaViewModelFactory(
 
 interface AppContainer {
     val repository: MediaRepository
-    val userPreferencesRepository: UserPreferencesRepository
+    val userPreferencesRepository: UserSettingsRepository
     val imageProcessor: ImageProcessor
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
@@ -87,7 +88,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         MediaRepositoryImpl(database.mediaDao(), context)
     }
 
-    override val userPreferencesRepository: UserPreferencesRepository by lazy {
+    override val userPreferencesRepository: UserSettingsRepository by lazy {
         UserPreferencesRepository(context)
     }
 
@@ -96,7 +97,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     }
 
     private val ocrProcessor: OcrProcessor by lazy {
-        OcrUseCase()
+        MlKitOcrProcessor()
     }
 
     private val mediaViewModelDependencies: MediaViewModelDependencies by lazy {

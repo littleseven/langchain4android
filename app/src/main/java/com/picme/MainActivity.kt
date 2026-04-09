@@ -28,7 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.picme.core.designsystem.PicMeTheme
-import com.picme.data.preferences.AppLanguage
+import com.picme.domain.model.AppLanguage
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen

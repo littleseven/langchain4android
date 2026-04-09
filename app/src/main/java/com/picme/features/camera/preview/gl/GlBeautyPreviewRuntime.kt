@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.picme.core.image.gl.GlBeautyPreviewProvider
-import com.picme.data.preferences.BeautyStrategy
+import com.picme.domain.model.BeautyStrategy
 
 @Composable
 internal fun rememberGlBeautyPreviewProvider(

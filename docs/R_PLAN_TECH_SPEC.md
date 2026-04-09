@@ -454,21 +454,29 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 4.4 三大目标驱动的重构路线（技术视角）
 
-#### Phase 1：质量门禁与可观测性收敛（2~4 周）
+#### Phase 1：质量门禁与可观测性收敛（2~4 周）✅ 已完成
 - 目标对齐：保障商业级稳定交付（目标 2），建立 Agent 协作闭环（目标 1）。
 - 技术动作：
   - 将 P0 用例从 skeleton 升级为真实断言，并纳入 CI 阻断。
   - 固化 CR 检查项：分层越界、I18N 漏同步、回退链路失败一票否决。
   - 统一调试指标采集与日志字段，确保回归可追踪。
 
-#### Phase 2：架构边界收敛（4~8 周）
+#### Phase 2：架构边界收敛（4~8 周）🔄 进行中（核心完成）
 - 目标对齐：降低演进成本，支撑长期库化（目标 3）。
 - 技术动作：
   - 按 `settings -> gallery -> camera` 顺序推进，逐步降低风险。
   - 收敛依赖方向：`features -> domain usecase -> domain repository -> data impl`。
   - 清理 domain 污染：去除对 `android.*`、`features.*` 的反向依赖。
+- 已落地（2026-04）：
+  - [x] `BeautyStrategy`、`ThemeMode`、`AppLanguage`、`FaceDetectIntervalProfile` 迁移至 `domain.model.UserPreferences`，features/data 层均从 domain 导入。
+  - [x] `LensFacing` 去除 CameraX 直接依赖，改为纯 Kotlin 枚举。
+  - [x] `OcrUseCase` 实现下沉至 `data/local/MlKitOcrProcessor`，domain 层仅保留 `OcrProcessor` 接口。
+  - [x] 新增 `domain/repository/UserSettingsRepository` 接口；`UserPreferencesRepository` 实现该接口；`SettingsViewModel`、`CameraRuntimeState`、`AppContainer` 均依赖接口而非实现类。
+- 剩余事项：
+  - [ ] gallery 层 ViewModel 依赖审计与收敛。
+  - [ ] camera 层其余直接调用 data 层的用例审计。
 
-#### Phase 3：R Plan 库化落地（8~16 周）
+#### Phase 3：R Plan 库化落地（8~16 周）⏳ 待启动
 - 目标对齐：形成可独立发布的视觉能力底座（目标 3）。
 - 技术动作：
   - `beauty-core`：沉淀策略模型、参数协议、状态机与能力契约。
@@ -476,9 +484,9 @@ while (isRendering && !Thread.interrupted()) {
   - App 侧改为消费者模式：仅通过稳定 API 接入，避免直接依赖引擎实现。
 
 #### 跨阶段验收标准
-- M1：P0 自动化真实断言通过率 100%，关键链路可无人值守回归。
-- M2：核心模块完成边界收敛，domain 层无跨层污染。
-- M3：R Plan 完成接口化接入，具备独立版本演进能力。
+- M1：P0 自动化真实断言通过率 100%，关键链路可无人值守回归。✅
+- M2：核心模块完成边界收敛，domain 层无跨层污染。🔄
+- M3：R Plan 完成接口化接入，具备独立版本演进能力。⏳
 
 ---
 

@@ -42,10 +42,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
-import com.picme.data.preferences.AppLanguage
-import com.picme.data.preferences.BeautyStrategy
-import com.picme.data.preferences.FaceDetectIntervalProfile
-import com.picme.data.preferences.ThemeMode
+import com.picme.domain.model.AppLanguage
+import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.ThemeMode
 
 @Composable
 fun SettingsScreen(

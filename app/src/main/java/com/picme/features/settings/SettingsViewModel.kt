@@ -3,17 +3,17 @@ package com.picme.features.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.picme.data.preferences.AppLanguage
-import com.picme.data.preferences.BeautyStrategy
-import com.picme.data.preferences.FaceDetectIntervalProfile
-import com.picme.data.preferences.ThemeMode
-import com.picme.data.preferences.UserPreferencesRepository
+import com.picme.domain.model.AppLanguage
+import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.ThemeMode
+import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class SettingsViewModel(private val repository: UserPreferencesRepository) : ViewModel() {
+class SettingsViewModel(private val repository: UserSettingsRepository) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
         .stateIn(
@@ -156,7 +156,7 @@ class SettingsViewModel(private val repository: UserPreferencesRepository) : Vie
 }
 
 class SettingsViewModelFactory(
-    private val repository: UserPreferencesRepository
+    private val repository: UserSettingsRepository
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
