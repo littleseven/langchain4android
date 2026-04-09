@@ -227,7 +227,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     }
 
     val lipRealtimePreviewSupported = when (uiState.beautyDebugState.strategy) {
-        com.picme.domain.model.BeautyStrategy.R_PLAN -> uiState.beautyDebugState.providerRenderActive
+        com.picme.domain.model.BeautyStrategy.BIG_BEAUTY -> uiState.beautyDebugState.providerRenderActive
         com.picme.domain.model.BeautyStrategy.PIXEL_FREE -> {
             when (uiState.beautyDebugState.pixelFreeLinkMode) {
                 com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER,

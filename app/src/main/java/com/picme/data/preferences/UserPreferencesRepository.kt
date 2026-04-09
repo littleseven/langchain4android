@@ -98,17 +98,17 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.R_PLAN.name
+            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.BIG_BEAUTY.name
             BeautyStrategy.valueOf(strategyName)
         }
 
     override fun getBeautyStrategyBlocking(): BeautyStrategy = runBlocking {
         try {
             val preferences = context.dataStore.data.first()
-            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.R_PLAN.name
+            val strategyName = preferences[PreferencesKeys.BEAUTY_STRATEGY] ?: BeautyStrategy.BIG_BEAUTY.name
             BeautyStrategy.valueOf(strategyName)
         } catch (_: Exception) {
-            BeautyStrategy.R_PLAN
+            BeautyStrategy.BIG_BEAUTY
         }
     }
 
@@ -140,7 +140,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
 
     override suspend fun triggerManualGlEngineRecovery() {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.R_PLAN.name
+            preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.BIG_BEAUTY.name
             preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
         }
     }
