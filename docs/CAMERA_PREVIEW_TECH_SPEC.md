@@ -1,16 +1,16 @@
 # 相机预览完整指南
 
 **最后更新**：2026-04（按预览策略重构对齐）
-**状态**：生产稳定版（策略化预览链路：R Plan Provider + PreviewView）
+**状态**：生产稳定版（策略化预览链路：大美丽 Provider + PreviewView）
 
 ---
 
 ## 1. 核心解决方案
 
 ### 1.1 核心原则
-**采用策略化预览绑定（R Plan Provider + PreviewView 兜底）**，并在 `PreviewView` 路径下使用 `ScaleType` 处理比例。
+**采用策略化预览绑定（大美丽 Provider + PreviewView 兜底）**，并在 `PreviewView` 路径下使用 `ScaleType` 处理比例。
 
-> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `GlBeautyPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `R_PLAN_TECH_SPEC.md`。
+> 说明：本指南聚焦预览层的比例与坐标问题；当前实现通过 `rememberPreviewStrategyBundle(...)` 在 `GlBeautyPreviewStrategy` 与 `PixelFreePreviewStrategy` 间切换。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `BIG_BEAUTY_TECH_SPEC.md`。
 
 ### 1.2 PreviewView 路径技术方案（兜底与通用预览）
 
@@ -298,5 +298,5 @@ DisposableEffect(previewView) {
 - `FEATURES.md` - 功能交互规范
 - `AGENTS.md` - AI Agent 操作规范
 - `PIXELFREE_FALLBACK_TECH_SPEC.md` - 实时美颜集成规范
-- `R_PLAN_TECH_SPEC.md` - R 计划实时美颜自主方案
+- `BIG_BEAUTY_TECH_SPEC.md` - 大美丽实时美颜自主方案
 

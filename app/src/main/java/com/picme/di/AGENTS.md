@@ -57,7 +57,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 - **策略模式**: 根据 `BeautyStrategy` 枚举动态选择美颜引擎
   - `BIG_BEAUTY`: 主引擎 (`GlBeautyPreviewProvider`)
   - `PIXEL_FREE`: 备用引擎 (`PixelFreeBeautyPreviewProvider`)
-- **故障回退**: R Plan 初始化失败时自动回退到 PixelFree，记录回退原因
+- **故障回退**: 大美丽 初始化失败时自动回退到 PixelFree，记录回退原因
 - **运行时状态**: 使用 `BeautyEngineRuntimeState` 单例管理回退状态，支持 UI 层查询
 - **阻塞读取**: 使用 `getBeautyStrategyBlocking()` 确保初始化时获取最新配置
 
@@ -74,7 +74,7 @@ private val beautyProcessor: BeautyProcessor by lazy {
                 GlBeautyPreviewProvider(context)
             } catch (error: Throwable) {
                 BeautyEngineRuntimeState.markGlEngineFallback(error.message ?: "unknown")
-                Logger.w("DI", "R Plan init failed, fallback to PixelFree", error)
+                Logger.w("DI", "大美丽 init failed, fallback to PixelFree", error)
                 PixelFreeBeautyPreviewProvider(context)
             }
         }
@@ -175,5 +175,5 @@ class MediaViewModelFactory(
 - 选择手动 DI 而非 Hilt：项目规模适中，手动 DI 更轻量、易理解；Hilt 作为预留扩展
 - 使用 by lazy 延迟初始化：确保单例、线程安全，避免启动时不必要的资源分配
 - 策略模式实现引擎切换：支持运行时动态切换，便于灰度发布与 A/B 测试
-- 故障回退机制：R Plan 异常时自动降级到 PixelFree，保证核心功能可用
+- 故障回退机制：大美丽 异常时自动降级到 PixelFree，保证核心功能可用
 - 依赖数据结构封装：通过 MediaViewModelDependencies 聚合依赖，简化 Factory 构造
