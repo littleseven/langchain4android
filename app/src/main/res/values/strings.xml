@@ -133,6 +133,8 @@
     <string name="focus">Focus</string>
     <string name="auto">AUTO</string>
     <string name="manual">MANUAL</string>
+    <string name="exposure">Exposure</string>
+    <string name="white_balance">White Balance</string>
     <string name="wb_auto">Auto</string>
     <string name="wb_sunny">Sunny</string>
     <string name="wb_cloudy">Cloudy</string>
