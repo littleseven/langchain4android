@@ -31,11 +31,11 @@
 - 遵循项目的 I18N 规范
 - 使用结构化日志标签 `PicMe:[ModuleName]`
 
-### 远程开发模式（OpenClaw + kimi-cli）
-- **激活方式**: 用户发送 "激活我的团队" 或 `openclaw agent start`
+### 远程开发模式（kimi-cli）
+- **激活方式**: 用户发送 "激活我的团队"
 - **角色链**: CO → PM → RD → CR → QA 自动流转
-- **远程构建**: 通过 `openclaw remote gradle` 执行
-- **远程验证**: 自动同步构建结果和日志
+- **构建执行**: 在 kimi-cli 中直接执行 `./gradlew assembleDebug`
+- **日志验证**: 使用 `adb logcat` 查看设备日志
 - **自愈机制**: RD 阶段自动修复编译错误（最多 2 次）
 
 ### 远程模式专用指令
