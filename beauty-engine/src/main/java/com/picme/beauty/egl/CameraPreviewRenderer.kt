@@ -237,6 +237,7 @@ class CameraPreviewRenderer {
                         android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
 
                         applyViewport(outputWidth, outputHeight)
+                        beautyRenderer.setTexelSize(cameraInputWidth, cameraInputHeight)
 
                         beautyRenderer.onRender()
                         ws.swapBuffers()

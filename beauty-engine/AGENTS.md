@@ -95,10 +95,10 @@ beauty-engine/src/main/java/com/picme/beauty/
 **美颜算法实现规范**：
 
 - **磨皮 (Smoothing)**：
-  - **算法选择**：使用 GPU 加速的双边滤波 (Bilateral Filter) 或表面模糊 (Surface Blur)
-  - **实现要点**：保留边缘细节，仅平滑肤色区域
-  - **参数映射**：UI 参数 0-100 → 滤波强度 σ_d (空间) 和 σ_r (灰度)
-  - **性能优化**：使用 RenderScript 或 OpenGL ES 实现，避免 CPU 计算瓶颈
+  - **算法选择**：采用双边滤波（Bilateral Filter）快速近似，通过 9 点采样结合值域高斯权重，在平滑皮肤的同时保留边缘细节
+  - **实现要点**：在 Fragment Shader 内以当前像素为中心，在 3×3 邻域内采样；根据邻域像素与中心像素的亮度差异计算值域权重 exp(-(ΔLuma)² / 2σ_r²)，并结合空间距离权重 exp(-dist² / 2σ_s²)；仅对皮肤蒙版（skinMask）区域生效
+  - **参数映射**：uSmoothing (0.0~1.0) 同时控制磨皮强度与值域 σ_r 的宽度；uTexelSize 由 CameraPreviewRenderer 根据输入分辨率实时传入，确保跨分辨率下采样半径一致
+  - **性能优化**：单 Pass 内完成，无需额外 FBO；共 9 次 texture2D 采样，空间 σ_s=1.8 像素，值域 σ_r=0.10~0.18，兼顾效果自然度与移动端实时性
 
 - **美白 (Whitening)**：
   - **色彩空间**：在 YUV 或 Lab 色彩空间调整亮度 (L) 和色度 (U/V)
