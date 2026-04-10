@@ -6,8 +6,7 @@ import android.util.Log
 import android.view.Surface
 import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.api.BeautyPerfStats
-import com.picme.beauty.api.BeautyPreviewCapability
-import com.picme.beauty.api.BeautyPreviewProvider
+import com.picme.beauty.api.BeautyPreviewEngine
 
 /**
  * GL 渲染美颜预览提供者
@@ -20,7 +19,7 @@ import com.picme.beauty.api.BeautyPreviewProvider
  */
 class GlBeautyPreviewProvider(
     context: Context
-) : BeautyPreviewProvider, BeautyPreviewCapability {
+) : BeautyPreviewEngine {
 
     companion object {
         private const val TAG = "PicMe:GlBeautyProvider"
@@ -35,7 +34,7 @@ class GlBeautyPreviewProvider(
     private var cameraInputHeight: Int = 720
     private var isFillCenter: Boolean = true
 
-    fun initialize() {
+    override fun initialize() {
         if (isInitialized) return
         beautyPreviewView = BeautyPreviewView(appContext).apply {
             ensureOffscreenReady()
@@ -142,7 +141,8 @@ class GlBeautyPreviewProvider(
         return isInitialized && (previewSurface?.isValid == true)
     }
 
-    fun getView(): BeautyPreviewView? = beautyPreviewView
+    override fun getView(): BeautyPreviewView = beautyPreviewView
+        ?: throw IllegalStateException("GlBeautyPreviewProvider view not ready")
 
     override fun setCameraInputBufferSize(width: Int, height: Int) {
         if (width <= 0 || height <= 0) return

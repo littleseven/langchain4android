@@ -59,6 +59,7 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.R
 import com.picme.beauty.api.BeautyPerfStats
+import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings

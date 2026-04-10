@@ -14,7 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.PicMeApplication
 import com.picme.core.common.Logger
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
@@ -81,7 +81,7 @@ internal data class GlRecoveryUiState(
 internal data class PreviewRuntimeViews(
     val previewView: PreviewView,
     val pixelFreeView: PixelFreeGLSurfaceView?,
-    val glPreviewProvider: GlBeautyPreviewProvider?
+    val glPreviewProvider: BeautyPreviewEngine?
 )
 
 internal enum class MakeupEntry {

@@ -4,7 +4,7 @@ import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.BeautySettings
@@ -33,7 +33,7 @@ internal fun rememberPreviewStrategyBundle(
     beautyStrategy: BeautyStrategy,
     previewView: PreviewView,
     pixelFreeView: PixelFreeGLSurfaceView?,
-    glPreviewProvider: GlBeautyPreviewProvider?,
+    glPreviewProvider: BeautyPreviewEngine?,
     onGlWarmUpFallback: (String) -> Unit,
     onPixelFreePreviewLinkModeChanged: (PixelFreePreviewLinkMode) -> Unit,
     onPixelFreePreviewLinkReasonChanged: (String?) -> Unit
