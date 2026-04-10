@@ -86,10 +86,7 @@ dependencies {
     implementation(libs.google.mlkit.text.recognition.chinese)
 
     // PixelFreeEffects 已移除（2026-04），当前仅保留 beauty-engine（BIG_BEAUTY）
-
-
-    // GPUImage for beauty effects
-    implementation("jp.co.cyberagent.android:gpuimage:2.1.0")
+    // GPUImage 已移除（2026-04）：项目已迁移至 beauty-engine，且该库不支持 Android 15 的 16KB 页面对齐要求
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
