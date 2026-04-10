@@ -21,7 +21,7 @@
 - **[PERF] 单帧处理 ≤ 16ms**：目标 60fps；低端机保底 30fps
 - **[PERF] 参数响应延迟 < 100ms**：美颜参数通过 `uniform` 实时传递，无需重新编译 Shader
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
-- **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 接口向 App 层报告，触发 PixelFree 兜底
+- **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
 
 ---
@@ -62,12 +62,14 @@ beauty-engine/src/main/java/com/picme/beauty/
 - 新增参数必须提供默认值 `0.0f`，保证向后兼容
 
 #### BeautyPreviewProvider
-- 接口设计遵循"一次性初始化 + 可重复绑定"原则：
-  - `initialize(context): Result<Unit>` — 离屏初始化（EGL + Shader 编译）
-  - `getPreviewSurface(): Surface` — 返回给 CameraX 的输入 Surface
-  - `bindDisplaySurface(surface: Surface)` — 绑定显示 Surface
+- 接口设计遵循"一次性初始化 + 可重复绑定"原则（当前 Phase 3 库化 API）：
+  - `initialize()` — 离屏初始化（EGL + Shader 编译）
+  - `createPreviewSurface(): Surface` — 创建并返回给 CameraX 的输入 Surface
+  - `updateFilters(params: BeautyParams)` — 实时更新美颜滤镜参数
   - `release()` — 资源释放
-- 初始化失败必须返回 `Result.failure()`，携带明确异常信息，供 App 层触发兜底
+  - `isReady(): Boolean` — 判断引擎是否已就绪
+  - `getPerfStats(): BeautyPerfStats` — 获取实时性能统计（默认返回 `EMPTY`）
+- 初始化异常应通过抛出异常或状态查询供 App 层触发兜底。详见 `docs/BEAUTY_ENGINE_FALLBACK.md`
 
 #### BeautyPerfStats
 - 统一输出字段：`fps`, `processingMs`, `delayMs`, `cpuUsage`, `nullFrames`

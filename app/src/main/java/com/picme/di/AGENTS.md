@@ -53,6 +53,8 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
 ### 2.2 美颜引擎动态切换
 
+> 跨模块容灾降级流程的完整说明请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`。本节仅保留 DI 层的实现代码与关键约束。
+
 **技术规范**:
 - **策略模式**: 根据 `BeautyStrategy` 枚举动态选择美颜引擎
   - `BIG_BEAUTY`: 主引擎 (`GlBeautyPreviewProvider`)
