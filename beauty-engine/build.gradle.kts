@@ -20,6 +20,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(project(":gpupixel"))
 
     testImplementation(libs.junit)
 }

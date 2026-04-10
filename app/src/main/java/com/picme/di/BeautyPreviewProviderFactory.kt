@@ -3,6 +3,7 @@ package com.picme.di
 import android.content.Context
 import com.picme.beauty.api.BeautyPreviewProvider
 import com.picme.beauty.egl.GlBeautyPreviewProviderFactory
+import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.BeautyStrategy
@@ -21,10 +22,10 @@ import com.picme.domain.model.BeautyStrategy
  * @see com.picme.beauty.egl.GlBeautyPreviewProviderFactory
  */
 object BeautyPreviewProviderFactory {
-    
+
     /**
      * 创建美颜预览提供者
-     * 
+     *
      * @param context 应用上下文
      * @param strategy 实现策略（null 则从用户设置中读取）
      * @return BeautyPreviewProvider 实例
@@ -42,6 +43,12 @@ object BeautyPreviewProviderFactory {
             BeautyStrategy.BIG_BEAUTY -> {
                 Logger.i("Factory", "Using R Plan (user preference: ${selectedStrategy.name})")
                 GlBeautyPreviewProviderFactory().create(context).apply {
+                    initialize()
+                }
+            }
+            BeautyStrategy.GPUPIXEL -> {
+                Logger.i("Factory", "Using GPUPixel (user preference: ${selectedStrategy.name})")
+                GpupixelBeautyPreviewProvider(context).apply {
                     initialize()
                 }
             }

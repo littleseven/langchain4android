@@ -4,9 +4,11 @@ import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.picme.beauty.api.BeautyPreviewEngine
+import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.domain.model.BeautyStrategy
 import com.picme.features.camera.preview.core.PreviewStrategyBundle
 import com.picme.features.camera.preview.gl.GlBeautyPreviewStrategy
+import com.picme.features.camera.preview.gpupixel.GpupixelBeautyPreviewStrategy
 
 @Composable
 internal fun rememberPreviewStrategyBundle(
@@ -22,6 +24,14 @@ internal fun rememberPreviewStrategyBundle(
                     previewView = previewView,
                     glBeautyPreviewProvider = requireNotNull(glPreviewProvider) {
                         "GL beauty strategy requires GlBeautyPreviewProvider"
+                    },
+                    onWarmUpFallback = onGlWarmUpFallback
+                )
+            }
+            BeautyStrategy.GPUPIXEL -> {
+                GpupixelBeautyPreviewStrategy(
+                    gpupixelProvider = requireNotNull(glPreviewProvider as? GpupixelBeautyPreviewProvider) {
+                        "GPUPixel strategy requires GpupixelBeautyPreviewProvider"
                     },
                     onWarmUpFallback = onGlWarmUpFallback
                 )

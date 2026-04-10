@@ -437,9 +437,10 @@ private fun resolvePreviewTargetView(
 
     val providerView = when (activeStrategy) {
         BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
+        BeautyStrategy.GPUPIXEL -> runtimeProviderView
     }
 
-    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY
+    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY || activeStrategy == BeautyStrategy.GPUPIXEL
 
     if (requiresProviderView && providerView == null) {
         return PreviewTargetDecision(
@@ -580,7 +581,9 @@ fun CameraContent(
     )
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
-    var useProviderRenderView by remember { mutableStateOf(false) }
+    var useProviderRenderView by remember(beautyStrategy) {
+        mutableStateOf(beautyStrategy == BeautyStrategy.GPUPIXEL)
+    }
     var lipRealtimeRecoveryRequested by remember { mutableStateOf(false) }
     var lastLipPreviewRebindRequestMs by remember { mutableStateOf(0L) }
 
@@ -593,7 +596,7 @@ fun CameraContent(
             return@LaunchedEffect
         }
 
-        if (beautyStrategy != BeautyStrategy.BIG_BEAUTY) {
+        if (beautyStrategy != BeautyStrategy.BIG_BEAUTY && beautyStrategy != BeautyStrategy.GPUPIXEL) {
             return@LaunchedEffect
         }
 
@@ -783,7 +786,7 @@ fun CameraContent(
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
         while (isActive) {
-            renderPerfStats = if (beautyStrategy == BeautyStrategy.BIG_BEAUTY && useProviderRenderView) {
+            renderPerfStats = if ((beautyStrategy == BeautyStrategy.BIG_BEAUTY || beautyStrategy == BeautyStrategy.GPUPIXEL) && useProviderRenderView) {
                 glPreviewProvider?.getPerfStats() ?: BeautyPerfStats()
             } else {
                 BeautyPerfStats()
@@ -825,7 +828,9 @@ fun CameraContent(
             cameraExecutor = cameraExecutor,
             faceDetector = faceDetector,
             beautySettings = beautySettings,
+            beautyStrategy = beautyStrategy,
             videoCapture = videoCapture,
+            gpupixelProvider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider,
             onImageCaptureChanged = { capture -> imageCapture = capture },
             onCameraControlChanged = { control -> cameraControl = control },
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },

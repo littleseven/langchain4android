@@ -14,8 +14,11 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.mlkit.vision.face.FaceDetector
+import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
+import com.pixpark.gpupixel.GPUPixel
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.preview.core.FaceWarpParams
 import java.util.concurrent.ExecutorService
@@ -33,7 +36,9 @@ internal fun bindCameraUseCases(
     cameraExecutor: ExecutorService,
     faceDetector: FaceDetector,
     beautySettings: BeautySettings,
+    beautyStrategy: BeautyStrategy,
     videoCapture: VideoCapture<Recorder>,
+    gpupixelProvider: GpupixelBeautyPreviewProvider?,
     onImageCaptureChanged: (ImageCapture) -> Unit,
     onCameraControlChanged: (CameraControl) -> Unit,
     onZoomRatioChanged: (Float) -> Unit,
@@ -103,6 +108,35 @@ internal fun bindCameraUseCases(
             android.util.Log.d("PicMe:Camera", "ImageAnalysis frame received: #${frameCount}")
             Logger.d("Camera", "ImageAnalysis frame received: #${frameCount}")
         }
+
+        if (beautyStrategy == BeautyStrategy.GPUPIXEL && gpupixelProvider != null) {
+            val mediaImage = imageProxy.image
+            if (mediaImage != null) {
+                try {
+                    val rgba = GPUPixel.YUV_420_888toRGBA(mediaImage)
+                    if (rgba != null) {
+                        val width = mediaImage.width
+                        val height = mediaImage.height
+                        val rotation = imageProxy.imageInfo.rotationDegrees
+                        val (outWidth, outHeight, rotatedData) = when (rotation) {
+                            90, 270 -> {
+                                val rotated = GPUPixel.rotateRgbaImage(rgba, width, height, rotation)
+                                Triple(height, width, rotated)
+                            }
+                            180 -> {
+                                val rotated = GPUPixel.rotateRgbaImage(rgba, width, height, rotation)
+                                Triple(width, height, rotated)
+                            }
+                            else -> Triple(width, height, rgba)
+                        }
+                        gpupixelProvider.onRgbaFrame(rotatedData, outWidth, outHeight)
+                    }
+                } catch (e: Exception) {
+                    Logger.e("Camera", "GPUPixel frame conversion error", e)
+                }
+            }
+        }
+
         handleImageAnalysisFrame(
             imageProxy = imageProxy,
             previewView = previewView,

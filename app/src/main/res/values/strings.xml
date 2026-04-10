@@ -28,6 +28,7 @@
     <string name="beauty_engine">Beauty Engine</string>
 
     <string name="beauty_engine_rplan">R Plan (Default)</string>
+    <string name="beauty_engine_gpupixel">GPUPixel (Experimental)</string>
     <string name="settings_theme_mode_desc">Controls app appearance in light/dark mode.</string>
     <string name="settings_language_desc">Sets interface language and localization style.</string>
     <string name="settings_beauty_engine_desc">Choose default beauty engine. Affects preview and processing pipeline.</string>
