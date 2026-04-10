@@ -325,7 +325,8 @@ fun BeautyStrategySelection(
     onStrategySelected: (BeautyStrategy) -> Unit
 ) {
     val options = listOf(
-        BeautyStrategy.BIG_BEAUTY to stringResource(R.string.beauty_engine_rplan)
+        BeautyStrategy.BIG_BEAUTY to stringResource(R.string.beauty_engine_rplan),
+        BeautyStrategy.GPUPIXEL to stringResource(R.string.beauty_engine_gpupixel)
     )
 
     CompactOptionChips(

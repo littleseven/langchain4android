@@ -29,6 +29,7 @@
     <string name="beauty_engine">美颜引擎</string>
 
     <string name="beauty_engine_rplan">R 计划自主方案（默认）</string>
+    <string name="beauty_engine_gpupixel">GPUPixel（实验性）</string>
     <string name="settings_theme_mode_desc">控制应用浅色/深色显示风格。</string>
     <string name="settings_language_desc">设置界面语言与本地化展示方式。</string>
     <string name="settings_beauty_engine_desc">选择默认美颜引擎，会影响预览与处理链路。</string>
