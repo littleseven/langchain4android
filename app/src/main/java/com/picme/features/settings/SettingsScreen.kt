@@ -325,8 +325,7 @@ fun BeautyStrategySelection(
     onStrategySelected: (BeautyStrategy) -> Unit
 ) {
     val options = listOf(
-        BeautyStrategy.BIG_BEAUTY to stringResource(R.string.beauty_engine_rplan),
-        BeautyStrategy.PIXEL_FREE to stringResource(R.string.beauty_engine_pixelfree)
+        BeautyStrategy.BIG_BEAUTY to stringResource(R.string.beauty_engine_rplan)
     )
 
     CompactOptionChips(
@@ -431,7 +430,7 @@ fun SettingsScreenPreview() {
         SettingsContent(
             themeMode = ThemeMode.SYSTEM,
             appLanguage = AppLanguage.ENGLISH,
-            beautyStrategy = BeautyStrategy.PIXEL_FREE,
+            beautyStrategy = BeautyStrategy.BIG_BEAUTY,
             debugUiEnabled = true,
             showCameraInfoInPreview = false,
             showFaceDebugOverlay = false,

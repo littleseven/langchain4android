@@ -68,8 +68,6 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.preview.core.FaceWarpParams
-import com.picme.features.camera.preview.core.rememberPreviewStrategyBundle
-import com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
@@ -186,8 +184,6 @@ internal data class BeautyDebugState(
     val persistedFallbackReason: String?,
     val strategy: BeautyStrategy,
     val recoveryAvailableAtMs: Long,
-    val pixelFreeLinkMode: PixelFreePreviewLinkMode?,
-    val pixelFreeLinkReason: String?,
     val providerRenderActive: Boolean
 )
 
@@ -429,9 +425,7 @@ private data class PreviewTargetDecision(
 private fun resolvePreviewTargetView(
     useProviderRenderView: Boolean,
     activeStrategy: BeautyStrategy,
-    pixelFreeLinkMode: PixelFreePreviewLinkMode?,
     runtimeProviderView: View?,
-    pixelFreeView: View?,
     previewView: View
 ): PreviewTargetDecision {
     if (!useProviderRenderView) {
@@ -443,18 +437,9 @@ private fun resolvePreviewTargetView(
 
     val providerView = when (activeStrategy) {
         BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
-        BeautyStrategy.PIXEL_FREE -> when (pixelFreeLinkMode) {
-            PixelFreePreviewLinkMode.PROVIDER -> runtimeProviderView
-            PixelFreePreviewLinkMode.RAW -> pixelFreeView
-            PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> previewView
-            null -> pixelFreeView
-        }
     }
 
-    val requiresProviderView =
-        activeStrategy == BeautyStrategy.BIG_BEAUTY ||
-            (activeStrategy == BeautyStrategy.PIXEL_FREE &&
-                pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER)
+    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY
 
     if (requiresProviderView && providerView == null) {
         return PreviewTargetDecision(
@@ -576,7 +561,6 @@ fun CameraContent(
         beautyStrategy = beautyStrategy
     )
     val previewView = previewRuntimeViews.previewView
-    val pixelFreeView = previewRuntimeViews.pixelFreeView
     val glPreviewProvider = previewRuntimeViews.glPreviewProvider
 
     val recoveryState = rememberGlRecoveryState(
@@ -588,17 +572,11 @@ fun CameraContent(
     val persistedGlFallback = recoveryState.persistedFallback
     val persistedGlFallbackReason = recoveryState.persistedFallbackReason
 
-    var pixelFreeLinkMode by remember { mutableStateOf<PixelFreePreviewLinkMode?>(null) }
-    var pixelFreeLinkReason by remember { mutableStateOf<String?>(null) }
-
     val previewStrategyBundle = rememberPreviewStrategyBundle(
         beautyStrategy = beautyStrategy,
         previewView = previewView,
-        pixelFreeView = pixelFreeView,
         glPreviewProvider = glPreviewProvider,
-        onGlWarmUpFallback = recoveryState.onGlWarmUpFallback,
-        onPixelFreePreviewLinkModeChanged = { mode -> pixelFreeLinkMode = mode },
-        onPixelFreePreviewLinkReasonChanged = { reason -> pixelFreeLinkReason = reason }
+        onGlWarmUpFallback = recoveryState.onGlWarmUpFallback
     )
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
@@ -610,16 +588,12 @@ fun CameraContent(
         useProviderRenderView = activePreviewStrategy.bindPreview(previewUseCase, aspectRatio)
     }
 
-    LaunchedEffect(useProviderRenderView, beautyStrategy, previewRebindSignal, pixelFreeLinkMode) {
+    LaunchedEffect(useProviderRenderView, beautyStrategy, previewRebindSignal) {
         if (!useProviderRenderView) {
             return@LaunchedEffect
         }
 
-        val shouldCheckProviderReady = when (beautyStrategy) {
-            BeautyStrategy.BIG_BEAUTY -> true
-            BeautyStrategy.PIXEL_FREE -> pixelFreeLinkMode == PixelFreePreviewLinkMode.PROVIDER
-        }
-        if (!shouldCheckProviderReady) {
+        if (beautyStrategy != BeautyStrategy.BIG_BEAUTY) {
             return@LaunchedEffect
         }
 
@@ -679,7 +653,6 @@ fun CameraContent(
 
     LaunchedEffect(
         beautyStrategy,
-        pixelFreeLinkMode,
         beautySettings.lipColor,
         beautySettings.enabled,
         useProviderRenderView
@@ -700,19 +673,9 @@ fun CameraContent(
             lastLipPreviewRebindRequestMs = nowMs
             Logger.w(
                 "Camera",
-                "Lip realtime preview unavailable, request provider rebind: strategy=${beautyStrategy.name}, link=$pixelFreeLinkMode"
+                "Lip realtime preview unavailable, request provider rebind: strategy=${beautyStrategy.name}"
             )
             previewRebindSignal += 1
-        }
-
-        val shouldForceGlRecovery =
-            beautyStrategy == BeautyStrategy.PIXEL_FREE &&
-                pixelFreeLinkMode == PixelFreePreviewLinkMode.PREVIEW_FALLBACK
-
-        if (shouldForceGlRecovery && !lipRealtimeRecoveryRequested) {
-            lipRealtimeRecoveryRequested = true
-            Logger.w("Camera", "Lip realtime preview requires provider path, trigger R Plan recovery")
-            userPreferencesRepository.triggerManualGlEngineRecovery()
         }
     }
 
@@ -847,24 +810,7 @@ fun CameraContent(
         }
     }
     
-    // RD 监听美颜参数变化（暂时注释，后续实现）
-    // LaunchedEffect(beautySettings) {
-    //     pixelFreeView.setSmoothingStrength(beautySettings.smoothing.toFloat())
-    //     pixelFreeView.setWhiteningStrength(beautySettings.whitening.toFloat())
-    //     pixelFreeView.setSlimFaceStrength(beautySettings.slimFace.toFloat())
-    //     pixelFreeView.setBigEyesStrength(beautySettings.bigEyes.toFloat())
-    //     Logger.d("Camera", "PixelFree beauty updated: smoothing=${beautySettings.smoothing}, whitening=${beautySettings.whitening}")
-    // }
-    
-    // 仅在 PixelFree 策略下执行 PixelFree 初始化日志。
-    LaunchedEffect(beautyStrategy, pixelFreeView) {
-        if (beautyStrategy != BeautyStrategy.PIXEL_FREE || pixelFreeView == null) {
-            return@LaunchedEffect
-        }
 
-        delay(500)
-        Logger.d("Camera", "PixelFree initialization requested")
-    }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal, faceDetector) {
         bindCameraUseCases(
@@ -1032,26 +978,20 @@ CameraPreviewContent(
                     val targetDecision = resolvePreviewTargetView(
                         useProviderRenderView = useProviderRenderView,
                         activeStrategy = activePreviewStrategy.strategy,
-                        pixelFreeLinkMode = pixelFreeLinkMode,
                         runtimeProviderView = runtimeProviderView,
-                        pixelFreeView = pixelFreeView,
                         previewView = previewView
                     )
 
                     android.util.Log.d(
                         "PicMe:Camera",
                         "AndroidView update: useProviderRenderView=$useProviderRenderView, strategy=${activePreviewStrategy.strategy}, " +
-                            "pixelFreeLinkMode=$pixelFreeLinkMode, targetView=${targetDecision.targetView}"
+                            "targetView=${targetDecision.targetView}"
                     )
 
                     if (targetDecision.scheduleProviderFallback) {
                         Logger.w("Camera", "Provider render view missing, fallback to PreviewView and request rebind")
                         container.post {
                             if (useProviderRenderView) {
-                                if (activePreviewStrategy.strategy == BeautyStrategy.PIXEL_FREE) {
-                                    pixelFreeLinkMode = PixelFreePreviewLinkMode.PREVIEW_FALLBACK
-                                    pixelFreeLinkReason = "provider view is null"
-                                }
                                 useProviderRenderView = false
                                 previewRebindSignal += 1
                             }
@@ -1109,8 +1049,7 @@ CameraPreviewContent(
             persistedFallbackReason = persistedGlFallbackReason,
             strategy = beautyStrategy,
             recoveryAvailableAtMs = glRecoveryAvailableAtMs,
-            pixelFreeLinkMode = pixelFreeLinkMode,
-            pixelFreeLinkReason = pixelFreeLinkReason,
+
             providerRenderActive = useProviderRenderView
         ),
         aspectRatio = aspectRatio,

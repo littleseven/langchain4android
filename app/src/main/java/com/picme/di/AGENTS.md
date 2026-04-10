@@ -56,41 +56,32 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 > 跨模块容灾降级流程的完整说明请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`。本节仅保留 DI 层的实现代码与关键约束。
 
 **技术规范**:
-- **策略模式**: 根据 `BeautyStrategy` 枚举动态选择美颜引擎
-  - `BIG_BEAUTY`: 主引擎 (`GlBeautyPreviewProvider`)
-  - `PIXEL_FREE`: 备用引擎 (`PixelFreeBeautyPreviewProvider`)
-- **故障回退**: 大美丽 初始化失败时自动回退到 PixelFree，记录回退原因
-- **运行时状态**: 使用 `BeautyEngineRuntimeState` 单例管理回退状态，支持 UI 层查询
-- **阻塞读取**: 使用 `getBeautyStrategyBlocking()` 确保初始化时获取最新配置
+- **单引擎策略**: `BeautyStrategy` 当前仅保留 `BIG_BEAUTY`，PixelFree 已完全移除
+- **故障回退**: 大美丽 初始化失败时不再回退到 PixelFree，改为记录异常并降级为无美颜预览（CameraX `PreviewView` 直出），保证相机核心功能可用
+- **运行时状态**: 使用 `BeautyEngineRuntimeState` 单例记录初始化异常原因，支持 UI 层查询并提示用户
+- **阻塞读取**: 使用 `getBeautyStrategyBlocking()` 确保初始化时获取最新配置（当前恒为 `BIG_BEAUTY`）
 
 **代码示例**:
 ```kotlin
 private val beautyProcessor: BeautyProcessor by lazy {
-    val userPrefs = UserPreferencesRepository(context)
-    val strategy = userPrefs.getBeautyStrategyBlocking()
-    
-    when (strategy) {
-        BeautyStrategy.PIXEL_FREE -> PixelFreeBeautyProcessor(context)
-        BeautyStrategy.BIG_BEAUTY -> {
-            try {
-                GlBeautyPreviewProvider(context)
-            } catch (error: Throwable) {
-                BeautyEngineRuntimeState.markGlEngineFallback(error.message ?: "unknown")
-                Logger.w("DI", "大美丽 init failed, fallback to PixelFree", error)
-                PixelFreeBeautyPreviewProvider(context)
-            }
-        }
+    try {
+        GpuBeautyProcessor(context)
+    } catch (error: Throwable) {
+        BeautyEngineRuntimeState.markGlEngineFallback(error.message ?: "unknown")
+        Logger.w("DI", "大美丽 init failed, degrade to no-beauty preview", error)
+        // 返回一个空实现的 BeautyProcessor，或让上层捕获后降级到 PreviewView
+        NoOpBeautyProcessor
     }
 }
 
 object BeautyEngineRuntimeState {
     @Volatile
     private var fallbackReason: String? = null
-    
+
     fun markGlEngineFallback(reason: String) {
         fallbackReason = reason
     }
-    
+
     fun consumeGlEngineFallbackReason(): String? {
         val reason = fallbackReason
         fallbackReason = null
@@ -156,7 +147,7 @@ class MediaViewModelFactory(
 ## 4. 常见陷阱检查清单 (Checklist)
 
 - [ ] 是否对所有全局依赖使用了 by lazy？(确保单例与线程安全)
-- [ ] 美颜引擎初始化失败是否有回退机制？(try-catch + PixelFree 兜底)
+- [ ] 美颜引擎初始化失败是否有降级机制？(try-catch + 无美颜 PreviewView 兜底)
 - [ ] 回退原因是否正确记录到 BeautyEngineRuntimeState？(支持 UI 查询)
 - [ ] ViewModel Factory 是否正确注入了全部依赖？(检查 Dependencies 数据类)
 - [ ] 是否在 ViewModel onCleared 中释放了 OCR 资源？(避免内存泄漏)
@@ -176,6 +167,6 @@ class MediaViewModelFactory(
 **技术决策记录**:
 - 选择手动 DI 而非 Hilt：项目规模适中，手动 DI 更轻量、易理解；Hilt 作为预留扩展
 - 使用 by lazy 延迟初始化：确保单例、线程安全，避免启动时不必要的资源分配
-- 策略模式实现引擎切换：支持运行时动态切换，便于灰度发布与 A/B 测试
-- 故障回退机制：大美丽 异常时自动降级到 PixelFree，保证核心功能可用
+- 单引擎策略（BIG_BEAUTY only）：PixelFree 已移除，当前仅保留自研引擎
+- 故障降级机制：大美丽 异常时降级为无美颜预览（PreviewView 直出），保证相机可用
 - 依赖数据结构封装：通过 MediaViewModelDependencies 聚合依赖，简化 Factory 构造

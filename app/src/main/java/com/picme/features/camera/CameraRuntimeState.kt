@@ -15,12 +15,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.PicMeApplication
 import com.picme.core.common.Logger
 import com.picme.beauty.api.BeautyPreviewEngine
-import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.repository.UserSettingsRepository
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
-import com.picme.features.camera.preview.pixelfree.rememberPixelFreePreviewView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -80,7 +78,6 @@ internal data class GlRecoveryUiState(
 
 internal data class PreviewRuntimeViews(
     val previewView: PreviewView,
-    val pixelFreeView: PixelFreeGLSurfaceView?,
     val glPreviewProvider: BeautyPreviewEngine?
 )
 
@@ -177,11 +174,6 @@ internal fun rememberPreviewRuntimeViews(
         }
     }
 
-    val pixelFreeView = rememberPixelFreePreviewView(
-        context = context,
-        beautyStrategy = beautyStrategy
-    )
-
     val glPreviewProvider = rememberGlBeautyPreviewProvider(
         context = context,
         beautyStrategy = beautyStrategy
@@ -189,7 +181,6 @@ internal fun rememberPreviewRuntimeViews(
 
     return PreviewRuntimeViews(
         previewView = previewView,
-        pixelFreeView = pixelFreeView,
         glPreviewProvider = glPreviewProvider
     )
 }
@@ -206,23 +197,9 @@ internal fun rememberGlRecoveryState(
     var autoRecoveryRequestedAtMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(beautyStrategy, glRecoveryAvailableAtMs) {
-        if (beautyStrategy == BeautyStrategy.BIG_BEAUTY) {
-            persistedFallback = false
-            persistedFallbackReason = null
-            autoRecoveryRequestedAtMs = 0L
-            return@LaunchedEffect
-        }
-
-        if (beautyStrategy != BeautyStrategy.PIXEL_FREE || glRecoveryAvailableAtMs <= 0L) {
-            return@LaunchedEffect
-        }
-
-        val nowMs = System.currentTimeMillis()
-        if (nowMs >= glRecoveryAvailableAtMs && autoRecoveryRequestedAtMs != glRecoveryAvailableAtMs) {
-            autoRecoveryRequestedAtMs = glRecoveryAvailableAtMs
-            userPreferencesRepository.triggerManualGlEngineRecovery()
-            Logger.i("Camera", "Cooldown ended, auto retry R Plan strategy")
-        }
+        persistedFallback = false
+        persistedFallbackReason = null
+        autoRecoveryRequestedAtMs = 0L
     }
 
     val onGlWarmUpFallback: (String) -> Unit = { reason ->
@@ -235,7 +212,7 @@ internal fun rememberGlRecoveryState(
                 userPreferencesRepository.persistGlEngineFallback(R_PLAN_RECOVERY_COOLDOWN_MS)
                 Logger.w(
                     "Camera",
-                    "Beauty strategy persisted to PIXEL_FREE after R Plan warm-up failure, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
+                    "R Plan warm-up failure recorded, cooldown=${R_PLAN_RECOVERY_COOLDOWN_MS}ms"
                 )
             }
         }

@@ -26,7 +26,7 @@
     <string name="grant_permissions">Grant Permissions</string>
     <string name="theme_mode">Theme Mode</string>
     <string name="beauty_engine">Beauty Engine</string>
-    <string name="beauty_engine_pixelfree">PixelFree SDK (Backup)</string>
+
     <string name="beauty_engine_rplan">R Plan (Default)</string>
     <string name="settings_theme_mode_desc">Controls app appearance in light/dark mode.</string>
     <string name="settings_language_desc">Sets interface language and localization style.</string>

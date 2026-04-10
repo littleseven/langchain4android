@@ -77,7 +77,7 @@ override fun onCleared() {
 如果 `initialize()` 抛出异常（如设备不支持所需 GLES 版本、Shader 编译失败）：
 
 1. `BeautyPreviewProvider` 内部不会自动回退，异常会向上抛出。
-2. **调用方**（通常是 `app` 模块的 DI 层）应捕获异常并切换到兜底引擎（如 PixelFree）。
+2. **调用方**（通常是 `app` 模块的 DI 层）应捕获异常并降级为无美颜预览（CameraX `PreviewView` 直出）。
 3. 详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`。
 
 ---
@@ -110,4 +110,4 @@ override fun onCleared() {
 - `beauty-engine/AGENTS.md` — 内部实现规范与代码约束
 - `docs/BIG_BEAUTY_TECH_SPEC.md` — 大美丽 渲染链路、容灾回退、冷却恢复与观测指标
 - `docs/BEAUTY_ENGINE_FALLBACK.md` — 跨模块容灾降级统一说明
-- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` — PixelFree 兜底引擎技术规范
+- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` — ~~PixelFree 兜底引擎技术规范~~ **已废弃并移除（2026-04）**

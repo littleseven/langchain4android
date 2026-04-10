@@ -27,7 +27,7 @@
     <string name="grant_permissions">授予權限</string>
     <string name="theme_mode">主題模式</string>
     <string name="beauty_engine">美顏引擎</string>
-    <string name="beauty_engine_pixelfree">PixelFree SDK（備援）</string>
+
     <string name="beauty_engine_rplan">R 計畫自主方案（預設）</string>
     <string name="settings_theme_mode_desc">控制應用淺色/深色顯示風格。</string>
     <string name="settings_language_desc">設定介面語言與在地化呈現方式。</string>

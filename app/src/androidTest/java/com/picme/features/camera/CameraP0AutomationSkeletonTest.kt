@@ -32,7 +32,7 @@ class CameraP0AutomationSkeletonTest {
     }
 
     @Test
-    fun p0_03_glEngineWarmupFailure_shouldFallbackToPixelFree_skeleton() {
+    fun p0_03_glEngineWarmupFailure_fallbackReasonObservable_skeleton() {
         // 骨架阶段先验证 fallback reason 的可观测链路可被测试捕获。
         BeautyEngineRuntimeState.markGlEngineFallback("warm-up timeout")
         val fallbackReason = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()

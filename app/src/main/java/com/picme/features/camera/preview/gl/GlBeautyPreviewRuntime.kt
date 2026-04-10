@@ -12,7 +12,7 @@ internal fun rememberGlBeautyPreviewProvider(
     context: Context,
     beautyStrategy: BeautyStrategy
 ): BeautyPreviewEngine {
-    // PixelFree 实时预览借用 GL 美颜渲染管线以保证瘦脸/大眼即时生效。
+    // 实时预览通过 GL 美颜渲染管线保证瘦脸/大眼即时生效。
     return remember(context) {
         GlBeautyPreviewProvider(context)
     }

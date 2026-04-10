@@ -23,6 +23,8 @@
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
 - **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
+- **[INTEGRATION] 单引擎策略**：当前仅保留自研 `beauty-engine`（BIG_BEAUTY）作为唯一实时美颜引擎，已完全移除 PixelFree 相关模块与依赖
+- **[ROADMAP] GPUPixel 评估方向**：未来开源替代方案评估目标为 [GPUPixel](https://github.com/pixpark/gpupixel)（Apache 2.0、纯 C++11/OpenGL ES、无商业 SDK 绑定）， CainCamera 因硬依赖 Face++ 商业 SDK 且已停止维护，已被排除
 
 ---
 
@@ -70,6 +72,11 @@ beauty-engine/src/main/java/com/picme/beauty/
   - `isReady(): Boolean` — 判断引擎是否已就绪
   - `getPerfStats(): BeautyPerfStats` — 获取实时性能统计（默认返回 `EMPTY`）
 - 初始化异常应通过抛出异常或状态查询供 App 层触发兜底。详见 `docs/BEAUTY_ENGINE_FALLBACK.md`
+
+#### 未来接口扩展（ML Kit 增强）
+- **FaceWarpParams 增强**：Phase 2 引入 `faceMeshPoints: List<Offset>` 字段，支持 468 点密集网格驱动精细美型和妆容贴合。
+- **SegmentationMask 支持**：Phase 2-3 引入 `segmentationMaskTexture: Int` 字段，允许 Shader 通过 `sampler2D` 读取人像前景 Mask，实现背景虚化和美体边缘保护。
+- **约束**：以上扩展必须通过 `updateFilters(params: BeautyParams)` 的扩展重载或新增接口实现，保持现有调用方二进制兼容。
 
 #### BeautyPerfStats
 - 统一输出字段：`fps`, `processingMs`, `delayMs`, `cpuUsage`, `nullFrames`
@@ -292,7 +299,7 @@ if (fps < 25 || processingMs > 20) {
 - `PRODUCT.md` - 产品需求规格说明书（大美丽 产品策略）
 - `docs/FEATURES.md` - 功能交互规范
 - `docs/BIG_BEAUTY_TECH_SPEC.md` - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标
-- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` - PixelFreeEffects SDK 集成（备用引擎）
+- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` - ~~PixelFreeEffects SDK 集成（备用引擎）~~ **已废弃并移除（2026-04）**
 - `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` - 大美丽 QA 独立执行清单
 - `app/src/main/java/com/picme/features/camera/AGENTS.md` - Camera 模块实现规范
 - `beauty-engine/src/main/java/com/picme/beauty/api/` - 对外稳定 API

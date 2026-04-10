@@ -133,7 +133,6 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun persistGlEngineFallback(cooldownMs: Long) {
         val nowMs = System.currentTimeMillis()
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.BEAUTY_STRATEGY] = BeautyStrategy.PIXEL_FREE.name
             preferences[PreferencesKeys.GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = nowMs + cooldownMs
         }
     }

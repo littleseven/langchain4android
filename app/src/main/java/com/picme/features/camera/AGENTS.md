@@ -19,8 +19,10 @@
 - **[OFFLINE] OCR 本地识别**：使用 ML Kit 离线引擎，严禁云端处理
 - **[PRIVACY] 权限最小化**：仅在需要时申请相机和存储权限，提供降级方案
 - **[REALTIME] 美颜实时预览**：所有美颜效果处理延迟 < 100ms，支持实时预览
+- **[ENGINE] 单引擎策略**：当前仅使用自研 `beauty-engine`（BIG_BEAUTY）作为唯一实时美颜引擎；PixelFree 已完全移除，未来开源替代方案评估目标为 GPUPixel
 - **[NATURAL] 自然美学原则**：所有美颜效果必须保持自然，避免过度失真
 - **[ACCURACY] 十字星精确跟踪**：人脸跟踪十字星偏差 < 5px，支持旋转/缩放/镜像场景
+- **[MLKIT] 人脸能力深度挖掘**：基于现有 ML Kit Face Detection，充分利用表情/状态属性（微笑、睁眼、头部角度）；Face Mesh 与 Selfie Segmentation 作为异步增强流引入，严禁阻塞预览渲染线程
 
 ## 2. 技术实现规范 (Technical Implementation)
 
@@ -272,5 +274,39 @@ val screenY = adjustedY * previewHeight
 - 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
 - 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳
 - 美颜使用 GPU 加速：CPU 计算无法满足实时性要求
+- 单引擎策略（BIG_BEAUTY only）：PixelFree 已移除，GPUPixel 作为未来开源评估方向
 - 十字星坐标转换统一为四步法：避免分析链路与绘制链路偏移
 - 坐标调试日志固定 Step1~Step4：便于快速定位旋转/镜像问题
+
+### 2.6 ML Kit 人脸增强能力实现规范
+
+#### 2.6.1 表情与状态属性（立即落地）
+基于现有 `CameraFrameAnalyzer` 中的 ML Kit Face Detection 结果，零新增依赖即可读取以下字段：
+
+| 属性 | 字段 | 应用场景 | 实现位置 |
+|:---|:---|:---|:---|
+| 微笑概率 | `face.smilingProbability` | 微笑快门（可选开关） | `CameraFrameAnalyzer` / `CameraScreen` |
+| 左眼睁开 | `face.leftEyeOpenProbability` | 闭眼提醒、连拍选优 | `CameraFrameAnalyzer` |
+| 右眼睁开 | `face.rightEyeOpenProbability` | 同上 | `CameraFrameAnalyzer` |
+| 头部欧拉角 | `face.headEulerAngleX/Y/Z` | 侧脸时自动降低瘦脸/大眼强度 | `CameraScreen` 参数联动 |
+| 追踪 ID | `face.trackingId` | 多人场景稳定跟踪 | 未来扩展 |
+
+**约束**：
+- 这些属性读取必须在 `ImageAnalysis` 异步回调中完成，严禁放入主线程阻塞逻辑。
+- 侧脸降强度逻辑应通过状态流（`StateFlow` / `remember`）联动到美颜参数下发，避免直接修改用户保存的偏好值。
+
+#### 2.6.2 Face Mesh 468 点（Phase 2）
+- **引入方式**：新增 ML Kit `face-detection` 的 `FaceMesh` 模块（或通过 `face-detection` 的 `CLASSIFICATION_MODE_ALL` + 轮廓模式增强）。
+- **数据流**：`ImageAnalysis` → `FaceMeshDetector` → 468 点坐标 → `FaceWarpParams` → `BeautyPreviewEngine`。
+- **性能红线**：
+  - Face Mesh 推理耗时约 20-40ms/帧（中端机），**绝对禁止**放入预览渲染管线同步执行。
+  - 必须采用"异步分析 + 参数插值"策略：分析流每 200-300ms 更新一次关键点，预览流根据最近一次结果进行平滑插值。
+- **应用场景**：精细美型参数映射、妆容 UV 贴合、AR 贴纸锚点。
+
+#### 2.6.3 Selfie Segmentation（Phase 2-3）
+- **引入方式**：新增 ML Kit `segmentation-selfie` 依赖。
+- **数据流**：`ImageAnalysis` → `SelfieSegmenter` → 前景 Mask Bitmap → GPU 纹理上传 → Shader 蒙版应用。
+- **性能注意**：
+  - Mask 生成在 CPU，但应用必须在 GPU（通过 `uniform sampler2D` 传入 Shader）。
+  - 低端机可降级为关闭分割相关效果。
+- **隐私约束**：完全端侧运行，符合 `[PRIVACY]` 红线。
