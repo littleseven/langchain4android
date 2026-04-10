@@ -5,7 +5,7 @@ package com.picme.beauty.egl
  *
  * 包含：
  * 1. 顶点着色器（通用）
- * 2. 磨皮算法（盒式模糊）
+ * 2. 磨皮算法（双边滤波快速近似，9点采样+值域高斯权重）
  * 3. 美白算法（亮度提升）
  * 4. 组合效果（大眼、瘦脸、唇色、腮红）
  */
@@ -28,6 +28,7 @@ object BeautyShaders {
         precision mediump float;
 
         uniform samplerExternalOES uTexture;
+        uniform vec2 uTexelSize;
         uniform float uSmoothing;
         uniform float uWhitening;
         uniform float uBigEyes;
@@ -111,14 +112,45 @@ uniform int uBlushColorFamily;
         }
 
         vec4 smoothSkin(vec2 uv, float intensity) {
-            vec4 color = texture2D(uTexture, uv);
-            vec4 color1 = texture2D(uTexture, uv + vec2(0.008, 0.0));
-            vec4 color2 = texture2D(uTexture, uv + vec2(-0.008, 0.0));
-            vec4 color3 = texture2D(uTexture, uv + vec2(0.0, 0.008));
-            vec4 color4 = texture2D(uTexture, uv + vec2(0.0, -0.008));
-            vec4 avgColor = (color + color1 + color2 + color3 + color4) / 5.0;
+            vec4 centerColor = texture2D(uTexture, uv);
             float mask = skinMask(uv);
-            return mix(color, avgColor, intensity * mask);
+            if (mask < 0.01 || intensity < 0.001) {
+                return centerColor;
+            }
+
+            vec3 centerRgb = centerColor.rgb;
+            float centerL = dot(centerRgb, vec3(0.299, 0.587, 0.114));
+
+            vec2 texelSize = uTexelSize;
+            float sigmaSpatial = 1.8;
+            float sigmaSpatialSq = sigmaSpatial * sigmaSpatial * 2.0;
+            float sigmaRange = 0.10 + intensity * 0.08;
+            float sigmaRangeSq = sigmaRange * sigmaRange * 2.0;
+
+            vec3 sum = centerRgb;
+            float wSum = 1.0;
+
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    if (x == 0 && y == 0) continue;
+                    vec2 offset = vec2(float(x), float(y)) * texelSize;
+                    vec3 sRgb = texture2D(uTexture, uv + offset).rgb;
+                    float sL = dot(sRgb, vec3(0.299, 0.587, 0.114));
+
+                    float dL = sL - centerL;
+                    float spatialDistSq = float(x*x + y*y);
+
+                    float spatialW = exp(-spatialDistSq / sigmaSpatialSq);
+                    float rangeW = exp(-(dL * dL) / sigmaRangeSq);
+
+                    float w = spatialW * rangeW;
+                    sum += sRgb * w;
+                    wSum += w;
+                }
+            }
+
+            vec3 result = sum / wSum;
+            return mix(centerColor, vec4(result, centerColor.a), intensity * mask);
         }
 
         vec4 whitenSkin(vec4 color, float intensity, float mask) {

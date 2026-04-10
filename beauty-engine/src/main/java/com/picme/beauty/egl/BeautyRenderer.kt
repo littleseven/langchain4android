@@ -58,6 +58,8 @@ class BeautyRenderer : GLRenderer() {
 
     private var warmthStrength: Float = 0.0f
     private var contrast: Float = 1.0f
+    private var texelSizeX: Float = 0.0015f
+    private var texelSizeY: Float = 0.0015f
 
     private var renderFrameCount: Long = 0
 
@@ -198,6 +200,13 @@ class BeautyRenderer : GLRenderer() {
         }
     }
 
+    fun setTexelSize(width: Int, height: Int) {
+        if (width > 0 && height > 0) {
+            texelSizeX = 1.0f / width
+            texelSizeY = 1.0f / height
+        }
+    }
+
     fun updateAdvancedParams(warmth: Float, contrast: Float) {
         warmthStrength = warmth.coerceIn(0f, 1f)
         this.contrast = contrast.coerceIn(0.5f, 1.5f)
@@ -229,6 +238,7 @@ class BeautyRenderer : GLRenderer() {
 
         when (renderMode) {
             MODE_BEAUTY, MODE_ADVANCED -> {
+                shaderProgram.setVec2("uTexelSize", texelSizeX, texelSizeY)
                 shaderProgram.setFloat("uSmoothing", smoothingStrength)
                 shaderProgram.setFloat("uWhitening", whiteningStrength)
                 shaderProgram.setFloat("uBigEyes", bigEyesStrength)
