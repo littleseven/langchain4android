@@ -17,6 +17,11 @@ import android.view.Surface
 interface BeautyPreviewProvider {
 
     /**
+     * 初始化引擎（离屏 EGL + Shader 编译）
+     */
+    fun initialize()
+
+    /**
      * 创建预览 Surface，CameraX 将帧输出到此 Surface
      */
     fun createPreviewSurface(): Surface

@@ -4,7 +4,7 @@ import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.picme.core.common.Logger
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.image.gl.toBeautyParams
 import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.domain.model.BeautyStrategy
@@ -22,7 +22,7 @@ internal enum class PixelFreePreviewLinkMode {
 internal class PixelFreePreviewStrategy(
     private val previewView: PreviewView,
     private val pixelFreeView: PixelFreeGLSurfaceView,
-    private val glPreviewProvider: GlBeautyPreviewProvider?,
+    private val glPreviewProvider: BeautyPreviewEngine?,
     private val onPreviewLinkModeChanged: (PixelFreePreviewLinkMode) -> Unit,
     private val onPreviewLinkReasonChanged: (String?) -> Unit
 ) : BeautyPreviewEngineStrategy {

@@ -4,7 +4,7 @@ import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.picme.core.common.Logger
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.image.gl.toBeautyParams
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.BeautySettings
@@ -14,7 +14,7 @@ import com.picme.features.camera.preview.core.FaceWarpParams
 
 internal class GlBeautyPreviewStrategy(
     private val previewView: PreviewView,
-    private val glBeautyPreviewProvider: GlBeautyPreviewProvider,
+    private val glBeautyPreviewProvider: BeautyPreviewEngine,
     private val onWarmUpFallback: (String) -> Unit
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY

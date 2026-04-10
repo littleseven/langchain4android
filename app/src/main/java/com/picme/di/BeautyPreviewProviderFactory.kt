@@ -1,12 +1,12 @@
 package com.picme.di
 
 import android.content.Context
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.api.BeautyPreviewProvider
+import com.picme.beauty.egl.GlBeautyPreviewProviderFactory
 import com.picme.core.common.Logger
 import com.picme.core.image.pixelfree.PixelFreeBeautyPreviewProvider
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.preview.BeautyPreviewProvider
 
 /**
  * 美颜预览提供者工厂
@@ -17,13 +17,13 @@ import com.picme.domain.preview.BeautyPreviewProvider
  * 3. 便于单元测试时替换为 Mock
  *
  * 双引擎策略：
- * - 主引擎：R 计划自主方案（R_PLAN）——使用 beauty-engine 模块的 [GlBeautyPreviewProvider]
+ * - 主引擎：R 计划自主方案（R_PLAN）——通过 [GlBeautyPreviewProviderFactory] 创建
  * - 备用引擎：PixelFreeEffects SDK（PIXEL_FREE）
  *
  * 切换方式：设置页「美颜引擎」配置开关
  * 策略枚举已迁移至 [com.picme.domain.model.BeautyStrategy]
  *
- * @see com.picme.beauty.egl.GlBeautyPreviewProvider
+ * @see com.picme.beauty.egl.GlBeautyPreviewProviderFactory
  * @see com.picme.core.image.pixelfree.PixelFreeBeautyPreviewProvider
  */
 object BeautyPreviewProviderFactory {
@@ -55,7 +55,7 @@ object BeautyPreviewProviderFactory {
             BeautyStrategy.BIG_BEAUTY -> {
                 Logger.i("Factory", "Using R Plan (user preference: ${selectedStrategy.name})")
                 try {
-                    GlBeautyPreviewProvider(context).apply {
+                    GlBeautyPreviewProviderFactory().create(context).apply {
                         initialize()
                     }
                 } catch (error: Throwable) {

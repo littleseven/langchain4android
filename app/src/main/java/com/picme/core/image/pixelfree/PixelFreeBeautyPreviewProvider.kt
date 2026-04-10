@@ -35,7 +35,7 @@ class PixelFreeBeautyPreviewProvider(
      * 初始化 PixelFree GLSurfaceView
      * 必须在 UI 线程调用
      */
-    fun initialize() {
+    override fun initialize() {
         if (isInitialized) return
 
         pixelFreeView = PixelFreeGLSurfaceView(context).apply {
