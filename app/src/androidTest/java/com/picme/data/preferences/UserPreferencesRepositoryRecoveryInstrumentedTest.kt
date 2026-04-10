@@ -38,7 +38,7 @@ class UserPreferencesRepositoryRecoveryInstrumentedTest {
         val fallbackStrategy = repository.beautyStrategyFlow.first()
         val fallbackRecoveryAt = repository.glEngineRecoveryAvailableAtFlow.first()
 
-        assertEquals(BeautyStrategy.PIXEL_FREE, fallbackStrategy)
+        assertEquals(BeautyStrategy.BIG_BEAUTY, fallbackStrategy)
         assertTrue(fallbackRecoveryAt > System.currentTimeMillis())
 
         repository.triggerManualGlEngineRecovery()
@@ -46,7 +46,7 @@ class UserPreferencesRepositoryRecoveryInstrumentedTest {
         val recoveredStrategy = repository.beautyStrategyFlow.first()
         val recoveredRecoveryAt = repository.glEngineRecoveryAvailableAtFlow.first()
 
-        assertEquals(BeautyStrategy.R_PLAN, recoveredStrategy)
+        assertEquals(BeautyStrategy.BIG_BEAUTY, recoveredStrategy)
         assertEquals(0L, recoveredRecoveryAt)
     }
 }

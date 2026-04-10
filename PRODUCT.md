@@ -66,13 +66,15 @@
         - **身材管理**：
             - **丰胸 (Body Enhancement)**：基于人体关键点的安全调整，范围 -30~+30
             - **长腿 (Leg Extension)**：视觉比例优化，保持身体协调，范围 0-50
-    - **大美丽 产品策略**：
-        - **默认主引擎**：大美丽（自研 OpenGL ES + EGL）作为实时美颜默认引擎。
-        - **稳定兜底**：保留 PixelFreeEffects 作为备用链路，确保核心拍摄流程可用。
-        - **双引擎共存**：两套引擎长期共存，并提供设置页切换能力。
-        - **自动回退**：当 大美丽初始化失败或运行异常时，自动切换至 PixelFreeEffects，并提示“已切换稳定模式”。
-        - **回退可恢复**：异常恢复后允许用户在设置页重新切回 大美丽。
-        - **长期库化目标**：大美丽 持续演进为独立视觉能力基础库（类似 PixelFree 的产品形态），App 作为能力消费者。
+    - **ML Kit 人脸能力挖掘（2026-04）**：
+        - **表情与状态属性（立即落地）**：基于现有 ML Kit Face Detection，读取 `smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性，实现微笑快门、侧脸美颜降强度、闭眼提醒。
+        - **Face Mesh 468 点（Phase 2）**：引入 ML Kit Face Mesh 作为异步分析流，支撑精细美型（颧骨、下颌线）和精准妆容贴合（眼影、腮红 UV 映射）。严禁放入预览渲染线程，仅通过 `ImageAnalysis` 异步回调驱动参数。
+        - **Selfie Segmentation（Phase 2-3）**：引入人像分割实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
+    - **美颜引擎技术路线（2026-04 更新）**：
+        - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）作为唯一实时美颜引擎。
+        - **移除 PixelFreeEffects**：因 PixelFree 核心算法未真正开源，且官方 UIKit 与 Jetpack Compose 架构冲突，已于 2026-04 彻底移除 `:pixelfree-sdk` 模块及相关代码。
+        - **未来演进方向（GPUPixel）**：评估以 [GPUPixel](https://github.com/pixpark/gpupixel) 作为开源高性能 GPU 滤镜引擎基础，逐步替换/增强 大美丽 的 Shader 管线。GPUPixel 采用 Apache 2.0 协议，纯 C++11 + OpenGL ES，单帧 < 10ms，无商业 SDK 绑定，与 PicMe 技术栈高度一致。
+        - **长期库化目标**：大美丽 持续演进为独立视觉能力基础库，App 作为能力消费者。
         - **能力边界**：基础库统一承载美颜、滤镜、妆容能力，对外提供稳定 API 与版本，不暴露底层渲染细节。
 
     - **调试与性能可观测性**：

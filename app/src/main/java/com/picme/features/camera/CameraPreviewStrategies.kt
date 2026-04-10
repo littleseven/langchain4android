@@ -4,24 +4,18 @@ import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.picme.beauty.api.BeautyPreviewEngine
-import com.picme.core.image.pixelfree.PixelFreeGLSurfaceView
 import com.picme.domain.model.BeautyStrategy
 import com.picme.features.camera.preview.core.PreviewStrategyBundle
 import com.picme.features.camera.preview.gl.GlBeautyPreviewStrategy
-import com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode
-import com.picme.features.camera.preview.pixelfree.PixelFreePreviewStrategy
 
 @Composable
 internal fun rememberPreviewStrategyBundle(
     beautyStrategy: BeautyStrategy,
     previewView: PreviewView,
-    pixelFreeView: PixelFreeGLSurfaceView?,
     glPreviewProvider: BeautyPreviewEngine?,
-    onGlWarmUpFallback: (String) -> Unit,
-    onPixelFreePreviewLinkModeChanged: (PixelFreePreviewLinkMode) -> Unit,
-    onPixelFreePreviewLinkReasonChanged: (String?) -> Unit
+    onGlWarmUpFallback: (String) -> Unit
 ): PreviewStrategyBundle {
-    val activeStrategy = remember(beautyStrategy, previewView, pixelFreeView, glPreviewProvider) {
+    val activeStrategy = remember(beautyStrategy, previewView, glPreviewProvider) {
         when (beautyStrategy) {
             BeautyStrategy.BIG_BEAUTY -> {
                 GlBeautyPreviewStrategy(
@@ -30,17 +24,6 @@ internal fun rememberPreviewStrategyBundle(
                         "GL beauty strategy requires GlBeautyPreviewProvider"
                     },
                     onWarmUpFallback = onGlWarmUpFallback
-                )
-            }
-            BeautyStrategy.PIXEL_FREE -> {
-                PixelFreePreviewStrategy(
-                    previewView = previewView,
-                    pixelFreeView = requireNotNull(pixelFreeView) {
-                        "PixelFree strategy requires PixelFreeGLSurfaceView"
-                    },
-                    glPreviewProvider = glPreviewProvider,
-                    onPreviewLinkModeChanged = onPixelFreePreviewLinkModeChanged,
-                    onPreviewLinkReasonChanged = onPixelFreePreviewLinkReasonChanged
                 )
             }
         }

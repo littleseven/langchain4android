@@ -85,8 +85,8 @@ dependencies {
     implementation(libs.google.mlkit.text.recognition)
     implementation(libs.google.mlkit.text.recognition.chinese)
 
-    // PixelFreeEffects 美颜 SDK
-    implementation(files("libs/lib_pixelFree.aar"))
+    // PixelFreeEffects 已移除（2026-04），当前仅保留 beauty-engine（BIG_BEAUTY）
+
 
     // GPUImage for beauty effects
     implementation("jp.co.cyberagent.android:gpuimage:2.1.0")

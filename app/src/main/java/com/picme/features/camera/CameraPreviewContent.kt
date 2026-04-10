@@ -195,15 +195,13 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     }
 
     val nowMs = System.currentTimeMillis()
-    val hasPersistedFallback =
-        uiState.beautyDebugState.strategy == com.picme.domain.model.BeautyStrategy.PIXEL_FREE &&
-            uiState.beautyDebugState.recoveryAvailableAtMs > 0L
+    val hasPersistedFallback = uiState.beautyDebugState.recoveryAvailableAtMs > 0L
     val fallbackStateText = if (hasPersistedFallback) {
         val reasonText = uiState.beautyDebugState.persistedFallbackReason ?: "runtime failure"
         val remainingMs = (uiState.beautyDebugState.recoveryAvailableAtMs - nowMs).coerceAtLeast(0L)
         val remainingSec = remainingMs / 1000L
         if (remainingMs > 0L) {
-            "Fallback: PERSISTED -> PIXEL_FREE (${remainingSec}s, $reasonText)"
+            "Fallback: PERSISTED (${remainingSec}s, $reasonText)"
         } else {
             "Fallback: READY_TO_RECOVER ($reasonText)"
         }
@@ -211,32 +209,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "Fallback: NONE"
     }
 
-    val pixelFreeLinkText = if (uiState.beautyDebugState.strategy == com.picme.domain.model.BeautyStrategy.PIXEL_FREE) {
-        when (uiState.beautyDebugState.pixelFreeLinkMode) {
-            com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> "PixelFree Link: PROVIDER(realtime)"
-            com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> "PixelFree Link: RAW(no warp realtime)"
-            com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> "PixelFree Link: PREVIEW_FALLBACK"
-            null -> "PixelFree Link: UNKNOWN"
-        }
-    } else {
-        "PixelFree Link: N/A"
-    }
-    val pixelFreeLinkReasonText = uiState.beautyDebugState.pixelFreeLinkReason?.let { reason ->
-        val mappedReason = mapProviderFailReason(reason)
-        "Provider失败: $mappedReason"
-    }
-
-    val lipRealtimePreviewSupported = when (uiState.beautyDebugState.strategy) {
-        com.picme.domain.model.BeautyStrategy.BIG_BEAUTY -> uiState.beautyDebugState.providerRenderActive
-        com.picme.domain.model.BeautyStrategy.PIXEL_FREE -> {
-            when (uiState.beautyDebugState.pixelFreeLinkMode) {
-                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER,
-                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> true
-                com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> false
-                null -> uiState.beautyDebugState.providerRenderActive
-            }
-        }
-    }
+    val lipRealtimePreviewSupported = uiState.beautyDebugState.providerRenderActive
 
     val lipCompactText = buildString {
         append("LIP ${uiState.beautySettings.lipColor.toInt()}% #${uiState.beautySettings.lipColorIndex}")
@@ -291,23 +264,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                     },
                     fontSize = 9.sp
                 )
-                Text(
-                    text = pixelFreeLinkText,
-                    color = when (uiState.beautyDebugState.pixelFreeLinkMode) {
-                        com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PROVIDER -> Color(0xFF80D8FF)
-                        com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.RAW -> Color(0xFFFFCC80)
-                        com.picme.features.camera.preview.pixelfree.PixelFreePreviewLinkMode.PREVIEW_FALLBACK -> Color(0xFFE57373)
-                        null -> Color.White.copy(alpha = 0.85f)
-                    },
-                    fontSize = 9.sp
-                )
-                if (pixelFreeLinkReasonText != null) {
-                    Text(
-                        text = pixelFreeLinkReasonText,
-                        color = Color(0xFFFFCDD2),
-                        fontSize = 9.sp
-                    )
-                }
+
                 Text(
                     text = lipCompactText,
                     color = if (uiState.beautySettings.lipColor > 0) Color(0xFFFF80AB) else Color.White.copy(alpha = 0.6f),

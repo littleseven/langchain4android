@@ -69,18 +69,6 @@ interface ImageProcessor {
 }
 
 class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImageProcessor {
-    private val useWhiteningFallback by lazy {
-        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
-    }
-    private val useSlimFaceFallback by lazy {
-        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
-    }
-    private val useSmoothingFallback by lazy {
-        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
-    }
-    private val useBigEyesFallback by lazy {
-        beautyProcessor::class.java.simpleName.contains("PixelFree", ignoreCase = true)
-    }
 
     private fun createFaceMaskBitmap(
         width: Int,
@@ -450,22 +438,11 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 if (beauty.smoothing > 0f) {
                     Logger.d("ImageProcessor", "Applying smoothing: ${beauty.smoothing}")
                     processed = beautyProcessor.applySmoothing(processed, beauty.smoothing)
-
-                    if (useSmoothingFallback && faces.isNotEmpty()) {
-                        Logger.d("ImageProcessor", "Applying smoothing fallback boost: ${beauty.smoothing}")
-                        processed = applySmoothingFallback(processed, beauty.smoothing, faces)
-                    }
                 }
                 if (beauty.whitening > 0f) {
                     if (faces.isNotEmpty()) {
                         Logger.d("ImageProcessor", "Applying whitening on faces: ${beauty.whitening}, faceCount=${faces.size}")
                         processed = beautyProcessor.applyWhitening(processed, beauty.whitening)
-
-                        // PixelFree 部分机型上美白参数回显不明显，补一层仅人脸区域增强
-                        if (useWhiteningFallback) {
-                            Logger.d("ImageProcessor", "Applying face-only whitening fallback boost: ${beauty.whitening}")
-                            processed = applyWhiteningFallback(processed, beauty.whitening, faces)
-                        }
                     } else {
                         Logger.d("ImageProcessor", "Whitening skipped: no face detected")
                     }
@@ -475,30 +452,10 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     if (beauty.slimFace != 0f) {
                         Logger.d("ImageProcessor", "Applying slim face: ${beauty.slimFace}")
                         processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces)
-
-                        val shouldApplySlimFaceFallback =
-                            useSlimFaceFallback &&
-                                abs(beauty.slimFace) >= 1f &&
-                                beauty.lipColor <= 0f
-
-                        if (shouldApplySlimFaceFallback) {
-                            Logger.d("ImageProcessor", "Applying slim face fallback warp: ${beauty.slimFace}")
-                            processed = applySlimFaceFallback(processed, beauty.slimFace, faces)
-                        } else if (useSlimFaceFallback && beauty.lipColor > 0f) {
-                            Logger.d(
-                                "ImageProcessor",
-                                "Skip slim fallback warp when lip color is enabled to avoid facial tearing"
-                            )
-                        }
                     }
                     if (beauty.bigEyes > 0f) {
                         Logger.d("ImageProcessor", "Applying big eyes: ${beauty.bigEyes}")
                         processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes, faces)
-
-                        if (useBigEyesFallback && beauty.bigEyes >= 1f) {
-                            Logger.d("ImageProcessor", "Applying big eyes fallback boost: ${beauty.bigEyes}")
-                            processed = applyBigEyesFallback(processed, beauty.bigEyes, faces)
-                        }
                     }
                 } else {
                     Logger.d("ImageProcessor", "No faces detected, skipping face beautification")
