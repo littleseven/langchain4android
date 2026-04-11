@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 日志条目数据模型
@@ -61,6 +62,27 @@ object Logger {
     val logs = _logs.asStateFlow()
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+
+    /** 限流表：key -> 上次打印时间戳(ms) */
+    private val throttleMap = ConcurrentHashMap<String, Long>(64)
+
+    /**
+     * 限流 Debug 日志：同一 key 最多每 [intervalMs] 毫秒打印一次（默认 1000ms）。
+     * 适用于渲染循环、帧分析等高频场景，避免日志洪水。
+     *
+     * @param tag 模块标签
+     * @param key 限流 key，建议用 "tag:消息类型" 格式
+     * @param message 日志内容
+     * @param intervalMs 最短打印间隔，默认 1000ms
+     */
+    fun dThrottled(tag: String, key: String, message: String, intervalMs: Long = 1_000L) {
+        val now = System.currentTimeMillis()
+        val last = throttleMap[key] ?: 0L
+        if (now - last >= intervalMs) {
+            throttleMap[key] = now
+            d(tag, message)
+        }
+    }
 
     /**
      * Debug 级别日志

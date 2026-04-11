@@ -1,6 +1,7 @@
 package com.picme.features.camera.preview.gpupixel
 
 import androidx.camera.core.Preview
+import androidx.camera.view.PreviewView
 import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
@@ -12,6 +13,7 @@ import com.picme.features.camera.preview.core.FaceWarpParams
 
 internal class GpupixelBeautyPreviewStrategy(
     private val gpupixelProvider: GpupixelBeautyPreviewProvider,
+    private val previewView: PreviewView,
     private val onWarmUpFallback: (String) -> Unit
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.GPUPIXEL
@@ -21,10 +23,11 @@ internal class GpupixelBeautyPreviewStrategy(
             // setScaleMode 必须在 initialize() 之前调用，确保 isFillCenter 状态在初始化时正确
             gpupixelProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
             gpupixelProvider.initialize()
-            // GPUPixel 通过 ImageAnalysis → onRgbaFrame 路径接收帧，无需 CameraX Preview Surface
-            previewUseCase.setSurfaceProvider { request ->
-                request.willNotProvideSurface()
-            }
+            // GPUPixel 通过 ImageAnalysis → onRgbaFrame 路径接收帧，不需要 Preview Surface 渲染。
+            // 但必须提供一个有效的 SurfaceProvider，否则 CameraX 会阻塞整个 session（包括 ImageAnalysis）。
+            // 使用 previewView.surfaceProvider 作为占位——帧会送到 PreviewView，但 PreviewView
+            // 在 GPUPixel 模式下不可见（container 里放的是 TextureView），不影响显示效果。
+            previewUseCase.setSurfaceProvider(previewView.surfaceProvider)
             Logger.i(
                 "Camera",
                 "GPUPixel preview strategy active, aspectRatio=$aspectRatio, " +

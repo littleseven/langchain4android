@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
+import com.picme.core.common.Logger
 import com.picme.domain.model.BeautyStrategy
 import com.picme.features.camera.preview.core.PreviewStrategyBundle
 import com.picme.features.camera.preview.gl.GlBeautyPreviewStrategy
@@ -29,12 +30,29 @@ internal fun rememberPreviewStrategyBundle(
                 )
             }
             BeautyStrategy.GPUPIXEL -> {
-                GpupixelBeautyPreviewStrategy(
-                    gpupixelProvider = requireNotNull(glPreviewProvider as? GpupixelBeautyPreviewProvider) {
-                        "GPUPixel strategy requires GpupixelBeautyPreviewProvider"
-                    },
-                    onWarmUpFallback = onGlWarmUpFallback
-                )
+                // 防御性检查：provider 可能在策略切换的过渡帧中类型不匹配（如 recomposition 竞态）
+                // 此时降级到 BIG_BEAUTY 路径，下一帧 provider 刷新后会自动重建正确策略
+                val gpupixelProvider = glPreviewProvider as? GpupixelBeautyPreviewProvider
+                if (gpupixelProvider == null) {
+                    Logger.w(
+                        "Camera",
+                        "GPUPixel strategy requested but provider type mismatch: " +
+                            "${glPreviewProvider?.javaClass?.simpleName}, fallback to GL strategy temporarily"
+                    )
+                    GlBeautyPreviewStrategy(
+                        previewView = previewView,
+                        glBeautyPreviewProvider = requireNotNull(glPreviewProvider) {
+                            "No beauty provider available during strategy transition"
+                        },
+                        onWarmUpFallback = onGlWarmUpFallback
+                    )
+                } else {
+                    GpupixelBeautyPreviewStrategy(
+                        gpupixelProvider = gpupixelProvider,
+                        previewView = previewView,
+                        onWarmUpFallback = onGlWarmUpFallback
+                    )
+                }
             }
         }
     }

@@ -42,7 +42,6 @@ internal fun handleImageAnalysisFrame(
 
         faceDetector.process(image)
             .addOnSuccessListener { faces ->
-                android.util.Log.d("PicMe:Camera", "Face detection success: ${faces.size} faces found")
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val bounds = face.boundingBox
@@ -289,11 +288,6 @@ internal fun handleImageAnalysisFrame(
                         lipInnerContourPoints = lipInnerContourPoints
                     )
                     onFaceWarpParamsChanged(faceWarpParams)
-                    android.util.Log.d(
-                        "PicMe:Camera",
-                        "Face warp params updated: center=(${faceWarpParams.faceCenterX},${faceWarpParams.faceCenterY}), " +
-                            "radius=${faceWarpParams.faceRadius}, hasFace=${faceWarpParams.hasFace}"
-                    )
                 } else {
                     onShowFocusIndicatorChanged(false)
                     onFaceWarpParamsChanged(FaceWarpParams())
@@ -303,9 +297,6 @@ internal fun handleImageAnalysisFrame(
                 android.util.Log.e("PicMe:Camera", "Face detection failed: ${error.message}", error)
             }
             .addOnCompleteListener {
-                if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
-                    Logger.d("Camera", "Beauty enabled, will apply on capture")
-                }
                 imageProxy.close()
             }
     } catch (error: Exception) {
@@ -392,21 +383,11 @@ internal fun transformFaceCoordinateSimple(
     val normX = faceX / rotatedWidth
     val normY = faceY / rotatedHeight
 
-    android.util.Log.d(
-        "PicMe:Camera",
-        "Step1 [归一化]: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, norm=($normX,$normY)"
-    )
-
     val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
         1f - normX
     } else {
         normX
     }
-
-    android.util.Log.d(
-        "PicMe:Camera",
-        "Step2 [镜像]: lens=${if (lensFacing == CameraSelector.LENS_FACING_FRONT) "前" else "后"}, norm=($normX,$normY), mirrored=($mirroredX,$normY)"
-    )
 
     val (adjustedX, adjustedY) = when (rotationDegrees) {
         0 -> Pair(mirroredX, normY)
@@ -416,18 +397,8 @@ internal fun transformFaceCoordinateSimple(
         else -> Pair(mirroredX, normY)
     }
 
-    android.util.Log.d(
-        "PicMe:Camera",
-        "Step3 [旋转补偿]: rot=$rotationDegrees, mirrored=($mirroredX,$normY), adjusted=($adjustedX,$adjustedY)"
-    )
-
     val screenX = adjustedX * previewWidth
     val screenY = adjustedY * previewHeight
-
-    android.util.Log.d(
-        "PicMe:Camera",
-        "Step4 [像素转换]: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}, screen=($screenX,$screenY)"
-    )
 
     return Offset(screenX, screenY)
 }

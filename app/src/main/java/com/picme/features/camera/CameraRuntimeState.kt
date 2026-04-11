@@ -13,8 +13,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.PicMeApplication
-import com.picme.core.common.Logger
 import com.picme.beauty.api.BeautyPreviewEngine
+import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.repository.UserSettingsRepository
@@ -44,8 +44,10 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val imageProcessor = app.container.imageProcessor
     val userPreferencesRepository = app.container.userPreferencesRepository
     val coroutineScope = rememberCoroutineScope()
+    // 用 getBeautyStrategyBlocking() 同步读取初始值，避免 DataStore flow 首帧异步延迟
+    // 导致先用 BIG_BEAUTY 初始化一次、再切换到真实策略的竞态（双引擎并存 → EGL_BAD_DISPLAY 黑屏）
     val beautyStrategy by userPreferencesRepository.beautyStrategyFlow.collectAsState(
-        initial = BeautyStrategy.BIG_BEAUTY
+        initial = userPreferencesRepository.getBeautyStrategyBlocking()
     )
     val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
     val showCameraInfoInPreview by userPreferencesRepository.showCameraInfoInPreviewFlow.collectAsState(initial = false)
