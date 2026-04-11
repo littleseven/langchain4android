@@ -83,6 +83,12 @@ class BeautyPreviewView @JvmOverloads constructor(
             updateBeautyParamsInternal()
         }
 
+    var colorMatrix: FloatArray? = null
+        set(value) {
+            field = value
+            if (isRendererInitialized) renderer.updateColorMatrix(value)
+        }
+
     var renderMode: Int = BeautyRenderer.MODE_BEAUTY
         set(value) {
             field = value
@@ -130,6 +136,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.setScaleMode(isFillCenter)
         isRendererInitialized = true
         updateBeautyParamsInternal()
+        renderer.updateColorMatrix(colorMatrix)
         Log.d(TAG, "Renderer initialized")
     }
 

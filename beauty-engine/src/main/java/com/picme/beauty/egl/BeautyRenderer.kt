@@ -33,6 +33,9 @@ class BeautyRenderer : GLRenderer() {
     private var blushStrength: Float = 0f
     private var blushColorFamily: Int = 0
 
+    // 色调矩阵（null = 无滤镜直通）
+    private var colorMatrix: FloatArray? = null
+
     private var faceCenterX: Float = 0.5f
     private var faceCenterY: Float = 0.5f
     private var leftEyeX: Float = 0.4f
@@ -87,6 +90,12 @@ class BeautyRenderer : GLRenderer() {
     private var uLipColorIndexLocation: Int = -1
     private var uBlushLocation: Int = -1
     private var uBlushColorFamilyLocation: Int = -1
+    private var uCMRow0Location: Int = -1
+    private var uCMRow1Location: Int = -1
+    private var uCMRow2Location: Int = -1
+    private var uCMRow3Location: Int = -1
+    private var uCMOffsetLocation: Int = -1
+    private var uHasColorMatrixLocation: Int = -1
 
     fun setRenderMode(mode: Int) {
         if (renderMode != mode) {
@@ -212,6 +221,14 @@ class BeautyRenderer : GLRenderer() {
         this.contrast = contrast.coerceIn(0.5f, 1.5f)
     }
 
+    /**
+     * 更新色调滤镜矩阵。
+     * @param matrix Android ColorMatrix.values（20个float，4行×5列，行主序）；null 表示无滤镜
+     */
+    fun updateColorMatrix(matrix: FloatArray?) {
+        colorMatrix = matrix
+    }
+
     override fun onCompileShader(): Boolean {
         val vertexShader = BeautyShaders.VERTEX_SHADER
         val fragmentShader = when (renderMode) {
@@ -274,6 +291,24 @@ class BeautyRenderer : GLRenderer() {
                     shaderProgram.setFloat("uWarmth", warmthStrength)
                     shaderProgram.setFloat("uContrast", contrast)
                 }
+
+                // 色调滤镜矩阵传递
+                val cm = colorMatrix
+                if (cm != null && cm.size >= 20) {
+                    shaderProgram.setFloat("uHasColorMatrix", 1f)
+                    // 每行：[R系数, G系数, B系数, A系数]
+                    shaderProgram.setVec4("uCMRow0", cm[0], cm[1], cm[2], cm[3])
+                    shaderProgram.setVec4("uCMRow1", cm[5], cm[6], cm[7], cm[8])
+                    shaderProgram.setVec4("uCMRow2", cm[10], cm[11], cm[12], cm[13])
+                    shaderProgram.setVec4("uCMRow3", cm[15], cm[16], cm[17], cm[18])
+                    // 平移量（第5列），除以255归一化到0~1
+                    shaderProgram.setVec4(
+                        "uCMOffset",
+                        cm[4] / 255f, cm[9] / 255f, cm[14] / 255f, cm[19] / 255f
+                    )
+                } else {
+                    shaderProgram.setFloat("uHasColorMatrix", 0f)
+                }
             }
         }
 
@@ -310,6 +345,12 @@ class BeautyRenderer : GLRenderer() {
         uLipColorIndexLocation = shaderProgram.getUniformLocation("uLipColorIndex")
         uBlushLocation = shaderProgram.getUniformLocation("uBlush")
         uBlushColorFamilyLocation = shaderProgram.getUniformLocation("uBlushColorFamily")
+        uCMRow0Location = shaderProgram.getUniformLocation("uCMRow0")
+        uCMRow1Location = shaderProgram.getUniformLocation("uCMRow1")
+        uCMRow2Location = shaderProgram.getUniformLocation("uCMRow2")
+        uCMRow3Location = shaderProgram.getUniformLocation("uCMRow3")
+        uCMOffsetLocation = shaderProgram.getUniformLocation("uCMOffset")
+        uHasColorMatrixLocation = shaderProgram.getUniformLocation("uHasColorMatrix")
     }
 
     override fun release() {

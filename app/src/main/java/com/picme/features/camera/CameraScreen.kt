@@ -59,7 +59,6 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.R
 import com.picme.beauty.api.BeautyPerfStats
-import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings
@@ -1101,7 +1100,11 @@ CameraPreviewContent(
             )
         },
         onCaptureModeChanged = { mode -> captureMode = mode },
-        onSelectedFilterChanged = { filter -> selectedFilter = filter },
+        onSelectedFilterChanged = { filter ->
+            selectedFilter = filter
+            // 同步到 beautySettings，确保预览引擎能收到色调矩阵变化
+            beautySettings = beautySettings.copy(colorFilter = filter)
+        },
         onStyleFilterSelected = { style ->
             beautySettings = beautySettings.copy(styleFilter = style)
         },

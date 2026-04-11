@@ -36,11 +36,11 @@ import com.picme.features.camera.components.CameraRightControls
 import com.picme.features.camera.components.ControlPanel
 import com.picme.features.camera.components.DocumentDetectionOverlay
 import com.picme.features.camera.components.FilterSelector
-import com.picme.features.camera.components.StyleFilterSelector
 import com.picme.features.camera.components.GridSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
+import com.picme.features.camera.components.StyleFilterSelector
 
 @Composable
 internal fun CameraPreviewContent(

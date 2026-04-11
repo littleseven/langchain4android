@@ -47,10 +47,20 @@ uniform vec2 uLipInnerContourPoints[20];
 uniform float uLipInnerContourCount;
 uniform float uFaceRadius;
         uniform float uHasFace;
-uniform float uLipColor;
+        uniform float uLipColor;
 uniform int uLipColorIndex;
 uniform float uBlush;
 uniform int uBlushColorFamily;
+        // 色调滤镜矩阵（4x5 ColorMatrix 分解为 4 行系数 + 1 个归一化平移量）
+        // uCMRow0~3：每行的 RGBA 系数（行主序）
+        // uCMOffset：平移量（第5列）已除以 255 归一化到 0~1
+        // uHasColorMatrix：1.0 表示有色调滤镜，0.0 表示直通
+        uniform vec4 uCMRow0;
+        uniform vec4 uCMRow1;
+        uniform vec4 uCMRow2;
+        uniform vec4 uCMRow3;
+        uniform vec4 uCMOffset;
+        uniform float uHasColorMatrix;
         varying vec2 vTextureCoord;
 
         vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
@@ -405,7 +415,19 @@ float blushMask = blushMaskFromCheeks(warpedUv);
 float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
 vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
 vec3 makeupColor = mix(lipTinted.rgb, blushTarget, blushBlend);
-gl_FragColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
+vec4 finalColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
+
+// 色调滤镜矩阵变换（uHasColorMatrix > 0.5 时生效）
+if (uHasColorMatrix > 0.5) {
+    vec4 src = finalColor;
+    float r = dot(uCMRow0, src) + uCMOffset.r;
+    float g = dot(uCMRow1, src) + uCMOffset.g;
+    float b = dot(uCMRow2, src) + uCMOffset.b;
+    float a = dot(uCMRow3, src) + uCMOffset.a;
+    finalColor = vec4(clamp(r, 0.0, 1.0), clamp(g, 0.0, 1.0), clamp(b, 0.0, 1.0), clamp(a, 0.0, 1.0));
+}
+
+gl_FragColor = finalColor;
 }
     """.trimIndent()
 

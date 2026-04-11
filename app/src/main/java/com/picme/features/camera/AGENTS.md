@@ -274,9 +274,10 @@ val screenY = adjustedY * previewHeight
 - 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
 - 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳
 - 美颜使用 GPU 加速：CPU 计算无法满足实时性要求
-- 单引擎策略（BIG_BEAUTY only）：PixelFree 已移除，GPUPixel 作为未来开源评估方向
+- 双引擎策略（BIG_BEAUTY + GPUPIXEL）：PixelFree 已移除；引擎由用户设置动态切换，Composable 层实现零 recomposition 级平滑切换
 - 十字星坐标转换统一为四步法：避免分析链路与绘制链路偏移
 - 坐标调试日志固定 Step1~Step4：便于快速定位旋转/镜像问题
+- `BeautyParamsConverter`：统一 `BeautySettings` → `BeautyParams` 转换逻辑，包括 `FilterType` → `colorMatrix` 映射
 
 ### 2.6 ML Kit 人脸增强能力实现规范
 

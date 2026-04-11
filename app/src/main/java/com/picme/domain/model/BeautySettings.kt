@@ -1,5 +1,6 @@
 package com.picme.domain.model
 
+import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.model.StyleFilter
 
 /**
@@ -34,7 +35,10 @@ data class BeautySettings(
     val gpuWhiteBalance: Float = 5000f,  // 色温 2000~10000K，5000=原始
 
     // 风格特效滤镜（GPUPixel 路径专用，大美丽引擎忽略）
-    val styleFilter: StyleFilter = StyleFilter.NONE
+    val styleFilter: StyleFilter = StyleFilter.NONE,
+
+    // 色调滤镜（大美丽引擎路径专用，GPUPixel 路径忽略；同时影响拍照后期处理）
+    val colorFilter: FilterType = FilterType.NONE
 ) {
     /**
      * 检查是否有任何美颜参数被设置

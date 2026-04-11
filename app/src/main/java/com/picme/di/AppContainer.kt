@@ -2,7 +2,6 @@ package com.picme.di
 
 import android.content.Context
 import androidx.lifecycle.ViewModelProvider
-import com.picme.core.common.Logger
 import com.picme.core.image.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
 import com.picme.core.image.ImageProcessor
@@ -11,7 +10,6 @@ import com.picme.data.local.AppDatabase
 import com.picme.data.local.MlKitOcrProcessor
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.data.repository.MediaRepositoryImpl
-import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.repository.UserSettingsRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
@@ -57,7 +55,9 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     private val database by lazy { AppDatabase.getDatabase(context) }
 
     /**
-     * RD 美颜处理器 - 使用 R 计划自研方案（BIG_BEAUTY）
+     * 静态 Bitmap 美颜处理器（拍照后 CPU 路径）。
+     * ⚠️ 仅用于拍照后的静态图像后处理，与实时预览无关。
+     * 实时预览美颜由 beauty-engine 模块的 BeautyPreviewEngine（GPU 路径）负责。
      */
     private val beautyProcessor: BeautyProcessor by lazy {
         GpuBeautyProcessor(context)

@@ -141,6 +141,11 @@ class ShaderProgram {
         }
     }
 
+    fun setVec4(name: String, x: Float, y: Float, z: Float, w: Float) {
+        val location = getUniformLocation(name)
+        if (location != -1) GLES20.glUniform4f(location, x, y, z, w)
+    }
+
     fun setMat4(name: String, value: FloatArray) {
         val location = getUniformLocation(name)
         if (location != -1) GLES20.glUniformMatrix4fv(location, 1, false, value, 0)

@@ -34,18 +34,55 @@
 
 ### 2.2 图像处理核心
 
-**滤镜基类设计**：
-- **FilterBase 抽象类要求**：
-  - 必须定义 `name`（StringResource）和`thumbnail`（Drawable）
-  - 必须实现 `apply(bitmap: Bitmap)` suspend 方法
-  - 性能约束：单个滤镜处理时间 < 200ms
-- **LEICA_CLASSIC 示例**：使用 ColorMatrix 调整，饱和度设为 0.9，对比度微调 +0.05
+#### 架构分层说明（重要）
+
+> `core/image` 层仅处理**拍照后**的静态 Bitmap 后处理，与实时预览渲染链路完全隔离。
+> 实时预览美颜（GPU 路径）由独立的 `beauty-engine` 模块承载，app 层通过 `BeautyPreviewEngine` 接口调用。
+
+**两条处理路径**：
+
+| 路径 | 使用场景 | 实现位置 | 技术方案 |
+|---|---|---|---|
+| **实时预览（GPU）** | 相机预览帧 | `beauty-engine` 模块 | OpenGL ES Shader / GPUPixel |
+| **拍照后处理（CPU）** | 保存前静态 Bitmap | `core/image/` | Android Canvas + ColorMatrix |
+
+**`core/image/` 当前文件结构**：
+```
+core/image/
+├── gl/
+│   └── BeautyParamsConverter.kt     # BeautySettings → BeautyParams 转换（含 ColorMatrix 映射）
+├── BeautyProcessor.kt               # 拍照后美颜接口（含 applyAllEffects 默认实现）
+├── GpuBeautyProcessor.kt            # BeautyProcessor CPU 实现（Canvas + ColorMatrix）
+├── ImageProcessor.kt                # 拍照/录像接口 + ImageProcessorImpl 实现
+└── CoilConfig.kt                    # Coil 全局图片加载配置
+```
+
+**⚠️ 已清理的冗余文件（2026-04）**：
+以下文件原属 `core/image/gl/` 下，与 `beauty-engine` 模块重复，已删除：
+`BeautyShaders.kt`、`BeautyRenderer.kt`、`BeautyPreviewView.kt`、`CameraPreviewRenderer.kt`、
+`GLRenderer.kt`、`EGLCore.kt`、`WindowSurface.kt`、`ShaderProgram.kt`
+
+**BeautyParamsConverter**（`gl/BeautyParamsConverter.kt`）：
+- 将 `BeautySettings`（domain 层）转换为 `BeautyParams`（beauty-engine API 层）
+- 负责归一化映射（UI 原始值 → [0, 1] 或 [-1, 1]）
+- 将 `FilterType` 转换为 4×5 `colorMatrix`（FloatArray），传入大美丽引擎 Shader
+- `FilterType.NONE` 时 `colorMatrix = null`，Shader 直通输出
+
+**GpuBeautyProcessor（CPU 路径）注意事项**：
+- 磨皮：原 RenderScript API 已废弃（Android API 31+），现改为 Canvas + ColorMatrix 亮度近似
+- 实时预览磨皮的双边滤波 Shader 效果仍在 `beauty-engine` 中保留，CPU 路径为轻量兼容实现
+- 日志 TAG：`PicMe:ImageProc`
+
+**滤镜 ColorMatrix（`FilterType.getColorMatrix()`）**：
+- 每个 `FilterType` 枚举值实现 `getColorMatrix(): ColorMatrix` 方法
+- 矩阵值为 `android.graphics.ColorMatrix` 标准 4×5 行主序布局（20 个 Float）
+- LEICA_CLASSIC 示例：饱和度 0.9、对比度微调 +0.05、暗部轻微压缩
 
 **图片加载优化**：
 - **Coil 全局配置**：
   - 内存缓存：占可用内存 25%，使用 MemoryCache.Builder
   - 磁盘缓存：占磁盘空间 2%，目录为 `cache/image_cache`
-  - 忽略 HTTP 缓存头：本地应用设置`respectCacheHeaders(false)`
+  - 忽略 HTTP 缓存头：本地应用设置 `respectCacheHeaders(false)`
 
 ### 2.3 工具类与扩展函数
 
@@ -74,21 +111,24 @@
 - **DesignSystem 组件**：必须支持深色模式，使用 colorScheme 动态适配
 - **滤镜处理**：必须在后台线程执行（Dispatchers.Default），避免阻塞 UI
 - **Bitmap 管理**：必须及时回收（recycle() 或在 using 块中），避免 OOM
-- **Logger 使用**：必须使用正确的 Tag 格式（PicMe:Module），便于检索
+- **Logger 使用**：必须使用正确的 Tag 格式（`PicMe:Module`），便于检索；`GpuBeautyProcessor` 使用 `PicMe:ImageProc`
 - **扩展函数**：必须使用明确的前缀，避免命名冲突
 - **Hilt 依赖**：必须标注正确的生命周期（@Singleton / @ViewModelScoped）
 - **Coil 缓存**：大小必须合理（避免 OOM），占可用内存 25% 以内
+- **冗余代码防止**：`core/image/gl/` 目录下**禁止**添加 OpenGL/EGL 实现类；GL 渲染链路统一由 `beauty-engine` 模块维护
 
 ## 4. 常见陷阱检查清单 (Checklist)
 
 - [ ] DesignSystem 组件是否支持深色模式？（使用 colorScheme）
 - [ ] 滤镜处理是否在后台线程？（Dispatchers.Default）
 - [ ] Bitmap 是否正确回收？（recycle() 或在 using 块中）
-- [ ] Logger 是否使用了正确的 Tag 格式？（PicMe:Module）
+- [ ] Logger 是否使用了正确的 Tag 格式？（`PicMe:Module`；`GpuBeautyProcessor` 用 `PicMe:ImageProc`）
 - [ ] 扩展函数是否避免了命名冲突？（使用明确的前缀）
 - [ ] Hilt 依赖是否标注了正确的生命周期？（@Singleton / @ViewModelScoped）
 - [ ] Coil 缓存大小是否合理？（避免 OOM）
 - [ ] 所有用户可见字符串是否已提取到 strings.xml？（支持 I18N）
+- [ ] 是否在 `core/image/gl/` 下误添加了 GL 渲染实现类？（应放在 `beauty-engine` 模块）
+- [ ] `BeautyParamsConverter` 的 colorMatrix 是否正确处理了 `FilterType.NONE`？（应返回 null 让 Shader 直通）
 
 ## 5. 与产品文档对照 (Product Alignment)
 
@@ -99,5 +139,5 @@
 
 **技术决策记录**：
 - 选择 Coil 而非 Glide：原生支持 Compose（`AsyncImage` API 简洁）、支持 Kotlin 协程、包体积更小
-- 选择 RenderScript 替代方案：RenderScript 已废弃，使用 GPU Image 或自研矩阵运算
+- RenderScript 已废弃（API 31+）：`GpuBeautyProcessor` 磨皮改为 Canvas + ColorMatrix 近似实现；实时预览磨皮仍在 `beauty-engine` 双边滤波 Shader 中
 - 日志系统设计：结构化 Tag 便于 grep 检索，内存缓冲支持调试浮窗实时查看
