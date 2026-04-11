@@ -301,8 +301,6 @@ private fun BoxScope.CameraPreviewSideControls(
 ) {
     CameraLeftControls(
         onNavigateToSettings = actions.onNavigateToSettings,
-        onFlipCamera = actions.onFlipCamera,
-        isFrontCamera = uiState.lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT,
         modifier = Modifier.align(Alignment.TopStart)
     )
 

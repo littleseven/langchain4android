@@ -42,7 +42,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
-import androidx.compose.material.icons.rounded.Cameraswitch
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropFree
@@ -107,8 +106,6 @@ private const val PANEL_HEIGHT_RATIO = 0.5f
 @Composable
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
-    onFlipCamera: () -> Unit,
-    isFrontCamera: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -119,13 +116,6 @@ fun CameraLeftControls(
     ) {
         // 设置
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
-        
-        // 翻转摄像头
-        ControlButton(
-            icon = Icons.Rounded.Cameraswitch,
-            onClick = onFlipCamera,
-            isActive = false
-        )
     }
 }
 
@@ -1549,15 +1539,21 @@ fun ProModeControls(
                     .padding(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── 拖拽把手（与其他面板一致）──
+                // ── 拖拽把手（点击可关闭面板）──
                 Box(
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(top = 10.dp, bottom = 4.dp)
-                        .size(width = 36.dp, height = 4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-                )
+                        .fillMaxWidth()
+                        .clickable(onClick = onClose)
+                        .padding(top = 10.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 36.dp, height = 4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                    )
+                }
 
                 // ── 曝光控制 ──
                 Column(
