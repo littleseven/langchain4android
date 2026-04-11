@@ -1559,37 +1559,6 @@ fun ProModeControls(
                     )
                 }
 
-                // ── 曝光控制 ──
-                val exposureValueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat()
-                val exposureDisplayText = if (exposure >= 0) "+$exposure" else "$exposure"
-                ProModeSlider(
-                    label = stringResource(R.string.exposure),
-                    valueText = exposureDisplayText,
-                    isValueChanged = exposure != 0,
-                    sliderContent = {
-                        Slider(
-                            value = exposure.toFloat(),
-                            valueRange = exposureValueRange,
-                            steps = if (exposureRange.last > exposureRange.first) {
-                                exposureRange.last - exposureRange.first - 1
-                            } else {
-                                0
-                            },
-                            onValueChange = { newValue -> onExposureChange(newValue.toInt()) },
-                            modifier = Modifier.fillMaxWidth().height(36.dp),
-                            thumb = { ProModeThumb() },
-                            track = { state ->
-                                ProModeTrack(
-                                    fraction = state.valueRange.run {
-                                        (exposure.toFloat() - start) / (endInclusive - start)
-                                            .coerceAtLeast(0.001f)
-                                    }.coerceIn(0f, 1f)
-                                )
-                            }
-                        )
-                    }
-                )
-
                 // ── 白平衡控制（模式选择芯片）──
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -1634,6 +1603,37 @@ fun ProModeControls(
                         }
                     }
                 }
+
+                // ── 曝光控制 ──
+                val exposureValueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat()
+                val exposureDisplayText = if (exposure >= 0) "+$exposure" else "$exposure"
+                ProModeSlider(
+                    label = stringResource(R.string.exposure),
+                    valueText = exposureDisplayText,
+                    isValueChanged = exposure != 0,
+                    sliderContent = {
+                        Slider(
+                            value = exposure.toFloat(),
+                            valueRange = exposureValueRange,
+                            steps = if (exposureRange.last > exposureRange.first) {
+                                exposureRange.last - exposureRange.first - 1
+                            } else {
+                                0
+                            },
+                            onValueChange = { newValue -> onExposureChange(newValue.toInt()) },
+                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                            thumb = { ProModeThumb() },
+                            track = { state ->
+                                ProModeTrack(
+                                    fraction = state.valueRange.run {
+                                        (exposure.toFloat() - start) / (endInclusive - start)
+                                            .coerceAtLeast(0.001f)
+                                    }.coerceIn(0f, 1f)
+                                )
+                            }
+                        )
+                    }
+                )
 
                 // ── 分隔线 ──
                 Box(
