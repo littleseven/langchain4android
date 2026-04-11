@@ -67,6 +67,7 @@ import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
+import com.picme.features.camera.model.StyleFilter
 import com.picme.features.camera.preview.core.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
@@ -189,6 +190,7 @@ internal data class BeautyDebugState(
 
 internal data class CameraPreviewUiState(
     val selectedFilter: FilterType,
+    val selectedStyleFilter: StyleFilter,
     val facePoint: Offset?,
     val faceWarpParams: FaceWarpParams,
     val showFaceDebugOverlay: Boolean,
@@ -249,6 +251,7 @@ internal data class CameraPreviewActions(
     val onCaptureClick: () -> Unit,
     val onModeChange: (MediaType) -> Unit,
     val onFilterSelected: (FilterType) -> Unit,
+    val onStyleFilterSelected: (StyleFilter) -> Unit,
     val onBeautySettingsChanged: (BeautySettings) -> Unit,
     val onRatioSelected: (Int) -> Unit,
     val onDismissPanels: () -> Unit
@@ -256,6 +259,7 @@ internal data class CameraPreviewActions(
 
 private fun buildCameraPreviewUiState(
     selectedFilter: FilterType,
+    selectedStyleFilter: StyleFilter,
     facePoint: Offset?,
     faceWarpParams: FaceWarpParams,
     showFaceDebugOverlay: Boolean,
@@ -282,6 +286,7 @@ private fun buildCameraPreviewUiState(
 ): CameraPreviewUiState {
     return CameraPreviewUiState(
         selectedFilter = selectedFilter,
+        selectedStyleFilter = selectedStyleFilter,
         facePoint = facePoint,
         faceWarpParams = faceWarpParams,
         showFaceDebugOverlay = showFaceDebugOverlay,
@@ -329,6 +334,7 @@ private fun buildCameraPreviewActions(
     onCaptureClick: () -> Unit,
     onCaptureModeChanged: (MediaType) -> Unit,
     onSelectedFilterChanged: (FilterType) -> Unit,
+    onStyleFilterSelected: (StyleFilter) -> Unit,
     onBeautySettingsChanged: (BeautySettings) -> Unit,
     onAspectRatioChanged: (Int) -> Unit,
     onExposureCompensationChanged: (Int) -> Unit,
@@ -408,6 +414,7 @@ private fun buildCameraPreviewActions(
         onCaptureClick = onCaptureClick,
         onModeChange = { mode -> onCaptureModeChanged(mode) },
         onFilterSelected = { filter -> onSelectedFilterChanged(filter) },
+        onStyleFilterSelected = { style -> onStyleFilterSelected(style) },
         onBeautySettingsChanged = { settings -> onBeautySettingsChanged(settings) },
         onRatioSelected = { ratio ->
             onAspectRatioChanged(ratio)
@@ -1026,6 +1033,7 @@ CameraPreviewContent(
     },
     uiState = buildCameraPreviewUiState(
         selectedFilter = selectedFilter,
+        selectedStyleFilter = beautySettings.styleFilter,
         facePoint = facePoint,
         faceWarpParams = faceWarpParams,
         showFaceDebugOverlay = showFaceDebugOverlay,
@@ -1094,6 +1102,9 @@ CameraPreviewContent(
         },
         onCaptureModeChanged = { mode -> captureMode = mode },
         onSelectedFilterChanged = { filter -> selectedFilter = filter },
+        onStyleFilterSelected = { style ->
+            beautySettings = beautySettings.copy(styleFilter = style)
+        },
         onBeautySettingsChanged = { updatedSettings ->
             beautySettings = resolveNextBeautySettings(
                 currentSettings = beautySettings,

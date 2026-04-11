@@ -45,15 +45,16 @@ init_filter_factory() {
   //     DirectionalNonMaximumSuppressionFilter::Create;
   // factory["WeakPixelInclusionFilter"] = WeakPixelInclusionFilter::Create;
 
-  // // Special effect filters
-  // factory["ToonFilter"] = ToonFilter::Create;
-  // factory["SmoothToonFilter"] = SmoothToonFilter::Create;
-  // factory["PosterizeFilter"] = PosterizeFilter::Create;
+  // Special effect filters
+  factory["ToonFilter"] = ToonFilter::Create;
+  factory["SmoothToonFilter"] = SmoothToonFilter::Create;
+  factory["PosterizeFilter"] = PosterizeFilter::Create;
   // factory["PixellationFilter"] = PixellationFilter::Create;
-  // factory["SketchFilter"] = SketchFilter::Create;
+  factory["SketchFilter"] = SketchFilter::Create;
   // factory["GlassSphereFilter"] = GlassSphereFilter::Create;
   // factory["SphereRefractionFilter"] = SphereRefractionFilter::Create;
-  // factory["EmbossFilter"] = EmbossFilter::Create;
+  factory["EmbossFilter"] = EmbossFilter::Create;
+  factory["CrosshatchFilter"] = CrosshatchFilter::Create;
 
   // // Image processing filters
   // factory["LuminanceRangeFilter"] = LuminanceRangeFilter::Create;

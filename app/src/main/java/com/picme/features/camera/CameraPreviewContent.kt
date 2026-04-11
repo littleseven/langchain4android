@@ -36,6 +36,7 @@ import com.picme.features.camera.components.CameraRightControls
 import com.picme.features.camera.components.ControlPanel
 import com.picme.features.camera.components.DocumentDetectionOverlay
 import com.picme.features.camera.components.FilterSelector
+import com.picme.features.camera.components.StyleFilterSelector
 import com.picme.features.camera.components.GridSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
@@ -354,6 +355,7 @@ private fun BoxScope.PrimaryControlPanels(
             when {
                 uiState.showFilterSelector -> {
                     FilterSelector(uiState.selectedFilter) { selected -> actions.onFilterSelected(selected) }
+                    StyleFilterSelector(uiState.selectedStyleFilter) { selected -> actions.onStyleFilterSelected(selected) }
                 }
                 uiState.showRatioSelector -> {
                     RatioSelector(

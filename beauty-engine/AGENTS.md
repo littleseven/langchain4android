@@ -332,7 +332,17 @@ sourceRawData?.SetRotation(rotationMode)
 | 瘦脸 | `FaceReshapeFilter` | `thin_face` [0,0.15] + `face_landmark` | ✅ 已接入 |
 | 大眼 | `FaceReshapeFilter` | `big_eye` [0,0.5] + `face_landmark` | ✅ 已接入 |
 | 唇色 | `LipstickFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入 |
-| 腮红 | `BlusherFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入（本期） |
+| 腮红 | `BlusherFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入 |
+| 专业曝光 | `ExposureFilter` | `exposure` [-10,10] | ✅ 已接入 |
+| 专业对比度 | `ContrastFilter` | `contrast` [0,4] | ✅ 已接入 |
+| 专业饱和度 | `SaturationFilter` | `saturation` [0,2] | ✅ 已接入 |
+| 专业色温 | `WhiteBalanceFilter` | `temperature` [2000,10000K] | ✅ 已接入 |
+| 卡通风格 | `ToonFilter` | `threshold`, `quantizationLevels` | ✅ 已接入（P2 本期） |
+| 平滑卡通 | `SmoothToonFilter` | `blurRadius`, `threshold`, `quantizationLevels` | ✅ 已接入（P2 本期） |
+| 素描风格 | `SketchFilter` | `edgeStrength` | ✅ 已接入（P2 本期） |
+| 色块化 | `PosterizeFilter` | `colorLevels` | ✅ 已接入（P2 本期） |
+| 浮雕效果 | `EmbossFilter` | `intensity` | ✅ 已接入（P2 本期） |
+| 交叉线 | `CrosshatchFilter` | `crossHatchSpacing`, `lineWidth` | ✅ 已接入（P2 本期） |
 | 人脸关键点 | `FaceDetector`（内置 Mars 模型，106 点） | `detect()` → `float[]` | ✅ 已接入 |
 
 **滤镜链拓扑（当前）**：
@@ -382,6 +392,61 @@ GPUPixelSourceRawData
 - [ ] P1 开发时：`BeautyParams` 是否已新增 `exposure`、`contrast`、`saturation`、`whiteBalanceTemperature` 字段？
 - [ ] P1 开发时：`GpupixelBeautyPreviewStrategy.applyBeautySettings()` 是否已映射上述字段到对应滤镜？
 - [ ] P1 开发时：`ProModeControls` 是否已切换到 GPUPixel 滤镜参数，并废弃 CameraX `CaptureRequest` 路径？
+
+#### GPUPixel 风格特效滤镜接入规范（P2，2026-04 实现）
+
+> 本规范于 2026-04 实现并记录。
+
+**滤镜链追加位置**：`WhiteBalanceFilter` 之后、`GPUPixelSinkSurface` 之前。
+
+**滤镜链拓扑（完整，含风格特效）**：
+```
+GPUPixelSourceRawData
+  → LipstickFilter    (blend_level, face_landmark)
+  → BlusherFilter     (blend_level, face_landmark)
+  → BeautyFaceFilter  (skin_smoothing, whiteness)
+  → FaceReshapeFilter (thin_face, big_eye, face_landmark)
+  → ExposureFilter    (exposure)
+  → ContrastFilter    (contrast)
+  → SaturationFilter  (saturation)
+  → WhiteBalanceFilter (temperature, tint)
+  → [StyleFilter]     (互斥，每次只激活一个，NONE 时使用透传滤镜或直连 Sink)
+  → GPUPixelSinkSurface
+```
+
+**互斥切换策略**：
+- 维护一个 `activeStyleFilter: GPUPixelFilter?` 成员变量。
+- 切换前先将前一个滤镜从链路中移除（重新接线 `WhiteBalanceFilter → SinkSurface`），再插入新滤镜。
+- `STYLE_NONE` 时，直接连接 `WhiteBalanceFilter → SinkSurface`，不保留任何风格滤镜在链路中。
+
+**支持的风格滤镜（`StyleFilter` 枚举与 GPUPixel 类名映射）**：
+
+| StyleFilter 值 | GPUPixel 滤镜类 | 关键参数 | 推荐默认值 |
+|---|---|---|---|
+| `NONE` | — | — | — |
+| `TOON` | `ToonFilter` | `threshold` [0,1], `quantizationLevels` | threshold=0.2, levels=10.0 |
+| `SMOOTH_TOON` | `SmoothToonFilter` | `blurRadius`, `threshold`, `quantizationLevels` | blur=2.0, threshold=0.1, levels=10.0 |
+| `SKETCH` | `SketchFilter` | `edgeStrength` [0,1] | edgeStrength=1.0 |
+| `POSTERIZE` | `PosterizeFilter` | `colorLevels` [1,256] | colorLevels=4 |
+| `EMBOSS` | `EmbossFilter` | `intensity` [0,4] | intensity=1.0 |
+| `CROSSHATCH` | `CrosshatchFilter` | `crossHatchSpacing` [0,0.1], `lineWidth` | spacing=0.03, lineWidth=0.003 |
+
+**参数传递**：
+- 风格参数通过 `BeautyParams.styleFilter: StyleFilter` 字段传递，枚举名映射到对应的 `GPUPixelFilter` 类名。
+- 参数使用固定推荐默认值，本期不对外暴露参数调节入口（UI 只提供开关切换）。
+
+**生命周期**：
+- 随 `GpupixelBeautyPreviewProvider.initialize()` 时不预创建风格滤镜，按需在 `applyStyleFilter()` 中动态创建。
+- 随 `release()` 调用时确保当前激活的风格滤镜 `Destroy()` 被调用。
+
+**`BeautyParams` 字段**：
+- `styleFilter: StyleFilter = StyleFilter.NONE`（新增字段，默认无特效）
+
+**注意事项**：
+- [ ] 风格滤镜与调色滤镜叠加时，确保滤镜链接线顺序正确（调色在前，风格在后）。
+- [ ] 切换风格滤镜时，上一个滤镜必须从链中断开后才能插入新的，否则 GPUPixel C++ 层可能双重持有节点导致崩溃。
+- [ ] 非 GPUPixel 引擎（大美丽）模式下，`StyleFilter` 字段由引擎层静默忽略，不引发异常。
+- [ ] UI 层在非 GPUPixel 模式下，风格特效区域整体置灰，并展示引擎提示。
 
 ---
 

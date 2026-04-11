@@ -99,6 +99,7 @@ import com.picme.features.camera.GridType
 import com.picme.features.camera.MakeupEntry
 import com.picme.features.camera.ScenePreset
 import com.picme.features.camera.model.FilterType
+import com.picme.features.camera.model.StyleFilter
 
 /** Panel height ratio relative to screen height */
 private const val PANEL_HEIGHT_RATIO = 0.5f
@@ -424,6 +425,117 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
             }
         }
     }
+}
+
+/**
+ * 风格特效滤镜选择器
+ *
+ * 仅在 GPUPixel 引擎模式下生效。风格特效与色调滤镜的关系：
+ * - 色调滤镜（FilterType）基于 ColorMatrix 实时生效
+ * - 风格特效（StyleFilter）基于 GPUPixel Shader 实时生效
+ * - 叠加顺序：色调滤镜 → 风格特效
+ * - 互斥关系：同时只能激活一个风格特效
+ */
+@Composable
+fun StyleFilterSelector(selectedStyle: StyleFilter, onStyleSelected: (StyleFilter) -> Unit) {
+    val listState = rememberLazyListState()
+
+    LazyRow(
+        state = listState,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp)
+    ) {
+        items(StyleFilter.values()) { style ->
+            val isSelected = selectedStyle == style
+            val scale by animateFloatAsState(if (isSelected) 1.1f else 1.0f, label = "scale")
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .width(60.dp)
+                    .clickable { onStyleSelected(style) }
+                    .scale(scale)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .border(
+                            width = if (isSelected) 2.5.dp else 1.dp,
+                            brush = if (isSelected) {
+                                Brush.linearGradient(
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+                                )
+                            } else {
+                                Brush.linearGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.onSurface.copy(0.3f),
+                                        MaterialTheme.colorScheme.onSurface.copy(0.1f)
+                                    )
+                                )
+                            },
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // 使用渐变色表达风格特效效果
+                    StyleGradientPreview(style = style)
+
+                    if (isSelected) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(style.displayNameRes),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    },
+                    fontSize = 10.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 风格特效渐变预览组件
+ * 使用简单的渐变色表达不同风格特效的视觉特征
+ */
+@Composable
+private fun StyleGradientPreview(style: StyleFilter) {
+    val gradientColors = when (style) {
+        StyleFilter.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
+        StyleFilter.TOON -> listOf(Color(0xFF2196F3), Color(0xFF1976D2))
+        StyleFilter.SMOOTH_TOON -> listOf(Color(0xFF4CAF50), Color(0xFF388E3C))
+        StyleFilter.SKETCH -> listOf(Color(0xFF757575), Color(0xFF424242))
+        StyleFilter.POSTERIZE -> listOf(Color(0xFFFF5722), Color(0xFFE64A19))
+        StyleFilter.EMBOSS -> listOf(Color(0xFFA1887F), Color(0xFF6D4C41))
+        StyleFilter.CROSSHATCH -> listOf(Color(0xFFFF9800), Color(0xFFF57C00))
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = gradientColors,
+                    start = Offset.Zero,
+                    end = Offset.Infinite
+                )
+            )
+    )
 }
 
 /**

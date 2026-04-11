@@ -69,6 +69,10 @@ class GpupixelBeautyPreviewProvider(
     private var faceDetector: FaceDetector? = null
     private var isInitialized = false
     private var lastParams: BeautyParams = BeautyParams.EMPTY
+    /** 当前激活的风格特效滤镜（null 表示无特效 / STYLE_NONE） */
+    private var activeStyleFilter: GPUPixelFilter? = null
+    /** 当前激活的风格特效类名，用于判断是否需要切换 */
+    private var activeStyleFilterClassName: String? = null
     private var isFillCenter: Boolean = true
     private var surfaceWidth: Int = 0
     private var surfaceHeight: Int = 0
@@ -181,7 +185,7 @@ class GpupixelBeautyPreviewProvider(
         whiteBalanceFilter?.SetProperty("temperature", 5000f)
         whiteBalanceFilter?.SetProperty("tint", 0f)
 
-        // 构建滤镜链：rawData → lipstick → blusher → beauty → faceReshape → exposure → contrast → saturation → whiteBalance → sinkSurface
+        // 构建滤镜链：rawData → lipstick → blusher → beauty → faceReshape → exposure → contrast → saturation → whiteBalance → [styleFilter] → sinkSurface
         sourceRawData?.AddSink(lipstickFilter)
         lipstickFilter?.AddSink(blusherFilter)
         blusherFilter?.AddSink(beautyFilter)
@@ -190,6 +194,7 @@ class GpupixelBeautyPreviewProvider(
         exposureFilter?.AddSink(contrastFilter)
         contrastFilter?.AddSink(saturationFilter)
         saturationFilter?.AddSink(whiteBalanceFilter)
+        // 初始时无风格特效，直连 sinkSurface
         whiteBalanceFilter?.AddSink(sinkSurface)
 
         applyParams(lastParams)
@@ -410,12 +415,107 @@ class GpupixelBeautyPreviewProvider(
         contrastFilter?.SetProperty("contrast", params.gpuContrast.coerceIn(0f, 4f))
         saturationFilter?.SetProperty("saturation", params.gpuSaturation.coerceIn(0f, 2f))
         whiteBalanceFilter?.SetProperty("temperature", params.gpuWhiteBalance.coerceIn(2000f, 10000f))
+
+        // 风格特效参数：仅在类名变化时执行滤镜链切换（互斥切换，按需动态创建/销毁）
+        if (params.styleFilterClassName != activeStyleFilterClassName) {
+            applyStyleFilter(params.styleFilterClassName)
+        }
+
         Log.d(
             TAG,
             "applyParams: enabled=${params.enabled}, exposure=${params.gpuExposure}, " +
                 "contrast=${params.gpuContrast}, saturation=${params.gpuSaturation}, " +
-                "whiteBalance=${params.gpuWhiteBalance}, blush=${params.blush}"
+                "whiteBalance=${params.gpuWhiteBalance}, blush=${params.blush}, " +
+                "styleFilter=${params.styleFilterClassName}"
         )
+    }
+
+    /**
+     * 动态切换风格特效滤镜。
+     *
+     * 切换策略：
+     * 1. 从滤镜链中断开 whiteBalanceFilter → sinkSurface（或 whiteBalanceFilter → 旧风格滤镜 → sinkSurface）
+     * 2. 销毁旧风格滤镜
+     * 3. 若新 className 非 null，创建并接入新风格滤镜：whiteBalanceFilter → newStyleFilter → sinkSurface
+     * 4. 若新 className 为 null（NONE），直接接线 whiteBalanceFilter → sinkSurface
+     *
+     * **注意**：GPUPixel C++ 层 AddSink/RemoveSink 操作需在 GPUPixel 渲染线程上执行，
+     * 此处假设调用方（updateFilters → applyParams）在合适线程中调用。
+     */
+    private fun applyStyleFilter(newClassName: String?) {
+        val wb = whiteBalanceFilter ?: return
+        val sink = sinkSurface ?: return
+
+        // Step 1: 断开旧链路
+        val oldStyle = activeStyleFilter
+        if (oldStyle != null) {
+            // 断开 whiteBalance → oldStyle → sink
+            wb.RemoveSink(oldStyle)
+            oldStyle.RemoveSink(sink)
+        } else {
+            // 当前是直连 whiteBalance → sink，断开直连
+            wb.RemoveSink(sink)
+        }
+
+        // Step 2: 销毁旧滤镜
+        oldStyle?.Destroy()
+        activeStyleFilter = null
+
+        // Step 3: 创建并接入新滤镜（或直连 sink）
+        if (newClassName != null) {
+            val newFilter = GPUPixelFilter.Create(newClassName)
+            if (newFilter != null && newFilter.getNativeClassID() != 0L) {
+                // 设置风格滤镜默认参数
+                applyStyleFilterDefaults(newFilter, newClassName)
+                // 接线：whiteBalance → newFilter → sink
+                wb.AddSink(newFilter)
+                newFilter.AddSink(sink)
+                activeStyleFilter = newFilter
+                Log.i(TAG, "Style filter switched to: $newClassName")
+            } else {
+                // 创建失败，回退到直连
+                newFilter?.Destroy()
+                wb.AddSink(sink)
+                Log.w(TAG, "Style filter create failed: $newClassName, fallback to NONE")
+                activeStyleFilterClassName = null
+                return
+            }
+        } else {
+            // NONE：直连
+            wb.AddSink(sink)
+            Log.i(TAG, "Style filter cleared (NONE)")
+        }
+        activeStyleFilterClassName = newClassName
+    }
+
+    /**
+     * 为风格特效滤镜设置推荐默认参数（参考 beauty-engine/AGENTS.md 规范）。
+     */
+    private fun applyStyleFilterDefaults(filter: GPUPixelFilter, className: String) {
+        when (className) {
+            "ToonFilter" -> {
+                filter.SetProperty("threshold", 0.2f)
+                filter.SetProperty("quantizationLevels", 10.0f)
+            }
+            "SmoothToonFilter" -> {
+                filter.SetProperty("blurRadius", 2.0f)
+                filter.SetProperty("threshold", 0.1f)
+                filter.SetProperty("quantizationLevels", 10.0f)
+            }
+            "SketchFilter" -> {
+                filter.SetProperty("edgeStrength", 1.0f)
+            }
+            "PosterizeFilter" -> {
+                filter.SetProperty("colorLevels", 4f)
+            }
+            "EmbossFilter" -> {
+                filter.SetProperty("intensity", 1.0f)
+            }
+            "CrosshatchFilter" -> {
+                filter.SetProperty("crossHatchSpacing", 0.03f)
+                filter.SetProperty("lineWidth", 0.003f)
+            }
+        }
     }
 
     override fun updateFaceWarpParams(
@@ -449,6 +549,14 @@ class GpupixelBeautyPreviewProvider(
     }
 
     override fun release() {
+        // 先断开并销毁当前风格滤镜（若有）
+        activeStyleFilter?.let { style ->
+            whiteBalanceFilter?.RemoveSink(style)
+            style.RemoveSink(sinkSurface)
+            style.Destroy()
+        }
+        activeStyleFilter = null
+        activeStyleFilterClassName = null
         sourceRawData?.Destroy()
         lipstickFilter?.Destroy()
         blusherFilter?.Destroy()
