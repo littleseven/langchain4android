@@ -149,7 +149,12 @@ void SinkSurface::SetMirror(bool mirror) {
  * @param width Window width (in pixels)
  * @param height Window height (in pixels)
  * 
- * If the window has not changed, return directly; otherwise, first release the old window, then create a new EGL Surface
+ * If the window has not changed, return directly; otherwise, first release the old window, then create a new EGL Surface.
+ *
+ * IMPORTANT: eglCreateWindowSurface and eglDestroySurface MUST be called on the GL thread (the thread where
+ * eglMakeCurrent was last called for this context). Calling these from the main/UI thread while the context
+ * is current on another thread causes EGL_BAD_MATCH or silent failure on many Android drivers.
+ * Therefore, all EGL surface operations are dispatched via SyncRunWithContext to ensure correct thread affinity.
  */
 void SinkSurface::SetNativeWindow(ANativeWindow* window, int width, int height) {
   // If the window and dimensions haven't changed, return directly
@@ -157,19 +162,28 @@ void SinkSurface::SetNativeWindow(ANativeWindow* window, int width, int height) 
     return;
   }
   
-  // Release old window resources
-  ReleaseNativeWindow();
-  
-  // Set new window parameters
-  native_window_ = window;
-  view_width_ = width;
-  view_height_ = height;
-  
-  // If window is valid, create EGL Surface and update display vertices
-  if (native_window_ != nullptr) {
-    CreateEGLSurface();
-    UpdateDisplayVertices();
-  }
+  // Capture values for the lambda (avoid capturing 'this' members that may race)
+  ANativeWindow* new_window = window;
+  int new_width = width;
+  int new_height = height;
+
+  // Dispatch all EGL surface operations onto the GL thread to guarantee correct
+  // thread affinity for eglCreateWindowSurface / eglDestroySurface.
+  GPUPixelContext::GetInstance()->SyncRunWithContext([this, new_window, new_width, new_height]() {
+    // Release old window resources on the GL thread
+    ReleaseNativeWindow();
+
+    // Set new window parameters
+    native_window_ = new_window;
+    view_width_ = new_width;
+    view_height_ = new_height;
+
+    // If window is valid, create EGL Surface and update display vertices
+    if (native_window_ != nullptr) {
+      CreateEGLSurface();
+      UpdateDisplayVertices();
+    }
+  });
 }
 
 void SinkSurface::ReleaseNativeWindow() {
@@ -382,9 +396,10 @@ void SinkSurface::UpdateDisplayVertices() {
     scaled_width = inset_framebuffer_width / view_width_;
     scaled_height = inset_framebuffer_height / view_height_;
   } else if (fill_mode_ == FillMode::PreserveAspectRatioAndFill) {
-    // Preserve aspect ratio and scale to fill, may crop
-    scaled_width = view_width_ / inset_framebuffer_height;
-    scaled_height = view_height_ / inset_framebuffer_width;
+    // Preserve aspect ratio and scale to fill, may crop.
+    // Scale inset to fill the view: scale_factor = view_size / inset_size.
+    scaled_width = view_width_ / inset_framebuffer_width;
+    scaled_height = view_height_ / inset_framebuffer_height;
   }
   // In Stretch mode, scaled_width and scaled_height remain 1.0
 

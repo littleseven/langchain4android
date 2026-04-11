@@ -73,11 +73,7 @@ class GlBeautyPreviewProvider(
     override fun updateFilters(params: BeautyParams) {
         lastParams = params
         applyParams(params)
-        Log.d(
-            TAG,
-            "updateFilters: enabled=${params.enabled}, smoothing=${params.smoothing}, " +
-                "whitening=${params.whitening}, bigEyes=${params.bigEyes}, slimFace=${params.slimFace}"
-        )
+        // 高频调用不打日志，避免日志洪水
     }
 
     override fun updateFaceWarpParams(

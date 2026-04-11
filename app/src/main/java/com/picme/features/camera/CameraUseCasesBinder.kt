@@ -15,12 +15,12 @@ import androidx.compose.ui.geometry.Offset
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.mlkit.vision.face.FaceDetector
 import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
-import com.pixpark.gpupixel.GPUPixel
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.preview.core.FaceWarpParams
+import com.pixpark.gpupixel.GPUPixel
 import java.util.concurrent.ExecutorService
 
 @ExperimentalGetImage
@@ -66,7 +66,13 @@ internal fun bindCameraUseCases(
         .build()
     onImageCaptureChanged(imageCapture)
 
-    val useCaseGroup = if (aspectRatio == AspectRatio.RATIO_FULL) {
+    // GPUPixel 模式：通过 ImageAnalysis → onRgbaFrame 路径传递帧，不需要 Preview usecase。
+    // Preview usecase 的 SurfaceProvider 生命周期与 PreviewView 绑定；GPUPixel 模式下
+    // PreviewView 不可见，其 Surface 随时可能销毁，导致 CameraX 反复触发 session 重建。
+    // 解决：GPUPixel 模式跳过 Preview，只绑 imageCapture + imageAnalysis。
+    val isGpuPixelMode = beautyStrategy == BeautyStrategy.GPUPIXEL
+
+    val useCaseGroup = if (aspectRatio == AspectRatio.RATIO_FULL && !isGpuPixelMode) {
         val rotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
         val preview = Preview.Builder()
             .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
@@ -92,7 +98,9 @@ internal fun bindCameraUseCases(
         null
     }
 
-    val preview = if (useCaseGroup == null) {
+    // 非 useCaseGroup 模式（非全屏 aspectRatio，或 GPUPixel 模式）需要单独的 Preview
+    // GPUPixel 模式下不创建 Preview，直接绑 imageCapture + imageAnalysis
+    val preview = if (useCaseGroup == null && !isGpuPixelMode) {
         Preview.Builder()
             .setTargetAspectRatio(toCameraAspectRatio(aspectRatio))
             .build()
@@ -101,35 +109,37 @@ internal fun bindCameraUseCases(
         null
     }
 
+    // GPUPixel 模式：初始化 provider（不依赖 Preview）
+    if (isGpuPixelMode && gpupixelProvider != null) {
+        gpupixelProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
+        gpupixelProvider.initialize()
+        android.util.Log.d("PicMe:Camera", "GPUPixel mode: provider initialized, skipping Preview usecase")
+    }
+
     var frameCount = 0
+    var lastFrameLogMs = 0L
     imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
         frameCount++
-        if (frameCount % 30 == 0) {
-            android.util.Log.d("PicMe:Camera", "ImageAnalysis frame received: #${frameCount}")
-            Logger.d("Camera", "ImageAnalysis frame received: #${frameCount}")
+        // 限流：帧计数日志 1 秒最多打一次
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastFrameLogMs >= 1_000L) {
+            Logger.dThrottled("Camera", "Camera:frameCount", "ImageAnalysis frame #$frameCount (~${frameCount}fps since bind) strategy=$beautyStrategy")
+            lastFrameLogMs = nowMs
         }
 
         if (beautyStrategy == BeautyStrategy.GPUPIXEL && gpupixelProvider != null) {
             val mediaImage = imageProxy.image
             if (mediaImage != null) {
                 try {
+                    // 旋转委托给 GPUPixelSourceRawData.SetRotation()，无需上层手动旋转
                     val rgba = GPUPixel.YUV_420_888toRGBA(mediaImage)
                     if (rgba != null) {
-                        val width = mediaImage.width
-                        val height = mediaImage.height
-                        val rotation = imageProxy.imageInfo.rotationDegrees
-                        val (outWidth, outHeight, rotatedData) = when (rotation) {
-                            90, 270 -> {
-                                val rotated = GPUPixel.rotateRgbaImage(rgba, width, height, rotation)
-                                Triple(height, width, rotated)
-                            }
-                            180 -> {
-                                val rotated = GPUPixel.rotateRgbaImage(rgba, width, height, rotation)
-                                Triple(width, height, rotated)
-                            }
-                            else -> Triple(width, height, rgba)
-                        }
-                        gpupixelProvider.onRgbaFrame(rotatedData, outWidth, outHeight)
+                        gpupixelProvider.onRgbaFrame(
+                            rgba,
+                            mediaImage.width,
+                            mediaImage.height,
+                            imageProxy.imageInfo.rotationDegrees
+                        )
                     }
                 } catch (e: Exception) {
                     Logger.e("Camera", "GPUPixel frame conversion error", e)
@@ -152,31 +162,40 @@ internal fun bindCameraUseCases(
     try {
         cameraProvider.unbindAll()
 
-        val camera = if (useCaseGroup != null) {
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                cameraSelector,
-                useCaseGroup
-            )
-        } else {
-            when (captureMode) {
-                MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview!!,
-                        imageCapture,
-                        imageAnalysis
-                    )
-                }
-                MediaType.VIDEO -> {
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview!!,
-                        videoCapture,
-                        imageAnalysis
-                    )
+        val camera = when {
+            useCaseGroup != null -> {
+                // RATIO_FULL + 非 GPUPixel：使用 UseCaseGroup（含 Preview + ViewPort）
+                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, useCaseGroup)
+            }
+            isGpuPixelMode -> {
+                // GPUPixel 模式：只绑 imageCapture + imageAnalysis，不需要 Preview
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    imageCapture,
+                    imageAnalysis
+                )
+            }
+            else -> {
+                when (captureMode) {
+                    MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview!!,
+                            imageCapture,
+                            imageAnalysis
+                        )
+                    }
+                    MediaType.VIDEO -> {
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview!!,
+                            videoCapture,
+                            imageAnalysis
+                        )
+                    }
                 }
             }
         }

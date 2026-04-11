@@ -187,18 +187,39 @@ class GpupixelBeautyPreviewProvider(
     }
 
     /**
-     * 处理 RGBA 帧数据，由外部（app 层）在 analyzer 线程调用。
+     * 处理原始 RGBA 帧数据（推荐用法），由外部（app 层）在 analyzer 线程调用。
      *
-     * 注意：[isReady] 为 false 时静默丢帧，避免日志刷屏。
+     * 旋转由 [GPUPixelSourceRawData.SetRotation] 委托给 GPUPixel 内部处理，
+     * 避免在上层分配额外 ByteArray 并执行像素级旋转（节省 CPU 和内存开销）。
+     *
+     * @param data   原始（未旋转）RGBA 数据
+     * @param width  传感器原始宽（未旋转）
+     * @param height 传感器原始高（未旋转）
+     * @param rotationDegrees [androidx.camera.core.ImageProxy.imageInfo.rotationDegrees]，
+     *                        取值 0 / 90 / 180 / 270
      */
-    fun onRgbaFrame(data: ByteArray, width: Int, height: Int) {
+    fun onRgbaFrame(data: ByteArray, width: Int, height: Int, rotationDegrees: Int) {
         if (!isInitialized) return
-        if (!surfaceAvailable) {
-            // surface 尚未就绪时丢帧，避免 GPUPixel 内部报错
-            return
-        }
+        if (!surfaceAvailable) return
 
         try {
+            // 把旋转委托给 GPUPixel，无需上层手动旋转帧数据
+            // 注意：GPUPixel SetRotation 接受的是 RotationMode 枚举序号，不是角度值
+            // RotationMode: NoRotation=0, RotateLeft=1, RotateRight=2, FlipVertical=3,
+            //               FlipHorizontal=4, RotateRightFlipVertical=5, RotateRightFlipHorizontal=6, Rotate180=7
+            // CameraX rotationDegrees → RotationMode 映射：
+            //   0   → NoRotation  (0)
+            //   90  → RotateRight (2)  — 顺时针 90°
+            //   180 → Rotate180   (7)
+            //   270 → RotateLeft  (1)  — 逆时针 90°（即顺时针 270°）
+            val rotationMode = when (rotationDegrees) {
+                90 -> 2   // RotateRight
+                180 -> 7  // Rotate180
+                270 -> 1  // RotateLeft
+                else -> 0 // NoRotation
+            }
+            sourceRawData?.SetRotation(rotationMode)
+
             val landmarks = faceDetector?.detect(
                 data,
                 width,

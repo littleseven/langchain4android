@@ -179,6 +179,7 @@ class CameraPreviewRenderer {
             var frameCount = 0
             var framesReceived = 0
             var lastFrameTime = System.currentTimeMillis()
+            var lastFpsLogMs = 0L
             var statsWindowStartMs = System.currentTimeMillis()
             var statsFrameCount = 0
             var statsProcessingTotalMs = 0L
@@ -207,11 +208,14 @@ class CameraPreviewRenderer {
                         framesReceived++
 
                         val currentTime = System.currentTimeMillis()
-                        if (framesReceived % 30 == 0) {
+                        // 限流：fps 日志 1 秒最多打一次
+                        if (currentTime - lastFpsLogMs >= 1_000L) {
                             val elapsed = currentTime - lastFrameTime
-                            val fps = if (elapsed > 0) 30000 / elapsed else 0
+                            val fps = if (elapsed > 0) framesReceived * 1000 / elapsed else 0
                             Log.d(TAG, "Received $framesReceived frames (~${fps}fps)")
+                            lastFpsLogMs = currentTime
                             lastFrameTime = currentTime
+                            framesReceived = 0
                         }
 
                         val transformMatrix = FloatArray(16)
