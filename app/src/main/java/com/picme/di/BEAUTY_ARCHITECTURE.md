@@ -1,5 +1,19 @@
 # 美颜架构设计：双轨策略实施指南
 
+> ⚠️ **历史文档警告（2026-04 更新）**
+>
+> 本文档记录了**早期双轨策略设计历史**（短期 PixelFree SDK + 中长期大美丽自研）。
+>
+> **当前状态**：PixelFree SDK 已于 2026-04 **完全移除**，大美丽（BIG_BEAUTY）已成为**唯一主引擎**，GPUPixel 作为实验性备选。本文档中涉及 `PixelFree`、`PIXEL_FREE`、`PixelFreeBeautyPreviewProvider` 的内容均已**废弃失效**。
+>
+> **请以以下文档为准**：
+> - 当前技术路线：`docs/BIG_BEAUTY_TECH_SPEC.md`
+> - 容灾降级策略：`docs/BEAUTY_ENGINE_FALLBACK.md`
+> - DI 层实现规范：`di/AGENTS.md`
+> - beauty-engine 模块规范：`beauty-engine/AGENTS.md`
+
+---
+
 ## 1. 架构概览
 
 ### 1.1 设计原则
@@ -93,15 +107,15 @@ interface BeautyPreviewProvider {
 
 ## 3. 实现策略：双轨并行
 
-### 3.1 短期方案：PixelFreeEffects SDK
+### ~~3.1 短期方案：PixelFreeEffects SDK~~（❌ 已废弃并移除，2026-04）
 
-**文件**：`core/image/pixelfree/PixelFreeBeautyPreviewProvider.kt`
+~~**文件**：`core/image/pixelfree/PixelFreeBeautyPreviewProvider.kt`~~
 
-**特点**：
-- ✅ **快速上线**：1-2 周完成集成
-- ✅ **功能完整**：支持磨皮、美白、瘦脸、大眼等
-- ✅ **实时预览**：60fps 流畅度
-- ⚠️ **依赖第三方**：需要 SDK 授权
+~~**特点**：~~
+- ~~✅ **快速上线**：1-2 周完成集成~~
+- ~~✅ **功能完整**：支持磨皮、美白、瘦脸、大眼等~~
+- ~~✅ **实时预览**：60fps 流畅度~~
+- ~~❌ **依赖第三方**：SDK 授权到期、与 Compose 架构冲突，已移除~~
 
 **核心实现**：
 ```kotlin
@@ -122,7 +136,7 @@ class PixelFreeBeautyPreviewProvider(context: Context) : BeautyPreviewProvider {
 }
 ```
 
-**技术文档**：`docs/PIXELFREE_FALLBACK_TECH_SPEC.md`
+~~**技术文档**：`docs/PIXELFREE_FALLBACK_TECH_SPEC.md`~~（已废弃）
 
 ### 3.2 中长期方案：大美丽自主研发
 
@@ -378,7 +392,8 @@ fun CameraScreen(viewModel: CameraViewModel) {
 
 ### 8.2 技术文档
 - `docs/CAMERA_PREVIEW_TECH_SPEC.md` - 相机预览完整规范
-- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` - PixelFree SDK 集成规范
+- ~~`docs/PIXELFREE_FALLBACK_TECH_SPEC.md`~~ - ~~PixelFree SDK 集成规范~~（**已废弃并移除，2026-04**）
+- `docs/BEAUTY_ENGINE_FALLBACK.md` - 当前容灾降级统一说明
 - `docs/BIG_BEAUTY_TECH_SPEC.md` - 大美丽实时美颜完整规范
 
 ### 8.3 代码规范
@@ -398,7 +413,7 @@ fun CameraScreen(viewModel: CameraViewModel) {
 - `core/image/GPUImageBeautyView.kt`
 - `core/image/BeautyPreviewProcessor.kt`
 
-这些实现与当前主链路（`CameraScreen` + `PixelFree/GL` 双引擎策略）并行存在，但未被实际引用。
+这些实现与历史双引擎主链路（`CameraScreen` + `PixelFree/GL`）并行存在但未被引用，已于代码清理时一并移除。
 
 ### 9.2 策略切换逻辑修正
 
@@ -438,6 +453,6 @@ fun setBeautyStrategy(strategy: BeautyStrategy) {
 ---
 
 **[RD] 设计者**：PicMe 全栈工程师团队
-**最后更新**：2026-04-09
-**版本**：1.1
+**最后更新**：2026-04-11（标注 PixelFree 相关内容为已废弃，更新参考文档）
+**版本**：1.2（历史文档，仅供参考）
 
