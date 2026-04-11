@@ -18,12 +18,19 @@ internal class GpupixelBeautyPreviewStrategy(
 
     override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
         return try {
-            gpupixelProvider.initialize()
+            // setScaleMode 必须在 initialize() 之前调用，确保 isFillCenter 状态在初始化时正确
             gpupixelProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
+            gpupixelProvider.initialize()
+            // GPUPixel 通过 ImageAnalysis → onRgbaFrame 路径接收帧，无需 CameraX Preview Surface
             previewUseCase.setSurfaceProvider { request ->
                 request.willNotProvideSurface()
             }
-            Logger.i("Camera", "GPUPixel preview strategy active")
+            Logger.i(
+                "Camera",
+                "GPUPixel preview strategy active, aspectRatio=$aspectRatio, " +
+                    "fillCenter=${aspectRatio == AspectRatio.RATIO_FULL}, " +
+                    "ready=${gpupixelProvider.isReady()}"
+            )
             true
         } catch (error: Throwable) {
             Logger.w("Camera", "GPUPixel warm-up failed", error)
