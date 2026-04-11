@@ -142,6 +142,10 @@
     <string name="wb_cloudy">多雲</string>
     <string name="wb_incandescent">白熾燈</string>
     <string name="wb_fluorescent">螢光燈</string>
+    <!-- GPUPixel Pro Color Grading -->
+    <string name="contrast">對比度</string>
+    <string name="saturation">飽和度</string>
+    <string name="color_temperature">色溫（K）</string>
 
     <!-- Scene & Composition -->
     <string name="scene">場景</string>

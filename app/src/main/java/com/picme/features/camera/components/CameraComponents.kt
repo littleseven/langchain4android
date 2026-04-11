@@ -1493,6 +1493,8 @@ fun ProModeControls(
     whiteBalance: Int,
     onWhiteBalanceChange: (Int) -> Unit,
     onClose: () -> Unit,
+    beautySettings: BeautySettings = BeautySettings(),
+    onBeautySettingsChanged: (BeautySettings) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -1692,7 +1694,93 @@ fun ProModeControls(
                         }
                     }
                 }
+
+                // ── GPUPixel 专业调色（对比度 / 饱和度 / 色温） ──
+                // 仅在 GPUPixel 模式下有意义；其他模式下参数存储但引擎忽略
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // 对比度
+                    ProColorSlider(
+                        label = stringResource(R.string.contrast),
+                        value = beautySettings.gpuContrast,
+                        valueRange = 0f..200f,
+                        defaultValue = 50f,
+                        onValueChange = { value ->
+                            onBeautySettingsChanged(beautySettings.copy(gpuContrast = value))
+                        }
+                    )
+                    // 饱和度
+                    ProColorSlider(
+                        label = stringResource(R.string.saturation),
+                        value = beautySettings.gpuSaturation,
+                        valueRange = 0f..200f,
+                        defaultValue = 100f,
+                        onValueChange = { value ->
+                            onBeautySettingsChanged(beautySettings.copy(gpuSaturation = value))
+                        }
+                    )
+                    // 色温（K）
+                    ProColorSlider(
+                        label = stringResource(R.string.color_temperature),
+                        value = beautySettings.gpuWhiteBalance,
+                        valueRange = 2000f..10000f,
+                        defaultValue = 5000f,
+                        onValueChange = { value ->
+                            onBeautySettingsChanged(beautySettings.copy(gpuWhiteBalance = value))
+                        }
+                    )
+                }
             }
         }
+    }
+}
+
+/**
+ * 专业调色滑块（ProMode 专用，精简版 BeautySlider）
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProColorSlider(
+    label: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    defaultValue: Float,
+    onValueChange: (Float) -> Unit
+) {
+    val isChanged = kotlin.math.abs(value - defaultValue) > 0.5f
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                fontSize = 12.sp
+            )
+            Text(
+                text = if (isChanged) "${value.toInt()}" else "--",
+                color = if (isChanged) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Slider(
+            value = value,
+            valueRange = valueRange,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(32.dp),
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.onSurface,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+            )
+        )
     }
 }

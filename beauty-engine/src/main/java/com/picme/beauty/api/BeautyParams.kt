@@ -15,6 +15,12 @@ package com.picme.beauty.api
  * - lipColorIndex : 唇色色号 0~11
  * - blush       : 腮红强度 0.0~1.0
  * - blushColorFamily : 腮红色系 0=粉/1=橙/2=梅
+ *
+ * 专业调色参数（GPUPixel 路径专用，大美丽引擎忽略此字段）：
+ * - gpuExposure      : 曝光 -10.0~10.0，0 为原始（对应 GPUPixel ExposureFilter exposure）
+ * - gpuContrast      : 对比度 0.0~4.0，1.0 为原始（对应 GPUPixel ContrastFilter contrast）
+ * - gpuSaturation    : 饱和度 0.0~2.0，1.0 为原始（对应 GPUPixel SaturationFilter saturation）
+ * - gpuWhiteBalance  : 色温 2000~10000K，5000 为原始（对应 GPUPixel WhiteBalanceFilter temperature）
  */
 data class BeautyParams(
     val enabled: Boolean = false,
@@ -25,7 +31,12 @@ data class BeautyParams(
     val lipColor: Float = 0f,
     val lipColorIndex: Int = 0,
     val blush: Float = 0f,
-    val blushColorFamily: Int = 0
+    val blushColorFamily: Int = 0,
+    // 专业调色参数（GPUPixel 路径专用）
+    val gpuExposure: Float = 0f,
+    val gpuContrast: Float = 1f,
+    val gpuSaturation: Float = 1f,
+    val gpuWhiteBalance: Float = 5000f
 ) {
     companion object {
         val EMPTY = BeautyParams()

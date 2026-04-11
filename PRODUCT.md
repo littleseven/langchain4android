@@ -83,7 +83,12 @@
     - **美颜引擎技术路线（2026-04 更新）**：
         - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）作为唯一实时美颜引擎。单 Pass Shader 完成磨皮/美白/大眼/瘦脸/唇色/腮红，零拷贝 GPU 管线（SurfaceTexture → OES 纹理 → SurfaceView）。
         - **移除 PixelFreeEffects**：因 PixelFree 核心算法未真正开源，且官方 UIKit 与 Jetpack Compose 架构冲突，已于 2026-04 彻底移除 `:pixelfree-sdk` 模块及相关代码。
-        - **未来演进方向（GPUPixel）**：评估以 [GPUPixel](https://github.com/pixpark/gpupixel) 作为开源高性能 GPU 滤镜引擎基础（C++11 + OpenGL ES，Apache 2.0，单帧 < 10ms，GPUPixel 2.0 集成 MNN 人脸检测精度达 98.7%），逐步替换/增强 大美丽 的 Shader 管线。GPUPixel 的滤镜链（Filter Chain）模块化设计与 PicMe 技术栈高度契合。
+        - **GPUPixel 实验性引擎（当前进展，2026-04）**：GPUPixel 已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口，可在设置中切换。已接入能力：磨皮（BeautyFaceFilter）、美白、瘦脸（FaceReshapeFilter）、大眼、唇色（LipstickFilter）；内置 Mars 106 点人脸检测模型，完全本地化。本期新增：腮红（BlusherFilter）直接接入。GPUPixel 的滤镜链（Filter Chain）模块化设计与 PicMe 技术栈高度契合。
+        - **GPUPixel 可直接接入的能力（优先级排序）**：
+            - **P0（本期）**：腮红（BlusherFilter，有完整 C++ 实现 + 内置 blusher.png mask，与唇色接入方式相同，3 行代码即可完成）。
+            - **P1**：专业调色滤镜链（ExposureFilter、ContrastFilter、SaturationFilter、WhiteBalanceFilter），可替换当前专业模式依赖 CameraX CaptureRequest 的参数调节，以 GPU Shader 方式实时预览，延迟更低、效果更可控。
+            - **P2**：风格特效滤镜（ToonFilter、SketchFilter、PosterizeFilter 等），用于创意拍摄场景。
+        - **GPUPixel 不具备、需自建的能力**：眉毛美化（无内置 mask）；多色号唇色切换（需动态替换纹理）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（有资源但无对应滤镜代码，需自建 LUTFilter）。
         - **滤镜技术演进**：当前基于自定义 GLSL Shader 实现，后续评估引入 **3D LUT（颜色查找表）** 技术——预计算 64×64×64 网格颜色变换，运行时三线性插值以接近零计算开销应用复杂滤镜效果，支持专业调色风格扩展。
         - **磨皮算法演进**：双边滤波（当前）→ 引导滤波（O(N) 复杂度，更优边缘保持，无光晕伪影）→ 多尺度细节分层（工业级，分频层独立处理后融合）。
         - **长期库化目标**：大美丽 持续演进为独立视觉能力基础库，App 作为能力消费者。

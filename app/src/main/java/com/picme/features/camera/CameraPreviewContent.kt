@@ -120,6 +120,8 @@ internal fun CameraPreviewContent(
                 whiteBalance = uiState.whiteBalanceMode,
                 onWhiteBalanceChange = actions.onWhiteBalanceChange,
                 onClose = { actions.onModeChange(MediaType.PHOTO) },
+                beautySettings = uiState.beautySettings,
+                onBeautySettingsChanged = actions.onBeautySettingsChanged,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
