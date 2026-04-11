@@ -112,6 +112,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **实现要点**：在 Fragment Shader 内以当前像素为中心，在 3×3 邻域内采样；根据邻域像素与中心像素的亮度差异计算值域权重 exp(-(ΔLuma)² / 2σ_r²)，并结合空间距离权重 exp(-dist² / 2σ_s²)；仅对皮肤蒙版（skinMask）区域生效
   - **参数映射**：uSmoothing (0.0~1.0) 同时控制磨皮强度与值域 σ_r 的宽度；uTexelSize 由 CameraPreviewRenderer 根据输入分辨率实时传入，确保跨分辨率下采样半径一致
   - **性能优化**：单 Pass 内完成，无需额外 FBO；共 9 次 texture2D 采样，空间 σ_s=1.8 像素，值域 σ_r=0.10~0.18，兼顾效果自然度与移动端实时性
+  - **演进路线**：双边滤波（当前）→ **引导滤波 Guided Filter**（O(N) 闭式解，无梯度反转光晕，更适合移动端）→ 多尺度细节分层（工业级效果）
 
 - **美白 (Whitening)**：
   - **色彩空间**：在 YUV 或 Lab 色彩空间调整亮度 (L) 和色度 (U/V)
@@ -149,7 +150,7 @@ beauty-engine/src/main/java/com/picme/beauty/
 
 **Shader 工程规范**（与实际代码对齐）：
 - **当前实现**：单 Pass Shader（`FRAGMENT_SHADER_BEAUTY`）在一次 draw call 内完成磨皮/美白/大眼/瘦脸/唇色/腮红，无多 Pass FBO 切换
-- **磨皮算法**：双边滤波快速近似（9 点采样 + 值域高斯权重），**非** Box Blur；早期文档中"盒式模糊"的描述是规划期草案，与当前实现不符，已在本次更新中纠正
+- **磨皮算法**：双边滤波快速近似（9 点采样 + 值域高斯权重），**非** Box Blur；早期文档中“盒式模糊”的描述是规划期草案，与当前实现不符，已纠正。演进路线：双边滤波 → 引导滤波（Phase 2）→ 多尺度分层（Phase 3）
 - **参数传递**：通过 `glUniform1f`/`glUniform2f`/`glUniform1i` 实时更新，禁止在参数变化时重新编译 Shader
 - **纹理类型**：相机输入使用 `GL_TEXTURE_EXTERNAL_OES`，调试 Shader 使用普通 `GL_TEXTURE_2D`
 - **调试 Shader**：`FRAGMENT_SHADER_DEBUG_RED`（全红）、`FRAGMENT_SHADER_DEBUG_TEXTURE_R`（R 通道灰度）供渲染链路验证使用
@@ -296,7 +297,7 @@ if (fps < 25 || processingMs > 20) {
 - 选择 OpenGL ES 而非 Vulkan：CameraX 兼容性更好、设备覆盖率更高、开发周期更短
 - 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小（GPUPixel 路径使用 `TextureView`，因 SDK 接口限制）
 - 输入/显示 Surface 解耦：避免 CameraX 与 View 生命周期抖动互相影响
-- 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档"盒式模糊"描述已纠正）
+- 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档“盒式模糊”描述已纠正）。后续评估引导滤波（O(N) 无序复杂度）作为 Phase 2 升级方向
 - 单 Pass Shader 覆盖全部美颜效果：减少 FBO 切换开销，单帧延迟可控
 - GPUPixel 实验性集成保留 FaceDetector 独立路径：避免与 ML Kit 人脸点位格式冲突
 - `api/` 纯 Kotlin 接口层：为后续独立发布 AAR/Maven 做准备
