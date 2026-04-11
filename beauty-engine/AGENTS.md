@@ -282,6 +282,47 @@ if (fps < 25 || processingMs > 20) {
 - [ ] Lambda 参数是否显式命名？
 - [ ] Shader 源码是否集中管理并带有性能注释？
 
+### 4.7 GPUPixel 集成专项
+
+#### ⚠️ SetRotation 参数类型陷阱（已踩坑，2026-04）
+**症状**：切换到 GPUPixel 模式后 App 立即崩溃，`SIGTRAP (Fatal signal 5)`，
+崩溃栈顶为 `gpupixel::Filter::GetTextureCoordinate(RotationMode const&)`。
+
+**根因**：
+- `GPUPixelSourceRawData.SetRotation(int rotation)` 的 JNI 实现为 `(*ptr)->SetRotation((RotationMode)rotation)`
+- `RotationMode` 是 C++ 枚举，合法值范围 `0~7`（见下表）
+- 直接传入 CameraX 的 `rotationDegrees`（如 90 / 270）会导致枚举越界
+- `GetTextureCoordinate` 用越界枚举值做数组下标 → `SIGTRAP`
+
+**RotationMode 枚举映射表**（`gpupixel/include/gpupixel/sink/sink.h`）：
+| 枚举名 | 数值 | 对应 CameraX rotationDegrees |
+|---|---|---|
+| `NoRotation` | 0 | 0° |
+| `RotateLeft` | 1 | 270° |
+| `RotateRight` | 2 | 90° |
+| `FlipVertical` | 3 | — |
+| `FlipHorizontal` | 4 | — |
+| `RotateRightFlipVertical` | 5 | — |
+| `RotateRightFlipHorizontal` | 6 | — |
+| `Rotate180` | 7 | 180° |
+
+**正确用法**（`GpupixelBeautyPreviewProvider.kt`）：
+```kotlin
+val rotationMode = when (rotationDegrees) {
+    90  -> 2  // RotateRight
+    180 -> 7  // Rotate180
+    270 -> 1  // RotateLeft
+    else -> 0 // NoRotation
+}
+sourceRawData?.SetRotation(rotationMode)
+```
+
+- [ ] 调用 `GPUPixelSourceRawData.SetRotation()` 时是否已将角度值映射为 `RotationMode` 枚举序号？（**禁止直接传入 90/270**）
+
+#### CameraX Preview UseCase 与 GPUPixel 冲突
+- [ ] GPUPixel 模式下是否避免创建 CameraX `Preview` UseCase？（`Preview` 占用 Surface 会导致 `ImageAnalysis` 无帧，引发黑屏）
+- [ ] GPUPixel 模式下帧数据是否通过 `ImageAnalysis → onRgbaFrame()` 路径传递，而非 `Preview.SurfaceProvider`？
+
 ---
 
 ## 5. 与产品文档对照 (Product Alignment)
