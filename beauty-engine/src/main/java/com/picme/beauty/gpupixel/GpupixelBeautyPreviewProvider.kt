@@ -18,7 +18,13 @@ import com.pixpark.gpupixel.GPUPixelSourceRawData
 /**
  * GPUPixel 美颜预览提供者
  *
- * 经外部转换后的 RGBA 帧喂给 GPUPixel 滤镜链，渲染到内部 TextureView。
+ * 数据流：CameraX ImageAnalysis (YUV) → RGBA 转换 → GPUPixel 滤镜链 → TextureView 显示
+ *
+ * 关键时序说明：
+ * - TextureView 加入 window hierarchy 后才会触发 [TextureView.SurfaceTextureListener]
+ * - [initialize] 可能在 surface 可用之前或之后调用
+ * - 通过 [pendingDisplaySurface] 缓存解决初始化竞态问题：无论哪个先就绪，都能正确绑定
+ *
  * 当前为实验性集成，支持磨皮、美白、瘦脸、大眼、唇色。
  */
 class GpupixelBeautyPreviewProvider(
@@ -42,7 +48,19 @@ class GpupixelBeautyPreviewProvider(
     private var isFillCenter: Boolean = true
     private var surfaceWidth: Int = 0
     private var surfaceHeight: Int = 0
+
+    /**
+     * TextureView surface 是否已经可用（已触发 onSurfaceTextureAvailable）
+     */
+    @Volatile
     private var surfaceAvailable = false
+
+    /**
+     * 缓存已就绪的显示 Surface，用于解决初始化竞态：
+     * 当 [onSurfaceTextureAvailable] 触发时 [sinkSurface] 还未创建，
+     * 将 surface 缓存在此；[initialize] 完成后立即绑定。
+     */
+    private var pendingDisplaySurface: Surface? = null
 
     init {
         textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -54,8 +72,20 @@ class GpupixelBeautyPreviewProvider(
                 surfaceWidth = width
                 surfaceHeight = height
                 surfaceAvailable = true
-                sinkSurface?.SetSurface(Surface(surfaceTexture), width, height)
-                Log.d(TAG, "Surface available: ${width}x${height}")
+                val surface = Surface(surfaceTexture)
+                val sink = sinkSurface
+                if (sink != null) {
+                    // initialize() 已经完成，直接绑定
+                    sink.SetSurface(surface, width, height)
+                    pendingDisplaySurface?.release()
+                    pendingDisplaySurface = surface
+                    Log.d(TAG, "Surface available and sink ready: ${width}x${height}, binding immediately")
+                } else {
+                    // initialize() 尚未完成，缓存 surface 等待绑定
+                    pendingDisplaySurface?.release()
+                    pendingDisplaySurface = surface
+                    Log.d(TAG, "Surface available but sink not ready yet: ${width}x${height}, caching for later")
+                }
             }
 
             override fun onSurfaceTextureSizeChanged(
@@ -65,13 +95,19 @@ class GpupixelBeautyPreviewProvider(
             ) {
                 surfaceWidth = width
                 surfaceHeight = height
-                sinkSurface?.SetSurface(Surface(surfaceTexture), width, height)
+                // 尺寸变化时重新绑定，确保 sinkSurface 使用正确尺寸
+                val surface = Surface(surfaceTexture)
+                pendingDisplaySurface?.release()
+                pendingDisplaySurface = surface
+                sinkSurface?.SetSurface(surface, width, height)
                 Log.d(TAG, "Surface size changed: ${width}x${height}")
             }
 
             override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
                 surfaceAvailable = false
                 sinkSurface?.ReleaseSurface()
+                pendingDisplaySurface?.release()
+                pendingDisplaySurface = null
                 return true
             }
 
@@ -93,6 +129,7 @@ class GpupixelBeautyPreviewProvider(
         sinkSurface = GPUPixelSinkSurface.Create()
         faceDetector = FaceDetector.Create()
 
+        // 构建滤镜链：rawData → lipstick → beauty → faceReshape → sinkSurface
         sourceRawData?.AddSink(lipstickFilter)
         lipstickFilter?.AddSink(beautyFilter)
         beautyFilter?.AddSink(faceReshapeFilter)
@@ -100,29 +137,66 @@ class GpupixelBeautyPreviewProvider(
 
         applyParams(lastParams)
 
-        if (surfaceAvailable && textureView.isAvailable) {
+        // 应用 scaleMode（在 sinkSurface 创建后立即设置）
+        val fillMode = if (isFillCenter) {
+            GPUPixelSinkSurface.PRESERVE_ASPECT_RATIO_AND_FILL
+        } else {
+            GPUPixelSinkSurface.PRESERVE_ASPECT_RATIO
+        }
+        sinkSurface?.SetFillMode(fillMode)
+
+        // 绑定 surface：优先使用已缓存的 pendingDisplaySurface（surface 先于 initialize 就绪的情况）
+        val cachedSurface = pendingDisplaySurface
+        if (cachedSurface != null && cachedSurface.isValid) {
+            sinkSurface?.SetSurface(cachedSurface, surfaceWidth, surfaceHeight)
+            Log.d(TAG, "Bound cached pending surface: ${surfaceWidth}x${surfaceHeight}")
+        } else if (surfaceAvailable && textureView.isAvailable) {
+            // 兜底：surface 可用但未缓存，直接从 textureView 获取
             val st = textureView.surfaceTexture
             if (st != null) {
-                sinkSurface?.SetSurface(Surface(st), surfaceWidth, surfaceHeight)
+                val surface = Surface(st)
+                pendingDisplaySurface?.release()
+                pendingDisplaySurface = surface
+                sinkSurface?.SetSurface(surface, surfaceWidth, surfaceHeight)
+                Log.d(TAG, "Bound surface from textureView: ${surfaceWidth}x${surfaceHeight}")
+            } else {
+                Log.w(TAG, "surfaceAvailable=true but surfaceTexture is null, will bind when surface is ready")
             }
+        } else {
+            Log.d(TAG, "Surface not yet available, will bind in onSurfaceTextureAvailable callback")
         }
 
         isInitialized = true
-        Log.i(TAG, "GpupixelBeautyPreviewProvider initialized")
+        Log.i(TAG, "GpupixelBeautyPreviewProvider initialized, surfaceAvailable=$surfaceAvailable")
     }
 
+    /**
+     * GPUPixel 模式下此方法不应被 CameraX Preview use case 调用
+     * （CameraX 帧通过 ImageAnalysis → [onRgbaFrame] 路径传递）。
+     * 为防止上层误调用导致崩溃，返回一个临时 Surface；如 TextureView 不可用则抛出异常。
+     */
     override fun createPreviewSurface(): Surface {
         if (!isInitialized) initialize()
         val st = textureView.surfaceTexture
-            ?: throw IllegalStateException("TextureView surface texture not available yet")
+            ?: throw IllegalStateException(
+                "GPUPixel TextureView surface not available. " +
+                    "Ensure TextureView is attached to window hierarchy before calling createPreviewSurface(). " +
+                    "GPUPixel mode uses ImageAnalysis path, createPreviewSurface() should not be called."
+            )
         return Surface(st)
     }
 
     /**
      * 处理 RGBA 帧数据，由外部（app 层）在 analyzer 线程调用。
+     *
+     * 注意：[isReady] 为 false 时静默丢帧，避免日志刷屏。
      */
     fun onRgbaFrame(data: ByteArray, width: Int, height: Int) {
         if (!isInitialized) return
+        if (!surfaceAvailable) {
+            // surface 尚未就绪时丢帧，避免 GPUPixel 内部报错
+            return
+        }
 
         try {
             val landmarks = faceDetector?.detect(
@@ -210,18 +284,27 @@ class GpupixelBeautyPreviewProvider(
         faceReshapeFilter?.Destroy()
         sinkSurface?.Destroy()
         faceDetector?.destroy()
+        pendingDisplaySurface?.release()
         sourceRawData = null
         lipstickFilter = null
         beautyFilter = null
         faceReshapeFilter = null
         sinkSurface = null
         faceDetector = null
+        pendingDisplaySurface = null
         isInitialized = false
         Log.i(TAG, "GpupixelBeautyPreviewProvider released")
     }
 
+    /**
+     * GPUPixel 引擎是否已就绪。
+     *
+     * 只要 [isInitialized] 为 true 即视为就绪，避免 [surfaceAvailable] 未及时触发
+     * 导致上层超时后回退到 PreviewView。
+     * [surfaceAvailable] 未就绪时 [onRgbaFrame] 会静默丢帧，不会崩溃。
+     */
     override fun isReady(): Boolean {
-        return isInitialized && surfaceAvailable
+        return isInitialized
     }
 
     override fun getView(): View = textureView
