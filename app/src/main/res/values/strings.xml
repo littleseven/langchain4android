@@ -141,6 +141,10 @@
     <string name="wb_cloudy">Cloudy</string>
     <string name="wb_incandescent">Incandescent</string>
     <string name="wb_fluorescent">Fluorescent</string>
+    <!-- GPUPixel Pro Color Grading -->
+    <string name="contrast">Contrast</string>
+    <string name="saturation">Saturation</string>
+    <string name="color_temperature">Color Temp (K)</string>
 
     <!-- Scene & Composition -->
     <string name="scene">Scene</string>

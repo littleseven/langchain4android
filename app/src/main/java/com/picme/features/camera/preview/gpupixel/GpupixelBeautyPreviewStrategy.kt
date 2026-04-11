@@ -43,7 +43,13 @@ internal class GpupixelBeautyPreviewStrategy(
     }
 
     override fun applyBeautySettings(settings: BeautySettings) {
-        val params = if (!settings.enabled || !settings.hasAnyEffect()) {
+        // 调色参数：映射规则参考 beauty-engine/AGENTS.md §4.7 GPUPixel 专业调色滤镜接入规范
+        // gpuContrast: UI 0-200，50=原始 → GPUPixel 0.0-4.0，1.0=原始 (÷50 × 1.0)
+        // gpuSaturation: UI 0-200，100=原始 → GPUPixel 0.0-2.0，1.0=原始 (÷100)
+        val gpuContrast = (settings.gpuContrast / 50f).coerceIn(0f, 4f)
+        val gpuSaturation = (settings.gpuSaturation / 100f).coerceIn(0f, 2f)
+
+        val beautyBase = if (!settings.enabled || !settings.hasAnyEffect()) {
             BeautyParams.EMPTY
         } else {
             BeautyParams(
@@ -58,6 +64,13 @@ internal class GpupixelBeautyPreviewStrategy(
                 blushColorFamily = settings.blushColorFamily.coerceIn(0, 2)
             )
         }
+        // 将调色参数合并到 BeautyParams（调色始终生效，不依赖美颜开关）
+        val params = beautyBase.copy(
+            gpuExposure = settings.gpuExposure.coerceIn(-10f, 10f),
+            gpuContrast = gpuContrast,
+            gpuSaturation = gpuSaturation,
+            gpuWhiteBalance = settings.gpuWhiteBalance.coerceIn(2000f, 10000f)
+        )
         gpupixelProvider.updateFilters(params)
     }
 

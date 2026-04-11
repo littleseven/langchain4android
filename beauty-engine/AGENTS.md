@@ -323,6 +323,66 @@ sourceRawData?.SetRotation(rotationMode)
 - [ ] GPUPixel 模式下是否避免创建 CameraX `Preview` UseCase？（`Preview` 占用 Surface 会导致 `ImageAnalysis` 无帧，引发黑屏）
 - [ ] GPUPixel 模式下帧数据是否通过 `ImageAnalysis → onRgbaFrame()` 路径传递，而非 `Preview.SurfaceProvider`？
 
+#### GPUPixel 已接入能力清单（2026-04）
+
+| 能力 | GPUPixel 滤镜类 | 参数 Key | 接入状态 |
+|---|---|---|---|
+| 磨皮 | `BeautyFaceFilter` | `skin_smoothing` [-1,1] | ✅ 已接入 |
+| 美白 | `BeautyFaceFilter` | `whiteness` [-1,1] | ✅ 已接入 |
+| 瘦脸 | `FaceReshapeFilter` | `thin_face` [0,0.15] + `face_landmark` | ✅ 已接入 |
+| 大眼 | `FaceReshapeFilter` | `big_eye` [0,0.5] + `face_landmark` | ✅ 已接入 |
+| 唇色 | `LipstickFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入 |
+| 腮红 | `BlusherFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入（本期） |
+| 人脸关键点 | `FaceDetector`（内置 Mars 模型，106 点） | `detect()` → `float[]` | ✅ 已接入 |
+
+**滤镜链拓扑（当前）**：
+```
+GPUPixelSourceRawData
+  → LipstickFilter    (blend_level, face_landmark)
+  → BlusherFilter     (blend_level, face_landmark)   ← 本期新增
+  → BeautyFaceFilter  (skin_smoothing, whiteness)
+  → FaceReshapeFilter (thin_face, big_eye, face_landmark)
+  → GPUPixelSinkSurface
+```
+
+#### GPUPixel 腮红（BlusherFilter）接入规范
+
+- **滤镜类**：`GPUPixelFilter.BLUSHER_FILTER`（= `"BlusherFilter"`）
+- **内置资源**：C++ 层自动加载 `assets/blusher.png` 作为腮红 mask 纹理（与 `LipstickFilter` 加载 `mouth.png` 同机制）
+- **参数**：
+  - `blend_level`：强度 [0.0, 1.0]，映射自 `BeautyParams.blush`
+  - `face_landmark`：106 点归一化坐标数组，由 `FaceDetector.detect()` 返回后同步下发
+- **最佳接入位置**：紧接 `LipstickFilter` 之后（均属于 FaceMakeupFilter 派生，共享相同的 landmark 传入机制）
+- **参数下发时机**：与 `lipstickFilter` 保持一致，在 `onRgbaFrame` 的每次人脸检测结果回调中同步更新
+- **关闭时**：`blend_level` 设为 `0.0f`，不销毁滤镜对象
+- **生命周期**：随 `GpupixelBeautyPreviewProvider.release()` 统一调用 `Destroy()`
+
+#### GPUPixel 专业调色滤镜接入规范（P1，待开发）
+
+> 本期（P0）不实现，规范在此预埋，下期 P1 开发时直接参考。
+
+- **目标**：用 GPUPixel 滤镜链替代专业模式当前依赖 CameraX `CaptureRequest` 的参数调节，实现 GPU Shader 级实时预览，延迟更低、效果更可控
+- **滤镜与参数**：
+
+| 功能 | GPUPixel 滤镜类 | 参数 Key | 参数范围 |
+|---|---|---|---|
+| 曝光 | `ExposureFilter` | `exposure` | [-10.0, 10.0]，0 为原始 |
+| 对比度 | `ContrastFilter` | `contrast` | [0.0, 4.0]，1.0 为原始 |
+| 饱和度 | `SaturationFilter` | `saturation` | [0.0, 2.0]，1.0 为原始 |
+| 白平衡 | `WhiteBalanceFilter` | `temperature` (K) + `tint` [-100,100] | temperature 默认 5000K |
+
+- **滤镜链追加位置**：在 `GPUPixelSinkSurface` 之前、`FaceReshapeFilter` 之后追加
+- **参数映射**（App 层 `BeautyParams` → GPUPixel 参数）：
+  - 曝光：UI `[-3.0, 3.0]` 区间直接传入 `exposure`（GPUPixel 内部限制 ±10）
+  - 对比度：UI `[0, 200]` 归一化为 `[0.0, 4.0]`，默认 1.0（UI 值 50）
+  - 饱和度：UI `[0, 200]` 归一化为 `[0.0, 2.0]`，默认 1.0（UI 值 100）
+  - 白平衡温度：UI `[2000K, 10000K]` 直接传入 `temperature`
+- **关闭时**：各滤镜恢复默认值（exposure=0, contrast=1.0, saturation=1.0, temperature=5000）
+- **注意**：调色滤镜对全画面生效，不依赖 FaceDetector，无需传 `face_landmark`
+- [ ] P1 开发时：`BeautyParams` 是否已新增 `exposure`、`contrast`、`saturation`、`whiteBalanceTemperature` 字段？
+- [ ] P1 开发时：`GpupixelBeautyPreviewStrategy.applyBeautySettings()` 是否已映射上述字段到对应滤镜？
+- [ ] P1 开发时：`ProModeControls` 是否已切换到 GPUPixel 滤镜参数，并废弃 CameraX `CaptureRequest` 路径？
+
 ---
 
 ## 5. 与产品文档对照 (Product Alignment)

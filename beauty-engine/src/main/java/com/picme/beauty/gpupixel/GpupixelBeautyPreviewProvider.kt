@@ -44,7 +44,7 @@ import com.pixpark.gpupixel.GPUPixelSourceRawData
  * - [initialize] 可能在 surface 可用之前或之后调用
  * - 通过 [pendingDisplaySurface] 缓存解决初始化竞态问题：无论哪个先就绪，都能正确绑定
  *
- * 当前为实验性集成，支持磨皮、美白、瘦脸、大眼、唇色。
+ * 当前为实验性集成，支持磨皮、美白、瘦脸、大眼、唇色、腮红。
  */
 class GpupixelBeautyPreviewProvider(
     context: Context
@@ -60,7 +60,12 @@ class GpupixelBeautyPreviewProvider(
     private var sourceRawData: GPUPixelSourceRawData? = null
     private var beautyFilter: GPUPixelFilter? = null
     private var lipstickFilter: GPUPixelFilter? = null
+    private var blusherFilter: GPUPixelFilter? = null
     private var faceReshapeFilter: GPUPixelFilter? = null
+    private var exposureFilter: GPUPixelFilter? = null
+    private var contrastFilter: GPUPixelFilter? = null
+    private var saturationFilter: GPUPixelFilter? = null
+    private var whiteBalanceFilter: GPUPixelFilter? = null
     private var faceDetector: FaceDetector? = null
     private var isInitialized = false
     private var lastParams: BeautyParams = BeautyParams.EMPTY
@@ -160,15 +165,32 @@ class GpupixelBeautyPreviewProvider(
         sourceRawData = GPUPixelSourceRawData.Create()
         beautyFilter = GPUPixelFilter.Create(GPUPixelFilter.BEAUTY_FACE_FILTER)
         lipstickFilter = GPUPixelFilter.Create(GPUPixelFilter.LIPSTICK_FILTER)
+        blusherFilter = GPUPixelFilter.Create(GPUPixelFilter.BLUSHER_FILTER)
         faceReshapeFilter = GPUPixelFilter.Create(GPUPixelFilter.FACE_RESHAPE_FILTER)
+        exposureFilter = GPUPixelFilter.Create(GPUPixelFilter.EXPOSURE_FILTER)
+        contrastFilter = GPUPixelFilter.Create(GPUPixelFilter.CONTRAST_FILTER)
+        saturationFilter = GPUPixelFilter.Create(GPUPixelFilter.SATURATION_FILTER)
+        whiteBalanceFilter = GPUPixelFilter.Create(GPUPixelFilter.WHITE_BALANCE_FILTER)
         sinkSurface = GPUPixelSinkSurface.Create()
         faceDetector = FaceDetector.Create()
 
-        // 构建滤镜链：rawData → lipstick → beauty → faceReshape → sinkSurface
+        // 初始化调色参数为中性值（不影响画面）
+        exposureFilter?.SetProperty("exposure", 0f)
+        contrastFilter?.SetProperty("contrast", 1f)
+        saturationFilter?.SetProperty("saturation", 1f)
+        whiteBalanceFilter?.SetProperty("temperature", 5000f)
+        whiteBalanceFilter?.SetProperty("tint", 0f)
+
+        // 构建滤镜链：rawData → lipstick → blusher → beauty → faceReshape → exposure → contrast → saturation → whiteBalance → sinkSurface
         sourceRawData?.AddSink(lipstickFilter)
-        lipstickFilter?.AddSink(beautyFilter)
+        lipstickFilter?.AddSink(blusherFilter)
+        blusherFilter?.AddSink(beautyFilter)
         beautyFilter?.AddSink(faceReshapeFilter)
-        faceReshapeFilter?.AddSink(sinkSurface)
+        faceReshapeFilter?.AddSink(exposureFilter)
+        exposureFilter?.AddSink(contrastFilter)
+        contrastFilter?.AddSink(saturationFilter)
+        saturationFilter?.AddSink(whiteBalanceFilter)
+        whiteBalanceFilter?.AddSink(sinkSurface)
 
         applyParams(lastParams)
 
@@ -274,6 +296,7 @@ class GpupixelBeautyPreviewProvider(
             if (landmarks != null && landmarks.isNotEmpty()) {
                 faceReshapeFilter?.SetProperty("face_landmark", landmarks)
                 lipstickFilter?.SetProperty("face_landmark", landmarks)
+                blusherFilter?.SetProperty("face_landmark", landmarks)
             }
 
             sourceRawData?.ProcessData(
@@ -365,20 +388,34 @@ class GpupixelBeautyPreviewProvider(
     }
 
     private fun applyParams(params: BeautyParams) {
+        // 美颜参数：受 enabled 开关控制，关闭时归零
         if (!params.enabled) {
             beautyFilter?.SetProperty("skin_smoothing", 0.0f)
             beautyFilter?.SetProperty("whiteness", 0.0f)
             faceReshapeFilter?.SetProperty("thin_face", 0.0f)
             faceReshapeFilter?.SetProperty("big_eye", 0.0f)
             lipstickFilter?.SetProperty("blend_level", 0.0f)
-            return
+            blusherFilter?.SetProperty("blend_level", 0.0f)
+        } else {
+            beautyFilter?.SetProperty("skin_smoothing", params.smoothing)
+            beautyFilter?.SetProperty("whiteness", params.whitening)
+            faceReshapeFilter?.SetProperty("thin_face", params.slimFace)
+            faceReshapeFilter?.SetProperty("big_eye", params.bigEyes)
+            lipstickFilter?.SetProperty("blend_level", params.lipColor)
+            blusherFilter?.SetProperty("blend_level", params.blush)
         }
 
-        beautyFilter?.SetProperty("skin_smoothing", params.smoothing)
-        beautyFilter?.SetProperty("whiteness", params.whitening)
-        faceReshapeFilter?.SetProperty("thin_face", params.slimFace)
-        faceReshapeFilter?.SetProperty("big_eye", params.bigEyes)
-        lipstickFilter?.SetProperty("blend_level", params.lipColor)
+        // 调色参数：不受美颜开关控制，始终实时生效（默认值为中性，不影响画面）
+        exposureFilter?.SetProperty("exposure", params.gpuExposure.coerceIn(-10f, 10f))
+        contrastFilter?.SetProperty("contrast", params.gpuContrast.coerceIn(0f, 4f))
+        saturationFilter?.SetProperty("saturation", params.gpuSaturation.coerceIn(0f, 2f))
+        whiteBalanceFilter?.SetProperty("temperature", params.gpuWhiteBalance.coerceIn(2000f, 10000f))
+        Log.d(
+            TAG,
+            "applyParams: enabled=${params.enabled}, exposure=${params.gpuExposure}, " +
+                "contrast=${params.gpuContrast}, saturation=${params.gpuSaturation}, " +
+                "whiteBalance=${params.gpuWhiteBalance}, blush=${params.blush}"
+        )
     }
 
     override fun updateFaceWarpParams(
@@ -414,15 +451,25 @@ class GpupixelBeautyPreviewProvider(
     override fun release() {
         sourceRawData?.Destroy()
         lipstickFilter?.Destroy()
+        blusherFilter?.Destroy()
         beautyFilter?.Destroy()
         faceReshapeFilter?.Destroy()
+        exposureFilter?.Destroy()
+        contrastFilter?.Destroy()
+        saturationFilter?.Destroy()
+        whiteBalanceFilter?.Destroy()
         sinkSurface?.Destroy()
         faceDetector?.destroy()
         pendingDisplaySurface?.release()
         sourceRawData = null
         lipstickFilter = null
+        blusherFilter = null
         beautyFilter = null
         faceReshapeFilter = null
+        exposureFilter = null
+        contrastFilter = null
+        saturationFilter = null
+        whiteBalanceFilter = null
         sinkSurface = null
         faceDetector = null
         pendingDisplaySurface = null

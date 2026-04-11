@@ -23,7 +23,13 @@ data class BeautySettings(
     
     // 身材管理
     val bodyEnhancement: Float = 0f, // 丰胸 -30~+30
-    val legExtension: Float = 0f     // 长腿 0-50
+    val legExtension: Float = 0f,    // 长腿 0-50
+
+    // 专业调色（GPUPixel 路径专用，UI 原始值，由 Strategy 层映射到 GPUPixel 参数范围）
+    val gpuExposure: Float = 0f,         // 曝光 -3.0~3.0，0 为原始
+    val gpuContrast: Float = 50f,        // 对比度 0-200，50=原始(→ GPUPixel 1.0)
+    val gpuSaturation: Float = 100f,     // 饱和度 0-200，100=原始(→ GPUPixel 1.0)
+    val gpuWhiteBalance: Float = 5000f   // 色温 2000~10000K，5000=原始
 ) {
     /**
      * 检查是否有任何美颜参数被设置
