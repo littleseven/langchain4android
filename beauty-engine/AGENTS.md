@@ -7,7 +7,7 @@
 > - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标：见 `docs/BIG_BEAUTY_TECH_SPEC.md`。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**：`beauty-engine` 是 PicMe 大美丽 实时美颜引擎的独立 Android Library 模块，承载 OpenGL ES + EGL 渲染管线，对外暴露稳定 API，对内封装 GPU 加速实现。长期演进为可独立发布的视觉能力基础库。
+**模块定位**：`beauty-engine` 是 PicMe 美颜引擎的独立 Android Library 模块，承载 OpenGL ES + EGL 渲染管线（大美丽主引擎）和 GPUPixel 实验性集成，对外暴露稳定 API，对内封装 GPU 加速实现。长期演进为可独立发布的视觉能力基础库。
 
 **主要维护者**：[RD] 全栈工程师
 
@@ -23,8 +23,8 @@
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
 - **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
-- **[INTEGRATION] 单引擎策略**：当前仅保留自研 `beauty-engine`（BIG_BEAUTY）作为唯一实时美颜引擎，已完全移除 PixelFree 相关模块与依赖
-- **[ROADMAP] GPUPixel 评估方向**：未来开源替代方案评估目标为 [GPUPixel](https://github.com/pixpark/gpupixel)（Apache 2.0、纯 C++11/OpenGL ES、无商业 SDK 绑定）， CainCamera 因硬依赖 Face++ 商业 SDK 且已停止维护，已被排除
+- **[INTEGRATION] 双引擎架构**：当前保留自研 `beauty-engine`（BIG_BEAUTY）主引擎与 GPUPixel（GPUPIXEL）实验性备选；PixelFree 已于 2026-04 完全移除
+- **[ROADMAP] GPUPixel 集成状态**：[GPUPixel](https://github.com/pixpark/gpupixel)（Apache 2.0、纯 C++11/OpenGL ES、无商业 SDK 绑定）已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口；CainCamera 因硬依赖 Face++ 商业 SDK 且已停止维护，已被排除
 
 ---
 
@@ -34,27 +34,33 @@
 
 ```
 beauty-engine/src/main/java/com/picme/beauty/
-├── api/                          # 对外稳定 API（能力契约层）
-│   ├── BeautyParams.kt           # 美颜参数数据类
-│   ├── BeautyPerfStats.kt        # 性能统计模型
-│   ├── BeautyPreviewCapability.kt # 能力查询与版本信息
-│   └── BeautyPreviewProvider.kt  # 预览 Provider 接口
-└── egl/                          # 内部实现（渲染管线层）
-    ├── BeautyPreviewView.kt      # 自定义 View（SurfaceView 封装）
-    ├── CameraPreviewRenderer.kt  # 渲染管线核心
-    ├── BeautyRenderer.kt         # 美颜 Shader 渲染器
-    ├── BeautyShaders.kt          # GLSL Shader 源码
-    ├── ShaderProgram.kt          # Shader 编译与链接
-    ├── EGLCore.kt                # EGL 上下文与 Surface 管理
-    ├── WindowSurface.kt          # EGL Window Surface 封装
-    ├── GLRenderer.kt             # GL 渲染通用基类
-    └── GlBeautyPreviewProvider.kt # Provider 接口实现（内部适配器）
+├── api/                               # 对外稳定 API（能力契约层）
+│   ├── BeautyParams.kt                # 美颜参数数据类
+│   ├── BeautyPerfStats.kt             # 性能统计模型
+│   ├── BeautyPreviewCapability.kt     # GL 能力扩展接口（FaceWarp/LipMask 等）
+│   ├── BeautyPreviewProvider.kt       # 预览 Provider 基础接口
+│   ├── BeautyPreviewEngine.kt         # 组合接口（Provider + Capability + getView）
+│   └── BeautyPreviewProviderFactory.kt # Factory（未来 DI 扩展点）
+├── egl/                               # 内部实现（GL 渲染管线层）
+│   ├── BeautyPreviewView.kt           # 自定义 View（SurfaceView 封装）
+│   ├── CameraPreviewRenderer.kt       # 渲染管线核心
+│   ├── BeautyRenderer.kt              # 美颜 Shader 渲染器
+│   ├── BeautyShaders.kt               # GLSL Shader 源码
+│   ├── ShaderProgram.kt               # Shader 编译与链接
+│   ├── EGLCore.kt                     # EGL 上下文与 Surface 管理
+│   ├── WindowSurface.kt               # EGL Window Surface 封装
+│   ├── GLRenderer.kt                  # GL 渲染通用基类
+│   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现（内部适配器）
+│   └── GlBeautyPreviewProviderFactory.kt # GL Provider 工厂
+└── gpupixel/                          # GPUPixel 实验性集成层（🧪）
+    └── GpupixelBeautyPreviewProvider.kt # GPUPixel 引擎 Provider 实现
 ```
 
 **依赖方向红线**：
-- `api/` 包：**禁止**依赖 `egl/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
+- `api/` 包：**禁止**依赖 `egl/`、`gpupixel/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
 - `egl/` 包：允许实现 `api/` 接口，允许依赖 `android.*` 和 OpenGL ES 相关库
-- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `egl/` 内部类
+- `gpupixel/` 包：允许实现 `api/` 接口，允许依赖 GPUPixel JNI 库；**禁止**从 `egl/` 反向依赖
+- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `egl/` 或 `gpupixel/` 内部类
 
 ### 2.2 对外 API 层 (`api/`)
 
@@ -141,11 +147,12 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **长腿算法**：以下半身关键点为基准，纵向拉伸 + 透视校正
   - **安全约束**：调整幅度限制在 20% 以内，保持身体比例
 
-**Shader 工程规范**：
-- **性能优先**：磨皮使用盒式模糊（Box Blur），避免双边滤波带来的高复杂度
-- **分步 Shader**：磨皮 → 美白 → 输出，每步独立 Shader Program
-- **参数传递**：通过 `glUniform1f` 实时更新，禁止在参数变化时重新编译 Shader
-- **纹理类型**：相机输入使用 `GL_TEXTURE_EXTERNAL_OES`，中间处理使用普通 `GL_TEXTURE_2D`
+**Shader 工程规范**（与实际代码对齐）：
+- **当前实现**：单 Pass Shader（`FRAGMENT_SHADER_BEAUTY`）在一次 draw call 内完成磨皮/美白/大眼/瘦脸/唇色/腮红，无多 Pass FBO 切换
+- **磨皮算法**：双边滤波快速近似（9 点采样 + 值域高斯权重），**非** Box Blur；早期文档中"盒式模糊"的描述是规划期草案，与当前实现不符，已在本次更新中纠正
+- **参数传递**：通过 `glUniform1f`/`glUniform2f`/`glUniform1i` 实时更新，禁止在参数变化时重新编译 Shader
+- **纹理类型**：相机输入使用 `GL_TEXTURE_EXTERNAL_OES`，调试 Shader 使用普通 `GL_TEXTURE_2D`
+- **调试 Shader**：`FRAGMENT_SHADER_DEBUG_RED`（全红）、`FRAGMENT_SHADER_DEBUG_TEXTURE_R`（R 通道灰度）供渲染链路验证使用
 
 **GPU 加速策略**：
 - **优先使用 GPU**：所有图像处理方法必须使用 GPU 加速 (OpenGL ES / Vulkan)
@@ -287,9 +294,11 @@ if (fps < 25 || processingMs > 20) {
 
 **技术决策记录**：
 - 选择 OpenGL ES 而非 Vulkan：CameraX 兼容性更好、设备覆盖率更高、开发周期更短
-- 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小
+- 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小（GPUPixel 路径使用 `TextureView`，因 SDK 接口限制）
 - 输入/显示 Surface 解耦：避免 CameraX 与 View 生命周期抖动互相影响
-- 盒式模糊替代双边滤波：在性能与效果间取得平衡，满足实时性要求
+- 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档"盒式模糊"描述已纠正）
+- 单 Pass Shader 覆盖全部美颜效果：减少 FBO 切换开销，单帧延迟可控
+- GPUPixel 实验性集成保留 FaceDetector 独立路径：避免与 ML Kit 人脸点位格式冲突
 - `api/` 纯 Kotlin 接口层：为后续独立发布 AAR/Maven 做准备
 
 ---
