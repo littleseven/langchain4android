@@ -157,6 +157,9 @@ class GlBeautyPreviewProvider(
     private fun applyParams(params: BeautyParams) {
         val view = beautyPreviewView ?: return
 
+        // 色调滤镜矩阵独立于美颜开关，始终同步
+        view.colorMatrix = params.colorMatrix
+
         if (!params.enabled) {
             view.smoothingStrength = 0f
             view.whiteningStrength = 0f

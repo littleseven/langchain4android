@@ -508,6 +508,10 @@ class CameraPreviewRenderer {
         return kotlin.math.abs(sum) * 0.5f
     }
 
+    fun updateColorMatrix(matrix: FloatArray?) {
+        beautyRenderer.updateColorMatrix(matrix)
+    }
+
     fun setRenderMode(mode: Int) {
         beautyRenderer.setRenderMode(mode)
     }

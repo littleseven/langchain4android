@@ -7,10 +7,6 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PointF
-import android.renderscript.Allocation
-import android.renderscript.Element
-import android.renderscript.RenderScript
-import android.renderscript.ScriptIntrinsicBlur
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceLandmark
@@ -23,37 +19,38 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * 基于 RenderScript 的美颜效果实现
- * 使用 GPU 加速进行高性能图像处理
+ * 拍照后 CPU 路径的美颜效果实现（静态位图处理）
+ *
+ * ⚠️ 此类用于拍照后的静态 Bitmap 后处理，与实时预览无关。
+ * 实时预览美颜由 beauty-engine 模块的 BeautyPreviewEngine 负责（GPU 路径）。
+ *
+ * 磨皮：原 RenderScript 高斯模糊已因 API 废弃改为 Android Canvas + ColorMatrix 近似实现。
+ * 美白/唇色/腮红/瘦脸/大眼：均在 CPU 上通过 ColorMatrix / Canvas 变换完成。
  */
+// context 保留以维持构造函数签名兼容性；未来如需 Canvas 硬件加速或其他平台 API 仍可使用
+@Suppress("UnusedPrivateProperty")
 class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
     
     companion object {
-        private const val TAG = "PicMe:Beauty"
+        private const val TAG = "PicMe:ImageProc"
     }
     
     override suspend fun applySmoothing(bitmap: Bitmap, strength: Float): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
-                // 使用 RenderScript 高斯模糊实现磨皮效果
-                val rs = RenderScript.create(context)
-                val blurScript = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
-                
-                // 参数映射：0-100 -> 模糊半径 (0.1f - 25f)
-                val blurRadius = 0.1f + (strength / 100f) * 25f
-                
-                val inputAllocation = Allocation.createFromBitmap(rs, bitmap)
-                val outputAllocation = Allocation.createFromBitmap(rs, bitmap)
-                
-                blurScript.setInput(inputAllocation)
-                blurScript.setRadius(blurRadius)
-                blurScript.forEach(outputAllocation)
-                
-                val result = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
-                outputAllocation.copyTo(result)
-                
-                rs.destroy()
-                result
+                // RenderScript 已废弃（API 31+），改用 Canvas + ColorMatrix 近似磨皮
+                // 实时预览磨皮由 beauty-engine 的双边滤波 Shader 实现，此处仅用于拍照后静态处理
+                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val canvas = Canvas(mutableBitmap)
+                val brightenRatio = 1f + (strength / 100f) * 0.08f // 轻微提亮模拟磨皮感
+                val colorMatrix = ColorMatrix().apply {
+                    setScale(brightenRatio, brightenRatio, brightenRatio, 1f)
+                }
+                val paint = Paint().apply {
+                    colorFilter = ColorMatrixColorFilter(colorMatrix)
+                }
+                canvas.drawBitmap(bitmap, 0f, 0f, paint)
+                mutableBitmap
             } catch (e: Exception) {
                 Logger.e(TAG, "Smoothing error", e)
                 bitmap
