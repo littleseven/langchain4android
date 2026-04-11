@@ -21,6 +21,11 @@ package com.picme.beauty.api
  * - gpuContrast      : 对比度 0.0~4.0，1.0 为原始（对应 GPUPixel ContrastFilter contrast）
  * - gpuSaturation    : 饱和度 0.0~2.0，1.0 为原始（对应 GPUPixel SaturationFilter saturation）
  * - gpuWhiteBalance  : 色温 2000~10000K，5000 为原始（对应 GPUPixel WhiteBalanceFilter temperature）
+ *
+ * 风格特效参数（GPUPixel 路径专用，大美丽引擎忽略此字段）：
+ * - styleFilterClassName : GPUPixel 风格滤镜类名，null 表示无特效（对应 StyleFilter 枚举）
+ *                         合法值："ToonFilter" | "SmoothToonFilter" | "SketchFilter" |
+ *                                "PosterizeFilter" | "EmbossFilter" | "CrosshatchFilter" | null
  */
 data class BeautyParams(
     val enabled: Boolean = false,
@@ -36,7 +41,9 @@ data class BeautyParams(
     val gpuExposure: Float = 0f,
     val gpuContrast: Float = 1f,
     val gpuSaturation: Float = 1f,
-    val gpuWhiteBalance: Float = 5000f
+    val gpuWhiteBalance: Float = 5000f,
+    // 风格特效参数（GPUPixel 路径专用）
+    val styleFilterClassName: String? = null
 ) {
     companion object {
         val EMPTY = BeautyParams()

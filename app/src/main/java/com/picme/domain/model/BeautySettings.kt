@@ -1,5 +1,7 @@
 package com.picme.domain.model
 
+import com.picme.features.camera.model.StyleFilter
+
 /**
  * 美颜设置数据类
  * 包含所有美颜功能的参数配置
@@ -29,7 +31,10 @@ data class BeautySettings(
     val gpuExposure: Float = 0f,         // 曝光 -3.0~3.0，0 为原始
     val gpuContrast: Float = 50f,        // 对比度 0-200，50=原始(→ GPUPixel 1.0)
     val gpuSaturation: Float = 100f,     // 饱和度 0-200，100=原始(→ GPUPixel 1.0)
-    val gpuWhiteBalance: Float = 5000f   // 色温 2000~10000K，5000=原始
+    val gpuWhiteBalance: Float = 5000f,  // 色温 2000~10000K，5000=原始
+
+    // 风格特效滤镜（GPUPixel 路径专用，大美丽引擎忽略）
+    val styleFilter: StyleFilter = StyleFilter.NONE
 ) {
     /**
      * 检查是否有任何美颜参数被设置

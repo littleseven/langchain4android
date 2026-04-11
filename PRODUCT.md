@@ -87,7 +87,7 @@
         - **GPUPixel 可直接接入的能力（优先级排序）**：
             - **P0（本期）**：腮红（BlusherFilter，有完整 C++ 实现 + 内置 blusher.png mask，与唇色接入方式相同，3 行代码即可完成）。
             - **P1**：专业调色滤镜链（ExposureFilter、ContrastFilter、SaturationFilter、WhiteBalanceFilter），可替换当前专业模式依赖 CameraX CaptureRequest 的参数调节，以 GPU Shader 方式实时预览，延迟更低、效果更可控。
-            - **P2**：风格特效滤镜（ToonFilter、SketchFilter、PosterizeFilter 等），用于创意拍摄场景。
+            - **P2（本期）**：风格特效滤镜（ToonFilter 卡通、SketchFilter 素描、PosterizeFilter 色块、EmbossFilter 浮雕、CrosshatchFilter 交叉线），用于创意拍摄场景。接入方式与调色滤镜相同，追加到滤镜链末端（`WhiteBalanceFilter` 之后、`SinkSurface` 之前），每次只激活一个滤镜，互斥切换。
         - **GPUPixel 不具备、需自建的能力**：眉毛美化（无内置 mask）；多色号唇色切换（需动态替换纹理）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（有资源但无对应滤镜代码，需自建 LUTFilter）。
         - **滤镜技术演进**：当前基于自定义 GLSL Shader 实现，后续评估引入 **3D LUT（颜色查找表）** 技术——预计算 64×64×64 网格颜色变换，运行时三线性插值以接近零计算开销应用复杂滤镜效果，支持专业调色风格扩展。
         - **磨皮算法演进**：双边滤波（当前）→ 引导滤波（O(N) 复杂度，更优边缘保持，无光晕伪影）→ 多尺度细节分层（工业级，分频层独立处理后融合）。
@@ -101,11 +101,28 @@
         - **动态检测间隔**：默认开启，可在 280~450ms 区间自适应调整
         - **强度档位**：支持保守/平衡/激进三档，默认平衡
 - **滤镜系统**：
-    - **LEICA_CLASSIC**：强调暗部细节，低饱和度，轻微提高对比度（街头摄影、建筑、纪实）
-    - **FILM_GOLD**：暖色调，模拟柯达胶片质感，高光柔和（人像、旅行、美食）
-    - **COOL**：冷色调，清爽干净，轻微提高饱和度（风景、城市夜景）
-    - **WARM**：暖色调，温馨氛围，肤色自然（日落、室内、亲子）
-    - **性能要求**：实时预览流畅，内存占用合理，切换动画 < 200ms
+    - **色调滤镜（ColorMatrix，CPU）**：基于 ColorMatrix 实现，所有引擎可用：
+        - **LEICA_CLASSIC**：强调暗部细节，低饱和度，轻微提高对比度（街头摄影、建筑、纪实）
+        - **FILM_GOLD**：暖色调，模拟柯达胶片质感，高光柔和（人像、旅行、美食）
+        - **COOL**：冷色调，清爽干净，轻微提高饱和度（风景、城市夜景）
+        - **WARM**：暖色调，温馨氛围，肤色自然（日落、室内、亲子）
+        - **LEICA_VIBRANT**：提高饱和度，色彩鲜艳
+        - **LEICA_BW**：黑白效果，去除饱和度
+        - **FILM_FUJI**：冷调偏绿，模拟富士胶片质感
+        - **VINTAGE**：复古低饱和色调
+    - **风格特效滤镜（GPUPixel GPU，2026-04 新增）**：仅 GPUPixel 引擎模式生效，实时 GPU 渲染：
+        - **STYLE_NONE**：无风格特效（默认）
+        - **STYLE_TOON**：卡通化渲染（ToonFilter），将画面转换为类卡通漫画风格
+        - **STYLE_SKETCH**：素描效果（SketchFilter），黑白铅笔素描风格
+        - **STYLE_POSTERIZE**：色块化（PosterizeFilter），限制颜色层级创造海报效果
+        - **STYLE_EMBOSS**：浮雕效果（EmbossFilter），凸起质感雕刻风
+        - **STYLE_CROSSHATCH**：交叉线阴影（CrosshatchFilter），手绘版画风格
+    - **交互规范**：
+        - 风格滤镜在滤镜面板底部独立展示"风格特效"区域
+        - 风格特效与色调滤镜可同时生效（先应用色调，再应用风格特效）
+        - GPUPixel 引擎模式下风格特效实时渲染；非 GPUPixel 模式下风格特效入口置灰并提示"需开启 GPUPixel 引擎"
+        - 选中风格特效时右上角显示对应图标高亮
+    - **性能要求**：实时预览流畅，内存占用合理，切换动画 < 200ms；风格滤镜切换延迟 < 100ms
 - **OCR 智能服务**：
     - **定位**：无感后台服务，集成于拍摄流与相册查看器
     - **触发时机**：拍摄中检测到矩形边缘且拍摄完成后；相册内点击工具栏"提取文字"或长按文字区域

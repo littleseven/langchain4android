@@ -64,12 +64,13 @@ internal class GpupixelBeautyPreviewStrategy(
                 blushColorFamily = settings.blushColorFamily.coerceIn(0, 2)
             )
         }
-        // 将调色参数合并到 BeautyParams（调色始终生效，不依赖美颜开关）
+        // 将调色参数与风格特效参数合并到 BeautyParams（调色与风格特效始终生效，不依赖美颜开关）
         val params = beautyBase.copy(
             gpuExposure = settings.gpuExposure.coerceIn(-10f, 10f),
             gpuContrast = gpuContrast,
             gpuSaturation = gpuSaturation,
-            gpuWhiteBalance = settings.gpuWhiteBalance.coerceIn(2000f, 10000f)
+            gpuWhiteBalance = settings.gpuWhiteBalance.coerceIn(2000f, 10000f),
+            styleFilterClassName = settings.styleFilter.gpuFilterClassName
         )
         gpupixelProvider.updateFilters(params)
     }

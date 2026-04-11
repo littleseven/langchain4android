@@ -48,6 +48,7 @@ public class GPUPixelFilter extends GPUPixelSource implements GPUPixelSink {
     public static final String GLASS_SPHERE_FILTER = "GlassSphereFilter";
     public static final String SPHERE_REFRACTION_FILTER = "SphereRefractionFilter";
     public static final String EMBOSS_FILTER = "EmbossFilter";
+    public static final String CROSSHATCH_FILTER = "CrosshatchFilter";
 
     // Other processing filters
     public static final String LUMINANCE_RANGE_FILTER = "LuminanceRangeFilter";

@@ -62,6 +62,16 @@
     <string name="filter_leica_bw">Leica B&amp;W</string>
     <string name="filter_film_gold">Film Gold</string>
     <string name="filter_film_fuji">Film Fuji</string>
+
+    <!-- Style Effect Filters (GPUPixel) -->
+    <string name="style_filter_none">Original</string>
+    <string name="style_filter_toon">Toon</string>
+    <string name="style_filter_smooth_toon">Soft Toon</string>
+    <string name="style_filter_sketch">Sketch</string>
+    <string name="style_filter_posterize">Posterize</string>
+    <string name="style_filter_emboss">Emboss</string>
+    <string name="style_filter_crosshatch">Crosshatch</string>
+
     <string name="edit">Edit</string>
     <string name="save">Save</string>
     <string name="doodle">Doodle</string>
