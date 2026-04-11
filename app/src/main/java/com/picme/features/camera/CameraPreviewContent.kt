@@ -51,6 +51,7 @@ internal fun CameraPreviewContent(
     val isAnyPanelOpen = uiState.showFilterSelector || uiState.showRatioSelector ||
         uiState.showSceneSelector || uiState.showGridSelector
     val isBeautyPanelOpen = uiState.showBeautySelector
+    val isProPanelOpen = uiState.captureMode == MediaType.PRO
 
     Box(
         modifier = Modifier
@@ -58,8 +59,14 @@ internal fun CameraPreviewContent(
             .background(Color.Black)
             // 点击取景区空白处关闭所有面板
             .clickable(
-                enabled = isAnyPanelOpen || isBeautyPanelOpen,
-                onClick = actions.onDismissPanels
+                enabled = isAnyPanelOpen || isBeautyPanelOpen || isProPanelOpen,
+                onClick = {
+                    if (isProPanelOpen) {
+                        actions.onModeChange(MediaType.PHOTO)
+                    } else {
+                        actions.onDismissPanels()
+                    }
+                }
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -111,8 +118,12 @@ internal fun CameraPreviewContent(
 
         // Pro Mode Controls - 底部 Sheet 风格，与其他面板保持一致
         // 必须在 CameraBottomControls 之后声明，确保浮层盖在固定按钮之上
-        if (uiState.captureMode == MediaType.PRO && !isAnyPanelOpen) {
-            android.util.Log.d("ProMode", "=== ProModeControls RENDERING === exposure=${uiState.exposureCompensation}, range=${uiState.exposureRange}")
+        AnimatedVisibility(
+            visible = isProPanelOpen && !isAnyPanelOpen,
+            enter = slideInVertically(initialOffsetY = { offsetY -> offsetY }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { offsetY -> offsetY }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
             ProModeControls(
                 exposure = uiState.exposureCompensation,
                 exposureRange = uiState.exposureRange,
@@ -122,7 +133,6 @@ internal fun CameraPreviewContent(
                 onClose = { actions.onModeChange(MediaType.PHOTO) },
                 beautySettings = uiState.beautySettings,
                 onBeautySettingsChanged = actions.onBeautySettingsChanged,
-                modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
 

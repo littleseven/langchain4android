@@ -1497,8 +1497,6 @@ fun ProModeControls(
     onBeautySettingsChanged: (BeautySettings) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     val panelMaxHeight = screenHeight * PANEL_HEIGHT_RATIO
 
@@ -1537,15 +1535,19 @@ fun ProModeControls(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp)
-                    .padding(bottom = 16.dp),
+                    .padding(top = 0.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── 拖拽把手（点击可关闭面板）──
+                // ── 拖拽把手（点击关闭面板，消费事件避免透传到外层 Box）──
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onClose)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { onClose() }
                         .padding(top = 10.dp, bottom = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1558,99 +1560,37 @@ fun ProModeControls(
                 }
 
                 // ── 曝光控制 ──
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.exposure),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            fontSize = 12.sp
-                        )
-                        Text(
-                            text = if (exposure >= 0) "+$exposure" else "$exposure",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    LaunchedEffect(exposureRange) {
-                        android.util.Log.d("ProMode", "Exposure range: ${exposureRange.first} to ${exposureRange.last}, current: $exposure")
-                    }
-
-                    Slider(
-                        value = exposure.toFloat(),
-                        valueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat(),
-                        steps = if (exposureRange.last > exposureRange.first) {
-                            exposureRange.last - exposureRange.first - 1
-                        } else {
-                            0
-                        },
-                        onValueChange = { newValue ->
-                            android.util.Log.d("ProMode", "Exposure changed to: ${newValue.toInt()}")
-                            onExposureChange(newValue.toInt())
-                        },
-                        enabled = true,
-                        interactionSource = interactionSource,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.onSurface,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-                        ),
-                        thumb = {
-                            val thumbScale by animateFloatAsState(
-                                if (isPressed) 1.5f else 1f,
-                                label = "thumbScale"
-                            )
-                            Spacer(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .scale(thumbScale)
-                                    .background(MaterialTheme.colorScheme.onSurface, CircleShape)
-                                    .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            )
-                        },
-                        track = { _ ->
-                            val fraction = if (exposureRange.last > exposureRange.first) {
-                                (exposure.toFloat() - exposureRange.first.toFloat()) / (exposureRange.last.toFloat() - exposureRange.first.toFloat())
+                val exposureValueRange = exposureRange.first.toFloat()..exposureRange.last.toFloat()
+                val exposureDisplayText = if (exposure >= 0) "+$exposure" else "$exposure"
+                ProModeSlider(
+                    label = stringResource(R.string.exposure),
+                    valueText = exposureDisplayText,
+                    isValueChanged = exposure != 0,
+                    sliderContent = {
+                        Slider(
+                            value = exposure.toFloat(),
+                            valueRange = exposureValueRange,
+                            steps = if (exposureRange.last > exposureRange.first) {
+                                exposureRange.last - exposureRange.first - 1
                             } else {
-                                0f
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(fraction)
-                                        .fillMaxHeight()
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                listOf(
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                                    MaterialTheme.colorScheme.primary
-                                                )
-                                            )
-                                        )
+                                0
+                            },
+                            onValueChange = { newValue -> onExposureChange(newValue.toInt()) },
+                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                            thumb = { ProModeThumb() },
+                            track = { state ->
+                                ProModeTrack(
+                                    fraction = state.valueRange.run {
+                                        (exposure.toFloat() - start) / (endInclusive - start)
+                                            .coerceAtLeast(0.001f)
+                                    }.coerceIn(0f, 1f)
                                 )
                             }
-                        }
-                    )
-                }
+                        )
+                    }
+                )
 
-                // ── 白平衡控制 ──
+                // ── 白平衡控制（模式选择芯片）──
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1695,62 +1635,109 @@ fun ProModeControls(
                     }
                 }
 
+                // ── 分隔线 ──
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(0.5.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                )
+
                 // ── GPUPixel 专业调色（对比度 / 饱和度 / 色温） ──
                 // 仅在 GPUPixel 模式下有意义；其他模式下参数存储但引擎忽略
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 对比度
-                    ProColorSlider(
-                        label = stringResource(R.string.contrast),
-                        value = beautySettings.gpuContrast,
-                        valueRange = 0f..200f,
-                        defaultValue = 50f,
-                        onValueChange = { value ->
-                            onBeautySettingsChanged(beautySettings.copy(gpuContrast = value))
-                        }
-                    )
-                    // 饱和度
-                    ProColorSlider(
-                        label = stringResource(R.string.saturation),
-                        value = beautySettings.gpuSaturation,
-                        valueRange = 0f..200f,
-                        defaultValue = 100f,
-                        onValueChange = { value ->
-                            onBeautySettingsChanged(beautySettings.copy(gpuSaturation = value))
-                        }
-                    )
-                    // 色温（K）
-                    ProColorSlider(
-                        label = stringResource(R.string.color_temperature),
-                        value = beautySettings.gpuWhiteBalance,
-                        valueRange = 2000f..10000f,
-                        defaultValue = 5000f,
-                        onValueChange = { value ->
-                            onBeautySettingsChanged(beautySettings.copy(gpuWhiteBalance = value))
-                        }
-                    )
-                }
+                ProModeSlider(
+                    label = stringResource(R.string.contrast),
+                    valueText = if (kotlin.math.abs(beautySettings.gpuContrast - 50f) > 0.5f)
+                        beautySettings.gpuContrast.toInt().toString() else "--",
+                    isValueChanged = kotlin.math.abs(beautySettings.gpuContrast - 50f) > 0.5f,
+                    sliderContent = {
+                        Slider(
+                            value = beautySettings.gpuContrast,
+                            valueRange = 0f..200f,
+                            onValueChange = { value ->
+                                onBeautySettingsChanged(beautySettings.copy(gpuContrast = value))
+                            },
+                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                            thumb = { ProModeThumb() },
+                            track = { state ->
+                                ProModeTrack(
+                                    fraction = state.valueRange.run {
+                                        (beautySettings.gpuContrast - start) / (endInclusive - start)
+                                    }.coerceIn(0f, 1f)
+                                )
+                            }
+                        )
+                    }
+                )
+
+                ProModeSlider(
+                    label = stringResource(R.string.saturation),
+                    valueText = if (kotlin.math.abs(beautySettings.gpuSaturation - 100f) > 0.5f)
+                        beautySettings.gpuSaturation.toInt().toString() else "--",
+                    isValueChanged = kotlin.math.abs(beautySettings.gpuSaturation - 100f) > 0.5f,
+                    sliderContent = {
+                        Slider(
+                            value = beautySettings.gpuSaturation,
+                            valueRange = 0f..200f,
+                            onValueChange = { value ->
+                                onBeautySettingsChanged(beautySettings.copy(gpuSaturation = value))
+                            },
+                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                            thumb = { ProModeThumb() },
+                            track = { state ->
+                                ProModeTrack(
+                                    fraction = state.valueRange.run {
+                                        (beautySettings.gpuSaturation - start) / (endInclusive - start)
+                                    }.coerceIn(0f, 1f)
+                                )
+                            }
+                        )
+                    }
+                )
+
+                ProModeSlider(
+                    label = stringResource(R.string.color_temperature),
+                    valueText = if (kotlin.math.abs(beautySettings.gpuWhiteBalance - 5000f) > 50f)
+                        "${beautySettings.gpuWhiteBalance.toInt()}K" else "--",
+                    isValueChanged = kotlin.math.abs(beautySettings.gpuWhiteBalance - 5000f) > 50f,
+                    sliderContent = {
+                        Slider(
+                            value = beautySettings.gpuWhiteBalance,
+                            valueRange = 2000f..10000f,
+                            onValueChange = { value ->
+                                onBeautySettingsChanged(beautySettings.copy(gpuWhiteBalance = value))
+                            },
+                            modifier = Modifier.fillMaxWidth().height(36.dp),
+                            thumb = { ProModeThumb() },
+                            track = { state ->
+                                ProModeTrack(
+                                    fraction = state.valueRange.run {
+                                        (beautySettings.gpuWhiteBalance - start) / (endInclusive - start)
+                                    }.coerceIn(0f, 1f)
+                                )
+                            }
+                        )
+                    }
+                )
             }
         }
     }
 }
 
 /**
- * 专业调色滑块（ProMode 专用，精简版 BeautySlider）
+ * 专业模式统一滑块行布局：标签 + 值显示 + 滑块内容插槽
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProColorSlider(
+private fun ProModeSlider(
     label: String,
-    value: Float,
-    valueRange: ClosedFloatingPointRange<Float>,
-    defaultValue: Float,
-    onValueChange: (Float) -> Unit
+    valueText: String,
+    isValueChanged: Boolean,
+    sliderContent: @Composable () -> Unit
 ) {
-    val isChanged = kotlin.math.abs(value - defaultValue) > 0.5f
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1759,28 +1746,62 @@ private fun ProColorSlider(
             Text(
                 text = label,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
-                text = if (isChanged) "${value.toInt()}" else "--",
-                color = if (isChanged) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                text = valueText,
+                color = if (isValueChanged) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
         }
-        Slider(
-            value = value,
-            valueRange = valueRange,
-            onValueChange = onValueChange,
+        sliderContent()
+    }
+}
+
+/**
+ * 专业模式统一滑块 Thumb（带按压缩放动画）
+ */
+@Composable
+private fun ProModeThumb() {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val thumbScale by animateFloatAsState(if (isPressed) 1.4f else 1f, label = "thumbScale")
+    Spacer(
+        modifier = Modifier
+            .size(20.dp)
+            .scale(thumbScale)
+            .background(MaterialTheme.colorScheme.onSurface, CircleShape)
+            .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+    )
+}
+
+/**
+ * 专业模式统一滑块 Track
+ */
+@Composable
+private fun ProModeTrack(fraction: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(32.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.onSurface,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
-            )
+                .fillMaxWidth(fraction)
+                .fillMaxHeight()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            MaterialTheme.colorScheme.primary
+                        )
+                    )
+                )
         )
     }
 }
