@@ -15,6 +15,9 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
     COOL(R.string.filter_cool),
     WARM(R.string.filter_warm);
 
+    /**
+     * 返回 Compose 的 ColorMatrix（用于预览）
+     */
     fun getColorMatrix(): ColorMatrix {
         return when (this) {
             NONE -> ColorMatrix()
@@ -72,6 +75,76 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
             )
 
             WARM -> ColorMatrix(
+                floatArrayOf(
+                    1.2f, 0f, 0f, 0f, 0f,
+                    0f, 1.0f, 0f, 0f, 0f,
+                    0f, 0.5f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+        }
+    }
+
+    /**
+     * 返回 Android 原生的 ColorMatrix（用于拍照后处理）
+     */
+    fun toAndroidColorMatrix(): android.graphics.ColorMatrix {
+        return when (this) {
+            NONE -> android.graphics.ColorMatrix()
+            LEICA_CLASSIC -> android.graphics.ColorMatrix(
+                floatArrayOf(
+                    0.95f, 0f, 0f, 0f, 0f,
+                    0f, 0.9f, 0f, 0f, 0f,
+                    0f, 0f, 0.85f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            LEICA_VIBRANT -> android.graphics.ColorMatrix().apply {
+                setSaturation(1.3f)
+            }
+
+            LEICA_BW -> android.graphics.ColorMatrix().apply {
+                setSaturation(0f)
+            }
+
+            FILM_GOLD -> android.graphics.ColorMatrix(
+                floatArrayOf(
+                    1.1f, 0.1f, 0f, 0f, 0f,
+                    0.1f, 1.0f, 0f, 0f, 0f,
+                    0f, 0f, 0.8f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            FILM_FUJI -> android.graphics.ColorMatrix(
+                floatArrayOf(
+                    0.9f, 0f, 0.1f, 0f, 0f,
+                    0f, 1.1f, 0f, 0f, 0f,
+                    0.1f, 0f, 1.0f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            VINTAGE -> android.graphics.ColorMatrix(
+                floatArrayOf(
+                    0.9f, 0f, 0f, 0f, 0f,
+                    0f, 0.8f, 0f, 0f, 0f,
+                    0f, 0.5f, 0f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            COOL -> android.graphics.ColorMatrix(
+                floatArrayOf(
+                    0.8f, 0f, 0f, 0f, 0f,
+                    0f, 0.9f, 0f, 0f, 0f,
+                    0f, 0f, 1.2f, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f
+                )
+            )
+
+            WARM -> android.graphics.ColorMatrix(
                 floatArrayOf(
                     1.2f, 0f, 0f, 0f, 0f,
                     0f, 1.0f, 0f, 0f, 0f,

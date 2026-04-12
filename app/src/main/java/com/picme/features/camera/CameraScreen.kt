@@ -1095,6 +1095,7 @@ CameraPreviewContent(
                 selectedFilter = selectedFilter,
                 beautySettings = beautySettings,
                 lensFacing = lensFacing,
+                cachedFaces = FaceDetectionCache.getCachedFaces(),
                 onRecordingChanged = { updated -> recording = updated },
                 onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
             )

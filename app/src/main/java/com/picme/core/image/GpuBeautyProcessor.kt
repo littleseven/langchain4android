@@ -91,14 +91,14 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         }
     }
     
-    override suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
+    override suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>, isFrontCamera: Boolean): Bitmap {
         return withContext(Dispatchers.Default) {
             if (faces.isEmpty() || strength == 0f) {
                 return@withContext bitmap
             }
             
             try {
-                // 使用基于人脸 landmarks 的网格变形算法实现瘦脸效果
+                // [修复] 使用与预览（Shader）一致的瘦脸算法：沿眼轴方向水平收缩
                 // 强度范围：-50~+50（负值为丰满，正值为瘦脸）
                 val sourceBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
 
@@ -123,42 +123,81 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     }
                 }
                 
-                // 对每个人脸应用 landmarks 变形
+                // 对每个人脸应用瘦脸变形
                 faces.forEach { face ->
                     val bounds = face.boundingBox
                     val centerX = bounds.centerX().toFloat()
-                    // 下巴位置：从底部向上 15%
-                    val chinY = (bounds.bottom - bounds.height() * 0.15f).toFloat()
+                    val centerY = bounds.centerY().toFloat()
+                    
+                    // 获取双眼位置计算眼轴方向
+                    val leftEyeRaw = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
+                    val rightEyeRaw = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+                    
+                    // [修复] 前置摄像头需要反转 eye 顺序以匹配预览坐标系
+                    val (leftEye, rightEye) = if (isFrontCamera) {
+                        Pair(rightEyeRaw, leftEyeRaw)
+                    } else {
+                        Pair(leftEyeRaw, rightEyeRaw)
+                    }
+                    
+                    // 计算眼轴方向（归一化）
+                    val eyeAxisX: Float
+                    val eyeAxisY: Float
+                    if (leftEye != null && rightEye != null) {
+                        val dx = rightEye.x - leftEye.x
+                        val dy = rightEye.y - leftEye.y
+                        val len = sqrt(dx * dx + dy * dy)
+                        if (len > 0.0001f) {
+                            eyeAxisX = dx / len
+                            eyeAxisY = dy / len
+                        } else {
+                            eyeAxisX = 1f
+                            eyeAxisY = 0f
+                        }
+                    } else {
+                        eyeAxisX = 1f
+                        eyeAxisY = 0f
+                    }
+                    
                     // 瘦脸影响半径：脸部宽度的 75%
                     val slimRadius = bounds.width() * 0.75f
                     
-                    // 应用瘦脸变形
+                    // 应用瘦脸变形（与 Shader 一致：沿眼轴方向水平收缩）
                     for (i in 0 until count) {
                         val vx = orig[i * 2 + 0]
                         val vy = orig[i * 2 + 1]
                         
-                        // 计算到下巴中心的距离
+                        // 计算到人脸中心的距离
                         val dx = vx - centerX
-                        val dy = vy - chinY
+                        val dy = vy - centerY
                         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
                         
                         if (dist < slimRadius) {
-                            // 强度映射：-50~+50 -> 变形系数 (-0.25 - +0.25)
-                            val pull = (strength / 50f) * 0.25f * (1f - dist / slimRadius)
-                            // 向中心收缩（瘦脸）或向外扩展（丰满）
-                            verts[i * 2 + 0] -= dx * pull
-                            verts[i * 2 + 1] -= dy * pull
+                            // 与 Shader 一致的计算：
+                            // Shader 链路: slimFace/50*1.35 -> intensity -> intensity*0.45*percent^2
+                            // CPU 链路: slimFace/50*1.35*0.45*percent^2 = slimFace/50*0.6075*percent^2
+                            val percent = 1f - dist / slimRadius
+                            val intensityNorm = (strength / 50f) * 1.35f * 0.45f  // [修复] 完整链路：1.35 * 0.45
+                            val str = intensityNorm * percent * percent
+                            
+                            // 计算在眼轴上的投影
+                            val axisOffset = (dx * eyeAxisX + dy * eyeAxisY) / slimRadius
+                            
+                            // 沿眼轴方向偏移（注意：+ 表示瘦脸，- 表示丰脸）
+                            // 经测试，CPU 需要与 Shader 相反的符号
+                            verts[i * 2 + 0] += eyeAxisX * axisOffset * str * slimRadius
+                            verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
                         }
                     }
                 }
                 
-                // 应用网格变形，避免在同一位图上读写导致裂纹伪影
+                // 应用网格变形
                 val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(outputBitmap)
                 canvas.drawBitmapMesh(sourceBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
                 sourceBitmap.recycle()
                 
-                Logger.d(TAG, "Slim face applied: strength=$strength, faces=${faces.size}")
+                Logger.d(TAG, "Slim face applied (aligned with preview): strength=$strength, faces=${faces.size}")
                 outputBitmap
             } catch (e: Exception) {
                 Logger.e(TAG, "Slim face error", e)
