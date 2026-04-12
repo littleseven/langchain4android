@@ -879,6 +879,152 @@ onRgbaFrame()（ImageAnalysis 帧）
 
 ---
 
+## 附录 A：正向映射与反向映射（图像变形核心概念）
+
+### A.1 概述
+
+在图像变形（如瘦脸、大眼）实现中，**映射方向**是决定效果正确性的核心概念。大美丽引擎同时涉及两种映射方式：
+
+- **预览（Shader）**：反向映射（Backward Mapping）
+- **拍照（CPU）**：正向映射（Forward Mapping）
+
+### A.2 正向映射（Forward Mapping）
+
+**定义**：从源图像的像素/顶点出发，计算它在目标图像中的新位置。
+
+```
+源图像                    目标图像
+┌─────┐                  ┌─────┐
+│  A  │ ──映射计算──→    │  A' │
+│  B  │ ──映射计算──→    │  B' │
+└─────┘                  └─────┘
+```
+
+**特点**：
+- 直接移动源像素/顶点到新位置
+- 可能出现"空洞"（某些目标位置没有源像素映射过来）
+- CPU `drawBitmapMesh` 使用此方式
+
+**代码示例**（`GpuBeautyProcessor.kt` 瘦脸）：
+```kotlin
+// 遍历源图像的每个顶点
+for (i in 0 until count) {
+    val vx = orig[i * 2 + 0]  // 源顶点 X（像素坐标）
+    val vy = orig[i * 2 + 1]  // 源顶点 Y（像素坐标）
+    
+    // 计算变形后的新位置
+    val newX = vx + offsetX   // 正向：源位置 + 偏移 = 新位置
+    val newY = vy + offsetY
+    
+    verts[i * 2 + 0] = newX
+    verts[i * 2 + 1] = newY
+}
+```
+
+### A.3 反向映射（Backward Mapping）
+
+**定义**：从目标图像的像素出发，反向查找它在源图像中的对应位置。
+
+```
+源图像                    目标图像
+┌─────┐                  ┌─────┐
+│  A  │ ←──反向查找──    │  A' │
+│  B  │ ←──反向查找──    │  B' │
+└─────┘                  └─────┘
+```
+
+**特点**：
+- 遍历目标图像的每个像素
+- 不会出现空洞（每个目标像素都有来源）
+- GPU Shader 使用此方式（更适合并行）
+
+**代码示例**（`warp.glsl` 瘦脸）：
+```glsl
+// 遍历目标图像的每个像素（通过纹理坐标 uv）
+vec2 applySlimFace(vec2 uv, vec2 center, float radius, float intensity) {
+    vec2 dir = uv - center;           // 从中心指向当前像素（UV单位）
+    float dist = length(dir);
+    if (dist >= radius) return uv;
+    
+    vec2 eyeAxis = normalize(uRightEye - uLeftEye);
+    float percent = 1.0 - dist / radius;
+    float strength = intensity * percent * percent * 0.45;
+    float axisOffset = dot(dir, eyeAxis) / max(radius, 0.0001);
+    vec2 offset = eyeAxis * axisOffset * strength * radius;
+    
+    return uv - offset;  // 反向：目标位置 - 偏移 = 源位置
+}
+```
+
+### A.4 关键差异：坐标系
+
+| 特性 | Shader UV | CPU 像素 |
+|------|-----------|----------|
+| **范围** | 0.0 ~ 1.0 | 0 ~ width/height |
+| **单位** | 比例（归一化） | 像素 |
+| **原点** | 左上角 | 左上角 |
+| **Y轴方向** | 向下递增 | 向下递增 |
+
+### A.5 瘦脸效果中的符号差异
+
+**核心问题**：相同的数学公式，因映射方向不同，需要相反的符号。
+
+#### 瘦脸的数学本质
+瘦脸 = 将脸部像素向眼轴方向（水平）收缩
+
+#### 正向映射（CPU）
+```kotlin
+// 源顶点向眼轴方向移动（脸部变窄）
+verts[i] += eyeAxis * offset  // 正确：瘦脸
+verts[i] -= eyeAxis * offset  // 错误：丰脸
+```
+
+#### 反向映射（Shader）
+```glsl
+// 目标像素从内侧采样（脸部变窄）
+return uv - offset;  // 正确：瘦脸
+return uv + offset;  // 错误：丰脸
+```
+
+### A.6 符号对照表
+
+| 效果 | 正向映射（CPU） | 反向映射（Shader） |
+|------|----------------|-------------------|
+| **瘦脸**（向中心收缩） | `+` | `-` |
+| **丰脸**（向外扩展） | `-` | `+` |
+
+**记忆口诀**：**正向加，反向减；方向相反效果同。**
+
+### A.7 实际修复案例
+
+**问题**：大美丽瘦脸预览与拍照效果相反
+- 预览（Shader）：正强度 → 变胖
+- 拍照（CPU）：正强度 → 变瘦
+
+**修复**（`GpuBeautyProcessor.kt`）：
+```kotlin
+// 修复前（与 Shader 一致，但效果相反）
+verts[i * 2 + 0] -= eyeAxisX * axisOffset * str * slimRadius
+verts[i * 2 + 1] -= eyeAxisY * axisOffset * str * slimRadius
+
+// 修复后（符号反转，效果一致）
+verts[i * 2 + 0] += eyeAxisX * axisOffset * str * slimRadius
+verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
+```
+
+### A.8 调试技巧
+
+1. **小幅度测试**：先用 0.1 的小强度测试方向
+2. **可视化偏移**：用颜色表示偏移方向（红色=正，蓝色=负）
+3. **坐标打印**：在关键位置打印坐标，对比 Shader 和 CPU 结果
+
+### A.9 相关文件
+
+- `app/src/main/java/com/picme/core/image/GpuBeautyProcessor.kt` - 正向映射实现
+- `beauty-engine/src/main/assets/shaders/warp.glsl` - 反向映射实现
+
+---
+
 ## 11. 总结
 
 大美丽的核心是**构建一个高性能、可观测、可降级的 GPU 加速图像流处理管道**：
