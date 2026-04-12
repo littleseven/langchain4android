@@ -10,11 +10,9 @@ import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
 import com.picme.beauty.api.BeautyPerfStats
-import com.picme.beauty.api.IBeautyPipeline
-import com.picme.beauty.engine.gpupixel.GPUPixelPipelineAdapter
 
 /**
- * R Plan 预览视图：
+ * 大美丽预览视图：
  * - CameraX 输入 Surface 与显示 Surface 明确分离
  * - 显示层使用 SurfaceView，确保 Surface 创建可靠
  */
@@ -28,7 +26,6 @@ class BeautyPreviewView @JvmOverloads constructor(
     }
 
     private val renderer: CameraPreviewRenderer = CameraPreviewRenderer(context)
-    private var pipeline: IBeautyPipeline? = null // 统一管线接口
     private val surfaceView: SurfaceView = SurfaceView(context)
 
     private var cameraSurface: Surface? = null
@@ -97,23 +94,6 @@ class BeautyPreviewView @JvmOverloads constructor(
             field = value
             renderer.setRenderMode(value)
         }
-
-    /**
-     * 切换底层渲染引擎
-     * @param useGPUPixel true 使用 GPUPixel, false 使用自研 R Plan
-     */
-    fun switchEngine(useGPUPixel: Boolean) {
-        renderer.switchEngine(useGPUPixel)
-        if (useGPUPixel && pipeline !is GPUPixelPipelineAdapter) {
-            pipeline?.release()
-            pipeline = GPUPixelPipelineAdapter(context)
-            Log.d(TAG, "Switched to GPUPixel Engine")
-        } else if (!useGPUPixel && pipeline is GPUPixelPipelineAdapter) {
-            pipeline?.release()
-            pipeline = null
-            Log.d(TAG, "Switched to R Plan Engine")
-        }
-    }
 
     /**
      * 设置 Shader 调试模式
