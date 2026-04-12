@@ -2,6 +2,8 @@ package com.picme.beauty.egl
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.opengl.GLES20
+import android.opengl.GLES11Ext
 import android.opengl.Matrix
 import android.util.Log
 import android.view.View
@@ -128,36 +130,36 @@ class CameraPreviewRenderer(private val context: Context) {
 
     private fun createExternalTexture() {
         val textures = intArrayOf(0)
-        android.opengl.GLES20.glGenTextures(1, textures, 0)
+        GLES20.glGenTextures(1, textures, 0)
         textureId = textures[0]
 
         if (textureId == 0) {
             throw RuntimeException("Failed to create external texture, textureId=0")
         }
 
-        android.opengl.GLES20.glBindTexture(
-            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+        GLES20.glBindTexture(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
             textureId
         )
-        android.opengl.GLES20.glTexParameteri(
-            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-            android.opengl.GLES20.GL_TEXTURE_MIN_FILTER,
-            android.opengl.GLES20.GL_LINEAR
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_MIN_FILTER,
+            GLES20.GL_LINEAR
         )
-        android.opengl.GLES20.glTexParameteri(
-            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-            android.opengl.GLES20.GL_TEXTURE_MAG_FILTER,
-            android.opengl.GLES20.GL_LINEAR
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_MAG_FILTER,
+            GLES20.GL_LINEAR
         )
-        android.opengl.GLES20.glTexParameteri(
-            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-            android.opengl.GLES20.GL_TEXTURE_WRAP_S,
-            android.opengl.GLES20.GL_CLAMP_TO_EDGE
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_WRAP_S,
+            GLES20.GL_CLAMP_TO_EDGE
         )
-        android.opengl.GLES20.glTexParameteri(
-            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-            android.opengl.GLES20.GL_TEXTURE_WRAP_T,
-            android.opengl.GLES20.GL_CLAMP_TO_EDGE
+        GLES20.glTexParameteri(
+            GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+            GLES20.GL_TEXTURE_WRAP_T,
+            GLES20.GL_CLAMP_TO_EDGE
         )
         Log.d(TAG, "External texture created: $textureId")
     }
@@ -238,9 +240,9 @@ class CameraPreviewRenderer(private val context: Context) {
                             // GPUPixel 内部会处理渲染和 swapBuffers
                         } else {
                             // R Plan 自研引擎渲染路径
-                            android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
-                            android.opengl.GLES20.glBindTexture(
-                                android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+                            GLES20.glBindTexture(
+                                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
                                 textureId
                             )
 
@@ -250,9 +252,9 @@ class CameraPreviewRenderer(private val context: Context) {
                                 renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
                             val outputHeight =
                                 renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
-                            android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
-                            android.opengl.GLES20.glClearColor(0f, 0f, 0f, 1f)
-                            android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+                            GLES20.glViewport(0, 0, outputWidth, outputHeight)
+                            GLES20.glClearColor(0f, 0f, 0f, 1f)
+                            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
                             applyViewport(outputWidth, outputHeight)
                             beautyRenderer.setTexelSize(cameraInputWidth, cameraInputHeight)
@@ -380,7 +382,7 @@ class CameraPreviewRenderer(private val context: Context) {
         currentViewportWidth = viewportWidth
         currentViewportHeight = viewportHeight
 
-        android.opengl.GLES20.glViewport(x, y, viewportWidth, viewportHeight)
+        GLES20.glViewport(x, y, viewportWidth, viewportHeight)
     }
 
     private fun mapViewNormalizedToUv(x: Float, y: Float): Pair<Float, Float> {
@@ -570,7 +572,7 @@ class CameraPreviewRenderer(private val context: Context) {
         windowSurface = null
         if (textureId != -1) {
             val textures = intArrayOf(textureId)
-            android.opengl.GLES20.glDeleteTextures(1, textures, 0)
+            GLES20.glDeleteTextures(1, textures, 0)
             textureId = -1
         }
         surfaceTexture?.setOnFrameAvailableListener(null)
