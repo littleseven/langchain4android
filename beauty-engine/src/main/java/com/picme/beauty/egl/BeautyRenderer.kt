@@ -1,5 +1,6 @@
 package com.picme.beauty.egl
 
+import android.content.Context
 import android.opengl.GLES20
 import android.util.Log
 
@@ -10,7 +11,7 @@ import android.util.Log
  * 1. 使用美颜 Shader 渲染相机预览帧
  * 2. 支持实时调整磨皮、美白、大眼、瘦脸、唇色、腮红
  */
-class BeautyRenderer : GLRenderer() {
+class BeautyRenderer(private val context: Context) : GLRenderer() {
     companion object {
         private const val TAG = "PicMe:BeautyRenderer"
 
@@ -96,6 +97,9 @@ class BeautyRenderer : GLRenderer() {
     private var uCMRow3Location: Int = -1
     private var uCMOffsetLocation: Int = -1
     private var uHasColorMatrixLocation: Int = -1
+    private var uDebugModeLocation: Int = -1
+
+    private var debugMode: Int = 0
 
     fun setRenderMode(mode: Int) {
         if (renderMode != mode) {
@@ -231,11 +235,8 @@ class BeautyRenderer : GLRenderer() {
 
     override fun onCompileShader(): Boolean {
         val vertexShader = BeautyShaders.VERTEX_SHADER
-        val fragmentShader = when (renderMode) {
-            MODE_DEBUG_RED -> BeautyShaders.FRAGMENT_SHADER_DEBUG_RED
-            MODE_DEBUG_TEXTURE_R -> BeautyShaders.FRAGMENT_SHADER_DEBUG_TEXTURE_R
-            else -> BeautyShaders.FRAGMENT_SHADER_BEAUTY
-        }
+        // 始终使用模块化加载的 Shader，通过 uDebugMode 控制调试输出
+        val fragmentShader = ShaderModuleLoader.loadFullFragmentShader(context)
         Log.d(TAG, "Compiling shader: mode=$renderMode")
         return shaderProgram.compile(vertexShader, fragmentShader)
     }
@@ -309,6 +310,9 @@ class BeautyRenderer : GLRenderer() {
                 } else {
                     shaderProgram.setFloat("uHasColorMatrix", 0f)
                 }
+
+                // 传递调试模式
+                shaderProgram.setInt("uDebugMode", debugMode)
             }
         }
 
@@ -351,6 +355,15 @@ class BeautyRenderer : GLRenderer() {
         uCMRow3Location = shaderProgram.getUniformLocation("uCMRow3")
         uCMOffsetLocation = shaderProgram.getUniformLocation("uCMOffset")
         uHasColorMatrixLocation = shaderProgram.getUniformLocation("uHasColorMatrix")
+        uDebugModeLocation = shaderProgram.getUniformLocation("uDebugMode")
+    }
+
+    /**
+     * 设置调试模式
+     * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移, 3=显示唇部区域
+     */
+    fun setDebugMode(mode: Int) {
+        debugMode = mode
     }
 
     override fun release() {
