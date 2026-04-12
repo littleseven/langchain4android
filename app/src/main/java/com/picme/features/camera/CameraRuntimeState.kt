@@ -163,7 +163,8 @@ internal fun rememberCameraPanelState(): CameraPanelState {
 internal fun rememberPreviewRuntimeViews(
     context: Context,
     aspectRatio: Int,
-    beautyStrategy: BeautyStrategy
+    beautyStrategy: BeautyStrategy,
+    onGpuPixelLandmarksDetected: ((FloatArray?) -> Unit)? = null
 ): PreviewRuntimeViews {
     val previewView = remember {
         PreviewView(context).apply {
@@ -178,7 +179,8 @@ internal fun rememberPreviewRuntimeViews(
 
     val glPreviewProvider = rememberGlBeautyPreviewProvider(
         context = context,
-        beautyStrategy = beautyStrategy
+        beautyStrategy = beautyStrategy,
+        onGpuPixelLandmarksDetected = onGpuPixelLandmarksDetected
     )
 
     return PreviewRuntimeViews(

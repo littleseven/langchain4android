@@ -562,10 +562,26 @@ fun CameraContent(
     var exposureCompensation by remember { mutableIntStateOf(0) }
     var whiteBalanceMode by remember { mutableIntStateOf(0) }
 
+    var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
+    var previewFaceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
+    var lastFaceWarpDetectedAtMs by remember { mutableStateOf(0L) }
+
+    // GPUPixel 106 点回调：更新 faceWarpParams 用于调试 UI 显示
+    val onGpuPixelLandmarksDetected: (FloatArray?) -> Unit = { landmarks ->
+        if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
+            val gpuPixelLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks)
+            faceWarpParams = faceWarpParams.copy(
+                hasFace = gpuPixelLandmarks.hasFace,
+                gpuPixelLandmarks = gpuPixelLandmarks
+            )
+        }
+    }
+
     val previewRuntimeViews = rememberPreviewRuntimeViews(
         context = context,
         aspectRatio = aspectRatio,
-        beautyStrategy = beautyStrategy
+        beautyStrategy = beautyStrategy,
+        onGpuPixelLandmarksDetected = onGpuPixelLandmarksDetected
     )
     val previewView = previewRuntimeViews.previewView
     val glPreviewProvider = previewRuntimeViews.glPreviewProvider
@@ -620,10 +636,6 @@ fun CameraContent(
             previewRebindSignal += 1
         }
     }
-
-    var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
-    var previewFaceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
-    var lastFaceWarpDetectedAtMs by remember { mutableStateOf(0L) }
 
     // RD 快路径：参数变更立即下发到当前预览引擎，保证滑杆跟手性。
     LaunchedEffect(beautySettings, beautyStrategy) {

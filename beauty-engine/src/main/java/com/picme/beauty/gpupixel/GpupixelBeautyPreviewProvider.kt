@@ -47,7 +47,8 @@ import com.pixpark.gpupixel.GPUPixelSourceRawData
  * 当前为实验性集成，支持磨皮、美白、瘦脸、大眼、唇色、腮红。
  */
 class GpupixelBeautyPreviewProvider(
-    context: Context
+    context: Context,
+    private val onFaceLandmarksDetected: ((FloatArray?) -> Unit)? = null
 ) : BeautyPreviewEngine {
 
     companion object {
@@ -302,6 +303,10 @@ class GpupixelBeautyPreviewProvider(
                 faceReshapeFilter?.SetProperty("face_landmark", landmarks)
                 lipstickFilter?.SetProperty("face_landmark", landmarks)
                 blusherFilter?.SetProperty("face_landmark", landmarks)
+                // 回调 106 点数据用于调试 UI 显示
+                onFaceLandmarksDetected?.invoke(landmarks)
+            } else {
+                onFaceLandmarksDetected?.invoke(null)
             }
 
             sourceRawData?.ProcessData(
