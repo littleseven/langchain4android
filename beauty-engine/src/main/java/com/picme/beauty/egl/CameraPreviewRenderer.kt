@@ -1,5 +1,6 @@
 package com.picme.beauty.egl
 
+import android.content.Context
 import android.graphics.SurfaceTexture
 import android.opengl.Matrix
 import android.util.Log
@@ -15,7 +16,7 @@ import com.picme.beauty.api.BeautyPerfStats
  * 3. 使用 BeautyRenderer 渲染美颜效果
  * 4. 输出到 SurfaceView
  */
-class CameraPreviewRenderer {
+class CameraPreviewRenderer(private val context: Context) {
     companion object {
         private const val TAG = "PicMe:CameraPreview"
 
@@ -28,7 +29,7 @@ class CameraPreviewRenderer {
     private val eglCore = EGLCore()
     private var eglContext: android.opengl.EGLContext? = null
     private var windowSurface: WindowSurface? = null
-    private val beautyRenderer = BeautyRenderer()
+    private lateinit var beautyRenderer: BeautyRenderer
     private var renderThread: Thread? = null
 
     var isRendering = false
@@ -111,6 +112,7 @@ class CameraPreviewRenderer {
             }
         }
 
+        beautyRenderer = BeautyRenderer(context)
         beautyRenderer.onInit()
         eglCore.clearCurrent()
 
@@ -517,6 +519,10 @@ class CameraPreviewRenderer {
     }
 
     fun getPerfStats(): BeautyPerfStats = latestPerfStats
+
+    fun setDebugMode(mode: Int) {
+        beautyRenderer.setDebugMode(mode)
+    }
 
     fun getSurfaceTexture(): SurfaceTexture? = surfaceTexture
 

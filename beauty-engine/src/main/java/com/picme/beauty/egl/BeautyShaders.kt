@@ -34,23 +34,23 @@ object BeautyShaders {
         uniform float uBigEyes;
         uniform float uSlimFace;
         uniform vec2 uFaceCenter;
-uniform vec2 uLeftEye;
-uniform vec2 uRightEye;
-uniform vec2 uMouthCenter;
-uniform vec2 uMouthLeft;
-uniform vec2 uMouthRight;
-uniform vec2 uUpperLipCenter;
-uniform vec2 uLowerLipCenter;
-uniform vec2 uLipOuterContourPoints[20];
-uniform float uLipOuterContourCount;
-uniform vec2 uLipInnerContourPoints[20];
-uniform float uLipInnerContourCount;
-uniform float uFaceRadius;
+        uniform vec2 uLeftEye;
+        uniform vec2 uRightEye;
+        uniform vec2 uMouthCenter;
+        uniform vec2 uMouthLeft;
+        uniform vec2 uMouthRight;
+        uniform vec2 uUpperLipCenter;
+        uniform vec2 uLowerLipCenter;
+        uniform vec2 uLipOuterContourPoints[20];
+        uniform float uLipOuterContourCount;
+        uniform vec2 uLipInnerContourPoints[20];
+        uniform float uLipInnerContourCount;
+        uniform float uFaceRadius;
         uniform float uHasFace;
         uniform float uLipColor;
-uniform int uLipColorIndex;
-uniform float uBlush;
-uniform int uBlushColorFamily;
+        uniform int uLipColorIndex;
+        uniform float uBlush;
+        uniform int uBlushColorFamily;
         // 色调滤镜矩阵（4x5 ColorMatrix 分解为 4 行系数 + 1 个归一化平移量）
         // uCMRow0~3：每行的 RGBA 系数（行主序）
         // uCMOffset：平移量（第5列）已除以 255 归一化到 0~1
@@ -185,218 +185,218 @@ uniform int uBlushColorFamily;
         }
 
         float distancePointToSegment(vec2 point, vec2 a, vec2 b) {
-vec2 ab = b - a;
-float len2 = dot(ab, ab);
-if (len2 < 0.000001) {
-return length(point - a);
-}
-float t = clamp(dot(point - a, ab) / len2, 0.0, 1.0);
-vec2 projection = a + ab * t;
-return length(point - projection);
-}
+            vec2 ab = b - a;
+            float len2 = dot(ab, ab);
+            if (len2 < 0.000001) {
+                return length(point - a);
+            }
+            float t = clamp(dot(point - a, ab) / len2, 0.0, 1.0);
+            vec2 projection = a + ab * t;
+            return length(point - projection);
+        }
 
-float contourMaskFromOuterPolygon(vec2 uv) {
-if (uLipOuterContourCount < 6.0) {
-return 0.0;
-}
-bool inside = false;
-float minDist = 10.0;
-vec2 firstPoint = vec2(0.0, 0.0);
-vec2 prevPoint = vec2(0.0, 0.0);
-bool hasPrev = false;
-for (int i = 0; i < 20; i++) {
-if (float(i) >= uLipOuterContourCount) {
-continue;
-}
-vec2 current = uLipOuterContourPoints[i];
-if (!hasPrev) {
-firstPoint = current;
-prevPoint = current;
-hasPrev = true;
-continue;
-}
-bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
-(uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
-if (cross) {
-inside = !inside;
-}
-minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
-prevPoint = current;
-}
-if (hasPrev) {
-bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
-(uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
-if (cross) {
-inside = !inside;
-}
-minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
-}
-float feather = max(uFaceRadius * 0.025, 0.004);
-float edgeSoft = smoothstep(0.0, feather, minDist);
-return (inside ? 1.0 : 0.0) * edgeSoft;
-}
+        float contourMaskFromOuterPolygon(vec2 uv) {
+            if (uLipOuterContourCount < 6.0) {
+                return 0.0;
+            }
+            bool inside = false;
+            float minDist = 10.0;
+            vec2 firstPoint = vec2(0.0, 0.0);
+            vec2 prevPoint = vec2(0.0, 0.0);
+            bool hasPrev = false;
+            for (int i = 0; i < 20; i++) {
+                if (float(i) >= uLipOuterContourCount) {
+                    continue;
+                }
+                vec2 current = uLipOuterContourPoints[i];
+                if (!hasPrev) {
+                    firstPoint = current;
+                    prevPoint = current;
+                    hasPrev = true;
+                    continue;
+                }
+                bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
+                    (uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
+                if (cross) {
+                    inside = !inside;
+                }
+                minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
+                prevPoint = current;
+            }
+            if (hasPrev) {
+                bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
+                    (uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
+                if (cross) {
+                    inside = !inside;
+                }
+                minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
+            }
+            float feather = max(uFaceRadius * 0.025, 0.004);
+            float edgeSoft = smoothstep(0.0, feather, minDist);
+            return (inside ? 1.0 : 0.0) * edgeSoft;
+        }
 
-float contourMaskFromInnerPolygon(vec2 uv) {
-if (uLipInnerContourCount < 6.0) {
-return 0.0;
-}
-bool inside = false;
-float minDist = 10.0;
-vec2 firstPoint = vec2(0.0, 0.0);
-vec2 prevPoint = vec2(0.0, 0.0);
-bool hasPrev = false;
-for (int i = 0; i < 20; i++) {
-if (float(i) >= uLipInnerContourCount) {
-continue;
-}
-vec2 current = uLipInnerContourPoints[i];
-if (!hasPrev) {
-firstPoint = current;
-prevPoint = current;
-hasPrev = true;
-continue;
-}
-bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
-(uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
-if (cross) {
-inside = !inside;
-}
-minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
-prevPoint = current;
-}
-if (hasPrev) {
-bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
-(uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
-if (cross) {
-inside = !inside;
-}
-minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
-}
-float feather = max(uFaceRadius * 0.025, 0.004);
-float edgeSoft = smoothstep(0.0, feather, minDist);
-return (inside ? 1.0 : 0.0) * edgeSoft;
-}
+        float contourMaskFromInnerPolygon(vec2 uv) {
+            if (uLipInnerContourCount < 6.0) {
+                return 0.0;
+            }
+            bool inside = false;
+            float minDist = 10.0;
+            vec2 firstPoint = vec2(0.0, 0.0);
+            vec2 prevPoint = vec2(0.0, 0.0);
+            bool hasPrev = false;
+            for (int i = 0; i < 20; i++) {
+                if (float(i) >= uLipInnerContourCount) {
+                    continue;
+                }
+                vec2 current = uLipInnerContourPoints[i];
+                if (!hasPrev) {
+                    firstPoint = current;
+                    prevPoint = current;
+                    hasPrev = true;
+                    continue;
+                }
+                bool cross = ((prevPoint.y > uv.y) != (current.y > uv.y)) &&
+                    (uv.x < (current.x - prevPoint.x) * (uv.y - prevPoint.y) / (current.y - prevPoint.y + 0.000001) + prevPoint.x);
+                if (cross) {
+                    inside = !inside;
+                }
+                minDist = min(minDist, distancePointToSegment(uv, prevPoint, current));
+                prevPoint = current;
+            }
+            if (hasPrev) {
+                bool cross = ((prevPoint.y > uv.y) != (firstPoint.y > uv.y)) &&
+                    (uv.x < (firstPoint.x - prevPoint.x) * (uv.y - prevPoint.y) / (firstPoint.y - prevPoint.y + 0.000001) + prevPoint.x);
+                if (cross) {
+                    inside = !inside;
+                }
+                minDist = min(minDist, distancePointToSegment(uv, prevPoint, firstPoint));
+            }
+            float feather = max(uFaceRadius * 0.025, 0.004);
+            float edgeSoft = smoothstep(0.0, feather, minDist);
+            return (inside ? 1.0 : 0.0) * edgeSoft;
+        }
 
-vec3 blushColorByFamily(int family) {
-if (family == 1) return vec3(1.00, 0.62, 0.45);
-if (family == 2) return vec3(0.67, 0.31, 0.52);
-return vec3(1.00, 0.56, 0.67);
-}
+        vec3 blushColorByFamily(int family) {
+            if (family == 1) return vec3(1.00, 0.62, 0.45);
+            if (family == 2) return vec3(0.67, 0.31, 0.52);
+            return vec3(1.00, 0.56, 0.67);
+        }
 
-float lipColorMaskFromPixel(vec3 baseColor) {
-float luma = dot(baseColor, vec3(0.299, 0.587, 0.114));
-float maxChannel = max(baseColor.r, max(baseColor.g, baseColor.b));
-float minChannel = min(baseColor.r, min(baseColor.g, baseColor.b));
-float saturation = maxChannel - minChannel;
-float redness = baseColor.r - max(baseColor.g, baseColor.b);
-float redGate = smoothstep(0.02, 0.16, redness);
-float satGate = smoothstep(0.05, 0.24, saturation);
-float darkGate = 1.0 - smoothstep(0.78, 0.98, luma);
-return clamp(redGate * satGate * darkGate, 0.0, 1.0);
-}
+        float lipColorMaskFromPixel(vec3 baseColor) {
+            float luma = dot(baseColor, vec3(0.299, 0.587, 0.114));
+            float maxChannel = max(baseColor.r, max(baseColor.g, baseColor.b));
+            float minChannel = min(baseColor.r, min(baseColor.g, baseColor.b));
+            float saturation = maxChannel - minChannel;
+            float redness = baseColor.r - max(baseColor.g, baseColor.b);
+            float redGate = smoothstep(0.02, 0.16, redness);
+            float satGate = smoothstep(0.05, 0.24, saturation);
+            float darkGate = 1.0 - smoothstep(0.78, 0.98, luma);
+            return clamp(redGate * satGate * darkGate, 0.0, 1.0);
+        }
 
-float blushMaskFromCheeks(vec2 uv) {
-if (uHasFace < 0.5 || uBlush < 0.001) {
-return 0.0;
-}
-vec2 faceRight = normalize(uRightEye - uLeftEye);
-if (length(faceRight) < 0.0001) {
-faceRight = vec2(1.0, 0.0);
-}
-vec2 eyeCenter = (uLeftEye + uRightEye) * 0.5;
-vec2 mouthCenter = (uMouthLeft + uMouthRight) * 0.5;
-vec2 faceUp = normalize(eyeCenter - mouthCenter);
-if (length(faceUp) < 0.0001) {
-faceUp = vec2(-faceRight.y, faceRight.x);
-}
-float eyeWidth = max(length(uRightEye - uLeftEye), 0.12);
-float eyeMouthDist = max(length(eyeCenter - mouthCenter), uFaceRadius * 0.55);
-float faceAspect = clamp(eyeMouthDist / eyeWidth, 0.9, 1.8);
-float roundFace = clamp((1.28 - faceAspect) / 0.28, 0.0, 1.0);
-float longFace = clamp((faceAspect - 1.40) / 0.30, 0.0, 1.0);
-float appleBaseFactor = 0.34 + longFace * 0.05 - roundFace * 0.03;
-vec2 appleBase = eyeCenter - faceUp * max(eyeMouthDist * appleBaseFactor, uFaceRadius * 0.17);
-float cheekOffsetX = max(eyeWidth * (0.34 + roundFace * 0.05 - longFace * 0.02), uFaceRadius * (0.31 + roundFace * 0.03));
-float cheekOffsetY = max(eyeMouthDist * (0.06 + roundFace * 0.05 - longFace * 0.03), uFaceRadius * (0.03 + roundFace * 0.04 - longFace * 0.01));
-vec2 leftCheekCenter = appleBase - faceRight * cheekOffsetX + faceUp * cheekOffsetY;
-vec2 rightCheekCenter = appleBase + faceRight * cheekOffsetX + faceUp * cheekOffsetY;
-float radiusX = max(uFaceRadius * (0.128 + longFace * 0.018 + roundFace * 0.005), 0.05);
-float radiusY = max(uFaceRadius * (0.102 + roundFace * 0.010 - longFace * 0.008), 0.04);
-vec2 leftDelta = uv - leftCheekCenter;
-float leftX = dot(leftDelta, faceRight) / radiusX;
-float leftY = dot(leftDelta, faceUp) / radiusY;
-float leftEllipse = leftX * leftX + leftY * leftY;
-float leftMask = 1.0 - smoothstep(0.48, 1.0, leftEllipse);
-vec2 rightDelta = uv - rightCheekCenter;
-float rightX = dot(rightDelta, faceRight) / radiusX;
-float rightY = dot(rightDelta, faceUp) / radiusY;
-float rightEllipse = rightX * rightX + rightY * rightY;
-float rightMask = 1.0 - smoothstep(0.48, 1.0, rightEllipse);
-float centerGap = smoothstep(uFaceRadius * 0.18, uFaceRadius * 0.30, abs(dot(uv - eyeCenter, faceRight)));
-float mouthGap = smoothstep(uFaceRadius * 0.10, uFaceRadius * 0.23, dot(uv - mouthCenter, faceUp));
-float mouthCornerGapLeft = smoothstep(uFaceRadius * 0.08, uFaceRadius * 0.18, length(uv - uMouthLeft));
-float mouthCornerGapRight = smoothstep(uFaceRadius * 0.08, uFaceRadius * 0.18, length(uv - uMouthRight));
-float eyeSafeRadius = max(uFaceRadius * 0.17, eyeWidth * 0.28);
-float leftEyeGap = smoothstep(eyeSafeRadius * 0.58, eyeSafeRadius, length(uv - uLeftEye));
-float rightEyeGap = smoothstep(eyeSafeRadius * 0.58, eyeSafeRadius, length(uv - uRightEye));
-float underEyeGap = smoothstep(uFaceRadius * 0.04, uFaceRadius * 0.12, -dot(uv - eyeCenter, faceUp));
-float eyeGap = leftEyeGap * rightEyeGap * underEyeGap;
-float sideSplitLeft = smoothstep(-uFaceRadius * 0.02, uFaceRadius * 0.09, dot(leftCheekCenter - uv, faceRight));
-float sideSplitRight = smoothstep(-uFaceRadius * 0.02, uFaceRadius * 0.09, dot(uv - rightCheekCenter, faceRight));
-leftMask *= sideSplitLeft;
-rightMask *= sideSplitRight;
-float cheekMask = max(leftMask, rightMask) * centerGap * mouthGap * mouthCornerGapLeft * mouthCornerGapRight * eyeGap;
-return clamp(cheekMask, 0.0, 1.0);
-}
+        float blushMaskFromCheeks(vec2 uv) {
+            if (uHasFace < 0.5 || uBlush < 0.001) {
+                return 0.0;
+            }
+            vec2 faceRight = normalize(uRightEye - uLeftEye);
+            if (length(faceRight) < 0.0001) {
+                faceRight = vec2(1.0, 0.0);
+            }
+            vec2 eyeCenter = (uLeftEye + uRightEye) * 0.5;
+            vec2 mouthCenter = (uMouthLeft + uMouthRight) * 0.5;
+            vec2 faceUp = normalize(eyeCenter - mouthCenter);
+            if (length(faceUp) < 0.0001) {
+                faceUp = vec2(-faceRight.y, faceRight.x);
+            }
+            float eyeWidth = max(length(uRightEye - uLeftEye), 0.12);
+            float eyeMouthDist = max(length(eyeCenter - mouthCenter), uFaceRadius * 0.55);
+            float faceAspect = clamp(eyeMouthDist / eyeWidth, 0.9, 1.8);
+            float roundFace = clamp((1.28 - faceAspect) / 0.28, 0.0, 1.0);
+            float longFace = clamp((faceAspect - 1.40) / 0.30, 0.0, 1.0);
+            float appleBaseFactor = 0.34 + longFace * 0.05 - roundFace * 0.03;
+            vec2 appleBase = eyeCenter - faceUp * max(eyeMouthDist * appleBaseFactor, uFaceRadius * 0.17);
+            float cheekOffsetX = max(eyeWidth * (0.34 + roundFace * 0.05 - longFace * 0.02), uFaceRadius * (0.31 + roundFace * 0.03));
+            float cheekOffsetY = max(eyeMouthDist * (0.06 + roundFace * 0.05 - longFace * 0.03), uFaceRadius * (0.03 + roundFace * 0.04 - longFace * 0.01));
+            vec2 leftCheekCenter = appleBase - faceRight * cheekOffsetX + faceUp * cheekOffsetY;
+            vec2 rightCheekCenter = appleBase + faceRight * cheekOffsetX + faceUp * cheekOffsetY;
+            float radiusX = max(uFaceRadius * (0.128 + longFace * 0.018 + roundFace * 0.005), 0.05);
+            float radiusY = max(uFaceRadius * (0.102 + roundFace * 0.010 - longFace * 0.008), 0.04);
+            vec2 leftDelta = uv - leftCheekCenter;
+            float leftX = dot(leftDelta, faceRight) / radiusX;
+            float leftY = dot(leftDelta, faceUp) / radiusY;
+            float leftEllipse = leftX * leftX + leftY * leftY;
+            float leftMask = 1.0 - smoothstep(0.48, 1.0, leftEllipse);
+            vec2 rightDelta = uv - rightCheekCenter;
+            float rightX = dot(rightDelta, faceRight) / radiusX;
+            float rightY = dot(rightDelta, faceUp) / radiusY;
+            float rightEllipse = rightX * rightX + rightY * rightY;
+            float rightMask = 1.0 - smoothstep(0.48, 1.0, rightEllipse);
+            float centerGap = smoothstep(uFaceRadius * 0.18, uFaceRadius * 0.30, abs(dot(uv - eyeCenter, faceRight)));
+            float mouthGap = smoothstep(uFaceRadius * 0.10, uFaceRadius * 0.23, dot(uv - mouthCenter, faceUp));
+            float mouthCornerGapLeft = smoothstep(uFaceRadius * 0.08, uFaceRadius * 0.18, length(uv - uMouthLeft));
+            float mouthCornerGapRight = smoothstep(uFaceRadius * 0.08, uFaceRadius * 0.18, length(uv - uMouthRight));
+            float eyeSafeRadius = max(uFaceRadius * 0.17, eyeWidth * 0.28);
+            float leftEyeGap = smoothstep(eyeSafeRadius * 0.58, eyeSafeRadius, length(uv - uLeftEye));
+            float rightEyeGap = smoothstep(eyeSafeRadius * 0.58, eyeSafeRadius, length(uv - uRightEye));
+            float underEyeGap = smoothstep(uFaceRadius * 0.04, uFaceRadius * 0.12, -dot(uv - eyeCenter, faceUp));
+            float eyeGap = leftEyeGap * rightEyeGap * underEyeGap;
+            float sideSplitLeft = smoothstep(-uFaceRadius * 0.02, uFaceRadius * 0.09, dot(leftCheekCenter - uv, faceRight));
+            float sideSplitRight = smoothstep(-uFaceRadius * 0.02, uFaceRadius * 0.09, dot(uv - rightCheekCenter, faceRight));
+            leftMask *= sideSplitLeft;
+            rightMask *= sideSplitRight;
+            float cheekMask = max(leftMask, rightMask) * centerGap * mouthGap * mouthCornerGapLeft * mouthCornerGapRight * eyeGap;
+            return clamp(cheekMask, 0.0, 1.0);
+        }
 
-vec4 applyLipTint(vec4 color, vec2 uv) {
+        vec4 applyLipTint(vec4 color, vec2 uv) {
             if (uHasFace < 0.5 || uLipColor < 0.01) {
                 return color;
             }
-vec2 eyeAxis = normalize(uRightEye - uLeftEye);
-if (length(eyeAxis) < 0.0001) {
-    eyeAxis = vec2(1.0, 0.0);
-}
-vec2 mouthLeft = uMouthLeft;
-vec2 mouthRight = uMouthRight;
-vec2 upperLipCenter = uUpperLipCenter;
-vec2 lowerLipCenter = uLowerLipCenter;
-vec2 mouthCenter = (mouthLeft + mouthRight + upperLipCenter + lowerLipCenter) * 0.25;
-vec2 mouthAxisRaw = mouthRight - mouthLeft;
-float mouthAxisLen = length(mouthAxisRaw);
-vec2 mouthAxis = mouthAxisLen > 0.0001 ? normalize(mouthAxisRaw) : eyeAxis;
-vec2 mouthNormal = vec2(-mouthAxis.y, mouthAxis.x);
-if (dot(lowerLipCenter - upperLipCenter, mouthNormal) < 0.0) {
-    mouthNormal = -mouthNormal;
-}
-vec2 delta = uv - mouthCenter;
-float localX = dot(delta, mouthAxis);
-float localY = dot(delta, mouthNormal);
-float leftWidth = max(abs(dot(mouthCenter - mouthLeft, mouthAxis)) * 1.06, uFaceRadius * 0.11);
-float rightWidth = max(abs(dot(mouthRight - mouthCenter, mouthAxis)) * 1.06, uFaceRadius * 0.11);
-float activeHalfWidth = localX >= 0.0 ? rightWidth : leftWidth;
-float upperHeight = max(abs(dot(upperLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.038);
-float lowerHeight = max(abs(dot(lowerLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.05);
-float x = localX / max(activeHalfWidth, 0.0001);
-float upperY = max(localY, 0.0) / max(upperHeight, 0.0001);
-float lowerY = max(-localY, 0.0) / max(lowerHeight, 0.0001);
-float upperEllipse = x * x + upperY * upperY;
-float lowerEllipse = x * x + lowerY * lowerY;
-float upperMask = 1.0 - smoothstep(0.45, 1.0, upperEllipse);
-float lowerMask = 1.0 - smoothstep(0.45, 1.0, lowerEllipse);
-float cornerMask = 1.0 - smoothstep(0.92, 1.22, abs(x));
-float seamWidth = max((upperHeight + lowerHeight) * 0.08, uFaceRadius * 0.006);
-float sideSwitch = max((upperHeight + lowerHeight) * 0.06, uFaceRadius * 0.004);
-float upperSideMask = smoothstep(-sideSwitch, sideSwitch, localY);
-float lowerSideMask = smoothstep(-sideSwitch, sideSwitch, -localY);
-float seamFade = 1.0 - smoothstep(0.0, seamWidth, abs(localY));
-float splitMask = max(upperMask * upperSideMask, lowerMask * lowerSideMask);
-float fallbackMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
-float outerContourMask = contourMaskFromOuterPolygon(uv);
-float innerContourMask = contourMaskFromInnerPolygon(uv);
-float contourMask = clamp(outerContourMask - innerContourMask, 0.0, 1.0);
-float contourPreferredMask = max(contourMask, fallbackMask * 0.78);
-float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterContourCount));
+            vec2 eyeAxis = normalize(uRightEye - uLeftEye);
+            if (length(eyeAxis) < 0.0001) {
+                eyeAxis = vec2(1.0, 0.0);
+            }
+            vec2 mouthLeft = uMouthLeft;
+            vec2 mouthRight = uMouthRight;
+            vec2 upperLipCenter = uUpperLipCenter;
+            vec2 lowerLipCenter = uLowerLipCenter;
+            vec2 mouthCenter = (mouthLeft + mouthRight + upperLipCenter + lowerLipCenter) * 0.25;
+            vec2 mouthAxisRaw = mouthRight - mouthLeft;
+            float mouthAxisLen = length(mouthAxisRaw);
+            vec2 mouthAxis = mouthAxisLen > 0.0001 ? normalize(mouthAxisRaw) : eyeAxis;
+            vec2 mouthNormal = vec2(-mouthAxis.y, mouthAxis.x);
+            if (dot(lowerLipCenter - upperLipCenter, mouthNormal) < 0.0) {
+                mouthNormal = -mouthNormal;
+            }
+            vec2 delta = uv - mouthCenter;
+            float localX = dot(delta, mouthAxis);
+            float localY = dot(delta, mouthNormal);
+            float leftWidth = max(abs(dot(mouthCenter - mouthLeft, mouthAxis)) * 1.06, uFaceRadius * 0.11);
+            float rightWidth = max(abs(dot(mouthRight - mouthCenter, mouthAxis)) * 1.06, uFaceRadius * 0.11);
+            float activeHalfWidth = localX >= 0.0 ? rightWidth : leftWidth;
+            float upperHeight = max(abs(dot(upperLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.038);
+            float lowerHeight = max(abs(dot(lowerLipCenter - mouthCenter, mouthNormal)) * 2.0, uFaceRadius * 0.05);
+            float x = localX / max(activeHalfWidth, 0.0001);
+            float upperY = max(localY, 0.0) / max(upperHeight, 0.0001);
+            float lowerY = max(-localY, 0.0) / max(lowerHeight, 0.0001);
+            float upperEllipse = x * x + upperY * upperY;
+            float lowerEllipse = x * x + lowerY * lowerY;
+            float upperMask = 1.0 - smoothstep(0.45, 1.0, upperEllipse);
+            float lowerMask = 1.0 - smoothstep(0.45, 1.0, lowerEllipse);
+            float cornerMask = 1.0 - smoothstep(0.92, 1.22, abs(x));
+            float seamWidth = max((upperHeight + lowerHeight) * 0.08, uFaceRadius * 0.006);
+            float sideSwitch = max((upperHeight + lowerHeight) * 0.06, uFaceRadius * 0.004);
+            float upperSideMask = smoothstep(-sideSwitch, sideSwitch, localY);
+            float lowerSideMask = smoothstep(-sideSwitch, sideSwitch, -localY);
+            float seamFade = 1.0 - smoothstep(0.0, seamWidth, abs(localY));
+            float splitMask = max(upperMask * upperSideMask, lowerMask * lowerSideMask);
+            float fallbackMask = clamp(splitMask * cornerMask * (1.0 - 0.22 * seamFade), 0.0, 1.0);
+            float outerContourMask = contourMaskFromOuterPolygon(uv);
+            float innerContourMask = contourMaskFromInnerPolygon(uv);
+            float contourMask = clamp(outerContourMask - innerContourMask, 0.0, 1.0);
+            float contourPreferredMask = max(contourMask, fallbackMask * 0.78);
+            float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterContourCount));
             vec3 target = lipColorByIndex(uLipColorIndex);
             float colorMask = lipColorMaskFromPixel(color.rgb);
             float edgeAwareLipMask = lipMask * mix(0.42, 1.0, colorMask);
@@ -405,30 +405,30 @@ float lipMask = mix(fallbackMask, contourPreferredMask, step(6.0, uLipOuterConto
             return vec4(clamp(tinted, 0.0, 1.0), color.a);
         }
 
-void main() {
-vec2 warpedUv = warpCoord(vTextureCoord);
-float mask = skinMask(warpedUv);
-vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
-vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
-vec4 lipTinted = applyLipTint(whitened, warpedUv);
-float blushMask = blushMaskFromCheeks(warpedUv);
-float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
-vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
-vec3 makeupColor = mix(lipTinted.rgb, blushTarget, blushBlend);
-vec4 finalColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
+        void main() {
+            vec2 warpedUv = warpCoord(vTextureCoord);
+            float mask = skinMask(warpedUv);
+            vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
+            vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
+            vec4 lipTinted = applyLipTint(whitened, warpedUv);
+            float blushMask = blushMaskFromCheeks(warpedUv);
+            float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
+            vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
+            vec3 makeupColor = mix(lipTinted.rgb, blushTarget, blushBlend);
+            vec4 finalColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
 
-// 色调滤镜矩阵变换（uHasColorMatrix > 0.5 时生效）
-if (uHasColorMatrix > 0.5) {
-    vec4 src = finalColor;
-    float r = dot(uCMRow0, src) + uCMOffset.r;
-    float g = dot(uCMRow1, src) + uCMOffset.g;
-    float b = dot(uCMRow2, src) + uCMOffset.b;
-    float a = dot(uCMRow3, src) + uCMOffset.a;
-    finalColor = vec4(clamp(r, 0.0, 1.0), clamp(g, 0.0, 1.0), clamp(b, 0.0, 1.0), clamp(a, 0.0, 1.0));
-}
+            // 色调滤镜矩阵变换（uHasColorMatrix > 0.5 时生效）
+            if (uHasColorMatrix > 0.5) {
+                vec4 src = finalColor;
+                float r = dot(uCMRow0, src) + uCMOffset.r;
+                float g = dot(uCMRow1, src) + uCMOffset.g;
+                float b = dot(uCMRow2, src) + uCMOffset.b;
+                float a = dot(uCMRow3, src) + uCMOffset.a;
+                finalColor = vec4(clamp(r, 0.0, 1.0), clamp(g, 0.0, 1.0), clamp(b, 0.0, 1.0), clamp(a, 0.0, 1.0));
+            }
 
-gl_FragColor = finalColor;
-}
+            gl_FragColor = finalColor;
+        }
     """.trimIndent()
 
     val FRAGMENT_SHADER_DEBUG_RED = """

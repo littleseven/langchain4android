@@ -154,6 +154,14 @@ class GlBeautyPreviewProvider(
 
     override fun getPerfStats(): BeautyPerfStats = beautyPreviewView?.getPerfStats() ?: BeautyPerfStats.EMPTY
 
+    /**
+     * 设置 Shader 调试模式
+     * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移
+     */
+    fun setDebugMode(mode: Int) {
+        beautyPreviewView?.setDebugMode(mode)
+    }
+
     private fun applyParams(params: BeautyParams) {
         val view = beautyPreviewView ?: return
 

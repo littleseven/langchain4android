@@ -25,7 +25,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         private const val TAG = "PicMe:BeautyPreviewView"
     }
 
-    private val renderer: CameraPreviewRenderer = CameraPreviewRenderer()
+    private val renderer: CameraPreviewRenderer = CameraPreviewRenderer(context)
     private val surfaceView: SurfaceView = SurfaceView(context)
 
     private var cameraSurface: Surface? = null
@@ -94,6 +94,14 @@ class BeautyPreviewView @JvmOverloads constructor(
             field = value
             renderer.setRenderMode(value)
         }
+
+    /**
+     * 设置 Shader 调试模式
+     * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移
+     */
+    fun setDebugMode(mode: Int) {
+        renderer.setDebugMode(mode)
+    }
 
     init {
         surfaceView.layoutParams = LayoutParams(
