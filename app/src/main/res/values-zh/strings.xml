@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">PicMe</string>
+    <string name="app_name">觅影相机</string>
     <string name="camera">相机</string>
     <string name="gallery">相册</string>
     <string name="settings">设置</string>
