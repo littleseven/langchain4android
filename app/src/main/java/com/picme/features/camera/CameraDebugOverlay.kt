@@ -147,93 +147,97 @@ internal fun FaceDebugOverlay(
             )
         }
 
-        drawClosedContour(
-            points = contourPoints,
-            color = Color.Magenta.copy(alpha = 0.9f),
-            strokeWidth = 2.dp.toPx()
-        )
-        drawClosedContour(
-            points = leftEyeContourPoints,
-            color = Color.Yellow.copy(alpha = 0.95f),
-            strokeWidth = 2.dp.toPx()
-        )
-        drawClosedContour(
-            points = rightEyeContourPoints,
-            color = Color.Green.copy(alpha = 0.95f),
-            strokeWidth = 2.dp.toPx()
-        )
-
-        drawCircle(
-            color = Color(0xFFFF6D00).copy(alpha = 0.12f),
-            radius = radiusPx,
-            center = center,
-            style = Fill
-        )
-        drawCircle(
-            color = Color(0xFFFF6D00).copy(alpha = 0.18f),
-            radius = radiusPx * 0.58f,
-            center = center,
-            style = Fill
-        )
-        drawCircle(
-            color = Color.Cyan.copy(alpha = 0.75f),
-            radius = radiusPx,
-            center = center,
-            style = Stroke(width = 2.dp.toPx())
-        )
-
-        val debugWarpAmplifier = 6f
-        val yRatios = listOf(-0.45f, -0.2f, 0f, 0.2f, 0.45f)
-        yRatios.forEach { ratio ->
-            val sampleY = (centerNorm.y + faceRadiusNorm * ratio).coerceIn(0f, 1f)
-            val leftSample = Offset(
-                x = (centerNorm.x - faceRadiusNorm * 0.72f).coerceIn(0f, 1f),
-                y = sampleY
+        // 瘦脸控制点：仅在 ML Kit 模式（有 contourPoints）下绘制，GPUPixel 模式下跳过
+        val isMlKitMode = faceWarpParams.contourPoints.isNotEmpty()
+        if (isMlKitMode) {
+            drawClosedContour(
+                points = contourPoints,
+                color = Color.Magenta.copy(alpha = 0.9f),
+                strokeWidth = 2.dp.toPx()
             )
-            val rightSample = Offset(
-                x = (centerNorm.x + faceRadiusNorm * 0.72f).coerceIn(0f, 1f),
-                y = sampleY
+            drawClosedContour(
+                points = leftEyeContourPoints,
+                color = Color.Yellow.copy(alpha = 0.95f),
+                strokeWidth = 2.dp.toPx()
             )
-            listOf(leftSample, rightSample).forEach { samplePoint ->
-                val warpedPoint = applySlimFaceDebug(samplePoint)
-                val sampleCanvasPoint = toCanvasPoint(samplePoint)
-                val warpedCanvasPoint = toCanvasPoint(warpedPoint)
-                val debugWarpedCanvasPoint = Offset(
-                    x = (
-                        sampleCanvasPoint.x +
-                            (warpedCanvasPoint.x - sampleCanvasPoint.x) * debugWarpAmplifier
-                        ).coerceIn(0f, size.width),
-                    y = (
-                        sampleCanvasPoint.y +
-                            (warpedCanvasPoint.y - sampleCanvasPoint.y) * debugWarpAmplifier
-                        ).coerceIn(0f, size.height)
-                )
+            drawClosedContour(
+                points = rightEyeContourPoints,
+                color = Color.Green.copy(alpha = 0.95f),
+                strokeWidth = 2.dp.toPx()
+            )
 
-                drawLine(
-                    color = Color(0xFFFF6D00),
-                    start = sampleCanvasPoint,
-                    end = debugWarpedCanvasPoint,
-                    strokeWidth = 3.dp.toPx()
+            drawCircle(
+                color = Color(0xFFFF6D00).copy(alpha = 0.12f),
+                radius = radiusPx,
+                center = center,
+                style = Fill
+            )
+            drawCircle(
+                color = Color(0xFFFF6D00).copy(alpha = 0.18f),
+                radius = radiusPx * 0.58f,
+                center = center,
+                style = Fill
+            )
+            drawCircle(
+                color = Color.Cyan.copy(alpha = 0.75f),
+                radius = radiusPx,
+                center = center,
+                style = Stroke(width = 2.dp.toPx())
+            )
+
+            val debugWarpAmplifier = 6f
+            val yRatios = listOf(-0.45f, -0.2f, 0f, 0.2f, 0.45f)
+            yRatios.forEach { ratio ->
+                val sampleY = (centerNorm.y + faceRadiusNorm * ratio).coerceIn(0f, 1f)
+                val leftSample = Offset(
+                    x = (centerNorm.x - faceRadiusNorm * 0.72f).coerceIn(0f, 1f),
+                    y = sampleY
                 )
-                drawCircle(
-                    color = Color(0xFFFF6D00),
-                    radius = 3.dp.toPx(),
-                    center = sampleCanvasPoint
+                val rightSample = Offset(
+                    x = (centerNorm.x + faceRadiusNorm * 0.72f).coerceIn(0f, 1f),
+                    y = sampleY
                 )
-                drawCircle(
-                    color = Color(0xFF00E5FF),
-                    radius = 4.dp.toPx(),
-                    center = debugWarpedCanvasPoint
-                )
+                listOf(leftSample, rightSample).forEach { samplePoint ->
+                    val warpedPoint = applySlimFaceDebug(samplePoint)
+                    val sampleCanvasPoint = toCanvasPoint(samplePoint)
+                    val warpedCanvasPoint = toCanvasPoint(warpedPoint)
+                    val debugWarpedCanvasPoint = Offset(
+                        x = (
+                            sampleCanvasPoint.x +
+                                (warpedCanvasPoint.x - sampleCanvasPoint.x) * debugWarpAmplifier
+                            ).coerceIn(0f, size.width),
+                        y = (
+                            sampleCanvasPoint.y +
+                                (warpedCanvasPoint.y - sampleCanvasPoint.y) * debugWarpAmplifier
+                            ).coerceIn(0f, size.height)
+                    )
+
+                    drawLine(
+                        color = Color(0xFFFF6D00),
+                        start = sampleCanvasPoint,
+                        end = debugWarpedCanvasPoint,
+                        strokeWidth = 3.dp.toPx()
+                    )
+                    drawCircle(
+                        color = Color(0xFFFF6D00),
+                        radius = 3.dp.toPx(),
+                        center = sampleCanvasPoint
+                    )
+                    drawCircle(
+                        color = Color(0xFF00E5FF),
+                        radius = 4.dp.toPx(),
+                        center = debugWarpedCanvasPoint
+                    )
+                }
             }
-        }
 
-        drawLine(
-            color = Color.White.copy(alpha = 0.8f),
-            start = leftEye,
-            end = rightEye,
-            strokeWidth = 1.5.dp.toPx()
-        )
+            drawLine(
+                color = Color.White.copy(alpha = 0.8f),
+                start = leftEye,
+                end = rightEye,
+                strokeWidth = 1.5.dp.toPx()
+            )
+        }
 
         // 绘制所有 133 点 Contour（调试用，ML Kit 模式）
         drawAllContours(faceWarpParams, ::toCanvasPoint)
