@@ -10,6 +10,7 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
+import com.google.mlkit.vision.face.Face
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
@@ -29,6 +30,7 @@ internal fun handleCaptureClick(
     selectedFilter: FilterType,
     beautySettings: BeautySettings,
     lensFacing: Int,
+    cachedFaces: List<Face> = emptyList(),
     onRecordingChanged: (Recording?) -> Unit,
     onIsRecordingChanged: (Boolean) -> Unit
 ) {
@@ -41,7 +43,8 @@ internal fun handleCaptureClick(
                 filter = selectedFilter,
                 beauty = beautySettings,
                 lensFacing = lensFacing,
-                mode = captureMode
+                mode = captureMode,
+                cachedFaces = cachedFaces
             )
         }
         return

@@ -43,9 +43,10 @@ interface BeautyProcessor {
      * @param bitmap 原始图像
      * @param strength 强度 -50~+50 (负值为丰满)
      * @param faces 人脸检测结果（用于 landmarks 定位）
+     * @param isFrontCamera 是否为前置摄像头（影响 eye 坐标方向）
      * @return 处理后的图像
      */
-    suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
+    suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>, isFrontCamera: Boolean = false): Bitmap
     
     /**
      * 应用大眼效果

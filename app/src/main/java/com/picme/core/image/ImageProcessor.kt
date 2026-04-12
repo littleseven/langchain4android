@@ -47,7 +47,8 @@ interface ImageProcessor {
         source: Bitmap,
         filter: FilterType,
         beauty: BeautySettings,
-        faces: List<Face>
+        faces: List<Face>,
+        lensFacing: Int = CameraSelector.LENS_FACING_BACK
     ) : Bitmap
 
     fun takePhoto(
@@ -57,7 +58,8 @@ interface ImageProcessor {
         filter: FilterType,
         beauty: BeautySettings,
         lensFacing: Int,
-        mode: MediaType = MediaType.PHOTO
+        mode: MediaType = MediaType.PHOTO,
+        cachedFaces: List<Face> = emptyList()
     )
 
     fun startVideoRecording(
@@ -419,7 +421,8 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         source: Bitmap,
         filter: FilterType,
         beauty: BeautySettings,
-        faces: List<Face>
+        faces: List<Face>,
+        lensFacing: Int
     ) : Bitmap {
         // [DEBUG] 记录传入的参数
         Logger.d("ImageProcessor", "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
@@ -451,7 +454,8 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     Logger.d("ImageProcessor", "Processing face beautification for ${faces.size} faces")
                     if (beauty.slimFace != 0f) {
                         Logger.d("ImageProcessor", "Applying slim face: ${beauty.slimFace}")
-                        processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces)
+                        val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
+                        processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces, isFrontCamera)
                     }
                     if (beauty.bigEyes > 0f) {
                         Logger.d("ImageProcessor", "Applying big eyes: ${beauty.bigEyes}")
@@ -504,7 +508,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
             val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(output)
             val paint = Paint().apply {
-                colorFilter = ColorMatrixColorFilter(ColorMatrix(filter.getColorMatrix().values))
+                colorFilter = ColorMatrixColorFilter(filter.toAndroidColorMatrix())
             }
             canvas.drawBitmap(processed, 0f, 0f, paint)
             output
@@ -518,9 +522,10 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         filter: FilterType,
         beauty: BeautySettings,
         lensFacing: Int,
-        mode: MediaType
+        mode: MediaType,
+        cachedFaces: List<Face>
     ) {
-        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing")
+        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}")
         
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         imageCapture.takePicture(
@@ -568,6 +573,30 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
 
                     Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
+                    // [方案 B 变种] 优先使用缓存的人脸检测结果进行美颜（磨皮/美白/瘦脸/大眼）
+                    // 但妆容（唇色/腮红/眉毛）需要在拍照后的图片上重新检测人脸，以确保坐标正确
+                    if (cachedFaces.isNotEmpty()) {
+                        Logger.d("ImageProcessor", "Using cached faces from preview: ${cachedFaces.size} faces")
+                        
+                        // 检查是否需要妆容处理
+                        val needMakeup = beauty.lipColor > 0f || beauty.blush > 0f || beauty.eyebrow > 0f
+                        
+                        if (!needMakeup) {
+                            // 不需要妆容，直接使用缓存的人脸进行美颜处理
+                            val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, cachedFaces, lensFacing)
+                            val faceId = if (cachedFaces.isNotEmpty()) "person_${cachedFaces.size}" else null
+                            saveBitmapToMediaStore(
+                                context, finalBitmap, name, viewModel, cachedFaces.isNotEmpty(), faceId, mode
+                            )
+                            return
+                        }
+                        
+                        // 需要妆容，必须在拍照后的图片上重新检测人脸
+                        Logger.d("ImageProcessor", "Makeup required, performing detection on captured photo")
+                    }
+
+                    // 没有缓存时，进行实时检测（兜底）
+                    Logger.d("ImageProcessor", "No cached faces, performing real-time detection")
                 val faceDetector = FaceDetection.getClient(
                     FaceDetectorOptions.Builder()
                         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
@@ -581,7 +610,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     faceDetector.process(inputImage)
                         .addOnSuccessListener { faces ->
                             Logger.d("ImageProcessor", "Face detection success: ${faces.size} faces found")
-                            val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces)
+                            val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces, lensFacing)
                             // Simple Mock Face ID Logic: Use face count as a temporary "person group" id
                             val faceId = if (faces.isNotEmpty()) "person_${faces.size}" else null
                             saveBitmapToMediaStore(

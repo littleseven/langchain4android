@@ -42,6 +42,9 @@ internal fun handleImageAnalysisFrame(
 
         faceDetector.process(image)
             .addOnSuccessListener { faces ->
+                // [方案 B 变种] 缓存人脸检测结果供拍照使用
+                FaceDetectionCache.updateFaces(faces)
+                
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val bounds = face.boundingBox

@@ -2,8 +2,8 @@
 
 **版本**：6.0
 **状态**：实施中（大美丽 BIG_BEAUTY 主引擎 + GPUPixel 实验性备选）
-**最后更新**：2026-04-12（新增第 8 章：双引擎协作设计，系统性记录两引擎能力边界、帧数据流差异与最佳实践）
-**技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + GPUPixel 实验性集成
+**最后更新**：2026-04-12（新增拍照处理架构：方案 B 变种实现，长期向方案 A 演进）
+**技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + 拍照 CPU/GPU 混合处理
 
 ---
 
@@ -209,7 +209,86 @@ CameraPreviewStrategies.rememberPreviewStrategyBundle()
                 → GPUPixel 滤镜链（C++ JNI）
 ```
 
-### 2.4 核心组件职责
+### 2.4 拍照处理架构（2026-04 新增）
+
+#### 设计决策：方案 B 变种（长期向方案 A 演进）
+
+**背景**：预览和拍照效果不一致是行业难题。预览使用 GPU Shader 实时渲染，拍照后处理使用 CPU Canvas，算法实现不同导致效果差异。
+
+**竞品路线参考**：
+- 美图/B612/抖音：**方案 A**（全 GPU 管线，效果 100% 一致）
+- 轻颜/小米：**方案 B**（预览 GPU + 拍照 CPU 精修，略有差异）
+
+**PicMe 当前路线**：
+
+```
+当前（方案 B 变种）：
+预览: CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
+拍照: CameraX → ImageCapture → Bitmap → CPU 处理(Canvas) → 保存
+
+长期目标（方案 A）：
+预览: CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
+拍照: CameraX → ImageCapture → GPU 离屏渲染 → 保存
+```
+
+#### 方案 B 变种核心设计
+
+**目标**：在保持 CPU 处理灵活性的前提下，最大化复用预览阶段的参数和算法逻辑，减少预览/拍照差异。
+
+**关键优化点**：
+
+1. **人脸检测复用**
+   - 预览阶段 ML Kit 检测结果缓存
+   - 拍照时直接使用缓存的 `FaceWarpParams`，避免重新检测
+   - 减少检测差异导致的美颜效果不一致
+
+2. **参数统一转换**
+   - 提取 `BeautySettings` → `BeautyParams` 公共转换逻辑
+   - 预览和拍照共用同一套参数转换，避免数值差异
+
+3. **算法核心抽象**
+   - 磨皮/美白/瘦脸等算法的核心数值计算抽象为纯函数
+   - GPU Shader 和 CPU Canvas 共用同一套数值逻辑
+
+4. **效果对比调试**
+   - 开发模式下同时保存"预览截图"和"拍照结果"
+   - 便于对比差异，持续优化
+
+#### 架构分层
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  UI Layer (CameraScreen)                                │
+│  ├─ 预览: BeautyPreviewView (OpenGL ES 实时渲染)        │
+│  └─ 拍照: ImageProcessor.takePhoto() (CPU 后处理)       │
+└─────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────┐
+│  公共层 (beauty-core，待提取)                            │
+│  ├─ BeautyParamsConverter (参数统一转换)                │
+│  ├─ FaceWarpParamsCache (人脸检测结果缓存)              │
+│  └─ BeautyAlgorithmCore (算法数值核心)                  │
+└─────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────┐
+│  实现层                                                  │
+│  ├─ 预览: BeautyRenderer (GPU Shader 实现)              │
+│  └─ 拍照: GpuBeautyProcessor (CPU Canvas 实现)          │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 演进路线
+
+| 阶段 | 时间 | 目标 | 关键动作 | 状态 |
+|------|------|------|----------|------|
+| **当前** | 2026-04 | 方案 B 变种落地 | 人脸检测复用、参数统一转换 | ✅ 已完成 |
+| **Phase 1** | 2-4 周 | 减少差异 | 提取公共算法核心、效果对比调试 | 🔄 进行中 |
+| **Phase 2** | 4-8 周 | 方案 A 准备 | GPU 离屏渲染基础设施 | ⏳ 待启动 |
+| **Phase 3** | 8-12 周 | 方案 A 落地 | 拍照迁移到 GPU，全管线统一 | ⏳ 待启动 |
+
+---
+
+### 2.5 核心组件职责
 
 #### BeautyPreviewView
 
@@ -364,6 +443,8 @@ while (isRendering && !Thread.interrupted()) {
 - [x] `BeautyStrategy.GPUPIXEL` 实验性集成落地，`GpupixelBeautyPreviewProvider` 封装 GPUPixel C++ 滤镜链。
 - [x] `BeautyPreviewEngine` 组合接口统一 `BeautyPreviewProvider` + `BeautyPreviewCapability`，App 层通过接口访问。
 - [x] `BeautyStrategy`、`FaceDetectIntervalProfile` 等枚举迁移至 `domain.model.UserPreferences`，实现分层解耦。
+- [x] **方案 B 变种**：`FaceDetectionCache` 实现预览/拍照人脸检测复用，减少效果差异。
+- [x] **滤镜一致性修复**：`FilterType` 新增 `toAndroidColorMatrix()` 方法，修复 Compose ColorMatrix 与 Android ColorMatrix 类型不兼容导致的滤镜失效问题。
 
 ### 4.2 双引擎现状
 
