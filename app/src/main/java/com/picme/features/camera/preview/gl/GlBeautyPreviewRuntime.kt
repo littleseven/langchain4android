@@ -28,11 +28,12 @@ import com.picme.domain.model.BeautyStrategy
 @Composable
 internal fun rememberGlBeautyPreviewProvider(
     context: Context,
-    beautyStrategy: BeautyStrategy
+    beautyStrategy: BeautyStrategy,
+    onGpuPixelLandmarksDetected: ((FloatArray?) -> Unit)? = null
 ): BeautyPreviewEngine {
     // remember(beautyStrategy)：key 变化时同帧创建新 provider，保证类型与策略一致
     val provider = remember(beautyStrategy) {
-        createProvider(context, beautyStrategy).also {
+        createProvider(context, beautyStrategy, onGpuPixelLandmarksDetected).also {
             Logger.d("Camera", "Beauty provider created: ${beautyStrategy.name}")
         }
     }
@@ -51,10 +52,17 @@ internal fun rememberGlBeautyPreviewProvider(
     return provider
 }
 
-private fun createProvider(context: Context, beautyStrategy: BeautyStrategy): BeautyPreviewEngine {
+private fun createProvider(
+    context: Context,
+    beautyStrategy: BeautyStrategy,
+    onGpuPixelLandmarksDetected: ((FloatArray?) -> Unit)? = null
+): BeautyPreviewEngine {
     return when (beautyStrategy) {
         BeautyStrategy.BIG_BEAUTY -> GlBeautyPreviewProvider(context)
-        BeautyStrategy.GPUPIXEL -> GpupixelBeautyPreviewProvider(context)
+        BeautyStrategy.GPUPIXEL -> GpupixelBeautyPreviewProvider(
+            context = context,
+            onFaceLandmarksDetected = onGpuPixelLandmarksDetected
+        )
     }
 }
 

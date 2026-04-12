@@ -235,8 +235,52 @@ internal fun FaceDebugOverlay(
             strokeWidth = 1.5.dp.toPx()
         )
 
-        // 绘制所有 133 点 Contour（调试用）
+        // 绘制所有 133 点 Contour（调试用，ML Kit 模式）
         drawAllContours(faceWarpParams, ::toCanvasPoint)
+
+        // 绘制 GPUPixel 106 点（调试用，GPUPixel 模式）
+        drawGpuPixelLandmarks(faceWarpParams, ::toCanvasPoint)
+    }
+}
+
+/**
+ * 绘制 GPUPixel 106 点（mars-face-kit 格式）
+ */
+private fun DrawScope.drawGpuPixelLandmarks(
+    faceWarpParams: FaceWarpParams,
+    toCanvasPoint: (Offset) -> Offset
+) {
+    val gpuPixelLandmarks = faceWarpParams.gpuPixelLandmarks
+    if (!gpuPixelLandmarks.hasFace || gpuPixelLandmarks.points.isEmpty()) return
+
+    val points = gpuPixelLandmarks.points.map(toCanvasPoint)
+
+    // 绘制所有点（不同区域使用不同颜色）
+    points.forEachIndexed { index, point ->
+        val color = when (index) {
+            // 脸部轮廓 (0-32)
+            in 0..32 -> Color.Magenta.copy(alpha = 0.7f)
+            // 左眉毛 (33-42)
+            in 33..42 -> Color.Cyan.copy(alpha = 0.8f)
+            // 右眉毛 (43-52)
+            in 43..52 -> Color.Blue.copy(alpha = 0.8f)
+            // 鼻子 (53-72)
+            in 53..72 -> Color(0xFF9C27B0).copy(alpha = 0.8f)
+            // 左眼 (73-84)
+            in 73..84 -> Color.Yellow.copy(alpha = 0.9f)
+            // 右眼 (85-96)
+            in 85..96 -> Color.Green.copy(alpha = 0.9f)
+            // 嘴巴 (97-105)
+            in 97..105 -> Color.Red.copy(alpha = 0.8f)
+            else -> Color.White.copy(alpha = 0.6f)
+        }
+
+        drawCircle(
+            color = color,
+            radius = 4.dp.toPx(),
+            center = point,
+            style = Fill
+        )
     }
 }
 

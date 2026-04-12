@@ -145,18 +145,21 @@ internal fun bindCameraUseCases(
                     Logger.e("Camera", "GPUPixel frame conversion error", e)
                 }
             }
+            // GPUPixel 模式：内部使用 mars-face-kit 检测，跳过 ML Kit 检测避免双检测冲突
+            imageProxy.close()
+        } else {
+            // 大美丽/其他模式：使用 ML Kit 人脸检测
+            handleImageAnalysisFrame(
+                imageProxy = imageProxy,
+                previewView = previewView,
+                faceDetector = faceDetector,
+                lensFacing = lensFacing,
+                beautySettings = beautySettings,
+                onFacePointChanged = onFacePointChanged,
+                onFaceWarpParamsChanged = onFaceWarpParamsChanged,
+                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged
+            )
         }
-
-        handleImageAnalysisFrame(
-            imageProxy = imageProxy,
-            previewView = previewView,
-            faceDetector = faceDetector,
-            lensFacing = lensFacing,
-            beautySettings = beautySettings,
-            onFacePointChanged = onFacePointChanged,
-            onFaceWarpParamsChanged = onFaceWarpParamsChanged,
-            onShowFocusIndicatorChanged = onShowFocusIndicatorChanged
-        )
     }
 
     try {
