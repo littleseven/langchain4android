@@ -6,6 +6,7 @@ import android.opengl.Matrix
 import android.util.Log
 import android.view.View
 import com.picme.beauty.api.BeautyPerfStats
+import com.picme.beauty.api.IBeautyPipeline
 
 /**
  * R 计划 - 相机预览渲染器
@@ -30,6 +31,7 @@ class CameraPreviewRenderer(private val context: Context) {
     private var eglContext: android.opengl.EGLContext? = null
     private var windowSurface: WindowSurface? = null
     private lateinit var beautyRenderer: BeautyRenderer
+    private var activePipeline: IBeautyPipeline? = null // 激活的管线
     private var renderThread: Thread? = null
 
     var isRendering = false
@@ -114,6 +116,10 @@ class CameraPreviewRenderer(private val context: Context) {
 
         beautyRenderer = BeautyRenderer(context)
         beautyRenderer.onInit()
+        
+        // 默认不初始化 GPUPixel，保持为 null，使用 R Plan 引擎
+        // activePipeline 只在调用 switchEngine(true) 时创建
+        
         eglCore.clearCurrent()
 
         textureListener?.onTextureAvailable(surfaceTexture!!, DEFAULT_WIDTH, DEFAULT_HEIGHT)
@@ -226,26 +232,35 @@ class CameraPreviewRenderer(private val context: Context) {
                             System.arraycopy(transformMatrix, 0, latestTextureTransformMatrix, 0, 16)
                         }
 
-                        android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
-                        android.opengl.GLES20.glBindTexture(
-                            android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                            textureId
-                        )
+                        // 如果激活了外部管线（如 GPUPixel），则优先处理
+                        if (activePipeline is com.picme.beauty.engine.gpupixel.GPUPixelPipelineAdapter) {
+                            activePipeline?.onFrameAvailable(textureId, transformMatrix, System.nanoTime())
+                            // GPUPixel 内部会处理渲染和 swapBuffers
+                        } else {
+                            // R Plan 自研引擎渲染路径
+                            android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
+                            android.opengl.GLES20.glBindTexture(
+                                android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                                textureId
+                            )
 
-                        beautyRenderer.setTextureTransform(transformMatrix)
+                            beautyRenderer.setTextureTransform(transformMatrix)
 
-                        val outputWidth =
-                            renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
-                        val outputHeight =
-                            renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
-                        android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
-                        android.opengl.GLES20.glClearColor(0f, 0f, 0f, 1f)
-                        android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+                            val outputWidth =
+                                renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
+                            val outputHeight =
+                                renderView?.height?.takeIf { size -> size > 0 } ?: DEFAULT_HEIGHT
+                            android.opengl.GLES20.glViewport(0, 0, outputWidth, outputHeight)
+                            android.opengl.GLES20.glClearColor(0f, 0f, 0f, 1f)
+                            android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
 
-                        applyViewport(outputWidth, outputHeight)
-                        beautyRenderer.setTexelSize(cameraInputWidth, cameraInputHeight)
+                            applyViewport(outputWidth, outputHeight)
+                            beautyRenderer.setTexelSize(cameraInputWidth, cameraInputHeight)
 
-                        beautyRenderer.onRender()
+                            beautyRenderer.onRender()
+                        }
+                        
+                        // 统一交换缓冲区
                         ws.swapBuffers()
 
                         frameCount++
@@ -516,6 +531,21 @@ class CameraPreviewRenderer(private val context: Context) {
 
     fun setRenderMode(mode: Int) {
         beautyRenderer.setRenderMode(mode)
+    }
+
+    /**
+     * 切换底层渲染引擎
+     */
+    fun switchEngine(useGPUPixel: Boolean) {
+        if (useGPUPixel) {
+            activePipeline = com.picme.beauty.engine.gpupixel.GPUPixelPipelineAdapter(context)
+            activePipeline?.init(cameraInputWidth, cameraInputHeight)
+            Log.d(TAG, "Switched to GPUPixel Engine in Renderer")
+        } else {
+            activePipeline?.release()
+            activePipeline = null
+            Log.d(TAG, "Switched to R Plan Engine in Renderer")
+        }
     }
 
     fun getPerfStats(): BeautyPerfStats = latestPerfStats
