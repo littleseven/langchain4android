@@ -2,6 +2,40 @@ package com.picme.features.camera.preview.core
 
 import androidx.compose.ui.geometry.Offset
 
+/**
+ * 存储所有人脸 Contour 点的数据类（用于调试）
+ */
+internal data class FaceContourData(
+    val faceOval: List<Offset> = emptyList(),      // 脸部轮廓 ~36点
+    val leftEyebrowTop: List<Offset> = emptyList(),
+    val leftEyebrowBottom: List<Offset> = emptyList(),
+    val rightEyebrowTop: List<Offset> = emptyList(),
+    val rightEyebrowBottom: List<Offset> = emptyList(),
+    val leftEye: List<Offset> = emptyList(),       // 左眼轮廓
+    val rightEye: List<Offset> = emptyList(),      // 右眼轮廓
+    val upperLipTop: List<Offset> = emptyList(),
+    val upperLipBottom: List<Offset> = emptyList(),
+    val lowerLipTop: List<Offset> = emptyList(),
+    val lowerLipBottom: List<Offset> = emptyList(),
+    val noseBridge: List<Offset> = emptyList(),
+    val noseBottom: List<Offset> = emptyList(),
+    val leftCheek: List<Offset> = emptyList(),
+    val rightCheek: List<Offset> = emptyList()
+) {
+    /**
+     * 获取所有 Contour 点的总数（应等于 133）
+     */
+    fun totalPointCount(): Int {
+        return faceOval.size + leftEyebrowTop.size + leftEyebrowBottom.size +
+            rightEyebrowTop.size + rightEyebrowBottom.size +
+            leftEye.size + rightEye.size +
+            upperLipTop.size + upperLipBottom.size +
+            lowerLipTop.size + lowerLipBottom.size +
+            noseBridge.size + noseBottom.size +
+            leftCheek.size + rightCheek.size
+    }
+}
+
 internal data class FaceWarpParams(
     val faceCenterX: Float = 0.5f,
     val faceCenterY: Float = 0.5f,
@@ -25,6 +59,8 @@ internal data class FaceWarpParams(
     val leftEyeContourPoints: List<Offset> = emptyList(),
     val rightEyeContourPoints: List<Offset> = emptyList(),
     val lipOuterContourPoints: List<Offset> = emptyList(),
-    val lipInnerContourPoints: List<Offset> = emptyList()
+    val lipInnerContourPoints: List<Offset> = emptyList(),
+    // 新增：完整的 133 点 Contour 数据（用于调试）
+    val allContours: FaceContourData = FaceContourData()
 )
 

@@ -265,6 +265,57 @@ internal fun handleImageAnalysisFrame(
                     val lipOuterContourPoints = mapContourPoints(lipOuterContourRaw)
                     val lipInnerContourPoints = mapContourPoints(lipInnerContourRaw)
 
+                    // 收集所有 133 点 Contour 数据（用于调试）
+                    fun mapContourPointsToOffset(points: List<PointF>?): List<Offset> {
+                        return points?.map { contourPoint ->
+                            val mappedPoint = transformFaceCoordinateSimple(
+                                faceX = contourPoint.x,
+                                faceY = contourPoint.y,
+                                imageProxyWidth = imageProxy.width,
+                                imageProxyHeight = imageProxy.height,
+                                previewWidth = previewWidth,
+                                previewHeight = previewHeight,
+                                rotationDegrees = rotationDegrees,
+                                lensFacing = lensFacing
+                            )
+                            Offset(
+                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
+                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
+                            )
+                        } ?: emptyList()
+                    }
+
+                    val allContours = com.picme.features.camera.preview.core.FaceContourData(
+                        faceOval = mapContourPointsToOffset(face.getContour(FaceContour.FACE)?.points),
+                        leftEyebrowTop = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_EYEBROW_TOP)?.points),
+                        leftEyebrowBottom = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_EYEBROW_BOTTOM)?.points),
+                        rightEyebrowTop = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_EYEBROW_TOP)?.points),
+                        rightEyebrowBottom = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_EYEBROW_BOTTOM)?.points),
+                        leftEye = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_EYE)?.points),
+                        rightEye = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_EYE)?.points),
+                        upperLipTop = mapContourPointsToOffset(face.getContour(FaceContour.UPPER_LIP_TOP)?.points),
+                        upperLipBottom = mapContourPointsToOffset(face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points),
+                        lowerLipTop = mapContourPointsToOffset(face.getContour(FaceContour.LOWER_LIP_TOP)?.points),
+                        lowerLipBottom = mapContourPointsToOffset(face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points),
+                        noseBridge = mapContourPointsToOffset(face.getContour(FaceContour.NOSE_BRIDGE)?.points),
+                        noseBottom = mapContourPointsToOffset(face.getContour(FaceContour.NOSE_BOTTOM)?.points),
+                        leftCheek = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_CHEEK)?.points),
+                        rightCheek = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_CHEEK)?.points)
+                    )
+
+                    android.util.Log.d(
+                        "PicMe:Camera",
+                        "ML Kit 133点统计: total=${allContours.totalPointCount()}, " +
+                        "faceOval=${allContours.faceOval.size}, " +
+                        "leftEye=${allContours.leftEye.size}, " +
+                        "rightEye=${allContours.rightEye.size}, " +
+                        "leftEyebrow=${allContours.leftEyebrowTop.size + allContours.leftEyebrowBottom.size}, " +
+                        "rightEyebrow=${allContours.rightEyebrowTop.size + allContours.rightEyebrowBottom.size}, " +
+                        "nose=${allContours.noseBridge.size + allContours.noseBottom.size}, " +
+                        "lips=${allContours.upperLipTop.size + allContours.upperLipBottom.size + allContours.lowerLipTop.size + allContours.lowerLipBottom.size}, " +
+                        "cheeks=${allContours.leftCheek.size + allContours.rightCheek.size}"
+                    )
+
                     val faceWarpParams = FaceWarpParams(
                         faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
                         faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
@@ -288,7 +339,8 @@ internal fun handleImageAnalysisFrame(
                         leftEyeContourPoints = leftEyeContourPoints,
                         rightEyeContourPoints = rightEyeContourPoints,
                         lipOuterContourPoints = lipOuterContourPoints,
-                        lipInnerContourPoints = lipInnerContourPoints
+                        lipInnerContourPoints = lipInnerContourPoints,
+                        allContours = allContours
                     )
                     onFaceWarpParamsChanged(faceWarpParams)
                 } else {

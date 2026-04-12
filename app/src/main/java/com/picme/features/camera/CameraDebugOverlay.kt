@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.picme.features.camera.preview.core.FaceWarpParams
 import kotlin.math.sqrt
+import androidx.compose.ui.graphics.drawscope.DrawScope
 
 @Composable
 internal fun FaceDebugOverlay(
@@ -233,6 +234,128 @@ internal fun FaceDebugOverlay(
             end = rightEye,
             strokeWidth = 1.5.dp.toPx()
         )
+
+        // 绘制所有 133 点 Contour（调试用）
+        drawAllContours(faceWarpParams, ::toCanvasPoint)
+    }
+}
+
+/**
+ * 绘制所有 133 点 Contour（调试用）
+ */
+private fun DrawScope.drawAllContours(
+    faceWarpParams: FaceWarpParams,
+    toCanvasPoint: (Offset) -> Offset
+) {
+    val allContours = faceWarpParams.allContours
+    if (allContours.totalPointCount() == 0) return
+
+    // 绘制脸部轮廓（品红色）
+    allContours.faceOval.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Magenta.copy(alpha = 0.7f), 3.dp.toPx())
+    }
+
+    // 绘制左眉毛（青色）
+    allContours.leftEyebrowTop.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Cyan.copy(alpha = 0.8f), 2.dp.toPx())
+    }
+    allContours.leftEyebrowBottom.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Cyan.copy(alpha = 0.6f), 2.dp.toPx())
+    }
+
+    // 绘制右眉毛（蓝色）
+    allContours.rightEyebrowTop.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Blue.copy(alpha = 0.8f), 2.dp.toPx())
+    }
+    allContours.rightEyebrowBottom.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Blue.copy(alpha = 0.6f), 2.dp.toPx())
+    }
+
+    // 绘制左眼（黄色）
+    allContours.leftEye.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Yellow.copy(alpha = 0.9f), 2.dp.toPx())
+    }
+
+    // 绘制右眼（绿色）
+    allContours.rightEye.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Green.copy(alpha = 0.9f), 2.dp.toPx())
+    }
+
+    // 绘制上嘴唇（红色）
+    allContours.upperLipTop.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Red.copy(alpha = 0.8f), 2.dp.toPx())
+    }
+    allContours.upperLipBottom.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color.Red.copy(alpha = 0.6f), 2.dp.toPx())
+    }
+
+    // 绘制下嘴唇（橙色）
+    allContours.lowerLipTop.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color(0xFFFF9800).copy(alpha = 0.6f), 2.dp.toPx())
+    }
+    allContours.lowerLipBottom.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color(0xFFFF9800).copy(alpha = 0.8f), 2.dp.toPx())
+    }
+
+    // 绘制鼻梁（紫色）
+    allContours.noseBridge.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color(0xFF9C27B0).copy(alpha = 0.8f), 2.dp.toPx())
+    }
+
+    // 绘制鼻翼（深紫色）
+    allContours.noseBottom.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color(0xFF673AB7).copy(alpha = 0.8f), 2.dp.toPx())
+    }
+
+    // 绘制左脸颊（浅绿色）
+    allContours.leftCheek.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color(0xFF8BC34A).copy(alpha = 0.7f), 2.dp.toPx())
+    }
+
+    // 绘制右脸颊（深绿色）
+    allContours.rightCheek.map(toCanvasPoint).let { points ->
+        drawContourPoints(points, Color(0xFF4CAF50).copy(alpha = 0.7f), 2.dp.toPx())
+    }
+
+    // 显示点数统计
+    val totalCount = allContours.totalPointCount()
+    drawRect(
+        color = Color.Black.copy(alpha = 0.5f),
+        topLeft = Offset(10f, 10f),
+        size = androidx.compose.ui.geometry.Size(200f, 120f)
+    )
+}
+
+/**
+ * 绘制 Contour 点（小圆点 + 连线）
+ */
+private fun DrawScope.drawContourPoints(
+    points: List<Offset>,
+    color: Color,
+    strokeWidth: Float
+) {
+    if (points.isEmpty()) return
+
+    // 绘制点
+    points.forEach { point ->
+        drawCircle(
+            color = color,
+            radius = 3.dp.toPx(),
+            center = point,
+            style = Fill
+        )
+    }
+
+    // 绘制连线
+    if (points.size >= 2) {
+        points.zipWithNext().forEach { (start, end) ->
+            drawLine(
+                color = color.copy(alpha = 0.5f),
+                start = start,
+                end = end,
+                strokeWidth = strokeWidth * 0.5f
+            )
+        }
     }
 }
 
