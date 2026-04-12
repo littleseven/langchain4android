@@ -5,7 +5,7 @@ import android.opengl.GLES20
 import android.util.Log
 
 /**
- * R 计划 - 美颜渲染器
+ * 大美丽 - 美颜渲染器
  *
  * 功能：
  * 1. 使用美颜 Shader 渲染相机预览帧

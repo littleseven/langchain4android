@@ -4,7 +4,7 @@ import android.content.Context
 import android.util.Log
 
 /**
- * R 计划 - Shader 模块加载器
+ * 大美丽 - Shader 模块加载器
  *
  * 功能：
  * 1. 从 assets/shaders/ 目录加载独立的 .glsl 文件
