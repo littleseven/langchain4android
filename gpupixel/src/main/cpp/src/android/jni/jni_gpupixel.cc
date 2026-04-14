@@ -44,7 +44,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
 }
 
 /**
- * Convert YUV420 format to RGBA format
+ * Convert YUV420 format to RGBA format with rotation
  */
 extern "C" JNIEXPORT void JNICALL
 Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
@@ -60,6 +60,7 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
                                                       jint y_pixel_stride,
                                                       jint u_pixel_stride,
                                                       jint v_pixel_stride,
+                                                      jint rotation_degrees,
                                                       jbyteArray rgba_out) {
   // Get input buffers
   uint8_t* y_data = (uint8_t*)env->GetDirectBufferAddress(y_buffer);
@@ -77,99 +78,94 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
     return;
   }
 
-  // If pixel stride is 1, use standard libyuv conversion function
-  if (y_pixel_stride == 1 && u_pixel_stride == 1 && v_pixel_stride == 1) {
-    // Create temporary NV12/NV21 buffer (Y plane and interleaved UV plane)
-    uint8_t* nv21_data = new uint8_t[width * height * 3 / 2];
-    if (!nv21_data) {
-      LOG_ERROR("Memory allocation failed");
-      env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);
-      return;
-    }
-
-    // Copy Y plane
-    for (int i = 0; i < height; i++) {
-      memcpy(nv21_data + i * width, y_data + i * y_row_stride, width);
-    }
-
-    // Build NV21 format (VU interleaved) UV plane
-    uint8_t* nv21_vu_data = nv21_data + width * height;
-    int uv_height = height / 2;
-    int uv_width = width / 2;
-
-    for (int i = 0; i < uv_height; i++) {
-      for (int j = 0; j < uv_width; j++) {
-        int offset = i * u_row_stride + j;
-        nv21_vu_data[i * width + j * 2] = v_data[offset];      // V
-        nv21_vu_data[i * width + j * 2 + 1] = u_data[offset];  // U
-      }
-    }
-
-    // Use libyuv to convert NV21 to RGBA
-    libyuv::NV21ToABGR(nv21_data,                   // Y
-                       width,                       // Y stride
-                       nv21_data + width * height,  // VU
-                       width,                       // VU stride
-                       (uint8_t*)rgba_data,         // RGBA
-                       width * 4,                   // RGBA stride
-                       width, height);
-
-    delete[] nv21_data;
-  } else {
-    // Non-standard pixel stride, handle manually
-    std::stringstream ss;
-    ss << "Non-standard pixel stride: Y=" << y_pixel_stride
-       << " U=" << u_pixel_stride << " V=" << v_pixel_stride;
-    LOG_INFO("{}", ss.str());
-
-    // Create temporary buffers
-    uint8_t* y_plane = new uint8_t[width * height];
-    uint8_t* u_plane = new uint8_t[width * height / 4];
-    uint8_t* v_plane = new uint8_t[width * height / 4];
-
-    if (!y_plane || !u_plane || !v_plane) {
-      LOG_ERROR("Memory allocation failed");
-      delete[] y_plane;
-      delete[] u_plane;
-      delete[] v_plane;
-      env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);
-      return;
-    }
-
-    // Extract continuous plane data from stride data
-    for (int i = 0; i < height; i++) {
-      for (int j = 0; j < width; j++) {
-        y_plane[i * width + j] = y_data[i * y_row_stride + j * y_pixel_stride];
-      }
-    }
-
-    int uv_height = height / 2;
-    int uv_width = width / 2;
-
-    for (int i = 0; i < uv_height; i++) {
-      for (int j = 0; j < uv_width; j++) {
-        u_plane[i * uv_width + j] =
-            u_data[i * u_row_stride + j * u_pixel_stride];
-        v_plane[i * uv_width + j] =
-            v_data[i * v_row_stride + j * v_pixel_stride];
-      }
-    }
-
-    // Use libyuv to convert I420(YUV420) to RGBA
-    libyuv::I420ToABGR(y_plane,              // Y
-                       width,                // Y stride
-                       u_plane,              // U
-                       uv_width,             // U stride
-                       v_plane,              // V
-                       uv_width,             // V stride
-                       (uint8_t*)rgba_data,  // RGBA
-                       width * 4,            // RGBA stride
-                       width, height);
-
-    delete[] y_plane;
-    delete[] u_plane;
-    delete[] v_plane;
+  // Determine output dimensions after rotation
+  int out_width = width;
+  int out_height = height;
+  if (rotation_degrees == 90 || rotation_degrees == 270) {
+    out_width = height;
+    out_height = width;
   }
+
+  libyuv::RotationMode rotate_mode = libyuv::kRotate0;
+  if (rotation_degrees == 90) {
+    rotate_mode = libyuv::kRotate90;
+  } else if (rotation_degrees == 180) {
+    rotate_mode = libyuv::kRotate180;
+  } else if (rotation_degrees == 270) {
+    rotate_mode = libyuv::kRotate270;
+  }
+
+  int uv_height = height / 2;
+  int uv_width = width / 2;
+  int out_uv_width = out_width / 2;
+  int out_uv_height = out_height / 2;
+
+  // Allocate I420 buffers for rotation
+  uint8_t* i420_y = new uint8_t[width * height];
+  uint8_t* i420_u = new uint8_t[uv_width * uv_height];
+  uint8_t* i420_v = new uint8_t[uv_width * uv_height];
+
+  uint8_t* rotated_y = new uint8_t[out_width * out_height];
+  uint8_t* rotated_u = new uint8_t[out_uv_width * out_uv_height];
+  uint8_t* rotated_v = new uint8_t[out_uv_width * out_uv_height];
+
+  if (!i420_y || !i420_u || !i420_v || !rotated_y || !rotated_u || !rotated_v) {
+    LOG_ERROR("Memory allocation failed");
+    delete[] i420_y;
+    delete[] i420_u;
+    delete[] i420_v;
+    delete[] rotated_y;
+    delete[] rotated_u;
+    delete[] rotated_v;
+    env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);
+    return;
+  }
+
+  // Extract Y plane
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      i420_y[i * width + j] = y_data[i * y_row_stride + j * y_pixel_stride];
+    }
+  }
+
+  // Extract U/V planes
+  for (int i = 0; i < uv_height; i++) {
+    for (int j = 0; j < uv_width; j++) {
+      i420_u[i * uv_width + j] = u_data[i * u_row_stride + j * u_pixel_stride];
+      i420_v[i * uv_width + j] = v_data[i * v_row_stride + j * v_pixel_stride];
+    }
+  }
+
+  // Rotate I420 if needed
+  if (rotation_degrees != 0 && rotation_degrees != 360) {
+    libyuv::I420Rotate(i420_y, width,
+                       i420_u, uv_width,
+                       i420_v, uv_width,
+                       rotated_y, out_width,
+                       rotated_u, out_uv_width,
+                       rotated_v, out_uv_width,
+                       width, height,
+                       rotate_mode);
+  } else {
+    memcpy(rotated_y, i420_y, width * height);
+    memcpy(rotated_u, i420_u, uv_width * uv_height);
+    memcpy(rotated_v, i420_v, uv_width * uv_height);
+  }
+
+  // Convert rotated I420 to RGBA (ABGR in little-endian is RGBA in memory)
+  libyuv::I420ToABGR(rotated_y, out_width,
+                     rotated_u, out_uv_width,
+                     rotated_v, out_uv_width,
+                     (uint8_t*)rgba_data,
+                     out_width * 4,
+                     out_width, out_height);
+
+  delete[] i420_y;
+  delete[] i420_u;
+  delete[] i420_v;
+  delete[] rotated_y;
+  delete[] rotated_u;
+  delete[] rotated_v;
 
   // Release Java array
   env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);

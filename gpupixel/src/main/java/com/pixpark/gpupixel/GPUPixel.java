@@ -143,12 +143,13 @@ public class GPUPixel {
     }
 
     /**
-     * Converts YUV_420_888 format image to RGBA format
+     * Converts YUV_420_888 format image to RGBA format with rotation
      *
      * @param image YUV_420_888 format image
+     * @param rotationDegrees Rotation angle (0, 90, 180, 270)
      * @return RGBA format byte array
      */
-    public static byte[] YUV_420_888toRGBA(Image image) {
+    public static byte[] YUV_420_888toRGBA(Image image, int rotationDegrees) {
         if (image == null) return null;
 
         int width = image.getWidth();
@@ -167,10 +168,12 @@ public class GPUPixel {
         int uPixelStride = planes[1].getPixelStride();
         int vPixelStride = planes[2].getPixelStride();
 
-        byte[] rgba = new byte[width * height * 4];
+        int outWidth = (rotationDegrees == 90 || rotationDegrees == 270) ? height : width;
+        int outHeight = (rotationDegrees == 90 || rotationDegrees == 270) ? width : height;
+        byte[] rgba = new byte[outWidth * outHeight * 4];
 
         nativeYUV420ToRGBA(yBuffer, uBuffer, vBuffer, width, height, yRowStride, uRowStride,
-                vRowStride, yPixelStride, uPixelStride, vPixelStride, rgba);
+                vRowStride, yPixelStride, uPixelStride, vPixelStride, rotationDegrees, rgba);
 
         return rgba;
     }
@@ -254,7 +257,8 @@ public class GPUPixel {
     // JNI Native methods
     private static native void nativeYUV420ToRGBA(ByteBuffer yBuffer, ByteBuffer uBuffer,
             ByteBuffer vBuffer, int width, int height, int yRowStride, int uRowStride,
-            int vRowStride, int yPixelStride, int uPixelStride, int vPixelStride, byte[] rgbaOut);
+            int vRowStride, int yPixelStride, int uPixelStride, int vPixelStride,
+            int rotationDegrees, byte[] rgbaOut);
 
     private static native void nativeRotateRGBA(byte[] rgbaIn, int width, int height,
             byte[] rgbaOut, int outWidth, int outHeight, int rotationDegrees);
