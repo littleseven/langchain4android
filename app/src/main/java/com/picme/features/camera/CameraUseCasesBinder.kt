@@ -131,14 +131,21 @@ internal fun bindCameraUseCases(
             val mediaImage = imageProxy.image
             if (mediaImage != null) {
                 try {
-                    // 旋转委托给 GPUPixelSourceRawData.SetRotation()，无需上层手动旋转
-                    val rgba = GPUPixel.YUV_420_888toRGBA(mediaImage)
+                    // YUV 转换与旋转合并到 Native 层完成，减少一次 RGBA 拷贝
+                    val rgba = GPUPixel.YUV_420_888toRGBA(
+                        mediaImage,
+                        imageProxy.imageInfo.rotationDegrees
+                    )
                     if (rgba != null) {
+                        val (rotatedWidth, rotatedHeight) = when (imageProxy.imageInfo.rotationDegrees) {
+                            90, 270 -> Pair(mediaImage.height, mediaImage.width)
+                            else -> Pair(mediaImage.width, mediaImage.height)
+                        }
                         gpupixelProvider.onRgbaFrame(
                             rgba,
-                            mediaImage.width,
-                            mediaImage.height,
-                            imageProxy.imageInfo.rotationDegrees
+                            rotatedWidth,
+                            rotatedHeight,
+                            0
                         )
                     }
                 } catch (e: Exception) {

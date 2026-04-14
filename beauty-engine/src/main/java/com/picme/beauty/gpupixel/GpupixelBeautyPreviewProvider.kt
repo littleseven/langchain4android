@@ -248,53 +248,31 @@ class GpupixelBeautyPreviewProvider(
     /**
      * 处理原始 RGBA 帧数据（推荐用法），由外部（app 层）在 analyzer 线程调用。
      *
-     * ## 旋转处理策略
+     * 旋转已在 Native 层 YUV→RGBA 转换时完成，此处直接透传。
      *
-     * 不使用 `GPUPixelSourceRawData.SetRotation()`，原因：
-     * - `SetRotation` 只旋转 SourceRawData 内部的纹理坐标，不传递旋转信息到下游 SinkSurface
-     * - SinkSurface.UpdateDisplayVertices() 用原始横向 framebuffer 尺寸（如 1280×720）计算宽高比
-     *   → 画面被错误拉伸
-     *
-     * 改为上层手动旋转 RGBA 像素数据（[rotateRgba90CW] / [rotateRgba90CCW]）：
-     * - 旋转后 width/height 互换，SinkSurface 看到的 framebuffer 是视觉正确方向的竖向尺寸
-     * - SinkSurface 内部宽高比计算正确
-     * - TextureView 通过 LayoutParams 控制最终显示比例（见 [updateTextureViewSize]）
-     *
-     * 参考：大美丽方案在 CameraPreviewRenderer.applyViewport() 中自行计算 viewport，
-     * 本方案等效地通过 TextureView LayoutParams 实现。
-     *
-     * @param data   原始（未旋转）RGBA 数据
-     * @param width  传感器原始宽（未旋转）
-     * @param height 传感器原始高（未旋转）
-     * @param rotationDegrees [androidx.camera.core.ImageProxy.imageInfo.rotationDegrees]，
-     *                        取值 0 / 90 / 180 / 270
+     * @param data   RGBA 数据（已旋转到视觉正确方向）
+     * @param width  帧宽（已旋转后）
+     * @param height 帧高（已旋转后）
+     * @param rotationDegrees 保留参数，当前始终为 0（旋转已前置完成）
      */
     fun onRgbaFrame(data: ByteArray, width: Int, height: Int, rotationDegrees: Int) {
         if (!isInitialized) return
         if (!surfaceAvailable) return
 
         try {
-            // 上层手动旋转，使 GPUPixel 看到视觉正确方向的帧
-            val (rotatedData, rotatedWidth, rotatedHeight) = when (rotationDegrees) {
-                90 -> Triple(rotateRgba90CW(data, width, height), height, width)
-                180 -> Triple(rotateRgba180(data, width, height), width, height)
-                270 -> Triple(rotateRgba90CCW(data, width, height), height, width)
-                else -> Triple(data, width, height)
-            }
-
-            // 记录内容尺寸（旋转后），首帧或尺寸变化时更新 TextureView 宽高比
-            if (rotatedWidth != contentWidth || rotatedHeight != contentHeight) {
-                contentWidth = rotatedWidth
-                contentHeight = rotatedHeight
+            // 记录内容尺寸，首帧或尺寸变化时更新 TextureView 宽高比
+            if (width != contentWidth || height != contentHeight) {
+                contentWidth = width
+                contentHeight = height
                 // 切换到主线程更新 LayoutParams
-                textureView.post { updateTextureViewSize(rotatedWidth, rotatedHeight) }
+                textureView.post { updateTextureViewSize(width, height) }
             }
 
             val landmarks = faceDetector?.detect(
-                rotatedData,
-                rotatedWidth,
-                rotatedHeight,
-                rotatedWidth * 4,
+                data,
+                width,
+                height,
+                width * 4,
                 FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
                 FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
             )
@@ -310,10 +288,10 @@ class GpupixelBeautyPreviewProvider(
             }
 
             sourceRawData?.ProcessData(
-                rotatedData,
-                rotatedWidth,
-                rotatedHeight,
-                rotatedWidth * 4,
+                data,
+                width,
+                height,
+                width * 4,
                 GPUPixelSourceRawData.FRAME_TYPE_RGBA
             )
         } catch (e: Exception) {
@@ -627,70 +605,5 @@ class GpupixelBeautyPreviewProvider(
 
     override fun getPerfStats(): BeautyPerfStats = BeautyPerfStats.EMPTY
 
-    // ─── 像素旋转工具方法 ───────────────────────────────────────────────────────
-
-    /**
-     * 顺时针旋转 90°（CameraX rotationDegrees=90 时使用）。
-     * 输出尺寸：width=srcHeight, height=srcWidth
-     */
-    private fun rotateRgba90CW(src: ByteArray, srcWidth: Int, srcHeight: Int): ByteArray {
-        val dst = ByteArray(src.size)
-        val dstWidth = srcHeight
-        for (row in 0 until srcHeight) {
-            for (col in 0 until srcWidth) {
-                val srcIdx = (row * srcWidth + col) * 4
-                // 顺时针 90°：dst[col][dstWidth - 1 - row] = src[row][col]
-                val dstCol = dstWidth - 1 - row
-                val dstRow = col
-                val dstIdx = (dstRow * dstWidth + dstCol) * 4
-                dst[dstIdx] = src[srcIdx]
-                dst[dstIdx + 1] = src[srcIdx + 1]
-                dst[dstIdx + 2] = src[srcIdx + 2]
-                dst[dstIdx + 3] = src[srcIdx + 3]
-            }
-        }
-        return dst
-    }
-
-    /**
-     * 逆时针旋转 90°（CameraX rotationDegrees=270 时使用）。
-     * 输出尺寸：width=srcHeight, height=srcWidth
-     */
-    private fun rotateRgba90CCW(src: ByteArray, srcWidth: Int, srcHeight: Int): ByteArray {
-        val dst = ByteArray(src.size)
-        val dstWidth = srcHeight
-        val dstHeight = srcWidth
-        for (row in 0 until srcHeight) {
-            for (col in 0 until srcWidth) {
-                val srcIdx = (row * srcWidth + col) * 4
-                // 逆时针 90°：dst[srcWidth - 1 - col][row] = src[row][col]
-                val dstRow = dstHeight - 1 - col
-                val dstCol = row
-                val dstIdx = (dstRow * dstWidth + dstCol) * 4
-                dst[dstIdx] = src[srcIdx]
-                dst[dstIdx + 1] = src[srcIdx + 1]
-                dst[dstIdx + 2] = src[srcIdx + 2]
-                dst[dstIdx + 3] = src[srcIdx + 3]
-            }
-        }
-        return dst
-    }
-
-    /**
-     * 旋转 180°（CameraX rotationDegrees=180 时使用）。
-     * 输出尺寸：与输入相同
-     */
-    private fun rotateRgba180(src: ByteArray, srcWidth: Int, srcHeight: Int): ByteArray {
-        val dst = ByteArray(src.size)
-        val totalPixels = srcWidth * srcHeight
-        for (i in 0 until totalPixels) {
-            val srcIdx = i * 4
-            val dstIdx = (totalPixels - 1 - i) * 4
-            dst[dstIdx] = src[srcIdx]
-            dst[dstIdx + 1] = src[srcIdx + 1]
-            dst[dstIdx + 2] = src[srcIdx + 2]
-            dst[dstIdx + 3] = src[srcIdx + 3]
-        }
-        return dst
-    }
+    // 像素旋转已下放到 Native 层 YUV→RGBA 转换时完成，此处不再保留 Kotlin 层旋转工具方法
 }
