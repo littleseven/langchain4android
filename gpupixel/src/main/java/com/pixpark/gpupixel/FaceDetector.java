@@ -7,6 +7,8 @@
 
 package com.pixpark.gpupixel;
 
+import java.nio.ByteBuffer;
+
 /**
  * Face detector class for detecting facial landmarks in images
  */
@@ -20,6 +22,7 @@ public class FaceDetector {
     // Frame type constants
     public static final int GPUPIXEL_FRAME_TYPE_RGBA = 0;
     public static final int GPUPIXEL_FRAME_TYPE_BGRA = 1;
+    public static final int GPUPIXEL_FRAME_TYPE_YUV_I420 = 2;
 
     /**
      * Create a face detector instance
@@ -55,6 +58,24 @@ public class FaceDetector {
     }
 
     /**
+     * Detect facial landmarks using DirectByteBuffer (zero-copy JNI)
+     * @param buffer Image data buffer
+     * @param width Image width
+     * @param height Image height
+     * @param format Image format (GPUPIXEL_MODE_FMT_VIDEO or GPUPIXEL_MODE_FMT_PICTURE)
+     * @param frameType Frame type (GPUPIXEL_FRAME_TYPE_RGBA or GPUPIXEL_FRAME_TYPE_BGRA)
+     * @return Array of facial landmark coordinates, each landmark consists of x,y values
+     */
+    public float[] detect(final ByteBuffer buffer, final int width, final int height, final int stride,
+            final int format, final int frameType) {
+        if (mNativeClassID == 0) {
+            return new float[0];
+        }
+        return nativeFaceDetectorDetectBuffer(
+                mNativeClassID, buffer, width, height, stride, format, frameType);
+    }
+
+    /**
      * Destroy face detector
      */
     public void destroy() {
@@ -80,5 +101,7 @@ public class FaceDetector {
     private static native long nativeFaceDetectorCreate();
     private static native void nativeFaceDetectorDestroy(long classId);
     private static native float[] nativeFaceDetectorDetect(long classId, byte[] data, int width,
+            int height, int stride, int format, int frameType);
+    private static native float[] nativeFaceDetectorDetectBuffer(long classId, ByteBuffer buffer, int width,
             int height, int stride, int format, int frameType);
 }

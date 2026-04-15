@@ -61,20 +61,17 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
                                                       jint u_pixel_stride,
                                                       jint v_pixel_stride,
                                                       jint rotation_degrees,
-                                                      jbyteArray rgba_out) {
+                                                      jobject rgba_buffer) {
   // Get input buffers
   uint8_t* y_data = (uint8_t*)env->GetDirectBufferAddress(y_buffer);
   uint8_t* u_data = (uint8_t*)env->GetDirectBufferAddress(u_buffer);
   uint8_t* v_data = (uint8_t*)env->GetDirectBufferAddress(v_buffer);
 
-  // Get output array
-  jbyte* rgba_data = env->GetByteArrayElements(rgba_out, nullptr);
+  // Get output buffer
+  uint8_t* rgba_data = (uint8_t*)env->GetDirectBufferAddress(rgba_buffer);
 
   if (!y_data || !u_data || !v_data || !rgba_data) {
     LOG_ERROR("Failed to get buffer addresses");
-    if (rgba_data) {
-      env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);
-    }
     return;
   }
 
@@ -117,7 +114,6 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
     delete[] rotated_y;
     delete[] rotated_u;
     delete[] rotated_v;
-    env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);
     return;
   }
 
@@ -166,9 +162,139 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
   delete[] rotated_y;
   delete[] rotated_u;
   delete[] rotated_v;
+}
 
-  // Release Java array
-  env->ReleaseByteArrayElements(rgba_out, rgba_data, 0);
+/**
+ * Convert YUV420 format to both I420 and RGBA formats with rotation
+ * Outputs to 3 DirectByteBuffers (I420) + 1 DirectByteBuffer (RGBA)
+ */
+extern "C" JNIEXPORT void JNICALL
+Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToI420AndRGBA(JNIEnv* env,
+                                                             jclass clazz,
+                                                             jobject y_buffer,
+                                                             jobject u_buffer,
+                                                             jobject v_buffer,
+                                                             jint width,
+                                                             jint height,
+                                                             jint y_row_stride,
+                                                             jint u_row_stride,
+                                                             jint v_row_stride,
+                                                             jint y_pixel_stride,
+                                                             jint u_pixel_stride,
+                                                             jint v_pixel_stride,
+                                                             jint rotation_degrees,
+                                                             jobject y_out_buffer,
+                                                             jobject u_out_buffer,
+                                                             jobject v_out_buffer,
+                                                             jobject rgba_out_buffer) {
+  // Get input buffers
+  uint8_t* y_data = (uint8_t*)env->GetDirectBufferAddress(y_buffer);
+  uint8_t* u_data = (uint8_t*)env->GetDirectBufferAddress(u_buffer);
+  uint8_t* v_data = (uint8_t*)env->GetDirectBufferAddress(v_buffer);
+
+  // Get output buffers
+  uint8_t* y_out = (uint8_t*)env->GetDirectBufferAddress(y_out_buffer);
+  uint8_t* u_out = (uint8_t*)env->GetDirectBufferAddress(u_out_buffer);
+  uint8_t* v_out = (uint8_t*)env->GetDirectBufferAddress(v_out_buffer);
+  uint8_t* rgba_out = (uint8_t*)env->GetDirectBufferAddress(rgba_out_buffer);
+
+  if (!y_data || !u_data || !v_data || !y_out || !u_out || !v_out || !rgba_out) {
+    LOG_ERROR("Failed to get buffer addresses");
+    return;
+  }
+
+  // Determine output dimensions after rotation
+  int out_width = width;
+  int out_height = height;
+  if (rotation_degrees == 90 || rotation_degrees == 270) {
+    out_width = height;
+    out_height = width;
+  }
+
+  libyuv::RotationMode rotate_mode = libyuv::kRotate0;
+  if (rotation_degrees == 90) {
+    rotate_mode = libyuv::kRotate90;
+  } else if (rotation_degrees == 180) {
+    rotate_mode = libyuv::kRotate180;
+  } else if (rotation_degrees == 270) {
+    rotate_mode = libyuv::kRotate270;
+  }
+
+  int uv_height = height / 2;
+  int uv_width = width / 2;
+  int out_uv_width = out_width / 2;
+  int out_uv_height = out_height / 2;
+
+  // Allocate I420 buffers for rotation
+  uint8_t* i420_y = new uint8_t[width * height];
+  uint8_t* i420_u = new uint8_t[uv_width * uv_height];
+  uint8_t* i420_v = new uint8_t[uv_width * uv_height];
+
+  uint8_t* rotated_y = new uint8_t[out_width * out_height];
+  uint8_t* rotated_u = new uint8_t[out_uv_width * out_uv_height];
+  uint8_t* rotated_v = new uint8_t[out_uv_width * out_uv_height];
+
+  if (!i420_y || !i420_u || !i420_v || !rotated_y || !rotated_u || !rotated_v) {
+    LOG_ERROR("Memory allocation failed");
+    delete[] i420_y;
+    delete[] i420_u;
+    delete[] i420_v;
+    delete[] rotated_y;
+    delete[] rotated_u;
+    delete[] rotated_v;
+    return;
+  }
+
+  // Extract Y plane
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      i420_y[i * width + j] = y_data[i * y_row_stride + j * y_pixel_stride];
+    }
+  }
+
+  // Extract U/V planes
+  for (int i = 0; i < uv_height; i++) {
+    for (int j = 0; j < uv_width; j++) {
+      i420_u[i * uv_width + j] = u_data[i * u_row_stride + j * u_pixel_stride];
+      i420_v[i * uv_width + j] = v_data[i * v_row_stride + j * v_pixel_stride];
+    }
+  }
+
+  // Rotate I420 if needed
+  if (rotation_degrees != 0 && rotation_degrees != 360) {
+    libyuv::I420Rotate(i420_y, width,
+                       i420_u, uv_width,
+                       i420_v, uv_width,
+                       rotated_y, out_width,
+                       rotated_u, out_uv_width,
+                       rotated_v, out_uv_width,
+                       width, height,
+                       rotate_mode);
+  } else {
+    memcpy(rotated_y, i420_y, width * height);
+    memcpy(rotated_u, i420_u, uv_width * uv_height);
+    memcpy(rotated_v, i420_v, uv_width * uv_height);
+  }
+
+  // Output I420 to DirectByteBuffers
+  memcpy(y_out, rotated_y, out_width * out_height);
+  memcpy(u_out, rotated_u, out_uv_width * out_uv_height);
+  memcpy(v_out, rotated_v, out_uv_width * out_uv_height);
+
+  // Convert rotated I420 to RGBA
+  libyuv::I420ToABGR(rotated_y, out_width,
+                     rotated_u, out_uv_width,
+                     rotated_v, out_uv_width,
+                     rgba_out,
+                     out_width * 4,
+                     out_width, out_height);
+
+  delete[] i420_y;
+  delete[] i420_u;
+  delete[] i420_v;
+  delete[] rotated_y;
+  delete[] rotated_u;
+  delete[] rotated_v;
 }
 
 /**

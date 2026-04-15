@@ -17,6 +17,8 @@ import com.pixpark.gpupixel.GPUPixel
 import com.pixpark.gpupixel.GPUPixelFilter
 import com.pixpark.gpupixel.GPUPixelSinkSurface
 import com.pixpark.gpupixel.GPUPixelSourceRawData
+import com.pixpark.gpupixel.GPUPixelSourceYUV
+import java.nio.ByteBuffer
 
 /**
  * GPUPixel 美颜预览提供者
@@ -59,6 +61,7 @@ class GpupixelBeautyPreviewProvider(
     private val textureView: TextureView = TextureView(appContext)
     private var sinkSurface: GPUPixelSinkSurface? = null
     private var sourceRawData: GPUPixelSourceRawData? = null
+    private var sourceYUV: GPUPixelSourceYUV? = null
     private var beautyFilter: GPUPixelFilter? = null
     private var lipstickFilter: GPUPixelFilter? = null
     private var blusherFilter: GPUPixelFilter? = null
@@ -168,6 +171,7 @@ class GpupixelBeautyPreviewProvider(
         GPUPixel.Init(appContext)
 
         sourceRawData = GPUPixelSourceRawData.Create()
+        sourceYUV = GPUPixelSourceYUV.Create()
         beautyFilter = GPUPixelFilter.Create(GPUPixelFilter.BEAUTY_FACE_FILTER)
         lipstickFilter = GPUPixelFilter.Create(GPUPixelFilter.LIPSTICK_FILTER)
         blusherFilter = GPUPixelFilter.Create(GPUPixelFilter.BLUSHER_FILTER)
@@ -186,8 +190,8 @@ class GpupixelBeautyPreviewProvider(
         whiteBalanceFilter?.SetProperty("temperature", 5000f)
         whiteBalanceFilter?.SetProperty("tint", 0f)
 
-        // 构建滤镜链：rawData → lipstick → blusher → beauty → faceReshape → exposure → contrast → saturation → whiteBalance → [styleFilter] → sinkSurface
-        sourceRawData?.AddSink(lipstickFilter)
+        // 构建滤镜链：sourceYUV → lipstick → blusher → beauty → faceReshape → exposure → contrast → saturation → whiteBalance → [styleFilter] → sinkSurface
+        sourceYUV?.AddSink(lipstickFilter)
         lipstickFilter?.AddSink(blusherFilter)
         blusherFilter?.AddSink(beautyFilter)
         beautyFilter?.AddSink(faceReshapeFilter)
@@ -246,16 +250,27 @@ class GpupixelBeautyPreviewProvider(
     }
 
     /**
-     * 处理原始 RGBA 帧数据（推荐用法），由外部（app 层）在 analyzer 线程调用。
+     * 处理 I420 帧数据（YUV 直通路径），由外部（app 层）在 analyzer 线程调用。
      *
-     * 旋转已在 Native 层 YUV→RGBA 转换时完成，此处直接透传。
+     * 旋转已在 Native 层 YUV→I420 转换时完成，此处直接透传。
+     * 使用 DirectByteBuffer 零拷贝传递给 GPUPixel 渲染链路和人脸检测。
      *
-     * @param data   RGBA 数据（已旋转到视觉正确方向）
-     * @param width  帧宽（已旋转后）
-     * @param height 帧高（已旋转后）
+     * @param yBuffer Y 平面 DirectByteBuffer
+     * @param uBuffer U 平面 DirectByteBuffer
+     * @param vBuffer V 平面 DirectByteBuffer
+     * @param width   帧宽（已旋转后）
+     * @param height  帧高（已旋转后）
      * @param rotationDegrees 保留参数，当前始终为 0（旋转已前置完成）
      */
-    fun onRgbaFrame(data: ByteArray, width: Int, height: Int, rotationDegrees: Int) {
+    fun onYuvFrame(
+        yBuffer: ByteBuffer,
+        uBuffer: ByteBuffer,
+        vBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        rotationDegrees: Int,
+        rgbaBuffer: ByteBuffer? = null
+    ) {
         if (!isInitialized) return
         if (!surfaceAvailable) return
 
@@ -268,14 +283,17 @@ class GpupixelBeautyPreviewProvider(
                 textureView.post { updateTextureViewSize(width, height) }
             }
 
-            val landmarks = faceDetector?.detect(
-                data,
-                width,
-                height,
-                width * 4,
-                FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
-                FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
-            )
+            // 人脸检测：mars-face-kit 对 YUV_I420 支持不完善且会污染内部状态，必须使用 RGBA 路径
+            val landmarks = rgbaBuffer?.let {
+                faceDetector?.detect(
+                    it,
+                    width,
+                    height,
+                    width * 4,
+                    FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
+                    FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
+                )
+            }
 
             if (landmarks != null && landmarks.isNotEmpty()) {
                 faceReshapeFilter?.SetProperty("face_landmark", landmarks)
@@ -287,8 +305,59 @@ class GpupixelBeautyPreviewProvider(
                 onFaceLandmarksDetected?.invoke(null)
             }
 
+            // 零拷贝 YUV 直通传递给 GPUPixel 渲染链路
+            sourceYUV?.ProcessData(
+                yBuffer,
+                uBuffer,
+                vBuffer,
+                width,
+                height,
+                0
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Frame processing error", e)
+        }
+    }
+
+    /**
+     * 处理原始 RGBA 帧数据（兼容/兜底路径）。
+     *
+     * @param buffer DirectByteBuffer 包含已旋转的 RGBA 数据
+     * @param width  帧宽（已旋转后）
+     * @param height 帧高（已旋转后）
+     * @param rotationDegrees 保留参数
+     */
+    fun onRgbaFrame(buffer: ByteBuffer, width: Int, height: Int, rotationDegrees: Int) {
+        if (!isInitialized) return
+        if (!surfaceAvailable) return
+
+        try {
+            if (width != contentWidth || height != contentHeight) {
+                contentWidth = width
+                contentHeight = height
+                textureView.post { updateTextureViewSize(width, height) }
+            }
+
+            val landmarks = faceDetector?.detect(
+                buffer,
+                width,
+                height,
+                width * 4,
+                FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
+                FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
+            )
+
+            if (landmarks != null && landmarks.isNotEmpty()) {
+                faceReshapeFilter?.SetProperty("face_landmark", landmarks)
+                lipstickFilter?.SetProperty("face_landmark", landmarks)
+                blusherFilter?.SetProperty("face_landmark", landmarks)
+                onFaceLandmarksDetected?.invoke(landmarks)
+            } else {
+                onFaceLandmarksDetected?.invoke(null)
+            }
+
             sourceRawData?.ProcessData(
-                data,
+                buffer,
                 width,
                 height,
                 width * 4,

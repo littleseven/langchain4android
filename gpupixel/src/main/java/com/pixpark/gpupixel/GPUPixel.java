@@ -147,9 +147,9 @@ public class GPUPixel {
      *
      * @param image YUV_420_888 format image
      * @param rotationDegrees Rotation angle (0, 90, 180, 270)
-     * @return RGBA format byte array
+     * @return DirectByteBuffer containing RGBA data
      */
-    public static byte[] YUV_420_888toRGBA(Image image, int rotationDegrees) {
+    public static ByteBuffer YUV_420_888toRGBA(Image image, int rotationDegrees) {
         if (image == null) return null;
 
         int width = image.getWidth();
@@ -170,12 +170,12 @@ public class GPUPixel {
 
         int outWidth = (rotationDegrees == 90 || rotationDegrees == 270) ? height : width;
         int outHeight = (rotationDegrees == 90 || rotationDegrees == 270) ? width : height;
-        byte[] rgba = new byte[outWidth * outHeight * 4];
+        ByteBuffer rgbaBuffer = ByteBuffer.allocateDirect(outWidth * outHeight * 4);
 
         nativeYUV420ToRGBA(yBuffer, uBuffer, vBuffer, width, height, yRowStride, uRowStride,
-                vRowStride, yPixelStride, uPixelStride, vPixelStride, rotationDegrees, rgba);
+                vRowStride, yPixelStride, uPixelStride, vPixelStride, rotationDegrees, rgbaBuffer);
 
-        return rgba;
+        return rgbaBuffer;
     }
 
     /**
@@ -254,11 +254,58 @@ public class GPUPixel {
         return facing == CameraCharacteristics.LENS_FACING_FRONT;
     }
 
+    /**
+     * Converts YUV_420_888 format image to both I420 and RGBA formats with rotation
+     *
+     * @param image YUV_420_888 format image
+     * @param rotationDegrees Rotation angle (0, 90, 180, 270)
+     * @return Array of 4 DirectByteBuffers: [Y, U, V, RGBA]
+     */
+    public static ByteBuffer[] YUV_420_888toI420AndRGBA(Image image, int rotationDegrees) {
+        if (image == null) return null;
+
+        int width = image.getWidth();
+        int height = image.getHeight();
+
+        Image.Plane[] planes = image.getPlanes();
+        ByteBuffer yBuffer = planes[0].getBuffer();
+        ByteBuffer uBuffer = planes[1].getBuffer();
+        ByteBuffer vBuffer = planes[2].getBuffer();
+
+        int yRowStride = planes[0].getRowStride();
+        int uRowStride = planes[1].getRowStride();
+        int vRowStride = planes[2].getRowStride();
+
+        int yPixelStride = planes[0].getPixelStride();
+        int uPixelStride = planes[1].getPixelStride();
+        int vPixelStride = planes[2].getPixelStride();
+
+        int outWidth = (rotationDegrees == 90 || rotationDegrees == 270) ? height : width;
+        int outHeight = (rotationDegrees == 90 || rotationDegrees == 270) ? width : height;
+        int outUvWidth = outWidth / 2;
+        int outUvHeight = outHeight / 2;
+
+        ByteBuffer yOut = ByteBuffer.allocateDirect(outWidth * outHeight);
+        ByteBuffer uOut = ByteBuffer.allocateDirect(outUvWidth * outUvHeight);
+        ByteBuffer vOut = ByteBuffer.allocateDirect(outUvWidth * outUvHeight);
+        ByteBuffer rgbaOut = ByteBuffer.allocateDirect(outWidth * outHeight * 4);
+
+        nativeYUV420ToI420AndRGBA(yBuffer, uBuffer, vBuffer, width, height, yRowStride, uRowStride,
+                vRowStride, yPixelStride, uPixelStride, vPixelStride, rotationDegrees, yOut, uOut, vOut, rgbaOut);
+
+        return new ByteBuffer[]{yOut, uOut, vOut, rgbaOut};
+    }
+
     // JNI Native methods
     private static native void nativeYUV420ToRGBA(ByteBuffer yBuffer, ByteBuffer uBuffer,
             ByteBuffer vBuffer, int width, int height, int yRowStride, int uRowStride,
             int vRowStride, int yPixelStride, int uPixelStride, int vPixelStride,
-            int rotationDegrees, byte[] rgbaOut);
+            int rotationDegrees, ByteBuffer rgbaOut);
+
+    private static native void nativeYUV420ToI420AndRGBA(ByteBuffer yBuffer, ByteBuffer uBuffer,
+            ByteBuffer vBuffer, int width, int height, int yRowStride, int uRowStride,
+            int vRowStride, int yPixelStride, int uPixelStride, int vPixelStride,
+            int rotationDegrees, ByteBuffer yOut, ByteBuffer uOut, ByteBuffer vOut, ByteBuffer rgbaOut);
 
     private static native void nativeRotateRGBA(byte[] rgbaIn, int width, int height,
             byte[] rgbaOut, int outWidth, int outHeight, int rotationDegrees);

@@ -76,3 +76,39 @@ Java_com_pixpark_gpupixel_FaceDetector_nativeFaceDetectorDetect(
 
   return result;
 }
+
+// Detect face landmarks using DirectByteBuffer (zero-copy)
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_com_pixpark_gpupixel_FaceDetector_nativeFaceDetectorDetectBuffer(
+    JNIEnv* env,
+    jclass obj,
+    jlong classId,
+    jobject jBuffer,
+    jint width,
+    jint height,
+    jint stride,
+    jint format,
+    jint frameType) {
+  // Get direct buffer address
+  uint8_t* data = (uint8_t*)env->GetDirectBufferAddress(jBuffer);
+  if (!data) {
+    return nullptr;
+  }
+
+  // Call C++ method to detect face landmarks
+  std::vector<float> landmarks =
+      ((FaceDetector*)classId)
+          ->Detect(data, width, height, stride,
+                   (GPUPIXEL_MODE_FMT)format, (GPUPIXEL_FRAME_TYPE)frameType);
+
+  // Create Java float array
+  jfloatArray result = env->NewFloatArray(landmarks.size());
+  if (result == nullptr) {
+    return nullptr;
+  }
+
+  // Fill Java float array
+  env->SetFloatArrayRegion(result, 0, landmarks.size(), landmarks.data());
+
+  return result;
+}

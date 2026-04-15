@@ -21,6 +21,7 @@ import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.preview.core.FaceWarpParams
 import com.pixpark.gpupixel.GPUPixel
+import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
 @ExperimentalGetImage
@@ -131,21 +132,24 @@ internal fun bindCameraUseCases(
             val mediaImage = imageProxy.image
             if (mediaImage != null) {
                 try {
-                    // YUV 转换与旋转合并到 Native 层完成，减少一次 RGBA 拷贝
-                    val rgba = GPUPixel.YUV_420_888toRGBA(
+                    // 合并 Native 转换：一次提取 YUV，同时输出 I420（渲染）+ RGBA（人脸检测）
+                    val buffers: Array<ByteBuffer>? = GPUPixel.YUV_420_888toI420AndRGBA(
                         mediaImage,
                         imageProxy.imageInfo.rotationDegrees
                     )
-                    if (rgba != null) {
+                    if (buffers != null) {
                         val (rotatedWidth, rotatedHeight) = when (imageProxy.imageInfo.rotationDegrees) {
                             90, 270 -> Pair(mediaImage.height, mediaImage.width)
                             else -> Pair(mediaImage.width, mediaImage.height)
                         }
-                        gpupixelProvider.onRgbaFrame(
-                            rgba,
+                        gpupixelProvider.onYuvFrame(
+                            buffers[0], // Y
+                            buffers[1], // U
+                            buffers[2], // V
                             rotatedWidth,
                             rotatedHeight,
-                            0
+                            0,
+                            buffers[3]  // RGBA for face detection
                         )
                     }
                 } catch (e: Exception) {

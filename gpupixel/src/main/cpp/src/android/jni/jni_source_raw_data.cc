@@ -47,7 +47,7 @@ Java_com_pixpark_gpupixel_GPUPixelSourceRawData_nativeFinalize(
   }
 }
 
-// Process data (unified interface) - only handles byte[]
+// Process data (unified interface) - handles byte[]
 extern "C" JNIEXPORT void JNICALL
 Java_com_pixpark_gpupixel_GPUPixelSourceRawData_nativeProcessData(
     JNIEnv* env,
@@ -69,6 +69,30 @@ Java_com_pixpark_gpupixel_GPUPixelSourceRawData_nativeProcessData(
                       (GPUPIXEL_FRAME_TYPE)type);
 
   env->ReleaseByteArrayElements(data, bytes, 0);
+}
+
+// Zero-copy data processing - handles DirectByteBuffer
+extern "C" JNIEXPORT void JNICALL
+Java_com_pixpark_gpupixel_GPUPixelSourceRawData_nativeProcessDataBuffer(
+    JNIEnv* env,
+    jclass clazz,
+    jlong native_obj,
+    jobject buffer,
+    jint width,
+    jint height,
+    jint stride,
+    jint type) {
+  auto* ptr = reinterpret_cast<std::shared_ptr<SourceRawData>*>(native_obj);
+  if (!ptr || !*ptr) {
+    return;
+  }
+
+  uint8_t* bytes = (uint8_t*)env->GetDirectBufferAddress(buffer);
+  if (!bytes) {
+    return;
+  }
+
+  (*ptr)->ProcessData(bytes, width, height, stride, (GPUPIXEL_FRAME_TYPE)type);
 }
 
 // Set rotation mode
