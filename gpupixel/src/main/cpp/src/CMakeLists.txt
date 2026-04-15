@@ -21,6 +21,7 @@ set(common_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/core/gpupixel_framebuffer_factory.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/source/source.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/source/source_raw_data.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/source/source_yuv.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/source/source_image.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/sink/sink_raw_data.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/sink/sink_raw_data_yuv.cc
@@ -94,6 +95,7 @@ set(jni_source_files
     ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_gpupixel.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_filter.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_source_raw_data.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_source_yuv.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_source.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_helpers.h
     ${CMAKE_CURRENT_SOURCE_DIR}/android/jni/jni_helpers.cc
@@ -128,6 +130,7 @@ endif()
 set(public_source_header_files
     ${PROJECT_SOURCE_DIR}/include/gpupixel/source/source.h
     ${PROJECT_SOURCE_DIR}/include/gpupixel/source/source_raw_data.h
+    ${PROJECT_SOURCE_DIR}/include/gpupixel/source/source_yuv.h
     ${PROJECT_SOURCE_DIR}/include/gpupixel/source/source_image.h)
 
 set(public_sink_header_files

@@ -9,34 +9,24 @@ package com.pixpark.gpupixel;
 
 import java.nio.ByteBuffer;
 
-public class GPUPixelSourceRawData extends GPUPixelSource {
-    // Frame data format types
-    public static final int FRAME_TYPE_RGBA = 0;
-    public static final int FRAME_TYPE_BGRA = 1;
+public class GPUPixelSourceYUV extends GPUPixelSource {
+    protected GPUPixelSourceYUV() {}
 
-    protected GPUPixelSourceRawData() {}
-
-    public static GPUPixelSourceRawData Create() {
-        final GPUPixelSourceRawData source = new GPUPixelSourceRawData();
+    public static GPUPixelSourceYUV Create() {
+        final GPUPixelSourceYUV source = new GPUPixelSourceYUV();
         if (source.mNativeClassID != 0) return source;
 
         source.mNativeClassID = nativeCreate();
         return source;
     }
 
-    // Set rotation direction
     public void SetRotation(int rotation) {
         nativeSetRotation(mNativeClassID, rotation);
     }
 
-    // Unified data processing interface - accepts byte[]
-    public void ProcessData(byte[] data, int width, int height, int stride, int frameType) {
-        nativeProcessData(mNativeClassID, data, width, height, stride, frameType);
-    }
-
-    // Zero-copy data processing interface - accepts DirectByteBuffer
-    public void ProcessData(ByteBuffer buffer, int width, int height, int stride, int frameType) {
-        nativeProcessDataBuffer(mNativeClassID, buffer, width, height, stride, frameType);
+    public void ProcessData(ByteBuffer yBuffer, ByteBuffer uBuffer, ByteBuffer vBuffer,
+                            int width, int height, int rotation) {
+        nativeProcessData(mNativeClassID, yBuffer, uBuffer, vBuffer, width, height, rotation);
     }
 
     @Override
@@ -65,8 +55,7 @@ public class GPUPixelSourceRawData extends GPUPixelSource {
     private static native void nativeDestroy(long nativeObj);
     private static native void nativeFinalize(long nativeObj);
     private static native void nativeProcessData(
-            long nativeObj, byte[] data, int width, int height, int stride, int frameType);
-    private static native void nativeProcessDataBuffer(
-            long nativeObj, ByteBuffer buffer, int width, int height, int stride, int frameType);
+            long nativeObj, ByteBuffer yBuffer, ByteBuffer uBuffer, ByteBuffer vBuffer,
+            int width, int height, int rotation);
     private static native void nativeSetRotation(long nativeObj, int rotation);
 }
