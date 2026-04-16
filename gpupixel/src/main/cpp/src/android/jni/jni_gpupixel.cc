@@ -44,6 +44,89 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
 }
 
 /**
+ * 从 CameraX YUV_420_888 三平面提取标准 I420 连续内存。
+ *
+ * 快路径（pixel_stride == 1）：Y/U/V 每行均为连续像素，直接 memcpy 整行，避免逐像素循环。
+ * 通用路径（pixel_stride > 1，NV12/NV21 等交错格式）：逐像素提取。
+ *
+ * @param y_data       Y 平面原始指针
+ * @param u_data       U 平面原始指针
+ * @param v_data       V 平面原始指针
+ * @param width        图像宽度（像素）
+ * @param height       图像高度（像素）
+ * @param y_row_stride Y 平面行字节步长
+ * @param u_row_stride U 平面行字节步长
+ * @param v_row_stride V 平面行字节步长
+ * @param y_pixel_stride Y 平面像素步长（1 = 连续；2 = 交错）
+ * @param u_pixel_stride U 平面像素步长
+ * @param v_pixel_stride V 平面像素步长
+ * @param i420_y       输出 Y 平面（size = width × height）
+ * @param i420_u       输出 U 平面（size = uv_width × uv_height）
+ * @param i420_v       输出 V 平面（size = uv_width × uv_height）
+ */
+static void ExtractI420Planes(const uint8_t* y_data,
+                               const uint8_t* u_data,
+                               const uint8_t* v_data,
+                               int width,
+                               int height,
+                               int y_row_stride,
+                               int u_row_stride,
+                               int v_row_stride,
+                               int y_pixel_stride,
+                               int u_pixel_stride,
+                               int v_pixel_stride,
+                               uint8_t* i420_y,
+                               uint8_t* i420_u,
+                               uint8_t* i420_v) {
+  int uv_width = width / 2;
+  int uv_height = height / 2;
+
+  if (y_pixel_stride == 1) {
+    // 快路径：Y 平面逐行 memcpy
+    if (y_row_stride == width) {
+      memcpy(i420_y, y_data, width * height);
+    } else {
+      for (int i = 0; i < height; i++) {
+        memcpy(i420_y + i * width, y_data + i * y_row_stride, width);
+      }
+    }
+  } else {
+    // 通用路径：逐像素提取 Y
+    for (int i = 0; i < height; i++) {
+      for (int j = 0; j < width; j++) {
+        i420_y[i * width + j] = y_data[i * y_row_stride + j * y_pixel_stride];
+      }
+    }
+  }
+
+  if (u_pixel_stride == 1 && v_pixel_stride == 1) {
+    // 快路径：U/V 平面逐行 memcpy
+    if (u_row_stride == uv_width) {
+      memcpy(i420_u, u_data, uv_width * uv_height);
+    } else {
+      for (int i = 0; i < uv_height; i++) {
+        memcpy(i420_u + i * uv_width, u_data + i * u_row_stride, uv_width);
+      }
+    }
+    if (v_row_stride == uv_width) {
+      memcpy(i420_v, v_data, uv_width * uv_height);
+    } else {
+      for (int i = 0; i < uv_height; i++) {
+        memcpy(i420_v + i * uv_width, v_data + i * v_row_stride, uv_width);
+      }
+    }
+  } else {
+    // 通用路径：逐像素提取 U/V（NV12/NV21 交错格式）
+    for (int i = 0; i < uv_height; i++) {
+      for (int j = 0; j < uv_width; j++) {
+        i420_u[i * uv_width + j] = u_data[i * u_row_stride + j * u_pixel_stride];
+        i420_v[i * uv_width + j] = v_data[i * v_row_stride + j * v_pixel_stride];
+      }
+    }
+  }
+}
+
+/**
  * Convert YUV420 format to RGBA format with rotation
  */
 extern "C" JNIEXPORT void JNICALL
@@ -97,7 +180,7 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
   int out_uv_width = out_width / 2;
   int out_uv_height = out_height / 2;
 
-  // Allocate I420 buffers for rotation
+  // 分配 I420 中间缓冲区
   uint8_t* i420_y = new uint8_t[width * height];
   uint8_t* i420_u = new uint8_t[uv_width * uv_height];
   uint8_t* i420_v = new uint8_t[uv_width * uv_height];
@@ -117,22 +200,14 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToRGBA(JNIEnv* env,
     return;
   }
 
-  // Extract Y plane
-  for (int i = 0; i < height; i++) {
-    for (int j = 0; j < width; j++) {
-      i420_y[i * width + j] = y_data[i * y_row_stride + j * y_pixel_stride];
-    }
-  }
+  // 提取 I420（快路径：pixel_stride==1 走 memcpy；通用路径：逐像素）
+  ExtractI420Planes(y_data, u_data, v_data,
+                    width, height,
+                    y_row_stride, u_row_stride, v_row_stride,
+                    y_pixel_stride, u_pixel_stride, v_pixel_stride,
+                    i420_y, i420_u, i420_v);
 
-  // Extract U/V planes
-  for (int i = 0; i < uv_height; i++) {
-    for (int j = 0; j < uv_width; j++) {
-      i420_u[i * uv_width + j] = u_data[i * u_row_stride + j * u_pixel_stride];
-      i420_v[i * uv_width + j] = v_data[i * v_row_stride + j * v_pixel_stride];
-    }
-  }
-
-  // Rotate I420 if needed
+  // 旋转 I420
   if (rotation_degrees != 0 && rotation_degrees != 360) {
     libyuv::I420Rotate(i420_y, width,
                        i420_u, uv_width,
@@ -225,7 +300,7 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToI420AndRGBA(JNIEnv* env,
   int out_uv_width = out_width / 2;
   int out_uv_height = out_height / 2;
 
-  // Allocate I420 buffers for rotation
+  // 分配 I420 中间缓冲区
   uint8_t* i420_y = new uint8_t[width * height];
   uint8_t* i420_u = new uint8_t[uv_width * uv_height];
   uint8_t* i420_v = new uint8_t[uv_width * uv_height];
@@ -245,22 +320,14 @@ Java_com_pixpark_gpupixel_GPUPixel_nativeYUV420ToI420AndRGBA(JNIEnv* env,
     return;
   }
 
-  // Extract Y plane
-  for (int i = 0; i < height; i++) {
-    for (int j = 0; j < width; j++) {
-      i420_y[i * width + j] = y_data[i * y_row_stride + j * y_pixel_stride];
-    }
-  }
+  // 提取 I420（快路径：pixel_stride==1 走 memcpy；通用路径：逐像素）
+  ExtractI420Planes(y_data, u_data, v_data,
+                    width, height,
+                    y_row_stride, u_row_stride, v_row_stride,
+                    y_pixel_stride, u_pixel_stride, v_pixel_stride,
+                    i420_y, i420_u, i420_v);
 
-  // Extract U/V planes
-  for (int i = 0; i < uv_height; i++) {
-    for (int j = 0; j < uv_width; j++) {
-      i420_u[i * uv_width + j] = u_data[i * u_row_stride + j * u_pixel_stride];
-      i420_v[i * uv_width + j] = v_data[i * v_row_stride + j * v_pixel_stride];
-    }
-  }
-
-  // Rotate I420 if needed
+  // 旋转 I420
   if (rotation_degrees != 0 && rotation_degrees != 360) {
     libyuv::I420Rotate(i420_y, width,
                        i420_u, uv_width,

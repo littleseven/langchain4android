@@ -44,16 +44,31 @@ std::vector<float> FaceDetector::Detect(const uint8_t* data,
                                         GPUPIXEL_FRAME_TYPE type) {
   mars_vision::MarsImage image;
   image.data = (uint8_t*)data;
-  image.width = width == stride / 4 ? width : stride / 4;
   image.height = height;
-  if (type == GPUPIXEL_FRAME_TYPE_RGBA) {
-    image.format = mars_vision::MarsImageFormat::RGBA;
-  } else if (type == GPUPIXEL_FRAME_TYPE_BGRA) {
-    image.format = mars_vision::MarsImageFormat::BGRA;
-  }
-  image.stride = stride;
   image.rotate_type = mars_vision::RotateType::CLOCKWISE_0;
   image.timestamp = 0;
+
+  if (type == GPUPIXEL_FRAME_TYPE_RGBA) {
+    // RGBA/BGRA：stride 为字节宽度（width × 4），真实像素宽由 stride/4 推算
+    image.format = mars_vision::MarsImageFormat::RGBA;
+    image.width = (stride > 0 && stride / 4 != width) ? stride / 4 : width;
+    image.stride = stride;
+  } else if (type == GPUPIXEL_FRAME_TYPE_BGRA) {
+    image.format = mars_vision::MarsImageFormat::BGRA;
+    image.width = (stride > 0 && stride / 4 != width) ? stride / 4 : width;
+    image.stride = stride;
+  } else if (type == GPUPIXEL_FRAME_TYPE_YUV_I420) {
+    // YUV I420（平面格式）：stride 为 Y 平面行字节宽，mars 内部读取 stride × height × 3/2 字节
+    // MarsImage.data 指向连续的 Y+U+V 三平面内存（I420 打包布局）
+    image.format = mars_vision::MarsImageFormat::YUV_I420;
+    image.width = width;
+    image.stride = (stride > 0) ? stride : width;
+  } else {
+    // 未知格式，回退到 RGBA
+    image.format = mars_vision::MarsImageFormat::RGBA;
+    image.width = width;
+    image.stride = stride;
+  }
 
   std::vector<mars_vision::FaceLandmarkerResult> face_results;
   std::vector<float> landmarks;
