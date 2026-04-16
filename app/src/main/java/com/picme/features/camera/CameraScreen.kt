@@ -1108,6 +1108,8 @@ CameraPreviewContent(
                 beautySettings = beautySettings,
                 lensFacing = lensFacing,
                 cachedFaces = FaceDetectionCache.getCachedFaces(),
+                beautyStrategy = beautyStrategy,
+                gpupixelProvider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider,
                 onRecordingChanged = { updated -> recording = updated },
                 onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
             )
