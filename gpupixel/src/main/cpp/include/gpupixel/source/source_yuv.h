@@ -51,6 +51,10 @@ class GPUPIXEL_API SourceYUV : public Filter {
   uint32_t v_texture_ = 0;
   RotationMode rotation_ = NoRotation;
   std::shared_ptr<GPUPixelFramebuffer> framebuffer_;
+
+  // 记录当前纹理尺寸，用于判断是否可以使用 glTexSubImage2D 而非 glTexImage2D
+  int tex_width_ = 0;
+  int tex_height_ = 0;
 };
 
 }  // namespace gpupixel

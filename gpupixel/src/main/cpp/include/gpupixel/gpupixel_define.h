@@ -75,8 +75,12 @@
 namespace gpupixel {
 
 typedef enum GPUPIXEL_API {
-  GPUPIXEL_FRAME_TYPE_RGBA,
-  GPUPIXEL_FRAME_TYPE_BGRA,
+  GPUPIXEL_FRAME_TYPE_RGBA = 0,
+  GPUPIXEL_FRAME_TYPE_BGRA = 1,
+  // YUV I420 平面格式（Y + U + V 三平面连续排列）
+  // data 指针指向连续内存：[Y: width×height] [U: width/2×height/2] [V: width/2×height/2]
+  // stride 为 Y 平面的行字节宽（通常等于 width）
+  GPUPIXEL_FRAME_TYPE_YUV_I420 = 2,
 } GPUPIXEL_FRAME_TYPE;
 
 typedef enum GPUPIXEL_API {

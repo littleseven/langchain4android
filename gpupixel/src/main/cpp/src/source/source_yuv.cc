@@ -155,17 +155,40 @@ int SourceYUV::GenerateTextureWithPixels(const uint8_t* y_data,
   int uv_width = (tex_width + 1) / 2;
   int uv_height = (tex_height + 1) / 2;
 
+  // 尺寸相同时用 glTexSubImage2D 复用已分配显存（避免每帧重新分配 GPU 内存）；
+  // 尺寸变化（首帧或分辨率切换）时才用 glTexImage2D 重新分配。
+  const bool size_changed = (tex_width != tex_width_) || (tex_height != tex_height_);
+  if (size_changed) {
+    tex_width_ = tex_width;
+    tex_height_ = tex_height;
+  }
+
   GL_CALL(glBindTexture(GL_TEXTURE_2D, y_texture_));
-  GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, tex_width, tex_height, 0,
-                       GL_LUMINANCE, GL_UNSIGNED_BYTE, y_data));
+  if (size_changed) {
+    GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, tex_width, tex_height, 0,
+                         GL_LUMINANCE, GL_UNSIGNED_BYTE, y_data));
+  } else {
+    GL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tex_width, tex_height,
+                            GL_LUMINANCE, GL_UNSIGNED_BYTE, y_data));
+  }
 
   GL_CALL(glBindTexture(GL_TEXTURE_2D, u_texture_));
-  GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, uv_width, uv_height, 0,
-                       GL_LUMINANCE, GL_UNSIGNED_BYTE, u_data));
+  if (size_changed) {
+    GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, uv_width, uv_height, 0,
+                         GL_LUMINANCE, GL_UNSIGNED_BYTE, u_data));
+  } else {
+    GL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, uv_width, uv_height,
+                            GL_LUMINANCE, GL_UNSIGNED_BYTE, u_data));
+  }
 
   GL_CALL(glBindTexture(GL_TEXTURE_2D, v_texture_));
-  GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, uv_width, uv_height, 0,
-                       GL_LUMINANCE, GL_UNSIGNED_BYTE, v_data));
+  if (size_changed) {
+    GL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, uv_width, uv_height, 0,
+                         GL_LUMINANCE, GL_UNSIGNED_BYTE, v_data));
+  } else {
+    GL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, uv_width, uv_height,
+                            GL_LUMINANCE, GL_UNSIGNED_BYTE, v_data));
+  }
 
   GPUPixelContext::GetInstance()->SetActiveGlProgram(filter_program_);
   this->GetFramebuffer()->Activate();
