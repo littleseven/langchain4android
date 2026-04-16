@@ -13,9 +13,12 @@ import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.BeautyPreviewEngine
 import com.pixpark.gpupixel.FaceDetector
+import android.graphics.Bitmap
 import com.pixpark.gpupixel.GPUPixel
 import com.pixpark.gpupixel.GPUPixelFilter
+import com.pixpark.gpupixel.GPUPixelSinkRawData
 import com.pixpark.gpupixel.GPUPixelSinkSurface
+import com.pixpark.gpupixel.GPUPixelSourceImage
 import com.pixpark.gpupixel.GPUPixelSourceRawData
 import com.pixpark.gpupixel.GPUPixelSourceYUV
 import java.nio.ByteBuffer
@@ -73,6 +76,9 @@ class GpupixelBeautyPreviewProvider(
     private var faceDetector: FaceDetector? = null
     private var isInitialized = false
     private var lastParams: BeautyParams = BeautyParams.EMPTY
+    /** 缓存最近一次检测到的人脸 landmarks，供拍照处理时复用 */
+    @Volatile
+    private var lastDetectedLandmarks: FloatArray? = null
     /** 当前激活的风格特效滤镜（null 表示无特效 / STYLE_NONE） */
     private var activeStyleFilter: GPUPixelFilter? = null
     /** 当前激活的风格特效类名，用于判断是否需要切换 */
@@ -296,6 +302,7 @@ class GpupixelBeautyPreviewProvider(
             }
 
             if (landmarks != null && landmarks.isNotEmpty()) {
+                lastDetectedLandmarks = landmarks
                 faceReshapeFilter?.SetProperty("face_landmark", landmarks)
                 lipstickFilter?.SetProperty("face_landmark", landmarks)
                 blusherFilter?.SetProperty("face_landmark", landmarks)
@@ -437,6 +444,154 @@ class GpupixelBeautyPreviewProvider(
         Log.d(TAG, "TextureView size updated: content=${contentW}x${contentH}, " +
             "parent=${parentWidth}x${parentHeight}, layout=${layoutWidth}x${layoutHeight}, " +
             "isFillCenter=$isFillCenter, gravity=CENTER")
+    }
+
+    /**
+     * 使用 GPUPixel 滤镜链处理拍照后的 Bitmap，确保预览与拍照效果一致。
+     *
+     * 实现方式：独立创建一套拍照专用滤镜对象（避免与预览链竞争），
+     * 使用与预览完全相同的参数和 landmarks，通过 SourceImage → FilterChain → SinkRawData 渲染后返回 Bitmap。
+     */
+    fun processPhoto(bitmap: Bitmap): Bitmap {
+        if (!isInitialized) {
+            Log.w(TAG, "processPhoto called before initialization, returning original bitmap")
+            return bitmap
+        }
+
+        try {
+            // 创建独立的拍照滤镜链（避免与预览线程竞争）
+            val photoSource = GPUPixelSourceImage.CreateFromBitmap(bitmap)
+            val photoBeautyFilter = GPUPixelFilter.Create(GPUPixelFilter.BEAUTY_FACE_FILTER)
+            val photoLipstickFilter = GPUPixelFilter.Create(GPUPixelFilter.LIPSTICK_FILTER)
+            val photoBlusherFilter = GPUPixelFilter.Create(GPUPixelFilter.BLUSHER_FILTER)
+            val photoFaceReshapeFilter = GPUPixelFilter.Create(GPUPixelFilter.FACE_RESHAPE_FILTER)
+            val photoExposureFilter = GPUPixelFilter.Create(GPUPixelFilter.EXPOSURE_FILTER)
+            val photoContrastFilter = GPUPixelFilter.Create(GPUPixelFilter.CONTRAST_FILTER)
+            val photoSaturationFilter = GPUPixelFilter.Create(GPUPixelFilter.SATURATION_FILTER)
+            val photoWhiteBalanceFilter = GPUPixelFilter.Create(GPUPixelFilter.WHITE_BALANCE_FILTER)
+            val photoSinkRawData = GPUPixelSinkRawData.Create()
+
+            // 初始化调色参数为中性值（后续会被覆盖）
+            photoExposureFilter?.SetProperty("exposure", 0f)
+            photoContrastFilter?.SetProperty("contrast", 1f)
+            photoSaturationFilter?.SetProperty("saturation", 1f)
+            photoWhiteBalanceFilter?.SetProperty("temperature", 5000f)
+            photoWhiteBalanceFilter?.SetProperty("tint", 0f)
+
+            // 构建滤镜链：sourceImage → lipstick → blusher → beauty → faceReshape → exposure → contrast → saturation → whiteBalance → [styleFilter] → sinkRawData
+            photoSource?.AddSink(photoLipstickFilter)
+            photoLipstickFilter?.AddSink(photoBlusherFilter)
+            photoBlusherFilter?.AddSink(photoBeautyFilter)
+            photoBeautyFilter?.AddSink(photoFaceReshapeFilter)
+            photoFaceReshapeFilter?.AddSink(photoExposureFilter)
+            photoExposureFilter?.AddSink(photoContrastFilter)
+            photoContrastFilter?.AddSink(photoSaturationFilter)
+            photoSaturationFilter?.AddSink(photoWhiteBalanceFilter)
+
+            // 风格特效
+            val styleClassName = lastParams.styleFilterClassName
+            val photoStyleFilter: GPUPixelFilter? = if (styleClassName != null) {
+                val sf = GPUPixelFilter.Create(styleClassName)
+                if (sf != null && sf.getNativeClassID() != 0L) {
+                    // 设置风格滤镜默认参数（与预览一致）
+                    when (styleClassName) {
+                        "ToonFilter" -> {
+                            sf.SetProperty("threshold", 0.2f)
+                            sf.SetProperty("quantizationLevels", 10.0f)
+                        }
+                        "SmoothToonFilter" -> {
+                            sf.SetProperty("blurRadius", 2.0f)
+                            sf.SetProperty("threshold", 0.1f)
+                            sf.SetProperty("quantizationLevels", 10.0f)
+                        }
+                        "SketchFilter" -> sf.SetProperty("edgeStrength", 1.0f)
+                        "PosterizeFilter" -> sf.SetProperty("colorLevels", 4f)
+                        "EmbossFilter" -> sf.SetProperty("intensity", 1.0f)
+                        "CrosshatchFilter" -> {
+                            sf.SetProperty("crossHatchSpacing", 0.03f)
+                            sf.SetProperty("lineWidth", 0.003f)
+                        }
+                    }
+                    photoWhiteBalanceFilter?.AddSink(sf)
+                    sf.AddSink(photoSinkRawData)
+                    sf
+                } else {
+                    photoWhiteBalanceFilter?.AddSink(photoSinkRawData)
+                    null
+                }
+            } else {
+                photoWhiteBalanceFilter?.AddSink(photoSinkRawData)
+                null
+            }
+
+            // 同步当前美颜参数
+            if (!lastParams.enabled) {
+                photoBeautyFilter?.SetProperty("skin_smoothing", 0.0f)
+                photoBeautyFilter?.SetProperty("whiteness", 0.0f)
+                photoFaceReshapeFilter?.SetProperty("thin_face", 0.0f)
+                photoFaceReshapeFilter?.SetProperty("big_eye", 0.0f)
+                photoLipstickFilter?.SetProperty("blend_level", 0.0f)
+                photoBlusherFilter?.SetProperty("blend_level", 0.0f)
+            } else {
+                photoBeautyFilter?.SetProperty("skin_smoothing", lastParams.smoothing)
+                photoBeautyFilter?.SetProperty("whiteness", lastParams.whitening)
+                photoFaceReshapeFilter?.SetProperty("thin_face", lastParams.slimFace)
+                photoFaceReshapeFilter?.SetProperty("big_eye", lastParams.bigEyes)
+                photoLipstickFilter?.SetProperty("blend_level", lastParams.lipColor)
+                photoBlusherFilter?.SetProperty("blend_level", lastParams.blush)
+            }
+            photoExposureFilter?.SetProperty("exposure", lastParams.gpuExposure.coerceIn(-10f, 10f))
+            photoContrastFilter?.SetProperty("contrast", lastParams.gpuContrast.coerceIn(0f, 4f))
+            photoSaturationFilter?.SetProperty("saturation", lastParams.gpuSaturation.coerceIn(0f, 2f))
+            photoWhiteBalanceFilter?.SetProperty("temperature", lastParams.gpuWhiteBalance.coerceIn(2000f, 10000f))
+            photoWhiteBalanceFilter?.SetProperty("tint", 0f)
+
+            // 同步最新的人脸 landmarks（从预览链路的 faceReshapeFilter 中读取当前值）
+            // GPUPixel 的 SetProperty 内部会保存 landmarks，但 Java 层没有 getter。
+            // 替代方案：在 onYuvFrame 中把最新的 landmarks 缓存到一个成员变量中。
+            val cachedLandmarks = lastDetectedLandmarks
+            if (cachedLandmarks != null && cachedLandmarks.isNotEmpty()) {
+                photoFaceReshapeFilter?.SetProperty("face_landmark", cachedLandmarks)
+                photoLipstickFilter?.SetProperty("face_landmark", cachedLandmarks)
+                photoBlusherFilter?.SetProperty("face_landmark", cachedLandmarks)
+            }
+
+            // 执行渲染
+            photoSource?.Render()
+
+            // 读取输出
+            val rgbaBuffer = photoSinkRawData?.GetRgbaBuffer()
+            val outWidth = photoSinkRawData?.GetWidth() ?: bitmap.width
+            val outHeight = photoSinkRawData?.GetHeight() ?: bitmap.height
+
+            val resultBitmap = if (rgbaBuffer != null && rgbaBuffer.isNotEmpty()) {
+                val result = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888)
+                val byteBuffer = java.nio.ByteBuffer.wrap(rgbaBuffer)
+                byteBuffer.rewind()
+                result.copyPixelsFromBuffer(byteBuffer)
+                result
+            } else {
+                bitmap
+            }
+
+            // 清理资源
+            photoStyleFilter?.Destroy()
+            photoSource?.Destroy()
+            photoLipstickFilter?.Destroy()
+            photoBlusherFilter?.Destroy()
+            photoBeautyFilter?.Destroy()
+            photoFaceReshapeFilter?.Destroy()
+            photoExposureFilter?.Destroy()
+            photoContrastFilter?.Destroy()
+            photoSaturationFilter?.Destroy()
+            photoWhiteBalanceFilter?.Destroy()
+            photoSinkRawData?.Destroy()
+
+            return resultBitmap
+        } catch (e: Exception) {
+            Log.e(TAG, "processPhoto error", e)
+            return bitmap
+        }
     }
 
     override fun updateFilters(params: BeautyParams) {

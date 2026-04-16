@@ -59,7 +59,8 @@ interface ImageProcessor {
         beauty: BeautySettings,
         lensFacing: Int,
         mode: MediaType = MediaType.PHOTO,
-        cachedFaces: List<Face> = emptyList()
+        cachedFaces: List<Face> = emptyList(),
+        gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider? = null
     )
 
     fun startVideoRecording(
@@ -523,17 +524,18 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         beauty: BeautySettings,
         lensFacing: Int,
         mode: MediaType,
-        cachedFaces: List<Face>
+        cachedFaces: List<Face>,
+        gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider?
     ) {
-        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}")
-        
+        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, gpupixelProvider=${gpupixelProvider != null}")
+
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         imageCapture.takePicture(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     Logger.d("ImageProcessor", "Photo captured successfully, rotation=${image.imageInfo.rotationDegrees}")
-                    
+
                     val rotationDegrees = image.imageInfo.rotationDegrees
 
                     // [关键] 检查ViewPort的CropRect
@@ -573,14 +575,32 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
 
                     Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
+                    // GPUPixel 模式：使用 GPUPixel 滤镜链处理拍照，确保与预览效果一致
+                    if (gpupixelProvider != null) {
+                        Logger.d("ImageProcessor", "GPUPixel mode: processing photo with GPUPixel filter chain")
+                        val finalBitmap = gpupixelProvider.processPhoto(rotatedBitmap)
+                        // 色调滤镜在 GPUPixel 中已通过 whiteBalanceFilter 等处理，
+                        // 但用户选择的 ColorMatrix 滤镜（如 LEICA_CLASSIC）是 App 层独立实现的，
+                        // 如果 GPUPixel 未接入该滤镜，仍需在 Bitmap 上应用。
+                        val output = if (filter != FilterType.NONE) {
+                            applyColorMatrixFilter(finalBitmap, filter)
+                        } else {
+                            finalBitmap
+                        }
+                        saveBitmapToMediaStore(
+                            context, output, name, viewModel, cachedFaces.isNotEmpty(), null, mode
+                        )
+                        return
+                    }
+
                     // [方案 B 变种] 优先使用缓存的人脸检测结果进行美颜（磨皮/美白/瘦脸/大眼）
                     // 但妆容（唇色/腮红/眉毛）需要在拍照后的图片上重新检测人脸，以确保坐标正确
                     if (cachedFaces.isNotEmpty()) {
                         Logger.d("ImageProcessor", "Using cached faces from preview: ${cachedFaces.size} faces")
-                        
+
                         // 检查是否需要妆容处理
                         val needMakeup = beauty.lipColor > 0f || beauty.blush > 0f || beauty.eyebrow > 0f
-                        
+
                         if (!needMakeup) {
                             // 不需要妆容，直接使用缓存的人脸进行美颜处理
                             val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, cachedFaces, lensFacing)
@@ -590,7 +610,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                             )
                             return
                         }
-                        
+
                         // 需要妆容，必须在拍照后的图片上重新检测人脸
                         Logger.d("ImageProcessor", "Makeup required, performing detection on captured photo")
                     }
@@ -606,7 +626,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 )
                     val inputImage = InputImage.fromBitmap(rotatedBitmap, 0)
                     Logger.d("ImageProcessor", "Starting face detection on bitmap ${rotatedBitmap.width}x${rotatedBitmap.height}")
-                    
+
                     faceDetector.process(inputImage)
                         .addOnSuccessListener { faces ->
                             Logger.d("ImageProcessor", "Face detection success: ${faces.size} faces found")
@@ -747,6 +767,16 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         canvas.drawBitmapMesh(source, meshWidth, meshHeight, verts, 0, null, 0, null)
+        return output
+    }
+
+    private fun applyColorMatrixFilter(bitmap: Bitmap, filter: FilterType): Bitmap {
+        val output = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        val paint = Paint().apply {
+            colorFilter = ColorMatrixColorFilter(filter.toAndroidColorMatrix())
+        }
+        canvas.drawBitmap(bitmap, 0f, 0f, paint)
         return output
     }
 
