@@ -1,7 +1,7 @@
 # 相机预览完整指南
 
 **最后更新**：2026-04（按预览策略重构对齐）
-**状态**：生产稳定版（策略化预览链路：大美丽 Provider + PreviewView）
+**状态**：生产稳定版（策略化预览链路：大美丽 Provider + PreviewView + GPUPixel 零拷贝 YUV 链路）
 
 ---
 
@@ -10,7 +10,7 @@
 ### 1.1 核心原则
 **采用策略化预览绑定（大美丽 Provider + PreviewView 兜底）**，并在 `PreviewView` 路径下使用 `ScaleType` 处理比例。
 
-> 说明：本指南聚焦预览层的比例与坐标问题；当前实现仅保留 `GlBeautyPreviewStrategy`（BIG_BEAUTY），PixelFree 相关策略已完全移除。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `BIG_BEAUTY_TECH_SPEC.md`。
+> 说明：本指南聚焦预览层的比例与坐标问题；当前实现保留 `GlBeautyPreviewStrategy`（BIG_BEAUTY）与 `GpupixelBeautyPreviewStrategy`（GPUPIXEL）两条策略，PixelFree 相关策略已完全移除。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `BIG_BEAUTY_TECH_SPEC.md`；GPUPixel 零拷贝 YUV 链路详见 `beauty-engine/AGENTS.md`。
 
 ### 1.2 PreviewView 路径技术方案（兜底与通用预览）
 
@@ -269,6 +269,7 @@ DisposableEffect(previewView) {
 - 使用 `ImplementationMode.COMPATIBLE` 确保兼容性
 - 避免频繁切换 `ScaleType`
 - 坐标转换缓存 `Matrix` 对象
+- GPUPixel 模式下使用 `ImageAnalysis` 而非 `Preview` UseCase，Native 层合并 I420+RGBA 转换，JNI 使用 `DirectByteBuffer` 消除潜在拷贝
 
 ---
 
@@ -298,4 +299,5 @@ DisposableEffect(previewView) {
 - `FEATURES.md` - 功能交互规范
 - `AGENTS.md` - AI Agent 操作规范
 - `BIG_BEAUTY_TECH_SPEC.md` - 大美丽实时美颜自主方案
+- `beauty-engine/AGENTS.md` - Beauty Engine 模块实现规范（含 GPUPixel 零拷贝链路）
 

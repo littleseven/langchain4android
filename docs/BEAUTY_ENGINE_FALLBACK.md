@@ -4,7 +4,7 @@
 > 
 > 本文档统一说明 `beauty-engine`（大美丽）初始化失败或运行异常时的回退策略、状态记录与恢复机制。各模块 AGENTS.md 中涉及容灾降级的描述，均以此文档为准。
 
-**最后更新**：2026-04-11（PixelFree 已完全移除，重写为单主引擎 + GPUPixel 实验引擎策略）
+**最后更新**：2026-04-14（PixelFree 已完全移除，GPUPixel 零拷贝 YUV 预览链路已完成）
 
 ---
 
@@ -15,7 +15,7 @@ PicMe 当前引擎策略如下：
 | 引擎 | 状态 | 职责 | 实现类 | 所在模块 |
 |------|------|------|--------|----------|
 | **大美丽 (`BIG_BEAUTY`)** | ✅ 默认主引擎 | 自研 OpenGL ES + EGL 管线，完整美颜功能 | `GlBeautyPreviewProvider` | `:beauty-engine` |
-| **GPUPixel (`GPUPIXEL`)** | 🧪 实验性备选 | 开源 C++/OpenGL ES 滤镜库，通过 `BeautyStrategy.GPUPIXEL` 手动切换 | `GpupixelBeautyPreviewStrategy` | `:app` |
+| **GPUPixel (`GPUPIXEL`)** | 🧪 实验性备选 | 开源 C++/OpenGL ES 滤镜库，已完成零拷贝 YUV 预览链路，通过 `BeautyStrategy.GPUPIXEL` 手动切换 | `GpupixelBeautyPreviewStrategy` | `:app` |
 | ~~PixelFree (`PIXEL_FREE`)~~ | ❌ **已完全移除（2026-04）** | 第三方 SDK 兜底引擎，因与 Compose 架构冲突且算法不可控，已彻底清除 | — | — |
 
 > **重要说明**：当前项目**不再**使用"主引擎失败自动降级至兜底引擎"的双引擎策略。
