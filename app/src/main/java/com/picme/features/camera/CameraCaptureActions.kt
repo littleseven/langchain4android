@@ -48,6 +48,7 @@ internal fun handleCaptureClick(
                 lensFacing = lensFacing,
                 mode = captureMode,
                 cachedFaces = cachedFaces,
+                beautyStrategy = beautyStrategy,
                 gpupixelProvider = gpupixelProvider
             )
         }

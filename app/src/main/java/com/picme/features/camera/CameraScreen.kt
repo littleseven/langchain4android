@@ -1095,6 +1095,11 @@ CameraPreviewContent(
         onCurrentGridChanged = { grid -> currentGrid = grid },
         onNavigateToGallery = onNavigateToGallery,
         onCaptureClick = {
+            val provider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
+            android.util.Log.d(
+                "PicMe:Camera",
+                "onCaptureClick: beautyStrategy=$beautyStrategy, glPreviewProviderType=${glPreviewProvider?.javaClass?.simpleName}, castResult=${provider != null}"
+            )
             handleCaptureClick(
                 context = context,
                 captureMode = captureMode,
@@ -1109,7 +1114,7 @@ CameraPreviewContent(
                 lensFacing = lensFacing,
                 cachedFaces = FaceDetectionCache.getCachedFaces(),
                 beautyStrategy = beautyStrategy,
-                gpupixelProvider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider,
+                gpupixelProvider = provider,
                 onRecordingChanged = { updated -> recording = updated },
                 onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
             )
