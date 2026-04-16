@@ -60,6 +60,7 @@ interface ImageProcessor {
         lensFacing: Int,
         mode: MediaType = MediaType.PHOTO,
         cachedFaces: List<Face> = emptyList(),
+        beautyStrategy: com.picme.domain.model.BeautyStrategy = com.picme.domain.model.BeautyStrategy.BIG_BEAUTY,
         gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider? = null
     )
 
@@ -525,9 +526,10 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         lensFacing: Int,
         mode: MediaType,
         cachedFaces: List<Face>,
+        beautyStrategy: com.picme.domain.model.BeautyStrategy,
         gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider?
     ) {
-        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, gpupixelProvider=${gpupixelProvider != null}")
+        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy, gpupixelProvider=${gpupixelProvider != null}")
 
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         imageCapture.takePicture(
@@ -576,19 +578,26 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
                     // GPUPixel 模式：使用 GPUPixel 滤镜链处理拍照，确保与预览效果一致
-                    if (gpupixelProvider != null) {
-                        Logger.d("ImageProcessor", "GPUPixel mode: processing photo with GPUPixel filter chain")
-                        val finalBitmap = gpupixelProvider.processPhoto(rotatedBitmap)
-                        // 色调滤镜在 GPUPixel 中已通过 whiteBalanceFilter 等处理，
-                        // 但用户选择的 ColorMatrix 滤镜（如 LEICA_CLASSIC）是 App 层独立实现的，
-                        // 如果 GPUPixel 未接入该滤镜，仍需在 Bitmap 上应用。
-                        val output = if (filter != FilterType.NONE) {
-                            applyColorMatrixFilter(finalBitmap, filter)
-                        } else {
-                            finalBitmap
+                    if (beautyStrategy == com.picme.domain.model.BeautyStrategy.GPUPIXEL) {
+                        if (gpupixelProvider != null) {
+                            Logger.d("ImageProcessor", "GPUPixel mode: processing photo with GPUPixel filter chain")
+                            val finalBitmap = gpupixelProvider.processPhoto(rotatedBitmap)
+                            // 色调滤镜在 GPUPixel 中已通过 whiteBalanceFilter 等处理，
+                            // 但用户选择的 ColorMatrix 滤镜（如 LEICA_CLASSIC）是 App 层独立实现的，
+                            // 如果 GPUPixel 未接入该滤镜，仍需在 Bitmap 上应用。
+                            val output = if (filter != FilterType.NONE) {
+                                applyColorMatrixFilter(finalBitmap, filter)
+                            } else {
+                                finalBitmap
+                            }
+                            saveBitmapToMediaStore(
+                                context, output, name, viewModel, cachedFaces.isNotEmpty(), null, mode
+                            )
+                            return
                         }
+                        Logger.e("ImageProcessor", "GPUPixel strategy active but gpupixelProvider is null! Saving original bitmap.")
                         saveBitmapToMediaStore(
-                            context, output, name, viewModel, cachedFaces.isNotEmpty(), null, mode
+                            context, rotatedBitmap, name, viewModel, cachedFaces.isNotEmpty(), null, mode
                         )
                         return
                     }
