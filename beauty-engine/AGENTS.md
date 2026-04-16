@@ -168,6 +168,8 @@ beauty-engine/src/main/java/com/picme/beauty/
 
 ### 2.4 零拷贝数据流
 
+#### 大美丽 (BIG_BEAUTY) 路径
+
 ```
 CameraX 预览帧
     ↓ (无拷贝)
@@ -184,6 +186,32 @@ SurfaceView Surface
 - ❌ 禁止 `glReadPixels` 将图像读回 CPU
 - ❌ 禁止多次纹理上传/下载
 - ✅ 全流程在 GPU 内完成
+
+#### GPUPixel 路径（2026-04 优化后）
+
+```
+CameraX ImageAnalysis (YUV_420_888)
+    ↓
+GPUPixel.YUV_420_888toI420AndRGBA()
+    ├── Native 层 ExtractI420Planes (YUV → 标准 I420，第 1 次 copy)
+    ├── libyuv::I420Rotate (I420 旋转，第 2 次 copy)
+    ├── memcpy (rotated I420 → Y/U/V DirectByteBuffer，第 3 次 copy)
+    └── libyuv::I420ToABGR (I420 → RGBA DirectByteBuffer，第 4 次 copy)
+    ↓
+GpupixelBeautyPreviewProvider.onYuvFrame()
+    ├── 人脸检测：rgbaBuffer → FaceDetector.detect() (DirectByteBuffer 零拷贝)
+    └── 渲染：yBuffer/uBuffer/vBuffer → SourceYUV.ProcessData() (DirectByteBuffer 零拷贝)
+        ↓
+    GPU Shader 实时 YUV→RGBA 转换 → GPUPixelSinkSurface → TextureView
+```
+
+**关键优化点**：
+- `ExtractI420Planes` 针对 `pixel_stride == 1` 的 CameraX 输出走 `memcpy` 快路径，避免逐像素循环
+- JNI 层使用 `DirectByteBuffer` + `GetDirectBufferAddress`，消除 `byte[]` 的潜在拷贝
+- 渲染链路使用 `SourceYUV` GPU Shader 实时 YUV→RGBA 转换，无需在 CPU 侧预转 RGBA
+- 人脸检测使用 RGBA `ByteBuffer` 路径；`mars-face-kit` 对 `YUV_I420` 支持不完善且会污染检测器内部状态，**严禁传入 YUV_I420**
+
+**当前链路严格 copy 次数**：**4 次**（工程口径）
 
 ### 2.5 性能监控与告警
 
@@ -321,7 +349,13 @@ sourceRawData?.SetRotation(rotationMode)
 
 #### CameraX Preview UseCase 与 GPUPixel 冲突
 - [ ] GPUPixel 模式下是否避免创建 CameraX `Preview` UseCase？（`Preview` 占用 Surface 会导致 `ImageAnalysis` 无帧，引发黑屏）
-- [ ] GPUPixel 模式下帧数据是否通过 `ImageAnalysis → onRgbaFrame()` 路径传递，而非 `Preview.SurfaceProvider`？
+- [ ] GPUPixel 模式下帧数据是否通过 `ImageAnalysis → onYuvFrame()` 路径传递，而非 `Preview.SurfaceProvider`？
+- [ ] `CameraUseCasesBinder.kt` 中 GPUPixel 模式是否仅绑定 `imageCapture + imageAnalysis`？
+
+#### GPUPixel YUV 零拷贝渲染约束
+- [ ] 渲染链路是否使用 `SourceYUV` 而非 `GPUPixelSourceRawData`？（YUV 直通避免 CPU 侧 RGBA 转换）
+- [ ] `yBuffer/uBuffer/vBuffer` 是否为 `DirectByteBuffer`？（确保 `GetDirectBufferAddress` 零拷贝）
+- [ ] 人脸检测是否仅使用 `RGBA` 格式传入 `FaceDetector`？（`YUV_I420` 会导致 `mars-face-kit` 检测失效并污染状态）
 
 #### GPUPixel 已接入能力清单（2026-04）
 
