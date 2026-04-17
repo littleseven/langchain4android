@@ -125,6 +125,13 @@ class GlBeautyPreviewProvider(
         beautyPreviewView?.updateLipMaskPoints(outerPoints, innerPoints)
     }
 
+    override fun updateCheekContourPoints(
+        leftCheekPoints: List<Pair<Float, Float>>,
+        rightCheekPoints: List<Pair<Float, Float>>
+    ) {
+        beautyPreviewView?.updateCheekContourPoints(leftCheekPoints, rightCheekPoints)
+    }
+
     override fun release() {
         previewSurface?.release()
         previewSurface = null

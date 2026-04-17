@@ -485,6 +485,19 @@ class CameraPreviewRenderer(private val context: Context) {
         beautyRenderer.updateLipMaskPoints(mappedOuterPoints, normalizedInnerPoints)
     }
 
+    fun updateCheekContourPoints(
+        leftCheekPoints: List<Pair<Float, Float>>,
+        rightCheekPoints: List<Pair<Float, Float>>
+    ) {
+        val mappedLeftPoints = leftCheekPoints.map { point ->
+            mapViewNormalizedToUv(point.first, point.second)
+        }
+        val mappedRightPoints = rightCheekPoints.map { point ->
+            mapViewNormalizedToUv(point.first, point.second)
+        }
+        beautyRenderer.updateCheekContourPoints(mappedLeftPoints, mappedRightPoints)
+    }
+
     private fun normalizeInnerLipContour(
         outerPoints: List<Pair<Float, Float>>,
         innerPoints: List<Pair<Float, Float>>

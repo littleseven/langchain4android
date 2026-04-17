@@ -250,6 +250,9 @@ internal fun handleImageAnalysisFrame(
                         "cheeks=${allContours.leftCheek.size + allContours.rightCheek.size}"
                     )
 
+                    val leftCheekContourPoints = mapContourToNorm(face.getContour(FaceContour.LEFT_CHEEK)?.points)
+                    val rightCheekContourPoints = mapContourToNorm(face.getContour(FaceContour.RIGHT_CHEEK)?.points)
+
                     val faceWarpParams = FaceWarpParams(
                         faceCenterX = faceCenterNorm.x,
                         faceCenterY = faceCenterNorm.y,
@@ -274,6 +277,8 @@ internal fun handleImageAnalysisFrame(
                         rightEyeContourPoints = rightEyeContourPoints,
                         lipOuterContourPoints = lipOuterContourPoints,
                         lipInnerContourPoints = lipInnerContourPoints,
+                        leftCheekContourPoints = leftCheekContourPoints,
+                        rightCheekContourPoints = rightCheekContourPoints,
                         allContours = allContours
                     )
                     onFaceWarpParamsChanged(faceWarpParams)

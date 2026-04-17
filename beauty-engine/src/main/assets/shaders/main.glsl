@@ -22,10 +22,7 @@ void main() {
     vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
     vec4 lipTinted = applyLipTint(whitened, warpedUv);
     
-    float blushMask = blushMaskFromCheeks(warpedUv);
-    float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
-    vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
-    vec3 makeupColor = mix(lipTinted.rgb, blushTarget, blushBlend);
+    vec3 makeupColor = applyBlush(lipTinted.rgb, warpedUv);
     vec4 finalColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
 
     // Color Matrix Filter

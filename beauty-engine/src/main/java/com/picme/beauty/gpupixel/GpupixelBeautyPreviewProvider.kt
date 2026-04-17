@@ -755,6 +755,13 @@ class GpupixelBeautyPreviewProvider(
         // GPUPixel 使用自带 FaceDetector 的 landmarks，此处忽略 ML Kit 参数
     }
 
+    override fun updateCheekContourPoints(
+        leftCheekPoints: List<Pair<Float, Float>>,
+        rightCheekPoints: List<Pair<Float, Float>>
+    ) {
+        // GPUPixel 使用自带 FaceDetector 的 landmarks，此处忽略 ML Kit 参数
+    }
+
     override fun release() {
         // 先断开并销毁当前风格滤镜（若有）
         activeStyleFilter?.let { style ->
