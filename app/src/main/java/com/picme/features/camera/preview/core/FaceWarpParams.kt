@@ -5,7 +5,7 @@ import androidx.compose.ui.geometry.Offset
 /**
  * 存储所有人脸 Contour 点的数据类（用于调试）
  */
-internal data class FaceContourData(
+data class FaceContourData(
     val faceOval: List<Offset> = emptyList(),      // 脸部轮廓 ~36点
     val leftEyebrowTop: List<Offset> = emptyList(),
     val leftEyebrowBottom: List<Offset> = emptyList(),
@@ -36,7 +36,7 @@ internal data class FaceContourData(
     }
 }
 
-internal data class FaceWarpParams(
+data class FaceWarpParams(
     val faceCenterX: Float = 0.5f,
     val faceCenterY: Float = 0.5f,
     val leftEyeX: Float = 0.4f,
@@ -72,7 +72,7 @@ internal data class FaceWarpParams(
 /**
  * GPUPixel 106 点数据结构（mars-face-kit 格式）
  */
-internal data class GpuPixelLandmarks(
+data class GpuPixelLandmarks(
     val points: List<Offset> = emptyList(),  // 106 个点 (x,y) 归一化坐标
     val hasFace: Boolean = false
 ) {

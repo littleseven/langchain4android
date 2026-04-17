@@ -39,6 +39,7 @@ material = "1.4.0"
 media3 = "1.5.1"
 mlkitFaceDetection = "16.1.7"
 mlkitTextRecognition = "16.0.1"
+mediapipeFaceLandmarker = "0.10.14"
 kotlinxCoroutinesPlayServices = "1.10.2"
 mockk = "1.13.8"
 
@@ -92,6 +93,7 @@ androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.re
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 google-mlkit-face-detection = { group = "com.google.mlkit", name = "face-detection", version.ref = "mlkitFaceDetection" }
 google-mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+mediapipe-face-landmarker = { group = "com.google.mediapipe", name = "tasks-vision", version.ref = "mediapipeFaceLandmarker" }
 google-mlkit-text-recognition-chinese = { group = "com.google.mlkit", name = "text-recognition-chinese", version.ref = "mlkitTextRecognition" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutinesPlayServices" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
