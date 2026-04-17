@@ -308,10 +308,56 @@ class OffscreenRenderer {
 
 | 日期 | 决策 | 决策人 | 状态 |
 |------|------|--------|------|
-| 2026-04-17 | 采用方案 A (OpenGL 离屏渲染) | PM/RD | 提议 |
-| 2026-04-17 | 4 阶段实施计划 | RD | 提议 |
-| - | Phase 1 启动 | - | 待 PM 确认 |
+| 2026-04-17 | 采用方案 A (OpenGL 离屏渲染) | PM/RD | 已接受 |
+| 2026-04-17 | 4 阶段实施计划 | RD | 已接受 |
+| 2026-04-17 | **Phase 1 启动** | PM | 🚀 **进行中** |
 
 ---
 
-**下一步**: 等待 PM 评审并确认 Phase 1 启动时间
+## 9. Phase 1 进展记录
+
+### 2026-04-17 基础设施框架搭建
+
+| 任务 | 状态 | 产出文件 |
+|------|------|---------|
+| OffscreenRenderer 框架 | ✅ 完成 | `OffscreenRenderer.kt` |
+| BeautyShaderChain 抽象 | ✅ 完成 | `BeautyShaderChain.kt` |
+| Shader 接口定义 | ✅ 完成 | `ShaderInterfaces.kt` |
+| 单元测试骨架 | ✅ 完成 | `OffscreenRendererTest.kt` |
+
+### 已完成代码文件
+
+**OffscreenRenderer.kt** - 核心离屏渲染器
+- Bitmap → Texture → FBO → Bitmap 完整流程
+- PBO 异步读取优化（双缓冲）
+- 资源自动管理（FBO/Texture 复用）
+- 错误处理和边界检查
+
+**BeautyShaderChain.kt** - 统一 Shader 链
+- 美颜参数数据类（BeautyParams）
+- 人脸数据结构（FaceData）
+- 链式 Shader 执行逻辑
+- 与预览渲染共享同一套参数更新机制
+
+**ShaderInterfaces.kt** - Shader 接口契约
+- 磨皮、美白、瘦脸、大眼、唇色、腮红、滤镜 7 个 Shader 接口
+- 统一的生命周期管理（setIntensity, release）
+
+### 验收进度
+
+Phase 1 验收标准：
+- [x] OffscreenRenderer 框架实现（支持 Bitmap 输入输出）
+- [ ] 单元测试通过（需真实 EGL 环境）
+- [ ] 1080p 图片处理 < 500ms（需设备测试）
+- [ ] 内存无泄漏测试（需设备测试）
+
+### 下一步工作
+
+1. 实现具体 Shader 类（从现有 BeautyPreviewView 提取）
+2. 集成到 GpuBeautyProcessor 拍照流程
+3. 添加设备级仪器测试
+4. 性能基准测试
+
+---
+
+**当前状态**: Phase 1 框架完成，等待 Shader 迁移和设备测试
