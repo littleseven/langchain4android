@@ -251,6 +251,14 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.updateLipMaskPoints(outerPoints, innerPoints)
     }
 
+    fun updateCheekContourPoints(
+        leftCheekPoints: List<Pair<Float, Float>>,
+        rightCheekPoints: List<Pair<Float, Float>>
+    ) {
+        if (!isRendererInitialized) return
+        renderer.updateCheekContourPoints(leftCheekPoints, rightCheekPoints)
+    }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         Log.d(TAG, "BeautyPreviewView attached to window")

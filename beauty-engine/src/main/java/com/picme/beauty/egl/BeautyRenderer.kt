@@ -60,6 +60,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var faceRadius: Float = 0.18f
     private var hasFace: Float = 0f
 
+    private val leftCheekContourBuffer = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private var leftCheekContourCount: Int = 0
+    private val rightCheekContourBuffer = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private var rightCheekContourCount: Int = 0
+
     private var warmthStrength: Float = 0.0f
     private var contrast: Float = 1.0f
     private var texelSizeX: Float = 0.0015f
@@ -85,6 +90,10 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uLipOuterContourCountLocation: Int = -1
     private var uLipInnerContourPointsLocation: Int = -1
     private var uLipInnerContourCountLocation: Int = -1
+    private var uLeftCheekContourPointsLocation: Int = -1
+    private var uLeftCheekContourCountLocation: Int = -1
+    private var uRightCheekContourPointsLocation: Int = -1
+    private var uRightCheekContourCountLocation: Int = -1
     private var uWarmthLocation: Int = -1
     private var uContrastLocation: Int = -1
     private var uLipColorLocation: Int = -1
@@ -213,6 +222,35 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         }
     }
 
+    fun updateCheekContourPoints(
+        leftCheekPoints: List<Pair<Float, Float>>,
+        rightCheekPoints: List<Pair<Float, Float>>
+    ) {
+        leftCheekContourCount = leftCheekPoints.size.coerceIn(0, MAX_LIP_CONTOUR_POINTS)
+        rightCheekContourCount = rightCheekPoints.size.coerceIn(0, MAX_LIP_CONTOUR_POINTS)
+
+        for (index in 0 until MAX_LIP_CONTOUR_POINTS) {
+            val base = index * 2
+            if (index < leftCheekContourCount) {
+                val point = leftCheekPoints[index]
+                leftCheekContourBuffer[base] = point.first.coerceIn(0f, 1f)
+                leftCheekContourBuffer[base + 1] = point.second.coerceIn(0f, 1f)
+            } else {
+                leftCheekContourBuffer[base] = 0f
+                leftCheekContourBuffer[base + 1] = 0f
+            }
+
+            if (index < rightCheekContourCount) {
+                val point = rightCheekPoints[index]
+                rightCheekContourBuffer[base] = point.first.coerceIn(0f, 1f)
+                rightCheekContourBuffer[base + 1] = point.second.coerceIn(0f, 1f)
+            } else {
+                rightCheekContourBuffer[base] = 0f
+                rightCheekContourBuffer[base + 1] = 0f
+            }
+        }
+    }
+
     fun setTexelSize(width: Int, height: Int) {
         if (width > 0 && height > 0) {
             texelSizeX = 1.0f / width
@@ -287,6 +325,18 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 )
                 shaderProgram.setVec2("uLeftEye", leftEyeX, leftEyeY)
                 shaderProgram.setVec2("uRightEye", rightEyeX, rightEyeY)
+                shaderProgram.setFloat("uLeftCheekContourCount", leftCheekContourCount.toFloat())
+                shaderProgram.setVec2Array(
+                    "uLeftCheekContourPoints",
+                    leftCheekContourBuffer,
+                    MAX_LIP_CONTOUR_POINTS
+                )
+                shaderProgram.setFloat("uRightCheekContourCount", rightCheekContourCount.toFloat())
+                shaderProgram.setVec2Array(
+                    "uRightCheekContourPoints",
+                    rightCheekContourBuffer,
+                    MAX_LIP_CONTOUR_POINTS
+                )
 
                 if (renderMode == MODE_ADVANCED) {
                     shaderProgram.setFloat("uWarmth", warmthStrength)
@@ -343,6 +393,14 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             shaderProgram.getUniformLocation("uLipInnerContourPoints")
         uLipInnerContourCountLocation =
             shaderProgram.getUniformLocation("uLipInnerContourCount")
+        uLeftCheekContourPointsLocation =
+            shaderProgram.getUniformLocation("uLeftCheekContourPoints")
+        uLeftCheekContourCountLocation =
+            shaderProgram.getUniformLocation("uLeftCheekContourCount")
+        uRightCheekContourPointsLocation =
+            shaderProgram.getUniformLocation("uRightCheekContourPoints")
+        uRightCheekContourCountLocation =
+            shaderProgram.getUniformLocation("uRightCheekContourCount")
         uWarmthLocation = shaderProgram.getUniformLocation("uWarmth")
         uContrastLocation = shaderProgram.getUniformLocation("uContrast")
         uLipColorLocation = shaderProgram.getUniformLocation("uLipColor")

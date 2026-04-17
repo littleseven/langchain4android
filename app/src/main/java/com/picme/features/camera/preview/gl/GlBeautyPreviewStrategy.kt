@@ -86,6 +86,14 @@ internal class GlBeautyPreviewStrategy(
                     Pair(contourPoint.x, contourPoint.y)
                 }
             )
+            glBeautyPreviewProvider.updateCheekContourPoints(
+                leftCheekPoints = params.leftCheekContourPoints.map { contourPoint ->
+                    Pair(contourPoint.x, contourPoint.y)
+                },
+                rightCheekPoints = params.rightCheekContourPoints.map { contourPoint ->
+                    Pair(contourPoint.x, contourPoint.y)
+                }
+            )
         }.onFailure { error ->
             Logger.w("Camera", "GL beauty face params update failed", error)
         }

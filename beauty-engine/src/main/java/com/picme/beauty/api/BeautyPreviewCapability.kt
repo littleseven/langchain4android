@@ -52,6 +52,16 @@ interface BeautyPreviewCapability {
     )
 
     /**
+     * 更新脸颊轮廓点（用于精确腮红定位）
+     * @param leftCheekPoints 左脸颊 contour 点列表，Pair<normX, normY>
+     * @param rightCheekPoints 右脸颊 contour 点列表，Pair<normX, normY>
+     */
+    fun updateCheekContourPoints(
+        leftCheekPoints: List<Pair<Float, Float>>,
+        rightCheekPoints: List<Pair<Float, Float>>
+    )
+
+    /**
      * 设置相机输入缓冲区尺寸
      */
     fun setCameraInputBufferSize(width: Int, height: Int)

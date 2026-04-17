@@ -60,6 +60,9 @@ internal data class FaceWarpParams(
     val rightEyeContourPoints: List<Offset> = emptyList(),
     val lipOuterContourPoints: List<Offset> = emptyList(),
     val lipInnerContourPoints: List<Offset> = emptyList(),
+    // 新增：脸颊 contour 点（用于精确腮红定位，ML Kit 133 点）
+    val leftCheekContourPoints: List<Offset> = emptyList(),
+    val rightCheekContourPoints: List<Offset> = emptyList(),
     // 新增：完整的 133 点 Contour 数据（用于调试，ML Kit 模式）
     val allContours: FaceContourData = FaceContourData(),
     // 新增：GPUPixel 106 点数据（用于调试，GPUPixel 模式）
