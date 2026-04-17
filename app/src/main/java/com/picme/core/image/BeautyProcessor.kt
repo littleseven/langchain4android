@@ -26,17 +26,19 @@ interface BeautyProcessor {
      * 应用磨皮效果
      * @param bitmap 原始图像
      * @param strength 强度 0-100
+     * @param faces 人脸检测结果（用于人脸区域磨皮，避免背景模糊）
      * @return 处理后的图像
      */
-    suspend fun applySmoothing(bitmap: Bitmap, strength: Float): Bitmap
+    suspend fun applySmoothing(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
     
     /**
      * 应用美白效果
      * @param bitmap 原始图像
      * @param strength 强度 0-100
+     * @param faces 人脸检测结果（用于人脸区域美白，避免背景提亮）
      * @return 处理后的图像
      */
-    suspend fun applyWhitening(bitmap: Bitmap, strength: Float): Bitmap
+    suspend fun applyWhitening(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
     
     /**
      * 应用瘦脸效果
@@ -111,11 +113,11 @@ interface BeautyProcessor {
         var result = bitmap
         
         // 面部精修
-        if (settings.smoothing > 0) {
-            result = applySmoothing(result, settings.smoothing)
+        if (settings.smoothing > 0 && faces.isNotEmpty()) {
+            result = applySmoothing(result, settings.smoothing, faces)
         }
-        if (settings.whitening > 0) {
-            result = applyWhitening(result, settings.whitening)
+        if (settings.whitening > 0 && faces.isNotEmpty()) {
+            result = applyWhitening(result, settings.whitening, faces)
         }
         if (faces.isNotEmpty()) {
             if (settings.slimFace != 0f) {

@@ -35,22 +35,70 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         private const val TAG = "PicMe:ImageProc"
     }
     
-    override suspend fun applySmoothing(bitmap: Bitmap, strength: Float): Bitmap {
+    override suspend fun applySmoothing(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
-                // RenderScript 已废弃（API 31+），改用 Canvas + ColorMatrix 近似磨皮
-                // 实时预览磨皮由 beauty-engine 的双边滤波 Shader 实现，此处仅用于拍照后静态处理
-                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                val canvas = Canvas(mutableBitmap)
-                val brightenRatio = 1f + (strength / 100f) * 0.08f // 轻微提亮模拟磨皮感
-                val colorMatrix = ColorMatrix().apply {
-                    setScale(brightenRatio, brightenRatio, brightenRatio, 1f)
+                if (strength <= 0f || faces.isEmpty()) {
+                    return@withContext bitmap
                 }
-                val paint = Paint().apply {
-                    colorFilter = ColorMatrixColorFilter(colorMatrix)
+                
+                // [修复] 使用高斯模糊 + 人脸 Mask 实现磨皮，更接近预览的双边滤波效果
+                // 实时预览磨皮由 beauty-engine 的双边滤波 Shader 实现
+                val ratio = strength.coerceIn(0f, 100f) / 100f
+                
+                // 1. 创建模糊层（高斯模糊近似双边滤波）
+                val blurRadius = (5f + ratio * 15f).toInt() // 5-20px 模糊半径
+                val downsampleDivisor = (4f - ratio * 2f).coerceIn(2f, 4f)
+                val downscaledWidth = (bitmap.width / downsampleDivisor).toInt().coerceAtLeast(1)
+                val downscaledHeight = (bitmap.height / downsampleDivisor).toInt().coerceAtLeast(1)
+                
+                // 缩小 -> 模糊 -> 放大，模拟高斯模糊
+                val downscaled = Bitmap.createScaledBitmap(bitmap, downscaledWidth, downscaledHeight, true)
+                val blurLayer = Bitmap.createScaledBitmap(downscaled, bitmap.width, bitmap.height, true)
+                downscaled.recycle()
+                
+                // 2. 创建人脸蒙版（只对人脸区域应用磨皮）
+                val maskBitmap = createFaceMaskBitmap(
+                    width = bitmap.width,
+                    height = bitmap.height,
+                    faces = faces,
+                    featherRadius = 14f + ratio * 26f,
+                    logPrefix = "Smoothing"
+                ) ?: run {
+                    blurLayer.recycle()
+                    return@withContext bitmap
                 }
-                canvas.drawBitmap(bitmap, 0f, 0f, paint)
-                mutableBitmap
+                
+                // 3. 合并：原图 + 模糊层 * 蒙版 * 强度
+                val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val canvas = Canvas(output)
+                
+                // 先画原图
+                canvas.drawBitmap(bitmap, 0f, 0f, null)
+                
+                // 再画磨皮效果（只在人脸区域）
+                val alpha = (120 + ratio * 135).toInt().coerceIn(0, 255) // 120-255
+                val blendPaint = Paint().apply {
+                    this.alpha = alpha
+                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_OVER)
+                }
+                
+                // 使用蒙版只覆盖人脸区域
+                val maskedCanvas = Canvas(blurLayer)
+                val maskPaint = Paint().apply {
+                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
+                }
+                maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskPaint)
+                
+                // 绘制磨皮层
+                canvas.drawBitmap(blurLayer, 0f, 0f, blendPaint)
+                
+                // 清理
+                blurLayer.recycle()
+                maskBitmap.recycle()
+                
+                Logger.d(TAG, "Smoothing applied (blur + mask): strength=$strength, faces=${faces.size}")
+                output
             } catch (e: Exception) {
                 Logger.e(TAG, "Smoothing error", e)
                 bitmap
@@ -58,14 +106,81 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         }
     }
     
-    override suspend fun applyWhitening(bitmap: Bitmap, strength: Float): Bitmap {
+    /**
+     * 创建人脸蒙版 Bitmap
+     */
+    private fun createFaceMaskBitmap(
+        width: Int,
+        height: Int,
+        faces: List<Face>,
+        featherRadius: Float,
+        logPrefix: String
+    ): Bitmap? {
+        val maskBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val maskCanvas = Canvas(maskBitmap)
+        val maskPaint = Paint().apply {
+            isAntiAlias = true
+            style = Paint.Style.FILL
+            color = 0xFFFFFFFF.toInt()
+            maskFilter = android.graphics.BlurMaskFilter(featherRadius, android.graphics.BlurMaskFilter.Blur.NORMAL)
+        }
+        
+        var regionCount = 0
+        faces.forEach { face ->
+            val contourPoints = face.getContour(FaceContour.FACE)?.points
+            if (contourPoints != null && contourPoints.size >= 3) {
+                // 使用脸部轮廓
+                val facePath = android.graphics.Path()
+                facePath.moveTo(contourPoints[0].x, contourPoints[0].y)
+                for (pointIndex in 1 until contourPoints.size) {
+                    val point = contourPoints[pointIndex]
+                    facePath.lineTo(point.x, point.y)
+                }
+                facePath.close()
+                maskCanvas.drawPath(facePath, maskPaint)
+                regionCount++
+            } else {
+                // 回退到椭圆
+                val bounds = face.boundingBox
+                if (bounds.width() > 1 && bounds.height() > 1) {
+                    val insetX = bounds.width() * 0.16f
+                    val insetTop = bounds.height() * 0.10f
+                    val insetBottom = bounds.height() * 0.16f
+                    val ovalRect = android.graphics.RectF(
+                        (bounds.left + insetX).coerceIn(0f, width.toFloat()),
+                        (bounds.top + insetTop).coerceIn(0f, height.toFloat()),
+                        (bounds.right - insetX).coerceIn(0f, width.toFloat()),
+                        (bounds.bottom - insetBottom).coerceIn(0f, height.toFloat())
+                    )
+                    if (ovalRect.width() > 1f && ovalRect.height() > 1f) {
+                        maskCanvas.drawOval(ovalRect, maskPaint)
+                        regionCount++
+                    }
+                }
+            }
+        }
+        
+        return if (regionCount == 0) {
+            Logger.d(TAG, "$logPrefix mask skipped: no face regions")
+            maskBitmap.recycle()
+            null
+        } else {
+            maskBitmap
+        }
+    }
+    
+    override suspend fun applyWhitening(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
-                val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                if (strength <= 0f || faces.isEmpty()) {
+                    return@withContext bitmap
+                }
                 
-                // 使用 ColorMatrix 提亮肤色
-                val brightness = (strength / 100f) * 50f // 最大 +50 亮度
+                // [修复] 使用 ColorMatrix + 人脸 Mask 实现局部美白，与预览一致
+                val ratio = strength.coerceIn(0f, 100f) / 100f
                 
+                // 1. 创建美白层
+                val brightness = ratio * 50f // 最大 +50 亮度
                 val colorMatrix = ColorMatrix().apply {
                     set(floatArrayOf(
                         1f, 0f, 0f, 0f, brightness,
@@ -75,15 +190,56 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     ))
                 }
                 
+                val whitenedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val canvas = Canvas(whitenedBitmap)
                 val paint = Paint().apply {
                     colorFilter = ColorMatrixColorFilter(colorMatrix)
                     isAntiAlias = true
                 }
-                
-                val canvas = android.graphics.Canvas(mutableBitmap)
                 canvas.drawBitmap(bitmap, 0f, 0f, paint)
                 
-                mutableBitmap
+                // 2. 创建人脸蒙版
+                val maskBitmap = createFaceMaskBitmap(
+                    width = bitmap.width,
+                    height = bitmap.height,
+                    faces = faces,
+                    featherRadius = 16f + ratio * 20f,
+                    logPrefix = "Whitening"
+                ) ?: run {
+                    whitenedBitmap.recycle()
+                    return@withContext bitmap
+                }
+                
+                // 3. 合并：原图 + 美白层 * 蒙版
+                val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                val outputCanvas = Canvas(output)
+                
+                // 先画原图
+                outputCanvas.drawBitmap(bitmap, 0f, 0f, null)
+                
+                // 再画美白效果（只在人脸区域）
+                val alpha = (130 + ratio * 100f).toInt().coerceIn(0, 255) // 130-230
+                val blendPaint = Paint().apply {
+                    this.alpha = alpha
+                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_OVER)
+                }
+                
+                // 使用蒙版只覆盖人脸区域
+                val maskedCanvas = Canvas(whitenedBitmap)
+                val maskPaint = Paint().apply {
+                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
+                }
+                maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskPaint)
+                
+                // 绘制美白层
+                outputCanvas.drawBitmap(whitenedBitmap, 0f, 0f, blendPaint)
+                
+                // 清理
+                whitenedBitmap.recycle()
+                maskBitmap.recycle()
+                
+                Logger.d(TAG, "Whitening applied (masked): strength=$strength, faces=${faces.size}")
+                output
             } catch (e: Exception) {
                 Logger.e(TAG, "Whitening error", e)
                 bitmap
