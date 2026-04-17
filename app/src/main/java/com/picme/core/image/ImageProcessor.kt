@@ -440,17 +440,13 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                 // 使用 BeautyProcessor 处理所有美颜效果
                 kotlinx.coroutines.runBlocking {
                 // 面部精修
-                if (beauty.smoothing > 0f) {
+                if (beauty.smoothing > 0f && faces.isNotEmpty()) {
                     Logger.d("ImageProcessor", "Applying smoothing: ${beauty.smoothing}")
-                    processed = beautyProcessor.applySmoothing(processed, beauty.smoothing)
+                    processed = beautyProcessor.applySmoothing(processed, beauty.smoothing, faces)
                 }
-                if (beauty.whitening > 0f) {
-                    if (faces.isNotEmpty()) {
-                        Logger.d("ImageProcessor", "Applying whitening on faces: ${beauty.whitening}, faceCount=${faces.size}")
-                        processed = beautyProcessor.applyWhitening(processed, beauty.whitening)
-                    } else {
-                        Logger.d("ImageProcessor", "Whitening skipped: no face detected")
-                    }
+                if (beauty.whitening > 0f && faces.isNotEmpty()) {
+                    Logger.d("ImageProcessor", "Applying whitening on faces: ${beauty.whitening}, faceCount=${faces.size}")
+                    processed = beautyProcessor.applyWhitening(processed, beauty.whitening, faces)
                 }
                 if (faces.isNotEmpty()) {
                     Logger.d("ImageProcessor", "Processing face beautification for ${faces.size} faces")
