@@ -147,8 +147,8 @@ internal fun FaceDebugOverlay(
             )
         }
 
-        // 瘦脸控制点：仅在 ML Kit 模式（有 contourPoints）下绘制，GPUPixel 模式下跳过
-        val isMlKitMode = faceWarpParams.contourPoints.isNotEmpty()
+        // 瘦脸控制点：仅在 ML Kit 模式（有 allContours 数据）下绘制，GPUPixel/MediaPipe 模式下跳过
+        val isMlKitMode = faceWarpParams.allContours.totalPointCount() > 0
         if (isMlKitMode) {
             drawClosedContour(
                 points = contourPoints,
@@ -239,11 +239,11 @@ internal fun FaceDebugOverlay(
             )
         }
 
+        // 绘制 GPUPixel/MediaPipe 106 点（调试用，GPUPixel/大美丽模式）
+        drawGpuPixelLandmarks(faceWarpParams, ::toCanvasPoint)
+
         // 绘制所有 133 点 Contour（调试用，ML Kit 模式）
         drawAllContours(faceWarpParams, ::toCanvasPoint)
-
-        // 绘制 GPUPixel 106 点（调试用，GPUPixel 模式）
-        drawGpuPixelLandmarks(faceWarpParams, ::toCanvasPoint)
     }
 }
 
