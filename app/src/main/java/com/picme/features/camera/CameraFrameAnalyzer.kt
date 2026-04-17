@@ -44,7 +44,7 @@ internal fun handleImageAnalysisFrame(
             .addOnSuccessListener { faces ->
                 // [方案 B 变种] 缓存人脸检测结果供拍照使用
                 FaceDetectionCache.updateFaces(faces)
-                
+
                 if (faces.isNotEmpty()) {
                     val face = faces[0]
                     val bounds = face.boundingBox
@@ -52,15 +52,21 @@ internal fun handleImageAnalysisFrame(
                     val previewHeight = fallbackPreviewHeight
                     val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-                    val screenPoint = transformFaceCoordinateSimple(
+                    // 使用纹理归一化坐标（0~1，基于相机输入帧旋转后尺寸）
+                    // 这样 Shader 直接接收纹理坐标，与画面比例无关
+                    val faceCenterNorm = transformFaceCoordinateToNormalized(
                         faceX = bounds.centerX().toFloat(),
                         faceY = bounds.centerY().toFloat(),
                         imageProxyWidth = imageProxy.width,
                         imageProxyHeight = imageProxy.height,
-                        previewWidth = previewWidth,
-                        previewHeight = previewHeight,
                         rotationDegrees = rotationDegrees,
                         lensFacing = lensFacing
+                    )
+
+                    // 调试UI和聚焦指示器仍需要屏幕像素坐标
+                    val screenPoint = Offset(
+                        x = faceCenterNorm.x * previewWidth,
+                        y = faceCenterNorm.y * previewHeight
                     )
                     onFacePointChanged(screenPoint)
                     onShowFocusIndicatorChanged(true)
@@ -68,39 +74,35 @@ internal fun handleImageAnalysisFrame(
                     val leftEyeLandmark = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
                     val rightEyeLandmark = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
 
-                    val leftEyePoint = if (leftEyeLandmark != null) {
-                        transformFaceCoordinateSimple(
+                    val leftEyeNorm = if (leftEyeLandmark != null) {
+                        transformFaceCoordinateToNormalized(
                             faceX = leftEyeLandmark.x,
                             faceY = leftEyeLandmark.y,
                             imageProxyWidth = imageProxy.width,
                             imageProxyHeight = imageProxy.height,
-                            previewWidth = previewWidth,
-                            previewHeight = previewHeight,
                             rotationDegrees = rotationDegrees,
                             lensFacing = lensFacing
                         )
                     } else {
                         Offset(
-                            screenPoint.x - bounds.width().toFloat() * 0.16f,
-                            screenPoint.y - bounds.height().toFloat() * 0.10f
+                            x = (faceCenterNorm.x - bounds.width().toFloat() / imageProxy.width.toFloat() * 0.16f).coerceIn(0f, 1f),
+                            y = (faceCenterNorm.y - bounds.height().toFloat() / imageProxy.height.toFloat() * 0.10f).coerceIn(0f, 1f)
                         )
                     }
 
-                    val rightEyePoint = if (rightEyeLandmark != null) {
-                        transformFaceCoordinateSimple(
+                    val rightEyeNorm = if (rightEyeLandmark != null) {
+                        transformFaceCoordinateToNormalized(
                             faceX = rightEyeLandmark.x,
                             faceY = rightEyeLandmark.y,
                             imageProxyWidth = imageProxy.width,
                             imageProxyHeight = imageProxy.height,
-                            previewWidth = previewWidth,
-                            previewHeight = previewHeight,
                             rotationDegrees = rotationDegrees,
                             lensFacing = lensFacing
                         )
                     } else {
                         Offset(
-                            screenPoint.x + bounds.width().toFloat() * 0.16f,
-                            screenPoint.y - bounds.height().toFloat() * 0.10f
+                            x = (faceCenterNorm.x + bounds.width().toFloat() / imageProxy.width.toFloat() * 0.16f).coerceIn(0f, 1f),
+                            y = (faceCenterNorm.y - bounds.height().toFloat() / imageProxy.height.toFloat() * 0.10f).coerceIn(0f, 1f)
                         )
                     }
 
@@ -152,85 +154,43 @@ internal fun handleImageAnalysisFrame(
                         (upperLipCenterRaw.y + lowerLipCenterRaw.y) * 0.5f
                     )
 
-                    fun mapLipPoint(rawPoint: PointF): Offset {
-                        return transformFaceCoordinateSimple(
+                    fun mapLipPointToNorm(rawPoint: PointF): Offset {
+                        return transformFaceCoordinateToNormalized(
                             faceX = rawPoint.x,
                             faceY = rawPoint.y,
                             imageProxyWidth = imageProxy.width,
                             imageProxyHeight = imageProxy.height,
-                            previewWidth = previewWidth,
-                            previewHeight = previewHeight,
                             rotationDegrees = rotationDegrees,
                             lensFacing = lensFacing
                         )
                     }
 
-                    val mouthCenterPoint = mapLipPoint(mouthCenterRaw)
-                    val mouthLeftPoint = mapLipPoint(mouthLeftRaw)
-                    val mouthRightPoint = mapLipPoint(mouthRightRaw)
-                    val upperLipCenterPoint = mapLipPoint(upperLipCenterRaw)
-                    val lowerLipCenterPoint = mapLipPoint(lowerLipCenterRaw)
+                    val mouthCenterNorm = mapLipPointToNorm(mouthCenterRaw)
+                    val mouthLeftNorm = mapLipPointToNorm(mouthLeftRaw)
+                    val mouthRightNorm = mapLipPointToNorm(mouthRightRaw)
+                    val upperLipCenterNorm = mapLipPointToNorm(upperLipCenterRaw)
+                    val lowerLipCenterNorm = mapLipPointToNorm(lowerLipCenterRaw)
 
                     val faceRadius = (
                         maxOf(bounds.width().toFloat() / imageProxy.width.toFloat(), 0.16f)
                     ).coerceIn(0.12f, 0.38f)
 
-                    val contourPoints = face.getContour(FaceContour.FACE)?.points
-                        ?.map { contourPoint ->
-                            val mappedPoint = transformFaceCoordinateSimple(
+                    fun mapContourToNorm(points: List<PointF>?): List<Offset> {
+                        return points?.map { contourPoint ->
+                            transformFaceCoordinateToNormalized(
                                 faceX = contourPoint.x,
                                 faceY = contourPoint.y,
                                 imageProxyWidth = imageProxy.width,
                                 imageProxyHeight = imageProxy.height,
-                                previewWidth = previewWidth,
-                                previewHeight = previewHeight,
                                 rotationDegrees = rotationDegrees,
                                 lensFacing = lensFacing
                             )
-                            Offset(
-                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
-                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
-                            )
-                        }
-                        ?: emptyList()
+                        } ?: emptyList()
+                    }
 
-                    val leftEyeContourPoints = face.getContour(FaceContour.LEFT_EYE)?.points
-                        ?.map { contourPoint ->
-                            val mappedPoint = transformFaceCoordinateSimple(
-                                faceX = contourPoint.x,
-                                faceY = contourPoint.y,
-                                imageProxyWidth = imageProxy.width,
-                                imageProxyHeight = imageProxy.height,
-                                previewWidth = previewWidth,
-                                previewHeight = previewHeight,
-                                rotationDegrees = rotationDegrees,
-                                lensFacing = lensFacing
-                            )
-                            Offset(
-                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
-                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
-                            )
-                        }
-                        ?: emptyList()
-
-                    val rightEyeContourPoints = face.getContour(FaceContour.RIGHT_EYE)?.points
-                        ?.map { contourPoint ->
-                            val mappedPoint = transformFaceCoordinateSimple(
-                                faceX = contourPoint.x,
-                                faceY = contourPoint.y,
-                                imageProxyWidth = imageProxy.width,
-                                imageProxyHeight = imageProxy.height,
-                                previewWidth = previewWidth,
-                                previewHeight = previewHeight,
-                                rotationDegrees = rotationDegrees,
-                                lensFacing = lensFacing
-                            )
-                            Offset(
-                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
-                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
-                            )
-                        }
-                        ?: emptyList()
+                    val contourPoints = mapContourToNorm(face.getContour(FaceContour.FACE)?.points)
+                    val leftEyeContourPoints = mapContourToNorm(face.getContour(FaceContour.LEFT_EYE)?.points)
+                    val rightEyeContourPoints = mapContourToNorm(face.getContour(FaceContour.RIGHT_EYE)?.points)
 
                     val lipOuterContourRaw = if (upperLipTopPoints.isNotEmpty() && lowerLipBottomPoints.isNotEmpty()) {
                         upperLipTopPoints + lowerLipBottomPoints.reversed()
@@ -243,64 +203,38 @@ internal fun handleImageAnalysisFrame(
                         emptyList()
                     }
 
-                    fun mapContourPoints(rawPoints: List<PointF>): List<Offset> {
+                    fun mapLipContourToNorm(rawPoints: List<PointF>): List<Offset> {
                         return resampleContourPoints(rawPoints).map { lipPoint ->
-                            val mappedPoint = transformFaceCoordinateSimple(
+                            transformFaceCoordinateToNormalized(
                                 faceX = lipPoint.x,
                                 faceY = lipPoint.y,
                                 imageProxyWidth = imageProxy.width,
                                 imageProxyHeight = imageProxy.height,
-                                previewWidth = previewWidth,
-                                previewHeight = previewHeight,
                                 rotationDegrees = rotationDegrees,
                                 lensFacing = lensFacing
-                            )
-                            Offset(
-                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
-                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
                             )
                         }
                     }
 
-                    val lipOuterContourPoints = mapContourPoints(lipOuterContourRaw)
-                    val lipInnerContourPoints = mapContourPoints(lipInnerContourRaw)
-
-                    // 收集所有 133 点 Contour 数据（用于调试）
-                    fun mapContourPointsToOffset(points: List<PointF>?): List<Offset> {
-                        return points?.map { contourPoint ->
-                            val mappedPoint = transformFaceCoordinateSimple(
-                                faceX = contourPoint.x,
-                                faceY = contourPoint.y,
-                                imageProxyWidth = imageProxy.width,
-                                imageProxyHeight = imageProxy.height,
-                                previewWidth = previewWidth,
-                                previewHeight = previewHeight,
-                                rotationDegrees = rotationDegrees,
-                                lensFacing = lensFacing
-                            )
-                            Offset(
-                                x = (mappedPoint.x / previewWidth).coerceIn(0f, 1f),
-                                y = (mappedPoint.y / previewHeight).coerceIn(0f, 1f)
-                            )
-                        } ?: emptyList()
-                    }
+                    val lipOuterContourPoints = mapLipContourToNorm(lipOuterContourRaw)
+                    val lipInnerContourPoints = mapLipContourToNorm(lipInnerContourRaw)
 
                     val allContours = com.picme.features.camera.preview.core.FaceContourData(
-                        faceOval = mapContourPointsToOffset(face.getContour(FaceContour.FACE)?.points),
-                        leftEyebrowTop = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_EYEBROW_TOP)?.points),
-                        leftEyebrowBottom = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_EYEBROW_BOTTOM)?.points),
-                        rightEyebrowTop = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_EYEBROW_TOP)?.points),
-                        rightEyebrowBottom = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_EYEBROW_BOTTOM)?.points),
-                        leftEye = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_EYE)?.points),
-                        rightEye = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_EYE)?.points),
-                        upperLipTop = mapContourPointsToOffset(face.getContour(FaceContour.UPPER_LIP_TOP)?.points),
-                        upperLipBottom = mapContourPointsToOffset(face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points),
-                        lowerLipTop = mapContourPointsToOffset(face.getContour(FaceContour.LOWER_LIP_TOP)?.points),
-                        lowerLipBottom = mapContourPointsToOffset(face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points),
-                        noseBridge = mapContourPointsToOffset(face.getContour(FaceContour.NOSE_BRIDGE)?.points),
-                        noseBottom = mapContourPointsToOffset(face.getContour(FaceContour.NOSE_BOTTOM)?.points),
-                        leftCheek = mapContourPointsToOffset(face.getContour(FaceContour.LEFT_CHEEK)?.points),
-                        rightCheek = mapContourPointsToOffset(face.getContour(FaceContour.RIGHT_CHEEK)?.points)
+                        faceOval = mapContourToNorm(face.getContour(FaceContour.FACE)?.points),
+                        leftEyebrowTop = mapContourToNorm(face.getContour(FaceContour.LEFT_EYEBROW_TOP)?.points),
+                        leftEyebrowBottom = mapContourToNorm(face.getContour(FaceContour.LEFT_EYEBROW_BOTTOM)?.points),
+                        rightEyebrowTop = mapContourToNorm(face.getContour(FaceContour.RIGHT_EYEBROW_TOP)?.points),
+                        rightEyebrowBottom = mapContourToNorm(face.getContour(FaceContour.RIGHT_EYEBROW_BOTTOM)?.points),
+                        leftEye = mapContourToNorm(face.getContour(FaceContour.LEFT_EYE)?.points),
+                        rightEye = mapContourToNorm(face.getContour(FaceContour.RIGHT_EYE)?.points),
+                        upperLipTop = mapContourToNorm(face.getContour(FaceContour.UPPER_LIP_TOP)?.points),
+                        upperLipBottom = mapContourToNorm(face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points),
+                        lowerLipTop = mapContourToNorm(face.getContour(FaceContour.LOWER_LIP_TOP)?.points),
+                        lowerLipBottom = mapContourToNorm(face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points),
+                        noseBridge = mapContourToNorm(face.getContour(FaceContour.NOSE_BRIDGE)?.points),
+                        noseBottom = mapContourToNorm(face.getContour(FaceContour.NOSE_BOTTOM)?.points),
+                        leftCheek = mapContourToNorm(face.getContour(FaceContour.LEFT_CHEEK)?.points),
+                        rightCheek = mapContourToNorm(face.getContour(FaceContour.RIGHT_CHEEK)?.points)
                     )
 
                     android.util.Log.d(
@@ -317,22 +251,22 @@ internal fun handleImageAnalysisFrame(
                     )
 
                     val faceWarpParams = FaceWarpParams(
-                        faceCenterX = (screenPoint.x / previewWidth).coerceIn(0f, 1f),
-                        faceCenterY = (screenPoint.y / previewHeight).coerceIn(0f, 1f),
-                        leftEyeX = (leftEyePoint.x / previewWidth).coerceIn(0f, 1f),
-                        leftEyeY = (leftEyePoint.y / previewHeight).coerceIn(0f, 1f),
-                        rightEyeX = (rightEyePoint.x / previewWidth).coerceIn(0f, 1f),
-                        rightEyeY = (rightEyePoint.y / previewHeight).coerceIn(0f, 1f),
-                        mouthCenterX = (mouthCenterPoint.x / previewWidth).coerceIn(0f, 1f),
-                        mouthCenterY = (mouthCenterPoint.y / previewHeight).coerceIn(0f, 1f),
-                        mouthLeftX = (mouthLeftPoint.x / previewWidth).coerceIn(0f, 1f),
-                        mouthLeftY = (mouthLeftPoint.y / previewHeight).coerceIn(0f, 1f),
-                        mouthRightX = (mouthRightPoint.x / previewWidth).coerceIn(0f, 1f),
-                        mouthRightY = (mouthRightPoint.y / previewHeight).coerceIn(0f, 1f),
-                        upperLipCenterX = (upperLipCenterPoint.x / previewWidth).coerceIn(0f, 1f),
-                        upperLipCenterY = (upperLipCenterPoint.y / previewHeight).coerceIn(0f, 1f),
-                        lowerLipCenterX = (lowerLipCenterPoint.x / previewWidth).coerceIn(0f, 1f),
-                        lowerLipCenterY = (lowerLipCenterPoint.y / previewHeight).coerceIn(0f, 1f),
+                        faceCenterX = faceCenterNorm.x,
+                        faceCenterY = faceCenterNorm.y,
+                        leftEyeX = leftEyeNorm.x,
+                        leftEyeY = leftEyeNorm.y,
+                        rightEyeX = rightEyeNorm.x,
+                        rightEyeY = rightEyeNorm.y,
+                        mouthCenterX = mouthCenterNorm.x,
+                        mouthCenterY = mouthCenterNorm.y,
+                        mouthLeftX = mouthLeftNorm.x,
+                        mouthLeftY = mouthLeftNorm.y,
+                        mouthRightX = mouthRightNorm.x,
+                        mouthRightY = mouthRightNorm.y,
+                        upperLipCenterX = upperLipCenterNorm.x,
+                        upperLipCenterY = upperLipCenterNorm.y,
+                        lowerLipCenterX = lowerLipCenterNorm.x,
+                        lowerLipCenterY = lowerLipCenterNorm.y,
                         faceRadius = faceRadius,
                         hasFace = true,
                         contourPoints = contourPoints,
@@ -420,13 +354,21 @@ private fun resampleContourPoints(points: List<PointF>): List<PointF> {
     return result
 }
 
-internal fun transformFaceCoordinateSimple(
+/**
+ * 将 ML Kit 人脸坐标转换为纹理归一化坐标（0~1），直接对应 Shader 纹理坐标系。
+ *
+ * 纹理坐标系定义：
+ * - (0,0) = 纹理左上角
+ * - (1,1) = 纹理右下角
+ * - 基于相机输入帧旋转后的尺寸（与 Shader 纹理一致）
+ *
+ * @return Offset(x, y) 其中 x 和 y 都在 [0, 1] 范围内
+ */
+internal fun transformFaceCoordinateToNormalized(
     faceX: Float,
     faceY: Float,
     imageProxyWidth: Int,
     imageProxyHeight: Int,
-    previewWidth: Float,
-    previewHeight: Float,
     rotationDegrees: Int,
     lensFacing: Int
 ): Offset {
@@ -452,9 +394,39 @@ internal fun transformFaceCoordinateSimple(
         else -> Pair(mirroredX, normY)
     }
 
-    val screenX = adjustedX * previewWidth
-    val screenY = adjustedY * previewHeight
+    return Offset(
+        x = adjustedX.coerceIn(0f, 1f),
+        y = adjustedY.coerceIn(0f, 1f)
+    )
+}
 
-    return Offset(screenX, screenY)
+/**
+ * 将 ML Kit 人脸坐标转换为 PreviewView 屏幕像素坐标（用于调试UI绘制）。
+ *
+ * @deprecated 新代码应优先使用 [transformFaceCoordinateToNormalized]，
+ *             调试UI绘制时自行将归一化坐标映射到屏幕。
+ */
+internal fun transformFaceCoordinateSimple(
+    faceX: Float,
+    faceY: Float,
+    imageProxyWidth: Int,
+    imageProxyHeight: Int,
+    previewWidth: Float,
+    previewHeight: Float,
+    rotationDegrees: Int,
+    lensFacing: Int
+): Offset {
+    val normPoint = transformFaceCoordinateToNormalized(
+        faceX = faceX,
+        faceY = faceY,
+        imageProxyWidth = imageProxyWidth,
+        imageProxyHeight = imageProxyHeight,
+        rotationDegrees = rotationDegrees,
+        lensFacing = lensFacing
+    )
+    return Offset(
+        x = normPoint.x * previewWidth,
+        y = normPoint.y * previewHeight
+    )
 }
 
