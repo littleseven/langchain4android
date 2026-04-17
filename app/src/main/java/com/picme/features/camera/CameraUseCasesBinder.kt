@@ -13,7 +13,6 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.mlkit.vision.face.FaceDetector
 import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
@@ -35,7 +34,6 @@ internal fun bindCameraUseCases(
     previewView: PreviewView,
     bindPreviewSurfaceProvider: (Preview) -> Unit,
     cameraExecutor: ExecutorService,
-    faceDetector: FaceDetector,
     beautySettings: BeautySettings,
     beautyStrategy: BeautyStrategy,
     videoCapture: VideoCapture<Recorder>,
@@ -117,12 +115,8 @@ internal fun bindCameraUseCases(
         android.util.Log.d("PicMe:Camera", "GPUPixel mode: provider initialized, skipping Preview usecase")
     }
 
-    // MediaPipe Face Landmarker 检测器（大美丽模式使用）
-    val mediaPipeDetector = if (beautyStrategy == BeautyStrategy.BIG_BEAUTY) {
-        com.picme.features.camera.facedetect.MediaPipeFaceDetector(context)
-    } else {
-        null
-    }
+    // MediaPipe Face Landmarker 检测器（所有非 GPUPixel 模式使用）
+    val mediaPipeDetector = com.picme.features.camera.facedetect.MediaPipeFaceDetector(context)
 
     var frameCount = 0
     var lastFrameLogMs = 0L
@@ -163,27 +157,15 @@ internal fun bindCameraUseCases(
                     Logger.e("Camera", "GPUPixel frame conversion error", e)
                 }
             }
-            // GPUPixel 模式：内部使用 mars-face-kit 检测，跳过 ML Kit 检测避免双检测冲突
+            // GPUPixel 模式：内部使用 mars-face-kit 检测
             imageProxy.close()
-        } else if (beautyStrategy == BeautyStrategy.BIG_BEAUTY && mediaPipeDetector != null) {
-            // 大美丽模式：使用 MediaPipe Face Landmarker（468点 → 106点）
+        } else {
+            // 所有非 GPUPixel 模式：使用 MediaPipe Face Landmarker（468点 → 106点）
             handleImageAnalysisFrameMediaPipe(
                 imageProxy = imageProxy,
                 previewView = previewView,
                 mediaPipeDetector = mediaPipeDetector,
                 lensFacing = lensFacing,
-                onFacePointChanged = onFacePointChanged,
-                onFaceWarpParamsChanged = onFaceWarpParamsChanged,
-                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged
-            )
-        } else {
-            // 其他模式：使用 ML Kit 人脸检测
-            handleImageAnalysisFrame(
-                imageProxy = imageProxy,
-                previewView = previewView,
-                faceDetector = faceDetector,
-                lensFacing = lensFacing,
-                beautySettings = beautySettings,
                 onFacePointChanged = onFacePointChanged,
                 onFaceWarpParamsChanged = onFaceWarpParamsChanged,
                 onShowFocusIndicatorChanged = onShowFocusIndicatorChanged

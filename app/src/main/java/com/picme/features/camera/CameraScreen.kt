@@ -55,8 +55,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetectorOptions
+
 import com.picme.R
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.core.common.Logger
@@ -768,29 +767,6 @@ fun CameraContent(
     var lastFocusPoint by remember { mutableStateOf<Offset?>(null) }
     val focusIndicatorAlpha = remember { Animatable(0f) }
 
-    val shouldEnableLipContour = beautySettings.enabled && beautySettings.lipColor > 0f
-    val faceDetector = remember(faceLandmarkModeEnabled, showFaceDebugOverlay, shouldEnableLipContour) {
-        val optionsBuilder = FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-
-        val useContour = showFaceDebugOverlay || !faceLandmarkModeEnabled || shouldEnableLipContour
-        optionsBuilder.setContourMode(
-            if (useContour) {
-                FaceDetectorOptions.CONTOUR_MODE_ALL
-            } else {
-                FaceDetectorOptions.CONTOUR_MODE_NONE
-            }
-        )
-
-        Logger.i(
-            "Camera",
-            "Face detector mode=${if (useContour) "CONTOUR" else "LANDMARK"}, " +
-                "debugOverlay=$showFaceDebugOverlay, lipContour=$shouldEnableLipContour"
-        )
-        FaceDetection.getClient(optionsBuilder.build())
-    }
-
     val mediaAssets by viewModel.allMedia.collectAsState()
     val lastMedia = mediaAssets.firstOrNull()
     val beautyPreviewStatus = if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
@@ -833,7 +809,7 @@ fun CameraContent(
     
 
 
-    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal, faceDetector) {
+    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal) {
         bindCameraUseCases(
             context = context,
             lifecycleOwner = lifecycleOwner,
@@ -844,7 +820,6 @@ fun CameraContent(
             previewView = previewView,
             bindPreviewSurfaceProvider = bindPreviewSurfaceProvider,
             cameraExecutor = cameraExecutor,
-            faceDetector = faceDetector,
             beautySettings = beautySettings,
             beautyStrategy = beautyStrategy,
             videoCapture = videoCapture,
@@ -969,12 +944,6 @@ fun CameraContent(
     DisposableEffect(Unit) {
         onDispose {
             cameraExecutor.shutdown()
-        }
-    }
-
-    DisposableEffect(faceDetector) {
-        onDispose {
-            faceDetector.close()
         }
     }
 
@@ -1112,7 +1081,7 @@ CameraPreviewContent(
                 selectedFilter = selectedFilter,
                 beautySettings = beautySettings,
                 lensFacing = lensFacing,
-                cachedFaces = FaceDetectionCache.getCachedFaces(),
+                cachedFaces = emptyList(),
                 beautyStrategy = beautyStrategy,
                 gpupixelProvider = provider,
                 onRecordingChanged = { updated -> recording = updated },
