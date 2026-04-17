@@ -117,6 +117,13 @@ internal fun bindCameraUseCases(
         android.util.Log.d("PicMe:Camera", "GPUPixel mode: provider initialized, skipping Preview usecase")
     }
 
+    // MediaPipe Face Landmarker 检测器（大美丽模式使用）
+    val mediaPipeDetector = if (beautyStrategy == BeautyStrategy.BIG_BEAUTY) {
+        com.picme.features.camera.facedetect.MediaPipeFaceDetector(context)
+    } else {
+        null
+    }
+
     var frameCount = 0
     var lastFrameLogMs = 0L
     imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
@@ -158,8 +165,19 @@ internal fun bindCameraUseCases(
             }
             // GPUPixel 模式：内部使用 mars-face-kit 检测，跳过 ML Kit 检测避免双检测冲突
             imageProxy.close()
+        } else if (beautyStrategy == BeautyStrategy.BIG_BEAUTY && mediaPipeDetector != null) {
+            // 大美丽模式：使用 MediaPipe Face Landmarker（468点 → 106点）
+            handleImageAnalysisFrameMediaPipe(
+                imageProxy = imageProxy,
+                previewView = previewView,
+                mediaPipeDetector = mediaPipeDetector,
+                lensFacing = lensFacing,
+                onFacePointChanged = onFacePointChanged,
+                onFaceWarpParamsChanged = onFaceWarpParamsChanged,
+                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged
+            )
         } else {
-            // 大美丽/其他模式：使用 ML Kit 人脸检测
+            // 其他模式：使用 ML Kit 人脸检测
             handleImageAnalysisFrame(
                 imageProxy = imageProxy,
                 previewView = previewView,

@@ -435,3 +435,78 @@ internal fun transformFaceCoordinateSimple(
     )
 }
 
+/**
+ * MediaPipe 版本的人脸分析帧处理
+ * 使用 MediaPipe Face Landmarker 检测 468 点，映射为 106 点
+ *
+ * @param imageProxy CameraX ImageProxy
+ * @param previewView 预览视图（用于调试UI坐标映射）
+ * @param mediaPipeDetector MediaPipe 人脸检测器
+ * @param lensFacing 镜头方向
+ * @param onFacePointChanged 人脸中心点回调（屏幕坐标，用于聚焦指示器）
+ * @param onFaceWarpParamsChanged FaceWarpParams 回调
+ * @param onShowFocusIndicatorChanged 聚焦指示器显示回调
+ */
+@ExperimentalGetImage
+internal fun handleImageAnalysisFrameMediaPipe(
+    imageProxy: androidx.camera.core.ImageProxy,
+    previewView: PreviewView,
+    mediaPipeDetector: com.picme.features.camera.facedetect.MediaPipeFaceDetector,
+    lensFacing: Int,
+    onFacePointChanged: (Offset) -> Unit,
+    onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
+    onShowFocusIndicatorChanged: (Boolean) -> Unit
+) {
+    try {
+        val mediaImage = imageProxy.image
+        if (mediaImage == null) {
+            imageProxy.close()
+            return
+        }
+
+        val previewWidth = previewView.width.takeIf { width -> width > 0 }?.toFloat()
+            ?: imageProxy.width.toFloat()
+        val previewHeight = previewView.height.takeIf { height -> height > 0 }?.toFloat()
+            ?: imageProxy.height.toFloat()
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
+        // MediaPipe 检测
+        val landmarks106 = mediaPipeDetector.detect(imageProxy, rotationDegrees)
+
+        if (landmarks106 != null) {
+            // 缓存人脸检测结果供拍照使用
+            FaceDetectionCache.updateLandmarks106(landmarks106)
+
+            // 构建 FaceWarpParams
+            val faceWarpParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(landmarks106)
+
+            // 人脸中心点（用于聚焦指示器）
+            val screenPoint = Offset(
+                x = faceWarpParams.faceCenterX * previewWidth,
+                y = faceWarpParams.faceCenterY * previewHeight
+            )
+            onFacePointChanged(screenPoint)
+            onShowFocusIndicatorChanged(true)
+
+            // 调试日志
+            android.util.Log.d(
+                "PicMe:Camera",
+                "MediaPipe 106点: center=(${"%.3f".format(faceWarpParams.faceCenterX)}, ${"%.3f".format(faceWarpParams.faceCenterY)}), " +
+                "leftEye=(${"%.3f".format(faceWarpParams.leftEyeX)}, ${"%.3f".format(faceWarpParams.leftEyeY)}), " +
+                "rightEye=(${"%.3f".format(faceWarpParams.rightEyeX)}, ${"%.3f".format(faceWarpParams.rightEyeY)}), " +
+                "processTime=${mediaPipeDetector.getLastProcessTimeMs()}ms"
+            )
+
+            onFaceWarpParamsChanged(faceWarpParams)
+        } else {
+            onShowFocusIndicatorChanged(false)
+            onFaceWarpParamsChanged(FaceWarpParams())
+        }
+
+        imageProxy.close()
+    } catch (error: Exception) {
+        Logger.e("Camera", "MediaPipe face detection error", error)
+        imageProxy.close()
+    }
+}
+
