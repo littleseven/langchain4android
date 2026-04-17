@@ -222,6 +222,8 @@ private fun ZoomableImage(
         onZoomStateChanged(scale)
     }
 
+    val isZoomed = scale > 1.02f
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -229,18 +231,24 @@ private fun ZoomableImage(
                 containerSize = size
                 offset = clampOffset(offset, scale)
             }
-            .pointerInput(uri) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val nextScale = (scale * zoom).coerceIn(1f, 4f)
-                    val nextOffset = clampOffset(offset + pan, nextScale)
-                    scale = nextScale
-                    offset = if (abs(nextScale - 1f) < 0.01f) {
-                        Offset.Zero
-                    } else {
-                        nextOffset
+            .then(
+                if (isZoomed) {
+                    Modifier.pointerInput(uri) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            val nextScale = (scale * zoom).coerceIn(1f, 4f)
+                            val nextOffset = clampOffset(offset + pan, nextScale)
+                            scale = nextScale
+                            offset = if (abs(nextScale - 1f) < 0.01f) {
+                                Offset.Zero
+                            } else {
+                                nextOffset
+                            }
+                        }
                     }
+                } else {
+                    Modifier
                 }
-            }
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
