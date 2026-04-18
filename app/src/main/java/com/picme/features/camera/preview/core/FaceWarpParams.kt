@@ -66,11 +66,16 @@ data class FaceWarpParams(
     // 新增：完整的 133 点 Contour 数据（用于调试，ML Kit 模式）
     val allContours: FaceContourData = FaceContourData(),
     // 新增：GPUPixel 106 点数据（用于调试，GPUPixel 模式）
-    val gpuPixelLandmarks: GpuPixelLandmarks = GpuPixelLandmarks()
+    val gpuPixelLandmarks: GpuPixelLandmarks = GpuPixelLandmarks(),
+    // 新增：大美丽(MediaPipe) 106 点原始数据（用于调试对比）
+    val bigBeautyLandmarks: GpuPixelLandmarks = GpuPixelLandmarks()
 )
 
 /**
  * GPUPixel 106 点数据结构（mars-face-kit 格式）
+ *
+ * 注：mars-face-kit 返回 111 个点，但前 106 个是标准 Face++ 106 点规范
+ * 我们只使用标准的 106 点，忽略额外的 5 个辅助点
  */
 data class GpuPixelLandmarks(
     val points: List<Offset> = emptyList(),  // 106 个点 (x,y) 归一化坐标
@@ -79,6 +84,7 @@ data class GpuPixelLandmarks(
     companion object {
         /**
          * 从 GPUPixel 返回的 float 数组创建（格式：[x0,y0,x1,y1,...]）
+         * 只取前 106 个点，忽略 mars-face-kit 额外的 5 个辅助点
          */
         fun fromFloatArray(landmarks: FloatArray?): GpuPixelLandmarks {
             if (landmarks == null || landmarks.isEmpty()) {

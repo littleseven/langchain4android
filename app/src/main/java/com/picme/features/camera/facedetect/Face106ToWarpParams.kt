@@ -7,15 +7,25 @@ import com.picme.features.camera.preview.core.FaceWarpParams
 /**
  * 将 106 点 FloatArray 转换为 FaceWarpParams
  *
- * 106点索引定义（与 GPUPixel / Face++ 兼容）：
- * - 0-32: 脸部轮廓 33点
- * - 33-42: 左眉 10点
- * - 43-52: 右眉 10点
- * - 53-63: 左眼 11点（含瞳孔）
- * - 64-74: 右眼 11点（含瞳孔）
- * - 75-87: 鼻子 13点
- * - 88-96: 嘴巴外轮廓 9点
- * - 97-105: 嘴巴内轮廓 9点
+ * 106点索引定义（mars-face-kit 格式，与GPUPixel一致）：
+ * - 0-32:   脸部轮廓 33点
+ * - 33-37:  左眉 5点
+ * - 38-42:  右眉 5点
+ * - 43:     眉心
+ * - 44-46:  鼻梁 3点
+ * - 47-51:  鼻尖 5点
+ * - 52-57:  左眼外轮廓 6点
+ * - 58-63:  右眼外轮廓 6点
+ * - 64-67:  左眉下辅助 4点
+ * - 68-71:  右眉下辅助 4点
+ * - 72-74:  左眼内/下 3点（74=左瞳孔）
+ * - 75-77:  右眼内/下 3点（77=右瞳孔）
+ * - 78-79:  鼻孔上 2点
+ * - 80-83:  鼻孔 4点
+ * - 84-95:  嘴巴外轮廓 12点
+ * - 96-103: 嘴巴内轮廓 8点
+ * - 104:    左瞳孔重复
+ * - 105:    右瞳孔重复
  */
 object Face106ToWarpParams {
 
@@ -35,12 +45,12 @@ object Face106ToWarpParams {
         val leftEye = calculateEyeCenter(landmarks106, isLeft = true)
         val rightEye = calculateEyeCenter(landmarks106, isLeft = false)
 
-        // 嘴巴关键点
+        // 嘴巴关键点（mars-face-kit格式：外84-95 + 内96-103）
         val mouthCenter = calculateMouthCenter(landmarks106)
-        val mouthLeft = getPoint(landmarks106, 88)  // 嘴巴外轮廓左角
-        val mouthRight = getPoint(landmarks106, 92) // 嘴巴外轮廓右角
-        val upperLipCenter = getPoint(landmarks106, 90) // 上唇中心
-        val lowerLipCenter = getPoint(landmarks106, 94) // 下唇中心
+        val mouthLeft = getPoint(landmarks106, 84)   // 左嘴角外
+        val mouthRight = getPoint(landmarks106, 90)  // 右嘴角外
+        val upperLipCenter = getPoint(landmarks106, 87) // 上唇外中心
+        val lowerLipCenter = getPoint(landmarks106, 93) // 下唇外中心
 
         // 脸部半径（使用轮廓点估算）
         val faceRadius = calculateFaceRadius(landmarks106, faceCenter)
@@ -49,8 +59,7 @@ object Face106ToWarpParams {
         val contourPoints = extractContourPoints(landmarks106)
         val leftEyeContour = extractEyeContour(landmarks106, isLeft = true)
         val rightEyeContour = extractEyeContour(landmarks106, isLeft = false)
-        val lipOuterContour = extractLipOuterContour(landmarks106)
-        val lipInnerContour = extractLipInnerContour(landmarks106)
+        val mouthContour = extractMouthContour(landmarks106)
         val leftCheekContour = extractCheekContour(landmarks106, isLeft = true)
         val rightCheekContour = extractCheekContour(landmarks106, isLeft = false)
 
@@ -76,8 +85,8 @@ object Face106ToWarpParams {
             contourPoints = contourPoints,
             leftEyeContourPoints = leftEyeContour,
             rightEyeContourPoints = rightEyeContour,
-            lipOuterContourPoints = lipOuterContour,
-            lipInnerContourPoints = lipInnerContour,
+            lipOuterContourPoints = mouthContour,
+            lipInnerContourPoints = emptyList(), // 新规范嘴巴合并为18点
             leftCheekContourPoints = leftCheekContour,
             rightCheekContourPoints = rightCheekContour,
             allContours = FaceContourData(), // 106点模式不使用 ML Kit 的 contour 数据
@@ -105,31 +114,45 @@ object Face106ToWarpParams {
 
     /**
      * 计算眼睛中心
+     * mars-face-kit格式：左眼 52-57(外6点)+72-74(内3点)，右眼 58-63(外6点)+75-77(内3点)
      */
     private fun calculateEyeCenter(landmarks: FloatArray, isLeft: Boolean): Offset {
-        val startIdx = if (isLeft) 53 else 64
+        // 使用外轮廓+内轮廓计算眼睛中心（不含瞳孔）
+        val outerStart = if (isLeft) 52 else 58
+        val innerStart = if (isLeft) 72 else 75
         var sumX = 0f
         var sumY = 0f
-        // 使用眼睑点（不含瞳孔）
-        for (i in startIdx until startIdx + 10) {
+        // 外轮廓6点
+        for (i in outerStart until outerStart + 6) {
             sumX += landmarks[i * 2]
             sumY += landmarks[i * 2 + 1]
         }
-        return Offset(sumX / 10f, sumY / 10f)
+        // 内轮廓2点（不含瞳孔：72+2=74, 75+2=77）
+        for (i in innerStart until innerStart + 2) {
+            sumX += landmarks[i * 2]
+            sumY += landmarks[i * 2 + 1]
+        }
+        return Offset(sumX / 8f, sumY / 8f)
     }
 
     /**
      * 计算嘴巴中心
+     * mars-face-kit格式：嘴巴外84-95(12点) + 内96-103(8点)
      */
     private fun calculateMouthCenter(landmarks: FloatArray): Offset {
         var sumX = 0f
         var sumY = 0f
-        // 使用嘴巴外轮廓 88-96
-        for (i in 88..96) {
+        // 外轮廓12点
+        for (i in 84..95) {
             sumX += landmarks[i * 2]
             sumY += landmarks[i * 2 + 1]
         }
-        return Offset(sumX / 9f, sumY / 9f)
+        // 内轮廓8点
+        for (i in 96..103) {
+            sumX += landmarks[i * 2]
+            sumY += landmarks[i * 2 + 1]
+        }
+        return Offset(sumX / 20f, sumY / 20f)
     }
 
     /**
@@ -156,36 +179,51 @@ object Face106ToWarpParams {
 
     /**
      * 提取眼睛轮廓点
+     * mars-face-kit格式：左眼 52-57(外6)+72-74(内3)，右眼 58-63(外6)+75-77(内3)
      */
     private fun extractEyeContour(landmarks: FloatArray, isLeft: Boolean): List<Offset> {
-        val startIdx = if (isLeft) 53 else 64
-        return (startIdx until startIdx + 10).map { getPoint(landmarks, it) }
+        val outerStart = if (isLeft) 52 else 58
+        val innerStart = if (isLeft) 72 else 75
+        val result = mutableListOf<Offset>()
+        // 外轮廓6点
+        for (i in outerStart until outerStart + 6) {
+            result.add(getPoint(landmarks, i))
+        }
+        // 内轮廓3点（含瞳孔）
+        for (i in innerStart until innerStart + 3) {
+            result.add(getPoint(landmarks, i))
+        }
+        return result
     }
 
     /**
-     * 提取嘴唇外轮廓点
+     * 提取嘴巴轮廓点
+     * mars-face-kit格式：嘴巴外84-95(12点) + 内96-103(8点)
      */
-    private fun extractLipOuterContour(landmarks: FloatArray): List<Offset> {
-        return (88..96).map { getPoint(landmarks, it) }
-    }
-
-    /**
-     * 提取嘴唇内轮廓点
-     */
-    private fun extractLipInnerContour(landmarks: FloatArray): List<Offset> {
-        return (97..105).map { getPoint(landmarks, it) }
+    private fun extractMouthContour(landmarks: FloatArray): List<Offset> {
+        val result = mutableListOf<Offset>()
+        // 外轮廓12点
+        for (i in 84..95) {
+            result.add(getPoint(landmarks, i))
+        }
+        // 内轮廓8点
+        for (i in 96..103) {
+            result.add(getPoint(landmarks, i))
+        }
+        return result
     }
 
     /**
      * 提取脸颊轮廓点（使用脸部轮廓的子集）
+     * 商汤规范：左脸颊 2-6，右脸颊 27-31（避开下巴区域）
      */
     private fun extractCheekContour(landmarks: FloatArray, isLeft: Boolean): List<Offset> {
         return if (isLeft) {
-            // 左脸颊：轮廓点 27-32
-            (27..32).map { getPoint(landmarks, it) }
+            // 左脸颊：轮廓点 2-6
+            (2..6).map { getPoint(landmarks, it) }
         } else {
-            // 右脸颊：轮廓点 0-5
-            (0..5).map { getPoint(landmarks, it) }
+            // 右脸颊：轮廓点 27-31
+            (27..31).map { getPoint(landmarks, it) }
         }
     }
 }
