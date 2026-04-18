@@ -103,7 +103,9 @@ internal fun handleImageAnalysisFrameMediaPipe(
     lensFacing: Int,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
-    onShowFocusIndicatorChanged: (Boolean) -> Unit
+    onShowFocusIndicatorChanged: (Boolean) -> Unit,
+    isDualMode: Boolean = false,
+    existingWarpParams: FaceWarpParams? = null
 ) {
     try {
         val mediaImage = imageProxy.image
@@ -119,7 +121,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
         // MediaPipe 检测
-        val landmarks106 = mediaPipeDetector.detect(imageProxy, rotationDegrees)
+        val landmarks106 = mediaPipeDetector.detect(imageProxy, lensFacing)
 
         if (landmarks106 != null) {
             // 缓存人脸检测结果供拍照使用
@@ -136,19 +138,29 @@ internal fun handleImageAnalysisFrameMediaPipe(
             onFacePointChanged(screenPoint)
             onShowFocusIndicatorChanged(true)
 
-            // 调试日志
-            android.util.Log.d(
-                "PicMe:Camera",
-                "MediaPipe 106点: center=(${"%.3f".format(faceWarpParams.faceCenterX)}, ${"%.3f".format(faceWarpParams.faceCenterY)}), " +
-                "leftEye=(${"%.3f".format(faceWarpParams.leftEyeX)}, ${"%.3f".format(faceWarpParams.leftEyeY)}), " +
-                "rightEye=(${"%.3f".format(faceWarpParams.rightEyeX)}, ${"%.3f".format(faceWarpParams.rightEyeY)}), " +
-                "processTime=${mediaPipeDetector.getLastProcessTimeMs()}ms"
-            )
+            // 保存大美丽原始点位用于调试对比
+            val bigBeautyLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
 
-            onFaceWarpParamsChanged(faceWarpParams)
+            if (isDualMode) {
+                // 双模式：只返回 MediaPipe 的 bigBeautyLandmarks 部分
+                // GPUPixel 的 gpuPixelLandmarks 由 CameraScreen 中的 onGpuPixelLandmarksDetected 回调单独更新
+                val dualModeParams = FaceWarpParams(
+                    bigBeautyLandmarks = bigBeautyLandmarks,
+                    hasFace = faceWarpParams.hasFace
+                )
+                onFaceWarpParamsChanged(dualModeParams)
+            } else {
+                // 单模式：直接返回大美丽参数
+                val warpParamsWithBigBeauty = faceWarpParams.copy(
+                    bigBeautyLandmarks = bigBeautyLandmarks
+                )
+                onFaceWarpParamsChanged(warpParamsWithBigBeauty)
+            }
         } else {
-            onShowFocusIndicatorChanged(false)
-            onFaceWarpParamsChanged(FaceWarpParams())
+            if (!isDualMode) {
+                onShowFocusIndicatorChanged(false)
+                onFaceWarpParamsChanged(FaceWarpParams())
+            }
         }
 
         imageProxy.close()

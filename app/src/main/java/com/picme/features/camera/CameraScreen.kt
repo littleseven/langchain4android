@@ -568,11 +568,41 @@ fun CameraContent(
     // GPUPixel 106 点回调：更新 faceWarpParams 用于调试 UI 显示
     val onGpuPixelLandmarksDetected: (FloatArray?) -> Unit = { landmarks ->
         if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
-            val gpuPixelLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks)
-            faceWarpParams = faceWarpParams.copy(
-                hasFace = gpuPixelLandmarks.hasFace,
-                gpuPixelLandmarks = gpuPixelLandmarks
-            )
+            if (landmarks != null && landmarks.isNotEmpty()) {
+                // GPUPixel 返回的坐标未做前置摄像头镜像，需要与 MediaPipe 保持一致
+                val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
+                val mirroredLandmarks = if (isFrontCamera) {
+                    // 前置摄像头：水平镜像 x 坐标
+                    FloatArray(landmarks.size).apply {
+                        for (i in landmarks.indices step 2) {
+                            this[i] = 1f - landmarks[i]     // x = 1 - x
+                            this[i + 1] = landmarks[i + 1]   // y 不变
+                        }
+                    }
+                } else {
+                    landmarks
+                }
+
+                // 使用 Face106ToWarpParams 转换，确保与 MediaPipe 模式一致
+                val newParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(mirroredLandmarks)
+                // 保存 GPUPixel 原始点位用于调试对比
+                // 双模式下保留已有的 bigBeautyLandmarks（由 MediaPipe 检测提供）
+                val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
+                val existingHasFace = faceWarpParams.hasFace
+                faceWarpParams = newParams.copy(
+                    gpuPixelLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(mirroredLandmarks),
+                    bigBeautyLandmarks = existingBigBeauty,
+                    hasFace = existingHasFace || newParams.hasFace
+                )
+            } else {
+                // 双模式下保留 bigBeautyLandmarks
+                val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
+                val existingHasFace = faceWarpParams.hasFace
+                faceWarpParams = FaceWarpParams(
+                    bigBeautyLandmarks = existingBigBeauty,
+                    hasFace = existingHasFace
+                )
+            }
         }
     }
 
@@ -835,7 +865,47 @@ fun CameraContent(
                 Logger.d("Camera", "Actual lens changed: $ignoredLensFacing")
             },
             onFacePointChanged = { point -> facePoint = point },
-            onFaceWarpParamsChanged = { params -> faceWarpParams = params },
+            onFaceWarpParamsChanged = { params ->
+                if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
+                    // 双模式：合并 MediaPipe 的 bigBeautyLandmarks 到现有的 GPUPixel 参数中
+                    val existingGpuPixel = faceWarpParams.gpuPixelLandmarks
+                    val existingHasFace = faceWarpParams.hasFace
+                    val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
+                    
+                    // 判断当前回调是 MediaPipe 还是 GPUPixel 数据
+                    val isMediaPipeCallback = params.bigBeautyLandmarks.hasFace && params.bigBeautyLandmarks.points.isNotEmpty()
+                    val isGpuPixelCallback = params.gpuPixelLandmarks.hasFace && params.gpuPixelLandmarks.points.isNotEmpty()
+                    
+                    Logger.d("Camera", "onFaceWarpParamsChanged: isMediaPipe=$isMediaPipeCallback, isGpuPixel=$isGpuPixelCallback, " +
+                        "existingBB=${existingBigBeauty.hasFace}, existingGP=${existingGpuPixel.hasFace}")
+                    
+                    faceWarpParams = when {
+                        // MediaPipe 回调：保留已有的 GPUPixel 数据
+                        isMediaPipeCallback && !isGpuPixelCallback -> {
+                            Logger.d("Camera", "Merging MediaPipe data, GP points=${existingGpuPixel.points.size}")
+                            faceWarpParams.copy(
+                                bigBeautyLandmarks = params.bigBeautyLandmarks,
+                                hasFace = existingHasFace || params.hasFace
+                            )
+                        }
+                        // GPUPixel 回调：保留已有的 MediaPipe 数据
+                        isGpuPixelCallback && !isMediaPipeCallback -> {
+                            Logger.d("Camera", "Merging GPUPixel data, BB points=${existingBigBeauty.points.size}")
+                            faceWarpParams.copy(
+                                gpuPixelLandmarks = params.gpuPixelLandmarks,
+                                hasFace = existingHasFace || params.hasFace
+                            )
+                        }
+                        // 其他情况：直接更新
+                        else -> {
+                            Logger.d("Camera", "Direct update: params.hasFace=${params.hasFace}")
+                            params
+                        }
+                    }
+                } else {
+                    faceWarpParams = params
+                }
+            },
             onShowFocusIndicatorChanged = { show ->
                 isFaceLocked = show
             }

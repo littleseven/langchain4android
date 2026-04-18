@@ -157,8 +157,24 @@ internal fun bindCameraUseCases(
                     Logger.e("Camera", "GPUPixel frame conversion error", e)
                 }
             }
-            // GPUPixel 模式：内部使用 mars-face-kit 检测
-            imageProxy.close()
+            // GPUPixel 模式：同时运行 MediaPipe 检测用于调试对比
+            // 先获取 GPUPixel 回调中的点位数据（由 GpupixelBeautyPreviewProvider 内部回调更新）
+            // 由于 GPUPixel 回调是异步的，这里使用一个占位参数，实际合并逻辑在 CameraScreen 中处理
+            handleImageAnalysisFrameMediaPipe(
+                imageProxy = imageProxy,
+                previewView = previewView,
+                mediaPipeDetector = mediaPipeDetector,
+                lensFacing = lensFacing,
+                onFacePointChanged = onFacePointChanged,
+                onFaceWarpParamsChanged = { mediaPipeParams ->
+                    // 双模式：将 MediaPipe 结果合并到现有的 GPUPixel 参数中
+                    // 注意：GPUPixel 点位由 onGpuPixelLandmarksDetected 回调单独更新
+                    // 这里只更新 bigBeautyLandmarks 部分
+                    onFaceWarpParamsChanged(mediaPipeParams)
+                },
+                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
+                isDualMode = true
+            )
         } else {
             // 所有非 GPUPixel 模式：使用 MediaPipe Face Landmarker（468点 → 106点）
             handleImageAnalysisFrameMediaPipe(
@@ -168,7 +184,8 @@ internal fun bindCameraUseCases(
                 lensFacing = lensFacing,
                 onFacePointChanged = onFacePointChanged,
                 onFaceWarpParamsChanged = onFaceWarpParamsChanged,
-                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged
+                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
+                isDualMode = false
             )
         }
     }
