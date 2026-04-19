@@ -76,14 +76,14 @@
         - **身材管理**：
             - **丰胸 (Body Enhancement)**：基于 MediaPipe/ML Kit Pose 人体关键点的局部径向扩展，调整幅度 ≤ 20%，范围 -30~+30
             - **长腿 (Leg Extension)**：基于姿态估计的下半身分段线性缩放 + 透视校正，幅度 ≤ 20%，范围 0-50
-    - **ML Kit 人脸能力挖掘（2026-04）**：
-        - **表情与状态属性（立即落地）**：基于现有 ML Kit Face Detection，读取 `smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性，实现微笑快门、侧脸美颜降强度、闭眼提醒。
-        - **Face Mesh 468 点（Phase 2）**：引入 ML Kit Face Mesh 作为异步分析流，支撑精细美型（颧骨、下颌线）和精准妆容贴合（眼影、腮红 UV 映射）。严禁放入预览渲染线程，仅通过 `ImageAnalysis` 异步回调驱动参数。
-        - **Selfie Segmentation（Phase 2-3）**：引入人像分割实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
+    - **人脸关键点检测能力（2026-04 更新）**：
+        - **表情与状态属性（已落地）**：基于 ML Kit Face Detection，读取 `smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性，实现微笑快门、侧脸美颜降强度、闭眼提醒。
+        - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型（瘦脸、大眼）和 GPUPixel 模式的滤镜链驱动。严禁放入预览渲染线程，仅通过异步回调更新美颜参数，避免掉帧。
+        - **Selfie Segmentation（Phase 2-3）**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask，实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
     - **美颜引擎技术路线（2026-04 更新）**：
         - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）作为唯一实时美颜引擎。单 Pass Shader 完成磨皮/美白/大眼/瘦脸/唇色/腮红，零拷贝 GPU 管线（SurfaceTexture → OES 纹理 → SurfaceView）。
         - **移除 PixelFreeEffects**：因 PixelFree 核心算法未真正开源，且官方 UIKit 与 Jetpack Compose 架构冲突，已于 2026-04 彻底移除 `:pixelfree-sdk` 模块及相关代码。
-        - **GPUPixel 实验性引擎（当前进展，2026-04）**：GPUPixel 已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口，可在设置中切换。已接入能力：磨皮（BeautyFaceFilter）、美白、瘦脸（FaceReshapeFilter）、大眼、唇色（LipstickFilter）；内置 Mars 106 点人脸检测模型，完全本地化。本期新增：腮红（BlusherFilter）直接接入。GPUPixel 的滤镜链（Filter Chain）模块化设计与 PicMe 技术栈高度契合。
+        - **GPUPixel 实验性引擎（当前进展，2026-04）**：GPUPixel 已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口，可在设置中切换。已接入能力：磨皮（BeautyFaceFilter）、美白、瘦脸（FaceReshapeFilter）、大眼、唇色（LipstickFilter）、腮红（BlusherFilter）；人脸关键点通过 MediaPipe 468→106 点映射统一提供，对齐字节火山引擎 106 点标准，完全本地化。GPUPixel 的滤镜链（Filter Chain）模块化设计与 PicMe 技术栈高度契合。
         - **GPUPixel 可直接接入的能力（优先级排序）**：
             - **P0（本期）**：腮红（BlusherFilter，有完整 C++ 实现 + 内置 blusher.png mask，与唇色接入方式相同，3 行代码即可完成）。
             - **P1**：专业调色滤镜链（ExposureFilter、ContrastFilter、SaturationFilter、WhiteBalanceFilter），可替换当前专业模式依赖 CameraX CaptureRequest 的参数调节，以 GPU Shader 方式实时预览，延迟更低、效果更可控。
