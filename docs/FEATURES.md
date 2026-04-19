@@ -167,20 +167,23 @@
 - **未来演进方向（GPUPixel）**：评估以 [GPUPixel](https://github.com/pixpark/gpupixel) 作为开源高性能 GPU 滤镜引擎基础，逐步替换/增强 大美丽 的 Shader 管线。GPUPixel 采用 Apache 2.0 协议，纯 C++11 + OpenGL ES，单帧 < 10ms，无商业 SDK 绑定。
 - **技术实现文档**：引擎实现与渲染链路细节见 [`BIG_BEAUTY_TECH_SPEC.md`](BIG_BEAUTY_TECH_SPEC.md)。
 
-#### 1.3.5 ML Kit 人脸增强能力规划
+#### 1.3.5 人脸关键点检测能力规划
 
-##### 1.3.5.1 表情与状态感知（零新增依赖）
+##### 1.3.5.1 表情与状态感知（已落地）
 基于现有 ML Kit Face Detection 结果，深度挖掘以下属性以提升美颜智能化：
 - **微笑快门**：当 `smilingProbability > 0.7` 且画面稳定时，自动触发拍摄（可选开关）。
 - **侧脸降强度**：当 `headEulerAngleY` 绝对值 > 25° 时，自动降低瘦脸/大眼强度，避免侧脸几何扭曲。
 - **闭眼提醒/选优**：连拍时结合 `leftEyeOpenProbability` / `rightEyeOpenProbability` 自动标记闭眼帧，推荐最佳表情照片。
 
-##### 1.3.5.2 Face Mesh 精细美型（Phase 2）
-- **能力**：引入 ML Kit Face Mesh（468 点）作为 `ImageAnalysis` 异步分析流。
+##### 1.3.5.2 MediaPipe Face Mesh 468 点精细美型（已落地）
+- **能力**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。
+- **映射对齐**：通过精确的 468→106 点语义映射，对齐字节火山引擎 106 点标准（与 GPUPixel 内置 Mars 模型拓扑一致）。映射策略优先使用对等语义点，缺失点使用插值。
 - **应用场景**：
-  - 精细美型：颧骨内推、下颌线微调、鼻型精修。
-  - 精准妆容：眼影、腮红基于密集网格做 UV 映射，边界清晰不溢出。
+  - 精细美型：基于 106 点 landmarks 的径向变形场实现瘦脸、大眼，安全范围 -50~+50（幅度 ≤ 30%）。
+  - 精准妆容：唇色、腮红基于关键点区域做 UV 映射，边界清晰不溢出。
+  - GPUPixel 滤镜链驱动：统一的人脸关键点数据支撑 GPUPixel 模式的 FaceReshapeFilter、LipstickFilter、BlusherFilter 等滤镜。
 - **性能约束**：严禁将 Face Mesh 放入预览渲染线程，仅允许异步回调更新美颜参数，避免掉帧。
+- **轮廓方向**：106 点轮廓为开放曲线（33 点），从右鬓角(0) → 下巴(16) → 左鬓角(32)，与 MediaPipe FACE_OVAL 闭合曲线（含额头）不同，映射时需选择不含额头的轮廓点。
 
 ##### 1.3.5.3 Selfie Segmentation 人像分割（Phase 2-3）
 - **能力**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask。
