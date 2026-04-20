@@ -119,17 +119,17 @@ private fun FaceDebugOverlayDual(
             }
         }
 
-        // 绘制大美丽点位（红色，带序号）
+        // 绘制大美丽点位（蓝色，带序号）
         val bbPoints = bigBeautyLandmarks.points.map { pt -> toCanvasPoint(pt) }
         bbPoints.forEachIndexed { index, point ->
             drawCircle(
-                color = Color.Red.copy(alpha = 0.85f),
+                color = Color.Blue.copy(alpha = 0.85f),
                 radius = 2.5f,
                 center = point,
                 style = Fill
             )
             drawIntoCanvas { canvas ->
-                textPaint.color = android.graphics.Color.RED
+                textPaint.color = android.graphics.Color.BLUE
                 canvas.nativeCanvas.drawText(
                     "M$index",
                     point.x,
