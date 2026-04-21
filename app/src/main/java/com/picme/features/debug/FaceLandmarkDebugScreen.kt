@@ -330,7 +330,7 @@ fun FaceLandmarkDebugScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             DebugToggle(
-                color = Color(0xFF00FFFF),
+                color = Color(0xFF00FF00),
                 label = "468",
                 subLabel = "${mpDetectTime.toInt()}ms",
                 enabled = show468Points,
@@ -442,14 +442,14 @@ private fun DebugLandmarkCanvas(
 
         // 绘制 MediaPipe 468 点
         if (show468Points && mediaPipe468Points != null) {
-            val cyanColor = Color(0xFF00FFFF)
+            val pointColor = Color(0xFF00FF00)
             mediaPipe468Points.forEachIndexed { index, point ->
                 val canvasPoint = toCanvasPoint(point.first, point.second)
-                drawCircle(color = cyanColor, radius = 3f, center = canvasPoint)
+                drawCircle(color = pointColor, radius = 3f, center = canvasPoint)
                 if (index % 10 == 0) {
                     drawIntoCanvas { canvas ->
                         val paint = android.graphics.Paint().apply {
-                            color = android.graphics.Color.parseColor("#00FFFF")
+                            color = android.graphics.Color.parseColor("#00FF00")
                             textSize = 16f
                             textAlign = android.graphics.Paint.Align.CENTER
                         }
