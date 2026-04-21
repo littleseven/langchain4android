@@ -314,6 +314,8 @@ private fun BoxScope.CameraPreviewSideControls(
 ) {
     CameraLeftControls(
         onNavigateToSettings = actions.onNavigateToSettings,
+        onNavigateToFaceLandmarkDebug = actions.onNavigateToFaceLandmarkDebug,
+        debugUiEnabled = uiState.debugUiEnabled,
         modifier = Modifier.align(Alignment.TopStart)
     )
 
