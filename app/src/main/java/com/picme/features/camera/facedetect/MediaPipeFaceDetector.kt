@@ -313,49 +313,47 @@ class MediaPipeFaceDetector(context: Context) {
 
         // === 右半边：M0-M15 (画面左侧=实际右脸，从上到下) ===
         // 火山引擎标准：0-16 为右轮廓（画面左侧，从右上到下巴右）
-        // 策略：先确定语义对称的固定点，再插值过渡点
-        // 固定点（从外到中心）：162→127→234→93→132→58→172→136→150→149→176→148→152
-        setPoint(0, getMpPoint(162))     // 右鬓角/太阳穴（画面左侧）
-        setPoint(1, midPoint(getMpPoint(162), getMpPoint(127)))   // 过渡：右鬓角到右耳上
-        setPoint(2, getMpPoint(127))     // 右耳上
-        setPoint(3, getMpPoint(234))     // 右耳
-        setPoint(4, midPoint(getMpPoint(234), getMpPoint(93)))    // 过渡：右耳到右耳下
-        setPoint(5, getMpPoint(93))      // 右耳下/脸颊起点
-        setPoint(6, getMpPoint(132))     // 右脸颊上
-        setPoint(7, getMpPoint(58))      // 右脸颊中
-        setPoint(8, getMpPoint(172))     // 右脸颊下
-        setPoint(9, getMpPoint(136))     // 右下颌角
-        setPoint(10, getMpPoint(150))    // 右下巴边缘
-        setPoint(11, getMpPoint(149))    // 下巴右侧
-        setPoint(12, midPoint(getMpPoint(149), getMpPoint(176)))  // 过渡：下巴右侧到下巴中右
-        setPoint(13, getMpPoint(176))    // 下巴中右
-        setPoint(14, midPoint(getMpPoint(176), getMpPoint(148)))  // 过渡：下巴中右到下巴中心右侧
-        setPoint(15, getMpPoint(148))    // 下巴中心右侧
+        // 策略：先确定语义固定点，再插值过渡点
+        setPoint(0, getMpPoint(234))     // 右脸颊上（固定点）
+        setPoint(1, midPoint(getMpPoint(234), getMpPoint(93)))   // 右脸颊过渡
+        setPoint(2, getMpPoint(93))      // 右脸颊（固定点）
+        setPoint(3, getMpPoint(132))     // 右脸颊（固定点）
+        setPoint(4, getMpPoint(58))      // 右脸颊（固定点）
+        setPoint(5, getMpPoint(172))     // 右脸颊下（固定点）
+        setPoint(6, getMpPoint(136))     // 右下颌角（固定点）
+        setPoint(7, getMpPoint(150))     // 右下巴边缘（固定点）
+        setPoint(8, getMpPoint(149))     // 下巴右侧（固定点）
+        setPoint(9, midPoint(getMpPoint(149), getMpPoint(176)))  // 下巴右过渡
+        setPoint(10, getMpPoint(176))    // 下巴中右（固定点）
+        setPoint(11, midPoint(getMpPoint(176), getMpPoint(148)))  // 下巴中右过渡
+        setPoint(12, getMpPoint(148))    // 下巴中心右侧（固定点）
+        setPoint(13, midPoint(getMpPoint(148), getMpPoint(152)))  // 下巴中心过渡
+        setPoint(14, getMpPoint(152))    // 下巴（固定点）
+        setPoint(15, midPoint(getMpPoint(152), getMpPoint(377)))  // 下巴→中心过渡
 
         // === 下巴中心：M16 ===
-        setPoint(16, getMpPoint(152))    // 下巴中心/最低点（中轴点）
+        setPoint(16, getMpPoint(377))    // 下巴中心最低（中轴点）
 
         // === 左半边：M17-M32 (画面右侧=实际左脸，从下到上) ===
         // 火山引擎标准：17-32 为左轮廓（画面右侧，从下巴左到左上）
-        // 策略：使用与右半边语义对称的MediaPipe固定点，按x坐标递减排列（从中心到左侧），再插值过渡点
-        // 固定点顺序（从中心到左侧，x递减）：152→377→378→400→379→397→365→288→361→323→454→389
-        // 对称关系：148↔377, 176↔378, 149↔400, 150↔379, 136↔397, 172↔365, 58↔288, 132↔361, 93↔323, 234↔454, 127↔389, 162↔389(近似)
-        setPoint(17, getMpPoint(377))    // 下巴中心左侧（对称M15=148）
-        setPoint(18, midPoint(getMpPoint(377), getMpPoint(378)))  // 过渡：下巴中心左侧→下巴中左
-        setPoint(19, getMpPoint(378))    // 下巴中左（对称M13=176）
-        setPoint(20, midPoint(getMpPoint(378), getMpPoint(400)))  // 过渡：下巴中左→下巴左侧
-        setPoint(21, getMpPoint(400))    // 下巴左侧（对称M11=149）
-        setPoint(22, getMpPoint(379))    // 左下巴边缘（对称M10=150）
-        setPoint(23, getMpPoint(397))    // 左下颌角（对称M9=136）
-        setPoint(24, getMpPoint(365))    // 左脸颊下（对称M8=172）
-        setPoint(25, getMpPoint(288))    // 左脸颊中（对称M7=58）
-        setPoint(26, getMpPoint(361))    // 左脸颊上（对称M6=132）
-        setPoint(27, getMpPoint(323))    // 左耳下/脸颊起点（对称M5=93）
-        setPoint(28, midPoint(getMpPoint(323), getMpPoint(454)))  // 过渡：左耳下→左耳上
-        setPoint(29, getMpPoint(454))    // 左耳上（对称M3=234）
-        setPoint(30, midPoint(getMpPoint(454), getMpPoint(389)))  // 过渡：左耳上→左鬓角
-        setPoint(31, getMpPoint(389))    // 左太阳穴（对称M2=127）
-        setPoint(32, getMpPoint(389))    // 左鬓角/轮廓终点（对称M0=162，近似）
+        // 策略：使用与右半边语义对称的MediaPipe固定点
+        // 对称关系：152↔400, 148↔378, 149↔379, 176↔365, 136↔397, 150↔288, 172↔361, 58↔323, 132↔454, 93↔389
+        setPoint(17, midPoint(getMpPoint(377), getMpPoint(400)))  // 下巴中心左侧过渡（对称M15）
+        setPoint(18, getMpPoint(400))    // 下巴左侧（固定点，对称M14=152）
+        setPoint(19, midPoint(getMpPoint(400), getMpPoint(378)))  // 下巴左侧过渡
+        setPoint(20, getMpPoint(378))    // 下巴中左（固定点，对称M12=148）
+        setPoint(21, midPoint(getMpPoint(378), getMpPoint(379)))  // 下巴中左过渡
+        setPoint(22, getMpPoint(379))    // 左下巴边缘（固定点，对称M8=149）
+        setPoint(23, getMpPoint(365))    // 左脸颊下（固定点，对称M10=176）
+        setPoint(24, midPoint(getMpPoint(365), getMpPoint(397)))  // 左脸颊下过渡
+        setPoint(25, getMpPoint(397))    // 左下颌角（固定点，对称M6=136）
+        setPoint(26, getMpPoint(288))    // 左脸颊（固定点，对称M7=150）
+        setPoint(27, midPoint(getMpPoint(288), getMpPoint(361)))  // 左脸颊过渡
+        setPoint(28, getMpPoint(361))    // 左脸颊上（固定点，对称M5=172）
+        setPoint(29, getMpPoint(323))    // 左耳下（固定点，对称M4=58）
+        setPoint(30, midPoint(getMpPoint(323), getMpPoint(454)))  // 左耳过渡
+        setPoint(31, getMpPoint(454))    // 左耳上（固定点，对称M3=132）
+        setPoint(32, getMpPoint(389))    // 左鬓角/轮廓终点（固定点，近似对称M2=93）
 
         // 日志输出轮廓点坐标，用于调试对齐
         val sb = StringBuilder("Contour33: ")
