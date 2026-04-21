@@ -32,12 +32,14 @@ import com.picme.domain.model.AppLanguage
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
+import com.picme.features.debug.FaceLandmarkDebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
 import com.picme.navigation.Screen
+import com.picme.BuildConfig
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -125,6 +127,7 @@ class MainActivity : ComponentActivity() {
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                                    onNavigateToFaceLandmarkDebug = { navController.navigate(Screen.FaceLandmarkDebug.route) },
                                     viewModel = mediaViewModel
                                 )
                             }
@@ -144,6 +147,11 @@ class MainActivity : ComponentActivity() {
                                 DebugScreen(
                                     onNavigateBack = { navController.popBackStack() },
                                     mediaViewModel = mediaViewModel
+                                )
+                            }
+                            composable(Screen.FaceLandmarkDebug.route) {
+                                FaceLandmarkDebugScreen(
+                                    onNavigateBack = { navController.popBackStack() }
                                 )
                             }
 

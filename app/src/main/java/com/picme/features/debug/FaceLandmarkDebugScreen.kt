@@ -1,0 +1,708 @@
+package com.picme.features.debug
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
+import com.google.mediapipe.tasks.vision.core.RunningMode
+import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
+import com.picme.core.common.Logger
+import com.picme.features.camera.facedetect.MediaPipeFaceDetector
+import com.pixpark.gpupixel.FaceDetector
+import com.pixpark.gpupixel.GPUPixel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+private const val TAG = "PicMe:FaceLandmarkDebug"
+
+@Composable
+fun FaceLandmarkDebugScreen(
+    onNavigateBack: () -> Unit
+) {
+    val context = LocalContext.current
+
+    // 图像加载状态
+    var imageBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var imageWidth by remember { mutableIntStateOf(0) }
+    var imageHeight by remember { mutableIntStateOf(0) }
+
+    // 检测结果
+    var mediaPipe468Points by remember { mutableStateOf<List<Pair<Float, Float>>?>(null) }
+    var bigBeauty106Points by remember { mutableStateOf<FloatArray?>(null) }
+    var gpupixel106Points by remember { mutableStateOf<FloatArray?>(null) }
+
+    // 开关状态 - 使用 remember 确保状态在重组时保持
+    var show468Points by remember { mutableStateOf(true) }
+    var showBigBeauty106 by remember { mutableStateOf(true) }
+    var showGpuPixel106 by remember { mutableStateOf(true) }
+
+    // 加载状态
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // 检测耗时
+    var mpDetectTime by remember { mutableFloatStateOf(0f) }
+    var gpDetectTime by remember { mutableFloatStateOf(0f) }
+
+    // 初始化检测器（GPUPixel 必须先 Init 才能创建 FaceDetector）
+    var mediaPipeLandmarker by remember { mutableStateOf<FaceLandmarker?>(null) }
+    var gpuPixelDetector by remember { mutableStateOf<FaceDetector?>(null) }
+
+    DisposableEffect(Unit) {
+        GPUPixel.Init(context)
+        gpuPixelDetector = FaceDetector.Create()
+
+        // 独立创建 IMAGE 模式的 FaceLandmarker（调试用，不依赖 MediaPipeFaceDetector）
+        try {
+            val baseOptions = BaseOptions.builder()
+                .setDelegate(Delegate.GPU)
+                .setModelAssetPath("mediapipe/face_landmarker.task")
+                .build()
+            val options = FaceLandmarker.FaceLandmarkerOptions.builder()
+                .setBaseOptions(baseOptions)
+                .setMinFaceDetectionConfidence(0.5f)
+                .setMinTrackingConfidence(0.5f)
+                .setMinFacePresenceConfidence(0.5f)
+                .setNumFaces(1)
+                .setOutputFaceBlendshapes(false)
+                .setRunningMode(RunningMode.IMAGE)
+                .build()
+            mediaPipeLandmarker = FaceLandmarker.createFromOptions(context, options)
+            Logger.d(TAG, "MediaPipe FaceLandmarker (IMAGE mode) initialized for debug")
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to init FaceLandmarker with GPU, fallback to CPU", e)
+            try {
+                val baseOptions = BaseOptions.builder()
+                    .setDelegate(Delegate.CPU)
+                    .setModelAssetPath("mediapipe/face_landmarker.task")
+                    .build()
+                val options = FaceLandmarker.FaceLandmarkerOptions.builder()
+                    .setBaseOptions(baseOptions)
+                    .setMinFaceDetectionConfidence(0.5f)
+                    .setMinTrackingConfidence(0.5f)
+                    .setMinFacePresenceConfidence(0.5f)
+                    .setNumFaces(1)
+                    .setOutputFaceBlendshapes(false)
+                    .setRunningMode(RunningMode.IMAGE)
+                    .build()
+                mediaPipeLandmarker = FaceLandmarker.createFromOptions(context, options)
+                Logger.d(TAG, "MediaPipe FaceLandmarker (IMAGE mode, CPU) initialized for debug")
+            } catch (e2: Exception) {
+                Logger.e(TAG, "Failed to init FaceLandmarker", e2)
+            }
+        }
+
+        onDispose {
+            mediaPipeLandmarker?.close()
+            gpuPixelDetector?.destroy()
+        }
+    }
+
+    // 当前图片 URI（null 表示使用默认 assets 图片）
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    // 相册选择器
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { selectedImageUri = it }
+    }
+
+    // 加载图片并检测
+    LaunchedEffect(selectedImageUri) {
+        Log.d(TAG, "LaunchedEffect triggered, uri=$selectedImageUri")
+        isLoading = true
+        errorMessage = null
+        mediaPipe468Points = null
+        bigBeauty106Points = null
+        gpupixel106Points = null
+        try {
+            val bitmap = if (selectedImageUri != null) {
+                // 从相册加载
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(selectedImageUri!!)?.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    } ?: throw IllegalStateException("无法打开图片")
+                }
+            } else {
+                // 从 assets 加载默认图片
+                withContext(Dispatchers.IO) {
+                    val inputStream = context.assets.open("img.png")
+                    val bmp = BitmapFactory.decodeStream(inputStream)
+                    inputStream.close()
+                    bmp
+                }
+            }
+
+            if (bitmap == null) {
+                errorMessage = "图片解码失败"
+                isLoading = false
+                return@LaunchedEffect
+            }
+
+            imageWidth = bitmap.width
+            imageHeight = bitmap.height
+            imageBitmap = bitmap.asImageBitmap()
+
+            // 执行检测
+            withContext(Dispatchers.IO) {
+                Log.d(TAG, "Starting detection on ${bitmap.width}x${bitmap.height} bitmap")
+
+                // 1. MediaPipe 468 点检测
+                val landmarker = mediaPipeLandmarker
+                Log.d(TAG, "MediaPipe landmarker is ${if (landmarker != null) "initialized" else "NULL"}")
+                if (landmarker != null) {
+                    val mpStart = System.currentTimeMillis()
+                    val mpResult = detectMediaPipe468(bitmap, landmarker)
+                    mpDetectTime = (System.currentTimeMillis() - mpStart).toFloat()
+
+                    mpResult?.let { result ->
+                        mediaPipe468Points = result.landmarks
+                        bigBeauty106Points = result.points106
+                    }
+                } else {
+                    Logger.e(TAG, "MediaPipe FaceLandmarker not initialized")
+                }
+
+                // 2. GPUPixel 106 点检测
+                val gpDetector = gpuPixelDetector
+                Log.d(TAG, "GPUPixel detector is ${if (gpDetector != null) "initialized" else "NULL"}")
+                if (gpDetector != null) {
+                    val gpStart = System.currentTimeMillis()
+                    gpupixel106Points = detectGpuPixel106(bitmap, gpDetector)
+                    gpDetectTime = (System.currentTimeMillis() - gpStart).toFloat()
+                    Log.d(
+                        TAG,
+                        "GPUPixel result: ${gpupixel106Points?.size?.div(2) ?: 0} points, ${gpDetectTime.toInt()}ms"
+                    )
+                } else {
+                    Logger.e(TAG, "GPUPixel detector not initialized")
+                }
+            }
+
+            Logger.d(
+                TAG,
+                "Detection complete - MediaPipe: ${mpDetectTime}ms, GPUPixel: ${gpDetectTime}ms"
+            )
+        } catch (e: Exception) {
+            errorMessage = "加载或检测失败: ${e.message}"
+            Logger.e(TAG, "Debug screen error", e)
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 全屏图片显示
+        AsyncImage(
+            model = selectedImageUri ?: ImageRequest.Builder(context)
+                .data("file:///android_asset/img.png")
+                .build(),
+            contentDescription = "测试图片",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit
+        )
+
+        // 关键点绘制层 - 使用 key 确保状态变化触发重绘
+        DebugLandmarkCanvas(
+            imageWidth = imageWidth,
+            imageHeight = imageHeight,
+            mediaPipe468Points = mediaPipe468Points,
+            bigBeauty106Points = bigBeauty106Points,
+            gpupixel106Points = gpupixel106Points,
+            show468Points = show468Points,
+            showBigBeauty106 = showBigBeauty106,
+            showGpuPixel106 = showGpuPixel106
+        )
+
+        // 顶部按钮行：返回(左侧) + 相册(右侧)
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 返回按钮 - 左上，增加顶部间距避免状态栏重叠
+            IconButton(
+                onClick = onNavigateBack,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 8.dp, top = 40.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    tint = Color.White
+                )
+            }
+
+            // 相册按钮 - 右上，增加顶部间距避免状态栏重叠
+            IconButton(
+                onClick = { pickImageLauncher.launch("image/*") },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 8.dp, top = 40.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+            ) {
+                Icon(
+                    Icons.Filled.PhotoLibrary,
+                    contentDescription = "从相册选择",
+                    tint = Color.White
+                )
+            }
+        }
+
+        // 加载中
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                color = Color.White
+            )
+        }
+
+        // 错误提示
+        errorMessage?.let { error ->
+            Text(
+                text = error,
+                color = Color.Red,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                    .padding(16.dp)
+            )
+        }
+
+        // 底部简化控制面板：彩色圆点 + 文字标签
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            DebugToggle(
+                color = Color(0xFF00FFFF),
+                label = "468",
+                subLabel = "${mpDetectTime.toInt()}ms",
+                enabled = show468Points,
+                onClick = { show468Points = !show468Points }
+            )
+            DebugToggle(
+                color = Color(0xFF4488FF),
+                label = "大美丽",
+                subLabel = "106",
+                enabled = showBigBeauty106,
+                onClick = { showBigBeauty106 = !showBigBeauty106 }
+            )
+            DebugToggle(
+                color = Color(0xFFFF4444),
+                label = "GPUPixel",
+                subLabel = "${gpDetectTime.toInt()}ms",
+                enabled = showGpuPixel106,
+                onClick = { showGpuPixel106 = !showGpuPixel106 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun DebugToggle(
+    color: Color,
+    label: String,
+    subLabel: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        // 彩色指示圆点
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(
+                    if (enabled) color else Color.Gray.copy(alpha = 0.4f),
+                    RoundedCornerShape(5.dp)
+                )
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Column {
+            Text(label, fontSize = 12.sp, color = if (enabled) Color.White else Color.Gray)
+            Text(subLabel, fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
+        }
+    }
+}
+
+@Composable
+private fun DebugLandmarkCanvas(
+    imageWidth: Int,
+    imageHeight: Int,
+    mediaPipe468Points: List<Pair<Float, Float>>?,
+    bigBeauty106Points: FloatArray?,
+    gpupixel106Points: FloatArray?,
+    show468Points: Boolean,
+    showBigBeauty106: Boolean,
+    showGpuPixel106: Boolean
+) {
+    // 使用 remember 缓存坐标转换参数，避免每次重组重新计算
+    val drawParams = remember(imageWidth, imageHeight) {
+        if (imageWidth <= 0 || imageHeight <= 0) return@remember null
+        val imageAspect = imageWidth.toFloat() / imageHeight.toFloat()
+        // 返回 lambda 用于坐标转换，实际参数在 Canvas drawScope 中获取
+        object {
+            val imgAspect = imageAspect
+        }
+    }
+
+    if (drawParams == null) return
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val canvasWidth = size.width
+        val canvasHeight = size.height
+        val imageAspect = drawParams.imgAspect
+        val canvasAspect = canvasWidth / canvasHeight
+
+        // 计算图片在 Canvas 中的实际显示区域（ContentScale.Fit 模式）
+        val drawWidth: Float
+        val drawHeight: Float
+        val drawLeft: Float
+        val drawTop: Float
+
+        if (imageAspect > canvasAspect) {
+            // 图片更宽，以宽度为准，高度居中
+            drawWidth = canvasWidth
+            drawHeight = canvasWidth / imageAspect
+            drawLeft = 0f
+            drawTop = (canvasHeight - drawHeight) / 2
+        } else {
+            // 图片更高，以高度为准，宽度居中
+            drawHeight = canvasHeight
+            drawWidth = canvasHeight * imageAspect
+            drawLeft = (canvasWidth - drawWidth) / 2
+            drawTop = 0f
+        }
+
+        // 转换归一化坐标到 Canvas 坐标
+        fun toCanvasPoint(normX: Float, normY: Float): Offset {
+            return Offset(
+                x = drawLeft + normX * drawWidth,
+                y = drawTop + normY * drawHeight
+            )
+        }
+
+        // 绘制 MediaPipe 468 点
+        if (show468Points && mediaPipe468Points != null) {
+            val cyanColor = Color(0xFF00FFFF)
+            mediaPipe468Points.forEachIndexed { index, point ->
+                val canvasPoint = toCanvasPoint(point.first, point.second)
+                drawCircle(color = cyanColor, radius = 3f, center = canvasPoint)
+                if (index % 10 == 0) {
+                    drawIntoCanvas { canvas ->
+                        val paint = android.graphics.Paint().apply {
+                            color = android.graphics.Color.parseColor("#00FFFF")
+                            textSize = 16f
+                            textAlign = android.graphics.Paint.Align.CENTER
+                        }
+                        canvas.nativeCanvas.drawText(
+                            index.toString(),
+                            canvasPoint.x,
+                            canvasPoint.y - 6f,
+                            paint
+                        )
+                    }
+                }
+            }
+        }
+
+        // 绘制大美丽 106 点
+        if (showBigBeauty106 && bigBeauty106Points != null) {
+            val blueColor = Color(0xFF0000FF)
+            for (i in 0 until bigBeauty106Points.size / 2) {
+                val x = bigBeauty106Points[i * 2]
+                val y = bigBeauty106Points[i * 2 + 1]
+                val canvasPoint = toCanvasPoint(x, y)
+                drawCircle(color = blueColor, radius = 6f, center = canvasPoint)
+                drawIntoCanvas { canvas ->
+                    val paint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.parseColor("#0000FF")
+                        textSize = 18f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                    }
+                    canvas.nativeCanvas.drawText(
+                        i.toString(),
+                        canvasPoint.x,
+                        canvasPoint.y - 8f,
+                        paint
+                    )
+                }
+            }
+        }
+
+        // 绘制 GPUPixel 106 点
+        if (showGpuPixel106 && gpupixel106Points != null) {
+            val redColor = Color(0xFFFF0000)
+            for (i in 0 until gpupixel106Points.size / 2) {
+                val x = gpupixel106Points[i * 2]
+                val y = gpupixel106Points[i * 2 + 1]
+                val canvasPoint = toCanvasPoint(x, y)
+                drawCircle(color = redColor, radius = 8f, center = canvasPoint)
+                drawIntoCanvas { canvas ->
+                    val paint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.parseColor("#FF0000")
+                        textSize = 18f
+                        textAlign = android.graphics.Paint.Align.CENTER
+                    }
+                    canvas.nativeCanvas.drawText(
+                        i.toString(),
+                        canvasPoint.x,
+                        canvasPoint.y - 10f,
+                        paint
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * MediaPipe 468 点检测结果
+ */
+private data class MediaPipeResult(
+    val landmarks: List<Pair<Float, Float>>,
+    val points106: FloatArray
+)
+
+/**
+ * 使用 MediaPipe 检测图片的 468 点，并转换为 106 点
+ */
+private fun detectMediaPipe468(
+    bitmap: Bitmap,
+    landmarker: FaceLandmarker
+): MediaPipeResult? {
+    return try {
+        Logger.d(TAG, "Running MediaPipe detection with IMAGE mode landmarker...")
+
+        val mpImage = BitmapImageBuilder(bitmap).build()
+        val result = landmarker.detect(mpImage)
+
+        if (result.faceLandmarks().isEmpty()) {
+            Logger.d(TAG, "No face detected by MediaPipe")
+            return null
+        }
+
+        val landmarks = result.faceLandmarks()[0]
+        Logger.d(TAG, "MediaPipe detected ${landmarks.size} landmarks")
+
+        val points468 = landmarks.map { landmark ->
+            Pair(landmark.x(), landmark.y())
+        }
+        val points106 = convert468To106ForDebug(landmarks)
+
+        MediaPipeResult(points468, points106)
+    } catch (e: Exception) {
+        Logger.e(TAG, "MediaPipe detection failed: ${e.message}", e)
+        null
+    }
+}
+
+/**
+ * 将 MediaPipe 468 点转换为 106 点（调试用，不做镜像）
+ */
+private fun convert468To106ForDebug(
+    landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>
+): FloatArray {
+    val result = FloatArray(MediaPipeFaceDetector.POINT_COUNT * 2)
+
+    fun getMpPoint(index: Int): Pair<Float, Float>? {
+        if (index >= landmarks.size) return null
+        return Pair(landmarks[index].x(), landmarks[index].y())
+    }
+
+    fun midPoint(p1: Pair<Float, Float>?, p2: Pair<Float, Float>?): Pair<Float, Float>? {
+        if (p1 == null || p2 == null) return null
+        return Pair((p1.first + p2.first) / 2f, (p1.second + p2.second) / 2f)
+    }
+
+    fun setPoint(idx: Int, point: Pair<Float, Float>?) {
+        if (point == null) return
+        result[idx * 2] = point.first.coerceIn(0f, 1f)
+        result[idx * 2 + 1] = point.second.coerceIn(0f, 1f)
+    }
+
+    // 轮廓点 0-32
+    setPoint(0, getMpPoint(234))
+    setPoint(1, midPoint(getMpPoint(234), getMpPoint(93)))
+    setPoint(2, getMpPoint(93))
+    setPoint(3, getMpPoint(132))
+    setPoint(4, getMpPoint(58))
+    setPoint(5, getMpPoint(172))
+    setPoint(6, getMpPoint(136))
+    setPoint(7, getMpPoint(150))
+    setPoint(8, getMpPoint(149))
+    setPoint(9, midPoint(getMpPoint(149), getMpPoint(176)))
+    setPoint(10, getMpPoint(176))
+    setPoint(11, midPoint(getMpPoint(176), getMpPoint(148)))
+    setPoint(12, getMpPoint(148))
+    setPoint(13, midPoint(getMpPoint(148), getMpPoint(152)))
+    setPoint(14, getMpPoint(152))
+    setPoint(15, midPoint(getMpPoint(152), getMpPoint(377)))
+    setPoint(16, getMpPoint(377))
+    setPoint(17, midPoint(getMpPoint(377), getMpPoint(400)))
+    setPoint(18, getMpPoint(400))
+    setPoint(19, midPoint(getMpPoint(400), getMpPoint(378)))
+    setPoint(20, getMpPoint(378))
+    setPoint(21, midPoint(getMpPoint(378), getMpPoint(379)))
+    setPoint(22, getMpPoint(379))
+    setPoint(23, getMpPoint(365))
+    setPoint(24, midPoint(getMpPoint(365), getMpPoint(397)))
+    setPoint(25, getMpPoint(397))
+    setPoint(26, getMpPoint(288))
+    setPoint(27, midPoint(getMpPoint(288), getMpPoint(361)))
+    setPoint(28, getMpPoint(361))
+    setPoint(29, getMpPoint(323))
+    setPoint(30, midPoint(getMpPoint(323), getMpPoint(454)))
+    setPoint(31, getMpPoint(454))
+    setPoint(32, getMpPoint(389))
+
+    // 非轮廓区域 33-105
+    val nonContourMapping = intArrayOf(
+        70, 63, 105, 66, 107,
+        336, 296, 334, 293, 300,
+        168,
+        6, 195, 197,
+        327, 51, 4, 48, 326,
+        362, 385, 386, 387, 388, 463,
+        33, 157, 158, 160, 161, 133,
+        46, 53, 52, 65,
+        295, 282, 283, 276,
+        463, 374, 473,
+        133, 145, 468,
+        327, 326,
+        327, 358, 2, 326,
+        61, 62, 65, 0, 267, 270, 291, 375, 409, 0, 321, 84,
+        78, 78, 88, 87, 310, 310, 324, 308,
+        473, 468
+    )
+
+    for (i in 0 until MediaPipeFaceDetector.NON_CONTOUR_POINT_COUNT) {
+        val mpIndex = nonContourMapping[i]
+        if (mpIndex < landmarks.size) {
+            val landmark = landmarks[mpIndex]
+            result[(33 + i) * 2] = landmark.x().coerceIn(0f, 1f)
+            result[(33 + i) * 2 + 1] = landmark.y().coerceIn(0f, 1f)
+        }
+    }
+
+    return result
+}
+
+/**
+ * 使用 GPUPixel 检测图片的 106 点
+ */
+private fun detectGpuPixel106(bitmap: Bitmap, detector: FaceDetector): FloatArray? {
+    return try {
+        // GPUPixel/mars-face-kit 对大图支持有限，限制最大边长为 1024
+        val maxSize = 1024
+        val scaledBitmap = if (bitmap.width > maxSize || bitmap.height > maxSize) {
+            val scale = maxSize.toFloat() / kotlin.math.max(bitmap.width, bitmap.height)
+            val newWidth = (bitmap.width * scale).toInt()
+            val newHeight = (bitmap.height * scale).toInt()
+            Log.d(TAG, "GPUPixel scaling: ${bitmap.width}x${bitmap.height} -> ${newWidth}x${newHeight}")
+            Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        } else {
+            bitmap
+        }
+
+        val width = scaledBitmap.width
+        val height = scaledBitmap.height
+        Log.d(TAG, "GPUPixel detecting: ${width}x${height}")
+
+        val pixels = IntArray(width * height)
+        scaledBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+        val rgbaData = ByteArray(width * height * 4)
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            rgbaData[i * 4] = (pixel shr 16 and 0xFF).toByte()
+            rgbaData[i * 4 + 1] = (pixel shr 8 and 0xFF).toByte()
+            rgbaData[i * 4 + 2] = (pixel and 0xFF).toByte()
+            rgbaData[i * 4 + 3] = (pixel shr 24 and 0xFF).toByte()
+        }
+
+        val landmarks = detector.detect(
+            rgbaData,
+            width,
+            height,
+            width * 4,
+            FaceDetector.GPUPIXEL_MODE_FMT_PICTURE,
+            FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
+        )
+
+        Log.d(TAG, "GPUPixel raw result: ${landmarks.size} floats = ${landmarks.size / 2} points")
+
+        if (scaledBitmap !== bitmap) {
+            scaledBitmap.recycle()
+        }
+
+        if (landmarks.isEmpty()) {
+            Log.d(TAG, "No face detected by GPUPixel")
+            return null
+        }
+
+        Log.d(TAG, "GPUPixel detected ${landmarks.size / 2} points")
+        landmarks
+    } catch (e: Exception) {
+        Logger.e(TAG, "GPUPixel detection failed", e)
+        null
+    }
+}
