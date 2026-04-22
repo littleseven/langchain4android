@@ -469,45 +469,48 @@ private fun DebugLandmarkCanvas(
         // 绘制 MediaPipe 468 点
         if (show468Points && mediaPipe468Points != null) {
             val pointColor = Color(0xFF00FF00)
-            // 关键区域索引定义（用于标注）
+            // 五官轮廓索引定义（用于标注显示）
             val faceOvalIndices = setOf(10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109)
             val leftEyeIndices = setOf(33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145)
             val rightEyeIndices = setOf(362, 398, 384, 385, 386, 387, 388, 466, 263, 380, 381, 382, 374)
             val noseIndices = setOf(1, 2, 3, 4, 5, 6, 19, 94, 168, 195, 196, 197, 198, 174, 217, 236, 275, 248, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353, 354, 355, 356, 357, 358, 359, 360)
             val mouthIndices = setOf(61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 375, 321, 78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 84, 183)
+            // 眉毛索引
+            val leftEyebrowIndices = setOf(70, 63, 105, 66, 107, 46, 53, 52, 65)
+            val rightEyebrowIndices = setOf(336, 296, 334, 293, 300, 295, 282, 283, 276)
+
+            // 所有五官轮廓点集合（用于判断是否显示索引号）
+            val allFeatureIndices = faceOvalIndices + leftEyeIndices + rightEyeIndices +
+                noseIndices + mouthIndices + leftEyebrowIndices + rightEyebrowIndices
 
             mediaPipe468Points.forEachIndexed { index, point ->
                 val canvasPoint = toCanvasPoint(point.first, point.second)
                 // 关键区域点用大一点的圆，其他用小点
                 val radius = when {
-                    faceOvalIndices.contains(index) -> 4f
-                    leftEyeIndices.contains(index) -> 4f
-                    rightEyeIndices.contains(index) -> 4f
-                    noseIndices.contains(index) -> 4f
-                    mouthIndices.contains(index) -> 4f
+                    faceOvalIndices.contains(index) -> 5f
+                    leftEyeIndices.contains(index) -> 5f
+                    rightEyeIndices.contains(index) -> 5f
+                    noseIndices.contains(index) -> 5f
+                    mouthIndices.contains(index) -> 5f
+                    leftEyebrowIndices.contains(index) -> 5f
+                    rightEyebrowIndices.contains(index) -> 5f
                     else -> 2f
                 }
                 drawCircle(color = pointColor, radius = radius, center = canvasPoint)
 
-                // 标注关键索引：所有关键区域点 + 每10个点
-                val shouldLabel = faceOvalIndices.contains(index) ||
-                    leftEyeIndices.contains(index) ||
-                    rightEyeIndices.contains(index) ||
-                    noseIndices.contains(index) ||
-                    mouthIndices.contains(index) ||
-                    index % 10 == 0
-
-                if (shouldLabel) {
+                // 标注所有五官轮廓点索引号
+                if (allFeatureIndices.contains(index)) {
                     drawIntoCanvas { canvas ->
                         val paint = android.graphics.Paint().apply {
                             color = android.graphics.Color.parseColor("#00FF00")
-                            textSize = 14f
+                            textSize = 16f
                             textAlign = android.graphics.Paint.Align.CENTER
+                            isFakeBoldText = true
                         }
                         canvas.nativeCanvas.drawText(
                             index.toString(),
                             canvasPoint.x,
-                            canvasPoint.y - 8f,
+                            canvasPoint.y - 10f,
                             paint
                         )
                     }
@@ -705,7 +708,16 @@ private fun convert468To106ForDebug(
         // === 鼻孔 80-83 (4点) ===
         327, 358, 2, 326,
         // === 嘴巴外轮廓 84-95 (12点) - 顺时针闭合曲线 ===
-        61, 62, 65, 0, 267, 270, 291, 375, 409, 0, 321, 84,
+        // 基于 VOLCANO_ENGINE_106_POINTS.md + MEDIAPIPE_468_POINTS.md 语义映射：
+        //   上唇外轮廓(MediaPipe): 61→185→40→39→37→0→267→269→270→409→291
+        //   下唇外轮廓(MediaPipe): 291→375→321→405→314→17→84→181→91→146→61
+        //   84=61(左嘴角), 90=291(右嘴角)
+        //   85-89=上唇5点(不含嘴角): 40→37→0(唇珠)→267→270
+        //     87=0 唇珠, 86/88 关于唇珠对称
+        //   91-95=下唇5点(不含嘴角): 375→405→178(下唇中心)→314→84
+        //     93=178 下唇中心, 92/94 关于中心对称
+        // 拓扑顺序：84→85→86→87→88→89→90→91→92→93→94→95→84
+        61, 40, 37, 0, 267, 270, 291, 375, 405, 178, 314, 84,
         // === 嘴巴内轮廓 96-103 (8点) ===
         78, 78, 88, 87, 310, 310, 324, 308,
         // === 瞳孔 104-105 (2点) ===
