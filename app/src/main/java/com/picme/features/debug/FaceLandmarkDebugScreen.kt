@@ -242,6 +242,17 @@ fun FaceLandmarkDebugScreen(
         }
     }
 
+    // 开关状态变化时记录日志
+    LaunchedEffect(showGpuPixel106) {
+        Log.d(TAG, "GPUPixel switch toggled: $showGpuPixel106, points=${gpupixel106Points?.size?.div(2) ?: 0}")
+    }
+    LaunchedEffect(show468Points) {
+        Log.d(TAG, "468 switch toggled: $show468Points, points=${mediaPipe468Points?.size ?: 0}")
+    }
+    LaunchedEffect(showBigBeauty106) {
+        Log.d(TAG, "BigBeauty switch toggled: $showBigBeauty106, points=${bigBeauty106Points?.size?.div(2) ?: 0}")
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // 全屏图片显示
         AsyncImage(
@@ -319,37 +330,52 @@ fun FaceLandmarkDebugScreen(
         }
 
         // 底部简化控制面板：彩色圆点 + 文字标签
-        Row(
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Color.Black.copy(alpha = 0.55f))
                 .navigationBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            DebugToggle(
-                color = Color(0xFF00FF00),
-                label = "468",
-                subLabel = "${mpDetectTime.toInt()}ms",
-                enabled = show468Points,
-                onClick = { show468Points = !show468Points }
-            )
-            DebugToggle(
-                color = Color(0xFF4488FF),
-                label = "大美丽",
-                subLabel = "106",
-                enabled = showBigBeauty106,
-                onClick = { showBigBeauty106 = !showBigBeauty106 }
-            )
-            DebugToggle(
-                color = Color(0xFFFF4444),
-                label = "GPUPixel",
-                subLabel = "${gpDetectTime.toInt()}ms",
-                enabled = showGpuPixel106,
-                onClick = { showGpuPixel106 = !showGpuPixel106 }
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DebugToggle(
+                    color = Color(0xFF00FF00),
+                    label = "468",
+                    subLabel = "${mpDetectTime.toInt()}ms",
+                    enabled = show468Points,
+                    onClick = { show468Points = !show468Points }
+                )
+                DebugToggle(
+                    color = Color(0xFF4488FF),
+                    label = "大美丽",
+                    subLabel = "106",
+                    enabled = showBigBeauty106,
+                    onClick = { showBigBeauty106 = !showBigBeauty106 }
+                )
+                DebugToggle(
+                    color = Color(0xFFFF4444),
+                    label = "GPUPixel",
+                    subLabel = "${gpDetectTime.toInt()}ms",
+                    enabled = showGpuPixel106,
+                    onClick = { showGpuPixel106 = !showGpuPixel106 }
+                )
+            }
+
+            // GPUPixel 检测失败提示
+            if (showGpuPixel106 && gpupixel106Points == null && !isLoading) {
+                Text(
+                    text = "GPUPixel 未检测到人脸",
+                    color = Color(0xFFFF8888),
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
@@ -670,16 +696,17 @@ private fun detectGpuPixel106(bitmap: Bitmap, detector: FaceDetector): FloatArra
         val pixels = IntArray(width * height)
         scaledBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
+        // 尝试 RGBA 格式
         val rgbaData = ByteArray(width * height * 4)
         for (i in pixels.indices) {
             val pixel = pixels[i]
-            rgbaData[i * 4] = (pixel shr 16 and 0xFF).toByte()
-            rgbaData[i * 4 + 1] = (pixel shr 8 and 0xFF).toByte()
-            rgbaData[i * 4 + 2] = (pixel and 0xFF).toByte()
-            rgbaData[i * 4 + 3] = (pixel shr 24 and 0xFF).toByte()
+            rgbaData[i * 4] = (pixel shr 16 and 0xFF).toByte()     // R
+            rgbaData[i * 4 + 1] = (pixel shr 8 and 0xFF).toByte()  // G
+            rgbaData[i * 4 + 2] = (pixel and 0xFF).toByte()        // B
+            rgbaData[i * 4 + 3] = (pixel shr 24 and 0xFF).toByte() // A
         }
 
-        val landmarks = detector.detect(
+        var landmarks = detector.detect(
             rgbaData,
             width,
             height,
@@ -688,14 +715,36 @@ private fun detectGpuPixel106(bitmap: Bitmap, detector: FaceDetector): FloatArra
             FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
         )
 
-        Log.d(TAG, "GPUPixel raw result: ${landmarks.size} floats = ${landmarks.size / 2} points")
+        Log.d(TAG, "GPUPixel RGBA result: ${landmarks.size} floats = ${landmarks.size / 2} points")
+
+        // 如果 RGBA 失败，尝试 BGRA 格式
+        if (landmarks.isEmpty()) {
+            val bgraData = ByteArray(width * height * 4)
+            for (i in pixels.indices) {
+                val pixel = pixels[i]
+                bgraData[i * 4] = (pixel and 0xFF).toByte()        // B
+                bgraData[i * 4 + 1] = (pixel shr 8 and 0xFF).toByte() // G
+                bgraData[i * 4 + 2] = (pixel shr 16 and 0xFF).toByte() // R
+                bgraData[i * 4 + 3] = (pixel shr 24 and 0xFF).toByte() // A
+            }
+
+            landmarks = detector.detect(
+                bgraData,
+                width,
+                height,
+                width * 4,
+                FaceDetector.GPUPIXEL_MODE_FMT_PICTURE,
+                FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA
+            )
+            Log.d(TAG, "GPUPixel BGRA result: ${landmarks.size} floats = ${landmarks.size / 2} points")
+        }
 
         if (scaledBitmap !== bitmap) {
             scaledBitmap.recycle()
         }
 
         if (landmarks.isEmpty()) {
-            Log.d(TAG, "No face detected by GPUPixel")
+            Log.d(TAG, "No face detected by GPUPixel (RGBA and BGRA both failed)")
             return null
         }
 
