@@ -194,4 +194,8 @@
     <string name="duplicate_preview">重复预览</string>
     <string name="will_keep_first_file">将保留第一张图片，删除其余：</string>
     <string name="confirm_delete">确认删除</string>
+    <string name="screenshot">截图</string>
+    <string name="screenshot_saved">截图已保存至 %1$s</string>
+    <string name="screenshot_failed">截图失败</string>
+
 </resources>
