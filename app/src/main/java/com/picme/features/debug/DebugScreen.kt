@@ -1,5 +1,6 @@
 package com.picme.features.debug
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pool
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
@@ -53,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -69,6 +72,7 @@ fun DebugScreen(
     mediaViewModel: MediaViewModel
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val app = context.applicationContext as PicMeApplication
     val scope = app.applicationScope
 
@@ -106,6 +110,24 @@ fun DebugScreen(
         },
         onClearData = {
             scope.launch { SampleDataGenerator.clearTestData(context, app.repository, allMedia) }
+        },
+        onScreenshot = {
+            val path = ScreenshotUtil.captureAndSave(view, context)
+            if (path != null) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.screenshot_saved, path),
+                    Toast.LENGTH_LONG
+                ).show()
+                SampleDataGenerator.addLog("Screenshot saved: $path")
+            } else {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.screenshot_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
+                SampleDataGenerator.addLog("Screenshot failed")
+            }
         }
     )
 }
@@ -124,7 +146,8 @@ private fun DebugContent(
     onPopulateLandscape: () -> Unit,
     onPopulateSwimwear: () -> Unit,
     onPopulateSexy: () -> Unit,
-    onClearData: () -> Unit
+    onClearData: () -> Unit,
+    onScreenshot: () -> Unit
 ) {
     var filterText by remember { mutableStateOf("") }
     val filteredLogs = remember(logs, filterText) {
@@ -179,6 +202,25 @@ private fun DebugContent(
                 onPopulateSexy = onPopulateSexy,
                 onClearData = onClearData
             )
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+
+            Text(
+                stringResource(R.string.screenshot),
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            Button(
+                onClick = onScreenshot,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Save, null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.screenshot))
+            }
 
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 4.dp),

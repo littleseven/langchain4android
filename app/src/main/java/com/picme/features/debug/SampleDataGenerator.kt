@@ -93,7 +93,7 @@ object SampleDataGenerator {
 
     private fun getRandomUA() = USER_AGENTS.random()
 
-    private fun addLog(message: String) {
+    internal fun addLog(message: String) {
         Log.d(TAG, message)
         val currentLogs = _logs.value.toMutableList()
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())

@@ -276,16 +276,6 @@ class MediaPipeFaceDetector(context: Context) {
         val result = FloatArray(POINT_COUNT * 2)
         val isFrontCamera = lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT
 
-        // === 生成33个轮廓点（0-32）===
-        // 基于精确语义映射表：有直接语义对应的 MediaPipe 点使用精确值，
-        // 过渡点使用相邻两点的坐标平均
-        //
-        // 轮廓方向（被摄者真实面部，前置摄像头镜像后）——严格遵循火山引擎106点标准：
-        //   M0-M15=右轮廓（画面左侧，从右上到下巴右）
-        //   M16=下巴中心（最低点）
-        //   M17-M32=左轮廓（画面右侧，从下巴左到左上）
-        //   注意：MediaPipe 的 FACE_OVAL 为闭合曲线（含额头），106点为开放曲线（不含额头）
-
         // 辅助函数：获取 MediaPipe 点坐标
         fun getMpPoint(index: Int): Pair<Float, Float>? {
             if (index >= landmarks.size) return null
@@ -311,49 +301,49 @@ class MediaPipeFaceDetector(context: Context) {
             result[idx * 2 + 1] = point.second.coerceIn(0f, 1f)
         }
 
-        // === 右半边：M0-M15 (画面左侧=实际右脸，从上到下) ===
-        // 火山引擎标准：0-16 为右轮廓（画面左侧，从右上到下巴右）
-        // 策略：先确定语义固定点，再插值过渡点
-        setPoint(0, getMpPoint(234))     // 右脸颊上（固定点）
-        setPoint(1, midPoint(getMpPoint(234), getMpPoint(93)))   // 右脸颊过渡
-        setPoint(2, getMpPoint(93))      // 右脸颊（固定点）
-        setPoint(3, getMpPoint(132))     // 右脸颊（固定点）
-        setPoint(4, getMpPoint(58))      // 右脸颊（固定点）
-        setPoint(5, getMpPoint(172))     // 右脸颊下（固定点）
-        setPoint(6, getMpPoint(136))     // 右下颌角（固定点）
-        setPoint(7, getMpPoint(150))     // 右下巴边缘（固定点）
-        setPoint(8, getMpPoint(149))     // 下巴右侧（固定点）
-        setPoint(9, midPoint(getMpPoint(149), getMpPoint(176)))  // 下巴右过渡
-        setPoint(10, getMpPoint(176))    // 下巴中右（固定点）
-        setPoint(11, midPoint(getMpPoint(176), getMpPoint(148)))  // 下巴中右过渡
-        setPoint(12, getMpPoint(148))    // 下巴中心右侧（固定点）
-        setPoint(13, midPoint(getMpPoint(148), getMpPoint(152)))  // 下巴中心过渡
-        setPoint(14, getMpPoint(152))    // 下巴（固定点）
-        setPoint(15, midPoint(getMpPoint(152), getMpPoint(377)))  // 下巴→中心过渡
+        // === 生成33个轮廓点（0-32）===
+        // 规则：M0=127, M16=152, M32=356，沿 FACE_OVAL 路径均匀插值
+        // MediaPipe FACE_OVAL 点序：[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109]
+        // 注意：106点为开放曲线（不含额头），M0和M32与上眼皮位置齐平
 
-        // === 下巴中心：M16 ===
-        setPoint(16, getMpPoint(377))    // 下巴中心最低（中轴点）
+        // M0-M16：从 127 沿 FACE_OVAL 逆时针到 152
+        // FACE_OVAL 从 127 到 152 的路径（逆时针）：127→234→93→132→58→172→136→150→149→176→148→152
+        val leftContourBasePoints = listOf(127, 234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152)
+            .mapNotNull { idx -> getMpPoint(idx) }
 
-        // === 左半边：M17-M32 (画面右侧=实际左脸，从下到上) ===
-        // 火山引擎标准：17-32 为左轮廓（画面右侧，从下巴左到左上）
-        // 策略：使用与右半边语义对称的MediaPipe固定点
-        // 对称关系：152↔400, 148↔378, 149↔379, 176↔365, 136↔397, 150↔288, 172↔361, 58↔323, 132↔454, 93↔389
-        setPoint(17, midPoint(getMpPoint(377), getMpPoint(400)))  // 下巴中心左侧过渡（对称M15）
-        setPoint(18, getMpPoint(400))    // 下巴左侧（固定点，对称M14=152）
-        setPoint(19, midPoint(getMpPoint(400), getMpPoint(378)))  // 下巴左侧过渡
-        setPoint(20, getMpPoint(378))    // 下巴中左（固定点，对称M12=148）
-        setPoint(21, midPoint(getMpPoint(378), getMpPoint(379)))  // 下巴中左过渡
-        setPoint(22, getMpPoint(379))    // 左下巴边缘（固定点，对称M8=149）
-        setPoint(23, getMpPoint(365))    // 左脸颊下（固定点，对称M10=176）
-        setPoint(24, midPoint(getMpPoint(365), getMpPoint(397)))  // 左脸颊下过渡
-        setPoint(25, getMpPoint(397))    // 左下颌角（固定点，对称M6=136）
-        setPoint(26, getMpPoint(288))    // 左脸颊（固定点，对称M7=150）
-        setPoint(27, midPoint(getMpPoint(288), getMpPoint(361)))  // 左脸颊过渡
-        setPoint(28, getMpPoint(361))    // 左脸颊上（固定点，对称M5=172）
-        setPoint(29, getMpPoint(323))    // 左耳下（固定点，对称M4=58）
-        setPoint(30, midPoint(getMpPoint(323), getMpPoint(454)))  // 左耳过渡
-        setPoint(31, getMpPoint(454))    // 左耳上（固定点，对称M3=132）
-        setPoint(32, getMpPoint(389))    // 左鬓角/轮廓终点（固定点，近似对称M2=93）
+        // M16-M32：从 152 沿 FACE_OVAL 逆时针到 356
+        // FACE_OVAL 从 152 继续：152→377→400→378→379→365→397→288→361→323→454→356
+        val rightContourBasePoints = listOf(152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454, 356)
+            .mapNotNull { idx -> getMpPoint(idx) }
+
+        // 沿路径均匀插值生成 33 点
+        // M0-M16 (17点)
+        for (i in 0..16) {
+            val t = i.toFloat() / 16f
+            val pos = t * (leftContourBasePoints.size - 1)
+            val idx = pos.toInt().coerceIn(0, leftContourBasePoints.size - 2)
+            val frac = pos - idx
+
+            val p1 = leftContourBasePoints[idx]
+            val p2 = leftContourBasePoints[idx + 1]
+            val x = p1.first + (p2.first - p1.first) * frac
+            val y = p1.second + (p2.second - p1.second) * frac
+            setPoint(i, Pair(x, y))
+        }
+
+        // M16-M32 (17点，M16已设置，所以从M17开始)
+        for (i in 1..16) {
+            val t = i.toFloat() / 16f
+            val pos = t * (rightContourBasePoints.size - 1)
+            val idx = pos.toInt().coerceIn(0, rightContourBasePoints.size - 2)
+            val frac = pos - idx
+
+            val p1 = rightContourBasePoints[idx]
+            val p2 = rightContourBasePoints[idx + 1]
+            val x = p1.first + (p2.first - p1.first) * frac
+            val y = p1.second + (p2.second - p1.second) * frac
+            setPoint(16 + i, Pair(x, y))
+        }
 
         // 日志输出轮廓点坐标，用于调试对齐
         val sb = StringBuilder("Contour33: ")

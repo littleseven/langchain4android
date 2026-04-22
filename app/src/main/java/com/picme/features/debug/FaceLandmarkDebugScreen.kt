@@ -469,20 +469,45 @@ private fun DebugLandmarkCanvas(
         // 绘制 MediaPipe 468 点
         if (show468Points && mediaPipe468Points != null) {
             val pointColor = Color(0xFF00FF00)
+            // 关键区域索引定义（用于标注）
+            val faceOvalIndices = setOf(10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109)
+            val leftEyeIndices = setOf(33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145)
+            val rightEyeIndices = setOf(362, 398, 384, 385, 386, 387, 388, 466, 263, 380, 381, 382, 374)
+            val noseIndices = setOf(1, 2, 3, 4, 5, 6, 19, 94, 168, 195, 196, 197, 198, 174, 217, 236, 275, 248, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353, 354, 355, 356, 357, 358, 359, 360)
+            val mouthIndices = setOf(61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 375, 321, 78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 84, 183)
+
             mediaPipe468Points.forEachIndexed { index, point ->
                 val canvasPoint = toCanvasPoint(point.first, point.second)
-                drawCircle(color = pointColor, radius = 3f, center = canvasPoint)
-                if (index % 10 == 0) {
+                // 关键区域点用大一点的圆，其他用小点
+                val radius = when {
+                    faceOvalIndices.contains(index) -> 4f
+                    leftEyeIndices.contains(index) -> 4f
+                    rightEyeIndices.contains(index) -> 4f
+                    noseIndices.contains(index) -> 4f
+                    mouthIndices.contains(index) -> 4f
+                    else -> 2f
+                }
+                drawCircle(color = pointColor, radius = radius, center = canvasPoint)
+
+                // 标注关键索引：所有关键区域点 + 每10个点
+                val shouldLabel = faceOvalIndices.contains(index) ||
+                    leftEyeIndices.contains(index) ||
+                    rightEyeIndices.contains(index) ||
+                    noseIndices.contains(index) ||
+                    mouthIndices.contains(index) ||
+                    index % 10 == 0
+
+                if (shouldLabel) {
                     drawIntoCanvas { canvas ->
                         val paint = android.graphics.Paint().apply {
                             color = android.graphics.Color.parseColor("#00FF00")
-                            textSize = 16f
+                            textSize = 14f
                             textAlign = android.graphics.Paint.Align.CENTER
                         }
                         canvas.nativeCanvas.drawText(
                             index.toString(),
                             canvasPoint.x,
-                            canvasPoint.y - 6f,
+                            canvasPoint.y - 8f,
                             paint
                         )
                     }
@@ -583,6 +608,7 @@ private fun detectMediaPipe468(
 
 /**
  * 将 MediaPipe 468 点转换为 106 点（调试用，不做镜像）
+ * 与生产环境 MediaPipeFaceDetector.convert468To106 保持一致的映射逻辑
  */
 private fun convert468To106ForDebug(
     landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>
@@ -605,58 +631,84 @@ private fun convert468To106ForDebug(
         result[idx * 2 + 1] = point.second.coerceIn(0f, 1f)
     }
 
-    // 轮廓点 0-32
-    setPoint(0, getMpPoint(234))
-    setPoint(1, midPoint(getMpPoint(234), getMpPoint(93)))
-    setPoint(2, getMpPoint(93))
-    setPoint(3, getMpPoint(132))
-    setPoint(4, getMpPoint(58))
-    setPoint(5, getMpPoint(172))
-    setPoint(6, getMpPoint(136))
-    setPoint(7, getMpPoint(150))
-    setPoint(8, getMpPoint(149))
-    setPoint(9, midPoint(getMpPoint(149), getMpPoint(176)))
-    setPoint(10, getMpPoint(176))
-    setPoint(11, midPoint(getMpPoint(176), getMpPoint(148)))
-    setPoint(12, getMpPoint(148))
-    setPoint(13, midPoint(getMpPoint(148), getMpPoint(152)))
-    setPoint(14, getMpPoint(152))
-    setPoint(15, midPoint(getMpPoint(152), getMpPoint(377)))
-    setPoint(16, getMpPoint(377))
-    setPoint(17, midPoint(getMpPoint(377), getMpPoint(400)))
-    setPoint(18, getMpPoint(400))
-    setPoint(19, midPoint(getMpPoint(400), getMpPoint(378)))
-    setPoint(20, getMpPoint(378))
-    setPoint(21, midPoint(getMpPoint(378), getMpPoint(379)))
-    setPoint(22, getMpPoint(379))
-    setPoint(23, getMpPoint(365))
-    setPoint(24, midPoint(getMpPoint(365), getMpPoint(397)))
-    setPoint(25, getMpPoint(397))
-    setPoint(26, getMpPoint(288))
-    setPoint(27, midPoint(getMpPoint(288), getMpPoint(361)))
-    setPoint(28, getMpPoint(361))
-    setPoint(29, getMpPoint(323))
-    setPoint(30, midPoint(getMpPoint(323), getMpPoint(454)))
-    setPoint(31, getMpPoint(454))
-    setPoint(32, getMpPoint(389))
+    // === 轮廓 33 点（0-32）===
+    // 规则：M0=127, M16=152, M32=386，沿 FACE_OVAL 路径均匀插值
+    // MediaPipe FACE_OVAL 点序：[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109]
+    // M0=127 (索引29) → M16=152 (索引18) → M32=386 (需要插值)
+    // 注意：这是闭合曲线，需要选择正确的路径段
+    
+    // M0-M16：从 127 沿 FACE_OVAL 逆时针到 152
+    // FACE_OVAL 从 127 到 152 的路径（逆时针）：127→234→93→132→58→172→136→150→149→176→148→152
+    val leftContourBasePoints = listOf(127, 234, 93, 132, 58, 172, 136, 150, 149, 176, 148, 152)
+        .mapNotNull { idx -> getMpPoint(idx) }
+    
+    // M16-M32：从 152 沿 FACE_OVAL 逆时针到 356
+    // FACE_OVAL 从 152 继续：152→377→400→378→379→365→397→288→361→323→454→356
+    val rightContourBasePoints = listOf(152, 377, 400, 378, 379, 365, 397, 288, 361, 323, 454, 356)
+        .mapNotNull { idx -> getMpPoint(idx) }
+    
+    // 沿路径均匀插值生成 33 点
+    // M0-M16 (17点)
+    for (i in 0..16) {
+        val t = i.toFloat() / 16f
+        val pos = t * (leftContourBasePoints.size - 1)
+        val idx = pos.toInt().coerceIn(0, leftContourBasePoints.size - 2)
+        val frac = pos - idx
+        
+        val p1 = leftContourBasePoints[idx]
+        val p2 = leftContourBasePoints[idx + 1]
+        val x = p1.first + (p2.first - p1.first) * frac
+        val y = p1.second + (p2.second - p1.second) * frac
+        setPoint(i, Pair(x, y))
+    }
+    
+    // M16-M32 (17点，M16已设置，所以从M17开始)
+    for (i in 1..16) {
+        val t = i.toFloat() / 16f
+        val pos = t * (rightContourBasePoints.size - 1)
+        val idx = pos.toInt().coerceIn(0, rightContourBasePoints.size - 2)
+        val frac = pos - idx
+        
+        val p1 = rightContourBasePoints[idx]
+        val p2 = rightContourBasePoints[idx + 1]
+        val x = p1.first + (p2.first - p1.first) * frac
+        val y = p1.second + (p2.second - p1.second) * frac
+        setPoint(16 + i, Pair(x, y))
+    }
 
-    // 非轮廓区域 33-105
+    // 非轮廓区域 33-105 - 与生产环境 NON_CONTOUR_MAPPING 完全一致
     val nonContourMapping = intArrayOf(
+        // === 右眉上部 33-37 (5点) - 画面左侧=实际右脸，从眉头到眉尾 ===
         70, 63, 105, 66, 107,
+        // === 左眉上部 38-42 (5点) - 画面右侧=实际左脸，从眉头到眉尾 ===
         336, 296, 334, 293, 300,
+        // === 眉心 43 ===
         168,
+        // === 鼻梁 44-46 (3点) - 从上到下 ===
         6, 195, 197,
+        // === 鼻尖 47-51 (5点) - 从左到右（47=画面左侧，51=画面右侧）===
         327, 51, 4, 48, 326,
+        // === 右眼外轮廓 52-57 (6点) - 画面左侧，从外角到内角 ===
         362, 385, 386, 387, 388, 463,
+        // === 左眼外轮廓 58-63 (6点) - 画面右侧，从外角到内角 ===
         33, 157, 158, 160, 161, 133,
+        // === 右眉下部 64-67 (4点) - 画面左侧，从眉头到眉尾 ===
         46, 53, 52, 65,
+        // === 左眉下部 68-71 (4点) - 画面右侧，从眉尾到眉头 ===
         295, 282, 283, 276,
+        // === 右眼内/下 72-74 (3点) - 画面左侧 ===
         463, 374, 473,
+        // === 左眼内/下 75-77 (3点) - 画面右侧 ===
         133, 145, 468,
+        // === 山根 78-79 (2点) ===
         327, 326,
+        // === 鼻孔 80-83 (4点) ===
         327, 358, 2, 326,
+        // === 嘴巴外轮廓 84-95 (12点) - 顺时针闭合曲线 ===
         61, 62, 65, 0, 267, 270, 291, 375, 409, 0, 321, 84,
+        // === 嘴巴内轮廓 96-103 (8点) ===
         78, 78, 88, 87, 310, 310, 324, 308,
+        // === 瞳孔 104-105 (2点) ===
         473, 468
     )
 
