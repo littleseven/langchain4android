@@ -177,7 +177,7 @@ fun FaceLandmarkDebugScreen(
             } else {
                 // 从 assets 加载默认图片
                 withContext(Dispatchers.IO) {
-                    val inputStream = context.assets.open("img.png")
+                    val inputStream = context.assets.open("debug/Di.png")
                     val bmp = BitmapFactory.decodeStream(inputStream)
                     inputStream.close()
                     bmp
