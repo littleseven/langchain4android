@@ -27,6 +27,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     private var smoothingStrength: Float = 0.5f
     private var whiteningStrength: Float = 0.5f
+    private var sharpenStrength: Float = 0.0f  // 锐化强度（借鉴 GPUPixel）
     private var bigEyesStrength: Float = 0f
     private var slimFaceStrength: Float = 0f
     private var lipColorStrength: Float = 0f
@@ -74,6 +75,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     private var uSmoothingLocation: Int = -1
     private var uWhiteningLocation: Int = -1
+    private var uSharpenLocation: Int = -1
     private var uBigEyesLocation: Int = -1
     private var uSlimFaceLocation: Int = -1
     private var uFaceCenterLocation: Int = -1
@@ -131,6 +133,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     fun updateBeautyParams(
         smoothing: Float,
         whitening: Float,
+        sharpen: Float = 0.0f,
         bigEyes: Float = 0f,
         slimFace: Float = 0f,
         lipColor: Float = 0f,
@@ -140,6 +143,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     ) {
         smoothingStrength = smoothing.coerceIn(0f, 1f)
         whiteningStrength = whitening.coerceIn(0f, 1f)
+        sharpenStrength = sharpen.coerceIn(0f, 1f)
         bigEyesStrength = bigEyes.coerceIn(0f, 1f)
         slimFaceStrength = slimFace.coerceIn(-1f, 1f)
         lipColorStrength = lipColor.coerceIn(0f, 1f)
@@ -149,7 +153,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(
             TAG,
             "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
-                "bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength"
+                "sharpen=$sharpenStrength, bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength"
         )
     }
 
@@ -297,6 +301,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 shaderProgram.setVec2("uTexelSize", texelSizeX, texelSizeY)
                 shaderProgram.setFloat("uSmoothing", smoothingStrength)
                 shaderProgram.setFloat("uWhitening", whiteningStrength)
+                shaderProgram.setFloat("uSharpen", sharpenStrength)
                 shaderProgram.setFloat("uBigEyes", bigEyesStrength)
                 shaderProgram.setFloat("uSlimFace", slimFaceStrength)
                 shaderProgram.setFloat("uFaceRadius", faceRadius)
@@ -373,6 +378,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private fun initUniformLocations() {
         uSmoothingLocation = shaderProgram.getUniformLocation("uSmoothing")
         uWhiteningLocation = shaderProgram.getUniformLocation("uWhitening")
+        uSharpenLocation = shaderProgram.getUniformLocation("uSharpen")
         uBigEyesLocation = shaderProgram.getUniformLocation("uBigEyes")
         uSlimFaceLocation = shaderProgram.getUniformLocation("uSlimFace")
         uFaceCenterLocation = shaderProgram.getUniformLocation("uFaceCenter")

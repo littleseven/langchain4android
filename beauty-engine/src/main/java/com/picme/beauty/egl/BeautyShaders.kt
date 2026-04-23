@@ -51,6 +51,8 @@ object BeautyShaders {
         uniform int uLipColorIndex;
         uniform float uBlush;
         uniform int uBlushColorFamily;
+        // 锐化增强（借鉴 GPUPixel 算法）
+        uniform float uSharpen;
         // 色调滤镜矩阵（4x5 ColorMatrix 分解为 4 行系数 + 1 个归一化平移量）
         // uCMRow0~3：每行的 RGBA 系数（行主序）
         // uCMOffset：平移量（第5列）已除以 255 归一化到 0~1
@@ -283,6 +285,27 @@ object BeautyShaders {
             return vec3(1.00, 0.56, 0.67);
         }
 
+        vec4 sharpenSkin(vec4 color, vec2 uv, float sharpenIntensity) {
+            if (sharpenIntensity < 0.001) return color;
+            
+            // 拉普拉斯锐化（9点采样，与 GPUPixel 一致）
+            vec3 center = color.rgb;
+            vec3 sum = center * 0.25;
+            sum += texture2D(uTexture, uv + vec2(-uTexelSize.x, 0.0)).rgb * 0.125;
+            sum += texture2D(uTexture, uv + vec2(uTexelSize.x, 0.0)).rgb * 0.125;
+            sum += texture2D(uTexture, uv + vec2(0.0, -uTexelSize.y)).rgb * 0.125;
+            sum += texture2D(uTexture, uv + vec2(0.0, uTexelSize.y)).rgb * 0.125;
+            sum += texture2D(uTexture, uv + vec2(-uTexelSize.x, -uTexelSize.y)).rgb * 0.0625;
+            sum += texture2D(uTexture, uv + vec2(uTexelSize.x, -uTexelSize.y)).rgb * 0.0625;
+            sum += texture2D(uTexture, uv + vec2(-uTexelSize.x, uTexelSize.y)).rgb * 0.0625;
+            sum += texture2D(uTexture, uv + vec2(uTexelSize.x, uTexelSize.y)).rgb * 0.0625;
+            
+            vec3 hPass = center - sum;
+            vec3 sharpened = center + sharpenIntensity * hPass * 2.0;
+            
+            return vec4(clamp(sharpened, 0.0, 1.0), color.a);
+        }
+
         float lipColorMaskFromPixel(vec3 baseColor) {
             float luma = dot(baseColor, vec3(0.299, 0.587, 0.114));
             float maxChannel = max(baseColor.r, max(baseColor.g, baseColor.b));
@@ -410,7 +433,11 @@ object BeautyShaders {
             float mask = skinMask(warpedUv);
             vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
             vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
-            vec4 lipTinted = applyLipTint(whitened, warpedUv);
+            
+            // 应用锐化增强（仅在皮肤区域）
+            vec4 sharpened = sharpenSkin(whitened, warpedUv, uSharpen * mask);
+            
+            vec4 lipTinted = applyLipTint(sharpened, warpedUv);
             float blushMask = blushMaskFromCheeks(warpedUv);
             float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
             vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
