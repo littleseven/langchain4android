@@ -33,17 +33,16 @@ internal fun FaceDebugOverlay(
     val hasGpuPixel = gpuPixelLandmarks.hasFace && gpuPixelLandmarks.points.isNotEmpty()
     val hasBigBeauty = bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()
 
-    // 如果只有一套数据，正常显示；如果两套都有，同时显示对比
-    if (hasGpuPixel && hasBigBeauty) {
-        FaceDebugOverlayDual(
-            gpuPixelLandmarks = gpuPixelLandmarks,
+    // 大美丽模式：仅显示大美丽点位
+    if (hasBigBeauty) {
+        FaceDebugOverlayBigBeauty(
             bigBeautyLandmarks = bigBeautyLandmarks,
             aspectRatio = aspectRatio
         )
-    } else {
-        FaceDebugOverlaySingle(
-            faceWarpParams = faceWarpParams,
-            slimFaceValue = slimFaceValue,
+    } else if (hasGpuPixel) {
+        // GPUPixel 模式：仅显示 GPUPixel 点位
+        FaceDebugOverlayGpuPixel(
+            gpuPixelLandmarks = gpuPixelLandmarks,
             aspectRatio = aspectRatio
         )
     }
@@ -165,6 +164,118 @@ private fun FaceDebugOverlayDual(
                 color = android.graphics.Color.WHITE
             }
             canvas.nativeCanvas.drawText("G=GPUPixel  M=MediaPipe(大美丽)", 10f, 30f, legendPaint)
+        }
+    }
+}
+
+@Composable
+private fun FaceDebugOverlayBigBeauty(
+    bigBeautyLandmarks: com.picme.features.camera.preview.core.GpuPixelLandmarks,
+    aspectRatio: Int = AspectRatio.RATIO_FULL
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val contentOffsetX: Float
+        val contentOffsetY: Float
+        val contentWidth: Float
+        val contentHeight: Float
+
+        if (aspectRatio == AspectRatio.RATIO_FULL) {
+            contentOffsetX = 0f
+            contentOffsetY = 0f
+            contentWidth = size.width
+            contentHeight = size.height
+        } else {
+            val imageContentAspect = when (aspectRatio) {
+                AspectRatio.RATIO_4_3 -> 3f / 4f
+                AspectRatio.RATIO_16_9 -> 9f / 16f
+                else -> size.width / size.height
+            }
+            val canvasAspect = size.width / size.height
+            if (imageContentAspect < canvasAspect) {
+                contentHeight = size.height
+                contentWidth = size.height * imageContentAspect
+                contentOffsetX = (size.width - contentWidth) / 2f
+                contentOffsetY = 0f
+            } else {
+                contentWidth = size.width
+                contentHeight = size.width / imageContentAspect
+                contentOffsetX = 0f
+                contentOffsetY = (size.height - contentHeight) / 2f
+            }
+        }
+
+        fun toCanvasPoint(point: Offset): Offset {
+            return Offset(
+                x = contentOffsetX + point.x.coerceIn(0f, 1f) * contentWidth,
+                y = contentOffsetY + point.y.coerceIn(0f, 1f) * contentHeight
+            )
+        }
+
+        // 绘制大美丽点位（蓝色，带序号）
+        val bbPoints = bigBeautyLandmarks.points.map { pt -> toCanvasPoint(pt) }
+        bbPoints.forEachIndexed { index, point ->
+            drawCircle(
+                color = Color.Blue.copy(alpha = 0.85f),
+                radius = 2.5f,
+                center = point,
+                style = Fill
+            )
+        }
+    }
+}
+
+@Composable
+private fun FaceDebugOverlayGpuPixel(
+    gpuPixelLandmarks: com.picme.features.camera.preview.core.GpuPixelLandmarks,
+    aspectRatio: Int = AspectRatio.RATIO_FULL
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val contentOffsetX: Float
+        val contentOffsetY: Float
+        val contentWidth: Float
+        val contentHeight: Float
+
+        if (aspectRatio == AspectRatio.RATIO_FULL) {
+            contentOffsetX = 0f
+            contentOffsetY = 0f
+            contentWidth = size.width
+            contentHeight = size.height
+        } else {
+            val imageContentAspect = when (aspectRatio) {
+                AspectRatio.RATIO_4_3 -> 3f / 4f
+                AspectRatio.RATIO_16_9 -> 9f / 16f
+                else -> size.width / size.height
+            }
+            val canvasAspect = size.width / size.height
+            if (imageContentAspect < canvasAspect) {
+                contentHeight = size.height
+                contentWidth = size.height * imageContentAspect
+                contentOffsetX = (size.width - contentWidth) / 2f
+                contentOffsetY = 0f
+            } else {
+                contentWidth = size.width
+                contentHeight = size.width / imageContentAspect
+                contentOffsetX = 0f
+                contentOffsetY = (size.height - contentHeight) / 2f
+            }
+        }
+
+        fun toCanvasPoint(point: Offset): Offset {
+            return Offset(
+                x = contentOffsetX + point.x.coerceIn(0f, 1f) * contentWidth,
+                y = contentOffsetY + point.y.coerceIn(0f, 1f) * contentHeight
+            )
+        }
+
+        // 绘制 GPUPixel 点位（绿色，带序号）
+        val gpuPoints = gpuPixelLandmarks.points.map { pt -> toCanvasPoint(pt) }
+        gpuPoints.forEachIndexed { index, point ->
+            drawCircle(
+                color = Color.Green.copy(alpha = 0.85f),
+                radius = 2.5f,
+                center = point,
+                style = Fill
+            )
         }
     }
 }
