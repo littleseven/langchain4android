@@ -63,6 +63,15 @@ object BeautyShaders {
         uniform vec4 uCMRow3;
         uniform vec4 uCMOffset;
         uniform float uHasColorMatrix;
+        uniform float uExposure;      // -10.0 ~ +10.0, default 0.0
+        uniform float uContrast;      // 0.0 ~ 4.0, default 1.0
+        uniform float uSaturation;    // 0.0 ~ 2.0, default 1.0
+        uniform float uTemperature;   // -1.0 ~ +1.0, default 0.0 (色温: 蓝-黄偏移)
+        uniform float uTint;          // -1.0 ~ +1.0, default 0.0 (色调: 绿-品红偏移)
+        uniform float uBrightness;    // -1.0 ~ +1.0, default 0.0
+        uniform float uRedAdj;        // 0.0 ~ 2.0, default 1.0
+        uniform float uGreenAdj;      // 0.0 ~ 2.0, default 1.0
+        uniform float uBlueAdj;       // 0.0 ~ 2.0, default 1.0
         varying vec2 vTextureCoord;
 
         vec2 applyBigEye(vec2 uv, vec2 eyeCenter, float radius, float intensity) {
@@ -428,6 +437,29 @@ object BeautyShaders {
             return vec4(clamp(tinted, 0.0, 1.0), color.a);
         }
 
+        vec3 applyColorGrade(vec3 color) {
+            // 曝光: color * pow(2.0, exposure)
+            color *= pow(2.0, uExposure);
+            // 对比度: (color - 0.5) * contrast + 0.5
+            color = (color - 0.5) * uContrast + 0.5;
+            // 饱和度: mix(luma, color, saturation)
+            float luma = dot(color, vec3(0.299, 0.587, 0.114));
+            color = mix(vec3(luma), color, uSaturation);
+            // 色温: 红增蓝减
+            color.r += uTemperature * 0.01;
+            color.b -= uTemperature * 0.01;
+            // 色调: 绿增蓝减
+            color.g += uTint * 0.005;
+            color.b -= uTint * 0.005;
+            // 亮度
+            color += uBrightness;
+            // RGB 通道调整
+            color.r *= uRedAdj;
+            color.g *= uGreenAdj;
+            color.b *= uBlueAdj;
+            return clamp(color, 0.0, 1.0);
+        }
+
         void main() {
             vec2 warpedUv = warpCoord(vTextureCoord);
             float mask = skinMask(warpedUv);
@@ -442,7 +474,8 @@ object BeautyShaders {
             float blushBlend = clamp(uBlush, 0.0, 1.0) * 0.28 * blushMask;
             vec3 blushTarget = blushColorByFamily(uBlushColorFamily);
             vec3 makeupColor = mix(lipTinted.rgb, blushTarget, blushBlend);
-            vec4 finalColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
+            vec3 graded = applyColorGrade(makeupColor);
+            vec4 finalColor = vec4(graded, lipTinted.a);
 
             // 色调滤镜矩阵变换（uHasColorMatrix > 0.5 时生效）
             if (uHasColorMatrix > 0.5) {
