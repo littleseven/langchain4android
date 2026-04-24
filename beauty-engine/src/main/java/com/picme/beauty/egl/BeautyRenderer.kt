@@ -68,6 +68,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     private var warmthStrength: Float = 0.0f
     private var contrast: Float = 1.0f
+    private var exposureStrength: Float = 0.0f
+    private var contrastStrength: Float = 1.0f
+    private var saturationStrength: Float = 1.0f
+    private var temperatureStrength: Float = 0.0f
+    private var tintStrength: Float = 0.0f
+    private var brightnessStrength: Float = 0.0f
+    private var redAdjustment: Float = 1.0f
+    private var greenAdjustment: Float = 1.0f
+    private var blueAdjustment: Float = 1.0f
     private var texelSizeX: Float = 0.0015f
     private var texelSizeY: Float = 0.0015f
 
@@ -108,6 +117,14 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uCMRow3Location: Int = -1
     private var uCMOffsetLocation: Int = -1
     private var uHasColorMatrixLocation: Int = -1
+    private var uExposureLocation: Int = -1
+    private var uSaturationLocation: Int = -1
+    private var uTemperatureLocation: Int = -1
+    private var uTintLocation: Int = -1
+    private var uBrightnessLocation: Int = -1
+    private var uRedAdjLocation: Int = -1
+    private var uGreenAdjLocation: Int = -1
+    private var uBlueAdjLocation: Int = -1
     private var uDebugModeLocation: Int = -1
 
     private var debugMode: Int = 0
@@ -195,6 +212,28 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         this.lowerLipCenterY = lowerLipCenterY.coerceIn(0f, 1f)
         this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
         this.hasFace = if (hasFace) 1f else 0f
+    }
+
+    fun setColorGradeParams(
+        exposure: Float = 0.0f,
+        contrast: Float = 1.0f,
+        saturation: Float = 1.0f,
+        temperature: Float = 0.0f,
+        tint: Float = 0.0f,
+        brightness: Float = 0.0f,
+        redAdj: Float = 1.0f,
+        greenAdj: Float = 1.0f,
+        blueAdj: Float = 1.0f
+    ) {
+        exposureStrength = exposure.coerceIn(-10f, 10f)
+        contrastStrength = contrast.coerceIn(0f, 4f)
+        saturationStrength = saturation.coerceIn(0f, 2f)
+        temperatureStrength = temperature.coerceIn(-1f, 1f)
+        tintStrength = tint.coerceIn(-1f, 1f)
+        brightnessStrength = brightness.coerceIn(-1f, 1f)
+        redAdjustment = redAdj.coerceIn(0f, 2f)
+        greenAdjustment = greenAdj.coerceIn(0f, 2f)
+        blueAdjustment = blueAdj.coerceIn(0f, 2f)
     }
 
     fun updateLipMaskPoints(
@@ -368,6 +407,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
                 // 传递调试模式
                 shaderProgram.setInt("uDebugMode", debugMode)
+
+                // Phase 1 调色参数
+                GLES20.glUniform1f(uExposureLocation, exposureStrength)
+                GLES20.glUniform1f(uContrastLocation, contrastStrength)
+                GLES20.glUniform1f(uSaturationLocation, saturationStrength)
+                GLES20.glUniform1f(uTemperatureLocation, temperatureStrength)
+                GLES20.glUniform1f(uTintLocation, tintStrength)
+                GLES20.glUniform1f(uBrightnessLocation, brightnessStrength)
+                GLES20.glUniform1f(uRedAdjLocation, redAdjustment)
+                GLES20.glUniform1f(uGreenAdjLocation, greenAdjustment)
+                GLES20.glUniform1f(uBlueAdjLocation, blueAdjustment)
             }
         }
 
@@ -419,6 +469,14 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         uCMRow3Location = shaderProgram.getUniformLocation("uCMRow3")
         uCMOffsetLocation = shaderProgram.getUniformLocation("uCMOffset")
         uHasColorMatrixLocation = shaderProgram.getUniformLocation("uHasColorMatrix")
+        uExposureLocation = shaderProgram.getUniformLocation("uExposure")
+        uSaturationLocation = shaderProgram.getUniformLocation("uSaturation")
+        uTemperatureLocation = shaderProgram.getUniformLocation("uTemperature")
+        uTintLocation = shaderProgram.getUniformLocation("uTint")
+        uBrightnessLocation = shaderProgram.getUniformLocation("uBrightness")
+        uRedAdjLocation = shaderProgram.getUniformLocation("uRedAdj")
+        uGreenAdjLocation = shaderProgram.getUniformLocation("uGreenAdj")
+        uBlueAdjLocation = shaderProgram.getUniformLocation("uBlueAdj")
         uDebugModeLocation = shaderProgram.getUniformLocation("uDebugMode")
     }
 
