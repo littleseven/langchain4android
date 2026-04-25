@@ -1,8 +1,10 @@
 package com.picme.core.image.gl
 
 import com.picme.beauty.api.BeautyParams
+import com.picme.beauty.egl.StyleEffect
 import com.picme.domain.model.BeautySettings
 import com.picme.features.camera.model.FilterType
+import com.picme.features.camera.model.StyleFilter
 
 /**
  * BeautySettings -> BeautyParams 转换扩展
@@ -37,8 +39,11 @@ fun BeautySettings.toBeautyParams(): BeautyParams {
     val shaderGreen = (greenAdjustment / 100f).coerceIn(0f, 2f)
     val shaderBlue = (blueAdjustment / 100f).coerceIn(0f, 2f)
 
+    // 风格特效映射（大美丽引擎路径）
+    val styleEffect = styleFilter.toStyleEffect()
+
     if (!enabled || !hasAnyEffect()) {
-        // 美颜关闭时仍需携带色调矩阵和调色参数（滤镜/调色独立于美颜开关）
+        // 美颜关闭时仍需携带色调矩阵、调色参数和风格特效（滤镜/调色/风格独立于美颜开关）
         return BeautyParams.EMPTY.copy(
             colorMatrix = matrix,
             exposure = exposure.coerceIn(-10f, 10f),
@@ -49,7 +54,8 @@ fun BeautySettings.toBeautyParams(): BeautyParams {
             brightness = shaderBrightness,
             redAdjustment = shaderRed,
             greenAdjustment = shaderGreen,
-            blueAdjustment = shaderBlue
+            blueAdjustment = shaderBlue,
+            styleEffect = styleEffect
         )
     }
     return BeautyParams(
@@ -71,7 +77,23 @@ fun BeautySettings.toBeautyParams(): BeautyParams {
         redAdjustment = shaderRed,
         greenAdjustment = shaderGreen,
         blueAdjustment = shaderBlue,
-        colorMatrix = matrix
+        colorMatrix = matrix,
+        styleEffect = styleEffect
     )
+}
+
+/**
+ * StyleFilter（UI 枚举）→ StyleEffect（大美丽引擎枚举）映射
+ */
+private fun StyleFilter.toStyleEffect(): StyleEffect {
+    return when (this) {
+        StyleFilter.NONE -> StyleEffect.NONE
+        StyleFilter.TOON -> StyleEffect.TOON
+        StyleFilter.SMOOTH_TOON -> StyleEffect.TOON
+        StyleFilter.SKETCH -> StyleEffect.SKETCH
+        StyleFilter.POSTERIZE -> StyleEffect.POSTERIZE
+        StyleFilter.EMBOSS -> StyleEffect.EMBOSS
+        StyleFilter.CROSSHATCH -> StyleEffect.CROSSHATCH
+    }
 }
 

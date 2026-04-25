@@ -41,4 +41,19 @@ object ShaderModuleLoader {
             }
         }
     }
+
+    /**
+     * 加载单个 Shader 文件
+     * @param context Context
+     * @param path assets 内的相对路径，如 "shaders/style/toon.glsl"
+     * @return Shader 源码字符串，加载失败返回空字符串
+     */
+    fun loadShaderFile(context: Context, path: String): String {
+        return try {
+            context.assets.open(path).bufferedReader().use { it.readText() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load shader file: $path", e)
+            ""
+        }
+    }
 }

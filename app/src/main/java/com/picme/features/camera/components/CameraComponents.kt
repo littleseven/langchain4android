@@ -437,84 +437,177 @@ fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) ->
 }
 
 /**
- * 风格特效滤镜选择器
+ * 统一滤镜选择器（大美丽模式专用）
  *
- * 仅在 GPUPixel 引擎模式下生效。风格特效与色调滤镜的关系：
- * - 色调滤镜（FilterType）基于 ColorMatrix 实时生效
- * - 风格特效（StyleFilter）基于 GPUPixel Shader 实时生效
- * - 叠加顺序：色调滤镜 → 风格特效
- * - 互斥关系：同时只能激活一个风格特效
+ * 将色调滤镜（FilterType）和风格特效（StyleFilter）合并到一个面板中：
+ * - 第一组：色调滤镜（基于 ColorMatrix）
+ * - 第二组：风格特效（基于 Shader 多 Pass）
+ *
+ * GPUPixel 模式下不显示此选择器。
  */
 @Composable
-fun StyleFilterSelector(selectedStyle: StyleFilter, onStyleSelected: (StyleFilter) -> Unit) {
-    val listState = rememberLazyListState()
+fun UnifiedFilterSelector(
+    selectedFilter: FilterType,
+    selectedStyleFilter: StyleFilter,
+    onFilterSelected: (FilterType) -> Unit,
+    onStyleFilterSelected: (StyleFilter) -> Unit
+) {
+    val filterListState = rememberLazyListState()
+    val styleListState = rememberLazyListState()
 
-    LazyRow(
-        state = listState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp)
-    ) {
-        items(StyleFilter.values()) { style ->
-            val isSelected = selectedStyle == style
-            val scale by animateFloatAsState(if (isSelected) 1.1f else 1.0f, label = "scale")
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(60.dp)
-                    .clickable { onStyleSelected(style) }
-                    .scale(scale)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .border(
-                            width = if (isSelected) 2.5.dp else 1.dp,
-                            brush = if (isSelected) {
-                                Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
-                                )
-                            } else {
-                                Brush.linearGradient(
-                                    listOf(
-                                        MaterialTheme.colorScheme.onSurface.copy(0.3f),
-                                        MaterialTheme.colorScheme.onSurface.copy(0.1f)
-                                    )
-                                )
-                            },
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // 使用渐变色表达风格特效效果
-                    StyleGradientPreview(style = style)
-
-                    if (isSelected) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(style.displayNameRes),
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    },
-                    fontSize = 10.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1
+    Column {
+        // 色调滤镜组
+        Text(
+            text = stringResource(R.string.filter_group_color),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
+        )
+        LazyRow(
+            state = filterListState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp)
+        ) {
+            items(FilterType.values()) { filter ->
+                FilterItem(
+                    label = stringResource(filter.displayNameRes),
+                    isSelected = selectedFilter == filter,
+                    gradientColors = filterGradientColors(filter),
+                    onClick = { onFilterSelected(filter) }
                 )
             }
         }
+
+        // 分隔线
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 风格特效组
+        Text(
+            text = stringResource(R.string.filter_group_style),
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
+        )
+        LazyRow(
+            state = styleListState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(horizontal = 4.dp)
+        ) {
+            items(StyleFilter.values()) { style ->
+                FilterItem(
+                    label = stringResource(style.displayNameRes),
+                    isSelected = selectedStyleFilter == style,
+                    gradientColors = styleGradientColors(style),
+                    onClick = { onStyleFilterSelected(style) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterItem(
+    label: String,
+    isSelected: Boolean,
+    gradientColors: List<Color>,
+    onClick: () -> Unit
+) {
+    val scale by animateFloatAsState(if (isSelected) 1.1f else 1.0f, label = "scale")
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(60.dp)
+            .clickable { onClick() }
+            .scale(scale)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .border(
+                    width = if (isSelected) 2.5.dp else 1.dp,
+                    brush = if (isSelected) {
+                        Brush.linearGradient(
+                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.onSurface.copy(0.3f),
+                                MaterialTheme.colorScheme.onSurface.copy(0.1f)
+                            )
+                        )
+                    },
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = gradientColors,
+                            start = Offset.Zero,
+                            end = Offset.Infinite
+                        )
+                    )
+            )
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = label,
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            },
+            fontSize = 10.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1
+        )
+    }
+}
+
+private fun filterGradientColors(filter: FilterType): List<Color> {
+    return when (filter) {
+        FilterType.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
+        FilterType.LEICA_CLASSIC -> listOf(Color(0xFF8D6E63), Color(0xFF5D4037))
+        FilterType.LEICA_VIBRANT -> listOf(Color(0xFFFF5252), Color(0xFFD32F2F))
+        FilterType.LEICA_BW -> listOf(Color(0xFF757575), Color(0xFF424242))
+        FilterType.FILM_GOLD -> listOf(Color(0xFFFFD54F), Color(0xFFFFA726))
+        FilterType.FILM_FUJI -> listOf(Color(0xFF81C784), Color(0xFF4CAF50))
+        FilterType.VINTAGE -> listOf(Color(0xFFFFB74D), Color(0xFFFB8C00))
+        FilterType.COOL -> listOf(Color(0xFF4FC3F7), Color(0xFF29B6F6))
+        FilterType.WARM -> listOf(Color(0xFFFF8A65), Color(0xFFFF7043))
+    }
+}
+
+private fun styleGradientColors(style: StyleFilter): List<Color> {
+    return when (style) {
+        StyleFilter.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
+        StyleFilter.TOON -> listOf(Color(0xFF2196F3), Color(0xFF1976D2))
+        StyleFilter.SMOOTH_TOON -> listOf(Color(0xFF4CAF50), Color(0xFF388E3C))
+        StyleFilter.SKETCH -> listOf(Color(0xFF757575), Color(0xFF424242))
+        StyleFilter.POSTERIZE -> listOf(Color(0xFFFF5722), Color(0xFFE64A19))
+        StyleFilter.EMBOSS -> listOf(Color(0xFFA1887F), Color(0xFF6D4C41))
+        StyleFilter.CROSSHATCH -> listOf(Color(0xFFFF9800), Color(0xFFF57C00))
     }
 }
 

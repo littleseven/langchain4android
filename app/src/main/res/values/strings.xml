@@ -72,6 +72,10 @@
     <string name="style_filter_emboss">Emboss</string>
     <string name="style_filter_crosshatch">Crosshatch</string>
 
+    <!-- Unified Filter Groups -->
+    <string name="filter_group_color">Color Filter</string>
+    <string name="filter_group_style">Style Effect</string>
+
     <string name="edit">Edit</string>
     <string name="save">Save</string>
     <string name="doodle">Doodle</string>

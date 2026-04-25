@@ -219,7 +219,8 @@ internal data class CameraPreviewUiState(
     val lensFacing: Int,
     val exposureCompensation: Int,
     val exposureRange: IntRange,
-    val whiteBalanceMode: Int
+    val whiteBalanceMode: Int,
+    val beautyStrategy: BeautyStrategy
 )
 
 internal data class CameraPreviewActions(
@@ -281,7 +282,8 @@ private fun buildCameraPreviewUiState(
     lensFacing: Int,
     exposureCompensation: Int,
     exposureRange: IntRange,
-    whiteBalanceMode: Int
+    whiteBalanceMode: Int,
+    beautyStrategy: BeautyStrategy
 ): CameraPreviewUiState {
     return CameraPreviewUiState(
         selectedFilter = selectedFilter,
@@ -316,7 +318,8 @@ private fun buildCameraPreviewUiState(
         lensFacing = lensFacing,
         exposureCompensation = exposureCompensation,
         exposureRange = exposureRange,
-        whiteBalanceMode = whiteBalanceMode
+        whiteBalanceMode = whiteBalanceMode,
+        beautyStrategy = beautyStrategy
     )
 }
 
@@ -1125,7 +1128,8 @@ CameraPreviewContent(
         lensFacing = lensFacing,
         exposureCompensation = exposureCompensation,
         exposureRange = -2..2,
-        whiteBalanceMode = whiteBalanceMode
+        whiteBalanceMode = whiteBalanceMode,
+        beautyStrategy = beautyStrategy
     ),
     actions = buildCameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,

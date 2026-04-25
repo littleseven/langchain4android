@@ -1,5 +1,7 @@
 package com.picme.beauty.api
 
+import com.picme.beauty.egl.StyleEffect
+
 /**
  * R Plan 美颜参数
  *
@@ -32,6 +34,17 @@ package com.picme.beauty.api
  * - gpuContrast      : 对比度 0.0~4.0，1.0 为原始（对应 GPUPixel ContrastFilter contrast）
  * - gpuSaturation    : 饱和度 0.0~2.0，1.0 为原始（对应 GPUPixel SaturationFilter saturation）
  * - gpuWhiteBalance  : 色温 2000~10000K，5000 为原始（对应 GPUPixel WhiteBalanceFilter temperature）
+ *
+ * 风格特效参数（大美丽引擎路径专用，GPUPixel 路径忽略此字段）：
+ * - styleEffect : 风格特效类型，NONE 表示无特效
+ * - styleIntensity : 风格特效强度 0.0~1.0
+ * - toonThreshold : Toon 边缘阈值 0.0~1.0
+ * - toonQuantizationLevels : Toon 颜色量化级数 1.0~256.0
+ * - sketchEdgeStrength : Sketch 边缘强度 0.0~4.0
+ * - posterizeColorLevels : Posterize 颜色级数 1.0~256.0
+ * - embossIntensity : Emboss 强度 0.0~4.0
+ * - crosshatchSpacing : Crosshatch 线条间距 0.001~0.5
+ * - crosshatchLineWidth : Crosshatch 线条宽度 0.0001~0.1
  *
  * 风格特效参数（GPUPixel 路径专用，大美丽引擎忽略此字段）：
  * - styleFilterClassName : GPUPixel 风格滤镜类名，null 表示无特效（对应 StyleFilter 枚举）
@@ -68,6 +81,16 @@ data class BeautyParams(
     val gpuContrast: Float = 1f,
     val gpuSaturation: Float = 1f,
     val gpuWhiteBalance: Float = 5000f,
+    // 风格特效参数（大美丽引擎路径专用）
+    val styleEffect: StyleEffect = StyleEffect.NONE,
+    val styleIntensity: Float = 1f,
+    val toonThreshold: Float = 0.2f,
+    val toonQuantizationLevels: Float = 10f,
+    val sketchEdgeStrength: Float = 1f,
+    val posterizeColorLevels: Float = 10f,
+    val embossIntensity: Float = 1f,
+    val crosshatchSpacing: Float = 0.03f,
+    val crosshatchLineWidth: Float = 0.003f,
     // 风格特效参数（GPUPixel 路径专用）
     val styleFilterClassName: String? = null,
     // 色调滤镜矩阵（大美丽引擎路径专用）：4x5 ColorMatrix，null 表示无滤镜
@@ -102,6 +125,15 @@ data class BeautyParams(
             gpuContrast == other.gpuContrast &&
             gpuSaturation == other.gpuSaturation &&
             gpuWhiteBalance == other.gpuWhiteBalance &&
+            styleEffect == other.styleEffect &&
+            styleIntensity == other.styleIntensity &&
+            toonThreshold == other.toonThreshold &&
+            toonQuantizationLevels == other.toonQuantizationLevels &&
+            sketchEdgeStrength == other.sketchEdgeStrength &&
+            posterizeColorLevels == other.posterizeColorLevels &&
+            embossIntensity == other.embossIntensity &&
+            crosshatchSpacing == other.crosshatchSpacing &&
+            crosshatchLineWidth == other.crosshatchLineWidth &&
             styleFilterClassName == other.styleFilterClassName &&
             colorMatrix.contentEquals(other.colorMatrix)
     }
@@ -129,9 +161,17 @@ data class BeautyParams(
         result = 31 * result + gpuContrast.hashCode()
         result = 31 * result + gpuSaturation.hashCode()
         result = 31 * result + gpuWhiteBalance.hashCode()
+        result = 31 * result + styleEffect.hashCode()
+        result = 31 * result + styleIntensity.hashCode()
+        result = 31 * result + toonThreshold.hashCode()
+        result = 31 * result + toonQuantizationLevels.hashCode()
+        result = 31 * result + sketchEdgeStrength.hashCode()
+        result = 31 * result + posterizeColorLevels.hashCode()
+        result = 31 * result + embossIntensity.hashCode()
+        result = 31 * result + crosshatchSpacing.hashCode()
+        result = 31 * result + crosshatchLineWidth.hashCode()
         result = 31 * result + styleFilterClassName.hashCode()
         result = 31 * result + colorMatrix.contentHashCode()
         return result
     }
 }
-

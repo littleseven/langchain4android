@@ -8,6 +8,7 @@ import android.opengl.Matrix
 import android.util.Log
 import android.view.View
 import com.picme.beauty.api.BeautyPerfStats
+import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
  * 大美丽 - 相机预览渲染器
@@ -77,6 +78,9 @@ class CameraPreviewRenderer(private val context: Context) {
 
     @Volatile
     private var latestPerfStats: BeautyPerfStats = BeautyPerfStats()
+
+    // GL 线程任务队列：用于将需要在 GL 线程执行的操作从 UI 线程投递过来
+    private val glEventQueue = ConcurrentLinkedQueue<() -> Unit>()
 
     interface OnTextureAvailableListener {
         fun onTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int)
@@ -243,6 +247,17 @@ class CameraPreviewRenderer(private val context: Context) {
                         GLES20.glViewport(0, 0, outputWidth, outputHeight)
                         GLES20.glClearColor(0f, 0f, 0f, 1f)
                         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+                        // 执行 UI 线程投递过来的 GL 任务
+                        var event = glEventQueue.poll()
+                        while (event != null) {
+                            try {
+                                event()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "GL event error: ${e.message}", e)
+                            }
+                            event = glEventQueue.poll()
+                        }
 
                         applyViewport(outputWidth, outputHeight)
                         beautyRenderer.setTexelSize(cameraInputWidth, cameraInputHeight)
@@ -553,6 +568,36 @@ class CameraPreviewRenderer(private val context: Context) {
             greenAdj = greenAdj,
             blueAdj = blueAdj
         )
+    }
+
+    fun setStyleEffect(effect: StyleEffect) {
+        glEventQueue.offer {
+            beautyRenderer.setStyleEffect(effect)
+        }
+    }
+
+    fun setStyleParams(
+        intensity: Float = 1f,
+        toonThreshold: Float = 0.2f,
+        toonQuantizationLevels: Float = 10f,
+        sketchEdgeStrength: Float = 1f,
+        posterizeColorLevels: Float = 10f,
+        embossIntensity: Float = 1f,
+        crosshatchSpacing: Float = 0.03f,
+        crosshatchLineWidth: Float = 0.003f
+    ) {
+        glEventQueue.offer {
+            beautyRenderer.setStyleParams(
+                intensity = intensity,
+                toonThreshold = toonThreshold,
+                toonQuantizationLevels = toonQuantizationLevels,
+                sketchEdgeStrength = sketchEdgeStrength,
+                posterizeColorLevels = posterizeColorLevels,
+                embossIntensity = embossIntensity,
+                crosshatchSpacing = crosshatchSpacing,
+                crosshatchLineWidth = crosshatchLineWidth
+            )
+        }
     }
 
     fun setRenderMode(mode: Int) {
