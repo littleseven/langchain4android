@@ -186,6 +186,17 @@ class GlBeautyPreviewProvider(
         view.greenAdjustment = params.greenAdjustment
         view.blueAdjustment = params.blueAdjustment
 
+        // 风格特效参数独立于美颜开关，始终同步
+        view.styleEffect = params.styleEffect
+        view.styleIntensity = params.styleIntensity
+        view.toonThreshold = params.toonThreshold
+        view.toonQuantizationLevels = params.toonQuantizationLevels
+        view.sketchEdgeStrength = params.sketchEdgeStrength
+        view.posterizeColorLevels = params.posterizeColorLevels
+        view.embossIntensity = params.embossIntensity
+        view.crosshatchSpacing = params.crosshatchSpacing
+        view.crosshatchLineWidth = params.crosshatchLineWidth
+
         if (!params.enabled) {
             view.smoothingStrength = 0f
             view.whiteningStrength = 0f

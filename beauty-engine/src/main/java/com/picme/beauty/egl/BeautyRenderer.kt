@@ -10,6 +10,7 @@ import android.util.Log
  * 功能：
  * 1. 使用美颜 Shader 渲染相机预览帧
  * 2. 支持实时调整磨皮、美白、大眼、瘦脸、唇色、腮红
+ * 3. Phase 2: 支持风格特效多 Pass 渲染（Toon/Sketch/Posterize/Emboss/Crosshatch）
  */
 class BeautyRenderer(private val context: Context) : GLRenderer() {
     companion object {
@@ -27,7 +28,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     private var smoothingStrength: Float = 0.5f
     private var whiteningStrength: Float = 0.5f
-    private var sharpenStrength: Float = 0.0f  // 锐化强度（借鉴 GPUPixel）
+    private var sharpenStrength: Float = 0.0f
     private var bigEyesStrength: Float = 0f
     private var slimFaceStrength: Float = 0f
     private var lipColorStrength: Float = 0f
@@ -35,7 +36,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var blushStrength: Float = 0f
     private var blushColorFamily: Int = 0
 
-    // 色调矩阵（null = 无滤镜直通）
     private var colorMatrix: FloatArray? = null
 
     private var faceCenterX: Float = 0.5f
@@ -77,11 +77,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var redAdjustment: Float = 1.0f
     private var greenAdjustment: Float = 1.0f
     private var blueAdjustment: Float = 1.0f
-    private var contourThinFaceStrength: Float = 0.0f  // GPUPixel curveWarp 轮廓瘦脸强度
+    private var contourThinFaceStrength: Float = 0.0f
     private var texelSizeX: Float = 0.0015f
     private var texelSizeY: Float = 0.0015f
 
     private var renderFrameCount: Long = 0
+
+    // Phase 2: 风格特效多 Pass 支持
+    private val styleEffectShader = StyleEffectShader(context)
+    private var intermediateFbo: Framebuffer? = null
+    private var fboWidth: Int = 0
+    private var fboHeight: Int = 0
 
     private var uSmoothingLocation: Int = -1
     private var uWhiteningLocation: Int = -1
@@ -331,6 +337,98 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         return shaderProgram.compile(vertexShader, fragmentShader)
     }
 
+    // ========== Phase 2: 风格特效多 Pass 支持 ==========
+
+    /**
+     * 设置风格特效类型
+     */
+    fun setStyleEffect(effect: StyleEffect) {
+        styleEffectShader.setStyleEffect(effect)
+    }
+
+    /**
+     * 设置风格特效参数
+     */
+    fun setStyleParams(
+        intensity: Float = 1f,
+        toonThreshold: Float = 0.2f,
+        toonQuantizationLevels: Float = 10f,
+        sketchEdgeStrength: Float = 1f,
+        posterizeColorLevels: Float = 10f,
+        embossIntensity: Float = 1f,
+        crosshatchSpacing: Float = 0.03f,
+        crosshatchLineWidth: Float = 0.003f
+    ) {
+        styleEffectShader.setToonParams(toonThreshold, toonQuantizationLevels)
+        styleEffectShader.setSketchParams(sketchEdgeStrength)
+        styleEffectShader.setPosterizeParams(posterizeColorLevels)
+        styleEffectShader.setEmbossParams(embossIntensity)
+        styleEffectShader.setCrosshatchParams(crosshatchSpacing, crosshatchLineWidth)
+    }
+
+    private fun updateFramebufferSize(width: Int, height: Int) {
+        if (width != fboWidth || height != fboHeight || intermediateFbo?.isInitialized != true) {
+            intermediateFbo?.release()
+            val newFbo = Framebuffer(width, height)
+            if (!newFbo.initialize()) {
+                Log.e(TAG, "Failed to initialize framebuffer: ${width}x${height}")
+                intermediateFbo = null
+                fboWidth = 0
+                fboHeight = 0
+                return
+            }
+            intermediateFbo = newFbo
+            fboWidth = width
+            fboHeight = height
+            styleEffectShader.setRenderSize(width, height)
+            Log.d(TAG, "Framebuffer updated: ${width}x${height}")
+        }
+    }
+
+    override fun onRender() {
+        val activeStyle = styleEffectShader.getActiveStyle()
+        if (activeStyle == StyleEffect.NONE) {
+            super.onRender()
+            return
+        }
+        renderMultiPass(activeStyle)
+    }
+
+    private fun renderMultiPass(activeStyle: StyleEffect) {
+        // 获取当前 viewport 尺寸
+        val viewportArray = IntArray(4)
+        GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
+        val outputWidth = viewportArray[2]
+        val outputHeight = viewportArray[3]
+
+        updateFramebufferSize(outputWidth, outputHeight)
+
+        val fbo = intermediateFbo
+        if (fbo == null || !fbo.isInitialized) {
+            Log.w(TAG, "FBO not ready, falling back to single pass")
+            super.onRender()
+            return
+        }
+
+        // Pass 1: 美颜 + 调色 -> FBO
+        fbo.bind()
+        super.onRender()
+        fbo.unbind()
+
+        // 恢复 viewport 和默认 framebuffer
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        GLES20.glViewport(viewportArray[0], viewportArray[1], outputWidth, outputHeight)
+
+        // Pass 2: 风格特效 -> 屏幕
+        // 禁用 Pass 1 可能遗留的 vertex attrib array，避免干扰 Pass 2
+        GLES20.glDisableVertexAttribArray(aPositionLocation)
+        GLES20.glDisableVertexAttribArray(aTextureCoordLocation)
+
+        styleEffectShader.render(fbo.getTextureId(), outputWidth, outputHeight)
+    }
+
+    // ========== Phase 2 结束 ==========
+
     override fun onBeforeRender() {
         super.onBeforeRender()
         initUniformLocations()
@@ -396,16 +494,13 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                     shaderProgram.setFloat("uContrast", contrast)
                 }
 
-                // 色调滤镜矩阵传递
                 val cm = colorMatrix
                 if (cm != null && cm.size >= 20) {
                     shaderProgram.setFloat("uHasColorMatrix", 1f)
-                    // 每行：[R系数, G系数, B系数, A系数]
                     shaderProgram.setVec4("uCMRow0", cm[0], cm[1], cm[2], cm[3])
                     shaderProgram.setVec4("uCMRow1", cm[5], cm[6], cm[7], cm[8])
                     shaderProgram.setVec4("uCMRow2", cm[10], cm[11], cm[12], cm[13])
                     shaderProgram.setVec4("uCMRow3", cm[15], cm[16], cm[17], cm[18])
-                    // 平移量（第5列），除以255归一化到0~1
                     shaderProgram.setVec4(
                         "uCMOffset",
                         cm[4] / 255f, cm[9] / 255f, cm[14] / 255f, cm[19] / 255f
@@ -414,10 +509,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                     shaderProgram.setFloat("uHasColorMatrix", 0f)
                 }
 
-                // 传递调试模式
                 shaderProgram.setInt("uDebugMode", debugMode)
 
-                // Phase 1 调色参数
                 GLES20.glUniform1f(uExposureLocation, exposureStrength)
                 GLES20.glUniform1f(uContrastLocation, contrastStrength)
                 GLES20.glUniform1f(uSaturationLocation, saturationStrength)
@@ -501,7 +594,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     override fun release() {
         Log.d(TAG, "Releasing BeautyRenderer")
+        intermediateFbo?.release()
+        intermediateFbo = null
+        styleEffectShader.release()
         super.release()
     }
 }
-

@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
@@ -35,12 +36,11 @@ import com.picme.features.camera.components.CameraOverlays
 import com.picme.features.camera.components.CameraRightControls
 import com.picme.features.camera.components.ControlPanel
 import com.picme.features.camera.components.DocumentDetectionOverlay
-import com.picme.features.camera.components.FilterSelector
 import com.picme.features.camera.components.GridSelector
 import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
-import com.picme.features.camera.components.StyleFilterSelector
+import com.picme.features.camera.components.UnifiedFilterSelector
 
 @Composable
 internal fun CameraPreviewContent(
@@ -356,8 +356,15 @@ private fun BoxScope.PrimaryControlPanels(
         ControlPanel(onDismiss = actions.onDismissPanels) {
             when {
                 uiState.showFilterSelector -> {
-                    FilterSelector(uiState.selectedFilter) { selected -> actions.onFilterSelected(selected) }
-                    StyleFilterSelector(uiState.selectedStyleFilter) { selected -> actions.onStyleFilterSelected(selected) }
+                    // GPUPixel 模式下不显示任何滤镜选择器
+                    if (uiState.beautyStrategy != BeautyStrategy.GPUPIXEL) {
+                        UnifiedFilterSelector(
+                            selectedFilter = uiState.selectedFilter,
+                            selectedStyleFilter = uiState.selectedStyleFilter,
+                            onFilterSelected = actions.onFilterSelected,
+                            onStyleFilterSelected = actions.onStyleFilterSelected
+                        )
+                    }
                 }
                 uiState.showRatioSelector -> {
                     RatioSelector(

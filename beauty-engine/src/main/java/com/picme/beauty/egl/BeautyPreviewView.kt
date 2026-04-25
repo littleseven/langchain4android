@@ -150,6 +150,61 @@ class BeautyPreviewView @JvmOverloads constructor(
             updateColorGradeInternal()
         }
 
+    // Phase 2: 风格特效属性
+    var styleEffect: StyleEffect = StyleEffect.NONE
+        set(value) {
+            field = value
+            updateStyleEffectInternal()
+        }
+
+    var styleIntensity: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            updateStyleEffectInternal()
+        }
+
+    var toonThreshold: Float = 0.2f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            updateStyleEffectInternal()
+        }
+
+    var toonQuantizationLevels: Float = 10f
+        set(value) {
+            field = value.coerceIn(1f, 256f)
+            updateStyleEffectInternal()
+        }
+
+    var sketchEdgeStrength: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 4f)
+            updateStyleEffectInternal()
+        }
+
+    var posterizeColorLevels: Float = 10f
+        set(value) {
+            field = value.coerceIn(1f, 256f)
+            updateStyleEffectInternal()
+        }
+
+    var embossIntensity: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 4f)
+            updateStyleEffectInternal()
+        }
+
+    var crosshatchSpacing: Float = 0.03f
+        set(value) {
+            field = value.coerceIn(0.001f, 0.5f)
+            updateStyleEffectInternal()
+        }
+
+    var crosshatchLineWidth: Float = 0.003f
+        set(value) {
+            field = value.coerceIn(0.0001f, 0.1f)
+            updateStyleEffectInternal()
+        }
+
     /**
      * 设置 Shader 调试模式
      * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移
@@ -199,6 +254,8 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.setScaleMode(isFillCenter)
         isRendererInitialized = true
         updateBeautyParamsInternal()
+        updateColorGradeInternal()
+        updateStyleEffectInternal()
         renderer.updateColorMatrix(colorMatrix)
         Log.d(TAG, "Renderer initialized")
     }
@@ -251,6 +308,21 @@ class BeautyPreviewView @JvmOverloads constructor(
             redAdj = redAdjustment,
             greenAdj = greenAdjustment,
             blueAdj = blueAdjustment
+        )
+    }
+
+    private fun updateStyleEffectInternal() {
+        if (!isRendererInitialized) return
+        renderer.setStyleEffect(styleEffect)
+        renderer.setStyleParams(
+            intensity = styleIntensity,
+            toonThreshold = toonThreshold,
+            toonQuantizationLevels = toonQuantizationLevels,
+            sketchEdgeStrength = sketchEdgeStrength,
+            posterizeColorLevels = posterizeColorLevels,
+            embossIntensity = embossIntensity,
+            crosshatchSpacing = crosshatchSpacing,
+            crosshatchLineWidth = crosshatchLineWidth
         )
     }
 
