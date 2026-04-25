@@ -17,6 +17,12 @@ package com.picme.beauty.api
 interface BeautyPreviewCapability {
 
     /**
+     * 更新106点人脸关键点（GPUPixel风格瘦脸/大眼使用）
+     * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
+     */
+    fun updateFacePoints106(landmarks106: FloatArray)
+
+    /**
      * 更新实时人脸变形参数
      * 所有坐标均为归一化坐标（0.0 ~ 1.0），以屏幕预览区域为参考系
      */

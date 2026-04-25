@@ -67,7 +67,6 @@
     <!-- 風格特效濾鏡（僅 GPUPixel 模式） -->
     <string name="style_filter_none">原圖</string>
     <string name="style_filter_toon">卡通</string>
-    <string name="style_filter_smooth_toon">平滑卡通</string>
     <string name="style_filter_sketch">素描</string>
     <string name="style_filter_posterize">色塊</string>
     <string name="style_filter_emboss">浮雕</string>

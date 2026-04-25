@@ -360,7 +360,8 @@ class BeautyPreviewView @JvmOverloads constructor(
         lowerLipCenterX: Float,
         lowerLipCenterY: Float,
         faceRadius: Float,
-        hasFace: Boolean
+        hasFace: Boolean,
+        facePoints106: FloatArray? = null
     ) {
         if (!isRendererInitialized) return
         renderer.updateFaceWarpParams(
@@ -383,6 +384,18 @@ class BeautyPreviewView @JvmOverloads constructor(
             faceRadius = faceRadius,
             hasFace = hasFace
         )
+        // 传递106点关键点给GPUPixel风格warp
+        if (facePoints106 != null) {
+            renderer.updateFacePoints106(facePoints106)
+        }
+    }
+
+    /**
+     * 更新106点人脸关键点（GPUPixel风格瘦脸/大眼使用）
+     */
+    fun updateFacePoints106(landmarks106: FloatArray) {
+        if (!isRendererInitialized) return
+        renderer.updateFacePoints106(landmarks106)
     }
 
     fun updateLipMaskPoints(

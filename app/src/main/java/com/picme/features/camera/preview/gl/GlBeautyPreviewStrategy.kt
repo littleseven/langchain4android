@@ -94,6 +94,17 @@ internal class GlBeautyPreviewStrategy(
                     Pair(contourPoint.x, contourPoint.y)
                 }
             )
+            // 传递106点关键点给GPUPixel风格瘦脸/大眼
+            val bigBeautyLandmarks = params.bigBeautyLandmarks
+            if (bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()) {
+                val landmarks106 = FloatArray(bigBeautyLandmarks.points.size * 2)
+                for (i in bigBeautyLandmarks.points.indices) {
+                    val point = bigBeautyLandmarks.points[i]
+                    landmarks106[i * 2] = point.x
+                    landmarks106[i * 2 + 1] = point.y
+                }
+                glBeautyPreviewProvider.updateFacePoints106(landmarks106)
+            }
         }.onFailure { error ->
             Logger.w("Camera", "GL beauty face params update failed", error)
         }

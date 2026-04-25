@@ -499,11 +499,6 @@ class GpupixelBeautyPreviewProvider(
                             sf.SetProperty("threshold", 0.2f)
                             sf.SetProperty("quantizationLevels", 10.0f)
                         }
-                        "SmoothToonFilter" -> {
-                            sf.SetProperty("blurRadius", 2.0f)
-                            sf.SetProperty("threshold", 0.1f)
-                            sf.SetProperty("quantizationLevels", 10.0f)
-                        }
                         "SketchFilter" -> sf.SetProperty("edgeStrength", 1.0f)
                         "PosterizeFilter" -> sf.SetProperty("colorLevels", 4f)
                         "EmbossFilter" -> sf.SetProperty("intensity", 1.0f)
@@ -704,11 +699,6 @@ class GpupixelBeautyPreviewProvider(
                 filter.SetProperty("threshold", 0.2f)
                 filter.SetProperty("quantizationLevels", 10.0f)
             }
-            "SmoothToonFilter" -> {
-                filter.SetProperty("blurRadius", 2.0f)
-                filter.SetProperty("threshold", 0.1f)
-                filter.SetProperty("quantizationLevels", 10.0f)
-            }
             "SketchFilter" -> {
                 filter.SetProperty("edgeStrength", 1.0f)
             }
@@ -723,6 +713,10 @@ class GpupixelBeautyPreviewProvider(
                 filter.SetProperty("lineWidth", 0.003f)
             }
         }
+    }
+
+    override fun updateFacePoints106(landmarks106: FloatArray) {
+        // GPUPixel 模式使用自带 FaceDetector 的 landmarks，此处忽略外部传入的106点
     }
 
     override fun updateFaceWarpParams(

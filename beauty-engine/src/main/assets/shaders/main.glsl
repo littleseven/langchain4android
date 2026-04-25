@@ -1,5 +1,12 @@
 void main() {
-    vec2 warpedUv = warpCoord(vTextureCoord);
+    vec2 warpedUv;
+    if (uUseGpupixelWarp > 0) {
+        // GPUPixel风格：瘦脸和大眼分开调用，便于独立调试
+        warpedUv = warpCoordGpupixelThinFace(vTextureCoord);
+        warpedUv = warpCoordGpupixelBigEye(warpedUv);
+    } else {
+        warpedUv = warpCoord(vTextureCoord);
+    }
     
     // Debug Mode: Show Skin Mask
     if (uDebugMode == 1) {

@@ -81,6 +81,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var texelSizeX: Float = 0.0015f
     private var texelSizeY: Float = 0.0015f
 
+    // GPUPixel 风格瘦脸/大眼：106点人脸关键点
+    private val facePointsBuffer = FloatArray(106 * 2)
+    private var useGpupixelWarp: Int = 1  // 默认启用GPUPixel风格warp
+    private var viewportWidth: Int = 0
+    private var viewportHeight: Int = 0
+
     private var renderFrameCount: Long = 0
 
     // Phase 2: 风格特效多 Pass 支持
@@ -134,6 +140,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uBlueAdjLocation: Int = -1
     private var uContourThinFaceLocation: Int = -1
     private var uDebugModeLocation: Int = -1
+    private var uFacePointsLocation: Int = -1
+    private var uAspectRatioLocation: Int = -1
+    private var uUseGpupixelWarpLocation: Int = -1
 
     private var debugMode: Int = 0
 
@@ -314,7 +323,31 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         if (width > 0 && height > 0) {
             texelSizeX = 1.0f / width
             texelSizeY = 1.0f / height
+            viewportWidth = width
+            viewportHeight = height
         }
+    }
+
+    /**
+     * 更新106点人脸关键点（GPUPixel风格瘦脸/大眼使用）
+     * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
+     */
+    fun updateFacePoints106(landmarks106: FloatArray?) {
+        if (landmarks106 == null || landmarks106.isEmpty()) {
+            hasFace = 0f
+            return
+        }
+        val count = minOf(landmarks106.size, facePointsBuffer.size)
+        System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
+        hasFace = 1f
+    }
+
+    /**
+     * 设置是否使用GPUPixel风格warp（基于106点关键点）
+     * @param enabled true=使用GPUPixel风格, false=使用原有简单warp
+     */
+    fun setUseGpupixelWarp(enabled: Boolean) {
+        useGpupixelWarp = if (enabled) 1 else 0
     }
 
     fun updateAdvancedParams(warmth: Float, contrast: Float) {
@@ -521,6 +554,25 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 GLES20.glUniform1f(uGreenAdjLocation, greenAdjustment)
                 GLES20.glUniform1f(uBlueAdjLocation, blueAdjustment)
                 GLES20.glUniform1f(uContourThinFaceLocation, contourThinFaceStrength)
+
+                // GPUPixel 风格瘦脸/大眼：传递106点关键点和宽高比
+                if (uFacePointsLocation >= 0 && hasFace > 0.5f) {
+                    GLES20.glUniform1fv(uFacePointsLocation, facePointsBuffer.size, facePointsBuffer, 0)
+                }
+                if (uAspectRatioLocation >= 0) {
+                    // 使用当前实际 viewport 尺寸计算 aspect ratio（与 GPUPixel 原始实现一致）
+                    val viewportArray = IntArray(4)
+                    GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
+                    val vpW = viewportArray[2]
+                    val vpH = viewportArray[3]
+                    if (vpH > 0) {
+                        val aspect = vpW.toFloat() / vpH.toFloat()
+                        GLES20.glUniform1f(uAspectRatioLocation, aspect)
+                    }
+                }
+                if (uUseGpupixelWarpLocation >= 0) {
+                    GLES20.glUniform1i(uUseGpupixelWarpLocation, useGpupixelWarp)
+                }
             }
         }
 
@@ -582,6 +634,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         uBlueAdjLocation = shaderProgram.getUniformLocation("uBlueAdj")
         uContourThinFaceLocation = shaderProgram.getUniformLocation("uContourThinFace")
         uDebugModeLocation = shaderProgram.getUniformLocation("uDebugMode")
+        uFacePointsLocation = shaderProgram.getUniformLocation("uFacePoints")
+        uAspectRatioLocation = shaderProgram.getUniformLocation("uAspectRatio")
+        uUseGpupixelWarpLocation = shaderProgram.getUniformLocation("uUseGpupixelWarp")
     }
 
     /**

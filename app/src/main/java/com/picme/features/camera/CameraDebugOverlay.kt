@@ -221,6 +221,9 @@ private fun FaceDebugOverlayBigBeauty(
                 style = Fill
             )
         }
+
+        // 绘制瘦脸控制点及方向（调试用）
+        drawThinFaceControlPoints(bbPoints)
     }
 }
 
@@ -687,6 +690,113 @@ private fun DrawScope.drawGpuPixelLandmarks(
                 index.toString(),
                 point.x,
                 point.y - 6.dp.toPx(),
+                textPaint
+            )
+        }
+    }
+
+    // 绘制瘦脸控制点及方向（调试用）
+    drawThinFaceControlPoints(points)
+}
+
+/**
+ * 绘制瘦脸算法的9对控制点及方向
+ * originIndex -> targetIndex：从轮廓点指向鼻梁方向
+ */
+private fun DrawScope.drawThinFaceControlPoints(points: List<Offset>) {
+    if (points.size < 50) return
+
+    // 9对控制点映射（originIndex -> targetIndex）
+    val controlPairs = listOf(
+        Pair(3, 44),   // 右脸轮廓 -> 鼻梁右侧
+        Pair(29, 44),  // 左脸轮廓 -> 鼻梁右侧
+        Pair(7, 45),   // 右脸颊 -> 鼻梁中
+        Pair(25, 45),  // 左脸颊 -> 鼻梁中
+        Pair(10, 46),  // 右下颌 -> 鼻梁下
+        Pair(22, 46),  // 左下颌 -> 鼻梁下
+        Pair(14, 49),  // 右下巴 -> 下巴中心
+        Pair(18, 49),  // 左下巴 -> 下巴中心
+        Pair(16, 49)   // 下巴尖 -> 下巴中心
+    )
+
+    controlPairs.forEachIndexed { idx, (originIdx, targetIdx) ->
+        if (originIdx >= points.size || targetIdx >= points.size) return@forEachIndexed
+
+        val origin = points[originIdx]
+        val target = points[targetIdx]
+
+        // 绘制方向箭头（从 origin 指向 target，表示形变方向）
+        val arrowColor = when (idx) {
+            0, 1 -> Color(0xFFFF6D00).copy(alpha = 0.9f)  // 橙色 - 上部
+            2, 3 -> Color(0xFF00E5FF).copy(alpha = 0.9f)  // 青色 - 中部
+            4, 5 -> Color(0xFF76FF03).copy(alpha = 0.9f)  // 绿色 - 下部
+            else -> Color(0xFFFF00FF).copy(alpha = 0.9f)  // 紫色 - 底部
+        }
+
+        // 绘制虚线连接 origin 和 target
+        val direction = target - origin
+        val segmentCount = 10
+        for (i in 0 until segmentCount step 2) {
+            val t1 = i.toFloat() / segmentCount
+            val t2 = (i + 1).toFloat() / segmentCount
+            drawLine(
+                color = arrowColor.copy(alpha = 0.4f),
+                start = origin + direction * t1,
+                end = origin + direction * t2,
+                strokeWidth = 2.5f
+            )
+        }
+
+        // 绘制 origin 点（大圆，红色边框）
+        drawCircle(
+            color = Color.Red.copy(alpha = 0.9f),
+            radius = 6.dp.toPx(),
+            center = origin,
+            style = Stroke(width = 2.5f)
+        )
+        drawCircle(
+            color = Color.Red.copy(alpha = 0.3f),
+            radius = 6.dp.toPx(),
+            center = origin,
+            style = Fill
+        )
+
+        // 绘制 target 点（小圆，绿色填充）
+        drawCircle(
+            color = Color.Green.copy(alpha = 0.9f),
+            radius = 4.dp.toPx(),
+            center = target,
+            style = Fill
+        )
+
+        // 绘制箭头头部
+        val arrowLen = 15f
+        val arrowAngle = 0.5f  // 弧度
+        val angle = kotlin.math.atan2(direction.y, direction.x)
+        val tip = origin + direction * 0.85f
+        val leftWing = Offset(
+            tip.x - arrowLen * kotlin.math.cos(angle + arrowAngle),
+            tip.y - arrowLen * kotlin.math.sin(angle + arrowAngle)
+        )
+        val rightWing = Offset(
+            tip.x - arrowLen * kotlin.math.cos(angle - arrowAngle),
+            tip.y - arrowLen * kotlin.math.sin(angle - arrowAngle)
+        )
+        drawLine(color = arrowColor, start = tip, end = leftWing, strokeWidth = 2.5f)
+        drawLine(color = arrowColor, start = tip, end = rightWing, strokeWidth = 2.5f)
+
+        // 标注序号
+        val textPaint = Paint().apply {
+            textSize = 10.dp.toPx()
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        drawIntoCanvas { canvas ->
+            textPaint.color = arrowColor.toArgb()
+            canvas.nativeCanvas.drawText(
+                "$idx:$originIdx->$targetIdx",
+                (origin.x + target.x) / 2,
+                (origin.y + target.y) / 2,
                 textPaint
             )
         }

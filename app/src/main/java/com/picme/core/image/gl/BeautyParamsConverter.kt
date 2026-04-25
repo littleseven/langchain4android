@@ -89,7 +89,6 @@ private fun StyleFilter.toStyleEffect(): StyleEffect {
     return when (this) {
         StyleFilter.NONE -> StyleEffect.NONE
         StyleFilter.TOON -> StyleEffect.TOON
-        StyleFilter.SMOOTH_TOON -> StyleEffect.TOON
         StyleFilter.SKETCH -> StyleEffect.SKETCH
         StyleFilter.POSTERIZE -> StyleEffect.POSTERIZE
         StyleFilter.EMBOSS -> StyleEffect.EMBOSS

@@ -19,6 +19,8 @@ object ShaderModuleLoader {
         "header.glsl",
         "uniforms.glsl",
         "warp.glsl",
+        "warp_gpupixel_thinface.glsl",
+        "warp_gpupixel_bigeye.glsl",
         "skin.glsl",
         "lip.glsl",
         "blush.glsl",
