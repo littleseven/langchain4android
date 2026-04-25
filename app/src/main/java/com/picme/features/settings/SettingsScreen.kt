@@ -81,6 +81,7 @@ fun SettingsScreen(
     val faceDetectionLandmarkModeEnabled by viewModel.faceDetectionLandmarkModeEnabled.collectAsState()
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
+    val debugShaderMode by viewModel.debugShaderMode.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
@@ -93,6 +94,7 @@ fun SettingsScreen(
         faceDetectionLandmarkModeEnabled = faceDetectionLandmarkModeEnabled,
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
+        debugShaderMode = debugShaderMode,
         onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
         onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
@@ -109,6 +111,7 @@ fun SettingsScreen(
         onFaceDetectIntervalProfileSelected = { profile ->
             viewModel.setFaceDetectIntervalProfile(profile)
         },
+        onDebugShaderModeSelected = { mode -> viewModel.setDebugShaderMode(mode) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -126,6 +129,7 @@ private fun SettingsContent(
     faceDetectionLandmarkModeEnabled: Boolean,
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
+    debugShaderMode: Int,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onBeautyStrategySelected: (BeautyStrategy) -> Unit,
@@ -136,6 +140,7 @@ private fun SettingsContent(
     onFaceDetectionLandmarkModeEnabledChange: (Boolean) -> Unit,
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
+    onDebugShaderModeSelected: (Int) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -244,6 +249,11 @@ private fun SettingsContent(
                         title = stringResource(R.string.show_log_overlay),
                         checked = showLogOverlay,
                         onCheckedChange = onShowLogOverlayChange
+                    )
+                    // Shader Debug Mode Selection (for GPUPixel warp debugging)
+                    ShaderDebugModeSelection(
+                        currentMode = debugShaderMode,
+                        onModeSelected = onDebugShaderModeSelected
                     )
                 }
             }
@@ -363,6 +373,35 @@ private fun FaceDetectProfileSelection(
     )
 }
 
+@Composable
+private fun ShaderDebugModeSelection(
+    currentMode: Int,
+    onModeSelected: (Int) -> Unit
+) {
+    val options = listOf(
+        0 to "Normal",
+        1 to "Skin Mask",
+        2 to "Warp Offset",
+        3 to "BigEye Radius",
+        4 to "ThinFace Radius",
+        5 to "All Warp"
+    )
+
+    Text(
+        text = "Shader Debug Mode",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 0.dp)
+    )
+
+    CompactOptionChips(
+        options = options,
+        currentValue = currentMode,
+        maxLines = 2,
+        onSelected = onModeSelected
+    )
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> CompactOptionChips(
@@ -439,6 +478,7 @@ fun SettingsScreenPreview() {
             faceDetectionLandmarkModeEnabled = true,
             adaptiveFaceDetectionIntervalEnabled = true,
             faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
+            debugShaderMode = 0,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
             onBeautyStrategySelected = {},
@@ -449,6 +489,7 @@ fun SettingsScreenPreview() {
             onFaceDetectionLandmarkModeEnabledChange = {},
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
+            onDebugShaderModeSelected = {},
             onNavigateBack = {}
         )
     }

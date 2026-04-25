@@ -144,7 +144,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uAspectRatioLocation: Int = -1
     private var uUseGpupixelWarpLocation: Int = -1
 
-    private var debugMode: Int = 0
+    private var debugMode: Int = 0  // 0=正常渲染
 
     fun setRenderMode(mode: Int) {
         if (renderMode != mode) {
@@ -641,7 +641,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     /**
      * 设置调试模式
-     * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移, 3=显示唇部区域
+     * @param mode 0=正常, 1=Skin Mask, 2=Warp Offset, 
+     *             3=BigEye Radius, 4=ThinFace Radius, 5=All Warp
      */
     fun setDebugMode(mode: Int) {
         debugMode = mode

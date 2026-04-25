@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -39,6 +40,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val ADAPTIVE_FACE_DETECTION_INTERVAL = booleanPreferencesKey("adaptive_face_detection_interval")
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
         val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
+        val DEBUG_SHADER_MODE = intPreferencesKey("debug_shader_mode")
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -219,6 +221,24 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateShowLogOverlay(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SHOW_LOG_OVERLAY] = show
+        }
+    }
+
+    override val debugShaderModeFlow: Flow<Int> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.DEBUG_SHADER_MODE] ?: 0
+        }
+
+    override suspend fun updateDebugShaderMode(mode: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DEBUG_SHADER_MODE] = mode
         }
     }
 
