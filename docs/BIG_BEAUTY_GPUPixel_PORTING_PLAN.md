@@ -514,4 +514,112 @@ fun applyColorGrade(params: BeautyParams, renderer: BeautyRenderer) {
 
 ---
 
-*文档版本: 1.0 | 作者: 小七 (AI Agent) | 日期: 2026-04-23*
+## 11. 大眼算法移植踩坑记录
+
+### 11.1 问题概述
+
+将 GPUPixel `FaceReshapeFilter` 的大眼算法移植到大美丽模式的 GLSL Shader 中，遇到了多个关键问题。
+
+### 11.2 踩坑清单
+
+#### 坑 1: 正向映射 vs 反向映射方向混淆
+
+**问题**: GPUPixel 原始实现使用**正向映射**（Forward Mapping），而大美丽架构使用**反向映射**（Backward Mapping）。
+
+```
+正向映射（GPUPixel）: output = origin + (input - origin) * w
+反向映射（大美丽）:   input  = origin + (output - origin) * w  ← 不是 1/w！
+```
+
+**错误做法**: 使用 `scale = 1.0 / w` 试图"抵消"正向映射，导致方向反了（滑杆向右眼睛变小）。
+
+**正确做法**: 反向映射直接使用 `scale = w`，因为我们是反推输入位置，如果正向是收缩（`w < 1`），反向也是收缩。
+
+**关键理解**:
+- 正向映射中 `w < 1` 表示坐标向 origin 收缩，产生放大效果
+- 反向映射中同样用 `w < 1`，采样位置更靠近 origin，相当于把周围像素拉向 origin = 放大效果
+
+#### 坑 2: 参数范围映射不当
+
+**问题**: `uBigEyes` 传入范围是 `[0, 1]`，但 GPUPixel 原始 `bigEyeDelta` 范围是 `[0, 0.15]`。
+
+**错误做法**: 直接将 `uBigEyes` 作为 `delta` 传入，导致 `delta = 1.0` 时 `w = t²`，在中心点 `w = 0`，scale 爆炸。
+
+**正确做法**: 在 Shader 入口处映射：`float bigEyeDelta = uBigEyes * 0.3;`（根据效果灵敏度调整系数）。
+
+#### 坑 3: Radius 影响范围过大
+
+**问题**: 大眼效果影响范围覆盖整张脸，而不是只影响眼睛周围。
+
+**原因**: `radius = distance(瞳孔, 眼角) * 5.0` 计算出的值在 UV 坐标系中过大。
+
+**解决方案**:
+1. 添加 `radius = min(radius, 0.08)` 上限限制（约画面 8%）
+2. 使用 `aspectRatio` 校正后的坐标系计算距离，确保圆形变形成椭圆
+
+```glsl
+vec2 correctedCoord = vec2(uv.x, uv.y / uAspectRatio);
+vec2 correctedOrigin = vec2(originPoint.x, originPoint.y / uAspectRatio);
+float r = distance(correctedCoord, correctedOrigin);
+```
+
+#### 坑 4: Aspect Ratio 坐标系不一致
+
+**问题**: 距离计算没有考虑 aspect ratio，导致在不同屏幕比例下形变形状错误。
+
+**正确做法**: 在 aspectRatio 校正后的坐标系中计算距离和方向，再转换回 UV 坐标系：
+
+```glsl
+// 校正坐标系
+vec2 correctedCoord = vec2(textureCoord.x, textureCoord.y / uAspectRatio);
+vec2 correctedOrigin = vec2(originPosition.x, originPosition.y / uAspectRatio);
+vec2 correctedOffset = correctedCoord - correctedOrigin;
+
+// 计算距离和形变
+float r = length(correctedOffset);
+// ... 形变计算 ...
+
+// 转换回 UV 坐标系
+vec2 correctedResult = correctedOrigin + correctedOffset * scale;
+return vec2(correctedResult.x, correctedResult.y * uAspectRatio);
+```
+
+#### 坑 5: 106 点坐标映射错误
+
+**问题**: 人脸关键点从 CPU 坐标系（Y=0 顶部）到 Shader UV 坐标系（V=0 底部）需要 Y 轴翻转。
+
+**正确做法**:
+```kotlin
+// CPU 侧：Y 轴翻转
+val uvY = 1.0f - normalizedY
+
+// 应用 Texture Transform Matrix
+val uvPoint = mapNormalizedToUv(normalizedX, uvY, transformMatrix)
+```
+
+#### 坑 6: Debug 模式硬编码覆盖正常渲染
+
+**问题**: `debugMode` 被硬编码为 3（BigEye Radius 调试模式），导致正常渲染被调试可视化覆盖。
+
+**正确做法**: 默认 `debugMode = 0`，通过设置页动态切换。
+
+### 11.3 调试技巧
+
+1. **可视化影响范围**: 在 Shader 中添加调试函数，用颜色标记 radius 范围
+2. **分阶段验证**: 先验证控制点位置（白色十字），再验证 radius 范围（青色圆圈），最后验证形变效果
+3. **参数日志**: 在 `onBeforeRender` 中每 60 帧输出一次关键参数值
+
+### 11.4 关键文件
+
+| 文件 | 路径 |
+|------|------|
+| 大眼 Shader | `beauty-engine/src/main/assets/shaders/warp_gpupixel_bigeye.glsl` |
+| 瘦脸 Shader | `beauty-engine/src/main/assets/shaders/warp_gpupixel_thinface.glsl` |
+| Uniform 声明 | `beauty-engine/src/main/assets/shaders/uniforms.glsl` |
+| 主 Shader | `beauty-engine/src/main/assets/shaders/main.glsl` |
+| 渲染器 | `beauty-engine/src/main/java/.../BeautyRenderer.kt` |
+| 106 点传递 | `beauty-engine/src/main/java/.../BeautyPreviewView.kt` |
+
+---
+
+*文档版本: 1.1 | 作者: 小七 (AI Agent) | 日期: 2026-04-25*
