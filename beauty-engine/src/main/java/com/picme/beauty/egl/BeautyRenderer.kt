@@ -1,8 +1,12 @@
 package com.picme.beauty.egl
 
 import android.content.Context
+import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.util.Log
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 
 /**
  * 大美丽 - 美颜渲染器
@@ -95,6 +99,36 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var fboWidth: Int = 0
     private var fboHeight: Int = 0
 
+    // Phase 3: GPUPixel 风格多 Pass 美颜支持
+    private val fboPool = FramebufferPool()
+    private val lutTextureLoader = LutTextureLoader(context)
+
+    // Pass 0: OES外部纹理 -> 2D纹理
+    private val copyPass = BeautyPass(context)
+    private var copyPassCompiled = false
+
+    // Pass 1: BoxBlur -> 均值图 (meanColor)
+    private val boxBlurPass = BeautyPass(context)
+    private var boxBlurPassCompiled = false
+
+    // Pass 2: BoxHighPass -> 方差图 (varColor)
+    private val boxHighPassPass = BeautyPass(context)
+    private var boxHighPassPassCompiled = false
+
+    // Pass 3: BeautyFaceUnit -> 磨皮+美白+LUT
+    private val beautyUnitPass = BeautyPass(context)
+    private var beautyUnitPassCompiled = false
+
+    // FBO Copy Pass - 用于将FBO纹理直接渲染到屏幕（验证/调试）
+    private val fboCopyPass = BeautyPass(context)
+    private var fboCopyPassCompiled = false
+
+    // Debug Pass - 用于验证Pass是否执行
+    private val debugRedPass = BeautyPass(context)
+    private var debugRedPassCompiled = false
+
+    private var multiPassBeautyEnabled: Boolean = false
+
     private var uSmoothingLocation: Int = -1
     private var uWhiteningLocation: Int = -1
     private var uSharpenLocation: Int = -1
@@ -145,6 +179,20 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uUseGpupixelWarpLocation: Int = -1
 
     private var debugMode: Int = 0  // 0=正常渲染
+
+    // FBO纹理采样时使用翻转Y轴的UV（因为FBO渲染的图像Y轴是反的）
+    private val fboTextureBuffer: FloatBuffer by lazy {
+        val coords = floatArrayOf(
+            0f, 1f,  // 左下 -> 左上（V翻转）
+            1f, 1f,  // 右下 -> 右上
+            0f, 0f,  // 左上 -> 左下
+            1f, 0f   // 右上 -> 右下
+        )
+        ByteBuffer.allocateDirect(coords.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { put(coords).position(0) }
+    }
 
     fun setRenderMode(mode: Int) {
         if (renderMode != mode) {
@@ -420,11 +468,473 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     override fun onRender() {
         val activeStyle = styleEffectShader.getActiveStyle()
+
+        // 如果启用了多Pass美颜且需要磨皮/美白，使用多Pass管线
+        if (multiPassBeautyEnabled && (smoothingStrength > 0.001 || whiteningStrength > 0.001)) {
+            renderBeautyMultiPass(activeStyle)
+            return
+        }
+
+        // 原有逻辑：单Pass美颜
         if (activeStyle == StyleEffect.NONE) {
             super.onRender()
             return
         }
         renderMultiPass(activeStyle)
+    }
+
+    /**
+     * 多Pass美颜 + 风格特效渲染
+     */
+    private fun renderBeautyMultiPass(activeStyle: StyleEffect) {
+        val viewportArray = IntArray(4)
+        GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
+        val outputWidth = viewportArray[2]
+        val outputHeight = viewportArray[3]
+
+        // 步骤1: 执行磨皮/美白 Pass
+        Log.d(TAG, "renderBeautyMultiPass: calling executeBeautyPasses")
+        val beautyPassSuccess = executeBeautyPasses()
+        Log.d(TAG, "renderBeautyMultiPass: executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
+
+        if (!beautyPassSuccess) {
+            // 多Pass失败，回退到单Pass
+            if (activeStyle == StyleEffect.NONE) {
+                super.onRender()
+            } else {
+                renderMultiPass(activeStyle)
+            }
+            return
+        }
+
+        // 步骤2: 使用主Shader渲染美型+美妆+调色
+        // 主Shader从 beautyPassOutputTextureId（FBO纹理）采样
+        if (activeStyle != StyleEffect.NONE) {
+            // 有风格特效：先渲染到 intermediateFbo
+            updateFramebufferSize(outputWidth, outputHeight)
+            val fbo = intermediateFbo
+            if (fbo != null && fbo.isInitialized) {
+                renderMainShaderFromFbo(beautyPassOutputTextureId, fbo)
+                fbo.unbind()
+
+                // 风格特效 -> 屏幕
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+                GLES20.glViewport(viewportArray[0], viewportArray[1], outputWidth, outputHeight)
+                GLES20.glDisableVertexAttribArray(aPositionLocation)
+                GLES20.glDisableVertexAttribArray(aTextureCoordLocation)
+                styleEffectShader.render(fbo.getTextureId(), outputWidth, outputHeight)
+            } else {
+                renderMainShaderFromFbo(beautyPassOutputTextureId, null, outputWidth, outputHeight)
+            }
+        } else {
+            // 无风格特效：直接渲染到屏幕
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            GLES20.glViewport(viewportArray[0], viewportArray[1], outputWidth, outputHeight)
+            renderMainShaderFromFbo(beautyPassOutputTextureId, null, outputWidth, outputHeight)
+        }
+    }
+
+    /**
+     * 使用主Shader渲染，但输入纹理来自 FBO（而非外部纹理）
+     */
+    // 2D 纹理版本的主 Shader（用于多Pass后从FBO采样）
+    private val shaderProgram2D by lazy { ShaderProgram() }
+    private var shaderProgram2DCompiled = false
+
+    private fun compileShaderProgram2D(): Boolean {
+        // 强制重新编译（确保使用最新的 uniforms_2d.glsl）
+        if (shaderProgram2DCompiled) {
+            shaderProgram2D.release()
+            shaderProgram2DCompiled = false
+        }
+        val vertexSource = context.assets.open("shaders/pass_vertex.glsl").bufferedReader().use { it.readText() }
+        val fragmentSource = ShaderModuleLoader.loadFullFragmentShader2D(context)
+        shaderProgram2DCompiled = shaderProgram2D.compile(vertexSource, fragmentSource)
+        Log.d(TAG, "ShaderProgram2D compiled: $shaderProgram2DCompiled")
+        return shaderProgram2DCompiled
+    }
+
+    private fun renderMainShaderFromFbo(
+        inputTextureId: Int,
+        outputFbo: Framebuffer? = null,
+        viewportWidth: Int = 0,
+        viewportHeight: Int = 0
+    ) {
+        // 编译 2D Shader（如果未编译）
+        if (!compileShaderProgram2D()) {
+            Log.e(TAG, "Failed to compile ShaderProgram2D")
+            return
+        }
+
+        // 绑定输出 FBO（如果有）
+        if (outputFbo != null) {
+            outputFbo.bind()
+        } else {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        }
+
+        // 使用 2D 主 Shader 渲染
+        shaderProgram2D.use()
+
+        // 绑定 FBO 纹理到 TEXTURE0（替代外部纹理）
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTextureId)
+        val uTexLoc = shaderProgram2D.getUniformLocation("uTexture")
+        if (uTexLoc >= 0) GLES20.glUniform1i(uTexLoc, 0)
+
+        // 设置所有 uniform（复制 onBeforeRender 的逻辑）
+        shaderProgram2D.setVec2("uTexelSize", texelSizeX, texelSizeY)
+        shaderProgram2D.setFloat("uSmoothing", smoothingStrength)
+        shaderProgram2D.setFloat("uWhitening", whiteningStrength)
+        shaderProgram2D.setFloat("uSharpen", sharpenStrength)
+        shaderProgram2D.setFloat("uBigEyes", bigEyesStrength)
+        shaderProgram2D.setFloat("uSlimFace", slimFaceStrength)
+        shaderProgram2D.setFloat("uFaceRadius", faceRadius)
+        shaderProgram2D.setFloat("uHasFace", hasFace)
+        shaderProgram2D.setFloat("uLipColor", lipColorStrength)
+        shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
+        shaderProgram2D.setFloat("uBlush", blushStrength)
+        shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
+        shaderProgram2D.setVec2("uFaceCenter", faceCenterX, faceCenterY)
+        shaderProgram2D.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
+        shaderProgram2D.setVec2("uMouthLeft", mouthLeftX, mouthLeftY)
+        shaderProgram2D.setVec2("uMouthRight", mouthRightX, mouthRightY)
+        shaderProgram2D.setVec2("uUpperLipCenter", upperLipCenterX, upperLipCenterY)
+        shaderProgram2D.setVec2("uLowerLipCenter", lowerLipCenterX, lowerLipCenterY)
+        shaderProgram2D.setFloat("uLipOuterContourCount", lipOuterContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uLipOuterContourPoints", lipOuterContourBuffer, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setFloat("uLipInnerContourCount", lipInnerContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uLipInnerContourPoints", lipInnerContourBuffer, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2("uLeftEye", leftEyeX, leftEyeY)
+        shaderProgram2D.setVec2("uRightEye", rightEyeX, rightEyeY)
+        shaderProgram2D.setFloat("uLeftCheekContourCount", leftCheekContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uLeftCheekContourPoints", leftCheekContourBuffer, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setFloat("uRightCheekContourCount", rightCheekContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uRightCheekContourPoints", rightCheekContourBuffer, MAX_LIP_CONTOUR_POINTS)
+
+        if (renderMode == MODE_ADVANCED) {
+            shaderProgram2D.setFloat("uWarmth", warmthStrength)
+            shaderProgram2D.setFloat("uContrast", contrast)
+        }
+
+        val cm = colorMatrix
+        if (cm != null && cm.size >= 20) {
+            shaderProgram2D.setFloat("uHasColorMatrix", 1f)
+            shaderProgram2D.setVec4("uCMRow0", cm[0], cm[1], cm[2], cm[3])
+            shaderProgram2D.setVec4("uCMRow1", cm[5], cm[6], cm[7], cm[8])
+            shaderProgram2D.setVec4("uCMRow2", cm[10], cm[11], cm[12], cm[13])
+            shaderProgram2D.setVec4("uCMRow3", cm[15], cm[16], cm[17], cm[18])
+            shaderProgram2D.setVec4("uCMOffset", cm[4] / 255f, cm[9] / 255f, cm[14] / 255f, cm[19] / 255f)
+        } else {
+            shaderProgram2D.setFloat("uHasColorMatrix", 0f)
+        }
+
+        shaderProgram2D.setInt("uDebugMode", debugMode)
+
+        val uExpLoc = shaderProgram2D.getUniformLocation("uExposure")
+        if (uExpLoc >= 0) GLES20.glUniform1f(uExpLoc, exposureStrength)
+        val uContLoc = shaderProgram2D.getUniformLocation("uContrast")
+        if (uContLoc >= 0) GLES20.glUniform1f(uContLoc, contrastStrength)
+        val uSatLoc = shaderProgram2D.getUniformLocation("uSaturation")
+        if (uSatLoc >= 0) GLES20.glUniform1f(uSatLoc, saturationStrength)
+        val uTempLoc = shaderProgram2D.getUniformLocation("uTemperature")
+        if (uTempLoc >= 0) GLES20.glUniform1f(uTempLoc, temperatureStrength)
+        val uTintLoc = shaderProgram2D.getUniformLocation("uTint")
+        if (uTintLoc >= 0) GLES20.glUniform1f(uTintLoc, tintStrength)
+        val uBrightLoc = shaderProgram2D.getUniformLocation("uBrightness")
+        if (uBrightLoc >= 0) GLES20.glUniform1f(uBrightLoc, brightnessStrength)
+        val uRedLoc = shaderProgram2D.getUniformLocation("uRedAdj")
+        if (uRedLoc >= 0) GLES20.glUniform1f(uRedLoc, redAdjustment)
+        val uGreenLoc = shaderProgram2D.getUniformLocation("uGreenAdj")
+        if (uGreenLoc >= 0) GLES20.glUniform1f(uGreenLoc, greenAdjustment)
+        val uBlueLoc = shaderProgram2D.getUniformLocation("uBlueAdj")
+        if (uBlueLoc >= 0) GLES20.glUniform1f(uBlueLoc, blueAdjustment)
+        val uContourLoc = shaderProgram2D.getUniformLocation("uContourThinFace")
+        if (uContourLoc >= 0) GLES20.glUniform1f(uContourLoc, contourThinFaceStrength)
+
+        val uFacePtsLoc = shaderProgram2D.getUniformLocation("uFacePoints")
+        if (uFacePtsLoc >= 0 && hasFace > 0.5f) {
+            GLES20.glUniform1fv(uFacePtsLoc, facePointsBuffer.size, facePointsBuffer, 0)
+        }
+        val uAspectLoc = shaderProgram2D.getUniformLocation("uAspectRatio")
+        if (uAspectLoc >= 0) {
+            // 使用传入的 viewport 尺寸计算 aspect ratio（避免 FBO bind 后 viewport 被修改）
+            val aspectW = if (viewportWidth > 0) viewportWidth else {
+                val viewportArray = IntArray(4)
+                GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
+                viewportArray[2]
+            }
+            val aspectH = if (viewportHeight > 0) viewportHeight else {
+                val viewportArray = IntArray(4)
+                GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
+                viewportArray[3]
+            }
+            if (aspectH > 0) {
+                val aspect = aspectW.toFloat() / aspectH.toFloat()
+                GLES20.glUniform1f(uAspectLoc, aspect)
+                Log.d(TAG, "MainShader2D uAspectRatio: $aspect (${aspectW}x${aspectH})")
+            }
+        }
+        val uUseWarpLoc = shaderProgram2D.getUniformLocation("uUseGpupixelWarp")
+        if (uUseWarpLoc >= 0) GLES20.glUniform1i(uUseWarpLoc, useGpupixelWarp)
+
+        // 设置顶点数据
+        val vb = vertexBuffer
+        val tb = textureBuffer
+        if (vb != null && tb != null) {
+            val aPosLoc = shaderProgram2D.getAttribLocation("aPosition")
+            val aTexLoc = shaderProgram2D.getAttribLocation("aTextureCoord")
+            if (aPosLoc >= 0) {
+                GLES20.glEnableVertexAttribArray(aPosLoc)
+                vb.position(0)
+                GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 0, vb)
+            }
+            if (aTexLoc >= 0) {
+                GLES20.glEnableVertexAttribArray(aTexLoc)
+                tb.position(0)
+                GLES20.glVertexAttribPointer(aTexLoc, 2, GLES20.GL_FLOAT, false, 0, tb)
+            }
+        }
+
+        // 绘制
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+
+        // 清理
+        if (vb != null) {
+            val aPosLoc = shaderProgram2D.getAttribLocation("aPosition")
+            if (aPosLoc >= 0) GLES20.glDisableVertexAttribArray(aPosLoc)
+        }
+        if (tb != null) {
+            val aTexLoc = shaderProgram2D.getAttribLocation("aTextureCoord")
+            if (aTexLoc >= 0) GLES20.glDisableVertexAttribArray(aTexLoc)
+        }
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
+
+        if (outputFbo != null) {
+            outputFbo.unbind()
+        }
+
+        Log.d(TAG, "MainShader2D rendered from FBO texture: $inputTextureId")
+    }
+
+    /**
+     * 多Pass美颜渲染管线
+     *
+     * 在 onBeforeRender 中执行磨皮/美白 Pass，将相机纹理处理后的结果
+     * 保存到 ping-pong FBO。然后主 Shader 从 FBO 纹理采样（而非外部纹理），
+     * 执行美型+美妆+调色。
+     *
+     * Pass 0: CopyPass (OES外部纹理 -> FBO 2D纹理)
+     * Pass 1: BoxBlur (原图 -> 均值图)
+     * Pass 2: BoxHighPass (原图+均值图 -> 方差图)
+     * Pass 3: BeautyFaceUnit (原图+均值图+方差图+LUT -> 磨皮+美白)
+     * Pass 4: 主Shader (美型+美妆+调色 -> 屏幕/FBO)
+     */
+    private var beautyPassOutputTextureId: Int = 0
+    // 标记多Pass是否真正执行了磨皮/美白（影响主Shader是否回退到单Pass逻辑）
+    private var beautyPassExecutedSmoothing: Boolean = false
+    private var beautyPassExecutedWhitening: Boolean = false
+
+    /**
+     * 在 onBeforeRender 中执行磨皮/美白多Pass
+     * 返回 true 表示需要修改主Shader的纹理绑定
+     *
+     * 管线：
+     * Pass 0: CopyPass (OES外部纹理 -> FBO_ping 2D纹理)
+     * Pass 1: SmoothingPass (FBO_ping -> FBO_pong)
+     * Pass 2: WhiteningPass (FBO_pong -> FBO_ping)
+     */
+    private fun executeBeautyPasses(): Boolean {
+        Log.d(TAG, "executeBeautyPasses: START, multiPass=$multiPassBeautyEnabled, smooth=$smoothingStrength, white=$whiteningStrength")
+        if (!multiPassBeautyEnabled) {
+            Log.d(TAG, "Multi-pass disabled")
+            return false
+        }
+        if (smoothingStrength < 0.001 && whiteningStrength < 0.001) {
+            Log.d(TAG, "Multi-pass: smoothing and whitening both near zero")
+            return false
+        }
+
+        val viewportArray = IntArray(4)
+        GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
+        val outputWidth = viewportArray[2]
+        val outputHeight = viewportArray[3]
+        Log.d(TAG, "executeBeautyPasses: viewport=${outputWidth}x${outputHeight}")
+
+        if (outputWidth <= 0 || outputHeight <= 0) {
+            Log.w(TAG, "executeBeautyPasses: invalid viewport size")
+            return false
+        }
+
+        Log.d(TAG, "executeBeautyPasses: viewport check passed")
+
+        // 编译独立 Pass Shader（延迟编译）
+        Log.d(TAG, "executeBeautyPasses: compiling shaders...")
+        if (!copyPassCompiled) {
+            try {
+                copyPassCompiled = copyPass.compileFromAssets(
+                    "shaders/pass_vertex.glsl", "shaders/pass_copy.glsl"
+                )
+                Log.d(TAG, "CopyPass compiled: $copyPassCompiled")
+                if (!copyPassCompiled) {
+                    Log.e(TAG, "CopyPass compilation failed, aborting multi-pass")
+                    return false
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "CopyPass compilation exception: ${e.message}", e)
+                return false
+            }
+        }
+        if (!boxBlurPassCompiled) {
+            boxBlurPassCompiled = boxBlurPass.compileFromAssets(
+                "shaders/pass_vertex.glsl", "shaders/pass_boxblur.glsl"
+            )
+            Log.d(TAG, "BoxBlurPass compiled: $boxBlurPassCompiled")
+        }
+        if (!boxHighPassPassCompiled) {
+            boxHighPassPassCompiled = boxHighPassPass.compileFromAssets(
+                "shaders/pass_vertex.glsl", "shaders/pass_boxhighpass.glsl"
+            )
+            Log.d(TAG, "BoxHighPassPass compiled: $boxHighPassPassCompiled")
+        }
+        if (!beautyUnitPassCompiled) {
+            beautyUnitPassCompiled = beautyUnitPass.compileFromAssets(
+                "shaders/pass_vertex.glsl", "shaders/pass_smoothing.glsl"
+            )
+            Log.d(TAG, "BeautyUnitPass compiled: $beautyUnitPassCompiled")
+        }
+
+        // 加载 LUT 纹理
+        if (!lutTextureLoader.isAllLoaded()) {
+            val lutLoaded = lutTextureLoader.loadAllFallback()
+            Log.d(TAG, "LUT textures loaded: $lutLoaded")
+        }
+
+        // 确保 FBO 池已初始化（需要3个FBO：ping/pong/pang）
+        val fboPing = fboPool.acquire("ping", outputWidth, outputHeight)
+        val fboPong = fboPool.acquire("pong", outputWidth, outputHeight)
+        val fboPang = fboPool.acquire("pang", outputWidth, outputHeight)
+        Log.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${fboPing.isInitialized}, pong=${fboPong.isInitialized}, pang=${fboPang.isInitialized}")
+        if (!fboPing.isInitialized || !fboPong.isInitialized || !fboPang.isInitialized) {
+            Log.w(TAG, "FBO pool not ready")
+            return false
+        }
+
+        // 获取外部纹理 ID
+        val cameraTextureId = getBoundExternalTextureId()
+        Log.d(TAG, "executeBeautyPasses: cameraTextureId=$cameraTextureId")
+        if (cameraTextureId == 0) {
+            Log.w(TAG, "Camera texture ID is 0, multi-pass will use fallback")
+            return false
+        }
+        Log.d(TAG, "Multi-pass: cameraTex=$cameraTextureId, smooth=$smoothingStrength, white=$whiteningStrength")
+
+        var currentInputTexture = cameraTextureId
+        var currentOutputFbo = fboPing
+
+        // Pass 0: 将 OES 外部纹理复制到 2D FBO 纹理
+        if (copyPassCompiled) {
+            val copyProgram = copyPass.getShaderProgram()
+            Log.d(TAG, "Pass0 CopyPass: input=$currentInputTexture, outputFbo=${currentOutputFbo.getTextureId()}")
+            copyPass.render(
+                inputTextureId = currentInputTexture,
+                outputFbo = currentOutputFbo,
+                textureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                setupUniforms = {
+                    val loc = copyProgram.getUniformLocation("uCameraTexture")
+                    if (loc >= 0) GLES20.glUniform1i(loc, 0)
+                    val transformLoc = copyProgram.getUniformLocation("uTextureTransform")
+                    if (transformLoc >= 0) {
+                        GLES20.glUniformMatrix4fv(transformLoc, 1, false, textureMatrix, 0)
+                    }
+                }
+            )
+            currentInputTexture = currentOutputFbo.getTextureId()
+            currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
+            Log.d(TAG, "Pass0 done: outputTex=$currentInputTexture")
+        }
+
+        val originalTexture = currentInputTexture  // 保存原图纹理ID
+
+        // Pass 3: BeautyFaceUnit -> 磨皮+美白+LUT（跳过 Pass 1/2）
+        beautyPassExecutedSmoothing = false
+        beautyPassExecutedWhitening = false
+        if (beautyUnitPassCompiled && lutTextureLoader.isAllLoaded()) {
+            val unitProgram = beautyUnitPass.getShaderProgram()
+            beautyUnitPass.render(
+                inputTextureId = originalTexture,  // 原图
+                outputFbo = currentOutputFbo,
+                setupUniforms = {
+                    // 跳过 mean/var 纹理绑定（Pass 1/2 未执行）
+                    // 绑定 LUT 纹理
+                    val grayLoc = unitProgram.getUniformLocation("uLookUpGray")
+                    if (grayLoc >= 0) {
+                        GLES20.glActiveTexture(GLES20.GL_TEXTURE3)
+                        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTextureLoader.getGrayTextureId())
+                        GLES20.glUniform1i(grayLoc, 3)
+                    }
+                    val originLoc = unitProgram.getUniformLocation("uLookUpOrigin")
+                    if (originLoc >= 0) {
+                        GLES20.glActiveTexture(GLES20.GL_TEXTURE4)
+                        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTextureLoader.getOriginTextureId())
+                        GLES20.glUniform1i(originLoc, 4)
+                    }
+                    val skinLoc = unitProgram.getUniformLocation("uLookUpSkin")
+                    if (skinLoc >= 0) {
+                        GLES20.glActiveTexture(GLES20.GL_TEXTURE5)
+                        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTextureLoader.getSkinTextureId())
+                        GLES20.glUniform1i(skinLoc, 5)
+                    }
+                    val lightLoc = unitProgram.getUniformLocation("uLookUpLight")
+                    if (lightLoc >= 0) {
+                        GLES20.glActiveTexture(GLES20.GL_TEXTURE6)
+                        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTextureLoader.getLightTextureId())
+                        GLES20.glUniform1i(lightLoc, 6)
+                    }
+                    // 设置参数
+                    setFloat("uBlurAlpha", smoothingStrength)
+                    setFloat("uSharpen", sharpenStrength)
+                    setFloat("uWhiten", whiteningStrength)
+                    setFloat("uWidthOffset", texelSizeX)
+                    setFloat("uHeightOffset", texelSizeY)
+                }
+            )
+            currentInputTexture = currentOutputFbo.getTextureId()
+            currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
+            // 标记多Pass真正执行了磨皮/美白
+            beautyPassExecutedSmoothing = smoothingStrength > 0.001f
+            beautyPassExecutedWhitening = whiteningStrength > 0.001f
+            Log.d(TAG, "BeautyUnitPass executed: smoothing=$beautyPassExecutedSmoothing, whitening=$beautyPassExecutedWhitening")
+        } else {
+            Log.w(TAG, "BeautyUnitPass skipped: compiled=$beautyUnitPassCompiled, lutLoaded=${lutTextureLoader.isAllLoaded()}")
+        }
+
+        // 保存最终输出纹理 ID
+        beautyPassOutputTextureId = currentInputTexture
+        Log.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=${fboPing.getTextureId()}, fboPong=${fboPong.getTextureId()}, fboPang=${fboPang.getTextureId()}")
+        return true
+    }
+
+    /**
+     * 外部纹理 ID（由 CameraPreviewRenderer 在渲染前绑定到 GL_TEXTURE0 + GL_TEXTURE_EXTERNAL_OES）
+     * 不再查询 GL 状态，而是直接使用已知的外部纹理 ID
+     */
+    private var externalTextureId: Int = 0
+
+    fun setExternalTextureId(id: Int) {
+        externalTextureId = id
+    }
+
+    private fun getBoundExternalTextureId(): Int {
+        return externalTextureId
+    }
+
+    /**
+     * 设置是否启用多Pass美颜
+     */
+    fun setMultiPassBeautyEnabled(enabled: Boolean) {
+        multiPassBeautyEnabled = enabled
+        Log.d(TAG, "Multi-pass beauty enabled: $enabled")
     }
 
     private fun renderMultiPass(activeStyle: StyleEffect) {
@@ -653,6 +1163,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         intermediateFbo?.release()
         intermediateFbo = null
         styleEffectShader.release()
+        copyPass.release()
+        boxBlurPass.release()
+        boxHighPassPass.release()
+        beautyUnitPass.release()
+        lutTextureLoader.release()
+        fboPool.releaseAll()
         super.release()
     }
 }

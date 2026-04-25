@@ -89,6 +89,10 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
     private val _debugShaderMode = kotlinx.coroutines.flow.MutableStateFlow(0)
     val debugShaderMode: StateFlow<Int> = _debugShaderMode
 
+    // Multi-pass beauty (not persisted, defaults to false)
+    private val _multiPassBeautyEnabled = kotlinx.coroutines.flow.MutableStateFlow(true)
+    val multiPassBeautyEnabled: StateFlow<Boolean> = _multiPassBeautyEnabled
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -163,6 +167,13 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         // 通知 BeautyRenderer 更新 debug mode
         viewModelScope.launch {
             repository.updateDebugShaderMode(mode)
+        }
+    }
+
+    fun setMultiPassBeautyEnabled(enabled: Boolean) {
+        _multiPassBeautyEnabled.value = enabled
+        viewModelScope.launch {
+            repository.updateMultiPassBeautyEnabled(enabled)
         }
     }
 }

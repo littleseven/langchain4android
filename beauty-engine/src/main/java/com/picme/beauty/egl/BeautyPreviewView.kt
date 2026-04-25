@@ -213,6 +213,13 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.setDebugMode(mode)
     }
 
+    /**
+     * 设置是否启用多Pass美颜（磨皮/美白独立Pass）
+     */
+    fun setMultiPassBeautyEnabled(enabled: Boolean) {
+        renderer.setMultiPassBeautyEnabled(enabled)
+    }
+
     init {
         surfaceView.layoutParams = LayoutParams(
             LayoutParams.MATCH_PARENT,
