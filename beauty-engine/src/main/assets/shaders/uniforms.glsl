@@ -32,5 +32,14 @@ uniform vec4 uCMRow2;
 uniform vec4 uCMRow3;
 uniform vec4 uCMOffset;
 uniform float uHasColorMatrix;
-uniform int uDebugMode; // 调试模式：0=正常, 1=mask, 2=warp, 3=lip_region
+uniform float uExposure;
+uniform float uContrast;
+uniform float uSaturation;
+uniform float uTemperature;
+uniform float uTint;
+uniform float uBrightness;
+uniform float uRedAdj;
+uniform float uGreenAdj;
+uniform float uBlueAdj;
+uniform int uDebugMode;
 varying vec2 vTextureCoord;

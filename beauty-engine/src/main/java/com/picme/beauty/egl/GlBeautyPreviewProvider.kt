@@ -175,6 +175,17 @@ class GlBeautyPreviewProvider(
         // 色调滤镜矩阵独立于美颜开关，始终同步
         view.colorMatrix = params.colorMatrix
 
+        // 专业调色参数独立于美颜开关，始终同步
+        view.exposureStrength = params.exposure
+        view.contrastStrength = params.contrast
+        view.saturationStrength = params.saturation
+        view.temperatureStrength = params.temperature
+        view.tintStrength = params.tint
+        view.brightnessStrength = params.brightness
+        view.redAdjustment = params.redAdjustment
+        view.greenAdjustment = params.greenAdjustment
+        view.blueAdjustment = params.blueAdjustment
+
         if (!params.enabled) {
             view.smoothingStrength = 0f
             view.whiteningStrength = 0f

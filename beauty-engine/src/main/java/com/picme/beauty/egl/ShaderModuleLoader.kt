@@ -22,6 +22,7 @@ object ShaderModuleLoader {
         "skin.glsl",
         "lip.glsl",
         "blush.glsl",
+        "colorgrade.glsl",
         "main.glsl"
     )
 

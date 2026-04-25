@@ -86,6 +86,13 @@ class ShaderProgram {
         if (compiled[0] != GLES20.GL_TRUE) {
             val error = GLES20.glGetShaderInfoLog(shader)
             Log.e(TAG, "Shader compile error: $error")
+            // 输出完整 Shader 源码以便诊断（按行号）
+            val typeName = if (type == GLES20.GL_VERTEX_SHADER) "VERTEX" else "FRAGMENT"
+            Log.e(TAG, "=== $typeName SHADER SOURCE ===")
+            source.lines().forEachIndexed { index, line ->
+                Log.e(TAG, "${index + 1}: $line")
+            }
+            Log.e(TAG, "=== END SHADER SOURCE ===")
             GLES20.glDeleteShader(shader)
             return 0
         }

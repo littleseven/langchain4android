@@ -16,6 +16,17 @@ package com.picme.beauty.api
  * - blush       : 腮红强度 0.0~1.0
  * - blushColorFamily : 腮红色系 0=粉/1=橙/2=梅
  *
+ * 专业调色参数（大美丽引擎路径专用，GPUPixel 路径忽略此字段）：
+ * - exposure      : 曝光 -10.0~10.0，0 为原始
+ * - contrast      : 对比度 0.0~4.0，1.0 为原始
+ * - saturation    : 饱和度 0.0~2.0，1.0 为原始
+ * - temperature   : 色温 -1.0~+1.0，0 为原始（蓝-黄偏移）
+ * - tint          : 色调 -1.0~+1.0，0 为原始（绿-品红偏移）
+ * - brightness    : 亮度 -1.0~+1.0，0 为原始
+ * - redAdjustment : 红色通道 0.0~2.0，1.0 为原始
+ * - greenAdjustment : 绿色通道 0.0~2.0，1.0 为原始
+ * - blueAdjustment : 蓝色通道 0.0~2.0，1.0 为原始
+ *
  * 专业调色参数（GPUPixel 路径专用，大美丽引擎忽略此字段）：
  * - gpuExposure      : 曝光 -10.0~10.0，0 为原始（对应 GPUPixel ExposureFilter exposure）
  * - gpuContrast      : 对比度 0.0~4.0，1.0 为原始（对应 GPUPixel ContrastFilter contrast）
@@ -42,6 +53,16 @@ data class BeautyParams(
     val lipColorIndex: Int = 0,
     val blush: Float = 0f,
     val blushColorFamily: Int = 0,
+    // 专业调色参数（大美丽引擎路径专用）
+    val exposure: Float = 0f,
+    val contrast: Float = 1f,
+    val saturation: Float = 1f,
+    val temperature: Float = 0f,
+    val tint: Float = 0f,
+    val brightness: Float = 0f,
+    val redAdjustment: Float = 1f,
+    val greenAdjustment: Float = 1f,
+    val blueAdjustment: Float = 1f,
     // 专业调色参数（GPUPixel 路径专用）
     val gpuExposure: Float = 0f,
     val gpuContrast: Float = 1f,
@@ -68,6 +89,15 @@ data class BeautyParams(
             lipColorIndex == other.lipColorIndex &&
             blush == other.blush &&
             blushColorFamily == other.blushColorFamily &&
+            exposure == other.exposure &&
+            contrast == other.contrast &&
+            saturation == other.saturation &&
+            temperature == other.temperature &&
+            tint == other.tint &&
+            brightness == other.brightness &&
+            redAdjustment == other.redAdjustment &&
+            greenAdjustment == other.greenAdjustment &&
+            blueAdjustment == other.blueAdjustment &&
             gpuExposure == other.gpuExposure &&
             gpuContrast == other.gpuContrast &&
             gpuSaturation == other.gpuSaturation &&
@@ -86,6 +116,15 @@ data class BeautyParams(
         result = 31 * result + lipColorIndex
         result = 31 * result + blush.hashCode()
         result = 31 * result + blushColorFamily
+        result = 31 * result + exposure.hashCode()
+        result = 31 * result + contrast.hashCode()
+        result = 31 * result + saturation.hashCode()
+        result = 31 * result + temperature.hashCode()
+        result = 31 * result + tint.hashCode()
+        result = 31 * result + brightness.hashCode()
+        result = 31 * result + redAdjustment.hashCode()
+        result = 31 * result + greenAdjustment.hashCode()
+        result = 31 * result + blueAdjustment.hashCode()
         result = 31 * result + gpuExposure.hashCode()
         result = 31 * result + gpuContrast.hashCode()
         result = 31 * result + gpuSaturation.hashCode()

@@ -77,6 +77,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var redAdjustment: Float = 1.0f
     private var greenAdjustment: Float = 1.0f
     private var blueAdjustment: Float = 1.0f
+    private var contourThinFaceStrength: Float = 0.0f  // GPUPixel curveWarp 轮廓瘦脸强度
     private var texelSizeX: Float = 0.0015f
     private var texelSizeY: Float = 0.0015f
 
@@ -125,6 +126,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uRedAdjLocation: Int = -1
     private var uGreenAdjLocation: Int = -1
     private var uBlueAdjLocation: Int = -1
+    private var uContourThinFaceLocation: Int = -1
     private var uDebugModeLocation: Int = -1
 
     private var debugMode: Int = 0
@@ -236,6 +238,14 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         blueAdjustment = blueAdj.coerceIn(0f, 2f)
     }
 
+    /**
+     * GPUPixel 风格轮廓瘦脸强度设置。
+     * @param strength 0.0~1.0，0.0 为关闭
+     */
+    fun setContourThinFace(strength: Float) {
+        contourThinFaceStrength = strength.coerceIn(0f, 1f)
+    }
+
     fun updateLipMaskPoints(
         outerPoints: List<Pair<Float, Float>>,
         innerPoints: List<Pair<Float, Float>>
@@ -316,9 +326,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     override fun onCompileShader(): Boolean {
         val vertexShader = BeautyShaders.VERTEX_SHADER
-        // 始终使用模块化加载的 Shader，通过 uDebugMode 控制调试输出
         val fragmentShader = ShaderModuleLoader.loadFullFragmentShader(context)
-        Log.d(TAG, "Compiling shader: mode=$renderMode")
+        Log.d(TAG, "Compiling shader (modular): mode=$renderMode")
         return shaderProgram.compile(vertexShader, fragmentShader)
     }
 
@@ -418,6 +427,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 GLES20.glUniform1f(uRedAdjLocation, redAdjustment)
                 GLES20.glUniform1f(uGreenAdjLocation, greenAdjustment)
                 GLES20.glUniform1f(uBlueAdjLocation, blueAdjustment)
+                GLES20.glUniform1f(uContourThinFaceLocation, contourThinFaceStrength)
             }
         }
 
@@ -477,6 +487,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         uRedAdjLocation = shaderProgram.getUniformLocation("uRedAdj")
         uGreenAdjLocation = shaderProgram.getUniformLocation("uGreenAdj")
         uBlueAdjLocation = shaderProgram.getUniformLocation("uBlueAdj")
+        uContourThinFaceLocation = shaderProgram.getUniformLocation("uContourThinFace")
         uDebugModeLocation = shaderProgram.getUniformLocation("uDebugMode")
     }
 

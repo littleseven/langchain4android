@@ -1764,19 +1764,19 @@ fun ProModeControls(
                         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                 )
 
-                // ── GPUPixel 专业调色（对比度 / 饱和度 / 色温） ──
-                // 仅在 GPUPixel 模式下有意义；其他模式下参数存储但引擎忽略
+                // ── 专业调色（对比度 / 饱和度 / 色温） ──
+                // 大美丽引擎路径：参数通过 BeautyParamsConverter 映射到 Shader
                 ProModeSlider(
                     label = stringResource(R.string.contrast),
-                    valueText = if (kotlin.math.abs(beautySettings.gpuContrast - 50f) > 0.5f)
-                        beautySettings.gpuContrast.toInt().toString() else "--",
-                    isValueChanged = kotlin.math.abs(beautySettings.gpuContrast - 50f) > 0.5f,
+                    valueText = if (kotlin.math.abs(beautySettings.contrast - 50f) > 0.5f)
+                        beautySettings.contrast.toInt().toString() else "--",
+                    isValueChanged = kotlin.math.abs(beautySettings.contrast - 50f) > 0.5f,
                     sliderContent = {
                         Slider(
-                            value = beautySettings.gpuContrast,
+                            value = beautySettings.contrast,
                             valueRange = 0f..200f,
                             onValueChange = { value ->
-                                onBeautySettingsChanged(beautySettings.copy(gpuContrast = value))
+                                onBeautySettingsChanged(beautySettings.copy(contrast = value))
                             },
                             modifier = Modifier.fillMaxWidth().height(36.dp),
                             thumb = { ProModeThumb() },
@@ -1793,15 +1793,15 @@ fun ProModeControls(
 
                 ProModeSlider(
                     label = stringResource(R.string.saturation),
-                    valueText = if (kotlin.math.abs(beautySettings.gpuSaturation - 100f) > 0.5f)
-                        beautySettings.gpuSaturation.toInt().toString() else "--",
-                    isValueChanged = kotlin.math.abs(beautySettings.gpuSaturation - 100f) > 0.5f,
+                    valueText = if (kotlin.math.abs(beautySettings.saturation - 100f) > 0.5f)
+                        beautySettings.saturation.toInt().toString() else "--",
+                    isValueChanged = kotlin.math.abs(beautySettings.saturation - 100f) > 0.5f,
                     sliderContent = {
                         Slider(
-                            value = beautySettings.gpuSaturation,
+                            value = beautySettings.saturation,
                             valueRange = 0f..200f,
                             onValueChange = { value ->
-                                onBeautySettingsChanged(beautySettings.copy(gpuSaturation = value))
+                                onBeautySettingsChanged(beautySettings.copy(saturation = value))
                             },
                             modifier = Modifier.fillMaxWidth().height(36.dp),
                             thumb = { ProModeThumb() },
@@ -1818,15 +1818,15 @@ fun ProModeControls(
 
                 ProModeSlider(
                     label = stringResource(R.string.color_temperature),
-                    valueText = if (kotlin.math.abs(beautySettings.gpuWhiteBalance - 5000f) > 50f)
-                        "${beautySettings.gpuWhiteBalance.toInt()}K" else "--",
-                    isValueChanged = kotlin.math.abs(beautySettings.gpuWhiteBalance - 5000f) > 50f,
+                    valueText = if (kotlin.math.abs(beautySettings.temperature - 5000f) > 50f)
+                        "${beautySettings.temperature.toInt()}K" else "--",
+                    isValueChanged = kotlin.math.abs(beautySettings.temperature - 5000f) > 50f,
                     sliderContent = {
                         Slider(
-                            value = beautySettings.gpuWhiteBalance,
-                            valueRange = 2000f..10000f,
+                            value = beautySettings.temperature,
+                            valueRange = 2000f..8000f,
                             onValueChange = { value ->
-                                onBeautySettingsChanged(beautySettings.copy(gpuWhiteBalance = value))
+                                onBeautySettingsChanged(beautySettings.copy(temperature = value))
                             },
                             modifier = Modifier.fillMaxWidth().height(36.dp),
                             thumb = { ProModeThumb() },

@@ -531,6 +531,30 @@ class CameraPreviewRenderer(private val context: Context) {
         beautyRenderer.updateColorMatrix(matrix)
     }
 
+    fun setColorGradeParams(
+        exposure: Float = 0.0f,
+        contrast: Float = 1.0f,
+        saturation: Float = 1.0f,
+        temperature: Float = 0.0f,
+        tint: Float = 0.0f,
+        brightness: Float = 0.0f,
+        redAdj: Float = 1.0f,
+        greenAdj: Float = 1.0f,
+        blueAdj: Float = 1.0f
+    ) {
+        beautyRenderer.setColorGradeParams(
+            exposure = exposure,
+            contrast = contrast,
+            saturation = saturation,
+            temperature = temperature,
+            tint = tint,
+            brightness = brightness,
+            redAdj = redAdj,
+            greenAdj = greenAdj,
+            blueAdj = blueAdj
+        )
+    }
+
     fun setRenderMode(mode: Int) {
         beautyRenderer.setRenderMode(mode)
     }

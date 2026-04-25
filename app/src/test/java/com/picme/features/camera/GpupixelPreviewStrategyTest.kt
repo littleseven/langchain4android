@@ -37,8 +37,28 @@ class GpupixelPreviewStrategyTest {
     // ================================================================
 
     private fun mapToBeautyParams(settings: BeautySettings): BeautyParams {
+        // 专业调色参数映射（大美丽引擎路径）
+        val shaderContrast = (settings.contrast / 50f).coerceIn(0f, 4f)
+        val shaderSaturation = (settings.saturation / 100f).coerceIn(0f, 2f)
+        val shaderTemperature = ((settings.temperature - 5000f) / 3000f).coerceIn(-1f, 1f)
+        val shaderTint = (settings.tint / 100f).coerceIn(-1f, 1f)
+        val shaderBrightness = (settings.brightness / 100f).coerceIn(-1f, 1f)
+        val shaderRed = (settings.redAdjustment / 100f).coerceIn(0f, 2f)
+        val shaderGreen = (settings.greenAdjustment / 100f).coerceIn(0f, 2f)
+        val shaderBlue = (settings.blueAdjustment / 100f).coerceIn(0f, 2f)
+
         return if (!settings.enabled || !settings.hasAnyEffect()) {
-            BeautyParams.EMPTY
+            BeautyParams.EMPTY.copy(
+                exposure = settings.exposure.coerceIn(-10f, 10f),
+                contrast = shaderContrast,
+                saturation = shaderSaturation,
+                temperature = shaderTemperature,
+                tint = shaderTint,
+                brightness = shaderBrightness,
+                redAdjustment = shaderRed,
+                greenAdjustment = shaderGreen,
+                blueAdjustment = shaderBlue
+            )
         } else {
             BeautyParams(
                 enabled = true,
@@ -49,7 +69,16 @@ class GpupixelPreviewStrategyTest {
                 lipColor = (settings.lipColor / 100f).coerceIn(0f, 1f),
                 lipColorIndex = settings.lipColorIndex.coerceIn(0, 11),
                 blush = (settings.blush / 100f).coerceIn(0f, 1f),
-                blushColorFamily = settings.blushColorFamily.coerceIn(0, 2)
+                blushColorFamily = settings.blushColorFamily.coerceIn(0, 2),
+                exposure = settings.exposure.coerceIn(-10f, 10f),
+                contrast = shaderContrast,
+                saturation = shaderSaturation,
+                temperature = shaderTemperature,
+                tint = shaderTint,
+                brightness = shaderBrightness,
+                redAdjustment = shaderRed,
+                greenAdjustment = shaderGreen,
+                blueAdjustment = shaderBlue
             )
         }
     }
