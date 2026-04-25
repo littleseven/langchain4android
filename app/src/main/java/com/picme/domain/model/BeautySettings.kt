@@ -28,6 +28,17 @@ data class BeautySettings(
     val bodyEnhancement: Float = 0f, // 丰胸 -30~+30
     val legExtension: Float = 0f,    // 长腿 0-50
 
+    // 专业调色（大美丽引擎路径专用，UI 原始值，由 Converter 映射到 Shader 参数范围）
+    val exposure: Float = 0f,         // 曝光 -10.0~10.0，0 为原始
+    val contrast: Float = 50f,        // 对比度 0-200，50=原始(→ Shader 1.0)
+    val saturation: Float = 100f,     // 饱和度 0-200，100=原始(→ Shader 1.0)
+    val temperature: Float = 5000f,   // 色温 2000~8000K，5000=原始(→ Shader -1~+1)
+    val tint: Float = 0f,             // 色调 -100~+100，0 为原始(→ Shader -1~+1)
+    val brightness: Float = 0f,       // 亮度 -100~+100，0 为原始(→ Shader -1~+1)
+    val redAdjustment: Float = 100f,  // 红色 0-200，100=原始(→ Shader 1.0)
+    val greenAdjustment: Float = 100f,// 绿色 0-200，100=原始(→ Shader 1.0)
+    val blueAdjustment: Float = 100f, // 蓝色 0-200，100=原始(→ Shader 1.0)
+
     // 专业调色（GPUPixel 路径专用，UI 原始值，由 Strategy 层映射到 GPUPixel 参数范围）
     val gpuExposure: Float = 0f,         // 曝光 -3.0~3.0，0 为原始
     val gpuContrast: Float = 50f,        // 对比度 0-200，50=原始(→ GPUPixel 1.0)

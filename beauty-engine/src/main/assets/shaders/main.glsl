@@ -23,7 +23,8 @@ void main() {
     vec4 lipTinted = applyLipTint(whitened, warpedUv);
     
     vec3 makeupColor = applyBlush(lipTinted.rgb, warpedUv);
-    vec4 finalColor = vec4(clamp(makeupColor, 0.0, 1.0), lipTinted.a);
+    vec3 graded = applyColorGrade(makeupColor);
+    vec4 finalColor = vec4(clamp(graded, 0.0, 1.0), lipTinted.a);
 
     // Color Matrix Filter
     if (uHasColorMatrix > 0.5) {

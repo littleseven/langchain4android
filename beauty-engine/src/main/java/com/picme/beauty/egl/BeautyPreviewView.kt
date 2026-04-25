@@ -95,6 +95,61 @@ class BeautyPreviewView @JvmOverloads constructor(
             renderer.setRenderMode(value)
         }
 
+    // 专业调色参数（GPUPixel 移植到大美丽）
+    var exposureStrength: Float = 0f
+        set(value) {
+            field = value.coerceIn(-10f, 10f)
+            updateColorGradeInternal()
+        }
+
+    var contrastStrength: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 4f)
+            updateColorGradeInternal()
+        }
+
+    var saturationStrength: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 2f)
+            updateColorGradeInternal()
+        }
+
+    var temperatureStrength: Float = 0f
+        set(value) {
+            field = value.coerceIn(-1f, 1f)
+            updateColorGradeInternal()
+        }
+
+    var tintStrength: Float = 0f
+        set(value) {
+            field = value.coerceIn(-1f, 1f)
+            updateColorGradeInternal()
+        }
+
+    var brightnessStrength: Float = 0f
+        set(value) {
+            field = value.coerceIn(-1f, 1f)
+            updateColorGradeInternal()
+        }
+
+    var redAdjustment: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 2f)
+            updateColorGradeInternal()
+        }
+
+    var greenAdjustment: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 2f)
+            updateColorGradeInternal()
+        }
+
+    var blueAdjustment: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 2f)
+            updateColorGradeInternal()
+        }
+
     /**
      * 设置 Shader 调试模式
      * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移
@@ -181,6 +236,21 @@ class BeautyPreviewView @JvmOverloads constructor(
             lipColorIndex = lipColorIndex,
             blush = blushStrength,
             blushColorFamily = blushColorFamily
+        )
+    }
+
+    private fun updateColorGradeInternal() {
+        if (!isRendererInitialized) return
+        renderer.setColorGradeParams(
+            exposure = exposureStrength,
+            contrast = contrastStrength,
+            saturation = saturationStrength,
+            temperature = temperatureStrength,
+            tint = tintStrength,
+            brightness = brightnessStrength,
+            redAdj = redAdjustment,
+            greenAdj = greenAdjustment,
+            blueAdj = blueAdjustment
         )
     }
 
