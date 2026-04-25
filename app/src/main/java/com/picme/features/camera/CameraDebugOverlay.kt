@@ -224,6 +224,9 @@ private fun FaceDebugOverlayBigBeauty(
 
         // 绘制瘦脸控制点及方向（调试用）
         drawThinFaceControlPoints(bbPoints)
+
+        // 绘制大眼控制点及方向（调试用）
+        drawBigEyeControlPoints(bbPoints)
     }
 }
 
@@ -697,6 +700,128 @@ private fun DrawScope.drawGpuPixelLandmarks(
 
     // 绘制瘦脸控制点及方向（调试用）
     drawThinFaceControlPoints(points)
+
+    // 绘制大眼控制点及方向（调试用）
+    drawBigEyeControlPoints(points)
+}
+
+/**
+ * 绘制大眼算法的2对控制点及方向
+ * originIndex=瞳孔 -> targetIndex=眼角
+ */
+private fun DrawScope.drawBigEyeControlPoints(points: List<Offset>) {
+    if (points.size < 78) return
+
+    // 2对控制点映射（originIndex=瞳孔 -> targetIndex=眼角）
+    val controlPairs = listOf(
+        Pair(74, 72),   // 右瞳孔 -> 右眼内角
+        Pair(77, 75)    // 左瞳孔 -> 左眼内角
+    )
+
+    controlPairs.forEachIndexed { idx, (originIdx, targetIdx) ->
+        if (originIdx >= points.size || targetIdx >= points.size) return@forEachIndexed
+
+        val origin = points[originIdx]
+        val target = points[targetIdx]
+
+        // 大眼使用径向放大，origin是瞳孔，target是眼角
+        // 绘制从瞳孔到眼角的连线，表示放大中心方向
+        val eyeColor = if (idx == 0) {
+            Color(0xFFFFD700).copy(alpha = 0.9f)  // 金色 - 右眼
+        } else {
+            Color(0xFF00CED1).copy(alpha = 0.9f)  // 深青色 - 左眼
+        }
+
+        // 绘制瞳孔到眼角的实线
+        drawLine(
+            color = eyeColor.copy(alpha = 0.6f),
+            start = origin,
+            end = target,
+            strokeWidth = 2.5f
+        )
+
+        // 绘制瞳孔点（大圆，表示放大中心）
+        drawCircle(
+            color = Color.Yellow.copy(alpha = 0.9f),
+            radius = 8.dp.toPx(),
+            center = origin,
+            style = Stroke(width = 3f)
+        )
+        drawCircle(
+            color = Color.Yellow.copy(alpha = 0.2f),
+            radius = 8.dp.toPx(),
+            center = origin,
+            style = Fill
+        )
+
+        // 绘制眼角点（小圆，绿色）
+        drawCircle(
+            color = Color.Green.copy(alpha = 0.9f),
+            radius = 4.dp.toPx(),
+            center = target,
+            style = Fill
+        )
+
+        // 绘制影响范围圆圈（radius = 瞳孔到眼角距离 * 5）
+        val radiusPx = distance(
+            vec2(target.x, target.y),
+            vec2(origin.x, origin.y)
+        ) * 5.0f
+        drawCircle(
+            color = eyeColor.copy(alpha = 0.3f),
+            radius = radiusPx,
+            center = origin,
+            style = Stroke(width = 2.dp.toPx())
+        )
+
+        // 绘制放大方向箭头（从眼角指向瞳孔外侧，表示向外扩展）
+        val direction = origin - target
+        val angle = kotlin.math.atan2(direction.y, direction.x)
+        val arrowLen = 20f
+        val arrowAngle = 0.5f
+        val tip = origin + direction * 0.5f
+        val leftWing = Offset(
+            tip.x - arrowLen * kotlin.math.cos(angle + arrowAngle),
+            tip.y - arrowLen * kotlin.math.sin(angle + arrowAngle)
+        )
+        val rightWing = Offset(
+            tip.x - arrowLen * kotlin.math.cos(angle - arrowAngle),
+            tip.y - arrowLen * kotlin.math.sin(angle - arrowAngle)
+        )
+        drawLine(color = eyeColor, start = tip, end = leftWing, strokeWidth = 3f)
+        drawLine(color = eyeColor, start = tip, end = rightWing, strokeWidth = 3f)
+
+        // 标注序号和信息
+        val textPaint = Paint().apply {
+            textSize = 10.dp.toPx()
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        val eyeLabel = if (idx == 0) "右眼" else "左眼"
+        drawIntoCanvas { canvas ->
+            textPaint.color = eyeColor.toArgb()
+            canvas.nativeCanvas.drawText(
+                "$eyeLabel: $originIdx(瞳孔)->$targetIdx(眼角)",
+                origin.x,
+                origin.y - 12.dp.toPx(),
+                textPaint
+            )
+            canvas.nativeCanvas.drawText(
+                "radius=${radiusPx.toInt()}px",
+                origin.x,
+                origin.y + 20.dp.toPx(),
+                textPaint
+            )
+        }
+    }
+}
+
+// GLSL风格辅助函数
+private fun vec2(x: Float, y: Float): Offset = Offset(x, y)
+private fun distance(a: Offset, b: Offset): Float {
+    val dx = a.x - b.x
+    val dy = a.y - b.y
+    return kotlin.math.sqrt(dx * dx + dy * dy)
 }
 
 /**

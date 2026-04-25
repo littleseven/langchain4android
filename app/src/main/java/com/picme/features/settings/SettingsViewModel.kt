@@ -85,6 +85,10 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             initialValue = false
         )
 
+    // Shader debug mode (not persisted, defaults to 0)
+    private val _debugShaderMode = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val debugShaderMode: StateFlow<Int> = _debugShaderMode
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -151,6 +155,14 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
     fun setShowLogOverlay(show: Boolean) {
         viewModelScope.launch {
             repository.updateShowLogOverlay(show)
+        }
+    }
+
+    fun setDebugShaderMode(mode: Int) {
+        _debugShaderMode.value = mode
+        // 通知 BeautyRenderer 更新 debug mode
+        viewModelScope.launch {
+            repository.updateDebugShaderMode(mode)
         }
     }
 }

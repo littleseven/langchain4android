@@ -808,6 +808,7 @@ fun CameraContent(
 
     val mediaAssets by viewModel.allMedia.collectAsState()
     val lastMedia = mediaAssets.firstOrNull()
+    val debugShaderMode by userPreferencesRepository.debugShaderModeFlow.collectAsState(initial = 0)
     val beautyPreviewStatus = if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
         BeautyPreviewStatus.ACTIVE
     } else {
@@ -815,6 +816,13 @@ fun CameraContent(
     }
     var renderPerfStats by remember {
         mutableStateOf(BeautyPerfStats())
+    }
+
+    // 监听 Shader Debug Mode 变化，同步到 GL Provider
+    LaunchedEffect(debugShaderMode, glPreviewProvider) {
+        val provider = glPreviewProvider as? com.picme.beauty.egl.GlBeautyPreviewProvider
+        provider?.setDebugMode(debugShaderMode)
+        Logger.d("Camera", "Shader debug mode updated: $debugShaderMode")
     }
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {

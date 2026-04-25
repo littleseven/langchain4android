@@ -78,3 +78,52 @@ vec2 warpCoordGpupixelThinFace(vec2 uv) {
 
     return uv;
 }
+
+// 调试模式：可视化瘦脸控制点的影响范围
+// 返回颜色：红色=在radius内（靠近origin），绿色=在radius外
+vec3 warpCoordGpupixelThinFaceDebug(vec2 uv) {
+    if (uHasFace < 0.5) {
+        return vec3(0.0, 0.0, 1.0);  // 蓝色：无脸
+    }
+
+    vec2 faceIndexs[9];
+    faceIndexs[0] = vec2(3.0, 44.0);
+    faceIndexs[1] = vec2(29.0, 44.0);
+    faceIndexs[2] = vec2(7.0, 45.0);
+    faceIndexs[3] = vec2(25.0, 45.0);
+    faceIndexs[4] = vec2(10.0, 46.0);
+    faceIndexs[5] = vec2(22.0, 46.0);
+    faceIndexs[6] = vec2(14.0, 49.0);
+    faceIndexs[7] = vec2(18.0, 49.0);
+    faceIndexs[8] = vec2(16.0, 49.0);
+
+    float maxInfluence = 0.0;
+
+    for (int i = 0; i < 9; i++) {
+        int originIndex = int(faceIndexs[i].x);
+        int targetIndex = int(faceIndexs[i].y);
+        vec2 originPoint = getFacePoint(originIndex);
+        vec2 targetPoint = getFacePoint(targetIndex);
+
+        float radius = distance(
+            vec2(targetPoint.x, targetPoint.y / uAspectRatio),
+            vec2(originPoint.x, originPoint.y / uAspectRatio)
+        );
+
+        float r = distance(
+            vec2(uv.x, uv.y / uAspectRatio),
+            vec2(originPoint.x, originPoint.y / uAspectRatio)
+        );
+
+        float ratio = 1.0 - (r / radius);
+        ratio = clamp(ratio, 0.0, 1.0);
+        maxInfluence = max(maxInfluence, ratio);
+    }
+
+    if (maxInfluence > 0.0) {
+        // 红色=强影响，黄色=弱影响
+        return vec3(1.0, 1.0 - maxInfluence, 0.0);
+    }
+
+    return vec3(0.0, 1.0, 0.0);  // 绿色：无影响
+}

@@ -47,6 +47,10 @@ interface UserSettingsRepository {
     val showLogOverlayFlow: Flow<Boolean>
     suspend fun updateShowLogOverlay(show: Boolean)
 
+    // ── Shader 调试模式 ────────────────────────────────────
+    val debugShaderModeFlow: Flow<Int>
+    suspend fun updateDebugShaderMode(mode: Int)
+
     // ── 人脸检测 ───────────────────────────────────────────
     val faceDetectionLandmarkModeFlow: Flow<Boolean>
     suspend fun updateFaceDetectionLandmarkMode(enabled: Boolean)
