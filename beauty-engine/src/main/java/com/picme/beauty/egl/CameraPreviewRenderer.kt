@@ -238,6 +238,7 @@ class CameraPreviewRenderer(private val context: Context) {
                             textureId
                         )
 
+                        beautyRenderer.setExternalTextureId(textureId)
                         beautyRenderer.setTextureTransform(transformMatrix)
 
                         val outputWidth =
@@ -648,6 +649,15 @@ class CameraPreviewRenderer(private val context: Context) {
 
     fun setDebugMode(mode: Int) {
         beautyRenderer.setDebugMode(mode)
+    }
+
+    /**
+     * 设置是否启用多Pass美颜（磨皮/美白独立Pass）
+     */
+    fun setMultiPassBeautyEnabled(enabled: Boolean) {
+        glEventQueue.offer {
+            beautyRenderer.setMultiPassBeautyEnabled(enabled)
+        }
     }
 
     fun getSurfaceTexture(): SurfaceTexture? = surfaceTexture

@@ -51,6 +51,10 @@ interface UserSettingsRepository {
     val debugShaderModeFlow: Flow<Int>
     suspend fun updateDebugShaderMode(mode: Int)
 
+    // ── 多Pass美颜 ─────────────────────────────────────────
+    val multiPassBeautyEnabledFlow: Flow<Boolean>
+    suspend fun updateMultiPassBeautyEnabled(enabled: Boolean)
+
     // ── 人脸检测 ───────────────────────────────────────────
     val faceDetectionLandmarkModeFlow: Flow<Boolean>
     suspend fun updateFaceDetectionLandmarkMode(enabled: Boolean)

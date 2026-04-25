@@ -28,12 +28,41 @@ object ShaderModuleLoader {
         "main.glsl"
     )
 
+    private val MODULE_ORDER_2D = listOf(
+        "header_2d.glsl",
+        "uniforms_2d.glsl",
+        "warp.glsl",
+        "warp_gpupixel_thinface.glsl",
+        "warp_gpupixel_bigeye.glsl",
+        "skin.glsl",
+        "lip.glsl",
+        "blush.glsl",
+        "colorgrade.glsl",
+        "main.glsl"
+    )
+
     /**
      * 加载并拼接所有 Shader 模块
      */
     fun loadFullFragmentShader(context: Context): String {
         return buildString {
             for (moduleName in MODULE_ORDER) {
+                try {
+                    val content = context.assets.open("$SHADER_DIR/$moduleName").bufferedReader().use { it.readText() }
+                    appendLine(content)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to load shader module: $moduleName", e)
+                }
+            }
+        }
+    }
+
+    /**
+     * 加载并拼接所有 Shader 模块（2D纹理版本，用于多Pass后从FBO采样）
+     */
+    fun loadFullFragmentShader2D(context: Context): String {
+        return buildString {
+            for (moduleName in MODULE_ORDER_2D) {
                 try {
                     val content = context.assets.open("$SHADER_DIR/$moduleName").bufferedReader().use { it.readText() }
                     appendLine(content)

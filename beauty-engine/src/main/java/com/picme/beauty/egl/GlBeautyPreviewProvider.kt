@@ -176,6 +176,13 @@ class GlBeautyPreviewProvider(
         beautyPreviewView?.setDebugMode(mode)
     }
 
+    /**
+     * 设置是否启用多Pass美颜（磨皮/美白独立Pass）
+     */
+    fun setMultiPassBeautyEnabled(enabled: Boolean) {
+        beautyPreviewView?.setMultiPassBeautyEnabled(enabled)
+    }
+
     private fun applyParams(params: BeautyParams) {
         val view = beautyPreviewView ?: return
 
