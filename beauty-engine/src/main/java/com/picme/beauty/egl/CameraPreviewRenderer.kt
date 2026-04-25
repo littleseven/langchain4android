@@ -486,6 +486,46 @@ class CameraPreviewRenderer(private val context: Context) {
         )
     }
 
+    /**
+     * 更新106点人脸关键点（GPUPixel风格瘦脸/大眼使用）
+     * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
+     */
+    fun updateFacePoints106(landmarks106: FloatArray) {
+        // 106点坐标需要经过与 FaceWarpParams 相同的 mapViewNormalizedToUv 映射
+        // 才能与 Shader UV 坐标系对齐
+        val mapped = FloatArray(landmarks106.size)
+        for (i in landmarks106.indices step 2) {
+            val uv = mapNormalizedToUv(landmarks106[i], landmarks106[i + 1])
+            mapped[i] = uv.first
+            mapped[i + 1] = uv.second
+        }
+        beautyRenderer.updateFacePoints106(mapped)
+    }
+
+    /**
+     * 将归一化坐标 [0,1] 映射到 Shader UV 坐标系
+     * 与 mapViewNormalizedToUv 相同，但跳过 viewport 裁剪（106点已在相机帧坐标系中）
+     */
+    private fun mapNormalizedToUv(x: Float, y: Float): Pair<Float, Float> {
+        // 106点来自 bitmap 检测，Y=0在顶部；UV坐标V=0在底部，需要翻转Y
+        val flippedY = 1.0f - y.coerceIn(0f, 1f)
+        val normalizedX = x.coerceIn(0f, 1f)
+
+        // 应用 texture transform matrix（与 mapViewNormalizedToUv 一致）
+        val transformed = FloatArray(4)
+        val matrixCopy = FloatArray(16)
+        synchronized(textureMatrixLock) {
+            System.arraycopy(latestTextureTransformMatrix, 0, matrixCopy, 0, 16)
+        }
+        Matrix.multiplyMV(
+            transformed, 0,
+            matrixCopy, 0,
+            floatArrayOf(normalizedX, flippedY, 0f, 1f), 0
+        )
+
+        return Pair(transformed[0].coerceIn(0f, 1f), transformed[1].coerceIn(0f, 1f))
+    }
+
     fun updateLipMaskPoints(
         outerPoints: List<Pair<Float, Float>>,
         innerPoints: List<Pair<Float, Float>>

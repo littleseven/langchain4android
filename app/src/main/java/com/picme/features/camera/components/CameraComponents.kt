@@ -33,6 +33,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -42,6 +45,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropFree
@@ -85,6 +89,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
@@ -363,85 +368,12 @@ fun ControlPanel(
     }
 }
 
-@Composable
-fun FilterSelector(selectedFilter: FilterType, onFilterSelected: (FilterType) -> Unit) {
-    val listState = rememberLazyListState()
-
-    LazyRow(
-        state = listState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(horizontal = 4.dp)
-    ) {
-        items(FilterType.values()) { filter ->
-            val isSelected = selectedFilter == filter
-            val scale by animateFloatAsState(if (isSelected) 1.1f else 1.0f, label = "scale")
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .width(60.dp)
-                    .clickable { onFilterSelected(filter) }
-                    .scale(scale)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .border(
-                            width = if (isSelected) 2.5.dp else 1.dp,
-                            brush = if (isSelected) {
-                                Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurface)
-                                )
-                            } else {
-                                Brush.linearGradient(
-                                    listOf(
-                                        MaterialTheme.colorScheme.onSurface.copy(0.3f),
-                                        MaterialTheme.colorScheme.onSurface.copy(0.1f)
-                                    )
-                                )
-                            },
-                            shape = CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // 使用渐变色代替图片，简洁表达滤镜效果
-                    FilterGradientPreview(filter = filter)
-
-                    if (isSelected) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stringResource(filter.displayNameRes),
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    },
-                    fontSize = 10.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-}
-
 /**
  * 统一滤镜选择器（大美丽模式专用）
  *
- * 将色调滤镜（FilterType）和风格特效（StyleFilter）合并到一个面板中：
- * - 第一组：色调滤镜（基于 ColorMatrix）
- * - 第二组：风格特效（基于 Shader 多 Pass）
+ * 所有滤镜平铺为三排网格，不区分色调滤镜和风格特效。
+ * 每排按屏幕宽度显示6个滤镜项。
+ * 点击色调滤镜时自动清除风格特效，点击风格特效时自动清除色调滤镜。
  *
  * GPUPixel 模式下不显示此选择器。
  */
@@ -452,64 +384,117 @@ fun UnifiedFilterSelector(
     onFilterSelected: (FilterType) -> Unit,
     onStyleFilterSelected: (StyleFilter) -> Unit
 ) {
-    val filterListState = rememberLazyListState()
-    val styleListState = rememberLazyListState()
+    val configuration = LocalConfiguration.current
+    val screenWidth = configuration.screenWidthDp.dp
+    val itemWidth = (screenWidth - 20.dp) / 5
 
-    Column {
-        // 色调滤镜组
-        Text(
-            text = stringResource(R.string.filter_group_color),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
+    // 所有滤镜项统一排列，按相关性逐行排列（使用 LazyVerticalGrid 实现横向填充）：
+    // 第1排：原图 + 徕卡系列 + 胶片系列
+    // 第2排：复古/冷暖调 + 风格特效（卡通/素描/色块）
+    // 第3排：风格特效（浮雕/交叉线）
+    val allFilters = remember {
+        listOf(
+            // 第1排：基础色调
+            FilterItemData(FilterType.NONE.displayNameRes, FilterKind.COLOR, FilterType.NONE.ordinal),
+            FilterItemData(FilterType.LEICA_CLASSIC.displayNameRes, FilterKind.COLOR, FilterType.LEICA_CLASSIC.ordinal),
+            FilterItemData(FilterType.LEICA_VIBRANT.displayNameRes, FilterKind.COLOR, FilterType.LEICA_VIBRANT.ordinal),
+            FilterItemData(FilterType.LEICA_BW.displayNameRes, FilterKind.COLOR, FilterType.LEICA_BW.ordinal),
+            FilterItemData(FilterType.FILM_GOLD.displayNameRes, FilterKind.COLOR, FilterType.FILM_GOLD.ordinal),
+            FilterItemData(FilterType.FILM_FUJI.displayNameRes, FilterKind.COLOR, FilterType.FILM_FUJI.ordinal),
+            // 第2排：氛围色调 + 艺术风格
+            FilterItemData(FilterType.VINTAGE.displayNameRes, FilterKind.COLOR, FilterType.VINTAGE.ordinal),
+            FilterItemData(FilterType.COOL.displayNameRes, FilterKind.COLOR, FilterType.COOL.ordinal),
+            FilterItemData(FilterType.WARM.displayNameRes, FilterKind.COLOR, FilterType.WARM.ordinal),
+            FilterItemData(StyleFilter.TOON.displayNameRes, FilterKind.STYLE, StyleFilter.TOON.ordinal),
+            FilterItemData(StyleFilter.SKETCH.displayNameRes, FilterKind.STYLE, StyleFilter.SKETCH.ordinal),
+            FilterItemData(StyleFilter.POSTERIZE.displayNameRes, FilterKind.STYLE, StyleFilter.POSTERIZE.ordinal),
+            // 第3排：艺术风格
+            FilterItemData(StyleFilter.EMBOSS.displayNameRes, FilterKind.STYLE, StyleFilter.EMBOSS.ordinal),
+            FilterItemData(StyleFilter.CROSSHATCH.displayNameRes, FilterKind.STYLE, StyleFilter.CROSSHATCH.ordinal),
         )
-        LazyRow(
-            state = filterListState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp)
-        ) {
-            items(FilterType.values()) { filter ->
-                FilterItem(
-                    label = stringResource(filter.displayNameRes),
-                    isSelected = selectedFilter == filter,
-                    gradientColors = filterGradientColors(filter),
-                    onClick = { onFilterSelected(filter) }
-                )
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(5),
+        state = rememberLazyGridState(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(280.dp)
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp)
+    ) {
+        items(allFilters.size) { index ->
+            val item = allFilters[index]
+            when (item.kind) {
+                FilterKind.COLOR -> {
+                    val filter = FilterType.values()[item.ordinal]
+                    val isSelected = selectedFilter == filter && selectedStyleFilter == StyleFilter.NONE
+                    FilterItem(
+                        label = stringResource(item.nameRes),
+                        isSelected = isSelected,
+                        assetPath = filterAssetPath(filter),
+                        itemWidth = itemWidth,
+                        onClick = {
+                            onFilterSelected(filter)
+                            onStyleFilterSelected(StyleFilter.NONE)
+                        }
+                    )
+                }
+                FilterKind.STYLE -> {
+                    val style = StyleFilter.values()[item.ordinal]
+                    val isSelected = selectedStyleFilter == style
+                    FilterItem(
+                        label = stringResource(item.nameRes),
+                        isSelected = isSelected,
+                        assetPath = styleAssetPath(style),
+                        itemWidth = itemWidth,
+                        onClick = {
+                            onStyleFilterSelected(style)
+                            onFilterSelected(FilterType.NONE)
+                        }
+                    )
+                }
             }
         }
+    }
+}
 
-        // 分隔线
-        Spacer(modifier = Modifier.height(8.dp))
+private enum class FilterKind { COLOR, STYLE }
 
-        // 风格特效组
-        Text(
-            text = stringResource(R.string.filter_group_style),
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp)
-        )
-        LazyRow(
-            state = styleListState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp)
-        ) {
-            items(StyleFilter.values()) { style ->
-                FilterItem(
-                    label = stringResource(style.displayNameRes),
-                    isSelected = selectedStyleFilter == style,
-                    gradientColors = styleGradientColors(style),
-                    onClick = { onStyleFilterSelected(style) }
-                )
-            }
-        }
+private data class FilterItemData(
+    val nameRes: Int,
+    val kind: FilterKind,
+    val ordinal: Int
+)
+
+/**
+ * 本地 assets 滤镜预览图路径映射。
+ * 图片已下载到 app/src/main/assets/filters/ 目录。
+ */
+private fun filterAssetPath(filter: FilterType): String {
+    return when (filter) {
+        FilterType.NONE -> "filters/filter_none.jpg"
+        FilterType.LEICA_CLASSIC -> "filters/filter_leica_classic.jpg"
+        FilterType.LEICA_VIBRANT -> "filters/filter_leica_vibrant.jpg"
+        FilterType.LEICA_BW -> "filters/filter_leica_bw.jpg"
+        FilterType.FILM_GOLD -> "filters/filter_film_gold.jpg"
+        FilterType.FILM_FUJI -> "filters/filter_film_fuji.jpg"
+        FilterType.VINTAGE -> "filters/filter_vintage.jpg"
+        FilterType.COOL -> "filters/filter_cool.jpg"
+        FilterType.WARM -> "filters/filter_warm.jpg"
+    }
+}
+
+private fun styleAssetPath(style: StyleFilter): String {
+    return when (style) {
+        StyleFilter.TOON -> "filters/style_toon.jpg"
+        StyleFilter.SKETCH -> "filters/style_sketch.jpg"
+        StyleFilter.POSTERIZE -> "filters/style_posterize.jpg"
+        StyleFilter.EMBOSS -> "filters/style_emboss.jpg"
+        StyleFilter.CROSSHATCH -> "filters/style_crosshatch.jpg"
+        else -> "filters/style_toon.jpg"
     }
 }
 
@@ -517,21 +502,24 @@ fun UnifiedFilterSelector(
 private fun FilterItem(
     label: String,
     isSelected: Boolean,
-    gradientColors: List<Color>,
+    assetPath: String,
+    itemWidth: androidx.compose.ui.unit.Dp,
     onClick: () -> Unit
 ) {
-    val scale by animateFloatAsState(if (isSelected) 1.1f else 1.0f, label = "scale")
+    val scale by animateFloatAsState(if (isSelected) 1.08f else 1.0f, label = "scale")
+    val imageSize = itemWidth * 0.72f
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(60.dp)
+            .width(itemWidth)
             .clickable { onClick() }
             .scale(scale)
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(imageSize)
                 .clip(CircleShape)
                 .border(
                     width = if (isSelected) 2.5.dp else 1.dp,
@@ -551,124 +539,65 @@ private fun FilterItem(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = gradientColors,
-                            start = Offset.Zero,
-                            end = Offset.Infinite
+            // 本地 assets 图片加载
+            val bitmap = remember(assetPath) {
+                try {
+                    context.assets.open(assetPath).use { stream ->
+                        android.graphics.BitmapFactory.decodeStream(stream)
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            if (bitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = label,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            } else {
+                // 加载失败时显示渐变色占位
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+                                )
+                            )
                         )
-                    )
-            )
+                )
+            }
             if (isSelected) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                )
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(imageSize * 0.38f)
                 )
             }
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
             color = if (isSelected) {
                 MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
             },
             fontSize = 10.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             maxLines = 1
         )
     }
-}
-
-private fun filterGradientColors(filter: FilterType): List<Color> {
-    return when (filter) {
-        FilterType.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
-        FilterType.LEICA_CLASSIC -> listOf(Color(0xFF8D6E63), Color(0xFF5D4037))
-        FilterType.LEICA_VIBRANT -> listOf(Color(0xFFFF5252), Color(0xFFD32F2F))
-        FilterType.LEICA_BW -> listOf(Color(0xFF757575), Color(0xFF424242))
-        FilterType.FILM_GOLD -> listOf(Color(0xFFFFD54F), Color(0xFFFFA726))
-        FilterType.FILM_FUJI -> listOf(Color(0xFF81C784), Color(0xFF4CAF50))
-        FilterType.VINTAGE -> listOf(Color(0xFFFFB74D), Color(0xFFFB8C00))
-        FilterType.COOL -> listOf(Color(0xFF4FC3F7), Color(0xFF29B6F6))
-        FilterType.WARM -> listOf(Color(0xFFFF8A65), Color(0xFFFF7043))
-    }
-}
-
-private fun styleGradientColors(style: StyleFilter): List<Color> {
-    return when (style) {
-        StyleFilter.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
-        StyleFilter.TOON -> listOf(Color(0xFF2196F3), Color(0xFF1976D2))
-        StyleFilter.SMOOTH_TOON -> listOf(Color(0xFF4CAF50), Color(0xFF388E3C))
-        StyleFilter.SKETCH -> listOf(Color(0xFF757575), Color(0xFF424242))
-        StyleFilter.POSTERIZE -> listOf(Color(0xFFFF5722), Color(0xFFE64A19))
-        StyleFilter.EMBOSS -> listOf(Color(0xFFA1887F), Color(0xFF6D4C41))
-        StyleFilter.CROSSHATCH -> listOf(Color(0xFFFF9800), Color(0xFFF57C00))
-    }
-}
-
-/**
- * 风格特效渐变预览组件
- * 使用简单的渐变色表达不同风格特效的视觉特征
- */
-@Composable
-private fun StyleGradientPreview(style: StyleFilter) {
-    val gradientColors = when (style) {
-        StyleFilter.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
-        StyleFilter.TOON -> listOf(Color(0xFF2196F3), Color(0xFF1976D2))
-        StyleFilter.SMOOTH_TOON -> listOf(Color(0xFF4CAF50), Color(0xFF388E3C))
-        StyleFilter.SKETCH -> listOf(Color(0xFF757575), Color(0xFF424242))
-        StyleFilter.POSTERIZE -> listOf(Color(0xFFFF5722), Color(0xFFE64A19))
-        StyleFilter.EMBOSS -> listOf(Color(0xFFA1887F), Color(0xFF6D4C41))
-        StyleFilter.CROSSHATCH -> listOf(Color(0xFFFF9800), Color(0xFFF57C00))
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.linearGradient(
-                    colors = gradientColors,
-                    start = Offset.Zero,
-                    end = Offset.Infinite
-                )
-            )
-    )
-}
-
-/**
- * 滤镜渐变预览组件
- * 使用简单的渐变色表达不同滤镜的色调特征
- */
-@Composable
-private fun FilterGradientPreview(filter: FilterType) {
-    val gradientColors = when (filter) {
-        FilterType.NONE -> listOf(Color(0xFFE0E0E0), Color(0xFFBDBDBD))
-        FilterType.VINTAGE -> listOf(Color(0xFFFFD54F), Color(0xFFFFA726))
-        FilterType.COOL -> listOf(Color(0xFF4FC3F7), Color(0xFF29B6F6))
-        FilterType.WARM -> listOf(Color(0xFFFFAB91), Color(0xFFFFCC80))
-        FilterType.LEICA_CLASSIC -> listOf(Color(0xFF90A4AE), Color(0xFF546E7A))
-        FilterType.LEICA_VIBRANT -> listOf(Color(0xFF26C6DA), Color(0xFF00ACC1))
-        FilterType.LEICA_BW -> listOf(Color(0xFFEEEEEE), Color(0xFF616161))
-        FilterType.FILM_GOLD -> listOf(Color(0xFFFFECB3), Color(0xFFFFCA28))
-        FilterType.FILM_FUJI -> listOf(Color(0xFFA5D6A7), Color(0xFF66BB6A))
-    }
-    
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.linearGradient(
-                    colors = gradientColors,
-                    start = Offset.Zero,
-                    end = Offset.Infinite
-                )
-            )
-    )
 }
 
 /**

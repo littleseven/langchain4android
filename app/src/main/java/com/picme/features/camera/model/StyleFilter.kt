@@ -18,7 +18,6 @@ enum class StyleFilter(
 ) {
     NONE(R.string.style_filter_none, null),
     TOON(R.string.style_filter_toon, "ToonFilter"),
-    SMOOTH_TOON(R.string.style_filter_smooth_toon, "SmoothToonFilter"),
     SKETCH(R.string.style_filter_sketch, "SketchFilter"),
     POSTERIZE(R.string.style_filter_posterize, "PosterizeFilter"),
     EMBOSS(R.string.style_filter_emboss, "EmbossFilter"),

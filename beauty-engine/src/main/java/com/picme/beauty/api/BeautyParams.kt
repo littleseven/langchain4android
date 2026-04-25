@@ -48,7 +48,7 @@ import com.picme.beauty.egl.StyleEffect
  *
  * 风格特效参数（GPUPixel 路径专用，大美丽引擎忽略此字段）：
  * - styleFilterClassName : GPUPixel 风格滤镜类名，null 表示无特效（对应 StyleFilter 枚举）
- *                         合法值："ToonFilter" | "SmoothToonFilter" | "SketchFilter" |
+ *                         合法值："ToonFilter" | "SketchFilter" |
  *                                "PosterizeFilter" | "EmbossFilter" | "CrosshatchFilter" | null
  *
  * 色调滤镜参数（大美丽引擎路径专用，GPUPixel 路径忽略此字段）：

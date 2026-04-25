@@ -42,4 +42,10 @@ uniform float uRedAdj;
 uniform float uGreenAdj;
 uniform float uBlueAdj;
 uniform int uDebugMode;
+
+// GPUPixel 瘦脸/大眼：106点人脸关键点
+uniform float uFacePoints[106 * 2];
+uniform float uAspectRatio;
+uniform int uUseGpupixelWarp;  // 0=使用原有warp, 1=使用GPUPixel风格warp
+
 varying vec2 vTextureCoord;

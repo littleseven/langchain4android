@@ -118,6 +118,13 @@ class GlBeautyPreviewProvider(
         )
     }
 
+    /**
+     * 更新106点人脸关键点（GPUPixel风格瘦脸/大眼使用）
+     */
+    override fun updateFacePoints106(landmarks106: FloatArray) {
+        beautyPreviewView?.updateFacePoints106(landmarks106)
+    }
+
     override fun updateLipMaskPoints(
         outerPoints: List<Pair<Float, Float>>,
         innerPoints: List<Pair<Float, Float>>
