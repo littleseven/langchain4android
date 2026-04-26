@@ -108,25 +108,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private val copyPass = BeautyPass(context)
     private var copyPassCompiled = false
 
-    // Pass 1: BoxBlur -> 均值图 (meanColor)
-    private val boxBlurPass = BeautyPass(context)
-    private var boxBlurPassCompiled = false
-
-    // Pass 2: BoxHighPass -> 方差图 (varColor)
-    private val boxHighPassPass = BeautyPass(context)
-    private var boxHighPassPassCompiled = false
-
-    // Pass 3: BeautyFaceUnit -> 磨皮+美白+LUT
+    // Pass 1: BeautyUnitPass -> 磨皮+美白+LUT（合并Pass）
     private val beautyUnitPass = BeautyPass(context)
     private var beautyUnitPassCompiled = false
-
-    // FBO Copy Pass - 用于将FBO纹理直接渲染到屏幕（验证/调试）
-    private val fboCopyPass = BeautyPass(context)
-    private var fboCopyPassCompiled = false
-
-    // Debug Pass - 用于验证Pass是否执行
-    private val debugRedPass = BeautyPass(context)
-    private var debugRedPassCompiled = false
 
     private var multiPassBeautyEnabled: Boolean = false
 
@@ -180,20 +164,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uUseGpupixelWarpLocation: Int = -1
 
     private var debugMode: Int = 0  // 0=正常渲染
-
-    // FBO纹理采样时使用翻转Y轴的UV（因为FBO渲染的图像Y轴是反的）
-    private val fboTextureBuffer: FloatBuffer by lazy {
-        val coords = floatArrayOf(
-            0f, 1f,  // 左下 -> 左上（V翻转）
-            1f, 1f,  // 右下 -> 右上
-            0f, 0f,  // 左上 -> 左下
-            1f, 0f   // 右上 -> 右下
-        )
-        ByteBuffer.allocateDirect(coords.size * 4)
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .apply { put(coords).position(0) }
-    }
 
     fun setRenderMode(mode: Int) {
         if (renderMode != mode) {
@@ -639,7 +609,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 设置所有 uniform（复制 onBeforeRender 的逻辑）
         shaderProgram2D.setVec2("uTexelSize", texelSizeX, texelSizeY)
-        // 多Pass已执行磨皮/美白，主Shader不再重复处理
+        // 磨皮/美白已在多Pass中完成，主Shader不再重复
         shaderProgram2D.setFloat("uSmoothing", 0.0f)
         shaderProgram2D.setFloat("uWhitening", 0.0f)
         shaderProgram2D.setFloat("uSharpen", 0.0f)
@@ -651,8 +621,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
         shaderProgram2D.setFloat("uBlush", blushStrength)
         shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
-        // 多Pass模式下：vWarpCoord和vTextureCoord都是标准UV
-        // 人脸关键点需要通过逆矩阵还原到标准UV坐标系
+        // 人脸关键点逆变换到标准UV，与vWarpCoord匹配
         val invFaceCenter = inverseTransformVec2(faceCenterX, faceCenterY)
         val invMouthCenter = inverseTransformVec2(mouthCenterX, mouthCenterY)
         val invMouthLeft = inverseTransformVec2(mouthLeftX, mouthLeftY)
@@ -727,7 +696,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val uContourLoc = shaderProgram2D.getUniformLocation("uContourThinFace")
         if (uContourLoc >= 0) GLES20.glUniform1f(uContourLoc, contourThinFaceStrength)
 
-        // 多Pass模式下：vWarpCoord是标准UV，人脸关键点也需要逆变换到标准UV
+        // 106点人脸关键点逆变换到标准UV
         val uFacePtsLoc = shaderProgram2D.getUniformLocation("uFacePoints")
         if (uFacePtsLoc >= 0 && hasFace > 0.5f) {
             // 复制并逆变换106点
@@ -805,30 +774,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     }
 
     /**
-     * 多Pass美颜渲染管线
-     *
-     * 在 onBeforeRender 中执行磨皮/美白 Pass，将相机纹理处理后的结果
-     * 保存到 ping-pong FBO。然后主 Shader 从 FBO 纹理采样（而非外部纹理），
-     * 执行美型+美妆+调色。
+     * 多Pass美颜渲染管线（简化版）
      *
      * Pass 0: CopyPass (OES外部纹理 -> FBO 2D纹理)
-     * Pass 1: BoxBlur (原图 -> 均值图)
-     * Pass 2: BoxHighPass (原图+均值图 -> 方差图)
-     * Pass 3: BeautyFaceUnit (原图+均值图+方差图+LUT -> 磨皮+美白)
-     * Pass 4: 主Shader (美型+美妆+调色 -> 屏幕/FBO)
+     * Pass 1: BeautyUnitPass (磨皮+美白+LUT，FBO_ping -> FBO_pong)
+     * 主Shader: 美型+美妆+调色 (FBO纹理 -> 屏幕)
      */
     private var beautyPassOutputTextureId: Int = 0
-    // 标记多Pass是否真正执行了磨皮/美白（影响主Shader是否回退到单Pass逻辑）
-    private var beautyPassExecutedSmoothing: Boolean = false
-    private var beautyPassExecutedWhitening: Boolean = false
 
     /**
-     * 在 onBeforeRender 中执行磨皮/美白多Pass
-     * 返回 true 表示需要修改主Shader的纹理绑定
-     *
-     * 管线（简化版）：
-     * Pass 0: CopyPass (OES外部纹理 -> FBO_ping 2D纹理)
-     * Pass 1: BeautyPass (磨皮+美白+LUT 合并，FBO_ping -> FBO_pong)
+     * 执行多Pass美颜：CopyPass -> BeautyUnitPass
+     * 返回 true 表示成功，主Shader应从FBO纹理采样
      */
     private fun executeBeautyPasses(): Boolean {
         Log.d(TAG, "executeBeautyPasses: START, multiPass=$multiPassBeautyEnabled, smooth=$smoothingStrength, white=$whiteningStrength")
@@ -977,10 +933,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             )
             currentInputTexture = currentOutputFbo.getTextureId()
             currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
-            // 标记多Pass执行状态
-            beautyPassExecutedSmoothing = smoothingStrength > 0.001f
-            beautyPassExecutedWhitening = whiteningStrength > 0.001f
-            Log.d(TAG, "BeautyUnitPass executed: smoothing=$beautyPassExecutedSmoothing, whitening=$beautyPassExecutedWhitening")
+            Log.d(TAG, "BeautyUnitPass executed: smoothing=$smoothingStrength, whitening=$whiteningStrength")
         } else {
             Log.w(TAG, "BeautyUnitPass skipped: compiled=$beautyUnitPassCompiled, lutLoaded=${lutTextureLoader.isAllLoaded()}")
         }
