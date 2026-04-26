@@ -6,7 +6,7 @@ precision highp float;
 
 uniform sampler2D uInputTexture;    // 原图
 uniform sampler2D uMeanTexture;     // BoxBlur后的均值图（直接输入，无需再次模糊）
-uniform float uDelta;               // 高通阈值
+uniform float uDelta;               // 高通阈值（默认0.0）
 
 varying vec2 vTextureCoord;
 
