@@ -41,6 +41,9 @@ object ShaderModuleLoader {
         "main.glsl"
     )
 
+    // 2D版本使用的vertex shader路径（支持双坐标：vTextureCoord + vWarpCoord）
+    const val VERTEX_SHADER_2D_PATH = "shaders/pass_vertex_warp.glsl"
+
     /**
      * 加载并拼接所有 Shader 模块
      */

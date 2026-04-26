@@ -1,17 +1,13 @@
-// GPUPixel BeautyFaceFilter - 磨皮+美白+LUT 合并Pass
-// 参考 GPUPixel BeautyFaceUnitFilter 的完整实现
+// BeautyPass - 磨皮+美白+LUT 合并Pass
+// 简化版：使用9-tap双边滤波近似实现磨皮，无需BoxBlur/BoxHighPass前置Pass
 //
 // 输入：uInputTexture（原图）
-// 输入：uMeanTexture（BoxBlur后的均值图）
-// 输入：uVarTexture（BoxHighPass后的方差图）
 // 输入：uLookUpGray, uLookUpOrigin, uLookUpSkin, uLookUpLight（LUT查找表）
 // 输出：磨皮+美白后的图像
 
 precision highp float;
 
 uniform sampler2D uInputTexture;    // 原图
-uniform sampler2D uMeanTexture;     // BoxBlur均值图
-uniform sampler2D uVarTexture;      // BoxHighPass方差图
 uniform sampler2D uLookUpGray;      // 灰度LUT
 uniform sampler2D uLookUpOrigin;    // 原始色调LUT
 uniform sampler2D uLookUpSkin;      // 肤色LUT
@@ -30,37 +26,70 @@ const float levelRangeInv = 1.02657;
 const float levelBlack = 0.0258820;
 const float alpha = 0.7;
 
+// 简化磨皮：9-tap双边滤波近似
+vec3 smoothSkin(vec2 uv, float intensity) {
+    if (intensity < 0.001) {
+        return texture2D(uInputTexture, uv).rgb;
+    }
+
+    vec3 centerRgb = texture2D(uInputTexture, uv).rgb;
+    float centerL = dot(centerRgb, vec3(0.299, 0.587, 0.114));
+
+    // 5x5采样核（简化版双边滤波）
+    vec3 sum = centerRgb;
+    float wSum = 1.0;
+
+    float sigmaSpatial = 2.5;
+    float sigmaSpatialSq = sigmaSpatial * sigmaSpatial * 2.0;
+    float sigmaRange = 0.08 + intensity * 0.12;
+    float sigmaRangeSq = sigmaRange * sigmaRange * 2.0;
+
+    for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
+            if (x == 0 && y == 0) continue;
+            vec2 offset = vec2(float(x), float(y)) * vec2(uWidthOffset, uHeightOffset);
+            vec3 sRgb = texture2D(uInputTexture, uv + offset).rgb;
+            float sL = dot(sRgb, vec3(0.299, 0.587, 0.114));
+
+            float dL = sL - centerL;
+            float spatialDistSq = float(x*x + y*y);
+
+            float spatialW = exp(-spatialDistSq / sigmaSpatialSq);
+            float rangeW = exp(-(dL * dL) / sigmaRangeSq);
+
+            float w = spatialW * rangeW;
+            sum += sRgb * w;
+            wSum += w;
+        }
+    }
+
+    vec3 blurColor = sum / wSum;
+
+    // 边缘保留：根据亮度差异调整混合强度
+    float meanL = dot(blurColor, vec3(0.299, 0.587, 0.114));
+    float edgeFactor = clamp((min(centerL, meanL - 0.1) - 0.2) * 4.0, 0.0, 1.0);
+    float blendAlpha = intensity * edgeFactor;
+
+    vec3 result = mix(centerRgb, blurColor, blendAlpha);
+
+    // 锐化
+    float sharpenStrength = 0.15 * intensity;
+    vec3 highPass = centerRgb - blurColor;
+    result = result + sharpenStrength * highPass * 2.0;
+    result = clamp(result, 0.0, 1.0);
+
+    return result;
+}
+
 void main() {
     vec2 uv = vTextureCoord;
     vec4 iColor = texture2D(uInputTexture, uv);
-    vec4 meanColor = texture2D(uMeanTexture, uv);
-    vec4 varColor = texture2D(uVarTexture, uv);
 
     vec3 color = iColor.rgb;
 
     // ========== 磨皮部分 ==========
     if (uBlurAlpha > 0.0) {
-        float theta = 0.1;
-        // GPUPixel 边缘保留公式
-        float p = clamp((min(iColor.r, meanColor.r - 0.1) - 0.2) * 4.0, 0.0, 1.0);
-        float meanVar = (varColor.r + varColor.g + varColor.b) / 3.0;
-        float kMin = (1.0 - meanVar / (meanVar + theta)) * p * uBlurAlpha;
-        kMin = clamp(kMin, 0.0, 1.0);
-        vec3 resultColor = mix(iColor.rgb, meanColor.rgb, kMin);
-
-        // 9-tap 锐化核（GPUPixel原始）
-        vec3 sum = 0.25 * iColor.rgb;
-        sum += 0.125 * texture2D(uInputTexture, uv + vec2(-uWidthOffset, 0.0)).rgb;
-        sum += 0.125 * texture2D(uInputTexture, uv + vec2(uWidthOffset, 0.0)).rgb;
-        sum += 0.125 * texture2D(uInputTexture, uv + vec2(0.0, -uHeightOffset)).rgb;
-        sum += 0.125 * texture2D(uInputTexture, uv + vec2(0.0, uHeightOffset)).rgb;
-        sum += 0.0625 * texture2D(uInputTexture, uv + vec2(uWidthOffset, uHeightOffset)).rgb;
-        sum += 0.0625 * texture2D(uInputTexture, uv + vec2(-uWidthOffset, -uHeightOffset)).rgb;
-        sum += 0.0625 * texture2D(uInputTexture, uv + vec2(-uWidthOffset, uHeightOffset)).rgb;
-        sum += 0.0625 * texture2D(uInputTexture, uv + vec2(uWidthOffset, -uHeightOffset)).rgb;
-
-        vec3 hPass = iColor.rgb - sum;
-        color = resultColor + uSharpen * hPass * 2.0;
+        color = smoothSkin(uv, uBlurAlpha);
     }
 
     // ========== 美白部分（LUT） ==========

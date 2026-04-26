@@ -378,6 +378,60 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     }
 
     /**
+     * 计算 textureMatrix 的逆矩阵，用于将变换后的坐标还原到标准UV
+     */
+    private fun getInverseTextureMatrix(): FloatArray {
+        val inverse = FloatArray(16)
+        val result = Matrix.invertM(inverse, 0, textureMatrix, 0)
+        if (!result) {
+            Log.w(TAG, "Failed to invert textureMatrix, using identity")
+            Matrix.setIdentityM(inverse, 0)
+        }
+        return inverse
+    }
+
+    /**
+     * 使用逆矩阵将变换后的坐标还原到标准UV
+     */
+    private fun inverseTransformVec2(x: Float, y: Float): Pair<Float, Float> {
+        val inverseMatrix = getInverseTextureMatrix()
+        val vec = floatArrayOf(x, y, 0f, 1f)
+        val result = FloatArray(4)
+        Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
+        return Pair(result[0].coerceIn(0f, 1f), result[1].coerceIn(0f, 1f))
+    }
+
+    /**
+     * 将轮廓点数组通过逆矩阵还原到标准UV坐标系
+     */
+    private fun inverseTransformContour(buffer: FloatArray, count: Int) {
+        val inverseMatrix = getInverseTextureMatrix()
+        for (i in 0 until count) {
+            val base = i * 2
+            val vec = floatArrayOf(buffer[base], buffer[base + 1], 0f, 1f)
+            val result = FloatArray(4)
+            Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
+            buffer[base] = result[0].coerceIn(0f, 1f)
+            buffer[base + 1] = result[1].coerceIn(0f, 1f)
+        }
+    }
+
+    /**
+     * 将106点人脸关键点通过逆矩阵还原到标准UV坐标系
+     */
+    private fun inverseTransformFacePoints() {
+        val inverseMatrix = getInverseTextureMatrix()
+        for (i in 0 until 106) {
+            val base = i * 2
+            val vec = floatArrayOf(facePointsBuffer[base], facePointsBuffer[base + 1], 0f, 1f)
+            val result = FloatArray(4)
+            Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
+            facePointsBuffer[base] = result[0].coerceIn(0f, 1f)
+            facePointsBuffer[base + 1] = result[1].coerceIn(0f, 1f)
+        }
+    }
+
+    /**
      * 更新106点人脸关键点（GPUPixel风格瘦脸/大眼使用）
      * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
      */
@@ -548,7 +602,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             shaderProgram2D.release()
             shaderProgram2DCompiled = false
         }
-        val vertexSource = context.assets.open("shaders/pass_vertex.glsl").bufferedReader().use { it.readText() }
+        val vertexSource = context.assets.open(ShaderModuleLoader.VERTEX_SHADER_2D_PATH).bufferedReader().use { it.readText() }
         val fragmentSource = ShaderModuleLoader.loadFullFragmentShader2D(context)
         shaderProgram2DCompiled = shaderProgram2D.compile(vertexSource, fragmentSource)
         Log.d(TAG, "ShaderProgram2D compiled: $shaderProgram2DCompiled")
@@ -585,9 +639,10 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 设置所有 uniform（复制 onBeforeRender 的逻辑）
         shaderProgram2D.setVec2("uTexelSize", texelSizeX, texelSizeY)
-        shaderProgram2D.setFloat("uSmoothing", smoothingStrength)
-        shaderProgram2D.setFloat("uWhitening", whiteningStrength)
-        shaderProgram2D.setFloat("uSharpen", sharpenStrength)
+        // 多Pass已执行磨皮/美白，主Shader不再重复处理
+        shaderProgram2D.setFloat("uSmoothing", 0.0f)
+        shaderProgram2D.setFloat("uWhitening", 0.0f)
+        shaderProgram2D.setFloat("uSharpen", 0.0f)
         shaderProgram2D.setFloat("uBigEyes", bigEyesStrength)
         shaderProgram2D.setFloat("uSlimFace", slimFaceStrength)
         shaderProgram2D.setFloat("uFaceRadius", faceRadius)
@@ -596,7 +651,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
         shaderProgram2D.setFloat("uBlush", blushStrength)
         shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
-        // 多Pass模式下，将人脸关键点坐标通过逆矩阵还原
+        // 多Pass模式下：vWarpCoord和vTextureCoord都是标准UV
+        // 人脸关键点需要通过逆矩阵还原到标准UV坐标系
         val invFaceCenter = inverseTransformVec2(faceCenterX, faceCenterY)
         val invMouthCenter = inverseTransformVec2(mouthCenterX, mouthCenterY)
         val invMouthLeft = inverseTransformVec2(mouthLeftX, mouthLeftY)
@@ -605,23 +661,31 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val invLowerLip = inverseTransformVec2(lowerLipCenterX, lowerLipCenterY)
         val invLeftEye = inverseTransformVec2(leftEyeX, leftEyeY)
         val invRightEye = inverseTransformVec2(rightEyeX, rightEyeY)
-
         shaderProgram2D.setVec2("uFaceCenter", invFaceCenter.first, invFaceCenter.second)
         shaderProgram2D.setVec2("uMouthCenter", invMouthCenter.first, invMouthCenter.second)
         shaderProgram2D.setVec2("uMouthLeft", invMouthLeft.first, invMouthLeft.second)
         shaderProgram2D.setVec2("uMouthRight", invMouthRight.first, invMouthRight.second)
         shaderProgram2D.setVec2("uUpperLipCenter", invUpperLip.first, invUpperLip.second)
         shaderProgram2D.setVec2("uLowerLipCenter", invLowerLip.first, invLowerLip.second)
+        // 轮廓点也需要逆变换
+        val invLipOuter = lipOuterContourBuffer.clone()
+        val invLipInner = lipInnerContourBuffer.clone()
+        val invLeftCheek = leftCheekContourBuffer.clone()
+        val invRightCheek = rightCheekContourBuffer.clone()
+        inverseTransformContour(invLipOuter, lipOuterContourCount)
+        inverseTransformContour(invLipInner, lipInnerContourCount)
+        inverseTransformContour(invLeftCheek, leftCheekContourCount)
+        inverseTransformContour(invRightCheek, rightCheekContourCount)
         shaderProgram2D.setFloat("uLipOuterContourCount", lipOuterContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uLipOuterContourPoints", inverseTransformContour(lipOuterContourBuffer), MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uLipOuterContourPoints", invLipOuter, MAX_LIP_CONTOUR_POINTS)
         shaderProgram2D.setFloat("uLipInnerContourCount", lipInnerContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uLipInnerContourPoints", inverseTransformContour(lipInnerContourBuffer), MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uLipInnerContourPoints", invLipInner, MAX_LIP_CONTOUR_POINTS)
         shaderProgram2D.setVec2("uLeftEye", invLeftEye.first, invLeftEye.second)
         shaderProgram2D.setVec2("uRightEye", invRightEye.first, invRightEye.second)
         shaderProgram2D.setFloat("uLeftCheekContourCount", leftCheekContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uLeftCheekContourPoints", inverseTransformContour(leftCheekContourBuffer), MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uLeftCheekContourPoints", invLeftCheek, MAX_LIP_CONTOUR_POINTS)
         shaderProgram2D.setFloat("uRightCheekContourCount", rightCheekContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uRightCheekContourPoints", inverseTransformContour(rightCheekContourBuffer), MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uRightCheekContourPoints", invRightCheek, MAX_LIP_CONTOUR_POINTS)
 
         if (renderMode == MODE_ADVANCED) {
             shaderProgram2D.setFloat("uWarmth", warmthStrength)
@@ -663,12 +727,21 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val uContourLoc = shaderProgram2D.getUniformLocation("uContourThinFace")
         if (uContourLoc >= 0) GLES20.glUniform1f(uContourLoc, contourThinFaceStrength)
 
-        // 多Pass模式下，vertex shader没有应用uTextureTransform，但人脸关键点已经过变换
-        // 需要将人脸关键点通过textureMatrix的逆矩阵还原，使其与vTextureCoord坐标系匹配
+        // 多Pass模式下：vWarpCoord是标准UV，人脸关键点也需要逆变换到标准UV
         val uFacePtsLoc = shaderProgram2D.getUniformLocation("uFacePoints")
         if (uFacePtsLoc >= 0 && hasFace > 0.5f) {
-            val inverseFacePoints = inverseTransformFacePoints(facePointsBuffer)
-            GLES20.glUniform1fv(uFacePtsLoc, inverseFacePoints.size, inverseFacePoints, 0)
+            // 复制并逆变换106点
+            val invFacePoints = facePointsBuffer.clone()
+            val inverseMatrix = getInverseTextureMatrix()
+            for (i in 0 until 106) {
+                val base = i * 2
+                val vec = floatArrayOf(invFacePoints[base], invFacePoints[base + 1], 0f, 1f)
+                val result = FloatArray(4)
+                Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
+                invFacePoints[base] = result[0].coerceIn(0f, 1f)
+                invFacePoints[base + 1] = result[1].coerceIn(0f, 1f)
+            }
+            GLES20.glUniform1fv(uFacePtsLoc, invFacePoints.size, invFacePoints, 0)
         }
         val uAspectLoc = shaderProgram2D.getUniformLocation("uAspectRatio")
         if (uAspectLoc >= 0) {
@@ -692,7 +765,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val uUseWarpLoc = shaderProgram2D.getUniformLocation("uUseGpupixelWarp")
         if (uUseWarpLoc >= 0) GLES20.glUniform1i(uUseWarpLoc, useGpupixelWarp)
 
-        // 设置顶点数据
+        // 设置顶点数据（CopyPass已应用uTextureTransform，FBO图像方向正确，使用标准UV）
         val vb = vertexBuffer
         val tb = textureBuffer
         if (vb != null && tb != null) {
@@ -753,10 +826,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * 在 onBeforeRender 中执行磨皮/美白多Pass
      * 返回 true 表示需要修改主Shader的纹理绑定
      *
-     * 管线：
+     * 管线（简化版）：
      * Pass 0: CopyPass (OES外部纹理 -> FBO_ping 2D纹理)
-     * Pass 1: SmoothingPass (FBO_ping -> FBO_pong)
-     * Pass 2: WhiteningPass (FBO_pong -> FBO_ping)
+     * Pass 1: BeautyPass (磨皮+美白+LUT 合并，FBO_ping -> FBO_pong)
      */
     private fun executeBeautyPasses(): Boolean {
         Log.d(TAG, "executeBeautyPasses: START, multiPass=$multiPassBeautyEnabled, smooth=$smoothingStrength, white=$whiteningStrength")
@@ -799,18 +871,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 return false
             }
         }
-        if (!boxBlurPassCompiled) {
-            boxBlurPassCompiled = boxBlurPass.compileFromAssets(
-                "shaders/pass_vertex.glsl", "shaders/pass_boxblur.glsl"
-            )
-            Log.d(TAG, "BoxBlurPass compiled: $boxBlurPassCompiled")
-        }
-        if (!boxHighPassPassCompiled) {
-            boxHighPassPassCompiled = boxHighPassPass.compileFromAssets(
-                "shaders/pass_vertex.glsl", "shaders/pass_boxhighpass.glsl"
-            )
-            Log.d(TAG, "BoxHighPassPass compiled: $boxHighPassPassCompiled")
-        }
         if (!beautyUnitPassCompiled) {
             beautyUnitPassCompiled = beautyUnitPass.compileFromAssets(
                 "shaders/pass_vertex.glsl", "shaders/pass_smoothing.glsl"
@@ -824,12 +884,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             Log.d(TAG, "LUT textures loaded: $lutLoaded")
         }
 
-        // 确保 FBO 池已初始化（需要3个FBO：ping/pong/pang）
+        // 确保 FBO 池已初始化（需要2个FBO：ping/pong）
         val fboPing = fboPool.acquire("ping", outputWidth, outputHeight)
         val fboPong = fboPool.acquire("pong", outputWidth, outputHeight)
-        val fboPang = fboPool.acquire("pang", outputWidth, outputHeight)
-        Log.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${fboPing.isInitialized}, pong=${fboPong.isInitialized}, pang=${fboPang.isInitialized}")
-        if (!fboPing.isInitialized || !fboPong.isInitialized || !fboPang.isInitialized) {
+        Log.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${fboPing.isInitialized}, pong=${fboPong.isInitialized}")
+        if (!fboPing.isInitialized || !fboPong.isInitialized) {
             Log.w(TAG, "FBO pool not ready")
             return false
         }
@@ -870,19 +929,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         val originalTexture = currentInputTexture  // 保存原图纹理ID
 
-        // 简化版：跳过 BoxBlur + BoxHighPass，只执行 BeautyUnitPass（美白+LUT）
-        // 磨皮需要 mean/var 纹理，暂时禁用，只保留美白功能
         // 确保 Pass 的输入和输出不使用同一个 FBO
         if (currentOutputFbo.getTextureId() == originalTexture) {
             currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
             Log.d(TAG, "Switched outputFbo to avoid read-write conflict: ${currentOutputFbo.getTextureId()}")
         }
 
-        // Pass: BeautyFaceUnit -> 美白+LUT（跳过磨皮，因为缺少 mean/var 纹理）
+        // Pass 1: BeautyPass -> 磨皮+美白+LUT（合并Pass，无需BoxBlur/BoxHighPass）
         if (beautyUnitPassCompiled && lutTextureLoader.isAllLoaded()) {
             val unitProgram = beautyUnitPass.getShaderProgram()
             beautyUnitPass.render(
-                inputTextureId = originalTexture,  // 原图
+                inputTextureId = originalTexture,
                 outputFbo = currentOutputFbo,
                 setupUniforms = {
                     // 绑定 LUT 纹理
@@ -910,8 +967,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, lutTextureLoader.getLightTextureId())
                         GLES20.glUniform1i(lightLoc, 4)
                     }
-                    // 设置参数（磨皮强度设为0，跳过磨皮部分）
-                    setFloat("uBlurAlpha", 0.0f)  // 禁用磨皮
+                    // 设置参数（磨皮和美白同时生效）
+                    setFloat("uBlurAlpha", smoothingStrength)
                     setFloat("uSharpen", 0.0f)
                     setFloat("uWhiten", whiteningStrength)
                     setFloat("uWidthOffset", texelSizeX)
@@ -920,17 +977,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             )
             currentInputTexture = currentOutputFbo.getTextureId()
             currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
-            // 标记多Pass执行了美白（磨皮暂时禁用）
-            beautyPassExecutedSmoothing = false
+            // 标记多Pass执行状态
+            beautyPassExecutedSmoothing = smoothingStrength > 0.001f
             beautyPassExecutedWhitening = whiteningStrength > 0.001f
-            Log.d(TAG, "BeautyUnitPass executed: whitening=$beautyPassExecutedWhitening")
+            Log.d(TAG, "BeautyUnitPass executed: smoothing=$beautyPassExecutedSmoothing, whitening=$beautyPassExecutedWhitening")
         } else {
             Log.w(TAG, "BeautyUnitPass skipped: compiled=$beautyUnitPassCompiled, lutLoaded=${lutTextureLoader.isAllLoaded()}")
         }
 
         // 保存最终输出纹理 ID
         beautyPassOutputTextureId = currentInputTexture
-        Log.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=${fboPing.getTextureId()}, fboPong=${fboPong.getTextureId()}, fboPang=${fboPang.getTextureId()}")
+        Log.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=${fboPing.getTextureId()}, fboPong=${fboPong.getTextureId()}")
         return true
     }
 
@@ -1177,102 +1234,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         debugMode = mode
     }
 
-    // ========== 多Pass模式坐标还原辅助方法 ==========
-
-    /**
-     * 计算textureMatrix的逆矩阵，用于将变换后的人脸关键点坐标还原
-     */
-    private fun getInverseTextureMatrix(): FloatArray? {
-        val original = textureMatrix
-        // 检查是否接近单位矩阵（无需变换）
-        var isIdentity = true
-        for (i in 0 until 4) {
-            for (j in 0 until 4) {
-                val expected = if (i == j) 1f else 0f
-                if (kotlin.math.abs(original[i * 4 + j] - expected) > 0.001f) {
-                    isIdentity = false
-                    break
-                }
-            }
-            if (!isIdentity) break
-        }
-        if (isIdentity) return null
-
-        val inverse = FloatArray(16)
-        return try {
-            Matrix.invertM(inverse, 0, original, 0)
-            inverse
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to invert textureMatrix: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 将2D坐标通过逆矩阵还原
-     */
-    private fun inverseTransformVec2(x: Float, y: Float): Pair<Float, Float> {
-        val inverseMatrix = getInverseTextureMatrix()
-        if (inverseMatrix == null) return Pair(x, y)
-
-        val input = floatArrayOf(x, y, 0f, 1f)
-        val output = FloatArray(4)
-        Matrix.multiplyMV(output, 0, inverseMatrix, 0, input, 0)
-        return Pair(output[0].coerceIn(0f, 1f), output[1].coerceIn(0f, 1f))
-    }
-
-    /**
-     * 将轮廓点数组通过逆矩阵还原
-     */
-    private fun inverseTransformContour(contourBuffer: FloatArray): FloatArray {
-        val inverseMatrix = getInverseTextureMatrix()
-        if (inverseMatrix == null) return contourBuffer
-
-        val result = FloatArray(contourBuffer.size)
-        val input = FloatArray(4)
-        val output = FloatArray(4)
-        for (i in contourBuffer.indices step 2) {
-            input[0] = contourBuffer[i]
-            input[1] = contourBuffer[i + 1]
-            input[2] = 0f
-            input[3] = 1f
-            Matrix.multiplyMV(output, 0, inverseMatrix, 0, input, 0)
-            result[i] = output[0].coerceIn(0f, 1f)
-            result[i + 1] = output[1].coerceIn(0f, 1f)
-        }
-        return result
-    }
-
-    /**
-     * 将106点人脸关键点数组通过逆矩阵还原
-     */
-    private fun inverseTransformFacePoints(facePoints: FloatArray): FloatArray {
-        val inverseMatrix = getInverseTextureMatrix()
-        if (inverseMatrix == null) return facePoints
-
-        val result = FloatArray(facePoints.size)
-        val input = FloatArray(4)
-        val output = FloatArray(4)
-        for (i in facePoints.indices step 2) {
-            input[0] = facePoints[i]
-            input[1] = facePoints[i + 1]
-            input[2] = 0f
-            input[3] = 1f
-            Matrix.multiplyMV(output, 0, inverseMatrix, 0, input, 0)
-            result[i] = output[0].coerceIn(0f, 1f)
-            result[i + 1] = output[1].coerceIn(0f, 1f)
-        }
-        return result
-    }
-
     override fun release() {
         Log.d(TAG, "Releasing BeautyRenderer")
         intermediateFbo?.release()
         intermediateFbo = null
         styleEffectShader.release()
         copyPass.release()
-        boxBlurPass.release()
-        boxHighPassPass.release()
         beautyUnitPass.release()
         lutTextureLoader.release()
         fboPool.releaseAll()

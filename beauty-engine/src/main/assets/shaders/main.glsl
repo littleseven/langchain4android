@@ -1,11 +1,16 @@
 void main() {
+    // 多Pass模式下：vWarpCoord=变换后坐标(用于warp)，vTextureCoord=未变换坐标(用于采样)
+    // 单Pass模式下：两者相同（vertex shader中vWarpCoord = vTextureCoord）
+    vec2 warpInputCoord = vWarpCoord;
+    vec2 sampleCoord = vTextureCoord;
+    
     vec2 warpedUv;
     if (uUseGpupixelWarp > 0) {
         // GPUPixel风格：瘦脸和大眼分开调用，便于独立调试
-        warpedUv = warpCoordGpupixelThinFace(vTextureCoord);
+        warpedUv = warpCoordGpupixelThinFace(warpInputCoord);
         warpedUv = warpCoordGpupixelBigEye(warpedUv);
     } else {
-        warpedUv = warpCoord(vTextureCoord);
+        warpedUv = warpCoord(warpInputCoord);
     }
     
     // Debug Mode Definitions:
@@ -59,7 +64,9 @@ void main() {
     }
 
     // Normal Rendering Pipeline
+    // warp后的坐标用于皮肤mask、唇色、腮红等定位
     float mask = skinMask(warpedUv);
+    // 使用warp后的坐标采样纹理，实现瘦脸/大眼变形效果
     vec4 smoothed = smoothSkin(warpedUv, uSmoothing);
     vec4 whitened = whitenSkin(smoothed, uWhitening, mask);
     vec4 lipTinted = applyLipTint(whitened, warpedUv);
