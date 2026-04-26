@@ -8,14 +8,14 @@ import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import java.nio.IntBuffer
+import java.nio.ShortBuffer
 
 /**
  * 面部妆容 Pass（GPUPixel 风格）
  *
  * 使用三角网格 + 纹理贴图实现唇色/腮红渲染：
- * - 111 个顶点构成人脸三角网格（基于 106 点关键点扩展）
- * - 226 个三角形覆盖全脸区域
+ * - 106 个顶点构成人脸三角网格（纯 106 点关键点，不扩展）
+ * - 36 个三角形覆盖嘴唇区域
  * - 预制妆容纹理（mouth.png / blusher.png）通过网格变形贴合人脸
  *
  * 渲染流程：
@@ -28,105 +28,117 @@ class FaceMakeupPass(private val context: Context) {
     companion object {
         private const val TAG = "PicMe:FaceMakeupPass"
 
-        // 顶点数：GPUPixel 标准脸网格 = 111 个顶点
-        const val VERTEX_COUNT = 111
+        // 顶点数：纯 106 点方案
+        const val VERTEX_COUNT = 106
 
-        // 三角形数：226 个三角形
-        const val TRIANGLE_COUNT = 226
-        const val INDEX_COUNT = TRIANGLE_COUNT * 3
-
-        // 预定义纹理坐标（标准脸 UV，对应 mouth.png / blusher.png）
-        // 这些数据来自 GPUPixel FaceMakeupFilter::FaceTextureCoordinates()
+        // GPUPixel 111 点基准纹理坐标的前 106 点
+        // 来源：GPUPixel FaceTextureCoordinates()，忽略辅助点 106-110
         private val FACE_TEXTURE_COORDS = floatArrayOf(
-            0.302451f, 0.384169f, 0.302986f, 0.409377f, 0.304336f, 0.434977f,
-            0.306984f, 0.460683f, 0.311010f, 0.486447f, 0.316537f, 0.511947f,
-            0.323069f, 0.536942f, 0.331312f, 0.561627f, 0.342011f, 0.585088f,
-            0.355477f, 0.607217f, 0.371142f, 0.627774f, 0.388459f, 0.646991f,
-            0.407041f, 0.665229f, 0.426325f, 0.682694f, 0.447468f, 0.697492f,
-            0.471782f, 0.707060f, 0.500000f, 0.709867f, 0.528218f, 0.707060f,
-            0.552532f, 0.697492f, 0.573675f, 0.682694f, 0.592959f, 0.665229f,
-            0.611541f, 0.646991f, 0.628858f, 0.627774f, 0.644523f, 0.607217f,
-            0.657989f, 0.585088f, 0.668688f, 0.561627f, 0.676931f, 0.536942f,
-            0.683463f, 0.511947f, 0.688990f, 0.486447f, 0.693016f, 0.460683f,
+            // 0-32: 轮廓点（33点）
+            0.302451f, 0.384169f, 0.302986f, 0.409377f, 0.304336f, 0.434977f, 0.306984f, 0.460683f, 0.311010f, 0.486447f,
+            0.316537f, 0.511947f, 0.323069f, 0.536942f, 0.331312f, 0.561627f, 0.342011f, 0.585088f, 0.355477f, 0.607217f,
+            0.371142f, 0.627774f, 0.388459f, 0.646991f, 0.407041f, 0.665229f, 0.426325f, 0.682694f, 0.447468f, 0.697492f,
+            0.471782f, 0.707060f, 0.500000f, 0.709867f, 0.528218f, 0.707060f, 0.552532f, 0.697492f, 0.573675f, 0.682694f,
+            0.592959f, 0.665229f, 0.611541f, 0.646991f, 0.628858f, 0.627774f, 0.644523f, 0.607217f, 0.657989f, 0.585088f,
+            0.668688f, 0.561627f, 0.676931f, 0.536942f, 0.683463f, 0.511947f, 0.688990f, 0.486447f, 0.693016f, 0.460683f,
             0.695664f, 0.434977f, 0.697014f, 0.409377f, 0.697549f, 0.384169f,
-            0.331655f, 0.354725f, 0.354609f, 0.331785f, 0.387080f, 0.325436f,
-            0.420446f, 0.330125f, 0.452685f, 0.339996f, 0.547315f, 0.339996f,
-            0.579554f, 0.330125f, 0.612920f, 0.325436f, 0.645391f, 0.331785f,
-            0.668345f, 0.354725f, 0.500000f, 0.405156f, 0.500000f, 0.442322f,
-            0.500000f, 0.480116f, 0.500000f, 0.517378f, 0.457729f, 0.542442f,
-            0.476911f, 0.546376f, 0.500000f, 0.550557f, 0.523089f, 0.546376f,
-            0.542271f, 0.542442f, 0.366597f, 0.404028f, 0.385132f, 0.392425f,
-            0.428177f, 0.397495f, 0.442446f, 0.414082f, 0.422818f, 0.419177f,
-            0.382917f, 0.415929f, 0.557554f, 0.414082f, 0.571823f, 0.397495f,
-            0.614868f, 0.392425f, 0.633403f, 0.404028f, 0.617083f, 0.415929f,
-            0.577182f, 0.419177f, 0.360880f, 0.349748f, 0.391440f, 0.348304f,
-            0.421788f, 0.352051f, 0.451601f, 0.358026f, 0.548399f, 0.358026f,
+            // 33-42: 眉毛上部（10点）
+            0.331655f, 0.354725f, 0.354609f, 0.331785f, 0.387080f, 0.325436f, 0.420446f, 0.330125f, 0.452685f, 0.339996f,
+            0.547315f, 0.339996f, 0.579554f, 0.330125f, 0.612920f, 0.325436f, 0.645391f, 0.331785f, 0.668345f, 0.354725f,
+            // 43: 眉心（1点）
+            0.500000f, 0.405156f,
+            // 44-51: 鼻子（8点）
+            0.500000f, 0.442322f, 0.500000f, 0.480116f, 0.500000f, 0.517378f, 0.457729f, 0.542442f, 0.476911f, 0.546376f,
+            0.500000f, 0.550557f, 0.523089f, 0.546376f, 0.542271f, 0.542442f,
+            // 52-57: 右眼（6点）
+            0.366597f, 0.404028f, 0.385132f, 0.392425f, 0.428177f, 0.397495f, 0.442446f, 0.414082f, 0.422818f, 0.419177f,
+            0.382917f, 0.415929f,
+            // 58-63: 左眼（6点）
+            0.557554f, 0.414082f, 0.571823f, 0.397495f, 0.614868f, 0.392425f, 0.633403f, 0.404028f, 0.617083f, 0.415929f,
+            0.577182f, 0.419177f,
+            // 64-71: 眉毛下部（8点）
+            0.360880f, 0.349748f, 0.391440f, 0.348304f, 0.421788f, 0.352051f, 0.451601f, 0.358026f, 0.548399f, 0.358026f,
             0.578212f, 0.352051f, 0.608560f, 0.348304f, 0.639120f, 0.349748f,
+            // 72-74: 右眼补充（3点）
             0.407165f, 0.390906f, 0.402591f, 0.420584f, 0.406113f, 0.405280f,
+            // 75-77: 左眼补充（3点）
             0.592835f, 0.390906f, 0.597409f, 0.420584f, 0.593887f, 0.405280f,
-            0.471223f, 0.409619f, 0.528777f, 0.409619f, 0.455607f, 0.495169f,
-            0.544393f, 0.495169f, 0.441855f, 0.523363f, 0.558145f, 0.523363f,
-            0.426186f, 0.593516f, 0.453348f, 0.586128f, 0.481258f, 0.582594f,
-            0.500000f, 0.584476f, 0.518742f, 0.582594f, 0.546652f, 0.586128f,
-            0.573814f, 0.593516f, 0.556544f, 0.620391f, 0.531320f, 0.639672f,
-            0.500000f, 0.644911f, 0.468680f, 0.639672f, 0.443456f, 0.620391f,
-            0.433718f, 0.595595f, 0.466898f, 0.597025f, 0.500000f, 0.599883f,
-            0.533102f, 0.597025f, 0.566282f, 0.595595f, 0.534634f, 0.610720f,
-            0.500000f, 0.616173f, 0.465366f, 0.610720f, 0.406113f, 0.405280f,
-            0.593887f, 0.405280f, 0.500000f, 0.608028f, 0.389259f, 0.336870f,
-            0.610740f, 0.336870f, 0.386071f, 0.503558f, 0.613928f, 0.503558f
+            // 78-83: 鼻子补充（6点）
+            0.471223f, 0.409619f, 0.528777f, 0.409619f, 0.455607f, 0.495169f, 0.544393f, 0.495169f, 0.441855f, 0.523363f,
+            0.558145f, 0.523363f,
+            // 84-95: 嘴巴外轮廓（12点）
+            0.426186f, 0.593516f, 0.453348f, 0.586128f, 0.481258f, 0.582594f, 0.500000f, 0.584476f, 0.518742f, 0.582594f,
+            0.546652f, 0.586128f, 0.573814f, 0.593516f, 0.556544f, 0.620391f, 0.531320f, 0.639672f, 0.500000f, 0.644911f,
+            0.468680f, 0.639672f, 0.443456f, 0.620391f,
+            // 96-103: 嘴巴内轮廓（8点）
+            0.433718f, 0.595595f, 0.466898f, 0.597025f, 0.500000f, 0.599883f, 0.533102f, 0.597025f, 0.566282f, 0.595595f,
+            0.534634f, 0.610720f, 0.500000f, 0.616173f, 0.465366f, 0.610720f,
+            // 104-105: 瞳孔（2点）
+            0.406113f, 0.405280f, 0.593887f, 0.405280f
         )
 
-        // 三角索引数据（226 个三角形 = 678 个索引）
-        // 来自 GPUPixel FaceMakeupFilter::GetFaceIndexs()
-        private val FACE_INDICES = intArrayOf(
-            // Left eyebrow - 10 triangles
-            33, 34, 64, 64, 34, 65, 65, 34, 107, 107, 34, 35, 35, 36, 107, 107, 36,
-            66, 66, 107, 65, 66, 36, 67, 67, 36, 37, 37, 67, 43,
-            // Right eyebrow - 10 triangles
-            43, 38, 68, 68, 38, 39, 39, 68, 69, 39, 40, 108, 39, 108, 69, 69, 108, 70,
-            70, 108, 41, 41, 108, 40, 41, 70, 71, 71, 41, 42,
-            // Left eye - 21 triangles
-            0, 33, 52, 33, 52, 64, 52, 64, 53, 64, 53, 65, 65, 53, 72, 65, 72, 66, 66,
-            72, 54, 66, 54, 67, 54, 67, 55, 67, 55, 78, 67, 78, 43, 52, 53, 57, 53,
-            72, 74, 53, 74, 57, 74, 57, 73, 72, 54, 104, 72, 104, 74, 74, 104, 73, 73,
-            104, 56, 104, 56, 54, 54, 56, 55,
-            // Right eye - 21 triangles
-            68, 43, 79, 68, 79, 58, 68, 58, 59, 68, 59, 69, 69, 59, 75, 69, 75, 70,
-            70, 75, 60, 70, 60, 71, 71, 60, 61, 71, 61, 42, 42, 61, 32, 61, 60, 62,
-            60, 75, 77, 60, 77, 62, 77, 62, 76, 75, 77, 105, 77, 105, 76, 105, 76, 63,
-            105, 63, 59, 105, 59, 75, 59, 63, 58,
-            // Left cheek - 16 triangles
-            0, 52, 1, 1, 52, 2, 2, 52, 57, 2, 57, 3, 3, 57, 4, 4, 57, 109, 57, 109,
-            74, 74, 109, 56, 56, 109, 80, 80, 109, 82, 82, 109, 7, 7, 109, 6, 6, 109,
-            5, 5, 109, 4, 56, 80, 55, 55, 80, 78,
-            // Right cheek - 16 triangles
-            32, 61, 31, 31, 61, 30, 30, 61, 62, 30, 62, 29, 29, 62, 28, 28, 62, 110,
-            62, 110, 76, 76, 110, 63, 63, 110, 81, 81, 110, 83, 83, 110, 25, 25, 110,
-            26, 26, 110, 27, 27, 110, 28, 63, 81, 58, 58, 81, 79,
-            // Nose part - 16 triangles
-            78, 43, 44, 43, 44, 79, 78, 44, 80, 79, 81, 44, 80, 44, 45, 44, 81, 45,
-            80, 45, 46, 45, 81, 46, 80, 46, 82, 81, 46, 83, 82, 46, 47, 47, 46, 48,
-            48, 46, 49, 49, 46, 50, 50, 46, 51, 51, 46, 83,
-            // Triangles between nose and mouth - 14 triangles
-            7, 82, 84, 82, 84, 47, 84, 47, 85, 85, 47, 48, 48, 85, 86, 86, 48, 49, 49,
-            86, 87, 49, 87, 88, 88, 49, 50, 88, 50, 89, 89, 50, 51, 89, 51, 90, 51,
-            90, 83, 83, 90, 25,
-            // Upper lip part - 10 triangles
-            84, 85, 96, 96, 85, 97, 97, 85, 86, 86, 97, 98, 86, 98, 87, 87, 98, 88,
-            88, 98, 99, 88, 99, 89, 89, 99, 100, 89, 100, 90,
-            // Lower lip part - 10 triangles
-            90, 100, 91, 100, 91, 101, 101, 91, 92, 101, 92, 102, 102, 92, 93, 102,
-            93, 94, 102, 94, 103, 103, 94, 95, 103, 95, 96, 96, 95, 84,
-            // Between lips part - 8 triangles
-            96, 97, 103, 97, 103, 106, 97, 106, 98, 106, 103, 102, 106, 102, 101, 106,
-            101, 99, 106, 98, 99, 99, 101, 100,
-            // Part between mouth and chin - 24 triangles
-            7, 84, 8, 8, 84, 9, 9, 84, 10, 10, 84, 95, 10, 95, 11, 11, 95, 12, 12, 95,
-            94, 12, 94, 13, 13, 94, 14, 14, 94, 93, 14, 93, 15, 15, 93, 16, 16, 93,
-            17, 17, 93, 18, 18, 93, 92, 18, 92, 19, 19, 92, 20, 20, 92, 91, 20, 91,
-            21, 21, 91, 22, 22, 91, 90, 22, 90, 23, 23, 90, 24, 24, 90, 25
+        // 嘴唇区域三角索引（只使用 84-103 共20个点）
+        // 所有索引必须在 [0, 105] 范围内（因为 VERTEX_COUNT = 106）
+        private val LIP_INDICES = intArrayOf(
+            // === 上唇区域 ===
+            84, 85, 96,
+            85, 96, 97,
+            85, 86, 97,
+            86, 97, 98,
+            86, 87, 98,
+            87, 98, 99,
+            87, 88, 99,
+            88, 99, 100,
+            88, 89, 100,
+            89, 90, 100,
+            // === 下唇区域 ===
+            90, 91, 100,
+            91, 100, 101,
+            91, 92, 101,
+            92, 101, 102,
+            92, 93, 102,
+            93, 102, 103,
+            93, 94, 103,
+            94, 103, 96,
+            94, 95, 96,
+            95, 84, 96,
+            // === 嘴唇中央闭合区域 ===
+            96, 97, 103,
+            97, 98, 102,
+            97, 102, 103,
+            98, 99, 102,
+            99, 100, 101,
+            99, 101, 102
         )
+
+        // 腮红区域三角索引（使用脸颊轮廓点）
+        // 右脸颊（画面左侧=实际右脸）：轮廓点 2-6
+        // 左脸颊（画面右侧=实际左脸）：轮廓点 27-31
+        // 使用鼻子点（44-46, 78-79）作为内侧边界
+        private val BLUSH_INDICES = intArrayOf(
+            // === 右脸颊（画面左侧）===
+            // 使用轮廓点 2,3,4,5,6 和鼻子点 44,45,78 构建三角网格
+            2, 3, 78,
+            3, 78, 44,
+            3, 4, 44,
+            4, 44, 45,
+            4, 5, 45,
+            5, 45, 46,
+            5, 6, 46,
+            // === 左脸颊（画面右侧）===
+            // 使用轮廓点 27,28,29,30,31 和鼻子点 45,46,79 构建三角网格
+            27, 28, 79,
+            28, 79, 46,
+            28, 29, 46,
+            29, 46, 45,
+            29, 30, 45,
+            30, 45, 44,
+            30, 31, 44
+        )
+
+        // 索引数
+        val LIP_INDEX_COUNT = LIP_INDICES.size
+        val BLUSH_INDEX_COUNT = BLUSH_INDICES.size
 
         // 混合模式常量（对应 GPUPixel blendMode）
         const val BLEND_MODE_REPLACE = 0
@@ -152,8 +164,13 @@ class FaceMakeupPass(private val context: Context) {
     // 纹理坐标缓冲区（静态预定义）
     private val texCoordBuffer: FloatBuffer
 
-    // 索引缓冲区（静态预定义）
-    private val indexBuffer: IntBuffer
+    // 嘴唇索引缓冲区
+    private val lipIndexBuffer: ShortBuffer
+    private val lipIndexByteBuffer: ByteBuffer
+
+    // 腮红索引缓冲区
+    private val blushIndexBuffer: ShortBuffer
+    private val blushIndexByteBuffer: ByteBuffer
 
     // 妆容纹理
     private var makeupTextureId: Int = 0
@@ -164,26 +181,45 @@ class FaceMakeupPass(private val context: Context) {
     private var blendMode: Int = BLEND_MODE_MULTIPLY
 
     init {
-        // 初始化顶点缓冲区（111 个顶点 * 2 坐标）
+        // 初始化顶点缓冲区（106 个顶点 × 2 坐标 × 4 bytes/float）
         val vb = ByteBuffer.allocateDirect(VERTEX_COUNT * 2 * 4)
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
-        vb.position(0)
         vertexBuffer = vb
 
         // 初始化纹理坐标缓冲区
         val tb = ByteBuffer.allocateDirect(FACE_TEXTURE_COORDS.size * 4)
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
-        tb.put(FACE_TEXTURE_COORDS).position(0)
+        tb.put(FACE_TEXTURE_COORDS)
+        tb.flip()
         texCoordBuffer = tb
 
-        // 初始化索引缓冲区
-        val ib = ByteBuffer.allocateDirect(FACE_INDICES.size * 4)
+        // 初始化嘴唇索引缓冲区
+        val lipIbb = ByteBuffer.allocateDirect(LIP_INDICES.size * 2)
             .order(ByteOrder.nativeOrder())
-            .asIntBuffer()
-        ib.put(FACE_INDICES).position(0)
-        indexBuffer = ib
+        val lipIb = lipIbb.asShortBuffer()
+        for (idx in LIP_INDICES) {
+            lipIb.put(idx.toShort())
+        }
+        lipIb.flip()
+        lipIbb.limit(lipIb.limit() * 2)
+        lipIndexBuffer = lipIb
+        lipIndexByteBuffer = lipIbb
+
+        // 初始化腮红索引缓冲区
+        val blushIbb = ByteBuffer.allocateDirect(BLUSH_INDICES.size * 2)
+            .order(ByteOrder.nativeOrder())
+        val blushIb = blushIbb.asShortBuffer()
+        for (idx in BLUSH_INDICES) {
+            blushIb.put(idx.toShort())
+        }
+        blushIb.flip()
+        blushIbb.limit(blushIb.limit() * 2)
+        blushIndexBuffer = blushIb
+        blushIndexByteBuffer = blushIbb
+
+        Log.d(TAG, "Index buffers initialized: lip=${LIP_INDICES.size}, blush=${BLUSH_INDICES.size}")
     }
 
     /**
@@ -257,11 +293,9 @@ class FaceMakeupPass(private val context: Context) {
     }
 
     /**
-     * 更新人脸关键点（106 点 → 111 顶点）
+     * 更新人脸关键点（纯 106 点方案）
      *
-     * GPUPixel 将 106 点映射到 111 顶点：
-     * - 前 106 个顶点 = 106 个关键点（landmarks[0..105]）
-     * - 额外 5 个顶点 = 插值生成的辅助点（如眉毛中点等）
+     * 所有 106 个顶点直接使用关键点，不添加额外顶点
      *
      * @param landmarks 106 点人脸关键点，范围 [0,1] 的 UV 坐标
      *                 格式：[x0, y0, x1, y1, ..., x105, y105]
@@ -272,9 +306,9 @@ class FaceMakeupPass(private val context: Context) {
             return
         }
 
-        vertexBuffer.position(0)
+        vertexBuffer.clear()
 
-        // 1. 写入前 106 个关键点（转换为 OpenGL NDC [-1, 1]）
+        // 写入 106 个关键点（转换为 OpenGL NDC [-1, 1]）
         for (i in 0 until 106) {
             val x = landmarks[i * 2]
             val y = landmarks[i * 2 + 1]
@@ -283,29 +317,19 @@ class FaceMakeupPass(private val context: Context) {
             vertexBuffer.put(y * 2f - 1f)
         }
 
-        // 2. 生成额外 5 个辅助顶点（索引 106..110）
-        // 这些对应 GPUPixel 的额外点，用于完善三角网格
-        // 107 = 左眉中点 (34+36)/2, 108 = 右眉中点 (39+41)/2
-        // 109 = 左脸颊辅助点, 110 = 右脸颊辅助点, 106 = 唇中辅助点
-        val extraPoints = floatArrayOf(
-            // 106: 上下唇中点（用于嘴唇间隙）
-            (landmarks[84 * 2] + landmarks[90 * 2]) * 0.5f * 2f - 1f,
-            (landmarks[84 * 2 + 1] + landmarks[90 * 2 + 1]) * 0.5f * 2f - 1f,
-            // 107: 左眉中点
-            (landmarks[34 * 2] + landmarks[36 * 2]) * 0.5f * 2f - 1f,
-            (landmarks[34 * 2 + 1] + landmarks[36 * 2 + 1]) * 0.5f * 2f - 1f,
-            // 108: 右眉中点
-            (landmarks[39 * 2] + landmarks[41 * 2]) * 0.5f * 2f - 1f,
-            (landmarks[39 * 2 + 1] + landmarks[41 * 2 + 1]) * 0.5f * 2f - 1f,
-            // 109: 左脸颊辅助
-            (landmarks[2 * 2] + landmarks[4 * 2]) * 0.5f * 2f - 1f,
-            (landmarks[2 * 2 + 1] + landmarks[4 * 2 + 1]) * 0.5f * 2f - 1f,
-            // 110: 右脸颊辅助
-            (landmarks[29 * 2] + landmarks[27 * 2]) * 0.5f * 2f - 1f,
-            (landmarks[29 * 2 + 1] + landmarks[27 * 2 + 1]) * 0.5f * 2f - 1f
-        )
-        vertexBuffer.put(extraPoints)
-        vertexBuffer.position(0)
+        vertexBuffer.flip()
+        
+        // 调试：打印嘴唇区域顶点的 NDC 坐标
+        val lipIndices = intArrayOf(84, 87, 90, 93, 96, 100)
+        val sb = StringBuilder("Lip vertices NDC: ")
+        for (idx in lipIndices) {
+            if (idx < VERTEX_COUNT) {
+                val x = vertexBuffer.get(idx * 2)
+                val y = vertexBuffer.get(idx * 2 + 1)
+                sb.append("[$idx](${String.format("%.2f", x)},${String.format("%.2f", y)}) ")
+            }
+        }
+        Log.d(TAG, sb.toString())
     }
 
     /**
@@ -320,20 +344,95 @@ class FaceMakeupPass(private val context: Context) {
     }
 
     /**
+     * 设置纹理边界（用于切换不同妆容的 bounds）
+     */
+    fun setTextureBounds(bounds: FrameBounds) {
+        textureBounds = bounds
+        Log.d(TAG, "Texture bounds updated: $bounds")
+    }
+
+    // 运行时纹理坐标缓冲区（应用 textureBounds 后的坐标）
+    private val runtimeTexCoordBuffer: FloatBuffer
+
+    init {
+        // ... 前面的初始化代码保持不变 ...
+        
+        // 初始化运行时纹理坐标缓冲区
+        val rtb = ByteBuffer.allocateDirect(FACE_TEXTURE_COORDS.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+        runtimeTexCoordBuffer = rtb
+    }
+
+    // 当前妆容类型
+    enum class MakeupType {
+        LIP,    // 唇色
+        BLUSH   // 腮红
+    }
+    private var currentMakeupType = MakeupType.LIP
+
+    /**
+     * 动态计算纹理坐标
+     *
+     * 根据妆容类型选择不同的映射策略：
+     * - LIP: 使用嘴唇关键点（84-103）计算外接矩形，映射到 mouth.png
+     * - BLUSH: 使用脸颊关键点计算外接矩形，映射到 blusher.png
+     */
+    // 纹理尺寸（mouth.png / blusher.png 都是 1280x1280）
+    private val TEXTURE_SIZE = 1280f
+
+    /**
+     * 计算纹理坐标：GPUPixel 方式
+     *
+     * 使用基准纹理坐标（FACE_TEXTURE_COORDS）+ textureBounds 缩放
+     * 公式：finalU = (baseU * textureSize - bounds.x) / bounds.width
+     */
+    private fun updateTextureCoordinates() {
+        val bounds = textureBounds
+        val texSize = TEXTURE_SIZE
+
+        runtimeTexCoordBuffer.clear()
+        for (i in 0 until VERTEX_COUNT) {
+            val baseU = FACE_TEXTURE_COORDS[i * 2]
+            val baseV = FACE_TEXTURE_COORDS[i * 2 + 1]
+
+            // GPUPixel 公式：(coord * 1280 - bounds.x) / bounds.width
+            val u = (baseU * texSize - bounds.x) / bounds.width
+            val v = (baseV * texSize - bounds.y) / bounds.height
+
+            runtimeTexCoordBuffer.put(u)
+            runtimeTexCoordBuffer.put(v)
+        }
+        runtimeTexCoordBuffer.flip()
+    }
+
+    /**
      * 渲染妆容到 FBO
      *
      * @param inputTextureId 原始帧纹理 ID
      * @param outputFbo 输出 FBO（null 则输出到屏幕）
+     * @param makeupType 妆容类型（LIP 或 BLUSH）
      */
-    fun render(inputTextureId: Int, outputFbo: Framebuffer? = null) {
+    fun render(inputTextureId: Int, outputFbo: Framebuffer? = null, makeupType: MakeupType = MakeupType.LIP) {
         if (!isCompiled || makeupTextureId == 0) {
             Log.w(TAG, "FaceMakeupPass not ready: compiled=$isCompiled, tex=$makeupTextureId")
             return
         }
 
-        // 绑定输出
+        // 设置当前妆容类型
+        currentMakeupType = makeupType
+
+        // 更新纹理坐标（根据妆容类型）
+        updateTextureCoordinates()
+
+        // 保存当前视口
+        val prevViewport = IntArray(4)
+        GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, prevViewport, 0)
+
+        // 绑定输出并设置视口
         if (outputFbo != null) {
             outputFbo.bind()
+            GLES20.glViewport(0, 0, outputFbo.getWidth(), outputFbo.getHeight())
         } else {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
         }
@@ -362,7 +461,7 @@ class FaceMakeupPass(private val context: Context) {
             GLES20.glUniform1i(uBlendModeLocation, blendMode)
         }
 
-        // 设置顶点属性
+        // 设置顶点属性（使用真实人脸关键点）
         if (aPositionLocation >= 0) {
             GLES20.glEnableVertexAttribArray(aPositionLocation)
             vertexBuffer.position(0)
@@ -371,12 +470,19 @@ class FaceMakeupPass(private val context: Context) {
 
         if (aTextureCoordLocation >= 0) {
             GLES20.glEnableVertexAttribArray(aTextureCoordLocation)
-            texCoordBuffer.position(0)
-            GLES20.glVertexAttribPointer(aTextureCoordLocation, 2, GLES20.GL_FLOAT, false, 0, texCoordBuffer)
+            runtimeTexCoordBuffer.position(0)
+            GLES20.glVertexAttribPointer(aTextureCoordLocation, 2, GLES20.GL_FLOAT, false, 0, runtimeTexCoordBuffer)
         }
 
-        // 绘制三角网格
-        GLES20.glDrawElements(GLES20.GL_TRIANGLES, INDEX_COUNT, GLES20.GL_UNSIGNED_INT, indexBuffer)
+        // 根据妆容类型选择索引缓冲区和绘制
+        val (indexBuffer, indexCount) = when (makeupType) {
+            MakeupType.LIP -> Pair(lipIndexByteBuffer, LIP_INDEX_COUNT)
+            MakeupType.BLUSH -> Pair(blushIndexByteBuffer, BLUSH_INDEX_COUNT)
+        }
+
+        Log.d(TAG, "FaceMakeupPass render: type=$makeupType, drawing $indexCount indices")
+        indexBuffer.position(0)
+        GLES20.glDrawElements(GLES20.GL_TRIANGLES, indexCount, GLES20.GL_UNSIGNED_SHORT, indexBuffer)
 
         // 清理
         if (aPositionLocation >= 0) GLES20.glDisableVertexAttribArray(aPositionLocation)
@@ -385,6 +491,8 @@ class FaceMakeupPass(private val context: Context) {
 
         if (outputFbo != null) {
             outputFbo.unbind()
+            // 恢复之前的视口
+            GLES20.glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3])
         }
     }
 
