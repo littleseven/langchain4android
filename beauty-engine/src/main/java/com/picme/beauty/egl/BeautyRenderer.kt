@@ -114,6 +114,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     private var multiPassBeautyEnabled: Boolean = false
 
+    // Phase 4: GPUPixel 风格妆容 Pass（三角网格 + 纹理贴图）
+    private val faceMakeupPass = FaceMakeupPass(context)
+    private var faceMakeupPassCompiled = false
+    private var faceMakeupEnabled: Boolean = true
+
+    // FBO 池中的 ping/pong FBO（供妆容 Pass 复用）
+    private var fboPing: Framebuffer? = null
+    private var fboPong: Framebuffer? = null
+
     private var uSmoothingLocation: Int = -1
     private var uWhiteningLocation: Int = -1
     private var uSharpenLocation: Int = -1
@@ -206,7 +215,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(
             TAG,
             "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
-                "sharpen=$sharpenStrength, bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength"
+                "sharpen=$sharpenStrength, bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength, " +
+                "lipColor=$lipColorStrength, blush=$blushStrength"
         )
     }
 
@@ -532,7 +542,18 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             return
         }
 
-        // 步骤2: 使用主Shader渲染美型+美妆+调色
+        // 步骤2: FaceMakeupPass 妆容渲染（三角网格 + 纹理贴图）
+        if (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)) {
+            val ping = fboPing
+            val pong = fboPong
+            if (ping != null && pong != null && ping.isInitialized && pong.isInitialized) {
+                renderFaceMakeupPass(beautyPassOutputTextureId, ping, pong)
+                // 更新主Shader输入为妆容Pass输出
+                beautyPassOutputTextureId = pong.getTextureId()
+            }
+        }
+
+        // 步骤3: 使用主Shader渲染美型+美妆+调色
         // 主Shader从 beautyPassOutputTextureId（FBO纹理）采样
         if (activeStyle != StyleEffect.NONE) {
             // 有风格特效：先渲染到 intermediateFbo
@@ -841,10 +862,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         }
 
         // 确保 FBO 池已初始化（需要2个FBO：ping/pong）
-        val fboPing = fboPool.acquire("ping", outputWidth, outputHeight)
-        val fboPong = fboPool.acquire("pong", outputWidth, outputHeight)
-        Log.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${fboPing.isInitialized}, pong=${fboPong.isInitialized}")
-        if (!fboPing.isInitialized || !fboPong.isInitialized) {
+        val acquiredPing = fboPool.acquire("ping", outputWidth, outputHeight)
+        val acquiredPong = fboPool.acquire("pong", outputWidth, outputHeight)
+        fboPing = acquiredPing
+        fboPong = acquiredPong
+        Log.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${acquiredPing.isInitialized}, pong=${acquiredPong.isInitialized}")
+        if (!acquiredPing.isInitialized || !acquiredPong.isInitialized) {
             Log.w(TAG, "FBO pool not ready")
             return false
         }
@@ -859,7 +882,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(TAG, "Multi-pass: cameraTex=$cameraTextureId, smooth=$smoothingStrength, white=$whiteningStrength")
 
         var currentInputTexture = cameraTextureId
-        var currentOutputFbo = fboPing
+        var currentOutputFbo = acquiredPing
 
         // Pass 0: 将 OES 外部纹理复制到 2D FBO 纹理
         if (copyPassCompiled) {
@@ -879,7 +902,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 }
             )
             currentInputTexture = currentOutputFbo.getTextureId()
-            currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
+            currentOutputFbo = if (currentOutputFbo === acquiredPing) acquiredPong else acquiredPing
             Log.d(TAG, "Pass0 done: outputTex=$currentInputTexture")
         }
 
@@ -887,7 +910,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 确保 Pass 的输入和输出不使用同一个 FBO
         if (currentOutputFbo.getTextureId() == originalTexture) {
-            currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
+            currentOutputFbo = if (currentOutputFbo === acquiredPing) acquiredPong else acquiredPing
             Log.d(TAG, "Switched outputFbo to avoid read-write conflict: ${currentOutputFbo.getTextureId()}")
         }
 
@@ -932,7 +955,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 }
             )
             currentInputTexture = currentOutputFbo.getTextureId()
-            currentOutputFbo = if (currentOutputFbo === fboPing) fboPong else fboPing
+            currentOutputFbo = if (currentOutputFbo === acquiredPing) acquiredPong else acquiredPing
             Log.d(TAG, "BeautyUnitPass executed: smoothing=$smoothingStrength, whitening=$whiteningStrength")
         } else {
             Log.w(TAG, "BeautyUnitPass skipped: compiled=$beautyUnitPassCompiled, lutLoaded=${lutTextureLoader.isAllLoaded()}")
@@ -940,7 +963,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 保存最终输出纹理 ID
         beautyPassOutputTextureId = currentInputTexture
-        Log.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=${fboPing.getTextureId()}, fboPong=${fboPong.getTextureId()}")
+        val pingTex = fboPing?.getTextureId() ?: 0
+        val pongTex = fboPong?.getTextureId() ?: 0
+        Log.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=$pingTex, fboPong=$pongTex")
         return true
     }
 
@@ -1187,6 +1212,65 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         debugMode = mode
     }
 
+    /**
+     * 渲染 FaceMakeupPass（唇色 + 腮红）
+     * 使用 GPUPixel 风格三角网格 + 纹理贴图
+     */
+    private fun renderFaceMakeupPass(
+        inputTextureId: Int,
+        fboPing: Framebuffer,
+        fboPong: Framebuffer
+    ) {
+        // 延迟编译
+        if (!faceMakeupPassCompiled) {
+            faceMakeupPassCompiled = faceMakeupPass.compileFromAssets(
+                "shaders/makeup_vertex.glsl",
+                "shaders/makeup_fragment.glsl"
+            )
+            Log.d(TAG, "FaceMakeupPass compiled: $faceMakeupPassCompiled")
+            if (!faceMakeupPassCompiled) return
+
+            // 加载妆容纹理
+            faceMakeupPass.loadMakeupTexture(
+                "makeup/mouth.png",
+                FrameBounds(502.5f, 710f, 262.5f, 167.5f)
+            )
+        }
+
+        // 更新人脸关键点
+        if (facePointsBuffer.isNotEmpty()) {
+            faceMakeupPass.updateFaceLandmarks(facePointsBuffer)
+        }
+
+        // 确定输出 FBO（避免读写冲突）
+        val outputFbo = if (fboPing.getTextureId() == inputTextureId) fboPong else fboPing
+
+        // 渲染唇色（Multiply 混合模式）
+        if (lipColorStrength > 0.001f) {
+            faceMakeupPass.setIntensity(lipColorStrength)
+            faceMakeupPass.setBlendMode(FaceMakeupPass.BLEND_MODE_MULTIPLY)
+            faceMakeupPass.render(inputTextureId, outputFbo)
+        }
+
+        // 渲染腮红（Overlay 混合模式）
+        if (blushStrength > 0.001f) {
+            faceMakeupPass.setIntensity(blushStrength)
+            faceMakeupPass.setBlendMode(FaceMakeupPass.BLEND_MODE_OVERLAY)
+            // 如果唇色已渲染，使用 outputFbo 作为输入；否则使用原始输入
+            val makeupInput = if (lipColorStrength > 0.001f) outputFbo.getTextureId() else inputTextureId
+            val makeupOutput = if (lipColorStrength > 0.001f) fboPing else outputFbo
+            faceMakeupPass.render(makeupInput, makeupOutput)
+        }
+    }
+
+    /**
+     * 设置是否启用 FaceMakeupPass（GPUPixel 风格妆容）
+     */
+    fun setFaceMakeupEnabled(enabled: Boolean) {
+        faceMakeupEnabled = enabled
+        Log.d(TAG, "FaceMakeupPass enabled: $enabled")
+    }
+
     override fun release() {
         Log.d(TAG, "Releasing BeautyRenderer")
         intermediateFbo?.release()
@@ -1194,6 +1278,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         styleEffectShader.release()
         copyPass.release()
         beautyUnitPass.release()
+        faceMakeupPass.release()
         lutTextureLoader.release()
         fboPool.releaseAll()
         super.release()
