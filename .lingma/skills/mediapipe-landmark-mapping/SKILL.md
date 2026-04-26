@@ -1,0 +1,109 @@
+---
+name: mediapipe-landmark-mapping
+description: MediaPipe 468 点与 GPUPixel 106 点人脸关键点映射规范。Use when working with face landmark detection, coordinate transformation between MediaPipe and OpenGL NDC space, or implementing face warp/makeup effects in the PicMe beauty engine.
+---
+
+# MediaPipe 关键点映射 Skill
+
+## 坐标系转换
+
+### MediaPipe → OpenGL NDC
+MediaPipe 输出 468 个点，范围 [0, 1]，原点在左上角：
+- X: 从左到右 0→1
+- Y: 从上到下 0→1
+
+OpenGL NDC 范围 [-1, 1]，原点在中心：
+```kotlin
+// 标准映射（无镜像）
+ndcX = x * 2.0f - 1.0f
+ndcY = -(y * 2.0f - 1.0f)  // Y轴翻转
+
+// 前置摄像头（左右镜像）
+ndcX = -(x * 2.0f - 1.0f)  // X轴翻转
+ndcY = -(y * 2.0f - 1.0f)  // Y轴翻转
+```
+
+### MediaPipe 468 → 106 点映射
+使用项目中的 `MediaPipeTo106Mapping.kt`：
+- 左脸轮廓：0-7
+- 右脸轮廓：25-32
+- 左眼：52-57, 72-78
+- 右眼：58-63, 75-79
+- 鼻子：43-51, 78-83
+- 嘴唇：84-103
+- 左眉毛：33-37, 64-67
+- 右眉毛：38-42, 68-71
+
+## 关键索引对照表
+
+| 区域 | MediaPipe 468 | 106点索引 |
+|------|--------------|-----------|
+| 左眼外角 | 33 | 52 |
+| 左眼内角 | 133 | 57 |
+| 右眼外角 | 362 | 58 |
+| 右眼内角 | 463 | 63 |
+| 鼻尖 | 1 | 46 |
+| 鼻底左 | 48 | 31 |
+| 鼻底右 | 278 | 35 |
+| 上唇中 | 0 | 96 |
+| 下唇中 | 17 | 95 |
+| 左嘴角 | 61 | 84 |
+| 右嘴角 | 291 | 90 |
+
+## 常见陷阱
+
+### 坐标交换问题
+MediaPipe 某些版本输出可能是 [y, x] 顺序：
+```kotlin
+// 如果画面有90度偏转，尝试交换 X/Y
+val temp = x
+x = y
+y = temp
+```
+
+### 索引越界
+- 106 点有效索引：0-105
+- 禁止使用 106+（GPUPixel 原始有 111 点）
+- 替代方案：用语义相近的点替代
+
+### 左右镜像
+前置摄像头预览需要左右镜像：
+```kotlin
+// 前置摄像头
+ndcX = -(x * 2.0f - 1.0f)
+```
+
+## 调试方法
+
+### 可视化关键点
+```kotlin
+// 在屏幕上绘制点
+GLES20.glDrawArrays(GLES20.GL_POINTS, 0, vertexCount)
+```
+
+### 日志输出关键点位置
+```kotlin
+for (i in 0 until 106) {
+    Log.d(TAG, "Point $i: (${landmarks[i*2]}, ${landmarks[i*2+1]})")
+}
+```
+
+## 三角网格构建
+
+### 避免索引越界
+```kotlin
+// 错误：使用 106
+val indices = intArrayOf(95, 96, 106) // 越界！
+
+// 正确：用 95 替代 106
+val indices = intArrayOf(95, 96, 95) // 95 是下唇底部
+```
+
+### 语义替代规则
+| 原始索引 | 替代索引 | 说明 |
+|---------|---------|------|
+| 106 | 95 | 下唇底部 |
+| 107 | 43 | 鼻梁中心 |
+| 108 | 0 | 左脸轮廓起点 |
+| 109 | 32 | 右脸轮廓终点 |
+| 110 | 50 | 鼻尖附近 |
