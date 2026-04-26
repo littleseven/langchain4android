@@ -20,10 +20,12 @@ object BeautyShaders {
         attribute vec4 aTextureCoord;
         uniform mat4 uTextureTransform;
         varying vec2 vTextureCoord;
+        varying vec2 vWarpCoord;
 
         void main() {
             gl_Position = aPosition;
             vTextureCoord = (uTextureTransform * aTextureCoord).xy;
+            vWarpCoord = vTextureCoord;
         }
     """.trimIndent()
 }

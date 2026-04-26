@@ -49,3 +49,4 @@ uniform float uAspectRatio;
 uniform int uUseGpupixelWarp;  // 0=使用原有warp, 1=使用GPUPixel风格warp
 
 varying vec2 vTextureCoord;
+varying vec2 vWarpCoord;
