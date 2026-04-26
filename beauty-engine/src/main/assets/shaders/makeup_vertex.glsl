@@ -14,6 +14,7 @@ void main() {
     vTextureCoord = aTextureCoord;
     
     // 屏幕坐标 = 顶点位置从 NDC [-1,1] 映射到 UV [0,1]
-    // 用于从原始帧纹理采样对应位置的颜色
-    vScreenCoord = aPosition * 0.5 + 0.5;
+    // 注意：OpenGL ES 纹理坐标原点在左下角，但相机预览纹理可能在左上角
+    // 需要 Y 轴翻转来正确采样原始帧
+    vScreenCoord = vec2(aPosition.x * 0.5 + 0.5, -aPosition.y * 0.5 + 0.5);
 }

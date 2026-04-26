@@ -87,19 +87,19 @@ void main() {
     vec4 bgColor = texture2D(uInputTexture, vScreenCoord);
     
     // Alpha = 0 表示该像素无妆容，直接输出原始帧
-    if (makeupColor.a == 0.0) {
+    if (makeupColor.a < 0.01) {
         gl_FragColor = bgColor;
         return;
     }
     
     // 预乘 Alpha 还原
-    vec3 makeupRgb = clamp(makeupColor.rgb * (1.0 / makeupColor.a), 0.0, 1.0);
+    vec3 makeupRgb = clamp(makeupColor.rgb / makeupColor.a, 0.0, 1.0);
     
     // 混合妆容与原始帧
     vec3 blended = blendFunc(bgColor.rgb, makeupRgb, uBlendMode);
     
     // 最终混合：根据妆容 Alpha 混合原始帧和混合结果
-    vec3 finalColor = bgColor.rgb * (1.0 - makeupColor.a) + blended.rgb * makeupColor.a;
+    vec3 finalColor = mix(bgColor.rgb, blended, makeupColor.a);
     
     gl_FragColor = vec4(finalColor, bgColor.a);
 }

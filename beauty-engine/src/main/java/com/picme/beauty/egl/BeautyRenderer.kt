@@ -504,8 +504,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     override fun onRender() {
         val activeStyle = styleEffectShader.getActiveStyle()
 
-        // 如果启用了多Pass美颜且需要磨皮/美白，使用多Pass管线
-        if (multiPassBeautyEnabled && (smoothingStrength > 0.001 || whiteningStrength > 0.001)) {
+        // 如果启用了多Pass美颜且需要磨皮/美白/妆容/美型，使用多Pass管线
+        val needMultiPass = multiPassBeautyEnabled && (
+            smoothingStrength > 0.001 ||
+                whiteningStrength > 0.001 ||
+                bigEyesStrength > 0.001f ||
+                kotlin.math.abs(slimFaceStrength) > 0.001f ||
+                (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f))
+        )
+        if (needMultiPass) {
             renderBeautyMultiPass(activeStyle)
             return
         }
@@ -543,9 +550,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         }
 
         // 步骤2: FaceMakeupPass 妆容渲染（三角网格 + 纹理贴图）
+        Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
         if (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)) {
             val ping = fboPing
             val pong = fboPong
+            Log.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
             if (ping != null && pong != null && ping.isInitialized && pong.isInitialized) {
                 renderFaceMakeupPass(beautyPassOutputTextureId, ping, pong)
                 // 更新主Shader输入为妆容Pass输出
@@ -813,8 +822,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             Log.d(TAG, "Multi-pass disabled")
             return false
         }
-        if (smoothingStrength < 0.001 && whiteningStrength < 0.001) {
-            Log.d(TAG, "Multi-pass: smoothing and whitening both near zero")
+        // 当需要磨皮/美白/妆容时，才需要执行多Pass管线
+        val needBeautyPass = smoothingStrength > 0.001 || whiteningStrength > 0.001
+        val needMakeupPass = faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
+        if (!needBeautyPass && !needMakeupPass) {
+            Log.d(TAG, "Multi-pass: no beauty or makeup effect needed")
             return false
         }
 
@@ -1221,6 +1233,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         fboPing: Framebuffer,
         fboPong: Framebuffer
     ) {
+        Log.d(TAG, "renderFaceMakeupPass START: input=$inputTextureId, ping=${fboPing.getTextureId()}, pong=${fboPong.getTextureId()}")
+
         // 延迟编译
         if (!faceMakeupPassCompiled) {
             faceMakeupPassCompiled = faceMakeupPass.compileFromAssets(
@@ -1230,7 +1244,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             Log.d(TAG, "FaceMakeupPass compiled: $faceMakeupPassCompiled")
             if (!faceMakeupPassCompiled) return
 
-            // 加载妆容纹理
+            // 加载妆容纹理（使用 mouth.png，bounds 在渲染时根据妆容类型切换）
             faceMakeupPass.loadMakeupTexture(
                 "makeup/mouth.png",
                 FrameBounds(502.5f, 710f, 262.5f, 167.5f)
@@ -1239,28 +1253,44 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 更新人脸关键点
         if (facePointsBuffer.isNotEmpty()) {
+            // 调试：打印前几个点的坐标
+            val sb = StringBuilder("FacePointsBuffer: ")
+            for (i in 0 until minOf(6, facePointsBuffer.size / 2)) {
+                sb.append("[$i](${String.format("%.3f", facePointsBuffer[i*2])},${String.format("%.3f", facePointsBuffer[i*2+1])}) ")
+            }
+            Log.d(TAG, sb.toString())
             faceMakeupPass.updateFaceLandmarks(facePointsBuffer)
+            Log.d(TAG, "FaceMakeupPass landmarks updated: ${facePointsBuffer.size} floats")
         }
 
         // 确定输出 FBO（避免读写冲突）
         val outputFbo = if (fboPing.getTextureId() == inputTextureId) fboPong else fboPing
+        Log.d(TAG, "FaceMakeupPass outputFbo selected: ${outputFbo.getTextureId()}")
 
         // 渲染唇色（Multiply 混合模式）
         if (lipColorStrength > 0.001f) {
+            Log.d(TAG, "FaceMakeupPass rendering LIP: intensity=$lipColorStrength")
             faceMakeupPass.setIntensity(lipColorStrength)
             faceMakeupPass.setBlendMode(FaceMakeupPass.BLEND_MODE_MULTIPLY)
-            faceMakeupPass.render(inputTextureId, outputFbo)
+            faceMakeupPass.setTextureBounds(FrameBounds(502.5f, 710f, 262.5f, 167.5f))
+            faceMakeupPass.render(inputTextureId, outputFbo, FaceMakeupPass.MakeupType.LIP)
+            Log.d(TAG, "FaceMakeupPass LIP rendered")
         }
 
         // 渲染腮红（Overlay 混合模式）
         if (blushStrength > 0.001f) {
+            Log.d(TAG, "FaceMakeupPass rendering BLUSH: intensity=$blushStrength")
             faceMakeupPass.setIntensity(blushStrength)
             faceMakeupPass.setBlendMode(FaceMakeupPass.BLEND_MODE_OVERLAY)
+            faceMakeupPass.setTextureBounds(FrameBounds(395f, 520f, 489f, 209f))
             // 如果唇色已渲染，使用 outputFbo 作为输入；否则使用原始输入
             val makeupInput = if (lipColorStrength > 0.001f) outputFbo.getTextureId() else inputTextureId
             val makeupOutput = if (lipColorStrength > 0.001f) fboPing else outputFbo
-            faceMakeupPass.render(makeupInput, makeupOutput)
+            faceMakeupPass.render(makeupInput, makeupOutput, FaceMakeupPass.MakeupType.BLUSH)
+            Log.d(TAG, "FaceMakeupPass BLUSH rendered")
         }
+
+        Log.d(TAG, "renderFaceMakeupPass END")
     }
 
     /**
