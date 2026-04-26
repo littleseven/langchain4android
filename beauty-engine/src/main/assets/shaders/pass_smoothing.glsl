@@ -26,7 +26,7 @@ const float levelRangeInv = 1.02657;
 const float levelBlack = 0.0258820;
 const float alpha = 0.7;
 
-// 简化磨皮：9-tap双边滤波近似
+// 优化磨皮：扩展半径双边滤波 + 皮肤检测 + 自适应混合
 vec3 smoothSkin(vec2 uv, float intensity) {
     if (intensity < 0.001) {
         return texture2D(uInputTexture, uv).rgb;
@@ -35,19 +35,23 @@ vec3 smoothSkin(vec2 uv, float intensity) {
     vec3 centerRgb = texture2D(uInputTexture, uv).rgb;
     float centerL = dot(centerRgb, vec3(0.299, 0.587, 0.114));
 
-    // 5x5采样核（简化版双边滤波）
+    // 扩展采样半径：根据强度调整，最大覆盖约15-25像素
+    float radiusScale = 3.0 + intensity * 5.0;
+    vec2 texelSize = vec2(uWidthOffset, uHeightOffset) * radiusScale;
+
+    // 7x7采样核（扩展半径双边滤波）
     vec3 sum = centerRgb;
     float wSum = 1.0;
 
-    float sigmaSpatial = 2.5;
+    float sigmaSpatial = 3.5;
     float sigmaSpatialSq = sigmaSpatial * sigmaSpatial * 2.0;
-    float sigmaRange = 0.08 + intensity * 0.12;
+    float sigmaRange = 0.06 + intensity * 0.10;
     float sigmaRangeSq = sigmaRange * sigmaRange * 2.0;
 
-    for (int x = -2; x <= 2; x++) {
-        for (int y = -2; y <= 2; y++) {
+    for (int x = -3; x <= 3; x++) {
+        for (int y = -3; y <= 3; y++) {
             if (x == 0 && y == 0) continue;
-            vec2 offset = vec2(float(x), float(y)) * vec2(uWidthOffset, uHeightOffset);
+            vec2 offset = vec2(float(x), float(y)) * texelSize;
             vec3 sRgb = texture2D(uInputTexture, uv + offset).rgb;
             float sL = dot(sRgb, vec3(0.299, 0.587, 0.114));
 
@@ -65,17 +69,41 @@ vec3 smoothSkin(vec2 uv, float intensity) {
 
     vec3 blurColor = sum / wSum;
 
-    // 边缘保留：根据亮度差异调整混合强度
-    float meanL = dot(blurColor, vec3(0.299, 0.587, 0.114));
-    float edgeFactor = clamp((min(centerL, meanL - 0.1) - 0.2) * 4.0, 0.0, 1.0);
-    float blendAlpha = intensity * edgeFactor;
+    // 皮肤检测：基于肤色范围判断当前像素是否属于皮肤
+    // 肤色在YCbCr空间中 Cb∈[77,127], Cr∈[133,173]
+    float cb = -0.169 * centerRgb.r - 0.331 * centerRgb.g + 0.500 * centerRgb.b + 0.5;
+    float cr = 0.500 * centerRgb.r - 0.419 * centerRgb.g - 0.081 * centerRgb.b + 0.5;
+    float skinMask = smoothstep(0.0, 1.0, 1.0 - abs(cb - 0.52) * 8.0) *
+                     smoothstep(0.0, 1.0, 1.0 - abs(cr - 0.58) * 8.0);
+
+    // 边缘检测：使用Sobel算子计算边缘强度
+    vec2 texel = vec2(uWidthOffset, uHeightOffset) * 2.0;
+    float tl = dot(texture2D(uInputTexture, uv + vec2(-texel.x, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float t  = dot(texture2D(uInputTexture, uv + vec2(0.0, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float tr = dot(texture2D(uInputTexture, uv + vec2(texel.x, -texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float l  = dot(texture2D(uInputTexture, uv + vec2(-texel.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    float r  = dot(texture2D(uInputTexture, uv + vec2(texel.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+    float bl = dot(texture2D(uInputTexture, uv + vec2(-texel.x, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float b  = dot(texture2D(uInputTexture, uv + vec2(0.0, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+    float br = dot(texture2D(uInputTexture, uv + vec2(texel.x, texel.y)).rgb, vec3(0.299, 0.587, 0.114));
+
+    float edgeX = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
+    float edgeY = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
+    float edgeStrength = length(vec2(edgeX, edgeY));
+
+    // 边缘保留：边缘越强，磨皮效果越弱
+    float edgeFactor = smoothstep(0.0, 0.3, 0.15 - edgeStrength);
+
+    // 自适应混合：皮肤区域磨皮更强，边缘区域保留原图
+    float blendAlpha = intensity * skinMask * edgeFactor;
+    blendAlpha = clamp(blendAlpha, 0.0, intensity * 0.85);
 
     vec3 result = mix(centerRgb, blurColor, blendAlpha);
 
-    // 锐化
-    float sharpenStrength = 0.15 * intensity;
+    // 细节增强：在磨皮后的图像上叠加轻微的高频细节
+    float detailStrength = 0.08 * intensity * skinMask;
     vec3 highPass = centerRgb - blurColor;
-    result = result + sharpenStrength * highPass * 2.0;
+    result = result + detailStrength * highPass;
     result = clamp(result, 0.0, 1.0);
 
     return result;
