@@ -13,8 +13,7 @@ void main() {
     // 妆容纹理坐标直接使用（由预定义的标准脸 UV 提供）
     vTextureCoord = aTextureCoord;
     
-    // 屏幕坐标 = 顶点位置从 NDC [-1,1] 映射到 UV [0,1]
-    // 注意：OpenGL ES 纹理坐标原点在左下角，但相机预览纹理可能在左上角
-    // 需要 Y 轴翻转来正确采样原始帧
-    vScreenCoord = vec2(aPosition.x * 0.5 + 0.5, -aPosition.y * 0.5 + 0.5);
+    // 与 GPUPixel 保持一致：直接用 landmark 顶点推导背景采样坐标，
+    // 避免额外 Y 翻转导致采样到错误区域，出现亮斑或妆容漂移。
+    vScreenCoord = vec2(aPosition.x * 0.5 + 0.5, aPosition.y * 0.5 + 0.5);
 }
