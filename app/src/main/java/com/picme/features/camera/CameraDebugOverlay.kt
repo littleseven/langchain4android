@@ -227,6 +227,9 @@ private fun FaceDebugOverlayBigBeauty(
 
         // 绘制大眼控制点及方向（调试用）
         drawBigEyeControlPoints(bbPoints)
+
+        // 绘制腮红控制点及区域（调试用）
+        drawBlushControlPoints(bbPoints)
     }
 }
 
@@ -703,6 +706,9 @@ private fun DrawScope.drawGpuPixelLandmarks(
 
     // 绘制大眼控制点及方向（调试用）
     drawBigEyeControlPoints(points)
+
+    // 绘制腮红控制点及区域（调试用）
+    drawBlushControlPoints(points)
 }
 
 /**
@@ -822,6 +828,283 @@ private fun distance(a: Offset, b: Offset): Float {
     val dx = a.x - b.x
     val dy = a.y - b.y
     return kotlin.math.sqrt(dx * dx + dy * dy)
+}
+
+/**
+ * 绘制腮红算法的控制点及椭圆区域
+ * 基于眼-嘴轴几何计算双颊椭圆中心、长轴/短轴方向
+ *
+ * 控制点语义：
+ * - 左右眼中心 (52-57范围, 58-63范围) 确定眼轴方向
+ * - 嘴巴中心 (84-95范围) 确定垂直参考
+ * - 椭圆中心 = 眼-嘴轴中点向外/向上偏移
+ * - 椭圆长轴沿眼轴方向，短轴垂直于眼轴
+ */
+private fun DrawScope.drawBlushControlPoints(points: List<Offset>) {
+    if (points.size < 96) return
+
+    // 计算左眼中心（取左眼外轮廓6点的平均）
+    val leftEyeIndices = listOf(52, 53, 54, 55, 56, 57)
+    val leftEyeCenter = if (leftEyeIndices.all { it < points.size }) {
+        val sumX = leftEyeIndices.sumOf { points[it].x.toDouble() }.toFloat()
+        val sumY = leftEyeIndices.sumOf { points[it].y.toDouble() }.toFloat()
+        Offset(sumX / leftEyeIndices.size, sumY / leftEyeIndices.size)
+    } else {
+        return
+    }
+
+    // 计算右眼中心（取右眼外轮廓6点的平均）
+    val rightEyeIndices = listOf(58, 59, 60, 61, 62, 63)
+    val rightEyeCenter = if (rightEyeIndices.all { it < points.size }) {
+        val sumX = rightEyeIndices.sumOf { points[it].x.toDouble() }.toFloat()
+        val sumY = rightEyeIndices.sumOf { points[it].y.toDouble() }.toFloat()
+        Offset(sumX / rightEyeIndices.size, sumY / rightEyeIndices.size)
+    } else {
+        return
+    }
+
+    // 计算嘴巴中心（取嘴巴外轮廓12点的平均）
+    val mouthIndices = listOf(84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95)
+    val mouthCenter = if (mouthIndices.all { it < points.size }) {
+        val sumX = mouthIndices.sumOf { points[it].x.toDouble() }.toFloat()
+        val sumY = mouthIndices.sumOf { points[it].y.toDouble() }.toFloat()
+        Offset(sumX / mouthIndices.size, sumY / mouthIndices.size)
+    } else {
+        return
+    }
+
+    // 眼轴方向（从左眼指向右眼，归一化）
+    val eyeAxisX = rightEyeCenter.x - leftEyeCenter.x
+    val eyeAxisY = rightEyeCenter.y - leftEyeCenter.y
+    val eyeAxisLen = kotlin.math.sqrt(eyeAxisX * eyeAxisX + eyeAxisY * eyeAxisY)
+    if (eyeAxisLen < 0.0001f) return
+    val eyeAxisNormX = eyeAxisX / eyeAxisLen
+    val eyeAxisNormY = eyeAxisY / eyeAxisLen
+
+    // 垂直于眼轴的方向（向下为正向，用于腮红偏移）
+    val perpAxisX = -eyeAxisNormY
+    val perpAxisY = eyeAxisNormX
+
+    // 眼-嘴垂直距离（用于自适应椭圆大小）
+    val eyeToMouthDist = kotlin.math.abs(
+        (mouthCenter.x - (leftEyeCenter.x + rightEyeCenter.x) / 2f) * perpAxisX +
+            (mouthCenter.y - (leftEyeCenter.y + rightEyeCenter.y) / 2f) * perpAxisY
+    )
+
+    // 两眼间距
+    val eyeSpacing = eyeAxisLen
+
+    // 对齐 Shader (blush.glsl) 的几何计算逻辑
+    // faceUp = normalize(eyeCenter - mouthCenter)，从嘴指向眼 = 向上
+    // appleBase = eyeCenter - faceUp * eyeMouthDist * appleBaseFactor（眼-嘴轴中点向下偏移）
+    // 左右腮红 = appleBase ± faceRight * cheekOffsetX + faceUp * cheekOffsetY
+    val faceUpX = -perpAxisX  // faceUp 与 perpAxis 相反（perpAxis向下，faceUp向上）
+    val faceUpY = -perpAxisY
+
+    // 脸型自适应参数（与 Shader 一致）
+    val faceAspect = (eyeToMouthDist / eyeSpacing).coerceIn(0.9f, 1.8f)
+    val roundFace = ((1.28f - faceAspect) / 0.28f).coerceIn(0f, 1f)
+    val longFace = ((faceAspect - 1.40f) / 0.30f).coerceIn(0f, 1f)
+
+    // appleBaseFactor: 0.34 + longFace * 0.05 - roundFace * 0.03
+    val appleBaseFactor = 0.34f + longFace * 0.05f - roundFace * 0.03f
+    val eyeCenterX = (leftEyeCenter.x + rightEyeCenter.x) / 2f
+    val eyeCenterY = (leftEyeCenter.y + rightEyeCenter.y) / 2f
+
+    // appleBase = eyeCenter - faceUp * max(eyeMouthDist * appleBaseFactor, faceRadius * 0.17)
+    // 使用 faceRadius 的估算值 = eyeSpacing * 0.5
+    val faceRadius = eyeSpacing * 0.5f
+    val appleBaseOffset = kotlin.math.max(eyeToMouthDist * appleBaseFactor, faceRadius * 0.17f)
+    val appleBaseX = eyeCenterX - faceUpX * appleBaseOffset
+    val appleBaseY = eyeCenterY - faceUpY * appleBaseOffset
+
+    // cheekOffsetX = max(eyeWidth * (0.34 + roundFace * 0.05 - longFace * 0.02), faceRadius * (0.31 + roundFace * 0.03))
+    val cheekOffsetX = kotlin.math.max(
+        eyeSpacing * (0.34f + roundFace * 0.05f - longFace * 0.02f),
+        faceRadius * (0.31f + roundFace * 0.03f)
+    )
+
+    // cheekOffsetY = max(eyeMouthDist * (0.06 + roundFace * 0.05 - longFace * 0.03), faceRadius * (0.03 + roundFace * 0.04 - longFace * 0.01))
+    val cheekOffsetY = kotlin.math.max(
+        eyeToMouthDist * (0.06f + roundFace * 0.05f - longFace * 0.03f),
+        faceRadius * (0.03f + roundFace * 0.04f - longFace * 0.01f)
+    )
+
+    // 左腮红中心 = appleBase - faceRight * cheekOffsetX + faceUp * cheekOffsetY
+    val leftBlushCenter = Offset(
+        x = appleBaseX - eyeAxisNormX * cheekOffsetX + faceUpX * cheekOffsetY,
+        y = appleBaseY - eyeAxisNormY * cheekOffsetX + faceUpY * cheekOffsetY
+    )
+
+    // 右腮红中心 = appleBase + faceRight * cheekOffsetX + faceUp * cheekOffsetY
+    val rightBlushCenter = Offset(
+        x = appleBaseX + eyeAxisNormX * cheekOffsetX + faceUpX * cheekOffsetY,
+        y = appleBaseY + eyeAxisNormY * cheekOffsetX + faceUpY * cheekOffsetY
+    )
+
+    // 椭圆半径（与 Shader 一致）
+    val ellipseRadiusX = kotlin.math.max(
+        faceRadius * (0.128f + longFace * 0.018f + roundFace * 0.005f),
+        0.05f
+    )
+    val ellipseRadiusY = kotlin.math.max(
+        faceRadius * (0.102f + roundFace * 0.010f - longFace * 0.008f),
+        0.04f
+    )
+
+    // 绘制颜色定义（使用粉红色系，与腮红语义一致）
+    val blushPink = Color(0xFFFF4081).copy(alpha = 0.9f)
+    val blushLight = Color(0xFFFF4081).copy(alpha = 0.25f)
+    val blushStroke = Color(0xFFFF4081).copy(alpha = 0.6f)
+
+    // 绘制左右腮红椭圆区域
+    listOf(
+        Pair("左腮红", leftBlushCenter),
+        Pair("右腮红", rightBlushCenter)
+    ).forEach { (label, center) ->
+        // 绘制椭圆外框（虚线风格）
+        drawBlushEllipse(
+            center = center,
+            radiusX = ellipseRadiusX,
+            radiusY = ellipseRadiusY,
+            eyeAxisX = eyeAxisNormX,
+            eyeAxisY = eyeAxisNormY,
+            strokeColor = blushStroke,
+            fillColor = blushLight
+        )
+
+        // 绘制椭圆中心点（实心圆）
+        drawCircle(
+            color = blushPink,
+            radius = 5.dp.toPx(),
+            center = center,
+            style = Fill
+        )
+
+        // 绘制长轴方向线（沿眼轴方向）
+        val longAxisStart = Offset(
+            center.x - ellipseRadiusX * eyeAxisNormX,
+            center.y - ellipseRadiusX * eyeAxisNormY
+        )
+        val longAxisEnd = Offset(
+            center.x + ellipseRadiusX * eyeAxisNormX,
+            center.y + ellipseRadiusX * eyeAxisNormY
+        )
+        drawLine(
+            color = blushPink.copy(alpha = 0.5f),
+            start = longAxisStart,
+            end = longAxisEnd,
+            strokeWidth = 1.5f
+        )
+
+        // 绘制短轴方向线（垂直眼轴方向）
+        val shortAxisStart = Offset(
+            center.x - ellipseRadiusY * perpAxisX,
+            center.y - ellipseRadiusY * perpAxisY
+        )
+        val shortAxisEnd = Offset(
+            center.x + ellipseRadiusY * perpAxisX,
+            center.y + ellipseRadiusY * perpAxisY
+        )
+        drawLine(
+            color = blushPink.copy(alpha = 0.5f),
+            start = shortAxisStart,
+            end = shortAxisEnd,
+            strokeWidth = 1.5f
+        )
+
+        // 标注文字
+        val textPaint = Paint().apply {
+            textSize = 10.dp.toPx()
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        drawIntoCanvas { canvas ->
+            textPaint.color = blushPink.toArgb()
+            canvas.nativeCanvas.drawText(
+                label,
+                center.x,
+                center.y - 10.dp.toPx(),
+                textPaint
+            )
+            canvas.nativeCanvas.drawText(
+                "rx=${(ellipseRadiusX * 1000).toInt() / 10f}‰ ry=${(ellipseRadiusY * 1000).toInt() / 10f}‰",
+                center.x,
+                center.y + 18.dp.toPx(),
+                textPaint
+            )
+        }
+    }
+
+    // 绘制眼轴参考线（调试用，浅灰色）
+    drawLine(
+        color = Color.LightGray.copy(alpha = 0.3f),
+        start = leftEyeCenter,
+        end = rightEyeCenter,
+        strokeWidth = 1f
+    )
+}
+
+/**
+ * 绘制腮红椭圆（使用线段近似椭圆轮廓）
+ */
+private fun DrawScope.drawBlushEllipse(
+    center: Offset,
+    radiusX: Float,
+    radiusY: Float,
+    eyeAxisX: Float,
+    eyeAxisY: Float,
+    strokeColor: Color,
+    fillColor: Color
+) {
+    val segments = 32
+    val ellipsePoints = mutableListOf<Offset>()
+
+    for (i in 0..segments) {
+        val angle = 2f * kotlin.math.PI * i / segments
+        // 椭圆在局部坐标系中的点
+        val localX = kotlin.math.cos(angle) * radiusX
+        val localY = kotlin.math.sin(angle) * radiusY
+
+        // 转换到全局坐标系（考虑眼轴旋转）
+        // 眼轴方向为长轴，垂直方向为短轴
+        val perpAxisX = -eyeAxisY
+        val perpAxisY = eyeAxisX
+
+        val globalX = center.x + localX * eyeAxisX + localY * perpAxisX
+        val globalY = center.y + localX * eyeAxisY + localY * perpAxisY
+
+        ellipsePoints.add(Offset(globalX.toFloat(), globalY.toFloat()))
+    }
+
+    // 绘制填充（使用多边形近似）
+    if (ellipsePoints.size >= 3) {
+        val path = android.graphics.Path().apply {
+            moveTo(ellipsePoints.first().x, ellipsePoints.first().y)
+            for (i in 1 until ellipsePoints.size) {
+                lineTo(ellipsePoints[i].x, ellipsePoints[i].y)
+            }
+            close()
+        }
+        drawIntoCanvas { canvas ->
+            val paint = Paint().apply {
+                color = fillColor.toArgb()
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+            canvas.nativeCanvas.drawPath(path, paint)
+        }
+    }
+
+    // 绘制椭圆轮廓线
+    ellipsePoints.zipWithNext().forEach { (start, end) ->
+        drawLine(
+            color = strokeColor,
+            start = start,
+            end = end,
+            strokeWidth = 2f
+        )
+    }
 }
 
 /**
