@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +63,48 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PicMe:FaceLandmarkDebug"
+
+private val BLUSH_MESH_INDICES = intArrayOf(
+    0, 52, 1,
+    1, 52, 2,
+    2, 52, 57,
+    2, 57, 3,
+    3, 57, 4,
+    4, 57, 109,
+    57, 109, 74,
+    74, 109, 56,
+    56, 109, 80,
+    80, 109, 82,
+    82, 109, 7,
+    7, 109, 6,
+    6, 109, 5,
+    5, 109, 4,
+    56, 80, 55,
+    55, 80, 78,
+    32, 61, 31,
+    31, 61, 30,
+    30, 61, 62,
+    30, 62, 29,
+    29, 62, 28,
+    28, 62, 110,
+    62, 110, 76,
+    76, 110, 63,
+    63, 110, 81,
+    81, 110, 83,
+    83, 110, 25,
+    25, 110, 26,
+    26, 110, 27,
+    27, 110, 28,
+    63, 81, 58,
+    58, 81, 79
+)
+
+private val BLUSH_LEFT_HELPER_SOURCE_INDICES = intArrayOf(4, 7, 56, 80, 82)
+private val BLUSH_RIGHT_HELPER_SOURCE_INDICES = intArrayOf(25, 28, 63, 81, 83)
+private val BLUSH_LEFT_EYE_SOURCE_106 = intArrayOf(72, 73, 74)
+private val BLUSH_RIGHT_EYE_SOURCE_106 = intArrayOf(75, 76, 77)
+private val BLUSH_LEFT_EYE_SOURCE_468 = intArrayOf(374, 375, 473)
+private val BLUSH_RIGHT_EYE_SOURCE_468 = intArrayOf(44, 45, 468)
 
 @Composable
 fun FaceLandmarkDebugScreen(
@@ -466,6 +507,116 @@ private fun DebugLandmarkCanvas(
             )
         }
 
+        fun drawLabel(center: Offset, label: String, color: Color, offsetY: Float = 16f) {
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    this.color = android.graphics.Color.argb(
+                        (color.alpha * 255).toInt(),
+                        (color.red * 255).toInt(),
+                        (color.green * 255).toInt(),
+                        (color.blue * 255).toInt()
+                    )
+                    textSize = 24f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isFakeBoldText = true
+                }
+                canvas.nativeCanvas.drawText(label, center.x, center.y - offsetY, paint)
+            }
+        }
+
+        fun drawPointHighlight(center: Offset, color: Color, radius: Float, label: String? = null) {
+            drawCircle(color = color.copy(alpha = 0.20f), radius = radius * 1.8f, center = center)
+            drawCircle(color = color, radius = radius, center = center)
+            if (label != null) {
+                drawLabel(center = center, label = label, color = color)
+            }
+        }
+
+        fun drawFloatArrayIndexHighlight(points: FloatArray, index: Int, color: Color, radius: Float = 10f) {
+            val point = normalizedPoint(points, index) ?: return
+            drawPointHighlight(
+                center = toCanvasPoint(point.x, point.y),
+                color = color,
+                radius = radius,
+                label = index.toString()
+            )
+        }
+
+        fun drawMediaPipeIndexHighlight(points: List<Pair<Float, Float>>, index: Int, color: Color, radius: Float = 8f) {
+            if (index !in points.indices) return
+            val point = points[index]
+            drawPointHighlight(
+                center = toCanvasPoint(point.first, point.second),
+                color = color,
+                radius = radius,
+                label = index.toString()
+            )
+        }
+
+        fun drawBlushMeshHighlight(points: FloatArray, meshColor: Color, leftColor: Color, rightColor: Color) {
+            val debugPoints = buildBlushDebugPointMap(points)
+            val drawnEdges = mutableSetOf<String>()
+
+            fun drawEdge(startIndex: Int, endIndex: Int) {
+                val start = debugPoints[startIndex] ?: return
+                val end = debugPoints[endIndex] ?: return
+                val edgeKey = if (startIndex < endIndex) "$startIndex-$endIndex" else "$endIndex-$startIndex"
+                if (!drawnEdges.add(edgeKey)) return
+                drawLine(
+                    color = meshColor.copy(alpha = 0.42f),
+                    start = toCanvasPoint(start.x, start.y),
+                    end = toCanvasPoint(end.x, end.y),
+                    strokeWidth = 2.5f
+                )
+            }
+
+            for (triangleIndex in BLUSH_MESH_INDICES.indices step 3) {
+                val a = BLUSH_MESH_INDICES[triangleIndex]
+                val b = BLUSH_MESH_INDICES[triangleIndex + 1]
+                val c = BLUSH_MESH_INDICES[triangleIndex + 2]
+                drawEdge(a, b)
+                drawEdge(b, c)
+                drawEdge(c, a)
+            }
+
+            val leftHelper = debugPoints[109]
+            if (leftHelper != null) {
+                val helperCanvasPoint = toCanvasPoint(leftHelper.x, leftHelper.y)
+                BLUSH_LEFT_HELPER_SOURCE_INDICES.forEach { sourceIndex ->
+                    val sourcePoint = debugPoints[sourceIndex] ?: return@forEach
+                    drawLine(
+                        color = leftColor.copy(alpha = 0.70f),
+                        start = toCanvasPoint(sourcePoint.x, sourcePoint.y),
+                        end = helperCanvasPoint,
+                        strokeWidth = 3f
+                    )
+                }
+                drawPointHighlight(helperCanvasPoint, leftColor, radius = 12f, label = "109")
+            }
+
+            val rightHelper = debugPoints[110]
+            if (rightHelper != null) {
+                val helperCanvasPoint = toCanvasPoint(rightHelper.x, rightHelper.y)
+                BLUSH_RIGHT_HELPER_SOURCE_INDICES.forEach { sourceIndex ->
+                    val sourcePoint = debugPoints[sourceIndex] ?: return@forEach
+                    drawLine(
+                        color = rightColor.copy(alpha = 0.70f),
+                        start = toCanvasPoint(sourcePoint.x, sourcePoint.y),
+                        end = helperCanvasPoint,
+                        strokeWidth = 3f
+                    )
+                }
+                drawPointHighlight(helperCanvasPoint, rightColor, radius = 12f, label = "110")
+            }
+
+            BLUSH_LEFT_EYE_SOURCE_106.forEach { index ->
+                drawFloatArrayIndexHighlight(points, index, leftColor, radius = 10f)
+            }
+            BLUSH_RIGHT_EYE_SOURCE_106.forEach { index ->
+                drawFloatArrayIndexHighlight(points, index, rightColor, radius = 10f)
+            }
+        }
+
         // 绘制 MediaPipe 468 点
         if (show468Points && mediaPipe468Points != null) {
             val pointColor = Color(0xFF00FF00)
@@ -516,6 +667,23 @@ private fun DebugLandmarkCanvas(
                     }
                 }
             }
+
+            BLUSH_LEFT_EYE_SOURCE_468.forEach { index ->
+                drawMediaPipeIndexHighlight(
+                    points = mediaPipe468Points,
+                    index = index,
+                    color = Color(0xFFFFFF00),
+                    radius = 8f
+                )
+            }
+            BLUSH_RIGHT_EYE_SOURCE_468.forEach { index ->
+                drawMediaPipeIndexHighlight(
+                    points = mediaPipe468Points,
+                    index = index,
+                    color = Color(0xFFFF66CC),
+                    radius = 8f
+                )
+            }
         }
 
         // 绘制大美丽 106 点
@@ -540,6 +708,13 @@ private fun DebugLandmarkCanvas(
                     )
                 }
             }
+
+            drawBlushMeshHighlight(
+                points = bigBeauty106Points,
+                meshColor = Color(0xFFFFD54F),
+                leftColor = Color(0xFFFFC107),
+                rightColor = Color(0xFFFF5CA8)
+            )
         }
 
         // 绘制 GPUPixel 106 点
@@ -564,6 +739,13 @@ private fun DebugLandmarkCanvas(
                     )
                 }
             }
+
+            drawBlushMeshHighlight(
+                points = gpupixel106Points,
+                meshColor = Color(0x66FF8A65),
+                leftColor = Color(0xFFFFB300),
+                rightColor = Color(0xFFFF4081)
+            )
         }
     }
 }
@@ -575,6 +757,41 @@ private data class MediaPipeResult(
     val landmarks: List<Pair<Float, Float>>,
     val points106: FloatArray
 )
+
+private fun normalizedPoint(points: FloatArray, index: Int): Offset? {
+    if (index !in 0 until points.size / 2) return null
+    return Offset(points[index * 2], points[index * 2 + 1])
+}
+
+private fun averageNormalizedPoint(points: FloatArray, indices: IntArray): Offset? {
+    var sumX = 0f
+    var sumY = 0f
+    var count = 0
+    indices.forEach { index ->
+        val point = normalizedPoint(points, index) ?: return@forEach
+        sumX += point.x
+        sumY += point.y
+        count += 1
+    }
+    if (count == 0) return null
+    return Offset(sumX / count, sumY / count)
+}
+
+private fun buildBlushDebugPointMap(points: FloatArray): Map<Int, Offset> {
+    val result = mutableMapOf<Int, Offset>()
+    for (index in 0 until minOf(points.size / 2, 106)) {
+        normalizedPoint(points, index)?.let { point ->
+            result[index] = point
+        }
+    }
+    averageNormalizedPoint(points, BLUSH_LEFT_HELPER_SOURCE_INDICES)?.let { point ->
+        result[109] = point
+    }
+    averageNormalizedPoint(points, BLUSH_RIGHT_HELPER_SOURCE_INDICES)?.let { point ->
+        result[110] = point
+    }
+    return result
+}
 
 /**
  * 使用 MediaPipe 检测图片的 468 点，并转换为 106 点
@@ -699,10 +916,10 @@ private fun convert468To106ForDebug(
         53, 52, 65, 55,
         // === 左眉下部 68-71 (4点) - 画面右侧，从眉尾到眉头 ===
         285, 295, 282, 283,
-        // === 右眼内/下 72-74 (3点) - 画面左侧 ===
-        27, 23, 473,
-        // === 左眼内/下 75-77 (3点) - 画面右侧 ===
-        257, 253, 468,
+        // === 右眼补充 72-74 (3点) - 画面左侧 ===
+        374, 375, 473,
+        // === 左眼补充 75-77 (3点) - 画面右侧 ===
+        44, 45, 468,
         // === 山根 78-79 (2点) ===
         193, 417,
         // === 鼻孔 80-83 (4点) ===
