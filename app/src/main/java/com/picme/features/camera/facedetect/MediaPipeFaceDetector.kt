@@ -6,14 +6,11 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ImageProxy
 import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import com.google.mediapipe.tasks.vision.core.RunningMode
+import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.core.common.Logger
-import java.nio.ByteBuffer
 
 /**
  * MediaPipe Face Landmarker 封装器
@@ -53,8 +50,8 @@ class MediaPipeFaceDetector(context: Context) {
         //   58-63: 左眼外轮廓6点（画面右侧，从外角到内角）
         //   64-67: 右眉下部4点（画面左侧，从眉头到眉尾）
         //   68-71: 左眉下部4点（画面右侧，从眉尾到眉头）
-        //   72-74: 右眼内/下3点（72=右眼内角, 73=右眼下眼睑中, 74=右眼内下）
-        //   75-77: 左眼内/下3点（75=左眼内角, 76=左眼下眼睑中, 77=左眼内下）
+        //   72-74: 右眼补充3点（72=右眼下眼睑中, 73=右眼下眼睑外, 74=右瞳孔）
+        //   75-77: 左眼补充3点（75=左眼下眼睑中, 76=左眼下眼睑外, 77=左瞳孔）
         //   78-79: 山根2点（78=山根右/画面左侧, 79=山根左/画面右侧）
         //   80-83: 鼻孔4点（80=右鼻孔左/画面左侧, 81=右鼻孔右, 82=左鼻孔左, 83=左鼻孔右/画面右侧）
         //   84-95: 嘴巴外轮廓12点（84=右嘴角/画面左侧, 94=左嘴角/画面右侧）
@@ -89,11 +86,11 @@ class MediaPipeFaceDetector(context: Context) {
             // === 左眉下部 68-71 (4点) - 画面右侧=实际左脸，从眉尾到眉头 ===
             285, 295, 282, 283,
 
-            // === 右眼内/下 72-74 (3点) - 画面左侧 ===
-            27, 23, 473,
+            // === 右眼补充 72-74 (3点) - 画面左侧 ===
+            374, 375, 473,
 
-            // === 左眼内/下 75-77 (3点) - 画面右侧 ===
-            257, 253, 468,
+            // === 左眼补充 75-77 (3点) - 画面右侧 ===
+            44, 45, 468,
 
             // === 山根 78-79 (2点) ===
             193, 417,

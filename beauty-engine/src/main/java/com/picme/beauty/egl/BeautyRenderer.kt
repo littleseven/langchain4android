@@ -5,9 +5,6 @@ import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.Matrix
 import android.util.Log
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.FloatBuffer
 
 /**
  * 大美丽 - 美颜渲染器
@@ -508,14 +505,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     override fun onRender() {
         val activeStyle = styleEffectShader.getActiveStyle()
 
-        // 如果启用了多Pass美颜且需要磨皮/美白/妆容/美型，使用多Pass管线
-        val needMultiPass = multiPassBeautyEnabled && (
+        // 妆容纹理依赖 FaceMakeupPass，因此只要唇色或腮红开启，就必须走多Pass链路。
+        val needTextureMakeupPass =
+            faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
+        val needMultiPass = needTextureMakeupPass || (multiPassBeautyEnabled && (
             smoothingStrength > 0.001 ||
                 whiteningStrength > 0.001 ||
                 bigEyesStrength > 0.001f ||
-                kotlin.math.abs(slimFaceStrength) > 0.001f ||
-                (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f))
-        )
+                kotlin.math.abs(slimFaceStrength) > 0.001f
+        ))
         if (needMultiPass) {
             renderBeautyMultiPass(activeStyle)
             return
@@ -811,12 +809,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      */
     private fun executeBeautyPasses(): Boolean {
         Log.d(TAG, "executeBeautyPasses: START, multiPass=$multiPassBeautyEnabled, smooth=$smoothingStrength, white=$whiteningStrength")
-        if (!multiPassBeautyEnabled) {
-            Log.d(TAG, "Multi-pass disabled")
-            return false
-        }
-        // 当需要磨皮/美白/妆容时，才需要执行多Pass管线
-        val needBeautyPass = smoothingStrength > 0.001 || whiteningStrength > 0.001
+        // 妆容纹理链路独立于多Pass美颜开关；即使关闭磨皮/美白多Pass，也要保留 FaceMakeupPass。
+        val needBeautyPass = multiPassBeautyEnabled && (smoothingStrength > 0.001 || whiteningStrength > 0.001)
         val needMakeupPass = faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
         if (!needBeautyPass && !needMakeupPass) {
             Log.d(TAG, "Multi-pass: no beauty or makeup effect needed")
