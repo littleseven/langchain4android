@@ -18,9 +18,9 @@
     <string name="close">关闭</string>
     <string name="back">返回</string>
     <string name="beauty_engine">美颜引擎</string>
-    <string name="beauty_engine_rplan">R 计划自主方案（默认）</string>
-    <string name="beauty_engine_gpupixel">GPUPixel（实验性）</string>
-    <string name="settings_beauty_engine_desc">选择默认美颜引擎，会影响预览与处理链路。</string>
+<string name="beauty_engine_rplan">大美丽（默认）</string>
+<string name="beauty_engine_gpupixel">兼容模式</string>
+<string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
     <string name="photo">照片</string>
     <string name="video">视频</string>
     <string name="portrait">人像</string>

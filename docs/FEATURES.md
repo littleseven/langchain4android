@@ -162,10 +162,10 @@
 - **记忆功能**：记住用户上次使用的参数组合
 
 ##### 1.3.4.5 大美丽 引擎策略与用户体验（2026-04 更新）
-- **默认主引擎**：大美丽（自研 OpenGL ES + EGL）为默认主引擎；GPUPixel 为实验性备选引擎，可在设置中手动切换。
+- **默认主引擎**：大美丽（自研 OpenGL ES + EGL）为默认主引擎；设置页上层仅保留“大美丽 / 兼容模式”两档表述，兼容模式底层由 GPUPixel 链路承接。
 - **大美丽渲染特性**：基础美颜由主 Shader 实时处理；开启唇色/腮红时会进入 `FaceMakeupPass + 主 Shader` 的多 Pass GPU 链路，保持端侧实时预览。
 - **移除 PixelFreeEffects**：因 PixelFree 核心算法未真正开源，且官方 UIKit 与 Jetpack Compose 架构冲突，已于 2026-04 彻底移除 `:pixelfree-sdk` 模块及相关代码。
-- **未来演进方向（GPUPixel）**：评估以 [GPUPixel](https://github.com/pixpark/gpupixel) 作为开源高性能 GPU 滤镜引擎基础，逐步替换/增强 大美丽 的 Shader 管线。GPUPixel 采用 Apache 2.0 协议，纯 C++11 + OpenGL ES，单帧 < 10ms，无商业 SDK 绑定。
+- **未来演进方向（兼容链路 / 底层 GPUPixel）**：评估以 [GPUPixel](https://github.com/pixpark/gpupixel) 作为开源高性能 GPU 滤镜引擎基础，逐步补强兼容链路与回退能力；该技术名在上层默认弱化，仅在实现与调试语境保留。
 - **技术实现文档**：引擎实现与渲染链路细节见 [`BIG_BEAUTY_TECH_SPEC.md`](BIG_BEAUTY_TECH_SPEC.md)。
 
 #### 1.3.5 人脸关键点检测能力规划

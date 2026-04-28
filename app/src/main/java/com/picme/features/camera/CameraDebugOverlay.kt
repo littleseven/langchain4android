@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -15,7 +16,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import com.picme.features.camera.preview.core.FaceWarpParams
 import kotlin.math.sqrt
-import androidx.compose.ui.graphics.drawscope.DrawScope
 
 @Composable
 internal fun FaceDebugOverlay(
@@ -163,7 +163,7 @@ private fun FaceDebugOverlayDual(
                 textAlign = Paint.Align.LEFT
                 color = android.graphics.Color.WHITE
             }
-            canvas.nativeCanvas.drawText("G=GPUPixel  M=MediaPipe(大美丽)", 10f, 30f, legendPaint)
+            canvas.nativeCanvas.drawText("G=兼容链路  M=MediaPipe(大美丽)", 10f, 30f, legendPaint)
         }
     }
 }

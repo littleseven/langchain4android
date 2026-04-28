@@ -379,7 +379,7 @@ fun FaceLandmarkDebugScreen(
                 )
                 DebugToggle(
                     color = Color(0xFFFF4444),
-                    label = "GPUPixel",
+                    label = "兼容链路",
                     subLabel = "${gpDetectTime.toInt()}ms",
                     enabled = showGpuPixel106,
                     onClick = { showGpuPixel106 = !showGpuPixel106 }
@@ -389,7 +389,7 @@ fun FaceLandmarkDebugScreen(
             // GPUPixel 检测失败提示
             if (showGpuPixel106 && gpupixel106Points == null && !isLoading) {
                 Text(
-                    text = "GPUPixel 未检测到人脸",
+                    text = "兼容链路未检测到人脸",
                     color = Color(0xFFFF8888),
                     fontSize = 10.sp,
                     modifier = Modifier.padding(top = 4.dp)
