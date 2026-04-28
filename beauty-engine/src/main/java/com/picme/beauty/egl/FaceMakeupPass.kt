@@ -14,9 +14,9 @@ import java.util.EnumMap
  * 面部妆容 Pass（GPUPixel 风格）
  *
  * 使用三角网格 + 纹理贴图实现唇色/腮红渲染：
+ * - 106 个顶点构成人脸三角网格（纯 106 点关键点，不扩展）
  * - 嘴唇与脸颊分别使用独立的索引网格和妆容纹理
  * - 纹理 alpha 负责确定精确的生效区域，颜色由业务色板共同决定
- * - 为兼容 GPUPixel 的 111 点妆容网格，内部会在 106 点基础上补齐 5 个辅助点
  *
  * 与 GPUPixel 原始实现保持一致：
  * 1. 先把输入帧完整复制到输出 FBO
@@ -27,15 +27,8 @@ class FaceMakeupPass(private val context: Context) {
     companion object {
         private const val TAG = "PicMe:FaceMakeupPass"
         private const val TEXTURE_SIZE = 1280f
-        private const val BASE_FACE_POINT_COUNT = 106
 
-        const val VERTEX_COUNT = 111
-
-        private const val HELPER_LIP_CENTER_INDEX = 106
-        private const val HELPER_LEFT_BROW_INDEX = 107
-        private const val HELPER_RIGHT_BROW_INDEX = 108
-        private const val HELPER_LEFT_CHEEK_INDEX = 109
-        private const val HELPER_RIGHT_CHEEK_INDEX = 110
+        const val VERTEX_COUNT = 106
 
         private val FULLSCREEN_VERTICES = floatArrayOf(
             -1.0f, -1.0f,
@@ -72,7 +65,7 @@ class FaceMakeupPass(private val context: Context) {
             }
         """
 
-        // GPUPixel 111 点基准纹理坐标
+        // GPUPixel 111 点基准纹理坐标的前 106 点
         private val FACE_TEXTURE_COORDS = floatArrayOf(
             0.302451f, 0.384169f, 0.302986f, 0.409377f, 0.304336f, 0.434977f, 0.306984f, 0.460683f, 0.311010f, 0.486447f,
             0.316537f, 0.511947f, 0.323069f, 0.536942f, 0.331312f, 0.561627f, 0.342011f, 0.585088f, 0.355477f, 0.607217f,
@@ -101,78 +94,53 @@ class FaceMakeupPass(private val context: Context) {
             0.468680f, 0.639672f, 0.443456f, 0.620391f,
             0.433718f, 0.595595f, 0.466898f, 0.597025f, 0.500000f, 0.599883f, 0.533102f, 0.597025f, 0.566282f, 0.595595f,
             0.534634f, 0.610720f, 0.500000f, 0.616173f, 0.465366f, 0.610720f,
-            0.406113f, 0.405280f, 0.593887f, 0.405280f,
-            0.500000f, 0.608028f,
-            0.389259f, 0.336870f,
-            0.610740f, 0.336870f,
-            0.386071f, 0.503558f,
-            0.613928f, 0.503558f
+            0.406113f, 0.405280f, 0.593887f, 0.405280f
         )
 
         private val LIP_INDICES = intArrayOf(
             84, 85, 96,
-            96, 85, 97,
-            97, 85, 86,
+            85, 96, 97,
+            85, 86, 97,
             86, 97, 98,
-            86, 98, 87,
-            87, 98, 88,
-            88, 98, 99,
-            88, 99, 89,
-            89, 99, 100,
-            89, 100, 90,
-            90, 100, 91,
-            100, 91, 101,
-            101, 91, 92,
-            101, 92, 102,
-            102, 92, 93,
-            102, 93, 94,
-            102, 94, 103,
-            103, 94, 95,
-            103, 95, 96,
-            96, 95, 84,
+            86, 87, 98,
+            87, 98, 99,
+            87, 88, 99,
+            88, 99, 100,
+            88, 89, 100,
+            89, 90, 100,
+            90, 91, 100,
+            91, 100, 101,
+            91, 92, 101,
+            92, 101, 102,
+            92, 93, 102,
+            93, 102, 103,
+            93, 94, 103,
+            94, 103, 96,
+            94, 95, 96,
+            95, 84, 96,
             96, 97, 103,
-            97, 103, 106,
-            97, 106, 98,
-            106, 103, 102,
-            106, 102, 101,
-            106, 101, 99,
-            106, 98, 99,
-            99, 101, 100
+            97, 98, 102,
+            97, 102, 103,
+            98, 99, 102,
+            99, 100, 101,
+            99, 101, 102
         )
 
         private val BLUSH_INDICES = intArrayOf(
-            0, 52, 1,
-            1, 52, 2,
-            2, 52, 57,
-            2, 57, 3,
-            3, 57, 4,
-            4, 57, 109,
-            57, 109, 74,
-            74, 109, 56,
-            56, 109, 80,
-            80, 109, 82,
-            82, 109, 7,
-            7, 109, 6,
-            6, 109, 5,
-            5, 109, 4,
-            56, 80, 55,
-            55, 80, 78,
-            32, 61, 31,
-            31, 61, 30,
-            30, 61, 62,
-            30, 62, 29,
-            29, 62, 28,
-            28, 62, 110,
-            62, 110, 76,
-            76, 110, 63,
-            63, 110, 81,
-            81, 110, 83,
-            83, 110, 25,
-            25, 110, 26,
-            26, 110, 27,
-            27, 110, 28,
-            63, 81, 58,
-            58, 81, 79
+            2, 3, 78,
+            3, 78, 44,
+            3, 4, 44,
+            4, 44, 45,
+            4, 5, 45,
+            5, 45, 46,
+            5, 6, 46,
+            27, 28, 79,
+            28, 79, 46,
+            28, 29, 46,
+            29, 46, 45,
+            29, 30, 45,
+            30, 45, 44,
+            30, 31, 44
         )
 
         val LIP_INDEX_COUNT = LIP_INDICES.size
@@ -333,54 +301,19 @@ class FaceMakeupPass(private val context: Context) {
     }
 
     fun updateFaceLandmarks(landmarks: FloatArray) {
-        if (landmarks.size < BASE_FACE_POINT_COUNT * 2) {
-            Log.w(TAG, "Invalid landmarks size: ${landmarks.size}, expected >= ${BASE_FACE_POINT_COUNT * 2}")
+        if (landmarks.size < VERTEX_COUNT * 2) {
+            Log.w(TAG, "Invalid landmarks size: ${landmarks.size}, expected >= ${VERTEX_COUNT * 2}")
             return
         }
 
-        val expandedLandmarks = expandFaceLandmarks(landmarks)
         vertexBuffer.clear()
         for (index in 0 until VERTEX_COUNT) {
-            val x = expandedLandmarks[index * 2]
-            val y = expandedLandmarks[index * 2 + 1]
+            val x = landmarks[index * 2]
+            val y = landmarks[index * 2 + 1]
             vertexBuffer.put(x * 2f - 1f)
             vertexBuffer.put(y * 2f - 1f)
         }
         vertexBuffer.flip()
-    }
-
-    private fun expandFaceLandmarks(landmarks: FloatArray): FloatArray {
-        val expanded = FloatArray(VERTEX_COUNT * 2)
-        val baseCount = minOf(landmarks.size, BASE_FACE_POINT_COUNT * 2)
-        System.arraycopy(landmarks, 0, expanded, 0, baseCount)
-
-        putAveragePoint(expanded, HELPER_LIP_CENTER_INDEX, intArrayOf(96, 97, 98, 99, 100, 101, 102, 103))
-        putAveragePoint(expanded, HELPER_LEFT_BROW_INDEX, intArrayOf(34, 35, 43, 64, 65))
-        putAveragePoint(expanded, HELPER_RIGHT_BROW_INDEX, intArrayOf(39, 40, 43, 69, 70))
-        putAveragePoint(expanded, HELPER_LEFT_CHEEK_INDEX, intArrayOf(4, 7, 56, 80, 82))
-        putAveragePoint(expanded, HELPER_RIGHT_CHEEK_INDEX, intArrayOf(25, 28, 63, 81, 83))
-        return expanded
-    }
-
-    private fun putAveragePoint(target: FloatArray, targetIndex: Int, sourceIndices: IntArray) {
-        var sumX = 0f
-        var sumY = 0f
-        var count = 0
-        sourceIndices.forEach { sourceIndex ->
-            if (sourceIndex in 0 until BASE_FACE_POINT_COUNT) {
-                sumX += target[sourceIndex * 2]
-                sumY += target[sourceIndex * 2 + 1]
-                count += 1
-            }
-        }
-        val outputBase = targetIndex * 2
-        if (count == 0) {
-            target[outputBase] = 0.5f
-            target[outputBase + 1] = 0.5f
-            return
-        }
-        target[outputBase] = (sumX / count).coerceIn(0f, 1f)
-        target[outputBase + 1] = (sumY / count).coerceIn(0f, 1f)
     }
 
     fun setIntensity(value: Float) {
