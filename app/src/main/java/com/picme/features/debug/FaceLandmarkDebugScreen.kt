@@ -41,7 +41,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
@@ -63,6 +65,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PicMe:FaceLandmarkDebug"
+
+// 与 FaceMakeupPass 中的腮红三角网格保持一致，便于在静态图 UI 对齐左右脸区域。
+private val BLUSH_TRIANGLE_INDICES = intArrayOf(
+    2, 3, 78,
+    3, 78, 44,
+    3, 4, 44,
+    4, 44, 45,
+    4, 5, 45,
+    5, 45, 46,
+    5, 6, 46,
+    29, 30, 79,
+    79, 29, 44,
+    28, 29, 44,
+    44, 28, 45,
+    27, 28, 45,
+    45, 27, 46,
+    26, 27, 46
+)
 
 @Composable
 fun FaceLandmarkDebugScreen(
@@ -465,6 +485,32 @@ private fun DebugLandmarkCanvas(
             )
         }
 
+        fun drawBlushTriangleMesh(points106: FloatArray, color: Color) {
+            val pointCount = points106.size / 2
+            val fillColor = color.copy(alpha = 0.14f)
+            val strokeColor = color.copy(alpha = 0.75f)
+
+            for (index in BLUSH_TRIANGLE_INDICES.indices step 3) {
+                val first = BLUSH_TRIANGLE_INDICES[index]
+                val second = BLUSH_TRIANGLE_INDICES[index + 1]
+                val third = BLUSH_TRIANGLE_INDICES[index + 2]
+                if (first >= pointCount || second >= pointCount || third >= pointCount) continue
+
+                val p0 = toCanvasPoint(points106[first * 2], points106[first * 2 + 1])
+                val p1 = toCanvasPoint(points106[second * 2], points106[second * 2 + 1])
+                val p2 = toCanvasPoint(points106[third * 2], points106[third * 2 + 1])
+                val path = Path().apply {
+                    moveTo(p0.x, p0.y)
+                    lineTo(p1.x, p1.y)
+                    lineTo(p2.x, p2.y)
+                    close()
+                }
+
+                drawPath(path = path, color = fillColor)
+                drawPath(path = path, color = strokeColor, style = Stroke(width = 1.5f))
+            }
+        }
+
         // 绘制 MediaPipe 468 点
         if (show468Points && mediaPipe468Points != null) {
             val pointColor = Color(0xFF00FF00)
@@ -520,6 +566,7 @@ private fun DebugLandmarkCanvas(
         // 绘制大美丽 106 点
         if (showBigBeauty106 && bigBeauty106Points != null) {
             val blueColor = Color(0xFF0000FF)
+            drawBlushTriangleMesh(bigBeauty106Points, blueColor)
             for (i in 0 until bigBeauty106Points.size / 2) {
                 val x = bigBeauty106Points[i * 2]
                 val y = bigBeauty106Points[i * 2 + 1]
@@ -544,6 +591,7 @@ private fun DebugLandmarkCanvas(
         // 绘制 GPUPixel 106 点
         if (showGpuPixel106 && gpupixel106Points != null) {
             val redColor = Color(0xFFFF0000)
+            drawBlushTriangleMesh(gpupixel106Points, redColor)
             for (i in 0 until gpupixel106Points.size / 2) {
                 val x = gpupixel106Points[i * 2]
                 val y = gpupixel106Points[i * 2 + 1]
