@@ -22,7 +22,7 @@
 - **[ENGINE] 双引擎策略**：自研 `beauty-engine`（BIG_BEAUTY）为默认主引擎；GPUPixel（GPUPIXEL）为实验性备选引擎，已完成零拷贝 YUV 预览链路集成，通过 `BeautyStrategy.GPUPIXEL` 手动切换；PixelFree 已完全移除
 - **[NATURAL] 自然美学原则**：所有美颜效果必须保持自然，避免过度失真
 - **[ACCURACY] 十字星精确跟踪**：人脸跟踪十字星偏差 < 5px，支持旋转/缩放/镜像场景
-- **[MLKIT] 人脸能力深度挖掘**：基于现有 ML Kit Face Detection，充分利用表情/状态属性（微笑、睁眼、头部角度）；MediaPipe Face Landmarker 与 Selfie Segmentation 作为异步增强流引入，严禁阻塞预览渲染线程
+- **[MLKIT] 人脸能力预留**：表情/状态属性（微笑、睁眼、头部角度）仍保留为产品能力，但需通过独立 ML Kit 分析流补齐；MediaPipe Face Landmarker 作为当前预览主分析链路，Selfie Segmentation 作为异步增强流引入，严禁阻塞预览渲染线程
 
 ## 2. 技术实现规范 (Technical Implementation)
 
@@ -282,8 +282,8 @@ val screenY = adjustedY * previewHeight
 
 ### 2.6 ML Kit 人脸增强能力实现规范
 
-#### 2.6.1 表情与状态属性（立即落地）
-基于现有 `CameraFrameAnalyzer` 中的 ML Kit Face Detection 结果，零新增依赖即可读取以下字段：
+#### 2.6.1 表情与状态属性（能力预留）
+相关字段与产品能力仍保留，但当前预览主分析链路已切换为 MediaPipe；如需启用，需补充独立 ML Kit 分析流，并确保与预览渲染线程隔离：
 
 | 属性 | 字段 | 应用场景 | 实现位置 |
 |:---|:---|:---|:---|
@@ -299,7 +299,7 @@ val screenY = adjustedY * previewHeight
 
 #### 2.6.2 MediaPipe Face Landmarker 468 点（已落地）
 - **引入方式**：集成 MediaPipe `face_landmarker` 任务（`face_landmarker.task` 模型），通过 `ImageAnalysis` 异步分析流驱动。
-- **数据流**：`ImageAnalysis` → `MediaPipeFaceDetector` → 468 点坐标 → 468→106 点语义映射 → `FaceWarpParams` / GPUPixel 滤镜链 → `BeautyPreviewEngine`。
+- **数据流**：`ImageAnalysis` → `MediaPipeFaceDetector` → 468 点坐标 → 468→106 点语义映射 → `FaceWarpParams` → `BeautyPreviewEngine`；GPUPixel 模式下该结果额外写入 `bigBeautyLandmarks`，仅用于双模式调试对照。
 - **映射规范**：
   - 106 点轮廓为开放曲线（33 点）：从右鬓角(0) → 下巴(16) → 左鬓角(32)。
   - 非轮廓区域（73 点）：眉毛、鼻梁、鼻尖、眼睛、鼻孔、嘴巴、瞳孔，对齐字节火山引擎 106 点标准。
@@ -307,7 +307,7 @@ val screenY = adjustedY * previewHeight
 - **性能红线**：
   - MediaPipe Face Landmarker 推理耗时约 20-40ms/帧（中端机，GPU delegate），**绝对禁止**放入预览渲染管线同步执行。
   - 必须采用"异步分析 + 参数插值"策略：分析流每 200-300ms 更新一次关键点，预览流根据最近一次结果进行平滑插值。
-- **应用场景**：精细美型参数映射（瘦脸、大眼）、妆容 UV 贴合（唇色、腮红）、GPUPixel 滤镜链驱动。
+- **应用场景**：精细美型参数映射（瘦脸、大眼）、妆容 UV 贴合（唇色、腮红）、双模式调试对照；GPUPixel 实际滤镜链仍由内置 `FaceDetector` 的 106 点结果驱动。
 
 #### 2.6.3 Selfie Segmentation（Phase 2-3）
 - **引入方式**：新增 ML Kit `segmentation-selfie` 依赖。

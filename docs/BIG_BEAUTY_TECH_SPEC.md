@@ -315,7 +315,7 @@ CameraPreviewStrategies.rememberPreviewStrategyBundle()
 
 **职责**：执行美颜渲染，管理所有 uniform 参数
 
-**当前支持的美颜参数（单 Pass Shader）**：
+**当前支持的美颜参数（基础主 Shader + 妆容多 Pass）**：
 
 | 参数 | uniform | 类型 | 范围 |
 |------|---------|------|------|
@@ -411,7 +411,7 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 3.4 难点 4：View 归一化坐标 → 纹理 UV 坐标映射
 
-**背景**：ML Kit 输出的人脸坐标是屏幕归一化坐标（View 空间），而 Shader 中人脸变形参数需要在纹理 UV 空间中使用。
+**背景**：`FaceWarpParams` 输出的人脸坐标是屏幕归一化坐标（View 空间），而 Shader 中人脸变形参数需要在纹理 UV 空间中使用。
 
 **解决方案**：`CameraPreviewRenderer.mapViewNormalizedToUv()` 四步映射
 
@@ -430,7 +430,7 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 3.5 难点 5：MediaPipe 468 点 → 106 点映射
 
-**背景**：大美丽模式使用 MediaPipe Face Landmarker（468 点）替代 ML Kit，需将 468 点映射为火山引擎 106 点标准格式。
+**背景**：当前主分析链路使用 MediaPipe Face Landmarker（468 点），需将 468 点映射为火山引擎 106 点标准格式，供大美丽链路与双模式调试复用。
 
 **关键说明**：具体映射关系以代码实现为准，本文档仅记录核心原则。
 
@@ -544,18 +544,16 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
-- **人脸检测**：依赖 ML Kit（外部注入 FaceWarpParams + LipMaskPoints）
+- **人脸检测**：使用 `MediaPipeFaceDetector` 的 468→106 点结果构建 `FaceWarpParams`，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
 
 #### GPUPixel（GPUPIXEL）— 实验性备选
 - **触发条件**：`BeautyStrategy.GPUPIXEL`（用户手动切换）
 - **路由类**：`GpupixelBeautyPreviewStrategy`
 - **Provider**：`GpupixelBeautyPreviewProvider` → GPUPixel C++ JNI（`TextureView` 显示）
-- **人脸检测**：GPUPixel 内建 `FaceDetector`，忽略 ML Kit 传入的 FaceWarpParams
+- **人脸检测**：GPUPixel 内建 `FaceDetector` 驱动滤镜链；MediaPipe 结果仅在双模式下写入 `bigBeautyLandmarks` 供调试对照
 - **当前限制**：
   - `createPreviewSurface()` 使用 TextureView（非 SurfaceView），功耗略高
-  - `bindPreview` 中 `request.willNotProvideSurface()`，预览绑定逻辑尚待完善
-  - 不支持腮红、眉毛等大美丽独有效果
   - `getPerfStats()` 返回 `EMPTY`，暂无性能指标
 
 ### 4.3 下一步技术项（RD，优先级排序）
@@ -734,7 +732,7 @@ QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIS
 | **技术栈** | 自研 OpenGL ES + EGL 渲染管线 | 开源 C++11/OpenGL ES（Apache 2.0） |
 | **相机帧输入路径** | CameraX `Preview` UseCase → SurfaceTexture（OES 纹理，零拷贝） | CameraX `ImageAnalysis` → YUV → RGBA 转换 → 手动旋转 → GPUPixelSourceRawData |
 | **预览显示 View** | `SurfaceView`（直接硬件合成，延迟低，功耗小） | `TextureView`（SDK 接口限制，GPU 合成路径） |
-| **人脸检测** | ML Kit Face Detection（外部注入，`FaceWarpParams`） | 内建 Mars 模型 FaceDetector（106 点，与滤镜链紧耦合） |
+| **人脸检测** | MediaPipe 468→106 → `FaceWarpParams` → `mapViewNormalizedToUv()` | 内建 Mars 模型 FaceDetector（106 点，与滤镜链紧耦合） |
 | **色调滤镜** | ✅ ColorMatrix → `colorMatrix` uniform 实时变换（OpenGL Shader 层） | ➖ 当前使用大美丽 ColorMatrix 路径；GPUPixel 3D LUT 路径为长期演进目标 |
 | **美颜基础** | 双边滤波磨皮、ColorMatrix 美白、FaceWarp 瘦脸/大眼、Shader 唇色/腮红 | BeautyFaceFilter（磨皮/美白）、FaceReshapeFilter（瘦脸/大眼）、LipstickFilter、BlusherFilter |
 | **专业调色** | ➖ 使用 CameraX CaptureRequest（有限） | ✅ ExposureFilter / ContrastFilter / SaturationFilter / WhiteBalanceFilter（Shader 级实时） |
@@ -750,11 +748,11 @@ QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIS
 CameraX Preview UseCase
   └─ SurfaceRequest → Surface（来自 BeautyPreviewView.getSurfaceForCamera()）
        └─ SurfaceTexture.updateTexImage()   ← 零拷贝，OES 纹理直接传给 Shader
-            └─ OpenGL Fragment Shader（单 Pass）
+            └─ Beauty pass（主 Shader / 多 Pass 美颜）
                  ├─ 磨皮（双边滤波 9pt）
                  ├─ 美白（亮度 uniform）
                  ├─ 瘦脸/大眼（FaceWarp uniform）
-                 ├─ 唇色/腮红（Shader 几何区域）
+                 ├─ FaceMakeupPass（唇色/腮红纹理妆容，按需启用）
                  └─ 色调矩阵（uColorMatrix uniform，ColorMatrix 4×5）
                       └─ WindowSurface.swapBuffers()
                            └─ SurfaceView（硬件合成显示）
@@ -764,18 +762,18 @@ CameraX Preview UseCase
 ```
 CameraX ImageAnalysis UseCase（无 Preview UseCase）
   └─ ImageProxy（YUV_420_888）
-       └─ GPUPixel.YUV_420_888toRGBA()   ← CPU 格式转换（YUV → RGBA）
-            └─ 上层手动旋转（rotateRgba90CW/CCW）  ← 避免 SetRotation 宽高比错误
-                 └─ GPUPixelSourceRawData.ProcessData()
-                      └─ 滤镜链（C++ GPU 处理）
-                           ├─ LipstickFilter（blend_level + face_landmark）
-                           ├─ BlusherFilter（blend_level + face_landmark）
-                           ├─ BeautyFaceFilter（skin_smoothing / whiteness）
-                           ├─ FaceReshapeFilter（thin_face / big_eye + face_landmark）
-                           ├─ ExposureFilter / ContrastFilter / SaturationFilter / WhiteBalanceFilter
-                           └─ [StyleFilter]（互斥切换，NONE 时直连）
-                                └─ GPUPixelSinkSurface.SetSurface()
-                                     └─ TextureView（GPU 合成显示）
+       └─ GPUPixel.YUV_420_888toI420AndRGBA()
+            ├─ Y/U/V DirectByteBuffer → SourceYUV.ProcessData()
+            └─ RGBA DirectByteBuffer → FaceDetector.detect()
+                 └─ 滤镜链（C++ GPU 处理）
+                      ├─ LipstickFilter（blend_level + face_landmark）
+                      ├─ BlusherFilter（blend_level + face_landmark）
+                      ├─ BeautyFaceFilter（skin_smoothing / whiteness）
+                      ├─ FaceReshapeFilter（thin_face / big_eye + face_landmark）
+                      ├─ ExposureFilter / ContrastFilter / SaturationFilter / WhiteBalanceFilter
+                      └─ [StyleFilter]（互斥切换，NONE 时直连）
+                           └─ GPUPixelSinkSurface.SetSurface()
+                                └─ TextureView（GPU 合成显示）
 ```
 
 **关键差异**：
@@ -793,9 +791,9 @@ CameraX ImageAnalysis UseCase（无 Preview UseCase）
 | `whitening` | ✅ `uWhitening` uniform | ✅ `BeautyFaceFilter.whiteness` | 归一化映射不同 |
 | `bigEyes` | ✅ `uBigEyes` + FaceWarp | ✅ `FaceReshapeFilter.big_eye` | 人脸检测来源不同 |
 | `slimFace` | ✅ `uSlimFace` + FaceWarp | ✅ `FaceReshapeFilter.thin_face` | 人脸检测来源不同 |
-| `lipColor` | ✅ Shader 几何区域 | ✅ `LipstickFilter.blend_level` | — |
+| `lipColor` | ✅ `FaceMakeupPass` 纹理妆容 + 主 Shader | ✅ `LipstickFilter.blend_level` | — |
 | `lipColorIndex` | ✅ `uLipColorIndex` uniform | ❌ GPUPixel 不使用 | GPUPixel 内建口红颜色 |
-| `blush` | ✅ Shader 双颊区域 | ✅ `BlusherFilter.blend_level` | — |
+| `blush` | ✅ `FaceMakeupPass` 纹理妆容 + 主 Shader | ✅ `BlusherFilter.blend_level` | — |
 | `blushColorFamily` | ✅ `uBlushColorFamily` uniform | ❌ GPUPixel 不使用 | GPUPixel 内建腮红色系 |
 | `colorMatrix` | ✅ `uCMRow0~3` + `uCMOffset` uniform | **静默忽略** | GPUPixel 调色走专用滤镜 |
 | `gpuExposure` | **静默忽略** | ✅ `ExposureFilter.exposure` | 大美丽侧待 P1 实现 |
@@ -811,22 +809,22 @@ CameraX ImageAnalysis UseCase（无 Preview UseCase）
 
 两引擎在人脸检测上采用完全不同的策略：
 
-**大美丽路径（ML Kit 外注）**：
+**大美丽路径（MediaPipe 主分析流）**：
 ```
 ImageAnalysis Analyzer
-  └─ ML Kit FaceDetection（异步，30~50ms/帧）
-       └─ FaceWarpParams（归一化坐标）
-            └─ GlBeautyPreviewStrategy.applyFaceWarpParams()
-                 └─ GlBeautyPreviewProvider.updateFaceWarpParams()
+  └─ MediaPipeFaceDetector.detect()（异步）
+       └─ 468→106 映射
+            └─ FaceWarpParams（View 归一化坐标）
+                 └─ CameraPreviewRenderer.mapViewNormalizedToUv()
                       └─ BeautyPreviewView（Shader uniform 注入）
 ```
-- ML Kit 结果通过 `FaceWarpParams` 数据类跨线程传递
+- MediaPipe 结果通过 `FaceWarpParams` 数据类跨线程传递
 - 大眼/瘦脸变形需要精确的 landmark 坐标（眼球中心、嘴角、下颌等）
-- 唇色/腮红通过 ML Kit 轮廓点构建几何区域
+- 唇色/腮红通过 106 点轮廓与 `FaceMakeupPass` 三角网格共同驱动
 
 **GPUPixel 路径（内建 FaceDetector）**：
 ```
-onRgbaFrame()（ImageAnalysis 帧）
+onYuvFrame() / onRgbaFrame()
   └─ FaceDetector.detect()（内建 Mars 模型，106 点，同步）
        └─ face_landmark（float[]）
             ├─ faceReshapeFilter.SetProperty("face_landmark", landmarks)
@@ -834,11 +832,11 @@ onRgbaFrame()（ImageAnalysis 帧）
             └─ blusherFilter.SetProperty("face_landmark", landmarks)
 ```
 - 每帧同步推理，GPUPixel 滤镜链自动处理 landmark 依赖
-- `GpupixelBeautyPreviewStrategy.applyFaceWarpParams()` 为空实现（忽略 ML Kit 结果）
+- `GpupixelBeautyPreviewStrategy.applyFaceWarpParams()` 为空实现；双模式下只额外保留 MediaPipe 的 `bigBeautyLandmarks` 供调试显示
 
 **关键约束**：
-- `ImageAnalysis` 的 ML Kit 人脸检测仍会运行（用于十字星跟踪等 UI 功能），但 GPUPixel 引擎不消费这些结果
-- 如果 ML Kit 推理过重影响 `ImageAnalysis` 帧率，进而影响 GPUPixel 收帧速率，需要考虑隔离
+- GPUPixel 模式下，MediaPipe 结果不参与 GPUPixel 滤镜参数下发，只用于双模式调试对照
+- 如果后续补回 ML Kit 表情/状态分析流，必须与当前 MediaPipe / GPUPixel 主链路隔离，避免拖慢 `ImageAnalysis`
 
 ### 8.5 引擎切换时序
 
@@ -869,8 +867,8 @@ onRgbaFrame()（ImageAnalysis 帧）
 
 | 场景 | 推荐引擎 | 原因 |
 |---|---|---|
-| 日常美颜（磨皮/美白/大眼/瘦脸） | **大美丽** | Shader 单 Pass，延迟低；ML Kit FaceWarp 更精准 |
-| 口红/腮红效果 | 两引擎效果相当 | 大美丽用 Shader 几何区域；GPUPixel 用 LipstickFilter/BlusherFilter |
+| 日常美颜（磨皮/美白/大眼/瘦脸） | **大美丽** | 主 Shader 为主，链路成熟；MediaPipe 468→106 映射精度更稳定 |
+| 口红/腮红效果 | 两引擎效果相当 | 大美丽用 `FaceMakeupPass` 纹理妆容；GPUPixel 用 LipstickFilter/BlusherFilter |
 | 专业调色（曝光/对比度/饱和度/色温） | **GPUPixel** | 独立 Shader 滤镜，调色精准可控；大美丽侧待 P1 实现 |
 | 风格特效（卡通/素描/浮雕等） | **GPUPixel** | 大美丽侧无对应能力 |
 | 色调滤镜（徕卡/胶片等） | **大美丽**（当前） | ColorMatrix uniform 直接在 Shader 层实时变换，零额外 pass |
@@ -1136,7 +1134,7 @@ verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
 | ~~兜底引擎~~ | ~~PixelFree~~ | ❌ 已于 2026-04 完全移除 |
 | 磨皮算法 | 双边滤波快速近似（9pt） | 保边效果好，移动端性能可接受 |
 | 显示层 | SurfaceView | 直接硬件合成，延迟更低，功耗更小 |
-| 人脸检测 | ML Kit（外部注入） | 复用现有分析流，不阻塞渲染线程 |
+| 人脸检测 | MediaPipe 468→106（主链路） | 与当前预览分析流一致，直接服务 `FaceWarpParams` 与双模式调试 |
 | 渲染参数 | 全 uniform 实时更新 | 无需重新编译 Shader，延迟 < 100ms |
 
 **预期结果**：

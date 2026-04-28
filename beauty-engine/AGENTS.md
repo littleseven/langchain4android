@@ -120,7 +120,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **参数映射**：UI 参数 → ΔL (亮度提升) 和 ΔU/ΔV (色度调整)
 
 - **瘦脸 (Slim Face)**：
-  - **人脸检测**：使用 ML Kit Face Detection API 获取 68/106 个 landmarks
+  - **人脸检测**：当前主链路使用 `MediaPipeFaceDetector` 输出 468→106 点结果；GPUPixel 路径使用内置 `FaceDetector` 106 点
   - **变形算法**：基于 Delaunay 三角剖分的网格变形 (Mesh Warping)
   - **实现要点**：以下颌角为中心点，向内收缩 5%-30%
   - **安全约束**：变形幅度限制在 30% 以内，保持面部比例协调
@@ -132,7 +132,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **安全约束**：放大比例不超过 1.3x
 
 - **唇色 (Lip Color)**：
-  - **唇部识别**：使用语义分割模型 (如 DeepLabV3) 提取唇部区域
+  - **区域来源**：大美丽路径使用 106 点嘴唇轮廓/三角网格贴图；GPUPixel 路径使用 `LipstickFilter + face_landmark`
   - **上色算法**：在 HSV 空间调整色相 (H) 和饱和度 (S)，保留明暗 (V)
   - **色号管理**：预设 12 种色号的 HSV 值
   - **实现要点**：保留唇部纹理，边缘自然过渡
@@ -149,7 +149,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **安全约束**：调整幅度限制在 20% 以内，保持身体比例
 
 **Shader 工程规范**（与实际代码对齐）：
-- **当前实现**：单 Pass Shader（`FRAGMENT_SHADER_BEAUTY`）在一次 draw call 内完成磨皮/美白/大眼/瘦脸/唇色/腮红，无多 Pass FBO 切换
+- **当前实现**：基础美颜由主 Shader（`FRAGMENT_SHADER_BEAUTY`）处理；唇色/腮红启用时，会先经过 `FaceMakeupPass` 纹理妆容 Pass，再回到主 Shader 完成后续渲染
 - **磨皮算法**：双边滤波快速近似（9 点采样 + 值域高斯权重），**非** Box Blur；早期文档中“盒式模糊”的描述是规划期草案，与当前实现不符，已纠正。演进路线：双边滤波 → 引导滤波（Phase 2）→ 多尺度分层（Phase 3）
 - **参数传递**：通过 `glUniform1f`/`glUniform2f`/`glUniform1i` 实时更新，禁止在参数变化时重新编译 Shader
 - **纹理类型**：相机输入使用 `GL_TEXTURE_EXTERNAL_OES`，调试 Shader 使用普通 `GL_TEXTURE_2D`
@@ -498,8 +498,8 @@ GPUPixelSourceRawData
 - 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小（GPUPixel 路径使用 `TextureView`，因 SDK 接口限制）
 - 输入/显示 Surface 解耦：避免 CameraX 与 View 生命周期抖动互相影响
 - 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档“盒式模糊”描述已纠正）。后续评估引导滤波（O(N) 无序复杂度）作为 Phase 2 升级方向
-- 单 Pass Shader 覆盖全部美颜效果：减少 FBO 切换开销，单帧延迟可控
-- GPUPixel 实验性集成保留 FaceDetector 独立路径：避免与 ML Kit 人脸点位格式冲突
+- 基础美颜优先走主 Shader；妆容纹理通过 `FaceMakeupPass` 独立 Pass 处理，在效果与实时性间平衡
+- GPUPixel 实验性集成保留 FaceDetector 独立路径；MediaPipe 468→106 结果仅在双模式调试中作为对照展示，避免与 GPUPixel 内置点位链路混用
 - `api/` 纯 Kotlin 接口层：为后续独立发布 AAR/Maven 做准备
 
 ---
