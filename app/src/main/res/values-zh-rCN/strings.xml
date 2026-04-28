@@ -28,11 +28,11 @@
     <string name="theme_mode">主题模式</string>
     <string name="beauty_engine">美颜引擎</string>
 
-    <string name="beauty_engine_rplan">R 计划自主方案（默认）</string>
-    <string name="beauty_engine_gpupixel">GPUPixel（实验性）</string>
+    <string name="beauty_engine_rplan">大美丽（默认）</string>
+    <string name="beauty_engine_gpupixel">兼容模式</string>
     <string name="settings_theme_mode_desc">控制应用浅色/深色显示风格。</string>
     <string name="settings_language_desc">设置界面语言与本地化展示方式。</string>
-    <string name="settings_beauty_engine_desc">选择默认美颜引擎，会影响预览与处理链路。</string>
+    <string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
     <string name="settings_beauty_runtime_desc">影响实时性能与人脸分析行为。</string>
     <string name="settings_debug_tools_desc">仅建议调试环境开启。</string>
     <string name="filters">滤镜</string>

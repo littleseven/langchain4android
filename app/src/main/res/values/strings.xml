@@ -27,11 +27,11 @@
     <string name="theme_mode">Theme Mode</string>
     <string name="beauty_engine">Beauty Engine</string>
 
-    <string name="beauty_engine_rplan">R Plan (Default)</string>
-    <string name="beauty_engine_gpupixel">GPUPixel (Experimental)</string>
+    <string name="beauty_engine_rplan">Big Beauty (Default)</string>
+    <string name="beauty_engine_gpupixel">Compatibility Mode</string>
     <string name="settings_theme_mode_desc">Controls app appearance in light/dark mode.</string>
     <string name="settings_language_desc">Sets interface language and localization style.</string>
-    <string name="settings_beauty_engine_desc">Choose default beauty engine. Affects preview and processing pipeline.</string>
+    <string name="settings_beauty_engine_desc">Big Beauty is the default engine. Compatibility mode is only for fallback verification.</string>
     <string name="settings_beauty_runtime_desc">Affects real-time performance and face analysis behavior.</string>
     <string name="settings_debug_tools_desc">Recommended for debugging only. Enable in test environments.</string>
     <string name="filters">Filters</string>

@@ -255,11 +255,13 @@ private fun SettingsContent(
                         checked = showLogOverlay,
                         onCheckedChange = onShowLogOverlayChange
                     )
-                    // Shader Debug Mode Selection (for GPUPixel warp debugging)
-                    ShaderDebugModeSelection(
-                        currentMode = debugShaderMode,
-                        onModeSelected = onDebugShaderModeSelected
-                    )
+                    if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
+                        // 兼容链路使用独立 shader 调试面板，默认主链路不暴露该入口。
+                        ShaderDebugModeSelection(
+                            currentMode = debugShaderMode,
+                            onModeSelected = onDebugShaderModeSelected
+                        )
+                    }
                 }
             }
 
