@@ -77,17 +77,14 @@
             - **丰胸 (Body Enhancement)**：基于 MediaPipe/ML Kit Pose 人体关键点的局部径向扩展，调整幅度 ≤ 20%，范围 -30~+30
             - **长腿 (Leg Extension)**：基于姿态估计的下半身分段线性缩放 + 透视校正，幅度 ≤ 20%，范围 0-50
     - **人脸关键点检测能力（2026-04 更新）**：
-        - **表情与状态属性（已落地）**：基于 ML Kit Face Detection，读取 `smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性，实现微笑快门、侧脸美颜降强度、闭眼提醒。
-        - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型（瘦脸、大眼）和 GPUPixel 模式的滤镜链驱动。严禁放入预览渲染线程，仅通过异步回调更新美颜参数，避免掉帧。
+        - **表情与状态属性（能力预留，待独立分析流补齐）**：`smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性仍按产品能力保留；当前预览主分析链路已切换为 MediaPipe，如需启用该类能力，需补充独立 ML Kit 分析流，且不得阻塞预览渲染线程。
+        - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型与妆容贴合；在 GPUPixel 模式下，MediaPipe 点位仅用于双模式对照调试与 `bigBeautyLandmarks` 展示，实际滤镜链仍由 GPUPixel 内置 `FaceDetector` 驱动。
         - **Selfie Segmentation（Phase 2-3）**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask，实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
     - **美颜引擎技术路线（2026-04 更新）**：
-        - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）作为唯一实时美颜引擎。单 Pass Shader 完成磨皮/美白/大眼/瘦脸/唇色/腮红，零拷贝 GPU 管线（SurfaceTexture → OES 纹理 → SurfaceView）。
+        - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为默认主引擎；GPUPixel 为实验性备选引擎，可在设置中手动切换。
+        - **大美丽当前渲染**：基础美颜由主 Shader 实时处理；唇色/腮红启用时切换到 `FaceMakeupPass + 主 Shader` 的多 Pass GPU 链路，仍保持端侧实时预览。
         - **移除 PixelFreeEffects**：因 PixelFree 核心算法未真正开源，且官方 UIKit 与 Jetpack Compose 架构冲突，已于 2026-04 彻底移除 `:pixelfree-sdk` 模块及相关代码。
-        - **GPUPixel 实验性引擎（当前进展，2026-04）**：GPUPixel 已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口，可在设置中切换。已接入能力：磨皮（BeautyFaceFilter）、美白、瘦脸（FaceReshapeFilter）、大眼、唇色（LipstickFilter）、腮红（BlusherFilter）；人脸关键点通过 MediaPipe 468→106 点映射统一提供，对齐字节火山引擎 106 点标准，完全本地化。GPUPixel 的滤镜链（Filter Chain）模块化设计与 PicMe 技术栈高度契合。
-        - **GPUPixel 可直接接入的能力（优先级排序）**：
-            - **P0（本期）**：腮红（BlusherFilter，有完整 C++ 实现 + 内置 blusher.png mask，与唇色接入方式相同，3 行代码即可完成）。
-            - **P1**：专业调色滤镜链（ExposureFilter、ContrastFilter、SaturationFilter、WhiteBalanceFilter），可替换当前专业模式依赖 CameraX CaptureRequest 的参数调节，以 GPU Shader 方式实时预览，延迟更低、效果更可控。
-            - **P2（本期）**：风格特效滤镜（ToonFilter 卡通、SketchFilter 素描、PosterizeFilter 色块、EmbossFilter 浮雕、CrosshatchFilter 交叉线），用于创意拍摄场景。接入方式与调色滤镜相同，追加到滤镜链末端（`WhiteBalanceFilter` 之后、`SinkSurface` 之前），每次只激活一个滤镜，互斥切换。
+        - **GPUPixel 实验性引擎（当前进展，2026-04）**：GPUPixel 已完成实验性集成，可在设置中切换。已接入磨皮、美白、瘦脸、大眼、唇色、腮红、专业调色与风格特效；实际渲染路径为 `ImageAnalysis → YUV/I420 + RGBA 转换 → SourceYUV → Filter Chain → TextureView`，人脸关键点由内置 `FaceDetector`（106 点）实时驱动。
         - **GPUPixel 不具备、需自建的能力**：眉毛美化（无内置 mask）；多色号唇色切换（需动态替换纹理）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（有资源但无对应滤镜代码，需自建 LUTFilter）。
         - **滤镜技术演进**：当前基于自定义 GLSL Shader 实现，后续评估引入 **3D LUT（颜色查找表）** 技术——预计算 64×64×64 网格颜色变换，运行时三线性插值以接近零计算开销应用复杂滤镜效果，支持专业调色风格扩展。
         - **磨皮算法演进**：双边滤波（当前）→ 引导滤波（O(N) 复杂度，更优边缘保持，无光晕伪影）→ 多尺度细节分层（工业级，分频层独立处理后融合）。
