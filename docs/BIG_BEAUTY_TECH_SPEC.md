@@ -514,11 +514,11 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 
 | 本项目 | GPUPixel 源码 | 说明 |
 |--------|--------------|------|
-| `FaceTextureCoordinates()` | `face_makeup_filter.cc:352` | 111 点基准 UV 坐标 |
-| `GetFaceIndexs()` | `face_makeup_filter.cc:299` | 三角形网格索引（使用 0-110） |
-| 索引 107, 108, 109, 110 | 三角形顶点 | 辅助点用于眉心/脸颊区域网格填充 |
+| `FaceTextureCoordinates()` | `face_makeup_filter.cc:352` | 原始实现提供 111 点基准 UV 坐标 |
+| `GetFaceIndexs()` | `face_makeup_filter.cc:299` | 原始实现的三角形网格索引（使用 0-110） |
+| `FaceMakeupPass.FACE_TEXTURE_COORDS` | `face_makeup_filter.cc:352` | 当前仅截取前 106 点，避免在大美丽链路中补齐辅助点 |
 
-> **注意**：GPUPixel 源码中 `FaceTextureCoordinates()` 返回 111 个坐标（索引 0-110），但业界常称为"106 点"。实际使用时必须提供 111 点（222 个 float），否则三角形网格渲染会出现顶点缺失。
+> **注意**：GPUPixel 源码原始妆容网格包含 111 个点（索引 0-110），但 PicMe 当前大美丽链路只消费 106 点输入，不再通过均值法补齐 107-110 辅助点。
 
 ---
 

@@ -142,11 +142,10 @@ internal fun handleImageAnalysisFrameMediaPipe(
             val bigBeautyLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
 
             if (isDualMode) {
-                // 双模式：只返回 MediaPipe 的 bigBeautyLandmarks 部分
-                // GPUPixel 的 gpuPixelLandmarks 由 CameraScreen 中的 onGpuPixelLandmarksDetected 回调单独更新
-                val dualModeParams = FaceWarpParams(
-                    bigBeautyLandmarks = bigBeautyLandmarks,
-                    hasFace = faceWarpParams.hasFace
+                // 双模式下仍需保留 MediaPipe 转出的完整美颜参数，
+                // 只让 GPUPixel 回调补充 gpuPixelLandmarks，避免把轮廓/中心点清空后触发预览黑屏。
+                val dualModeParams = faceWarpParams.copy(
+                    bigBeautyLandmarks = bigBeautyLandmarks
                 )
                 onFaceWarpParamsChanged(dualModeParams)
             } else {
