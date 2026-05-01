@@ -109,8 +109,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private val beautyUnitPass = BeautyPass(context)
     private var beautyUnitPassCompiled = false
 
-    private var multiPassBeautyEnabled: Boolean = false
-
     // Phase 4: GPUPixel 风格妆容 Pass（三角网格 + 纹理贴图）
     private val faceMakeupPass = FaceMakeupPass(context)
     private var faceMakeupPassCompiled = false
@@ -505,28 +503,22 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     override fun onRender() {
         val activeStyle = styleEffectShader.getActiveStyle()
 
-        // 妆容纹理依赖 FaceMakeupPass，因此只要唇色或腮红开启，就必须走多Pass链路。
-        resetMultiPassFailureStateIfNeeded()
         val needTextureMakeupPass =
             faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
-        val multiPassAllowed = multiPassBeautyEnabled && !multiPassDisabledByFailure
-        val needMultiPass = needTextureMakeupPass || (multiPassAllowed && (
-            smoothingStrength > 0.001 ||
-                whiteningStrength > 0.001 ||
-                bigEyesStrength > 0.001f ||
-                kotlin.math.abs(slimFaceStrength) > 0.001f
-        ))
+        val needBeautyUnitPass = smoothingStrength > 0.001f || whiteningStrength > 0.001f
+        val needGeometryPass =
+            bigEyesStrength > 0.001f || kotlin.math.abs(slimFaceStrength) > 0.001f
+        val needMultiPass = needTextureMakeupPass || needBeautyUnitPass || needGeometryPass
         if (needMultiPass) {
             renderBeautyMultiPass(activeStyle)
             return
         }
 
-        // 原有逻辑：单Pass美颜
         if (activeStyle == StyleEffect.NONE) {
             super.onRender()
             return
         }
-        renderMultiPass(activeStyle)
+        renderStyleEffectPass()
     }
 
     /**
@@ -544,16 +536,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(TAG, "renderBeautyMultiPass: executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
 
         if (!beautyPassSuccess) {
-            recordMultiPassFailure("executeBeautyPasses returned false")
-            // 多Pass失败，回退到单Pass
-            if (activeStyle == StyleEffect.NONE) {
-                super.onRender()
-            } else {
-                renderMultiPass(activeStyle)
-            }
-            return
+            throw IllegalStateException("Multi-pass beauty pipeline failed: executeBeautyPasses returned false")
         }
-        recordMultiPassSuccess()
 
         // 步骤2: FaceMakeupPass 妆容渲染（三角网格 + 纹理贴图）
         Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
@@ -599,8 +583,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     // 2D 纹理版本的主 Shader（用于多Pass后从FBO采样）
     private val shaderProgram2D by lazy { ShaderProgram() }
     private var shaderProgram2DCompiled = false
-    private var multiPassFailureCount: Int = 0
-    private var multiPassDisabledByFailure: Boolean = false
 
     private fun compileShaderProgram2D(): Boolean {
         if (shaderProgram2DCompiled) {
@@ -611,30 +593,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         shaderProgram2DCompiled = shaderProgram2D.compile(vertexSource, fragmentSource)
         Log.d(TAG, "ShaderProgram2D compiled: $shaderProgram2DCompiled")
         return shaderProgram2DCompiled
-    }
-
-    private fun resetMultiPassFailureStateIfNeeded() {
-        if (multiPassDisabledByFailure && !multiPassBeautyEnabled) {
-            multiPassDisabledByFailure = false
-            multiPassFailureCount = 0
-        }
-    }
-
-    private fun recordMultiPassFailure(reason: String) {
-        multiPassFailureCount += 1
-        Log.w(TAG, "Multi-pass failure #$multiPassFailureCount: $reason")
-        if (multiPassFailureCount >= 3) {
-            multiPassDisabledByFailure = true
-            Log.w(TAG, "Multi-pass disabled after repeated failures")
-        }
-    }
-
-    private fun recordMultiPassSuccess() {
-        if (multiPassFailureCount != 0 || multiPassDisabledByFailure) {
-            Log.d(TAG, "Multi-pass recovered")
-        }
-        multiPassFailureCount = 0
-        multiPassDisabledByFailure = false
     }
 
     private fun renderMainShaderFromFbo(
@@ -836,12 +794,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * 返回 true 表示成功，主Shader应从FBO纹理采样
      */
     private fun executeBeautyPasses(): Boolean {
-        Log.d(TAG, "executeBeautyPasses: START, multiPass=$multiPassBeautyEnabled, smooth=$smoothingStrength, white=$whiteningStrength")
-        // 妆容纹理链路独立于多Pass美颜开关；即使关闭磨皮/美白多Pass，也要保留 FaceMakeupPass。
-        val needBeautyPass = multiPassBeautyEnabled && (smoothingStrength > 0.001 || whiteningStrength > 0.001)
-        val needMakeupPass = faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
-        if (!needBeautyPass && !needMakeupPass) {
-            Log.d(TAG, "Multi-pass: no beauty or makeup effect needed")
+        val needBeautyPass = smoothingStrength > 0.001f || whiteningStrength > 0.001f
+        val needGeometryPass = bigEyesStrength > 0.001f || kotlin.math.abs(slimFaceStrength) > 0.001f
+        val needMakeupPass =
+            faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
+        val needFboPipeline = needBeautyPass || needGeometryPass || needMakeupPass
+        Log.d(
+            TAG,
+            "executeBeautyPasses: START, needFboPipeline=$needFboPipeline, smooth=$smoothingStrength, white=$whiteningStrength"
+        )
+        if (!needFboPipeline) {
+            Log.d(TAG, "Multi-pass: no FBO pipeline effect needed")
             return false
         }
 
@@ -903,7 +866,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val cameraTextureId = getBoundExternalTextureId()
         Log.d(TAG, "executeBeautyPasses: cameraTextureId=$cameraTextureId")
         if (cameraTextureId == 0) {
-            Log.w(TAG, "Camera texture ID is 0, multi-pass will use fallback")
+            Log.w(TAG, "Camera texture ID is 0, cannot execute multi-pass pipeline")
             return false
         }
         Log.d(TAG, "Multi-pass: cameraTex=$cameraTextureId, smooth=$smoothingStrength, white=$whiteningStrength")
@@ -1010,19 +973,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         return externalTextureId
     }
 
-    /**
-     * 设置是否启用多Pass美颜
-     */
-    fun setMultiPassBeautyEnabled(enabled: Boolean) {
-        multiPassBeautyEnabled = enabled
-        if (enabled) {
-            multiPassDisabledByFailure = false
-            multiPassFailureCount = 0
-        }
-        Log.d(TAG, "Multi-pass beauty enabled: $enabled")
-    }
-
-    private fun renderMultiPass(activeStyle: StyleEffect) {
+    private fun renderStyleEffectPass() {
         // 获取当前 viewport 尺寸
         val viewportArray = IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
@@ -1033,9 +984,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         val fbo = intermediateFbo
         if (fbo == null || !fbo.isInitialized) {
-            Log.w(TAG, "FBO not ready, falling back to single pass")
-            super.onRender()
-            return
+            throw IllegalStateException("Style effect FBO is not ready")
         }
 
         // Pass 1: 美颜 + 调色 -> FBO
@@ -1366,8 +1315,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         fboPool.releaseAll()
         shaderProgram2D.release()
         shaderProgram2DCompiled = false
-        multiPassFailureCount = 0
-        multiPassDisabledByFailure = false
         super.release()
     }
 }
