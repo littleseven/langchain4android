@@ -244,6 +244,7 @@ class BeautyPreviewView @JvmOverloads constructor(
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 Log.d(TAG, "Display SurfaceView destroyed")
                 displaySurface = null
+                renderer.clearRenderSurface(holder.surface)
             }
         })
 
@@ -440,11 +441,22 @@ class BeautyPreviewView @JvmOverloads constructor(
         super.onDetachedFromWindow()
         Log.d(TAG, "BeautyPreviewView detached from window")
         displaySurface = null
+        renderer.clearRenderSurface()
     }
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         Log.d(TAG, "Visibility changed: $visibility")
+    }
+
+    fun release() {
+        displaySurface = null
+        cameraSurface?.release()
+        cameraSurface = null
+        if (isRendererInitialized) {
+            renderer.release()
+            isRendererInitialized = false
+        }
     }
 }
 

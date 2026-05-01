@@ -140,9 +140,9 @@ class GlBeautyPreviewProvider(
     }
 
     override fun release() {
-        previewSurface?.release()
-        previewSurface = null
+        beautyPreviewView?.release()
         beautyPreviewView = null
+        previewSurface = null
         isInitialized = false
         Log.i(TAG, "GlBeautyPreviewProvider released")
     }
