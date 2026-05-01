@@ -84,6 +84,7 @@
 - **多语言同步**：新增功能时必须同步更新三个语言文件
 - **深色模式**：必须使用 MaterialTheme.colorScheme 支持深色模式
 - **实时生效**：设置变更通过 Flow 自动通知订阅者，无需手动刷新
+- **选择器设置项**：人脸检测引擎等枚举配置应以 `SelectorSetting` / 选项 Chip 暴露，默认值必须可回退到 `AUTO`，并通过 Repository 持久化到 DataStore。
 
 ## 4. 常见陷阱检查清单 (Checklist)
 

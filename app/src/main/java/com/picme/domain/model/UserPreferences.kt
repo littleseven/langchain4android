@@ -25,6 +25,15 @@ enum class BeautyStrategy {
 }
 
 /**
+ * 人脸检测算法引擎模式（领域模型）
+ */
+enum class FaceDetectionEngineMode {
+    MEDIAPIPE,
+    INSIGHTFACE,
+    GPUPIXEL
+}
+
+/**
  * 人脸检测间隔档位（领域模型）
  */
 enum class FaceDetectIntervalProfile {

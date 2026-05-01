@@ -17,6 +17,7 @@ import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.repository.UserSettingsRepository
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +34,7 @@ internal data class CameraRuntimeContext(
     val showCameraInfoInPreview: Boolean,
     val showFaceDebugOverlay: Boolean,
     val showLogOverlay: Boolean,
+    val faceDetectionEngineMode: FaceDetectionEngineMode,
     val faceLandmarkModeEnabled: Boolean,
     val glRecoveryAvailableAtMs: Long,
     val lifecycleOwner: androidx.lifecycle.LifecycleOwner
@@ -53,6 +55,9 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val showCameraInfoInPreview by userPreferencesRepository.showCameraInfoInPreviewFlow.collectAsState(initial = false)
     val showFaceDebugOverlay by userPreferencesRepository.showFaceDebugOverlayFlow.collectAsState(initial = false)
     val showLogOverlay by userPreferencesRepository.showLogOverlayFlow.collectAsState(initial = false)
+    val faceDetectionEngineMode by userPreferencesRepository.faceDetectionEngineModeFlow.collectAsState(
+        initial = FaceDetectionEngineMode.MEDIAPIPE
+    )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -66,6 +71,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         showCameraInfoInPreview = showCameraInfoInPreview,
         showFaceDebugOverlay = showFaceDebugOverlay,
         showLogOverlay = showLogOverlay,
+        faceDetectionEngineMode = faceDetectionEngineMode,
         faceLandmarkModeEnabled = faceLandmarkModeEnabled,
         glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
         lifecycleOwner = lifecycleOwner

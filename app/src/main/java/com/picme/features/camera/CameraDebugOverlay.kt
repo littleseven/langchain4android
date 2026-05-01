@@ -2,8 +2,23 @@ package com.picme.features.camera
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -13,7 +28,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.picme.R
+import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
 import kotlin.math.sqrt
 
@@ -23,28 +43,133 @@ internal fun FaceDebugOverlay(
     slimFaceValue: Float,
     aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
-    if (!faceWarpParams.hasFace) {
-        return
-    }
-
-    // 同时显示 GPUPixel 和大美丽两套点位用于对比
     val gpuPixelLandmarks = faceWarpParams.gpuPixelLandmarks
     val bigBeautyLandmarks = faceWarpParams.bigBeautyLandmarks
     val hasGpuPixel = gpuPixelLandmarks.hasFace && gpuPixelLandmarks.points.isNotEmpty()
     val hasBigBeauty = bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()
+    val detectionLabel = when (faceWarpParams.detectionSource) {
+        FaceDetectionSource.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
+        FaceDetectionSource.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
+        FaceDetectionSource.GPUPIXEL -> stringResource(R.string.face_detection_source_gpupixel)
+        FaceDetectionSource.NONE -> stringResource(R.string.face_detection_source_none)
+    }
+    val requestedLabel = when (faceWarpParams.requestedDetectionEngineMode) {
+        FaceDetectionEngineMode.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
+        FaceDetectionEngineMode.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
+        FaceDetectionEngineMode.GPUPIXEL -> stringResource(R.string.face_detection_source_gpupixel)
+    }
+    val requestedColor = faceDebugRequestedColor(faceWarpParams.requestedDetectionEngineMode)
+    val detectionColor = faceDebugSourceColor(faceWarpParams.detectionSource)
 
-    // 大美丽模式：仅显示大美丽点位
-    if (hasBigBeauty) {
-        FaceDebugOverlayBigBeauty(
-            bigBeautyLandmarks = bigBeautyLandmarks,
-            aspectRatio = aspectRatio
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (faceWarpParams.hasFace && hasBigBeauty) {
+            FaceDebugOverlayBigBeauty(
+                bigBeautyLandmarks = bigBeautyLandmarks,
+                aspectRatio = aspectRatio
+            )
+        } else if (faceWarpParams.hasFace && hasGpuPixel) {
+            FaceDebugOverlayGpuPixel(
+                gpuPixelLandmarks = gpuPixelLandmarks,
+                aspectRatio = aspectRatio
+            )
+        }
+
+        FaceDebugStatusPanel(
+            requestedLabel = requestedLabel,
+            requestedColor = requestedColor,
+            detectionLabel = detectionLabel,
+            detectionColor = detectionColor,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 12.dp, top = 12.dp)
         )
-    } else if (hasGpuPixel) {
-        // GPUPixel 模式：仅显示 GPUPixel 点位
-        FaceDebugOverlayGpuPixel(
-            gpuPixelLandmarks = gpuPixelLandmarks,
-            aspectRatio = aspectRatio
+    }
+}
+
+@Composable
+private fun FaceDebugStatusPanel(
+    requestedLabel: String,
+    requestedColor: Color,
+    detectionLabel: String,
+    detectionColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(14.dp)
+    Column(
+        modifier = modifier
+            .background(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                shape = shape
+            )
+            .border(
+                width = 1.dp,
+                color = detectionColor.copy(alpha = 0.55f),
+                shape = shape
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        FaceDebugStatusRow(
+            title = stringResource(R.string.camera_face_debug_requested_label),
+            label = requestedLabel,
+            accentColor = requestedColor,
+            emphasized = false
         )
+        Spacer(modifier = Modifier.height(8.dp))
+        FaceDebugStatusRow(
+            title = stringResource(R.string.camera_face_debug_active_label),
+            label = detectionLabel,
+            accentColor = detectionColor,
+            emphasized = true
+        )
+    }
+}
+
+@Composable
+private fun FaceDebugStatusRow(
+    title: String,
+    label: String,
+    accentColor: Color,
+    emphasized: Boolean
+) {
+    Column {
+        Text(
+            text = title,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            fontSize = 10.sp
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(if (emphasized) 10.dp else 8.dp)
+                    .background(color = accentColor, shape = CircleShape)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = if (emphasized) 14.sp else 12.sp
+            )
+        }
+    }
+}
+
+private fun faceDebugRequestedColor(mode: FaceDetectionEngineMode): Color {
+    return when (mode) {
+        FaceDetectionEngineMode.MEDIAPIPE -> Color(0xFF4DB6AC)
+        FaceDetectionEngineMode.INSIGHTFACE -> Color(0xFFFFB300)
+        FaceDetectionEngineMode.GPUPIXEL -> Color(0xFF66BB6A)
+    }
+}
+
+private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
+    return when (source) {
+        FaceDetectionSource.MEDIAPIPE -> Color(0xFF26A69A)
+        FaceDetectionSource.INSIGHTFACE -> Color(0xFFFF8F00)
+        FaceDetectionSource.GPUPIXEL -> Color(0xFF43A047)
+        FaceDetectionSource.NONE -> Color(0xFF9E9E9E)
     }
 }
 

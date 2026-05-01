@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val SHOW_CAMERA_INFO_IN_PREVIEW = booleanPreferencesKey("show_camera_info_in_preview")
         val SHOW_FACE_DEBUG_OVERLAY = booleanPreferencesKey("show_face_debug_overlay")
         val SHOW_LOG_OVERLAY = booleanPreferencesKey("show_log_overlay")
+        val FACE_DETECTION_ENGINE_MODE = stringPreferencesKey("face_detection_engine_mode")
         val FACE_DETECTION_LANDMARK_MODE = booleanPreferencesKey("face_detection_landmark_mode")
         val ADAPTIVE_FACE_DETECTION_INTERVAL = booleanPreferencesKey("adaptive_face_detection_interval")
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
@@ -221,6 +223,27 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateShowLogOverlay(show: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SHOW_LOG_OVERLAY] = show
+        }
+    }
+
+    override val faceDetectionEngineModeFlow: Flow<FaceDetectionEngineMode> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val modeName = preferences[PreferencesKeys.FACE_DETECTION_ENGINE_MODE]
+                ?: FaceDetectionEngineMode.MEDIAPIPE.name
+            runCatching { FaceDetectionEngineMode.valueOf(modeName) }
+                .getOrDefault(FaceDetectionEngineMode.MEDIAPIPE)
+        }
+
+    override suspend fun updateFaceDetectionEngineMode(mode: FaceDetectionEngineMode) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.FACE_DETECTION_ENGINE_MODE] = mode.name
         }
     }
 

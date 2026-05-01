@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
@@ -243,6 +244,18 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "FX ${activeEffects.joinToString("/")}"
     }
     val perfCompact = "FPS ${"%.1f".format(uiState.beautyDebugState.fps)} | ${uiState.beautyDebugState.processingMs}ms/${uiState.beautyDebugState.delayMs}ms | D${uiState.beautyDebugState.nullFrames}"
+    val requestedEngineLabel = when (uiState.faceDetectionEngineMode) {
+        FaceDetectionEngineMode.MEDIAPIPE -> "MEDIAPIPE"
+        FaceDetectionEngineMode.INSIGHTFACE -> "INSIGHTFACE"
+        FaceDetectionEngineMode.GPUPIXEL -> "GPUPIXEL"
+    }
+    val activeSourceLabel = when (uiState.faceWarpParams.detectionSource) {
+        com.picme.features.camera.preview.core.FaceDetectionSource.NONE -> "NONE"
+        com.picme.features.camera.preview.core.FaceDetectionSource.MEDIAPIPE -> "MEDIAPIPE"
+        com.picme.features.camera.preview.core.FaceDetectionSource.INSIGHTFACE -> "INSIGHTFACE"
+        com.picme.features.camera.preview.core.FaceDetectionSource.GPUPIXEL -> "GPUPIXEL"
+    }
+    val detectionCompact = "Detect ${requestedEngineLabel} -> ${activeSourceLabel}"
     val rendererErrorCompact = if (uiState.beautyDebugState.rendererErrorCategory.isNotBlank()) {
         "RendererErr ${uiState.beautyDebugState.rendererErrorCategory}: ${uiState.beautyDebugState.rendererErrorReason.ifBlank { "unknown" }}"
     } else {
@@ -288,6 +301,16 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                         Color(0xFFFFE082)
                     } else {
                         Color.White.copy(alpha = 0.9f)
+                    },
+                    fontSize = 9.sp
+                )
+                Text(
+                    text = detectionCompact,
+                    color = when (uiState.faceWarpParams.detectionSource) {
+                        com.picme.features.camera.preview.core.FaceDetectionSource.INSIGHTFACE -> Color(0xFFFFAB91)
+                        com.picme.features.camera.preview.core.FaceDetectionSource.MEDIAPIPE -> Color(0xFF80CBC4)
+                        com.picme.features.camera.preview.core.FaceDetectionSource.GPUPIXEL -> Color(0xFFA5D6A7)
+                        else -> Color.White.copy(alpha = 0.6f)
                     },
                     fontSize = 9.sp
                 )

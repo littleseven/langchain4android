@@ -62,10 +62,12 @@ import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.model.StyleFilter
+import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
@@ -189,6 +191,7 @@ internal data class BeautyDebugState(
 )
 
 internal data class CameraPreviewUiState(
+    val faceDetectionEngineMode: FaceDetectionEngineMode,
     val selectedFilter: FilterType,
     val selectedStyleFilter: StyleFilter,
     val facePoint: Offset?,
@@ -261,6 +264,7 @@ internal data class CameraPreviewActions(
 private fun buildCameraPreviewUiState(
     selectedFilter: FilterType,
     selectedStyleFilter: StyleFilter,
+    faceDetectionEngineMode: FaceDetectionEngineMode,
     facePoint: Offset?,
     faceWarpParams: FaceWarpParams,
     showFaceDebugOverlay: Boolean,
@@ -289,6 +293,7 @@ private fun buildCameraPreviewUiState(
     return CameraPreviewUiState(
         selectedFilter = selectedFilter,
         selectedStyleFilter = selectedStyleFilter,
+        faceDetectionEngineMode = faceDetectionEngineMode,
         facePoint = facePoint,
         faceWarpParams = faceWarpParams,
         showFaceDebugOverlay = showFaceDebugOverlay,
@@ -536,6 +541,7 @@ fun CameraContent(
     val showCameraInfoInPreview = runtimeContext.showCameraInfoInPreview
     val showFaceDebugOverlay = runtimeContext.showFaceDebugOverlay
     val showLogOverlay = runtimeContext.showLogOverlay
+    val faceDetectionEngineMode = runtimeContext.faceDetectionEngineMode
     val faceLandmarkModeEnabled = runtimeContext.faceLandmarkModeEnabled
     val glRecoveryAvailableAtMs = runtimeContext.glRecoveryAvailableAtMs
     val lifecycleOwner = runtimeContext.lifecycleOwner
@@ -589,7 +595,10 @@ fun CameraContent(
                 }
 
                 // 使用 Face106ToWarpParams 转换，确保与 MediaPipe 模式一致
-                val newParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(mirroredLandmarks)
+                val newParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(
+                    landmarks106 = mirroredLandmarks,
+                    detectionSource = FaceDetectionSource.GPUPIXEL
+                )
                 // 保存 GPUPixel 原始点位用于调试对比
                 // 双模式下保留已有的 bigBeautyLandmarks（由 MediaPipe 检测提供）
                 val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
@@ -597,6 +606,8 @@ fun CameraContent(
                 faceWarpParams = newParams.copy(
                     gpuPixelLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(mirroredLandmarks),
                     bigBeautyLandmarks = existingBigBeauty,
+                    detectionSource = FaceDetectionSource.GPUPIXEL,
+                    requestedDetectionEngineMode = faceDetectionEngineMode,
                     hasFace = existingHasFace || newParams.hasFace
                 )
             } else {
@@ -605,6 +616,8 @@ fun CameraContent(
                 val existingHasFace = faceWarpParams.hasFace
                 faceWarpParams = FaceWarpParams(
                     bigBeautyLandmarks = existingBigBeauty,
+                    detectionSource = FaceDetectionSource.NONE,
+                    requestedDetectionEngineMode = faceDetectionEngineMode,
                     hasFace = existingHasFace
                 )
             }
@@ -852,7 +865,13 @@ fun CameraContent(
     
 
 
-    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, previewRebindSignal) {
+    LaunchedEffect(faceDetectionEngineMode) {
+        faceWarpParams = faceWarpParams.copy(requestedDetectionEngineMode = faceDetectionEngineMode)
+        previewFaceWarpParams = previewFaceWarpParams.copy(requestedDetectionEngineMode = faceDetectionEngineMode)
+    }
+
+    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, faceDetectionEngineMode, previewRebindSignal) {
+        Logger.d("Camera", "Rebinding camera use cases for face engine mode=${faceDetectionEngineMode.name}")
         bindCameraUseCases(
             context = context,
             lifecycleOwner = lifecycleOwner,
@@ -865,6 +884,7 @@ fun CameraContent(
             cameraExecutor = cameraExecutor,
             beautySettings = beautySettings,
             beautyStrategy = beautyStrategy,
+            detectionEngineMode = faceDetectionEngineMode,
             videoCapture = videoCapture,
             gpupixelProvider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider,
             onImageCaptureChanged = { capture -> imageCapture = capture },
@@ -898,6 +918,8 @@ fun CameraContent(
                             Logger.d("Camera", "Merging MediaPipe data, GP points=${existingGpuPixel.points.size}")
                             faceWarpParams.copy(
                                 bigBeautyLandmarks = params.bigBeautyLandmarks,
+                                detectionSource = params.detectionSource,
+                                requestedDetectionEngineMode = params.requestedDetectionEngineMode,
                                 hasFace = existingHasFace || params.hasFace
                             )
                         }
@@ -906,6 +928,8 @@ fun CameraContent(
                             Logger.d("Camera", "Merging GPUPixel data, BB points=${existingBigBeauty.points.size}")
                             faceWarpParams.copy(
                                 gpuPixelLandmarks = params.gpuPixelLandmarks,
+                                detectionSource = params.detectionSource,
+                                requestedDetectionEngineMode = params.requestedDetectionEngineMode,
                                 hasFace = existingHasFace || params.hasFace
                             )
                         }
@@ -1097,6 +1121,7 @@ CameraPreviewContent(
     uiState = buildCameraPreviewUiState(
         selectedFilter = selectedFilter,
         selectedStyleFilter = beautySettings.styleFilter,
+        faceDetectionEngineMode = faceDetectionEngineMode,
         facePoint = facePoint,
         faceWarpParams = faceWarpParams,
         showFaceDebugOverlay = showFaceDebugOverlay,

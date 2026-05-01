@@ -1,6 +1,7 @@
 package com.picme.features.camera.preview.core
 
 import androidx.compose.ui.geometry.Offset
+import com.picme.domain.model.FaceDetectionEngineMode
 
 /**
  * 存储所有人脸 Contour 点的数据类（用于调试）
@@ -36,6 +37,13 @@ data class FaceContourData(
     }
 }
 
+enum class FaceDetectionSource {
+    NONE,
+    MEDIAPIPE,
+    INSIGHTFACE,
+    GPUPIXEL
+}
+
 data class FaceWarpParams(
     val faceCenterX: Float = 0.5f,
     val faceCenterY: Float = 0.5f,
@@ -68,7 +76,11 @@ data class FaceWarpParams(
     // 新增：GPUPixel 106 点数据（用于调试，GPUPixel 模式）
     val gpuPixelLandmarks: GpuPixelLandmarks = GpuPixelLandmarks(),
     // 新增：大美丽(MediaPipe) 106 点原始数据（用于调试对比）
-    val bigBeautyLandmarks: GpuPixelLandmarks = GpuPixelLandmarks()
+    val bigBeautyLandmarks: GpuPixelLandmarks = GpuPixelLandmarks(),
+    // 当前帧的人脸检测来源（调试浮层/日志使用）
+    val detectionSource: FaceDetectionSource = FaceDetectionSource.NONE,
+    // 设置页选择的人脸检测算法引擎
+    val requestedDetectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE
 )
 
 /**

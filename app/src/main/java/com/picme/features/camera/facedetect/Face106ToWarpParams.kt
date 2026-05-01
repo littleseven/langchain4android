@@ -2,6 +2,7 @@ package com.picme.features.camera.facedetect
 
 import androidx.compose.ui.geometry.Offset
 import com.picme.features.camera.preview.core.FaceContourData
+import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
 
 /**
@@ -31,13 +32,10 @@ import com.picme.features.camera.preview.core.FaceWarpParams
  */
 object Face106ToWarpParams {
 
-    /**
-     * 从 106 点 landmarks 构建 FaceWarpParams
-     *
-     * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
-     * @return FaceWarpParams 供 BeautyRenderer 使用
-     */
-    fun convert(landmarks106: FloatArray): FaceWarpParams {
+    fun convert(
+        landmarks106: FloatArray,
+        detectionSource: FaceDetectionSource = FaceDetectionSource.GPUPIXEL
+    ): FaceWarpParams {
         require(landmarks106.size >= MediaPipeFaceDetector.POINT_COUNT * 2)
 
         // 脸部中心（使用轮廓点计算）
@@ -65,6 +63,17 @@ object Face106ToWarpParams {
         val leftCheekContour = extractCheekContour(landmarks106, isLeft = true)
         val rightCheekContour = extractCheekContour(landmarks106, isLeft = false)
 
+        val gpuPixelLandmarks = if (detectionSource == FaceDetectionSource.GPUPIXEL) {
+            com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
+        } else {
+            com.picme.features.camera.preview.core.GpuPixelLandmarks()
+        }
+        val bigBeautyLandmarks = if (detectionSource != FaceDetectionSource.GPUPIXEL) {
+            com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
+        } else {
+            com.picme.features.camera.preview.core.GpuPixelLandmarks()
+        }
+
         return FaceWarpParams(
             faceCenterX = faceCenter.x,
             faceCenterY = faceCenter.y,
@@ -88,13 +97,16 @@ object Face106ToWarpParams {
             leftEyeContourPoints = leftEyeContour,
             rightEyeContourPoints = rightEyeContour,
             lipOuterContourPoints = mouthContour,
-            lipInnerContourPoints = emptyList(), // 新规范嘴巴合并为18点
+            lipInnerContourPoints = emptyList(),
             leftCheekContourPoints = leftCheekContour,
             rightCheekContourPoints = rightCheekContour,
-            allContours = FaceContourData(), // 106点模式不使用 ML Kit 的 contour 数据
-            gpuPixelLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
+            allContours = FaceContourData(),
+            gpuPixelLandmarks = gpuPixelLandmarks,
+            bigBeautyLandmarks = bigBeautyLandmarks,
+            detectionSource = detectionSource
         )
     }
+
 
     private fun getPoint(landmarks: FloatArray, index: Int): Offset {
         return Offset(landmarks[index * 2], landmarks[index * 2 + 1])

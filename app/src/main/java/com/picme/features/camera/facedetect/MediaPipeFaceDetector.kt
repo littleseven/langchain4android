@@ -12,6 +12,11 @@ import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.core.common.Logger
+import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.features.camera.preview.core.FaceDetectionSource
+import com.pixpark.gpupixel.FaceDetector
+import com.pixpark.gpupixel.GPUPixel
+import java.nio.ByteBuffer
 
 /**
  * MediaPipe Face Landmarker 封装器
@@ -34,7 +39,7 @@ import com.picme.core.common.Logger
  */
 class MediaPipeFaceDetector(
     context: Context,
-    private val enableInsightFaceFallback: Boolean = true
+    private val detectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE
 ) {
 
     companion object {
@@ -115,16 +120,14 @@ class MediaPipeFaceDetector(
         const val POINT_COUNT = 106
         const val CONTOUR_POINT_COUNT = 33
         const val NON_CONTOUR_POINT_COUNT = 73
-        private const val INSIGHTFACE_COOLDOWN_MS = 300L
-        private const val INSIGHTFACE_TRIGGER_MISS_COUNT = 3
     }
 
     private val appContext: Context = context.applicationContext
     private var faceLandmarker: FaceLandmarker? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
+    private var gpupixelFaceDetector: FaceDetector? = null
     private var lastProcessTimeMs: Long = 0
-    private var consecutivePrimaryMissCount: Int = 0
-    private var lastInsightFallbackAttemptMs: Long = 0L
+    private var lastDetectionSource: FaceDetectionSource = FaceDetectionSource.NONE
 
     init {
         initialize(context)
@@ -181,45 +184,56 @@ class MediaPipeFaceDetector(
      * @return 106 点归一化坐标列表（FloatArray，偶数索引=x，奇数索引=y），无人脸返回 null
      */
     @ExperimentalGetImage
-    fun detect(imageProxy: ImageProxy, lensFacing: Int): FloatArray? {
+    fun detect(imageProxy: ImageProxy, lensFacing: Int): DetectionResult? {
         val startTime = SystemClock.elapsedRealtime()
         val bitmap = imageProxyToBitmap(imageProxy) ?: return null
+        lastDetectionSource = FaceDetectionSource.NONE
 
         return try {
-            val primaryResult = detectWithMediaPipe(bitmap, lensFacing)
-            if (primaryResult != null) {
-                consecutivePrimaryMissCount = 0
-                lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-                Logger.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
-                return primaryResult
-            }
-
-            consecutivePrimaryMissCount += 1
-            if (shouldRunInsightFaceFallback()) {
-                lastInsightFallbackAttemptMs = SystemClock.elapsedRealtime()
-                val fallbackResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
-                if (fallbackResult != null) {
-                    consecutivePrimaryMissCount = 0
+            when (detectionEngineMode) {
+                FaceDetectionEngineMode.MEDIAPIPE -> {
+                    val mediaPipeResult = detectWithMediaPipe(bitmap, lensFacing)
                     lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-                    Logger.w(TAG, "MediaPipe missed face, fallback to InsightFace 2D106 succeeded in ${lastProcessTimeMs}ms")
-                    return fallbackResult
+                    if (mediaPipeResult != null) {
+                        lastDetectionSource = FaceDetectionSource.MEDIAPIPE
+                        Logger.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
+                        DetectionResult(mediaPipeResult, lastDetectionSource)
+                    } else {
+                        Logger.d(TAG, "No face detected by MediaPipe (${lastProcessTimeMs}ms)")
+                        null
+                    }
+                }
+
+                FaceDetectionEngineMode.INSIGHTFACE -> {
+                    val insightFaceResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
+                    lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+                    if (insightFaceResult != null) {
+                        lastDetectionSource = FaceDetectionSource.INSIGHTFACE
+                        Logger.d(TAG, "Face detected by InsightFace in ${lastProcessTimeMs}ms")
+                        DetectionResult(insightFaceResult, lastDetectionSource)
+                    } else {
+                        Logger.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
+                        null
+                    }
+                }
+
+                FaceDetectionEngineMode.GPUPIXEL -> {
+                    val gpupixelResult = detectWithGpupixel(bitmap, lensFacing)
+                    lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+                    if (gpupixelResult != null) {
+                        lastDetectionSource = FaceDetectionSource.GPUPIXEL
+                        Logger.d(TAG, "Face detected by GPUPixel in ${lastProcessTimeMs}ms")
+                        DetectionResult(gpupixelResult, lastDetectionSource)
+                    } else {
+                        Logger.d(TAG, "No face detected by GPUPixel (${lastProcessTimeMs}ms)")
+                        null
+                    }
                 }
             }
-
-            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Logger.d(TAG, "No face detected (${lastProcessTimeMs}ms)")
-            null
         } catch (e: Exception) {
-            Logger.e(TAG, "Face detection failed", e)
-            val fallbackResult = runCatching {
-                lastInsightFallbackAttemptMs = SystemClock.elapsedRealtime()
-                ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
-            }.getOrElse { fallbackError ->
-                Logger.e(TAG, "InsightFace fallback failed", fallbackError)
-                null
-            }
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            fallbackResult
+            Logger.e(TAG, "Face detection failed in ${detectionEngineMode.name} mode", e)
+            null
         } finally {
             bitmap.recycle()
         }
@@ -456,18 +470,67 @@ class MediaPipeFaceDetector(
         return convert468To106(result.faceLandmarks()[0], lensFacing)
     }
 
-    private fun shouldRunInsightFaceFallback(): Boolean {
-        if (!enableInsightFaceFallback) {
-            return false
+    private fun detectWithGpupixel(bitmap: android.graphics.Bitmap, lensFacing: Int): FloatArray? {
+        val detector = ensureGpupixelFaceDetector() ?: return null
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+
+        val rgbaLandmarks = detector.detect(
+            buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA),
+            bitmap.width,
+            bitmap.height,
+            bitmap.width * 4,
+            FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
+            FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
+        )
+        val rawLandmarks: FloatArray = if (rgbaLandmarks.isNotEmpty()) {
+            rgbaLandmarks
+        } else {
+            detector.detect(
+                buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA),
+                bitmap.width,
+                bitmap.height,
+                bitmap.width * 4,
+                FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
+                FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA
+            )
         }
-        if (faceLandmarker == null) {
-            return true
+        if (rawLandmarks.isEmpty()) {
+            return null
         }
-        if (consecutivePrimaryMissCount < INSIGHTFACE_TRIGGER_MISS_COUNT) {
-            return false
+
+        val result = FloatArray(POINT_COUNT * 2)
+        val isFrontCamera = lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT
+        for (index in 0 until POINT_COUNT) {
+            val x = rawLandmarks[index * 2]
+            val y = rawLandmarks[index * 2 + 1]
+            result[index * 2] = if (isFrontCamera) 1f - x else x
+            result[index * 2 + 1] = y
         }
-        val now = SystemClock.elapsedRealtime()
-        return now - lastInsightFallbackAttemptMs >= INSIGHTFACE_COOLDOWN_MS
+        return result
+    }
+
+    private fun buildDirectColorBuffer(pixels: IntArray, frameType: Int): ByteBuffer {
+        val buffer = ByteBuffer.allocateDirect(pixels.size * 4)
+        for (pixel in pixels) {
+            when (frameType) {
+                FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA -> {
+                    buffer.put((pixel and 0xFF).toByte())
+                    buffer.put((pixel shr 8 and 0xFF).toByte())
+                    buffer.put((pixel shr 16 and 0xFF).toByte())
+                    buffer.put((pixel shr 24 and 0xFF).toByte())
+                }
+
+                else -> {
+                    buffer.put((pixel shr 16 and 0xFF).toByte())
+                    buffer.put((pixel shr 8 and 0xFF).toByte())
+                    buffer.put((pixel and 0xFF).toByte())
+                    buffer.put((pixel shr 24 and 0xFF).toByte())
+                }
+            }
+        }
+        buffer.flip()
+        return buffer
     }
 
     private fun ensureInsightFaceDetector(): InsightFace2D106Detector? {
@@ -484,10 +547,27 @@ class MediaPipeFaceDetector(
         }.getOrNull()?.takeIf { detector -> detector.isReady() }
     }
 
+    private fun ensureGpupixelFaceDetector(): FaceDetector? {
+        val cached = gpupixelFaceDetector
+        if (cached != null) {
+            return cached
+        }
+        return runCatching {
+            GPUPixel.Init(appContext)
+            FaceDetector.Create()
+        }.onSuccess { detector ->
+            gpupixelFaceDetector = detector
+        }.onFailure { error ->
+            Logger.e(TAG, "Failed to initialize GPUPixel face detector", error)
+        }.getOrNull()
+    }
+
     /**
      * 获取最近一次检测耗时
      */
     fun getLastProcessTimeMs(): Long = lastProcessTimeMs
+
+    fun getLastDetectionSource(): FaceDetectionSource = lastDetectionSource
 
     /**
      * 从 106 点 FloatArray 中提取指定索引的点
@@ -505,6 +585,14 @@ class MediaPipeFaceDetector(
         faceLandmarker = null
         insightFaceDetector?.release()
         insightFaceDetector = null
+        gpupixelFaceDetector?.destroy()
+        gpupixelFaceDetector = null
+        lastDetectionSource = FaceDetectionSource.NONE
         Log.i(TAG, "MediaPipeFaceDetector released")
     }
+
+    data class DetectionResult(
+        val landmarks106: FloatArray,
+        val detectionSource: FaceDetectionSource
+    )
 }

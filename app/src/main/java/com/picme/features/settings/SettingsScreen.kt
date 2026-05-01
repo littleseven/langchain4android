@@ -45,6 +45,7 @@ import com.picme.core.designsystem.PicMeTheme
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.ThemeMode
 
 @Composable
@@ -78,6 +79,7 @@ fun SettingsScreen(
     val showCameraInfoInPreview by viewModel.showCameraInfoInPreview.collectAsState()
     val showFaceDebugOverlay by viewModel.showFaceDebugOverlay.collectAsState()
     val showLogOverlay by viewModel.showLogOverlay.collectAsState()
+    val faceDetectionEngineMode by viewModel.faceDetectionEngineMode.collectAsState()
     val faceDetectionLandmarkModeEnabled by viewModel.faceDetectionLandmarkModeEnabled.collectAsState()
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
@@ -91,6 +93,7 @@ fun SettingsScreen(
         showCameraInfoInPreview = showCameraInfoInPreview,
         showFaceDebugOverlay = showFaceDebugOverlay,
         showLogOverlay = showLogOverlay,
+        faceDetectionEngineMode = faceDetectionEngineMode,
         faceDetectionLandmarkModeEnabled = faceDetectionLandmarkModeEnabled,
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
@@ -102,6 +105,9 @@ fun SettingsScreen(
         onShowCameraInfoInPreviewChange = { show -> viewModel.setShowCameraInfoInPreview(show) },
         onShowFaceDebugOverlayChange = { show -> viewModel.setShowFaceDebugOverlay(show) },
         onShowLogOverlayChange = { show -> viewModel.setShowLogOverlay(show) },
+        onFaceDetectionEngineModeSelected = { mode ->
+            viewModel.setFaceDetectionEngineMode(mode)
+        },
         onFaceDetectionLandmarkModeEnabledChange = { enabled ->
             viewModel.setFaceDetectionLandmarkModeEnabled(enabled)
         },
@@ -126,6 +132,7 @@ private fun SettingsContent(
     showCameraInfoInPreview: Boolean,
     showFaceDebugOverlay: Boolean,
     showLogOverlay: Boolean,
+    faceDetectionEngineMode: FaceDetectionEngineMode,
     faceDetectionLandmarkModeEnabled: Boolean,
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
@@ -137,6 +144,7 @@ private fun SettingsContent(
     onShowCameraInfoInPreviewChange: (Boolean) -> Unit,
     onShowFaceDebugOverlayChange: (Boolean) -> Unit,
     onShowLogOverlayChange: (Boolean) -> Unit,
+    onFaceDetectionEngineModeSelected: (FaceDetectionEngineMode) -> Unit,
     onFaceDetectionLandmarkModeEnabledChange: (Boolean) -> Unit,
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
@@ -205,6 +213,10 @@ private fun SettingsContent(
                 title = stringResource(R.string.beauty),
                 description = stringResource(R.string.settings_beauty_runtime_desc)
             ) {
+                FaceDetectionEngineSelection(
+                    currentMode = faceDetectionEngineMode,
+                    onModeSelected = onFaceDetectionEngineModeSelected
+                )
                 DebugOptionRow(
                     title = stringResource(R.string.face_landmark_mode),
                     checked = faceDetectionLandmarkModeEnabled,
@@ -351,6 +363,32 @@ fun BeautyStrategySelection(
 }
 
 @Composable
+private fun FaceDetectionEngineSelection(
+    currentMode: FaceDetectionEngineMode,
+    onModeSelected: (FaceDetectionEngineMode) -> Unit
+) {
+    val options = listOf(
+        FaceDetectionEngineMode.MEDIAPIPE to stringResource(R.string.face_detection_engine_mode_mediapipe),
+        FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface),
+        FaceDetectionEngineMode.GPUPIXEL to stringResource(R.string.face_detection_source_gpupixel)
+    )
+
+    Text(
+        text = stringResource(R.string.face_detection_engine_title),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 0.dp)
+    )
+
+    CompactOptionChips(
+        options = options,
+        currentValue = currentMode,
+        maxLines = 2,
+        onSelected = onModeSelected
+    )
+}
+
+@Composable
 private fun FaceDetectProfileSelection(
     currentProfile: FaceDetectIntervalProfile,
     onProfileSelected: (FaceDetectIntervalProfile) -> Unit
@@ -477,8 +515,10 @@ fun SettingsScreenPreview() {
             debugUiEnabled = true,
             showCameraInfoInPreview = false,
             showFaceDebugOverlay = false,
-            showLogOverlay = false,
-            faceDetectionLandmarkModeEnabled = true,
+        showLogOverlay = false,
+        faceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE,
+        faceDetectionLandmarkModeEnabled = true,
+
             adaptiveFaceDetectionIntervalEnabled = true,
             faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
             debugShaderMode = 0,
@@ -489,6 +529,7 @@ fun SettingsScreenPreview() {
             onShowCameraInfoInPreviewChange = {},
             onShowFaceDebugOverlayChange = {},
             onShowLogOverlayChange = {},
+            onFaceDetectionEngineModeSelected = {},
             onFaceDetectionLandmarkModeEnabledChange = {},
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
