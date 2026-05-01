@@ -57,6 +57,7 @@ import com.pixpark.gpupixel.FaceDetector
 import com.pixpark.gpupixel.GPUPixel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
 import kotlin.math.max
 
 private const val TAG = "PicMe:GalleryLandmark"
@@ -646,60 +647,77 @@ private fun detectGpuPixel106(bitmap: Bitmap, detector: FaceDetector): FloatArra
             bitmap
         }
 
-        val width = scaledBitmap.width
-        val height = scaledBitmap.height
-        val pixels = IntArray(width * height)
-        scaledBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-        val rgbaData = ByteArray(width * height * 4)
-        for (index in pixels.indices) {
-            val pixel = pixels[index]
-            rgbaData[index * 4] = (pixel shr 16 and 0xFF).toByte()
-            rgbaData[index * 4 + 1] = (pixel shr 8 and 0xFF).toByte()
-            rgbaData[index * 4 + 2] = (pixel and 0xFF).toByte()
-            rgbaData[index * 4 + 3] = (pixel shr 24 and 0xFF).toByte()
-        }
-
-        var landmarks = detector.detect(
-            rgbaData,
-            width,
-            height,
-            width * 4,
-            FaceDetector.GPUPIXEL_MODE_FMT_PICTURE,
-            FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
-        )
-
-        if (landmarks.isEmpty()) {
-            val bgraData = ByteArray(width * height * 4)
-            for (index in pixels.indices) {
-                val pixel = pixels[index]
-                bgraData[index * 4] = (pixel and 0xFF).toByte()
-                bgraData[index * 4 + 1] = (pixel shr 8 and 0xFF).toByte()
-                bgraData[index * 4 + 2] = (pixel shr 16 and 0xFF).toByte()
-                bgraData[index * 4 + 3] = (pixel shr 24 and 0xFF).toByte()
-            }
-            landmarks = detector.detect(
-                bgraData,
-                width,
-                height,
-                width * 4,
-                FaceDetector.GPUPIXEL_MODE_FMT_PICTURE,
-                FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA
-            )
-        }
-
+        val scaledLandmarks = detectGpuPixel106DirectBuffer(scaledBitmap, detector)
         if (scaledBitmap !== bitmap) {
             scaledBitmap.recycle()
         }
-
-        if (landmarks.isEmpty()) {
-            null
-        } else {
-            landmarks
+        if (scaledLandmarks != null) {
+            return scaledLandmarks
         }
+
+        if (scaledBitmap !== bitmap) {
+            Log.d(TAG, "GPUPixel retrying original bitmap for small-face detection")
+            return detectGpuPixel106DirectBuffer(bitmap, detector)
+        }
+
+        null
     } catch (error: Exception) {
         Logger.e(TAG, "GPUPixel detection failed", error)
         null
     }
+}
+
+private fun detectGpuPixel106DirectBuffer(bitmap: Bitmap, detector: FaceDetector): FloatArray? {
+    val width = bitmap.width
+    val height = bitmap.height
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+    // 与实时预览链路保持一致：DirectByteBuffer + VIDEO mode 更稳定。
+    val rgbaLandmarks = detector.detect(
+        buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA),
+        width,
+        height,
+        width * 4,
+        FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
+        FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
+    )
+    if (rgbaLandmarks.isNotEmpty()) {
+        return rgbaLandmarks
+    }
+
+    val bgraLandmarks = detector.detect(
+        buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA),
+        width,
+        height,
+        width * 4,
+        FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
+        FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA
+    )
+    return bgraLandmarks.takeIf { it.isNotEmpty() }
+}
+
+private fun buildDirectColorBuffer(pixels: IntArray, frameType: Int): ByteBuffer {
+    val buffer = ByteBuffer.allocateDirect(pixels.size * 4)
+    for (index in pixels.indices) {
+        val pixel = pixels[index]
+        when (frameType) {
+            FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA -> {
+                buffer.put((pixel and 0xFF).toByte())
+                buffer.put((pixel shr 8 and 0xFF).toByte())
+                buffer.put((pixel shr 16 and 0xFF).toByte())
+                buffer.put((pixel shr 24 and 0xFF).toByte())
+            }
+
+            else -> {
+                buffer.put((pixel shr 16 and 0xFF).toByte())
+                buffer.put((pixel shr 8 and 0xFF).toByte())
+                buffer.put((pixel and 0xFF).toByte())
+                buffer.put((pixel shr 24 and 0xFF).toByte())
+            }
+        }
+    }
+    buffer.flip()
+    return buffer
 }
 
