@@ -19,7 +19,7 @@
 - **[OFFLINE] OCR 本地识别**：使用 ML Kit 离线引擎，严禁云端处理
 - **[PRIVACY] 权限最小化**：仅在需要时申请相机和存储权限，提供降级方案
 - **[REALTIME] 美颜实时预览**：所有美颜效果处理延迟 < 100ms，支持实时预览
-- **[ENGINE] 双引擎策略**：自研 `beauty-engine`（BIG_BEAUTY）为默认主引擎；上层用户心智统一为“大美丽 / 兼容模式”，其中兼容模式底层由 GPUPixel（GPUPIXEL）链路承接，已完成零拷贝 YUV 预览链路集成，通过 `BeautyStrategy.GPUPIXEL` 手动切换；PixelFree 已完全移除
+- **[ENGINE] 双引擎策略**：自研 `beauty-engine`（BIG_BEAUTY）为默认主引擎；上层用户心智统一为“大美丽 / 兼容模式”，其中兼容模式底层由 GPUPixel（GPUPIXEL）链路承接，已完成零拷贝 YUV 预览链路集成，通过 `BeautyStrategy.GPUPIXEL` 手动切换
 - **[NATURAL] 自然美学原则**：所有美颜效果必须保持自然，避免过度失真
 - **[ACCURACY] 十字星精确跟踪**：人脸跟踪十字星偏差 < 5px，支持旋转/缩放/镜像场景
 - **[MLKIT] 人脸能力预留**：表情/状态属性（微笑、睁眼、头部角度）仍保留为产品能力，但需通过独立 ML Kit 分析流补齐；MediaPipe Face Landmarker 作为当前预览主分析链路，Selfie Segmentation 作为异步增强流引入，严禁阻塞预览渲染线程
@@ -274,7 +274,7 @@ val screenY = adjustedY * previewHeight
 - 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
 - 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳
 - 美颜使用 GPU 加速：CPU 计算无法满足实时性要求
-- 双引擎策略（BIG_BEAUTY + GPUPIXEL）：PixelFree 已移除；引擎由用户设置动态切换，Composable 层实现零 recomposition 级平滑切换
+- 双引擎策略（BIG_BEAUTY + GPUPIXEL）：引擎由用户设置动态切换，Composable 层实现零 recomposition 级平滑切换
 - GPUPixel 零拷贝 YUV 链路：Native 层合并 I420+RGBA 转换，JNI 使用 DirectByteBuffer，渲染走 SourceYUV GPU Shader，当前链路 4 次 copy
 - 十字星坐标转换统一为四步法：避免分析链路与绘制链路偏移
 - 坐标调试日志固定 Step1~Step4：便于快速定位旋转/镜像问题

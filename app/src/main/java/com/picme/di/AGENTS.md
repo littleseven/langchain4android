@@ -61,14 +61,12 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 |---|---|---|---|
 | 大美丽（自研 OpenGL ES） | `BIG_BEAUTY` | `GlBeautyPreviewProvider` | ✅ 默认启用 |
 | GPUPixel（开源实验） | `GPUPIXEL` | `GpupixelBeautyPreviewProvider` | ✅ 实验性已集成 |
-| PixelFree | — | — | ❌ 已完全移除（2026-04） |
-
 > 注意：引擎切换是**用户设置**驱动的运行时动态行为（通过 `UserPreferencesRepository` 读取 `BeautyStrategy`），DI 层不硬编引擎类型。
 
 **技术规范**:
 - **实时预览引擎切换**：通过 `rememberGlBeautyPreviewProvider(context, beautyStrategy)` Composable 庇数唡建/释放，DI 层不参与
 - **拍照后 CPU 处理器**：`GpuBeautyProcessor`（Canvas + ColorMatrix）作为静态 Bitmap 处理器，单独项很稳定，不涉及引擎切换
-- **容灾降级**：大美丽初始化失败时不回退到 PixelFree，改为记录异常并降级为无美颜预览（CameraX `PreviewView` 直出）
+- **容灾降级**：大美丽初始化失败时记录异常并降级为无美颜预览（CameraX `PreviewView` 直出）
 - **运行时状态**：使用 `BeautyEngineRuntimeState` 单例记录初始化异常原因，支持 UI 层查询并提示用户
 
 **代码示例**:
@@ -176,7 +174,7 @@ class MediaViewModelFactory(
 **技术决策记录**:
 - 选择手动 DI 而非 Hilt：项目规模适中，手动 DI 更轻量、易理解；Hilt 作为预留扩展
 - 使用 by lazy 延迟初始化：确保单例、线程安全，避免启动时不必要的资源分配
-- 双引擎策略（BIG_BEAUTY + GPUPIXEL）：PixelFree 已移除；实时预览引擎由 Composable 层动态切换，DI 层不硬编
+- 双引擎策略（BIG_BEAUTY + GPUPIXEL）：实时预览引擎由 Composable 层动态切换，DI 层不硬编
 - 故障降级机制：大美丽 异常时降级为无美颜预览（PreviewView 直出），保证相机可用
 - 依赖数据结构封装：通过 MediaViewModelDependencies 聚合依赖，简化 Factory 构造
 - `BeautyPreviewProviderFactory.kt` 已删除（2026-04）：实时预览 Provider 由 `rememberGlBeautyPreviewProvider` Composable 接管，不需要独立工厂类

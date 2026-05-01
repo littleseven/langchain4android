@@ -179,6 +179,8 @@ internal data class BeautyDebugState(
     val delayMs: Int,
     val cpuUsage: Float,
     val nullFrames: Int,
+    val rendererErrorCategory: String,
+    val rendererErrorReason: String,
     val persistedFallback: Boolean,
     val persistedFallbackReason: String?,
     val strategy: BeautyStrategy,
@@ -1125,11 +1127,12 @@ CameraPreviewContent(
             delayMs = renderPerfStats.delayMs,
             cpuUsage = renderPerfStats.cpuUsage,
             nullFrames = renderPerfStats.nullFrames,
+            rendererErrorCategory = renderPerfStats.errorCategory,
+            rendererErrorReason = renderPerfStats.errorReason,
             persistedFallback = persistedGlFallback,
             persistedFallbackReason = persistedGlFallbackReason,
             strategy = beautyStrategy,
             recoveryAvailableAtMs = glRecoveryAvailableAtMs,
-
             providerRenderActive = useProviderRenderView
         ),
         aspectRatio = aspectRatio,

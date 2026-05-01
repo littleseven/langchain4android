@@ -243,6 +243,11 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "FX ${activeEffects.joinToString("/")}"
     }
     val perfCompact = "FPS ${"%.1f".format(uiState.beautyDebugState.fps)} | ${uiState.beautyDebugState.processingMs}ms/${uiState.beautyDebugState.delayMs}ms | D${uiState.beautyDebugState.nullFrames}"
+    val rendererErrorCompact = if (uiState.beautyDebugState.rendererErrorCategory.isNotBlank()) {
+        "RendererErr ${uiState.beautyDebugState.rendererErrorCategory}: ${uiState.beautyDebugState.rendererErrorReason.ifBlank { "unknown" }}"
+    } else {
+        "RendererErr NONE"
+    }
 
     var debugExpanded by remember { mutableStateOf(false) }
 
@@ -268,6 +273,15 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
             Column {
                 Text(text = effectsCompact, color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp)
                 Text(text = perfCompact, color = Color.White.copy(alpha = 0.9f), fontSize = 9.sp)
+                Text(
+                    text = rendererErrorCompact,
+                    color = if (uiState.beautyDebugState.rendererErrorCategory.isNotBlank()) {
+                        Color(0xFFFF8A80)
+                    } else {
+                        Color.White.copy(alpha = 0.6f)
+                    },
+                    fontSize = 9.sp
+                )
                 Text(
                     text = fallbackStateText,
                     color = if (hasPersistedFallback || uiState.beautyDebugState.persistedFallback) {

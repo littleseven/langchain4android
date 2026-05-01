@@ -23,7 +23,7 @@
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
 - **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
-- **[INTEGRATION] 双引擎架构**：当前保留自研 `beauty-engine`（BIG_BEAUTY）主引擎与 GPUPixel（GPUPIXEL）实验性备选；PixelFree 已于 2026-04 完全移除
+- **[INTEGRATION] 双引擎架构**：当前仅保留自研 `beauty-engine`（BIG_BEAUTY）主引擎与 GPUPixel（GPUPIXEL）实验性备选，两条链路之外不再保留任何历史兜底实现
 - **[ROADMAP] GPUPixel 集成状态**：[GPUPixel](https://github.com/pixpark/gpupixel)（Apache 2.0、纯 C++11/OpenGL ES、无商业 SDK 绑定）已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口；CainCamera 因硬依赖 Face++ 商业 SDK 且已停止维护，已被排除
 
 ---
@@ -85,8 +85,9 @@ beauty-engine/src/main/java/com/picme/beauty/
 - **约束**：以上扩展必须通过 `updateFilters(params: BeautyParams)` 的扩展重载或新增接口实现，保持现有调用方二进制兼容。
 
 #### BeautyPerfStats
-- 统一输出字段：`fps`, `processingMs`, `delayMs`, `cpuUsage`, `nullFrames`
+- 统一输出字段：`fps`, `processingMs`, `delayMs`, `cpuUsage`, `nullFrames`, `errorCategory`, `errorReason`
 - 数据由 `egl/` 渲染线程每秒聚合一次，通过回调或状态流暴露给 App 层调试浮层
+- `errorCategory` 用于输出 `PicMe:BeautyRenderer` 分类错误（如 `shader_compile`、`fbo_pipeline`、`texture_input`、`face_makeup`、`style_effect`）
 
 ### 2.3 内部实现层 (`egl/`)
 
@@ -509,7 +510,6 @@ GPUPixelSourceRawData
 - `PRODUCT.md` - 产品需求规格说明书（大美丽 产品策略）
 - `docs/FEATURES.md` - 功能交互规范
 - `docs/BIG_BEAUTY_TECH_SPEC.md` - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标
-- `docs/PIXELFREE_FALLBACK_TECH_SPEC.md` - ~~PixelFreeEffects SDK 集成（备用引擎）~~ **已废弃并移除（2026-04）**
 - `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` - 大美丽 QA 独立执行清单
 - `app/src/main/java/com/picme/features/camera/AGENTS.md` - Camera 模块实现规范
 - `beauty-engine/src/main/java/com/picme/beauty/api/` - 对外稳定 API
