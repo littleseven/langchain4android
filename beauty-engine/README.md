@@ -20,7 +20,7 @@
 | 大美丽（BIG_BEAUTY） | `egl/` | 自研 OpenGL ES + EGL | ✅ 默认主引擎 |
 | GPUPixel（GPUPIXEL） | `gpupixel/` | GPUPixel C++ JNI（Apache 2.0） | ✅ 实验性已集成 |
 
-> PixelFree 商业 SDK 已于 2026-04 完全移除。
+> 当前模块仅维护大美丽与 GPUPixel 两条链路，历史旧兜底方案已从代码、配置与文档中清理。
 
 ---
 
@@ -139,7 +139,8 @@ override fun onCleared() {
 1. `BeautyPreviewEngine` 内部不会自动回退，异常会向上抛出。
 2. **调用方**（`GlBeautyPreviewStrategy` / `GpupixelBeautyPreviewStrategy`）捕获异常，降级为 CameraX `PreviewView` 直出，并通过 `onWarmUpFallback` 通知 UI 层。
 3. `BeautyEngineRuntimeState` 记录回退原因，供 UI 层消费展示提示。
-4. 详细的兜底策略与冷却恢复机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`。
+4. `BeautyPerfStats` 会额外暴露 `errorCategory` / `errorReason`，用于调试浮层展示最近一次 `PicMe:BeautyRenderer` 错误分类。
+5. 详细的兜底策略与冷却恢复机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`。
 
 ---
 

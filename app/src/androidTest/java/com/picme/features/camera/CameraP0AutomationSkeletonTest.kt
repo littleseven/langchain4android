@@ -52,7 +52,7 @@ class CameraP0AutomationSkeletonTest {
 
     @Test
     fun p0_05_debugOverlay_shouldContainPerfStatsFields_skeleton() {
-        val requiredKeys = listOf("fps", "processingMs", "delayMs", "cpuUsage", "nullFrames")
+        val requiredKeys = listOf("fps", "processingMs", "delayMs", "cpuUsage", "nullFrames", "errorCategory", "errorReason")
         assertTrue(requiredKeys.all { key -> key.isNotBlank() })
     }
 }

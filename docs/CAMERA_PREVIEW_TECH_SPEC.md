@@ -10,7 +10,7 @@
 ### 1.1 核心原则
 **采用策略化预览绑定（大美丽 Provider + PreviewView 兜底）**，并在 `PreviewView` 路径下使用 `ScaleType` 处理比例。
 
-> 说明：本指南聚焦预览层的比例与坐标问题；当前实现保留 `GlBeautyPreviewStrategy`（BIG_BEAUTY）与 `GpupixelBeautyPreviewStrategy`（GPUPIXEL）两条策略，PixelFree 相关策略已完全移除。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `BIG_BEAUTY_TECH_SPEC.md`；GPUPixel 零拷贝 YUV 链路详见 `beauty-engine/AGENTS.md`。
+> 说明：本指南聚焦预览层的比例与坐标问题；当前实现仅保留 `GlBeautyPreviewStrategy`（BIG_BEAUTY）与 `GpupixelBeautyPreviewStrategy`（GPUPIXEL）两条策略。GL 引擎的 `SurfaceView + Provider` 初始化、容灾回退与恢复链路详见 `BIG_BEAUTY_TECH_SPEC.md`；GPUPixel 零拷贝 YUV 链路详见 `beauty-engine/AGENTS.md`。
 
 ### 1.2 PreviewView 路径技术方案（兜底与通用预览）
 

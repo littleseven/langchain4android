@@ -23,7 +23,7 @@
 | 色调滤镜 | ColorMatrix 4×5（LEICA/FILM/COOL/WARM） | ✅ |
 | 人脸检测 | MediaPipe 468 → 106 点映射 | ✅ 刚完成 |
 
-**架构**: 单 Pass GLSL Fragment Shader，所有效果在一个 Shader 中顺序执行。
+**架构（历史基线）**: 早期以单 Pass GLSL Fragment Shader 为主；当前代码已演进为“基础主 Shader + 按需多 Pass”混合架构。
 
 ### 1.2 GPUPixel 引擎能力（实验性）
 
@@ -63,7 +63,7 @@
 
 ### 2.1 核心决策：混合架构（推荐）
 
-**不采用** GPUPixel 的纯多 Pass Filter Chain（改造量过大，且大美丽单 Pass 性能已验证）。  
+**不采用** GPUPixel 的纯多 Pass Filter Chain（改造量过大，且大美丽当前混合多 Pass 方案已可复用）。
 **也不采用** 无限扩展单 Pass Shader（Shader 编译时间和寄存器压力会超限）。
 
 **采用混合方案**：
@@ -399,7 +399,7 @@ fun applyColorGrade(params: BeautyParams, renderer: BeautyRenderer) {
 
 ### Phase 1: ColorGrade 整合到 BeautyPass（3 天）
 
-**目标**: 在现有单 Pass Shader 中新增调色 uniform 和计算逻辑。
+**目标**: 在现有基础主 Shader 中新增调色 uniform 和计算逻辑。
 
 **任务清单**:
 - [ ] `BeautyShaders.kt`: 在 FRAGMENT_SHADER_BEAUTY 末尾追加 `applyColorGrade()` 函数

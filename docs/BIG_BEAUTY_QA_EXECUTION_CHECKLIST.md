@@ -1,14 +1,14 @@
 # 大美丽 QA 执行清单
 
 **适用范围**：大美丽 主引擎（BIG_BEAUTY）+ GPUPixel 实验性引擎
-**最后更新**：2026-04-11（PixelFree 已完全移除，更新适用范围与测试用例描述）
+**最后更新**：2026-05-01（同步 PreviewView 容灾路径与多 Pass 可观测性）
 **关联文档**：`BIG_BEAUTY_TECH_SPEC.md`、`CAMERA_PREVIEW_TECH_SPEC.md`、`BEAUTY_ENGINE_FALLBACK.md`、`FEATURES.md`
 
 ---
 
 ## 0. 术语与状态定义（执行前必读）
 
-- **引擎策略枚举**：`BIG_BEAUTY`（主引擎）/ `GPUPIXEL`（实验性备选引擎）/ ~~`PIXEL_FREE`~~（已移除）。
+- **引擎策略枚举**：`BIG_BEAUTY`（主引擎）/ `GPUPIXEL`（实验性备选引擎）。
 - **统一回退入口**：`onGlWarmUpFallback(reason)`。
 - **策略持久化键**：`beauty_strategy`、`gl_engine_recovery_available_at_ms`。
 - **自动恢复触发**：`triggerManualGlEngineRecovery()`。
@@ -69,7 +69,7 @@
 - [ ] `isReady()` 在 `SurfaceTexture` 可用后返回 true。
 
 ### 2.4 `CameraScreen` 容灾链路
-- [ ] warm-up 失败时统一走 `onGlWarmUpFallback(reason)`，并最终持久化到 `PIXEL_FREE`。
+- [ ] warm-up 失败时统一走 `onGlWarmUpFallback(reason)`，并持久化 `gl_engine_recovery_available_at_ms` 冷却窗口。
 - [ ] 冷却到期后触发 `triggerManualGlEngineRecovery()` 自动重试。
 - [ ] `PROVIDER_VIEW_BIND_TIMEOUT_MS` 超时后回落 `PreviewView` 并请求重绑。
 - [ ] `useProviderRenderView` 状态与实际渲染容器一致（Provider View / PreviewView）。
@@ -84,7 +84,7 @@
 4. 验证 `useProviderRenderView=false`，确认当前展示容器为 `PreviewView`。
 5. 等待冷却窗口结束，确认自动触发 `triggerManualGlEngineRecovery()`。
 6. 重试成功时恢复到 `BIG_BEAUTY`；重试失败时再次回退且可继续拍照。
-7. 全程观察调试浮层与日志：`PerfStats`、fallback reason、剩余冷却秒数。
+7. 全程观察调试浮层与日志：`PerfStats`、`RendererErr` 分类、fallback reason、剩余冷却秒数。
 
 ---
 

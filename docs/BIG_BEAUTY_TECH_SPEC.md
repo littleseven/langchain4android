@@ -2,7 +2,7 @@
 
 **版本**：6.0
 **状态**：实施中（大美丽 BIG_BEAUTY 主引擎 + GPUPixel 实验性备选）
-**最后更新**：2026-04-23（MediaPipe 468 → 106 点映射优化，移除过时映射表，以代码实现为准）
+**最后更新**：2026-05-01（同步多 Pass 现状、容灾可观测性与文档清理）
 **技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + 拍照 CPU/GPU 混合处理
 
 ---
@@ -12,7 +12,7 @@
 - 本文档聚焦 大美丽 主引擎：渲染链路、容灾回退、冷却恢复与观测指标。
 - 预览比例与坐标转换细节：见 `CAMERA_PREVIEW_TECH_SPEC.md`。
 - 产品交互与验收口径：见 `FEATURES.md`。
-- beauty-engine 模块实现规范：见 `beauty-engine/src/main/java/com/picme/beauty/api/AGENTS.md`。
+- beauty-engine 模块实现规范：见 `beauty-engine/AGENTS.md`。
 
 ---
 
@@ -22,9 +22,8 @@
 
 | 引擎 | 状态 | 说明 |
 |------|------|------|
-| **大美丽（BIG_BEAUTY）** | ✅ 主引擎（默认） | 自研 OpenGL ES + EGL，单 Pass Shader，完整功能 |
+| **大美丽（BIG_BEAUTY）** | ✅ 主引擎（默认） | 自研 OpenGL ES + EGL；基础美颜走主 Shader，磨皮/美白/几何美型/妆容按需切换多 Pass GPU 管线 |
 | **GPUPixel（GPUPIXEL）** | 🧪 实验性备选 | 开源 C++/OpenGL ES 滤镜库，实验性集成，对应 `BeautyStrategy.GPUPIXEL` |
-| ~~PixelFreeEffects~~ | ❌ 已完全移除（2026-04） | 因核心算法不可控、与 Compose 架构冲突，已于 2026-04 彻底清除 |
 
 **切换方式**：通过 `BeautyStrategy`（`domain.model.UserPreferences`）配置，在 `CameraPreviewStrategies.kt` 中路由到对应引擎策略。
 
@@ -40,9 +39,9 @@
 
 ### 0.1 现状问题（历史背景）
 
-- **依赖不可控（已解决）**：PixelFreeEffects SDK 算法闭源、商业授权、与 Compose 架构冲突 → 已于 2026-04 完全移除。
-- **性能调优困难（持续改进中）**：单 Pass Shader 覆盖磨皮/美白/大眼/瘦脸/唇色/腮红，GPU 负担渐重，低端机需额外调优。
-- **调试可观测性（已完善）**：渲染线程每秒聚合 `PerfStats`（fps/processingMs/delayMs/cpuUsage/nullFrames），通过调试浮层实时展示。
+- **技术路线已收敛（已解决）**：当前仅保留大美丽与 GPUPixel 两条链路，所有旧兜底引擎实现、文档与状态引用已清理。
+- **性能调优困难（持续改进中）**：多 Pass 链路覆盖磨皮/美白/大眼/瘦脸/唇色/腮红，低端机仍需控制 FBO 切换与 Shader 复杂度。
+- **调试可观测性（已完善）**：渲染线程每秒聚合 `PerfStats`（fps/processingMs/delayMs/cpuUsage/nullFrames/errorCategory/errorReason），通过调试浮层实时展示。
 
 ### 0.2 目标（第一性原理）
 
@@ -74,16 +73,16 @@
 
 ### 1.1 为什么选择自研（大美丽）而非第三方 SDK
 
-| 维度 | PixelFreeEffects SDK（已移除） | GPUPixel（实验性） | 大美丽（自研，主引擎） |
-|------|--------------------------------|--------------------|------------------------|
-| 算法可控性 | ❌ 完全黑盒 | ✅ 开源 Apache 2.0 | ✅ 完全自主 |
-| 性能调优 | ❌ 受限 SDK | ✅ 可针对性优化 | ✅ 可精准控制每一步 |
-| 内存占用 | SDK + 资源 60MB+ | 目标 < 20MB | 目标 < 30MB |
-| 延迟控制 | SDK 调度黑盒 | OpenGL ES 链路透明 | 可精准控制线程优先级 |
-| 故障排查 | 依赖厂商支持 | 源码可查 | 全链路日志可观测 |
-| 授权成本 | 商业授权费用 | Apache 2.0 零成本 | 零成本 |
-| Compose 兼容性 | ❌ UIKit 冲突 | ✅ TextureView 嵌入 | ✅ SurfaceView/FrameLayout |
-| 人脸检测 | SDK 内建 | 内建 FaceDetector | ML Kit 外部提供 |
+| 维度 | GPUPixel（实验性） | 大美丽（自研，主引擎） |
+|------|--------------------|------------------------|
+| 算法可控性 | ✅ 开源 Apache 2.0 | ✅ 完全自主 |
+| 性能调优 | ✅ 可针对性优化 | ✅ 可精准控制每一步 |
+| 内存占用 | 目标 < 20MB | 目标 < 30MB |
+| 延迟控制 | OpenGL ES 链路透明 | 可精准控制线程优先级 |
+| 故障排查 | 源码可查 | 全链路日志可观测 |
+| 授权成本 | Apache 2.0 零成本 | 零成本 |
+| Compose 兼容性 | ✅ TextureView 嵌入 | ✅ SurfaceView/FrameLayout |
+| 人脸检测 | 内建 FaceDetector | ML Kit / MediaPipe 外部提供 |
 
 ### 1.2 为什么选择 OpenGL ES 而非 Vulkan
 
@@ -407,7 +406,7 @@ while (isRendering && !Thread.interrupted()) {
 
 - 无帧时走 `sleep(1)`，避免忙等。
 - 纹理矩阵与人脸点位映射必须使用同一份 `uTextureTransform`（通过 `mapViewNormalizedToUv` 转换）。
-- 调试指标统一由 `BeautyPerfStats(fps, processingMs, delayMs, cpuUsage, nullFrames)` 提供。
+- 调试指标统一由 `BeautyPerfStats(fps, processingMs, delayMs, cpuUsage, nullFrames, errorCategory, errorReason)` 提供。
 
 ### 3.4 难点 4：View 归一化坐标 → 纹理 UV 坐标映射
 
@@ -529,9 +528,9 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - [x] `BeautyPreviewView` 采用 `SurfaceView` 显示，显示 Surface 与 CameraX 输入 Surface 解耦。
 - [x] `CameraPreviewRenderer` 在主线程完成 EGL + 外部纹理 + SurfaceTexture 初始化。
 - [x] 渲染线程使用 `OnFrameAvailableListener + sleep(1)` 驱动，避免忙等。
-- [x] 单 Pass Shader 覆盖磨皮（双边滤波近似）/美白/大眼/瘦脸/唇色（含轮廓多边形）/腮红，支持实时 uniform 更新。
+- [x] 基础主 Shader + 多 Pass 管线覆盖磨皮（双边滤波近似）/美白/大眼/瘦脸/唇色（纹理妆容）/腮红，支持实时 uniform 更新。
 - [x] 已实现人脸点位到 UV 坐标映射（`mapViewNormalizedToUv`），保证形变参数与纹理变换一致。
-- [x] 已输出 `BeautyPerfStats(fps, processingMs, delayMs, cpuUsage, nullFrames)` 供调试浮层展示。
+- [x] 已输出 `BeautyPerfStats(fps, processingMs, delayMs, cpuUsage, nullFrames, errorCategory, errorReason)` 供调试浮层展示。
 - [x] `BeautyStrategy.GPUPIXEL` 实验性集成落地，`GpupixelBeautyPreviewProvider` 封装 GPUPixel C++ 滤镜链。
 - [x] `BeautyPreviewEngine` 组合接口统一 `BeautyPreviewProvider` + `BeautyPreviewCapability`，App 层通过接口访问。
 - [x] `BeautyStrategy`、`FaceDetectIntervalProfile` 等枚举迁移至 `domain.model.UserPreferences`，实现分层解耦。
@@ -668,17 +667,15 @@ val onGlWarmUpFallback: (String) -> Unit = { reason ->
 ```kotlin
 // UserPreferencesRepository
 suspend fun persistGlEngineFallback(cooldownMs: Long) {
-    preferences[BEAUTY_STRATEGY] = BeautyStrategy.PIXEL_FREE.name  // 历史遗留，当前以策略枚举名保存
     preferences[GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = now + cooldownMs
 }
 
 suspend fun triggerManualGlEngineRecovery() {
-    preferences[BEAUTY_STRATEGY] = BeautyStrategy.BIG_BEAUTY.name
     preferences[GL_ENGINE_RECOVERY_AVAILABLE_AT_MS] = 0L
 }
 ```
 
-> ⚠️ 注意：`persistGlEngineFallback` 历史实现中曾写入 `PIXEL_FREE`，当前两引擎为 `BIG_BEAUTY` 和 `GPUPIXEL`，需确认兜底策略对应关系（待 P0 修复）。
+> 当前实现仅持久化冷却时间，不再写入任何已删除的旧兜底引擎状态。
 
 ---
 
@@ -909,8 +906,6 @@ onYuvFrame() / onRgbaFrame()
 | 大美丽缺少专业调色滤镜（P1） | 用户在大美丽模式下无法使用曝光/对比度 | P1 在 Fragment Shader 追加调色 uniform |
 | 大美丽缺少风格特效（无计划） | 大美丽模式下风格特效 UI 置灰 | 维持现状；风格特效作为 GPUPixel 特有能力 |
 | 两引擎 lipColorIndex / blushColorFamily 行为不一致 | GPUPixel 内建色彩，不支持按 index 切换 | 待评估是否统一 ColorMap 传入 GPUPixel |
-| `persistGlEngineFallback` 历史写入 PIXEL_FREE | 回退持久化逻辑有遗留 bug | 待 P0 修复（参见代码注释） |
-
 ---
 
 ## 9. 风险与应对
@@ -959,7 +954,6 @@ onYuvFrame() / onRgbaFrame()
 - `FEATURES.md` — 功能交互规范（重点：`1.3.5` 大美丽 性能与验收）
 - `AGENTS.md` — AI Agent 操作规范
 - `CAMERA_PREVIEW_TECH_SPEC.md` — 相机预览与坐标系统规范
-- ~~`PIXELFREE_FALLBACK_TECH_SPEC.md`~~ — **已废弃并移除（2026-04），PixelFree 已从项目完全清除**
 - `BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 独立执行清单
 - `beauty-engine/src/main/java/com/picme/beauty/api/` — 对外稳定 API（`BeautyParams`、`BeautyPreviewProvider`、`BeautyPreviewCapability`、`BeautyPreviewEngine`）
 - `beauty-engine/src/main/java/com/picme/beauty/egl/` — GL 渲染管线核心实现
@@ -1131,7 +1125,6 @@ verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
 |--------|------|------|
 | 主引擎 | 自研 大美丽（OpenGL ES） | 可控性最高、零授权、全链路可观测 |
 | 备选引擎 | GPUPixel（实验性） | 开源/Apache 2.0、C++/OpenGL ES、内建人脸检测 |
-| ~~兜底引擎~~ | ~~PixelFree~~ | ❌ 已于 2026-04 完全移除 |
 | 磨皮算法 | 双边滤波快速近似（9pt） | 保边效果好，移动端性能可接受 |
 | 显示层 | SurfaceView | 直接硬件合成，延迟更低，功耗更小 |
 | 人脸检测 | MediaPipe 468→106（主链路） | 与当前预览分析流一致，直接服务 `FaceWarpParams` 与双模式调试 |

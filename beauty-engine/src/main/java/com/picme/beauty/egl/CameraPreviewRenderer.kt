@@ -89,6 +89,7 @@ class CameraPreviewRenderer(private val context: Context) {
 
     private var textureListener: OnTextureAvailableListener? = null
 
+    @Suppress("unused")
     fun setOnTextureAvailableListener(listener: OnTextureAvailableListener?) {
         this.textureListener = listener
     }
@@ -319,7 +320,9 @@ class CameraPreviewRenderer(private val context: Context) {
                                 processingMs = avgProcessingMs,
                                 delayMs = delayMs,
                                 cpuUsage = cpuUsage,
-                                nullFrames = statsNullFrames
+                                nullFrames = statsNullFrames,
+                                errorCategory = beautyRenderer.getLastErrorCategory(),
+                                errorReason = beautyRenderer.getLastErrorReason()
                             )
                             statsWindowStartMs = statsNowMs
                             statsFrameCount = 0
@@ -327,15 +330,41 @@ class CameraPreviewRenderer(private val context: Context) {
                             statsNullFrames = 0
                         }
                     } catch (e: IllegalStateException) {
-                        frameAvailable = false
                         statsNullFrames++
-                        if (frameCount == 0 || frameCount % 60 == 0) {
-                            Log.w(TAG, "SurfaceTexture not ready yet: ${e.message}")
+                        val errorCategory = beautyRenderer.getLastErrorCategory()
+                        val errorReason = beautyRenderer.getLastErrorReason().ifBlank { e.message.orEmpty() }
+                        if (errorCategory.isNotBlank()) {
+                            latestPerfStats = latestPerfStats.copy(
+                                nullFrames = statsNullFrames,
+                                errorCategory = errorCategory,
+                                errorReason = errorReason
+                            )
+                            Log.e(
+                                TAG,
+                                "Render error at frame $frameCount [category=$errorCategory]: $errorReason",
+                                e
+                            )
+                        } else {
+                            frameAvailable = false
+                            if (frameCount == 0 || frameCount % 60 == 0) {
+                                Log.w(TAG, "SurfaceTexture not ready yet: ${e.message}")
+                            }
                         }
                         if (!safeSleep(16)) break
                     } catch (e: Exception) {
                         statsNullFrames++
-                        Log.e(TAG, "Render error at frame $frameCount: ${e.message}", e)
+                        val errorCategory = beautyRenderer.getLastErrorCategory().ifBlank { "render_pipeline" }
+                        val errorReason = beautyRenderer.getLastErrorReason().ifBlank { e.message.orEmpty() }
+                        latestPerfStats = latestPerfStats.copy(
+                            nullFrames = statsNullFrames,
+                            errorCategory = errorCategory,
+                            errorReason = errorReason
+                        )
+                        Log.e(
+                            TAG,
+                            "Render error at frame $frameCount [category=$errorCategory]: $errorReason",
+                            e
+                        )
                         if (!safeSleep(16)) break
                     }
                 }

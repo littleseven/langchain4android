@@ -83,7 +83,7 @@
     - **美颜引擎技术路线（2026-04 更新）**：
         - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为默认主引擎；上层仅保留“大美丽 / 兼容模式”两档心智，兼容模式底层由 GPUPixel 链路承接，用于回退校验与兼容验证。
         - **大美丽当前渲染**：基础美颜由主 Shader 实时处理；唇色/腮红启用时切换到 `FaceMakeupPass + 主 Shader` 的多 Pass GPU 链路，仍保持端侧实时预览。
-        - **移除 PixelFreeEffects**：因 PixelFree 核心算法未真正开源，且官方 UIKit 与 Jetpack Compose 架构冲突，已于 2026-04 彻底移除 `:pixelfree-sdk` 模块及相关代码。
+        - **引擎收敛现状**：当前代码与文档体系仅保留大美丽与 GPUPixel 两条链路；旧兜底引擎相关实现、状态枚举与文档引用均已清理，不再作为任何设计选项保留。
         - **兼容链路实现（底层基于 GPUPixel，2026-04）**：底层兼容链路已完成集成，上层默认弱化 GPUPixel 技术名，仅在实现/调试上下文保留。当前已接入磨皮、美白、瘦脸、大眼、唇色、腮红、专业调色与风格特效；实际渲染路径为 `ImageAnalysis → YUV/I420 + RGBA 转换 → SourceYUV → Filter Chain → TextureView`，人脸关键点由内置 `FaceDetector`（106 点）实时驱动。
         - **GPUPixel 不具备、需自建的能力**：眉毛美化（无内置 mask）；多色号唇色切换（需动态替换纹理）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（有资源但无对应滤镜代码，需自建 LUTFilter）。
         - **滤镜技术演进**：当前基于自定义 GLSL Shader 实现，后续评估引入 **3D LUT（颜色查找表）** 技术——预计算 64×64×64 网格颜色变换，运行时三线性插值以接近零计算开销应用复杂滤镜效果，支持专业调色风格扩展。

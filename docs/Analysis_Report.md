@@ -411,7 +411,6 @@ GPUImage是iOS/Android图像处理领域的**经典开源项目**，开创了移
 
 | 项目名称 | 核心特点 | 适用场景 | 主要局限 |
 |:---|:---|:---|:---|
-| **PixelFreeEffects** | 支持iOS/Android/Windows/HarmonyOS/Flutter，功能全面（美颜+美型+美妆+滤镜+绿幕+贴纸） | 商业短视频、跨平台项目 | 贴纸系统不如商业SDK丰富 | **⚠️ 已移除（2026-04）** |
 | **Meihu-Beautyface-sdk** | iOS开源版本，功能完整（磨皮、大眼、瘦脸、滤镜、贴纸） | Demo开发、学习研究、MVP验证 | Android版本不完善，不适合大规模商用 |
 | **OpenCamera** | 基于OpenGL ES+GLSurfaceView，实时滤镜、拍照、录像、美颜磨皮 | Android相机框架学习、功能集成 | 功能相对基础 |
 | **BeautifyFaceDemo** | 基于GPUImage的高质量美颜算法示例 | 教学参考、算法理解 | 功能基础，不适合生产环境 |
@@ -419,7 +418,7 @@ GPUImage是iOS/Android图像处理领域的**经典开源项目**，开创了移
 | **face-api.js** | JS人脸检测+关键点库，易与Three.js/WebGL结合 | Web美颜基础模块 | 本身不提供美颜滤镜，需自行实现 |
 | **OpenSeeFace** | 高性能人脸跟踪，适合实时贴纸/面部几何变形 | 虚拟主播、表情驱动 | 不提供滤镜或美妆，需拼接pipeline |
 
-**开源方案选型建议**：对于需要立即落地且性能要求较高的场景（直播、短视频录制），**GPUPixel**是最成熟选择（PixelFreeEffects 已移除）；对于以学习验证为目标的项目，**Meihu-Beautyface-sdk和CainCamera**提供更完整的教学资源；对于已有Android项目需要快速集成相机能力，**OpenCamera**提供了可直接集成的方案。
+**开源方案选型建议**：对于需要立即落地且性能要求较高的场景（直播、短视频录制），**GPUPixel**是最成熟选择；对于以学习验证为目标的项目，**Meihu-Beautyface-sdk和CainCamera**提供更完整的教学资源；对于已有Android项目需要快速集成相机能力，**OpenCamera**提供了可直接集成的方案。
 
 #### 4.1.3 商业SDK集成路线
 
