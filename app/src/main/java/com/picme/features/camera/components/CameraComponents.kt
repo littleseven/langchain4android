@@ -112,8 +112,6 @@ private const val PANEL_HEIGHT_RATIO = 0.5f
 @Composable
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
-    onNavigateToFaceLandmarkDebug: () -> Unit,
-    debugUiEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -124,13 +122,6 @@ fun CameraLeftControls(
     ) {
         // 设置
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
-        // 人脸关键点调试入口（debug 包始终显示）
-        if (debugUiEnabled || com.picme.BuildConfig.DEBUG) {
-            ControlButton(
-                icon = Icons.Rounded.Face,
-                onClick = onNavigateToFaceLandmarkDebug
-            )
-        }
     }
 }
 

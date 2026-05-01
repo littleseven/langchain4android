@@ -95,6 +95,7 @@
     <string name="generating">Generating…</string>
     <string name="debug_tools">Debug Tools</string>
     <string name="show_debug_tools">Show debug entries</string>
+    <string name="test_data_tools">Test Data Tools</string>
     <string name="face_landmark_mode">Face landmark mode (faster)</string>
     <string name="adaptive_face_detect_interval">Adaptive face detect interval</string>
     <string name="face_detect_profile_title">Adaptive interval profile</string>
@@ -211,6 +212,11 @@
 
     <!-- Media Pager -->
     <string name="media_source">Source: %1$s</string>
+    <string name="landmark_overlay">Face Landmarks</string>
+    <string name="landmark_loading">Detecting face landmarks…</string>
+    <string name="landmark_no_face_detected">No face detected</string>
+    <string name="landmark_big_beauty">Big Beauty</string>
+    <string name="landmark_compatibility">Compatibility</string>
 <!-- /Users/guoshuai/AndroidStudioProjects/PicMe/app/src/main/res/values/strings.xml -->
 
     <!-- ... 续接 confirm_delete -->

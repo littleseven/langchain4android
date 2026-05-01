@@ -32,7 +32,6 @@ import com.picme.domain.model.AppLanguage
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
-import com.picme.features.debug.FaceLandmarkDebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.settings.SettingsScreen
@@ -127,14 +126,14 @@ class MainActivity : ComponentActivity() {
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                                    onNavigateToFaceLandmarkDebug = { navController.navigate(Screen.FaceLandmarkDebug.route) },
                                     viewModel = mediaViewModel
                                 )
                             }
                             composable(Screen.Gallery.route) {
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
-                                    onNavigateBack = { navController.popBackStack() }
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route) }
                                 )
                             }
                             composable(Screen.Settings.route) {
@@ -149,12 +148,6 @@ class MainActivity : ComponentActivity() {
                                     mediaViewModel = mediaViewModel
                                 )
                             }
-                            composable(Screen.FaceLandmarkDebug.route) {
-                                FaceLandmarkDebugScreen(
-                                    onNavigateBack = { navController.popBackStack() }
-                                )
-                            }
-
                         }
                     }
                 }

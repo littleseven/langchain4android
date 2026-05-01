@@ -92,6 +92,7 @@
     <string name="generating">正在生成…</string>
     <string name="debug_tools">調試工具</string>
     <string name="show_debug_tools">顯示調試入口</string>
+    <string name="test_data_tools">測試資料工具</string>
     <string name="face_landmark_mode">人臉關鍵點模式（更快）</string>
     <string name="adaptive_face_detect_interval">動態人臉檢測間隔</string>
     <string name="face_detect_profile_title">動態間隔強度檔位</string>
@@ -180,6 +181,11 @@
 
     <!-- Media Pager -->
     <string name="media_source">來源: %1$s</string>
+    <string name="landmark_overlay">人臉關鍵點</string>
+    <string name="landmark_loading">正在檢測人臉關鍵點…</string>
+    <string name="landmark_no_face_detected">未檢測到人臉</string>
+    <string name="landmark_big_beauty">大美麗</string>
+    <string name="landmark_compatibility">相容鏈路</string>
 
     <!-- Duplicate Management -->
     <string name="manage_duplicates">管理重複照片</string>
