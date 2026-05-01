@@ -543,7 +543,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
-- **人脸检测**：使用 `MediaPipeFaceDetector` 的 468→106 点结果构建 `FaceWarpParams`，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
+- **人脸检测**：默认使用 `MediaPipeFaceDetector` 的 468→106 点结果构建 `FaceWarpParams`，并在连续漏检或初始化失败时自动回退到本地 `InsightFace2D106Detector`（ML Kit 人脸框 + InsightFace `2d106det.onnx`）输出 106 点，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
 
 #### GPUPixel（GPUPIXEL）— 实验性备选
@@ -729,7 +729,7 @@ QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIS
 | **技术栈** | 自研 OpenGL ES + EGL 渲染管线 | 开源 C++11/OpenGL ES（Apache 2.0） |
 | **相机帧输入路径** | CameraX `Preview` UseCase → SurfaceTexture（OES 纹理，零拷贝） | CameraX `ImageAnalysis` → YUV → RGBA 转换 → 手动旋转 → GPUPixelSourceRawData |
 | **预览显示 View** | `SurfaceView`（直接硬件合成，延迟低，功耗小） | `TextureView`（SDK 接口限制，GPU 合成路径） |
-| **人脸检测** | MediaPipe 468→106 → `FaceWarpParams` → `mapViewNormalizedToUv()` | 内建 Mars 模型 FaceDetector（106 点，与滤镜链紧耦合） |
+| **人脸检测** | MediaPipe 468→106 主链路 + InsightFace `2d106det` 异步备选 → `FaceWarpParams` → `mapViewNormalizedToUv()` | 内建 Mars 模型 FaceDetector（106 点，与滤镜链紧耦合） |
 | **色调滤镜** | ✅ ColorMatrix → `colorMatrix` uniform 实时变换（OpenGL Shader 层） | ➖ 当前使用大美丽 ColorMatrix 路径；GPUPixel 3D LUT 路径为长期演进目标 |
 | **美颜基础** | 双边滤波磨皮、ColorMatrix 美白、FaceWarp 瘦脸/大眼、Shader 唇色/腮红 | BeautyFaceFilter（磨皮/美白）、FaceReshapeFilter（瘦脸/大眼）、LipstickFilter、BlusherFilter |
 | **专业调色** | ➖ 使用 CameraX CaptureRequest（有限） | ✅ ExposureFilter / ContrastFilter / SaturationFilter / WhiteBalanceFilter（Shader 级实时） |
@@ -806,16 +806,18 @@ CameraX ImageAnalysis UseCase（无 Preview UseCase）
 
 两引擎在人脸检测上采用完全不同的策略：
 
-**大美丽路径（MediaPipe 主分析流）**：
+**大美丽路径（MediaPipe 主分析流 + InsightFace 异步备选）**：
 ```
 ImageAnalysis Analyzer
   └─ MediaPipeFaceDetector.detect()（异步）
-       └─ 468→106 映射
+       ├─ 主路径：468→106 映射
+       └─ 备选路径：连续漏检/初始化失败 → ML Kit Face bbox → InsightFace 2D106
             └─ FaceWarpParams（View 归一化坐标）
                  └─ CameraPreviewRenderer.mapViewNormalizedToUv()
                       └─ BeautyPreviewView（Shader uniform 注入）
 ```
 - MediaPipe 结果通过 `FaceWarpParams` 数据类跨线程传递
+- InsightFace `2d106det` 仅作为大美丽主链路的本地备选来源，输出顺序与当前 106 点消费链路一致，无需额外重排
 - 大眼/瘦脸变形需要精确的 landmark 坐标（眼球中心、嘴角、下颌等）
 - 唇色/腮红通过 106 点轮廓与 `FaceMakeupPass` 三角网格共同驱动
 
@@ -832,7 +834,7 @@ onYuvFrame() / onRgbaFrame()
 - `GpupixelBeautyPreviewStrategy.applyFaceWarpParams()` 为空实现；双模式下只额外保留 MediaPipe 的 `bigBeautyLandmarks` 供调试显示
 
 **关键约束**：
-- GPUPixel 模式下，MediaPipe 结果不参与 GPUPixel 滤镜参数下发，只用于双模式调试对照
+- GPUPixel 模式下，MediaPipe 结果不参与 GPUPixel 滤镜参数下发，只用于双模式调试对照；InsightFace 备选也不会在双模式调试中启用，避免对照基线混杂
 - 如果后续补回 ML Kit 表情/状态分析流，必须与当前 MediaPipe / GPUPixel 主链路隔离，避免拖慢 `ImageAnalysis`
 
 ### 8.5 引擎切换时序

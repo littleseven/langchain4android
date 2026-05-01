@@ -299,13 +299,14 @@ val screenY = adjustedY * previewHeight
 
 #### 2.6.2 MediaPipe Face Landmarker 468 点（已落地）
 - **引入方式**：集成 MediaPipe `face_landmarker` 任务（`face_landmarker.task` 模型），通过 `ImageAnalysis` 异步分析流驱动。
-- **数据流**：`ImageAnalysis` → `MediaPipeFaceDetector` → 468 点坐标 → 468→106 点语义映射 → `FaceWarpParams` → `BeautyPreviewEngine`；GPUPixel 模式下该结果额外写入 `bigBeautyLandmarks`，仅用于双模式调试对照。
+- **数据流**：`ImageAnalysis` → `MediaPipeFaceDetector` → 468 点坐标 → 468→106 点语义映射 → `FaceWarpParams` → `BeautyPreviewEngine`；大美丽模式下若 MediaPipe 连续漏检或初始化失败，可自动回退到本地 `InsightFace2D106Detector`（ML Kit 人脸框 + InsightFace `2d106det.onnx`）直接输出 106 点；GPUPixel 模式下该结果额外写入 `bigBeautyLandmarks`，仅用于双模式调试对照。
 - **映射规范**：
   - 106 点轮廓为开放曲线（33 点）：从右鬓角(0) → 下巴(16) → 左鬓角(32)。
   - 非轮廓区域（73 点）：眉毛、鼻梁、鼻尖、眼睛、鼻孔、嘴巴、瞳孔，对齐字节火山引擎 106 点标准。
   - 映射策略：优先使用对等语义点，缺失点使用插值。详见 `MediaPipeFaceDetector.kt`。
 - **性能红线**：
   - MediaPipe Face Landmarker 推理耗时约 20-40ms/帧（中端机，GPU delegate），**绝对禁止**放入预览渲染管线同步执行。
+  - InsightFace `2d106det` 仅允许作为异步备选检测链路触发，禁止每帧常驻推理；当前实现要求至少连续 3 次主链路漏检且满足冷却时间后才允许触发。
   - 必须采用"异步分析 + 参数插值"策略：分析流每 200-300ms 更新一次关键点，预览流根据最近一次结果进行平滑插值。
 - **应用场景**：精细美型参数映射（瘦脸、大眼）、妆容 UV 贴合（唇色、腮红）、双模式调试对照；GPUPixel 实际滤镜链仍由内置 `FaceDetector` 的 106 点结果驱动。
 

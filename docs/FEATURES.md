@@ -177,12 +177,12 @@
 - **闭眼提醒/选优**：连拍时结合 `leftEyeOpenProbability` / `rightEyeOpenProbability` 自动标记闭眼帧，推荐最佳表情照片。
 
 ##### 1.3.5.2 MediaPipe Face Mesh 468 点精细美型（已落地）
-- **能力**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。
-- **映射对齐**：通过精确的 468→106 点语义映射，对齐字节火山引擎 106 点标准（与 GPUPixel 内置 Mars 模型拓扑一致）。映射策略优先使用对等语义点，缺失点使用插值。
+- **能力**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点；大美丽模式下在连续漏检时允许自动回退到本地 InsightFace `2d106det` 输出 106 点，提升主链路可用性。
+- **映射对齐**：通过精确的 468→106 点语义映射，对齐字节火山引擎 106 点标准（与 GPUPixel 内置 Mars 模型拓扑一致）；InsightFace `2d106det` 备选链路直接输出同拓扑 106 点，无需再做 468→106 映射。
 - **应用场景**：
   - 精细美型：基于 106 点 landmarks 的径向变形场实现瘦脸、大眼，安全范围 -50~+50（幅度 ≤ 30%）。
   - 精准妆容：唇色、腮红基于关键点区域做 UV 映射，边界清晰不溢出。
-  - 双模式调试：GPUPixel 模式下，MediaPipe 468→106 结果用于对照展示 `bigBeautyLandmarks`；实际 GPUPixel 滤镜链仍由内置 `FaceDetector` 输出的 106 点驱动。
+  - 双模式调试：GPUPixel 模式下，MediaPipe 468→106 结果用于对照展示 `bigBeautyLandmarks`；实际 GPUPixel 滤镜链仍由内置 `FaceDetector` 输出的 106 点驱动，且双模式调试不启用 InsightFace 备选，避免对照基线漂移。
 - **性能约束**：严禁将 Face Mesh 放入预览渲染线程，仅允许异步回调更新美颜参数，避免掉帧。
 - **轮廓方向**：106 点轮廓为开放曲线（33 点），从右鬓角(0) → 下巴(16) → 左鬓角(32)，与 MediaPipe FACE_OVAL 闭合曲线（含额头）不同，映射时需选择不含额头的轮廓点。
 

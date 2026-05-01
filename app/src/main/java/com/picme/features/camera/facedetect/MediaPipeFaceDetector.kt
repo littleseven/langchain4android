@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.PointF
 import android.os.SystemClock
 import android.util.Log
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -31,7 +32,10 @@ import com.picme.core.common.Logger
  *
  * @since 2026-04 替代 ML Kit Face Detection（大美丽模式）
  */
-class MediaPipeFaceDetector(context: Context) {
+class MediaPipeFaceDetector(
+    context: Context,
+    private val enableInsightFaceFallback: Boolean = true
+) {
 
     companion object {
         private const val TAG = "PicMe:MediaPipeFace"
@@ -111,10 +115,16 @@ class MediaPipeFaceDetector(context: Context) {
         const val POINT_COUNT = 106
         const val CONTOUR_POINT_COUNT = 33
         const val NON_CONTOUR_POINT_COUNT = 73
+        private const val INSIGHTFACE_COOLDOWN_MS = 300L
+        private const val INSIGHTFACE_TRIGGER_MISS_COUNT = 3
     }
 
+    private val appContext: Context = context.applicationContext
     private var faceLandmarker: FaceLandmarker? = null
+    private var insightFaceDetector: InsightFace2D106Detector? = null
     private var lastProcessTimeMs: Long = 0
+    private var consecutivePrimaryMissCount: Int = 0
+    private var lastInsightFallbackAttemptMs: Long = 0L
 
     init {
         initialize(context)
@@ -170,34 +180,48 @@ class MediaPipeFaceDetector(context: Context) {
      * @param lensFacing 镜头方向，用于坐标镜像
      * @return 106 点归一化坐标列表（FloatArray，偶数索引=x，奇数索引=y），无人脸返回 null
      */
+    @ExperimentalGetImage
     fun detect(imageProxy: ImageProxy, lensFacing: Int): FloatArray? {
-        val landmarker = faceLandmarker ?: return null
-
         val startTime = SystemClock.elapsedRealtime()
+        val bitmap = imageProxyToBitmap(imageProxy) ?: return null
 
         return try {
-            val bitmap = imageProxyToBitmap(imageProxy) ?: return null
-            val mpImage = BitmapImageBuilder(bitmap).build()
-
-            val result = landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
-
-            val processTime = SystemClock.elapsedRealtime() - startTime
-            lastProcessTimeMs = processTime
-
-            if (result.faceLandmarks().isEmpty()) {
-                Logger.d(TAG, "No face detected (${processTime}ms)")
-                return null
+            val primaryResult = detectWithMediaPipe(bitmap, lensFacing)
+            if (primaryResult != null) {
+                consecutivePrimaryMissCount = 0
+                lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+                Logger.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
+                return primaryResult
             }
 
-            val landmarks = result.faceLandmarks()[0]
-            val points106 = convert468To106(landmarks, lensFacing)
+            consecutivePrimaryMissCount += 1
+            if (shouldRunInsightFaceFallback()) {
+                lastInsightFallbackAttemptMs = SystemClock.elapsedRealtime()
+                val fallbackResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
+                if (fallbackResult != null) {
+                    consecutivePrimaryMissCount = 0
+                    lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+                    Logger.w(TAG, "MediaPipe missed face, fallback to InsightFace 2D106 succeeded in ${lastProcessTimeMs}ms")
+                    return fallbackResult
+                }
+            }
 
-            Logger.d(TAG, "Face detected: 106 points in ${processTime}ms")
-            points106
-
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Logger.d(TAG, "No face detected (${lastProcessTimeMs}ms)")
+            null
         } catch (e: Exception) {
             Logger.e(TAG, "Face detection failed", e)
-            null
+            val fallbackResult = runCatching {
+                lastInsightFallbackAttemptMs = SystemClock.elapsedRealtime()
+                ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
+            }.getOrElse { fallbackError ->
+                Logger.e(TAG, "InsightFace fallback failed", fallbackError)
+                null
+            }
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            fallbackResult
+        } finally {
+            bitmap.recycle()
         }
     }
 
@@ -390,6 +414,7 @@ class MediaPipeFaceDetector(context: Context) {
      * 使用标准 YUV_420_888 → RGBA 转换，然后创建 Bitmap。
      * 正确处理旋转和前置摄像头镜像。
      */
+    @ExperimentalGetImage
     private fun imageProxyToBitmap(imageProxy: ImageProxy): android.graphics.Bitmap? {
         val image = imageProxy.image ?: return null
         val width = imageProxy.width
@@ -421,6 +446,44 @@ class MediaPipeFaceDetector(context: Context) {
         return bitmap
     }
 
+    private fun detectWithMediaPipe(bitmap: android.graphics.Bitmap, lensFacing: Int): FloatArray? {
+        val landmarker = faceLandmarker ?: return null
+        val mpImage = BitmapImageBuilder(bitmap).build()
+        val result = landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
+        if (result.faceLandmarks().isEmpty()) {
+            return null
+        }
+        return convert468To106(result.faceLandmarks()[0], lensFacing)
+    }
+
+    private fun shouldRunInsightFaceFallback(): Boolean {
+        if (!enableInsightFaceFallback) {
+            return false
+        }
+        if (faceLandmarker == null) {
+            return true
+        }
+        if (consecutivePrimaryMissCount < INSIGHTFACE_TRIGGER_MISS_COUNT) {
+            return false
+        }
+        val now = SystemClock.elapsedRealtime()
+        return now - lastInsightFallbackAttemptMs >= INSIGHTFACE_COOLDOWN_MS
+    }
+
+    private fun ensureInsightFaceDetector(): InsightFace2D106Detector? {
+        val cached = insightFaceDetector
+        if (cached != null && cached.isReady()) {
+            return cached
+        }
+        return runCatching {
+            InsightFace2D106Detector(appContext)
+        }.onSuccess { detector ->
+            insightFaceDetector = detector.takeIf { instance -> instance.isReady() }
+        }.onFailure { error ->
+            Logger.e(TAG, "Failed to initialize InsightFace 2D106 detector", error)
+        }.getOrNull()?.takeIf { detector -> detector.isReady() }
+    }
+
     /**
      * 获取最近一次检测耗时
      */
@@ -440,6 +503,8 @@ class MediaPipeFaceDetector(context: Context) {
     fun release() {
         faceLandmarker?.close()
         faceLandmarker = null
+        insightFaceDetector?.release()
+        insightFaceDetector = null
         Log.i(TAG, "MediaPipeFaceDetector released")
     }
 }

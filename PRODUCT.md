@@ -79,6 +79,7 @@
     - **人脸关键点检测能力（2026-04 更新）**：
         - **表情与状态属性（能力预留，待独立分析流补齐）**：`smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性仍按产品能力保留；当前预览主分析链路已切换为 MediaPipe，如需启用该类能力，需补充独立 ML Kit 分析流，且不得阻塞预览渲染线程。
         - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型与妆容贴合；在 GPUPixel 模式下，MediaPipe 点位仅用于双模式对照调试与 `bigBeautyLandmarks` 展示，实际滤镜链仍由 GPUPixel 内置 `FaceDetector` 驱动。
+        - **InsightFace 2D106 备选（2026-05）**：大美丽模式下，当 MediaPipe 连续漏检或初始化不可用时，允许自动回退到本地 InsightFace `2d106det` 作为 106 点备选来源，优先保障瘦脸/大眼/妆容链路可用；GPUPixel 双模式调试保持纯 MediaPipe 对照，不混入该备选结果。
         - **Selfie Segmentation（Phase 2-3）**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask，实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
     - **美颜引擎技术路线（2026-04 更新）**：
         - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为默认主引擎；上层仅保留“大美丽 / 兼容模式”两档心智，兼容模式底层由 GPUPixel 链路承接，用于回退校验与兼容验证。
