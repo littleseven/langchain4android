@@ -115,8 +115,12 @@ internal fun bindCameraUseCases(
         android.util.Log.d("PicMe:Camera", "GPUPixel mode: provider initialized, skipping Preview usecase")
     }
 
-    // MediaPipe Face Landmarker 检测器（所有非 GPUPixel 模式使用）
-    val mediaPipeDetector = com.picme.features.camera.facedetect.MediaPipeFaceDetector(context)
+    // 大美丽主链路允许在 MediaPipe 连续漏检时回退到 InsightFace 2D106；
+    // GPUPixel 双模式调试仍保持纯 MediaPipe 对照，避免混入备选点位。
+    val mediaPipeDetector = com.picme.features.camera.facedetect.MediaPipeFaceDetector(
+        context = context,
+        enableInsightFaceFallback = !isGpuPixelMode
+    )
 
     var frameCount = 0
     var lastFrameLogMs = 0L
