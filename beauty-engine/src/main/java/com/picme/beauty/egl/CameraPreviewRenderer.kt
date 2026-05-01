@@ -2,8 +2,8 @@ package com.picme.beauty.egl
 
 import android.content.Context
 import android.graphics.SurfaceTexture
-import android.opengl.GLES20
 import android.opengl.GLES11Ext
+import android.opengl.GLES20
 import android.opengl.Matrix
 import android.util.Log
 import android.view.View
@@ -679,15 +679,6 @@ class CameraPreviewRenderer(private val context: Context) {
 
     fun setDebugMode(mode: Int) {
         beautyRenderer.setDebugMode(mode)
-    }
-
-    /**
-     * 设置是否启用多Pass美颜（磨皮/美白独立Pass）
-     */
-    fun setMultiPassBeautyEnabled(enabled: Boolean) {
-        glEventQueue.offer {
-            beautyRenderer.setMultiPassBeautyEnabled(enabled)
-        }
     }
 
     fun getSurfaceTexture(): SurfaceTexture? = surfaceTexture

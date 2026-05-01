@@ -818,20 +818,11 @@ fun CameraContent(
         mutableStateOf(BeautyPerfStats())
     }
 
-    val multiPassBeautyEnabled by userPreferencesRepository.multiPassBeautyEnabledFlow.collectAsState(initial = true)
-
     // 监听 Shader Debug Mode 变化，同步到 GL Provider
     LaunchedEffect(debugShaderMode, glPreviewProvider) {
         val provider = glPreviewProvider as? com.picme.beauty.egl.GlBeautyPreviewProvider
         provider?.setDebugMode(debugShaderMode)
         Logger.d("Camera", "Shader debug mode updated: $debugShaderMode")
-    }
-
-    // 监听多Pass美颜开关，同步到 GL Provider
-    LaunchedEffect(multiPassBeautyEnabled, glPreviewProvider) {
-        val provider = glPreviewProvider as? com.picme.beauty.egl.GlBeautyPreviewProvider
-        provider?.setMultiPassBeautyEnabled(multiPassBeautyEnabled)
-        Logger.d("Camera", "Multi-pass beauty enabled: $multiPassBeautyEnabled")
     }
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {

@@ -41,7 +41,6 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
         val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
         val DEBUG_SHADER_MODE = intPreferencesKey("debug_shader_mode")
-        val MULTI_PASS_BEAUTY_ENABLED = booleanPreferencesKey("multi_pass_beauty_enabled")
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -240,24 +239,6 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateDebugShaderMode(mode: Int) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.DEBUG_SHADER_MODE] = mode
-        }
-    }
-
-    override val multiPassBeautyEnabledFlow: Flow<Boolean> = context.dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            preferences[PreferencesKeys.MULTI_PASS_BEAUTY_ENABLED] ?: true
-        }
-
-    override suspend fun updateMultiPassBeautyEnabled(enabled: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.MULTI_PASS_BEAUTY_ENABLED] = enabled
         }
     }
 

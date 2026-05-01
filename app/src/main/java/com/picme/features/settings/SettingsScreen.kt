@@ -82,7 +82,6 @@ fun SettingsScreen(
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
-    val multiPassBeautyEnabled by viewModel.multiPassBeautyEnabled.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
@@ -96,7 +95,6 @@ fun SettingsScreen(
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
         debugShaderMode = debugShaderMode,
-        multiPassBeautyEnabled = multiPassBeautyEnabled,
         onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
         onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
@@ -114,7 +112,6 @@ fun SettingsScreen(
             viewModel.setFaceDetectIntervalProfile(profile)
         },
         onDebugShaderModeSelected = { mode -> viewModel.setDebugShaderMode(mode) },
-        onMultiPassBeautyEnabledChange = { enabled -> viewModel.setMultiPassBeautyEnabled(enabled) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -133,7 +130,6 @@ private fun SettingsContent(
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
     debugShaderMode: Int,
-    multiPassBeautyEnabled: Boolean,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onBeautyStrategySelected: (BeautyStrategy) -> Unit,
@@ -145,7 +141,6 @@ private fun SettingsContent(
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
     onDebugShaderModeSelected: (Int) -> Unit,
-    onMultiPassBeautyEnabledChange: (Boolean) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -265,18 +260,6 @@ private fun SettingsContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            SettingsSection(
-                title = "Experimental",
-                description = "Experimental features that may improve quality but impact performance"
-            ) {
-                DebugOptionRow(
-                    title = "Multi-Pass Beauty (Smoothing + Whitening)",
-                    checked = multiPassBeautyEnabled,
-                    onCheckedChange = onMultiPassBeautyEnabledChange
-                )
-            }
         }
     }
 }
@@ -499,7 +482,6 @@ fun SettingsScreenPreview() {
             adaptiveFaceDetectionIntervalEnabled = true,
             faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
             debugShaderMode = 0,
-            multiPassBeautyEnabled = true,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
             onBeautyStrategySelected = {},
@@ -511,7 +493,6 @@ fun SettingsScreenPreview() {
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
             onDebugShaderModeSelected = {},
-            onMultiPassBeautyEnabledChange = {},
             onNavigateBack = {}
         )
     }
