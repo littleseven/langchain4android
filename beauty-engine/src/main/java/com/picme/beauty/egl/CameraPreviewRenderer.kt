@@ -172,6 +172,18 @@ class CameraPreviewRenderer(private val context: Context) {
         startRendering()
     }
 
+    fun clearRenderSurface(surface: android.view.Surface? = null) {
+        val currentWindowSurface = windowSurface ?: return
+        val shouldClear = surface == null || !surface.isValid
+        if (!shouldClear) {
+            return
+        }
+        currentWindowSurface.release()
+        if (windowSurface === currentWindowSurface) {
+            windowSurface = null
+        }
+    }
+
     private fun startRendering() {
         if (renderThread?.isAlive == true) {
             Log.d(TAG, "Render thread already running")
@@ -208,7 +220,16 @@ class CameraPreviewRenderer(private val context: Context) {
                             continue
                         }
 
-                        eglCore.makeCurrent(ws.getEglSurface(), context)
+                        if (!eglCore.makeCurrent(ws.getEglSurface(), context)) {
+                            statsNullFrames++
+                            Log.w(TAG, "eglMakeCurrent failed, waiting for next valid surface")
+                            if (windowSurface === ws) {
+                                ws.release()
+                                windowSurface = null
+                            }
+                            if (!safeSleep(16)) break
+                            continue
+                        }
 
                         surfaceTexture?.updateTexImage()
                         frameAvailable = false
@@ -266,7 +287,16 @@ class CameraPreviewRenderer(private val context: Context) {
                         beautyRenderer.onRender()
                         
                         // 交换缓冲区
-                        ws.swapBuffers()
+                        if (!ws.swapBuffers()) {
+                            statsNullFrames++
+                            Log.w(TAG, "swapBuffers failed, waiting for next valid surface")
+                            if (windowSurface === ws) {
+                                ws.release()
+                                windowSurface = null
+                            }
+                            if (!safeSleep(16)) break
+                            continue
+                        }
 
                         frameCount++
                         statsFrameCount++
@@ -670,7 +700,12 @@ class CameraPreviewRenderer(private val context: Context) {
         Log.d(TAG, "Releasing CameraPreviewRenderer")
         isRendering = false
         frameAvailable = false
-        renderThread?.interrupt()
+        val activeThread = renderThread
+        if (activeThread != null && activeThread !== Thread.currentThread()) {
+            activeThread.interrupt()
+            runCatching { activeThread.join(300) }
+                .onFailure { error -> Log.w(TAG, "Render thread join failed: ${error.message}") }
+        }
         renderThread = null
         windowSurface?.release()
         windowSurface = null

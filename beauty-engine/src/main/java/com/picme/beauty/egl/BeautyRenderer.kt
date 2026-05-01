@@ -506,9 +506,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val activeStyle = styleEffectShader.getActiveStyle()
 
         // 妆容纹理依赖 FaceMakeupPass，因此只要唇色或腮红开启，就必须走多Pass链路。
+        resetMultiPassFailureStateIfNeeded()
         val needTextureMakeupPass =
             faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
-        val needMultiPass = needTextureMakeupPass || (multiPassBeautyEnabled && (
+        val multiPassAllowed = multiPassBeautyEnabled && !multiPassDisabledByFailure
+        val needMultiPass = needTextureMakeupPass || (multiPassAllowed && (
             smoothingStrength > 0.001 ||
                 whiteningStrength > 0.001 ||
                 bigEyesStrength > 0.001f ||
@@ -542,6 +544,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(TAG, "renderBeautyMultiPass: executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
 
         if (!beautyPassSuccess) {
+            recordMultiPassFailure("executeBeautyPasses returned false")
             // 多Pass失败，回退到单Pass
             if (activeStyle == StyleEffect.NONE) {
                 super.onRender()
@@ -550,6 +553,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             }
             return
         }
+        recordMultiPassSuccess()
 
         // 步骤2: FaceMakeupPass 妆容渲染（三角网格 + 纹理贴图）
         Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
@@ -595,18 +599,42 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     // 2D 纹理版本的主 Shader（用于多Pass后从FBO采样）
     private val shaderProgram2D by lazy { ShaderProgram() }
     private var shaderProgram2DCompiled = false
+    private var multiPassFailureCount: Int = 0
+    private var multiPassDisabledByFailure: Boolean = false
 
     private fun compileShaderProgram2D(): Boolean {
-        // 强制重新编译（确保使用最新的 uniforms_2d.glsl）
         if (shaderProgram2DCompiled) {
-            shaderProgram2D.release()
-            shaderProgram2DCompiled = false
+            return true
         }
         val vertexSource = context.assets.open(ShaderModuleLoader.VERTEX_SHADER_2D_PATH).bufferedReader().use { it.readText() }
         val fragmentSource = ShaderModuleLoader.loadFullFragmentShader2D(context)
         shaderProgram2DCompiled = shaderProgram2D.compile(vertexSource, fragmentSource)
         Log.d(TAG, "ShaderProgram2D compiled: $shaderProgram2DCompiled")
         return shaderProgram2DCompiled
+    }
+
+    private fun resetMultiPassFailureStateIfNeeded() {
+        if (multiPassDisabledByFailure && !multiPassBeautyEnabled) {
+            multiPassDisabledByFailure = false
+            multiPassFailureCount = 0
+        }
+    }
+
+    private fun recordMultiPassFailure(reason: String) {
+        multiPassFailureCount += 1
+        Log.w(TAG, "Multi-pass failure #$multiPassFailureCount: $reason")
+        if (multiPassFailureCount >= 3) {
+            multiPassDisabledByFailure = true
+            Log.w(TAG, "Multi-pass disabled after repeated failures")
+        }
+    }
+
+    private fun recordMultiPassSuccess() {
+        if (multiPassFailureCount != 0 || multiPassDisabledByFailure) {
+            Log.d(TAG, "Multi-pass recovered")
+        }
+        multiPassFailureCount = 0
+        multiPassDisabledByFailure = false
     }
 
     private fun renderMainShaderFromFbo(
@@ -987,6 +1015,10 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      */
     fun setMultiPassBeautyEnabled(enabled: Boolean) {
         multiPassBeautyEnabled = enabled
+        if (enabled) {
+            multiPassDisabledByFailure = false
+            multiPassFailureCount = 0
+        }
         Log.d(TAG, "Multi-pass beauty enabled: $enabled")
     }
 
@@ -1324,12 +1356,18 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(TAG, "Releasing BeautyRenderer")
         intermediateFbo?.release()
         intermediateFbo = null
+        fboPing = null
+        fboPong = null
         styleEffectShader.release()
         copyPass.release()
         beautyUnitPass.release()
         faceMakeupPass.release()
         lutTextureLoader.release()
         fboPool.releaseAll()
+        shaderProgram2D.release()
+        shaderProgram2DCompiled = false
+        multiPassFailureCount = 0
+        multiPassDisabledByFailure = false
         super.release()
     }
 }
