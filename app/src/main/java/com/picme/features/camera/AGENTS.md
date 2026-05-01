@@ -309,6 +309,7 @@ val screenY = adjustedY * previewHeight
   - InsightFace `2d106det` 仅允许作为异步备选检测链路触发，禁止每帧常驻推理；当前实现要求至少连续 3 次主链路漏检且满足冷却时间后才允许触发。
   - 必须采用"异步分析 + 参数插值"策略：分析流每 200-300ms 更新一次关键点，预览流根据最近一次结果进行平滑插值。
 - **应用场景**：精细美型参数映射（瘦脸、大眼）、妆容 UV 贴合（唇色、腮红）、双模式调试对照；GPUPixel 实际滤镜链仍由内置 `FaceDetector` 的 106 点结果驱动。
+- **调试浮层约束**：开启 `showFaceDebugOverlay` 后，浮层必须同时展示当前帧 `detectionSource` 与设置页选择的 `requestedDetectionEngineMode`，避免误判 `Auto -> InsightFace` 的备选命中来源。
 
 #### 2.6.3 Selfie Segmentation（Phase 2-3）
 - **引入方式**：新增 ML Kit `segmentation-selfie` 依赖。

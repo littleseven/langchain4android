@@ -20,8 +20,17 @@
     <string name="beauty_engine">美颜引擎</string>
 <string name="beauty_engine_rplan">大美丽（默认）</string>
 <string name="beauty_engine_gpupixel">兼容模式</string>
-<string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
+    <string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
+    <string name="face_detection_engine_title">人脸检测引擎</string>
+<string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
+<string name="face_detection_engine_mode_insightface">InsightFace</string>
+    <string name="face_detection_source_gpupixel">GPUPixel</string>
+    <string name="face_detection_source_none">无</string>
+    <string name="camera_face_debug_requested_label">当前请求引擎</string>
+    <string name="camera_face_debug_active_label">当前实际命中来源</string>
+    <string name="camera_face_debug_source_label">检测来源：%1$s  设定：%2$s</string>
     <string name="photo">照片</string>
+
     <string name="video">视频</string>
     <string name="portrait">人像</string>
     <string name="pro">专业模式</string>
@@ -153,6 +162,6 @@
     <string name="landmark_overlay">人脸关键点</string>
     <string name="landmark_loading">正在检测人脸关键点…</string>
     <string name="landmark_no_face_detected">未检测到人脸</string>
-    <string name="landmark_big_beauty">大美丽</string>
-    <string name="landmark_compatibility">兼容链路</string>
+<string name="landmark_big_beauty">大美丽</string>
+<string name="landmark_compatibility">GPUPixel</string>
 </resources>

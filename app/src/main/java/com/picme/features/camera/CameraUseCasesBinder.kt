@@ -17,6 +17,7 @@ import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.preview.core.FaceWarpParams
 import com.pixpark.gpupixel.GPUPixel
@@ -36,6 +37,7 @@ internal fun bindCameraUseCases(
     cameraExecutor: ExecutorService,
     beautySettings: BeautySettings,
     beautyStrategy: BeautyStrategy,
+    detectionEngineMode: FaceDetectionEngineMode,
     videoCapture: VideoCapture<Recorder>,
     gpupixelProvider: GpupixelBeautyPreviewProvider?,
     onImageCaptureChanged: (ImageCapture) -> Unit,
@@ -115,11 +117,10 @@ internal fun bindCameraUseCases(
         android.util.Log.d("PicMe:Camera", "GPUPixel mode: provider initialized, skipping Preview usecase")
     }
 
-    // 大美丽主链路允许在 MediaPipe 连续漏检时回退到 InsightFace 2D106；
-    // GPUPixel 双模式调试仍保持纯 MediaPipe 对照，避免混入备选点位。
+    // 人脸检测引擎使用显式模式，不再做自动降级。
     val mediaPipeDetector = com.picme.features.camera.facedetect.MediaPipeFaceDetector(
         context = context,
-        enableInsightFaceFallback = !isGpuPixelMode
+        detectionEngineMode = detectionEngineMode
     )
 
     var frameCount = 0
@@ -161,14 +162,14 @@ internal fun bindCameraUseCases(
                     Logger.e("Camera", "GPUPixel frame conversion error", e)
                 }
             }
-            // GPUPixel 模式：同时运行 MediaPipe 检测用于调试对比
-            // 先获取 GPUPixel 回调中的点位数据（由 GpupixelBeautyPreviewProvider 内部回调更新）
-            // 由于 GPUPixel 回调是异步的，这里使用一个占位参数，实际合并逻辑在 CameraScreen 中处理
+            // GPUPixel 预览链路仍通过 provider 产出调试点位；这里复用当前选择的人脸检测引擎，
+            // 用于焦点跟踪与静态对照链路。
             handleImageAnalysisFrameMediaPipe(
                 imageProxy = imageProxy,
                 previewView = previewView,
                 mediaPipeDetector = mediaPipeDetector,
                 lensFacing = lensFacing,
+                detectionEngineMode = detectionEngineMode,
                 onFacePointChanged = onFacePointChanged,
                 onFaceWarpParamsChanged = { mediaPipeParams ->
                     // 双模式：将 MediaPipe 结果合并到现有的 GPUPixel 参数中
@@ -180,12 +181,13 @@ internal fun bindCameraUseCases(
                 isDualMode = true
             )
         } else {
-            // 所有非 GPUPixel 模式：使用 MediaPipe Face Landmarker（468点 → 106点）
+            // 所有非 GPUPixel 预览模式：使用当前选定的人脸检测引擎。
             handleImageAnalysisFrameMediaPipe(
                 imageProxy = imageProxy,
                 previewView = previewView,
                 mediaPipeDetector = mediaPipeDetector,
                 lensFacing = lensFacing,
+                detectionEngineMode = detectionEngineMode,
                 onFacePointChanged = onFacePointChanged,
                 onFaceWarpParamsChanged = onFaceWarpParamsChanged,
                 onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,

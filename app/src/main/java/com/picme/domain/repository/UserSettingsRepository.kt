@@ -3,6 +3,7 @@ package com.picme.domain.repository
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
@@ -52,6 +53,9 @@ interface UserSettingsRepository {
     suspend fun updateDebugShaderMode(mode: Int)
 
     // ── 人脸检测 ───────────────────────────────────────────
+    val faceDetectionEngineModeFlow: Flow<FaceDetectionEngineMode>
+    suspend fun updateFaceDetectionEngineMode(mode: FaceDetectionEngineMode)
+
     val faceDetectionLandmarkModeFlow: Flow<Boolean>
     suspend fun updateFaceDetectionLandmarkMode(enabled: Boolean)
 

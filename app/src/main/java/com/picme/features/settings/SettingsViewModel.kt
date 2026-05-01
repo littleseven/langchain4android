@@ -3,9 +3,11 @@ package com.picme.features.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.picme.core.common.Logger
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -41,6 +43,13 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = true
+        )
+
+    val faceDetectionEngineMode: StateFlow<FaceDetectionEngineMode> = repository.faceDetectionEngineModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = FaceDetectionEngineMode.MEDIAPIPE
         )
 
     val faceDetectionLandmarkModeEnabled: StateFlow<Boolean> = repository.faceDetectionLandmarkModeFlow
@@ -119,6 +128,13 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
                 repository.updateShowFaceDebugOverlay(false)
                 repository.updateShowLogOverlay(false)
             }
+        }
+    }
+
+    fun setFaceDetectionEngineMode(mode: FaceDetectionEngineMode) {
+        viewModelScope.launch {
+            Logger.d("UX", "Face detection engine mode changed: ${mode.name}")
+            repository.updateFaceDetectionEngineMode(mode)
         }
     }
 

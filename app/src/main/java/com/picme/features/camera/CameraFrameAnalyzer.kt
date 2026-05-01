@@ -5,6 +5,7 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.picme.core.common.Logger
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.features.camera.preview.core.FaceWarpParams
 
 /**
@@ -101,6 +102,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
     previewView: PreviewView,
     mediaPipeDetector: com.picme.features.camera.facedetect.MediaPipeFaceDetector,
     lensFacing: Int,
+    detectionEngineMode: FaceDetectionEngineMode,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
@@ -120,15 +122,19 @@ internal fun handleImageAnalysisFrameMediaPipe(
             ?: imageProxy.height.toFloat()
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-        // MediaPipe 检测
-        val landmarks106 = mediaPipeDetector.detect(imageProxy, lensFacing)
+        // 人脸检测（MediaPipe / InsightFace / AUTO）
+        val detectionResult = mediaPipeDetector.detect(imageProxy, lensFacing)
 
-        if (landmarks106 != null) {
+        if (detectionResult != null) {
+            val landmarks106 = detectionResult.landmarks106
             // 缓存人脸检测结果供拍照使用
             FaceDetectionCache.updateLandmarks106(landmarks106)
 
             // 构建 FaceWarpParams
-            val faceWarpParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(landmarks106)
+            val faceWarpParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(
+                landmarks106 = landmarks106,
+                detectionSource = detectionResult.detectionSource
+            ).copy(requestedDetectionEngineMode = detectionEngineMode)
 
             // 人脸中心点（用于聚焦指示器）
             val screenPoint = Offset(
@@ -138,27 +144,20 @@ internal fun handleImageAnalysisFrameMediaPipe(
             onFacePointChanged(screenPoint)
             onShowFocusIndicatorChanged(true)
 
-            // 保存大美丽原始点位用于调试对比
-            val bigBeautyLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
-
             if (isDualMode) {
-                // 双模式下仍需保留 MediaPipe 转出的完整美颜参数，
+                // 双模式下仍需保留主分析流的完整美颜参数，
                 // 只让 GPUPixel 回调补充 gpuPixelLandmarks，避免把轮廓/中心点清空后触发预览黑屏。
-                val dualModeParams = faceWarpParams.copy(
-                    bigBeautyLandmarks = bigBeautyLandmarks
-                )
-                onFaceWarpParamsChanged(dualModeParams)
+                onFaceWarpParamsChanged(faceWarpParams)
             } else {
                 // 单模式：直接返回大美丽参数
-                val warpParamsWithBigBeauty = faceWarpParams.copy(
-                    bigBeautyLandmarks = bigBeautyLandmarks
-                )
-                onFaceWarpParamsChanged(warpParamsWithBigBeauty)
+                onFaceWarpParamsChanged(faceWarpParams)
             }
         } else {
             if (!isDualMode) {
                 onShowFocusIndicatorChanged(false)
-                onFaceWarpParamsChanged(FaceWarpParams())
+                onFaceWarpParamsChanged(
+                    FaceWarpParams(requestedDetectionEngineMode = detectionEngineMode)
+                )
             }
         }
 
