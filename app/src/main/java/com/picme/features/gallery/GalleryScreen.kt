@@ -41,9 +41,10 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.Sort
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -143,7 +144,8 @@ private fun shareMediaAssets(context: Context, assets: List<MediaAsset>) {
 @Composable
 fun GalleryScreen(
     viewModel: MediaViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToDebug: () -> Unit
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -203,7 +205,6 @@ fun GalleryScreen(
                 GalleryTopBar(
                     isSelectionMode = isSelectionMode,
                     selectedCount = selectedIds.size,
-                    allMediaCount = allFlatMedia.size,
                     groupingMode = groupingMode,
                     onNavigateBack = onNavigateBack,
                     onToggleSelectionMode = {
@@ -228,7 +229,8 @@ fun GalleryScreen(
                         shareMediaAssets(context, selectedAssets)
                     },
                     onGroupingModeSelected = { mode -> viewModel.setGroupingMode(mode) },
-                    onManageDuplicates = { viewModel.toggleDuplicateManager(true) }
+                    onManageDuplicates = { viewModel.toggleDuplicateManager(true) },
+                    onOpenTestDataTools = onNavigateToDebug
                 )
             } else if (showDuplicateManager) {
                 DuplicateManagerTopBar(
@@ -247,8 +249,7 @@ fun GalleryScreen(
                 DuplicateManagerScreen(
                     duplicateGroups = duplicateGroups,
                     isScanning = isScanningDuplicates,
-                    onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) },
-                    onDeleteAll = { viewModel.deleteAllDuplicatesExceptOne() }
+                    onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) }
                 )
             } else if (allFlatMedia.isEmpty()) {
                 EmptyGalleryMessage()
@@ -369,7 +370,6 @@ fun GalleryScreen(
 private fun GalleryTopBar(
     isSelectionMode: Boolean,
     selectedCount: Int,
-    allMediaCount: Int,
     groupingMode: GroupingMode,
     onNavigateBack: () -> Unit,
     onToggleSelectionMode: () -> Unit,
@@ -377,7 +377,8 @@ private fun GalleryTopBar(
     onDeleteSelected: () -> Unit,
     onShareSelected: () -> Unit,
     onGroupingModeSelected: (GroupingMode) -> Unit,
-    onManageDuplicates: () -> Unit
+    onManageDuplicates: () -> Unit,
+    onOpenTestDataTools: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -412,6 +413,12 @@ private fun GalleryTopBar(
                     Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete))
                 }
             } else {
+                IconButton(onClick = onOpenTestDataTools) {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = stringResource(R.string.test_data_tools)
+                    )
+                }
                 IconButton(onClick = onManageDuplicates) {
                     Icon(Icons.Outlined.FilterDrama, contentDescription = "Manage Duplicates")
                 }
@@ -432,7 +439,7 @@ private fun GroupingMenu(
     var showMenu by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { showMenu = true }) {
-            Icon(Icons.Rounded.Sort, contentDescription = null)
+            Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null)
         }
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
             GroupingMode.entries.forEach { mode ->
@@ -497,8 +504,7 @@ private fun DuplicateManagerTopBar(
 private fun DuplicateManagerScreen(
     duplicateGroups: List<DuplicateGroup>,
     isScanning: Boolean,
-    onDeleteGroup: (DuplicateGroup) -> Unit,
-    onDeleteAll: () -> Unit
+    onDeleteGroup: (DuplicateGroup) -> Unit
 ) {
     if (isScanning) {
         Box(

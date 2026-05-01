@@ -1,10 +1,15 @@
 package com.picme.features.debug
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.util.Log
+import androidx.core.net.toUri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
@@ -13,12 +18,13 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.domain.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -35,7 +41,6 @@ import java.util.Random
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 import kotlin.math.abs
 import kotlin.math.pow
 
@@ -188,7 +193,8 @@ object SampleDataGenerator {
                                 val file = downloadWithRetry(candidate.url, context, fileName)
 
                                 if (file != null) {
-                                    val bitmap = decodeSampledBitmap(file, 400, 400)
+                                        val bitmap = decodeSampledBitmap(file)
+
                                     if (bitmap != null) {
                                         val analysis = analyzeContentAndSkin(bitmap)
                                         if (analysis.isValidContent) {
@@ -206,24 +212,39 @@ object SampleDataGenerator {
                                                     Calendar.DAY_OF_YEAR,
                                                     -random.nextInt(180)
                                                 )
-                                                val asset = MediaAsset(
-                                                    uri = UriPathUtil.getUriFromFile(file),
-                                                    type = MediaType.PHOTO,
-                                                    captureDate = calendar.timeInMillis,
+                                                val savedUri = saveTestImageToAlbum(
+                                                    context = context,
+                                                    sourceFile = file,
                                                     fileName = fileName,
-                                                    hasFace = faceResult.count > 0,
-                                                    source = candidate.source
+                                                    captureDate = calendar.timeInMillis
                                                 )
-                                                repository.insertMedia(asset)
-                                                downloadedCount.incrementAndGet()
-                                                roundStatsSuccess.getOrPut(candidate.source) {
-                                                    AtomicInteger(
-                                                        0
+                                                if (savedUri != null) {
+                                                    val asset = MediaAsset(
+                                                        uri = savedUri,
+                                                        type = MediaType.PHOTO,
+                                                        captureDate = calendar.timeInMillis,
+                                                        fileName = fileName,
+                                                        hasFace = faceResult.count > 0,
+                                                        source = candidate.source
                                                     )
-                                                }.incrementAndGet()
-                                                _progress.value =
-                                                    "$keyword (${downloadedCount.get()}/$targetCount)"
-                                                addLog("Saved from [${candidate.source.uppercase(Locale.US)}]: ${asset.fileName}")
+                                                    repository.insertMedia(asset)
+                                                    downloadedCount.incrementAndGet()
+                                                    roundStatsSuccess.getOrPut(candidate.source) {
+                                                        AtomicInteger(
+                                                            0
+                                                        )
+                                                    }.incrementAndGet()
+                                                    _progress.value =
+                                                        "$keyword (${downloadedCount.get()}/$targetCount)"
+                                                    addLog(
+                                                        "Saved to album [${candidate.source.uppercase(Locale.US)}]: ${asset.fileName}"
+                                                    )
+                                                } else {
+                                                    addLog(
+                                                        "Album save failed [${candidate.source.uppercase(Locale.US)}]: $fileName"
+                                                    )
+                                                }
+                                                file.delete()
                                             } else {
                                                 addLog(
                                                     "Filtered [${
@@ -352,7 +373,7 @@ object SampleDataGenerator {
             } else {
                 emptyList()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
@@ -375,7 +396,7 @@ object SampleDataGenerator {
             } else {
                 emptyList()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
@@ -387,7 +408,7 @@ object SampleDataGenerator {
             try {
                 val result = downloadAndValidateImage(url, context, fileName)
                 if (result != null) return result
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 addLog("Retry $attempt failed: $url")
             }
             if (attempt < maxRetries - 1) {
@@ -424,7 +445,7 @@ object SampleDataGenerator {
             })
 
             if (connection.responseCode != 200) return null
-            val file = File(context.filesDir, fileName)
+            val file = File(context.cacheDir, fileName)
             connection.inputStream.use { input ->
                 FileOutputStream(file).use { output ->
                     input.copyTo(output)
@@ -435,7 +456,7 @@ object SampleDataGenerator {
                 return null
             }
             return file
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return null
         } finally {
             connection?.disconnect()
@@ -472,7 +493,9 @@ object SampleDataGenerator {
         )
     }
 
-    private fun decodeSampledBitmap(file: File, reqW: Int, reqH: Int): Bitmap? {
+    private fun decodeSampledBitmap(file: File): Bitmap? {
+        val reqW = 400
+        val reqH = 400
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, options)
         options.inSampleSize =
@@ -480,13 +503,13 @@ object SampleDataGenerator {
         options.inJustDecodeBounds = false
         return try {
             BitmapFactory.decodeFile(file.absolutePath, options)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
 
     private suspend fun analyzeFace(bitmap: Bitmap): FaceAnalysisResult =
-        suspendCoroutine { continuation ->
+        suspendCancellableCoroutine { continuation ->
             val image = InputImage.fromBitmap(bitmap, 0)
             val detector = FaceDetection.getClient(
                 FaceDetectorOptions.Builder().setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
@@ -509,25 +532,83 @@ object SampleDataGenerator {
                 }
         }
 
+    private fun saveTestImageToAlbum(
+        context: Context,
+        sourceFile: File,
+        fileName: String,
+        captureDate: Long
+    ): String? {
+        val resolver = context.contentResolver
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.DATE_TAKEN, captureDate)
+            put(MediaStore.MediaColumns.DATE_ADDED, captureDate / 1000)
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/PicMe")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+        }
+
+        var uri: Uri? = null
+        return try {
+            uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            val targetUri = uri ?: return null
+            val outputStream = resolver.openOutputStream(targetUri)
+            if (outputStream == null) {
+                resolver.delete(targetUri, null, null)
+                return null
+            }
+            outputStream.use { output ->
+                sourceFile.inputStream().use { input ->
+                    input.copyTo(output)
+                }
+            }
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                resolver.update(
+                    targetUri,
+                    ContentValues().apply {
+                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    },
+                    null,
+                    null
+                )
+            }
+            targetUri.toString()
+        } catch (error: Exception) {
+            addLog("Album insert failed: ${error.message.orEmpty().ifBlank { error::class.java.simpleName }}")
+            uri?.let { createdUri ->
+                runCatching { resolver.delete(createdUri, null, null) }
+            }
+            null
+        }
+    }
+
     suspend fun clearTestData(
         context: Context,
         repository: MediaRepository,
         allMedia: List<MediaAsset>
     ) {
-        allMedia.filter { it.fileName.startsWith("TEST_") }.forEach { asset ->
+        val testMedia = allMedia.filter { asset -> asset.fileName.startsWith("TEST_") }
+        val contentResolver = context.contentResolver
+        testMedia.forEach { asset ->
             try {
-                File(asset.uri.removePrefix("file://")).delete()
-            } catch (e: Exception) {
-                // Ignore
+                when {
+                    asset.uri.startsWith("content://") -> {
+                        contentResolver.delete(asset.uri.toUri(), null, null)
+                    }
+
+                    asset.uri.startsWith("file://") -> {
+                        File(asset.uri.removePrefix("file://")).delete()
+                    }
+                }
+            } catch (_: Exception) {
+                // Ignore cleanup failures for debug-only assets.
             }
         }
-        repository.deleteMediaByIds(allMedia.filter { it.fileName.startsWith("TEST_") }.map { it.id })
+        repository.deleteMediaByIds(testMedia.map { asset -> asset.id })
         addLog("Action: Cleared test data")
     }
-}
-
-object UriPathUtil {
-    fun getUriFromFile(file: File): String = "file://${file.absolutePath}"
 }
 
 data class FaceAnalysisResult(val count: Int, val maxHeightRatio: Float)

@@ -63,6 +63,7 @@
     <string name="generating">正在生成…</string>
     <string name="debug_tools">调试工具</string>
     <string name="show_debug_tools">显示调试入口</string>
+    <string name="test_data_tools">测试数据工具</string>
     <string name="data_generation">数据生成</string>
     <string name="person">人像</string>
     <string name="landscape">风景</string>
@@ -149,4 +150,9 @@
 
     <!-- Media Pager -->
     <string name="media_source">来源: %1$s</string>
+    <string name="landmark_overlay">人脸关键点</string>
+    <string name="landmark_loading">正在检测人脸关键点…</string>
+    <string name="landmark_no_face_detected">未检测到人脸</string>
+    <string name="landmark_big_beauty">大美丽</string>
+    <string name="landmark_compatibility">兼容链路</string>
 </resources>

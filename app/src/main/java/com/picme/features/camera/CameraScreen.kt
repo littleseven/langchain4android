@@ -228,7 +228,6 @@ internal data class CameraPreviewUiState(
 internal data class CameraPreviewActions(
     val onNavigateToSettings: () -> Unit,
     val onNavigateToDebug: () -> Unit,
-    val onNavigateToFaceLandmarkDebug: () -> Unit,
     val onFlipCamera: () -> Unit,
     val onToggleBeauty: () -> Unit,
     val onToggleFilter: () -> Unit,
@@ -327,7 +326,6 @@ private fun buildCameraPreviewUiState(
 
 private fun buildCameraPreviewActions(
     onNavigateToSettings: () -> Unit,
-    onNavigateToFaceLandmarkDebug: () -> Unit,
     lensFacing: Int,
     onLensFacingChanged: (Int) -> Unit,
     onActualLensFacingChanged: (Int) -> Unit,
@@ -348,7 +346,6 @@ private fun buildCameraPreviewActions(
     return CameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToDebug = {}, // 已废弃,保留空实现以兼容
-        onNavigateToFaceLandmarkDebug = onNavigateToFaceLandmarkDebug,
         onFlipCamera = {
             val nextLens = nextLensFacing(lensFacing)
             onLensFacingChanged(nextLens)
@@ -474,7 +471,6 @@ private fun resolvePreviewTargetView(
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToFaceLandmarkDebug: () -> Unit,
     viewModel: MediaViewModel
 ) {
     // RD 沉浸式模式：隐藏系统栏
@@ -510,8 +506,7 @@ fun CameraScreen(
         CameraContent(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
-            onNavigateToSettings = onNavigateToSettings,
-            onNavigateToFaceLandmarkDebug = onNavigateToFaceLandmarkDebug
+            onNavigateToSettings = onNavigateToSettings
         )
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -529,8 +524,7 @@ fun CameraScreen(
 fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToFaceLandmarkDebug: () -> Unit = {}
+    onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val runtimeContext = rememberCameraRuntimeContext(context)
@@ -1142,10 +1136,10 @@ CameraPreviewContent(
         whiteBalanceMode = whiteBalanceMode,
         beautyStrategy = beautyStrategy
     ),
-    actions = buildCameraPreviewActions(
-        onNavigateToSettings = onNavigateToSettings,
-        onNavigateToFaceLandmarkDebug = onNavigateToFaceLandmarkDebug,
-        lensFacing = lensFacing,
+            actions = buildCameraPreviewActions(
+                onNavigateToSettings = onNavigateToSettings,
+                lensFacing = lensFacing,
+
         onLensFacingChanged = { updatedLensFacing -> lensFacing = updatedLensFacing },
         onActualLensFacingChanged = { updatedLensFacing ->
             Logger.d("Camera", "Action lens sync: $updatedLensFacing")

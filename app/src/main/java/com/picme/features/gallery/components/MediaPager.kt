@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
@@ -107,12 +108,24 @@ fun MediaPager(
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(true) }
+    var showLandmarkOverlay by remember { mutableStateOf(false) }
+    var show468Points by remember { mutableStateOf(true) }
+    var showBigBeauty106 by remember { mutableStateOf(true) }
+    var showGpuPixel106 by remember { mutableStateOf(true) }
     var currentPageZoomed by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val currentAsset = assets.getOrNull(pagerState.currentPage)
+    val landmarkState = rememberFaceLandmarkDetection(
+        imageUri = currentAsset?.uri.orEmpty(),
+        enabled = showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO
+    )
 
     LaunchedEffect(pagerState.currentPage) {
         currentPageZoomed = false
+        if (currentAsset?.type != MediaType.PHOTO) {
+            showLandmarkOverlay = false
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -150,37 +163,60 @@ fun MediaPager(
         MediaPagerTopControls(
             onClose = onClose,
             showInfo = showInfo,
+            showLandmarkAction = currentAsset?.type == MediaType.PHOTO,
+            showLandmarkOverlay = showLandmarkOverlay,
             onToggleInfo = { 
                 Log.d("PicMe:UX", "Toggle info visibility via button")
                 showInfo = !showInfo 
             },
+            onToggleLandmarks = {
+                showLandmarkOverlay = !showLandmarkOverlay
+            },
             onDelete = { 
-                val currentAsset = assets[pagerState.currentPage]
-                Log.d("PicMe:UX", "Request delete media: ${currentAsset.id}")
-                onDelete(currentAsset) 
+                val selectedAsset = assets[pagerState.currentPage]
+                Log.d("PicMe:UX", "Request delete media: ${selectedAsset.id}")
+                onDelete(selectedAsset)
             },
             onShare = {
-                val currentAsset = assets[pagerState.currentPage]
-                Log.d("PicMe:UX", "Share media from pager: ${currentAsset.id}")
+                val selectedAsset = assets[pagerState.currentPage]
+                Log.d("PicMe:UX", "Share media from pager: ${selectedAsset.id}")
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    putExtra(Intent.EXTRA_STREAM, currentAsset.uri.toUri())
-                    type = if (currentAsset.type == MediaType.VIDEO) "video/*" else "image/*"
+                    putExtra(Intent.EXTRA_STREAM, selectedAsset.uri.toUri())
+                    type = if (selectedAsset.type == MediaType.VIDEO) "video/*" else "image/*"
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 context.startActivity(Intent.createChooser(shareIntent, null))
             },
             onStartOcr = {
-                val currentAsset = assets[pagerState.currentPage]
-                Log.d("PicMe:UX", "Trigger OCR via toolbar button for asset: ${currentAsset.id}")
-                onStartOcr(currentAsset.uri) 
+                val selectedAsset = assets[pagerState.currentPage]
+                Log.d("PicMe:UX", "Trigger OCR via toolbar button for asset: ${selectedAsset.id}")
+                onStartOcr(selectedAsset.uri)
             }
         )
 
+        if (showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO) {
+            FaceLandmarkCanvasOverlay(
+                state = landmarkState,
+                show468Points = show468Points,
+                showBigBeauty106 = showBigBeauty106,
+                showGpuPixel106 = showGpuPixel106
+            )
+            FaceLandmarkControlBar(
+                state = landmarkState,
+                show468Points = show468Points,
+                showBigBeauty106 = showBigBeauty106,
+                showGpuPixel106 = showGpuPixel106,
+                onToggle468Points = { show468Points = !show468Points },
+                onToggleBigBeauty106 = { showBigBeauty106 = !showBigBeauty106 },
+                onToggleGpuPixel106 = { showGpuPixel106 = !showGpuPixel106 },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
+
         // Source Info Overlay (Bottom Left)
-        val currentAsset = assets[pagerState.currentPage]
         SourceInfoOverlay(
-            visible = showInfo && currentAsset.source != null,
-            source = currentAsset.source
+            visible = showInfo && currentAsset?.source != null && !showLandmarkOverlay,
+            source = currentAsset?.source
         )
         
         // OCR Result Overlay
@@ -468,7 +504,10 @@ private fun OcrResultOverlay(
 private fun MediaPagerTopControls(
     onClose: () -> Unit,
     showInfo: Boolean,
+    showLandmarkAction: Boolean,
+    showLandmarkOverlay: Boolean,
     onToggleInfo: () -> Unit,
+    onToggleLandmarks: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
     onStartOcr: () -> Unit
@@ -494,6 +533,25 @@ private fun MediaPagerTopControls(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showLandmarkAction) {
+                IconButton(
+                    onClick = onToggleLandmarks,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = if (showLandmarkOverlay) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        } else {
+                            Color.Black.copy(alpha = 0.5f)
+                        }
+                    )
+                ) {
+                    Icon(
+                        Icons.Rounded.Face,
+                        contentDescription = stringResource(R.string.landmark_overlay),
+                        tint = if (showLandmarkOverlay) Color.Black else Color.White
+                    )
+                }
+            }
+
             IconButton(
                 onClick = { onStartOcr() },
                 colors = IconButtonDefaults.iconButtonColors(
