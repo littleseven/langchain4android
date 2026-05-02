@@ -6,8 +6,8 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Matrix
 import android.graphics.Rect
-import android.graphics.RectF
 import androidx.camera.core.CameraSelector
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
@@ -35,8 +35,8 @@ class InsightFace2D106Detector(context: Context) {
         private const val INPUT_CHANNELS = 3
         private const val POINT_COUNT = 106
         private const val LOOSE_CROP_SCALE = 1.5f
-        private const val INPUT_MEAN = 127.5f
-        private const val INPUT_STD = 128.0f
+        private const val DEFAULT_INPUT_MEAN = 127.5f
+        private const val DEFAULT_INPUT_STD = 128.0f
     }
 
     private val appContext = context.applicationContext
@@ -49,6 +49,8 @@ class InsightFace2D106Detector(context: Context) {
 
     private var ortSession: OrtSession? = null
     private var inputName: String? = null
+    private var inputMean: Float = DEFAULT_INPUT_MEAN
+    private var inputStd: Float = DEFAULT_INPUT_STD
 
     init {
         initialize()
@@ -66,12 +68,13 @@ class InsightFace2D106Detector(context: Context) {
 
             val result = FloatArray(POINT_COUNT * 2)
             val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
-            val scale = crop.looseSize / INPUT_SIZE.toFloat()
+            val mappedPoint = floatArrayOf(0f, 0f)
             for (index in 0 until POINT_COUNT) {
-                val cropX = (rawOutput[index * 2] + 1f) * (INPUT_SIZE / 2f)
-                val cropY = (rawOutput[index * 2 + 1] + 1f) * (INPUT_SIZE / 2f)
-                var normalizedX = (crop.left + cropX * scale) / bitmap.width.toFloat()
-                val normalizedY = (crop.top + cropY * scale) / bitmap.height.toFloat()
+                mappedPoint[0] = (rawOutput[index * 2] + 1f) * (INPUT_SIZE / 2f)
+                mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * (INPUT_SIZE / 2f)
+                crop.inverseTransform.mapPoints(mappedPoint)
+                var normalizedX = mappedPoint[0] / bitmap.width.toFloat()
+                val normalizedY = mappedPoint[1] / bitmap.height.toFloat()
                 if (isFrontCamera) {
                     normalizedX = 1f - normalizedX
                 }
@@ -98,11 +101,17 @@ class InsightFace2D106Detector(context: Context) {
             val sessionOptions = OrtSession.SessionOptions()
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
-            Logger.i(TAG, "InsightFace 2D106 initialized: ${modelFile.absolutePath}")
+            resolveInputNormalization(modelFile)
+            Logger.i(
+                TAG,
+                "InsightFace 2D106 initialized: ${modelFile.absolutePath}, mean=$inputMean, std=$inputStd"
+            )
         }.onFailure { error ->
             Logger.e(TAG, "Failed to initialize InsightFace 2D106", error)
             ortSession = null
             inputName = null
+            inputMean = DEFAULT_INPUT_MEAN
+            inputStd = DEFAULT_INPUT_STD
         }
     }
 
@@ -131,31 +140,28 @@ class InsightFace2D106Detector(context: Context) {
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
         val faceHeight = faceBounds.height().toFloat().coerceAtLeast(1f)
         val looseSize = max(faceWidth, faceHeight) * LOOSE_CROP_SCALE
-        val left = faceBounds.exactCenterX() - looseSize / 2f
-        val top = faceBounds.exactCenterY() - looseSize / 2f
-        val right = left + looseSize
-        val bottom = top + looseSize
-
-        val srcLeft = left.coerceAtLeast(0f).toInt()
-        val srcTop = top.coerceAtLeast(0f).toInt()
-        val srcRight = right.coerceAtMost(bitmap.width.toFloat()).toInt()
-        val srcBottom = bottom.coerceAtMost(bitmap.height.toFloat()).toInt()
-        if (srcRight <= srcLeft || srcBottom <= srcTop) {
+        if (looseSize <= 0f) {
             return null
+        }
+
+        val centerX = faceBounds.exactCenterX()
+        val centerY = faceBounds.exactCenterY()
+        val scale = INPUT_SIZE / looseSize
+        val transform = Matrix().apply {
+            postScale(scale, scale)
+            postTranslate(
+                INPUT_SIZE / 2f - centerX * scale,
+                INPUT_SIZE / 2f - centerY * scale
+            )
+        }
+        val inverseTransform = Matrix().apply {
+            transform.invert(this)
         }
 
         val croppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(croppedBitmap)
-        val srcRect = Rect(srcLeft, srcTop, srcRight, srcBottom)
-        val scale = INPUT_SIZE / looseSize
-        val dstRect = RectF(
-            (srcLeft - left) * scale,
-            (srcTop - top) * scale,
-            (srcRight - left) * scale,
-            (srcBottom - top) * scale
-        )
-        canvas.drawBitmap(bitmap, srcRect, dstRect, null)
-        return LooseCrop(bitmap = croppedBitmap, left = left, top = top, looseSize = looseSize)
+        canvas.drawBitmap(bitmap, transform, null)
+        return LooseCrop(bitmap = croppedBitmap, inverseTransform = inverseTransform)
     }
 
     private fun runInference(session: OrtSession, bitmap: Bitmap): FloatArray {
@@ -194,9 +200,9 @@ class InsightFace2D106Detector(context: Context) {
             val red = (pixel shr 16 and 0xFF).toFloat()
             val green = (pixel shr 8 and 0xFF).toFloat()
             val blue = (pixel and 0xFF).toFloat()
-            chw[index] = (red - INPUT_MEAN) / INPUT_STD
-            chw[pixelCount + index] = (green - INPUT_MEAN) / INPUT_STD
-            chw[pixelCount * 2 + index] = (blue - INPUT_MEAN) / INPUT_STD
+            chw[index] = (red - inputMean) / inputStd
+            chw[pixelCount + index] = (green - inputMean) / inputStd
+            chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
         }
 
         return OnnxTensor.createTensor(
@@ -223,11 +229,28 @@ class InsightFace2D106Detector(context: Context) {
         return flattened.takeIf { items -> items.isNotEmpty() }?.toFloatArray()
     }
 
+    private fun resolveInputNormalization(modelFile: File) {
+        val modelText = runCatching {
+            String(modelFile.readBytes(), Charsets.ISO_8859_1)
+        }.getOrNull()
+        val hasSubNode = modelText?.let { text ->
+            text.contains("_minusscalar0") || text.contains("_minus") || text.contains("bn_data")
+        } == true
+        val hasMulNode = modelText?.let { text ->
+            text.contains("_mulscalar0") || text.contains("_mul") || text.contains("bn_data")
+        } == true
+        if (hasSubNode && hasMulNode) {
+            inputMean = 0f
+            inputStd = 1f
+        } else {
+            inputMean = DEFAULT_INPUT_MEAN
+            inputStd = DEFAULT_INPUT_STD
+        }
+    }
+
     private data class LooseCrop(
         val bitmap: Bitmap,
-        val left: Float,
-        val top: Float,
-        val looseSize: Float
+        val inverseTransform: Matrix
     )
 }
 
