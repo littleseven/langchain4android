@@ -198,9 +198,9 @@
 - **调试总开关（设置页）**：默认开启；关闭后统一隐藏拍摄页调试浮层、调试工具入口和 Log 入口。
 - **调试浮层指标**：面向调试用户展示核心性能与稳定性指标（帧率、处理耗时、负载、空帧等）。
 - **检测来源标识**：开启人脸调试浮层后，需明确展示当前帧命中的人脸检测来源与设置页请求的算法引擎，便于确认 `MediaPipe` 主链路、`InsightFace` 备选链路与 `GPUPixel` 双模式调试是否符合预期。
-- **人脸检测模式开关**：
-    - **快速模式（默认）**：优先保证流畅体验。
-    - **精细模式**：优先保证效果精度。
+- **人脸检测模式开关**（对应代码 `LandmarkMode` / `ContourMode`）：
+    - **快速模式（默认）** `LandmarkMode`：优先保证流畅体验，对应 MediaPipe `LANDMARKS` 输出。
+    - **精细模式** `ContourMode`：优先保证效果精度，对应 MediaPipe `FACE_CONTOURS` 输出。
 - **人脸检测引擎开关**：
     - **Auto（默认）**：优先使用 `MediaPipe`，连续漏检或初始化失败时允许自动回退到本地 `InsightFace`。
     - **MediaPipe**：固定使用 `MediaPipe`，不触发 `InsightFace` 备选。
@@ -232,9 +232,9 @@
 - **回滚验收**：回滚后需确认拍照、录像、切镜头、参数调节全部可用，且回退提示文案正确展示。
 
 #### 1.3.6.3 用户提示与反馈文案（大美丽）
-- **自动回退提示**：`已切换稳定模式，可在设置中重试 大美丽`（短提示）。
-- **手动切换成功**：`已启用 大美丽 实时美颜` / `已启用稳定美颜模式`。
-- **重试提示**：用户在设置页切回 大美丽 时，若初始化失败需提示 `大美丽 启动失败，已为你保持稳定模式`。
+- **自动回退提示**：`已切换兼容模式，可在设置中重试 大美丽`（短提示）。
+- **手动切换成功**：`已启用 大美丽 实时美颜` / `已启用兼容美颜模式`。
+- **重试提示**：用户在设置页切回 大美丽 时，若初始化失败需提示 `大美丽 启动失败，已为你保持兼容模式`。
 - **提示原则**：文案应短句、低打扰、结果导向，避免技术术语堆叠。
 - **I18N 要求**：以上提示必须同步覆盖 `values`、`values-zh-rCN`、`values-zh-rTW`。
 
@@ -287,19 +287,19 @@
 #### 1.4.2 风格特效滤镜（GPUPixel 引擎模式专属，2026-04 新增）
 - **面板位置**：色调滤镜横向滚动列表下方，独立一行展示"风格特效"标题与滤镜选项
 - **STYLE_NONE（无特效）**：默认状态，不应用 GPU 风格渲染
-- **STYLE_TOON（卡通）**:
+- **STYLE_TOON（卡通）** `StyleFilter.TOON`:
     - 视觉风格：卡通漫画化，强化边缘线条，降低色彩层级
     - 适用场景：自拍创意、有趣场景
-- **STYLE_SKETCH（素描）**:
+- **STYLE_SKETCH（素描）** `StyleFilter.SKETCH`:
     - 视觉风格：黑白铅笔素描风格，突出线条与结构
     - 适用场景：艺术创作、建筑结构
-- **STYLE_POSTERIZE（色块）**:
+- **STYLE_POSTERIZE（色块）** `StyleFilter.POSTERIZE`:
     - 视觉风格：限制颜色层级（默认 4 层），创造海报艺术效果
     - 适用场景：海报风格、创意摄影
-- **STYLE_EMBOSS（浮雕）**:
+- **STYLE_EMBOSS（浮雕）** `StyleFilter.EMBOSS`:
     - 视觉风格：凸起质感雕刻风，突显光影结构
     - 适用场景：质感强调、工艺风格
-- **STYLE_CROSSHATCH（交叉线）**:
+- **STYLE_CROSSHATCH（交叉线）** `StyleFilter.CROSSHATCH`:
     - 视觉风格：手绘版画风格，覆盖交叉线阴影
     - 适用场景：版画风格、艺术插画效果
 
@@ -477,9 +477,9 @@
 | 保守 | 保守 | Conservative | 动态间隔档位 |
 | 平衡 | 平衡 | Balanced | 动态间隔档位（默认） |
 | 激进 | 激進 | Aggressive | 动态间隔档位 |
-| 已切换稳定模式，可在设置中重试 大美丽 | 已切換穩定模式，可在設定中重試 大美丽 | Switched to stable mode. Retry Big Beauty in Settings. | Big Beauty auto-fallback toast |
+| 已切换兼容模式，可在设置中重试 大美丽 | 已切換相容模式，可在設定中重試 大美丽 | Switched to compatible mode. Retry Big Beauty in Settings. | Big Beauty auto-fallback toast |
 | 已启用 大美丽 实时美颜 | 已啟用 大美丽 即時美顏 | Big Beauty real-time beauty enabled. | 手动切换成功提示 |
-| 大美丽 启动失败，已为你保持稳定模式 | 大美丽 啟動失敗，已為你保持穩定模式 | Big Beauty failed to start. Stable mode is kept. | Big Beauty retry failure toast |
+| 大美丽 启动失败，已为你保持兼容模式 | 大美丽 啟動失敗，已為你保持相容模式 | Big Beauty failed to start. Compatible mode is kept. | Big Beauty retry failure toast |
 
 #### 4.1.2 多语言维护规范
 - **资源组织**：各语言文案需按统一目录结构维护，避免遗漏
