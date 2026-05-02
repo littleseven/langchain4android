@@ -34,6 +34,9 @@
     <string name="settings_language_desc">Sets interface language and localization style.</string>
     <string name="settings_beauty_engine_desc">Big Beauty is the default engine. Compatibility mode is only for fallback verification.</string>
     <string name="settings_beauty_runtime_desc">Affects real-time performance and face analysis behavior.</string>
+    <string name="face_detection">Face Detection</string>
+    <string name="settings_face_detection_desc">Select face landmark detection engine. Affects accuracy of slim face, big eyes, and makeup effects.</string>
+    <string name="settings_face_detection_gpupixel_desc">Compatibility mode uses GPUPixel built-in face detection.</string>
     <string name="face_detection_engine_title">Face detection engine</string>
 <string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
 <string name="face_detection_engine_mode_insightface">InsightFace</string>
