@@ -7,6 +7,7 @@ import com.picme.core.image.CoilConfig
 import com.picme.di.AppContainer
 import com.picme.di.AppContainerImpl
 import com.picme.domain.repository.MediaRepository
+import com.picme.features.camera.facedetect.adapter.FaceLandmarkAdapterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
@@ -23,6 +24,9 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainerImpl(this)
+
+        // 初始化人脸关键点适配器注册表
+        FaceLandmarkAdapterRegistry.initDefaults()
     }
 
     override fun newImageLoader(): ImageLoader {
