@@ -11,7 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.picme.core.image.ImageProcessor
 import com.picme.PicMeApplication
 import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.core.common.Logger
@@ -26,7 +28,7 @@ import kotlinx.coroutines.launch
 private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
 
 internal data class CameraRuntimeContext(
-    val imageProcessor: com.picme.core.image.ImageProcessor,
+    val imageProcessor: ImageProcessor,
     val userPreferencesRepository: UserSettingsRepository,
     val coroutineScope: CoroutineScope,
     val beautyStrategy: BeautyStrategy,
@@ -37,7 +39,7 @@ internal data class CameraRuntimeContext(
     val faceDetectionEngineMode: FaceDetectionEngineMode,
     val faceLandmarkModeEnabled: Boolean,
     val glRecoveryAvailableAtMs: Long,
-    val lifecycleOwner: androidx.lifecycle.LifecycleOwner
+    val lifecycleOwner: LifecycleOwner
 )
 
 @Composable

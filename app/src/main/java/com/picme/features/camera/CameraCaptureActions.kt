@@ -11,6 +11,8 @@ import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.face.Face
+import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
+import com.picme.core.image.ImageProcessor
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
@@ -27,13 +29,13 @@ internal fun handleCaptureClick(
     videoCapture: VideoCapture<Recorder>,
     viewModel: MediaViewModel,
     imageCapture: ImageCapture?,
-    imageProcessor: com.picme.core.image.ImageProcessor,
+    imageProcessor: ImageProcessor,
     selectedFilter: FilterType,
     beautySettings: BeautySettings,
     lensFacing: Int,
     cachedFaces: List<Face> = emptyList(),
     beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY,
-    gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider? = null,
+    gpupixelProvider: GpupixelBeautyPreviewProvider? = null,
     onRecordingChanged: (Recording?) -> Unit,
     onIsRecordingChanged: (Boolean) -> Unit
 ) {

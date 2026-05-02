@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import com.picme.features.camera.preview.core.FaceContourData
 import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.features.camera.preview.core.GpuPixelLandmarks
 
 /**
  * 将 106 点 FloatArray 转换为 FaceWarpParams
@@ -36,7 +37,7 @@ object Face106ToWarpParams {
         landmarks106: FloatArray,
         detectionSource: FaceDetectionSource = FaceDetectionSource.GPUPIXEL
     ): FaceWarpParams {
-        require(landmarks106.size >= MediaPipeFaceDetector.POINT_COUNT * 2)
+        require(landmarks106.size >= FaceDetectorManager.POINT_COUNT * 2)
 
         // 脸部中心（使用轮廓点计算）
         val faceCenter = calculateFaceCenter(landmarks106)
@@ -64,14 +65,14 @@ object Face106ToWarpParams {
         val rightCheekContour = extractCheekContour(landmarks106, isLeft = false)
 
         val gpuPixelLandmarks = if (detectionSource == FaceDetectionSource.GPUPIXEL) {
-            com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
+            GpuPixelLandmarks.fromFloatArray(landmarks106)
         } else {
-            com.picme.features.camera.preview.core.GpuPixelLandmarks()
+            GpuPixelLandmarks()
         }
         val bigBeautyLandmarks = if (detectionSource != FaceDetectionSource.GPUPIXEL) {
-            com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(landmarks106)
+            GpuPixelLandmarks.fromFloatArray(landmarks106)
         } else {
-            com.picme.features.camera.preview.core.GpuPixelLandmarks()
+            GpuPixelLandmarks()
         }
 
         return FaceWarpParams(

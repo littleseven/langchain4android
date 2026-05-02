@@ -31,8 +31,10 @@ import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
+import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautySettings
+import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
@@ -60,8 +62,8 @@ interface ImageProcessor {
         lensFacing: Int,
         mode: MediaType = MediaType.PHOTO,
         cachedFaces: List<Face> = emptyList(),
-        beautyStrategy: com.picme.domain.model.BeautyStrategy = com.picme.domain.model.BeautyStrategy.BIG_BEAUTY,
-        gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider? = null
+        beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY,
+        gpupixelProvider: GpupixelBeautyPreviewProvider? = null
     )
 
     fun startVideoRecording(
@@ -522,8 +524,8 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
         lensFacing: Int,
         mode: MediaType,
         cachedFaces: List<Face>,
-        beautyStrategy: com.picme.domain.model.BeautyStrategy,
-        gpupixelProvider: com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider?
+        beautyStrategy: BeautyStrategy,
+        gpupixelProvider: GpupixelBeautyPreviewProvider?
     ) {
         Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy, gpupixelProvider=${gpupixelProvider != null}")
 
@@ -574,7 +576,7 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
                     Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
                     // GPUPixel 模式：使用 GPUPixel 滤镜链处理拍照，确保与预览效果一致
-                    if (beautyStrategy == com.picme.domain.model.BeautyStrategy.GPUPIXEL) {
+                    if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
                         if (gpupixelProvider != null) {
                             Logger.d("ImageProcessor", "GPUPixel mode: processing photo with GPUPixel filter chain")
                             val finalBitmap = gpupixelProvider.processPhoto(rotatedBitmap)
