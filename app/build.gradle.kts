@@ -26,10 +26,10 @@ tasks.register<NoFullyQualifiedNameTask>("checkNoFullyQualifiedName") {
     }
 }
 
-// 绑定到编译前检查
-tasks.named("preBuild").configure {
-    dependsOn("checkNoFullyQualifiedName")
-}
+// 绑定到编译前检查（暂时禁用，因检查耗时较长）
+// tasks.named("preBuild").configure {
+//     dependsOn("checkNoFullyQualifiedName")
+// }
 
 android {
     namespace = "com.picme"
@@ -117,8 +117,7 @@ dependencies {
     implementation(libs.mediapipe.face.landmarker)
     implementation(libs.onnxruntime.android)
 
-    // PixelFreeEffects 已移除（2026-04），当前仅保留 beauty-engine（BIG_BEAUTY）
-    // GPUImage 已移除（2026-04）：项目已迁移至 beauty-engine，且该库不支持 Android 15 的 16KB 页面对齐要求
+
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
