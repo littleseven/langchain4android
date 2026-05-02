@@ -137,12 +137,22 @@ class MediaPipeFaceDetector(
                 }
 
                 FaceDetectionEngineMode.INSIGHTFACE -> {
-                    val insightFaceResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
+                    val rawInsightFaceResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
                     lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-                    if (insightFaceResult != null) {
+                    if (rawInsightFaceResult != null) {
                         lastDetectionSource = FaceDetectionSource.INSIGHTFACE
-                        Logger.d(TAG, "Face detected by InsightFace in ${lastProcessTimeMs}ms")
-                        DetectionResult(insightFaceResult, lastDetectionSource)
+                        // 将 InsightFace 原始 106 点映射为统一 106 标准
+                        val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.INSIGHTFACE)
+                            as? InsightFaceAdapter
+                            ?: return@detect null
+                        val adaptedResult = adapter.adapt(rawInsightFaceResult, lensFacing).getOrNull()
+                        if (adaptedResult != null) {
+                            Logger.d(TAG, "Face detected by InsightFace in ${lastProcessTimeMs}ms (adapted)")
+                            DetectionResult(adaptedResult, lastDetectionSource)
+                        } else {
+                            Logger.w(TAG, "InsightFace detection succeeded but adaptation failed")
+                            null
+                        }
                     } else {
                         Logger.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
                         null
