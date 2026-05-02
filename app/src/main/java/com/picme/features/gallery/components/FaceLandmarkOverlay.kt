@@ -57,6 +57,7 @@ import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.features.camera.facedetect.InsightFace2D106Detector
 import com.picme.features.camera.facedetect.MediaPipeFaceDetector
+import com.picme.features.camera.facedetect.adapter.InsightFaceAdapter
 import com.pixpark.gpupixel.FaceDetector
 import com.pixpark.gpupixel.GPUPixel
 import kotlinx.coroutines.CancellationException
@@ -813,7 +814,12 @@ private fun convert468To106ForDebug(
 }
 
 private fun detectInsightFace106(bitmap: Bitmap, detector: InsightFace2D106Detector): FloatArray? {
-    return detector.detect(bitmap, androidx.camera.core.CameraSelector.LENS_FACING_BACK)
+    val rawLandmarks = detector.detect(bitmap, androidx.camera.core.CameraSelector.LENS_FACING_BACK)
+        ?: return null
+    // 将 InsightFace 原始 106 点映射为统一 106 标准
+    val adapter = InsightFaceAdapter()
+    val result = adapter.adapt(rawLandmarks, androidx.camera.core.CameraSelector.LENS_FACING_BACK)
+    return result.getOrNull()
 }
 
 private fun detectGpuPixel106(bitmap: Bitmap, detector: FaceDetector): FloatArray? {
