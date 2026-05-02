@@ -35,6 +35,9 @@
     <string name="settings_language_desc">設定介面語言與在地化呈現方式。</string>
     <string name="settings_beauty_engine_desc">預設使用大美麗引擎，相容模式僅用於回退驗證。</string>
     <string name="settings_beauty_runtime_desc">影響即時效能與人臉分析行為。</string>
+    <string name="face_detection">人臉檢測</string>
+    <string name="settings_face_detection_desc">選擇人臉關鍵點檢測引擎，影響瘦臉、大眼、妝容等效果的定位精度。</string>
+    <string name="settings_face_detection_gpupixel_desc">相容模式使用 GPUPixel 內建人臉檢測，無需額外設定。</string>
     <string name="face_detection_engine_title">人臉檢測引擎</string>
 <string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
 <string name="face_detection_engine_mode_insightface">InsightFace</string>

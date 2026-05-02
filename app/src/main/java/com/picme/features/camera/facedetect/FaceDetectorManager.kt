@@ -43,7 +43,7 @@ import java.nio.ByteBuffer
  */
 class FaceDetectorManager(
     context: Context,
-    private val detectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE
+    private val detectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.INSIGHTFACE
 ) {
 
     companion object {

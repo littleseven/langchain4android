@@ -209,30 +209,50 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            SettingsSection(
-                title = stringResource(R.string.beauty),
-                description = stringResource(R.string.settings_beauty_runtime_desc)
-            ) {
-                FaceDetectionEngineSelection(
-                    currentMode = faceDetectionEngineMode,
-                    onModeSelected = onFaceDetectionEngineModeSelected
-                )
-                DebugOptionRow(
-                    title = stringResource(R.string.face_landmark_mode),
-                    checked = faceDetectionLandmarkModeEnabled,
-                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
-                )
-                DebugOptionRow(
-                    title = stringResource(R.string.adaptive_face_detect_interval),
-                    checked = adaptiveFaceDetectionIntervalEnabled,
-                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
-                )
-                if (adaptiveFaceDetectionIntervalEnabled) {
-                    FaceDetectProfileSelection(
-                        currentProfile = faceDetectIntervalProfile,
-                        onProfileSelected = onFaceDetectIntervalProfileSelected
+            // 兼容模式下预览始终使用 GPUPixel 内部检测，不显示引擎选择
+            if (beautyStrategy == BeautyStrategy.BIG_BEAUTY) {
+                SettingsSection(
+                    title = stringResource(R.string.face_detection),
+                    description = stringResource(R.string.settings_face_detection_desc)
+                ) {
+                    FaceDetectionEngineSelection(
+                        currentMode = faceDetectionEngineMode,
+                        onModeSelected = onFaceDetectionEngineModeSelected
+                    )
+                    DebugOptionRow(
+                        title = stringResource(R.string.face_landmark_mode),
+                        checked = faceDetectionLandmarkModeEnabled,
+                        onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
+                    )
+                    DebugOptionRow(
+                        title = stringResource(R.string.adaptive_face_detect_interval),
+                        checked = adaptiveFaceDetectionIntervalEnabled,
+                        onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
+                    )
+                    if (adaptiveFaceDetectionIntervalEnabled) {
+                        FaceDetectProfileSelection(
+                            currentProfile = faceDetectIntervalProfile,
+                            onProfileSelected = onFaceDetectIntervalProfileSelected
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+            } else {
+                // 兼容模式：显示 GPUPixel 内部检测说明
+                SettingsSection(
+                    title = stringResource(R.string.face_detection),
+                    description = stringResource(R.string.settings_face_detection_gpupixel_desc)
+                ) {
+                    Text(
+                        text = stringResource(R.string.face_detection_source_gpupixel),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
                     )
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -369,8 +389,7 @@ private fun FaceDetectionEngineSelection(
 ) {
     val options = listOf(
         FaceDetectionEngineMode.MEDIAPIPE to stringResource(R.string.face_detection_engine_mode_mediapipe),
-        FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface),
-        FaceDetectionEngineMode.GPUPIXEL to stringResource(R.string.face_detection_source_gpupixel)
+        FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface)
     )
 
     Text(
