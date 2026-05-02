@@ -1,7 +1,8 @@
 # ADR-002: OpenGL 离屏渲染统一美颜处理管线
 
-**状态**: 提议 (Proposed)  
+**状态**: 已接受 (Accepted)  
 **日期**: 2026-04-17  
+**最后同步**: 2026-05-02（`OffscreenRenderer` 已落地于 `beauty-engine/impl`）  
 **决策**: PM/RD 联合评审  
 **依赖**: ADR-001 (分层架构重构)
 

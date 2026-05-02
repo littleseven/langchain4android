@@ -92,15 +92,60 @@
 
 ## 4. 演进路线图 (Evolution Roadmap)
 
-### Phase 1: 零拷贝管线迁移 (1-4 周)
-**核心动作：消除 4 处拷贝。**
-- **OES 接入**：修改 GPUPixel C++ 层接收 `GL_TEXTURE_EXTERNAL_OES`，直接在 GPU 内部进行采样。
-- **Shader 旋转**：将旋转逻辑移至 GPU Vertex Shader，通过顶点坐标变换实现，像素数据在物理内存中不动。
+> **状态更新（2026-05-02）**：Phase 1 已完成（`OffscreenRenderer` 已落地于 `beauty-engine/impl`），详见 `ROADMAP-ADR-002.md`（已合并到本文档）。
 
-### Phase 2: 算子升级与算法融合 (4-8 周)
+### Phase 1: 零拷贝管线迁移 (1-4 周) ✅ 已完成
+**核心动作：消除 4 处拷贝。**
+- [x] **OES 接入**：修改 GPUPixel C++ 层接收 `GL_TEXTURE_EXTERNAL_OES`，直接在 GPU 内部进行采样。
+- [x] **Shader 旋转**：将旋转逻辑移至 GPU Vertex Shader，通过顶点坐标变换实现，像素数据在物理内存中不动。
+- [x] **OffscreenRenderer 框架**：`bitmapToTexture()` / `readPixelsToBitmap()` / FBO 封装已落地。
+- [x] **PBO 异步读取**：双缓冲 PBO 轮转实现。
+- [x] **4K 分块处理**：避免 OOM 的 `TileProcessor` 已落地。
+
+**验收标准**：
+- [x] 独立单元测试通过率 100%
+- [x] 连续处理 100 张 1080p 图片无崩溃/泄漏
+- [x] 性能指标达到目标 80%
+
+### Phase 2: Shader 迁移与算子升级 (4-8 周) ⏳ 规划中
+- **Shader 提取**：将 `BeautyPreviewView` 内嵌 Shader 提取为独立、可复用的 Shader 类。
+- **ShaderChain 动态组合**：支持磨皮/美白/瘦脸/大眼/唇色/腮红的链式渲染。
 - **引导滤波落地**：提取 GPUPixel 的引导滤波实现，作为 PicMe 通用磨皮算子。
 - **3D LUT 引擎化**：建立统一的 LUT 资源加载协议，支持 32x32/64x64 规格。
 
-### Phase 3: 方案 A 落地与库化 (8-16 周)
-- **GPU 离屏拍照**：正式实现基于 Pbuffer Surface 的全链路 GPU 拍照处理，彻底终结预览/拍照差异。
-- **`:beauty-core` 库化**：对上层暴露纯净接口，隐藏 OpenGL 细节。
+### Phase 3: 拍照路径切换 (8-10 周) ⏳ 待启动
+- **双路径并存**：`GpuBeautyProcessor` 调用 `OffscreenRenderer`，添加 `useGpuPath` Feature Flag。
+- **A/B 测试**：50 组预览/拍照对比，效果一致性 > 95%。
+- **灰度发布**：50% 用户使用 GPU 路径，监控崩溃率 < 0.1%。
+- **全量切换**：100% GPU 路径，废弃 CPU 路径。
+
+### Phase 4: 库化准备 (11-15 周) 🔭 长期目标
+- **模块抽离**：创建 `beauty-core` 模块（纯 Kotlin 接口）。
+- **API 设计**：语义化版本规范（SemVer），向后兼容策略。
+- **内部发布**：`beauty-core` v0.1.0 (alpha) + `beauty-engine` v0.1.0 (alpha)。
+- **PicMe 接入验证**：完整接入指南。
+
+---
+
+## 5. 资源需求与风险
+
+### 人力
+| 角色 | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
+|------|---------|---------|---------|---------|
+| RD (Android/GL) | 1.0 FTE | 1.0 FTE | 0.8 FTE | 0.6 FTE |
+| RD (Kotlin) | 0.2 FTE | 0.2 FTE | 0.2 FTE | 0.8 FTE |
+| QA | 0.2 FTE | 0.3 FTE | 0.5 FTE | 0.3 FTE |
+| CR | 0.1 FTE | 0.2 FTE | 0.2 FTE | 0.2 FTE |
+
+### 风险与应对
+| 风险 | 概率 | 应对策略 |
+|------|------|---------|
+| PBO 兼容性（旧设备） | 中 | 检测 API 级别，回退到 glReadPixels |
+| 4K 内存 OOM | 中 | 强制分块处理，单块 2048x2048 |
+| Shader 精度问题 | 低 | 浮点精度统一为 highp |
+| 开发延期 | 低 | 每 Phase 可独立交付，允许延期 1 周 |
+
+---
+
+*路线图版本: 2.0*  
+*更新日期: 2026-05-02（合并 ROADMAP-ADR-002.md，标记 Phase 1 完成）*
