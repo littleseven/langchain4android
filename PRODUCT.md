@@ -96,7 +96,7 @@
         - **调试总开关**：设置页默认开启；统一控制拍摄页调试浮层、调试工具入口和 Log 入口显隐
         - **性能指标**：调试浮层实时展示 FPS、处理耗时、预览延迟、CPU 占用、空帧计数
         - **检测来源标识**：调试浮层需明确展示当前帧命中的人脸检测来源（`MediaPipe` / `InsightFace` / `GPUPixel` / `None`），便于真机回归与备选链路验证。
-        - **人脸检测模式**：默认 `Landmark`（性能优先），可切换 `Contour`（精度优先）
+        - **人脸检测模式**：默认 `Landmark`（性能优先，产品层称"快速模式"），可切换 `Contour`（精度优先，产品层称"精细模式"）
         - **人脸检测引擎**：设置页需暴露 `Auto` / `MediaPipe` / `InsightFace` 三档选择；`Auto` 允许主链路漏检时自动回退到本地 InsightFace。
         - **动态检测间隔**：默认开启，可在 280~450ms 区间自适应调整
         - **强度档位**：支持保守/平衡/激进三档，默认平衡
@@ -111,12 +111,12 @@
         - **FILM_FUJI**：冷调偏绿，模拟富士胶片质感
         - **VINTAGE**：复古低饱和色调
     - **风格特效滤镜（GPUPixel GPU，2026-04 新增）**：仅 GPUPixel 引擎模式生效，实时 GPU 渲染：
-        - **STYLE_NONE**：无风格特效（默认）
-        - **STYLE_TOON**：卡通化渲染（ToonFilter），将画面转换为类卡通漫画风格
-        - **STYLE_SKETCH**：素描效果（SketchFilter），黑白铅笔素描风格
-        - **STYLE_POSTERIZE**：色块化（PosterizeFilter），限制颜色层级创造海报效果
-        - **STYLE_EMBOSS**：浮雕效果（EmbossFilter），凸起质感雕刻风
-        - **STYLE_CROSSHATCH**：交叉线阴影（CrosshatchFilter），手绘版画风格
+        - **STYLE_NONE** `StyleFilter.NONE`：无风格特效（默认）
+        - **STYLE_TOON** `StyleFilter.TOON`：卡通化渲染（ToonFilter），将画面转换为类卡通漫画风格
+        - **STYLE_SKETCH** `StyleFilter.SKETCH`：素描效果（SketchFilter），黑白铅笔素描风格
+        - **STYLE_POSTERIZE** `StyleFilter.POSTERIZE`：色块化（PosterizeFilter），限制颜色层级创造海报效果
+        - **STYLE_EMBOSS** `StyleFilter.EMBOSS`：浮雕效果（EmbossFilter），凸起质感雕刻风
+        - **STYLE_CROSSHATCH** `StyleFilter.CROSSHATCH`：交叉线阴影（CrosshatchFilter），手绘版画风格
     - **交互规范**：
         - 风格滤镜在滤镜面板底部独立展示"风格特效"区域
         - 风格特效与色调滤镜可同时生效（先应用色调，再应用风格特效）
