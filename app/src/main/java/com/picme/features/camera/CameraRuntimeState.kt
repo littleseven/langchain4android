@@ -56,7 +56,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val showFaceDebugOverlay by userPreferencesRepository.showFaceDebugOverlayFlow.collectAsState(initial = false)
     val showLogOverlay by userPreferencesRepository.showLogOverlayFlow.collectAsState(initial = false)
     val faceDetectionEngineMode by userPreferencesRepository.faceDetectionEngineModeFlow.collectAsState(
-        initial = FaceDetectionEngineMode.MEDIAPIPE
+        initial = FaceDetectionEngineMode.INSIGHTFACE
     )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)

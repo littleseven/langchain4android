@@ -236,9 +236,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
         .map { preferences ->
             val modeName = preferences[PreferencesKeys.FACE_DETECTION_ENGINE_MODE]
-                ?: FaceDetectionEngineMode.MEDIAPIPE.name
+                ?: FaceDetectionEngineMode.INSIGHTFACE.name
             runCatching { FaceDetectionEngineMode.valueOf(modeName) }
-                .getOrDefault(FaceDetectionEngineMode.MEDIAPIPE)
+                .getOrDefault(FaceDetectionEngineMode.INSIGHTFACE)
         }
 
     override suspend fun updateFaceDetectionEngineMode(mode: FaceDetectionEngineMode) {
