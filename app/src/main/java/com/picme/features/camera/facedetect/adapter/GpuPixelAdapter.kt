@@ -15,7 +15,7 @@ import com.picme.features.camera.preview.core.FaceDetectionSource
  *
  * 参考文档：
  * - docs/BIG_BEAUTY_TECH_SPEC.md 8.4 节
- * - docs/BIG_BEAUTY_INSIGHTFACE_106_MAPPING.md
+ * - docs/face-detection/INSIGHTFACE_106_MAPPING.md
  */
 class GpuPixelAdapter : FaceLandmarkAdapter {
 

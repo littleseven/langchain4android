@@ -31,8 +31,8 @@ import java.nio.ByteBuffer
  * 3. 输出归一化坐标（0.0 ~ 1.0）
  *
  * 映射依据：
- * - 字节火山引擎106点标准：docs/VOLCANO_ENGINE_106_POINTS.md
- * - MediaPipe 468点标准：docs/MEDIAPIPE_468_POINTS.md
+ * - 字节火山引擎106点标准：docs/face-detection/VOLCANO_106_POINTS.md
+ * - MediaPipe 468点标准：docs/face-detection/MEDIAPIPE_468_REFERENCE.md
  * - 映射策略：优先使用对等语义点，缺失点使用插值
  *
  * 106点拓扑方向（被摄者真实面部，前置摄像头镜像后）：
