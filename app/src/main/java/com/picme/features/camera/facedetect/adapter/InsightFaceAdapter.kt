@@ -27,7 +27,7 @@ import com.picme.features.camera.preview.core.FaceDetectionSource
  * - 不存在 i -> i 的直通点
  * - 前置摄像头时水平镜像 x 坐标
  *
- * 参考文档：docs/BIG_BEAUTY_INSIGHTFACE_106_MAPPING.md
+ * 参考文档：docs/face-detection/INSIGHTFACE_106_MAPPING.md
  */
 class InsightFaceAdapter : FaceLandmarkAdapter {
 
