@@ -19,6 +19,7 @@ import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaType
+import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.features.camera.preview.core.FaceWarpParams
 import com.pixpark.gpupixel.GPUPixel
 import java.nio.ByteBuffer
@@ -118,7 +119,7 @@ internal fun bindCameraUseCases(
     }
 
     // 人脸检测引擎使用显式模式，不再做自动降级。
-    val mediaPipeDetector = com.picme.features.camera.facedetect.MediaPipeFaceDetector(
+    val faceDetectorManager = FaceDetectorManager(
         context = context,
         detectionEngineMode = detectionEngineMode
     )
@@ -167,7 +168,7 @@ internal fun bindCameraUseCases(
             handleImageAnalysisFrameMediaPipe(
                 imageProxy = imageProxy,
                 previewView = previewView,
-                mediaPipeDetector = mediaPipeDetector,
+                faceDetectorManager = faceDetectorManager,
                 lensFacing = lensFacing,
                 detectionEngineMode = detectionEngineMode,
                 onFacePointChanged = onFacePointChanged,
@@ -185,7 +186,7 @@ internal fun bindCameraUseCases(
             handleImageAnalysisFrameMediaPipe(
                 imageProxy = imageProxy,
                 previewView = previewView,
-                mediaPipeDetector = mediaPipeDetector,
+                faceDetectorManager = faceDetectorManager,
                 lensFacing = lensFacing,
                 detectionEngineMode = detectionEngineMode,
                 onFacePointChanged = onFacePointChanged,

@@ -32,9 +32,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
+import com.picme.core.common.Logger
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.features.camera.preview.core.GpuPixelLandmarks
 import kotlin.math.sqrt
 
 @Composable
@@ -175,8 +177,8 @@ private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
 
 @Composable
 private fun FaceDebugOverlayDual(
-    gpuPixelLandmarks: com.picme.features.camera.preview.core.GpuPixelLandmarks,
-    bigBeautyLandmarks: com.picme.features.camera.preview.core.GpuPixelLandmarks,
+    gpuPixelLandmarks: GpuPixelLandmarks,
+    bigBeautyLandmarks: GpuPixelLandmarks,
     aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -276,8 +278,8 @@ private fun FaceDebugOverlayDual(
                 sbG.append(" [$i:${g.x.toString().take(5)},${g.y.toString().take(5)}]")
                 sbM.append(" [$i:${m.x.toString().take(5)},${m.y.toString().take(5)}]")
             }
-            com.picme.core.common.Logger.d("CameraDebug", sbG.toString())
-            com.picme.core.common.Logger.d("CameraDebug", sbM.toString())
+            Logger.d("CameraDebug", sbG.toString())
+            Logger.d("CameraDebug", sbM.toString())
         }
 
         // 绘制图例说明
@@ -295,7 +297,7 @@ private fun FaceDebugOverlayDual(
 
 @Composable
 private fun FaceDebugOverlayBigBeauty(
-    bigBeautyLandmarks: com.picme.features.camera.preview.core.GpuPixelLandmarks,
+    bigBeautyLandmarks: GpuPixelLandmarks,
     aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
@@ -360,7 +362,7 @@ private fun FaceDebugOverlayBigBeauty(
 
 @Composable
 private fun FaceDebugOverlayGpuPixel(
-    gpuPixelLandmarks: com.picme.features.camera.preview.core.GpuPixelLandmarks,
+    gpuPixelLandmarks: GpuPixelLandmarks,
     aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {

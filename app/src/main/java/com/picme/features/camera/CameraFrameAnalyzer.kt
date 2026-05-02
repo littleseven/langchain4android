@@ -6,6 +6,8 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.picme.core.common.Logger
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.features.camera.facedetect.Face106ToWarpParams
+import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.features.camera.preview.core.FaceWarpParams
 
 /**
@@ -90,7 +92,7 @@ internal fun transformFaceCoordinateSimple(
  *
  * @param imageProxy CameraX ImageProxy
  * @param previewView 预览视图（用于调试UI坐标映射）
- * @param mediaPipeDetector MediaPipe 人脸检测器
+ * @param faceDetectorManager 人脸检测管理器（支持多引擎）
  * @param lensFacing 镜头方向
  * @param onFacePointChanged 人脸中心点回调（屏幕坐标，用于聚焦指示器）
  * @param onFaceWarpParamsChanged FaceWarpParams 回调
@@ -100,7 +102,7 @@ internal fun transformFaceCoordinateSimple(
 internal fun handleImageAnalysisFrameMediaPipe(
     imageProxy: androidx.camera.core.ImageProxy,
     previewView: PreviewView,
-    mediaPipeDetector: com.picme.features.camera.facedetect.MediaPipeFaceDetector,
+    faceDetectorManager: FaceDetectorManager,
     lensFacing: Int,
     detectionEngineMode: FaceDetectionEngineMode,
     onFacePointChanged: (Offset) -> Unit,
@@ -123,7 +125,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
         // 人脸检测（MediaPipe / InsightFace / AUTO）
-        val detectionResult = mediaPipeDetector.detect(imageProxy, lensFacing)
+        val detectionResult = faceDetectorManager.detect(imageProxy, lensFacing)
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
@@ -131,7 +133,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
             FaceDetectionCache.updateLandmarks106(landmarks106)
 
             // 构建 FaceWarpParams
-            val faceWarpParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(
+            val faceWarpParams = Face106ToWarpParams.convert(
                 landmarks106 = landmarks106,
                 detectionSource = detectionResult.detectionSource
             ).copy(requestedDetectionEngineMode = detectionEngineMode)

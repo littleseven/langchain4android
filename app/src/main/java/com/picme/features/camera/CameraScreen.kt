@@ -67,8 +67,12 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.model.FilterType
 import com.picme.features.camera.model.StyleFilter
+import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
+import com.picme.features.camera.facedetect.Face106ToWarpParams
 import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.features.camera.preview.core.GpuPixelLandmarks
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
@@ -595,7 +599,7 @@ fun CameraContent(
                 }
 
                 // 使用 Face106ToWarpParams 转换，确保与 MediaPipe 模式一致
-                val newParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(
+                val newParams = Face106ToWarpParams.convert(
                     landmarks106 = mirroredLandmarks,
                     detectionSource = FaceDetectionSource.GPUPIXEL
                 )
@@ -604,7 +608,7 @@ fun CameraContent(
                 val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
                 val existingHasFace = faceWarpParams.hasFace
                 faceWarpParams = newParams.copy(
-                    gpuPixelLandmarks = com.picme.features.camera.preview.core.GpuPixelLandmarks.fromFloatArray(mirroredLandmarks),
+                    gpuPixelLandmarks = GpuPixelLandmarks.fromFloatArray(mirroredLandmarks),
                     bigBeautyLandmarks = existingBigBeauty,
                     detectionSource = FaceDetectionSource.GPUPIXEL,
                     requestedDetectionEngineMode = faceDetectionEngineMode,
@@ -829,7 +833,7 @@ fun CameraContent(
 
     // 监听 Shader Debug Mode 变化，同步到 GL Provider
     LaunchedEffect(debugShaderMode, glPreviewProvider) {
-        val provider = glPreviewProvider as? com.picme.beauty.egl.GlBeautyPreviewProvider
+        val provider = glPreviewProvider as? GlBeautyPreviewProvider
         provider?.setDebugMode(debugShaderMode)
         Logger.d("Camera", "Shader debug mode updated: $debugShaderMode")
     }
@@ -886,7 +890,7 @@ fun CameraContent(
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode,
             videoCapture = videoCapture,
-            gpupixelProvider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider,
+            gpupixelProvider = glPreviewProvider as? GpupixelBeautyPreviewProvider,
             onImageCaptureChanged = { capture -> imageCapture = capture },
             onCameraControlChanged = { control -> cameraControl = control },
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },
@@ -1175,7 +1179,7 @@ CameraPreviewContent(
         onCurrentGridChanged = { grid -> currentGrid = grid },
         onNavigateToGallery = onNavigateToGallery,
         onCaptureClick = {
-            val provider = glPreviewProvider as? com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
+            val provider = glPreviewProvider as? GpupixelBeautyPreviewProvider
             android.util.Log.d(
                 "PicMe:Camera",
                 "onCaptureClick: beautyStrategy=$beautyStrategy, glPreviewProviderType=${glPreviewProvider?.javaClass?.simpleName}, castResult=${provider != null}"

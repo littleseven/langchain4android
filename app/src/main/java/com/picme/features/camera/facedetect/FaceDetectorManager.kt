@@ -41,7 +41,7 @@ import java.nio.ByteBuffer
  *
  * @since 2026-04 替代 ML Kit Face Detection（大美丽模式）
  */
-class MediaPipeFaceDetector(
+class FaceDetectorManager(
     context: Context,
     private val detectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE
 ) {
@@ -344,7 +344,7 @@ class MediaPipeFaceDetector(
         gpupixelFaceDetector?.destroy()
         gpupixelFaceDetector = null
         lastDetectionSource = FaceDetectionSource.NONE
-        Log.i(TAG, "MediaPipeFaceDetector released")
+        Log.i(TAG, "FaceDetectorManager released")
     }
 
     data class DetectionResult(

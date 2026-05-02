@@ -1,12 +1,14 @@
 package com.picme.domain.preview
 
+import com.picme.beauty.api.BeautyPreviewProvider as BeautyEnginePreviewProvider
+
 /**
  * 美颜预览提供者接口（typealias 桥接）
  *
  * Phase 2 后，此接口的权威定义已迁移至 beauty-engine-rplan 模块的
- * [com.picme.beauty.api.BeautyPreviewProvider]。
+ * [BeautyEnginePreviewProvider]。
  * 此 typealias 保持 app 层调用方无感知兼容。
  *
- * @see com.picme.beauty.api.BeautyPreviewProvider
+ * @see BeautyEnginePreviewProvider
  */
-typealias BeautyPreviewProvider = com.picme.beauty.api.BeautyPreviewProvider
+typealias BeautyPreviewProvider = BeautyEnginePreviewProvider

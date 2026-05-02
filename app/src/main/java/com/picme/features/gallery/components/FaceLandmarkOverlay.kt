@@ -56,7 +56,7 @@ import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.features.camera.facedetect.InsightFace2D106Detector
-import com.picme.features.camera.facedetect.MediaPipeFaceDetector
+import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.features.camera.facedetect.adapter.InsightFaceAdapter
 import com.pixpark.gpupixel.FaceDetector
 import com.pixpark.gpupixel.GPUPixel
@@ -732,7 +732,7 @@ private fun detectMediaPipe468(bitmap: Bitmap, landmarker: FaceLandmarker): Medi
 private fun convert468To106ForDebug(
     landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>
 ): FloatArray {
-    val result = FloatArray(MediaPipeFaceDetector.POINT_COUNT * 2)
+    val result = FloatArray(FaceDetectorManager.POINT_COUNT * 2)
 
     fun getMpPoint(index: Int): Pair<Float, Float>? {
         if (index >= landmarks.size) return null
@@ -801,7 +801,7 @@ private fun convert468To106ForDebug(
         473, 468
     )
 
-    for (index in 0 until MediaPipeFaceDetector.NON_CONTOUR_POINT_COUNT) {
+    for (index in 0 until FaceDetectorManager.NON_CONTOUR_POINT_COUNT) {
         val mpIndex = nonContourMapping[index]
         if (mpIndex < landmarks.size) {
             val landmark = landmarks[mpIndex]
