@@ -516,7 +516,7 @@ fun SettingsScreenPreview() {
             showCameraInfoInPreview = false,
             showFaceDebugOverlay = false,
         showLogOverlay = false,
-        faceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE,
+        faceDetectionEngineMode = FaceDetectionEngineMode.INSIGHTFACE,
         faceDetectionLandmarkModeEnabled = true,
 
             adaptiveFaceDetectionIntervalEnabled = true,

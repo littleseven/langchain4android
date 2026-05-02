@@ -49,7 +49,7 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = FaceDetectionEngineMode.MEDIAPIPE
+            initialValue = FaceDetectionEngineMode.INSIGHTFACE
         )
 
     val faceDetectionLandmarkModeEnabled: StateFlow<Boolean> = repository.faceDetectionLandmarkModeFlow
