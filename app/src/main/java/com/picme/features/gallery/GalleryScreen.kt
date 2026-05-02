@@ -2,8 +2,11 @@ package com.picme.features.gallery
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -45,6 +48,7 @@ import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -79,6 +84,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -156,32 +162,38 @@ fun GalleryScreen(
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
 
-
     val selectedIds = remember { mutableStateListOf<Long>() }
 
     val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { it.items } }
     val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { mediaAsset -> mediaAsset.id } }
     val context = LocalContext.current
 
-    // Store thumbnail positions for zoom animation
+    var hasMediaPermission by remember { mutableStateOf(hasGalleryPermission(context)) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        hasMediaPermission = hasGalleryPermission(context)
+    }
+
+    LaunchedEffect(hasMediaPermission) {
+        if (hasMediaPermission) {
+            viewModel.refreshMediaLibrary()
+        }
+    }
+
     val thumbnailPositions = remember { mutableStateMapOf<Long, Rect>() }
     var dragSelectionTargetSelected by remember { mutableStateOf(true) }
     val dragSelectionVisitedIds = remember { hashSetOf<Long>() }
 
-    // 沉浸式模式
     val view = LocalView.current
 
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
         val insetsController = WindowCompat.getInsetsController(window, view)
-
-        // 隐藏状态栏和导航栏
         insetsController.hide(WindowInsetsCompat.Type.systemBars())
-        // 设置沉浸式模式，滑动边缘时显示系统栏
         insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
         onDispose {
-            // 恢复系统栏显示
             insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
     }
@@ -194,7 +206,6 @@ fun GalleryScreen(
                 isSelectionMode = false
                 selectedIds.clear()
             }
-
             else -> onNavigateBack()
         }
     }
@@ -245,71 +256,85 @@ fun GalleryScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            if (showDuplicateManager) {
-                DuplicateManagerScreen(
-                    duplicateGroups = duplicateGroups,
-                    isScanning = isScanningDuplicates,
-                    onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) }
-                )
-            } else if (allFlatMedia.isEmpty()) {
-                EmptyGalleryMessage()
-            } else {
-                MediaGrid(
-                    context = context,
-                    groupedMedia = groupedMedia,
-                    selectedIds = selectedIds,
-                    isSelectionMode = isSelectionMode,
-                    thumbnailPositions = thumbnailPositions,
-                    mediaById = mediaById,
-                    onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
-                    onMediaClick = { asset ->
-                        if (isSelectionMode) {
-                            if (selectedIds.contains(asset.id)) {
-                                selectedIds.remove(asset.id)
+            when {
+                showDuplicateManager -> {
+                    DuplicateManagerScreen(
+                        duplicateGroups = duplicateGroups,
+                        isScanning = isScanningDuplicates,
+                        onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) }
+                    )
+                }
+
+                !hasMediaPermission -> {
+                    GalleryPermissionMessage(
+                        onGrantPermission = {
+                            permissionLauncher.launch(galleryReadPermissions())
+                        }
+                    )
+                }
+
+                allFlatMedia.isEmpty() -> {
+                    EmptyGalleryMessage()
+                }
+
+                else -> {
+                    MediaGrid(
+                        context = context,
+                        groupedMedia = groupedMedia,
+                        selectedIds = selectedIds,
+                        isSelectionMode = isSelectionMode,
+                        thumbnailPositions = thumbnailPositions,
+                        mediaById = mediaById,
+                        onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
+                        onMediaClick = { asset ->
+                            if (isSelectionMode) {
+                                if (selectedIds.contains(asset.id)) {
+                                    selectedIds.remove(asset.id)
+                                } else {
+                                    selectedIds.add(asset.id)
+                                }
                             } else {
+                                selectedMediaIndex = allFlatMedia.indexOf(asset)
+                            }
+                        },
+                        onMediaLongClick = { asset ->
+                            if (!isSelectionMode) {
+                                isSelectionMode = true
                                 selectedIds.add(asset.id)
                             }
-                        } else {
-                            selectedMediaIndex = allFlatMedia.indexOf(asset)
-                        }
-                    },
-                    onMediaLongClick = { asset ->
-                        if (!isSelectionMode) {
-                            isSelectionMode = true
-                            selectedIds.add(asset.id)
-                        }
-                    },
-                    onDragSelectionStart = { asset ->
-                        if (!isSelectionMode) {
-                            isSelectionMode = true
-                        }
-                        dragSelectionVisitedIds.clear()
-                        dragSelectionTargetSelected = !selectedIds.contains(asset.id)
-                        if (dragSelectionTargetSelected) {
-                            if (!selectedIds.contains(asset.id)) {
-                                selectedIds.add(asset.id)
+                        },
+                        onDragSelectionStart = { asset ->
+                            if (!isSelectionMode) {
+                                isSelectionMode = true
                             }
-                        } else {
-                            selectedIds.remove(asset.id)
-                        }
-                        dragSelectionVisitedIds.add(asset.id)
-                    },
-                    onDragSelectionItem = { asset ->
-                        if (!dragSelectionVisitedIds.add(asset.id)) {
-                            return@MediaGrid
-                        }
-                        if (dragSelectionTargetSelected) {
-                            if (!selectedIds.contains(asset.id)) {
-                                selectedIds.add(asset.id)
+                            dragSelectionVisitedIds.clear()
+                            dragSelectionTargetSelected = !selectedIds.contains(asset.id)
+                            if (dragSelectionTargetSelected) {
+                                if (!selectedIds.contains(asset.id)) {
+                                    selectedIds.add(asset.id)
+                                }
+                            } else {
+                                selectedIds.remove(asset.id)
                             }
-                        } else {
-                            selectedIds.remove(asset.id)
+                            dragSelectionVisitedIds.add(asset.id)
+                        },
+                        onDragSelectionItem = { asset ->
+                            if (!dragSelectionVisitedIds.add(asset.id)) {
+                                return@MediaGrid
+                            }
+                            if (dragSelectionTargetSelected) {
+                                if (!selectedIds.contains(asset.id)) {
+                                    selectedIds.add(asset.id)
+                                }
+                            } else {
+                                selectedIds.remove(asset.id)
+                            }
+                        },
+                        onDragSelectionEnd = {
+                            dragSelectionVisitedIds.clear()
                         }
-                    },
-                    onDragSelectionEnd = {
-                        dragSelectionVisitedIds.clear()
-                    }
-                )
+                    )
+                }
             }
 
             val currentMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
@@ -357,11 +382,28 @@ fun GalleryScreen(
                         onDismissOcr = {
                             viewModel.clearOcrResult()
                         },
-                        ocrState = viewModel.ocrState // 将 ViewModel 的 OCR 状态流传递下去
+                        ocrState = viewModel.ocrState
                     )
                 }
             }
         }
+    }
+}
+
+private fun hasGalleryPermission(context: Context): Boolean {
+    return galleryReadPermissions().all { permission ->
+        ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+}
+
+private fun galleryReadPermissions(): Array<String> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        arrayOf(
+            android.Manifest.permission.READ_MEDIA_IMAGES,
+            android.Manifest.permission.READ_MEDIA_VIDEO
+        )
+    } else {
+        arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     }
 }
 
@@ -464,6 +506,24 @@ private fun GroupingMenu(
                         }
                     }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GalleryPermissionMessage(
+    onGrantPermission: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = stringResource(R.string.gallery_permission_required),
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Spacer(modifier = Modifier.size(12.dp))
+            Button(onClick = onGrantPermission) {
+                Text(text = stringResource(R.string.grant_permissions))
             }
         }
     }
@@ -582,7 +642,6 @@ private fun DuplicateGroupCard(
                 )
             }
             
-            // 显示前 3 张图片的缩略图
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -604,7 +663,6 @@ private fun DuplicateGroupCard(
                 }
             }
             
-            // 操作按钮
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -625,7 +683,7 @@ private fun DuplicateGroupCard(
             }
         }
     }
-    
+
     if (showPreview) {
         DuplicatePreviewDialog(
             fileUris = group.fileUris,

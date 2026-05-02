@@ -106,6 +106,14 @@ class MediaViewModel(
     fun insertMedia(mediaAsset: MediaAsset) {
         viewModelScope.launch {
             repository.insertMedia(mediaAsset)
+            repository.refreshMediaLibrary()
+        }
+    }
+
+    fun refreshMediaLibrary() {
+        viewModelScope.launch {
+            Log.d("PicMe:Gallery", "Refreshing media library")
+            repository.refreshMediaLibrary()
         }
     }
 
