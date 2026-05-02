@@ -1,8 +1,9 @@
 # GPUPixel → 大美丽 滤镜移植方案
 
-**版本**: 1.0  
+**版本**: 1.1  
 **日期**: 2026-04-23  
-**状态**: 调研完成，Phase 1 开发中  
+**最后更新**: 2026-05-02  
+**状态**: Phase 1 已完成（风格特效已落地），Phase 2（专业调色）规划中  
 **目标**: 将 GPUPixel 的专业调色与风格特效能力整合到大美丽（BIG_BEAUTY）主引擎
 
 ---
@@ -486,7 +487,7 @@ fun applyColorGrade(params: BeautyParams, renderer: BeautyRenderer) {
 | 预览提供者 | `beauty-engine/.../egl/GlBeautyPreviewProvider.kt` |
 | 参数定义 | `beauty-engine/.../api/BeautyParams.kt` |
 | 参数转换器 | `app/.../camera/BeautyParamsConverter.kt` |
-| 人脸检测 | `app/.../facedetect/MediaPipeFaceDetector.kt` |
+| 人脸检测 | `app/.../facedetect/FaceDetectorManager.kt` |
 
 ---
 

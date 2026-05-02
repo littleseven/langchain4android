@@ -37,11 +37,11 @@
 - GPUPixel 作为开源高性能 GPU 滤镜引擎评估方向，长期目标是逐步增强/替换大美丽的 Shader 管线。
 - App 侧通过稳定 API 接入，不直接依赖底层 OpenGL/CameraX 实现。
 
-### 0.1 现状问题（历史背景）
+### 0.1 现状（2026-05）
 
-- **技术路线已收敛（已解决）**：当前仅保留大美丽与 GPUPixel 两条链路，所有旧兜底引擎实现、文档与状态引用已清理。
-- **性能调优困难（持续改进中）**：多 Pass 链路覆盖磨皮/美白/大眼/瘦脸/唇色/腮红，低端机仍需控制 FBO 切换与 Shader 复杂度。
-- **调试可观测性（已完善）**：渲染线程每秒聚合 `PerfStats`（fps/processingMs/delayMs/cpuUsage/nullFrames/errorCategory/errorReason），通过调试浮层实时展示。
+- **引擎链路**：大美丽（BIG_BEAUTY）主引擎 + GPUPixel（GPUPIXEL）兼容模式，旧兜底引擎已清理。
+- **多 Pass 链路**：磨皮/美白/大眼/瘦脸/唇色/腮红按需走多 Pass GPU 管线。
+- **可观测性**：渲染线程每秒聚合 `PerfStats`，调试浮层实时展示。
 
 ### 0.2 目标（第一性原理）
 
@@ -109,10 +109,7 @@
 
 **当前实现**：双边滤波快速近似（9 点采样 + 值域高斯权重），已落地在 `BeautyShaders.FRAGMENT_SHADER_BEAUTY`。
 
-> ⚠️ 历史文档（包括早期 BIG_BEAUTY_TECH_SPEC 和 beauty-engine/AGENTS.md）曾记录"使用盒式模糊（Box Blur）"。这是**规划期的方案描述，与实际代码不符**。
-> 正确事实：代码中磨皮使用的是双边滤波快速近似，通过 9 点采样结合值域权重 `exp(-(ΔLuma)² / 2σ_r²)` 和空间距离权重 `exp(-dist² / 2σ_s²)` 实现边缘保护磨皮。
-
-**算法演进路线**（业界路径参考 Analysis_Report.md 5.2 节）：
+**算法演进路线**：
 
 | 阶段 | 方案 | 复杂度 | 边缘保持 | 状态 |
 |------|------|------|------|------|
@@ -120,8 +117,6 @@
 | **当前** | 双边滤波快速近似（9pt Shader 内联） | O(N·r²) 近似 | 良好，保留皮肤轮廓 | ✅ 已落地 |
 | Phase 2 | **引导滤波（Guided Filter）** | **O(N)，与半径无关** | 更优，结构转移特性，无梯度反转光晕 | ⏳ 规划中 |
 | Phase 3 | 多尺度细节分层（Multi-scale） | O(N·K)，K层 | 工业级，分频层独立处理后融合 | 🔭 长期目标 |
-
-> **引导滤波选型依据**：相比双边滤波，引导滤波时间复杂度为 O(N)（闭式解，与滤波半径无关），不存在梯度反转光晕，支持天然多尺度堆叠，更适合移动端实时处理。GPUPixel 项目在磨皮滤镜中已验证该路径可行性。
 
 ### 1.5 滤镜技术演进路线（2026-04）
 
@@ -134,8 +129,6 @@
 | **当前** | 自定义 GLSL Shader | 完全可控，无额外依赖 | ✅ 已落地 |
 | Phase 2 | **3D LUT（颜色查找表）** | 预计算 64×64×64 网格，运行时三线性插值，接近零计算开销，支持专业调色风格动态扩展 | ⏳ 规划中 |
 | Phase 3 | GPUPixel Filter Chain | 滤镜模块化可插拔，与 GPUPixel 引擎深度集成 | 🔭 长期目标 |
-
-> **3D LUT 选型依据**：专业图像处理领域（Lightroom、DaVinci Resolve）的标准颜色变换技术，在运行时以极低计算开销应用复杂色彩风格，适合扩展「徕卡色」「胶片色」等高级调色预设。
 
 ---
 
@@ -210,80 +203,18 @@ CameraPreviewStrategies.rememberPreviewStrategyBundle()
 
 ### 2.4 拍照处理架构（2026-04 新增）
 
-#### 设计决策：方案 B 变种（长期向方案 A 演进）
+#### 拍照处理架构（2026-04 当前实现）
 
-**背景**：预览和拍照效果不一致是行业难题。预览使用 GPU Shader 实时渲染，拍照后处理使用 CPU Canvas，算法实现不同导致效果差异。
+**当前路线（方案 B 变种）**：
+- 预览：CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
+- 拍照：CameraX → ImageCapture → Bitmap → CPU 处理(Canvas) → 保存
 
-**竞品路线参考**：
-- 美图/B612/抖音：**方案 A**（全 GPU 管线，效果 100% 一致）
-- 轻颜/小米：**方案 B**（预览 GPU + 拍照 CPU 精修，略有差异）
-
-**PicMe 当前路线**：
-
-```
-当前（方案 B 变种）：
-预览: CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
-拍照: CameraX → ImageCapture → Bitmap → CPU 处理(Canvas) → 保存
-
-长期目标（方案 A）：
-预览: CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
-拍照: CameraX → ImageCapture → GPU 离屏渲染 → 保存
-```
-
-#### 方案 B 变种核心设计
-
-**目标**：在保持 CPU 处理灵活性的前提下，最大化复用预览阶段的参数和算法逻辑，减少预览/拍照差异。
+**长期目标（方案 A）**：拍照迁移到 GPU 离屏渲染，与预览共用同一套 Shader 管线。详见 `ADR-002-opengl-offscreen-unified-pipeline.md`。
 
 **关键优化点**：
-
-1. **人脸检测复用**
-   - 预览阶段 ML Kit 检测结果缓存
-   - 拍照时直接使用缓存的 `FaceWarpParams`，避免重新检测
-   - 减少检测差异导致的美颜效果不一致
-
-2. **参数统一转换**
-   - 提取 `BeautySettings` → `BeautyParams` 公共转换逻辑
-   - 预览和拍照共用同一套参数转换，避免数值差异
-
-3. **算法核心抽象**
-   - 磨皮/美白/瘦脸等算法的核心数值计算抽象为纯函数
-   - GPU Shader 和 CPU Canvas 共用同一套数值逻辑
-
-4. **效果对比调试**
-   - 开发模式下同时保存"预览截图"和"拍照结果"
-   - 便于对比差异，持续优化
-
-#### 架构分层
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  UI Layer (CameraScreen)                                │
-│  ├─ 预览: BeautyPreviewView (OpenGL ES 实时渲染)        │
-│  └─ 拍照: ImageProcessor.takePhoto() (CPU 后处理)       │
-└─────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────┐
-│  公共层 (beauty-core，待提取)                            │
-│  ├─ BeautyParamsConverter (参数统一转换)                │
-│  ├─ FaceWarpParamsCache (人脸检测结果缓存)              │
-│  └─ BeautyAlgorithmCore (算法数值核心)                  │
-└─────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────┐
-│  实现层                                                  │
-│  ├─ 预览: BeautyRenderer (GPU Shader 实现)              │
-│  └─ 拍照: GpuBeautyProcessor (CPU Canvas 实现)          │
-└─────────────────────────────────────────────────────────┘
-```
-
-#### 演进路线
-
-| 阶段 | 时间 | 目标 | 关键动作 | 状态 |
-|------|------|------|----------|------|
-| **当前** | 2026-04 | 方案 B 变种落地 | 人脸检测复用、参数统一转换 | ✅ 已完成 |
-| **Phase 1** | 2-4 周 | 减少差异 | 提取公共算法核心、效果对比调试 | 🔄 进行中 |
-| **Phase 2** | 4-8 周 | 方案 A 准备 | GPU 离屏渲染基础设施 | ⏳ 待启动 |
-| **Phase 3** | 8-12 周 | 方案 A 落地 | 拍照迁移到 GPU，全管线统一 | ⏳ 待启动 |
+1. 人脸检测复用：预览阶段检测结果缓存，拍照时直接使用 `FaceWarpParams`
+2. 参数统一转换：预览和拍照共用 `BeautySettings` → `BeautyParams` 转换逻辑
+3. 算法核心抽象：磨皮/美白/瘦脸等核心数值计算抽象为纯函数，GPU/CPU 共用
 
 ---
 
@@ -458,7 +389,7 @@ while (isRendering && !Thread.interrupted()) {
 #### 3.5.2 映射实现参考
 
 **非轮廓 73 点（33-105）**的具体映射关系请参考：
-- [MediaPipeFaceDetector.kt](../app/src/main/java/com/picme/features/camera/facedetect/MediaPipeFaceDetector.kt) - 生产环境映射
+- [FaceDetectorManager.kt](../app/src/main/java/com/picme/features/camera/facedetect/FaceDetectorManager.kt) - 生产环境映射
 - [FaceLandmarkDebugScreen.kt](../app/src/main/java/com/picme/features/debug/FaceLandmarkDebugScreen.kt) - 调试环境映射
 
 **映射原则**：
@@ -543,7 +474,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
-- **人脸检测**：默认使用 `MediaPipeFaceDetector` 的 468→106 点结果构建 `FaceWarpParams`，并在连续漏检或初始化失败时自动回退到本地 `InsightFace2D106Detector`（ML Kit 人脸框 + InsightFace `2d106det.onnx`）输出 106 点，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
+- **人脸检测**：默认使用 `FaceDetectorManager` 的 468→106 点结果构建 `FaceWarpParams`（支持 MediaPipe 主链路 + InsightFace `2d106det` 备选），再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
 
 #### GPUPixel（GPUPIXEL）— 实验性备选
@@ -809,7 +740,7 @@ CameraX ImageAnalysis UseCase（无 Preview UseCase）
 **大美丽路径（MediaPipe 主分析流 + InsightFace 异步备选）**：
 ```
 ImageAnalysis Analyzer
-  └─ MediaPipeFaceDetector.detect()（异步）
+  └─ FaceDetectorManager.detect()（异步，MediaPipe 主链路 + InsightFace 备选）
        ├─ 主路径：468→106 映射
        └─ 备选路径：连续漏检/初始化失败 → ML Kit Face bbox → InsightFace 2D106
             └─ FaceWarpParams（View 归一化坐标）

@@ -5,7 +5,7 @@
 本文档定义 MediaPipe Face Landmarker（468点）到火山引擎 106 点标准的映射策略。
 
 **注意**：本文档仅记录核心原则，具体映射关系以代码实现为准：
-- [MediaPipeFaceDetector.kt](../app/src/main/java/com/picme/features/camera/facedetect/MediaPipeFaceDetector.kt) - 生产环境映射
+- [FaceDetectorManager.kt](../app/src/main/java/com/picme/features/camera/facedetect/FaceDetectorManager.kt) - 生产环境映射
 - [FaceLandmarkDebugScreen.kt](../app/src/main/java/com/picme/features/debug/FaceLandmarkDebugScreen.kt) - 调试环境映射
 
 ## 核心映射原则
