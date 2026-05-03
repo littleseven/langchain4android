@@ -1,6 +1,6 @@
 # 大美丽 QA 执行清单
 
-**适用范围**：大美丽 主引擎（BIG_BEAUTY）+ GPUPixel 实验性引擎
+**适用范围**：大美丽 主引擎（BIG_BEAUTY）
 **最后更新**：2026-05-01（同步 PreviewView 容灾路径与多 Pass 可观测性）
 **关联文档**：`BIG_BEAUTY_TECH_SPEC.md`、`CAMERA_PREVIEW_TECH_SPEC.md`、`BEAUTY_ENGINE_FALLBACK.md`、`FEATURES.md`
 
@@ -8,7 +8,7 @@
 
 ## 0. 术语与状态定义（执行前必读）
 
-- **引擎策略枚举**：`BIG_BEAUTY`（主引擎）/ `GPUPIXEL`（实验性备选引擎）。
+- **引擎策略枚举**：`BIG_BEAUTY`（唯一引擎）。
 - **统一回退入口**：`onGlWarmUpFallback(reason)`。
 - **策略持久化键**：`beauty_strategy`、`gl_engine_recovery_available_at_ms`。
 - **自动恢复触发**：`triggerManualGlEngineRecovery()`。
@@ -106,7 +106,7 @@
 
 ### 4.3 执行记录模板
 - 设备型号 / 系统版本：
-- 引擎策略：`BIG_BEAUTY` / `GPUPIXEL`（实验性）
+- 引擎策略：`BIG_BEAUTY`
 - `useProviderRenderView`：true / false
 - 持久化状态：`gl_engine_fallback_reason` / `gl_engine_recovery_available_at_ms`
 - 测试用例：`P0-01` ~ `P1-05`

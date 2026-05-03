@@ -248,13 +248,11 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     val requestedEngineLabel = when (uiState.faceDetectionEngineMode) {
         FaceDetectionEngineMode.MEDIAPIPE -> "MEDIAPIPE"
         FaceDetectionEngineMode.INSIGHTFACE -> "INSIGHTFACE"
-        FaceDetectionEngineMode.GPUPIXEL -> "GPUPIXEL"
     }
     val activeSourceLabel = when (uiState.faceWarpParams.detectionSource) {
         FaceDetectionSource.NONE -> "NONE"
         FaceDetectionSource.MEDIAPIPE -> "MEDIAPIPE"
         FaceDetectionSource.INSIGHTFACE -> "INSIGHTFACE"
-        FaceDetectionSource.GPUPIXEL -> "GPUPIXEL"
     }
     val detectionCompact = "Detect ${requestedEngineLabel} -> ${activeSourceLabel}"
     val rendererErrorCompact = if (uiState.beautyDebugState.rendererErrorCategory.isNotBlank()) {
@@ -310,7 +308,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                     color = when (uiState.faceWarpParams.detectionSource) {
                         FaceDetectionSource.INSIGHTFACE -> Color(0xFFFFAB91)
                         FaceDetectionSource.MEDIAPIPE -> Color(0xFF80CBC4)
-                        FaceDetectionSource.GPUPIXEL -> Color(0xFFA5D6A7)
+                        FaceDetectionSource.NONE -> Color(0xFFA5D6A7)
                         else -> Color.White.copy(alpha = 0.6f)
                     },
                     fontSize = 9.sp
@@ -392,8 +390,8 @@ private fun BoxScope.PrimaryControlPanels(
         ControlPanel(onDismiss = actions.onDismissPanels) {
             when {
                 uiState.showFilterSelector -> {
-                    // GPUPixel 模式下不显示任何滤镜选择器
-                    if (uiState.beautyStrategy != BeautyStrategy.GPUPIXEL) {
+                    // 美颜模式下不显示任何滤镜选择器
+                    if (uiState.beautyStrategy != BeautyStrategy.BIG_BEAUTY) {
                         UnifiedFilterSelector(
                             selectedFilter = uiState.selectedFilter,
                             selectedStyleFilter = uiState.selectedStyleFilter,

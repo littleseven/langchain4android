@@ -148,7 +148,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
             if (isDualMode) {
                 // 双模式下仍需保留主分析流的完整美颜参数，
-                // 只让 GPUPixel 回调补充 gpuPixelLandmarks，避免把轮廓/中心点清空后触发预览黑屏。
+                // 保留已有的人脸关键点，避免把轮廓/中心点清空后触发预览黑屏。
                 onFaceWarpParamsChanged(faceWarpParams)
             } else {
                 // 单模式：直接返回大美丽参数

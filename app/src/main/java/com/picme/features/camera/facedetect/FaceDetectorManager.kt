@@ -14,12 +14,9 @@ import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.core.common.Logger
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.features.camera.facedetect.adapter.FaceLandmarkAdapterRegistry
-import com.picme.features.camera.facedetect.adapter.GpuPixelAdapter
 import com.picme.features.camera.facedetect.adapter.InsightFaceAdapter
 import com.picme.features.camera.facedetect.adapter.MediaPipe468Adapter
 import com.picme.features.camera.preview.core.FaceDetectionSource
-import com.pixpark.gpupixel.FaceDetector
-import com.pixpark.gpupixel.GPUPixel
 import java.nio.ByteBuffer
 
 /**
@@ -27,7 +24,7 @@ import java.nio.ByteBuffer
  *
  * 功能：
  * 1. 检测人脸 468 个 3D 关键点
- * 2. 将 468 点映射为与 GPUPixel/字节火山引擎兼容的 106 点格式
+ * 2. 将 468 点映射为与字节火山引擎兼容的 106 点格式
  * 3. 输出归一化坐标（0.0 ~ 1.0）
  *
  * 映射依据：
@@ -60,7 +57,6 @@ class FaceDetectorManager(
     // 避免与预览路径共享 VIDEO 模式实例导致时间戳序列冲突。
     private var photoFaceLandmarker: FaceLandmarker? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
-    private var gpupixelFaceDetector: FaceDetector? = null
     private var lastProcessTimeMs: Long = 0
     private var lastDetectionSource: FaceDetectionSource = FaceDetectionSource.NONE
 
@@ -233,18 +229,6 @@ class FaceDetectorManager(
                     }
                 }
 
-                FaceDetectionEngineMode.GPUPIXEL -> {
-                    val gpupixelResult = detectWithGpupixel(bitmap, lensFacing)
-                    lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-                    if (gpupixelResult != null) {
-                        lastDetectionSource = FaceDetectionSource.GPUPIXEL
-                        Logger.d(TAG, "Face detected by GPUPixel in ${lastProcessTimeMs}ms")
-                        DetectionResult(gpupixelResult, lastDetectionSource)
-                    } else {
-                        Logger.d(TAG, "No face detected by GPUPixel (${lastProcessTimeMs}ms)")
-                        null
-                    }
-                }
             }
         } catch (e: Exception) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
@@ -263,52 +247,34 @@ class FaceDetectorManager(
      */
     @ExperimentalGetImage
     private fun imageProxyToBitmap(imageProxy: ImageProxy): android.graphics.Bitmap? {
-        val image = imageProxy.image ?: return null
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-
-        // 使用 GPUPixel 的 Native 方法将 YUV 转换为 RGBA ByteBuffer
-        val rgbaBuffer: java.nio.ByteBuffer = try {
-            val buffers = com.pixpark.gpupixel.GPUPixel.YUV_420_888toI420AndRGBA(image, rotationDegrees)
-                ?: return null
-            // buffers[3] 是 RGBA
-            buffers[3]
+        return try {
+            val bitmap = imageProxy.toBitmap()
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            if (rotationDegrees == 0) {
+                bitmap
+            } else {
+                val matrix = android.graphics.Matrix().apply {
+                    postRotate(rotationDegrees.toFloat())
+                }
+                android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "YUV to RGBA conversion failed", e)
-            return null
+            Log.e(TAG, "Failed to convert ImageProxy to Bitmap", e)
+            null
         }
-
-        // 计算旋转后的尺寸
-        val (rotatedWidth, rotatedHeight) = when (rotationDegrees) {
-            90, 270 -> Pair(height, width)
-            else -> Pair(width, height)
-        }
-
-        // 从 RGBA ByteBuffer 创建 Bitmap
-        val bitmap = android.graphics.Bitmap.createBitmap(rotatedWidth, rotatedHeight, android.graphics.Bitmap.Config.ARGB_8888)
-        rgbaBuffer.rewind()
-        bitmap.copyPixelsFromBuffer(rgbaBuffer)
-
-        return bitmap
     }
 
     /**
      * 对 Bitmap 直接进行人脸检测（用于拍照路径）
-     * 优先使用 MediaPipe（独立 IMAGE 模式实例，无时间戳冲突），如果失败则回退到 GPUPixel
+     * 使用 MediaPipe（独立 IMAGE 模式实例，无时间戳冲突）
      */
     fun detectPhoto(bitmap: android.graphics.Bitmap, lensFacing: Int): DetectionResult? {
-        // 尝试 MediaPipe（使用独立的 IMAGE 模式实例）
         val mediaPipeResult = detectWithMediaPipeForPhoto(bitmap, lensFacing)
-        if (mediaPipeResult != null) {
-            return DetectionResult(mediaPipeResult, FaceDetectionSource.MEDIAPIPE)
+        return if (mediaPipeResult != null) {
+            DetectionResult(mediaPipeResult, FaceDetectionSource.MEDIAPIPE)
+        } else {
+            null
         }
-        // 回退到 GPUPixel
-        val gpupixelResult = detectWithGpupixel(bitmap, lensFacing)
-        if (gpupixelResult != null) {
-            return DetectionResult(gpupixelResult, FaceDetectionSource.GPUPIXEL)
-        }
-        return null
     }
 
     /**
@@ -346,63 +312,6 @@ class FaceDetectorManager(
         return adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()
     }
 
-    private fun detectWithGpupixel(bitmap: android.graphics.Bitmap, lensFacing: Int): FloatArray? {
-        val detector = ensureGpupixelFaceDetector() ?: return null
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-
-        val rgbaLandmarks = detector.detect(
-            buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA),
-            bitmap.width,
-            bitmap.height,
-            bitmap.width * 4,
-            FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
-            FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
-        )
-        val rawLandmarks: FloatArray = if (rgbaLandmarks.isNotEmpty()) {
-            rgbaLandmarks
-        } else {
-            detector.detect(
-                buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA),
-                bitmap.width,
-                bitmap.height,
-                bitmap.width * 4,
-                FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
-                FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA
-            )
-        }
-        if (rawLandmarks.isEmpty()) {
-            return null
-        }
-
-        val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.GPUPIXEL)
-            ?: return null
-        return adapter.adapt(rawLandmarks, lensFacing).getOrNull()
-    }
-
-    private fun buildDirectColorBuffer(pixels: IntArray, frameType: Int): ByteBuffer {
-        val buffer = ByteBuffer.allocateDirect(pixels.size * 4)
-        for (pixel in pixels) {
-            when (frameType) {
-                FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA -> {
-                    buffer.put((pixel and 0xFF).toByte())
-                    buffer.put((pixel shr 8 and 0xFF).toByte())
-                    buffer.put((pixel shr 16 and 0xFF).toByte())
-                    buffer.put((pixel shr 24 and 0xFF).toByte())
-                }
-
-                else -> {
-                    buffer.put((pixel shr 16 and 0xFF).toByte())
-                    buffer.put((pixel shr 8 and 0xFF).toByte())
-                    buffer.put((pixel and 0xFF).toByte())
-                    buffer.put((pixel shr 24 and 0xFF).toByte())
-                }
-            }
-        }
-        buffer.flip()
-        return buffer
-    }
-
     private fun ensureInsightFaceDetector(): InsightFace2D106Detector? {
         val cached = insightFaceDetector
         if (cached != null && cached.isReady()) {
@@ -415,21 +324,6 @@ class FaceDetectorManager(
         }.onFailure { error ->
             Logger.e(TAG, "Failed to initialize InsightFace 2D106 detector", error)
         }.getOrNull()?.takeIf { detector -> detector.isReady() }
-    }
-
-    private fun ensureGpupixelFaceDetector(): FaceDetector? {
-        val cached = gpupixelFaceDetector
-        if (cached != null) {
-            return cached
-        }
-        return runCatching {
-            GPUPixel.Init(appContext)
-            FaceDetector.Create()
-        }.onSuccess { detector ->
-            gpupixelFaceDetector = detector
-        }.onFailure { error ->
-            Logger.e(TAG, "Failed to initialize GPUPixel face detector", error)
-        }.getOrNull()
     }
 
     /**
@@ -455,8 +349,6 @@ class FaceDetectorManager(
         faceLandmarker = null
         insightFaceDetector?.release()
         insightFaceDetector = null
-        gpupixelFaceDetector?.destroy()
-        gpupixelFaceDetector = null
         lastDetectionSource = FaceDetectionSource.NONE
         Log.i(TAG, "FaceDetectorManager released")
     }

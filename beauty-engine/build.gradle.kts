@@ -20,7 +20,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-    implementation(project(":gpupixel"))
+    // GPUPixel 已移除，全部能力由自研引擎提供
 
     testImplementation(libs.junit)
 }

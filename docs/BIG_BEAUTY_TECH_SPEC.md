@@ -1,7 +1,7 @@
 # 大美丽：实时美颜完整指南
 
 **版本**：6.0
-**状态**：实施中（大美丽 BIG_BEAUTY 主引擎 + GPUPixel 实验性备选）
+**状态**：实施中（大美丽 BIG_BEAUTY 单引擎）
 **最后更新**：2026-05-01（同步多 Pass 现状、容灾可观测性与文档清理）
 **技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + 拍照 CPU/GPU 混合处理
 
@@ -22,24 +22,21 @@
 
 | 引擎 | 状态 | 说明 |
 |------|------|------|
-| **大美丽（BIG_BEAUTY）** | ✅ 主引擎（默认） | 自研 OpenGL ES + EGL；基础美颜走主 Shader，磨皮/美白/几何美型/妆容按需切换多 Pass GPU 管线 |
-| **GPUPixel（GPUPIXEL）** | 🧪 实验性备选 | 开源 C++/OpenGL ES 滤镜库，实验性集成，对应 `BeautyStrategy.GPUPIXEL` |
+| **大美丽（BIG_BEAUTY）** | ✅ 唯一引擎 | 自研 OpenGL ES + EGL；基础美颜走主 Shader，磨皮/美白/几何美型/妆容按需切换多 Pass GPU 管线 |
 
-**切换方式**：通过 `BeautyStrategy`（`domain.model.UserPreferences`）配置，在 `CameraPreviewStrategies.kt` 中路由到对应引擎策略。
+**配置方式**：通过 `BeautyStrategy`（`domain.model.UserPreferences`）配置，当前仅支持 `BeautyStrategy.BIG_BEAUTY`。
 
 **容灾策略**：
 - 大美丽初始化失败或运行异常时，由 `onGlWarmUpFallback` 收敛，回退并持久化状态。
-- GPUPixel 初始化失败时，由 `GpupixelBeautyPreviewStrategy.bindPreview` 触发 `onWarmUpFallback`。
-- **当前无自动恢复热切换**：两引擎均需重启预览绑定流程。
+- **当前无自动恢复热切换**：需重启预览绑定流程。
 
 **长期定位**：
 - 大美丽 从 App 内部能力逐步演进为独立视觉能力基础库（`beauty-engine` 模块库化）。
-- GPUPixel 作为开源高性能 GPU 滤镜引擎评估方向，长期目标是逐步增强/替换大美丽的 Shader 管线。
 - App 侧通过稳定 API 接入，不直接依赖底层 OpenGL/CameraX 实现。
 
 ### 0.1 现状（2026-05）
 
-- **引擎链路**：大美丽（BIG_BEAUTY）主引擎 + GPUPixel（GPUPIXEL）兼容模式，旧兜底引擎已清理。
+- **引擎链路**：大美丽（BIG_BEAUTY）单引擎，旧兜底引擎与实验性模块已清理。
 - **多 Pass 链路**：磨皮/美白/大眼/瘦脸/唇色/腮红按需走多 Pass GPU 管线。
 - **可观测性**：渲染线程每秒聚合 `PerfStats`，调试浮层实时展示。
 
@@ -73,16 +70,16 @@
 
 ### 1.1 为什么选择自研（大美丽）而非第三方 SDK
 
-| 维度 | GPUPixel（实验性） | 大美丽（自研，主引擎） |
-|------|--------------------|------------------------|
-| 算法可控性 | ✅ 开源 Apache 2.0 | ✅ 完全自主 |
-| 性能调优 | ✅ 可针对性优化 | ✅ 可精准控制每一步 |
-| 内存占用 | 目标 < 20MB | 目标 < 30MB |
-| 延迟控制 | OpenGL ES 链路透明 | 可精准控制线程优先级 |
-| 故障排查 | 源码可查 | 全链路日志可观测 |
-| 授权成本 | Apache 2.0 零成本 | 零成本 |
-| Compose 兼容性 | ✅ TextureView 嵌入 | ✅ SurfaceView/FrameLayout |
-| 人脸检测 | 内建 FaceDetector | ML Kit / MediaPipe 外部提供 |
+| 维度 | 大美丽（自研） |
+|------|----------------|
+| 算法可控性 | ✅ 完全自主 |
+| 性能调优 | ✅ 可精准控制每一步 |
+| 内存占用 | 目标 < 30MB |
+| 延迟控制 | ✅ 可精准控制线程优先级 |
+| 故障排查 | ✅ 全链路日志可观测 |
+| 授权成本 | ✅ 零成本 |
+| Compose 兼容性 | ✅ SurfaceView/FrameLayout |
+| 人脸检测 | ML Kit / MediaPipe 外部提供 |
 
 ### 1.2 为什么选择 OpenGL ES 而非 Vulkan
 
@@ -128,7 +125,7 @@
 |------|------|------|------|
 | **当前** | 自定义 GLSL Shader | 完全可控，无额外依赖 | ✅ 已落地 |
 | Phase 2 | **3D LUT（颜色查找表）** | 预计算 64×64×64 网格，运行时三线性插值，接近零计算开销，支持专业调色风格动态扩展 | ⏳ 规划中 |
-| Phase 3 | GPUPixel Filter Chain | 滤镜模块化可插拔，与 GPUPixel 引擎深度集成 | 🔭 长期目标 |
+| Phase 3 | 滤镜管线模块化重构 | 滤镜模块化可插拔，支持多滤镜链组合与动态加载 | 🔭 长期目标 |
 
 ---
 
@@ -193,12 +190,9 @@ SurfaceView Surface
 BeautyStrategy（domain.model.UserPreferences）
     ↓
 CameraPreviewStrategies.rememberPreviewStrategyBundle()
-    ├── BeautyStrategy.BIG_BEAUTY → GlBeautyPreviewStrategy
-    │       → GlBeautyPreviewProvider（beauty-engine/egl）
-    │           → BeautyPreviewView → CameraPreviewRenderer → BeautyRenderer
-    └── BeautyStrategy.GPUPIXEL → GpupixelBeautyPreviewStrategy
-            → GpupixelBeautyPreviewProvider（beauty-engine/gpupixel）
-                → GPUPixel 滤镜链（C++ JNI）
+    └── BeautyStrategy.BIG_BEAUTY → GlBeautyPreviewStrategy
+            → GlBeautyPreviewProvider（beauty-engine/egl）
+                → BeautyPreviewView → CameraPreviewRenderer → BeautyRenderer
 ```
 
 ### 2.4 拍照处理架构（2026-04 新增）
@@ -360,7 +354,7 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 3.5 难点 5：MediaPipe 468 点 → 106 点映射
 
-**背景**：当前主分析链路使用 MediaPipe Face Landmarker（468 点），需将 468 点映射为火山引擎 106 点标准格式，供大美丽链路与双模式调试复用。
+**背景**：当前主分析链路使用 MediaPipe Face Landmarker（468 点），需将 468 点映射为火山引擎 106 点标准格式，供大美丽链路复用。
 
 **关键说明**：具体映射关系以代码实现为准，本文档仅记录核心原则。
 
@@ -400,7 +394,7 @@ while (isRendering && !Thread.interrupted()) {
 #### 3.5.3 轮廓 33 点生成算法
 
 **核心约束**：
-- GPUPixel 轮廓为**开放曲线**，从右脸颊开始，经下巴，到左脸颊结束
+- 轮廓为**开放曲线**，从右脸颊开始，经下巴，到左脸颊结束
 - **无额头点**，M0 和 M32 与上眼皮位置齐平
 - **严格左右对称**，中心点 M16 强制 x=0.5
 - 中间点均匀分布
@@ -440,16 +434,6 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - M16.x = 0.500（中心）✓
 - 所有对称点 y 值相等 ✓
 
-#### 3.5.4 与 GPUPixel C++ 源码对应关系
-
-| 本项目 | GPUPixel 源码 | 说明 |
-|--------|--------------|------|
-| `FaceTextureCoordinates()` | `face_makeup_filter.cc:352` | 原始实现提供 111 点基准 UV 坐标 |
-| `GetFaceIndexs()` | `face_makeup_filter.cc:299` | 原始实现的三角形网格索引（使用 0-110） |
-| `FaceMakeupPass.FACE_TEXTURE_COORDS` | `face_makeup_filter.cc:352` | 当前仅截取前 106 点，避免在大美丽链路中补齐辅助点 |
-
-> **注意**：GPUPixel 源码原始妆容网格包含 111 个点（索引 0-110），但 PicMe 当前大美丽链路只消费 106 点输入，不再通过均值法补齐 107-110 辅助点。
-
 ---
 
 ## 4. 当前实现快照（2026-04-11）
@@ -462,29 +446,19 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - [x] 基础主 Shader + 多 Pass 管线覆盖磨皮（双边滤波近似）/美白/大眼/瘦脸/唇色（纹理妆容）/腮红，支持实时 uniform 更新。
 - [x] 已实现人脸点位到 UV 坐标映射（`mapViewNormalizedToUv`），保证形变参数与纹理变换一致。
 - [x] 已输出 `BeautyPerfStats(fps, processingMs, delayMs, cpuUsage, nullFrames, errorCategory, errorReason)` 供调试浮层展示。
-- [x] `BeautyStrategy.GPUPIXEL` 实验性集成落地，`GpupixelBeautyPreviewProvider` 封装 GPUPixel C++ 滤镜链。
 - [x] `BeautyPreviewEngine` 组合接口统一 `BeautyPreviewProvider` + `BeautyPreviewCapability`，App 层通过接口访问。
 - [x] `BeautyStrategy`、`FaceDetectIntervalProfile` 等枚举迁移至 `domain.model.UserPreferences`，实现分层解耦。
 - [x] **方案 B 变种**：`FaceDetectionCache` 实现预览/拍照人脸检测复用，减少效果差异。
 - [x] **滤镜一致性修复**：`FilterType` 新增 `toAndroidColorMatrix()` 方法，修复 Compose ColorMatrix 与 Android ColorMatrix 类型不兼容导致的滤镜失效问题。
 
-### 4.2 双引擎现状
+### 4.2 引擎现状
 
-#### 大美丽（BIG_BEAUTY）— 主引擎
-- **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值）
+#### 大美丽（BIG_BEAUTY）— 唯一引擎
+- **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值，唯一值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
 - **人脸检测**：默认使用 `FaceDetectorManager` 的 468→106 点结果构建 `FaceWarpParams`（支持 MediaPipe 主链路 + InsightFace `2d106det` 备选），再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
-
-#### GPUPixel（GPUPIXEL）— 实验性备选
-- **触发条件**：`BeautyStrategy.GPUPIXEL`（用户手动切换）
-- **路由类**：`GpupixelBeautyPreviewStrategy`
-- **Provider**：`GpupixelBeautyPreviewProvider` → GPUPixel C++ JNI（`TextureView` 显示）
-- **人脸检测**：GPUPixel 内建 `FaceDetector` 驱动滤镜链；MediaPipe 结果仅在双模式下写入 `bigBeautyLandmarks` 供调试对照
-- **当前限制**：
-  - `createPreviewSurface()` 使用 TextureView（非 SurfaceView），功耗略高
-  - `getPerfStats()` 返回 `EMPTY`，暂无性能指标
 
 ### 4.3 下一步技术项（RD，优先级排序）
 
@@ -495,14 +469,8 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 #### 🟡 P1 — 性能与可观测性
 - [ ] 补充低端机专项压测基线（720p/1080p，前后置，连续 5 分钟）。
 - [ ] 针对 `nullFrames` 异常波动增加告警阈值与自动抓日志能力。
-- [ ] GPUPixel 路径补充性能指标采集（`getPerfStats` 实现）。
 
-#### 🟢 P2 — GPUPixel 实验性路径完善
-- [ ] `GpupixelBeautyPreviewStrategy.bindPreview` 完善 Surface 绑定逻辑（当前 `willNotProvideSurface`，未实际接入 CameraX 帧）。
-- [ ] 评估 GPUPixel 在中端机型上的实际帧率与延迟数据。
-- [ ] 决策：GPUPixel 是否升级为正式备选引擎，或仅作为 Shader 增强参考。
-
-#### 🟢 P3 — 大美丽库化落地（8~16 周）
+#### 🟢 P2 — 大美丽库化落地（8~16 周）
 - [ ] `beauty-core`：沉淀策略模型、参数协议、状态机与能力契约。
 - [ ] 定义库级稳定 API（含语义版本），确保 App 仅依赖能力接口。
 
@@ -648,200 +616,7 @@ QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIS
 
 ---
 
-## 8. 双引擎协作设计（2026-04）
-
-> 本章系统性描述大美丽（BIG_BEAUTY）与 GPUPixel（GPUPIXEL）两个引擎的能力边界、数据流差异、
-> 互补定位与协作最佳实践，是双引擎并存后的核心技术决策记录。
-
-### 8.1 两引擎定位对比
-
-| 维度 | 大美丽（BIG_BEAUTY） | GPUPixel（GPUPIXEL） |
-|---|---|---|
-| **技术栈** | 自研 OpenGL ES + EGL 渲染管线 | 开源 C++11/OpenGL ES（Apache 2.0） |
-| **相机帧输入路径** | CameraX `Preview` UseCase → SurfaceTexture（OES 纹理，零拷贝） | CameraX `ImageAnalysis` → YUV → RGBA 转换 → 手动旋转 → GPUPixelSourceRawData |
-| **预览显示 View** | `SurfaceView`（直接硬件合成，延迟低，功耗小） | `TextureView`（SDK 接口限制，GPU 合成路径） |
-| **人脸检测** | MediaPipe 468→106 主链路 + InsightFace `2d106det` 异步备选 → `FaceWarpParams` → `mapViewNormalizedToUv()` | 内建 Mars 模型 FaceDetector（106 点，与滤镜链紧耦合） |
-| **色调滤镜** | ✅ ColorMatrix → `colorMatrix` uniform 实时变换（OpenGL Shader 层） | ➖ 当前使用大美丽 ColorMatrix 路径；GPUPixel 3D LUT 路径为长期演进目标 |
-| **美颜基础** | 双边滤波磨皮、ColorMatrix 美白、FaceWarp 瘦脸/大眼、Shader 唇色/腮红 | BeautyFaceFilter（磨皮/美白）、FaceReshapeFilter（瘦脸/大眼）、LipstickFilter、BlusherFilter |
-| **专业调色** | ➖ 使用 CameraX CaptureRequest（有限） | ✅ ExposureFilter / ContrastFilter / SaturationFilter / WhiteBalanceFilter（Shader 级实时） |
-| **风格特效** | ❌ 不支持 | ✅ ToonFilter / SmoothToonFilter / SketchFilter / PosterizeFilter / EmbossFilter / CrosshatchFilter |
-| **参数接口** | `BeautyParams.colorMatrix`（大美丽专用字段） | `BeautyParams.gpuExposure/gpuContrast/gpuSaturation/gpuWhiteBalance/styleFilterClassName`（GPUPixel 专用字段） |
-| **容灾入口** | `GlBeautyPreviewStrategy.onWarmUpFallback` → EGL warm-up 失败 | `GpupixelBeautyPreviewStrategy.onWarmUpFallback` → GPUPixel init 失败 |
-| **引擎切换开销** | 需 release 旧 EGL 上下文、重建 SurfaceTexture | 需 release 所有 GPUPixel C++ 滤镜链对象 |
-
-### 8.2 帧数据流对比
-
-**大美丽（BIG_BEAUTY）**：
-```
-CameraX Preview UseCase
-  └─ SurfaceRequest → Surface（来自 BeautyPreviewView.getSurfaceForCamera()）
-       └─ SurfaceTexture.updateTexImage()   ← 零拷贝，OES 纹理直接传给 Shader
-            └─ Beauty pass（主 Shader / 多 Pass 美颜）
-                 ├─ 磨皮（双边滤波 9pt）
-                 ├─ 美白（亮度 uniform）
-                 ├─ 瘦脸/大眼（FaceWarp uniform）
-                 ├─ FaceMakeupPass（唇色/腮红纹理妆容，按需启用）
-                 └─ 色调矩阵（uColorMatrix uniform，ColorMatrix 4×5）
-                      └─ WindowSurface.swapBuffers()
-                           └─ SurfaceView（硬件合成显示）
-```
-
-**GPUPixel（GPUPIXEL）**：
-```
-CameraX ImageAnalysis UseCase（无 Preview UseCase）
-  └─ ImageProxy（YUV_420_888）
-       └─ GPUPixel.YUV_420_888toI420AndRGBA()
-            ├─ Y/U/V DirectByteBuffer → SourceYUV.ProcessData()
-            └─ RGBA DirectByteBuffer → FaceDetector.detect()
-                 └─ 滤镜链（C++ GPU 处理）
-                      ├─ LipstickFilter（blend_level + face_landmark）
-                      ├─ BlusherFilter（blend_level + face_landmark）
-                      ├─ BeautyFaceFilter（skin_smoothing / whiteness）
-                      ├─ FaceReshapeFilter（thin_face / big_eye + face_landmark）
-                      ├─ ExposureFilter / ContrastFilter / SaturationFilter / WhiteBalanceFilter
-                      └─ [StyleFilter]（互斥切换，NONE 时直连）
-                           └─ GPUPixelSinkSurface.SetSurface()
-                                └─ TextureView（GPU 合成显示）
-```
-
-**关键差异**：
-- 大美丽走 `Preview` UseCase，零拷贝直连 OES 纹理；GPUPixel 走 `ImageAnalysis`，存在 YUV→RGBA 格式转换与上层旋转的 CPU 开销
-- 两引擎 **不可同时激活**：`CameraX` 绑定时 GPUPixel 模式会跳过 `Preview` UseCase，避免双 Surface 争抢
-
-### 8.3 参数字段与引擎对应关系
-
-`BeautyParams` 中各字段的引擎归属（`updateFilters()` 调用时各引擎只处理自己的字段）：
-
-| `BeautyParams` 字段 | 大美丽处理 | GPUPixel 处理 | 备注 |
-|---|---|---|---|
-| `enabled` | ✅ 控制所有美颜开关 | ✅ 控制所有美颜开关 | 两引擎均响应 |
-| `smoothing` | ✅ `uSmoothing` uniform | ✅ `BeautyFaceFilter.skin_smoothing` | 归一化映射不同 |
-| `whitening` | ✅ `uWhitening` uniform | ✅ `BeautyFaceFilter.whiteness` | 归一化映射不同 |
-| `bigEyes` | ✅ `uBigEyes` + FaceWarp | ✅ `FaceReshapeFilter.big_eye` | 人脸检测来源不同 |
-| `slimFace` | ✅ `uSlimFace` + FaceWarp | ✅ `FaceReshapeFilter.thin_face` | 人脸检测来源不同 |
-| `lipColor` | ✅ `FaceMakeupPass` 纹理妆容 + 主 Shader | ✅ `LipstickFilter.blend_level` | — |
-| `lipColorIndex` | ✅ `uLipColorIndex` uniform | ❌ GPUPixel 不使用 | GPUPixel 内建口红颜色 |
-| `blush` | ✅ `FaceMakeupPass` 纹理妆容 + 主 Shader | ✅ `BlusherFilter.blend_level` | — |
-| `blushColorFamily` | ✅ `uBlushColorFamily` uniform | ❌ GPUPixel 不使用 | GPUPixel 内建腮红色系 |
-| `colorMatrix` | ✅ `uCMRow0~3` + `uCMOffset` uniform | **静默忽略** | GPUPixel 调色走专用滤镜 |
-| `gpuExposure` | **静默忽略** | ✅ `ExposureFilter.exposure` | 大美丽侧待 P1 实现 |
-| `gpuContrast` | **静默忽略** | ✅ `ContrastFilter.contrast` | 大美丽侧待 P1 实现 |
-| `gpuSaturation` | **静默忽略** | ✅ `SaturationFilter.saturation` | 大美丽侧待 P1 实现 |
-| `gpuWhiteBalance` | **静默忽略** | ✅ `WhiteBalanceFilter.temperature` | 大美丽侧待 P1 实现 |
-| `styleFilterClassName` | **静默忽略** | ✅ 动态滤镜链切换 | 大美丽侧无对应能力 |
-
-> **设计原则**：各引擎只处理自己关心的字段，对不认识的字段静默忽略，不抛出异常。
-> 这保证了 `BeautyParams` 作为统一参数容器的向后兼容性。
-
-### 8.4 人脸检测协作方式
-
-两引擎在人脸检测上采用完全不同的策略：
-
-**大美丽路径（MediaPipe 主分析流 + InsightFace 异步备选）**：
-```
-ImageAnalysis Analyzer
-  └─ FaceDetectorManager.detect()（异步，MediaPipe 主链路 + InsightFace 备选）
-       ├─ 主路径：468→106 映射
-       └─ 备选路径：连续漏检/初始化失败 → ML Kit Face bbox → InsightFace 2D106
-            └─ FaceWarpParams（View 归一化坐标）
-                 └─ CameraPreviewRenderer.mapViewNormalizedToUv()
-                      └─ BeautyPreviewView（Shader uniform 注入）
-```
-- MediaPipe 结果通过 `FaceWarpParams` 数据类跨线程传递
-- InsightFace `2d106det` 仅作为大美丽主链路的本地备选来源，输出顺序与当前 106 点消费链路一致，无需额外重排
-- 大眼/瘦脸变形需要精确的 landmark 坐标（眼球中心、嘴角、下颌等）
-- 唇色/腮红通过 106 点轮廓与 `FaceMakeupPass` 三角网格共同驱动
-
-**GPUPixel 路径（内建 FaceDetector）**：
-```
-onYuvFrame() / onRgbaFrame()
-  └─ FaceDetector.detect()（内建 Mars 模型，106 点，同步）
-       └─ face_landmark（float[]）
-            ├─ faceReshapeFilter.SetProperty("face_landmark", landmarks)
-            ├─ lipstickFilter.SetProperty("face_landmark", landmarks)
-            └─ blusherFilter.SetProperty("face_landmark", landmarks)
-```
-- 每帧同步推理，GPUPixel 滤镜链自动处理 landmark 依赖
-- `GpupixelBeautyPreviewStrategy.applyFaceWarpParams()` 为空实现；双模式下只额外保留 MediaPipe 的 `bigBeautyLandmarks` 供调试显示
-
-**关键约束**：
-- GPUPixel 模式下，MediaPipe 结果不参与 GPUPixel 滤镜参数下发，只用于双模式调试对照；InsightFace 备选也不会在双模式调试中启用，避免对照基线混杂
-- 如果后续补回 ML Kit 表情/状态分析流，必须与当前 MediaPipe / GPUPixel 主链路隔离，避免拖慢 `ImageAnalysis`
-
-### 8.5 引擎切换时序
-
-引擎切换由用户设置（`BeautyStrategy` DataStore）驱动，Composable 层通过 `remember(beautyStrategy)` 实现零竞态切换：
-
-```
-用户切换引擎设置
-  └─ UserPreferencesRepository（DataStore）更新 beautyStrategy
-       └─ CameraRuntimeContext.beautyStrategy（StateFlow）
-            └─ rememberGlBeautyPreviewProvider(context, beautyStrategy)
-                 ├─ remember(beautyStrategy) → 同帧立即创建新 Provider
-                 └─ DisposableEffect(provider) → provider 被替换时异步 release 旧 Provider
-                      └─ rememberPreviewStrategyBundle(beautyStrategy, previewView, glPreviewProvider)
-                           ├─ remember(beautyStrategy, ...) → 同帧路由到新策略
-                           └─ bindCameraUseCases（重新绑定 CameraX 用例）
-```
-
-**切换保证**：
-- `remember(beautyStrategy)` 确保新 Provider 与新策略在同一 recomposition 帧内就位，避免类型不匹配强转崩溃
-- `DisposableEffect` 保证旧 Provider 在从渲染路径移除后才执行 `release()`，无 EGL 资源双持
-- GPUPixel 模式下 `bindCameraUseCases` 不创建 `Preview` UseCase，避免 Surface 冲突
-
-### 8.6 两引擎最佳配合策略（推荐实践）
-
-根据现有实现与两引擎的能力边界，推荐以下使用策略：
-
-#### 策略一：大美丽作为稳定基础，GPUPixel 作为专业增强
-
-| 场景 | 推荐引擎 | 原因 |
-|---|---|---|
-| 日常美颜（磨皮/美白/大眼/瘦脸） | **大美丽** | 主 Shader 为主，链路成熟；MediaPipe 468→106 映射精度更稳定 |
-| 口红/腮红效果 | 两引擎效果相当 | 大美丽用 `FaceMakeupPass` 纹理妆容；GPUPixel 用 LipstickFilter/BlusherFilter |
-| 专业调色（曝光/对比度/饱和度/色温） | **GPUPixel** | 独立 Shader 滤镜，调色精准可控；大美丽侧待 P1 实现 |
-| 风格特效（卡通/素描/浮雕等） | **GPUPixel** | 大美丽侧无对应能力 |
-| 色调滤镜（徕卡/胶片等） | **大美丽**（当前） | ColorMatrix uniform 直接在 Shader 层实时变换，零额外 pass |
-| 低端机稳定性 | **大美丽** | 经过更多压测验证；GPUPixel C++ 层在特定机型有潜在稳定性风险 |
-
-#### 策略二：共用 `BeautyParams` 协议，互不感知对方实现
-
-- App 层只向 `BeautyPreviewEngine` 发送统一的 `BeautyParams`，无需感知底层是哪个引擎
-- 各引擎实现 `updateFilters()` 时按字段归属处理，未知字段静默忽略
-- `BeautyParamsConverter.toBeautyParams()` 在 app 层完成所有映射，引擎不参与映射逻辑
-
-#### 策略三：长期融合路线
-
-```
-近期（P1）
-  大美丽补齐专业调色：在 FRAGMENT_SHADER_BEAUTY 追加 ExposureFilter / ContrastFilter 等
-  → 实现：gpuExposure/gpuContrast/gpuSaturation/gpuWhiteBalance 四个 uniform 映射
-
-中期（P2）
-  大美丽磨皮升级为引导滤波（Guided Filter）
-  → 与 GPUPixel 磨皮算法路线对齐（GPUPixel 项目已验证可行性）
-
-中期（P2）
-  色调滤镜升级为 3D LUT
-  → 两引擎均可受益，支持专业调色预设动态扩展
-
-长期（P3）
-  评估 GPUPixel 滤镜链能力替换/增强大美丽 Shader 管线
-  → 以大美丽 API 层为门面，底层逐步引入更成熟的 GPUPixel 滤镜
-```
-
-### 8.7 当前已知限制与待办
-
-| 限制 / 已知问题 | 影响 | 建议解法 |
-|---|---|---|
-| GPUPixel 存在 YUV→RGBA 格式转换 CPU 开销 | 中端机约 3~5ms/帧额外开销 | 评估 OpenGL ES PBO 或 libyuv SIMD 加速 |
-| GPUPixel 上层手动旋转 RGBA 为 CPU 操作 | 90°/270° 每帧需要完整像素复制 | 评估 Shader 旋转或利用 SetRotation 修复根因 |
-| 大美丽缺少专业调色滤镜（P1） | 用户在大美丽模式下无法使用曝光/对比度 | P1 在 Fragment Shader 追加调色 uniform |
-| 大美丽缺少风格特效（无计划） | 大美丽模式下风格特效 UI 置灰 | 维持现状；风格特效作为 GPUPixel 特有能力 |
-| 两引擎 lipColorIndex / blushColorFamily 行为不一致 | GPUPixel 内建色彩，不支持按 index 切换 | 待评估是否统一 ColorMap 传入 GPUPixel |
----
-
-## 9. 风险与应对
+## 8. 风险与应对
 
 ### 风险 1：设备兼容性
 
@@ -870,18 +645,9 @@ onYuvFrame() / onRgbaFrame()
 - 使用 `WeakReference` 避免内存泄漏
 - 定期内存分析
 
-### 风险 4：GPUPixel 实验性路径稳定性
-
-**风险**：GPUPixel C++ JNI 在特定机型崩溃或内存异常
-
-**应对**：
-- GPUPixel 路径仅在用户主动切换时激活，不作为默认引擎
-- 同样接入 `onGlWarmUpFallback` 兜底链路
-- 在正式提升为备选引擎前，需完成至少 3 款主流机型的压测
-
 ---
 
-## 10. 相关文档与实现入口
+## 9. 相关文档与实现入口
 
 - `PRODUCT.md` — 产品需求规格说明书（大美丽 产品策略）
 - `FEATURES.md` — 功能交互规范（重点：`1.3.5` 大美丽 性能与验收）
@@ -890,7 +656,6 @@ onYuvFrame() / onRgbaFrame()
 - `BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 独立执行清单
 - `beauty-engine/src/main/java/com/picme/beauty/api/` — 对外稳定 API（`BeautyParams`、`BeautyPreviewProvider`、`BeautyPreviewCapability`、`BeautyPreviewEngine`）
 - `beauty-engine/src/main/java/com/picme/beauty/egl/` — GL 渲染管线核心实现
-- `beauty-engine/src/main/java/com/picme/beauty/gpupixel/` — GPUPixel 实验性集成
 - `app/src/main/java/com/picme/features/camera/CameraScreen.kt` — 预览绑定、容灾回退与调试浮层
 - `app/src/main/java/com/picme/features/camera/CameraPreviewStrategies.kt` — 引擎策略路由
 
@@ -1042,7 +807,7 @@ verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
 
 ---
 
-## 11. 总结
+## 10. 总结
 
 大美丽的核心是**构建一个高性能、可观测、可降级的 GPU 加速图像流处理管道**：
 
@@ -1056,15 +821,13 @@ verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
-| 主引擎 | 自研 大美丽（OpenGL ES） | 可控性最高、零授权、全链路可观测 |
-| 备选引擎 | GPUPixel（实验性） | 开源/Apache 2.0、C++/OpenGL ES、内建人脸检测 |
+| 引擎 | 自研 大美丽（OpenGL ES） | 可控性最高、零授权、全链路可观测 |
 | 磨皮算法 | 双边滤波快速近似（9pt） | 保边效果好，移动端性能可接受 |
 | 显示层 | SurfaceView | 直接硬件合成，延迟更低，功耗更小 |
-| 人脸检测 | MediaPipe 468→106（主链路） | 与当前预览分析流一致，直接服务 `FaceWarpParams` 与双模式调试 |
+| 人脸检测 | MediaPipe 468→106（主链路） | 与当前预览分析流一致，直接服务 `FaceWarpParams` |
 | 渲染参数 | 全 uniform 实时更新 | 无需重新编译 Shader，延迟 < 100ms |
 
 **预期结果**：
 
 - 成功：实现 30-60fps 实时美颜预览，零授权成本，用户可无感知享受效果
-- 降级：大美丽 warm-up 失败进入冷却，3 分钟后自动重试；用户可手动切换 GPUPixel 实验性路径
-
+- 降级：大美丽 warm-up 失败进入冷却，3 分钟后自动重试

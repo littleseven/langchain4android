@@ -14,11 +14,9 @@ PicMe 当前引擎策略如下：
 
 | 引擎 | 状态 | 职责 | 实现类 | 所在模块 |
 |------|------|------|--------|----------|
-| **大美丽 (`BIG_BEAUTY`)** | ✅ 默认主引擎 | 自研 OpenGL ES + EGL 管线；当前基础美颜走主 Shader，磨皮/美白/几何美型/妆容按需走多 Pass GPU 链路 | `GlBeautyPreviewProvider` | `:beauty-engine` |
-| **GPUPixel (`GPUPIXEL`)** | 🧪 实验性备选 | 开源 C++/OpenGL ES 滤镜库，已完成零拷贝 YUV 预览链路，通过 `BeautyStrategy.GPUPIXEL` 手动切换 | `GpupixelBeautyPreviewStrategy` | `:app` |
+| **大美丽 (`BIG_BEAUTY`)** | ✅ 唯一引擎 | 自研 OpenGL ES + EGL 管线；当前基础美颜走主 Shader，磨皮/美白/几何美型/妆容按需走多 Pass GPU 链路 | `GlBeautyPreviewProvider` | `:beauty-engine` |
 
-> **重要说明**：当前项目**不再**使用"主引擎失败自动降级至兜底引擎"的双引擎策略。
-> 大美丽初始化失败后，系统将使用 `PreviewView` 进行无美颜预览，并通过冷却窗口机制在下次启动时自动重试。
+> **重要说明**：当前项目为单引擎架构。大美丽初始化失败后，系统将使用 `PreviewView` 进行无美颜预览，并通过冷却窗口机制在下次启动时自动重试。
 
 ---
 
@@ -54,11 +52,6 @@ private fun onGlWarmUpFallback(reason: String) {
 - `CameraPreviewRenderer` 会把最近一次分类与原因聚合进 `BeautyPerfStats.errorCategory/errorReason`，供调试浮层直接展示。
 - `:app` 层在接收到异常后，通过 `BeautyEngineRuntimeState` 标记状态，并在下一次页面重建时回落至 `PreviewView`。
 - 详细的运行时冷却与重试机制，请参阅 `docs/BIG_BEAUTY_TECH_SPEC.md`。
-
-### 2.3 GPUPixel 引擎回退（实验性）
-
-- GPUPixel 初始化失败时，由 `GpupixelBeautyPreviewStrategy.bindPreview` 触发 `onWarmUpFallback`。
-- 当前无自动恢复热切换，需重启预览绑定流程。
 
 ---
 

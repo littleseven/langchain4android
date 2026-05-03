@@ -28,7 +28,6 @@ import androidx.core.content.ContextCompat
 import com.picme.beauty.api.FaceData
 import com.picme.beauty.api.PhotoProcessException
 import com.picme.beauty.api.PhotoProcessor
-import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.core.image.gl.toBeautyParams
 import com.picme.domain.model.BeautySettings
@@ -60,8 +59,7 @@ interface ImageProcessor {
         lensFacing: Int,
         mode: MediaType = MediaType.PHOTO,
         cachedFaces: List<Face> = emptyList(),
-        beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY,
-        gpupixelProvider: GpupixelBeautyPreviewProvider? = null
+        beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY
     )
 
     fun startVideoRecording(
@@ -484,10 +482,9 @@ class ImageProcessorImpl(
         lensFacing: Int,
         mode: MediaType,
         cachedFaces: List<Face>,
-        beautyStrategy: BeautyStrategy,
-        gpupixelProvider: GpupixelBeautyPreviewProvider?
+        beautyStrategy: BeautyStrategy
     ) {
-        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy, gpupixelProvider=${gpupixelProvider != null}")
+        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")
 
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
         imageCapture.takePicture(
@@ -534,31 +531,6 @@ class ImageProcessorImpl(
                     )
 
                     Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
-
-                    // GPUPixel 模式：使用 GPUPixel 滤镜链处理拍照，确保与预览效果一致
-                    if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
-                        if (gpupixelProvider != null) {
-                            Logger.d("ImageProcessor", "GPUPixel mode: processing photo with GPUPixel filter chain")
-                            val finalBitmap = gpupixelProvider.processPhoto(rotatedBitmap)
-                            // 色调滤镜在 GPUPixel 中已通过 whiteBalanceFilter 等处理，
-                            // 但用户选择的 ColorMatrix 滤镜（如 LEICA_CLASSIC）是 App 层独立实现的，
-                            // 如果 GPUPixel 未接入该滤镜，仍需在 Bitmap 上应用。
-                            val output = if (filter != FilterType.NONE) {
-                                applyColorMatrixFilter(finalBitmap, filter)
-                            } else {
-                                finalBitmap
-                            }
-                            saveBitmapToMediaStore(
-                                context, output, name, viewModel, cachedFaces.isNotEmpty(), null, mode
-                            )
-                            return
-                        }
-                        Logger.e("ImageProcessor", "GPUPixel strategy active but gpupixelProvider is null! Saving original bitmap.")
-                        saveBitmapToMediaStore(
-                            context, rotatedBitmap, name, viewModel, cachedFaces.isNotEmpty(), null, mode
-                        )
-                        return
-                    }
 
                     // [方案 B 变种] 优先使用缓存的人脸检测结果进行美颜（磨皮/美白/瘦脸/大眼）
                     // 但妆容（唇色/腮红/眉毛）需要在拍照后的图片上重新检测人脸，以确保坐标正确
@@ -870,7 +842,7 @@ private fun List<Face>.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? 
     if (landmarks106 != null) {
         Logger.d("ImageProcessor", "Using cached landmarks106 from FaceDetectionCache")
     } else {
-        Logger.w("ImageProcessor", "No cached landmarks106 available, GPUPixel warp will fall back")
+        Logger.w("ImageProcessor", "No cached landmarks106 available, fallback to bitmap processing")
     }
 
     return FaceData(

@@ -78,7 +78,6 @@ object FaceLandmarkAdapterRegistry {
 
         register(FaceDetectionSource.MEDIAPIPE, MediaPipe468Adapter())
         register(FaceDetectionSource.INSIGHTFACE, InsightFaceAdapter())
-        register(FaceDetectionSource.GPUPIXEL, GpuPixelAdapter())
 
         Logger.i(TAG, "Default adapters initialized: ${adapters.size} registered")
     }

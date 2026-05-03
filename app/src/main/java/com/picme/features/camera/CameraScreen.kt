@@ -77,11 +77,9 @@ import com.picme.features.camera.test.CameraTestCommandReceiver
 import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.camera.test.CameraTestStateSnapshot
 import com.picme.beauty.egl.GlBeautyPreviewProvider
-import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.features.camera.facedetect.Face106ToWarpParams
 import com.picme.features.camera.preview.core.FaceDetectionSource
 import com.picme.features.camera.preview.core.FaceWarpParams
-import com.picme.features.camera.preview.core.GpuPixelLandmarks
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
@@ -465,10 +463,10 @@ private fun resolvePreviewTargetView(
 
     val providerView = when (activeStrategy) {
         BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
-        BeautyStrategy.GPUPIXEL -> runtimeProviderView
+        BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
     }
 
-    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY || activeStrategy == BeautyStrategy.GPUPIXEL
+    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY || activeStrategy == BeautyStrategy.BIG_BEAUTY
 
     if (requiresProviderView && providerView == null) {
         return PreviewTargetDecision(
@@ -588,59 +586,10 @@ fun CameraContent(
     var previewFaceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
     var lastFaceWarpDetectedAtMs by remember { mutableStateOf(0L) }
 
-    // GPUPixel 106 点回调：更新 faceWarpParams 用于调试 UI 显示
-    val onGpuPixelLandmarksDetected: (FloatArray?) -> Unit = { landmarks ->
-        if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
-            if (landmarks != null && landmarks.isNotEmpty()) {
-                // GPUPixel 返回的坐标未做前置摄像头镜像，需要与 MediaPipe 保持一致
-                val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
-                val mirroredLandmarks = if (isFrontCamera) {
-                    // 前置摄像头：水平镜像 x 坐标
-                    FloatArray(landmarks.size).apply {
-                        for (i in landmarks.indices step 2) {
-                            this[i] = 1f - landmarks[i]     // x = 1 - x
-                            this[i + 1] = landmarks[i + 1]   // y 不变
-                        }
-                    }
-                } else {
-                    landmarks
-                }
-
-                // 使用 Face106ToWarpParams 转换，确保与 MediaPipe 模式一致
-                val newParams = Face106ToWarpParams.convert(
-                    landmarks106 = mirroredLandmarks,
-                    detectionSource = FaceDetectionSource.GPUPIXEL
-                )
-                // 保存 GPUPixel 原始点位用于调试对比
-                // 双模式下保留已有的 bigBeautyLandmarks（由 MediaPipe 检测提供）
-                val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
-                val existingHasFace = faceWarpParams.hasFace
-                faceWarpParams = newParams.copy(
-                    gpuPixelLandmarks = GpuPixelLandmarks.fromFloatArray(mirroredLandmarks),
-                    bigBeautyLandmarks = existingBigBeauty,
-                    detectionSource = FaceDetectionSource.GPUPIXEL,
-                    requestedDetectionEngineMode = faceDetectionEngineMode,
-                    hasFace = existingHasFace || newParams.hasFace
-                )
-            } else {
-                // 双模式下保留 bigBeautyLandmarks
-                val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
-                val existingHasFace = faceWarpParams.hasFace
-                faceWarpParams = FaceWarpParams(
-                    bigBeautyLandmarks = existingBigBeauty,
-                    detectionSource = FaceDetectionSource.NONE,
-                    requestedDetectionEngineMode = faceDetectionEngineMode,
-                    hasFace = existingHasFace
-                )
-            }
-        }
-    }
-
     val previewRuntimeViews = rememberPreviewRuntimeViews(
         context = context,
         aspectRatio = aspectRatio,
-        beautyStrategy = beautyStrategy,
-        onGpuPixelLandmarksDetected = onGpuPixelLandmarksDetected
+        beautyStrategy = beautyStrategy
     )
     val previewView = previewRuntimeViews.previewView
     val glPreviewProvider = previewRuntimeViews.glPreviewProvider
@@ -663,7 +612,7 @@ fun CameraContent(
     val activePreviewStrategy = previewStrategyBundle.activeStrategy
 
     var useProviderRenderView by remember(beautyStrategy) {
-        mutableStateOf(beautyStrategy == BeautyStrategy.GPUPIXEL)
+        mutableStateOf(beautyStrategy == BeautyStrategy.BIG_BEAUTY)
     }
     var lipRealtimeRecoveryRequested by remember { mutableStateOf(false) }
     var lastLipPreviewRebindRequestMs by remember { mutableStateOf(0L) }
@@ -677,7 +626,7 @@ fun CameraContent(
             return@LaunchedEffect
         }
 
-        if (beautyStrategy != BeautyStrategy.BIG_BEAUTY && beautyStrategy != BeautyStrategy.GPUPIXEL) {
+        if (beautyStrategy != BeautyStrategy.BIG_BEAUTY && beautyStrategy != BeautyStrategy.BIG_BEAUTY) {
             return@LaunchedEffect
         }
 
@@ -865,7 +814,6 @@ fun CameraContent(
             Logger.i("PicMe:CameraTest", "Executing command: ${CameraTestCommandDispatcher.describeCommand(command)}")
             when (command) {
                 is CameraTestCommand.Capture -> {
-                    val provider = glPreviewProvider as? GpupixelBeautyPreviewProvider
                     handleCaptureClick(
                         context = context,
                         captureMode = captureMode,
@@ -880,7 +828,6 @@ fun CameraContent(
                         lensFacing = lensFacing,
                         cachedFaces = emptyList(),
                         beautyStrategy = beautyStrategy,
-                        gpupixelProvider = provider,
                         onRecordingChanged = { updated -> recording = updated },
                         onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
                     )
@@ -1023,7 +970,7 @@ fun CameraContent(
 
     LaunchedEffect(beautyStrategy, useProviderRenderView, previewRebindSignal) {
         while (isActive) {
-            renderPerfStats = if ((beautyStrategy == BeautyStrategy.BIG_BEAUTY || beautyStrategy == BeautyStrategy.GPUPIXEL) && useProviderRenderView) {
+            renderPerfStats = if ((beautyStrategy == BeautyStrategy.BIG_BEAUTY || beautyStrategy == BeautyStrategy.BIG_BEAUTY) && useProviderRenderView) {
                 glPreviewProvider?.getPerfStats() ?: BeautyPerfStats()
             } else {
                 BeautyPerfStats()
@@ -1073,7 +1020,6 @@ fun CameraContent(
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode,
             videoCapture = videoCapture,
-            gpupixelProvider = glPreviewProvider as? GpupixelBeautyPreviewProvider,
             faceDetectorManager = runtimeContext.faceDetectorManager,
             onImageCaptureChanged = { capture -> imageCapture = capture },
             onCameraControlChanged = { control -> cameraControl = control },
@@ -1087,49 +1033,7 @@ fun CameraContent(
             },
             onFacePointChanged = { point -> facePoint = point },
             onFaceWarpParamsChanged = { params ->
-                if (beautyStrategy == BeautyStrategy.GPUPIXEL) {
-                    // 双模式：合并 MediaPipe 的 bigBeautyLandmarks 到现有的 GPUPixel 参数中
-                    val existingGpuPixel = faceWarpParams.gpuPixelLandmarks
-                    val existingHasFace = faceWarpParams.hasFace
-                    val existingBigBeauty = faceWarpParams.bigBeautyLandmarks
-                    
-                    // 判断当前回调是 MediaPipe 还是 GPUPixel 数据
-                    val isMediaPipeCallback = params.bigBeautyLandmarks.hasFace && params.bigBeautyLandmarks.points.isNotEmpty()
-                    val isGpuPixelCallback = params.gpuPixelLandmarks.hasFace && params.gpuPixelLandmarks.points.isNotEmpty()
-                    
-                    Logger.d("Camera", "onFaceWarpParamsChanged: isMediaPipe=$isMediaPipeCallback, isGpuPixel=$isGpuPixelCallback, " +
-                        "existingBB=${existingBigBeauty.hasFace}, existingGP=${existingGpuPixel.hasFace}")
-                    
-                    faceWarpParams = when {
-                        // MediaPipe 回调：保留已有的 GPUPixel 数据
-                        isMediaPipeCallback && !isGpuPixelCallback -> {
-                            Logger.d("Camera", "Merging MediaPipe data, GP points=${existingGpuPixel.points.size}")
-                            faceWarpParams.copy(
-                                bigBeautyLandmarks = params.bigBeautyLandmarks,
-                                detectionSource = params.detectionSource,
-                                requestedDetectionEngineMode = params.requestedDetectionEngineMode,
-                                hasFace = existingHasFace || params.hasFace
-                            )
-                        }
-                        // GPUPixel 回调：保留已有的 MediaPipe 数据
-                        isGpuPixelCallback && !isMediaPipeCallback -> {
-                            Logger.d("Camera", "Merging GPUPixel data, BB points=${existingBigBeauty.points.size}")
-                            faceWarpParams.copy(
-                                gpuPixelLandmarks = params.gpuPixelLandmarks,
-                                detectionSource = params.detectionSource,
-                                requestedDetectionEngineMode = params.requestedDetectionEngineMode,
-                                hasFace = existingHasFace || params.hasFace
-                            )
-                        }
-                        // 其他情况：直接更新
-                        else -> {
-                            Logger.d("Camera", "Direct update: params.hasFace=${params.hasFace}")
-                            params
-                        }
-                    }
-                } else {
-                    faceWarpParams = params
-                }
+                faceWarpParams = params
             },
             onShowFocusIndicatorChanged = { show ->
                 isFaceLocked = show
@@ -1363,11 +1267,6 @@ CameraPreviewContent(
         onCurrentGridChanged = { grid -> currentGrid = grid },
         onNavigateToGallery = onNavigateToGallery,
         onCaptureClick = {
-            val provider = glPreviewProvider as? GpupixelBeautyPreviewProvider
-            android.util.Log.d(
-                "PicMe:Camera",
-                "onCaptureClick: beautyStrategy=$beautyStrategy, glPreviewProviderType=${glPreviewProvider?.javaClass?.simpleName}, castResult=${provider != null}"
-            )
             handleCaptureClick(
                 context = context,
                 captureMode = captureMode,
@@ -1382,7 +1281,6 @@ CameraPreviewContent(
                 lensFacing = lensFacing,
                 cachedFaces = emptyList(),
                 beautyStrategy = beautyStrategy,
-                gpupixelProvider = provider,
                 onRecordingChanged = { updated -> recording = updated },
                 onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
             )

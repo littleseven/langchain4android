@@ -132,7 +132,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     // 美颜引擎模块
     implementation(project(":beauty-engine"))
-    implementation(project(":gpupixel"))
+    // GPUPixel 已移除，全部能力由自研引擎提供
 
     "ksp"(libs.androidx.room.compiler)
     "ksp"(libs.moshi.kotlin.codegen)

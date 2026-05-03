@@ -366,7 +366,7 @@ fun ControlPanel(
  * 每排按屏幕宽度显示6个滤镜项。
  * 点击色调滤镜时自动清除风格特效，点击风格特效时自动清除色调滤镜。
  *
- * GPUPixel 模式下不显示此选择器。
+ * 美颜模式下不显示此选择器。
  */
 @Composable
 fun UnifiedFilterSelector(
@@ -1796,7 +1796,7 @@ fun ProModeControls(
                             track = { state ->
                                 ProModeTrack(
                                     fraction = state.valueRange.run {
-                                        (beautySettings.gpuContrast - start) / (endInclusive - start)
+                                        (beautySettings.contrast - start) / (endInclusive - start)
                                     }.coerceIn(0f, 1f)
                                 )
                             }
@@ -1821,7 +1821,7 @@ fun ProModeControls(
                             track = { state ->
                                 ProModeTrack(
                                     fraction = state.valueRange.run {
-                                        (beautySettings.gpuSaturation - start) / (endInclusive - start)
+                                        (beautySettings.saturation - start) / (endInclusive - start)
                                     }.coerceIn(0f, 1f)
                                 )
                             }
@@ -1846,7 +1846,7 @@ fun ProModeControls(
                             track = { state ->
                                 ProModeTrack(
                                     fraction = state.valueRange.run {
-                                        (beautySettings.gpuWhiteBalance - start) / (endInclusive - start)
+                                        (beautySettings.temperature - start) / (endInclusive - start)
                                     }.coerceIn(0f, 1f)
                                 )
                             }

@@ -112,7 +112,6 @@ fun MediaPager(
     var show468Points by remember { mutableStateOf(true) }
     var showBigBeauty106 by remember { mutableStateOf(true) }
     var showInsightFace106 by remember { mutableStateOf(true) }
-    var showGpuPixel106 by remember { mutableStateOf(true) }
     var currentPageZoomed by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -200,19 +199,16 @@ fun MediaPager(
                 state = landmarkState,
                 show468Points = show468Points,
                 showBigBeauty106 = showBigBeauty106,
-                showInsightFace106 = showInsightFace106,
-                showGpuPixel106 = showGpuPixel106
+                showInsightFace106 = showInsightFace106
             )
             FaceLandmarkControlBar(
                 state = landmarkState,
                 show468Points = show468Points,
                 showBigBeauty106 = showBigBeauty106,
                 showInsightFace106 = showInsightFace106,
-                showGpuPixel106 = showGpuPixel106,
                 onToggle468Points = { show468Points = !show468Points },
                 onToggleBigBeauty106 = { showBigBeauty106 = !showBigBeauty106 },
                 onToggleInsightFace106 = { showInsightFace106 = !showInsightFace106 },
-                onToggleGpuPixel106 = { showGpuPixel106 = !showGpuPixel106 },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
