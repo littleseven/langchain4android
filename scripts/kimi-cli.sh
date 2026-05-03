@@ -41,7 +41,7 @@ kclean() {
 # 安装调试 APK 到设备
 kinstall() {
     echo "📱 安装调试 APK..."
-    adb install -r app/build/outputs/apk/debug/app-debug.apk
+    adb install -r app/build/outputs/apk/debug/picme-debug.apk
 }
 
 # 查看日志
