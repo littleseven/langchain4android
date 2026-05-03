@@ -133,18 +133,14 @@ core/image/ → domain model（拍照后处理，与实时预览隔离）
 
 ### 常用命令
 
+完整命令列表见 [`DEVELOPMENT.md`](DEVELOPMENT.md)。
+
 ```bash
 # 编译 Debug 包
 ./gradlew assembleDebug
 
 # JVM 单元测试（无需设备）
 ./gradlew :app:testDebugUnitTest
-
-# 仅编译单元测试（快速校验）
-./gradlew :app:compileDebugUnitTestKotlin
-
-# androidTest 编译检查（无设备场景）
-./gradlew :app:compileDebugAndroidTestKotlin
 
 # 仪器测试（需连接设备或模拟器）
 ./gradlew :app:connectedDebugAndroidTest
@@ -190,6 +186,8 @@ core/image/ → domain model（拍照后处理，与实时预览隔离）
 | `PRODUCT.md` | 产品需求规格说明书（SSOT，What） |
 | `docs/FEATURES.md` | 功能交互规范（How） |
 | `AGENTS.md` | Agent 协作治理规范（顶层） |
+| `AI_TOOLS.md` | AI 工具配置索引（kimi-cli / Lingma / OpenClaw） |
+| `DEVELOPMENT.md` | 通用开发指南（构建、调试、IDE、发布） |
 | `docs/BIG_BEAUTY_TECH_SPEC.md` | 大美丽渲染链路、容灾、冷却恢复 |
 | `docs/CAMERA_PREVIEW_TECH_SPEC.md` | 相机预览技术规范 |
 | `docs/BEAUTY_ENGINE_FALLBACK.md` | 容灾降级统一说明 |

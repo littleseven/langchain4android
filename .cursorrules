@@ -53,3 +53,4 @@
 2. 根目录 `AGENTS.md`（全局治理）
 3. `.kimi/AGENTS.md`（kimi-cli 专用）
 4. `.cursorrules`（通用项目规范）
+5. `DEVELOPMENT.md`（开发环境与实践）
