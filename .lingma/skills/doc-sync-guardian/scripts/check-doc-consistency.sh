@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../.." && pwd)"
 
 echo "🔍 开始文档一致性检查..."
 echo "📁 项目根目录: $PROJECT_ROOT"
