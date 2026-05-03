@@ -38,6 +38,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# Quality check output
+output_quality_check/
+
 # Android Studio local configuration
 .gradle/
 .idea/
