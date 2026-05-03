@@ -1,28 +1,24 @@
-# AGENTS.md — OpenClaw 配置
+# AGENTS.md — OpenClaw 运行时配置
 
-## 角色定义
+## 与项目规范的关系
 
-本配置继承项目根目录的 `AGENTS.md` 规范。
+本文件**不重复**项目通用规范，仅声明 OpenClaw / kimi-cli 的**运行时差异**。
 
-### 与项目 AGENTS.md 的关系
-- 项目根目录 `AGENTS.md`: 顶层治理文档（跨模块通用规则）
-- 本文件: OpenClaw 运行时配置（工具、快捷方式）
+> **通用规范（唯一事实来源）**：`../../AGENTS.md`（项目根目录）  
+> **交互细节**：`../../docs/FEATURES.md`  
+> **技术规格**：`../../docs/AGENTS_SPEC.md`  
 
 ## kimi-cli 使用方式
 
 ### 启动会话
+
 ```bash
-# 进入项目目录
 cd ~/AndroidStudioProjects/PicMe
-
-# 启动交互式会话
 kimi-cli chat
-
-# 或使用项目脚本
-./kimi-cli.sh
 ```
 
 ### Agent 团队指令（自然语言）
+
 在 kimi-cli 中直接发送以下指令：
 
 | 指令 | 作用 |
@@ -33,6 +29,7 @@ kimi-cli chat
 | `执行吧` | RD-Review 闭环直至完成 |
 
 ### kimi-cli 内置命令
+
 输入 `/` 查看所有可用命令。常用命令包括：
 
 ```
@@ -41,12 +38,9 @@ kimi-cli chat
 /help           # 查看帮助
 ```
 
-> **注意**：代码生成、重构、构建等任务请直接使用自然语言描述，Agent 团队会协同完成。
-
 ## 工作模式
 
-### 自动执行模式
-- 默认启用
+### 自动执行模式（默认）
 - AI 自动推进: CO → PM → RD → CR → QA
 - 适用于: 常规功能开发、Bug 修复
 
@@ -54,35 +48,6 @@ kimi-cli chat
 - 需显式声明 "保守执行"
 - 关键节点等待确认
 - 适用于: 架构变更、数据库迁移、重大重构
-
-## 文件编辑规范
-
-### 代码修改原则
-1. **原子化修改**: 每次只改一个关注点
-2. **编译通过**: 修改后必须能编译
-3. **文档同步**: 改代码同时更新相关文档
-4. **I18N 同步**: 新字符串必须三语言化
-
-### 禁止操作
-- 禁止修改 `.git/` 目录
-- 禁止修改他人未提交的代码
-- 禁止删除没有备份的重要文件
-- 禁止提交包含敏感信息的代码
-
-## 质量门
-
-### 提交前检查
-- [ ] `./gradlew assembleDebug` 通过
-- [ ] 无硬编码字符串
-- [ ] 三语言已同步
-- [ ] 日志标签规范
-- [ ] 无通配符导入
-
-### 代码审查清单
-- [ ] 符合 MVVM 架构
-- [ ] 遵循 Clean Architecture 分层
-- [ ] 隐私红线未触碰（100% 本地处理）
-- [ ] 性能基准满足
 
 ## 外部工具集成
 
@@ -96,38 +61,38 @@ kimi-cli chat
 
 ### 灵码 (Lingma)
 - IDE 内 AI 辅助
-- 快捷键: Cmd+Shift+L
-
-### kimi-cli 集成
-- **启动**: 在项目目录下运行 `kimi-cli chat`
-- **交互**: 发送自然语言指令，Agent 团队自动响应
-- **查看命令**: 输入 `/` 列出所有内置命令
+- 快捷键: `Ctrl+Shift+L`（Windows/Linux）或 `Cmd+Shift+L`（macOS）
 
 ## Skills 配置
 
-项目采用统一的 Skills 目录结构，同时支持 Lingma 和 OpenClaw/kimi-cli。
+项目采用统一的 Skills 目录结构，同时支持 Lingma 和 OpenClaw / kimi-cli。
 
 ### 目录结构
-```
-.lingma/skills/       # Lingma 原生 Skills 目录
-.openclaw/skills/     # OpenClaw Skills 目录（通过符号链接指向 .lingma）
+
+```text
+.lingma/skills/       # Lingma 原生 Skills 目录（唯一事实来源）
+.openclaw/skills/     # OpenClaw Skills 目录（符号链接指向 .lingma/skills/）
 ```
 
 ### 可用 Skills
+
 | Skill | 用途 |
 |-------|------|
-| `adb-bot` | ADB 自动化控制与调试（拍照、截屏、日志分析） |
+| `adb-bot` | ADB 自动化控制与调试 |
 | `android-build-debug` | Android 编译、安装、日志调试流程 |
+| `av-gl-expert` | 音视频与 OpenGL 渲染专家 |
+| `coordinate-system-standard` | 坐标系规范化 |
+| `doc-sync-guardian` | 文档一致性守护 |
 | `gpupixel-porting` | GPUPixel 算法移植规范 |
+| `image-quality-checker` | 图片质量检查 |
 | `mediapipe-landmark-mapping` | MediaPipe 关键点映射规范 |
-| `shader-debug` | OpenGL ES Shader 调试技巧 |
 
 ### 使用方式
+
 - **Lingma**: 自动加载 `.lingma/skills/` 下的 Skills
-- **OpenClaw/kimi-cli**: 自动加载 `.openclaw/skills/` 下的 Skills
+- **OpenClaw / kimi-cli**: 自动加载 `.openclaw/skills/` 下的 Skills
 - **同步机制**: `.openclaw/skills/` 通过符号链接指向 `.lingma/skills/`，确保内容一致
 
 ---
 
-*本文件与项目根目录 AGENTS.md 配合使用*
-*实际可用命令以 `kimi-cli` 内置命令为准，输入 `/` 查看所有可用命令*
+*本文件与项目根目录 AGENTS.md 配合使用。实际可用命令以 `kimi-cli` 内置命令为准。*

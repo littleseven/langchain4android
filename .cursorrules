@@ -30,3 +30,23 @@
 ## 构建系统
 - 使用 Version Catalog (`libs.versions.toml`) 进行依赖管理。
 - 目标 SDK：35，最低 SDK：24。
+
+## AI 工具兼容性声明
+
+本项目同时使用多款 AI 辅助工具，各工具配置位置如下：
+
+| 工具 | 配置位置 | 用途 |
+|------|----------|------|
+| **kimi-cli** | `.kimi/AGENTS.md` + `.cursorrules` | 终端交互式 AI 开发 |
+| **Lingma** | `.lingma/skills/` | IDE 内代码补全与问答 |
+| **OpenClaw** | `.openclaw/workspace/` | 工作区上下文与角色定义 |
+
+### Skills 统一来源
+- `.lingma/skills/` 是项目 Skills 的**唯一事实来源**。
+- `.openclaw/skills/` 通过符号链接指向 `.lingma/skills/`，确保 Lingma 与 OpenClaw / kimi-cli 共用同一套技能定义。
+
+### 规范优先级
+1. 模块级 `AGENTS.md`（最近层级优先）
+2. 根目录 `AGENTS.md`（全局治理）
+3. `.kimi/AGENTS.md`（kimi-cli 专用）
+4. `.cursorrules`（通用项目规范）
