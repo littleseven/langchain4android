@@ -88,8 +88,7 @@ Kimi AI 助手的命令行工具。AI 工具配置详见 [`AI_TOOLS.md`](../AI_T
 
 | 脚本 | 说明 | 用法 |
 |------|------|------|
-| `kimi-cli.sh` | Kimi CLI 快捷命令脚本 | `source scripts/kimi-cli.sh` |
-| `start-kimi-cli.sh` | 启动 Kimi CLI（项目引导） | `./scripts/start-kimi-cli.sh` |
+| `kimi-cli.sh` | Kimi CLI 快捷命令脚本（含项目引导） | `source scripts/kimi-cli.sh` |
 
 ---
 
