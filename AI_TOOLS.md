@@ -109,6 +109,13 @@ cd ~/AndroidStudioProjects/PicMe && kimi-cli chat
 
 > 完整开发指南（环境配置、构建命令、调试技巧、发布流程）：`DEVELOPMENT.md`
 
+## IDE 内置 AI 助手
+
+| 助手 | 配置位置 | 状态 | 备注 |
+|------|----------|------|------|
+| **Android Studio Studio Bot** | `.idea/studiobot.xml` | ⚠️ 已启用上下文共享 | 当前配置为 `shareContext="OptedIn"`。本项目代码涉及人脸识别、图像处理等敏感算法，如需严格符合 `[PRIVACY]` 红线（100% 本地），建议改为 `OptedOut`。 |
+| **Lingma（通义灵码）** | `.lingma/skills/` | ✅ 已配置 | IDE 内代码补全与问答，Skills 本地化加载 |
+
 ## 兼容性变更记录
 
 | 日期 | 变更 | 影响 |
@@ -118,3 +125,5 @@ cd ~/AndroidStudioProjects/PicMe && kimi-cli chat
 | 2026-05-03 | 删除断裂的 `shader-debug` 符号链接 | 消除 OpenClaw 加载错误 |
 | 2026-05-03 | 精简 `agents/README.md` | 避免与根 `AGENTS.md` 重复 |
 | 2026-05-03 | 修正 `scripts/kimi-cli.sh` APK 路径 | `app-debug` → `picme-debug` |
+| 2026-05-03 | 新增 `DEVELOPMENT.md` | 通用开发命令从 OpenClaw 独占迁移为全平台共用 |
+| 2026-05-03 | 新增 `AI_TOOLS.md` | 统一索引所有 AI 工具配置位置 |

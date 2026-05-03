@@ -1,7 +1,7 @@
 # PicMe AGENTS.md 文档编写规范
 
-**版本**: 1.1
-**最后更新**: 2026-04-06
+**版本**: 1.2
+**最后更新**: 2026-05-03
 **维护者**: [CR] 规范守护者
 
 ---
@@ -20,7 +20,14 @@ PRODUCT.md (产品需求规格说明书 - What)
 FEATURES.md (功能交互细节规范 - How)
     ↓ 指导
 AGENTS.md (技术实现规范 - Implementation)
+
+AI_TOOLS.md (AI 工具配置索引)
+DEVELOPMENT.md (通用开发指南)
 ```
+
+> **新增文档说明**（2026-05）：
+> - `AI_TOOLS.md`：统一索引所有 AI 辅助工具的配置位置（kimi-cli / Lingma / OpenClaw / Cursor），与主文档体系并列，不作为产品或技术规范的上下级。
+> - `DEVELOPMENT.md`：通用开发环境配置与命令速查，面向人类开发者与所有 AI 工具。
 
 ### 1.3 核心原则
 
@@ -48,6 +55,8 @@ AGENTS.md (技术实现规范 - Implementation)
 - `How`（交互/体验）-> `docs/FEATURES.md`
 - `Implementation`（代码/架构/检查清单）-> 模块 `AGENTS.md`
 - `Deep Dive`（专项机制）-> 技术规范文档
+- `AI Config`（工具配置/兼容性）-> `AI_TOOLS.md`
+- `Dev Guide`（环境/构建/调试）-> `DEVELOPMENT.md`
 
 ---
 
