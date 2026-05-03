@@ -1,7 +1,6 @@
 package com.picme.core.image
 
 import android.graphics.Bitmap
-import com.google.mlkit.vision.face.Face
 import com.picme.domain.model.BeautySettings
 
 /**
@@ -11,13 +10,13 @@ import com.picme.domain.model.BeautySettings
  * ⚠️ 模块化注意（Phase 2）：
  * 此接口当前位于 core/image 层，引用了两个平台级依赖：
  * 1. [android.graphics.Bitmap] — Android 平台类
- * 2. [com.google.mlkit.vision.face.Face] — ML Kit SDK 类
+ * 2. [com.picme.core.image.Face] — 本地人脸数据类（已替代 ML Kit）
  *
  * 迁移到 beauty-core 模块时的建议方案：
  * a) 将 Bitmap 替换为自定义 ImageBuffer 数据类（纯 Kotlin），
  *    由具体引擎实现负责在 Android 层做 Bitmap <-> ImageBuffer 转换
  * b) 将 Face 替换为 domain 层自定义的 FaceInfo 数据类，
- *    避免 beauty-core 直接依赖 ML Kit SDK
+ *    避免 beauty-core 直接依赖外部人脸检测 SDK
  * c) 此接口可先整体保留在 app 模块，待 ImageBuffer/FaceInfo 完成后再迁移
  */
 interface BeautyProcessor {

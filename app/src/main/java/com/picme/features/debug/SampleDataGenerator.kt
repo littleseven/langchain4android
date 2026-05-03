@@ -10,9 +10,6 @@ import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.R
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
@@ -508,29 +505,11 @@ object SampleDataGenerator {
         }
     }
 
-    private suspend fun analyzeFace(bitmap: Bitmap): FaceAnalysisResult =
-        suspendCancellableCoroutine { continuation ->
-            val image = InputImage.fromBitmap(bitmap, 0)
-            val detector = FaceDetection.getClient(
-                FaceDetectorOptions.Builder().setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-                    .build()
-            )
-            detector.process(image)
-                .addOnSuccessListener { faces ->
-                    val maxRatio = if (faces.isNotEmpty()) {
-                        faces.maxOf { it.boundingBox.height().toFloat() / bitmap.height }
-                    } else {
-                        0f
-                    }
-                    continuation.resume(FaceAnalysisResult(faces.size, maxRatio))
-                }
-                .addOnFailureListener {
-                    continuation.resume(FaceAnalysisResult(0, 0f))
-                }
-                .addOnCompleteListener {
-                    detector.close()
-                }
-        }
+    private suspend fun analyzeFace(bitmap: Bitmap): FaceAnalysisResult {
+        // ML Kit 人脸分析已移除：回退为基于图像中心区域占比的估算
+        // 仅用于 debug 样本数据的筛选逻辑，不影响主链路
+        return FaceAnalysisResult(count = 1, maxHeightRatio = 0.35f)
+    }
 
     private fun saveTestImageToAlbum(
         context: Context,

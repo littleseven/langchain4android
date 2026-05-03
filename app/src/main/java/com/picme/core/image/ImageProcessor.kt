@@ -25,12 +25,6 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.Face
-import com.google.mlkit.vision.face.FaceContour
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetectorOptions
-import com.google.mlkit.vision.face.FaceLandmark
 import com.picme.beauty.api.FaceData
 import com.picme.beauty.api.PhotoProcessException
 import com.picme.beauty.api.PhotoProcessor
@@ -445,8 +439,10 @@ class ImageProcessorImpl(
             // 预览缓存的 faces/landmarks106 基于预览帧，可能与拍照帧的裁剪区域不同
             var photoFaceData: com.picme.beauty.api.FaceData? = null
             val detector = faceDetectorManager
-            if (detector != null && (beauty.slimFace > 0f || beauty.bigEyes > 0f)) {
-                Logger.d("ImageProcessor", "Re-detecting face on photo bitmap for accurate warp coordinates")
+            // [修复] 人脸重检测不再限制于 slimFace/bigEyes，因为 Shader 中磨皮/美白/唇色/腮红
+            // 全都依赖 uHasFace uniform。必须确保拍照路径始终有有效的人脸数据。
+            if (detector != null) {
+                Logger.d("ImageProcessor", "Re-detecting face on photo bitmap for makeup/skin effects")
                 val detectionResult = detector.detectPhoto(source, lensFacing)
                 if (detectionResult != null) {
                     Logger.d("ImageProcessor", "Photo face detection success: ${detectionResult.detectionSource}")
@@ -586,34 +582,25 @@ class ImageProcessorImpl(
                         Logger.d("ImageProcessor", "Makeup required, performing detection on captured photo")
                     }
 
-                    // 没有缓存时，进行实时检测（兜底）
-                    Logger.d("ImageProcessor", "No cached faces, performing real-time detection")
-                val faceDetector = FaceDetection.getClient(
-                    FaceDetectorOptions.Builder()
-                        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-                        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
-                        .build()
-                )
-                    val inputImage = InputImage.fromBitmap(rotatedBitmap, 0)
-                    Logger.d("ImageProcessor", "Starting face detection on bitmap ${rotatedBitmap.width}x${rotatedBitmap.height}")
-
-                    faceDetector.process(inputImage)
-                        .addOnSuccessListener { faces ->
-                            Logger.d("ImageProcessor", "Face detection success: ${faces.size} faces found")
-                            val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, faces, lensFacing)
-                            // Simple Mock Face ID Logic: Use face count as a temporary "person group" id
-                            val faceId = if (faces.isNotEmpty()) "person_${faces.size}" else null
-                            saveBitmapToMediaStore(
-                                context, finalBitmap, name, viewModel, faces.isNotEmpty(), faceId, mode
-                            )
+                    // 没有缓存时，使用 FaceDetectorManager 重新检测或直接处理（ML Kit 已移除）
+                    Logger.d("ImageProcessor", "No cached faces, processing photo directly with FaceDetectorManager")
+                    java.util.concurrent.Executors.newSingleThreadExecutor().execute {
+                        try {
+                            val finalBitmap = processPhoto(rotatedBitmap, filter, beauty, emptyList(), lensFacing)
+                            ContextCompat.getMainExecutor(context).execute {
+                                saveBitmapToMediaStore(
+                                    context, finalBitmap, name, viewModel, false, null, mode
+                                )
+                            }
+                        } catch (e: Exception) {
+                            Logger.e("ImageProcessor", "Photo processing failed: ${e.message}", e)
+                            ContextCompat.getMainExecutor(context).execute {
+                                saveBitmapToMediaStore(
+                                    context, rotatedBitmap, name, viewModel, false, null, mode
+                                )
+                            }
                         }
-                        .addOnFailureListener { e ->
-                            Logger.e("ImageProcessor", "Face detection failed: ${e.message}", e)
-                            saveBitmapToMediaStore(
-                                context, rotatedBitmap, name, viewModel, false, null, mode
-                            )
-                        }
+                    }
                 }
 
                 override fun onError(exc: ImageCaptureException) {

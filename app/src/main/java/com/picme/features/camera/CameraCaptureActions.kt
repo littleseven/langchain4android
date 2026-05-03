@@ -10,7 +10,7 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.face.Face
+import com.picme.core.image.Face
 import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.image.ImageProcessor
 import com.picme.domain.model.BeautySettings

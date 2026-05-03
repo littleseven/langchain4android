@@ -9,11 +9,6 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Rect
 import androidx.camera.core.CameraSelector
-import com.google.android.gms.tasks.Tasks
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.face.FaceDetection
-import com.google.mlkit.vision.face.FaceDetector
-import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.picme.core.common.Logger
 import java.io.File
 import java.nio.FloatBuffer
@@ -41,11 +36,7 @@ class InsightFace2D106Detector(context: Context) {
 
     private val appContext = context.applicationContext
     private val ortEnvironment: OrtEnvironment = OrtEnvironment.getEnvironment()
-    private val faceDetector: FaceDetector = FaceDetection.getClient(
-        FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .build()
-    )
+
 
     private var ortSession: OrtSession? = null
     private var inputName: String? = null
@@ -58,11 +49,11 @@ class InsightFace2D106Detector(context: Context) {
 
     fun isReady(): Boolean = ortSession != null
 
-    fun detect(bitmap: Bitmap, lensFacing: Int): FloatArray? {
+    fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.Rect? = null): FloatArray? {
         val session = ortSession ?: return null
         return try {
-            val faceBounds = detectLargestFaceBounds(bitmap) ?: return null
-            val crop = buildLooseFaceCrop(bitmap, faceBounds) ?: return null
+            val bounds = faceBounds ?: detectLargestFaceBounds(bitmap) ?: return null
+            val crop = buildLooseFaceCrop(bitmap, bounds) ?: return null
             val rawOutput = runInference(session, crop.bitmap)
             crop.bitmap.recycle()
 
@@ -89,7 +80,6 @@ class InsightFace2D106Detector(context: Context) {
     }
 
     fun release() {
-        runCatching { faceDetector.close() }
         runCatching { ortSession?.close() }
         ortSession = null
         inputName = null
@@ -129,11 +119,16 @@ class InsightFace2D106Detector(context: Context) {
     }
 
     private fun detectLargestFaceBounds(bitmap: Bitmap): Rect? {
-        val inputImage = InputImage.fromBitmap(bitmap, 0)
-        val faces = Tasks.await(faceDetector.process(inputImage))
-        val largestFace = faces.maxByOrNull { face -> face.boundingBox.width() * face.boundingBox.height() }
-            ?: return null
-        return largestFace.boundingBox
+        // ML Kit 人脸框检测已移除：回退为使用整图中心区域作为人脸 ROI
+        // InsightFace 2d106det.onnx 本身对居中人脸鲁棒性较好
+        val paddingX = (bitmap.width * 0.05f).toInt().coerceAtLeast(0)
+        val paddingY = (bitmap.height * 0.05f).toInt().coerceAtLeast(0)
+        return Rect(
+            paddingX,
+            paddingY,
+            (bitmap.width - paddingX).coerceAtLeast(paddingX + 1),
+            (bitmap.height - paddingY).coerceAtLeast(paddingY + 1)
+        )
     }
 
     private fun buildLooseFaceCrop(bitmap: Bitmap, faceBounds: Rect): LooseCrop? {
