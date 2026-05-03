@@ -92,7 +92,10 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             
             // 确保 EGL 上下文在当前线程激活（关键修复：线程池可能导致线程切换）
             if (!eglCore.makeCurrent(eglSurface, eglContext)) {
-                throw PhotoProcessException("Failed to rebind EGL context in current thread")
+                Log.w(TAG, "Failed to rebind EGL context, reinitializing...")
+                // 重置状态并重新初始化
+                isEglInitialized = false
+                ensureEglInitialized()
             }
 
             // 2. 检查纹理尺寸限制（必须在 EGL 上下文绑定后调用）
