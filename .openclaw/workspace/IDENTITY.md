@@ -27,7 +27,7 @@
 
 ## 项目文档索引
 - 产品需求: `PRODUCT.md`
-- AI Agent 规范: `AGENTS.md`
+- AI Agent 规范: `AGENTS.md`（根目录） / `.kimi/AGENTS.md`（kimi-cli 专用）
 - 交互规范: `docs/FEATURES.md`
 - 技术规范: `docs/AGENTS_SPEC.md`
 - 相机技术: `docs/CAMERA_PREVIEW_TECH_SPEC.md`
@@ -56,6 +56,10 @@ cd ~/AndroidStudioProjects/PicMe
 ### 环境要求
 - **kimi-cli**: 已安装 (`npm install -g @kimi/kimi-cli`)
 - **项目路径**: `~/AndroidStudioProjects/PicMe`
+
+### kimi-cli 项目配置
+- **项目级规范**: `.kimi/AGENTS.md`
+- **项目级 Skills**: `.kimi/skills/`
 
 ### 远程开发配置
 ```bash
