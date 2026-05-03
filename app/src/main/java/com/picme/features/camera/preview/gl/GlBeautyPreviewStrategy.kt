@@ -1,5 +1,6 @@
 package com.picme.features.camera.preview.gl
 
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
@@ -15,13 +16,15 @@ import com.picme.features.camera.preview.core.FaceWarpParams
 internal class GlBeautyPreviewStrategy(
     private val previewView: PreviewView,
     private val glBeautyPreviewProvider: BeautyPreviewEngine,
-    private val onWarmUpFallback: (String) -> Unit
+    private val onWarmUpFallback: (String) -> Unit,
+    private val lensFacing: Int = CameraSelector.LENS_FACING_BACK
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY
 
     override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
         return try {
             glBeautyPreviewProvider.initialize()
+            glBeautyPreviewProvider.setIsFrontCamera(lensFacing == CameraSelector.LENS_FACING_FRONT)
             glBeautyPreviewProvider.setScaleMode(isFillCenter = aspectRatio == AspectRatio.RATIO_FULL)
 
             val mainExecutor = ContextCompat.getMainExecutor(previewView.context)
@@ -34,6 +37,9 @@ internal class GlBeautyPreviewStrategy(
                 val previewSurface = glBeautyPreviewProvider.createPreviewSurface()
                 request.provideSurface(previewSurface, mainExecutor) { result ->
                     Logger.d("Camera", "GL beauty surface request completed: $result")
+                    // [关键修复] SurfaceRequest 完成后必须释放 Surface，让 BufferQueue 生产者端断开，
+                    // 否则下次 createPreviewSurface() 返回的 Surface 无法重新建立生产者连接，导致画面静止
+                    previewSurface.release()
                 }
             }
 

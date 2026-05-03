@@ -7,10 +7,15 @@ precision highp float;
 
 uniform samplerExternalOES uCameraTexture;
 uniform mat4 uTextureTransform;
+uniform float uIsFrontCamera;
 
 varying vec2 vTextureCoord;
 
 void main() {
-    vec2 uv = (uTextureTransform * vec4(vTextureCoord, 0.0, 1.0)).xy;
+    vec2 coord = vTextureCoord;
+    if (uIsFrontCamera > 0.5) {
+        coord.x = 1.0 - coord.x;
+    }
+    vec2 uv = (uTextureTransform * vec4(coord, 0.0, 1.0)).xy;
     gl_FragColor = texture2D(uCameraTexture, uv);
 }

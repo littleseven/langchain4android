@@ -88,6 +88,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var useGpupixelWarp: Int = 1  // 默认启用GPUPixel风格warp
     private var viewportWidth: Int = 0
     private var viewportHeight: Int = 0
+    private var isFrontCamera: Int = 0
 
     private var renderFrameCount: Long = 0
     private var lastErrorCategory: String = ""
@@ -432,6 +433,10 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      */
     fun setUseGpupixelWarp(enabled: Boolean) {
         useGpupixelWarp = if (enabled) 1 else 0
+    }
+
+    fun setIsFrontCamera(enabled: Boolean) {
+        isFrontCamera = if (enabled) 1 else 0
     }
 
     fun updateAdvancedParams(warmth: Float, contrast: Float) {
@@ -1137,6 +1142,10 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                     val transformLoc = copyProgram.getUniformLocation("uTextureTransform")
                     if (transformLoc >= 0) {
                         GLES20.glUniformMatrix4fv(transformLoc, 1, false, textureMatrix, 0)
+                    }
+                    val frontLoc = copyProgram.getUniformLocation("uIsFrontCamera")
+                    if (frontLoc >= 0) {
+                        GLES20.glUniform1f(frontLoc, isFrontCamera.toFloat())
                     }
                 }
             )

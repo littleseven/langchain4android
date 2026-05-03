@@ -59,7 +59,6 @@ class GlBeautyPreviewProvider(
         repeat(120) { attemptIndex ->
             val surface = view.getSurfaceForCamera()
             if (surface != null && surface.isValid) {
-                previewSurface?.takeIf { it !== surface }?.release()
                 previewSurface = surface
                 Log.i(TAG, "GL beauty preview surface ready on attempt=${attemptIndex + 1}")
                 return surface
@@ -148,7 +147,11 @@ class GlBeautyPreviewProvider(
     }
 
     override fun isReady(): Boolean {
-        return isInitialized && (previewSurface?.isValid == true)
+        // [关键修复] 不再检查 previewSurface?.isValid。
+        // SurfaceRequest 完成后 previewSurface 会被释放，isValid 变为 false。
+        // 若此处检查 isValid，会导致 useProviderRenderView 被错误回退。
+        // createPreviewSurface() 会在 bindPreview 时重新创建新的 Surface。
+        return isInitialized
     }
 
     override fun getView(): BeautyPreviewView = beautyPreviewView
@@ -164,6 +167,10 @@ class GlBeautyPreviewProvider(
     override fun setScaleMode(isFillCenter: Boolean) {
         this.isFillCenter = isFillCenter
         beautyPreviewView?.setScaleMode(isFillCenter)
+    }
+
+    override fun setIsFrontCamera(isFront: Boolean) {
+        beautyPreviewView?.setIsFrontCamera(isFront)
     }
 
     override fun getPerfStats(): BeautyPerfStats = beautyPreviewView?.getPerfStats() ?: BeautyPerfStats.EMPTY

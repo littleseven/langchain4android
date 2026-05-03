@@ -48,6 +48,9 @@ class CameraPreviewRenderer(private val context: Context) {
     @Volatile
     private var isFillCenter: Boolean = true
 
+    @Volatile
+    var isFrontCamera: Boolean = false
+
     private var renderView: View? = null
 
     @Volatile
@@ -262,6 +265,7 @@ class CameraPreviewRenderer(private val context: Context) {
 
                         beautyRenderer.setExternalTextureId(textureId)
                         beautyRenderer.setTextureTransform(transformMatrix)
+                        beautyRenderer.setIsFrontCamera(isFrontCamera)
 
                         val outputWidth =
                             renderView?.width?.takeIf { size -> size > 0 } ?: DEFAULT_WIDTH
@@ -459,6 +463,9 @@ class CameraPreviewRenderer(private val context: Context) {
         val preTransformUvX = ((pixelX - currentViewportX) / viewportW).coerceIn(0f, 1f)
         val preTransformUvY = (1f - ((pixelY - currentViewportY) / viewportH)).coerceIn(0f, 1f)
 
+        // 前置摄像头：在应用 textureMatrix 之前对标准 UV 做水平镜像
+        val mirroredX = if (isFrontCamera) 1f - preTransformUvX else preTransformUvX
+
         val transformed = FloatArray(4)
         val matrixCopy = FloatArray(16)
         synchronized(textureMatrixLock) {
@@ -467,7 +474,7 @@ class CameraPreviewRenderer(private val context: Context) {
         Matrix.multiplyMV(
             transformed, 0,
             matrixCopy, 0,
-            floatArrayOf(preTransformUvX, preTransformUvY, 0f, 1f), 0
+            floatArrayOf(mirroredX, preTransformUvY, 0f, 1f), 0
         )
 
         return Pair(transformed[0].coerceIn(0f, 1f), transformed[1].coerceIn(0f, 1f))
@@ -571,6 +578,9 @@ class CameraPreviewRenderer(private val context: Context) {
         val flippedY = 1.0f - y.coerceIn(0f, 1f)
         val normalizedX = x.coerceIn(0f, 1f)
 
+        // 前置摄像头：在应用 textureMatrix 之前对标准 UV 做水平镜像
+        val mirroredX = if (isFrontCamera) 1.0f - normalizedX else normalizedX
+
         // 应用 texture transform matrix（与 mapViewNormalizedToUv 一致）
         val transformed = FloatArray(4)
         val matrixCopy = FloatArray(16)
@@ -580,7 +590,7 @@ class CameraPreviewRenderer(private val context: Context) {
         Matrix.multiplyMV(
             transformed, 0,
             matrixCopy, 0,
-            floatArrayOf(normalizedX, flippedY, 0f, 1f), 0
+            floatArrayOf(mirroredX, flippedY, 0f, 1f), 0
         )
 
         return Pair(transformed[0].coerceIn(0f, 1f), transformed[1].coerceIn(0f, 1f))
