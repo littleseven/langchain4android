@@ -87,11 +87,20 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         Log.d(TAG, "process START: bitmap=${bitmap.width}x${bitmap.height}, enabled=${params.enabled}")
 
         try {
-            // 1. 初始化 EGL 环境（如果未初始化）
+            // 1. 初始化 EGL 环境（如果未初始化）并绑定到当前线程
             ensureEglInitialized()
+            
+            // 确保 EGL 上下文在当前线程激活（关键修复：线程池可能导致线程切换）
+            if (!eglCore.makeCurrent(eglSurface, eglContext)) {
+                throw PhotoProcessException("Failed to rebind EGL context in current thread")
+            }
 
-            // 2. 检查纹理尺寸限制
+            // 2. 检查纹理尺寸限制（必须在 EGL 上下文绑定后调用）
             val maxTextureSize = getMaxTextureSize()
+            Log.d(TAG, "Max texture size: $maxTextureSize (thread: ${Thread.currentThread().name})")
+            if (maxTextureSize <= 0) {
+                throw PhotoProcessException("Failed to query GL_MAX_TEXTURE_SIZE (returned $maxTextureSize)")
+            }
             if (bitmap.width > maxTextureSize || bitmap.height > maxTextureSize) {
                 throw PhotoProcessException(
                     "Bitmap size ${bitmap.width}x${bitmap.height} exceeds max texture size $maxTextureSize"
@@ -132,7 +141,10 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
      * 初始化 EGL 环境（Pbuffer Surface）
      */
     private fun ensureEglInitialized() {
-        if (isEglInitialized) return
+        if (isEglInitialized) {
+            Log.d(TAG, "EGL already initialized, reusing context")
+            return
+        }
 
         Log.d(TAG, "Initializing EGL for photo processing")
 
@@ -151,12 +163,19 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             throw PhotoProcessException("EGL Pbuffer surface creation failed")
         }
 
-        if (!eglCore.makeCurrent(eglSurface, eglContext)) {
+        val makeCurrentResult = eglCore.makeCurrent(eglSurface, eglContext)
+        if (!makeCurrentResult) {
             throw PhotoProcessException("eglMakeCurrent failed")
         }
 
+        // 验证上下文绑定成功
+        val glError = GLES20.glGetError()
+        if (glError != GLES20.GL_NO_ERROR) {
+            throw PhotoProcessException("GL error after eglMakeCurrent: $glError")
+        }
+
         isEglInitialized = true
-        Log.d(TAG, "EGL initialized for photo processing")
+        Log.d(TAG, "EGL initialized successfully for photo processing")
     }
 
     /**
@@ -377,7 +396,14 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         // 使用 BeautyRenderer 的 2D 主 Shader 直接渲染
         // 输入是 2D 纹理（inputTextureId），输出到 fboId
+        Log.d(TAG, "Before renderMainShaderFromFbo2D: inputTex=$inputTextureId, fbo=$fboId")
         renderer.renderMainShaderFromFbo2D(inputTextureId, width, height)
+
+        // 检查 GL 错误
+        val glError = GLES20.glGetError()
+        if (glError != GLES20.GL_NO_ERROR) {
+            Log.e(TAG, "GL error after renderMainShaderFromFbo2D: $glError")
+        }
 
         // 解绑 FBO
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
@@ -396,14 +422,26 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
      * 直接同步读取
      */
     private fun readPixelsDirect(width: Int, height: Int): Bitmap {
+        // [关键修复] 必须绑定 FBO 才能读取其内容
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
+        
         val buffer = ByteBuffer.allocateDirect(width * height * 4)
         buffer.order(ByteOrder.nativeOrder())
 
         GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buffer)
+        
+        // 检查 GL 错误
+        val glError = GLES20.glGetError()
+        if (glError != GLES20.GL_NO_ERROR) {
+            Log.e(TAG, "GL error in glReadPixels: $glError")
+        }
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         buffer.rewind()
         bitmap.copyPixelsFromBuffer(buffer)
+        
+        // 解绑 FBO
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
 
         return bitmap
     }
