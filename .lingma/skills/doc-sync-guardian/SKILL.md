@@ -1,3 +1,8 @@
+---
+name: doc-sync-guardian
+description: 自动维护 PRODUCT.md → docs/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。Use when checking documentation consistency across product specs, feature docs, and module implementation specs during PicMe project iterations.
+---
+
 # PicMe 文档一致性守护者 (DocSync Guardian)
 
 ## 📋 Skill 概述

@@ -1,3 +1,8 @@
+---
+name: av-gl-expert
+description: PicMe 音视频与 OpenGL 渲染专家。涵盖 CameraX 集成、OpenGL ES 黑屏诊断、Shader 调试、性能优化、人脸关键点坐标映射等。Use when debugging OpenGL rendering issues, CameraX integration problems, shader compilation errors, or performance bottlenecks in the PicMe beauty engine.
+---
+
 # PicMe 音视频与 OpenGL 专家 (AV-GL Expert)
 
 ## 📋 Skill 概述
