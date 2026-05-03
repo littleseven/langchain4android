@@ -379,33 +379,37 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
     /**
      * 执行拍照渲染
      *
-     * 拍照路径专用渲染流程：
-     * - 输入是 2D 纹理（Bitmap 上传），跳过 CopyPass（无需 OES → 2D 转换）
-     * - 直接调用 BeautyRenderer.renderMainShaderFromFbo() 渲染到目标 FBO
-     * - 避免使用 onRender() 中的多 Pass 管线（该管线依赖 OES 外部纹理和屏幕输出）
-     *
-     * 返回输出纹理 ID
+     * 拍照路径专用渲染流程（与预览保持一致）：
+     * 1. 输入是 2D 纹理（Bitmap 上传），跳过 CopyPass（无需 OES → 2D 转换）
+     * 2. 执行 BeautyUnitPass（磨皮+美白+LUT）
+     * 3. 执行 FaceMakeupPass（唇色+腮红）
+     * 4. 执行 MainShader（美型+调色）→ 输出到 FBO
      */
     private fun renderPhoto(renderer: BeautyRenderer, width: Int, height: Int): Int {
         // 设置 viewport
         GLES20.glViewport(0, 0, width, height)
 
+        // [关键修复] 调用完整的渲染管线，确保与预览一致
+        // 这会执行：BeautyUnitPass → FaceMakeupPass → MainShader
+        Log.d(TAG, "Before renderBeautyMultiPass: inputTex=$inputTextureId, fbo=$fboId")
+        
+        // 设置输入纹理 ID（让 BeautyRenderer 从该纹理采样）
+        renderer.setExternalTextureId(inputTextureId)
+        
         // 绑定我们的 FBO 作为渲染目标
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-
+        
         // 清屏
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-
-        // 使用 BeautyRenderer 的 2D 主 Shader 直接渲染
-        // 输入是 2D 纹理（inputTextureId），输出到 fboId
-        Log.d(TAG, "Before renderMainShaderFromFbo2D: inputTex=$inputTextureId, fbo=$fboId")
-        renderer.renderMainShaderFromFbo2D(inputTextureId, width, height)
+        
+        // 执行完整的多 Pass 渲染管线
+        renderer.renderBeautyMultiPass(width, height)
 
         // 检查 GL 错误
         val glError = GLES20.glGetError()
         if (glError != GLES20.GL_NO_ERROR) {
-            Log.e(TAG, "GL error after renderMainShaderFromFbo2D: $glError")
+            Log.e(TAG, "GL error after renderBeautyMultiPass: $glError")
         }
 
         // 解绑 FBO
