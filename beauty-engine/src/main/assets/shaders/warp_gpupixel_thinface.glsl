@@ -28,7 +28,7 @@ vec2 gpupixelCurveWarp(vec2 textureCoord, vec2 originPosition, vec2 targetPositi
     ratio = clamp(ratio, 0.0, 1.0);
     offset = direction * ratio;
 
-    // 反向映射：偏移方向取反（+offset 而不是 -offset）
+    // 反向映射：从输出位置反推输入采样位置
     result = textureCoord + offset;
     return result;
 }

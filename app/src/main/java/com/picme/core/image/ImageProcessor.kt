@@ -80,7 +80,8 @@ interface ImageProcessor {
 
 class ImageProcessorImpl(
     private val beautyProcessor: BeautyProcessor,
-    private val photoProcessor: PhotoProcessor? = null
+    private val photoProcessor: PhotoProcessor? = null,
+    private val faceDetectorManager: com.picme.features.camera.facedetect.FaceDetectorManager? = null
 ) : ImageProcessor {
 
     private fun createFaceMaskBitmap(
@@ -440,12 +441,27 @@ class ImageProcessorImpl(
 
         // 使用协程在后台线程处理
         return java.util.concurrent.Executors.newSingleThreadExecutor().submit<Bitmap> {
+            // [关键修复] 在拍照 Bitmap 上重新检测人脸，确保坐标与照片完全匹配
+            // 预览缓存的 faces/landmarks106 基于预览帧，可能与拍照帧的裁剪区域不同
+            var photoFaceData: com.picme.beauty.api.FaceData? = null
+            val detector = faceDetectorManager
+            if (detector != null && (beauty.slimFace > 0f || beauty.bigEyes > 0f)) {
+                Logger.d("ImageProcessor", "Re-detecting face on photo bitmap for accurate warp coordinates")
+                val detectionResult = detector.detectPhoto(source, lensFacing)
+                if (detectionResult != null) {
+                    Logger.d("ImageProcessor", "Photo face detection success: ${detectionResult.detectionSource}")
+                    photoFaceData = detectionResult.landmarks106.toFaceDataFromLandmarks106(source.width, source.height)
+                } else {
+                    Logger.w("ImageProcessor", "Photo face detection failed, falling back to cached faces")
+                }
+            }
+
             // [GPU路径] 大美丽模式下优先使用 GPU 离屏渲染，确保预览/拍照效果一致
             val gpuProcessor = photoProcessor
             if (gpuProcessor != null) {
                 Logger.d("ImageProcessor", "Trying GPU photo processing path")
                 val params = beauty.toBeautyParams()
-                val faceData = faces.toFaceData(source.width, source.height)
+                val faceData = photoFaceData ?: faces.toFaceData(source.width, source.height)
                 val gpuResult = gpuProcessor.process(source, params, faceData)
                 Logger.d("ImageProcessor", "GPU photo processing succeeded")
 
@@ -772,6 +788,41 @@ class ImageProcessorImpl(
 }
 
 /**
+ * 106点 landmarks → FaceData 转换（用于拍照路径重新检测）
+ */
+private fun FloatArray.toFaceDataFromLandmarks106(imageWidth: Int, imageHeight: Int): FaceData? {
+    if (this.size < 212) return null
+    val warpParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(
+        this, com.picme.features.camera.preview.core.FaceDetectionSource.MEDIAPIPE
+    )
+    return FaceData(
+        faceCenterX = warpParams.faceCenterX,
+        faceCenterY = warpParams.faceCenterY,
+        leftEyeX = warpParams.leftEyeX,
+        leftEyeY = warpParams.leftEyeY,
+        rightEyeX = warpParams.rightEyeX,
+        rightEyeY = warpParams.rightEyeY,
+        mouthCenterX = warpParams.mouthCenterX,
+        mouthCenterY = warpParams.mouthCenterY,
+        mouthLeftX = warpParams.mouthLeftX,
+        mouthLeftY = warpParams.mouthLeftY,
+        mouthRightX = warpParams.mouthRightX,
+        mouthRightY = warpParams.mouthRightY,
+        upperLipCenterX = warpParams.upperLipCenterX,
+        upperLipCenterY = warpParams.upperLipCenterY,
+        lowerLipCenterX = warpParams.lowerLipCenterX,
+        lowerLipCenterY = warpParams.lowerLipCenterY,
+        faceRadius = warpParams.faceRadius,
+        hasFace = true,
+        lipOuterPoints = warpParams.lipOuterContourPoints.map { it.x to it.y },
+        lipInnerPoints = warpParams.lipInnerContourPoints.map { it.x to it.y },
+        leftCheekPoints = warpParams.leftCheekContourPoints.map { it.x to it.y },
+        rightCheekPoints = warpParams.rightCheekContourPoints.map { it.x to it.y },
+        landmarks106 = this
+    )
+}
+
+/**
  * ML Kit Face → FaceData 转换扩展
  *
  * 将 ML Kit 人脸检测结果转换为 beauty-engine 模块所需的 FaceData 格式。
@@ -827,6 +878,14 @@ private fun List<Face>.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? 
         rightCheekPoints.add(pt.x / w to pt.y / h)
     }
 
+    // [关键修复] 从 FaceDetectionCache 获取预览时缓存的 106 点数据
+    val landmarks106 = com.picme.features.camera.FaceDetectionCache.getCachedLandmarks106()
+    if (landmarks106 != null) {
+        Logger.d("ImageProcessor", "Using cached landmarks106 from FaceDetectionCache")
+    } else {
+        Logger.w("ImageProcessor", "No cached landmarks106 available, GPUPixel warp will fall back")
+    }
+
     return FaceData(
         faceCenterX = faceCenterX.coerceIn(0f, 1f),
         faceCenterY = faceCenterY.coerceIn(0f, 1f),
@@ -850,6 +909,6 @@ private fun List<Face>.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? 
         lipInnerPoints = lipInnerPoints,
         leftCheekPoints = leftCheekPoints,
         rightCheekPoints = rightCheekPoints,
-        landmarks106 = null
+        landmarks106 = landmarks106
     )
 }

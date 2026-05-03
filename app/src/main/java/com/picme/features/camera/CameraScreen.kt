@@ -1074,6 +1074,7 @@ fun CameraContent(
             detectionEngineMode = faceDetectionEngineMode,
             videoCapture = videoCapture,
             gpupixelProvider = glPreviewProvider as? GpupixelBeautyPreviewProvider,
+            faceDetectorManager = runtimeContext.faceDetectorManager,
             onImageCaptureChanged = { capture -> imageCapture = capture },
             onCameraControlChanged = { control -> cameraControl = control },
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },

@@ -219,6 +219,24 @@ class FaceDetectorManager(
         return bitmap
     }
 
+    /**
+     * 对 Bitmap 直接进行人脸检测（用于拍照路径）
+     * 优先使用 MediaPipe，如果失败则回退到 GPUPixel
+     */
+    fun detectPhoto(bitmap: android.graphics.Bitmap, lensFacing: Int): DetectionResult? {
+        // 尝试 MediaPipe
+        val mediaPipeResult = detectWithMediaPipe(bitmap, lensFacing)
+        if (mediaPipeResult != null) {
+            return DetectionResult(mediaPipeResult, FaceDetectionSource.MEDIAPIPE)
+        }
+        // 回退到 GPUPixel
+        val gpupixelResult = detectWithGpupixel(bitmap, lensFacing)
+        if (gpupixelResult != null) {
+            return DetectionResult(gpupixelResult, FaceDetectionSource.GPUPIXEL)
+        }
+        return null
+    }
+
     private fun detectWithMediaPipe(bitmap: android.graphics.Bitmap, lensFacing: Int): FloatArray? {
         val landmarker = faceLandmarker ?: return null
         val mpImage = BitmapImageBuilder(bitmap).build()
