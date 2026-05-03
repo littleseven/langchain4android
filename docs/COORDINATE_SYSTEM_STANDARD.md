@@ -587,7 +587,7 @@ val imageLeftEye = landmarks[58..63]  // 实际是图像左侧
 
 ```bash
 #!/bin/bash
-# check-coordinate-annotation.sh
+# scripts/check-coordinate-annotation.sh
 # 检测代码中未标注坐标系的左右描述
 
 echo "🔍 检查未标注坐标系的注释..."
@@ -614,7 +614,7 @@ echo "\n✅ 检查完成"
 
 ```bash
 #!/bin/bash
-# check-doc-coordinate-annotation.sh
+# scripts/check-doc-coordinate-annotation.sh
 # 检测文档中未标注坐标系的左右描述
 
 echo "🔍 检查文档中的坐标系标注..."

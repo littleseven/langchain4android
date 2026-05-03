@@ -330,18 +330,18 @@ enum class EyePosition {
 - `docs/ADR-003-coordinate-system-management.md` - 本技术决策文档
 
 #### 自动化检测脚本
-- `docs/scripts/check-coordinate-annotation.sh` - 检测代码中的模糊描述
-- `docs/scripts/check-doc-coordinate-annotation.sh` - 检测文档中的模糊描述
+- `scripts/check-coordinate-annotation.sh` - 检测代码中的模糊描述
+- `scripts/check-doc-coordinate-annotation.sh` - 检测文档中的模糊描述
 
 ### 4.2 使用检测脚本
 
 ```bash
 # 检测代码
 cd /Users/guoshuai/AndroidStudioProjects/PicMe
-docs/scripts/check-coordinate-annotation.sh
+scripts/check-coordinate-annotation.sh
 
 # 检测文档
-docs/scripts/check-doc-coordinate-annotation.sh
+scripts/check-doc-coordinate-annotation.sh
 ```
 
 **预期输出**：

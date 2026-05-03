@@ -26,7 +26,7 @@
 
 ```bash
 # 运行自动化检测
-docs/scripts/check-coordinate-annotation.sh
+scripts/check-coordinate-annotation.sh
 ```
 
 **检查要点**：
@@ -41,7 +41,7 @@ docs/scripts/check-coordinate-annotation.sh
 
 ```bash
 # 运行文档检测
-docs/scripts/check-doc-coordinate-annotation.sh
+scripts/check-doc-coordinate-annotation.sh
 ```
 
 **规范要求**：
@@ -190,7 +190,7 @@ val faceRightCheek = getFaceRightCheek(isFrontCamera)
 
 ```bash
 # 检测代码中未标注坐标系的注释
-docs/scripts/check-coordinate-annotation.sh
+scripts/check-coordinate-annotation.sh
 ```
 
 **输出示例**：
@@ -209,7 +209,7 @@ docs/scripts/check-coordinate-annotation.sh
 
 ```bash
 # 检测文档中未标注坐标系的描述
-docs/scripts/check-doc-coordinate-annotation.sh
+scripts/check-doc-coordinate-annotation.sh
 ```
 
 ### 3. Git Pre-commit Hook
