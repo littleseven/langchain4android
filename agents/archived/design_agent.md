@@ -1,3 +1,6 @@
+> **已归档（Archived）**：此角色定义属于旧版 AI Agent 体系，当前活跃角色为 CO / PM / RD / CR / QA。详见 `agents/README.md` 与根目录 `AGENTS.md`。
+>
+
 # UI/UX 设计师 (UI/UX Designer)
 
 **角色标签**：`[Design]`
