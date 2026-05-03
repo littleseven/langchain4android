@@ -103,6 +103,30 @@ kimi-cli chat
 - **交互**: 发送自然语言指令，Agent 团队自动响应
 - **查看命令**: 输入 `/` 列出所有内置命令
 
+## Skills 配置
+
+项目采用统一的 Skills 目录结构，同时支持 Lingma 和 OpenClaw/kimi-cli。
+
+### 目录结构
+```
+.lingma/skills/       # Lingma 原生 Skills 目录
+.openclaw/skills/     # OpenClaw Skills 目录（通过符号链接指向 .lingma）
+```
+
+### 可用 Skills
+| Skill | 用途 |
+|-------|------|
+| `adb-bot` | ADB 自动化控制与调试（拍照、截屏、日志分析） |
+| `android-build-debug` | Android 编译、安装、日志调试流程 |
+| `gpupixel-porting` | GPUPixel 算法移植规范 |
+| `mediapipe-landmark-mapping` | MediaPipe 关键点映射规范 |
+| `shader-debug` | OpenGL ES Shader 调试技巧 |
+
+### 使用方式
+- **Lingma**: 自动加载 `.lingma/skills/` 下的 Skills
+- **OpenClaw/kimi-cli**: 自动加载 `.openclaw/skills/` 下的 Skills
+- **同步机制**: `.openclaw/skills/` 通过符号链接指向 `.lingma/skills/`，确保内容一致
+
 ---
 
 *本文件与项目根目录 AGENTS.md 配合使用*

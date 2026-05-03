@@ -33,6 +33,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".features.camera.test.CameraTestCommandReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.picme.TEST_COMMAND" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

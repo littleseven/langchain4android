@@ -25,6 +25,7 @@
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
 - **[INTEGRATION] 双引擎架构**：当前仅保留自研 `beauty-engine`（BIG_BEAUTY）主引擎与 GPUPixel（GPUPIXEL）实验性备选，两条链路之外不再保留任何历史兜底实现
 - **[ROADMAP] GPUPixel 集成状态**：[GPUPixel](https://github.com/pixpark/gpupixel)（Apache 2.0、纯 C++11/OpenGL ES、无商业 SDK 绑定）已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口；CainCamera 因硬依赖 Face++ 商业 SDK 且已停止维护，已被排除
+- **[ROADMAP] 拍照 GPU 化（2026-05 进行中）**：拍照后处理从 CPU Canvas 路径迁移到 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。详见 `docs/ADR-002-opengl-offscreen-unified-pipeline.md`
 
 ---
 
@@ -40,7 +41,8 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── BeautyPreviewCapability.kt     # GL 能力扩展接口（FaceWarp/LipMask 等）
 │   ├── BeautyPreviewProvider.kt       # 预览 Provider 基础接口
 │   ├── BeautyPreviewEngine.kt         # 组合接口（Provider + Capability + getView）
-│   └── BeautyPreviewProviderFactory.kt # Factory（未来 DI 扩展点）
+│   ├── BeautyPreviewProviderFactory.kt # Factory（未来 DI 扩展点）
+│   └── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染，2026-05 新增）
 ├── egl/                               # 内部实现（GL 渲染管线层）
 │   ├── BeautyPreviewView.kt           # 自定义 View（SurfaceView 封装）
 │   ├── CameraPreviewRenderer.kt       # 渲染管线核心
@@ -51,7 +53,8 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── WindowSurface.kt               # EGL Window Surface 封装
 │   ├── GLRenderer.kt                  # GL 渲染通用基类
 │   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现（内部适配器）
-│   └── GlBeautyPreviewProviderFactory.kt # GL Provider 工厂
+│   ├── GlBeautyPreviewProviderFactory.kt # GL Provider 工厂
+│   └── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现（2026-05 新增）
 └── gpupixel/                          # GPUPixel 实验性集成层（🧪）
     └── GpupixelBeautyPreviewProvider.kt # GPUPixel 引擎 Provider 实现
 ```
@@ -78,6 +81,18 @@ beauty-engine/src/main/java/com/picme/beauty/
   - `isReady(): Boolean` — 判断引擎是否已就绪
   - `getPerfStats(): BeautyPerfStats` — 获取实时性能统计（默认返回 `EMPTY`）
 - 初始化异常应通过抛出异常或状态查询供 App 层触发兜底。详见 `docs/BEAUTY_ENGINE_FALLBACK.md`
+
+#### PhotoProcessor（拍照 GPU 化接口，2026-05 新增）
+- **定位**：拍照后处理的统一入口，将 Bitmap 通过 GPU 离屏渲染处理，复用预览同一套 Shader 管线
+- **核心方法**：`process(bitmap: Bitmap, params: BeautyParams, faceData: FaceData?): Bitmap`
+- **实现路径**：
+  1. 创建独立 EGL 上下文（可与预览上下文共享纹理）
+  2. Bitmap → `GL_TEXTURE_2D`（通过 `texImage2D`）
+  3. 复用 `BeautyRenderer` 多 Pass 管线（CopyPass → BeautyUnitPass → FaceMakeupPass → MainShader）
+  4. 渲染到 FBO，通过 `glReadPixels` 或 PBO 读取为 Bitmap
+  5. 释放临时资源，返回处理后的 Bitmap
+- **降级策略**：GPU 路径失败时（EGL 创建失败、OOM、Shader 编译失败），抛出异常由调用方回退到 CPU 路径
+- **性能目标**：1080p < 300ms, 4K < 800ms
 
 #### 未来接口扩展（ML Kit 增强）
 - **FaceWarpParams 增强**：Phase 2 引入 `faceMeshPoints: List<Offset>` 字段，支持 468 点密集网格驱动精细美型和妆容贴合。
@@ -161,13 +176,52 @@ beauty-engine/src/main/java/com/picme/beauty/
 - **内存管理**：避免频繁的 CPU-GPU 数据传输，使用 FBO (Framebuffer Object)
 - **延迟控制**：单帧处理时间 < 16ms (60fps) 或 < 33ms (30fps)
 
+**拍照 GPU 化实现规范（2026-05 新增）**：
+- **输入处理**：Bitmap 通过 `GLUtils.texImage2D()` 上传到 `GL_TEXTURE_2D`，相机预览使用 `GL_TEXTURE_EXTERNAL_OES`
+- **Shader 复用**：`BeautyRenderer` 必须支持 2D 纹理输入模式（已有 `shaderProgram2D`），拍照时切换输入纹理类型
+- **多 Pass 管线复用**：
+  - Pass 0: CopyPass — Bitmap 2D纹理 → FBO
+  - Pass 1: BeautyUnitPass — 磨皮/美白/LUT（如果启用）
+  - Pass 2: FaceMakeupPass — 唇色/腮红三角网格（如果启用且有人脸数据）
+  - Pass 3: MainShader — 美型（瘦脸/大眼）+ 调色 + 风格特效
+- **输出读取**：使用 PBO（Pixel Buffer Object）双缓冲异步读取，减少 `glReadPixels` 阻塞
+- **资源隔离**：拍照 EGL 上下文独立创建，不与预览上下文共享，避免互相干扰；但可通过共享上下文机制共享已编译的 Shader Program
+- **尺寸限制**：最大纹理尺寸检查（`GL_MAX_TEXTURE_SIZE`），超大图（> 4096）考虑分块处理或限制分辨率
+
 #### EGLCore / WindowSurface
 - `EGLCore` 负责：Display 连接、配置选择、上下文创建、Surface 创建与切换
 - `createContext(shareContext)` 支持共享上下文；默认创建时自动共享纹理资源
 - `WindowSurface` 封装 EGL Surface 与 `swapBuffers()` 调用
 - 释放顺序：先释放 Surface，再释放 Context，最后终止 Display
 
-### 2.4 零拷贝数据流
+#### 2.4 拍照 GPU 化数据流（2026-05 新增）
+
+```
+CameraX ImageCapture
+    ↓
+Bitmap（旋转/裁剪/镜像后的原始照片）
+    ↓
+PhotoProcessor.process()
+    ├── 创建独立 EGL 上下文
+    ├── Bitmap → GL_TEXTURE_2D (texImage2D)
+    ├── 复用 BeautyRenderer 多 Pass 管线
+    │   ├── CopyPass: 2D纹理 → FBO
+    │   ├── BeautyUnitPass: 磨皮/美白/LUT
+    │   ├── FaceMakeupPass: 唇色/腮红（需人脸数据）
+    │   └── MainShader: 美型+调色+风格特效
+    ├── FBO → Bitmap (glReadPixels / PBO)
+    └── 释放 EGL/GL 资源
+    ↓
+处理后的 Bitmap → MediaStore 保存
+```
+
+**关键约束**：
+- 拍照 EGL 上下文与预览上下文隔离，避免资源冲突
+- 人脸数据来自预览缓存或拍照后重新检测
+- PBO 双缓冲优化读取性能
+- GPU 路径失败时自动回退 CPU 路径（调用方处理）
+
+#### 2.5 零拷贝数据流
 
 #### 大美丽 (BIG_BEAUTY) 路径
 
@@ -214,7 +268,7 @@ GpupixelBeautyPreviewProvider.onYuvFrame()
 
 **当前链路严格 copy 次数**：**4 次**（工程口径）
 
-### 2.5 性能监控与告警
+### 2.6 性能监控与告警
 
 ```kotlin
 // 渲染线程内每秒聚合
@@ -284,7 +338,7 @@ if (fps < 25 || processingMs > 20) {
 - [ ] 是否避免了多线程同时 `eglMakeCurrent`？（串行化或线程隔离）
 - [ ] EGL 上下文是否通过共享上下文机制创建？（主线程 init，渲染线程 render）
 - [ ] 释放顺序是否正确？（Surface → Context → Display）
-- [ ] `glReadPixels` 是否被误用？（破坏零拷贝原则）
+- [ ] `glReadPixels` 是否被误用？（预览路径禁止，拍照路径允许）
 
 ### 4.3 性能与稳定性
 - [ ] 单帧处理耗时是否 ≤ 16ms？（高端机目标）/ ≤ 33ms？（低端机保底）
@@ -305,7 +359,19 @@ if (fps < 25 || processingMs > 20) {
 - [ ] 磨皮是否保留边缘细节？（双边滤波或表面模糊）
 - [ ] 美白是否避免全图过曝？（仅提升肤色区域亮度）
 
-### 4.6 代码风格
+### 4.6 拍照 GPU 化检查清单（2026-05 新增）
+- [ ] `PhotoProcessor` 接口是否已添加到 `api/` 包？
+- [ ] `PhotoProcessorImpl` 是否创建独立 EGL 上下文，不与预览上下文冲突？
+- [ ] Bitmap 上传是否使用 `GL_TEXTURE_2D` 而非 `GL_TEXTURE_EXTERNAL_OES`？
+- [ ] `BeautyRenderer` 是否支持 2D 纹理输入模式？
+- [ ] 多 Pass 管线是否正确复用（CopyPass → BeautyUnitPass → FaceMakeupPass → MainShader）？
+- [ ] FBO 输出是否通过 PBO 双缓冲异步读取？
+- [ ] GPU 路径失败时是否抛出明确异常供调用方回退 CPU 路径？
+- [ ] 资源释放是否完整（FBO、Texture、EGL Context、PBO）？
+- [ ] 大尺寸图片是否做纹理尺寸检查（`GL_MAX_TEXTURE_SIZE`）？
+- [ ] 处理耗时是否满足 1080p < 300ms, 4K < 800ms 目标？
+
+### 4.7 代码风格
 - [ ] 日志是否使用了 `PicMe:BeautyEngine` 标签？
 - [ ] 是否避免了通配符导入？
 - [ ] Lambda 参数是否显式命名？
@@ -481,7 +547,7 @@ GPUPixelSourceRawData
 - [ ] 风格滤镜与调色滤镜叠加时，确保滤镜链接线顺序正确（调色在前，风格在后）。
 - [ ] 切换风格滤镜时，上一个滤镜必须从链中断开后才能插入新的，否则 GPUPixel C++ 层可能双重持有节点导致崩溃。
 - [ ] 非 GPUPixel 引擎（大美丽）模式下，`StyleFilter` 字段由引擎层静默忽略，不引发异常。
-- [ ] UI 层在非 GPUPixel 模式下，风格特效区域整体置灰，并展示引擎提示。
+- [ ] UI 层风格特效入口不再置灰（2026-05 已移植到大美丽引擎）。
 
 ---
 

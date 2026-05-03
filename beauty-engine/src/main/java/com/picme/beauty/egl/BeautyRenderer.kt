@@ -829,6 +829,154 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     }
 
     /**
+     * 拍照路径专用：2D 纹理直接渲染到当前绑定的 FBO
+     *
+     * 与 renderMainShaderFromFbo 的区别：
+     * - 输入是 2D 纹理（Bitmap 上传），不需要 inverseTransform（预览管线专用）
+     * - 直接使用原始人脸坐标（已标准化为 0.0~1.0）
+     * - 不绑定/解绑 FBO（由调用方 PhotoProcessorImpl 管理）
+     * - 支持磨皮/美白参数（拍照路径可能启用）
+     *
+     * @param inputTextureId 2D 纹理 ID（Bitmap 上传）
+     * @param width 渲染宽度
+     * @param height 渲染高度
+     */
+    fun renderMainShaderFromFbo2D(inputTextureId: Int, width: Int, height: Int) {
+        // 编译 2D Shader（如果未编译）
+        if (!compileShaderProgram2D()) {
+            throw IllegalStateException("shader_compile: failed to compile ShaderProgram2D for photo")
+        }
+
+        // 使用 2D 主 Shader 渲染
+        shaderProgram2D.use()
+
+        // 绑定 2D 输入纹理到 TEXTURE0
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTextureId)
+        val uTexLoc = shaderProgram2D.getUniformLocation("uTexture")
+        if (uTexLoc >= 0) GLES20.glUniform1i(uTexLoc, 0)
+
+        // 设置所有 uniform（使用原始坐标，不做 inverseTransform）
+        shaderProgram2D.setVec2("uTexelSize", 1.0f / width, 1.0f / height)
+        // 拍照路径：磨皮/美白参数直接生效（未经过 BeautyUnitPass）
+        shaderProgram2D.setFloat("uSmoothing", smoothingStrength)
+        shaderProgram2D.setFloat("uWhitening", whiteningStrength)
+        shaderProgram2D.setFloat("uSharpen", sharpenStrength)
+        shaderProgram2D.setFloat("uBigEyes", bigEyesStrength)
+        shaderProgram2D.setFloat("uSlimFace", slimFaceStrength)
+        shaderProgram2D.setFloat("uFaceRadius", faceRadius)
+        shaderProgram2D.setFloat("uHasFace", hasFace)
+        // 拍照路径：妆容参数直接生效（未经过 FaceMakeupPass）
+        shaderProgram2D.setFloat("uLipColor", lipColorStrength)
+        shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
+        shaderProgram2D.setFloat("uBlush", blushStrength)
+        shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
+        // 直接使用原始坐标（Bitmap 坐标空间与 Shader UV 一致）
+        shaderProgram2D.setVec2("uFaceCenter", faceCenterX, faceCenterY)
+        shaderProgram2D.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
+        shaderProgram2D.setVec2("uMouthLeft", mouthLeftX, mouthLeftY)
+        shaderProgram2D.setVec2("uMouthRight", mouthRightX, mouthRightY)
+        shaderProgram2D.setVec2("uUpperLipCenter", upperLipCenterX, upperLipCenterY)
+        shaderProgram2D.setVec2("uLowerLipCenter", lowerLipCenterX, lowerLipCenterY)
+        shaderProgram2D.setFloat("uLipOuterContourCount", lipOuterContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uLipOuterContourPoints", lipOuterContourBuffer, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setFloat("uLipInnerContourCount", lipInnerContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uLipInnerContourPoints", lipInnerContourBuffer, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2("uLeftEye", leftEyeX, leftEyeY)
+        shaderProgram2D.setVec2("uRightEye", rightEyeX, rightEyeY)
+        shaderProgram2D.setFloat("uLeftCheekContourCount", leftCheekContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uLeftCheekContourPoints", leftCheekContourBuffer, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setFloat("uRightCheekContourCount", rightCheekContourCount.toFloat())
+        shaderProgram2D.setVec2Array("uRightCheekContourPoints", rightCheekContourBuffer, MAX_LIP_CONTOUR_POINTS)
+
+        if (renderMode == MODE_ADVANCED) {
+            shaderProgram2D.setFloat("uWarmth", warmthStrength)
+            shaderProgram2D.setFloat("uContrast", contrast)
+        }
+
+        val cm = colorMatrix
+        if (cm != null && cm.size >= 20) {
+            shaderProgram2D.setFloat("uHasColorMatrix", 1f)
+            shaderProgram2D.setVec4("uCMRow0", cm[0], cm[1], cm[2], cm[3])
+            shaderProgram2D.setVec4("uCMRow1", cm[5], cm[6], cm[7], cm[8])
+            shaderProgram2D.setVec4("uCMRow2", cm[10], cm[11], cm[12], cm[13])
+            shaderProgram2D.setVec4("uCMRow3", cm[15], cm[16], cm[17], cm[18])
+            shaderProgram2D.setVec4("uCMOffset", cm[4] / 255f, cm[9] / 255f, cm[14] / 255f, cm[19] / 255f)
+        } else {
+            shaderProgram2D.setFloat("uHasColorMatrix", 0f)
+        }
+
+        shaderProgram2D.setInt("uDebugMode", debugMode)
+
+        val uExpLoc = shaderProgram2D.getUniformLocation("uExposure")
+        if (uExpLoc >= 0) GLES20.glUniform1f(uExpLoc, exposureStrength)
+        val uContLoc = shaderProgram2D.getUniformLocation("uContrast")
+        if (uContLoc >= 0) GLES20.glUniform1f(uContLoc, contrastStrength)
+        val uSatLoc = shaderProgram2D.getUniformLocation("uSaturation")
+        if (uSatLoc >= 0) GLES20.glUniform1f(uSatLoc, saturationStrength)
+        val uTempLoc = shaderProgram2D.getUniformLocation("uTemperature")
+        if (uTempLoc >= 0) GLES20.glUniform1f(uTempLoc, temperatureStrength)
+        val uTintLoc = shaderProgram2D.getUniformLocation("uTint")
+        if (uTintLoc >= 0) GLES20.glUniform1f(uTintLoc, tintStrength)
+        val uBrightLoc = shaderProgram2D.getUniformLocation("uBrightness")
+        if (uBrightLoc >= 0) GLES20.glUniform1f(uBrightLoc, brightnessStrength)
+        val uRedLoc = shaderProgram2D.getUniformLocation("uRedAdj")
+        if (uRedLoc >= 0) GLES20.glUniform1f(uRedLoc, redAdjustment)
+        val uGreenLoc = shaderProgram2D.getUniformLocation("uGreenAdj")
+        if (uGreenLoc >= 0) GLES20.glUniform1f(uGreenLoc, greenAdjustment)
+        val uBlueLoc = shaderProgram2D.getUniformLocation("uBlueAdj")
+        if (uBlueLoc >= 0) GLES20.glUniform1f(uBlueLoc, blueAdjustment)
+        val uContourLoc = shaderProgram2D.getUniformLocation("uContourThinFace")
+        if (uContourLoc >= 0) GLES20.glUniform1f(uContourLoc, contourThinFaceStrength)
+
+        // 106点人脸关键点（直接使用原始坐标）
+        val uFacePtsLoc = shaderProgram2D.getUniformLocation("uFacePoints")
+        if (uFacePtsLoc >= 0 && hasFace > 0.5f) {
+            GLES20.glUniform1fv(uFacePtsLoc, facePointsBuffer.size, facePointsBuffer, 0)
+        }
+        val uAspectLoc = shaderProgram2D.getUniformLocation("uAspectRatio")
+        if (uAspectLoc >= 0 && height > 0) {
+            GLES20.glUniform1f(uAspectLoc, width.toFloat() / height.toFloat())
+        }
+        val uUseWarpLoc = shaderProgram2D.getUniformLocation("uUseGpupixelWarp")
+        if (uUseWarpLoc >= 0) GLES20.glUniform1i(uUseWarpLoc, useGpupixelWarp)
+
+        // 设置顶点数据（标准全屏四边形）
+        val vb = vertexBuffer
+        val tb = textureBuffer
+        if (vb != null && tb != null) {
+            val aPosLoc = shaderProgram2D.getAttribLocation("aPosition")
+            val aTexLoc = shaderProgram2D.getAttribLocation("aTextureCoord")
+            if (aPosLoc >= 0) {
+                GLES20.glEnableVertexAttribArray(aPosLoc)
+                vb.position(0)
+                GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 0, vb)
+            }
+            if (aTexLoc >= 0) {
+                GLES20.glEnableVertexAttribArray(aTexLoc)
+                tb.position(0)
+                GLES20.glVertexAttribPointer(aTexLoc, 2, GLES20.GL_FLOAT, false, 0, tb)
+            }
+        }
+
+        // 绘制
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+
+        // 清理
+        if (vb != null) {
+            val aPosLoc = shaderProgram2D.getAttribLocation("aPosition")
+            if (aPosLoc >= 0) GLES20.glDisableVertexAttribArray(aPosLoc)
+        }
+        if (tb != null) {
+            val aTexLoc = shaderProgram2D.getAttribLocation("aTextureCoord")
+            if (aTexLoc >= 0) GLES20.glDisableVertexAttribArray(aTexLoc)
+        }
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
+
+        Log.d(TAG, "Photo renderMainShaderFromFbo2D DONE: input=$inputTextureId, ${width}x${height}")
+    }
+
+    /**
      * 多Pass美颜渲染管线（简化版）
      *
      * Pass 0: CopyPass (OES外部纹理 -> FBO 2D纹理)
@@ -1367,9 +1515,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         return currentTextureId
     }
 
-    /**
-     * 设置是否启用 FaceMakeupPass（GPUPixel 风格妆容）
-     */
     fun setFaceMakeupEnabled(enabled: Boolean) {
         faceMakeupEnabled = enabled
         Log.d(TAG, "FaceMakeupPass enabled: $enabled")

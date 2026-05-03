@@ -31,8 +31,12 @@ import com.google.mlkit.vision.face.FaceContour
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.google.mlkit.vision.face.FaceLandmark
+import com.picme.beauty.api.FaceData
+import com.picme.beauty.api.PhotoProcessException
+import com.picme.beauty.api.PhotoProcessor
 import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
+import com.picme.core.image.gl.toBeautyParams
 import com.picme.domain.model.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
@@ -74,7 +78,10 @@ interface ImageProcessor {
     ) : Recording
 }
 
-class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImageProcessor {
+class ImageProcessorImpl(
+    private val beautyProcessor: BeautyProcessor,
+    private val photoProcessor: PhotoProcessor? = null
+) : ImageProcessor {
 
     private fun createFaceMaskBitmap(
         width: Int,
@@ -433,8 +440,30 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
 
         // 使用协程在后台线程处理
         return java.util.concurrent.Executors.newSingleThreadExecutor().submit<Bitmap> {
+            // [GPU路径] 大美丽模式下优先使用 GPU 离屏渲染，确保预览/拍照效果一致
+            val gpuProcessor = photoProcessor
+            if (gpuProcessor != null) {
+                try {
+                    Logger.d("ImageProcessor", "Trying GPU photo processing path")
+                    val params = beauty.toBeautyParams()
+                    val faceData = faces.toFaceData(source.width, source.height)
+                    val gpuResult = gpuProcessor.process(source, params, faceData)
+                    Logger.d("ImageProcessor", "GPU photo processing succeeded")
+
+                    // GPU 路径已包含滤镜（colorMatrix/styleEffect 在 Shader 中处理），
+                    // 但 App 层的 FilterType ColorMatrix 滤镜需要额外应用
+                    return@submit if (filter != FilterType.NONE && params.colorMatrix == null) {
+                        applyColorMatrixFilter(gpuResult, filter)
+                    } else {
+                        gpuResult
+                    }
+                } catch (e: PhotoProcessException) {
+                    Logger.w("ImageProcessor", "GPU photo processing failed, falling back to CPU path", e)
+                }
+            }
+
             var processed = source.copy(Bitmap.Config.ARGB_8888, true)
-            
+
             // 检查美颜是否启用
             if (beauty.enabled && beauty.hasAnyEffect()) {
                 Logger.d("ImageProcessor", "Starting beauty processing...")
@@ -821,4 +850,87 @@ class ImageProcessorImpl(private val beautyProcessor: BeautyProcessor) : ImagePr
             viewModel.insertMedia(asset)
         }
     }
+}
+
+/**
+ * ML Kit Face → FaceData 转换扩展
+ *
+ * 将 ML Kit 人脸检测结果转换为 beauty-engine 模块所需的 FaceData 格式。
+ * 坐标标准化为 0.0~1.0 范围（基于图片宽高）。
+ */
+private fun List<Face>.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? {
+    if (isEmpty()) return null
+
+    val face = first()
+    val w = imageWidth.toFloat()
+    val h = imageHeight.toFloat()
+
+    val bounds = face.boundingBox
+    val faceCenterX = bounds.centerX() / w
+    val faceCenterY = bounds.centerY() / h
+    val faceRadius = maxOf(bounds.width(), bounds.height()) / maxOf(w, h) * 0.5f
+
+    val leftEye = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
+    val rightEye = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+    val leftEyeX = leftEye?.x?.div(w) ?: (faceCenterX - 0.1f)
+    val leftEyeY = leftEye?.y?.div(h) ?: (faceCenterY - 0.05f)
+    val rightEyeX = rightEye?.x?.div(w) ?: (faceCenterX + 0.1f)
+    val rightEyeY = rightEye?.y?.div(h) ?: (faceCenterY - 0.05f)
+
+    val mouthLeft = face.getLandmark(FaceLandmark.MOUTH_LEFT)?.position
+    val mouthRight = face.getLandmark(FaceLandmark.MOUTH_RIGHT)?.position
+    val mouthCenterX = ((mouthLeft?.x ?: 0f) + (mouthRight?.x ?: 0f)) / 2f / w
+    val mouthCenterY = ((mouthLeft?.y ?: 0f) + (mouthRight?.y ?: 0f)) / 2f / h
+
+    // 嘴唇轮廓点（从 FaceContour 提取）
+    val lipOuterPoints = mutableListOf<Pair<Float, Float>>()
+    val lipInnerPoints = mutableListOf<Pair<Float, Float>>()
+    face.getContour(FaceContour.UPPER_LIP_TOP)?.points?.forEach { pt ->
+        lipOuterPoints.add(pt.x / w to pt.y / h)
+    }
+    face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points?.forEach { pt ->
+        lipInnerPoints.add(pt.x / w to pt.y / h)
+    }
+    face.getContour(FaceContour.LOWER_LIP_TOP)?.points?.forEach { pt ->
+        lipInnerPoints.add(pt.x / w to pt.y / h)
+    }
+    face.getContour(FaceContour.LOWER_LIP_BOTTOM)?.points?.forEach { pt ->
+        lipOuterPoints.add(pt.x / w to pt.y / h)
+    }
+
+    // 脸颊轮廓点
+    val leftCheekPoints = mutableListOf<Pair<Float, Float>>()
+    val rightCheekPoints = mutableListOf<Pair<Float, Float>>()
+    face.getContour(FaceContour.LEFT_CHEEK)?.points?.forEach { pt ->
+        leftCheekPoints.add(pt.x / w to pt.y / h)
+    }
+    face.getContour(FaceContour.RIGHT_CHEEK)?.points?.forEach { pt ->
+        rightCheekPoints.add(pt.x / w to pt.y / h)
+    }
+
+    return FaceData(
+        faceCenterX = faceCenterX.coerceIn(0f, 1f),
+        faceCenterY = faceCenterY.coerceIn(0f, 1f),
+        leftEyeX = leftEyeX.coerceIn(0f, 1f),
+        leftEyeY = leftEyeY.coerceIn(0f, 1f),
+        rightEyeX = rightEyeX.coerceIn(0f, 1f),
+        rightEyeY = rightEyeY.coerceIn(0f, 1f),
+        mouthCenterX = mouthCenterX.coerceIn(0f, 1f),
+        mouthCenterY = mouthCenterY.coerceIn(0f, 1f),
+        mouthLeftX = (mouthLeft?.x?.div(w) ?: (mouthCenterX - 0.05f)).coerceIn(0f, 1f),
+        mouthLeftY = (mouthLeft?.y?.div(h) ?: mouthCenterY).coerceIn(0f, 1f),
+        mouthRightX = (mouthRight?.x?.div(w) ?: (mouthCenterX + 0.05f)).coerceIn(0f, 1f),
+        mouthRightY = (mouthRight?.y?.div(h) ?: mouthCenterY).coerceIn(0f, 1f),
+        upperLipCenterX = mouthCenterX,
+        upperLipCenterY = mouthCenterY - 0.02f,
+        lowerLipCenterX = mouthCenterX,
+        lowerLipCenterY = mouthCenterY + 0.02f,
+        faceRadius = faceRadius.coerceIn(0.08f, 0.45f),
+        hasFace = true,
+        lipOuterPoints = lipOuterPoints,
+        lipInnerPoints = lipInnerPoints,
+        leftCheekPoints = leftCheekPoints,
+        rightCheekPoints = rightCheekPoints,
+        landmarks106 = null
+    )
 }
