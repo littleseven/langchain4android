@@ -2,6 +2,8 @@ package com.picme.di
 
 import android.content.Context
 import androidx.lifecycle.ViewModelProvider
+import com.picme.beauty.api.PhotoProcessor
+import com.picme.beauty.egl.GlBeautyPreviewProviderFactory
 import com.picme.core.image.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
 import com.picme.core.image.ImageProcessor
@@ -72,7 +74,8 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     }
 
     override val imageProcessor: ImageProcessor by lazy {
-        ImageProcessorImpl(beautyProcessor)
+        val photoProcessor: PhotoProcessor = GlBeautyPreviewProviderFactory().createPhotoProcessor(context)
+        ImageProcessorImpl(beautyProcessor, photoProcessor)
     }
 
     private val ocrProcessor: OcrProcessor by lazy {
