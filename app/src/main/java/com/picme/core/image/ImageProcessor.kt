@@ -443,104 +443,23 @@ class ImageProcessorImpl(
             // [GPU路径] 大美丽模式下优先使用 GPU 离屏渲染，确保预览/拍照效果一致
             val gpuProcessor = photoProcessor
             if (gpuProcessor != null) {
-                try {
-                    Logger.d("ImageProcessor", "Trying GPU photo processing path")
-                    val params = beauty.toBeautyParams()
-                    val faceData = faces.toFaceData(source.width, source.height)
-                    val gpuResult = gpuProcessor.process(source, params, faceData)
-                    Logger.d("ImageProcessor", "GPU photo processing succeeded")
+                Logger.d("ImageProcessor", "Trying GPU photo processing path")
+                val params = beauty.toBeautyParams()
+                val faceData = faces.toFaceData(source.width, source.height)
+                val gpuResult = gpuProcessor.process(source, params, faceData)
+                Logger.d("ImageProcessor", "GPU photo processing succeeded")
 
-                    // GPU 路径已包含滤镜（colorMatrix/styleEffect 在 Shader 中处理），
-                    // 但 App 层的 FilterType ColorMatrix 滤镜需要额外应用
-                    return@submit if (filter != FilterType.NONE && params.colorMatrix == null) {
-                        applyColorMatrixFilter(gpuResult, filter)
-                    } else {
-                        gpuResult
-                    }
-                } catch (e: PhotoProcessException) {
-                    Logger.w("ImageProcessor", "GPU photo processing failed, falling back to CPU path", e)
-                }
-            }
-
-            var processed = source.copy(Bitmap.Config.ARGB_8888, true)
-
-            // 检查美颜是否启用
-            if (beauty.enabled && beauty.hasAnyEffect()) {
-                Logger.d("ImageProcessor", "Starting beauty processing...")
-
-                // 使用 BeautyProcessor 处理所有美颜效果
-                kotlinx.coroutines.runBlocking {
-                // 面部精修
-                if (beauty.smoothing > 0f && faces.isNotEmpty()) {
-                    Logger.d("ImageProcessor", "Applying smoothing: ${beauty.smoothing}")
-                    processed = beautyProcessor.applySmoothing(processed, beauty.smoothing, faces)
-                }
-                if (beauty.whitening > 0f && faces.isNotEmpty()) {
-                    Logger.d("ImageProcessor", "Applying whitening on faces: ${beauty.whitening}, faceCount=${faces.size}")
-                    processed = beautyProcessor.applyWhitening(processed, beauty.whitening, faces)
-                }
-                if (faces.isNotEmpty()) {
-                    Logger.d("ImageProcessor", "Processing face beautification for ${faces.size} faces")
-                    if (beauty.slimFace != 0f) {
-                        Logger.d("ImageProcessor", "Applying slim face: ${beauty.slimFace}")
-                        val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
-                        processed = beautyProcessor.applySlimFace(processed, beauty.slimFace, faces, isFrontCamera)
-                    }
-                    if (beauty.bigEyes > 0f) {
-                        Logger.d("ImageProcessor", "Applying big eyes: ${beauty.bigEyes}")
-                        processed = beautyProcessor.applyBigEyes(processed, beauty.bigEyes, faces)
-                    }
+                // GPU 路径已包含滤镜（colorMatrix/styleEffect 在 Shader 中处理），
+                // 但 App 层的 FilterType ColorMatrix 滤镜需要额外应用
+                return@submit if (filter != FilterType.NONE && params.colorMatrix == null) {
+                    applyColorMatrixFilter(gpuResult, filter)
                 } else {
-                    Logger.d("ImageProcessor", "No faces detected, skipping face beautification")
+                    gpuResult
                 }
-
-                // 妆容调节不依赖人脸检测结果，避免检测波动导致唇色/腮红/眉毛完全失效。
-                if (beauty.lipColor > 0f) {
-                    Logger.d("ImageProcessor", "Applying lip color: ${beauty.lipColor}")
-                    processed = beautyProcessor.applyLipColor(processed, beauty.lipColor, beauty.lipColorIndex, faces)
-                }
-                if (beauty.blush > 0f) {
-                    Logger.d(
-                        "ImageProcessor",
-                        "Applying blush: ${beauty.blush}, family=${beauty.blushColorFamily}"
-                    )
-                    processed = beautyProcessor.applyBlush(
-                        processed,
-                        beauty.blush,
-                        beauty.blushColorFamily
-                    )
-                }
-                if (beauty.eyebrow > 0f) {
-                    Logger.d("ImageProcessor", "Applying eyebrow: ${beauty.eyebrow}")
-                    processed = beautyProcessor.applyEyebrow(processed, beauty.eyebrow)
-                }
-
-                // 身材管理 (需要全身检测，当前仅当有人脸时应用)
-                if (faces.isNotEmpty() && (beauty.bodyEnhancement != 0f || beauty.legExtension > 0f)) {
-                    if (beauty.bodyEnhancement != 0f) {
-                        Logger.d("ImageProcessor", "Applying body enhancement: ${beauty.bodyEnhancement}")
-                        processed = beautyProcessor.applyBodyEnhancement(processed, beauty.bodyEnhancement)
-                    }
-                    if (beauty.legExtension > 0f) {
-                        Logger.d("ImageProcessor", "Applying leg extension: ${beauty.legExtension}")
-                        processed = beautyProcessor.applyLegExtension(processed, beauty.legExtension)
-                    }
-                }
-                }
-
-                Logger.d("ImageProcessor", "Beauty processing completed")
-            } else {
-                Logger.d("ImageProcessor", "Beauty processing skipped (enabled=${beauty.enabled}, hasEffect=${beauty.hasAnyEffect()})")
             }
-            
-            // 应用滤镜
-            val output = Bitmap.createBitmap(processed.width, processed.height, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(output)
-            val paint = Paint().apply {
-                colorFilter = ColorMatrixColorFilter(filter.toAndroidColorMatrix())
-            }
-            canvas.drawBitmap(processed, 0f, 0f, paint)
-            output
+
+            // [调试模式] GPU 处理器不存在时，直接抛出异常
+            throw IllegalStateException("PhotoProcessor is null, GPU photo processing not available")
         }.get()
     }
 
