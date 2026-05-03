@@ -1520,6 +1520,51 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(TAG, "FaceMakeupPass enabled: $enabled")
     }
 
+    /**
+     * 离屏渲染（用于拍照）
+     * 
+     * 与预览保持一致的完整多 Pass 管线：
+     * 1. executeBeautyPasses: CopyPass + BeautyUnitPass（磨皮+美白+LUT）
+     * 2. renderFaceMakeupPass: 唇色 + 腮红
+     * 3. renderMainShaderFromFbo: 美型 + 调色 → 输出到当前绑定的 FBO
+     * 
+     * @param width 渲染宽度
+     * @param height 渲染高度
+     */
+    fun renderBeautyMultiPass(width: Int, height: Int) {
+        // 设置 viewport
+        GLES20.glViewport(0, 0, width, height)
+        
+        clearLastRenderError()
+        val activeStyle = styleEffectShader.getActiveStyle()
+        
+        // 步骤1: 执行磨皮/美白 Pass
+        Log.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
+        val beautyPassSuccess = executeBeautyPasses()
+        Log.d(TAG, "renderBeautyMultiPass(offscreen): executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
+        
+        if (!beautyPassSuccess) {
+            val category = lastErrorCategory.ifBlank { "render_pipeline" }
+            val reason = lastErrorReason.ifBlank { "executeBeautyPasses returned false" }
+            throw IllegalStateException("$category: $reason")
+        }
+        
+        // 步骤2: FaceMakeupPass 妆容渲染
+        Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
+        if (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)) {
+            val ping = fboPing
+            val pong = fboPong
+            Log.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
+            if (ping != null && pong != null && ping.isInitialized && pong.isInitialized) {
+                beautyPassOutputTextureId = renderFaceMakeupPass(beautyPassOutputTextureId, ping, pong)
+            }
+        }
+        
+        // 步骤3: 使用主 Shader 渲染到当前绑定的 FBO（不解绑）
+        Log.d(TAG, "renderMainShaderFromFbo(offscreen): input=$beautyPassOutputTextureId, output=current FBO")
+        renderMainShaderFromFbo(beautyPassOutputTextureId, null, width, height)
+    }
+
     override fun release() {
         Log.d(TAG, "Releasing BeautyRenderer")
         intermediateFbo?.release()
