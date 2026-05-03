@@ -108,8 +108,7 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.common)
 
-    // ML Kit
-    implementation(libs.google.mlkit.face.detection)
+    // ML Kit（仅保留 OCR，人脸检测已迁移至 MediaPipe / InsightFace / GPUPixel）
     implementation(libs.google.mlkit.text.recognition)
     implementation(libs.google.mlkit.text.recognition.chinese)
 

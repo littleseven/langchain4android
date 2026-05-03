@@ -56,16 +56,23 @@ class FaceDetectorManager(
 
     private val appContext: Context = context.applicationContext
     private var faceLandmarker: FaceLandmarker? = null
+    // [修复] 拍照路径使用独立的 FaceLandmarker 实例（IMAGE 模式），
+    // 避免与预览路径共享 VIDEO 模式实例导致时间戳序列冲突。
+    private var photoFaceLandmarker: FaceLandmarker? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
     private var gpupixelFaceDetector: FaceDetector? = null
     private var lastProcessTimeMs: Long = 0
     private var lastDetectionSource: FaceDetectionSource = FaceDetectionSource.NONE
+
+    // MediaPipe FaceLandmarker 不是线程安全的，预览线程和拍照线程可能并发访问
+    private val mediaPipeLock = Any()
 
     init {
         initialize(context)
     }
 
     private fun initialize(context: Context) {
+        // 1) 初始化预览路径 FaceLandmarker（VIDEO 模式，需要时间戳）
         try {
             val baseOptions = BaseOptions.builder()
                 .setDelegate(Delegate.GPU)
@@ -83,7 +90,7 @@ class FaceDetectorManager(
                 .build()
 
             faceLandmarker = FaceLandmarker.createFromOptions(context, options)
-            Log.i(TAG, "MediaPipe FaceLandmarker initialized (GPU delegate)")
+            Log.i(TAG, "MediaPipe FaceLandmarker initialized (GPU delegate, VIDEO mode)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize FaceLandmarker with GPU, fallback to CPU", e)
             try {
@@ -101,9 +108,47 @@ class FaceDetectorManager(
                     .setRunningMode(RunningMode.VIDEO)
                     .build()
                 faceLandmarker = FaceLandmarker.createFromOptions(context, options)
-                Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU delegate)")
+                Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU delegate, VIDEO mode)")
             } catch (e2: Exception) {
                 Log.e(TAG, "Failed to initialize FaceLandmarker", e2)
+            }
+        }
+
+        // 2) 初始化拍照路径 FaceLandmarker（IMAGE 模式，无时间戳限制）
+        try {
+            val photoBaseOptions = BaseOptions.builder()
+                .setDelegate(Delegate.GPU)
+                .setModelAssetPath("mediapipe/face_landmarker.task")
+                .build()
+            val photoOptions = FaceLandmarker.FaceLandmarkerOptions.builder()
+                .setBaseOptions(photoBaseOptions)
+                .setMinFaceDetectionConfidence(0.5f)
+                .setMinFacePresenceConfidence(0.5f)
+                .setNumFaces(1)
+                .setOutputFaceBlendshapes(false)
+                .setRunningMode(RunningMode.IMAGE)
+                .build()
+            photoFaceLandmarker = FaceLandmarker.createFromOptions(context, photoOptions)
+            Log.i(TAG, "MediaPipe FaceLandmarker initialized (GPU delegate, IMAGE mode for photo)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize photo FaceLandmarker with GPU, fallback to CPU", e)
+            try {
+                val photoBaseOptions = BaseOptions.builder()
+                    .setDelegate(Delegate.CPU)
+                    .setModelAssetPath("mediapipe/face_landmarker.task")
+                    .build()
+                val photoOptions = FaceLandmarker.FaceLandmarkerOptions.builder()
+                    .setBaseOptions(photoBaseOptions)
+                    .setMinFaceDetectionConfidence(0.5f)
+                    .setMinFacePresenceConfidence(0.5f)
+                    .setNumFaces(1)
+                    .setOutputFaceBlendshapes(false)
+                    .setRunningMode(RunningMode.IMAGE)
+                    .build()
+                photoFaceLandmarker = FaceLandmarker.createFromOptions(context, photoOptions)
+                Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU delegate, IMAGE mode for photo)")
+            } catch (e2: Exception) {
+                Log.e(TAG, "Failed to initialize photo FaceLandmarker", e2)
             }
         }
     }
@@ -137,7 +182,36 @@ class FaceDetectorManager(
                 }
 
                 FaceDetectionEngineMode.INSIGHTFACE -> {
-                    val rawInsightFaceResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing)
+                    // 先用 MediaPipe 获取人脸框，为 InsightFace 提供 ROI（替代已移除的 ML Kit）
+                    var faceBounds: android.graphics.Rect? = null
+                    try {
+                        val mpImage = BitmapImageBuilder(bitmap).build()
+                        val mpResult = faceLandmarker?.detectForVideo(mpImage, SystemClock.uptimeMillis())
+                        mpResult?.faceLandmarks()?.firstOrNull()?.let { landmarks ->
+                            var minX = 1f
+                            var maxX = 0f
+                            var minY = 1f
+                            var maxY = 0f
+                            landmarks.forEach { landmark ->
+                                val x = landmark.x()
+                                val y = landmark.y()
+                                if (x < minX) minX = x
+                                if (x > maxX) maxX = x
+                                if (y < minY) minY = y
+                                if (y > maxY) maxY = y
+                            }
+                            faceBounds = android.graphics.Rect(
+                                (minX * bitmap.width).toInt(),
+                                (minY * bitmap.height).toInt(),
+                                (maxX * bitmap.width).toInt(),
+                                (maxY * bitmap.height).toInt()
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "MediaPipe face bounds detection failed for InsightFace ROI", e)
+                    }
+
+                    val rawInsightFaceResult = ensureInsightFaceDetector()?.detect(bitmap, lensFacing, faceBounds)
                     lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
                     if (rawInsightFaceResult != null) {
                         lastDetectionSource = FaceDetectionSource.INSIGHTFACE
@@ -221,11 +295,11 @@ class FaceDetectorManager(
 
     /**
      * 对 Bitmap 直接进行人脸检测（用于拍照路径）
-     * 优先使用 MediaPipe，如果失败则回退到 GPUPixel
+     * 优先使用 MediaPipe（独立 IMAGE 模式实例，无时间戳冲突），如果失败则回退到 GPUPixel
      */
     fun detectPhoto(bitmap: android.graphics.Bitmap, lensFacing: Int): DetectionResult? {
-        // 尝试 MediaPipe
-        val mediaPipeResult = detectWithMediaPipe(bitmap, lensFacing)
+        // 尝试 MediaPipe（使用独立的 IMAGE 模式实例）
+        val mediaPipeResult = detectWithMediaPipeForPhoto(bitmap, lensFacing)
         if (mediaPipeResult != null) {
             return DetectionResult(mediaPipeResult, FaceDetectionSource.MEDIAPIPE)
         }
@@ -237,14 +311,36 @@ class FaceDetectorManager(
         return null
     }
 
+    /**
+     * 预览路径：使用 VIDEO 模式 FaceLandmarker（共享实例，需要单调递增时间戳）
+     */
     private fun detectWithMediaPipe(bitmap: android.graphics.Bitmap, lensFacing: Int): FloatArray? {
         val landmarker = faceLandmarker ?: return null
         val mpImage = BitmapImageBuilder(bitmap).build()
-        val result = landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
+        val result = synchronized(mediaPipeLock) {
+            landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
+        }
         if (result.faceLandmarks().isEmpty()) {
             return null
         }
         val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MEDIAPIPE)
+            as? MediaPipe468Adapter
+            ?: return null
+        return adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()
+    }
+
+    /**
+     * 拍照路径：使用独立的 IMAGE 模式 FaceLandmarker 实例
+     * IMAGE 模式无时间戳限制，从根本上避免与预览路径的时间戳冲突。
+     */
+    private fun detectWithMediaPipeForPhoto(bitmap: android.graphics.Bitmap, lensFacing: Int): FloatArray? {
+        val landmarker = photoFaceLandmarker ?: return null
+        val mpImage = BitmapImageBuilder(bitmap).build()
+        val result = landmarker.detect(mpImage)
+        if (result.faceLandmarks().isEmpty()) {
+            return null
+        }
+        val adapter: MediaPipe468Adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MEDIAPIPE)
             as? MediaPipe468Adapter
             ?: return null
         return adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()

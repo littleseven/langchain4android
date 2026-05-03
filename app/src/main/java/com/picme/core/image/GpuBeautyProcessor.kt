@@ -7,9 +7,6 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PointF
-import com.google.mlkit.vision.face.Face
-import com.google.mlkit.vision.face.FaceContour
-import com.google.mlkit.vision.face.FaceLandmark
 import com.picme.core.common.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
