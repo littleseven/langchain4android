@@ -107,6 +107,8 @@ adb logcat -s "PicMe:*"
 cd ~/AndroidStudioProjects/PicMe && kimi-cli chat
 ```
 
+> 完整开发指南（环境配置、构建命令、调试技巧、发布流程）：`DEVELOPMENT.md`
+
 ## 兼容性变更记录
 
 | 日期 | 变更 | 影响 |
