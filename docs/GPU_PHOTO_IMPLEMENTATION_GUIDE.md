@@ -34,8 +34,7 @@
 │  2. 旋转/裁剪/镜像                                    │
 │     ↓                                                 │
 │  3. 判断美颜策略                                      │
-│     ├── GPUPixel → gpupixelProvider.processPhoto()   │
-│     └── BIG_BEAUTY → [新增 GPU 路径]                  │
+     └── BIG_BEAUTY → OffscreenRenderer                │
 │          ↓                                            │
 │  4. [GPU 路径] OffscreenRenderer                      │
 │     ├── Bitmap → Texture                              │
@@ -108,7 +107,7 @@ class OffscreenRenderer(eglContext: EGLContext) {
 **文件**: `app/src/main/java/com/picme/core/image/ImageProcessor.kt`
 
 **当前状态**: 
-- ✅ GPUPixel 模式已有 GPU 拍照路径
+- ✅ GPU 离屏渲染拍照路径已实现
 - ❌ BIG_BEAUTY 模式仍使用 CPU Canvas
 
 **需要添加的代码**（在 Line 630 之后）:

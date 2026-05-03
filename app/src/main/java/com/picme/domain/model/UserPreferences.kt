@@ -20,8 +20,7 @@ enum class AppLanguage {
  * BIG_BEAUTY: R 计划自研 OpenGL ES 管线（默认主引擎）
  */
 enum class BeautyStrategy {
-    BIG_BEAUTY,
-    GPUPIXEL
+    BIG_BEAUTY
 }
 
 /**
@@ -29,8 +28,7 @@ enum class BeautyStrategy {
  */
 enum class FaceDetectionEngineMode {
     MEDIAPIPE,
-    INSIGHTFACE,
-    GPUPIXEL
+    INSIGHTFACE
 }
 
 /**

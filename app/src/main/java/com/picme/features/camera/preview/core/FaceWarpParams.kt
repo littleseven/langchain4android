@@ -40,8 +40,7 @@ data class FaceContourData(
 enum class FaceDetectionSource {
     NONE,
     MEDIAPIPE,
-    INSIGHTFACE,
-    GPUPIXEL
+    INSIGHTFACE
 }
 
 data class FaceWarpParams(
@@ -73,9 +72,7 @@ data class FaceWarpParams(
     val rightCheekContourPoints: List<Offset> = emptyList(),
     // 新增：完整的 133 点 Contour 数据（用于调试，ML Kit 模式）
     val allContours: FaceContourData = FaceContourData(),
-    // 新增：GPUPixel 106 点数据（用于调试，GPUPixel 模式）
-    val gpuPixelLandmarks: GpuPixelLandmarks = GpuPixelLandmarks(),
-    // 新增：大美丽(MediaPipe) 106 点原始数据（用于调试对比）
+    // 新增：MediaPipe 106 点原始数据（用于调试对比）
     val bigBeautyLandmarks: GpuPixelLandmarks = GpuPixelLandmarks(),
     // 当前帧的人脸检测来源（调试浮层/日志使用）
     val detectionSource: FaceDetectionSource = FaceDetectionSource.NONE,
@@ -84,9 +81,9 @@ data class FaceWarpParams(
 )
 
 /**
- * GPUPixel 106 点数据结构（mars-face-kit 格式）
+ * 人脸 106 点数据结构（通用格式）
  *
- * 注：mars-face-kit 返回 111 个点，但前 106 个是标准 Face++ 106 点规范
+ * 注：返回 111 个点，但前 106 个是标准 Face++ 106 点规范
  * 我们只使用标准的 106 点，忽略额外的 5 个辅助点
  */
 data class GpuPixelLandmarks(
@@ -95,8 +92,8 @@ data class GpuPixelLandmarks(
 ) {
     companion object {
         /**
-         * 从 GPUPixel 返回的 float 数组创建（格式：[x0,y0,x1,y1,...]）
-         * 只取前 106 个点，忽略 mars-face-kit 额外的 5 个辅助点
+         * 从 float 数组创建（格式：[x0,y0,x1,y1,...]）
+         * 只取前 106 个点，忽略额外的 5 个辅助点
          */
         fun fromFloatArray(landmarks: FloatArray?): GpuPixelLandmarks {
             if (landmarks == null || landmarks.isEmpty()) {

@@ -5,7 +5,7 @@ import com.picme.features.camera.preview.core.FaceDetectionSource
 /**
  * 人脸关键点适配器接口
  *
- * 将不同检测器（MediaPipe 468点、InsightFace 106点、GPUPixel 106点等）的原生输出
+ * 将不同检测器（MediaPipe 468点、InsightFace 106点等）的原生输出
  * 转换为统一的 106 点标准格式，供美颜引擎消费。
  *
  * 设计原则：

@@ -76,12 +76,7 @@ data class BeautyParams(
     val redAdjustment: Float = 1f,
     val greenAdjustment: Float = 1f,
     val blueAdjustment: Float = 1f,
-    // 专业调色参数（GPUPixel 路径专用）
-    val gpuExposure: Float = 0f,
-    val gpuContrast: Float = 1f,
-    val gpuSaturation: Float = 1f,
-    val gpuWhiteBalance: Float = 5000f,
-    // 风格特效参数（大美丽引擎路径专用）
+    // 风格特效参数
     val styleEffect: StyleEffect = StyleEffect.NONE,
     val styleIntensity: Float = 1f,
     val toonThreshold: Float = 0.2f,
@@ -91,9 +86,7 @@ data class BeautyParams(
     val embossIntensity: Float = 1f,
     val crosshatchSpacing: Float = 0.03f,
     val crosshatchLineWidth: Float = 0.003f,
-    // 风格特效参数（GPUPixel 路径专用）
-    val styleFilterClassName: String? = null,
-    // 色调滤镜矩阵（大美丽引擎路径专用）：4x5 ColorMatrix，null 表示无滤镜
+    // 色调滤镜矩阵：4x5 ColorMatrix，null 表示无滤镜
     val colorMatrix: FloatArray? = null
 ) {
     companion object {
@@ -121,10 +114,6 @@ data class BeautyParams(
             redAdjustment == other.redAdjustment &&
             greenAdjustment == other.greenAdjustment &&
             blueAdjustment == other.blueAdjustment &&
-            gpuExposure == other.gpuExposure &&
-            gpuContrast == other.gpuContrast &&
-            gpuSaturation == other.gpuSaturation &&
-            gpuWhiteBalance == other.gpuWhiteBalance &&
             styleEffect == other.styleEffect &&
             styleIntensity == other.styleIntensity &&
             toonThreshold == other.toonThreshold &&
@@ -134,7 +123,6 @@ data class BeautyParams(
             embossIntensity == other.embossIntensity &&
             crosshatchSpacing == other.crosshatchSpacing &&
             crosshatchLineWidth == other.crosshatchLineWidth &&
-            styleFilterClassName == other.styleFilterClassName &&
             colorMatrix.contentEquals(other.colorMatrix)
     }
 
@@ -157,10 +145,6 @@ data class BeautyParams(
         result = 31 * result + redAdjustment.hashCode()
         result = 31 * result + greenAdjustment.hashCode()
         result = 31 * result + blueAdjustment.hashCode()
-        result = 31 * result + gpuExposure.hashCode()
-        result = 31 * result + gpuContrast.hashCode()
-        result = 31 * result + gpuSaturation.hashCode()
-        result = 31 * result + gpuWhiteBalance.hashCode()
         result = 31 * result + styleEffect.hashCode()
         result = 31 * result + styleIntensity.hashCode()
         result = 31 * result + toonThreshold.hashCode()
@@ -170,7 +154,6 @@ data class BeautyParams(
         result = 31 * result + embossIntensity.hashCode()
         result = 31 * result + crosshatchSpacing.hashCode()
         result = 31 * result + crosshatchLineWidth.hashCode()
-        result = 31 * result + styleFilterClassName.hashCode()
         result = 31 * result + colorMatrix.contentHashCode()
         return result
     }

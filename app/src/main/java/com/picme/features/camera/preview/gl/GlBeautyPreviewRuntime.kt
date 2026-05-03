@@ -6,12 +6,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.beauty.egl.GlBeautyPreviewProvider
-import com.picme.beauty.gpupixel.GpupixelBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautyStrategy
 
 /**
- * 创建并管理 BeautyPreviewEngine 实例，确保策略切换时旧 Provider 被完整 release。
+ * 创建并管理 BeautyPreviewEngine 实例。
  *
  * 时序约束（重要）：
  * - Compose recomposition 在帧开始时立即执行，DisposableEffect 的 onDispose/body 在帧结束才执行。
@@ -28,13 +27,12 @@ import com.picme.domain.model.BeautyStrategy
 @Composable
 internal fun rememberGlBeautyPreviewProvider(
     context: Context,
-    beautyStrategy: BeautyStrategy,
-    onGpuPixelLandmarksDetected: ((FloatArray?) -> Unit)? = null
+    beautyStrategy: BeautyStrategy
 ): BeautyPreviewEngine {
     // remember(beautyStrategy)：key 变化时同帧创建新 provider，保证类型与策略一致
     val provider = remember(beautyStrategy) {
-        createProvider(context, beautyStrategy, onGpuPixelLandmarksDetected).also {
-            Logger.d("Camera", "Beauty provider created: ${beautyStrategy.name}")
+        GlBeautyPreviewProvider(context).also {
+            Logger.d("Camera", "Beauty provider created: BIG_BEAUTY")
         }
     }
 
@@ -51,18 +49,3 @@ internal fun rememberGlBeautyPreviewProvider(
 
     return provider
 }
-
-private fun createProvider(
-    context: Context,
-    beautyStrategy: BeautyStrategy,
-    onGpuPixelLandmarksDetected: ((FloatArray?) -> Unit)? = null
-): BeautyPreviewEngine {
-    return when (beautyStrategy) {
-        BeautyStrategy.BIG_BEAUTY -> GlBeautyPreviewProvider(context)
-        BeautyStrategy.GPUPIXEL -> GpupixelBeautyPreviewProvider(
-            context = context,
-            onFaceLandmarksDetected = onGpuPixelLandmarksDetected
-        )
-    }
-}
-

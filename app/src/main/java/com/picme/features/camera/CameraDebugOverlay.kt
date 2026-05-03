@@ -45,20 +45,16 @@ internal fun FaceDebugOverlay(
     slimFaceValue: Float,
     aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
-    val gpuPixelLandmarks = faceWarpParams.gpuPixelLandmarks
     val bigBeautyLandmarks = faceWarpParams.bigBeautyLandmarks
-    val hasGpuPixel = gpuPixelLandmarks.hasFace && gpuPixelLandmarks.points.isNotEmpty()
     val hasBigBeauty = bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()
     val detectionLabel = when (faceWarpParams.detectionSource) {
         FaceDetectionSource.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         FaceDetectionSource.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
-        FaceDetectionSource.GPUPIXEL -> stringResource(R.string.face_detection_source_gpupixel)
         FaceDetectionSource.NONE -> stringResource(R.string.face_detection_source_none)
     }
     val requestedLabel = when (faceWarpParams.requestedDetectionEngineMode) {
         FaceDetectionEngineMode.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         FaceDetectionEngineMode.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
-        FaceDetectionEngineMode.GPUPIXEL -> stringResource(R.string.face_detection_source_gpupixel)
     }
     val requestedColor = faceDebugRequestedColor(faceWarpParams.requestedDetectionEngineMode)
     val detectionColor = faceDebugSourceColor(faceWarpParams.detectionSource)
@@ -67,11 +63,6 @@ internal fun FaceDebugOverlay(
         if (faceWarpParams.hasFace && hasBigBeauty) {
             FaceDebugOverlayBigBeauty(
                 bigBeautyLandmarks = bigBeautyLandmarks,
-                aspectRatio = aspectRatio
-            )
-        } else if (faceWarpParams.hasFace && hasGpuPixel) {
-            FaceDebugOverlayGpuPixel(
-                gpuPixelLandmarks = gpuPixelLandmarks,
                 aspectRatio = aspectRatio
             )
         }
@@ -162,7 +153,6 @@ private fun faceDebugRequestedColor(mode: FaceDetectionEngineMode): Color {
     return when (mode) {
         FaceDetectionEngineMode.MEDIAPIPE -> Color(0xFF4DB6AC)
         FaceDetectionEngineMode.INSIGHTFACE -> Color(0xFFFFB300)
-        FaceDetectionEngineMode.GPUPIXEL -> Color(0xFF66BB6A)
     }
 }
 
@@ -170,128 +160,7 @@ private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
     return when (source) {
         FaceDetectionSource.MEDIAPIPE -> Color(0xFF26A69A)
         FaceDetectionSource.INSIGHTFACE -> Color(0xFFFF8F00)
-        FaceDetectionSource.GPUPIXEL -> Color(0xFF43A047)
         FaceDetectionSource.NONE -> Color(0xFF9E9E9E)
-    }
-}
-
-@Composable
-private fun FaceDebugOverlayDual(
-    gpuPixelLandmarks: GpuPixelLandmarks,
-    bigBeautyLandmarks: GpuPixelLandmarks,
-    aspectRatio: Int = AspectRatio.RATIO_FULL
-) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val contentOffsetX: Float
-        val contentOffsetY: Float
-        val contentWidth: Float
-        val contentHeight: Float
-
-        if (aspectRatio == AspectRatio.RATIO_FULL) {
-            contentOffsetX = 0f
-            contentOffsetY = 0f
-            contentWidth = size.width
-            contentHeight = size.height
-        } else {
-            val imageContentAspect = when (aspectRatio) {
-                AspectRatio.RATIO_4_3 -> 3f / 4f
-                AspectRatio.RATIO_16_9 -> 9f / 16f
-                else -> size.width / size.height
-            }
-            val canvasAspect = size.width / size.height
-            if (imageContentAspect < canvasAspect) {
-                contentHeight = size.height
-                contentWidth = size.height * imageContentAspect
-                contentOffsetX = (size.width - contentWidth) / 2f
-                contentOffsetY = 0f
-            } else {
-                contentWidth = size.width
-                contentHeight = size.width / imageContentAspect
-                contentOffsetX = 0f
-                contentOffsetY = (size.height - contentHeight) / 2f
-            }
-        }
-
-        fun toCanvasPoint(point: Offset): Offset {
-            return Offset(
-                x = contentOffsetX + point.x.coerceIn(0f, 1f) * contentWidth,
-                y = contentOffsetY + point.y.coerceIn(0f, 1f) * contentHeight
-            )
-        }
-
-        val textPaint = Paint().apply {
-            textSize = 8.dp.toPx()
-            isAntiAlias = true
-            textAlign = Paint.Align.CENTER
-        }
-
-        // 绘制 GPUPixel 点位（绿色，带序号）
-        val gpuPoints = gpuPixelLandmarks.points.map { pt -> toCanvasPoint(pt) }
-        gpuPoints.forEachIndexed { index, point ->
-            drawCircle(
-                color = Color.Green.copy(alpha = 0.85f),
-                radius = 2.5f,
-                center = point,
-                style = Fill
-            )
-            drawIntoCanvas { canvas ->
-                textPaint.color = android.graphics.Color.GREEN
-                canvas.nativeCanvas.drawText(
-                    "G$index",
-                    point.x,
-                    point.y - 4.dp.toPx(),
-                    textPaint
-                )
-            }
-        }
-
-        // 绘制大美丽点位（蓝色，带序号）
-        val bbPoints = bigBeautyLandmarks.points.map { pt -> toCanvasPoint(pt) }
-        bbPoints.forEachIndexed { index, point ->
-            drawCircle(
-                color = Color.Blue.copy(alpha = 0.85f),
-                radius = 2.5f,
-                center = point,
-                style = Fill
-            )
-            drawIntoCanvas { canvas ->
-                textPaint.color = android.graphics.Color.BLUE
-                canvas.nativeCanvas.drawText(
-                    "M$index",
-                    point.x,
-                    point.y + 10.dp.toPx(),
-                    textPaint
-                )
-            }
-        }
-
-        // 每3秒输出一次完整坐标对比日志（用于映射优化）
-        val frameCount = System.currentTimeMillis() / 1000
-        if (frameCount % 3 == 0L && gpuPoints.size == 106 && bbPoints.size == 106) {
-            val sbG = StringBuilder()
-            val sbM = StringBuilder()
-            sbG.append("GPU_COORDS:")
-            sbM.append("MP_COORDS:")
-            for (i in 0 until 106) {
-                val g = gpuPixelLandmarks.points[i]
-                val m = bigBeautyLandmarks.points[i]
-                sbG.append(" [$i:${g.x.toString().take(5)},${g.y.toString().take(5)}]")
-                sbM.append(" [$i:${m.x.toString().take(5)},${m.y.toString().take(5)}]")
-            }
-            Logger.d("CameraDebug", sbG.toString())
-            Logger.d("CameraDebug", sbM.toString())
-        }
-
-        // 绘制图例说明
-        drawIntoCanvas { canvas ->
-            val legendPaint = Paint().apply {
-                textSize = 10.dp.toPx()
-                isAntiAlias = true
-                textAlign = Paint.Align.LEFT
-                color = android.graphics.Color.WHITE
-            }
-            canvas.nativeCanvas.drawText("G=兼容链路  M=MediaPipe(大美丽)", 10f, 30f, legendPaint)
-        }
     }
 }
 
@@ -357,62 +226,6 @@ private fun FaceDebugOverlayBigBeauty(
 
         // 绘制腮红控制点及区域（调试用）
         drawBlushControlPoints(bbPoints)
-    }
-}
-
-@Composable
-private fun FaceDebugOverlayGpuPixel(
-    gpuPixelLandmarks: GpuPixelLandmarks,
-    aspectRatio: Int = AspectRatio.RATIO_FULL
-) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val contentOffsetX: Float
-        val contentOffsetY: Float
-        val contentWidth: Float
-        val contentHeight: Float
-
-        if (aspectRatio == AspectRatio.RATIO_FULL) {
-            contentOffsetX = 0f
-            contentOffsetY = 0f
-            contentWidth = size.width
-            contentHeight = size.height
-        } else {
-            val imageContentAspect = when (aspectRatio) {
-                AspectRatio.RATIO_4_3 -> 3f / 4f
-                AspectRatio.RATIO_16_9 -> 9f / 16f
-                else -> size.width / size.height
-            }
-            val canvasAspect = size.width / size.height
-            if (imageContentAspect < canvasAspect) {
-                contentHeight = size.height
-                contentWidth = size.height * imageContentAspect
-                contentOffsetX = (size.width - contentWidth) / 2f
-                contentOffsetY = 0f
-            } else {
-                contentWidth = size.width
-                contentHeight = size.width / imageContentAspect
-                contentOffsetX = 0f
-                contentOffsetY = (size.height - contentHeight) / 2f
-            }
-        }
-
-        fun toCanvasPoint(point: Offset): Offset {
-            return Offset(
-                x = contentOffsetX + point.x.coerceIn(0f, 1f) * contentWidth,
-                y = contentOffsetY + point.y.coerceIn(0f, 1f) * contentHeight
-            )
-        }
-
-        // 绘制 GPUPixel 点位（绿色，带序号）
-        val gpuPoints = gpuPixelLandmarks.points.map { pt -> toCanvasPoint(pt) }
-        gpuPoints.forEachIndexed { index, point ->
-            drawCircle(
-                color = Color.Green.copy(alpha = 0.85f),
-                radius = 2.5f,
-                center = point,
-                style = Fill
-            )
-        }
     }
 }
 
@@ -550,7 +363,7 @@ private fun FaceDebugOverlaySingle(
             )
         }
 
-        // 瘦脸控制点：仅在 ML Kit 模式（有 allContours 数据）下绘制，GPUPixel/MediaPipe 模式下跳过
+        // 瘦脸控制点：仅在 ML Kit 模式（有 allContours 数据）下绘制，MediaPipe 模式下跳过
         val isMlKitMode = faceWarpParams.allContours.totalPointCount() > 0
         if (isMlKitMode) {
             drawClosedContour(
@@ -642,205 +455,13 @@ private fun FaceDebugOverlaySingle(
             )
         }
 
-        // 绘制 GPUPixel/MediaPipe 106 点（调试用，GPUPixel/大美丽模式）
-        drawGpuPixelLandmarks(faceWarpParams, ::toCanvasPoint)
-
         // 绘制所有 133 点 Contour（调试用，ML Kit 模式）
         drawAllContours(faceWarpParams, ::toCanvasPoint)
     }
 }
 
 /**
- * 绘制 GPUPixel 106 点（mars-face-kit 格式）
- * 绘制点 + 轮廓/区域连线
- */
-private fun DrawScope.drawGpuPixelLandmarks(
-    faceWarpParams: FaceWarpParams,
-    toCanvasPoint: (Offset) -> Offset
-) {
-    val gpuPixelLandmarks = faceWarpParams.gpuPixelLandmarks
-    if (!gpuPixelLandmarks.hasFace || gpuPixelLandmarks.points.isEmpty()) return
-
-    val points = gpuPixelLandmarks.points.map(toCanvasPoint)
-
-    // 定义各区域的索引范围（mars-face-kit 106点格式，与GPUPixel一致）
-    val contourRange = 0..32               // 33点 - 脸部轮廓
-    val leftEyebrowRange = 33..37           // 5点 - 左眉
-    val rightEyebrowRange = 38..42         // 5点 - 右眉
-    val leftEyeRange = 52..74              // 左眼外6点(52-57) + 左眉下4点(64-67) + 左眼内3点(72-74)
-    val rightEyeRange = 58..77             // 右眼外6点(58-63) + 右眉下4点(68-71) + 右眼内3点(75-77)
-    val noseRange = 43..83                 // 眉心1点 + 鼻梁3点 + 鼻尖5点 + 鼻孔上2点 + 鼻孔4点
-    val mouthRange = 84..105               // 嘴巴外12点 + 内8点 + 瞳孔重复2点
-
-    // 绘制轮廓连线（品红色）
-    val contourPoints = points.slice(contourRange)
-    if (contourPoints.size >= 2) {
-        // 绘制轮廓连线
-        contourPoints.zipWithNext().forEach { (start, end) ->
-            drawLine(
-                color = Color.Magenta.copy(alpha = 0.5f),
-                start = start,
-                end = end,
-                strokeWidth = 1.5f
-            )
-        }
-        // 闭合轮廓（连接最后一个点到第一个点）
-        drawLine(
-            color = Color.Magenta.copy(alpha = 0.5f),
-            start = contourPoints.last(),
-            end = contourPoints.first(),
-            strokeWidth = 1.5f
-        )
-    }
-
-    // 绘制左眉毛连线（青色）
-    val leftEyebrowPoints = points.slice(leftEyebrowRange)
-    if (leftEyebrowPoints.size >= 2) {
-        leftEyebrowPoints.zipWithNext().forEach { (start, end) ->
-            drawLine(
-                color = Color.Cyan.copy(alpha = 0.5f),
-                start = start,
-                end = end,
-                strokeWidth = 1.5f
-            )
-        }
-    }
-
-    // 绘制右眉毛连线（蓝色）
-    val rightEyebrowPoints = points.slice(rightEyebrowRange)
-    if (rightEyebrowPoints.size >= 2) {
-        rightEyebrowPoints.zipWithNext().forEach { (start, end) ->
-            drawLine(
-                color = Color.Blue.copy(alpha = 0.5f),
-                start = start,
-                end = end,
-                strokeWidth = 1.5f
-            )
-        }
-    }
-
-    // 绘制左眼连线（黄色）
-    val leftEyePoints = points.slice(leftEyeRange)
-    if (leftEyePoints.size >= 2) {
-        // 上眼睑 5 点 (53-57)
-        leftEyePoints.take(5).zipWithNext().forEach { (start, end) ->
-            drawLine(color = Color.Yellow.copy(alpha = 0.5f), start = start, end = end, strokeWidth = 1.5f)
-        }
-        // 下眼睑 5 点 (58-62)
-        leftEyePoints.drop(5).take(5).zipWithNext().forEach { (start, end) ->
-            drawLine(color = Color.Yellow.copy(alpha = 0.5f), start = start, end = end, strokeWidth = 1.5f)
-        }
-        // 连接眼睑两端，瞳孔(63)不连线
-        if (leftEyePoints.size >= 10) {
-            drawLine(color = Color.Yellow.copy(alpha = 0.5f), start = leftEyePoints[4], end = leftEyePoints[5], strokeWidth = 1.5f)
-            drawLine(color = Color.Yellow.copy(alpha = 0.5f), start = leftEyePoints[9], end = leftEyePoints[0], strokeWidth = 1.5f)
-        }
-    }
-
-    // 绘制右眼连线（绿色）
-    val rightEyePoints = points.slice(rightEyeRange)
-    if (rightEyePoints.size >= 2) {
-        // 上眼睑 5 点 (64-68)
-        rightEyePoints.take(5).zipWithNext().forEach { (start, end) ->
-            drawLine(color = Color.Green.copy(alpha = 0.5f), start = start, end = end, strokeWidth = 1.5f)
-        }
-        // 下眼睑 5 点 (69-73)
-        rightEyePoints.drop(5).take(5).zipWithNext().forEach { (start, end) ->
-            drawLine(color = Color.Green.copy(alpha = 0.5f), start = start, end = end, strokeWidth = 1.5f)
-        }
-        // 连接眼睑两端，瞳孔(74)不连线
-        if (rightEyePoints.size >= 10) {
-            drawLine(color = Color.Green.copy(alpha = 0.5f), start = rightEyePoints[4], end = rightEyePoints[5], strokeWidth = 1.5f)
-            drawLine(color = Color.Green.copy(alpha = 0.5f), start = rightEyePoints[9], end = rightEyePoints[0], strokeWidth = 1.5f)
-        }
-    }
-
-    // 绘制鼻子连线（紫色）
-    val nosePoints = points.slice(noseRange)
-    if (nosePoints.size >= 2) {
-        nosePoints.zipWithNext().forEach { (start, end) ->
-            drawLine(
-                color = Color(0xFF9C27B0).copy(alpha = 0.5f),
-                start = start,
-                end = end,
-                strokeWidth = 1.5f
-            )
-        }
-    }
-
-    // 绘制嘴巴连线（红色）
-    val mouthPoints = points.slice(mouthRange)
-    if (mouthPoints.size >= 2) {
-        mouthPoints.zipWithNext().forEach { (start, end) ->
-            drawLine(
-                color = Color.Red.copy(alpha = 0.5f),
-                start = start,
-                end = end,
-                strokeWidth = 1.5f
-            )
-        }
-        // 闭合嘴巴轮廓
-        drawLine(
-            color = Color.Red.copy(alpha = 0.5f),
-            start = mouthPoints.last(),
-            end = mouthPoints.first(),
-            strokeWidth = 1.5f
-        )
-    }
-
-    // 配置序号文本画笔
-    val textPaint = Paint().apply {
-        textSize = 9.dp.toPx()
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-    }
-
-    // 绘制所有点（不同区域使用不同颜色）+ 序号
-    points.forEachIndexed { index, point ->
-        val color = when (index) {
-            in contourRange -> Color.Magenta.copy(alpha = 0.9f)
-            in leftEyebrowRange -> Color.Cyan.copy(alpha = 0.9f)
-            in rightEyebrowRange -> Color.Blue.copy(alpha = 0.9f)
-            in leftEyeRange -> Color.Yellow.copy(alpha = 0.95f)
-            in rightEyeRange -> Color.Green.copy(alpha = 0.95f)
-            in noseRange -> Color(0xFF9C27B0).copy(alpha = 0.9f)
-            in mouthRange -> Color.Red.copy(alpha = 0.9f)
-            else -> Color.White.copy(alpha = 0.8f)
-        }
-
-        drawCircle(
-            color = color,
-            radius = 3.dp.toPx(),
-            center = point,
-            style = Fill
-        )
-
-        // 绘制点位序号（使用对比色确保可读性）
-        val textColor = Color.Black.copy(alpha = 0.85f)
-        drawIntoCanvas { canvas ->
-            textPaint.color = textColor.toArgb()
-            canvas.nativeCanvas.drawText(
-                index.toString(),
-                point.x,
-                point.y - 6.dp.toPx(),
-                textPaint
-            )
-        }
-    }
-
-    // 绘制瘦脸控制点及方向（调试用）
-    drawThinFaceControlPoints(points)
-
-    // 绘制大眼控制点及方向（调试用）
-    drawBigEyeControlPoints(points)
-
-    // 绘制腮红控制点及区域（调试用）
-    drawBlushControlPoints(points)
-}
-
-/**
- * 绘制大眼算法的2对控制点及方向
- * originIndex=瞳孔 -> targetIndex=眼角
+ * 绘制大眼控制点及方向
  */
 private fun DrawScope.drawBigEyeControlPoints(points: List<Offset>) {
     if (points.size < 78) return

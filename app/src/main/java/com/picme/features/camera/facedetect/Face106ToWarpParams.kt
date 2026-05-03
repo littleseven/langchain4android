@@ -35,7 +35,7 @@ object Face106ToWarpParams {
 
     fun convert(
         landmarks106: FloatArray,
-        detectionSource: FaceDetectionSource = FaceDetectionSource.GPUPIXEL
+        detectionSource: FaceDetectionSource = FaceDetectionSource.NONE
     ): FaceWarpParams {
         require(landmarks106.size >= FaceDetectorManager.POINT_COUNT * 2)
 
@@ -64,16 +64,7 @@ object Face106ToWarpParams {
         val leftCheekContour = extractCheekContour(landmarks106, isLeft = true)
         val rightCheekContour = extractCheekContour(landmarks106, isLeft = false)
 
-        val gpuPixelLandmarks = if (detectionSource == FaceDetectionSource.GPUPIXEL) {
-            GpuPixelLandmarks.fromFloatArray(landmarks106)
-        } else {
-            GpuPixelLandmarks()
-        }
-        val bigBeautyLandmarks = if (detectionSource != FaceDetectionSource.GPUPIXEL) {
-            GpuPixelLandmarks.fromFloatArray(landmarks106)
-        } else {
-            GpuPixelLandmarks()
-        }
+        val bigBeautyLandmarks = GpuPixelLandmarks.fromFloatArray(landmarks106)
 
         return FaceWarpParams(
             faceCenterX = faceCenter.x,
@@ -102,7 +93,6 @@ object Face106ToWarpParams {
             leftCheekContourPoints = leftCheekContour,
             rightCheekContourPoints = rightCheekContour,
             allContours = FaceContourData(),
-            gpuPixelLandmarks = gpuPixelLandmarks,
             bigBeautyLandmarks = bigBeautyLandmarks,
             detectionSource = detectionSource
         )

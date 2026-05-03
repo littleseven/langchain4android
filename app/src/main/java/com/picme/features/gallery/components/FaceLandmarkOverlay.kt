@@ -58,8 +58,6 @@ import com.picme.core.common.Logger
 import com.picme.features.camera.facedetect.InsightFace2D106Detector
 import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.features.camera.facedetect.adapter.InsightFaceAdapter
-import com.pixpark.gpupixel.FaceDetector
-import com.pixpark.gpupixel.GPUPixel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,10 +70,8 @@ private class LandmarkDetectionSnapshot(
     val mediaPipe468Points: List<Pair<Float, Float>>?,
     val bigBeauty106Points: FloatArray?,
     val insightFace106Points: FloatArray?,
-    val gpupixel106Points: FloatArray?,
     val mpDetectTime: Float,
-    val insightDetectTime: Float,
-    val gpDetectTime: Float
+    val insightDetectTime: Float
 )
 
 // 与 FaceMakeupPass 中的腮红三角网格保持一致，便于对齐静态图左右脸区域。
@@ -102,10 +98,8 @@ class FaceLandmarkDetectionState(
     val mediaPipe468Points: List<Pair<Float, Float>>?,
     val bigBeauty106Points: FloatArray?,
     val insightFace106Points: FloatArray?,
-    val gpupixel106Points: FloatArray?,
     val mpDetectTime: Float,
     val insightDetectTime: Float,
-    val gpDetectTime: Float,
     val isLoading: Boolean,
     val errorMessage: String?
 )
@@ -121,22 +115,16 @@ fun rememberFaceLandmarkDetection(
     var mediaPipe468Points by remember(imageUri) { mutableStateOf<List<Pair<Float, Float>>?>(null) }
     var bigBeauty106Points by remember(imageUri) { mutableStateOf<FloatArray?>(null) }
     var insightFace106Points by remember(imageUri) { mutableStateOf<FloatArray?>(null) }
-    var gpupixel106Points by remember(imageUri) { mutableStateOf<FloatArray?>(null) }
     var isLoading by remember(imageUri) { mutableStateOf(false) }
     var errorMessage by remember(imageUri) { mutableStateOf<String?>(null) }
     var mpDetectTime by remember(imageUri) { mutableFloatStateOf(0f) }
     var insightDetectTime by remember(imageUri) { mutableFloatStateOf(0f) }
-    var gpDetectTime by remember(imageUri) { mutableFloatStateOf(0f) }
     var detectionRequestId by remember { mutableIntStateOf(0) }
 
     var mediaPipeLandmarker by remember { mutableStateOf<FaceLandmarker?>(null) }
     var insightFaceDetector by remember { mutableStateOf<InsightFace2D106Detector?>(null) }
-    var gpuPixelDetector by remember { mutableStateOf<FaceDetector?>(null) }
 
     DisposableEffect(Unit) {
-        GPUPixel.Init(context)
-        gpuPixelDetector = FaceDetector.Create()
-
         mediaPipeLandmarker = runCatching {
             createFaceLandmarker(context, Delegate.GPU)
         }.getOrElse { gpuError ->
@@ -159,11 +147,10 @@ fun rememberFaceLandmarkDetection(
         onDispose {
             mediaPipeLandmarker?.close()
             insightFaceDetector?.release()
-            gpuPixelDetector?.destroy()
         }
     }
 
-    LaunchedEffect(imageUri, enabled, mediaPipeLandmarker, insightFaceDetector, gpuPixelDetector) {
+    LaunchedEffect(imageUri, enabled, mediaPipeLandmarker, insightFaceDetector) {
         detectionRequestId += 1
         val requestId = detectionRequestId
         if (!enabled) {
@@ -176,10 +163,8 @@ fun rememberFaceLandmarkDetection(
         mediaPipe468Points = null
         bigBeauty106Points = null
         insightFace106Points = null
-        gpupixel106Points = null
         mpDetectTime = 0f
         insightDetectTime = 0f
-        gpDetectTime = 0f
 
         try {
             val bitmap = withContext(Dispatchers.IO) {
@@ -194,10 +179,8 @@ fun rememberFaceLandmarkDetection(
                     var detectedMediaPipe468: List<Pair<Float, Float>>? = null
                     var detectedBigBeauty106: FloatArray? = null
                     var detectedInsight106: FloatArray? = null
-                    var detectedGpuPixel106: FloatArray? = null
                     var detectedMpTime = 0f
                     var detectedInsightTime = 0f
-                    var detectedGpTime = 0f
 
                     mediaPipeLandmarker?.let { landmarker ->
                         val mpStart = System.currentTimeMillis()
@@ -213,20 +196,12 @@ fun rememberFaceLandmarkDetection(
                         detectedInsightTime = (System.currentTimeMillis() - insightStart).toFloat()
                     }
 
-                    gpuPixelDetector?.let { detector ->
-                        val gpStart = System.currentTimeMillis()
-                        detectedGpuPixel106 = detectGpuPixel106(bitmap, detector)
-                        detectedGpTime = (System.currentTimeMillis() - gpStart).toFloat()
-                    }
-
                     LandmarkDetectionSnapshot(
                         mediaPipe468Points = detectedMediaPipe468,
                         bigBeauty106Points = detectedBigBeauty106,
                         insightFace106Points = detectedInsight106,
-                        gpupixel106Points = detectedGpuPixel106,
                         mpDetectTime = detectedMpTime,
-                        insightDetectTime = detectedInsightTime,
-                        gpDetectTime = detectedGpTime
+                        insightDetectTime = detectedInsightTime
                     )
                 }
             } finally {
@@ -240,15 +215,12 @@ fun rememberFaceLandmarkDetection(
             mediaPipe468Points = snapshot.mediaPipe468Points
             bigBeauty106Points = snapshot.bigBeauty106Points
             insightFace106Points = snapshot.insightFace106Points
-            gpupixel106Points = snapshot.gpupixel106Points
             mpDetectTime = snapshot.mpDetectTime
             insightDetectTime = snapshot.insightDetectTime
-            gpDetectTime = snapshot.gpDetectTime
 
             if (
                 snapshot.mediaPipe468Points == null &&
-                snapshot.insightFace106Points == null &&
-                snapshot.gpupixel106Points == null
+                snapshot.insightFace106Points == null
             ) {
                 errorMessage = context.getString(R.string.landmark_no_face_detected)
             }
@@ -272,10 +244,8 @@ fun rememberFaceLandmarkDetection(
         mediaPipe468Points = mediaPipe468Points,
         bigBeauty106Points = bigBeauty106Points,
         insightFace106Points = insightFace106Points,
-        gpupixel106Points = gpupixel106Points,
         mpDetectTime = mpDetectTime,
         insightDetectTime = insightDetectTime,
-        gpDetectTime = gpDetectTime,
         isLoading = isLoading,
         errorMessage = errorMessage
     )
@@ -287,7 +257,6 @@ fun FaceLandmarkCanvasOverlay(
     show468Points: Boolean,
     showBigBeauty106: Boolean,
     showInsightFace106: Boolean,
-    showGpuPixel106: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (state.imageWidth <= 0 || state.imageHeight <= 0) {
@@ -452,29 +421,7 @@ fun FaceLandmarkCanvasOverlay(
             }
         }
 
-        if (showGpuPixel106 && state.gpupixel106Points != null) {
-            val redColor = Color(0xFFFF4444)
-            drawBlushTriangleMesh(state.gpupixel106Points, redColor)
-            for (index in 0 until state.gpupixel106Points.size / 2) {
-                val x = state.gpupixel106Points[index * 2]
-                val y = state.gpupixel106Points[index * 2 + 1]
-                val canvasPoint = toCanvasPoint(x, y)
-                drawCircle(color = redColor, radius = 8f, center = canvasPoint)
-                drawIntoCanvas { canvas ->
-                    val paint = android.graphics.Paint().apply {
-                        color = "#FF4444".toColorInt()
-                        textSize = 18f
-                        textAlign = android.graphics.Paint.Align.CENTER
-                    }
-                    canvas.nativeCanvas.drawText(
-                        index.toString(),
-                        canvasPoint.x,
-                        canvasPoint.y - 10f,
-                        paint
-                    )
-                }
-            }
-        }
+
     }
 }
 
@@ -484,11 +431,9 @@ fun FaceLandmarkControlBar(
     show468Points: Boolean,
     showBigBeauty106: Boolean,
     showInsightFace106: Boolean,
-    showGpuPixel106: Boolean,
     onToggle468Points: () -> Unit,
     onToggleBigBeauty106: () -> Unit,
     onToggleInsightFace106: () -> Unit,
-    onToggleGpuPixel106: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -525,13 +470,7 @@ fun FaceLandmarkControlBar(
                 enabled = showInsightFace106,
                 onClick = onToggleInsightFace106
             )
-            LandmarkToggle(
-                color = Color(0xFFFF4444),
-                label = stringResource(R.string.landmark_compatibility),
-                subLabel = "${state.gpDetectTime.toInt()}ms",
-                enabled = showGpuPixel106,
-                onClick = onToggleGpuPixel106
-            )
+
         }
 
         when {
@@ -822,90 +761,4 @@ private fun detectInsightFace106(bitmap: Bitmap, detector: InsightFace2D106Detec
     return result.getOrNull()
 }
 
-private fun detectGpuPixel106(bitmap: Bitmap, detector: FaceDetector): FloatArray? {
-    return try {
-        val maxSize = 1024
-        val scaledBitmap = if (bitmap.width > maxSize || bitmap.height > maxSize) {
-            val scale = maxSize.toFloat() / max(bitmap.width, bitmap.height)
-            val newWidth = (bitmap.width * scale).toInt()
-            val newHeight = (bitmap.height * scale).toInt()
-            Log.d(TAG, "GPUPixel scaling: ${bitmap.width}x${bitmap.height} -> ${newWidth}x${newHeight}")
-            bitmap.scale(newWidth, newHeight, true)
-        } else {
-            bitmap
-        }
-
-        val scaledLandmarks = detectGpuPixel106DirectBuffer(scaledBitmap, detector)
-        if (scaledBitmap !== bitmap) {
-            scaledBitmap.recycle()
-        }
-        if (scaledLandmarks != null) {
-            return scaledLandmarks
-        }
-
-        if (scaledBitmap !== bitmap) {
-            Log.d(TAG, "GPUPixel retrying original bitmap for small-face detection")
-            return detectGpuPixel106DirectBuffer(bitmap, detector)
-        }
-
-        null
-    } catch (error: Exception) {
-        Logger.e(TAG, "GPUPixel detection failed", error)
-        null
-    }
-}
-
-private fun detectGpuPixel106DirectBuffer(bitmap: Bitmap, detector: FaceDetector): FloatArray? {
-    val width = bitmap.width
-    val height = bitmap.height
-    val pixels = IntArray(width * height)
-    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-    // 与实时预览链路保持一致：DirectByteBuffer + VIDEO mode 更稳定。
-    val rgbaLandmarks = detector.detect(
-        buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA),
-        width,
-        height,
-        width * 4,
-        FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
-        FaceDetector.GPUPIXEL_FRAME_TYPE_RGBA
-    )
-    if (rgbaLandmarks.isNotEmpty()) {
-        return rgbaLandmarks
-    }
-
-    val bgraLandmarks = detector.detect(
-        buildDirectColorBuffer(pixels, FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA),
-        width,
-        height,
-        width * 4,
-        FaceDetector.GPUPIXEL_MODE_FMT_VIDEO,
-        FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA
-    )
-    return bgraLandmarks.takeIf { it.isNotEmpty() }
-}
-
-private fun buildDirectColorBuffer(pixels: IntArray, frameType: Int): ByteBuffer {
-    val buffer = ByteBuffer.allocateDirect(pixels.size * 4)
-    for (index in pixels.indices) {
-        val pixel = pixels[index]
-        when (frameType) {
-            FaceDetector.GPUPIXEL_FRAME_TYPE_BGRA -> {
-                buffer.put((pixel and 0xFF).toByte())
-                buffer.put((pixel shr 8 and 0xFF).toByte())
-                buffer.put((pixel shr 16 and 0xFF).toByte())
-                buffer.put((pixel shr 24 and 0xFF).toByte())
-            }
-
-            else -> {
-                buffer.put((pixel shr 16 and 0xFF).toByte())
-                buffer.put((pixel shr 8 and 0xFF).toByte())
-                buffer.put((pixel and 0xFF).toByte())
-                buffer.put((pixel shr 24 and 0xFF).toByte())
-            }
-        }
-    }
-    buffer.flip()
-    return buffer
-}
 

@@ -94,7 +94,7 @@ internal class GlBeautyPreviewStrategy(
                     Pair(contourPoint.x, contourPoint.y)
                 }
             )
-            // 传递106点关键点给GPUPixel风格瘦脸/大眼
+            // 传递106点关键点给风格瘦脸/大眼
             val bigBeautyLandmarks = params.bigBeautyLandmarks
             if (bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()) {
                 val landmarks106 = FloatArray(bigBeautyLandmarks.points.size * 2)
