@@ -26,12 +26,13 @@
 ## 工作模式
 
 ### 标准模式（本地）
-- 执行前阅读 `AGENTS.md` 和 `PRODUCT.md`
+- 执行前阅读根目录 `AGENTS.md`（或 `.kimi/AGENTS.md`）和 `PRODUCT.md`
 - 代码修改后必须自检编译: `./gradlew assembleDebug`
 - 遵循项目的 I18N 规范
 - 使用结构化日志标签 `PicMe:[ModuleName]`
 
 ### 远程开发模式（kimi-cli）
+- **项目配置**: `.kimi/AGENTS.md` + `.kimi/skills/`
 - **激活方式**: 用户发送 "激活我的团队"
 - **角色链**: CO → PM → RD → CR → QA 自动流转
 - **构建执行**: 在 kimi-cli 中直接执行 `./gradlew assembleDebug`
