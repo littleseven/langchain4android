@@ -215,4 +215,25 @@
     <string name="screenshot_saved">截图已保存至 %1$s</string>
     <string name="screenshot_failed">截图失败</string>
 
+    <!-- 缺失的 I18N 字符串补充 (2026-05-03) -->
+    <string name="filter_group_color">色调滤镜</string>
+    <string name="filter_group_style">风格特效</string>
+    <string name="downloading">下载中：%1$s</string>
+    <string name="generation_finished">生成完成</string>
+    <string name="live_recording">录制中…</string>
+    <string name="live_stable">画面稳定</string>
+    <string name="live_unstable">保持平稳</string>
+    <string name="searching_for">搜索中：%1$s</string>
+    <string name="tip_portrait_center">尝试将人脸放在中心圆圈内</string>
+    <string name="tip_portrait_thirds">将眼睛放在上三分之一交点处</string>
+    <string name="tip_portrait_headroom">头顶留出一些空间</string>
+    <string name="tip_portrait_full_body">脚部靠近底部边框</string>
+    <string name="ocr_recognize">提取文字</string>
+    <string name="ocr_copy_success">文字已复制到剪贴板</string>
+    <string name="ocr_share_title">分享文字</string>
+    <string name="media_details">详情</string>
+    <string name="media_info_path">路径：%1$s</string>
+    <string name="media_info_size">大小：%1$s</string>
+    <string name="media_info_resolution">分辨率：%1$s</string>
+
 </resources>

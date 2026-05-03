@@ -103,3 +103,23 @@ Box(
 | 卡片背景 | `surface` | 主要表面 |
 | 次级背景 | `surfaceVariant` | 区分层级的背景 |
 | 半透明背景 | `surfaceVariant.copy(alpha = 0.3f)` | 悬浮面板等 |
+
+## 5. 与产品文档对照 (Product Alignment)
+
+**必须满足的产品指标**:
+- ✅ **HyperOS 视觉风格** → 大圆角设计（24dp+）、毛玻璃效果、流体动效
+- ✅ **深色/浅色模式适配** → Material3 Theme 系统统一配色，无硬编码颜色
+- ✅ **无障碍支持** → 所有 Composable 提供 contentDescription，色彩对比度符合 WCAG 标准
+- ✅ **微交互反馈** → 关键操作伴随触感反馈（HapticFeedback）
+- ✅ **非线性动效** → 使用 FastOutSlowInEasing / StandardEasing，模拟物理惯性
+
+**技术决策记录**:
+- **选择 Material3 Design System**: 符合 HyperOS 风格、组件丰富、社区活跃、长期维护有保障
+- **使用 CompositionLocal 传递主题**: 避免参数层层透传、提升可维护性、支持动态主题切换
+- **RenderEffect 实现毛玻璃**: 性能优于传统 Canvas 方案、支持实时模糊、兼容 Android 12+
+- **Theme Tokens 统一管理**: 禁止硬编码颜色和尺寸、确保全局一致性、便于后期调整
+
+**参考文档**:
+- PRODUCT.md Section 3.3: 设计系统与规范
+- docs/FEATURES.md Section 3: HyperOS 视觉风格
+- docs/FEATURES.md Section 3.1: 色彩系统
