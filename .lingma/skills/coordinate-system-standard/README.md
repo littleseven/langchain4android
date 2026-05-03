@@ -10,10 +10,10 @@
 
 ```bash
 # 检测代码
-docs/scripts/check-coordinate-annotation.sh
+scripts/check-coordinate-annotation.sh
 
 # 检测文档
-docs/scripts/check-doc-coordinate-annotation.sh
+scripts/check-doc-coordinate-annotation.sh
 ```
 
 ### 2. 核心原则
