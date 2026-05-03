@@ -399,12 +399,19 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         // 绑定我们的 FBO 作为渲染目标
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
         
+        // [调试] 检查 FBO 状态
+        val fboStatus = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
+        Log.d(TAG, "FBO status before renderBeautyMultiPass: $fboStatus")
+        
         // 清屏
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         
         // 执行完整的多 Pass 渲染管线
         renderer.renderBeautyMultiPass(width, height)
+        
+        // [关键修复] renderBeautyMultiPass 内部会切换 FBO，需要重新绑定我们的 FBO
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
 
         // 检查 GL 错误
         val glError = GLES20.glGetError()

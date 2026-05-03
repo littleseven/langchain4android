@@ -27,9 +27,10 @@ echo "[2/6] 触发拍照..."
 adb shell input tap 540 2200
 sleep 3
 
-# 4. 获取最新照片
+# 4. 获取最新照片（按修改时间排序）
 echo "[3/6] 获取最新照片..."
-LATEST_PHOTO=$(adb shell ls /sdcard/Pictures/PicMe/ 2>/dev/null | tail -1)
+# [关键修复] 使用 ls -lt 按时间排序，而不是字母排序
+LATEST_PHOTO=$(adb shell ls -lt /sdcard/Pictures/PicMe/*.jpg 2>/dev/null | grep -v "total" | head -1 | awk '{print $NF}' | xargs basename)
 if [ -z "$LATEST_PHOTO" ]; then
     echo "❌ 错误：未找到照片"
     exit 1

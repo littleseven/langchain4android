@@ -849,6 +849,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 使用 2D 主 Shader 渲染
         shaderProgram2D.use()
+        
+        // [调试] 检查 Shader 程序是否有效
+        val programId = shaderProgram2D.getProgramId()
+        Log.d(TAG, "renderMainShaderFromFbo2D: using shader program $programId")
+        
+        // [调试] 检查当前绑定的 FBO
+        val boundFbo = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, boundFbo, 0)
+        Log.d(TAG, "renderMainShaderFromFbo2D: bound FBO=${boundFbo[0]}")
 
         // 绑定 2D 输入纹理到 TEXTURE0
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -944,6 +953,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // 设置顶点数据（标准全屏四边形）
         val vb = vertexBuffer
         val tb = textureBuffer
+        Log.d(TAG, "renderMainShaderFromFbo2D: vertexBuffer=${vb != null}, textureBuffer=${tb != null}")
         if (vb != null && tb != null) {
             val aPosLoc = shaderProgram2D.getAttribLocation("aPosition")
             val aTexLoc = shaderProgram2D.getAttribLocation("aTextureCoord")
@@ -961,6 +971,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 绘制
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        
+        // [调试] 检查绘制后的 GL 错误
+        val drawError = GLES20.glGetError()
+        if (drawError != GLES20.GL_NO_ERROR) {
+            Log.e(TAG, "GL error after glDrawArrays in renderMainShaderFromFbo2D: $drawError")
+        }
 
         // 清理
         if (vb != null) {
@@ -1532,6 +1548,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * @param height 渲染高度
      */
     fun renderBeautyMultiPass(width: Int, height: Int) {
+        // [调试] 检查入口时的 FBO 状态
+        val entryFbo = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, entryFbo, 0)
+        val savedFboId = entryFbo[0]  // 保存入口时的 FBO ID
+        Log.d(TAG, "renderBeautyMultiPass ENTRY: bound FBO=$savedFboId")
+        
         // 设置 viewport
         GLES20.glViewport(0, 0, width, height)
         
@@ -1542,6 +1564,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Log.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
         val beautyPassSuccess = executeBeautyPasses()
         Log.d(TAG, "renderBeautyMultiPass(offscreen): executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
+        
+        // [调试] 检查 executeBeautyPasses 后的 FBO 状态
+        val afterBeautyFbo = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, afterBeautyFbo, 0)
+        Log.d(TAG, "After executeBeautyPasses: bound FBO=${afterBeautyFbo[0]}")
+        
+        // [关键修复] executeBeautyPasses 会 unbind FBO，需要重新绑定
+        // 但我们不知道外部绑定的 FBO ID，所以需要在调用前保存
+        // 暂时跳过，看后面是否有问题
         
         if (!beautyPassSuccess) {
             val category = lastErrorCategory.ifBlank { "render_pipeline" }
@@ -1560,10 +1591,33 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             }
         }
         
+        // [调试] 检查 FaceMakeupPass 后的 FBO 状态
+        val afterMakeupFbo = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, afterMakeupFbo, 0)
+        Log.d(TAG, "After FaceMakeupPass: bound FBO=${afterMakeupFbo[0]}")
+        
         // 步骤3: 使用主 Shader 渲染到当前绑定的 FBO
         // [关键修复] 不能调用 renderMainShaderFromFbo(null)，因为它会解绑 FBO
         // 而是应该直接使用 renderMainShaderFromFbo2D，它不会绑定/解绑 FBO
+        
+        // [关键修复] 重新绑定入口时的 FBO，因为 executeBeautyPasses/renderFaceMakeupPass 会 unbind
+        if (savedFboId > 0) {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
+            Log.d(TAG, "Rebound to saved FBO: $savedFboId")
+        }
+        
         Log.d(TAG, "renderMainShaderFromFbo2D(offscreen): input=$beautyPassOutputTextureId")
+        
+        // [调试] 检查输入纹理是否有效
+        if (beautyPassOutputTextureId <= 0) {
+            Log.e(TAG, "ERROR: beautyPassOutputTextureId is invalid: $beautyPassOutputTextureId")
+        }
+        
+        // [调试] 检查当前绑定的 FBO
+        val currentFbo = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, currentFbo, 0)
+        Log.d(TAG, "Current bound FBO before renderMainShaderFromFbo2D: ${currentFbo[0]}")
+        
         renderMainShaderFromFbo2D(beautyPassOutputTextureId, width, height)
     }
 
