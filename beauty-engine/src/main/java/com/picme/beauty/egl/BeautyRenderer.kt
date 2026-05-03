@@ -1560,9 +1560,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             }
         }
         
-        // 步骤3: 使用主 Shader 渲染到当前绑定的 FBO（不解绑）
-        Log.d(TAG, "renderMainShaderFromFbo(offscreen): input=$beautyPassOutputTextureId, output=current FBO")
-        renderMainShaderFromFbo(beautyPassOutputTextureId, null, width, height)
+        // 步骤3: 使用主 Shader 渲染到当前绑定的 FBO
+        // [关键修复] 不能调用 renderMainShaderFromFbo(null)，因为它会解绑 FBO
+        // 而是应该直接使用 renderMainShaderFromFbo2D，它不会绑定/解绑 FBO
+        Log.d(TAG, "renderMainShaderFromFbo2D(offscreen): input=$beautyPassOutputTextureId")
+        renderMainShaderFromFbo2D(beautyPassOutputTextureId, width, height)
     }
 
     override fun release() {
