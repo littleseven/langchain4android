@@ -123,7 +123,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             applyBeautyParams(renderer, params, faceData)
 
             // 7. 执行渲染（多 Pass）
-            val outputTexture = renderPhoto(renderer, bitmap.width, bitmap.height)
+            val outputTexture = renderPhoto(renderer, params, bitmap.width, bitmap.height)
 
             // 8. 读取 FBO 到 Bitmap
             val result = readPixelsToBitmap(bitmap.width, bitmap.height, outputTexture)
@@ -280,6 +280,12 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
     /**
      * 应用美颜参数到 BeautyRenderer
+     *
+     * [关键修复] 照片路径**不需要**Y轴翻转。
+     * GLUtils.texImage2D(bitmap) 上传时，Bitmap 左上角(Y=0)已对齐纹理左下角(V=0)，
+     * 因此纹理坐标与 Bitmap 坐标天然一致。预览路径需要 flip 是因为 SurfaceTexture
+     * 的 textureMatrix 自带变换，但照片路径走 2D 纹理 FBO，无 textureMatrix，
+     * 若再 flip 会导致瘦脸/唇色/腮红全部上下错位。
      */
     private fun applyBeautyParams(renderer: BeautyRenderer, params: BeautyParams, faceData: FaceData?) {
         renderer.setTexelSize(fboWidth, fboHeight)
@@ -326,8 +332,13 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             crosshatchLineWidth = params.crosshatchLineWidth
         )
 
+        // [DEBUG] 如需调试可视化，可临时设置为 5（GPUPixel warp 可视化）
+        // renderer.setDebugMode(5)
+        // Log.d(TAG, "[DEBUG] Debug mode 5 enabled (GPUPixel warp visualization)")
+
         // 人脸数据
         if (faceData != null && faceData.hasFace) {
+            // 照片路径坐标直接使用，不做 Y-flip（见方法头部注释）
             renderer.updateFaceWarpParams(
                 faceCenterX = faceData.faceCenterX,
                 faceCenterY = faceData.faceCenterY,
@@ -359,9 +370,14 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
             if (faceData.landmarks106 != null) {
                 renderer.updateFacePoints106(faceData.landmarks106)
+                renderer.setUseGpupixelWarp(true)
+                Log.d(TAG, "PhotoProcessor: using GPUPixel warp (landmarks106 available)")
+            } else {
+                renderer.setUseGpupixelWarp(false)
+                Log.d(TAG, "PhotoProcessor: falling back to traditional warp (no landmarks106)")
             }
         } else {
-            // 无人脸：重置人脸状态
+            // 无人脸：重置人脸状态（默认值已基于 UV 坐标系，无需翻转）
             renderer.updateFaceWarpParams(
                 faceCenterX = 0.5f, faceCenterY = 0.5f,
                 leftEyeX = 0.4f, leftEyeY = 0.45f,
@@ -385,7 +401,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
      * 3. 执行 FaceMakeupPass（唇色+腮红）
      * 4. 执行 MainShader（美型+调色）→ 输出到 FBO
      */
-    private fun renderPhoto(renderer: BeautyRenderer, width: Int, height: Int): Int {
+    private fun renderPhoto(renderer: BeautyRenderer, params: BeautyParams, width: Int, height: Int): Int {
         // 设置 viewport
         GLES20.glViewport(0, 0, width, height)
 
@@ -407,11 +423,24 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         
-        // 执行完整的多 Pass 渲染管线
-        renderer.renderBeautyMultiPass(width, height)
-        
-        // [关键修复] renderBeautyMultiPass 内部会切换 FBO，需要重新绑定我们的 FBO
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
+        // 判断是否需要完整多 Pass 管线
+        val needMultiPass = params.smoothing > 0.001f ||
+            params.whitening > 0.001f ||
+            params.bigEyes > 0.001f ||
+            kotlin.math.abs(params.slimFace) > 0.001f ||
+            params.lipColor > 0.001f ||
+            params.blush > 0.001f ||
+            params.styleEffect != com.picme.beauty.egl.StyleEffect.NONE
+
+        if (needMultiPass) {
+            // [关键修复] 使用与预览完全一致的完整多 Pass 管线
+            Log.d(TAG, "Photo needs multi-pass pipeline, using renderBeautyMultiPass")
+            renderer.renderBeautyMultiPass(width, height, skipCopyPass = true)
+        } else {
+            // 无需多 Pass：直接主 Shader
+            Log.d(TAG, "Photo does not need multi-pass, using MainShader directly")
+            renderer.renderMainShaderFromFbo2D(inputTextureId, width, height)
+        }
 
         // 检查 GL 错误
         val glError = GLES20.glGetError()

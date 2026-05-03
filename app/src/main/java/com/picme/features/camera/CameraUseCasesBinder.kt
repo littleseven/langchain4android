@@ -41,6 +41,7 @@ internal fun bindCameraUseCases(
     detectionEngineMode: FaceDetectionEngineMode,
     videoCapture: VideoCapture<Recorder>,
     gpupixelProvider: GpupixelBeautyPreviewProvider?,
+    faceDetectorManager: FaceDetectorManager,
     onImageCaptureChanged: (ImageCapture) -> Unit,
     onCameraControlChanged: (CameraControl) -> Unit,
     onZoomRatioChanged: (Float) -> Unit,
@@ -118,11 +119,7 @@ internal fun bindCameraUseCases(
         android.util.Log.d("PicMe:Camera", "GPUPixel mode: provider initialized, skipping Preview usecase")
     }
 
-    // 人脸检测引擎使用显式模式，不再做自动降级。
-    val faceDetectorManager = FaceDetectorManager(
-        context = context,
-        detectionEngineMode = detectionEngineMode
-    )
+    // faceDetectorManager 由 AppContainer 统一管理，通过参数传入
 
     var frameCount = 0
     var lastFrameLogMs = 0L

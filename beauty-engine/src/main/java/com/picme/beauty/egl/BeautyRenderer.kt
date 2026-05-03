@@ -543,10 +543,16 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val beautyPassSuccess = executeBeautyPasses()
         Log.d(TAG, "renderBeautyMultiPass: executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
 
+        // [关键修复] 如果 executeBeautyPasses 返回 false（无需 FBO 管线），使用外部纹理 ID
+        val finalInputTextureId = if (beautyPassSuccess) {
+            beautyPassOutputTextureId
+        } else {
+            externalTextureId
+        }
+        Log.d(TAG, "Final input texture for MainShader: $finalInputTextureId")
+
         if (!beautyPassSuccess) {
-            val category = lastErrorCategory.ifBlank { "render_pipeline" }
-            val reason = lastErrorReason.ifBlank { "executeBeautyPasses returned false" }
-            throw IllegalStateException("$category: $reason")
+            Log.d(TAG, "Skipping FBO pipeline, using external texture directly")
         }
 
         // 步骤2: FaceMakeupPass 妆容渲染（三角网格 + 纹理贴图）
@@ -841,7 +847,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * @param width 渲染宽度
      * @param height 渲染高度
      */
-    fun renderMainShaderFromFbo2D(inputTextureId: Int, width: Int, height: Int) {
+    fun renderMainShaderFromFbo2D(inputTextureId: Int, width: Int, height: Int, skipBeautyEffects: Boolean = false) {
         // 编译 2D Shader（如果未编译）
         if (!compileShaderProgram2D()) {
             throw IllegalStateException("shader_compile: failed to compile ShaderProgram2D for photo")
@@ -867,19 +873,29 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 设置所有 uniform（使用原始坐标，不做 inverseTransform）
         shaderProgram2D.setVec2("uTexelSize", 1.0f / width, 1.0f / height)
-        // 拍照路径：磨皮/美白参数直接生效（未经过 BeautyUnitPass）
-        shaderProgram2D.setFloat("uSmoothing", smoothingStrength)
-        shaderProgram2D.setFloat("uWhitening", whiteningStrength)
-        shaderProgram2D.setFloat("uSharpen", sharpenStrength)
+        // [关键修复] 当多 Pass 管线已执行 BeautyUnitPass/FaceMakeupPass 时，
+        // 主 Shader 必须跳过磨皮/美白/妆容，避免重复应用导致预览/拍照不一致
+        if (skipBeautyEffects) {
+            shaderProgram2D.setFloat("uSmoothing", 0.0f)
+            shaderProgram2D.setFloat("uWhitening", 0.0f)
+            shaderProgram2D.setFloat("uSharpen", 0.0f)
+            shaderProgram2D.setFloat("uLipColor", 0.0f)
+            shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
+            shaderProgram2D.setFloat("uBlush", 0.0f)
+            shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
+        } else {
+            shaderProgram2D.setFloat("uSmoothing", smoothingStrength)
+            shaderProgram2D.setFloat("uWhitening", whiteningStrength)
+            shaderProgram2D.setFloat("uSharpen", sharpenStrength)
+            shaderProgram2D.setFloat("uLipColor", lipColorStrength)
+            shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
+            shaderProgram2D.setFloat("uBlush", blushStrength)
+            shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
+        }
         shaderProgram2D.setFloat("uBigEyes", bigEyesStrength)
         shaderProgram2D.setFloat("uSlimFace", slimFaceStrength)
         shaderProgram2D.setFloat("uFaceRadius", faceRadius)
         shaderProgram2D.setFloat("uHasFace", hasFace)
-        // 拍照路径：妆容参数直接生效（未经过 FaceMakeupPass）
-        shaderProgram2D.setFloat("uLipColor", lipColorStrength)
-        shaderProgram2D.setInt("uLipColorIndex", lipColorIndex)
-        shaderProgram2D.setFloat("uBlush", blushStrength)
-        shaderProgram2D.setInt("uBlushColorFamily", blushColorFamily)
         // 直接使用原始坐标（Bitmap 坐标空间与 Shader UV 一致）
         shaderProgram2D.setVec2("uFaceCenter", faceCenterX, faceCenterY)
         shaderProgram2D.setVec2("uMouthCenter", mouthCenterX, mouthCenterY)
@@ -1005,7 +1021,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * 执行多Pass美颜：CopyPass -> BeautyUnitPass
      * 返回 true 表示成功，主Shader应从FBO纹理采样
      */
-    private fun executeBeautyPasses(): Boolean {
+    private fun executeBeautyPasses(skipCopyPass: Boolean = false): Boolean {
         val needBeautyPass = smoothingStrength > 0.001f || whiteningStrength > 0.001f
         val needGeometryPass = bigEyesStrength > 0.001f || kotlin.math.abs(slimFaceStrength) > 0.001f
         val needMakeupPass =
@@ -1107,7 +1123,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         var currentOutputFbo = acquiredPing
 
         // Pass 0: 将 OES 外部纹理复制到 2D FBO 纹理
-        if (copyPassCompiled) {
+        // [关键修复] 当输入已是 2D 纹理（拍照路径）时，跳过 CopyPass
+        if (!skipCopyPass && copyPassCompiled) {
             val copyProgram = copyPass.getShaderProgram()
             Log.d(TAG, "Pass0 CopyPass: input=$currentInputTexture, outputFbo=${currentOutputFbo.getTextureId()}")
             copyPass.render(
@@ -1547,7 +1564,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * @param width 渲染宽度
      * @param height 渲染高度
      */
-    fun renderBeautyMultiPass(width: Int, height: Int) {
+    fun renderBeautyMultiPass(width: Int, height: Int, skipCopyPass: Boolean = false) {
         // [调试] 检查入口时的 FBO 状态
         val entryFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, entryFbo, 0)
@@ -1562,7 +1579,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         
         // 步骤1: 执行磨皮/美白 Pass
         Log.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
-        val beautyPassSuccess = executeBeautyPasses()
+        val beautyPassSuccess = executeBeautyPasses(skipCopyPass)
         Log.d(TAG, "renderBeautyMultiPass(offscreen): executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
         
         // [调试] 检查 executeBeautyPasses 后的 FBO 状态
@@ -1574,20 +1591,27 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // 但我们不知道外部绑定的 FBO ID，所以需要在调用前保存
         // 暂时跳过，看后面是否有问题
         
+        // [关键修复] 如果 executeBeautyPasses 返回 false（无需 FBO 管线），使用外部纹理 ID
+        val finalInputTextureId = if (beautyPassSuccess) {
+            beautyPassOutputTextureId
+        } else {
+            externalTextureId
+        }
+        Log.d(TAG, "Final input texture for MainShader: $finalInputTextureId")
+
         if (!beautyPassSuccess) {
-            val category = lastErrorCategory.ifBlank { "render_pipeline" }
-            val reason = lastErrorReason.ifBlank { "executeBeautyPasses returned false" }
-            throw IllegalStateException("$category: $reason")
+            Log.d(TAG, "Skipping FBO pipeline, using external texture directly")
         }
         
         // 步骤2: FaceMakeupPass 妆容渲染
         Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
+        var currentTextureId = finalInputTextureId
         if (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)) {
             val ping = fboPing
             val pong = fboPong
             Log.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
             if (ping != null && pong != null && ping.isInitialized && pong.isInitialized) {
-                beautyPassOutputTextureId = renderFaceMakeupPass(beautyPassOutputTextureId, ping, pong)
+                currentTextureId = renderFaceMakeupPass(finalInputTextureId, ping, pong)
             }
         }
         
@@ -1606,11 +1630,20 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             Log.d(TAG, "Rebound to saved FBO: $savedFboId")
         }
         
-        Log.d(TAG, "renderMainShaderFromFbo2D(offscreen): input=$beautyPassOutputTextureId")
+        // [关键修复] 重新绑定入口时的 FBO，因为 executeBeautyPasses/renderFaceMakeupPass 会 unbind
+        if (savedFboId > 0) {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
+            Log.d(TAG, "Rebound to saved FBO: $savedFboId")
+        }
+
+        // 步骤3: 主 Shader + 风格特效
+        // [关键修复] 使用 currentTextureId（而非 beautyPassOutputTextureId），
+        // 因为 FaceMakeupPass 可能已改变输出纹理
+        Log.d(TAG, "renderMainShaderFromFbo2D(offscreen): input=$currentTextureId")
         
         // [调试] 检查输入纹理是否有效
-        if (beautyPassOutputTextureId <= 0) {
-            Log.e(TAG, "ERROR: beautyPassOutputTextureId is invalid: $beautyPassOutputTextureId")
+        if (currentTextureId <= 0) {
+            Log.e(TAG, "ERROR: currentTextureId is invalid: $currentTextureId")
         }
         
         // [调试] 检查当前绑定的 FBO
@@ -1618,7 +1651,30 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, currentFbo, 0)
         Log.d(TAG, "Current bound FBO before renderMainShaderFromFbo2D: ${currentFbo[0]}")
         
-        renderMainShaderFromFbo2D(beautyPassOutputTextureId, width, height)
+        if (activeStyle != StyleEffect.NONE) {
+            // 有风格特效：先渲染主Shader到 intermediateFbo，再应用风格特效到 savedFboId
+            updateFramebufferSize(width, height)
+            val fbo = intermediateFbo
+            if (fbo != null && fbo.isInitialized) {
+                renderMainShaderFromFbo(currentTextureId, fbo, width, height)
+                fbo.unbind()
+
+                // 风格特效 -> savedFboId
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
+                GLES20.glViewport(0, 0, width, height)
+                GLES20.glDisableVertexAttribArray(aPositionLocation)
+                GLES20.glDisableVertexAttribArray(aTextureCoordLocation)
+                styleEffectShader.render(fbo.getTextureId(), width, height)
+                Log.d(TAG, "Style effect applied: $activeStyle")
+            } else {
+                Log.e(TAG, "Style effect FBO not ready, skipping style effect")
+                // 降级：直接渲染主Shader到 savedFboId
+                renderMainShaderFromFbo2D(currentTextureId, width, height, skipBeautyEffects = beautyPassSuccess)
+            }
+        } else {
+            // 无风格特效：直接渲染主Shader到 savedFboId
+            renderMainShaderFromFbo2D(currentTextureId, width, height, skipBeautyEffects = beautyPassSuccess)
+        }
     }
 
     override fun release() {

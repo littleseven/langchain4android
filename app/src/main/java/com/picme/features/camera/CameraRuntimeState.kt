@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.core.image.ImageProcessor
 import com.picme.PicMeApplication
 import com.picme.beauty.api.BeautyPreviewEngine
+import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
@@ -39,7 +40,8 @@ internal data class CameraRuntimeContext(
     val faceDetectionEngineMode: FaceDetectionEngineMode,
     val faceLandmarkModeEnabled: Boolean,
     val glRecoveryAvailableAtMs: Long,
-    val lifecycleOwner: LifecycleOwner
+    val lifecycleOwner: LifecycleOwner,
+    val faceDetectorManager: FaceDetectorManager
 )
 
 @Composable
@@ -47,6 +49,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val app = context.applicationContext as PicMeApplication
     val imageProcessor = app.container.imageProcessor
     val userPreferencesRepository = app.container.userPreferencesRepository
+    val faceDetectorManager = app.container.faceDetectorManager
     val coroutineScope = rememberCoroutineScope()
     // 用 getBeautyStrategyBlocking() 同步读取初始值，避免 DataStore flow 首帧异步延迟
     // 导致先用 BIG_BEAUTY 初始化一次、再切换到真实策略的竞态（双引擎并存 → EGL_BAD_DISPLAY 黑屏）
@@ -76,7 +79,8 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         faceDetectionEngineMode = faceDetectionEngineMode,
         faceLandmarkModeEnabled = faceLandmarkModeEnabled,
         glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
-        lifecycleOwner = lifecycleOwner
+        lifecycleOwner = lifecycleOwner,
+        faceDetectorManager = faceDetectorManager
     )
 }
 
