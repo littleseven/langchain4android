@@ -77,5 +77,11 @@ interface BeautyPreviewCapability {
      * @param isFillCenter true = FILL_CENTER（全屏裁剪），false = FIT_CENTER（黑边保持比例）
      */
     fun setScaleMode(isFillCenter: Boolean)
+
+    /**
+     * 设置是否为前置摄像头预览
+     * 前置摄像头时，OpenGL 渲染会水平镜像预览画面，使预览像镜子
+     */
+    fun setIsFrontCamera(isFront: Boolean)
 }
 

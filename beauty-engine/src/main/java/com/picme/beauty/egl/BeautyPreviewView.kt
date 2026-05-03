@@ -34,6 +34,7 @@ class BeautyPreviewView @JvmOverloads constructor(
     private var cameraInputWidth: Int = 1280
     private var cameraInputHeight: Int = 720
     private var isFillCenter: Boolean = true
+    private var isFrontCamera: Boolean = false
 
     var smoothingStrength: Float = 0.5f
         set(value) {
@@ -341,6 +342,12 @@ class BeautyPreviewView @JvmOverloads constructor(
         this.isFillCenter = isFillCenter
         if (!isRendererInitialized) return
         renderer.setScaleMode(isFillCenter)
+    }
+
+    fun setIsFrontCamera(isFront: Boolean) {
+        this.isFrontCamera = isFront
+        if (!isRendererInitialized) return
+        renderer.isFrontCamera = isFront
     }
 
     fun updateFaceWarpParams(
