@@ -51,6 +51,8 @@
 adb logcat -s "PicMe:*"          # 查看 PicMe 日志
 ```
 
+> 完整开发指南（环境配置、IDE 快捷键、性能分析、发布流程）：`DEVELOPMENT.md`
+
 ## 关联 AI 工具
 
 - **Lingma (IDE 内辅助)**: `.lingma/skills/`
