@@ -88,6 +88,12 @@ docs/FEATURES.md (How: 交互与体验规则)
 - 相机预览：`docs/CAMERA_PREVIEW_TECH_SPEC.md`
 - 大美丽（主引擎）：`docs/BIG_BEAUTY_TECH_SPEC.md`
 - 容灾降级统一说明：`docs/BEAUTY_ENGINE_FALLBACK.md`
+
+### 6.3 AI 工具配置索引
+- 工具配置速查：`AI_TOOLS.md`
+- kimi-cli 专用配置：`.kimi/AGENTS.md`
+- OpenClaw 工作区：`.openclaw/workspace/`
+- Lingma Skills：`.lingma/skills/`
 ### 6.3 文档写作与审查规范
 - 顶层/模块 AGENTS 写作规范：`docs/AGENTS_SPEC.md`
 - 产品需求：`PRODUCT.md`

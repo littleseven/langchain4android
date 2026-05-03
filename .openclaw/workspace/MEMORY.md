@@ -6,6 +6,13 @@
 - 项目已进入稳定开发阶段
 - OpenClaw 工作区已配置完成
 
+### 2026-05 AI 工具配置统一
+- 新增 `.kimi/AGENTS.md` 与 `.kimi/skills/`，为 kimi-cli 提供独立项目配置入口
+- `.lingma/skills/` 作为 Skills 唯一事实来源，通过符号链接同步到 `.openclaw/skills/` 与 `.kimi/skills/`
+- 删除断裂的 `shader-debug` 符号链接，修复 OpenClaw 加载错误
+- 新增 `AI_TOOLS.md` 统一索引所有 AI 工具配置位置
+- 精简 `agents/README.md`，消除与根 `AGENTS.md` 的重复内容
+
 ## 常用代码片段
 
 ### 创建新的 Feature 模块

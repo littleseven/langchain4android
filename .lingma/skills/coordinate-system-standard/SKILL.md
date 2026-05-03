@@ -1,10 +1,13 @@
+---
+name: coordinate-system-standard
+description: 人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。Use when normalizing face landmark coordinates, rendering pipeline coordinates, or UI annotation coordinate systems in the PicMe project.
+---
+
 # Coordinate System Standard Skill
 
-**技能名称**: coordinate-system-standard  
-**版本**: 1.0.0  
+**技能名称**: coordinate-system-standard
+**版本**: 1.0.0
 **适用场景**: 人脸关键点坐标、渲染管线、UI 标注的坐标系规范化
-
----
 
 ## 📋 技能概述
 
