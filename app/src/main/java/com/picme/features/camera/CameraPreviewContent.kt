@@ -390,15 +390,12 @@ private fun BoxScope.PrimaryControlPanels(
         ControlPanel(onDismiss = actions.onDismissPanels) {
             when {
                 uiState.showFilterSelector -> {
-                    // 美颜模式下不显示任何滤镜选择器
-                    if (uiState.beautyStrategy != BeautyStrategy.BIG_BEAUTY) {
-                        UnifiedFilterSelector(
-                            selectedFilter = uiState.selectedFilter,
-                            selectedStyleFilter = uiState.selectedStyleFilter,
-                            onFilterSelected = actions.onFilterSelected,
-                            onStyleFilterSelected = actions.onStyleFilterSelected
-                        )
-                    }
+                    UnifiedFilterSelector(
+                        selectedFilter = uiState.selectedFilter,
+                        selectedStyleFilter = uiState.selectedStyleFilter,
+                        onFilterSelected = actions.onFilterSelected,
+                        onStyleFilterSelected = actions.onStyleFilterSelected
+                    )
                 }
                 uiState.showRatioSelector -> {
                     RatioSelector(
