@@ -83,7 +83,7 @@ kimi-cli chat
 | `av-gl-expert` | 音视频与 OpenGL 渲染专家 |
 | `coordinate-system-standard` | 坐标系规范化 |
 | `doc-sync-guardian` | 文档一致性守护 |
-| `gpupixel-porting` | GPUPixel 算法移植规范 |
+| `gpupixel-porting` | 历史参考：GPUPixel 算法移植规范（GPUPixel 已移除） |
 | `image-quality-checker` | 图片质量检查 |
 | `mediapipe-landmark-mapping` | MediaPipe 关键点映射规范 |
 

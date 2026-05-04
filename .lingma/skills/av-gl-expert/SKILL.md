@@ -7,7 +7,7 @@ description: PicMe 音视频与 OpenGL 渲染专家。涵盖 CameraX 集成、Op
 
 ## 📋 Skill 概述
 
-本 Skill 专为 PicMe 项目的**音视频处理**（CameraX、Media3）和 **OpenGL ES 渲染**（大美丽引擎、GPUPixel、EGL 离屏渲染）提供专家级开发和调试支持。
+本 Skill 专为 PicMe 项目的**音视频处理**（CameraX、Media3）和 **OpenGL ES 渲染**（大美丽引擎、EGL 离屏渲染）提供专家级开发和调试支持。
 
 **核心价值**：
 - 🔍 **深度诊断**：快速定位 OpenGL 黑屏、Shader 编译失败、EGL 上下文丢失等疑难问题
@@ -51,40 +51,33 @@ description: PicMe 音视频与 OpenGL 渲染专家。涵盖 CameraX 集成、Op
 
 ## 🏗️ 项目技术架构总览
 
-### 渲染引擎双轨制
+### 渲染引擎架构
+
+> GPUPixel 已于 2026-05 完全移除。当前为单引擎架构。
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │              用户层：BeautyPreviewView               │
-│         （统一入口，隐藏底层引擎差异）                 │
-└──────────────┬──────────────────┬───────────────────┘
-               │                  │
-        大美丽模式           兼容模式 (GPUPixel)
-     (默认主引擎)          (回退校验/兼容验证)
-               │                  │
-    ┌──────────▼──────────┐      │
-    │  BeautyRenderer     │      │
-    │  (Kotlin + GLSL)    │      │
-    │                     │      │
-    │  • 主 Shader        │      │
-    │  • FaceMakeupPass   │      │
-    │  • StyleEffectPass  │      │
-    │  • OffscreenRender  │      │
-    └──────────┬──────────┘      │
-               │                  │
-    ┌──────────▼──────────┐      │
-    │   EGLCore           │      │
-    │  (EGL 上下文管理)    │      │
-    └─────────────────────┘      │
-                                 │
-                    ┌────────────▼────────────┐
-                    │  GPUPixel Engine (C++)  │
-                    │                         │
-                    │  • SourceYUV            │
-                    │  • Filter Chain         │
-                    │  • SinkSurface          │
-                    │  • FaceDetector (Mars)  │
-                    └─────────────────────────┘
+│              （统一入口，单引擎架构）                  │
+└──────────────────────────┬──────────────────────────┘
+                           │
+                      大美丽模式
+                       (唯一引擎)
+                           │
+              ┌────────────▼────────────┐
+              │     BeautyRenderer      │
+              │     (Kotlin + GLSL)     │
+              │                         │
+              │  • 主 Shader            │
+              │  • FaceMakeupPass       │
+              │  • StyleEffectPass      │
+              │  • OffscreenRender      │
+              └────────────┬────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │        EGLCore          │
+              │     (EGL 上下文管理)     │
+              └─────────────────────────┘
 ```
 
 ### 关键组件索引
@@ -95,7 +88,7 @@ description: PicMe 音视频与 OpenGL 渲染专家。涵盖 CameraX 集成、Op
 | **BeautyRenderer** | `beauty-engine/src/main/java/com/picme/beauty/egl/BeautyRenderer.kt` | 大美丽核心渲染器，实现多 Pass Shader 链 |
 | **OffscreenRenderer** | `beauty-engine/impl/src/main/java/com/picme/beauty/internal/OffscreenRenderer.kt` | 离屏渲染器，用于拍照后处理 |
 | **EGLCore** | `beauty-engine/src/main/java/com/picme/beauty/egl/EGLCore.kt` | EGL 上下文封装 |
-| **GPUPixel Provider** | `beauty-engine/src/main/java/com/picme/beauty/gpupixel/GpupixelBeautyPreviewProvider.kt` | GPUPixel 引擎 Kotlin 桥接 |
+| **GPUPixel Provider** | ~~`beauty-engine/.../GpupixelBeautyPreviewProvider.kt`~~ | ~~GPUPixel 引擎 Kotlin 桥接~~（已于 2026-05 移除） |
 | **CameraUseCasesBinder** | `app/src/main/java/com/picme/features/camera/CameraUseCasesBinder.kt` | CameraX UseCase 绑定 |
 
 ### 技术文档索引
@@ -106,7 +99,7 @@ description: PicMe 音视频与 OpenGL 渲染专家。涵盖 CameraX 集成、Op
 | **大美丽技术规格** | `docs/BIG_BEAUTY_TECH_SPEC.md` | Shader 架构、多 Pass 渲染、性能优化 |
 | **离屏渲染 ADR** | `docs/ADR-002-opengl-offscreen-unified-pipeline.md` | 拍照 GPU 化方案 |
 | **引擎容灾降级** | `docs/BEAUTY_ENGINE_FALLBACK.md` | 自动回退策略 |
-| **GPUPixel 移植计划** | `docs/BIG_BEAUTY_GPUPixel_PORTING_PLAN.md` | 风格特效移植路线 |
+| **风格特效实现** | `beauty-engine/src/main/java/com/picme/beauty/egl/StyleEffectShader.kt` | 自研 Shader 风格特效（TOON/SKETCH/POSTERIZE/EMBOSS/CROSSHATCH） |
 
 ---
 
@@ -588,21 +581,22 @@ imageAnalysis.setAnalyzer(Dispatchers.IO.asExecutor()) { imageProxy ->
         // ✅ 立即提取数据，避免 ImageProxy 过早关闭
         val mediaImage = imageProxy.image ?: return@setAnalyzer
         
-        // 转换为 GPUPixel 所需格式
-        val buffers = GPUPixel.YUV_420_888toI420AndRGBA(
-            mediaImage,
-            imageProxy.imageInfo.rotationDegrees
-        )
+        // 大美丽引擎：YUV 数据由 SurfaceTexture 直接输入 GPU Shader
+        // 不再经过 CPU 侧 I420/RGBA 转换（GPUPixel 旧链路已移除）
+        // 人脸检测在独立 ImageAnalysis 线程异步完成
         
-        if (buffers != null) {
-            gpupixelProvider.onYuvFrame(
-                buffers[0],  // Y
-                buffers[1],  // U
-                buffers[2],  // V
-                rotatedWidth,
-                rotatedHeight,
-                0,
-                buffers[3]   // RGBA for face detection
+        // 将 MediaPipe/InsightFace 检测结果更新到 BeautyRenderer
+        val landmarks = faceDetector.detect(mediaImage, rotationDegrees)
+        if (landmarks != null) {
+            beautyRenderer.updateFaceLandmarks(landmarks)
+        }
+        
+        imageProxy.close()
+        return@setAnalyzer
+        
+        // 以下为 GPUPixel 历史代码参考（已移除）：
+        // val buffers = GPUPixel.YUV_420_888toI420AndRGBA(...)
+        // gpupixelProvider.onYuvFrame(...)
             )
         }
     } catch (e: Exception) {
@@ -655,7 +649,7 @@ class DualCameraManager {
 ```
 MediaPipe 468 点 (3D NDC)
     ↓ 468→106 语义映射
-InsightFace/GPUPixel 106 点 (2D 图像坐标)
+InsightFace 2D106 点 (2D 图像坐标)
     ↓ 旋转校正 (rotationDegrees)
 旋转后图像坐标
     ↓ 归一化 (0.0~1.0)
@@ -855,7 +849,7 @@ fun LandmarkDebugOverlay(
 - [ ] 归一化坐标范围是否为 [0.0, 1.0]？
 - [ ] Viewport 计算是否考虑画幅比例？
 - [ ] UV 映射是否与 Shader 期望一致？
-- [ ] 调试浮层是否显示检测来源（MediaPipe/InsightFace/GPUPixel）？
+- [ ] 调试浮层是否显示检测来源（MediaPipe/InsightFace）？
 
 ---
 

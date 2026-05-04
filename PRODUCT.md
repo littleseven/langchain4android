@@ -81,15 +81,15 @@
             - **长腿 (Leg Extension)**：基于姿态估计的下半身分段线性缩放 + 透视校正，幅度 ≤ 20%，范围 0-50
     - **人脸关键点检测能力（2026-04 更新）**：
         - **表情与状态属性（能力预留，待独立分析流补齐）**：`smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性仍按产品能力保留；当前预览主分析链路已切换为 MediaPipe，如需启用该类能力，需补充独立 ML Kit 分析流，且不得阻塞预览渲染线程。
-        - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型与妆容贴合；在 GPUPixel 模式下，MediaPipe 点位仅用于双模式对照调试与 `bigBeautyLandmarks` 展示，实际滤镜链仍由 GPUPixel 内置 `FaceDetector` 驱动。
-        - **InsightFace 2D106 备选（2026-05）**：大美丽模式下，当 MediaPipe 连续漏检或初始化不可用时，允许自动回退到本地 InsightFace `2d106det` 作为 106 点备选来源，优先保障瘦脸/大眼/妆容链路可用；GPUPixel 双模式调试保持纯 MediaPipe 对照，不混入该备选结果。
+        - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型与妆容贴合。
+        - **InsightFace 2D106 备选（2026-05）**：大美丽模式下，当 MediaPipe 连续漏检或初始化不可用时，允许自动回退到本地 InsightFace `2d106det` 作为 106 点备选来源，优先保障瘦脸/大眼/妆容链路可用。
         - **Selfie Segmentation（Phase 2-3）**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask，实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
     - **美颜引擎技术路线（2026-04 更新）**：
-        - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为默认主引擎；上层仅保留“大美丽 / 兼容模式”两档心智，兼容模式底层由 GPUPixel 链路承接，用于回退校验与兼容验证。
+        - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为唯一引擎；GPUPixel 已于 2026-05 完全移除。
         - **大美丽当前渲染**：基础美颜由主 Shader 实时处理；唇色/腮红启用时切换到 `FaceMakeupPass + 主 Shader` 的多 Pass GPU 链路，仍保持端侧实时预览。
-        - **引擎收敛现状**：当前代码与文档体系仅保留大美丽与 GPUPixel 两条链路；旧兜底引擎相关实现、状态枚举与文档引用均已清理，不再作为任何设计选项保留。
-        - **兼容链路实现（底层基于 GPUPixel，2026-04）**：底层兼容链路已完成集成，上层默认弱化 GPUPixel 技术名，仅在实现/调试上下文保留。当前已接入磨皮、美白、瘦脸、大眼、唇色、腮红、专业调色与风格特效；实际渲染路径为 `ImageAnalysis → YUV/I420 + RGBA 转换 → SourceYUV → Filter Chain → TextureView`，人脸关键点由内置 `FaceDetector`（106 点）实时驱动。
-        - **GPUPixel 不具备、需自建的能力**：眉毛美化（无内置 mask）；多色号唇色切换（需动态替换纹理）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（有资源但无对应滤镜代码，需自建 LUTFilter）。
+        - **引擎收敛现状**：当前代码与文档体系仅保留大美丽单链路；GPUPixel 已于 2026-05 完全移除，旧兜底引擎相关实现、状态枚举与文档引用均已清理。
+        - **自研引擎渲染路径**：当前已接入磨皮、美白、瘦脸、大眼、唇色、腮红、专业调色与风格特效；实际渲染路径为 `SurfaceTexture → OpenGL ES Shader → SurfaceView`，人脸关键点由 MediaPipe 468→106 或 InsightFace 2D106 实时驱动。
+        - **待补齐能力**：眉毛美化（独立 Shader mask）；多色号唇色切换（动态纹理替换）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（需自建 LUTFilter）。
         - **滤镜技术演进**：当前基于自定义 GLSL Shader 实现，后续评估引入 **3D LUT（颜色查找表）** 技术——预计算 64×64×64 网格颜色变换，运行时三线性插值以接近零计算开销应用复杂滤镜效果，支持专业调色风格扩展。
         - **磨皮算法演进**：双边滤波（当前）→ 引导滤波（O(N) 复杂度，更优边缘保持，无光晕伪影）→ 多尺度细节分层（工业级，分频层独立处理后融合）。
         - **拍照 GPU 化（2026-05 进行中）**：
@@ -104,7 +104,7 @@
     - **调试与性能可观测性**：
         - **调试总开关**：设置页默认开启；统一控制拍摄页调试浮层、调试工具入口和 Log 入口显隐
         - **性能指标**：调试浮层实时展示 FPS、处理耗时、预览延迟、CPU 占用、空帧计数
-        - **检测来源标识**：调试浮层需明确展示当前帧命中的人脸检测来源（`MediaPipe` / `InsightFace` / `GPUPixel` / `None`），便于真机回归与备选链路验证。
+        - **检测来源标识**：调试浮层需明确展示当前帧命中的人脸检测来源（`MediaPipe` / `InsightFace` / `None`），便于真机回归与备选链路验证。
         - **人脸检测模式**：默认 `Landmark`（性能优先，产品层称"快速模式"），可切换 `Contour`（精度优先，产品层称"精细模式"）
         - **人脸检测引擎**：设置页需暴露 `InsightFace` / `MediaPipe` / `Auto` 三档选择；`InsightFace` 为默认首选，`Auto` 允许主链路漏检时自动回退到 MediaPipe。
         - **动态检测间隔**：默认开启，可在 280~450ms 区间自适应调整
@@ -119,7 +119,7 @@
         - **LEICA_BW**：黑白效果，去除饱和度
         - **FILM_FUJI**：冷调偏绿，模拟富士胶片质感
         - **VINTAGE**：复古低饱和色调
-    - **风格特效滤镜（2026-05 已移植到大美丽引擎）**：大美丽引擎和兼容模式均支持，实时 GPU 渲染：
+    - **风格特效滤镜（2026-05 已移植到大美丽引擎）**：大美丽引擎支持，实时 GPU 渲染：
         - **STYLE_NONE** `StyleFilter.NONE`：无风格特效（默认）
         - **STYLE_TOON** `StyleFilter.TOON`：卡通化渲染（ToonFilter），将画面转换为类卡通漫画风格
         - **STYLE_SKETCH** `StyleFilter.SKETCH`：素描效果（SketchFilter），黑白铅笔素描风格

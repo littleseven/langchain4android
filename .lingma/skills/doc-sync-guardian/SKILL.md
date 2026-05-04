@@ -141,7 +141,7 @@ find app/src -name "AGENTS.md" -exec grep -l "Product Alignment" {} \;
 
 ### ⚠️ 警告项 (3/15)
 1. **缺失链接**: PRODUCT.md 提到"背景虚化"但 FEATURES.md 未展开交互细节
-2. **过时内容**: Camera AGENTS.md 仍引用已废弃的兜底引擎
+2. **过时内容**: Camera AGENTS.md 引用 GPUPixel（已移除，需改为单引擎描述）
 3. **不一致**: FEATURES.md 唇色色号数量(12种)与 AGENTS.md 实现(8种)不符
 
 ### ❌ 错误项 (0/15)
@@ -279,7 +279,7 @@ git diff --stat
 **触发命令**：`log-decision "[决策标题]"` 或 `记录重大变更`
 
 **适用场景**：
-- 架构级别的技术选型（如选择 GPUPixel 作为兼容引擎）
+- 架构级别的技术选型（如从双引擎收敛为单引擎）
 - 影响多个模块的设计调整（如 Clean Architecture 分层调整）
 - 性能优化的重大方案变更（如拍照从 CPU 迁移到 GPU）
 
@@ -407,7 +407,7 @@ wc -l AGENTS.md  # 如果超过 500 行，可能需要瘦身
 📦 移动: EGL 离屏渲染架构 -> `docs/OFFSCREEN_RENDERING_TECH_SPEC.md`
 
 ### 标记为废弃
-🗑️ 标记: 旧兜底引擎文档 -> 添加"⚠️ 已废弃，见 XXX 替代方案"
+🗑️ 清理: GPUPixel 相关文档引用 -> 彻底移除或标注"已于 2026-05 移除"
 ```
 
 #### Step 3: 更新双向链接

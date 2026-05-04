@@ -7,7 +7,7 @@
 > - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标：见 `docs/BIG_BEAUTY_TECH_SPEC.md`。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**：`beauty-engine` 是 PicMe 美颜引擎的独立 Android Library 模块，承载 OpenGL ES + EGL 渲染管线（大美丽主引擎）和 GPUPixel 实验性集成，对外暴露稳定 API，对内封装 GPU 加速实现。长期演进为可独立发布的视觉能力基础库。
+**模块定位**：`beauty-engine` 是 PicMe 美颜引擎的独立 Android Library 模块，承载自研 OpenGL ES + EGL 渲染管线（大美丽引擎），对外暴露稳定 API，对内封装 GPU 加速实现。长期演进为可独立发布的视觉能力基础库。
 
 **主要维护者**：[RD] 全栈工程师
 
@@ -23,8 +23,7 @@
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
 - **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
-- **[INTEGRATION] 双引擎架构**：当前仅保留自研 `beauty-engine`（BIG_BEAUTY）主引擎与 GPUPixel（GPUPIXEL）实验性备选，两条链路之外不再保留任何历史兜底实现
-- **[ROADMAP] GPUPixel 集成状态**：[GPUPixel](https://github.com/pixpark/gpupixel)（Apache 2.0、纯 C++11/OpenGL ES、无商业 SDK 绑定）已完成实验性集成，`GpupixelBeautyPreviewProvider` 实现 `BeautyPreviewEngine` 接口；CainCamera 因硬依赖 Face++ 商业 SDK 且已停止维护，已被排除
+- **[INTEGRATION] 单引擎架构**：仅保留自研 `beauty-engine`（BIG_BEAUTY）引擎，GPUPixel 已于 2026-05 完全移除
 - **[ROADMAP] 拍照 GPU 化（2026-05 进行中）**：拍照后处理从 CPU Canvas 路径迁移到 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。详见 `docs/ADR-002-opengl-offscreen-unified-pipeline.md`
 
 ---
@@ -61,15 +60,12 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现（内部适配器）
 │   ├── GlBeautyPreviewProviderFactory.kt # GL Provider 工厂
 │   └── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现（2026-05 新增）
-└── gpupixel/                          # GPUPixel 实验性集成层（🧪）
-    └── GpupixelBeautyPreviewProvider.kt # GPUPixel 引擎 Provider 实现
 ```
 
 **依赖方向红线**：
-- `api/` 包：**禁止**依赖 `egl/`、`gpupixel/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
+- `api/` 包：**禁止**依赖 `egl/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
 - `egl/` 包：允许实现 `api/` 接口，允许依赖 `android.*` 和 OpenGL ES 相关库
-- `gpupixel/` 包：允许实现 `api/` 接口，允许依赖 GPUPixel JNI 库；**禁止**从 `egl/` 反向依赖
-- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `egl/` 或 `gpupixel/` 内部类
+- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `egl/` 内部类
 
 ### 2.2 对外 API 层 (`api/`)
 
@@ -142,7 +138,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **参数映射**：UI 参数 → ΔL (亮度提升) 和 ΔU/ΔV (色度调整)
 
 - **瘦脸 (Slim Face)**：
-  - **人脸检测**：当前主链路使用 `MediaPipeFaceDetector` 输出 468→106 点结果；GPUPixel 路径使用内置 `FaceDetector` 106 点
+  - **人脸检测**：当前主链路使用 `MediaPipeFaceDetector` 输出 468→106 点结果；`InsightFace2D106Detector` 作为异步备选
   - **变形算法**：基于 Delaunay 三角剖分的网格变形 (Mesh Warping)
   - **实现要点**：以下颌角为中心点，向内收缩 5%-30%
   - **安全约束**：变形幅度限制在 30% 以内，保持面部比例协调
@@ -154,7 +150,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **安全约束**：放大比例不超过 1.3x
 
 - **唇色 (Lip Color)**：
-  - **区域来源**：大美丽路径使用 106 点嘴唇轮廓/三角网格贴图；GPUPixel 路径使用 `LipstickFilter + face_landmark`
+  - **区域来源**：106 点嘴唇轮廓/三角网格贴图 + 边缘感知 Mask
   - **上色算法**：在 HSV 空间调整色相 (H) 和饱和度 (S)，保留明暗 (V)
   - **色号管理**：预设 12 种色号的 HSV 值
   - **实现要点**：保留唇部纹理，边缘自然过渡
@@ -248,33 +244,7 @@ SurfaceView Surface
 - ❌ 禁止多次纹理上传/下载
 - ✅ 全流程在 GPU 内完成
 
-#### GPUPixel 路径（2026-04 优化后）
-
-```
-CameraX ImageAnalysis (YUV_420_888)
-    ↓
-GPUPixel.YUV_420_888toI420AndRGBA()
-    ├── Native 层 ExtractI420Planes (YUV → 标准 I420，第 1 次 copy)
-    ├── libyuv::I420Rotate (I420 旋转，第 2 次 copy)
-    ├── memcpy (rotated I420 → Y/U/V DirectByteBuffer，第 3 次 copy)
-    └── libyuv::I420ToABGR (I420 → RGBA DirectByteBuffer，第 4 次 copy)
-    ↓
-GpupixelBeautyPreviewProvider.onYuvFrame()
-    ├── 人脸检测：rgbaBuffer → FaceDetector.detect() (DirectByteBuffer 零拷贝)
-    └── 渲染：yBuffer/uBuffer/vBuffer → SourceYUV.ProcessData() (DirectByteBuffer 零拷贝)
-        ↓
-    GPU Shader 实时 YUV→RGBA 转换 → GPUPixelSinkSurface → TextureView
-```
-
-**关键优化点**：
-- `ExtractI420Planes` 针对 `pixel_stride == 1` 的 CameraX 输出走 `memcpy` 快路径，避免逐像素循环
-- JNI 层使用 `DirectByteBuffer` + `GetDirectBufferAddress`，消除 `byte[]` 的潜在拷贝
-- 渲染链路使用 `SourceYUV` GPU Shader 实时 YUV→RGBA 转换，无需在 CPU 侧预转 RGBA
-- 人脸检测使用 RGBA `ByteBuffer` 路径；`mars-face-kit` 对 `YUV_I420` 支持不完善且会污染检测器内部状态，**严禁传入 YUV_I420**
-
-**当前链路严格 copy 次数**：**4 次**（工程口径）
-
-### 2.6 性能监控与告警
+### 2.5 性能监控与告警
 
 ```kotlin
 // 渲染线程内每秒聚合
@@ -383,177 +353,36 @@ if (fps < 25 || processingMs > 20) {
 - [ ] Lambda 参数是否显式命名？
 - [ ] Shader 源码是否集中管理并带有性能注释？
 
-### 4.7 GPUPixel 集成专项
+### 4.7 风格特效 Shader 规范
 
-#### ⚠️ SetRotation 参数类型陷阱（已踩坑，2026-04）
-**症状**：切换到 GPUPixel 模式后 App 立即崩溃，`SIGTRAP (Fatal signal 5)`，
-崩溃栈顶为 `gpupixel::Filter::GetTextureCoordinate(RotationMode const&)`。
+#### 自研风格特效（2026-05 实现）
 
-**根因**：
-- `GPUPixelSourceRawData.SetRotation(int rotation)` 的 JNI 实现为 `(*ptr)->SetRotation((RotationMode)rotation)`
-- `RotationMode` 是 C++ 枚举，合法值范围 `0~7`（见下表）
-- 直接传入 CameraX 的 `rotationDegrees`（如 90 / 270）会导致枚举越界
-- `GetTextureCoordinate` 用越界枚举值做数组下标 → `SIGTRAP`
+> GPUPixel 已于 2026-05 完全移除。以下风格特效由自研 `StyleEffectShader` 实现。
 
-**RotationMode 枚举映射表**（`gpupixel/include/gpupixel/sink/sink.h`）：
-| 枚举名 | 数值 | 对应 CameraX rotationDegrees |
-|---|---|---|
-| `NoRotation` | 0 | 0° |
-| `RotateLeft` | 1 | 270° |
-| `RotateRight` | 2 | 90° |
-| `FlipVertical` | 3 | — |
-| `FlipHorizontal` | 4 | — |
-| `RotateRightFlipVertical` | 5 | — |
-| `RotateRightFlipHorizontal` | 6 | — |
-| `Rotate180` | 7 | 180° |
+**风格特效列表**：
 
-**正确用法**（`GpupixelBeautyPreviewProvider.kt`）：
-```kotlin
-val rotationMode = when (rotationDegrees) {
-    90  -> 2  // RotateRight
-    180 -> 7  // Rotate180
-    270 -> 1  // RotateLeft
-    else -> 0 // NoRotation
-}
-sourceRawData?.SetRotation(rotationMode)
-```
-
-- [ ] 调用 `GPUPixelSourceRawData.SetRotation()` 时是否已将角度值映射为 `RotationMode` 枚举序号？（**禁止直接传入 90/270**）
-
-#### CameraX Preview UseCase 与 GPUPixel 冲突
-- [ ] GPUPixel 模式下是否避免创建 CameraX `Preview` UseCase？（`Preview` 占用 Surface 会导致 `ImageAnalysis` 无帧，引发黑屏）
-- [ ] GPUPixel 模式下帧数据是否通过 `ImageAnalysis → onYuvFrame()` 路径传递，而非 `Preview.SurfaceProvider`？
-- [ ] `CameraUseCasesBinder.kt` 中 GPUPixel 模式是否仅绑定 `imageCapture + imageAnalysis`？
-
-#### GPUPixel YUV 零拷贝渲染约束
-- [ ] 渲染链路是否使用 `SourceYUV` 而非 `GPUPixelSourceRawData`？（YUV 直通避免 CPU 侧 RGBA 转换）
-- [ ] `yBuffer/uBuffer/vBuffer` 是否为 `DirectByteBuffer`？（确保 `GetDirectBufferAddress` 零拷贝）
-- [ ] 人脸检测是否仅使用 `RGBA` 格式传入 `FaceDetector`？（`YUV_I420` 会导致 `mars-face-kit` 检测失效并污染状态）
-
-#### GPUPixel 已接入能力清单（2026-04）
-
-| 能力 | GPUPixel 滤镜类 | 参数 Key | 接入状态 |
-|---|---|---|---|
-| 磨皮 | `BeautyFaceFilter` | `skin_smoothing` [-1,1] | ✅ 已接入 |
-| 美白 | `BeautyFaceFilter` | `whiteness` [-1,1] | ✅ 已接入 |
-| 瘦脸 | `FaceReshapeFilter` | `thin_face` [0,0.15] + `face_landmark` | ✅ 已接入 |
-| 大眼 | `FaceReshapeFilter` | `big_eye` [0,0.5] + `face_landmark` | ✅ 已接入 |
-| 唇色 | `LipstickFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入 |
-| 腮红 | `BlusherFilter` | `blend_level` [0,1] + `face_landmark` | ✅ 已接入 |
-| 专业曝光 | `ExposureFilter` | `exposure` [-10,10] | ✅ 已接入 |
-| 专业对比度 | `ContrastFilter` | `contrast` [0,4] | ✅ 已接入 |
-| 专业饱和度 | `SaturationFilter` | `saturation` [0,2] | ✅ 已接入 |
-| 专业色温 | `WhiteBalanceFilter` | `temperature` [2000,10000K] | ✅ 已接入 |
-| 卡通风格 | `ToonFilter` | `threshold`, `quantizationLevels` | ✅ 已接入（P2 本期） |
-| 平滑卡通 | `SmoothToonFilter` | `blurRadius`, `threshold`, `quantizationLevels` | ✅ 已接入（P2 本期） |
-| 素描风格 | `SketchFilter` | `edgeStrength` | ✅ 已接入（P2 本期） |
-| 色块化 | `PosterizeFilter` | `colorLevels` | ✅ 已接入（P2 本期） |
-| 浮雕效果 | `EmbossFilter` | `intensity` | ✅ 已接入（P2 本期） |
-| 交叉线 | `CrosshatchFilter` | `crossHatchSpacing`, `lineWidth` | ✅ 已接入（P2 本期） |
-| 人脸关键点 | `FaceDetector`（内置 Mars 模型，106 点） | `detect()` → `float[]` | ✅ 已接入 |
-
-**滤镜链拓扑（当前）**：
-```
-GPUPixelSourceRawData
-  → LipstickFilter    (blend_level, face_landmark)
-  → BlusherFilter     (blend_level, face_landmark)   ← 本期新增
-  → BeautyFaceFilter  (skin_smoothing, whiteness)
-  → FaceReshapeFilter (thin_face, big_eye, face_landmark)
-  → GPUPixelSinkSurface
-```
-
-#### GPUPixel 腮红（BlusherFilter）接入规范
-
-- **滤镜类**：`GPUPixelFilter.BLUSHER_FILTER`（= `"BlusherFilter"`）
-- **内置资源**：C++ 层自动加载 `assets/blusher.png` 作为腮红 mask 纹理（与 `LipstickFilter` 加载 `mouth.png` 同机制）
-- **参数**：
-  - `blend_level`：强度 [0.0, 1.0]，映射自 `BeautyParams.blush`
-  - `face_landmark`：106 点归一化坐标数组，由 `FaceDetector.detect()` 返回后同步下发
-- **最佳接入位置**：紧接 `LipstickFilter` 之后（均属于 FaceMakeupFilter 派生，共享相同的 landmark 传入机制）
-- **参数下发时机**：与 `lipstickFilter` 保持一致，在 `onRgbaFrame` 的每次人脸检测结果回调中同步更新
-- **关闭时**：`blend_level` 设为 `0.0f`，不销毁滤镜对象
-- **生命周期**：随 `GpupixelBeautyPreviewProvider.release()` 统一调用 `Destroy()`
-
-#### GPUPixel 专业调色滤镜接入规范（P1，待开发）
-
-> 本期（P0）不实现，规范在此预埋，下期 P1 开发时直接参考。
-
-- **目标**：用 GPUPixel 滤镜链替代专业模式当前依赖 CameraX `CaptureRequest` 的参数调节，实现 GPU Shader 级实时预览，延迟更低、效果更可控
-- **滤镜与参数**：
-
-| 功能 | GPUPixel 滤镜类 | 参数 Key | 参数范围 |
-|---|---|---|---|
-| 曝光 | `ExposureFilter` | `exposure` | [-10.0, 10.0]，0 为原始 |
-| 对比度 | `ContrastFilter` | `contrast` | [0.0, 4.0]，1.0 为原始 |
-| 饱和度 | `SaturationFilter` | `saturation` | [0.0, 2.0]，1.0 为原始 |
-| 白平衡 | `WhiteBalanceFilter` | `temperature` (K) + `tint` [-100,100] | temperature 默认 5000K |
-
-- **滤镜链追加位置**：在 `GPUPixelSinkSurface` 之前、`FaceReshapeFilter` 之后追加
-- **参数映射**（App 层 `BeautyParams` → GPUPixel 参数）：
-  - 曝光：UI `[-3.0, 3.0]` 区间直接传入 `exposure`（GPUPixel 内部限制 ±10）
-  - 对比度：UI `[0, 200]` 归一化为 `[0.0, 4.0]`，默认 1.0（UI 值 50）
-  - 饱和度：UI `[0, 200]` 归一化为 `[0.0, 2.0]`，默认 1.0（UI 值 100）
-  - 白平衡温度：UI `[2000K, 10000K]` 直接传入 `temperature`
-- **关闭时**：各滤镜恢复默认值（exposure=0, contrast=1.0, saturation=1.0, temperature=5000）
-- **注意**：调色滤镜对全画面生效，不依赖 FaceDetector，无需传 `face_landmark`
-- [ ] P1 开发时：`BeautyParams` 是否已新增 `exposure`、`contrast`、`saturation`、`whiteBalanceTemperature` 字段？
-- [ ] P1 开发时：`GpupixelBeautyPreviewStrategy.applyBeautySettings()` 是否已映射上述字段到对应滤镜？
-- [ ] P1 开发时：`ProModeControls` 是否已切换到 GPUPixel 滤镜参数，并废弃 CameraX `CaptureRequest` 路径？
-
-#### GPUPixel 风格特效滤镜接入规范（P2，2026-04 实现）
-
-> 本规范于 2026-04 实现并记录。
-
-**滤镜链追加位置**：`WhiteBalanceFilter` 之后、`GPUPixelSinkSurface` 之前。
-
-**滤镜链拓扑（完整，含风格特效）**：
-```
-GPUPixelSourceRawData
-  → LipstickFilter    (blend_level, face_landmark)
-  → BlusherFilter     (blend_level, face_landmark)
-  → BeautyFaceFilter  (skin_smoothing, whiteness)
-  → FaceReshapeFilter (thin_face, big_eye, face_landmark)
-  → ExposureFilter    (exposure)
-  → ContrastFilter    (contrast)
-  → SaturationFilter  (saturation)
-  → WhiteBalanceFilter (temperature, tint)
-  → [StyleFilter]     (互斥，每次只激活一个，NONE 时使用透传滤镜或直连 Sink)
-  → GPUPixelSinkSurface
-```
-
-**互斥切换策略**：
-- 维护一个 `activeStyleFilter: GPUPixelFilter?` 成员变量。
-- 切换前先将前一个滤镜从链路中移除（重新接线 `WhiteBalanceFilter → SinkSurface`），再插入新滤镜。
-- `STYLE_NONE` 时，直接连接 `WhiteBalanceFilter → SinkSurface`，不保留任何风格滤镜在链路中。
-
-**支持的风格滤镜（`StyleFilter` 枚举与 GPUPixel 类名映射）**：
-
-| StyleFilter 值 | GPUPixel 滤镜类 | 关键参数 | 推荐默认值 |
+| StyleFilter 值 | 片段 Shader | 顶点 Shader | 关键参数 |
 |---|---|---|---|
 | `NONE` | — | — | — |
-| `TOON` | `ToonFilter` | `threshold` [0,1], `quantizationLevels` | threshold=0.2, levels=10.0 |
-| `SMOOTH_TOON` | `SmoothToonFilter` | `blurRadius`, `threshold`, `quantizationLevels` | blur=2.0, threshold=0.1, levels=10.0 |
-| `SKETCH` | `SketchFilter` | `edgeStrength` [0,1] | edgeStrength=1.0 |
-| `POSTERIZE` | `PosterizeFilter` | `colorLevels` [1,256] | colorLevels=4 |
-| `EMBOSS` | `EmbossFilter` | `intensity` [0,4] | intensity=1.0 |
-| `CROSSHATCH` | `CrosshatchFilter` | `crossHatchSpacing` [0,0.1], `lineWidth` | spacing=0.03, lineWidth=0.003 |
+| `TOON` | `toon.glsl` | `vertex_nearby.glsl` | `threshold` [0,1], `quantizationLevels` |
+| `SKETCH` | `sketch.glsl` | `vertex_nearby.glsl` | `edgeStrength` [0,4] |
+| `POSTERIZE` | `posterize.glsl` | `vertex.glsl` | `colorLevels` [1,256] |
+| `EMBOSS` | `emboss.glsl` | `vertex_nearby.glsl` | `intensity` [0,4] |
+| `CROSSHATCH` | `crosshatch.glsl` | `vertex.glsl` | `spacing` [0.001,0.5], `lineWidth` [0.0001,0.1] |
+
+**渲染管线**：
+- 风格特效作为 MainShader 之后的独立 Pass 执行
+- 输入为 MainShader 输出纹理（已应用美颜 + 调色 + 妆容）
+- `vertex_nearby.glsl` 提供 3×3 邻域纹理坐标（用于 Sobel 边缘检测和卷积）
+- `vertex.glsl` 为标准全屏四边形（无需邻域采样）
 
 **参数传递**：
-- 风格参数通过 `BeautyParams.styleFilter: StyleFilter` 字段传递，枚举名映射到对应的 `GPUPixelFilter` 类名。
-- 参数使用固定推荐默认值，本期不对外暴露参数调节入口（UI 只提供开关切换）。
-
-**生命周期**：
-- 随 `GpupixelBeautyPreviewProvider.initialize()` 时不预创建风格滤镜，按需在 `applyStyleFilter()` 中动态创建。
-- 随 `release()` 调用时确保当前激活的风格滤镜 `Destroy()` 被调用。
-
-**`BeautyParams` 字段**：
-- `styleFilter: StyleFilter = StyleFilter.NONE`（新增字段，默认无特效）
+- 通过 `BeautyParams.styleEffect: StyleEffect` 字段传递（内部由 `StyleFilter` 映射）
+- `StyleEffectShader.render()` 由调用者（`BeautyRenderer`）统一设置 viewport，内部不再覆盖
 
 **注意事项**：
-- [ ] 风格滤镜与调色滤镜叠加时，确保滤镜链接线顺序正确（调色在前，风格在后）。
-- [ ] 切换风格滤镜时，上一个滤镜必须从链中断开后才能插入新的，否则 GPUPixel C++ 层可能双重持有节点导致崩溃。
-- [ ] 非 GPUPixel 引擎（大美丽）模式下，`StyleFilter` 字段由引擎层静默忽略，不引发异常。
-- [ ] UI 层风格特效入口不再置灰（2026-05 已移植到大美丽引擎）。
+- [ ] 风格特效与调色滤镜叠加时，确保执行顺序正确（调色在前，风格在后）。
+- [ ] `StyleEffectShader` 内部**禁止**调用 `glViewport()`，由 `BeautyRenderer` 统一管控。
 
 ---
 
@@ -568,11 +397,11 @@ GPUPixelSourceRawData
 
 **技术决策记录**：
 - 选择 OpenGL ES 而非 Vulkan：CameraX 兼容性更好、设备覆盖率更高、开发周期更短
-- 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小（GPUPixel 路径使用 `TextureView`，因 SDK 接口限制）
+- 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小
 - 输入/显示 Surface 解耦：避免 CameraX 与 View 生命周期抖动互相影响
 - 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档“盒式模糊”描述已纠正）。后续评估引导滤波（O(N) 无序复杂度）作为 Phase 2 升级方向
 - 基础美颜优先走主 Shader；妆容纹理通过 `FaceMakeupPass` 独立 Pass 处理，在效果与实时性间平衡
-- GPUPixel 实验性集成保留 FaceDetector 独立路径；MediaPipe 468→106 结果仅在双模式调试中作为对照展示，避免与 GPUPixel 内置点位链路混用
+
 - `api/` 纯 Kotlin 接口层：为后续独立发布 AAR/Maven 做准备
 
 ---

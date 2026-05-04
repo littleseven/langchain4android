@@ -1,6 +1,6 @@
 ---
 name: mediapipe-landmark-mapping
-description: MediaPipe 468 点与 GPUPixel 106 点人脸关键点映射规范。Use when working with face landmark detection, coordinate transformation between MediaPipe and OpenGL NDC space, or implementing face warp/makeup effects in the PicMe beauty engine.
+description: MediaPipe 468 点与 106 点人脸关键点映射规范。Use when working with face landmark detection, coordinate transformation between MediaPipe and OpenGL NDC space, or implementing face warp/makeup effects in the PicMe beauty engine.
 ---
 
 # MediaPipe 关键点映射 Skill

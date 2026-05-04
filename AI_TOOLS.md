@@ -65,7 +65,7 @@ ln -sf ../../.lingma/skills/my-skill .kimi/skills/my-skill
 | `av-gl-expert` | 音视频与 OpenGL 渲染专家 | 全平台 |
 | `coordinate-system-standard` | 人脸关键点坐标系规范化 | 全平台 |
 | `doc-sync-guardian` | 三层文档体系一致性检查 | 全平台 |
-| `gpupixel-porting` | GPUPixel 算法移植规范 | 全平台 |
+| `gpupixel-porting` | 历史参考：GPUPixel 算法移植规范（GPUPixel 已移除） | 全平台 |
 | `image-quality-checker` | 截屏图片质量分析 | 全平台 |
 | `mediapipe-landmark-mapping` | MediaPipe 关键点映射规范 | 全平台 |
 

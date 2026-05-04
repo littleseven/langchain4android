@@ -1,6 +1,6 @@
 ---
 name: gpupixel-porting
-description: GPUPixel 算法向大美丽模式移植的规范流程。Use when porting GPUPixel filters, effects, or beauty algorithms to the PicMe beauty engine, including shader adaptation, coordinate mapping, and multi-pass pipeline integration.
+description: 历史参考：GPUPixel 算法向大美丽模式移植的规范流程。GPUPixel 已于 2026-05 完全移除，本 Skill 保留作为 Shader 适配与坐标映射的技术参考。Use when porting legacy filter algorithms or adapting shader logic to the PicMe beauty engine.
 ---
 
 # GPUPixel 移植 Skill

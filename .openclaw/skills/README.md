@@ -24,7 +24,7 @@ ln -sf ../../.lingma/skills/my-new-skill .openclaw/skills/my-new-skill
 | [av-gl-expert](../../.lingma/skills/av-gl-expert/) | 音视频与 OpenGL 渲染专家（CameraX、Shader、EGL） |
 | [coordinate-system-standard](../../.lingma/skills/coordinate-system-standard/) | 人脸关键点坐标系规范化 |
 | [doc-sync-guardian](../../.lingma/skills/doc-sync-guardian/) | 三层文档体系一致性检查 |
-| [gpupixel-porting](../../.lingma/skills/gpupixel-porting/) | GPUPixel 算法移植规范 |
+| [gpupixel-porting](../../.lingma/skills/gpupixel-porting/) | 历史参考：GPUPixel 算法移植规范（GPUPixel 已移除） |
 | [image-quality-checker](../../.lingma/skills/image-quality-checker/) | 截屏图片质量分析 |
 | [mediapipe-landmark-mapping](../../.lingma/skills/mediapipe-landmark-mapping/) | MediaPipe 关键点映射规范 |
 

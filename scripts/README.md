@@ -67,7 +67,7 @@ python scripts/generate_contour_mapping.py --input input_images/face.jpg
 
 | 脚本 | 说明 | 用途 |
 |------|------|------|
-| `extract_gpupixel_texcoords.py` | 提取 GPUPixel 纹理坐标 | Shader 开发 |
+| `extract_gpupixel_texcoords.py` | 提取参考纹理坐标（历史脚本，GPUPixel 已移除） | Shader 开发 |
 | `check_alignment.py` | 检查关键点对齐 | 质量验证 |
 
 ---
