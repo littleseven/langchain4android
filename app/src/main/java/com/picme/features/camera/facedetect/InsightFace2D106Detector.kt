@@ -9,6 +9,8 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Rect
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageProxy
 import com.picme.core.common.Logger
 import java.io.File
 import java.nio.FloatBuffer
@@ -53,6 +55,23 @@ class InsightFace2D106Detector(context: Context) {
     }
 
     fun isReady(): Boolean = ortSession != null && det10gDetector?.isReady() == true
+
+    /**
+     * 从 ImageProxy 检测人脸关键点（推荐用于相机预览）
+     *
+     * @param imageProxy CameraX ImageProxy
+     * @param lensFacing 镜头方向（用于坐标调整）
+     * @return 106 点归一化坐标数组，未检测到返回 null
+     */
+    @ExperimentalGetImage
+    fun detectFromImageProxy(imageProxy: ImageProxy, lensFacing: Int): FloatArray? {
+        val bitmap = convertImageProxyToBitmap(imageProxy) ?: return null
+        return try {
+            detect(bitmap, lensFacing)
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     /**
      * 检测人脸关键点
@@ -277,6 +296,100 @@ class InsightFace2D106Detector(context: Context) {
         } else {
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
+        }
+    }
+
+    /**
+     * 将 ImageProxy 转换为 Bitmap
+     * 处理 YUV420/NV21 格式、rowStride padding 和旋转
+     */
+    @ExperimentalGetImage
+    private fun convertImageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
+        return imageProxy.image?.let { img ->
+            // [关键修复] 处理 rowStride padding
+            val yBuffer = imageProxy.planes[0].buffer
+            val uBuffer = imageProxy.planes[1].buffer
+            val vBuffer = imageProxy.planes[2].buffer
+            
+            val yRowStride = imageProxy.planes[0].rowStride
+            val uRowStride = imageProxy.planes[1].rowStride
+            val vRowStride = imageProxy.planes[2].rowStride
+            val uvPixelStride = imageProxy.planes[1].pixelStride
+            
+            val width = imageProxy.width
+            val height = imageProxy.height
+            val uvWidth = width / 2
+            val uvHeight = height / 2
+            
+            // Y 平面大小（不含 padding）
+            val yPlaneSize = width * height
+            // UV 平面大小（不含 padding）
+            val uvPlaneSize = uvWidth * uvHeight
+            
+            val nv21 = ByteArray(yPlaneSize + uvPlaneSize * 2)
+            
+            // 复制 Y plane（逐行，跳过 rowStride padding）
+            for (row in 0 until height) {
+                val srcPos = row * yRowStride
+                val dstPos = row * width
+                yBuffer.position(srcPos)
+                yBuffer.get(nv21, dstPos, width)
+            }
+            
+            // 复制 UV planes
+            val uvOffset = yPlaneSize
+            
+            if (uvPixelStride == 2) {
+                // NV21 格式：VU 交错
+                for (row in 0 until uvHeight) {
+                    val uSrcPos = row * uRowStride
+                    val vSrcPos = row * vRowStride
+                    val dstPos = uvOffset + row * uvWidth * 2
+                    
+                    for (col in 0 until uvWidth) {
+                        nv21[dstPos + col * 2] = vBuffer.get(vSrcPos + col * 2)
+                        nv21[dstPos + col * 2 + 1] = uBuffer.get(uSrcPos + col * 2)
+                    }
+                }
+            } else {
+                // I420 格式：U 和 V 是独立的平面
+                // 需要转换为 NV21 (Y + VU 交错)
+                for (row in 0 until uvHeight) {
+                    val uSrcPos = row * uRowStride
+                    val vSrcPos = row * vRowStride
+                    val dstPos = uvOffset + row * uvWidth * 2
+                    
+                    for (col in 0 until uvWidth) {
+                        nv21[dstPos + col * 2] = vBuffer.get(vSrcPos + col)
+                        nv21[dstPos + col * 2 + 1] = uBuffer.get(uSrcPos + col)
+                    }
+                }
+            }
+            
+            val yuvImage = android.graphics.YuvImage(
+                nv21,
+                android.graphics.ImageFormat.NV21,
+                width,
+                height,
+                null
+            )
+            val out = java.io.ByteArrayOutputStream()
+            yuvImage.compressToJpeg(
+                android.graphics.Rect(0, 0, yuvImage.width, yuvImage.height),
+                100,
+                out
+            )
+            val imageBytes = out.toByteArray()
+            var bmp = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            if (rotationDegrees != 0) {
+                val matrix = android.graphics.Matrix().apply {
+                    postRotate(rotationDegrees.toFloat())
+                }
+                bmp = android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+            }
+            bmp
         }
     }
 
