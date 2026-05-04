@@ -189,12 +189,12 @@ class InsightFaceDet10GDetector(context: Context) {
         val chw = FloatArray(INPUT_CHANNELS * pixelCount)
         for (index in 0 until pixelCount) {
             val pixel = pixels[index]
-            // [关键修复] InsightFace Det10G 使用 BGR 格式,不是 RGB
-            val blue = (pixel and 0xFF).toFloat()
-            val green = (pixel shr 8 and 0xFF).toFloat()
+            // InsightFace Det10G 使用 RGB 格式 (与 cv2.dnn.blobFromImage swapRB=True 一致)
             val red = (pixel shr 16 and 0xFF).toFloat()
+            val green = (pixel shr 8 and 0xFF).toFloat()
+            val blue = (pixel and 0xFF).toFloat()
                 
-            // 归一化到 [-1, 1] 范围
+            // 归一化到 [-1, 1] 范围: (pixel - 127.5) / 128.0
             chw[index] = (red - inputMean) / inputStd
             chw[pixelCount + index] = (green - inputMean) / inputStd
             chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
@@ -246,22 +246,21 @@ class InsightFaceDet10GDetector(context: Context) {
         val allBoxes = mutableListOf<FloatArray>()
 
         // 合并 3 个尺度的 scores (每个是 [N, 1] -> face confidence)
+        // [关键修复] 官方实现中 scores 已经是概率,不需要 sigmoid
         for (i in 0..2) {
             val scoresTensor = results.get(i) as? OnnxTensor ?: continue
             val rawScores = flattenFloatArray(scoresTensor.value) ?: continue
-            // [关键修复] RetinaFace Det10G 输出的是 raw logits，需要 sigmoid 激活
-            var maxLogit = Float.MIN_VALUE
-            var minLogit = Float.MAX_VALUE
-            var sumLogit = 0.0
-            for (logit in rawScores) {
-                val prob = 1f / (1f + Math.exp(-logit.toDouble())).toFloat()
-                allScores.add(prob)
-                if (logit > maxLogit) maxLogit = logit
-                if (logit < minLogit) minLogit = logit
-                sumLogit += logit
+            var maxScore = Float.MIN_VALUE
+            var minScore = Float.MAX_VALUE
+            var sumScore = 0.0
+            for (score in rawScores) {
+                allScores.add(score)
+                if (score > maxScore) maxScore = score
+                if (score < minScore) minScore = score
+                sumScore += score
             }
-            val avgLogit = sumLogit / rawScores.size
-            Logger.d(TAG, "[Diag] Scale $i scores: logit range=[$minLogit, $maxLogit], avg=$avgLogit, count=${rawScores.size}")
+            val avgScore = sumScore / rawScores.size
+            Logger.d(TAG, "[Diag] Scale $i scores: range=[$minScore, $maxScore], avg=$avgScore, count=${rawScores.size}")
         }
 
         // 合并 3 个尺度的 boxes (每个是 [N, 4])
