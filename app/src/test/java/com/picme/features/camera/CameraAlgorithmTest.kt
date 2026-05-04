@@ -1,6 +1,6 @@
 package com.picme.features.camera
 
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
