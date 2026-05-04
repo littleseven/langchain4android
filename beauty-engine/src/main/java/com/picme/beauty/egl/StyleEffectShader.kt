@@ -137,7 +137,7 @@ class StyleEffectShader(private val context: Context) {
         // 保存并设置 GL 状态
         GLES20.glDisable(GLES20.GL_DEPTH_TEST)
         GLES20.glDisable(GLES20.GL_BLEND)
-        GLES20.glViewport(0, 0, renderWidth, renderHeight)
+        // 注意：viewport 由调用者（BeautyRenderer）统一设置，此处不再覆盖
 
         program.use()
 
