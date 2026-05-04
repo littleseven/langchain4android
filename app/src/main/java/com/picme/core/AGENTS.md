@@ -49,21 +49,24 @@
 **`core/image/` 当前文件结构**：
 ```
 core/image/
-├── gl/
-│   └── BeautyParamsConverter.kt     # BeautySettings → BeautyParams 转换（含 ColorMatrix 映射）
-├── BeautyProcessor.kt               # 拍照后美颜接口（含 applyAllEffects 默认实现）
 ├── GpuBeautyProcessor.kt            # BeautyProcessor CPU 实现（Canvas + ColorMatrix）
 ├── ImageProcessor.kt                # 拍照/录像接口 + ImageProcessorImpl 实现
 └── CoilConfig.kt                    # Coil 全局图片加载配置
 ```
+
+> **⚠️ 2026-05 架构下沉**：以下文件已从 `core/image/` 迁移至 `beauty-engine/api/`，实现美颜领域模型与引擎内聚：
+> - `BeautySettings.kt`、`BeautyParams.kt`、`BeautyParamsConverter.kt`
+> - `FilterType.kt`、`StyleFilter.kt`
+> - `Face.kt`、`FaceContour.kt`、`FaceLandmark.kt`
+> - `BeautyProcessor.kt`（接口契约）
 
 **⚠️ 已清理的冗余文件（2026-04）**：
 以下文件原属 `core/image/gl/` 下，与 `beauty-engine` 模块重复，已删除：
 `BeautyShaders.kt`、`BeautyRenderer.kt`、`BeautyPreviewView.kt`、`CameraPreviewRenderer.kt`、
 `GLRenderer.kt`、`EGLCore.kt`、`WindowSurface.kt`、`ShaderProgram.kt`
 
-**BeautyParamsConverter**（`gl/BeautyParamsConverter.kt`）：
-- 将 `BeautySettings`（domain 层）转换为 `BeautyParams`（beauty-engine API 层）
+**BeautyParamsConverter**（已迁移至 `beauty-engine/api/BeautyParamsConverter.kt`）：
+- 将 `BeautySettings`（UI 原始值）转换为 `BeautyParams`（Shader 归一化值）
 - 负责归一化映射（UI 原始值 → [0, 1] 或 [-1, 1]）
 - 将 `FilterType` 转换为 4×5 `colorMatrix`（FloatArray），传入大美丽引擎 Shader
 - `FilterType.NONE` 时 `colorMatrix = null`，Shader 直通输出
@@ -73,8 +76,8 @@ core/image/
 - 实时预览磨皮的双边滤波 Shader 效果仍在 `beauty-engine` 中保留，CPU 路径为轻量兼容实现
 - 日志 TAG：`PicMe:ImageProc`
 
-**滤镜 ColorMatrix（`FilterType.getColorMatrix()`）**：
-- 每个 `FilterType` 枚举值实现 `getColorMatrix(): ColorMatrix` 方法
+**滤镜 ColorMatrix（`FilterType.toAndroidColorMatrix()`）**：
+- 每个 `FilterType` 枚举值实现 `toAndroidColorMatrix(): android.graphics.ColorMatrix` 方法
 - 矩阵值为 `android.graphics.ColorMatrix` 标准 4×5 行主序布局（20 个 Float）
 - LEICA_CLASSIC 示例：饱和度 0.9、对比度微调 +0.05、暗部轻微压缩
 
@@ -128,7 +131,7 @@ core/image/
 - [ ] Coil 缓存大小是否合理？（避免 OOM）
 - [ ] 所有用户可见字符串是否已提取到 strings.xml？（支持 I18N）
 - [ ] 是否在 `core/image/gl/` 下误添加了 GL 渲染实现类？（应放在 `beauty-engine` 模块）
-- [ ] `BeautyParamsConverter` 的 colorMatrix 是否正确处理了 `FilterType.NONE`？（应返回 null 让 Shader 直通）
+- [ ] `BeautyParamsConverter`（beauty-engine/api/）的 colorMatrix 是否正确处理了 `FilterType.NONE`？（应返回 null 让 Shader 直通）
 
 ## 5. 与产品文档对照 (Product Alignment)
 

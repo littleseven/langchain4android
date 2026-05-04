@@ -36,7 +36,13 @@
 ```
 beauty-engine/src/main/java/com/picme/beauty/
 ├── api/                               # 对外稳定 API（能力契约层）
-│   ├── BeautyParams.kt                # 美颜参数数据类
+│   ├── BeautySettings.kt              # 美颜设置领域模型（UI 原始值）
+│   ├── BeautyParams.kt                # 美颜参数数据类（Shader 归一化值）
+│   ├── BeautyParamsConverter.kt       # BeautySettings → BeautyParams 转换
+│   ├── FilterType.kt                  # 色调滤镜枚举（含 ColorMatrix）
+│   ├── StyleFilter.kt                 # 风格特效枚举
+│   ├── Face.kt                        # 人脸数据结构（Face/FaceContour/FaceLandmark）
+│   ├── BeautyProcessor.kt             # CPU 后处理接口契约
 │   ├── BeautyPerfStats.kt             # 性能统计模型
 │   ├── BeautyPreviewCapability.kt     # GL 能力扩展接口（FaceWarp/LipMask 等）
 │   ├── BeautyPreviewProvider.kt       # 预览 Provider 基础接口

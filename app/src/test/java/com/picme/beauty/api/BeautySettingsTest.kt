@@ -1,5 +1,6 @@
-package com.picme.domain.model
+package com.picme.beauty.api
 
+import com.picme.beauty.api.BeautySettings
 import org.junit.Assert.*
 import org.junit.Test
 
