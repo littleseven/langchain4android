@@ -1,15 +1,11 @@
-package com.picme.core.image.gl
+package com.picme.beauty.api
 
-import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.egl.StyleEffect
-import com.picme.domain.model.BeautySettings
-import com.picme.features.camera.model.FilterType
-import com.picme.features.camera.model.StyleFilter
 
 /**
  * BeautySettings -> BeautyParams 转换扩展
  *
- * app 层负责将领域模型转换为新模块所需的参数格式。
+ * 将领域模型转换为引擎所需的参数格式。
  * 保留所有比例映射逻辑，确保美颜效果与重构前一致。
  *
  * colorFilter 字段会被转换为 4x5 colorMatrix（FloatArray，行主序），
@@ -20,8 +16,8 @@ fun BeautySettings.toBeautyParams(): BeautyParams {
     // 色调滤镜矩阵：取 Android ColorMatrix 的底层 float 数组（20个元素，4行×5列）
     val matrix: FloatArray? = colorFilter
         .takeIf { it != FilterType.NONE }
-        ?.getColorMatrix()
-        ?.values
+        ?.toAndroidColorMatrix()
+        ?.array
 
     // 专业调色参数映射（大美丽引擎路径）
     // 对比度: UI 0-200，50=原始 → Shader 0.0-4.0，1.0=原始 (÷50)
@@ -83,7 +79,7 @@ fun BeautySettings.toBeautyParams(): BeautyParams {
 }
 
 /**
- * StyleFilter（UI 枚举）→ StyleEffect（大美丽引擎枚举）映射
+ * StyleFilter（UI 枚举）→ StyleEffect（引擎内部枚举）映射
  */
 private fun StyleFilter.toStyleEffect(): StyleEffect {
     return when (this) {
@@ -95,4 +91,3 @@ private fun StyleFilter.toStyleEffect(): StyleEffect {
         StyleFilter.CROSSHATCH -> StyleEffect.CROSSHATCH
     }
 }
-

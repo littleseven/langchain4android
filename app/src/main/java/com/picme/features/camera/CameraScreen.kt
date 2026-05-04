@@ -63,13 +63,13 @@ import com.picme.R
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
-import com.picme.features.camera.model.FilterType
-import com.picme.features.camera.model.StyleFilter
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 import com.picme.features.camera.test.CameraTestCommand
 import com.picme.features.camera.test.CameraTestCommandConverters
 import com.picme.features.camera.test.CameraTestCommandDispatcher
@@ -461,12 +461,9 @@ private fun resolvePreviewTargetView(
         )
     }
 
-    val providerView = when (activeStrategy) {
-        BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
-        BeautyStrategy.BIG_BEAUTY -> runtimeProviderView
-    }
+    val providerView = runtimeProviderView
 
-    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY || activeStrategy == BeautyStrategy.BIG_BEAUTY
+    val requiresProviderView = activeStrategy == BeautyStrategy.BIG_BEAUTY
 
     if (requiresProviderView && providerView == null) {
         return PreviewTargetDecision(
@@ -799,7 +796,7 @@ fun CameraContent(
             }
         }
         val filter = IntentFilter(CameraTestCommandReceiver.ACTION_TEST_COMMAND)
-        context.registerReceiver(receiver, filter)
+        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         Logger.i("PicMe:CameraTest", "Test command receiver registered dynamically")
 
         onDispose {

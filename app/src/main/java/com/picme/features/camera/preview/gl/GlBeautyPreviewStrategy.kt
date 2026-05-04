@@ -6,9 +6,9 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import com.picme.core.common.Logger
 import com.picme.beauty.api.BeautyPreviewEngine
-import com.picme.core.image.gl.toBeautyParams
+import com.picme.beauty.api.toBeautyParams
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 import com.picme.features.camera.AspectRatio
 import com.picme.features.camera.preview.core.BeautyPreviewEngineStrategy
 import com.picme.features.camera.preview.core.FaceWarpParams

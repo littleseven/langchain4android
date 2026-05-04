@@ -1,26 +1,16 @@
-package com.picme.core.image
+package com.picme.beauty.api
 
 import android.graphics.Bitmap
-import com.picme.domain.model.BeautySettings
 
 /**
  * 美颜效果处理器接口
  * 定义所有美颜功能的标准实现规范
  *
- * ⚠️ 模块化注意（Phase 2）：
- * 此接口当前位于 core/image 层，引用了两个平台级依赖：
- * 1. [android.graphics.Bitmap] — Android 平台类
- * 2. [com.picme.core.image.Face] — 本地人脸数据类（已替代 ML Kit）
- *
- * 迁移到 beauty-core 模块时的建议方案：
- * a) 将 Bitmap 替换为自定义 ImageBuffer 数据类（纯 Kotlin），
- *    由具体引擎实现负责在 Android 层做 Bitmap <-> ImageBuffer 转换
- * b) 将 Face 替换为 domain 层自定义的 FaceInfo 数据类，
- *    避免 beauty-core 直接依赖外部人脸检测 SDK
- * c) 此接口可先整体保留在 app 模块，待 ImageBuffer/FaceInfo 完成后再迁移
+ * 此接口位于 beauty-engine 模块，为拍照后的 CPU 后处理路径提供统一契约。
+ * 实时预览美颜由 BeautyPreviewEngine 负责（GPU 路径）。
  */
 interface BeautyProcessor {
-    
+
     /**
      * 应用磨皮效果
      * @param bitmap 原始图像
@@ -29,7 +19,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applySmoothing(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
-    
+
     /**
      * 应用美白效果
      * @param bitmap 原始图像
@@ -38,7 +28,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applyWhitening(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
-    
+
     /**
      * 应用瘦脸效果
      * @param bitmap 原始图像
@@ -48,7 +38,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>, isFrontCamera: Boolean = false): Bitmap
-    
+
     /**
      * 应用大眼效果
      * @param bitmap 原始图像
@@ -57,7 +47,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applyBigEyes(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap
-    
+
     /**
      * 应用唇色效果
      * @param bitmap 原始图像
@@ -84,7 +74,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applyEyebrow(bitmap: Bitmap, strength: Float): Bitmap
-    
+
     /**
      * 应用身材调整效果
      * @param bitmap 原始图像
@@ -92,7 +82,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applyBodyEnhancement(bitmap: Bitmap, strength: Float): Bitmap
-    
+
     /**
      * 应用长腿效果
      * @param bitmap 原始图像
@@ -100,7 +90,7 @@ interface BeautyProcessor {
      * @return 处理后的图像
      */
     suspend fun applyLegExtension(bitmap: Bitmap, strength: Float): Bitmap
-    
+
     /**
      * 应用所有美颜效果
      * @param bitmap 原始图像
@@ -110,7 +100,7 @@ interface BeautyProcessor {
      */
     suspend fun applyAllEffects(bitmap: Bitmap, settings: BeautySettings, faces: List<Face>): Bitmap {
         var result = bitmap
-        
+
         // 面部精修
         if (settings.smoothing > 0 && faces.isNotEmpty()) {
             result = applySmoothing(result, settings.smoothing, faces)
@@ -145,7 +135,7 @@ interface BeautyProcessor {
                 result = applyLegExtension(result, settings.legExtension)
             }
         }
-        
+
         return result
     }
 }

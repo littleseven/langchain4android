@@ -1,7 +1,4 @@
-package com.picme.domain.model
-
-import com.picme.features.camera.model.FilterType
-import com.picme.features.camera.model.StyleFilter
+package com.picme.beauty.api
 
 /**
  * 美颜设置数据类
@@ -23,7 +20,7 @@ data class BeautySettings(
     val blush: Float = DEFAULT_BLUSH,              // 腮红 0-100，默认 20
     val blushColorFamily: Int = 0,                 // 腮红色系 0-2（粉/橙/梅）
     val eyebrow: Float = DEFAULT_EYEBROW,          // 眉毛 0-100，默认 15
-    
+
     // 身材管理
     val bodyEnhancement: Float = 0f, // 丰胸 -30~+30
     val legExtension: Float = 0f,    // 长腿 0-50

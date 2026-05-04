@@ -1,4 +1,4 @@
-package com.picme.core.image
+package com.picme.beauty.api
 
 import android.graphics.PointF
 import android.graphics.Rect
@@ -6,7 +6,7 @@ import android.graphics.Rect
 /**
  * 人脸检测结果数据类（替代 ML Kit 的 com.google.mlkit.vision.face.Face）
  *
- * 仅保留 App 内部 CPU 美颜路径所需的最小 API 表面：
+ * 仅保留 CPU 美颜路径所需的最小 API 表面：
  * - boundingBox
  * - getLandmark(type) -> FaceLandmark?
  * - getContour(type) -> FaceContour?

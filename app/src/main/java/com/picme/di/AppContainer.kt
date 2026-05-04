@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModelProvider
 import com.picme.beauty.api.PhotoProcessor
 import com.picme.beauty.egl.GlBeautyPreviewProviderFactory
-import com.picme.core.image.BeautyProcessor
+import com.picme.beauty.api.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
 import com.picme.core.image.ImageProcessor
 import com.picme.core.image.ImageProcessorImpl

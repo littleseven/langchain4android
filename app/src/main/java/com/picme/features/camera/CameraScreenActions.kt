@@ -1,7 +1,7 @@
 package com.picme.features.camera
 
 import androidx.camera.core.CameraSelector
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 
 internal fun nextLensFacing(currentLensFacing: Int): Int {
     return if (currentLensFacing == CameraSelector.LENS_FACING_BACK) {

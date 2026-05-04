@@ -4,13 +4,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.camera.core.CameraSelector
 import com.picme.core.common.Logger
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.CameraAspectRatio
 import com.picme.features.camera.GridType
 import com.picme.features.camera.ScenePreset
-import com.picme.features.camera.model.FilterType
-import com.picme.features.camera.model.StyleFilter
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
