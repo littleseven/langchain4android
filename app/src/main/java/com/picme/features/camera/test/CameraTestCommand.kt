@@ -1,8 +1,8 @@
 package com.picme.features.camera.test
 
-import com.picme.domain.model.BeautySettings
-import com.picme.features.camera.model.FilterType
-import com.picme.features.camera.model.StyleFilter
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 
 /**
  * 相机测试命令 Sealed Class

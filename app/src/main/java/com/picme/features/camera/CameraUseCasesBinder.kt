@@ -14,7 +14,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.google.common.util.concurrent.ListenableFuture
 import com.picme.core.common.Logger
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaType

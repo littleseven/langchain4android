@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 色调滤镜 -->
+    <string name="filter_none">原图</string>
+    <string name="filter_vintage">复古</string>
+    <string name="filter_cool">冷色</string>
+    <string name="filter_warm">暖色</string>
+    <string name="filter_leica_classic">徕卡经典</string>
+    <string name="filter_leica_vibrant">徕卡生动</string>
+    <string name="filter_leica_bw">徕卡黑白</string>
+    <string name="filter_film_gold">胶片金</string>
+    <string name="filter_film_fuji">富士胶片</string>
+
+    <!-- 风格特效 -->
+    <string name="style_filter_none">原图</string>
+    <string name="style_filter_toon">卡通</string>
+    <string name="style_filter_sketch">素描</string>
+    <string name="style_filter_posterize">色块</string>
+    <string name="style_filter_emboss">浮雕</string>
+    <string name="style_filter_crosshatch">交叉线</string>
+
+    <!-- 滤镜分组 -->
+    <string name="filter_group_color">色调滤镜</string>
+    <string name="filter_group_style">风格特效</string>
+</resources>

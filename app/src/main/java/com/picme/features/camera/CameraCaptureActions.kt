@@ -10,13 +10,13 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
-import com.picme.core.image.Face
+import com.picme.beauty.api.Face
 import com.picme.core.image.ImageProcessor
-import com.picme.domain.model.BeautySettings
+import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
-import com.picme.features.camera.model.FilterType
+import com.picme.beauty.api.FilterType
 import com.picme.features.gallery.MediaViewModel
 
 @SuppressLint("MissingPermission")

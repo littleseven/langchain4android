@@ -309,7 +309,6 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                         FaceDetectionSource.INSIGHTFACE -> Color(0xFFFFAB91)
                         FaceDetectionSource.MEDIAPIPE -> Color(0xFF80CBC4)
                         FaceDetectionSource.NONE -> Color(0xFFA5D6A7)
-                        else -> Color.White.copy(alpha = 0.6f)
                     },
                     fontSize = 9.sp
                 )

@@ -1,7 +1,7 @@
-package com.picme.features.camera.model
+package com.picme.beauty.api
 
 import androidx.annotation.StringRes
-import com.picme.R
+import com.picme.beauty.R
 
 /**
  * 风格特效滤镜枚举
@@ -21,4 +21,3 @@ enum class StyleFilter(
     EMBOSS(R.string.style_filter_emboss),
     CROSSHATCH(R.string.style_filter_crosshatch)
 }
-

@@ -7,6 +7,10 @@ import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PointF
+import com.picme.beauty.api.BeautyProcessor
+import com.picme.beauty.api.Face
+import com.picme.beauty.api.FaceContour
+import com.picme.beauty.api.FaceLandmark
 import com.picme.core.common.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
