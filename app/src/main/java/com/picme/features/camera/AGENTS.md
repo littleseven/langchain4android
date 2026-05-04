@@ -19,7 +19,7 @@
 - **[OFFLINE] OCR 本地识别**：使用 ML Kit 离线引擎，严禁云端处理
 - **[PRIVACY] 权限最小化**：仅在需要时申请相机和存储权限，提供降级方案
 - **[REALTIME] 美颜实时预览**：所有美颜效果处理延迟 < 100ms，支持实时预览
-- **[ENGINE] 双引擎策略**：自研 `beauty-engine`（BIG_BEAUTY）为默认主引擎；上层用户心智统一为“大美丽 / 兼容模式”，其中兼容模式底层由 GPUPixel（GPUPIXEL）链路承接，已完成零拷贝 YUV 预览链路集成，通过 `BeautyStrategy.GPUPIXEL` 手动切换
+- **[ENGINE] 单引擎架构**：自研 `beauty-engine`（BIG_BEAUTY）为唯一引擎；GPUPixel 已于 2026-05 完全移除
 - **[NATURAL] 自然美学原则**：所有美颜效果必须保持自然，避免过度失真
 - **[ACCURACY] 十字星精确跟踪**：人脸跟踪十字星偏差 < 5px，支持旋转/缩放/镜像场景
 - **[MLKIT] 人脸能力预留**：表情/状态属性（微笑、睁眼、头部角度）仍保留为产品能力，但需通过独立 ML Kit 分析流补齐；MediaPipe Face Landmarker 作为当前预览主分析链路，Selfie Segmentation 作为异步增强流引入，严禁阻塞预览渲染线程
@@ -274,8 +274,7 @@ val screenY = adjustedY * previewHeight
 - 使用 ML Kit Document Scanner：离线可用，精度足够，无需云端
 - 黑场时长定为 50ms：模拟单反机械快门感受，经用户测试最佳
 - 美颜使用 GPU 加速：CPU 计算无法满足实时性要求
-- 双引擎策略（BIG_BEAUTY + GPUPIXEL）：引擎由用户设置动态切换，Composable 层实现零 recomposition 级平滑切换
-- GPUPixel 零拷贝 YUV 链路：Native 层合并 I420+RGBA 转换，JNI 使用 DirectByteBuffer，渲染走 SourceYUV GPU Shader，当前链路 4 次 copy
+- 单引擎架构（BIG_BEAUTY）：自研 OpenGL ES + EGL 多 Pass 渲染管线
 - 十字星坐标转换统一为四步法：避免分析链路与绘制链路偏移
 - 坐标调试日志固定 Step1~Step4：便于快速定位旋转/镜像问题
 - `BeautyParamsConverter`：统一 `BeautySettings` → `BeautyParams` 转换逻辑，包括 `FilterType` → `colorMatrix` 映射
@@ -299,7 +298,7 @@ val screenY = adjustedY * previewHeight
 
 #### 2.6.2 MediaPipe Face Landmarker 468 点（已落地）
 - **引入方式**：集成 MediaPipe `face_landmarker` 任务（`face_landmarker.task` 模型），通过 `ImageAnalysis` 异步分析流驱动。
-- **数据流**：`ImageAnalysis` → `MediaPipeFaceDetector` → 468 点坐标 → 468→106 点语义映射 → `FaceWarpParams` → `BeautyPreviewEngine`；大美丽模式下若 MediaPipe 连续漏检或初始化失败，可自动回退到本地 `InsightFace2D106Detector`（ML Kit 人脸框 + InsightFace `2d106det.onnx`）直接输出 106 点；GPUPixel 模式下该结果额外写入 `bigBeautyLandmarks`，仅用于双模式调试对照。
+- **数据流**：`ImageAnalysis` → `MediaPipeFaceDetector` → 468 点坐标 → 468→106 点语义映射 → `FaceWarpParams` → `BeautyPreviewEngine`；若 MediaPipe 连续漏检或初始化失败，可自动回退到本地 `InsightFace2D106Detector`（ML Kit 人脸框 + InsightFace `2d106det.onnx`）直接输出 106 点。
 - **映射规范**：
   - 106 点轮廓为开放曲线（33 点）：从右鬓角(0) → 下巴(16) → 左鬓角(32)。
   - 非轮廓区域（73 点）：眉毛、鼻梁、鼻尖、眼睛、鼻孔、嘴巴、瞳孔，对齐字节火山引擎 106 点标准。
@@ -308,7 +307,7 @@ val screenY = adjustedY * previewHeight
   - MediaPipe Face Landmarker 推理耗时约 20-40ms/帧（中端机，GPU delegate），**绝对禁止**放入预览渲染管线同步执行。
   - InsightFace `2d106det` 仅允许作为异步备选检测链路触发，禁止每帧常驻推理；当前实现要求至少连续 3 次主链路漏检且满足冷却时间后才允许触发。
   - 必须采用"异步分析 + 参数插值"策略：分析流每 200-300ms 更新一次关键点，预览流根据最近一次结果进行平滑插值。
-- **应用场景**：精细美型参数映射（瘦脸、大眼）、妆容 UV 贴合（唇色、腮红）、双模式调试对照；GPUPixel 实际滤镜链仍由内置 `FaceDetector` 的 106 点结果驱动。
+- **应用场景**：精细美型参数映射（瘦脸、大眼）、妆容 UV 贴合（唇色、腮红）。
 - **调试浮层约束**：开启 `showFaceDebugOverlay` 后，浮层必须同时展示当前帧 `detectionSource` 与设置页选择的 `requestedDetectionEngineMode`，避免误判 `Auto -> InsightFace` 的备选命中来源。
 
 #### 2.6.3 Selfie Segmentation（Phase 2-3）

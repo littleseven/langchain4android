@@ -106,7 +106,7 @@ MediaPipe 468 点 → 106 点语义映射 → 旋转校正 →
 **调试可视化**：
 - 绘制 106 个关键点（不同颜色区分区域）
 - 显示索引号（便于对照映射表）
-- 实时显示检测来源（MediaPipe/InsightFace/GPUPixel）
+- 实时显示检测来源（MediaPipe/InsightFace）
 
 ---
 

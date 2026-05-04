@@ -43,7 +43,7 @@
 
 | 路径 | 使用场景 | 实现位置 | 技术方案 |
 |---|---|---|---|
-| **实时预览（GPU）** | 相机预览帧 | `beauty-engine` 模块 | OpenGL ES Shader / GPUPixel |
+| **实时预览（GPU）** | 相机预览帧 | `beauty-engine` 模块 | OpenGL ES Shader |
 | **拍照后处理（CPU）** | 保存前静态 Bitmap | `core/image/` | Android Canvas + ColorMatrix |
 
 **`core/image/` 当前文件结构**：
