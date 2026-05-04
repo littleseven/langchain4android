@@ -1002,10 +1002,12 @@ fun CameraContent(
     LaunchedEffect(faceDetectionEngineMode) {
         faceWarpParams = faceWarpParams.copy(requestedDetectionEngineMode = faceDetectionEngineMode)
         previewFaceWarpParams = previewFaceWarpParams.copy(requestedDetectionEngineMode = faceDetectionEngineMode)
+        runtimeContext.faceDetectorManager.setDetectionEngineMode(faceDetectionEngineMode)
     }
 
     LaunchedEffect(lensFacing) {
         glPreviewProvider?.setIsFrontCamera(lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT)
+        Logger.d("Camera", "Switched to lensFacing=$lensFacing, isFront=${lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT}")
     }
 
     LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, faceDetectionEngineMode, previewRebindSignal) {

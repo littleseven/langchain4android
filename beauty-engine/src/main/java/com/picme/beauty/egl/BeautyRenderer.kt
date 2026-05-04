@@ -356,61 +356,26 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     }
 
     /**
-     * 计算 textureMatrix 的逆矩阵，用于将变换后的坐标还原到标准UV
-     */
-    private fun getInverseTextureMatrix(): FloatArray {
-        val inverse = FloatArray(16)
-        val result = Matrix.invertM(inverse, 0, textureMatrix, 0)
-        if (!result) {
-            Log.w(TAG, "Failed to invert textureMatrix, using identity")
-            Matrix.setIdentityM(inverse, 0)
-        }
-        return inverse
-    }
-
-    /**
-     * 使用逆矩阵将变换后的坐标还原到标准UV
-     */
-    private fun inverseTransformVec2(x: Float, y: Float): Pair<Float, Float> {
-        val inverseMatrix = getInverseTextureMatrix()
-        val vec = floatArrayOf(x, y, 0f, 1f)
-        val result = FloatArray(4)
-        Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
-        return Pair(result[0].coerceIn(0f, 1f), result[1].coerceIn(0f, 1f))
-    }
-
-    /**
-     * 将轮廓点数组通过逆矩阵还原到标准UV坐标系
-     */
-    private fun inverseTransformContour(buffer: FloatArray, count: Int) {
-        val inverseMatrix = getInverseTextureMatrix()
-        for (i in 0 until count) {
-            val base = i * 2
-            val vec = floatArrayOf(buffer[base], buffer[base + 1], 0f, 1f)
-            val result = FloatArray(4)
-            Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
-            buffer[base] = result[0].coerceIn(0f, 1f)
-            buffer[base + 1] = result[1].coerceIn(0f, 1f)
-        }
-    }
-
-    /**
-     * 将106点关键点还原到标准UV坐标系。
-     * FaceMakeupPass 与多Pass主Shader都从已经方向校正后的 FBO 采样，
-     * 因此必须使用逆变换后的标准UV，不能直接复用 textureMatrix 映射后的点位。
+     * [坐标系对齐] 106点与轮廓点已由 CameraPreviewRenderer.mapNormalizedToUv()
+     * 直接映射到 FBO 标准 UV [0,1]，不再经过 textureMatrix 变换。
+     * 因此 facePointsBuffer 与轮廓 buffer 中已经是标准 UV，
+     * 无需逆矩阵还原，直接透传即可保证与 FBO 纹理坐标系一致。
      */
     private fun toStandardUvFacePoints(): FloatArray {
-        val invFacePoints = facePointsBuffer.clone()
-        val inverseMatrix = getInverseTextureMatrix()
-        for (i in 0 until 106) {
+        return facePointsBuffer.clone()
+    }
+
+    private fun inverseTransformVec2(x: Float, y: Float): Pair<Float, Float> {
+        return Pair(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f))
+    }
+
+    private fun inverseTransformContour(buffer: FloatArray, count: Int) {
+        // 坐标已由上游 mapNormalizedToUv / mapViewNormalizedToUv 对齐到 FBO UV，无需变换
+        for (i in 0 until count) {
             val base = i * 2
-            val vec = floatArrayOf(invFacePoints[base], invFacePoints[base + 1], 0f, 1f)
-            val result = FloatArray(4)
-            Matrix.multiplyMV(result, 0, inverseMatrix, 0, vec, 0)
-            invFacePoints[base] = result[0].coerceIn(0f, 1f)
-            invFacePoints[base + 1] = result[1].coerceIn(0f, 1f)
+            buffer[base] = buffer[base].coerceIn(0f, 1f)
+            buffer[base + 1] = buffer[base + 1].coerceIn(0f, 1f)
         }
-        return invFacePoints
     }
 
     /**
@@ -1143,10 +1108,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                     if (transformLoc >= 0) {
                         GLES20.glUniformMatrix4fv(transformLoc, 1, false, textureMatrix, 0)
                     }
-                    val frontLoc = copyProgram.getUniformLocation("uIsFrontCamera")
-                    if (frontLoc >= 0) {
-                        GLES20.glUniform1f(frontLoc, isFrontCamera.toFloat())
-                    }
+                    // uIsFrontCamera 已移除：SurfaceTexture.getTransformMatrix() 已经包含前后置方向差异
+                    // 前置镜像统一由 MediaPipe468Adapter 在 CPU 端处理
                 }
             )
             currentInputTexture = currentOutputFbo.getTextureId()

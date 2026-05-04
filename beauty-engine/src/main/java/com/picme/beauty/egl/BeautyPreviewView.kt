@@ -254,6 +254,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         renderer.init(surfaceView)
         renderer.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
         renderer.setScaleMode(isFillCenter)
+        renderer.isFrontCamera = isFrontCamera
         isRendererInitialized = true
         updateBeautyParamsInternal()
         updateColorGradeInternal()
@@ -277,10 +278,14 @@ class BeautyPreviewView @JvmOverloads constructor(
         ensureRendererInitialized()
         renderer.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
         renderer.getSurfaceTexture()?.setDefaultBufferSize(cameraInputWidth, cameraInputHeight)
-        if (cameraSurface == null) {
-            cameraSurface = renderer.getSurfaceForCamera()
-            Log.d(TAG, "Created camera input surface: ${cameraSurface?.hashCode()}")
-        }
+        // [关键修复] 不再缓存 cameraSurface，每次调用都创建新的 Surface。
+        // 原因：GlBeautyPreviewStrategy 在 SurfaceRequest 完成回调中会 release Surface，
+        // 而 BeautyPreviewView.cameraSurface 与 GlBeautyPreviewProvider.previewSurface 引用同一个对象。
+        // Surface.isValid() 在 release() 后不能 100% 可靠地返回 false，导致缓存命中返回已废弃的 Surface，
+        // CameraX 配置相机会话时抛出 "Surface was abandoned"。
+        cameraSurface?.release()
+        cameraSurface = renderer.getSurfaceForCamera()
+        Log.d(TAG, "Created camera input surface: ${cameraSurface?.hashCode()}")
         return cameraSurface
     }
 

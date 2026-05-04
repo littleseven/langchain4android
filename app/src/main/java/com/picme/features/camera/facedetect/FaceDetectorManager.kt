@@ -40,8 +40,17 @@ import java.nio.ByteBuffer
  */
 class FaceDetectorManager(
     context: Context,
-    private val detectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.INSIGHTFACE
+    private var detectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.INSIGHTFACE
 ) {
+
+    fun setDetectionEngineMode(mode: FaceDetectionEngineMode) {
+        if (detectionEngineMode != mode) {
+            detectionEngineMode = mode
+            Log.i(TAG, "Detection engine mode switched to: ${mode.name}")
+        }
+    }
+
+    fun getDetectionEngineMode(): FaceDetectionEngineMode = detectionEngineMode
 
     companion object {
         private const val TAG = "PicMe:MediaPipeFace"
