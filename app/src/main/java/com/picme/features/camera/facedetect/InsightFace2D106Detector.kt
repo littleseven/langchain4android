@@ -17,8 +17,11 @@ import kotlin.math.max
 /**
  * InsightFace 2D106 备选检测器。
  *
- * 方案：ML Kit 提供人脸框，InsightFace `2d106det.onnx` 输出 106 点。
- * 输出顺序与当前 106 点消费链路一致，直接复用 `Face106ToWarpParams`。
+ * 内部采用两阶段检测架构：
+ * - 第一阶段：Det10G (RetinaFace) 快速检测人脸存在性并提供 ROI
+ * - 第二阶段：2d106det.onnx 在 ROI 内输出 106 点关键点
+ * 
+ * 外部调用者无需关心内部实现细节，只需调用 detect() 方法即可。
  */
 class InsightFace2D106Detector(context: Context) {
 
@@ -37,6 +40,8 @@ class InsightFace2D106Detector(context: Context) {
     private val appContext = context.applicationContext
     private val ortEnvironment: OrtEnvironment = OrtEnvironment.getEnvironment()
 
+    // 内部 Det10G 检测器（不对外暴露）
+    private var det10gDetector: InsightFaceDet10GDetector? = null
 
     private var ortSession: OrtSession? = null
     private var inputName: String? = null
@@ -47,15 +52,55 @@ class InsightFace2D106Detector(context: Context) {
         initialize()
     }
 
-    fun isReady(): Boolean = ortSession != null
+    fun isReady(): Boolean = ortSession != null && det10gDetector?.isReady() == true
 
-    fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.Rect? = null): FloatArray? {
+    /**
+     * 检测人脸关键点
+     *
+     * @param bitmap 输入图像
+     * @param lensFacing 镜头方向（用于坐标调整）
+     * @param faceBounds 人脸边界框（可选），如果为 null 则内部自动使用 Det10G 检测
+     * @return 106 点归一化坐标数组，未检测到返回 null
+     */
+    fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
         val session = ortSession ?: return null
+        
+        // [两阶段检测] 第一阶段：如果没有提供 faceBounds，使用 Det10G 检测
+        val actualFaceBounds = faceBounds ?: run {
+            val det10g = det10gDetector
+            if (det10g == null) {
+                Logger.w(TAG, "[Diag] Det10G detector not ready")
+                return null
+            }
+            val bounds = det10g.detectLargestFace(bitmap)
+            if (bounds == null) {
+                Logger.d(TAG, "[Diag] Det10G no face detected")
+                return null
+            }
+            Logger.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
+            bounds
+        }
+        
+        Logger.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
         return try {
-            val bounds = faceBounds ?: detectLargestFaceBounds(bitmap) ?: return null
-            val crop = buildLooseFaceCrop(bitmap, bounds) ?: return null
+            // 将 RectF 转换为 Rect
+            val rectBounds = android.graphics.Rect(
+                actualFaceBounds.left.toInt().coerceIn(0, bitmap.width),
+                actualFaceBounds.top.toInt().coerceIn(0, bitmap.height),
+                actualFaceBounds.right.toInt().coerceIn(0, bitmap.width),
+                actualFaceBounds.bottom.toInt().coerceIn(0, bitmap.height)
+            )
+            Logger.d(TAG, "[Diag] 2d106det rectBounds=$rectBounds")
+
+            val crop = buildLooseFaceCrop(bitmap, rectBounds) ?: run {
+                Logger.w(TAG, "[Diag] 2d106det buildLooseFaceCrop returned null")
+                return null
+            }
+            Logger.d(TAG, "[Diag] 2d106det crop bitmap=${crop.bitmap.width}x${crop.bitmap.height}")
+
             val rawOutput = runInference(session, crop.bitmap)
             crop.bitmap.recycle()
+            Logger.d(TAG, "[Diag] 2d106det rawOutput size=${rawOutput.size}")
 
             val result = FloatArray(POINT_COUNT * 2)
             val mappedPoint = floatArrayOf(0f, 0f)
@@ -68,21 +113,27 @@ class InsightFace2D106Detector(context: Context) {
                 result[index * 2] = normalizedX.coerceIn(0f, 1f)
                 result[index * 2 + 1] = normalizedY.coerceIn(0f, 1f)
             }
+            Logger.d(TAG, "[Diag] 2d106det RESULT: firstPoint=(${result[0]},${result[1]}), lastPoint=(${result[210]},${result[211]})")
             result
         } catch (error: Exception) {
-            Logger.e(TAG, "InsightFace 2D106 detection failed", error)
+            Logger.e(TAG, "[Diag] InsightFace 2D106 detection failed", error)
             null
         }
     }
 
     fun release() {
         runCatching { ortSession?.close() }
+        det10gDetector?.release()
+        det10gDetector = null
         ortSession = null
         inputName = null
     }
 
     private fun initialize() {
         runCatching {
+            // 初始化 Det10G 检测器（内部使用）
+            det10gDetector = InsightFaceDet10GDetector(appContext)
+            
             val modelFile = ensureModelFile()
             val sessionOptions = OrtSession.SessionOptions()
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
@@ -96,6 +147,7 @@ class InsightFace2D106Detector(context: Context) {
             Logger.e(TAG, "Failed to initialize InsightFace 2D106", error)
             ortSession = null
             inputName = null
+            det10gDetector = null
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
         }
@@ -114,18 +166,7 @@ class InsightFace2D106Detector(context: Context) {
         return modelFile
     }
 
-    private fun detectLargestFaceBounds(bitmap: Bitmap): Rect? {
-        // ML Kit 人脸框检测已移除：回退为使用整图中心区域作为人脸 ROI
-        // InsightFace 2d106det.onnx 本身对居中人脸鲁棒性较好
-        val paddingX = (bitmap.width * 0.05f).toInt().coerceAtLeast(0)
-        val paddingY = (bitmap.height * 0.05f).toInt().coerceAtLeast(0)
-        return Rect(
-            paddingX,
-            paddingY,
-            (bitmap.width - paddingX).coerceAtLeast(paddingX + 1),
-            (bitmap.height - paddingY).coerceAtLeast(paddingY + 1)
-        )
-    }
+
 
     private fun buildLooseFaceCrop(bitmap: Bitmap, faceBounds: Rect): LooseCrop? {
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
