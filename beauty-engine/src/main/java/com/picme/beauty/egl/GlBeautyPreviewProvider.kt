@@ -27,7 +27,8 @@ class GlBeautyPreviewProvider(
 
     private val appContext: Context = context.applicationContext
     private var beautyPreviewView: BeautyPreviewView? = null
-    private var previewSurface: Surface? = null
+    // [关键修复] 不再缓存 previewSurface。每次 createPreviewSurface() 直接调用 view.getSurfaceForCamera()，
+    // 确保返回全新的 Surface，避免返回已被 GlBeautyPreviewStrategy 回调 release() 的废弃 Surface。
     private var isInitialized = false
     private var lastParams: BeautyParams = BeautyParams.EMPTY
     private var cameraInputWidth: Int = 1280
@@ -49,17 +50,12 @@ class GlBeautyPreviewProvider(
         beautyPreviewView?.setCameraInputBufferSize(cameraInputWidth, cameraInputHeight)
         if (!isInitialized) initialize()
 
-        previewSurface?.let { cachedSurface ->
-            if (cachedSurface.isValid) return cachedSurface
-        }
-
         val view = beautyPreviewView
             ?: throw IllegalStateException("GlBeautyPreviewProvider not initialized")
 
         repeat(120) { attemptIndex ->
             val surface = view.getSurfaceForCamera()
             if (surface != null && surface.isValid) {
-                previewSurface = surface
                 Log.i(TAG, "GL beauty preview surface ready on attempt=${attemptIndex + 1}")
                 return surface
             }
@@ -141,7 +137,6 @@ class GlBeautyPreviewProvider(
     override fun release() {
         beautyPreviewView?.release()
         beautyPreviewView = null
-        previewSurface = null
         isInitialized = false
         Log.i(TAG, "GlBeautyPreviewProvider released")
     }

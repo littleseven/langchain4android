@@ -58,17 +58,13 @@ class InsightFace2D106Detector(context: Context) {
             crop.bitmap.recycle()
 
             val result = FloatArray(POINT_COUNT * 2)
-            val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
             val mappedPoint = floatArrayOf(0f, 0f)
             for (index in 0 until POINT_COUNT) {
                 mappedPoint[0] = (rawOutput[index * 2] + 1f) * (INPUT_SIZE / 2f)
                 mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * (INPUT_SIZE / 2f)
                 crop.inverseTransform.mapPoints(mappedPoint)
-                var normalizedX = mappedPoint[0] / bitmap.width.toFloat()
+                val normalizedX = mappedPoint[0] / bitmap.width.toFloat()
                 val normalizedY = mappedPoint[1] / bitmap.height.toFloat()
-                if (isFrontCamera) {
-                    normalizedX = 1f - normalizedX
-                }
                 result[index * 2] = normalizedX.coerceIn(0f, 1f)
                 result[index * 2 + 1] = normalizedY.coerceIn(0f, 1f)
             }

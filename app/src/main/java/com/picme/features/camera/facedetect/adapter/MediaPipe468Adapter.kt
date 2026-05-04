@@ -137,6 +137,9 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
         val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
 
         // 辅助函数：获取 MediaPipe 点坐标
+        // [坐标系对齐] 后置 textureMatrix(det=-1) 已包含 X 轴翻转，FBO 人脸朝右；
+        // 前置 textureMatrix(det=1) 无翻转，FBO 人脸朝左。
+        // MediaPipe 原始输出人脸朝右，因此前置需要做 x=1-x 镜像才能与 FBO 对齐。
         fun getMpPoint(index: Int): Pair<Float, Float>? {
             if (index >= landmarks.size) return null
             val landmark = landmarks[index]
@@ -218,12 +221,10 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
             if (mpIndex < landmarks.size) {
                 val landmark = landmarks[mpIndex]
                 var x = landmark.x()
-                var y = landmark.y()
-
+                val y = landmark.y()
                 if (isFrontCamera) {
                     x = 1f - x
                 }
-
                 result[(33 + i) * 2] = x.coerceIn(0f, 1f)
                 result[(33 + i) * 2 + 1] = y.coerceIn(0f, 1f)
             }

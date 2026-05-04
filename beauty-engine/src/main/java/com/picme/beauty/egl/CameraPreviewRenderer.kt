@@ -460,21 +460,11 @@ class CameraPreviewRenderer(private val context: Context) {
         val pixelX = x.coerceIn(0f, 1f) * outputW
         val pixelY = y.coerceIn(0f, 1f) * outputH
 
-        val preTransformUvX = ((pixelX - currentViewportX) / viewportW).coerceIn(0f, 1f)
-        val preTransformUvY = (1f - ((pixelY - currentViewportY) / viewportH)).coerceIn(0f, 1f)
+        val uvX = ((pixelX - currentViewportX) / viewportW).coerceIn(0f, 1f)
+        val uvY = (1f - ((pixelY - currentViewportY) / viewportH)).coerceIn(0f, 1f)
 
-        val transformed = FloatArray(4)
-        val matrixCopy = FloatArray(16)
-        synchronized(textureMatrixLock) {
-            System.arraycopy(latestTextureTransformMatrix, 0, matrixCopy, 0, 16)
-        }
-        Matrix.multiplyMV(
-            transformed, 0,
-            matrixCopy, 0,
-            floatArrayOf(preTransformUvX, preTransformUvY, 0f, 1f), 0
-        )
-
-        return Pair(transformed[0].coerceIn(0f, 1f), transformed[1].coerceIn(0f, 1f))
+        // 坐标已由上游统一为传感器原始方向（非镜像），直接映射到 FBO UV
+        return Pair(uvX, uvY)
     }
 
     fun updateBeautyParams(
@@ -575,19 +565,8 @@ class CameraPreviewRenderer(private val context: Context) {
         val flippedY = 1.0f - y.coerceIn(0f, 1f)
         val normalizedX = x.coerceIn(0f, 1f)
 
-        // 应用 texture transform matrix（与 mapViewNormalizedToUv 一致）
-        val transformed = FloatArray(4)
-        val matrixCopy = FloatArray(16)
-        synchronized(textureMatrixLock) {
-            System.arraycopy(latestTextureTransformMatrix, 0, matrixCopy, 0, 16)
-        }
-        Matrix.multiplyMV(
-            transformed, 0,
-            matrixCopy, 0,
-            floatArrayOf(normalizedX, flippedY, 0f, 1f), 0
-        )
-
-        return Pair(transformed[0].coerceIn(0f, 1f), transformed[1].coerceIn(0f, 1f))
+        // 坐标已由上游统一为传感器原始方向（非镜像），直接映射到 FBO UV
+        return Pair(normalizedX, flippedY)
     }
 
     fun updateLipMaskPoints(
