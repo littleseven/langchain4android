@@ -137,9 +137,9 @@ class MediaPipeFaceDetector(context: Context) {
 
             val options = FaceLandmarker.FaceLandmarkerOptions.builder()
                 .setBaseOptions(baseOptions)
-                .setMinFaceDetectionConfidence(0.5f)
-                .setMinTrackingConfidence(0.5f)
-                .setMinFacePresenceConfidence(0.5f)
+                .setMinFaceDetectionConfidence(0.4f)
+                .setMinTrackingConfidence(0.4f)
+                .setMinFacePresenceConfidence(0.4f)
                 .setNumFaces(1)
                 .setOutputFaceBlendshapes(false)
                 .setRunningMode(RunningMode.VIDEO)
@@ -156,9 +156,9 @@ class MediaPipeFaceDetector(context: Context) {
                     .build()
                 val options = FaceLandmarker.FaceLandmarkerOptions.builder()
                     .setBaseOptions(baseOptions)
-                    .setMinFaceDetectionConfidence(0.5f)
-                    .setMinTrackingConfidence(0.5f)
-                    .setMinFacePresenceConfidence(0.5f)
+                    .setMinFaceDetectionConfidence(0.4f)
+                    .setMinTrackingConfidence(0.4f)
+                    .setMinFacePresenceConfidence(0.4f)
                     .setNumFaces(1)
                     .setOutputFaceBlendshapes(false)
                     .setRunningMode(RunningMode.VIDEO)
@@ -219,17 +219,69 @@ class MediaPipeFaceDetector(context: Context) {
             val ySize = yBuffer.remaining()
             val uSize = uBuffer.remaining()
             val vSize = vBuffer.remaining()
-
-            val nv21 = ByteArray(ySize + uSize + vSize)
-            yBuffer.get(nv21, 0, ySize)
-            vBuffer.get(nv21, ySize, vSize)
-            uBuffer.get(nv21, ySize + vSize, uSize)
+            
+            // [关键修复] 处理 rowStride padding
+            val yRowStride = imageProxy.planes[0].rowStride
+            val uRowStride = imageProxy.planes[1].rowStride
+            val vRowStride = imageProxy.planes[2].rowStride
+            val uvPixelStride = imageProxy.planes[1].pixelStride
+            
+            val width = imageProxy.width
+            val height = imageProxy.height
+            val uvWidth = width / 2
+            val uvHeight = height / 2
+            
+            // Y 平面大小（不含 padding）
+            val yPlaneSize = width * height
+            // UV 平面大小（不含 padding）
+            val uvPlaneSize = uvWidth * uvHeight
+            
+            val nv21 = ByteArray(yPlaneSize + uvPlaneSize * 2)
+            
+            // 复制 Y plane（逐行，跳过 rowStride padding）
+            for (row in 0 until height) {
+                val srcPos = row * yRowStride
+                val dstPos = row * width
+                yBuffer.position(srcPos)
+                yBuffer.get(nv21, dstPos, width)
+            }
+            
+            // 复制 UV planes
+            val uvOffset = yPlaneSize
+            
+            if (uvPixelStride == 2) {
+                // NV21 格式：VU 交错
+                // planes[1] 和 planes[2] 可能分别指向 U 和 V 的起始位置
+                for (row in 0 until uvHeight) {
+                    val uSrcPos = row * uRowStride
+                    val vSrcPos = row * vRowStride
+                    val dstPos = uvOffset + row * uvWidth * 2
+                    
+                    for (col in 0 until uvWidth) {
+                        nv21[dstPos + col * 2] = vBuffer.get(vSrcPos + col * 2)
+                        nv21[dstPos + col * 2 + 1] = uBuffer.get(uSrcPos + col * 2)
+                    }
+                }
+            } else {
+                // I420 格式：U 和 V 是独立的平面
+                // 需要转换为 NV21 (Y + VU 交错)
+                for (row in 0 until uvHeight) {
+                    val uSrcPos = row * uRowStride
+                    val vSrcPos = row * vRowStride
+                    val dstPos = uvOffset + row * uvWidth * 2
+                    
+                    for (col in 0 until uvWidth) {
+                        nv21[dstPos + col * 2] = vBuffer.get(vSrcPos + col)
+                        nv21[dstPos + col * 2 + 1] = uBuffer.get(uSrcPos + col)
+                    }
+                }
+            }
 
             val yuvImage = android.graphics.YuvImage(
                 nv21,
                 android.graphics.ImageFormat.NV21,
-                imageProxy.width,
-                imageProxy.height,
+                width,
+                height,
                 null
             )
             val out = java.io.ByteArrayOutputStream()

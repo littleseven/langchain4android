@@ -27,7 +27,7 @@ class InsightFaceDet10GDetector(context: Context) {
         private const val MODEL_FILE_NAME = "insightface_det_10g.onnx"
         private const val INPUT_SIZE = 640
         private const val INPUT_CHANNELS = 3
-        private const val CONFIDENCE_THRESHOLD = 0.3f  // 降低阈值提高召回率
+        private const val CONFIDENCE_THRESHOLD = 0.5f  // sigmoid 后的概率，适当提高过滤低质量检测
         private const val NMS_THRESHOLD = 0.4f
         private const val DEFAULT_INPUT_MEAN = 127.5f
         private const val DEFAULT_INPUT_STD = 128.0f
@@ -40,6 +40,7 @@ class InsightFaceDet10GDetector(context: Context) {
     private var inputName: String? = null
     private var inputMean: Float = DEFAULT_INPUT_MEAN
     private var inputStd: Float = DEFAULT_INPUT_STD
+    private var debugImageSaved: Boolean = false
 
     init {
         initialize()
@@ -64,14 +65,19 @@ class InsightFaceDet10GDetector(context: Context) {
                 Logger.d(TAG, "[Diag] No valid face found after filtering")
                 return null
             }
-            // Det10G 在 640x640 输入上推理，bbox 坐标需映射回原始 bitmap 尺寸
-            val scaleX = origW / INPUT_SIZE
-            val scaleY = origH / INPUT_SIZE
+            // [修复] 考虑 letterbox padding，先减去偏移再缩放
+            val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
+            val scaledW = (origW * scale).toInt()
+            val scaledH = (origH * scale).toInt()
+            val padLeft = (INPUT_SIZE - scaledW) / 2f
+            val padTop = (INPUT_SIZE - scaledH) / 2f
+            
+            // 将 640x640 坐标映射回原图，确保坐标在有效范围内
             val mappedFace = FaceBox(
-                x1 = largestFace.x1 * scaleX,
-                y1 = largestFace.y1 * scaleY,
-                x2 = largestFace.x2 * scaleX,
-                y2 = largestFace.y2 * scaleY,
+                x1 = ((largestFace.x1 - padLeft) / scale).coerceIn(0f, origW),
+                y1 = ((largestFace.y1 - padTop) / scale).coerceIn(0f, origH),
+                x2 = ((largestFace.x2 - padLeft) / scale).coerceIn(0f, origW),
+                y2 = ((largestFace.y2 - padTop) / scale).coerceIn(0f, origH),
                 confidence = largestFace.confidence
             )
             Logger.d(
@@ -79,7 +85,7 @@ class InsightFaceDet10GDetector(context: Context) {
                 "[Diag] Det10G face SELECTED: conf=${mappedFace.confidence}, " +
                     "640bbox=[${largestFace.x1.toInt()},${largestFace.y1.toInt()},${largestFace.x2.toInt()},${largestFace.y2.toInt()}], " +
                     "origBBox=[${mappedFace.x1.toInt()},${mappedFace.y1.toInt()},${mappedFace.x2.toInt()},${mappedFace.y2.toInt()}], " +
-                    "scale=($scaleX,$scaleY)"
+                    "scale=$scale, pad=($padLeft,$padTop)"
             )
             mappedFace.toRectF()
         } catch (error: Exception) {
@@ -156,23 +162,59 @@ class InsightFaceDet10GDetector(context: Context) {
     }
 
     private fun createInputTensor(bitmap: Bitmap): OnnxTensor {
-        val scaledBitmap = Bitmap.createScaledBitmap(bitmap, INPUT_SIZE, INPUT_SIZE, true)
+        // [修复] 保持宽高比缩放,避免图像变形
+        val origW = bitmap.width
+        val origH = bitmap.height
+        val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
+        val scaledW = (origW * scale).toInt()
+        val scaledH = (origH * scale).toInt()
+            
+        // 创建正方形画布并居中绘制(letterbox padding)
+        val paddedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(paddedBitmap)
+        canvas.drawColor(android.graphics.Color.BLACK)
+            
+        val left = (INPUT_SIZE - scaledW) / 2
+        val top = (INPUT_SIZE - scaledH) / 2
+            
+        val scaledBmp = Bitmap.createScaledBitmap(bitmap, scaledW, scaledH, true)
+        canvas.drawBitmap(scaledBmp, left.toFloat(), top.toFloat(), null)
+        scaledBmp.recycle()
+            
         val pixelCount = INPUT_SIZE * INPUT_SIZE
         val pixels = IntArray(pixelCount)
-        scaledBitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
-        scaledBitmap.recycle()
-
+        paddedBitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
+        paddedBitmap.recycle()
+    
         val chw = FloatArray(INPUT_CHANNELS * pixelCount)
         for (index in 0 until pixelCount) {
             val pixel = pixels[index]
-            val red = (pixel shr 16 and 0xFF).toFloat()
-            val green = (pixel shr 8 and 0xFF).toFloat()
+            // [关键修复] InsightFace Det10G 使用 BGR 格式,不是 RGB
             val blue = (pixel and 0xFF).toFloat()
+            val green = (pixel shr 8 and 0xFF).toFloat()
+            val red = (pixel shr 16 and 0xFF).toFloat()
+                
+            // 归一化到 [-1, 1] 范围
             chw[index] = (red - inputMean) / inputStd
             chw[pixelCount + index] = (green - inputMean) / inputStd
             chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
         }
-
+        
+        // [调试] 保存 letterbox 后的图像(仅首次)
+        if (!debugImageSaved) {
+            saveDebugBitmap(paddedBitmap, "det10g_letterbox_${System.currentTimeMillis()}.jpg")
+            debugImageSaved = true
+            
+            // 打印前10个像素的归一化值用于诊断
+            val sampleSize = minOf(10, pixelCount)
+            val sampleValues = StringBuilder()
+            for (i in 0 until sampleSize) {
+                sampleValues.append("[${String.format("%.2f", chw[i])},${String.format("%.2f", chw[pixelCount + i])},${String.format("%.2f", chw[pixelCount * 2 + i])}] ")
+            }
+            Logger.d(TAG, "[Diag] First $sampleSize pixels normalized (R,G,B): $sampleValues")
+            Logger.d(TAG, "[Diag] Using mean=$inputMean, std=$inputStd")
+        }
+    
         return OnnxTensor.createTensor(
             ortEnvironment,
             FloatBuffer.wrap(chw),
@@ -206,8 +248,20 @@ class InsightFaceDet10GDetector(context: Context) {
         // 合并 3 个尺度的 scores (每个是 [N, 1] -> face confidence)
         for (i in 0..2) {
             val scoresTensor = results.get(i) as? OnnxTensor ?: continue
-            val scores = flattenFloatArray(scoresTensor.value) ?: continue
-            allScores.addAll(scores.toList())
+            val rawScores = flattenFloatArray(scoresTensor.value) ?: continue
+            // [关键修复] RetinaFace Det10G 输出的是 raw logits，需要 sigmoid 激活
+            var maxLogit = Float.MIN_VALUE
+            var minLogit = Float.MAX_VALUE
+            var sumLogit = 0.0
+            for (logit in rawScores) {
+                val prob = 1f / (1f + Math.exp(-logit.toDouble())).toFloat()
+                allScores.add(prob)
+                if (logit > maxLogit) maxLogit = logit
+                if (logit < minLogit) minLogit = logit
+                sumLogit += logit
+            }
+            val avgLogit = sumLogit / rawScores.size
+            Logger.d(TAG, "[Diag] Scale $i scores: logit range=[$minLogit, $maxLogit], avg=$avgLogit, count=${rawScores.size}")
         }
 
         // 合并 3 个尺度的 boxes (每个是 [N, 4])
@@ -320,12 +374,20 @@ class InsightFaceDet10GDetector(context: Context) {
     }
 
     private fun applyNMS(faces: List<FaceBox>): List<FaceBox> {
-        if (faces.size <= 1) {
-            Logger.d(TAG, "[Diag] NMS skipped: ${faces.size} face(s)")
+        if (faces.isEmpty()) {
+            Logger.d(TAG, "[Diag] NMS skipped: 0 face(s)")
             return faces
         }
 
-        val sorted = faces.sortedByDescending { it.confidence }
+        // [优化] Top-K 策略：只取前 100 个最高分的框，避免 NMS 处理过多框
+        val topK = 100
+        val topFaces = faces.sortedByDescending { it.confidence }.take(topK)
+        
+        if (faces.size > topK) {
+            Logger.d(TAG, "[Diag] Top-K: reduced from ${faces.size} to $topK")
+        }
+
+        val sorted = topFaces
         val suppressed = BooleanArray(sorted.size)
         val result = mutableListOf<FaceBox>()
 
@@ -389,9 +451,31 @@ class InsightFaceDet10GDetector(context: Context) {
         if (hasSubNode && hasMulNode) {
             inputMean = 0f
             inputStd = 1f
+            Logger.i(TAG, "Model has built-in normalization nodes, using mean=0, std=1")
         } else {
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
+            Logger.i(TAG, "Using default normalization: mean=$DEFAULT_INPUT_MEAN, std=$DEFAULT_INPUT_STD")
+        }
+        Logger.d(TAG, "[Diag] Model file size=${modelFile.length()}, hasSub=$hasSubNode, hasMul=$hasMulNode")
+    }
+
+    /**
+     * 保存调试图像到外部存储
+     */
+    private fun saveDebugBitmap(bitmap: Bitmap, fileName: String) {
+        try {
+            val debugDir = File(appContext.getExternalFilesDir(null), "debug_det10g")
+            if (!debugDir.exists()) {
+                debugDir.mkdirs()
+            }
+            val file = File(debugDir, fileName)
+            file.outputStream().use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            Logger.d(TAG, "[Debug] Saved: ${file.absolutePath}")
+        } catch (e: Exception) {
+            Logger.e(TAG, "[Debug] Failed to save bitmap", e)
         }
     }
 

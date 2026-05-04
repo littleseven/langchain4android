@@ -85,52 +85,6 @@ class FaceDetectorManager(
     fun detect(imageProxy: ImageProxy, lensFacing: Int): DetectionResult? {
         val startTime = SystemClock.elapsedRealtime()
         lastDetectionSource = FaceDetectionSource.NONE
-        
-        // InsightFace 需要 Bitmap，MediaPipe 可以直接处理 ImageProxy
-        val bitmap = if (detectionEngineMode == FaceDetectionEngineMode.INSIGHTFACE) {
-            imageProxy.image?.let { img ->
-                // Simple YUV to Bitmap conversion
-                val yBuffer = imageProxy.planes[0].buffer
-                val uBuffer = imageProxy.planes[1].buffer
-                val vBuffer = imageProxy.planes[2].buffer
-                
-                val ySize = yBuffer.remaining()
-                val uSize = uBuffer.remaining()
-                val vSize = vBuffer.remaining()
-                
-                val nv21 = ByteArray(ySize + uSize + vSize)
-                yBuffer.get(nv21, 0, ySize)
-                vBuffer.get(nv21, ySize, vSize)
-                uBuffer.get(nv21, ySize + vSize, uSize)
-                
-                val yuvImage = android.graphics.YuvImage(
-                    nv21,
-                    android.graphics.ImageFormat.NV21,
-                    imageProxy.width,
-                    imageProxy.height,
-                    null
-                )
-                val out = java.io.ByteArrayOutputStream()
-                yuvImage.compressToJpeg(
-                    android.graphics.Rect(0, 0, yuvImage.width, yuvImage.height),
-                    100,
-                    out
-                )
-                val imageBytes = out.toByteArray()
-                var bmp = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                
-                val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                if (rotationDegrees != 0) {
-                    val matrix = android.graphics.Matrix().apply {
-                        postRotate(rotationDegrees.toFloat())
-                    }
-                    bmp = android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
-                }
-                bmp
-            } ?: return null
-        } else {
-            null
-        }
 
         return try {
             when (detectionEngineMode) {
@@ -162,8 +116,8 @@ class FaceDetectorManager(
                         Logger.w(TAG, "[Diag] InsightFace detector not ready")
                         return@detect null
                     }
-                    // 不需要传入 faceBounds，内部会自动使用 Det10G 检测
-                    val rawInsightFaceResult = insightFace.detect(bitmap!!, lensFacing)
+                    // [重构] 直接传递 ImageProxy，预处理逻辑已下沉到 Detector 内部
+                    val rawInsightFaceResult = insightFace.detectFromImageProxy(imageProxy, lensFacing)
                     lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
                     if (rawInsightFaceResult != null) {
                         lastDetectionSource = FaceDetectionSource.INSIGHTFACE
@@ -189,8 +143,6 @@ class FaceDetectorManager(
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
             Logger.e(TAG, "Face detection failed in ${detectionEngineMode.name} mode", e)
             null
-        } finally {
-            bitmap?.recycle()
         }
     }
 
