@@ -38,7 +38,14 @@ class MediaPipeFaceDetector(context: Context) {
     private var imageLandmarker: FaceLandmarker? = null
 
     init {
-        initialize()
+        // [修复] 捕获 UnsatisfiedLinkError，支持模拟器 x86_64 架构（MediaPipe 不提供 x86_64 库）
+        try {
+            initialize()
+        } catch (linkError: UnsatisfiedLinkError) {
+            Log.w(TAG, "MediaPipe native library not found (x86_64 simulator?), disabling MediaPipe detection")
+        } catch (error: Exception) {
+            Log.e(TAG, "Unexpected error initializing MediaPipe", error)
+        }
     }
 
     fun isReady(): Boolean = videoLandmarker != null || imageLandmarker != null

@@ -753,8 +753,13 @@ private fun convert468To106ForDebug(
 }
 
 private fun detectInsightFace106(bitmap: Bitmap, detector: InsightFace2D106Detector): FloatArray? {
-    val rawLandmarks = detector.detect(bitmap, androidx.camera.core.CameraSelector.LENS_FACING_BACK)
-        ?: return null
+    // 正常流程：让 Det10G 检测人脸 ROI，2d106det 在 ROI 内精确定位关键点
+    val rawLandmarks = detector.detect(
+        bitmap,
+        androidx.camera.core.CameraSelector.LENS_FACING_BACK,
+        faceBounds = null,
+        skipFirstStage = false
+    ) ?: return null
     // 将 InsightFace 原始 106 点映射为统一 106 标准
     val adapter = InsightFaceAdapter()
     val result = adapter.adapt(rawLandmarks, androidx.camera.core.CameraSelector.LENS_FACING_BACK)
