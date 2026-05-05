@@ -167,7 +167,18 @@ class InsightFace2D106Detector(context: Context) {
             det10gDetector = InsightFaceDet10GDetector(appContext)
             
             val modelFile = ensureModelFile()
+            
+            // [优化] 配置 ONNX Runtime SessionOptions,优先使用 GPU
             val sessionOptions = OrtSession.SessionOptions()
+            
+            try {
+                // 尝试添加 NNAPI (Android GPU/NPU 加速)
+                sessionOptions.addNnapi()
+                Logger.i(TAG, "NNAPI execution provider enabled for 2D106")
+            } catch (e: Exception) {
+                Logger.w(TAG, "NNAPI not available for 2D106, falling back to CPU", e)
+            }
+            
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)

@@ -137,7 +137,21 @@ class InsightFaceDet10GDetector(context: Context) {
     private fun initialize() {
         runCatching {
             val modelFile = ensureModelFile()
+            
+            // [优化] 配置 ONNX Runtime SessionOptions,优先使用 GPU
             val sessionOptions = OrtSession.SessionOptions()
+            
+            try {
+                // 尝试添加 NNAPI (Android GPU/NPU 加速)
+                sessionOptions.addNnapi()
+                Logger.i(TAG, "NNAPI execution provider enabled")
+            } catch (e: Exception) {
+                Logger.w(TAG, "NNAPI not available, falling back to CPU", e)
+            }
+            
+            // [备选] 如果 NNAPI 不可用,可以尝试 XNNPACK (CPU 优化)
+            // sessionOptions.addXnnpack()
+            
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)
