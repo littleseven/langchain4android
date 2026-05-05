@@ -68,15 +68,16 @@ internal fun FaceDebugOverlay(
             )
         }
 
-        FaceDebugStatusPanel(
-            requestedLabel = requestedLabel,
-            requestedColor = requestedColor,
-            detectionLabel = detectionLabel,
-            detectionColor = detectionColor,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 12.dp)
-        )
+        // [已移除] 调试状态面板(请求引擎和实际命中)
+        // FaceDebugStatusPanel(
+        //     requestedLabel = requestedLabel,
+        //     requestedColor = requestedColor,
+        //     detectionLabel = detectionLabel,
+        //     detectionColor = detectionColor,
+        //     modifier = Modifier
+        //         .align(Alignment.TopStart)
+        //         .padding(start = 12.dp, top = 12.dp)
+        // )
     }
 }
 
