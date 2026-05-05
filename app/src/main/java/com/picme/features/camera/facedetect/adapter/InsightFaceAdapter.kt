@@ -113,6 +113,11 @@ class InsightFaceAdapter : FaceLandmarkAdapter {
             val srcX = nativeLandmarks[insightIdx * 2]
             val srcY = nativeLandmarks[insightIdx * 2 + 1]
 
+            // [调试] 打印前3个点的原始值和镜像后的值
+            if (unifiedIdx < 3) {
+                android.util.Log.d("PicMe:InsightAdapter", "Point $unifiedIdx: src=($srcX,$srcY), isFront=$isFrontCamera, mirrored=${if (isFrontCamera) 1f - srcX else srcX}")
+            }
+
             unified[unifiedIdx * 2] = if (isFrontCamera) 1f - srcX else srcX
             unified[unifiedIdx * 2 + 1] = srcY
         }

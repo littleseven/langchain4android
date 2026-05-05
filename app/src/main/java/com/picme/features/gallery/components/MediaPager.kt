@@ -108,7 +108,7 @@ fun MediaPager(
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(true) }
-    var showLandmarkOverlay by remember { mutableStateOf(false) }
+    var showLandmarkOverlay by remember { mutableStateOf(true) }
     var show468Points by remember { mutableStateOf(true) }
     var showBigBeauty106 by remember { mutableStateOf(true) }
     var showInsightFace106 by remember { mutableStateOf(true) }

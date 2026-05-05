@@ -56,6 +56,9 @@ class InsightFaceDet10GDetector(context: Context) {
         return try {
             val faces = runInference(session, bitmap)
             Logger.d(TAG, "[Diag] detectLargestFace after inference: faces=${faces.size}")
+            if (faces.isNotEmpty()) {
+                Logger.d(TAG, "[Diag] First face: [${faces[0].x1.toInt()},${faces[0].y1.toInt()},${faces[0].x2.toInt()},${faces[0].y2.toInt()}] conf=${faces[0].confidence}")
+            }
             if (faces.isEmpty()) {
                 Logger.d(TAG, "[Diag] No face detected by Det10G")
                 return null
@@ -174,17 +177,16 @@ class InsightFaceDet10GDetector(context: Context) {
         val canvas = android.graphics.Canvas(paddedBitmap)
         canvas.drawColor(android.graphics.Color.BLACK)
             
-        val left = (INPUT_SIZE - scaledW) / 2
-        val top = (INPUT_SIZE - scaledH) / 2
+        val left = (INPUT_SIZE - scaledW) / 2f
+        val top = (INPUT_SIZE - scaledH) / 2f
             
         val scaledBmp = Bitmap.createScaledBitmap(bitmap, scaledW, scaledH, true)
-        canvas.drawBitmap(scaledBmp, left.toFloat(), top.toFloat(), null)
+        canvas.drawBitmap(scaledBmp, left, top, null)
         scaledBmp.recycle()
             
         val pixelCount = INPUT_SIZE * INPUT_SIZE
         val pixels = IntArray(pixelCount)
         paddedBitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
-        paddedBitmap.recycle()
     
         val chw = FloatArray(INPUT_CHANNELS * pixelCount)
         for (index in 0 until pixelCount) {
@@ -214,6 +216,8 @@ class InsightFaceDet10GDetector(context: Context) {
             Logger.d(TAG, "[Diag] First $sampleSize pixels normalized (R,G,B): $sampleValues")
             Logger.d(TAG, "[Diag] Using mean=$inputMean, std=$inputStd")
         }
+        
+        paddedBitmap.recycle()
     
         return OnnxTensor.createTensor(
             ortEnvironment,
@@ -297,18 +301,21 @@ class InsightFaceDet10GDetector(context: Context) {
             if (score < CONFIDENCE_THRESHOLD) continue
             aboveThreshold++
 
-            // 解码 bbox: RetinaFace 使用中心点 + 宽高格式
-            // boxes[i] = [dx, dy, dw, dh] 相对于 anchor 的偏移
+            // [修复] RetinaFace 标准 bbox 解码
+            // 公式: cx = anchor_cx + offset_x * 0.1 * anchor_w
+            //       cy = anchor_cy + offset_y * 0.1 * anchor_h
+            //       w  = anchor_w * exp(offset_w * 0.2)
+            //       h  = anchor_h * exp(offset_h * 0.2)
             val boxOffset = allBoxes[i]
             val anchor = anchors[i]
+            val variance0 = 0.1f
+            val variance1 = 0.2f
             
-            // 解码公式（RetinaFace 标准）
-            val cx = anchor[0] + boxOffset[0] * anchor[2]
-            val cy = anchor[1] + boxOffset[1] * anchor[3]
-            val w = anchor[2] * Math.exp(boxOffset[2].toDouble()).toFloat()
-            val h = anchor[3] * Math.exp(boxOffset[3].toDouble()).toFloat()
+            val cx = anchor[0] + boxOffset[0] * variance0 * anchor[2]
+            val cy = anchor[1] + boxOffset[1] * variance0 * anchor[3]
+            val w = anchor[2] * kotlin.math.exp(boxOffset[2] * variance1)
+            val h = anchor[3] * kotlin.math.exp(boxOffset[3] * variance1)
             
-            // 转换为中心点 + 宽高 -> 左上角 + 右下角
             val x1 = (cx - w / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
             val y1 = (cy - h / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
             val x2 = (cx + w / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
@@ -318,6 +325,16 @@ class InsightFaceDet10GDetector(context: Context) {
                 invalidBox++
                 if (aboveThreshold <= 5) {
                     Logger.d(TAG, "[Diag] Invalid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] score=$score")
+                }
+                continue
+            }
+
+            // [新增] 过滤过小的人脸框（小于 10x10 像素的视为无效检测）
+            val boxWidth = x2 - x1
+            val boxHeight = y2 - y1
+            if (boxWidth < 10f || boxHeight < 10f) {
+                if (aboveThreshold <= 5) {
+                    Logger.d(TAG, "[Diag] Too small box #$i: size=${boxWidth.toInt()}x${boxHeight.toInt()} at [$x1,$y1,$x2,$y2] score=$score")
                 }
                 continue
             }
@@ -354,8 +371,9 @@ class InsightFaceDet10GDetector(context: Context) {
         for (level in steps.indices) {
             val step = steps[level]
             val minSizes = minSizesList[level]
-            val featureMapHeight = ceil(INPUT_SIZE / step).toInt()
-            val featureMapWidth = ceil(INPUT_SIZE / step).toInt()
+            // [修复] 使用 floor 而不是 ceil，与官方实现一致
+            val featureMapHeight = (INPUT_SIZE / step).toInt()
+            val featureMapWidth = (INPUT_SIZE / step).toInt()
             
             for (y in 0 until featureMapHeight) {
                 for (x in 0 until featureMapWidth) {
