@@ -11,20 +11,59 @@ import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.features.camera.preview.core.FaceWarpParams
 
 /**
- * InsightFace 性能优化: 帧跳过计数器
- * 每 N 帧检测一次人脸,降低 ONNX 推理频率
+ * InsightFace 性能优化: 智能帧跳过管理器
+ * 平衡性能与响应速度,避免人脸跟随延迟
  */
 private object FaceDetectionFrameCounter {
     private var counter = 0
-    private const val DETECTION_INTERVAL = 5  // 每 5 帧检测一次 (30fps -> 6fps)
+    private const val DETECTION_INTERVAL = 3  // [优化] 每 3 帧检测一次 (30fps -> 10fps)
     
-    fun shouldDetect(): Boolean {
+    // 运动检测: 记录上次人脸中心点
+    private var lastFaceCenterX: Float = -1f
+    private var lastFaceCenterY: Float = -1f
+    private const val MOTION_THRESHOLD = 0.05f  // 归一化坐标变化超过 5% 视为快速移动
+    
+    /**
+     * 判断是否应该执行人脸检测
+     * @param currentFaceCenter 当前人脸中心(归一化坐标),如果为 null 表示未检测到人脸
+     * @return true=需要检测, false=可以跳过
+     */
+    fun shouldDetect(currentFaceCenter: Offset? = null): Boolean {
         counter++
-        return counter % DETECTION_INTERVAL == 0
+        
+        // 规则1: 每隔 N 帧必须检测一次
+        if (counter % DETECTION_INTERVAL == 0) {
+            return true
+        }
+        
+        // 规则2: 如果从未检测到人脸,需要检测
+        if (currentFaceCenter == null || lastFaceCenterX < 0) {
+            return true
+        }
+        
+        // 规则3: 检测快速移动,立即重新检测
+        val deltaX = kotlin.math.abs(currentFaceCenter.x - lastFaceCenterX)
+        val deltaY = kotlin.math.abs(currentFaceCenter.y - lastFaceCenterY)
+        if (deltaX > MOTION_THRESHOLD || deltaY > MOTION_THRESHOLD) {
+            Logger.d("Camera", "[Perf] Fast motion detected (dx=$deltaX, dy=$deltaY), force re-detect")
+            return true
+        }
+        
+        return false
+    }
+    
+    /**
+     * 更新人脸中心点记录
+     */
+    fun updateLastFaceCenter(x: Float, y: Float) {
+        lastFaceCenterX = x
+        lastFaceCenterY = y
     }
     
     fun reset() {
         counter = 0
+        lastFaceCenterX = -1f
+        lastFaceCenterY = -1f
     }
 }
 
@@ -142,15 +181,21 @@ internal fun handleImageAnalysisFrameMediaPipe(
             ?: imageProxy.height.toFloat()
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-        // [方案1] InsightFace 性能优化: 降低检测频率
+        // [方案1优化] InsightFace 性能优化: 智能帧跳过 + 运动检测
         val isInsightFaceMode = detectionEngineMode == FaceDetectionEngineMode.INSIGHTFACE
+        
+        // 获取上次的人脸中心点用于运动检测
+        val lastFaceCenter = existingWarpParams?.let {
+            Offset(it.faceCenterX, it.faceCenterY)
+        }
+        
         val shouldSkipDetection = isInsightFaceMode && 
-                                   !FaceDetectionFrameCounter.shouldDetect() && 
+                                   !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) && 
                                    existingWarpParams?.hasFace == true
         
         if (shouldSkipDetection) {
             // 跳过检测,复用上一帧的结果
-            Logger.d("Camera", "[Perf] Skip frame, reuse previous detection")
+            Logger.d("Camera", "[Perf] Skip frame")
             onFaceWarpParamsChanged(existingWarpParams)
             imageProxy.close()
             return
@@ -171,6 +216,12 @@ internal fun handleImageAnalysisFrameMediaPipe(
             ).copy(
                 requestedDetectionEngineMode = detectionEngineMode,
                 roiRect = detectionResult.roiRect  // [新增] 传递 ROI
+            )
+            
+            // [优化] 更新人脸中心点记录,用于运动检测
+            FaceDetectionFrameCounter.updateLastFaceCenter(
+                faceWarpParams.faceCenterX,
+                faceWarpParams.faceCenterY
             )
 
             // 人脸中心点（用于聚焦指示器）
