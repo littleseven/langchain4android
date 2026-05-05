@@ -136,7 +136,10 @@ internal fun handleImageAnalysisFrameMediaPipe(
             val faceWarpParams = Face106ToWarpParams.convert(
                 landmarks106 = landmarks106,
                 detectionSource = detectionResult.detectionSource
-            ).copy(requestedDetectionEngineMode = detectionEngineMode)
+            ).copy(
+                requestedDetectionEngineMode = detectionEngineMode,
+                roiRect = detectionResult.roiRect  // [新增] 传递 ROI
+            )
 
             // 人脸中心点（用于聚焦指示器）
             val screenPoint = Offset(

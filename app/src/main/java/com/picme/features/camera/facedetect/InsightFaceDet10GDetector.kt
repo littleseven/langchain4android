@@ -27,10 +27,11 @@ class InsightFaceDet10GDetector(context: Context) {
         private const val MODEL_FILE_NAME = "insightface_det_10g.onnx"
         private const val INPUT_SIZE = 640
         private const val INPUT_CHANNELS = 3
-        private const val CONFIDENCE_THRESHOLD = 0.5f  // sigmoid 后的概率，适当提高过滤低质量检测
+        private const val CONFIDENCE_THRESHOLD = 0.8f  // [修复] 进一步提高阈值,只保留高质量的人脸检测
         private const val NMS_THRESHOLD = 0.4f
         private const val DEFAULT_INPUT_MEAN = 127.5f
         private const val DEFAULT_INPUT_STD = 128.0f
+        private const val ROI_EXPAND_RATIO = 1.2f  // ROI 区域放大系数(1.2倍)
     }
 
     private val appContext = context.applicationContext
@@ -76,11 +77,29 @@ class InsightFaceDet10GDetector(context: Context) {
             val padTop = (INPUT_SIZE - scaledH) / 2f
             
             // 将 640x640 坐标映射回原图，确保坐标在有效范围内
+            var mappedX1 = ((largestFace.x1 - padLeft) / scale)
+            var mappedY1 = ((largestFace.y1 - padTop) / scale)
+            var mappedX2 = ((largestFace.x2 - padLeft) / scale)
+            var mappedY2 = ((largestFace.y2 - padTop) / scale)
+            
+            // [新增] 放大 ROI 区域,以包含更多面部上下文
+            val centerX = (mappedX1 + mappedX2) / 2f
+            val centerY = (mappedY1 + mappedY2) / 2f
+            val width = mappedX2 - mappedX1
+            val height = mappedY2 - mappedY1
+            val newWidth = width * ROI_EXPAND_RATIO
+            val newHeight = height * ROI_EXPAND_RATIO
+            
+            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+            
             val mappedFace = FaceBox(
-                x1 = ((largestFace.x1 - padLeft) / scale).coerceIn(0f, origW),
-                y1 = ((largestFace.y1 - padTop) / scale).coerceIn(0f, origH),
-                x2 = ((largestFace.x2 - padLeft) / scale).coerceIn(0f, origW),
-                y2 = ((largestFace.y2 - padTop) / scale).coerceIn(0f, origH),
+                x1 = mappedX1,
+                y1 = mappedY1,
+                x2 = mappedX2,
+                y2 = mappedY2,
                 confidence = largestFace.confidence
             )
             Logger.d(
@@ -301,48 +320,53 @@ class InsightFaceDet10GDetector(context: Context) {
             if (score < CONFIDENCE_THRESHOLD) continue
             aboveThreshold++
 
-            // [修复] RetinaFace 标准 bbox 解码
-            // 公式: cx = anchor_cx + offset_x * 0.1 * anchor_w
-            //       cy = anchor_cy + offset_y * 0.1 * anchor_h
-            //       w  = anchor_w * exp(offset_w * 0.2)
-            //       h  = anchor_h * exp(offset_h * 0.2)
+            // [修复] RetinaFace Det10G 使用 distance2bbox 解码方式
+            // 模型输出的是从 anchor 中心到四条边的距离: [left, top, right, bottom]
+            // 正确公式:
+            //   x1 = anchor_cx - left * stride
+            //   y1 = anchor_cy - top * stride
+            //   x2 = anchor_cx + right * stride
+            //   y2 = anchor_cy + bottom * stride
             val boxOffset = allBoxes[i]
             val anchor = anchors[i]
-            val variance0 = 0.1f
-            val variance1 = 0.2f
             
-            val cx = anchor[0] + boxOffset[0] * variance0 * anchor[2]
-            val cy = anchor[1] + boxOffset[1] * variance0 * anchor[3]
-            val w = anchor[2] * kotlin.math.exp(boxOffset[2] * variance1)
-            val h = anchor[3] * kotlin.math.exp(boxOffset[3] * variance1)
+            // [修复] 使用 anchor 中存储的 stride (anchor[4])，而不是计算出来的
+            val stride = if (anchor.size >= 5) anchor[4] else anchor[2] / 2f
             
-            val x1 = (cx - w / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
-            val y1 = (cy - h / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
-            val x2 = (cx + w / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
-            val y2 = (cy + h / 2f).coerceIn(0f, INPUT_SIZE.toFloat())
+            // distance2bbox 解码
+            val x1 = anchor[0] - boxOffset[0] * stride
+            val y1 = anchor[1] - boxOffset[1] * stride
+            val x2 = anchor[0] + boxOffset[2] * stride
+            val y2 = anchor[1] + boxOffset[3] * stride
+            
+            // [修复] 先裁剪到 640x640 模型空间，再进行 letterbox 反变换
+            val x1Clipped = x1.coerceIn(0f, INPUT_SIZE.toFloat())
+            val y1Clipped = y1.coerceIn(0f, INPUT_SIZE.toFloat())
+            val x2Clipped = x2.coerceIn(0f, INPUT_SIZE.toFloat())
+            val y2Clipped = y2.coerceIn(0f, INPUT_SIZE.toFloat())
 
-            if (x1 >= x2 || y1 >= y2) {
+            if (x1Clipped >= x2Clipped || y1Clipped >= y2Clipped) {
                 invalidBox++
                 if (aboveThreshold <= 5) {
-                    Logger.d(TAG, "[Diag] Invalid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] score=$score")
+                    Logger.d(TAG, "[Diag] Invalid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] clipped=[$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
                 }
                 continue
             }
 
             // [新增] 过滤过小的人脸框（小于 10x10 像素的视为无效检测）
-            val boxWidth = x2 - x1
-            val boxHeight = y2 - y1
+            val boxWidth = x2Clipped - x1Clipped
+            val boxHeight = y2Clipped - y1Clipped
             if (boxWidth < 10f || boxHeight < 10f) {
                 if (aboveThreshold <= 5) {
-                    Logger.d(TAG, "[Diag] Too small box #$i: size=${boxWidth.toInt()}x${boxHeight.toInt()} at [$x1,$y1,$x2,$y2] score=$score")
+                    Logger.d(TAG, "[Diag] Too small box #$i: size=${boxWidth.toInt()}x${boxHeight.toInt()} at [$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
                 }
                 continue
             }
 
             if (aboveThreshold <= 5) {
-                Logger.d(TAG, "[Diag] Valid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] score=$score")
+                Logger.d(TAG, "[Diag] Valid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] clipped=[$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
             }
-            faces.add(FaceBox(x1, y1, x2, y2, score))
+            faces.add(FaceBox(x1Clipped, y1Clipped, x2Clipped, y2Clipped, score))
         }
 
         Logger.d(TAG, "[Diag] After threshold: aboveThreshold=$aboveThreshold, invalidBox=$invalidBox, validFaces=${faces.size}")
@@ -380,7 +404,8 @@ class InsightFaceDet10GDetector(context: Context) {
                     for (minSize in minSizes) {
                         val cx = (x + 0.5f) * step
                         val cy = (y + 0.5f) * step
-                        anchors.add(floatArrayOf(cx, cy, minSize, minSize))
+                        // [新增] 存储 stride 信息在 anchor[4] 中，用于 distance2bbox 解码
+                        anchors.add(floatArrayOf(cx, cy, minSize, minSize, step))
                     }
                 }
             }

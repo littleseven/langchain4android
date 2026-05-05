@@ -32,7 +32,7 @@ class MediaPipeFaceDetector(context: Context) {
     private val appContext: Context = context.applicationContext
     
     // 预览路径：VIDEO 模式（需要时间戳）
-    private var videoLandmarker: FaceLandmarker? = null
+    internal var videoLandmarker: FaceLandmarker? = null
     
     // 拍照路径：IMAGE 模式（无时间戳限制）
     private var imageLandmarker: FaceLandmarker? = null

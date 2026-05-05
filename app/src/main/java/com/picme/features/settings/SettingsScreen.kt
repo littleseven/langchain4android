@@ -46,6 +46,8 @@ import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.InsightFaceLandmarkDetectorType
+import com.picme.domain.model.InsightFaceRoiDetectorType
 import com.picme.domain.model.ThemeMode
 
 @Composable
@@ -84,6 +86,8 @@ fun SettingsScreen(
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
+    val insightFaceRoiDetectorType by viewModel.insightFaceRoiDetectorType.collectAsState()
+    val insightFaceLandmarkDetectorType by viewModel.insightFaceLandmarkDetectorType.collectAsState()
 
     SettingsContent(
         themeMode = themeMode,
@@ -98,6 +102,8 @@ fun SettingsScreen(
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
         debugShaderMode = debugShaderMode,
+        insightFaceRoiDetectorType = insightFaceRoiDetectorType,
+        insightFaceLandmarkDetectorType = insightFaceLandmarkDetectorType,
         onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
         onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
@@ -118,6 +124,8 @@ fun SettingsScreen(
             viewModel.setFaceDetectIntervalProfile(profile)
         },
         onDebugShaderModeSelected = { mode -> viewModel.setDebugShaderMode(mode) },
+        onInsightFaceRoiDetectorTypeSelected = { type -> viewModel.setInsightFaceRoiDetectorType(type) },
+        onInsightFaceLandmarkDetectorTypeSelected = { type -> viewModel.setInsightFaceLandmarkDetectorType(type) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -137,6 +145,8 @@ private fun SettingsContent(
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
     debugShaderMode: Int,
+    insightFaceRoiDetectorType: InsightFaceRoiDetectorType,
+    insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onBeautyStrategySelected: (BeautyStrategy) -> Unit,
@@ -149,6 +159,8 @@ private fun SettingsContent(
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
     onDebugShaderModeSelected: (Int) -> Unit,
+    onInsightFaceRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -> Unit,
+    onInsightFaceLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -231,6 +243,17 @@ private fun SettingsContent(
                     FaceDetectProfileSelection(
                         currentProfile = faceDetectIntervalProfile,
                         onProfileSelected = onFaceDetectIntervalProfileSelected
+                    )
+                }
+                
+                // InsightFace 流水线配置（仅在 INSIGHTFACE 模式下显示）
+                if (faceDetectionEngineMode == FaceDetectionEngineMode.INSIGHTFACE) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InsightFacePipelineSelection(
+                        roiDetectorType = insightFaceRoiDetectorType,
+                        landmarkDetectorType = insightFaceLandmarkDetectorType,
+                        onRoiDetectorTypeSelected = onInsightFaceRoiDetectorTypeSelected,
+                        onLandmarkDetectorTypeSelected = onInsightFaceLandmarkDetectorTypeSelected
                     )
                 }
             }
@@ -443,6 +466,54 @@ private fun ShaderDebugModeSelection(
     )
 }
 
+@Composable
+private fun InsightFacePipelineSelection(
+    roiDetectorType: InsightFaceRoiDetectorType,
+    landmarkDetectorType: InsightFaceLandmarkDetectorType,
+    onRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -> Unit,
+    onLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -> Unit
+) {
+    // ROI 检测器选择
+    Text(
+        text = "ROI 检测器:",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
+    )
+    
+    val roiOptions = listOf(
+        InsightFaceRoiDetectorType.MEDIAPIPE to "MediaPipe (快速+精确)",
+        InsightFaceRoiDetectorType.DET10G to "Det10G (轻量级)"
+    )
+    
+    CompactOptionChips(
+        options = roiOptions,
+        currentValue = roiDetectorType,
+        maxLines = 1,
+        onSelected = onRoiDetectorTypeSelected
+    )
+    
+    // 关键点检测器选择
+    Text(
+        text = "关键点检测器:",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
+    )
+    
+    val landmarkOptions = listOf(
+        InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 to "InsightFace 2D106 (高精度)",
+        InsightFaceLandmarkDetectorType.MEDIAPIPE to "MediaPipe (468点)"
+    )
+    
+    CompactOptionChips(
+        options = landmarkOptions,
+        currentValue = landmarkDetectorType,
+        maxLines = 1,
+        onSelected = onLandmarkDetectorTypeSelected
+    )
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun <T> CompactOptionChips(
@@ -522,6 +593,8 @@ fun SettingsScreenPreview() {
             adaptiveFaceDetectionIntervalEnabled = true,
             faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
             debugShaderMode = 0,
+            insightFaceRoiDetectorType = InsightFaceRoiDetectorType.MEDIAPIPE,
+            insightFaceLandmarkDetectorType = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
             onBeautyStrategySelected = {},
@@ -534,6 +607,8 @@ fun SettingsScreenPreview() {
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
             onDebugShaderModeSelected = {},
+            onInsightFaceRoiDetectorTypeSelected = {},
+            onInsightFaceLandmarkDetectorTypeSelected = {},
             onNavigateBack = {}
         )
     }

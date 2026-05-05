@@ -8,6 +8,8 @@ import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.InsightFaceLandmarkDetectorType
+import com.picme.domain.model.InsightFaceRoiDetectorType
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -98,6 +100,20 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
     private val _debugShaderMode = kotlinx.coroutines.flow.MutableStateFlow(0)
     val debugShaderMode: StateFlow<Int> = _debugShaderMode
 
+    val insightFaceRoiDetectorType: StateFlow<InsightFaceRoiDetectorType> = repository.insightFaceRoiDetectorTypeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = InsightFaceRoiDetectorType.MEDIAPIPE
+        )
+
+    val insightFaceLandmarkDetectorType: StateFlow<InsightFaceLandmarkDetectorType> = repository.insightFaceLandmarkDetectorTypeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+        )
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -179,6 +195,18 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         // 通知 BeautyRenderer 更新 debug mode
         viewModelScope.launch {
             repository.updateDebugShaderMode(mode)
+        }
+    }
+
+    fun setInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType) {
+        viewModelScope.launch {
+            repository.updateInsightFaceRoiDetectorType(type)
+        }
+    }
+
+    fun setInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType) {
+        viewModelScope.launch {
+            repository.updateInsightFaceLandmarkDetectorType(type)
         }
     }
 

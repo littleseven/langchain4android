@@ -192,7 +192,34 @@ fun rememberFaceLandmarkDetection(
 
                     insightFaceDetector?.let { detector ->
                         val insightStart = System.currentTimeMillis()
-                        detectedInsight106 = detectInsightFace106(bitmap, detector)
+                        // 第一阶段：用 MediaPipe 获取人脸框，与实时预览链路保持一致
+                        var faceBounds: android.graphics.RectF? = null
+                        if (detectedMediaPipe468 != null) {
+                            // 复用已检测的 MediaPipe 结果计算人脸框
+                            val landmarks = detectedMediaPipe468!!
+                            var minX = 1f
+                            var maxX = 0f
+                            var minY = 1f
+                            var maxY = 0f
+                            landmarks.forEach { point ->
+                                val x = point.first
+                                val y = point.second
+                                if (x < minX) minX = x
+                                if (x > maxX) maxX = x
+                                if (y < minY) minY = y
+                                if (y > maxY) maxY = y
+                            }
+                            faceBounds = android.graphics.RectF(
+                                minX * bitmap.width.toFloat(),
+                                minY * bitmap.height.toFloat(),
+                                maxX * bitmap.width.toFloat(),
+                                maxY * bitmap.height.toFloat()
+                            )
+                            Log.d(TAG, "Static image MediaPipe faceBounds=$faceBounds")
+                        }
+                        
+                        // 第二阶段：使用 MediaPipe 提供的人脸框进行 InsightFace 检测
+                        detectedInsight106 = detectInsightFace106(bitmap, detector, faceBounds)
                         detectedInsightTime = (System.currentTimeMillis() - insightStart).toFloat()
                     }
 
@@ -752,13 +779,12 @@ private fun convert468To106ForDebug(
     return result
 }
 
-private fun detectInsightFace106(bitmap: Bitmap, detector: InsightFace2D106Detector): FloatArray? {
-    // 正常流程：让 Det10G 检测人脸 ROI，2d106det 在 ROI 内精确定位关键点
+private fun detectInsightFace106(bitmap: Bitmap, detector: InsightFace2D106Detector, faceBounds: android.graphics.RectF?): FloatArray? {
+    // 第二阶段：使用 MediaPipe 提供的人脸框进行 InsightFace 检测
     val rawLandmarks = detector.detect(
         bitmap,
         androidx.camera.core.CameraSelector.LENS_FACING_BACK,
-        faceBounds = null,
-        skipFirstStage = false
+        faceBounds = faceBounds
     ) ?: return null
     // 将 InsightFace 原始 106 点映射为统一 106 标准
     val adapter = InsightFaceAdapter()
