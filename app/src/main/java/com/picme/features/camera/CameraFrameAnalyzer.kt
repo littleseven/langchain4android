@@ -11,6 +11,24 @@ import com.picme.features.camera.facedetect.FaceDetectorManager
 import com.picme.features.camera.preview.core.FaceWarpParams
 
 /**
+ * InsightFace 性能优化: 帧跳过计数器
+ * 每 N 帧检测一次人脸,降低 ONNX 推理频率
+ */
+private object FaceDetectionFrameCounter {
+    private var counter = 0
+    private const val DETECTION_INTERVAL = 5  // 每 5 帧检测一次 (30fps -> 6fps)
+    
+    fun shouldDetect(): Boolean {
+        counter++
+        return counter % DETECTION_INTERVAL == 0
+    }
+    
+    fun reset() {
+        counter = 0
+    }
+}
+
+/**
  * 将 ML Kit 人脸坐标转换为纹理归一化坐标（0~1），直接对应 Shader 纹理坐标系。
  *
  * 纹理坐标系定义：
@@ -123,6 +141,20 @@ internal fun handleImageAnalysisFrameMediaPipe(
         val previewHeight = previewView.height.takeIf { height -> height > 0 }?.toFloat()
             ?: imageProxy.height.toFloat()
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
+        // [方案1] InsightFace 性能优化: 降低检测频率
+        val isInsightFaceMode = detectionEngineMode == FaceDetectionEngineMode.INSIGHTFACE
+        val shouldSkipDetection = isInsightFaceMode && 
+                                   !FaceDetectionFrameCounter.shouldDetect() && 
+                                   existingWarpParams?.hasFace == true
+        
+        if (shouldSkipDetection) {
+            // 跳过检测,复用上一帧的结果
+            Logger.d("Camera", "[Perf] Skip frame, reuse previous detection")
+            onFaceWarpParamsChanged(existingWarpParams)
+            imageProxy.close()
+            return
+        }
 
         // 人脸检测（MediaPipe / InsightFace / AUTO）
         val detectionResult = faceDetectorManager.detect(imageProxy, lensFacing)

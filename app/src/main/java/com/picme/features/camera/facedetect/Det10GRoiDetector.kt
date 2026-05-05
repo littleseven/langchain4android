@@ -45,6 +45,31 @@ class Det10GRoiDetector(context: Context) : RoiDetector {
         }
     }
     
+    /**
+     * [方案4] 从已转换的 Bitmap 检测,避免重复转换
+     */
+    override fun detectRoiFromBitmap(bitmap: android.graphics.Bitmap): android.graphics.RectF? {
+        return try {
+            Log.d(TAG, "=== Det10G ROI Detection (from Bitmap) ===")
+            Log.d(TAG, "  Bitmap size: ${bitmap.width}x${bitmap.height}")
+            
+            val roi = det10g.detectLargestFace(bitmap)
+            
+            roi?.let {
+                Log.d(TAG, "  Det10G ROI in pixels: $it")
+                Log.d(TAG, "=====================================")
+            } ?: run {
+                Log.w(TAG, "  No face detected by Det10G")
+                Log.d(TAG, "=====================================")
+            }
+            
+            roi
+        } catch (e: Exception) {
+            Log.e(TAG, "Det10G ROI detection from bitmap failed", e)
+            null
+        }
+    }
+    
     override fun release() {
         det10g.release()
     }
