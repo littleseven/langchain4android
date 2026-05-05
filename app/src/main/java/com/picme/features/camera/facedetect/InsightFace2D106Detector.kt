@@ -35,7 +35,7 @@ class InsightFace2D106Detector(context: Context) {
         private const val INPUT_SIZE = 192
         private const val INPUT_CHANNELS = 3
         private const val POINT_COUNT = 106
-        private const val LOOSE_CROP_SCALE = 1.2f
+        private const val LOOSE_CROP_SCALE = 1f
         private const val DEFAULT_INPUT_MEAN = 127.5f
         private const val DEFAULT_INPUT_STD = 128.0f
     }
@@ -62,13 +62,14 @@ class InsightFace2D106Detector(context: Context) {
      *
      * @param imageProxy CameraX ImageProxy
      * @param lensFacing 镜头方向（用于坐标调整）
+     * @param faceBounds 可选的人脸框，如果提供则跳过 Det10G 检测
      * @return 106 点归一化坐标数组，未检测到返回 null
      */
     @ExperimentalGetImage
-    fun detectFromImageProxy(imageProxy: ImageProxy, lensFacing: Int): FloatArray? {
+    fun detectFromImageProxy(imageProxy: ImageProxy, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
         val bitmap = convertImageProxyToBitmap(imageProxy) ?: return null
         return try {
-            detect(bitmap, lensFacing)
+            detect(bitmap, lensFacing, faceBounds)
         } finally {
             bitmap.recycle()
         }
@@ -80,35 +81,28 @@ class InsightFace2D106Detector(context: Context) {
      * @param bitmap 输入图像
      * @param lensFacing 镜头方向（用于坐标调整）
      * @param faceBounds 人脸边界框（可选），如果为 null 则内部自动使用 Det10G 检测
-     * @param skipFirstStage 是否跳过第一阶段 Det10G 检测（调试用途）
      * @return 106 点归一化坐标数组，未检测到返回 null
      */
-    fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.RectF? = null, skipFirstStage: Boolean = false): FloatArray? {
+    fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
         val session = ortSession ?: return null
 
         // [两阶段检测] 第一阶段：如果没有提供 faceBounds，使用 Det10G 检测
         val actualFaceBounds = faceBounds ?: run {
-            if (skipFirstStage) {
-                // [调试] 跳过 Det10G，使用全图作为人脸区域
-                Logger.d(TAG, "[Diag] Skipping Det10G, using full image bounds for debugging")
-                android.graphics.RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())
-            } else {
-                val det10g = det10gDetector
-                if (det10g == null) {
-                    Logger.w(TAG, "[Diag] Det10G detector not ready")
-                    return null
-                }
-                val bounds = det10g.detectLargestFace(bitmap)
-                if (bounds == null) {
-                    Logger.w(TAG, "[Diag] Det10G no face detected")
-                    return null
-                }
-                Logger.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
-                bounds
+            val det10g = det10gDetector
+            if (det10g == null) {
+                Logger.w(TAG, "[Diag] Det10G detector not ready")
+                return null
             }
+            val bounds = det10g.detectLargestFace(bitmap)
+            if (bounds == null) {
+                Logger.w(TAG, "[Diag] Det10G no face detected")
+                return null
+            }
+            Logger.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
+            bounds
         }
 
-        Logger.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds, skipFirstStage=$skipFirstStage")
+        Logger.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
         return try {
             // 将 RectF 转换为 Rect
             val rectBounds = android.graphics.Rect(
@@ -135,29 +129,13 @@ class InsightFace2D106Detector(context: Context) {
             }
             Logger.d(TAG, "[Diag] rawOutput sample values: $sampleValues")
 
-            // [修复] 计算模型实际输出的 min/max，使用自适应映射替代固定 [-1,1]→[0,192]
-            var minX = Float.MAX_VALUE
-            var maxX = -Float.MAX_VALUE
-            var minY = Float.MAX_VALUE
-            var maxY = -Float.MAX_VALUE
-            for (index in 0 until POINT_COUNT) {
-                val rx = rawOutput[index * 2]
-                val ry = rawOutput[index * 2 + 1]
-                if (rx < minX) minX = rx
-                if (rx > maxX) maxX = rx
-                if (ry < minY) minY = ry
-                if (ry > maxY) maxY = ry
-            }
-            val rangeX = (maxX - minX).coerceAtLeast(1e-5f)
-            val rangeY = (maxY - minY).coerceAtLeast(1e-5f)
-            Logger.d(TAG, "[Diag] rawOutput range: x=[$minX,$maxX] range=$rangeX, y=[$minY,$maxY] range=$rangeY")
-
+            // [修复] InsightFace 2d106det 模型输出在 [-1, 1] 范围，使用固定公式转换
             val result = FloatArray(POINT_COUNT * 2)
             val mappedPoint = floatArrayOf(0f, 0f)
             for (index in 0 until POINT_COUNT) {
-                // 自适应 min-max 映射：将模型实际输出范围线性拉伸到 [0, INPUT_SIZE]
-                mappedPoint[0] = (rawOutput[index * 2] - minX) / rangeX * INPUT_SIZE
-                mappedPoint[1] = (rawOutput[index * 2 + 1] - minY) / rangeY * INPUT_SIZE
+                // 标准公式：将 [-1, 1] 映射到 [0, INPUT_SIZE]
+                mappedPoint[0] = (rawOutput[index * 2] + 1f) * (INPUT_SIZE / 2f)
+                mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * (INPUT_SIZE / 2f)
                 crop.inverseTransform.mapPoints(mappedPoint)
                 val normalizedX = mappedPoint[0] / bitmap.width.toFloat()
                 val normalizedY = mappedPoint[1] / bitmap.height.toFloat()
@@ -225,6 +203,7 @@ class InsightFace2D106Detector(context: Context) {
     private fun buildLooseFaceCrop(bitmap: Bitmap, faceBounds: Rect): LooseCrop? {
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
         val faceHeight = faceBounds.height().toFloat().coerceAtLeast(1f)
+        // [修复] 不做任何扩展，直接使用原始人脸框
         val looseSize = max(faceWidth, faceHeight) * LOOSE_CROP_SCALE
         if (looseSize <= 0f) {
             return null
@@ -232,13 +211,13 @@ class InsightFace2D106Detector(context: Context) {
 
         val centerX = faceBounds.exactCenterX()
         val centerY = faceBounds.exactCenterY()
-        val scale = INPUT_SIZE / looseSize
+        val inputScale = INPUT_SIZE / looseSize
         // [修复] 使用 setValues 直接构造变换矩阵，避免 postScale+postTranslate 右乘导致平移被重复缩放
         val transform = Matrix().apply {
             setValues(
                 floatArrayOf(
-                    scale, 0f, INPUT_SIZE / 2f - centerX * scale,
-                    0f, scale, INPUT_SIZE / 2f - centerY * scale,
+                    inputScale, 0f, INPUT_SIZE / 2f - centerX * inputScale,
+                    0f, inputScale, INPUT_SIZE / 2f - centerY * inputScale,
                     0f, 0f, 1f
                 )
             )

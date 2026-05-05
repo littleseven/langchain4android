@@ -77,7 +77,9 @@ data class FaceWarpParams(
     // 当前帧的人脸检测来源（调试浮层/日志使用）
     val detectionSource: FaceDetectionSource = FaceDetectionSource.NONE,
     // 设置页选择的人脸检测算法引擎
-    val requestedDetectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE
+    val requestedDetectionEngineMode: FaceDetectionEngineMode = FaceDetectionEngineMode.MEDIAPIPE,
+    // [新增] ROI 区域 (归一化坐标: left, top, right, bottom)
+    val roiRect: android.graphics.RectF? = null
 )
 
 /**

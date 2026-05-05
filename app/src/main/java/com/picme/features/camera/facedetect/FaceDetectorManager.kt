@@ -6,7 +6,6 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
-import com.picme.core.common.Logger
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.features.camera.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.features.camera.facedetect.adapter.InsightFaceAdapter
@@ -55,7 +54,12 @@ class FaceDetectorManager(
 
     private val appContext: Context = context.applicationContext
     
-    // 委托给专门的检测器
+    // 新的流水线架构
+    private var roiDetector: RoiDetector? = null
+    private var landmarkDetector: LandmarkDetector? = null
+    private var pipelineConfig: DetectionPipelineConfig = DetectionPipelineConfig()
+    
+    // 保留旧的检测器用于兼容
     private var mediaPipeDetector: MediaPipeFaceDetector? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
     
@@ -67,11 +71,46 @@ class FaceDetectorManager(
     }
 
     private fun initialize(context: Context) {
-        // 初始化 MediaPipe 检测器
+        // 初始化旧的检测器用于兼容
         mediaPipeDetector = MediaPipeFaceDetector(context)
         
-        // InsightFace 检测器在需要时懒加载
+        // 初始化新的流水线
+        initializePipeline()
+        
         Log.i(TAG, "FaceDetectorManager initialized")
+    }
+    
+    /**
+     * 初始化检测流水线
+     */
+    private fun initializePipeline() {
+        Log.i(TAG, "=== Initializing Detection Pipeline ===")
+        Log.i(TAG, "  Config: roi=${pipelineConfig.roiDetector}, landmark=${pipelineConfig.landmarkDetector}")
+        
+        roiDetector?.release()
+        landmarkDetector?.release()
+        
+        roiDetector = DetectionPipelineFactory.createRoiDetector(
+            pipelineConfig.roiDetector, appContext
+        )
+        landmarkDetector = DetectionPipelineFactory.createLandmarkDetector(
+            pipelineConfig.landmarkDetector, appContext
+        )
+        
+        Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName}")
+        Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName}")
+        Log.i(TAG, "  Pipeline initialized successfully")
+        Log.i(TAG, "=========================================")
+    }
+    
+    /**
+     * 更新检测配置
+     */
+    fun updatePipelineConfig(newConfig: DetectionPipelineConfig) {
+        if (pipelineConfig == newConfig) return
+        
+        pipelineConfig = newConfig
+        initializePipeline()
     }
 
     /**
@@ -91,7 +130,7 @@ class FaceDetectorManager(
                 FaceDetectionEngineMode.MEDIAPIPE -> {
                     val detector = mediaPipeDetector
                     if (detector == null || !detector.isReady()) {
-                        Logger.w(TAG, "MediaPipe detector not ready")
+                        Log.w(TAG, "MediaPipe detector not ready")
                         return@detect null
                     }
                     
@@ -100,40 +139,60 @@ class FaceDetectorManager(
                     
                     if (mediaPipeResult != null) {
                         lastDetectionSource = FaceDetectionSource.MEDIAPIPE
-                        Logger.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
+                        Log.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
                         DetectionResult(mediaPipeResult, lastDetectionSource)
                     } else {
-                        Logger.d(TAG, "No face detected by MediaPipe (${lastProcessTimeMs}ms)")
+                        Log.d(TAG, "No face detected by MediaPipe (${lastProcessTimeMs}ms)")
                         null
                     }
                 }
 
                 FaceDetectionEngineMode.INSIGHTFACE -> {
-                    // [两阶段检测] InsightFace2D106Detector 内部封装了 Det10G + 2d106det
-                    Logger.d(TAG, "[Diag] === INSIGHTFACE mode START ===")
-                    val insightFace = ensureInsightFaceDetector()
-                    if (insightFace == null) {
-                        Logger.w(TAG, "[Diag] InsightFace detector not ready")
-                        return@detect null
-                    }
-                    // [重构] 直接传递 ImageProxy，预处理逻辑已下沉到 Detector 内部
-                    val rawInsightFaceResult = insightFace.detectFromImageProxy(imageProxy, lensFacing)
+                    // [新流水线] 两阶段检测
+                    val roi = roiDetector?.detectRoi(imageProxy)
+                    
+                    val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return@detect null
+                    
+                    val rawResult = landmarkDetector?.detectLandmarks(
+                        bitmap, lensFacing, roi
+                    )
+                    
+                    bitmap.recycle()
                     lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-                    if (rawInsightFaceResult != null) {
+                    
+                    if (rawResult != null) {
                         lastDetectionSource = FaceDetectionSource.INSIGHTFACE
                         val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.INSIGHTFACE)
                             as? InsightFaceAdapter
                             ?: return@detect null
-                        val adaptedResult = adapter.adapt(rawInsightFaceResult, lensFacing).getOrNull()
+                        val adaptedResult = adapter.adapt(rawResult, lensFacing).getOrNull()
                         if (adaptedResult != null) {
-                            Logger.d(TAG, "[Diag] === INSIGHTFACE END: success ${lastProcessTimeMs}ms ===")
-                            DetectionResult(adaptedResult, lastDetectionSource)
+                            Log.d(TAG, "InsightFace detection success in ${lastProcessTimeMs}ms")
+                            // [修复] ROI 已经是基于 Bitmap 尺寸的像素坐标,需要使用 Bitmap 尺寸进行归一化
+                            // 注意: imageProxy 经过旋转后变成 Bitmap,尺寸可能不同
+                            val rotatedWidth = when (imageProxy.imageInfo.rotationDegrees) {
+                                90, 270 -> imageProxy.height
+                                else -> imageProxy.width
+                            }
+                            val rotatedHeight = when (imageProxy.imageInfo.rotationDegrees) {
+                                90, 270 -> imageProxy.width
+                                else -> imageProxy.height
+                            }
+                            val normalizedRoi = roi?.let { r ->
+                                android.graphics.RectF(
+                                    r.left / rotatedWidth.toFloat(),
+                                    r.top / rotatedHeight.toFloat(),
+                                    r.right / rotatedWidth.toFloat(),
+                                    r.bottom / rotatedHeight.toFloat()
+                                )
+                            }
+                            DetectionResult(adaptedResult, lastDetectionSource, normalizedRoi)
                         } else {
-                            Logger.w(TAG, "[Diag] === INSIGHTFACE END: adaptation failed ===")
+                            Log.w(TAG, "InsightFace adaptation failed")
                             null
                         }
                     } else {
-                        Logger.d(TAG, "[Diag] === INSIGHTFACE END: detection failed (${lastProcessTimeMs}ms) ===")
+                        Log.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
                         null
                     }
                 }
@@ -141,7 +200,7 @@ class FaceDetectorManager(
             }
         } catch (e: Exception) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Logger.e(TAG, "Face detection failed in ${detectionEngineMode.name} mode", e)
+            Log.e(TAG, "Face detection failed in ${detectionEngineMode.name} mode", e)
             null
         }
     }
@@ -152,7 +211,7 @@ class FaceDetectorManager(
     fun detectPhoto(bitmap: android.graphics.Bitmap, lensFacing: Int): DetectionResult? {
         val detector = mediaPipeDetector
         if (detector == null || !detector.isReady()) {
-            Logger.w(TAG, "MediaPipe detector not ready for photo")
+            Log.w(TAG, "MediaPipe detector not ready for photo")
             return null
         }
         
@@ -162,20 +221,6 @@ class FaceDetectorManager(
         } else {
             null
         }
-    }
-
-    private fun ensureInsightFaceDetector(): InsightFace2D106Detector? {
-        val cached = insightFaceDetector
-        if (cached != null && cached.isReady()) {
-            return cached
-        }
-        return runCatching {
-            InsightFace2D106Detector(appContext)
-        }.onSuccess { detector ->
-            insightFaceDetector = detector.takeIf { instance -> instance.isReady() }
-        }.onFailure { error ->
-            Logger.e(TAG, "Failed to initialize InsightFace 2D106 detector", error)
-        }.getOrNull()?.takeIf { detector -> detector.isReady() }
     }
 
     /**
@@ -197,6 +242,13 @@ class FaceDetectorManager(
      * 释放资源
      */
     fun release() {
+        // 释放新流水线
+        roiDetector?.release()
+        landmarkDetector?.release()
+        roiDetector = null
+        landmarkDetector = null
+        
+        // 释放旧检测器用于兼容
         mediaPipeDetector?.release()
         mediaPipeDetector = null
         insightFaceDetector?.release()
@@ -207,6 +259,7 @@ class FaceDetectorManager(
 
     data class DetectionResult(
         val landmarks106: FloatArray,
-        val detectionSource: FaceDetectionSource
+        val detectionSource: FaceDetectionSource,
+        val roiRect: android.graphics.RectF? = null  // [新增] ROI 区域(归一化坐标)
     )
 }

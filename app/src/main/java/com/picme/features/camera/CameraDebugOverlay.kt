@@ -63,7 +63,8 @@ internal fun FaceDebugOverlay(
         if (faceWarpParams.hasFace && hasBigBeauty) {
             FaceDebugOverlayBigBeauty(
                 bigBeautyLandmarks = bigBeautyLandmarks,
-                aspectRatio = aspectRatio
+                aspectRatio = aspectRatio,
+                roiRect = faceWarpParams.roiRect
             )
         }
 
@@ -167,7 +168,8 @@ private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
 @Composable
 private fun FaceDebugOverlayBigBeauty(
     bigBeautyLandmarks: GpuPixelLandmarks,
-    aspectRatio: Int = AspectRatio.RATIO_FULL
+    aspectRatio: Int = AspectRatio.RATIO_FULL,
+    roiRect: android.graphics.RectF? = null
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val contentOffsetX: Float
@@ -205,6 +207,53 @@ private fun FaceDebugOverlayBigBeauty(
                 x = contentOffsetX + point.x.coerceIn(0f, 1f) * contentWidth,
                 y = contentOffsetY + point.y.coerceIn(0f, 1f) * contentHeight
             )
+        }
+
+        // [新增] 绘制 ROI 矩形框（橙色虚线）
+        roiRect?.let { roi ->
+            val roiLeft = contentOffsetX + roi.left.coerceIn(0f, 1f) * contentWidth
+            val roiTop = contentOffsetY + roi.top.coerceIn(0f, 1f) * contentHeight
+            val roiRight = contentOffsetX + roi.right.coerceIn(0f, 1f) * contentWidth
+            val roiBottom = contentOffsetY + roi.bottom.coerceIn(0f, 1f) * contentHeight
+            
+            // 绘制 ROI 边框
+            drawRect(
+                color = Color(0xFFFF6D00).copy(alpha = 0.8f),
+                topLeft = Offset(roiLeft, roiTop),
+                size = androidx.compose.ui.geometry.Size(roiRight - roiLeft, roiBottom - roiTop),
+                style = Stroke(width = 3.dp.toPx())
+            )
+            
+            // 绘制 ROI 四个角点
+            val cornerSize = 15.dp.toPx()
+            // 左上角
+            drawLine(color = Color.Yellow, start = Offset(roiLeft, roiTop), end = Offset(roiLeft + cornerSize, roiTop), strokeWidth = 4.dp.toPx())
+            drawLine(color = Color.Yellow, start = Offset(roiLeft, roiTop), end = Offset(roiLeft, roiTop + cornerSize), strokeWidth = 4.dp.toPx())
+            // 右上角
+            drawLine(color = Color.Yellow, start = Offset(roiRight, roiTop), end = Offset(roiRight - cornerSize, roiTop), strokeWidth = 4.dp.toPx())
+            drawLine(color = Color.Yellow, start = Offset(roiRight, roiTop), end = Offset(roiRight, roiTop + cornerSize), strokeWidth = 4.dp.toPx())
+            // 左下角
+            drawLine(color = Color.Yellow, start = Offset(roiLeft, roiBottom), end = Offset(roiLeft + cornerSize, roiBottom), strokeWidth = 4.dp.toPx())
+            drawLine(color = Color.Yellow, start = Offset(roiLeft, roiBottom), end = Offset(roiLeft, roiBottom - cornerSize), strokeWidth = 4.dp.toPx())
+            // 右下角
+            drawLine(color = Color.Yellow, start = Offset(roiRight, roiBottom), end = Offset(roiRight - cornerSize, roiBottom), strokeWidth = 4.dp.toPx())
+            drawLine(color = Color.Yellow, start = Offset(roiRight, roiBottom), end = Offset(roiRight, roiBottom - cornerSize), strokeWidth = 4.dp.toPx())
+            
+            // 标注 ROI 尺寸
+            val textPaint = Paint().apply {
+                textSize = 12.dp.toPx()
+                isAntiAlias = true
+                textAlign = Paint.Align.LEFT
+            }
+            drawIntoCanvas { canvas ->
+                textPaint.color = Color.White.toArgb()
+                canvas.nativeCanvas.drawText(
+                    "ROI: ${(roi.right - roi.left).toInt()}x${(roi.bottom - roi.top).toInt()}",
+                    roiLeft,
+                    roiTop - 8.dp.toPx(),
+                    textPaint
+                )
+            }
         }
 
         // 绘制大美丽点位（蓝色，带序号）

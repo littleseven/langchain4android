@@ -21,6 +21,8 @@ import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.InsightFaceLandmarkDetectorType
+import com.picme.domain.model.InsightFaceRoiDetectorType
 import com.picme.domain.repository.UserSettingsRepository
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import kotlinx.coroutines.CoroutineScope
@@ -41,7 +43,9 @@ internal data class CameraRuntimeContext(
     val faceLandmarkModeEnabled: Boolean,
     val glRecoveryAvailableAtMs: Long,
     val lifecycleOwner: LifecycleOwner,
-    val faceDetectorManager: FaceDetectorManager
+    val faceDetectorManager: FaceDetectorManager,
+    val insightFaceRoiDetectorType: InsightFaceRoiDetectorType,
+    val insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType
 )
 
 @Composable
@@ -65,7 +69,43 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
+    val insightFaceRoiDetectorType by userPreferencesRepository.insightFaceRoiDetectorTypeFlow.collectAsState(
+        initial = InsightFaceRoiDetectorType.MEDIAPIPE
+    )
+    val insightFaceLandmarkDetectorType by userPreferencesRepository.insightFaceLandmarkDetectorTypeFlow.collectAsState(
+        initial = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+    )
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // 监听 InsightFace 流水线配置变化并更新 FaceDetectorManager
+    LaunchedEffect(insightFaceRoiDetectorType, insightFaceLandmarkDetectorType) {
+        Logger.d("Camera", "=== InsightFace Config Change Detected ===")
+        Logger.d("Camera", "  ROI Detector: $insightFaceRoiDetectorType")
+        Logger.d("Camera", "  Landmark Detector: $insightFaceLandmarkDetectorType")
+        
+        val config = com.picme.features.camera.facedetect.DetectionPipelineConfig(
+            roiDetector = when (insightFaceRoiDetectorType) {
+                InsightFaceRoiDetectorType.MEDIAPIPE -> 
+                    com.picme.features.camera.facedetect.RoiDetectorType.MEDIAPIPE
+                InsightFaceRoiDetectorType.DET10G -> 
+                    com.picme.features.camera.facedetect.RoiDetectorType.DET10G
+            },
+            landmarkDetector = when (insightFaceLandmarkDetectorType) {
+                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> 
+                    com.picme.features.camera.facedetect.LandmarkDetectorType.INSIGHTFACE_2D106
+                InsightFaceLandmarkDetectorType.MEDIAPIPE -> 
+                    com.picme.features.camera.facedetect.LandmarkDetectorType.MEDIAPIPE
+            }
+        )
+        
+        Logger.d("Camera", "  Converting to internal config:")
+        Logger.d("Camera", "    roiDetector=${config.roiDetector}")
+        Logger.d("Camera", "    landmarkDetector=${config.landmarkDetector}")
+        
+        faceDetectorManager.updatePipelineConfig(config)
+        Logger.d("Camera", "  Pipeline config updated successfully")
+        Logger.d("Camera", "========================================")
+    }
 
     return CameraRuntimeContext(
         imageProcessor = imageProcessor,
@@ -80,7 +120,9 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         faceLandmarkModeEnabled = faceLandmarkModeEnabled,
         glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
         lifecycleOwner = lifecycleOwner,
-        faceDetectorManager = faceDetectorManager
+        faceDetectorManager = faceDetectorManager,
+        insightFaceRoiDetectorType = insightFaceRoiDetectorType,
+        insightFaceLandmarkDetectorType = insightFaceLandmarkDetectorType
     )
 }
 

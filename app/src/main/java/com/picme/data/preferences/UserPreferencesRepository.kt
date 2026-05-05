@@ -14,6 +14,8 @@ import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.InsightFaceLandmarkDetectorType
+import com.picme.domain.model.InsightFaceRoiDetectorType
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +45,8 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
         val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
         val DEBUG_SHADER_MODE = intPreferencesKey("debug_shader_mode")
+        val INSIGHTFACE_ROI_DETECTOR_TYPE = stringPreferencesKey("insightface_roi_detector_type")
+        val INSIGHTFACE_LANDMARK_DETECTOR_TYPE = stringPreferencesKey("insightface_landmark_detector_type")
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -318,6 +322,49 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.FACE_DETECT_INTERVAL_PROFILE] = profile.name
+        }
+    }
+
+    // ── InsightFace 流水线配置 ─────────────────────────────
+    override val insightFaceRoiDetectorTypeFlow: Flow<InsightFaceRoiDetectorType> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val typeName = preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE]
+                ?: InsightFaceRoiDetectorType.MEDIAPIPE.name
+            runCatching { InsightFaceRoiDetectorType.valueOf(typeName) }
+                .getOrDefault(InsightFaceRoiDetectorType.MEDIAPIPE)
+        }
+
+    override suspend fun updateInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE] = type.name
+        }
+    }
+
+    override val insightFaceLandmarkDetectorTypeFlow: Flow<InsightFaceLandmarkDetectorType> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val typeName = preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE]
+                ?: InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106.name
+            runCatching { InsightFaceLandmarkDetectorType.valueOf(typeName) }
+                .getOrDefault(InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106)
+        }
+
+    override suspend fun updateInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE] = type.name
         }
     }
 }

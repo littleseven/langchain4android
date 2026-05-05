@@ -40,3 +40,19 @@ enum class FaceDetectIntervalProfile {
     AGGRESSIVE
 }
 
+/**
+ * InsightFace ROI 检测器类型（领域模型）
+ */
+enum class InsightFaceRoiDetectorType {
+    MEDIAPIPE,  // MediaPipe 468 点计算 ROI
+    DET10G      // InsightFace Det10G 检测 ROI
+}
+
+/**
+ * InsightFace 关键点检测器类型（领域模型）
+ */
+enum class InsightFaceLandmarkDetectorType {
+    INSIGHTFACE_2D106,  // InsightFace 2d106det (106 点)
+    MEDIAPIPE           // MediaPipe FaceLandmarker (468 点 → 适配为 106)
+}
+
