@@ -79,16 +79,16 @@
         - **身材管理**：
             - **丰胸 (Body Enhancement)**：基于 MediaPipe/ML Kit Pose 人体关键点的局部径向扩展，调整幅度 ≤ 20%，范围 -30~+30
             - **长腿 (Leg Extension)**：基于姿态估计的下半身分段线性缩放 + 透视校正，幅度 ≤ 20%，范围 0-50
-    - **人脸关键点检测能力（2026-04 更新）**：
-        - **表情与状态属性（能力预留，待独立分析流补齐）**：`smilingProbability`、`leftEyeOpenProbability`、`headEulerAngleX/Y/Z` 等属性仍按产品能力保留；当前预览主分析链路已切换为 MediaPipe，如需启用该类能力，需补充独立 ML Kit 分析流，且不得阻塞预览渲染线程。
-        - **MediaPipe Face Mesh 468 点（已落地）**：引入 MediaPipe Face Landmarker 作为 `ImageAnalysis` 异步分析流，实时检测 468 个 3D 人脸关键点。通过精确的 468→106 点语义映射（对齐字节火山引擎 106 点标准），支撑大美丽模式的精细美型与妆容贴合。
-        - **InsightFace 2D106 备选（2026-05）**：大美丽模式下，当 MediaPipe 连续漏检或初始化不可用时，允许自动回退到本地 InsightFace `2d106det` 作为 106 点备选来源，优先保障瘦脸/大眼/妆容链路可用。
+    - **人脸关键点检测能力（2026-05 更新）**：
+        - **InsightFace 2D106（默认首选）**：本地 ONNX Runtime 推理，启用 NNAPI GPU/NPU 硬件加速。两阶段检测：Det10G ROI 检测 → 2D106 关键点提取。预期性能提升 3-5x。
+        - **MediaPipe Face Mesh 468→106（备选）**：异步分析流，通过精确的 468→106 点语义映射支撑大美丽模式的精细美型与妆容贴合。当 InsightFace 连续漏检或初始化失败时自动回退。
+        - **Auto 模式**：优先使用 InsightFace，主链路异常时允许自动回退到 MediaPipe，保障可用性。
         - **Selfie Segmentation（Phase 2-3）**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask，实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
-    - **美颜引擎技术路线（2026-04 更新）**：
+    - **美颜引擎技术路线（2026-05 更新）**：
         - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为唯一引擎；GPUPixel 已于 2026-05 完全移除。
         - **大美丽当前渲染**：基础美颜由主 Shader 实时处理；唇色/腮红启用时切换到 `FaceMakeupPass + 主 Shader` 的多 Pass GPU 链路，仍保持端侧实时预览。
         - **引擎收敛现状**：当前代码与文档体系仅保留大美丽单链路；GPUPixel 已于 2026-05 完全移除，旧兜底引擎相关实现、状态枚举与文档引用均已清理。
-        - **自研引擎渲染路径**：当前已接入磨皮、美白、瘦脸、大眼、唇色、腮红、专业调色与风格特效；实际渲染路径为 `SurfaceTexture → OpenGL ES Shader → SurfaceView`，人脸关键点由 MediaPipe 468→106 或 InsightFace 2D106 实时驱动。
+        - **自研引擎渲染路径**：当前已接入磨皮、美白、瘦脸、大眼、唇色、腮红、专业调色与风格特效；实际渲染路径为 `SurfaceTexture → OpenGL ES Shader → SurfaceView`，人脸关键点由 InsightFace 2D106（默认首选，NNAPI GPU/NPU 加速）或 MediaPipe 468→106（备选）实时驱动。
         - **待补齐能力**：眉毛美化（独立 Shader mask）；多色号唇色切换（动态纹理替换）；身材管理（需引入 MediaPipe Pose）；背景虚化（需 ML Kit Selfie Segmentation）；风格 LUT 滤镜（需自建 LUTFilter）。
         - **滤镜技术演进**：当前基于自定义 GLSL Shader 实现，后续评估引入 **3D LUT（颜色查找表）** 技术——预计算 64×64×64 网格颜色变换，运行时三线性插值以接近零计算开销应用复杂滤镜效果，支持专业调色风格扩展。
         - **磨皮算法演进**：双边滤波（当前）→ 引导滤波（O(N) 复杂度，更优边缘保持，无光晕伪影）→ 多尺度细节分层（工业级，分频层独立处理后融合）。
@@ -104,9 +104,9 @@
     - **调试与性能可观测性**：
         - **调试总开关**：设置页默认开启；统一控制拍摄页调试浮层、调试工具入口和 Log 入口显隐
         - **性能指标**：调试浮层实时展示 FPS、处理耗时、预览延迟、CPU 占用、空帧计数
-        - **检测来源标识**：调试浮层需明确展示当前帧命中的人脸检测来源（`MediaPipe` / `InsightFace` / `None`），便于真机回归与备选链路验证。
+        - **检测来源标识**：调试浮层需明确展示当前帧命中的人脸检测来源（`InsightFace` / `MediaPipe` / `None`），便于真机回归与备选链路验证。
         - **人脸检测模式**：默认 `Landmark`（性能优先，产品层称"快速模式"），可切换 `Contour`（精度优先，产品层称"精细模式"）
-        - **人脸检测引擎**：设置页需暴露 `InsightFace` / `MediaPipe` / `Auto` 三档选择；`InsightFace` 为默认首选，`Auto` 允许主链路漏检时自动回退到 MediaPipe。
+        - **人脸检测引擎**：设置页暴露 `InsightFace`（默认首选）/ `MediaPipe`（备选）/ `Auto`（智能回退）三档选择
         - **动态检测间隔**：默认开启，可在 280~450ms 区间自适应调整
         - **强度档位**：支持保守/平衡/激进三档，默认平衡
 - **滤镜系统**：

@@ -207,13 +207,13 @@
 #### 1.3.6 大美丽 实时预览性能与调试控制（2026-04 更新）
 - **调试总开关（设置页）**：默认开启；关闭后统一隐藏拍摄页调试浮层、调试工具入口和 Log 入口。
 - **调试浮层指标**：面向调试用户展示核心性能与稳定性指标（帧率、处理耗时、负载、空帧等）。
-- **检测来源标识**：开启人脸调试浮层后，需明确展示当前帧命中的人脸检测来源与设置页请求的算法引擎，便于确认 `MediaPipe`（默认首选）、`InsightFace`（备选）、`None`（未检测到）是否符合预期。
+- **检测来源标识**：开启人脸调试浮层后，需明确展示当前帧命中的人脸检测来源与设置页请求的算法引擎，便于确认 `InsightFace`（默认首选）、`MediaPipe`（备选）、`None`（未检测到）是否符合预期。
 - **人脸检测模式开关**（对应代码 `LandmarkMode` / `ContourMode`）：
     - **快速模式（默认）** `LandmarkMode`：优先保证流畅体验，对应 MediaPipe `LANDMARKS` 输出。
     - **精细模式** `ContourMode`：优先保证效果精度，对应 MediaPipe `FACE_CONTOURS` 输出。
 - **人脸检测引擎开关**：
-    - **InsightFace（默认）**：优先使用本地 `InsightFace 2D106`，作为默认首选引擎。
-    - **MediaPipe**：固定使用 `MediaPipe`，不触发 `InsightFace` 备选。
+    - **InsightFace（默认）**：优先使用本地 `InsightFace 2D106` + NNAPI GPU/NPU 加速，作为默认首选引擎。两阶段检测：Det10G ROI → 2D106 关键点。
+    - **MediaPipe**：固定使用 `MediaPipe Face Mesh 468→106`，不触发 `InsightFace`。
     - **Auto**：优先使用 `InsightFace`，连续漏检或初始化失败时允许自动回退到 `MediaPipe`。
 - **动态检测间隔开关**：默认开启；仅在用户使用形变类功能时生效。
 - **动态间隔强度档位**：
