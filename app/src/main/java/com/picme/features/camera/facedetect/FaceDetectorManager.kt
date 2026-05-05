@@ -149,16 +149,27 @@ class FaceDetectorManager(
 
                 FaceDetectionEngineMode.INSIGHTFACE -> {
                     // [新流水线] 两阶段检测
-                    val roi = roiDetector?.detectRoi(imageProxy)
-                    
+                    // [方案4] 先转换 Bitmap,然后复用
+                    val bitmapConvertStart = SystemClock.elapsedRealtime()
                     val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return@detect null
+                    val bitmapConvertTime = SystemClock.elapsedRealtime() - bitmapConvertStart
                     
+                    val roiStartTime = SystemClock.elapsedRealtime()
+                    // [方案4] 使用 Bitmap 版本的 ROI 检测,避免重复转换
+                    val roi = (roiDetector as? Det10GRoiDetector)?.detectRoiFromBitmap(bitmap)
+                        ?: roiDetector?.detectRoi(imageProxy)  // 降级:如果不是 Det10G,则用原方法
+                    val roiTime = SystemClock.elapsedRealtime() - roiStartTime
+                    
+                    val landmarkStart = SystemClock.elapsedRealtime()
                     val rawResult = landmarkDetector?.detectLandmarks(
                         bitmap, lensFacing, roi
                     )
+                    val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
                     
                     bitmap.recycle()
                     lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+                    
+                    Log.d(TAG, "[Perf] InsightFace breakdown: BitmapConvert=${bitmapConvertTime}ms, ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
                     
                     if (rawResult != null) {
                         lastDetectionSource = FaceDetectionSource.INSIGHTFACE

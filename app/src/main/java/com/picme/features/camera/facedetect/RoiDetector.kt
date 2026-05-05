@@ -17,6 +17,16 @@ interface RoiDetector {
     fun detectRoi(imageProxy: ImageProxy): android.graphics.RectF?
     
     /**
+     * [方案4] 从 Bitmap 检测人脸边界框 (避免重复转换)
+     * @param bitmap 已转换的 Bitmap
+     * @return 人脸边界框(RectF),未检测到返回 null
+     */
+    fun detectRoiFromBitmap(bitmap: android.graphics.Bitmap): android.graphics.RectF? {
+        // 默认实现: 不支持,返回 null
+        return null
+    }
+    
+    /**
      * 释放资源
      */
     fun release()
