@@ -24,4 +24,7 @@ interface MediaDao {
 
     @Query("SELECT * FROM media_assets WHERE id = :id")
     suspend fun getMediaById(id: Long): MediaEntity?
+
+    @Query("SELECT * FROM media_assets WHERE id IN (:ids)")
+    suspend fun getMediaByIds(ids: List<Long>): List<MediaEntity>
 }
