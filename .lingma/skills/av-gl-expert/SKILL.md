@@ -1,105 +1,53 @@
 ---
 name: av-gl-expert
-description: PicMe 音视频与 OpenGL 渲染专家。涵盖 CameraX 集成、OpenGL ES 黑屏诊断、Shader 调试、性能优化、人脸关键点坐标映射等。Use when debugging OpenGL rendering issues, CameraX integration problems, shader compilation errors, or performance bottlenecks in the PicMe beauty engine.
+description: PicMe OpenGL/CameraX 专家。诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。Use when debugging rendering, CameraX integration, or GPU performance.
 ---
 
-# PicMe 音视频与 OpenGL 专家 (AV-GL Expert)
+# AV-GL Expert (PicMe)
 
-## 📋 Skill 概述
+## 🚀 Kimi-cli 快速执行指南
 
-本 Skill 专为 PicMe 项目的**音视频处理**（CameraX、Media3）和 **OpenGL ES 渲染**（大美丽引擎、EGL 离屏渲染）提供专家级开发和调试支持。
+### 核心指令集
+| 触发词 | 动作 |
+|--------|------|
+| `diagnose-black-screen` | 检查 EGL 上下文、Shader 编译、FBO 状态、Viewport |
+| `debug-shader` | 启用红色测试 Shader、UV 可视化、Uniform 打印 |
+| `profile-performance` | 统计 FPS、渲染耗时、空帧率、PBO 异步读取验证 |
+| `debug-camerax` | 检查 Surface 绑定、YUV 流、前后置切换逻辑 |
+| `debug-landmarks` | 验证 468→106 映射、旋转校正、镜像翻转、Viewport 映射 |
 
-**核心价值**：
-- 🔍 **深度诊断**：快速定位 OpenGL 黑屏、Shader 编译失败、EGL 上下文丢失等疑难问题
-- 🛠️ **性能优化**：FBO 复用、PBO 异步读取、纹理内存管理、60fps 渲染管线优化
-- 📊 **可视化调试**：实时 FPS、渲染耗时、空帧计数、检测来源标识
-- 🎯 **最佳实践**：CameraX 集成、YUV→RGBA 转换、多 Pass 渲染、坐标映射规范
-
----
-
-## 🎯 适用场景
-
-### 何时使用本 Skill
-
-1. **OpenGL 渲染问题**
-   - 黑屏/白屏/花屏
-   - Shader 编译/链接失败
-   - 纹理坐标映射错误（画面倒置、拉伸、偏移）
-   - FBO 采样异常
-
-2. **EGL 上下文问题**
-   - EGL 初始化失败
-   - 上下文丢失/共享失败
-   - 离屏渲染崩溃
-
-3. **CameraX 集成问题**
-   - Preview Surface 绑定失败
-   - ImageAnalysis YUV 数据流中断
-   - 前后置摄像头切换卡顿
-
-4. **性能瓶颈**
-   - 预览掉帧（< 30fps）
-   - 拍照后处理慢（> 500ms）
-   - 内存泄漏（Texture/FBO 未释放）
-
-5. **美颜效果问题**
-   - 磨皮/美白参数不生效
-   - 人脸关键点偏移
-   - 妆容贴图错位
+### 📉 Token 优化原则
+- **记忆优先**：处理坐标问题时，先检索 `expert_experience` 中的坐标系规范。
+- **引用替代**：严禁粘贴超过 50 行的 Shader 或 Kotlin 代码，使用 `[file](file:///path)` 引用。
+- **文档导向**：复杂架构（如多 Pass 渲染）请直接查阅 `docs/BIG_BEAUTY_TECH_SPEC.md`。
 
 ---
 
-## 🏗️ 项目技术架构总览
+## 🛠️ 核心诊断流程 (Linear Execution)
 
-### 渲染引擎架构
+### 1. 黑屏排查 (Black Screen)
+1. **EGL 检查**：确认 `eglContext`、`surfaceTexture`、`textureId` 非空且有效。
+2. **Shader 检查**：调用 `glGetShaderInfoLog` 确认编译成功；检查 `samplerExternalOES` 类型匹配。
+3. **FBO 检查**：调用 `glCheckFramebufferStatus` 确保 `GL_FRAMEBUFFER_COMPLETE`。
+4. **Viewport 检查**：确认 `glViewport` 尺寸与屏幕一致，非 `[0,0,0,0]`。
 
-> GPUPixel 已于 2026-05 完全移除。当前为单引擎架构。
+### 2. 性能优化 (Performance)
+- **FPS 目标**：≥ 55fps。若低于此值，检查 FBO 复用情况及 PBO 异步读取。
+- **耗时分解**：单帧渲染应 < 16.67ms。重点关注 Shader 复杂度与纹理上传。
+- **资源管理**：确保纹理/FBO 在 `onDestroy` 时通过 `glDeleteTextures` 释放。
 
-```
-┌─────────────────────────────────────────────────────┐
-│              用户层：BeautyPreviewView               │
-│              （统一入口，单引擎架构）                  │
-└──────────────────────────┬──────────────────────────┘
-                           │
-                      大美丽模式
-                       (唯一引擎)
-                           │
-              ┌────────────▼────────────┐
-              │     BeautyRenderer      │
-              │     (Kotlin + GLSL)     │
-              │                         │
-              │  • 主 Shader            │
-              │  • FaceMakeupPass       │
-              │  • StyleEffectPass      │
-              │  • OffscreenRender      │
-              └────────────┬────────────┘
-                           │
-              ┌────────────▼────────────┐
-              │        EGLCore          │
-              │     (EGL 上下文管理)     │
-              └─────────────────────────┘
-```
+### 3. 坐标映射 (Coordinate Mapping)
+- **分层标准**：UI 层可用 [人脸坐标系]，渲染层**必须**使用 [图像坐标系]。
+- **转换链路**：MediaPipe 468 → InsightFace 106 → 旋转校正 → 镜像翻转 → Viewport 映射。
+- **常见陷阱**：前置摄像头下，图像左侧对应被拍摄者右脸（镜像效应）。
 
-### 关键组件索引
+---
 
-| 组件 | 路径 | 职责 |
-|------|------|------|
-| **CameraPreviewRenderer** | `beauty-engine/src/main/java/com/picme/beauty/egl/CameraPreviewRenderer.kt` | 相机预览渲染器，管理 EGL 上下文和渲染线程 |
-| **BeautyRenderer** | `beauty-engine/src/main/java/com/picme/beauty/egl/BeautyRenderer.kt` | 大美丽核心渲染器，实现多 Pass Shader 链 |
-| **OffscreenRenderer** | `beauty-engine/impl/src/main/java/com/picme/beauty/internal/OffscreenRenderer.kt` | 离屏渲染器，用于拍照后处理 |
-| **EGLCore** | `beauty-engine/src/main/java/com/picme/beauty/egl/EGLCore.kt` | EGL 上下文封装 |
-| **GPUPixel Provider** | ~~`beauty-engine/.../GpupixelBeautyPreviewProvider.kt`~~ | ~~GPUPixel 引擎 Kotlin 桥接~~（已于 2026-05 移除） |
-| **CameraUseCasesBinder** | `app/src/main/java/com/picme/features/camera/CameraUseCasesBinder.kt` | CameraX UseCase 绑定 |
-
-### 技术文档索引
-
-| 文档 | 路径 | 内容 |
-|------|------|------|
-| **相机预览技术规格** | `docs/CAMERA_PREVIEW_TECH_SPEC.md` | 坐标转换、Viewport 计算、十字星定位 |
-| **大美丽技术规格** | `docs/BIG_BEAUTY_TECH_SPEC.md` | Shader 架构、多 Pass 渲染、性能优化 |
-| **离屏渲染 ADR** | `docs/ADR-002-opengl-offscreen-unified-pipeline.md` | 拍照 GPU 化方案 |
-| **引擎容灾降级** | `docs/BEAUTY_ENGINE_FALLBACK.md` | 自动回退策略 |
-| **风格特效实现** | `beauty-engine/src/main/java/com/picme/beauty/egl/StyleEffectShader.kt` | 自研 Shader 风格特效（TOON/SKETCH/POSTERIZE/EMBOSS/CROSSHATCH） |
+## 📚 专项技术文档索引
+- **渲染管线**：`docs/BIG_BEAUTY_TECH_SPEC.md`
+- **相机集成**：`docs/CAMERA_PREVIEW_TECH_SPEC.md`
+- **离屏拍照**：`docs/ADR-002-opengl-offscreen-unified-pipeline.md`
+- **坐标系规范**：`docs/COORDINATE_SYSTEM_STANDARD.md`
 
 ---
 
