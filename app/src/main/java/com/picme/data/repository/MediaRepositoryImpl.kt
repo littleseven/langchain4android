@@ -50,16 +50,38 @@ class MediaRepositoryImpl(
         }
 
         val idSet = ids.toSet()
-        val targetAssets = allMedia.first().filter { asset -> asset.id in idSet }
-        targetAssets.forEach { asset ->
+        Log.d("PicMe:Gallery", "Starting deletion for IDs: $idSet")
+
+        // 1. 获取待删除资产的 URI（优先从内存流，其次查库）
+        val assetsToDelete = mutableListOf<MediaAsset>()
+        
+        // 尝试从当前流中获取
+        val currentAssets = allMedia.first()
+        assetsToDelete.addAll(currentAssets.filter { asset -> asset.id in idSet })
+        
+        // 补充查询：如果流中没找到（可能是刚插入的本地记录），直接查 Room
+        val missingIds = idSet - assetsToDelete.map { it.id }.toSet()
+        if (missingIds.isNotEmpty()) {
+            val dbEntities = mediaDao.getMediaByIds(missingIds.toList())
+            assetsToDelete.addAll(dbEntities.map { it.toDomain() })
+        }
+
+        // 2. 执行物理文件删除
+        assetsToDelete.forEach { asset ->
+            Log.d("PicMe:Gallery", "Attempting to delete file: ${asset.uri}")
             deleteSystemMedia(asset.uri)
         }
 
+        // 3. 清理 Room 数据库记录
         val localIds = ids.filter { id -> id > 0L }
         if (localIds.isNotEmpty()) {
+            Log.d("PicMe:Gallery", "Deleting local DB records: $localIds")
             mediaDao.deleteMediaByIds(localIds)
         }
+
+        // 4. 强制刷新媒体库以确保 UI 同步
         refreshMediaLibrary()
+        Log.d("PicMe:Gallery", "Deletion completed and library refreshed.")
     }
 
     override suspend fun getMediaById(id: Long): MediaAsset? {
