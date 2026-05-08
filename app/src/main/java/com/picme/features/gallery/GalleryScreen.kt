@@ -3,9 +3,11 @@ package com.picme.features.gallery
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.MediaStore
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -164,15 +166,73 @@ fun GalleryScreen(
 
     val selectedIds = remember { mutableStateListOf<Long>() }
 
-    val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { it.items } }
+    val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { group -> group.items } }
     val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { mediaAsset -> mediaAsset.id } }
     val context = LocalContext.current
+    val deleteAuthRequest by viewModel.deleteAuthRequest.collectAsState()
 
     var hasMediaPermission by remember { mutableStateOf(hasGalleryPermission(context)) }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
         hasMediaPermission = hasGalleryPermission(context)
+    }
+    
+    // Android 10 (API 29) 恢复性删除权限请求 launcher
+    val api29DeleteLauncher = if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartIntentSenderForResult()
+        ) { result ->
+            if (result.resultCode == android.app.Activity.RESULT_OK) {
+                Log.d("PicMe:Gallery", "User granted API 29 delete permission")
+                viewModel.executePendingDeletes()
+            } else {
+                Log.w("PicMe:Gallery", "User denied API 29 delete permission")
+                viewModel.clearPendingRecoverable()
+                viewModel.clearPendingDeleteUris()
+            }
+        }
+    } else {
+        null
+    }
+
+    // Android 11+ 删除权限请求 launcher
+    val deletePermissionLauncher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartIntentSenderForResult()
+        ) { result ->
+            if (result.resultCode == android.app.Activity.RESULT_OK) {
+                Log.d("PicMe:Gallery", "User granted delete permission")
+                viewModel.executePendingDeletes()
+            } else {
+                Log.w("PicMe:Gallery", "User denied delete permission")
+                viewModel.clearPendingDeleteUris()
+            }
+        }
+    } else {
+        null
+    }
+
+    LaunchedEffect(deleteAuthRequest) {
+        deleteAuthRequest?.let { request ->
+            when (request) {
+                is MediaViewModel.DeleteAuthRequest.Api29 -> {
+                    api29DeleteLauncher?.launch(
+                        IntentSenderRequest.Builder(request.intentSender).build()
+                    )
+                }
+                is MediaViewModel.DeleteAuthRequest.Api30 -> {
+                    val intent = MediaStore.createDeleteRequest(
+                        context.contentResolver,
+                        request.uris
+                    )
+                    deletePermissionLauncher?.launch(
+                        IntentSenderRequest.Builder(intent).build()
+                    )
+                }
+            }
+            viewModel.consumeDeleteAuthRequest()
+        }
     }
 
     LaunchedEffect(hasMediaPermission) {
@@ -227,11 +287,12 @@ fun GalleryScreen(
                             selectedIds.clear()
                         } else {
                             selectedIds.clear()
-                            selectedIds.addAll(allFlatMedia.map { it.id })
+                            selectedIds.addAll(allFlatMedia.map { asset -> asset.id })
                         }
                     },
                     onDeleteSelected = {
-                        viewModel.deleteMediaByIds(selectedIds.toList())
+                        val idsToDelete = selectedIds.toList()
+                        viewModel.deleteMediaByIds(idsToDelete)
                         isSelectionMode = false
                         selectedIds.clear()
                     },
@@ -246,7 +307,9 @@ fun GalleryScreen(
             } else if (showDuplicateManager) {
                 DuplicateManagerTopBar(
                     onNavigateBack = { viewModel.toggleDuplicateManager(false) },
-                    onDeleteAllDuplicates = { viewModel.deleteAllDuplicatesExceptOne() }
+                    onDeleteAllDuplicates = {
+                        viewModel.deleteAllDuplicatesExceptOne()
+                    }
                 )
             }
         }
@@ -261,7 +324,9 @@ fun GalleryScreen(
                     DuplicateManagerScreen(
                         duplicateGroups = duplicateGroups,
                         isScanning = isScanningDuplicates,
-                        onDeleteGroup = { group -> viewModel.deleteDuplicateGroup(group, 0) }
+                        onDeleteGroup = { group ->
+                            viewModel.deleteDuplicateGroup(group, 0)
+                        }
                     )
                 }
 
@@ -402,8 +467,13 @@ private fun galleryReadPermissions(): Array<String> {
             android.Manifest.permission.READ_MEDIA_IMAGES,
             android.Manifest.permission.READ_MEDIA_VIDEO
         )
-    } else {
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    } else {
+        arrayOf(
+            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+        )
     }
 }
 
@@ -462,7 +532,7 @@ private fun GalleryTopBar(
                     )
                 }
                 IconButton(onClick = onManageDuplicates) {
-                    Icon(Icons.Outlined.FilterDrama, contentDescription = "Manage Duplicates")
+                    Icon(Icons.Outlined.FilterDrama, contentDescription = stringResource(R.string.manage_duplicates))
                 }
                 GroupingMenu(
                     currentMode = groupingMode,
@@ -822,7 +892,7 @@ private fun MediaGrid(
                     )
                 }
             }
-            items(group.items, key = { it.id }) { asset ->
+            items(group.items, key = { item -> item.id }) { asset ->
                 MediaItem(
                     asset = asset,
                     isSelected = selectedIds.contains(asset.id),

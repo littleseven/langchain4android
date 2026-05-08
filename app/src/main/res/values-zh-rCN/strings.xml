@@ -198,6 +198,7 @@
 
     <!-- Duplicate Management -->
     <string name="manage_duplicates">管理重复照片</string>
+    <string name="delete_all_duplicates">删除全部重复</string>
     <string name="no_duplicates_found">未找到重复图片</string>
     <string name="duplicate_groups_found">找到 %1$d 组重复图片</string>
     <string name="exact_duplicate">完全重复</string>

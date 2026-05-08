@@ -87,17 +87,22 @@ HorizontalPager(
 - **连续批选**: 支持拖拽滑动批量选择/取消，减少逐张点击成本
 - **数据结构**: 使用 `mutableStateListOf<Long>` 存储选中 ID
 - **全选功能**: 提供"全选"按钮快速选中当前视图所有媒体
-- **批量分享**: 
+- **批量分享**:
   - 单张: `Intent.ACTION_SEND` + `EXTRA_STREAM`
   - 多张: `Intent.ACTION_SEND_MULTIPLE` + `EXTRA_STREAM` ArrayList
   - MIME 类型: 图片用 `image/*`，视频用 `video/*`，混合用 `*/*`
 - **批量删除**: 调用 `viewModel.deleteMediaByIds(ids)` 异步删除
+- **Scoped Storage 权限处理**:
+  - **Android 6~9 (API 23-28)**: 运行时申请 `READ_EXTERNAL_STORAGE` + `WRITE_EXTERNAL_STORAGE`，通过 `ContentResolver.delete()` 直接删除
+  - **Android 10 (API 29)**: 捕获 `RecoverableSecurityException`，保存 `userAction.actionIntent.intentSender`，通过 `StartIntentSenderForResult` 请求单条授权，授权后重试删除
+  - **Android 11+ (API 30+)**: 收集失败的 URI 列表，使用 `MediaStore.createDeleteRequest()` 发起批量系统授权对话框，用户允许后系统自动完成物理删除
+- **数据一致性**: 必须遵循"先物理文件、后数据库记录"的顺序。若删除需要用户授权，必须推迟 Room 数据库清理，直到授权成功后再执行，避免用户拒绝后出现"文件还在、记录已消失"的不一致状态
 
 **代码示例**:
 ```kotlin
 private fun shareMediaAssets(context: Context, assets: List<MediaAsset>) {
     if (assets.isEmpty()) return
-    
+
     val uris = assets.map { it.uri.toUri() }
     val shareIntent = if (uris.size == 1) {
         Intent(Intent.ACTION_SEND).apply {
@@ -112,7 +117,7 @@ private fun shareMediaAssets(context: Context, assets: List<MediaAsset>) {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
     }
-    
+
     context.startActivity(Intent.createChooser(shareIntent, null))
 }
 ```
