@@ -1,9 +1,8 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.internal.facedetect
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.util.Log
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageProxy
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 
 /**
@@ -14,35 +13,26 @@ class MediaPipeRoiDetector(context: Context) : RoiDetector {
     companion object {
         private const val TAG = "PicMe:MediaPipeRoi"
     }
-    
+
     private val faceDetector = MediaPipeFaceDetector(context)
-    
-    @ExperimentalGetImage
-    override fun detectRoi(imageProxy: ImageProxy): android.graphics.RectF? {
+
+    override fun detectRoi(bitmap: Bitmap): android.graphics.RectF? {
         return try {
-            // 复用 MediaPipeFaceDetector 的内部逻辑获取检测结果
-            val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return null
-            
             Log.d(TAG, "=== MediaPipe ROI Detection ===")
-            Log.d(TAG, "  ImageProxy size: ${imageProxy.width}x${imageProxy.height}")
-            Log.d(TAG, "  ImageProxy rotation: ${imageProxy.imageInfo.rotationDegrees}")
-            Log.d(TAG, "  Bitmap size after conversion: ${bitmap.width}x${bitmap.height}")
-            
+            Log.d(TAG, "  Bitmap size: ${bitmap.width}x${bitmap.height}")
+
             val mpImage = BitmapImageBuilder(bitmap).build()
             val result = faceDetector.videoLandmarker?.detectForVideo(
-                mpImage, 
+                mpImage,
                 android.os.SystemClock.uptimeMillis()
             )
-            
-            bitmap.recycle()
-            
+
             result?.faceLandmarks()?.firstOrNull()?.let { landmarks ->
-                // 从 468 点计算边界框
                 var minX = 1f
                 var maxX = 0f
                 var minY = 1f
                 var maxY = 0f
-                
+
                 landmarks.forEach { landmark ->
                     val x = landmark.x()
                     val y = landmark.y()
@@ -51,15 +41,14 @@ class MediaPipeRoiDetector(context: Context) : RoiDetector {
                     if (y < minY) minY = y
                     if (y > maxY) maxY = y
                 }
-                
-                // [修复] 使用旋转后的 Bitmap 尺寸,而不是原始 ImageProxy 尺寸
+
                 val roi = android.graphics.RectF(
                     minX * bitmap.width.toFloat(),
                     minY * bitmap.height.toFloat(),
                     maxX * bitmap.width.toFloat(),
                     maxY * bitmap.height.toFloat()
                 )
-                
+
                 Log.d(TAG, "  MediaPipe normalized bounds: ($minX,$minY)-($maxX,$maxY)")
                 Log.d(TAG, "  ROI in pixels (using Bitmap size): $roi")
                 Log.d(TAG, "=====================================")

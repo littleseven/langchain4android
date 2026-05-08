@@ -77,7 +77,7 @@ interface ImageProcessor {
 class ImageProcessorImpl(
     private val beautyProcessor: BeautyProcessor,
     private val photoProcessor: PhotoProcessor? = null,
-    private val faceDetectorManager: com.picme.features.camera.facedetect.FaceDetectorManager? = null
+    private val faceDetectorManager: com.picme.beauty.api.facedetect.FaceDetector? = null
 ) : ImageProcessor {
 
     private fun createFaceMaskBitmap(
@@ -755,8 +755,8 @@ class ImageProcessorImpl(
  */
 private fun FloatArray.toFaceDataFromLandmarks106(imageWidth: Int, imageHeight: Int): FaceData? {
     if (this.size < 212) return null
-    val warpParams = com.picme.features.camera.facedetect.Face106ToWarpParams.convert(
-        this, com.picme.features.camera.preview.core.FaceDetectionSource.MEDIAPIPE
+    val warpParams = com.picme.beauty.internal.facedetect.Face106ToWarpParams.convert(
+        this, com.picme.beauty.api.facedetect.FaceDetectionSource.MEDIAPIPE
     )
     return FaceData(
         faceCenterX = warpParams.faceCenterX,

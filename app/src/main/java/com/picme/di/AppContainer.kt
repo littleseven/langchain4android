@@ -9,7 +9,8 @@ import com.picme.core.image.GpuBeautyProcessor
 import com.picme.core.image.ImageProcessor
 import com.picme.core.image.ImageProcessorImpl
 import com.picme.data.local.AppDatabase
-import com.picme.features.camera.facedetect.FaceDetectorManager
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.FaceDetectorFactory
 import com.picme.data.local.MlKitOcrProcessor
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.data.repository.MediaRepositoryImpl
@@ -49,7 +50,7 @@ interface AppContainer {
     val repository: MediaRepository
     val userPreferencesRepository: UserSettingsRepository
     val imageProcessor: ImageProcessor
-    val faceDetectorManager: FaceDetectorManager
+    val faceDetector: FaceDetector
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
 }
@@ -75,13 +76,13 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         UserPreferencesRepository(context)
     }
 
-    override val faceDetectorManager: FaceDetectorManager by lazy {
-        FaceDetectorManager(context)
+    override val faceDetector: FaceDetector by lazy {
+        FaceDetectorFactory.create(context)
     }
 
     override val imageProcessor: ImageProcessor by lazy {
         val photoProcessor: PhotoProcessor = GlBeautyPreviewProviderFactory().createPhotoProcessor(context)
-        ImageProcessorImpl(beautyProcessor, photoProcessor, faceDetectorManager)
+        ImageProcessorImpl(beautyProcessor, photoProcessor, faceDetector)
     }
 
     private val ocrProcessor: OcrProcessor by lazy {

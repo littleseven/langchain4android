@@ -1,4 +1,4 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.internal.facedetect
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -8,10 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Rect
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageProxy
-import com.picme.core.common.Logger
+import android.util.Log
 import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.max
@@ -58,24 +55,6 @@ class InsightFace2D106Detector(context: Context) {
     fun isReady(): Boolean = ortSession != null && det10gDetector?.isReady() == true
 
     /**
-     * 从 ImageProxy 检测人脸关键点（推荐用于相机预览）
-     *
-     * @param imageProxy CameraX ImageProxy
-     * @param lensFacing 镜头方向（用于坐标调整）
-     * @param faceBounds 可选的人脸框，如果提供则跳过 Det10G 检测
-     * @return 106 点归一化坐标数组，未检测到返回 null
-     */
-    @ExperimentalGetImage
-    fun detectFromImageProxy(imageProxy: ImageProxy, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
-        val bitmap = convertImageProxyToBitmap(imageProxy) ?: return null
-        return try {
-            detect(bitmap, lensFacing, faceBounds)
-        } finally {
-            bitmap.recycle()
-        }
-    }
-
-    /**
      * 检测人脸关键点
      *
      * @param bitmap 输入图像
@@ -90,19 +69,19 @@ class InsightFace2D106Detector(context: Context) {
         val actualFaceBounds = faceBounds ?: run {
             val det10g = det10gDetector
             if (det10g == null) {
-                Logger.w(TAG, "[Diag] Det10G detector not ready")
+                Log.w(TAG, "[Diag] Det10G detector not ready")
                 return null
             }
             val bounds = det10g.detectLargestFace(bitmap)
             if (bounds == null) {
-                Logger.w(TAG, "[Diag] Det10G no face detected")
+                Log.w(TAG, "[Diag] Det10G no face detected")
                 return null
             }
-            Logger.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
+            Log.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
             bounds
         }
 
-        Logger.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
+        Log.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
         return try {
             // 将 RectF 转换为 Rect
             val rectBounds = android.graphics.Rect(
@@ -111,23 +90,23 @@ class InsightFace2D106Detector(context: Context) {
                 actualFaceBounds.right.toInt().coerceIn(0, bitmap.width),
                 actualFaceBounds.bottom.toInt().coerceIn(0, bitmap.height)
             )
-            Logger.d(TAG, "[Diag] 2d106det rectBounds=$rectBounds")
+            Log.d(TAG, "[Diag] 2d106det rectBounds=$rectBounds")
 
             val crop = buildLooseFaceCrop(bitmap, rectBounds) ?: run {
-                Logger.w(TAG, "[Diag] 2d106det buildLooseFaceCrop returned null")
+                Log.w(TAG, "[Diag] 2d106det buildLooseFaceCrop returned null")
                 return null
             }
-            Logger.d(TAG, "[Diag] 2d106det crop bitmap=${crop.bitmap.width}x${crop.bitmap.height}")
+            Log.d(TAG, "[Diag] 2d106det crop bitmap=${crop.bitmap.width}x${crop.bitmap.height}")
 
             val rawOutput = runInference(session, crop.bitmap)
             crop.bitmap.recycle()
-            Logger.d(TAG, "[Diag] 2d106det rawOutput size=${rawOutput.size}")
+            Log.d(TAG, "[Diag] 2d106det rawOutput size=${rawOutput.size}")
 
             // [调试] 采样 rawOutput 范围用于诊断
             val sampleValues = (0 until minOf(POINT_COUNT, 10)).flatMap {
                 listOf(rawOutput[it * 2], rawOutput[it * 2 + 1])
             }
-            Logger.d(TAG, "[Diag] rawOutput sample values: $sampleValues")
+            Log.d(TAG, "[Diag] rawOutput sample values: $sampleValues")
 
             // [修复] InsightFace 2d106det 模型输出在 [-1, 1] 范围，使用固定公式转换
             val result = FloatArray(POINT_COUNT * 2)
@@ -144,11 +123,11 @@ class InsightFace2D106Detector(context: Context) {
             }
 
             // [调试] 打印前3个点的归一化坐标
-            Logger.d(TAG, "[Diag] 2d106det RESULT: firstPoint=(${result[0]},${result[1]}), secondPoint=(${result[2]},${result[3]}), thirdPoint=(${result[4]},${result[5]})")
-            Logger.d(TAG, "[Diag] 2d106det lastPoint=(${result[210]},${result[211]})")
+            Log.d(TAG, "[Diag] 2d106det RESULT: firstPoint=(${result[0]},${result[1]}), secondPoint=(${result[2]},${result[3]}), thirdPoint=(${result[4]},${result[5]})")
+            Log.d(TAG, "[Diag] 2d106det lastPoint=(${result[210]},${result[211]})")
             result
         } catch (error: Exception) {
-            Logger.e(TAG, "[Diag] InsightFace 2D106 detection failed", error)
+            Log.e(TAG, "[Diag] InsightFace 2D106 detection failed", error)
             null
         }
     }
@@ -174,20 +153,20 @@ class InsightFace2D106Detector(context: Context) {
             try {
                 // 尝试添加 NNAPI (Android GPU/NPU 加速)
                 sessionOptions.addNnapi()
-                Logger.i(TAG, "NNAPI execution provider enabled for 2D106")
+                Log.i(TAG, "NNAPI execution provider enabled for 2D106")
             } catch (e: Exception) {
-                Logger.w(TAG, "NNAPI not available for 2D106, falling back to CPU", e)
+                Log.w(TAG, "NNAPI not available for 2D106, falling back to CPU", e)
             }
             
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)
-            Logger.i(
+            Log.i(
                 TAG,
                 "InsightFace 2D106 initialized: ${modelFile.absolutePath}, mean=$inputMean, std=$inputStd"
             )
         }.onFailure { error ->
-            Logger.e(TAG, "Failed to initialize InsightFace 2D106", error)
+            Log.e(TAG, "Failed to initialize InsightFace 2D106", error)
             ortSession = null
             inputName = null
             det10gDetector = null
@@ -322,100 +301,13 @@ class InsightFace2D106Detector(context: Context) {
         if (hasSubNode && hasMulNode) {
             inputMean = 0f
             inputStd = 1f
-            Logger.i(TAG, "Model has built-in normalization nodes, using mean=0, std=1")
+            Log.i(TAG, "Model has built-in normalization nodes, using mean=0, std=1")
         } else {
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
-            Logger.i(TAG, "Using default normalization: mean=$DEFAULT_INPUT_MEAN, std=$DEFAULT_INPUT_STD")
+            Log.i(TAG, "Using default normalization: mean=$DEFAULT_INPUT_MEAN, std=$DEFAULT_INPUT_STD")
         }
-        Logger.d(TAG, "[Diag] Model file size=${modelFile.length()}, hasSub=$hasSubNode, hasMul=$hasMulNode")
-    }
-
-    /**
-     * 将 ImageProxy 转换为 Bitmap
-     * 正确处理 YUV_420_888 到 NV21 的转换，包括 rowStride padding
-     */
-    @ExperimentalGetImage
-    private fun convertImageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
-        return imageProxy.image?.let { img ->
-            val yBuffer = imageProxy.planes[0].buffer
-            val uBuffer = imageProxy.planes[1].buffer
-            val vBuffer = imageProxy.planes[2].buffer
-            
-            val yRowStride = imageProxy.planes[0].rowStride
-            val uvRowStride = imageProxy.planes[1].rowStride
-            val uvPixelStride = imageProxy.planes[1].pixelStride
-            
-            val width = imageProxy.width
-            val height = imageProxy.height
-            
-            Logger.d(TAG, "[Debug] ImageProxy: ${width}x${height}, yRowStride=$yRowStride, uvRowStride=$uvRowStride, uvPixelStride=$uvPixelStride")
-            
-            // 创建标准的 NV21 数据（不含 padding）
-            val nv21 = ByteArray(width * height + width * height / 2)
-            
-            // 复制 Y plane（逐行，跳过 rowStride padding）
-            var pos = 0
-            for (row in 0 until height) {
-                yBuffer.position(row * yRowStride)
-                yBuffer.get(nv21, pos, width)
-                pos += width
-            }
-            
-            // 复制 UV plane
-            if (uvPixelStride == 2) {
-                // NV21 格式：V 和 U 交错存储
-                // 直接从 vBuffer 复制（vBuffer 包含完整的 VU 交错数据）
-                val uvHeight = height / 2
-                val uvWidth = width / 2
-                val bytesPerRow = uvWidth * 2
-                for (row in 0 until uvHeight) {
-                    val srcPos = row * uvRowStride
-                    val bytesToCopy = minOf(bytesPerRow, vBuffer.limit() - srcPos)
-                    if (bytesToCopy > 0) {
-                        vBuffer.position(srcPos)
-                        vBuffer.get(nv21, pos, bytesToCopy)
-                        pos += bytesToCopy
-                    }
-                }
-            } else {
-                // I420 格式：U 和 V 是独立的平面
-                // 需要手动交错为 VU
-                val uvHeight = height / 2
-                val uvWidth = width / 2
-                for (row in 0 until uvHeight) {
-                    for (col in 0 until uvWidth) {
-                        nv21[pos++] = vBuffer.get(row * uvRowStride + col)
-                        nv21[pos++] = uBuffer.get(row * uvRowStride + col)
-                    }
-                }
-            }
-            
-            val yuvImage = android.graphics.YuvImage(
-                nv21,
-                android.graphics.ImageFormat.NV21,
-                width,
-                height,
-                null
-            )
-            val out = java.io.ByteArrayOutputStream()
-            yuvImage.compressToJpeg(
-                android.graphics.Rect(0, 0, width, height),
-                100,
-                out
-            )
-            val imageBytes = out.toByteArray()
-            var bmp = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-            
-            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-            if (rotationDegrees != 0) {
-                val matrix = android.graphics.Matrix().apply {
-                    postRotate(rotationDegrees.toFloat())
-                }
-                bmp = android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
-            }
-            bmp
-        }
+        Log.d(TAG, "[Diag] Model file size=${modelFile.length()}, hasSub=$hasSubNode, hasMul=$hasMulNode")
     }
 
     private data class LooseCrop(

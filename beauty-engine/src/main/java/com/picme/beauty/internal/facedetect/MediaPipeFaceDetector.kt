@@ -1,18 +1,16 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
-import androidx.camera.core.ImageProxy
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
-import com.picme.core.common.Logger
-import com.picme.features.camera.facedetect.adapter.FaceLandmarkAdapterRegistry
-import com.picme.features.camera.facedetect.adapter.MediaPipe468Adapter
-import com.picme.features.camera.preview.core.FaceDetectionSource
+import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
+import com.picme.beauty.internal.facedetect.adapter.MediaPipe468Adapter
+import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 /**
  * MediaPipe 人脸检测器
@@ -52,37 +50,46 @@ class MediaPipeFaceDetector(context: Context) {
 
     /**
      * 预览路径检测（VIDEO 模式）
-     * 
-     * @param imageProxy CameraX ImageProxy
+     *
+     * @param bitmap 输入 Bitmap
+     * @param rotationDegrees 图像旋转角度
      * @param lensFacing 镜头方向
      * @return 106 点归一化坐标，未检测到返回 null
      */
-    fun detectForPreview(imageProxy: ImageProxy, lensFacing: Int): FloatArray? {
+    fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FloatArray? {
         val landmarker = videoLandmarker ?: return null
-        val bitmap = imageProxyToBitmap(imageProxy) ?: return null
-        
+
+        val processedBitmap = if (rotationDegrees != 0) {
+            val matrix = android.graphics.Matrix().apply {
+                postRotate(rotationDegrees.toFloat())
+            }
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } else {
+            bitmap
+        }
+
         return try {
-            val mpImage = BitmapImageBuilder(bitmap).build()
+            val mpImage = BitmapImageBuilder(processedBitmap).build()
             val result = landmarker.detectForVideo(mpImage, android.os.SystemClock.uptimeMillis())
-            
+
             if (result.faceLandmarks().isEmpty()) {
-                bitmap.recycle()
+                if (processedBitmap !== bitmap) processedBitmap.recycle()
                 return null
             }
-            
+
             val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MEDIAPIPE)
                 as? MediaPipe468Adapter
                 ?: run {
-                    bitmap.recycle()
+                    if (processedBitmap !== bitmap) processedBitmap.recycle()
                     return null
                 }
-            
+
             val adaptedResult = adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()
-            bitmap.recycle()
+            if (processedBitmap !== bitmap) processedBitmap.recycle()
             adaptedResult
         } catch (e: Exception) {
-            Logger.e(TAG, "MediaPipe preview detection failed", e)
-            bitmap.recycle()
+            Log.e(TAG, "MediaPipe preview detection failed", e)
+            if (processedBitmap !== bitmap) processedBitmap.recycle()
             null
         }
     }
@@ -111,7 +118,7 @@ class MediaPipeFaceDetector(context: Context) {
             
             adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()
         } catch (e: Exception) {
-            Logger.e(TAG, "MediaPipe photo detection failed", e)
+            Log.e(TAG, "MediaPipe photo detection failed", e)
             null
         }
     }
@@ -217,102 +224,5 @@ class MediaPipeFaceDetector(context: Context) {
         }
     }
 
-    private fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
-        return try {
-            val yBuffer = imageProxy.planes[0].buffer
-            val uBuffer = imageProxy.planes[1].buffer
-            val vBuffer = imageProxy.planes[2].buffer
 
-            val ySize = yBuffer.remaining()
-            val uSize = uBuffer.remaining()
-            val vSize = vBuffer.remaining()
-            
-            // [关键修复] 处理 rowStride padding
-            val yRowStride = imageProxy.planes[0].rowStride
-            val uRowStride = imageProxy.planes[1].rowStride
-            val vRowStride = imageProxy.planes[2].rowStride
-            val uvPixelStride = imageProxy.planes[1].pixelStride
-            
-            val width = imageProxy.width
-            val height = imageProxy.height
-            val uvWidth = width / 2
-            val uvHeight = height / 2
-            
-            // Y 平面大小（不含 padding）
-            val yPlaneSize = width * height
-            // UV 平面大小（不含 padding）
-            val uvPlaneSize = uvWidth * uvHeight
-            
-            val nv21 = ByteArray(yPlaneSize + uvPlaneSize * 2)
-            
-            // 复制 Y plane（逐行，跳过 rowStride padding）
-            for (row in 0 until height) {
-                val srcPos = row * yRowStride
-                val dstPos = row * width
-                yBuffer.position(srcPos)
-                yBuffer.get(nv21, dstPos, width)
-            }
-            
-            // 复制 UV planes
-            val uvOffset = yPlaneSize
-            
-            if (uvPixelStride == 2) {
-                // NV21 格式：VU 交错
-                // planes[1] 和 planes[2] 可能分别指向 U 和 V 的起始位置
-                for (row in 0 until uvHeight) {
-                    val uSrcPos = row * uRowStride
-                    val vSrcPos = row * vRowStride
-                    val dstPos = uvOffset + row * uvWidth * 2
-                    
-                    for (col in 0 until uvWidth) {
-                        nv21[dstPos + col * 2] = vBuffer.get(vSrcPos + col * 2)
-                        nv21[dstPos + col * 2 + 1] = uBuffer.get(uSrcPos + col * 2)
-                    }
-                }
-            } else {
-                // I420 格式：U 和 V 是独立的平面
-                // 需要转换为 NV21 (Y + VU 交错)
-                for (row in 0 until uvHeight) {
-                    val uSrcPos = row * uRowStride
-                    val vSrcPos = row * vRowStride
-                    val dstPos = uvOffset + row * uvWidth * 2
-                    
-                    for (col in 0 until uvWidth) {
-                        nv21[dstPos + col * 2] = vBuffer.get(vSrcPos + col)
-                        nv21[dstPos + col * 2 + 1] = uBuffer.get(uSrcPos + col)
-                    }
-                }
-            }
-
-            val yuvImage = android.graphics.YuvImage(
-                nv21,
-                android.graphics.ImageFormat.NV21,
-                width,
-                height,
-                null
-            )
-            val out = java.io.ByteArrayOutputStream()
-            yuvImage.compressToJpeg(
-                android.graphics.Rect(0, 0, yuvImage.width, yuvImage.height),
-                100,
-                out
-            )
-            val imageBytes = out.toByteArray()
-            var bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-            
-            // 处理旋转
-            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-            if (rotationDegrees != 0) {
-                val matrix = android.graphics.Matrix().apply {
-                    postRotate(rotationDegrees.toFloat())
-                }
-                bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-            }
-            
-            bitmap
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to convert ImageProxy to Bitmap", e)
-            null
-        }
-    }
 }

@@ -1,6 +1,6 @@
-package com.picme.features.camera.facedetect.adapter
+package com.picme.beauty.internal.facedetect.adapter
 
-import com.picme.features.camera.preview.core.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 /**
  * 人脸关键点适配器接口

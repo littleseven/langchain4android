@@ -1,9 +1,11 @@
-package com.picme.features.camera.facedetect.adapter
+package com.picme.beauty.internal.facedetect.adapter
 
-import androidx.camera.core.CameraSelector
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
-import com.picme.core.common.Logger
-import com.picme.features.camera.preview.core.FaceDetectionSource
+import android.util.Log
+import com.picme.beauty.api.facedetect.FaceDetectionSource
+
+// CameraSelector.LENS_FACING_FRONT = 0, LENS_FACING_BACK = 1
+private const val LENS_FACING_FRONT = 0
 
 /**
  * MediaPipe 468 点 → 统一 106 点适配器
@@ -134,7 +136,7 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
         }
 
         val result = FloatArray(POINT_COUNT * 2)
-        val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
+        val isFrontCamera = lensFacing == LENS_FACING_FRONT
 
         // 辅助函数：获取 MediaPipe 点坐标
         // [坐标系对齐] 后置 textureMatrix(det=-1) 已包含 X 轴翻转，FBO 人脸朝右；
@@ -213,7 +215,7 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
         for (i in 0 until 33) {
             sb.append("M$i=(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
         }
-        Logger.d(TAG, sb.toString())
+        Log.d(TAG, sb.toString())
 
         // === 生成非轮廓区域点（33-105）===
         for (i in 0 until NON_CONTOUR_POINT_COUNT) {

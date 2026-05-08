@@ -20,28 +20,24 @@ object ImageUtils {
             val yBuffer = imageProxy.planes[0].buffer
             val uBuffer = imageProxy.planes[1].buffer
             val vBuffer = imageProxy.planes[2].buffer
-            
+
             val yRowStride = imageProxy.planes[0].rowStride
             val uvRowStride = imageProxy.planes[1].rowStride
             val uvPixelStride = imageProxy.planes[1].pixelStride
-            
+
             val width = imageProxy.width
             val height = imageProxy.height
-            
-            // 创建标准的 NV21 数据（不含 padding）
+
             val nv21 = ByteArray(width * height + width * height / 2)
-            
-            // 复制 Y plane（逐行，跳过 rowStride padding）
+
             var pos = 0
             for (row in 0 until height) {
                 yBuffer.position(row * yRowStride)
                 yBuffer.get(nv21, pos, width)
                 pos += width
             }
-            
-            // 复制 UV plane
+
             if (uvPixelStride == 2) {
-                // NV21 格式：V 和 U 交错存储
                 val uvHeight = height / 2
                 val uvWidth = width / 2
                 val bytesPerRow = uvWidth * 2
@@ -55,7 +51,6 @@ object ImageUtils {
                     }
                 }
             } else {
-                // I420 格式：U 和 V 是独立的平面
                 val uvHeight = height / 2
                 val uvWidth = width / 2
                 for (row in 0 until uvHeight) {
@@ -65,7 +60,7 @@ object ImageUtils {
                     }
                 }
             }
-            
+
             val yuvImage = android.graphics.YuvImage(
                 nv21,
                 ImageFormat.NV21,
@@ -80,10 +75,8 @@ object ImageUtils {
                 out
             )
             val imageBytes = out.toByteArray()
-            var bmp = Bitmap.createBitmap(
-                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-            )
-            
+            var bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             if (rotationDegrees != 0) {
                 val matrix = android.graphics.Matrix().apply {

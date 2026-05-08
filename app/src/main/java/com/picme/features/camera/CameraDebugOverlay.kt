@@ -33,10 +33,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
 import com.picme.core.common.Logger
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.features.camera.preview.core.FaceDetectionSource
-import com.picme.features.camera.preview.core.FaceWarpParams
-import com.picme.features.camera.preview.core.GpuPixelLandmarks
+import android.graphics.PointF
+import com.picme.beauty.api.facedetect.EngineType
+import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceWarpParams
+import com.picme.beauty.api.facedetect.GpuPixelLandmarks
 import kotlin.math.sqrt
 
 @Composable
@@ -53,8 +54,8 @@ internal fun FaceDebugOverlay(
         FaceDetectionSource.NONE -> stringResource(R.string.face_detection_source_none)
     }
     val requestedLabel = when (faceWarpParams.requestedDetectionEngineMode) {
-        FaceDetectionEngineMode.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
-        FaceDetectionEngineMode.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
+        EngineType.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
+        EngineType.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
     }
     val requestedColor = faceDebugRequestedColor(faceWarpParams.requestedDetectionEngineMode)
     val detectionColor = faceDebugSourceColor(faceWarpParams.detectionSource)
@@ -151,10 +152,10 @@ private fun FaceDebugStatusRow(
     }
 }
 
-private fun faceDebugRequestedColor(mode: FaceDetectionEngineMode): Color {
+private fun faceDebugRequestedColor(mode: EngineType): Color {
     return when (mode) {
-        FaceDetectionEngineMode.MEDIAPIPE -> Color(0xFF4DB6AC)
-        FaceDetectionEngineMode.INSIGHTFACE -> Color(0xFFFFB300)
+        EngineType.MEDIAPIPE -> Color(0xFF4DB6AC)
+        EngineType.INSIGHTFACE -> Color(0xFFFFB300)
     }
 }
 
@@ -258,7 +259,7 @@ private fun FaceDebugOverlayBigBeauty(
         }
 
         // 绘制大美丽点位（蓝色，带序号）
-        val bbPoints = bigBeautyLandmarks.points.map { pt -> toCanvasPoint(pt) }
+        val bbPoints = bigBeautyLandmarks.points.map { pt -> toCanvasPoint(Offset(pt.x, pt.y)) }
         bbPoints.forEachIndexed { index, point ->
             drawCircle(
                 color = Color.Blue.copy(alpha = 0.85f),
@@ -358,13 +359,13 @@ private fun FaceDebugOverlaySingle(
         val radiusPx = faceRadiusNorm * contentWidth
 
         val contourPoints = faceWarpParams.contourPoints.map { contourPoint ->
-            toCanvasPoint(contourPoint)
+            toCanvasPoint(Offset(contourPoint.x, contourPoint.y))
         }
         val leftEyeContourPoints = faceWarpParams.leftEyeContourPoints.map { contourPoint ->
-            toCanvasPoint(contourPoint)
+            toCanvasPoint(Offset(contourPoint.x, contourPoint.y))
         }
         val rightEyeContourPoints = faceWarpParams.rightEyeContourPoints.map { contourPoint ->
-            toCanvasPoint(contourPoint)
+            toCanvasPoint(Offset(contourPoint.x, contourPoint.y))
         }
 
         fun drawClosedContour(points: List<Offset>, color: Color, strokeWidth: Float) {
@@ -1020,69 +1021,69 @@ private fun DrawScope.drawAllContours(
     if (allContours.totalPointCount() == 0) return
 
     // 绘制脸部轮廓（品红色）
-    allContours.faceOval.map(toCanvasPoint).let { points ->
+    allContours.faceOval.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Magenta.copy(alpha = 0.7f), 3.dp.toPx())
     }
 
     // 绘制左眉毛（青色）
-    allContours.leftEyebrowTop.map(toCanvasPoint).let { points ->
+    allContours.leftEyebrowTop.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Cyan.copy(alpha = 0.8f), 2.dp.toPx())
     }
-    allContours.leftEyebrowBottom.map(toCanvasPoint).let { points ->
+    allContours.leftEyebrowBottom.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Cyan.copy(alpha = 0.6f), 2.dp.toPx())
     }
 
     // 绘制右眉毛（蓝色）
-    allContours.rightEyebrowTop.map(toCanvasPoint).let { points ->
+    allContours.rightEyebrowTop.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Blue.copy(alpha = 0.8f), 2.dp.toPx())
     }
-    allContours.rightEyebrowBottom.map(toCanvasPoint).let { points ->
+    allContours.rightEyebrowBottom.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Blue.copy(alpha = 0.6f), 2.dp.toPx())
     }
 
     // 绘制左眼（黄色）
-    allContours.leftEye.map(toCanvasPoint).let { points ->
+    allContours.leftEye.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Yellow.copy(alpha = 0.9f), 2.dp.toPx())
     }
 
     // 绘制右眼（绿色）
-    allContours.rightEye.map(toCanvasPoint).let { points ->
+    allContours.rightEye.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Green.copy(alpha = 0.9f), 2.dp.toPx())
     }
 
     // 绘制上嘴唇（红色）
-    allContours.upperLipTop.map(toCanvasPoint).let { points ->
+    allContours.upperLipTop.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Red.copy(alpha = 0.8f), 2.dp.toPx())
     }
-    allContours.upperLipBottom.map(toCanvasPoint).let { points ->
+    allContours.upperLipBottom.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color.Red.copy(alpha = 0.6f), 2.dp.toPx())
     }
 
     // 绘制下嘴唇（橙色）
-    allContours.lowerLipTop.map(toCanvasPoint).let { points ->
+    allContours.lowerLipTop.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color(0xFFFF9800).copy(alpha = 0.6f), 2.dp.toPx())
     }
-    allContours.lowerLipBottom.map(toCanvasPoint).let { points ->
+    allContours.lowerLipBottom.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color(0xFFFF9800).copy(alpha = 0.8f), 2.dp.toPx())
     }
 
     // 绘制鼻梁（紫色）
-    allContours.noseBridge.map(toCanvasPoint).let { points ->
+    allContours.noseBridge.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color(0xFF9C27B0).copy(alpha = 0.8f), 2.dp.toPx())
     }
 
     // 绘制鼻翼（深紫色）
-    allContours.noseBottom.map(toCanvasPoint).let { points ->
+    allContours.noseBottom.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color(0xFF673AB7).copy(alpha = 0.8f), 2.dp.toPx())
     }
 
     // 绘制左脸颊（浅绿色）
-    allContours.leftCheek.map(toCanvasPoint).let { points ->
+    allContours.leftCheek.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color(0xFF8BC34A).copy(alpha = 0.7f), 2.dp.toPx())
     }
 
     // 绘制右脸颊（深绿色）
-    allContours.rightCheek.map(toCanvasPoint).let { points ->
+    allContours.rightCheek.map { Offset(it.x, it.y) }.map(toCanvasPoint).let { points ->
         drawContourPoints(points, Color(0xFF4CAF50).copy(alpha = 0.7f), 2.dp.toPx())
     }
 

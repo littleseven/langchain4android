@@ -16,7 +16,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.picme.core.image.ImageProcessor
 import com.picme.PicMeApplication
 import com.picme.beauty.api.BeautyPreviewEngine
-import com.picme.features.camera.facedetect.FaceDetectorManager
+import com.picme.beauty.api.facedetect.DetectionPipelineConfig
+import com.picme.beauty.api.facedetect.EngineType
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.LandmarkDetectorType
+import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
@@ -43,7 +47,7 @@ internal data class CameraRuntimeContext(
     val faceLandmarkModeEnabled: Boolean,
     val glRecoveryAvailableAtMs: Long,
     val lifecycleOwner: LifecycleOwner,
-    val faceDetectorManager: FaceDetectorManager,
+    val faceDetectorManager: FaceDetector,
     val insightFaceRoiDetectorType: InsightFaceRoiDetectorType,
     val insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType
 )
@@ -53,7 +57,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val app = context.applicationContext as PicMeApplication
     val imageProcessor = app.container.imageProcessor
     val userPreferencesRepository = app.container.userPreferencesRepository
-    val faceDetectorManager = app.container.faceDetectorManager
+    val faceDetectorManager = app.container.faceDetector
     val coroutineScope = rememberCoroutineScope()
     // 用 getBeautyStrategyBlocking() 同步读取初始值，避免 DataStore flow 首帧异步延迟
     // 导致先用 BIG_BEAUTY 初始化一次、再切换到真实策略的竞态（双引擎并存 → EGL_BAD_DISPLAY 黑屏）
@@ -83,18 +87,14 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         Logger.d("Camera", "  ROI Detector: $insightFaceRoiDetectorType")
         Logger.d("Camera", "  Landmark Detector: $insightFaceLandmarkDetectorType")
         
-        val config = com.picme.features.camera.facedetect.DetectionPipelineConfig(
+        val config = DetectionPipelineConfig(
             roiDetector = when (insightFaceRoiDetectorType) {
-                InsightFaceRoiDetectorType.MEDIAPIPE -> 
-                    com.picme.features.camera.facedetect.RoiDetectorType.MEDIAPIPE
-                InsightFaceRoiDetectorType.DET10G -> 
-                    com.picme.features.camera.facedetect.RoiDetectorType.DET10G
+                InsightFaceRoiDetectorType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
+                InsightFaceRoiDetectorType.DET10G -> RoiDetectorType.DET10G
             },
             landmarkDetector = when (insightFaceLandmarkDetectorType) {
-                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> 
-                    com.picme.features.camera.facedetect.LandmarkDetectorType.INSIGHTFACE_2D106
-                InsightFaceLandmarkDetectorType.MEDIAPIPE -> 
-                    com.picme.features.camera.facedetect.LandmarkDetectorType.MEDIAPIPE
+                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
+                InsightFaceLandmarkDetectorType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
             }
         )
         

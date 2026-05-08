@@ -11,7 +11,7 @@ import com.picme.domain.model.BeautyStrategy
 import com.picme.beauty.api.BeautySettings
 import com.picme.features.camera.AspectRatio
 import com.picme.features.camera.preview.core.BeautyPreviewEngineStrategy
-import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.beauty.api.facedetect.FaceWarpParams
 
 internal class GlBeautyPreviewStrategy(
     private val previewView: PreviewView,

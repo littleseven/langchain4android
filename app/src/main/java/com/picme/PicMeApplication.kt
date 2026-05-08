@@ -7,7 +7,7 @@ import com.picme.core.image.CoilConfig
 import com.picme.di.AppContainer
 import com.picme.di.AppContainerImpl
 import com.picme.domain.repository.MediaRepository
-import com.picme.features.camera.facedetect.adapter.FaceLandmarkAdapterRegistry
+import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 

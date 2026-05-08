@@ -3,6 +3,7 @@ package com.picme.features.camera.preview.core
 import androidx.camera.core.Preview
 import com.picme.domain.model.BeautyStrategy
 import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.facedetect.FaceWarpParams
 
 internal interface BeautyPreviewEngineStrategy {
     val strategy: BeautyStrategy

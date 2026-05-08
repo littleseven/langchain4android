@@ -1,11 +1,13 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.internal.facedetect
 
 import android.content.Context
+import com.picme.beauty.api.facedetect.LandmarkDetectorType
+import com.picme.beauty.api.facedetect.RoiDetectorType
 
 /**
  * 检测流水线工厂
  */
-object DetectionPipelineFactory {
+internal object DetectionPipelineFactory {
     fun createRoiDetector(
         type: RoiDetectorType,
         context: Context
@@ -15,15 +17,15 @@ object DetectionPipelineFactory {
             RoiDetectorType.DET10G -> Det10GRoiDetector(context)
         }
     }
-    
+
     fun createLandmarkDetector(
         type: LandmarkDetectorType,
         context: Context
     ): LandmarkDetector {
         return when (type) {
-            LandmarkDetectorType.INSIGHTFACE_2D106 -> 
+            LandmarkDetectorType.INSIGHTFACE_2D106 ->
                 InsightFaceLandmarkDetector(context)
-            LandmarkDetectorType.MEDIAPIPE -> 
+            LandmarkDetectorType.MEDIAPIPE ->
                 MediaPipeLandmarkDetector(context)
         }
     }
