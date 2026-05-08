@@ -1,6 +1,7 @@
 package com.picme.features.gallery
 
 import android.content.Context
+import android.content.IntentSender
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
@@ -40,10 +41,18 @@ class MediaViewModel(
     private val _ocrState = MutableStateFlow<OcrResult?>(null)
     val ocrState: StateFlow<OcrResult?> = _ocrState.asStateFlow()
 
+    private val _deleteAuthRequest = MutableStateFlow<DeleteAuthRequest?>(null)
+    val deleteAuthRequest: StateFlow<DeleteAuthRequest?> = _deleteAuthRequest.asStateFlow()
+
     sealed class OcrResult {
         object Loading : OcrResult()
         data class Success(val text: String) : OcrResult()
         data class Error(val message: String) : OcrResult()
+    }
+
+    sealed class DeleteAuthRequest {
+        data class Api29(val intentSender: IntentSender) : DeleteAuthRequest()
+        data class Api30(val uris: List<Uri>) : DeleteAuthRequest()
     }
 
     fun clearOcrResult() {
@@ -121,6 +130,56 @@ class MediaViewModel(
         viewModelScope.launch {
             Log.d("PicMe:Gallery", "Deleting media items: $ids")
             repository.deleteMediaByIds(ids)
+
+            // 协程完成后检查是否需要用户授权，避免 GalleryScreen 同步调用导致竞态条件
+            val recoverableSender = repository.getPendingRecoverableIntentSender()
+            if (recoverableSender != null) {
+                _deleteAuthRequest.value = DeleteAuthRequest.Api29(recoverableSender)
+                return@launch
+            }
+
+            val pendingUris = repository.getPendingDeleteUris()
+            if (pendingUris.isNotEmpty()) {
+                _deleteAuthRequest.value = DeleteAuthRequest.Api30(pendingUris)
+            }
+        }
+    }
+
+    fun consumeDeleteAuthRequest() {
+        _deleteAuthRequest.value = null
+    }
+    
+    /**
+     * 获取待删除的 URI 列表（用于权限请求）
+     */
+    fun getPendingDeleteUris() = repository.getPendingDeleteUris()
+    
+    /**
+     * 清除待删除的 URI 列表
+     */
+    fun clearPendingDeleteUris() {
+        repository.clearPendingDeleteUris()
+    }
+    
+    /**
+     * 获取 Android 10 恢复性删除的 IntentSender
+     */
+    fun getPendingRecoverableIntentSender() = repository.getPendingRecoverableIntentSender()
+
+    /**
+     * 清除 Android 10 恢复性删除状态
+     */
+    fun clearPendingRecoverable() {
+        repository.clearPendingRecoverable()
+    }
+
+    /**
+     * 在用户授权后执行删除操作
+     */
+    fun executePendingDeletes() {
+        viewModelScope.launch {
+            Log.d("PicMe:Gallery", "Executing pending deletes after user authorization")
+            repository.executePendingDeletes()
         }
     }
     

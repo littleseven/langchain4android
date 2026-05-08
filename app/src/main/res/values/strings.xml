@@ -208,6 +208,7 @@
 
     <!-- Duplicate Management -->
     <string name="manage_duplicates">Manage Duplicates</string>
+    <string name="delete_all_duplicates">Delete All Duplicates</string>
     <string name="no_duplicates_found">No duplicate images found</string>
     <string name="duplicate_groups_found">Found %1$d duplicate groups</string>
     <string name="exact_duplicate">Exact Duplicate</string>

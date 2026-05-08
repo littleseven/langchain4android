@@ -1,5 +1,6 @@
 package com.picme.domain.repository
 
+import android.net.Uri
 import com.picme.domain.model.MediaAsset
 import kotlinx.coroutines.flow.Flow
 
@@ -15,4 +16,29 @@ interface MediaRepository {
     suspend fun getMediaById(id: Long): MediaAsset?
 
     suspend fun refreshMediaLibrary()
+    
+    /**
+     * 获取需要用户授权删除的 URI 列表（Android 11+）
+     */
+    fun getPendingDeleteUris(): List<Uri>
+    
+    /**
+     * 清除待删除的 URI 列表
+     */
+    fun clearPendingDeleteUris()
+    
+    /**
+     * 获取 Android 10 (API 29) 的单条恢复性删除 IntentSender
+     */
+    fun getPendingRecoverableIntentSender(): android.content.IntentSender?
+
+    /**
+     * 清除 Android 10 的恢复性删除状态
+     */
+    fun clearPendingRecoverable()
+
+    /**
+     * 在用户授权后执行删除操作
+     */
+    suspend fun executePendingDeletes()
 }
