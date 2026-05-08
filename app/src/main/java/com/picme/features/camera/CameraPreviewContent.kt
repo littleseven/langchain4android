@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaType
-import com.picme.features.camera.preview.core.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
 import com.picme.features.camera.components.CameraLeftControls

@@ -1,4 +1,4 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.internal.facedetect
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
@@ -6,7 +6,7 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
-import com.picme.core.common.Logger
+import android.util.Log
 import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.ceil
@@ -53,20 +53,20 @@ class InsightFaceDet10GDetector(context: Context) {
         val session = ortSession ?: return null
         val origW = bitmap.width.toFloat()
         val origH = bitmap.height.toFloat()
-        Logger.d(TAG, "[Diag] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
+        Log.d(TAG, "[Diag] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
         return try {
             val faces = runInference(session, bitmap)
-            Logger.d(TAG, "[Diag] detectLargestFace after inference: faces=${faces.size}")
+            Log.d(TAG, "[Diag] detectLargestFace after inference: faces=${faces.size}")
             if (faces.isNotEmpty()) {
-                Logger.d(TAG, "[Diag] First face: [${faces[0].x1.toInt()},${faces[0].y1.toInt()},${faces[0].x2.toInt()},${faces[0].y2.toInt()}] conf=${faces[0].confidence}")
+                Log.d(TAG, "[Diag] First face: [${faces[0].x1.toInt()},${faces[0].y1.toInt()},${faces[0].x2.toInt()},${faces[0].y2.toInt()}] conf=${faces[0].confidence}")
             }
             if (faces.isEmpty()) {
-                Logger.d(TAG, "[Diag] No face detected by Det10G")
+                Log.d(TAG, "[Diag] No face detected by Det10G")
                 return null
             }
             val largestFace = faces.maxByOrNull { it.confidence * it.area() }
             if (largestFace == null) {
-                Logger.d(TAG, "[Diag] No valid face found after filtering")
+                Log.d(TAG, "[Diag] No valid face found after filtering")
                 return null
             }
             // [修复] 考虑 letterbox padding，先减去偏移再缩放
@@ -102,7 +102,7 @@ class InsightFaceDet10GDetector(context: Context) {
                 y2 = mappedY2,
                 confidence = largestFace.confidence
             )
-            Logger.d(
+            Log.d(
                 TAG,
                 "[Diag] Det10G face SELECTED: conf=${mappedFace.confidence}, " +
                     "640bbox=[${largestFace.x1.toInt()},${largestFace.y1.toInt()},${largestFace.x2.toInt()},${largestFace.y2.toInt()}], " +
@@ -111,7 +111,7 @@ class InsightFaceDet10GDetector(context: Context) {
             )
             mappedFace.toRectF()
         } catch (error: Exception) {
-            Logger.e(TAG, "[Diag] Det10G detection failed", error)
+            Log.e(TAG, "[Diag] Det10G detection failed", error)
             null
         }
     }
@@ -120,10 +120,10 @@ class InsightFaceDet10GDetector(context: Context) {
         val session = ortSession ?: return emptyList()
         return try {
             val faces = runInference(session, bitmap)
-            Logger.d(TAG, "Det10G detected ${faces.size} faces")
+            Log.d(TAG, "Det10G detected ${faces.size} faces")
             faces
         } catch (error: Exception) {
-            Logger.e(TAG, "Det10G detection failed", error)
+            Log.e(TAG, "Det10G detection failed", error)
             emptyList()
         }
     }
@@ -144,9 +144,9 @@ class InsightFaceDet10GDetector(context: Context) {
             try {
                 // 尝试添加 NNAPI (Android GPU/NPU 加速)
                 sessionOptions.addNnapi()
-                Logger.i(TAG, "NNAPI execution provider enabled")
+                Log.i(TAG, "NNAPI execution provider enabled")
             } catch (e: Exception) {
-                Logger.w(TAG, "NNAPI not available, falling back to CPU", e)
+                Log.w(TAG, "NNAPI not available, falling back to CPU", e)
             }
             
             // [备选] 如果 NNAPI 不可用,可以尝试 XNNPACK (CPU 优化)
@@ -155,12 +155,12 @@ class InsightFaceDet10GDetector(context: Context) {
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)
-            Logger.i(
+            Log.i(
                 TAG,
                 "InsightFace Det10G initialized: ${modelFile.absolutePath}, mean=$inputMean, std=$inputStd"
             )
         }.onFailure { error ->
-            Logger.e(TAG, "Failed to initialize InsightFace Det10G", error)
+            Log.e(TAG, "Failed to initialize InsightFace Det10G", error)
             ortSession = null
             inputName = null
             inputMean = DEFAULT_INPUT_MEAN
@@ -246,8 +246,8 @@ class InsightFaceDet10GDetector(context: Context) {
             for (i in 0 until sampleSize) {
                 sampleValues.append("[${String.format("%.2f", chw[i])},${String.format("%.2f", chw[pixelCount + i])},${String.format("%.2f", chw[pixelCount * 2 + i])}] ")
             }
-            Logger.d(TAG, "[Diag] First $sampleSize pixels normalized (R,G,B): $sampleValues")
-            Logger.d(TAG, "[Diag] Using mean=$inputMean, std=$inputStd")
+            Log.d(TAG, "[Diag] First $sampleSize pixels normalized (R,G,B): $sampleValues")
+            Log.d(TAG, "[Diag] Using mean=$inputMean, std=$inputStd")
         }
         
         paddedBitmap.recycle()
@@ -263,10 +263,10 @@ class InsightFaceDet10GDetector(context: Context) {
         val faces = mutableListOf<FaceBox>()
 
         val outputCount = results.size()
-        Logger.d(TAG, "[Diag] ONNX outputs count: $outputCount")
+        Log.d(TAG, "[Diag] ONNX outputs count: $outputCount")
         for (i in 0 until outputCount) {
             val tensor = results.get(i) as? OnnxTensor ?: continue
-            Logger.d(TAG, "[Diag] Output $i shape: ${tensor.info.shape.joinToString(",")}")
+            Log.d(TAG, "[Diag] Output $i shape: ${tensor.info.shape.joinToString(",")}")
         }
 
         // RetinaFace Det10G 有 9 个输出：
@@ -274,7 +274,7 @@ class InsightFaceDet10GDetector(context: Context) {
         // - 3 个尺度的 boxes: outputs[3], [4], [5]
         // - 3 个尺度的 landmarks: outputs[6], [7], [8]
         if (outputCount < 6) {
-            Logger.w(TAG, "[Diag] Unexpected output count: $outputCount, expected >= 6 for RetinaFace")
+            Log.w(TAG, "[Diag] Unexpected output count: $outputCount, expected >= 6 for RetinaFace")
             return emptyList()
         }
 
@@ -297,7 +297,7 @@ class InsightFaceDet10GDetector(context: Context) {
                 sumScore += score
             }
             val avgScore = sumScore / rawScores.size
-            Logger.d(TAG, "[Diag] Scale $i scores: range=[$minScore, $maxScore], avg=$avgScore, count=${rawScores.size}")
+            Log.d(TAG, "[Diag] Scale $i scores: range=[$minScore, $maxScore], avg=$avgScore, count=${rawScores.size}")
         }
 
         // 合并 3 个尺度的 boxes (每个是 [N, 4])
@@ -311,19 +311,19 @@ class InsightFaceDet10GDetector(context: Context) {
         }
 
         if (allScores.isEmpty() || allBoxes.isEmpty()) {
-            Logger.w(TAG, "[Diag] Failed to extract scores or boxes")
+            Log.w(TAG, "[Diag] Failed to extract scores or boxes")
             return emptyList()
         }
 
         val scores = allScores.toFloatArray()
         val numAnchors = scores.size
 
-        Logger.d(TAG, "[Diag] Merged scores length=${scores.size}, boxes count=${allBoxes.size}")
+        Log.d(TAG, "[Diag] Merged scores length=${scores.size}, boxes count=${allBoxes.size}")
 
         // 生成 anchors 并解码 bboxes
         val anchors = generateAnchors()
         if (anchors.size != numAnchors) {
-            Logger.w(TAG, "[Diag] Anchor count mismatch: anchors=${anchors.size}, scores=$numAnchors")
+            Log.w(TAG, "[Diag] Anchor count mismatch: anchors=${anchors.size}, scores=$numAnchors")
             return emptyList()
         }
 
@@ -362,7 +362,7 @@ class InsightFaceDet10GDetector(context: Context) {
             if (x1Clipped >= x2Clipped || y1Clipped >= y2Clipped) {
                 invalidBox++
                 if (aboveThreshold <= 5) {
-                    Logger.d(TAG, "[Diag] Invalid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] clipped=[$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
+                    Log.d(TAG, "[Diag] Invalid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] clipped=[$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
                 }
                 continue
             }
@@ -372,18 +372,18 @@ class InsightFaceDet10GDetector(context: Context) {
             val boxHeight = y2Clipped - y1Clipped
             if (boxWidth < 10f || boxHeight < 10f) {
                 if (aboveThreshold <= 5) {
-                    Logger.d(TAG, "[Diag] Too small box #$i: size=${boxWidth.toInt()}x${boxHeight.toInt()} at [$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
+                    Log.d(TAG, "[Diag] Too small box #$i: size=${boxWidth.toInt()}x${boxHeight.toInt()} at [$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
                 }
                 continue
             }
 
             if (aboveThreshold <= 5) {
-                Logger.d(TAG, "[Diag] Valid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] clipped=[$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
+                Log.d(TAG, "[Diag] Valid box #$i: offset=[${boxOffset.joinToString(",")}] anchor=[${anchor.joinToString(",")}] decoded=[$x1,$y1,$x2,$y2] clipped=[$x1Clipped,$y1Clipped,$x2Clipped,$y2Clipped] score=$score")
             }
             faces.add(FaceBox(x1Clipped, y1Clipped, x2Clipped, y2Clipped, score))
         }
 
-        Logger.d(TAG, "[Diag] After threshold: aboveThreshold=$aboveThreshold, invalidBox=$invalidBox, validFaces=${faces.size}")
+        Log.d(TAG, "[Diag] After threshold: aboveThreshold=$aboveThreshold, invalidBox=$invalidBox, validFaces=${faces.size}")
         return faces
     }
 
@@ -425,13 +425,13 @@ class InsightFaceDet10GDetector(context: Context) {
             }
         }
         
-        Logger.d(TAG, "[Diag] Generated ${anchors.size} anchors")
+        Log.d(TAG, "[Diag] Generated ${anchors.size} anchors")
         return anchors
     }
 
     private fun applyNMS(faces: List<FaceBox>): List<FaceBox> {
         if (faces.isEmpty()) {
-            Logger.d(TAG, "[Diag] NMS skipped: 0 face(s)")
+            Log.d(TAG, "[Diag] NMS skipped: 0 face(s)")
             return faces
         }
 
@@ -440,7 +440,7 @@ class InsightFaceDet10GDetector(context: Context) {
         val topFaces = faces.sortedByDescending { it.confidence }.take(topK)
         
         if (faces.size > topK) {
-            Logger.d(TAG, "[Diag] Top-K: reduced from ${faces.size} to $topK")
+            Log.d(TAG, "[Diag] Top-K: reduced from ${faces.size} to $topK")
         }
 
         val sorted = topFaces
@@ -459,7 +459,7 @@ class InsightFaceDet10GDetector(context: Context) {
             }
         }
 
-        Logger.d(TAG, "[Diag] NMS: before=${faces.size}, after=${result.size}, topConf=${result.firstOrNull()?.confidence}")
+        Log.d(TAG, "[Diag] NMS: before=${faces.size}, after=${result.size}, topConf=${result.firstOrNull()?.confidence}")
         return result
     }
 
@@ -507,13 +507,13 @@ class InsightFaceDet10GDetector(context: Context) {
         if (hasSubNode && hasMulNode) {
             inputMean = 0f
             inputStd = 1f
-            Logger.i(TAG, "Model has built-in normalization nodes, using mean=0, std=1")
+            Log.i(TAG, "Model has built-in normalization nodes, using mean=0, std=1")
         } else {
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
-            Logger.i(TAG, "Using default normalization: mean=$DEFAULT_INPUT_MEAN, std=$DEFAULT_INPUT_STD")
+            Log.i(TAG, "Using default normalization: mean=$DEFAULT_INPUT_MEAN, std=$DEFAULT_INPUT_STD")
         }
-        Logger.d(TAG, "[Diag] Model file size=${modelFile.length()}, hasSub=$hasSubNode, hasMul=$hasMulNode")
+        Log.d(TAG, "[Diag] Model file size=${modelFile.length()}, hasSub=$hasSubNode, hasMul=$hasMulNode")
     }
 
     /**
@@ -529,9 +529,9 @@ class InsightFaceDet10GDetector(context: Context) {
             file.outputStream().use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
             }
-            Logger.d(TAG, "[Debug] Saved: ${file.absolutePath}")
+            Log.d(TAG, "[Debug] Saved: ${file.absolutePath}")
         } catch (e: Exception) {
-            Logger.e(TAG, "[Debug] Failed to save bitmap", e)
+            Log.e(TAG, "[Debug] Failed to save bitmap", e)
         }
     }
 

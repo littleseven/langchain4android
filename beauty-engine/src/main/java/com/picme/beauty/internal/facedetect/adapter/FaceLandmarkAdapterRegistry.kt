@@ -1,7 +1,7 @@
-package com.picme.features.camera.facedetect.adapter
+package com.picme.beauty.internal.facedetect.adapter
 
-import com.picme.core.common.Logger
-import com.picme.features.camera.preview.core.FaceDetectionSource
+import android.util.Log
+import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 /**
  * 人脸关键点适配器注册表
@@ -27,9 +27,9 @@ object FaceLandmarkAdapterRegistry {
     fun register(source: FaceDetectionSource, adapter: FaceLandmarkAdapter) {
         val existing = adapters.put(source, adapter)
         if (existing != null) {
-            Logger.w(TAG, "Adapter for $source was overwritten")
+            Log.w(TAG, "Adapter for $source was overwritten")
         } else {
-            Logger.d(TAG, "Adapter registered: ${adapter::class.simpleName} for $source")
+            Log.d(TAG, "Adapter registered: ${adapter::class.simpleName} for $source")
         }
     }
 
@@ -62,7 +62,7 @@ object FaceLandmarkAdapterRegistry {
      */
     fun clear() {
         adapters.clear()
-        Logger.d(TAG, "All adapters cleared")
+        Log.d(TAG, "All adapters cleared")
     }
 
     /**
@@ -72,13 +72,13 @@ object FaceLandmarkAdapterRegistry {
      */
     fun initDefaults() {
         if (adapters.isNotEmpty()) {
-            Logger.d(TAG, "Default adapters already initialized, skipping")
+            Log.d(TAG, "Default adapters already initialized, skipping")
             return
         }
 
         register(FaceDetectionSource.MEDIAPIPE, MediaPipe468Adapter())
         register(FaceDetectionSource.INSIGHTFACE, InsightFaceAdapter())
 
-        Logger.i(TAG, "Default adapters initialized: ${adapters.size} registered")
+        Log.i(TAG, "Default adapters initialized: ${adapters.size} registered")
     }
 }

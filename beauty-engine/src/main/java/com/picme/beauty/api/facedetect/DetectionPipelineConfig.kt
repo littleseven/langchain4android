@@ -1,4 +1,4 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.api.facedetect
 
 /**
  * 检测流水线配置
@@ -6,13 +6,13 @@ package com.picme.features.camera.facedetect
 data class DetectionPipelineConfig(
     val roiDetector: RoiDetectorType = RoiDetectorType.MEDIAPIPE,
     val landmarkDetector: LandmarkDetectorType = LandmarkDetectorType.INSIGHTFACE_2D106,
-    val useLooseCrop: Boolean = false  // LOOSE_CROP_SCALE = 1f or 1.2f
+    val useLooseCrop: Boolean = false
 )
 
 enum class RoiDetectorType {
-    MEDIAPIPE,  // MediaPipe 468 点计算 ROI
-    DET10G;     // InsightFace Det10G 检测 ROI
-    
+    MEDIAPIPE,
+    DET10G;
+
     val displayName: String
         get() = when (this) {
             MEDIAPIPE -> "MediaPipe (快速+精确)"
@@ -21,9 +21,9 @@ enum class RoiDetectorType {
 }
 
 enum class LandmarkDetectorType {
-    INSIGHTFACE_2D106,  // InsightFace 2d106det (106 点)
-    MEDIAPIPE;          // MediaPipe FaceLandmarker (468 点 → 适配为 106)
-    
+    INSIGHTFACE_2D106,
+    MEDIAPIPE;
+
     val displayName: String
         get() = when (this) {
             INSIGHTFACE_2D106 -> "InsightFace 2D106 (高精度)"

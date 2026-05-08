@@ -1,4 +1,4 @@
-package com.picme.features.camera.facedetect
+package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap

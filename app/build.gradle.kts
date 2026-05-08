@@ -112,11 +112,8 @@ dependencies {
     implementation(libs.google.mlkit.text.recognition)
     implementation(libs.google.mlkit.text.recognition.chinese)
 
-    // MediaPipe Face Landmarker (468点 → 106点映射)
+    // MediaPipe Face Landmarker（Gallery 调试用，直接显示 468 点原始数据）
     implementation(libs.mediapipe.face.landmarker)
-    implementation(libs.onnxruntime.android)
-
-
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

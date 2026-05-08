@@ -22,6 +22,10 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     // GPUPixel 已移除，全部能力由自研引擎提供
 
+    // 人脸检测依赖（从 app 模块迁移）
+    implementation(libs.mediapipe.face.landmarker)
+    implementation(libs.onnxruntime.android)
+
     testImplementation(libs.junit)
 }
 

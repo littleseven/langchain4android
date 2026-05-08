@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import android.util.Log
+import com.picme.beauty.api.facedetect.FaceDetectionConstants
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,9 +56,9 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.R
 import com.picme.core.common.Logger
-import com.picme.features.camera.facedetect.InsightFace2D106Detector
-import com.picme.features.camera.facedetect.FaceDetectorManager
-import com.picme.features.camera.facedetect.adapter.InsightFaceAdapter
+import com.picme.beauty.internal.facedetect.InsightFace2D106Detector
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.internal.facedetect.adapter.InsightFaceAdapter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -698,7 +699,7 @@ private fun detectMediaPipe468(bitmap: Bitmap, landmarker: FaceLandmarker): Medi
 private fun convert468To106ForDebug(
     landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>
 ): FloatArray {
-    val result = FloatArray(FaceDetectorManager.POINT_COUNT * 2)
+    val result = FloatArray(FaceDetectionConstants.POINT_COUNT * 2)
 
     fun getMpPoint(index: Int): Pair<Float, Float>? {
         if (index >= landmarks.size) return null
@@ -767,7 +768,7 @@ private fun convert468To106ForDebug(
         473, 468
     )
 
-    for (index in 0 until FaceDetectorManager.NON_CONTOUR_POINT_COUNT) {
+    for (index in 0 until FaceDetectionConstants.NON_CONTOUR_POINT_COUNT) {
         val mpIndex = nonContourMapping[index]
         if (mpIndex < landmarks.size) {
             val landmark = landmarks[mpIndex]

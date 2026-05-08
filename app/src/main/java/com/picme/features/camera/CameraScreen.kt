@@ -77,9 +77,10 @@ import com.picme.features.camera.test.CameraTestCommandReceiver
 import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.camera.test.CameraTestStateSnapshot
 import com.picme.beauty.egl.GlBeautyPreviewProvider
-import com.picme.features.camera.facedetect.Face106ToWarpParams
-import com.picme.features.camera.preview.core.FaceDetectionSource
-import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.beauty.api.facedetect.EngineType
+import com.picme.beauty.internal.facedetect.Face106ToWarpParams
+import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.delay
@@ -271,6 +272,11 @@ internal data class CameraPreviewActions(
     val onRatioSelected: (Int) -> Unit,
     val onDismissPanels: () -> Unit
 )
+
+internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
+    FaceDetectionEngineMode.MEDIAPIPE -> EngineType.MEDIAPIPE
+    FaceDetectionEngineMode.INSIGHTFACE -> EngineType.INSIGHTFACE
+}
 
 private fun buildCameraPreviewUiState(
     selectedFilter: FilterType,
@@ -997,9 +1003,10 @@ fun CameraContent(
 
 
     LaunchedEffect(faceDetectionEngineMode) {
-        faceWarpParams = faceWarpParams.copy(requestedDetectionEngineMode = faceDetectionEngineMode)
-        previewFaceWarpParams = previewFaceWarpParams.copy(requestedDetectionEngineMode = faceDetectionEngineMode)
-        runtimeContext.faceDetectorManager.setDetectionEngineMode(faceDetectionEngineMode)
+        val engineType = faceDetectionEngineMode.toEngineType()
+        faceWarpParams = faceWarpParams.copy(requestedDetectionEngineMode = engineType)
+        previewFaceWarpParams = previewFaceWarpParams.copy(requestedDetectionEngineMode = engineType)
+        runtimeContext.faceDetectorManager.setEngineMode(engineType)
     }
 
     LaunchedEffect(lensFacing) {
@@ -1021,9 +1028,9 @@ fun CameraContent(
             cameraExecutor = cameraExecutor,
             beautySettings = beautySettings,
             beautyStrategy = beautyStrategy,
-            detectionEngineMode = faceDetectionEngineMode,
+            detectionEngineMode = faceDetectionEngineMode.toEngineType(),
             videoCapture = videoCapture,
-            faceDetectorManager = runtimeContext.faceDetectorManager,
+            faceDetector = runtimeContext.faceDetectorManager,
             onImageCaptureChanged = { capture -> imageCapture = capture },
             onCameraControlChanged = { control -> cameraControl = control },
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },

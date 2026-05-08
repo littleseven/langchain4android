@@ -1,7 +1,9 @@
-package com.picme.features.camera.facedetect.adapter
+package com.picme.beauty.internal.facedetect.adapter
 
-import androidx.camera.core.CameraSelector
-import com.picme.features.camera.preview.core.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceDetectionSource
+
+// CameraSelector.LENS_FACING_FRONT = 0, LENS_FACING_BACK = 1
+private const val LENS_FACING_FRONT = 0
 
 /**
  * InsightFace 2D106 适配器
@@ -104,7 +106,7 @@ class InsightFaceAdapter : FaceLandmarkAdapter {
             )
         }
 
-        val isFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT
+        val isFrontCamera = lensFacing == LENS_FACING_FRONT
         val unified = FloatArray(POINT_COUNT * 2)
 
         // 完整 106 点重排映射

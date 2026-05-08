@@ -16,10 +16,10 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.picme.core.common.Logger
 import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.beauty.api.facedetect.EngineType
 import com.picme.domain.model.MediaType
-import com.picme.features.camera.facedetect.FaceDetectorManager
-import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.FaceWarpParams
 import java.nio.ByteBuffer
 import java.util.concurrent.ExecutorService
 
@@ -36,9 +36,9 @@ internal fun bindCameraUseCases(
     cameraExecutor: ExecutorService,
     beautySettings: BeautySettings,
     beautyStrategy: BeautyStrategy,
-    detectionEngineMode: FaceDetectionEngineMode,
+    detectionEngineMode: EngineType,
     videoCapture: VideoCapture<Recorder>,
-    faceDetectorManager: FaceDetectorManager,
+    faceDetector: FaceDetector,
     onImageCaptureChanged: (ImageCapture) -> Unit,
     onCameraControlChanged: (CameraControl) -> Unit,
     onZoomRatioChanged: (Float) -> Unit,
@@ -115,7 +115,7 @@ internal fun bindCameraUseCases(
         handleImageAnalysisFrameMediaPipe(
             imageProxy = imageProxy,
             previewView = previewView,
-            faceDetectorManager = faceDetectorManager,
+            faceDetector = faceDetector,
             lensFacing = lensFacing,
             detectionEngineMode = detectionEngineMode,
             onFacePointChanged = onFacePointChanged,

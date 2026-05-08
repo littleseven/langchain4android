@@ -5,10 +5,11 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.picme.core.common.Logger
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.features.camera.facedetect.Face106ToWarpParams
-import com.picme.features.camera.facedetect.FaceDetectorManager
-import com.picme.features.camera.preview.core.FaceWarpParams
+import com.picme.beauty.api.facedetect.EngineType
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.FaceWarpParams
+import com.picme.beauty.internal.facedetect.Face106ToWarpParams
+import com.picme.features.camera.facedetect.ImageUtils
 
 /**
  * InsightFace 性能优化: 智能帧跳过管理器
@@ -159,9 +160,9 @@ internal fun transformFaceCoordinateSimple(
 internal fun handleImageAnalysisFrameMediaPipe(
     imageProxy: androidx.camera.core.ImageProxy,
     previewView: PreviewView,
-    faceDetectorManager: FaceDetectorManager,
+    faceDetector: FaceDetector,
     lensFacing: Int,
-    detectionEngineMode: FaceDetectionEngineMode,
+    detectionEngineMode: EngineType,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
@@ -182,7 +183,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
         // [方案1优化] InsightFace 性能优化: 智能帧跳过 + 运动检测
-        val isInsightFaceMode = detectionEngineMode == FaceDetectionEngineMode.INSIGHTFACE
+        val isInsightFaceMode = detectionEngineMode == EngineType.INSIGHTFACE
         
         // 获取上次的人脸中心点用于运动检测
         val lastFaceCenter = existingWarpParams?.let {
@@ -202,7 +203,9 @@ internal fun handleImageAnalysisFrameMediaPipe(
         }
 
         // 人脸检测（MediaPipe / InsightFace / AUTO）
-        val detectionResult = faceDetectorManager.detect(imageProxy, lensFacing)
+        val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return
+        val detectionResult = faceDetector.detect(bitmap, imageProxy.imageInfo.rotationDegrees, lensFacing)
+        bitmap.recycle()
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
@@ -215,7 +218,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 detectionSource = detectionResult.detectionSource
             ).copy(
                 requestedDetectionEngineMode = detectionEngineMode,
-                roiRect = detectionResult.roiRect  // [新增] 传递 ROI
+                roiRect = detectionResult.roiRect
             )
             
             // [优化] 更新人脸中心点记录,用于运动检测
