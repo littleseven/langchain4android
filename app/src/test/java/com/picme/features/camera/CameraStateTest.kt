@@ -1,7 +1,7 @@
 package com.picme.features.camera
 
-import androidx.compose.ui.geometry.Offset
-import com.picme.features.camera.preview.core.FaceWarpParams
+import android.graphics.PointF
+import com.picme.beauty.api.facedetect.FaceWarpParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -402,7 +402,7 @@ class CameraStateTest {
 
     @Test
     fun `FaceWarpParams with contour points can be compared by value`() {
-        val contour = listOf(Offset(0.1f, 0.2f), Offset(0.3f, 0.4f))
+        val contour = listOf(PointF(0.1f, 0.2f), PointF(0.3f, 0.4f))
         assertEquals("Same contour points should be equal",
             FaceWarpParams(hasFace = true, contourPoints = contour),
             FaceWarpParams(hasFace = true, contourPoints = contour))
