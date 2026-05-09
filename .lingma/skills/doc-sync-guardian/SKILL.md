@@ -201,7 +201,7 @@ elif changed_files include "beauty-engine/*":
 **当前位置**: Section 3.1 美颜系统 - 拍照 GPU 化
 **需要添加**:
 ```markdown
-- **拍照 GPU 化（2026-05 进行中）**：
+- **拍照 GPU 化（2026-05 已落地）**：
     - **目标**：预览与拍照效果一致性从 70-85% 提升至 99%+
     - **性能指标**：1080p < 300ms，4K < 800ms
     - **降级策略**：GPU 失败时自动回退 CPU 路径
@@ -646,7 +646,7 @@ if __name__ == "__main__":
 [QA] 验收文档更新质量...
      ✅ 所有链接有效，术语一致
 [CO] 生成审计报告并汇总
-     📊 审计报告: docs/audit_report_20260503.md
+     📊 审计报告: docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md
      ✅ 审计完成，发现 3 个问题已全部修复
 ```
 
