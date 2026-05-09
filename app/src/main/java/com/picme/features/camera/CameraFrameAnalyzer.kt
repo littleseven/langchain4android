@@ -204,7 +204,9 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         // 人脸检测（MediaPipe / InsightFace / AUTO）
         val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return
-        val detectionResult = faceDetector.detect(bitmap, imageProxy.imageInfo.rotationDegrees, lensFacing)
+        // [修复] ImageUtils.imageProxyToBitmap() 已将 bitmap 旋转为 upright，
+        // 此处不再传递 rotationDegrees，避免 MediaPipeFaceDetector.detect() 二次旋转。
+        val detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
         bitmap.recycle()
 
         if (detectionResult != null) {
