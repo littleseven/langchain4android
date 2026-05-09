@@ -5,6 +5,14 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    allRules = false
+    config.setFrom("$rootDir/detekt-config.yml")
+    baseline = file("$projectDir/detekt-baseline.xml")
 }
 
 ktlint {
@@ -21,9 +29,10 @@ ktlint {
 tasks.register<NoFullyQualifiedNameTask>("checkNoFullyQualifiedName") {
     group = "verification"
     description = "检查 Kotlin 源码中是否使用了完全限定名（禁止）"
-    sourceFiles = fileTree("src/main/java") {
-        include("**/*.kt")
-    }
+    sourceFiles =
+        fileTree("src/main/java") {
+            include("**/*.kt")
+        }
 }
 
 // 绑定到编译前检查（暂时禁用，因检查耗时较长）

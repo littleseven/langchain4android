@@ -727,7 +727,7 @@ find app/src/ -name "*.kt" -exec grep -n "//.*左眼\|//.*右眼" {} +
 ## PicMe 开发规范
 
 ### 坐标系与命名
-- 阅读 [人脸坐标系与左右命名规范](./docs/COORDINATE_SYSTEM_STANDARD.md)
+- 阅读 [人脸坐标系与左右命名规范](./ADR-003-coordinate-system-management.md)
 - 理解图像坐标系 vs 人脸坐标系的区别
 - 掌握前置/后置摄像头的镜像差异
 ```

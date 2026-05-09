@@ -1,0 +1,892 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ComplexCondition:SampleDataGenerator.kt$SampleDataGenerator$r &gt; 95 &amp;&amp; g &gt; 40 &amp;&amp; b &gt; 20 &amp;&amp; abs(r - g) &gt; 15 &amp;&amp; r &gt; g &amp;&amp; r &gt; b</ID>
+    <ID>ComplexInterface:CameraTestCommandDispatcher.kt$CameraTestCommandExecutor</ID>
+    <ID>ComplexInterface:MediaRepository.kt$MediaRepository</ID>
+    <ID>ComplexInterface:UserSettingsRepository.kt$UserSettingsRepository</ID>
+    <ID>CyclomaticComplexMethod:CameraPreviewContent.kt$@Composable private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState)</ID>
+    <ID>CyclomaticComplexMethod:CameraScreen.kt$@SuppressLint("MissingPermission", "UnusedMaterial3ScaffoldPaddingParameter") @OptIn(ExperimentalMaterial3Api::class) @ExperimentalGetImage @Composable fun CameraContent( viewModel: MediaViewModel, onNavigateToGallery: () -&gt; Unit, onNavigateToSettings: () -&gt; Unit )</ID>
+    <ID>CyclomaticComplexMethod:CameraTestCommand.kt$CameraTestCommand.Companion$fun fromExtras(extras: android.os.Bundle?): CameraTestCommand</ID>
+    <ID>CyclomaticComplexMethod:FaceLandmarkOverlay.kt$@Composable fun FaceLandmarkCanvasOverlay( state: FaceLandmarkDetectionState, show468Points: Boolean, showBigBeauty106: Boolean, showInsightFace106: Boolean, modifier: Modifier = Modifier )</ID>
+    <ID>CyclomaticComplexMethod:GalleryScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun GalleryScreen( viewModel: MediaViewModel, onNavigateBack: () -&gt; Unit, onNavigateToDebug: () -&gt; Unit )</ID>
+    <ID>CyclomaticComplexMethod:ImageProcessor.kt$private fun List&lt;Face&gt;.toFaceData(imageWidth: Int, imageHeight: Int): FaceData?</ID>
+    <ID>CyclomaticComplexMethod:SampleDataGenerator.kt$SampleDataGenerator$private suspend fun generateData( context: Context, repository: MediaRepository, keywords: List&lt;String&gt;, prefix: String )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun BeautyPanel( settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun BeautySelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun BlushColorFamilySelector( selectedFamily: Int, onFamilyChanged: (Int) -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun BodyManagementSelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun CameraLeftControls( onNavigateToSettings: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun CameraRightControls( onToggleBeauty: () -&gt; Unit, onToggleFilter: () -&gt; Unit, onToggleRatio: () -&gt; Unit, onToggleScene: () -&gt; Unit, onToggleGrid: () -&gt; Unit, onToggleBeautyEnabled: () -&gt; Unit, isBeautySelected: Boolean, isFilterSelected: Boolean, isRatioSelected: Boolean, isSceneActive: Boolean, isGridActive: Boolean, isBeautyEnabled: Boolean, currentRatio: Int, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun ControlButton( icon: ImageVector, onClick: () -&gt; Unit, isActive: Boolean = false, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun ControlPainterButton( @DrawableRes iconRes: Int, onClick: () -&gt; Unit, isActive: Boolean = false, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun ControlPanel( onDismiss: () -&gt; Unit, content: @Composable ColumnScope.() -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun FacialRefinementSelector(settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun GridSelector(currentGrid: GridType, onGridSelected: (GridType) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun LipColorSelector( strength: Float, colorIndex: Int, onStrengthChanged: (Float) -&gt; Unit, onColorIndexChanged: (Int) -&gt; Unit, onReset: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun RatioSelector(selectedRatio: CameraAspectRatio, onRatioSelected: (CameraAspectRatio) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun SceneSelector(currentScene: ScenePreset, onSceneSelected: (ScenePreset) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable fun UnifiedFilterSelector( selectedFilter: FilterType, selectedStyleFilter: StyleFilter, onFilterSelected: (FilterType) -&gt; Unit, onStyleFilterSelected: (StyleFilter) -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable internal fun MakeupAdjustmentSelector( settings: BeautySettings, activeEntry: MakeupEntry? = null, onSettingsChanged: (BeautySettings) -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun BeautyEntryButton( isEnabled: Boolean, isPanelOpen: Boolean, onTogglePanel: () -&gt; Unit, onToggleEnabled: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun BeautyPanelContent(settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun ExpandableSection( title: String, isExpanded: Boolean, onToggle: () -&gt; Unit, content: @Composable ColumnScope.() -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun FilterItem( label: String, isSelected: Boolean, assetPath: String, itemWidth: androidx.compose.ui.unit.Dp, onClick: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun ProModeSlider( label: String, valueText: String, isValueChanged: Boolean, sliderContent: @Composable () -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun ProModeThumb()</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun ProModeTrack(fraction: Float)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@Composable private fun RatioItem(label: String, isSelected: Boolean, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ProModeControls( exposure: Int, exposureRange: IntRange, onExposureChange: (Int) -&gt; Unit, whiteBalance: Int, onWhiteBalanceChange: (Int) -&gt; Unit, onClose: () -&gt; Unit, beautySettings: BeautySettings = BeautySettings(), onBeautySettingsChanged: (BeautySettings) -&gt; Unit = {}, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraComponents.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun BeautySlider( icon: ImageVector, label: String, value: Float, valueRange: ClosedFloatingPointRange&lt;Float&gt; = 0f..100f, onValueChange: (Float) -&gt; Unit, onReset: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable fun CameraBottomControls( lastMedia: MediaAsset?, zoomRatio: Float, minZoomRatio: Float, maxZoomRatio: Float, captureMode: MediaType, isRecording: Boolean, isAnyPanelOpen: Boolean, onZoomPresetClick: (Float) -&gt; Unit, onGalleryClick: () -&gt; Unit, onCaptureClick: () -&gt; Unit, onFlipCamera: () -&gt; Unit, onModeChange: (MediaType) -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable private fun FlipCameraButton(onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable private fun GalleryThumbnail(lastMedia: MediaAsset?, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable private fun ModeSelector( currentMode: MediaType, onModeChange: (MediaType) -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable private fun ShutterButton(isRecording: Boolean, mode: MediaType, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable private fun ZoomButton(label: String, isSelected: Boolean, onClick: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraControls.kt$@Composable private fun ZoomControls( zoomRatio: Float, minZoomRatio: Float, maxZoomRatio: Float, onZoomClick: (Float) -&gt; Unit )</ID>
+    <ID>FunctionNaming:CameraDebugOverlay.kt$@Composable internal fun FaceDebugOverlay( faceWarpParams: FaceWarpParams, slimFaceValue: Float, aspectRatio: Int = AspectRatio.RATIO_FULL )</ID>
+    <ID>FunctionNaming:CameraDebugOverlay.kt$@Composable private fun FaceDebugOverlayBigBeauty( bigBeautyLandmarks: GpuPixelLandmarks, aspectRatio: Int = AspectRatio.RATIO_FULL, roiRect: android.graphics.RectF? = null )</ID>
+    <ID>FunctionNaming:CameraDebugOverlay.kt$@Composable private fun FaceDebugOverlaySingle( faceWarpParams: FaceWarpParams, slimFaceValue: Float, aspectRatio: Int = AspectRatio.RATIO_FULL )</ID>
+    <ID>FunctionNaming:CameraDebugOverlay.kt$@Composable private fun FaceDebugStatusPanel( requestedLabel: String, requestedColor: Color, detectionLabel: String, detectionColor: Color, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraDebugOverlay.kt$@Composable private fun FaceDebugStatusRow( title: String, label: String, accentColor: Color, emphasized: Boolean )</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable fun CameraInfoOverlay( captureMode: MediaType, lensFacing: Int, zoomRatio: Float, aspectRatio: Int, filter: FilterType, beautySettings: BeautySettings, exposureCompensation: Int, whiteBalanceMode: Int, currentScene: ScenePreset, gridType: GridType, isStable: Boolean, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable fun CameraOverlays( isStable: Boolean, gridType: GridType, facePoint: Offset?, focusAlpha: Float, showInfo: Boolean, lensFacing: Int, captureMode: MediaType, zoomRatio: Float, aspectRatio: Int, selectedFilter: FilterType, beautySettings: BeautySettings, exposureCompensation: Int, whiteBalanceMode: Int, currentScene: ScenePreset, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable fun CompositionGrid(gridType: GridType)</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable fun FaceFocusCrosshair( offset: Offset, alpha: Float, isActive: Boolean = true )</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable fun FaceFocusIndicator(offset: Offset, alpha: Float)</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable private fun CameraInfoTitle(isStable: Boolean)</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable private fun InfoGroup(title: String, content: @Composable ColumnScope.() -&gt; Unit)</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable private fun InfoItem(label: String, value: String)</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable private fun OcrTextPreviewOverlay( text: String, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:CameraOverlays.kt$@Composable private fun SettingsInfoItems( aspectRatio: Int, filter: FilterType, currentScene: ScenePreset, gridType: GridType, exposureCompensation: Int, whiteBalanceMode: Int, beautySettings: BeautySettings )</ID>
+    <ID>FunctionNaming:CameraPreviewContent.kt$@Composable internal fun CameraPreviewContent( previewView: @Composable () -&gt; Unit, uiState: CameraPreviewUiState, actions: CameraPreviewActions )</ID>
+    <ID>FunctionNaming:CameraPreviewContent.kt$@Composable private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState)</ID>
+    <ID>FunctionNaming:CameraPreviewContent.kt$@Composable private fun BoxScope.CameraPreviewSideControls( uiState: CameraPreviewUiState, actions: CameraPreviewActions )</ID>
+    <ID>FunctionNaming:CameraPreviewContent.kt$@Composable private fun BoxScope.PrimaryControlPanels( uiState: CameraPreviewUiState, actions: CameraPreviewActions, isAnyPanelOpen: Boolean )</ID>
+    <ID>FunctionNaming:CameraScreen.kt$@OptIn(ExperimentalPermissionsApi::class) @ExperimentalGetImage @Composable fun CameraScreen( onNavigateToGallery: () -&gt; Unit, onNavigateToSettings: () -&gt; Unit, viewModel: MediaViewModel )</ID>
+    <ID>FunctionNaming:CameraScreen.kt$@SuppressLint("MissingPermission", "UnusedMaterial3ScaffoldPaddingParameter") @OptIn(ExperimentalMaterial3Api::class) @ExperimentalGetImage @Composable fun CameraContent( viewModel: MediaViewModel, onNavigateToGallery: () -&gt; Unit, onNavigateToSettings: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:DebugScreen.kt$@Composable private fun DataGenerationButtons( isGenerating: Boolean, onPopulatePerson: () -&gt; Unit, onPopulateLandscape: () -&gt; Unit, onPopulateSwimwear: () -&gt; Unit, onPopulateSexy: () -&gt; Unit, onClearData: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:DebugScreen.kt$@Composable private fun DebugButton( icon: ImageVector, label: String, onClick: () -&gt; Unit, enabled: Boolean, modifier: Modifier )</ID>
+    <ID>FunctionNaming:DebugScreen.kt$@Composable private fun GenerationStatusCard( progress: String, isPaused: Boolean, onPauseResume: () -&gt; Unit, onStop: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:DebugScreen.kt$@Composable private fun LogWindow( filterText: String, onFilterTextChange: (String) -&gt; Unit, filteredLogs: List&lt;String&gt; )</ID>
+    <ID>FunctionNaming:DebugScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun DebugScreen( onNavigateBack: () -&gt; Unit, mediaViewModel: MediaViewModel )</ID>
+    <ID>FunctionNaming:DebugScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun DebugContent( isGenerating: Boolean, isPaused: Boolean, progress: String, logs: List&lt;String&gt;, onNavigateBack: () -&gt; Unit, onPauseResume: () -&gt; Unit, onStop: () -&gt; Unit, onPopulatePerson: () -&gt; Unit, onPopulateLandscape: () -&gt; Unit, onPopulateSwimwear: () -&gt; Unit, onPopulateSexy: () -&gt; Unit, onClearData: () -&gt; Unit, onScreenshot: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:DocumentDetectionOverlay.kt$@Composable fun DocumentDetectionOverlay( documentBounds: Rect?, isDocumentDetected: Boolean = false, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:FaceLandmarkOverlay.kt$@Composable fun FaceLandmarkCanvasOverlay( state: FaceLandmarkDetectionState, show468Points: Boolean, showBigBeauty106: Boolean, showInsightFace106: Boolean, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:FaceLandmarkOverlay.kt$@Composable fun FaceLandmarkControlBar( state: FaceLandmarkDetectionState, show468Points: Boolean, showBigBeauty106: Boolean, showInsightFace106: Boolean, onToggle468Points: () -&gt; Unit, onToggleBigBeauty106: () -&gt; Unit, onToggleInsightFace106: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:FaceLandmarkOverlay.kt$@Composable private fun LandmarkToggle( color: Color, label: String, subLabel: String, enabled: Boolean, onClick: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun DuplicateGroupCard( group: DuplicateGroup, onDeleteGroup: (DuplicateGroup) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun DuplicateManagerScreen( duplicateGroups: List&lt;DuplicateGroup&gt;, isScanning: Boolean, onDeleteGroup: (DuplicateGroup) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun DuplicatePreviewDialog( fileUris: List&lt;String&gt;, onDismiss: () -&gt; Unit, onDelete: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun EmptyGalleryMessage()</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun GalleryPermissionMessage( onGrantPermission: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun GroupingMenu( currentMode: GroupingMode, onModeSelected: (GroupingMode) -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun MediaGrid( context: Context, groupedMedia: List&lt;GroupedMedia&gt;, selectedIds: List&lt;Long&gt;, isSelectionMode: Boolean, thumbnailPositions: Map&lt;Long, Rect&gt;, mediaById: Map&lt;Long, MediaAsset&gt;, onThumbnailPositioned: (Long, Rect) -&gt; Unit, onMediaClick: (MediaAsset) -&gt; Unit, onMediaLongClick: (MediaAsset) -&gt; Unit, onDragSelectionStart: (MediaAsset) -&gt; Unit, onDragSelectionItem: (MediaAsset) -&gt; Unit, onDragSelectionEnd: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@Composable private fun SelectionOverlay(isSelected: Boolean)</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun MediaItem( asset: MediaAsset, isSelected: Boolean, isSelectionMode: Boolean, modifier: Modifier = Modifier, onClick: () -&gt; Unit, onLongClick: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun GalleryScreen( viewModel: MediaViewModel, onNavigateBack: () -&gt; Unit, onNavigateToDebug: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun DuplicateManagerTopBar( onNavigateBack: () -&gt; Unit, onDeleteAllDuplicates: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:GalleryScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun GalleryTopBar( isSelectionMode: Boolean, selectedCount: Int, groupingMode: GroupingMode, onNavigateBack: () -&gt; Unit, onToggleSelectionMode: () -&gt; Unit, onSelectAll: () -&gt; Unit, onDeleteSelected: () -&gt; Unit, onShareSelected: () -&gt; Unit, onGroupingModeSelected: (GroupingMode) -&gt; Unit, onManageDuplicates: () -&gt; Unit, onOpenTestDataTools: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:ImageEditScreen.kt$@Composable fun ColorSelector(selectedColor: Int, onColorSelected: (Int) -&gt; Unit)</ID>
+    <ID>FunctionNaming:ImageEditScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ImageEditScreen( asset: MediaAsset, viewModel: MediaViewModel, onDismiss: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:ImageEditScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun ImageEditContent( originalBitmap: Bitmap?, mosaicShader: BitmapShader?, actions: MutableList&lt;DrawAction&gt;, currentMode: EditMode, currentColor: Int, onModeChange: (EditMode) -&gt; Unit, onColorChange: (Int) -&gt; Unit, onUndo: () -&gt; Unit, onSave: () -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:ImageEditScreen.kt$@Preview(showBackground = true) @Composable fun ImageEditScreenPreview()</ID>
+    <ID>FunctionNaming:LogOverlay.kt$@Composable private fun LogItem(entry: LogEntry)</ID>
+    <ID>FunctionNaming:LogOverlay.kt$@Composable private fun LogOverlayHeader(onClear: () -&gt; Unit, onDismiss: () -&gt; Unit)</ID>
+    <ID>FunctionNaming:LogOverlay.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun LogOverlay( onDismiss: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:MediaGroupHeader.kt$@Composable fun MediaGroupHeader( title: String, count: Int, modifier: Modifier = Modifier )</ID>
+    <ID>FunctionNaming:MediaPager.kt$@Composable fun VideoPlayer(uri: String)</ID>
+    <ID>FunctionNaming:MediaPager.kt$@Composable private fun MediaPagerTopControls( onClose: () -&gt; Unit, showInfo: Boolean, showLandmarkAction: Boolean, showLandmarkOverlay: Boolean, onToggleInfo: () -&gt; Unit, onToggleLandmarks: () -&gt; Unit, onDelete: () -&gt; Unit, onShare: () -&gt; Unit, onStartOcr: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:MediaPager.kt$@Composable private fun OcrResultOverlay( ocrState: StateFlow&lt;MediaViewModel.OcrResult?&gt;, onDismiss: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:MediaPager.kt$@Composable private fun SourceInfoOverlay( visible: Boolean, source: String? )</ID>
+    <ID>FunctionNaming:MediaPager.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun MediaPager( assets: List&lt;MediaAsset&gt;, initialIndex: Int, onClose: () -&gt; Unit, onDelete: (MediaAsset) -&gt; Unit, onStartOcr: (String) -&gt; Unit, onDismissOcr: () -&gt; Unit, ocrState: StateFlow&lt;MediaViewModel.OcrResult?&gt; )</ID>
+    <ID>FunctionNaming:MediaPager.kt$@OptIn(ExperimentalFoundationApi::class) @Composable private fun ZoomableImage( uri: String, onClick: () -&gt; Unit, onLongClick: () -&gt; Unit, onZoomStateChanged: (Float) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable fun BeautyStrategySelection( currentStrategy: BeautyStrategy, onStrategySelected: (BeautyStrategy) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable fun LanguageSelection( currentLanguage: AppLanguage, onLanguageSelected: (AppLanguage) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable fun SettingsScreen( viewModel: SettingsViewModel, onNavigateBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable fun ThemeSelection( currentMode: ThemeMode, onModeSelected: (ThemeMode) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun DebugOptionRow( title: String, checked: Boolean, onCheckedChange: (Boolean) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun FaceDetectProfileSelection( currentProfile: FaceDetectIntervalProfile, onProfileSelected: (FaceDetectIntervalProfile) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun FaceDetectionEngineSelection( currentMode: FaceDetectionEngineMode, onModeSelected: (FaceDetectionEngineMode) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun InsightFacePipelineSelection( roiDetectorType: InsightFaceRoiDetectorType, landmarkDetectorType: InsightFaceLandmarkDetectorType, onRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -&gt; Unit, onLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun SettingsSection( title: String, description: String? = null, content: @Composable () -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Composable private fun ShaderDebugModeSelection( currentMode: Int, onModeSelected: (Int) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@OptIn(ExperimentalLayoutApi::class) @Composable private fun &lt;T&gt; CompactOptionChips( options: List&lt;Pair&lt;T, String&gt;&gt;, currentValue: T, maxLines: Int, onSelected: (T) -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SettingsContent( themeMode: ThemeMode, appLanguage: AppLanguage, beautyStrategy: BeautyStrategy, debugUiEnabled: Boolean, showCameraInfoInPreview: Boolean, showFaceDebugOverlay: Boolean, showLogOverlay: Boolean, faceDetectionEngineMode: FaceDetectionEngineMode, faceDetectionLandmarkModeEnabled: Boolean, adaptiveFaceDetectionIntervalEnabled: Boolean, faceDetectIntervalProfile: FaceDetectIntervalProfile, debugShaderMode: Int, insightFaceRoiDetectorType: InsightFaceRoiDetectorType, insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType, onThemeModeSelected: (ThemeMode) -&gt; Unit, onAppLanguageSelected: (AppLanguage) -&gt; Unit, onBeautyStrategySelected: (BeautyStrategy) -&gt; Unit, onDebugUiEnabledChange: (Boolean) -&gt; Unit, onShowCameraInfoInPreviewChange: (Boolean) -&gt; Unit, onShowFaceDebugOverlayChange: (Boolean) -&gt; Unit, onShowLogOverlayChange: (Boolean) -&gt; Unit, onFaceDetectionEngineModeSelected: (FaceDetectionEngineMode) -&gt; Unit, onFaceDetectionLandmarkModeEnabledChange: (Boolean) -&gt; Unit, onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -&gt; Unit, onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -&gt; Unit, onDebugShaderModeSelected: (Int) -&gt; Unit, onInsightFaceRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -&gt; Unit, onInsightFaceLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -&gt; Unit, onNavigateBack: () -&gt; Unit )</ID>
+    <ID>FunctionNaming:SettingsScreen.kt$@Preview(showBackground = true) @Composable fun SettingsScreenPreview()</ID>
+    <ID>FunctionNaming:Theme.kt$@Composable fun PicMeTheme( themeMode: ThemeMode = ThemeMode.SYSTEM, dynamicColor: Boolean = true, content: @Composable () -&gt; Unit )</ID>
+    <ID>LargeClass:GpuBeautyProcessor.kt$GpuBeautyProcessor : BeautyProcessor</ID>
+    <ID>LongMethod:CameraComponents.kt$@Composable fun BeautyPanel( settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
+    <ID>LongMethod:CameraComponents.kt$@Composable fun LipColorSelector( strength: Float, colorIndex: Int, onStrengthChanged: (Float) -&gt; Unit, onColorIndexChanged: (Int) -&gt; Unit, onReset: () -&gt; Unit )</ID>
+    <ID>LongMethod:CameraComponents.kt$@Composable internal fun MakeupAdjustmentSelector( settings: BeautySettings, activeEntry: MakeupEntry? = null, onSettingsChanged: (BeautySettings) -&gt; Unit )</ID>
+    <ID>LongMethod:CameraComponents.kt$@Composable private fun BeautyPanelContent(settings: BeautySettings, onSettingsChanged: (BeautySettings) -&gt; Unit)</ID>
+    <ID>LongMethod:CameraComponents.kt$@Composable private fun FilterItem( label: String, isSelected: Boolean, assetPath: String, itemWidth: androidx.compose.ui.unit.Dp, onClick: () -&gt; Unit )</ID>
+    <ID>LongMethod:CameraComponents.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun ProModeControls( exposure: Int, exposureRange: IntRange, onExposureChange: (Int) -&gt; Unit, whiteBalance: Int, onWhiteBalanceChange: (Int) -&gt; Unit, onClose: () -&gt; Unit, beautySettings: BeautySettings = BeautySettings(), onBeautySettingsChanged: (BeautySettings) -&gt; Unit = {}, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:CameraComponents.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun BeautySlider( icon: ImageVector, label: String, value: Float, valueRange: ClosedFloatingPointRange&lt;Float&gt; = 0f..100f, onValueChange: (Float) -&gt; Unit, onReset: () -&gt; Unit )</ID>
+    <ID>LongMethod:CameraDebugOverlay.kt$@Composable private fun FaceDebugOverlaySingle( faceWarpParams: FaceWarpParams, slimFaceValue: Float, aspectRatio: Int = AspectRatio.RATIO_FULL )</ID>
+    <ID>LongMethod:CameraDebugOverlay.kt$private fun DrawScope.drawBigEyeControlPoints(points: List&lt;Offset&gt;)</ID>
+    <ID>LongMethod:CameraDebugOverlay.kt$private fun DrawScope.drawBlushControlPoints(points: List&lt;Offset&gt;)</ID>
+    <ID>LongMethod:CameraDebugOverlay.kt$private fun DrawScope.drawThinFaceControlPoints(points: List&lt;Offset&gt;)</ID>
+    <ID>LongMethod:CameraOverlays.kt$@Composable fun FaceFocusCrosshair( offset: Offset, alpha: Float, isActive: Boolean = true )</ID>
+    <ID>LongMethod:CameraPreviewContent.kt$@Composable internal fun CameraPreviewContent( previewView: @Composable () -&gt; Unit, uiState: CameraPreviewUiState, actions: CameraPreviewActions )</ID>
+    <ID>LongMethod:CameraPreviewContent.kt$@Composable private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState)</ID>
+    <ID>LongMethod:CameraScreen.kt$@SuppressLint("MissingPermission", "UnusedMaterial3ScaffoldPaddingParameter") @OptIn(ExperimentalMaterial3Api::class) @ExperimentalGetImage @Composable fun CameraContent( viewModel: MediaViewModel, onNavigateToGallery: () -&gt; Unit, onNavigateToSettings: () -&gt; Unit )</ID>
+    <ID>LongMethod:CameraScreen.kt$private fun buildCameraPreviewActions( onNavigateToSettings: () -&gt; Unit, lensFacing: Int, onLensFacingChanged: (Int) -&gt; Unit, onActualLensFacingChanged: (Int) -&gt; Unit, panelState: CameraPanelState, cameraControl: CameraControl?, onCurrentSceneChanged: (ScenePreset) -&gt; Unit, onCurrentGridChanged: (GridType) -&gt; Unit, onNavigateToGallery: () -&gt; Unit, onCaptureClick: () -&gt; Unit, onCaptureModeChanged: (MediaType) -&gt; Unit, onSelectedFilterChanged: (FilterType) -&gt; Unit, onStyleFilterSelected: (StyleFilter) -&gt; Unit, onBeautySettingsChanged: (BeautySettings) -&gt; Unit, onAspectRatioChanged: (Int) -&gt; Unit, onExposureCompensationChanged: (Int) -&gt; Unit, onWhiteBalanceModeChanged: (Int) -&gt; Unit ): CameraPreviewActions</ID>
+    <ID>LongMethod:CameraUseCasesBinder.kt$@ExperimentalGetImage internal fun bindCameraUseCases( context: Context, lifecycleOwner: androidx.lifecycle.LifecycleOwner, cameraProviderFuture: ListenableFuture&lt;ProcessCameraProvider&gt;, lensFacing: Int, captureMode: MediaType, aspectRatio: Int, previewView: PreviewView, bindPreviewSurfaceProvider: (Preview) -&gt; Unit, cameraExecutor: ExecutorService, beautySettings: BeautySettings, beautyStrategy: BeautyStrategy, detectionEngineMode: EngineType, videoCapture: VideoCapture&lt;Recorder&gt;, faceDetector: FaceDetector, onImageCaptureChanged: (ImageCapture) -&gt; Unit, onCameraControlChanged: (CameraControl) -&gt; Unit, onZoomRatioChanged: (Float) -&gt; Unit, onZoomRangeChanged: (minZoom: Float, maxZoom: Float) -&gt; Unit, onActualLensFacingChanged: (Int) -&gt; Unit, onFacePointChanged: (Offset) -&gt; Unit, onFaceWarpParamsChanged: (FaceWarpParams) -&gt; Unit, onShowFocusIndicatorChanged: (Boolean) -&gt; Unit )</ID>
+    <ID>LongMethod:FaceDataFlowTest.kt$FaceDataFlowTest.Companion$@JvmStatic @Parameterized.Parameters(name = "{0}") fun data(): Collection&lt;Array&lt;TestCase&gt;&gt;</ID>
+    <ID>LongMethod:FaceLandmarkOverlay.kt$@Composable fun FaceLandmarkCanvasOverlay( state: FaceLandmarkDetectionState, show468Points: Boolean, showBigBeauty106: Boolean, showInsightFace106: Boolean, modifier: Modifier = Modifier )</ID>
+    <ID>LongMethod:FaceLandmarkOverlay.kt$@Composable fun rememberFaceLandmarkDetection( imageUri: String, enabled: Boolean ): FaceLandmarkDetectionState</ID>
+    <ID>LongMethod:GalleryScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable fun GalleryScreen( viewModel: MediaViewModel, onNavigateBack: () -&gt; Unit, onNavigateToDebug: () -&gt; Unit )</ID>
+    <ID>LongMethod:GetGroupedMediaUseCase.kt$GetGroupedMediaUseCase$operator fun invoke(media: List&lt;MediaAsset&gt;, mode: GroupingMode): List&lt;GroupedMedia&gt;</ID>
+    <ID>LongMethod:GpuBeautyProcessor.kt$GpuBeautyProcessor$override suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List&lt;Face&gt;, isFrontCamera: Boolean): Bitmap</ID>
+    <ID>LongMethod:GpuBeautyProcessor.kt$GpuBeautyProcessor$private fun applyLipColorRegional( bitmap: Bitmap, strength: Float, colorIndex: Int, faces: List&lt;Face&gt; ): Bitmap</ID>
+    <ID>LongMethod:ImageEditScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun ImageEditContent( originalBitmap: Bitmap?, mosaicShader: BitmapShader?, actions: MutableList&lt;DrawAction&gt;, currentMode: EditMode, currentColor: Int, onModeChange: (EditMode) -&gt; Unit, onColorChange: (Int) -&gt; Unit, onUndo: () -&gt; Unit, onSave: () -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
+    <ID>LongMethod:ImageProcessor.kt$ImageProcessorImpl$private fun applySlimFaceFallback(bitmap: Bitmap, strength: Float, faces: List&lt;Face&gt;): Bitmap</ID>
+    <ID>LongMethod:MainActivity.kt$MainActivity$@androidx.camera.core.ExperimentalGetImage @Suppress("OPT_IN_USAGE_ERROR") @OptIn(ExperimentalMaterial3Api::class) override fun onCreate(savedInstanceState: Bundle?)</ID>
+    <ID>LongMethod:MediaPager.kt$@Composable private fun MediaPagerTopControls( onClose: () -&gt; Unit, showInfo: Boolean, showLandmarkAction: Boolean, showLandmarkOverlay: Boolean, onToggleInfo: () -&gt; Unit, onToggleLandmarks: () -&gt; Unit, onDelete: () -&gt; Unit, onShare: () -&gt; Unit, onStartOcr: () -&gt; Unit )</ID>
+    <ID>LongMethod:MediaPager.kt$@Composable private fun OcrResultOverlay( ocrState: StateFlow&lt;MediaViewModel.OcrResult?&gt;, onDismiss: () -&gt; Unit )</ID>
+    <ID>LongMethod:MediaPager.kt$@OptIn(ExperimentalFoundationApi::class) @Composable fun MediaPager( assets: List&lt;MediaAsset&gt;, initialIndex: Int, onClose: () -&gt; Unit, onDelete: (MediaAsset) -&gt; Unit, onStartOcr: (String) -&gt; Unit, onDismissOcr: () -&gt; Unit, ocrState: StateFlow&lt;MediaViewModel.OcrResult?&gt; )</ID>
+    <ID>LongMethod:SampleDataGenerator.kt$SampleDataGenerator$private suspend fun generateData( context: Context, repository: MediaRepository, keywords: List&lt;String&gt;, prefix: String )</ID>
+    <ID>LongMethod:SettingsScreen.kt$@OptIn(ExperimentalMaterial3Api::class) @Composable private fun SettingsContent( themeMode: ThemeMode, appLanguage: AppLanguage, beautyStrategy: BeautyStrategy, debugUiEnabled: Boolean, showCameraInfoInPreview: Boolean, showFaceDebugOverlay: Boolean, showLogOverlay: Boolean, faceDetectionEngineMode: FaceDetectionEngineMode, faceDetectionLandmarkModeEnabled: Boolean, adaptiveFaceDetectionIntervalEnabled: Boolean, faceDetectIntervalProfile: FaceDetectIntervalProfile, debugShaderMode: Int, insightFaceRoiDetectorType: InsightFaceRoiDetectorType, insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType, onThemeModeSelected: (ThemeMode) -&gt; Unit, onAppLanguageSelected: (AppLanguage) -&gt; Unit, onBeautyStrategySelected: (BeautyStrategy) -&gt; Unit, onDebugUiEnabledChange: (Boolean) -&gt; Unit, onShowCameraInfoInPreviewChange: (Boolean) -&gt; Unit, onShowFaceDebugOverlayChange: (Boolean) -&gt; Unit, onShowLogOverlayChange: (Boolean) -&gt; Unit, onFaceDetectionEngineModeSelected: (FaceDetectionEngineMode) -&gt; Unit, onFaceDetectionLandmarkModeEnabledChange: (Boolean) -&gt; Unit, onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -&gt; Unit, onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -&gt; Unit, onDebugShaderModeSelected: (Int) -&gt; Unit, onInsightFaceRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -&gt; Unit, onInsightFaceLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -&gt; Unit, onNavigateBack: () -&gt; Unit )</ID>
+    <ID>LongParameterList:CameraCaptureActions.kt$( context: Context, captureMode: MediaType, isRecording: Boolean, recording: Recording?, videoCapture: VideoCapture&lt;Recorder&gt;, viewModel: MediaViewModel, imageCapture: ImageCapture?, imageProcessor: ImageProcessor, selectedFilter: FilterType, beautySettings: BeautySettings, lensFacing: Int, cachedFaces: List&lt;Face&gt; = emptyList(), beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY, onRecordingChanged: (Recording?) -&gt; Unit, onIsRecordingChanged: (Boolean) -&gt; Unit )</ID>
+    <ID>LongParameterList:CameraComponents.kt$( exposure: Int, exposureRange: IntRange, onExposureChange: (Int) -&gt; Unit, whiteBalance: Int, onWhiteBalanceChange: (Int) -&gt; Unit, onClose: () -&gt; Unit, beautySettings: BeautySettings = BeautySettings(), onBeautySettingsChanged: (BeautySettings) -&gt; Unit = {}, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:CameraComponents.kt$( onToggleBeauty: () -&gt; Unit, onToggleFilter: () -&gt; Unit, onToggleRatio: () -&gt; Unit, onToggleScene: () -&gt; Unit, onToggleGrid: () -&gt; Unit, onToggleBeautyEnabled: () -&gt; Unit, isBeautySelected: Boolean, isFilterSelected: Boolean, isRatioSelected: Boolean, isSceneActive: Boolean, isGridActive: Boolean, isBeautyEnabled: Boolean, currentRatio: Int, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:CameraControls.kt$( lastMedia: MediaAsset?, zoomRatio: Float, minZoomRatio: Float, maxZoomRatio: Float, captureMode: MediaType, isRecording: Boolean, isAnyPanelOpen: Boolean, onZoomPresetClick: (Float) -&gt; Unit, onGalleryClick: () -&gt; Unit, onCaptureClick: () -&gt; Unit, onFlipCamera: () -&gt; Unit, onModeChange: (MediaType) -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:CameraCoordinateTest.kt$( faceX: Float, faceY: Float, imageProxyWidth: Int, imageProxyHeight: Int, previewWidth: Float, previewHeight: Float, rotationDegrees: Int, lensFacing: Int )</ID>
+    <ID>LongParameterList:CameraFrameAnalyzer.kt$( faceX: Float, faceY: Float, imageProxyWidth: Int, imageProxyHeight: Int, previewWidth: Float, previewHeight: Float, rotationDegrees: Int, lensFacing: Int )</ID>
+    <ID>LongParameterList:CameraFrameAnalyzer.kt$( imageProxy: androidx.camera.core.ImageProxy, previewView: PreviewView, faceDetector: FaceDetector, lensFacing: Int, detectionEngineMode: EngineType, onFacePointChanged: (Offset) -&gt; Unit, onFaceWarpParamsChanged: (FaceWarpParams) -&gt; Unit, onShowFocusIndicatorChanged: (Boolean) -&gt; Unit, isDualMode: Boolean = false, existingWarpParams: FaceWarpParams? = null )</ID>
+    <ID>LongParameterList:CameraOverlays.kt$( captureMode: MediaType, lensFacing: Int, zoomRatio: Float, aspectRatio: Int, filter: FilterType, beautySettings: BeautySettings, exposureCompensation: Int, whiteBalanceMode: Int, currentScene: ScenePreset, gridType: GridType, isStable: Boolean, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:CameraOverlays.kt$( color: Color, strokeWidth: Float, cornerLength: Float, left: Float, top: Float, right: Float, bottom: Float, corner: Corner )</ID>
+    <ID>LongParameterList:CameraOverlays.kt$( isStable: Boolean, gridType: GridType, facePoint: Offset?, focusAlpha: Float, showInfo: Boolean, lensFacing: Int, captureMode: MediaType, zoomRatio: Float, aspectRatio: Int, selectedFilter: FilterType, beautySettings: BeautySettings, exposureCompensation: Int, whiteBalanceMode: Int, currentScene: ScenePreset, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:CameraScreen.kt$( onNavigateToSettings: () -&gt; Unit, lensFacing: Int, onLensFacingChanged: (Int) -&gt; Unit, onActualLensFacingChanged: (Int) -&gt; Unit, panelState: CameraPanelState, cameraControl: CameraControl?, onCurrentSceneChanged: (ScenePreset) -&gt; Unit, onCurrentGridChanged: (GridType) -&gt; Unit, onNavigateToGallery: () -&gt; Unit, onCaptureClick: () -&gt; Unit, onCaptureModeChanged: (MediaType) -&gt; Unit, onSelectedFilterChanged: (FilterType) -&gt; Unit, onStyleFilterSelected: (StyleFilter) -&gt; Unit, onBeautySettingsChanged: (BeautySettings) -&gt; Unit, onAspectRatioChanged: (Int) -&gt; Unit, onExposureCompensationChanged: (Int) -&gt; Unit, onWhiteBalanceModeChanged: (Int) -&gt; Unit )</ID>
+    <ID>LongParameterList:CameraScreen.kt$( selectedFilter: FilterType, selectedStyleFilter: StyleFilter, faceDetectionEngineMode: FaceDetectionEngineMode, facePoint: Offset?, faceWarpParams: FaceWarpParams, showFaceDebugOverlay: Boolean, focusIndicatorAlpha: Float, lastMedia: MediaAsset?, zoomRatio: Float, minZoomRatio: Float, maxZoomRatio: Float, captureMode: MediaType, isRecording: Boolean, isStable: Boolean, panelState: CameraPanelState, showCameraInfo: Boolean, debugUiEnabled: Boolean, currentScene: ScenePreset, currentGrid: GridType, beautySettings: BeautySettings, beautyDebugState: BeautyDebugState, aspectRatio: Int, lensFacing: Int, exposureCompensation: Int, exposureRange: IntRange, whiteBalanceMode: Int, beautyStrategy: BeautyStrategy )</ID>
+    <ID>LongParameterList:CameraUseCasesBinder.kt$( context: Context, lifecycleOwner: androidx.lifecycle.LifecycleOwner, cameraProviderFuture: ListenableFuture&lt;ProcessCameraProvider&gt;, lensFacing: Int, captureMode: MediaType, aspectRatio: Int, previewView: PreviewView, bindPreviewSurfaceProvider: (Preview) -&gt; Unit, cameraExecutor: ExecutorService, beautySettings: BeautySettings, beautyStrategy: BeautyStrategy, detectionEngineMode: EngineType, videoCapture: VideoCapture&lt;Recorder&gt;, faceDetector: FaceDetector, onImageCaptureChanged: (ImageCapture) -&gt; Unit, onCameraControlChanged: (CameraControl) -&gt; Unit, onZoomRatioChanged: (Float) -&gt; Unit, onZoomRangeChanged: (minZoom: Float, maxZoom: Float) -&gt; Unit, onActualLensFacingChanged: (Int) -&gt; Unit, onFacePointChanged: (Offset) -&gt; Unit, onFaceWarpParamsChanged: (FaceWarpParams) -&gt; Unit, onShowFocusIndicatorChanged: (Boolean) -&gt; Unit )</ID>
+    <ID>LongParameterList:DebugScreen.kt$( isGenerating: Boolean, isPaused: Boolean, progress: String, logs: List&lt;String&gt;, onNavigateBack: () -&gt; Unit, onPauseResume: () -&gt; Unit, onStop: () -&gt; Unit, onPopulatePerson: () -&gt; Unit, onPopulateLandscape: () -&gt; Unit, onPopulateSwimwear: () -&gt; Unit, onPopulateSexy: () -&gt; Unit, onClearData: () -&gt; Unit, onScreenshot: () -&gt; Unit )</ID>
+    <ID>LongParameterList:FaceDataFlowTest.kt$( faceX: Float, faceY: Float, imageProxyWidth: Int, imageProxyHeight: Int, previewWidth: Float, previewHeight: Float, rotationDegrees: Int, lensFacing: Int )</ID>
+    <ID>LongParameterList:FaceLandmarkOverlay.kt$( state: FaceLandmarkDetectionState, show468Points: Boolean, showBigBeauty106: Boolean, showInsightFace106: Boolean, onToggle468Points: () -&gt; Unit, onToggleBigBeauty106: () -&gt; Unit, onToggleInsightFace106: () -&gt; Unit, modifier: Modifier = Modifier )</ID>
+    <ID>LongParameterList:GalleryScreen.kt$( context: Context, groupedMedia: List&lt;GroupedMedia&gt;, selectedIds: List&lt;Long&gt;, isSelectionMode: Boolean, thumbnailPositions: Map&lt;Long, Rect&gt;, mediaById: Map&lt;Long, MediaAsset&gt;, onThumbnailPositioned: (Long, Rect) -&gt; Unit, onMediaClick: (MediaAsset) -&gt; Unit, onMediaLongClick: (MediaAsset) -&gt; Unit, onDragSelectionStart: (MediaAsset) -&gt; Unit, onDragSelectionItem: (MediaAsset) -&gt; Unit, onDragSelectionEnd: () -&gt; Unit )</ID>
+    <ID>LongParameterList:GalleryScreen.kt$( isSelectionMode: Boolean, selectedCount: Int, groupingMode: GroupingMode, onNavigateBack: () -&gt; Unit, onToggleSelectionMode: () -&gt; Unit, onSelectAll: () -&gt; Unit, onDeleteSelected: () -&gt; Unit, onShareSelected: () -&gt; Unit, onGroupingModeSelected: (GroupingMode) -&gt; Unit, onManageDuplicates: () -&gt; Unit, onOpenTestDataTools: () -&gt; Unit )</ID>
+    <ID>LongParameterList:ImageEditScreen.kt$( originalBitmap: Bitmap?, mosaicShader: BitmapShader?, actions: MutableList&lt;DrawAction&gt;, currentMode: EditMode, currentColor: Int, onModeChange: (EditMode) -&gt; Unit, onColorChange: (Int) -&gt; Unit, onUndo: () -&gt; Unit, onSave: () -&gt; Unit, onDismiss: () -&gt; Unit )</ID>
+    <ID>LongParameterList:ImageProcessor.kt$ImageProcessor$( context: Context, imageCapture: ImageCapture, viewModel: MediaViewModel, filter: FilterType, beauty: BeautySettings, lensFacing: Int, mode: MediaType = MediaType.PHOTO, cachedFaces: List&lt;Face&gt; = emptyList(), beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY )</ID>
+    <ID>LongParameterList:MediaPager.kt$( onClose: () -&gt; Unit, showInfo: Boolean, showLandmarkAction: Boolean, showLandmarkOverlay: Boolean, onToggleInfo: () -&gt; Unit, onToggleLandmarks: () -&gt; Unit, onDelete: () -&gt; Unit, onShare: () -&gt; Unit, onStartOcr: () -&gt; Unit )</ID>
+    <ID>LongParameterList:SettingsScreen.kt$( themeMode: ThemeMode, appLanguage: AppLanguage, beautyStrategy: BeautyStrategy, debugUiEnabled: Boolean, showCameraInfoInPreview: Boolean, showFaceDebugOverlay: Boolean, showLogOverlay: Boolean, faceDetectionEngineMode: FaceDetectionEngineMode, faceDetectionLandmarkModeEnabled: Boolean, adaptiveFaceDetectionIntervalEnabled: Boolean, faceDetectIntervalProfile: FaceDetectIntervalProfile, debugShaderMode: Int, insightFaceRoiDetectorType: InsightFaceRoiDetectorType, insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType, onThemeModeSelected: (ThemeMode) -&gt; Unit, onAppLanguageSelected: (AppLanguage) -&gt; Unit, onBeautyStrategySelected: (BeautyStrategy) -&gt; Unit, onDebugUiEnabledChange: (Boolean) -&gt; Unit, onShowCameraInfoInPreviewChange: (Boolean) -&gt; Unit, onShowFaceDebugOverlayChange: (Boolean) -&gt; Unit, onShowLogOverlayChange: (Boolean) -&gt; Unit, onFaceDetectionEngineModeSelected: (FaceDetectionEngineMode) -&gt; Unit, onFaceDetectionLandmarkModeEnabledChange: (Boolean) -&gt; Unit, onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -&gt; Unit, onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -&gt; Unit, onDebugShaderModeSelected: (Int) -&gt; Unit, onInsightFaceRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -&gt; Unit, onInsightFaceLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -&gt; Unit, onNavigateBack: () -&gt; Unit )</ID>
+    <ID>LoopWithTooManyJumpStatements:GpuBeautyProcessor.kt$GpuBeautyProcessor$for</ID>
+    <ID>LoopWithTooManyJumpStatements:ImageProcessor.kt$ImageProcessorImpl$for</ID>
+    <ID>LoopWithTooManyJumpStatements:SampleDataGenerator.kt$SampleDataGenerator$for</ID>
+    <ID>MagicNumber:CameraComponents.kt$0.001f</ID>
+    <ID>MagicNumber:CameraComponents.kt$0.1f</ID>
+    <ID>MagicNumber:CameraComponents.kt$0.38f</ID>
+    <ID>MagicNumber:CameraComponents.kt$0.3f</ID>
+    <ID>MagicNumber:CameraComponents.kt$0.72f</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFF9B2335</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFF9B3D6A</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFB22222</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFC43343</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFCD5C5C</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFD4757D</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFDC143C</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFE0527C</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFF1493</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFF6B9D</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFF7F50</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFF8DAA</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFFA07A</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFFA85C</ID>
+    <ID>MagicNumber:CameraComponents.kt$0xFFFFB6C1</ID>
+    <ID>MagicNumber:CameraComponents.kt$1.08f</ID>
+    <ID>MagicNumber:CameraComponents.kt$1.4f</ID>
+    <ID>MagicNumber:CameraComponents.kt$1.5f</ID>
+    <ID>MagicNumber:CameraComponents.kt$180f</ID>
+    <ID>MagicNumber:CameraComponents.kt$3</ID>
+    <ID>MagicNumber:CameraComponents.kt$4</ID>
+    <ID>MagicNumber:CameraComponents.kt$5</ID>
+    <ID>MagicNumber:CameraComponents.kt$5000f</ID>
+    <ID>MagicNumber:CameraComponents.kt$50f</ID>
+    <ID>MagicNumber:CameraControls.kt$0.6f</ID>
+    <ID>MagicNumber:CameraControls.kt$3.2f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.0001f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.005f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.008f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.010f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.018f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.01f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.02f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.03f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.04f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.05f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.06f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.102f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.128f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.17f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.28f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.2f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.30f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.31f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.34f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.45f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.5f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.85f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0.9f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF00CED1</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF00E5FF</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF26A69A</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF4CAF50</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF4DB6AC</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF673AB7</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF76FF03</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF8BC34A</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF9C27B0</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFF9E9E9E</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFF00FF</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFF4081</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFF6D00</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFF8F00</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFF9800</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFFB300</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$0xFFFFD700</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$1.28f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$1.40f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$1.8f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$10</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$10f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$120f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$14</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$15f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$16</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$16f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$18</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$200f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$20f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$22</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$25</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$29</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$3</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$32</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$3f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$4</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$44</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$45</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$46</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$49</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$4f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$5</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$5.0f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$50</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$50f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$52</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$53</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$54</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$55</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$56</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$57</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$58</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$59</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$60</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$61</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$62</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$63</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$6f</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$7</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$72</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$74</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$75</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$77</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$78</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$84</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$85</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$86</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$87</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$88</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$89</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$90</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$91</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$92</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$93</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$94</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$95</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$96</ID>
+    <ID>MagicNumber:CameraDebugOverlay.kt$9f</ID>
+    <ID>MagicNumber:CameraFrameAnalyzer.kt$180</ID>
+    <ID>MagicNumber:CameraFrameAnalyzer.kt$270</ID>
+    <ID>MagicNumber:CameraFrameAnalyzer.kt$90</ID>
+    <ID>MagicNumber:CameraOverlays.kt$0.5f</ID>
+    <ID>MagicNumber:CameraOverlays.kt$0.618f</ID>
+    <ID>MagicNumber:CameraOverlays.kt$0.6f</ID>
+    <ID>MagicNumber:CameraOverlays.kt$0xFF00E5FF</ID>
+    <ID>MagicNumber:CameraOverlays.kt$10f</ID>
+    <ID>MagicNumber:CameraOverlays.kt$3</ID>
+    <ID>MagicNumber:CameraOverlays.kt$4</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFF00C853</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFF80CBC4</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFF80D8FF</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFFA5D6A7</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFFFF80AB</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFFFF8A80</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFFFFA000</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFFFFAB91</ID>
+    <ID>MagicNumber:CameraPreviewContent.kt$0xFFFFE082</ID>
+    <ID>MagicNumber:CameraScreen.kt$0.5f</ID>
+    <ID>MagicNumber:CameraScreen.kt$1100L</ID>
+    <ID>MagicNumber:CameraScreen.kt$1500L</ID>
+    <ID>MagicNumber:CameraScreen.kt$180</ID>
+    <ID>MagicNumber:CameraScreen.kt$2</ID>
+    <ID>MagicNumber:CameraScreen.kt$250</ID>
+    <ID>MagicNumber:CameraScreen.kt$270</ID>
+    <ID>MagicNumber:CameraScreen.kt$3.2f</ID>
+    <ID>MagicNumber:CameraScreen.kt$320</ID>
+    <ID>MagicNumber:CameraScreen.kt$320L</ID>
+    <ID>MagicNumber:CameraScreen.kt$42f</ID>
+    <ID>MagicNumber:CameraScreen.kt$90</ID>
+    <ID>MagicNumber:CameraScreen.kt$&lt;no name provided&gt;$0.5f</ID>
+    <ID>MagicNumber:DebugScreen.kt$0xFF2E7D32</ID>
+    <ID>MagicNumber:DocumentDetectionOverlay.kt$40f</ID>
+    <ID>MagicNumber:DocumentDetectionOverlay.kt$6f</ID>
+    <ID>MagicNumber:DuplicateImageDetector.kt$DuplicateImageDetector$0.114</ID>
+    <ID>MagicNumber:DuplicateImageDetector.kt$DuplicateImageDetector$0.299</ID>
+    <ID>MagicNumber:DuplicateImageDetector.kt$DuplicateImageDetector$0.587</ID>
+    <ID>MagicNumber:DuplicateImageDetector.kt$DuplicateImageDetector$0xFF</ID>
+    <ID>MagicNumber:DuplicateImageDetector.kt$DuplicateImageDetector$16</ID>
+    <ID>MagicNumber:DuplicateImageDetector.kt$DuplicateImageDetector$8</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$0.5f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$0xFF00FF00</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$0xFF4488FF</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$0xFFFFB4AB</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$0xFFFFC107</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$10</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$103</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$105</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$107</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$109</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$10f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$110</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$127</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$13</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$132</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$133</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$136</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$14</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$144</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$145</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$148</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$149</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$150</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$152</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$153</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$154</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$155</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$16</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$162</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$168</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$16f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$17</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$172</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$174</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$176</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$178</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$180f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$183</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$185</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$18f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$19</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$191</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$193</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$195</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$196</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$197</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$198</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$21</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$217</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$226</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$23</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$234</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$236</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$241</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$248</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$251</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$253</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$256</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$257</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$26</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$260</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$267</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$269</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$27</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$270</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$270f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$275</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$276</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$278</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$279</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$280</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$281</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$282</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$283</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$284</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$285</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$286</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$287</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$288</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$289</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$290</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$291</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$292</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$293</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$294</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$295</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$296</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$297</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$298</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$299</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$3</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$30</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$300</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$301</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$302</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$303</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$304</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$305</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$306</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$307</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$308</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$309</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$310</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$311</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$312</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$313</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$314</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$315</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$316</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$317</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$318</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$319</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$320</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$321</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$322</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$323</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$324</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$325</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$326</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$327</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$328</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$329</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$33</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$330</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$331</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$332</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$333</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$334</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$335</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$336</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$337</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$338</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$339</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$34</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$340</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$341</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$342</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$343</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$344</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$345</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$346</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$347</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$348</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$349</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$35</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$350</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$351</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$352</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$353</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$354</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$355</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$356</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$357</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$358</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$359</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$36</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$360</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$361</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$362</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$363</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$364</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$365</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$366</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$367</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$368</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$369</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$37</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$370</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$371</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$372</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$373</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$374</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$375</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$377</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$378</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$379</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$38</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$380</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$381</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$382</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$389</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$39</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$397</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$4</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$40</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$400</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$402</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$409</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$41</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$415</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$417</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$42</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$420</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$43</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$44</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$446</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$45</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$454</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$46</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$461</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$463</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$468</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$473</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$49</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$5</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$52</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$53</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$54</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$55</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$56</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$58</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$5f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$6</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$61</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$63</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$65</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$66</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$67</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$70</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$78</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$80</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$81</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$82</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$84</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$87</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$88</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$8f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$90f</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$91</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$93</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$94</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$95</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$98</ID>
+    <ID>MagicNumber:FaceLandmarkOverlay.kt$9f</ID>
+    <ID>MagicNumber:GalleryScreen.kt$1080f</ID>
+    <ID>MagicNumber:GalleryScreen.kt$1920f</ID>
+    <ID>MagicNumber:GalleryScreen.kt$3</ID>
+    <ID>MagicNumber:GalleryScreen.kt$300</ID>
+    <ID>MagicNumber:GalleryScreen.kt$400</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.000001f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.0001f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.01f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.028f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.02f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.055f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.05f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.06f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.10f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.114f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.15</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.16f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.18f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.24f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.25</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.299f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.2f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.42f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.45f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.4f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.5</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.587f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.5f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.75f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.78f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0.98f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$0xFF</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$1.35f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$1.45f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$10f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$120</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$130</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$135</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$15f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$16</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$18f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$20</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$20f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$24f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$255</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$255f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$26f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$3</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$30f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$3f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$4f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$50f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$5f</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$6</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$8</ID>
+    <ID>MagicNumber:GpuBeautyProcessor.kt$GpuBeautyProcessor$8f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$10f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$1200</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$1200f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$120f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$200f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$3</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$400f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$40f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$600f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$60f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$800</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$800f</ID>
+    <ID>MagicNumber:ImageEditScreen.kt$95</ID>
+    <ID>MagicNumber:ImageProcessor.kt$0.05f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$0.08f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$0.1f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$0.45f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$0.5f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$212</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.10f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.14f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.15f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.16f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.18f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.20f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.22f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.24f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.25f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.2f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.30f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.3f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.4f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.65f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$0.75f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$1.3f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$120</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$130</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$150</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$180</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$20</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$24</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$255</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$3</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$30</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$4</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$4f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$50f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$58f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$6f</ID>
+    <ID>MagicNumber:ImageProcessor.kt$ImageProcessorImpl$8</ID>
+    <ID>MagicNumber:LogOverlay.kt$0.7f</ID>
+    <ID>MagicNumber:LogOverlay.kt$0.9f</ID>
+    <ID>MagicNumber:LogOverlay.kt$0xFFFFA000</ID>
+    <ID>MagicNumber:MainActivity.kt$MainActivity$400</ID>
+    <ID>MagicNumber:MediaPager.kt$0.01f</ID>
+    <ID>MagicNumber:MediaPager.kt$1.02f</ID>
+    <ID>MagicNumber:MediaPager.kt$4f</ID>
+    <ID>MagicNumber:MediaRepositoryImpl.kt$MediaRepositoryImpl$10L</ID>
+    <ID>MagicNumber:MediaType.kt$AspectRatio.RATIO_FULL$3</ID>
+    <ID>MagicNumber:MediaViewModel.kt$MediaViewModel$20</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$0.114</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$0.299</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$0.4f</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$0.587</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$10</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$10.0f</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$10000</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$11</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$15</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$180</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$20</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$200</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$2000</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$2000L</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$3</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$4</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$40</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$400</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$5</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$500</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$5120</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$6</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$7</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$8</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$9</ID>
+    <ID>MagicNumber:SampleDataGenerator.kt$SampleDataGenerator$95</ID>
+    <ID>MagicNumber:SettingsScreen.kt$3</ID>
+    <ID>MagicNumber:SettingsScreen.kt$4</ID>
+    <ID>MagicNumber:SettingsScreen.kt$5</ID>
+    <ID>MatchingDeclarationName:OcrUseCase.kt$OcrProcessor</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$// cheekOffsetY = max(eyeMouthDist * (0.06 + roundFace * 0.05 - longFace * 0.03), faceRadius * (0.03 + roundFace * 0.04 - longFace * 0.01))</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiLeft, roiBottom), end = Offset(roiLeft + cornerSize, roiBottom), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiLeft, roiBottom), end = Offset(roiLeft, roiBottom - cornerSize), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiLeft, roiTop), end = Offset(roiLeft + cornerSize, roiTop), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiLeft, roiTop), end = Offset(roiLeft, roiTop + cornerSize), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiRight, roiBottom), end = Offset(roiRight - cornerSize, roiBottom), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiRight, roiBottom), end = Offset(roiRight, roiBottom - cornerSize), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiRight, roiTop), end = Offset(roiRight - cornerSize, roiTop), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraDebugOverlay.kt$drawLine(color = Color.Yellow, start = Offset(roiRight, roiTop), end = Offset(roiRight, roiTop + cornerSize), strokeWidth = 4.dp.toPx())</ID>
+    <ID>MaxLineLength:CameraPreviewContent.kt$"Face OK C(${"%.2f".format(uiState.faceWarpParams.faceCenterX)},${"%.2f".format(uiState.faceWarpParams.faceCenterY)}) R${"%.2f".format(uiState.faceWarpParams.faceRadius)}"</ID>
+    <ID>MaxLineLength:CameraPreviewContent.kt$"RendererErr ${uiState.beautyDebugState.rendererErrorCategory}: ${uiState.beautyDebugState.rendererErrorReason.ifBlank { "unknown" }}"</ID>
+    <ID>MaxLineLength:CameraPreviewContent.kt$val perfCompact = "FPS ${"%.1f".format(uiState.beautyDebugState.fps)} | ${uiState.beautyDebugState.processingMs}ms/${uiState.beautyDebugState.delayMs}ms | D${uiState.beautyDebugState.nullFrames}"</ID>
+    <ID>MaxLineLength:CameraScreen.kt$Logger.d("Camera", "Switched to lensFacing=$lensFacing, isFront=${lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT}")</ID>
+    <ID>MaxLineLength:CameraScreen.kt$android.util.Log.d("PicMe:Camera", "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")</ID>
+    <ID>MaxLineLength:CameraScreen.kt$renderPerfStats</ID>
+    <ID>MaxLineLength:CameraUseCasesBinder.kt$Logger.dThrottled("Camera", "Camera:frameCount", "ImageAnalysis frame #$frameCount (~${frameCount}fps since bind) strategy=$beautyStrategy")</ID>
+    <ID>MaxLineLength:FaceLandmarkOverlay.kt$val faceOvalIndices = setOf(10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109)</ID>
+    <ID>MaxLineLength:FaceLandmarkOverlay.kt$val mouthIndices = setOf(61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 375, 321, 78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95, 84, 183)</ID>
+    <ID>MaxLineLength:FaceLandmarkOverlay.kt$val noseIndices = setOf(1, 2, 3, 4, 5, 6, 19, 94, 168, 195, 196, 197, 198, 174, 217, 236, 275, 248, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301, 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313, 314, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 329, 330, 331, 332, 333, 334, 335, 336, 337, 338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352, 353, 354, 355, 356, 357, 358, 359, 360)</ID>
+    <ID>MaxLineLength:ImageProcessor.kt$ImageProcessorImpl$Logger.d("ImageProcessor", "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")</ID>
+    <ID>MaxLineLength:ImageProcessor.kt$ImageProcessorImpl$Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")</ID>
+    <ID>MaxLineLength:MediaRepositoryImpl.kt$MediaRepositoryImpl$Log.d("PicMe:Gallery", "Deletion process completed. Pending auth: ${pendingDeleteUris.size}, Recoverable: ${pendingRecoverableIntentSender != null}")</ID>
+    <ID>MaxLineLength:SampleDataGenerator.kt$SampleDataGenerator$"Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"</ID>
+    <ID>MaxLineLength:SampleDataGenerator.kt$SampleDataGenerator$"Portrait Candidates -&gt; DUITANG:${duitang.size}, PROFESSIONAL:${xiuren.size + tuchong.size + metcn.size + p500.size}, SOCIAL:${xhs.size + weibo.size}, HUABAN:${huaban.size}"</ID>
+    <ID>MaxLineLength:SampleDataGenerator.kt$SampleDataGenerator$if</ID>
+    <ID>NestedBlockDepth:ImageProcessor.kt$ImageProcessorImpl$private fun applyMeshWarp(source: Bitmap, faces: List&lt;Face&gt;, beauty: BeautySettings) : Bitmap</ID>
+    <ID>PrintStackTrace:MlKitOcrProcessor.kt$MlKitOcrProcessor$error</ID>
+    <ID>ReturnCount:CameraDebugOverlay.kt$private fun DrawScope.drawBlushControlPoints(points: List&lt;Offset&gt;)</ID>
+    <ID>SpacingBetweenPackageAndImports:CameraScreen.kt$ </ID>
+    <ID>SwallowedException:CameraComponents.kt$e: Exception</ID>
+    <ID>SwallowedException:DuplicateImageDetector.kt$DuplicateImageDetector$e: Exception</ID>
+    <ID>SwallowedException:FindDuplicateMediaUseCase.kt$FindDuplicateMediaUseCase$e: Exception</ID>
+    <ID>SwallowedException:ImageEditScreen.kt$e: Exception</ID>
+    <ID>SwallowedException:ScreenshotUtil.kt$ScreenshotUtil$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CameraComponents.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:CameraFrameAnalyzer.kt$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:CameraUseCasesBinder.kt$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:DuplicateImageDetector.kt$DuplicateImageDetector$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FaceLandmarkOverlay.kt$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:FindDuplicateMediaUseCase.kt$FindDuplicateMediaUseCase$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:GlBeautyPreviewStrategy.kt$GlBeautyPreviewStrategy$error: Throwable</ID>
+    <ID>TooGenericExceptionCaught:GpuBeautyProcessor.kt$GpuBeautyProcessor$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImageEditScreen.kt$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImageProcessor.kt$ImageProcessorImpl.&lt;no name provided&gt;$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MediaRepositoryImpl.kt$MediaRepositoryImpl$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MediaViewModel.kt$MediaViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:MlKitOcrProcessor.kt$MlKitOcrProcessor$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:SampleDataGenerator.kt$SampleDataGenerator$error: Exception</ID>
+    <ID>TooGenericExceptionCaught:ScreenshotUtil.kt$ScreenshotUtil$e: Exception</ID>
+    <ID>TooManyFunctions:CameraComponents.kt$com.picme.features.camera.components.CameraComponents.kt</ID>
+    <ID>TooManyFunctions:CameraDebugOverlay.kt$com.picme.features.camera.CameraDebugOverlay.kt</ID>
+    <ID>TooManyFunctions:GalleryScreen.kt$com.picme.features.gallery.GalleryScreen.kt</ID>
+    <ID>TooManyFunctions:GpuBeautyProcessor.kt$GpuBeautyProcessor : BeautyProcessor</ID>
+    <ID>TooManyFunctions:MediaRepositoryImpl.kt$MediaRepositoryImpl : MediaRepository</ID>
+    <ID>TooManyFunctions:MediaViewModel.kt$MediaViewModel : ViewModel</ID>
+    <ID>TooManyFunctions:SampleDataGenerator.kt$SampleDataGenerator</ID>
+    <ID>TooManyFunctions:UserPreferencesRepository.kt$UserPreferencesRepository : UserSettingsRepository</ID>
+    <ID>TooManyFunctions:UserSettingsRepository.kt$UserSettingsRepository</ID>
+    <ID>TrailingWhitespace:CameraComponents.kt$com.picme.features.camera.components.CameraComponents.kt</ID>
+    <ID>TrailingWhitespace:CameraDebugOverlay.kt$com.picme.features.camera.CameraDebugOverlay.kt</ID>
+    <ID>TrailingWhitespace:CameraFrameAnalyzer.kt$com.picme.features.camera.CameraFrameAnalyzer.kt</ID>
+    <ID>TrailingWhitespace:CameraOverlays.kt$com.picme.features.camera.components.CameraOverlays.kt</ID>
+    <ID>TrailingWhitespace:CameraRuntimeState.kt$com.picme.features.camera.CameraRuntimeState.kt</ID>
+    <ID>TrailingWhitespace:CameraScreen.kt$com.picme.features.camera.CameraScreen.kt</ID>
+    <ID>TrailingWhitespace:DocumentDetectionOverlay.kt$com.picme.features.camera.components.DocumentDetectionOverlay.kt</ID>
+    <ID>TrailingWhitespace:DuplicateGroup.kt$com.picme.domain.model.DuplicateGroup.kt</ID>
+    <ID>TrailingWhitespace:DuplicateImageDetector.kt$com.picme.core.common.DuplicateImageDetector.kt</ID>
+    <ID>TrailingWhitespace:FaceDataFlowTest.kt$com.picme.features.camera.FaceDataFlowTest.kt</ID>
+    <ID>TrailingWhitespace:FaceLandmarkOverlay.kt$com.picme.features.gallery.components.FaceLandmarkOverlay.kt</ID>
+    <ID>TrailingWhitespace:FindDuplicateMediaUseCase.kt$com.picme.domain.usecase.FindDuplicateMediaUseCase.kt</ID>
+    <ID>TrailingWhitespace:GalleryScreen.kt$com.picme.features.gallery.GalleryScreen.kt</ID>
+    <ID>TrailingWhitespace:GetGroupedMediaUseCaseTest.kt$com.picme.domain.usecase.GetGroupedMediaUseCaseTest.kt</ID>
+    <ID>TrailingWhitespace:GpuBeautyProcessor.kt$com.picme.core.image.GpuBeautyProcessor.kt</ID>
+    <ID>TrailingWhitespace:LipColorAlgorithmTest.kt$com.picme.core.image.LipColorAlgorithmTest.kt</ID>
+    <ID>TrailingWhitespace:MediaPager.kt$com.picme.features.gallery.components.MediaPager.kt</ID>
+    <ID>TrailingWhitespace:MediaRepository.kt$com.picme.domain.repository.MediaRepository.kt</ID>
+    <ID>TrailingWhitespace:MediaRepositoryImpl.kt$com.picme.data.repository.MediaRepositoryImpl.kt</ID>
+    <ID>TrailingWhitespace:MediaViewModel.kt$com.picme.features.gallery.MediaViewModel.kt</ID>
+    <ID>TrailingWhitespace:SettingsScreen.kt$com.picme.features.settings.SettingsScreen.kt</ID>
+    <ID>UnusedImports:BeautySettingsTest.kt$import com.picme.beauty.api.BeautySettings</ID>
+    <ID>UnusedImports:CameraComponents.kt$import androidx.compose.foundation.lazy.rememberLazyListState</ID>
+    <ID>UnusedImports:CameraComponents.kt$import androidx.compose.runtime.LaunchedEffect</ID>
+    <ID>UnusedImports:CameraComponents.kt$import androidx.compose.ui.geometry.Offset</ID>
+    <ID>UnusedImports:CameraDebugOverlay.kt$import android.graphics.PointF</ID>
+    <ID>UnusedImports:CameraDebugOverlay.kt$import com.picme.core.common.Logger</ID>
+    <ID>UnusedImports:CameraPreviewContent.kt$import com.picme.domain.model.BeautyStrategy</ID>
+    <ID>UnusedImports:CameraPreviewStrategies.kt$import com.picme.core.common.Logger</ID>
+    <ID>UnusedImports:CameraRuntimeState.kt$import com.picme.beauty.api.facedetect.EngineType</ID>
+    <ID>UnusedImports:CameraScreen.kt$import com.picme.beauty.api.facedetect.FaceDetectionSource</ID>
+    <ID>UnusedImports:CameraScreen.kt$import com.picme.beauty.internal.facedetect.Face106ToWarpParams</ID>
+    <ID>UnusedImports:CameraTestCommand.kt$import com.picme.beauty.api.BeautySettings</ID>
+    <ID>UnusedImports:CameraTestCommand.kt$import com.picme.beauty.api.FilterType</ID>
+    <ID>UnusedImports:CameraTestCommand.kt$import com.picme.beauty.api.StyleFilter</ID>
+    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import android.content.Context</ID>
+    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import com.picme.features.camera.CameraAspectRatio</ID>
+    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import com.picme.features.camera.GridType</ID>
+    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import kotlinx.coroutines.launch</ID>
+    <ID>UnusedImports:CameraUseCasesBinder.kt$import java.nio.ByteBuffer</ID>
+    <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.foundation.border</ID>
+    <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.foundation.shape.RoundedCornerShape</ID>
+    <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.material3.MaterialTheme</ID>
+    <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.ui.Alignment</ID>
+    <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.ui.graphics.drawscope.DrawScope</ID>
+    <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.ui.unit.dp</ID>
+    <ID>UnusedImports:FaceLandmarkOverlay.kt$import androidx.core.graphics.scale</ID>
+    <ID>UnusedImports:FaceLandmarkOverlay.kt$import com.picme.beauty.api.facedetect.FaceDetector</ID>
+    <ID>UnusedImports:FaceLandmarkOverlay.kt$import java.nio.ByteBuffer</ID>
+    <ID>UnusedImports:FaceLandmarkOverlay.kt$import kotlin.math.max</ID>
+    <ID>UnusedImports:ImageProcessor.kt$import com.picme.beauty.api.PhotoProcessException</ID>
+    <ID>UnusedImports:ImageProcessor.kt$import kotlin.math.abs</ID>
+    <ID>UnusedImports:SampleDataGenerator.kt$import kotlin.coroutines.resume</ID>
+    <ID>UnusedImports:SampleDataGenerator.kt$import kotlinx.coroutines.suspendCancellableCoroutine</ID>
+    <ID>UnusedParameter:CameraComponents.kt$onDismiss: () -&gt; Unit</ID>
+    <ID>UnusedParameter:CameraComponents.kt$onToggleEnabled: () -&gt; Unit</ID>
+    <ID>UnusedParameter:CameraDebugOverlay.kt$slimFaceValue: Float</ID>
+    <ID>UnusedParameter:CameraUseCasesBinder.kt$beautySettings: BeautySettings</ID>
+    <ID>UnusedParameter:DocumentDetectionOverlay.kt$isDocumentDetected: Boolean = false</ID>
+    <ID>UnusedParameter:ImageProcessor.kt$imageHeight: Int</ID>
+    <ID>UnusedParameter:ImageProcessor.kt$imageWidth: Int</ID>
+    <ID>UnusedParameter:SampleDataGenerator.kt$SampleDataGenerator$bitmap: Bitmap</ID>
+    <ID>UnusedPrivateMember:CameraComponents.kt$@Composable private fun ExpandableSection( title: String, isExpanded: Boolean, onToggle: () -&gt; Unit, content: @Composable ColumnScope.() -&gt; Unit )</ID>
+    <ID>UnusedPrivateMember:CameraDebugOverlay.kt$@Composable private fun FaceDebugOverlaySingle( faceWarpParams: FaceWarpParams, slimFaceValue: Float, aspectRatio: Int = AspectRatio.RATIO_FULL )</ID>
+    <ID>UnusedPrivateMember:CameraDebugOverlay.kt$@Composable private fun FaceDebugStatusPanel( requestedLabel: String, requestedColor: Color, detectionLabel: String, detectionColor: Color, modifier: Modifier = Modifier )</ID>
+    <ID>UnusedPrivateMember:CameraOverlays.kt$@Composable private fun OcrTextPreviewOverlay( text: String, modifier: Modifier = Modifier )</ID>
+    <ID>UnusedPrivateMember:CameraOverlays.kt$private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCorners( color: Color, strokeWidth: Float, bracketLen: Float )</ID>
+    <ID>UnusedPrivateMember:CameraPreviewContent.kt$private fun mapProviderFailReason(reason: String): String</ID>
+    <ID>UnusedPrivateMember:ImageProcessor.kt$ImageProcessorImpl$private fun applyBigEyesFallback(bitmap: Bitmap, strength: Float, faces: List&lt;Face&gt;): Bitmap</ID>
+    <ID>UnusedPrivateMember:ImageProcessor.kt$ImageProcessorImpl$private fun applyMeshWarp(source: Bitmap, faces: List&lt;Face&gt;, beauty: BeautySettings) : Bitmap</ID>
+    <ID>UnusedPrivateMember:ImageProcessor.kt$ImageProcessorImpl$private fun applySlimFaceFallback(bitmap: Bitmap, strength: Float, faces: List&lt;Face&gt;): Bitmap</ID>
+    <ID>UnusedPrivateMember:ImageProcessor.kt$ImageProcessorImpl$private fun applySmoothing(source: Bitmap, intensity: Float) : Bitmap</ID>
+    <ID>UnusedPrivateMember:ImageProcessor.kt$ImageProcessorImpl$private fun applySmoothingFallback(bitmap: Bitmap, strength: Float, faces: List&lt;Face&gt;): Bitmap</ID>
+    <ID>UnusedPrivateMember:ImageProcessor.kt$ImageProcessorImpl$private fun applyWhiteningFallback(bitmap: Bitmap, strength: Float, faces: List&lt;Face&gt;): Bitmap</ID>
+    <ID>UnusedPrivateProperty:CameraDebugOverlay.kt$val totalCount = allContours.totalPointCount()</ID>
+    <ID>UnusedPrivateProperty:CameraTestCommand.kt$CameraTestCommand.Companion$private const val TAG = "PicMe:CameraTestCommand"</ID>
+    <ID>UnusedPrivateProperty:CameraTestCommandDispatcher.kt$CameraTestCommandDispatcher$private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)</ID>
+    <ID>UnusedPrivateProperty:ImageProcessor.kt$ImageProcessorImpl$private val beautyProcessor: BeautyProcessor</ID>
+    <ID>UseCheckOrError:ImageProcessor.kt$ImageProcessorImpl$throw IllegalStateException("PhotoProcessor is null, GPU photo processing not available")</ID>
+    <ID>UseIfInsteadOfWhen:CameraCoordinateTest.kt$when (rotationDegrees) { 180 -&gt; Pair(1f - mirroredX, 1f - normY) else -&gt; Pair(mirroredX, normY) }</ID>
+    <ID>UseIfInsteadOfWhen:CameraRuntimeState.kt$when (aspectRatio) { AspectRatio.RATIO_FULL -&gt; PreviewView.ScaleType.FILL_CENTER else -&gt; PreviewView.ScaleType.FIT_CENTER }</ID>
+    <ID>UseIfInsteadOfWhen:CameraScreen.kt$when (aspectRatio) { AspectRatio.RATIO_FULL -&gt; PreviewView.ScaleType.FILL_CENTER else -&gt; PreviewView.ScaleType.FIT_CENTER }</ID>
+    <ID>UseIfInsteadOfWhen:CameraUseCasesBinder.kt$when { useCaseGroup != null -&gt; { cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, useCaseGroup) } else -&gt; { when (captureMode) { MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -&gt; { cameraProvider.bindToLifecycle( lifecycleOwner, cameraSelector, preview!!, imageCapture, imageAnalysis ) } MediaType.VIDEO -&gt; { cameraProvider.bindToLifecycle( lifecycleOwner, cameraSelector, preview!!, videoCapture, imageAnalysis ) } } } }</ID>
+    <ID>UseIfInsteadOfWhen:FaceDataFlowTest.kt$FaceDataFlowTest$when (testCase.rotationDegrees) { 180 -&gt; { assertTrue( "[${testCase.name}] 180度时眼睛应在人脸下方", leftEyeResult.y &gt; faceResult.y ) } else -&gt; { assertTrue( "[${testCase.name}] 眼睛应在人脸上方", leftEyeResult.y &lt; faceResult.y ) } }</ID>
+    <ID>UseIfInsteadOfWhen:MediaRepositoryImpl.kt$MediaRepositoryImpl$when (mediaType) { MediaType.VIDEO -&gt; 2L else -&gt; 1L }</ID>
+    <ID>VariableNaming:CameraAlgorithmTest.kt$CameraAlgorithmTest$private val LIP_CONTOUR_POINT_COUNT = 20</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val faceY_4_3 = IMG_W_4_3 / 2f // 480（4:3 竖屏中心）</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val normY_16_9 = (IMG_W_16_9 / 2f) / IMG_W_16_9.toFloat() // 640/1280 = 0.5</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val normY_4_3 = (IMG_W_4_3 / 2f) / IMG_W_4_3.toFloat() // 480/960 = 0.5</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val normY_correct = faceY_4_3 / IMG_W_4_3.toFloat() // 480/960 = 0.5</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val normY_wrong = faceY_4_3 / IMG_W_16_9.toFloat() // 480/1280 = 0.375（误用 16:9 高度）</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val screenY_contentArea = normY * PREVIEW_H // 480（无黑边，两者等价）</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val screenY_correct = normY_correct * PREVIEW_H // 960</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val screenY_fullHeight = normY * PREVIEW_H // 480</ID>
+    <ID>VariableNaming:CameraCoordinateTest.kt$CoordinateMathTest$val screenY_wrong = normY_wrong * PREVIEW_H // 720</ID>
+    <ID>WildcardImport:BeautySettingsTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:DuplicateImageDetectorTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:ExampleUnitTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:GetGroupedMediaUseCaseTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:LipColorAlgorithmTest.kt$import org.junit.Assert.*</ID>
+    <ID>WildcardImport:MediaAssetTest.kt$import org.junit.Assert.*</ID>
+  </CurrentIssues>
+</SmellBaseline>
