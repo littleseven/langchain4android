@@ -2,8 +2,8 @@
 
 **版本**：6.0
 **状态**：实施中（大美丽 BIG_BEAUTY 单引擎）
-**最后更新**：2026-05-01（同步多 Pass 现状、容灾可观测性与文档清理）
-**技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + 拍照 CPU/GPU 混合处理
+**最后更新**：2026-05-03（GPU 离屏渲染拍照已落地，`PhotoProcessorImpl` 生产可用）
+**技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + GPU 离屏渲染拍照（CPU Fallback 降级）
 
 ---
 
