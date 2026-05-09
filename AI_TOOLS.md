@@ -68,6 +68,8 @@ ln -sf ../../.lingma/skills/my-skill .kimi/skills/my-skill
 | `gpupixel-porting` | 历史参考：GPUPixel 算法移植规范（GPUPixel 已移除） | 全平台 |
 | `image-quality-checker` | 截屏图片质量分析 | 全平台 |
 | `mediapipe-landmark-mapping` | MediaPipe 关键点映射规范 | 全平台 |
+| `onnx-model-integration` | ONNX 模型接入 Checklist（颜色/归一化/激活函数） | 全平台 |
+| `egl-state-machine` | EGL 上下文与离屏渲染状态机规范 | 全平台 |
 
 ## 角色定义文件
 
