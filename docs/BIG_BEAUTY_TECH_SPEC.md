@@ -665,10 +665,15 @@ QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIS
 
 ### A.1 概述
 
-在图像变形（如瘦脸、大眼）实现中，**映射方向**是决定效果正确性的核心概念。大美丽引擎同时涉及两种映射方式：
+在图像变形（如瘦脸、大眼）实现中，**映射方向**是决定效果正确性的核心概念。
+
+> **2026-05 更新**：GPU 离屏渲染拍照已落地，拍照路径复用同一套 Shader 管线，统一采用**反向映射（Backward Mapping）**。原 CPU Canvas 正向映射路径已废弃，仅保留作为历史参考。
+
+大美丽引擎当前映射方式：
 
 - **预览（Shader）**：反向映射（Backward Mapping）
-- **拍照（CPU）**：正向映射（Forward Mapping）
+- **拍照（GPU）**：反向映射（Backward Mapping）✅ 当前标准路径
+- **拍照（CPU）**：正向映射（Forward Mapping）⚠️ 已废弃，仅作历史参考
 
 ### A.2 正向映射（Forward Mapping）
 
