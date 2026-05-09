@@ -35,7 +35,9 @@ tasks.register<NoFullyQualifiedNameTask>("checkNoFullyQualifiedName") {
         }
 }
 
-// 绑定到编译前检查（暂时禁用，因检查耗时较长）
+// 绑定到编译前检查
+// 注：该任务仅扫描 com.picme.* 的完全限定名，不包含第三方库
+// 如需完整扫描，可扩展正则表达式
 // tasks.named("preBuild").configure {
 //     dependsOn("checkNoFullyQualifiedName")
 // }

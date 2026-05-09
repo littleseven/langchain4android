@@ -430,7 +430,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             kotlin.math.abs(params.slimFace) > 0.001f ||
             params.lipColor > 0.001f ||
             params.blush > 0.001f ||
-            params.styleEffect != com.picme.beauty.egl.StyleEffect.NONE
+            params.styleEffect != StyleEffect.NONE
 
         if (needMultiPass) {
             // [关键修复] 使用与预览完全一致的完整多 Pass 管线
