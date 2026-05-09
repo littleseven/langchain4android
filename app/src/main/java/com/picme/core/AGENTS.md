@@ -41,10 +41,11 @@
 
 **两条处理路径**：
 
-| 路径 | 使用场景 | 实现位置 | 技术方案 |
-|---|---|---|---|
-| **实时预览（GPU）** | 相机预览帧 | `beauty-engine` 模块 | OpenGL ES Shader |
-| **拍照后处理（CPU）** | 保存前静态 Bitmap | `core/image/` | Android Canvas + ColorMatrix |
+| 路径 | 使用场景 | 实现位置 | 技术方案 | 状态 |
+|---|---|---|---|---|
+| **实时预览（GPU）** | 相机预览帧 | `beauty-engine` 模块 | OpenGL ES Shader | ✅ 生产可用 |
+| **拍照后处理（GPU）** | 保存前静态 Bitmap | `beauty-engine` 模块 | OpenGL ES 离屏渲染（`PhotoProcessorImpl`） | ✅ 2026-05 已落地（标准路径） |
+| **拍照后处理（CPU Fallback）** | GPU 路径失败时降级 | `core/image/` | Android Canvas + ColorMatrix | ⚠️ 降级备用 |
 
 **`core/image/` 当前文件结构**：
 ```

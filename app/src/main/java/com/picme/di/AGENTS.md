@@ -64,15 +64,20 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
 **技术规范**:
 - **实时预览引擎切换**：通过 `rememberGlBeautyPreviewProvider(context, beautyStrategy)` Composable 庇数唡建/释放，DI 层不参与
-- **拍照后 CPU 处理器**：`GpuBeautyProcessor`（Canvas + ColorMatrix）作为静态 Bitmap 处理器，单独项很稳定，不涉及引擎切换
+- **拍照后处理器**：`PhotoProcessorImpl`（GPU 离屏渲染，复用多 Pass Shader 管线）作为静态 Bitmap 处理器，生产可用；GPU 路径失败时回退到 `GpuBeautyProcessor`（Canvas + ColorMatrix）
 - **容灾降级**：大美丽初始化失败时记录异常并降级为无美颜预览（CameraX `PreviewView` 直出）
 - **运行时状态**：使用 `BeautyEngineRuntimeState` 单例记录初始化异常原因，支持 UI 层查询并提示用户
 
 **代码示例**:
 ```kotlin
-// DI 层仅负责拍照后的 CPU 美颜处理器
-private val beautyProcessor: BeautyProcessor by lazy {
-    GpuBeautyProcessor(context)  // Canvas + ColorMatrix，稳定不涉及 GL
+// DI 层提供拍照后处理器：优先 GPU 路径，失败时回退 CPU 路径
+private val photoProcessor: PhotoProcessor by lazy {
+    PhotoProcessorImpl(context)  // GPU 离屏渲染，复用预览 Shader 管线
+}
+
+// CPU Fallback（GPU 路径失败时降级使用）
+private val cpuBeautyProcessor: BeautyProcessor by lazy {
+    GpuBeautyProcessor(context)  // Canvas + ColorMatrix，不涉及 GL
 }
 
 // 实时预览引擎由 Composable 维护（见 GlBeautyPreviewRuntime.kt）

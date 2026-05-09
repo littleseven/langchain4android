@@ -24,7 +24,7 @@
 - **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
 - **[INTEGRATION] 单引擎架构**：仅保留自研 `beauty-engine`（BIG_BEAUTY）引擎，GPUPixel 已于 2026-05 完全移除
-- **[ROADMAP] 拍照 GPU 化（2026-05 进行中）**：拍照后处理从 CPU Canvas 路径迁移到 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。详见 `docs/ADR-002-opengl-offscreen-unified-pipeline.md`
+- **[ROADMAP] 拍照 GPU 化（2026-05 已落地）**：`PhotoProcessorImpl` 已实现拍照后处理 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。GPU 路径失败时自动回退 CPU 路径。详见 `docs/ADR-002-opengl-offscreen-unified-pipeline.md`
 
 ---
 
