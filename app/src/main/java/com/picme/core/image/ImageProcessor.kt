@@ -39,6 +39,10 @@ import com.picme.beauty.api.Face
 import com.picme.beauty.api.FaceContour
 import com.picme.beauty.api.FaceLandmark
 import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.internal.facedetect.Face106ToWarpParams
+import com.picme.features.camera.FaceDetectionCache
 import com.picme.features.gallery.MediaViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -77,7 +81,7 @@ interface ImageProcessor {
 class ImageProcessorImpl(
     private val beautyProcessor: BeautyProcessor,
     private val photoProcessor: PhotoProcessor? = null,
-    private val faceDetectorManager: com.picme.beauty.api.facedetect.FaceDetector? = null
+    private val faceDetectorManager: FaceDetector? = null
 ) : ImageProcessor {
 
     private fun createFaceMaskBitmap(
@@ -439,7 +443,7 @@ class ImageProcessorImpl(
         return java.util.concurrent.Executors.newSingleThreadExecutor().submit<Bitmap> {
             // [关键修复] 在拍照 Bitmap 上重新检测人脸，确保坐标与照片完全匹配
             // 预览缓存的 faces/landmarks106 基于预览帧，可能与拍照帧的裁剪区域不同
-            var photoFaceData: com.picme.beauty.api.FaceData? = null
+            var photoFaceData: FaceData? = null
             val detector = faceDetectorManager
             // [修复] 人脸重检测不再限制于 slimFace/bigEyes，因为 Shader 中磨皮/美白/唇色/腮红
             // 全都依赖 uHasFace uniform。必须确保拍照路径始终有有效的人脸数据。
@@ -755,8 +759,8 @@ class ImageProcessorImpl(
  */
 private fun FloatArray.toFaceDataFromLandmarks106(imageWidth: Int, imageHeight: Int): FaceData? {
     if (this.size < 212) return null
-    val warpParams = com.picme.beauty.internal.facedetect.Face106ToWarpParams.convert(
-        this, com.picme.beauty.api.facedetect.FaceDetectionSource.MEDIAPIPE
+    val warpParams = Face106ToWarpParams.convert(
+        this, FaceDetectionSource.MEDIAPIPE
     )
     return FaceData(
         faceCenterX = warpParams.faceCenterX,
@@ -842,7 +846,7 @@ private fun List<Face>.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? 
     }
 
     // [关键修复] 从 FaceDetectionCache 获取预览时缓存的 106 点数据
-    val landmarks106 = com.picme.features.camera.FaceDetectionCache.getCachedLandmarks106()
+    val landmarks106 = FaceDetectionCache.getCachedLandmarks106()
     if (landmarks106 != null) {
         Logger.d("ImageProcessor", "Using cached landmarks106 from FaceDetectionCache")
     } else {
