@@ -177,7 +177,7 @@ FULL_REMAP = intArrayOf(
 
 ## 5. 代码依据
 
-- 实现代码：`app/src/main/java/com/picme/features/camera/facedetect/adapter/InsightFaceAdapter.kt`
+- 实现代码：`beauty-engine/src/main/java/com/picme/beauty/internal/facedetect/adapter/InsightFaceAdapter.kt`
 - 映射逻辑：`adapt()` 方法通过 FULL_REMAP 表将 InsightFace 106 点转换到统一 106 顺序
 
 ## 6. 参考截图

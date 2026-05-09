@@ -412,7 +412,7 @@ grep -r "leftEye\|rightEye" app/src/ --include="*.kt" | grep -v "imageLeft\|imag
 #### 优先级 2: 代码注释
 
 **文件列表**：
-- `app/src/main/java/com/picme/features/camera/facedetect/adapter/InsightFaceAdapter.kt`
+- `beauty-engine/src/main/java/com/picme/beauty/internal/facedetect/adapter/InsightFaceAdapter.kt`
 - `beauty-engine/src/main/java/com/picme/beauty/egl/BeautyRenderer.kt`
 - `app/src/main/java/com/picme/core/image/ImageProcessor.kt`
 
@@ -435,7 +435,7 @@ val imageLeftEyeContour = unifiedLandmarks.slice(52..57)
 ```kotlin
 // Phase 1: 添加别名（向后兼容）
 @Deprecated("使用 imageLeftEye 替代", ReplaceWith("imageLeftEye"))
-val leftEye get() = imageLeftEye
+val leftEye = imageLeftEye
 
 // Phase 2: 逐步迁移调用方
 // Phase 3: 移除旧命名
