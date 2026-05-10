@@ -77,6 +77,11 @@ docs/FEATURES.md (How: 交互与体验规则)
 | `./scripts/regression-test.sh` | P0 端到端回归 | 相机/美颜/相册核心用例自动执行 |
 | `./scripts/quick-compile.sh` | 分层快速编译 | **语法→编译→Dex→APK**分层递进，失败即停 |
 | `./scripts/impact-analyzer.sh` | 变更影响分析 | 自动识别影响模块、红线、需同步文档 |
+| `./scripts/screenshot-diff.py` | 截图像素级对比 | 基准截图 diff，检测 UI 回归和渲染异常 |
+| `./scripts/perf-baseline.sh` | 性能基线对比 | 自动提取 FPS/耗时，与基线对比告警 |
+| `./scripts/crash-detector.sh` | Crash 自动检测 | 扫描 FATAL/ANR/Native crash/GL 错误 |
+| `./scripts/ui-check.py` | UI 自动校验 | 黑屏/快门按钮/网格布局/关键点覆盖层检测 |
+| `./scripts/test-generator.py` | 测试骨架生成 | 基于 public 方法自动生成 mockk 测试 |
 | `adb-bot` Skill | ADB 命令参考 | 提供标准化设备操作命令集 |
 | `intent-router` Skill | 意图路由 | 自然语言→技术术语→上下文自动加载 |
 | `error-healer` Skill | 编译错误修复 | 错误分类→定向修复策略→自愈循环 |
