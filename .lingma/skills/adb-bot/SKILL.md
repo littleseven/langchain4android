@@ -113,6 +113,53 @@ sleep 0.5
 adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
 ```
 
+### Gallery / MediaPager 命令（2026-05 新增）
+
+| 命令 | adb 命令 | 说明 |
+|------|----------|------|
+| 进入相册 | `--es action "enter_gallery"` | 从相机页导航到相册 |
+| 打开照片 | `--es action "open_photo" --ei index 0` | 打开指定索引的图片 |
+| 进入编辑 | `--es action "start_edit"` | 进入图片编辑模式 |
+| 保存编辑 | `--es action "save_edit"` | 保存编辑结果 |
+| 取消编辑 | `--es action "cancel_edit"` | 取消编辑 |
+| 设置磨皮 | `--es action "set_smooth" --ei value 50` | 编辑模式磨皮 0-100 |
+| 设置美白 | `--es action "set_whiten" --ei value 30` | 编辑模式美白 0-100 |
+| 设置滤镜 | `--es action "set_edit_filter" --es filter "leica_classic"` | 编辑模式色调滤镜 |
+| 触发 OCR | `--es action "start_ocr"` | 识别当前图片文字 |
+| 关闭 OCR | `--es action "dismiss_ocr"` | 关闭 OCR 浮层 |
+| 切换关键点 | `--es action "toggle_landmark"` | 人脸关键点覆盖层 |
+| 切换信息 | `--es action "toggle_info"` | 信息浮层显示 |
+| 删除照片 | `--es action "delete_photo"` | 删除当前照片 |
+| 分享照片 | `--es action "share_photo"` | 分享当前照片 |
+
+### 完整相册编辑流程示例
+```bash
+#!/bin/bash
+# 启动应用
+adb shell am start -n com.picme/.MainActivity
+sleep 3
+
+# 进入相册
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action "enter_gallery"
+sleep 2
+
+# 打开第一张照片
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action "open_photo" --ei index 0
+sleep 1
+
+# 进入编辑模式
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action "start_edit"
+sleep 2
+
+# 设置磨皮 50、美白 30
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_smooth" --ei value 50
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_whiten" --ei value 30
+sleep 2
+
+# 保存编辑
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action "save_edit"
+```
+
 ### 命令验证
 ```bash
 # 清除日志后执行命令
@@ -120,8 +167,8 @@ adb logcat -c
 adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
 sleep 1
 
-# 查看 PicMe:CameraTest 标签日志
-adb logcat -d | grep "PicMe:CameraTest"
+# 查看 PicMe:CameraTest / PicMe:GalleryTest 标签日志
+adb logcat -d | grep -E "PicMe:(CameraTest|GalleryTest)"
 ```
 
 预期输出：
@@ -287,9 +334,12 @@ adb logcat -d > /tmp/logcat.txt
 ## 五、故障排除
 
 ### 命令无响应
-1. 确认应用在前台运行
-2. 检查 `adb logcat | grep PicMe:CameraTest` 是否有接收日志
-3. 如果显示 `Background execution not allowed`，说明静态接收器被限制，动态接收器应该正常工作
+1. 确认应用在前台运行：`adb shell pidof com.picme`
+2. 清除日志后重试：`adb logcat -c && adb shell am broadcast ... && sleep 1 && adb logcat -d`
+3. 检查 `adb logcat | grep PicMe:(CameraTest|GalleryTest)` 是否有接收日志
+4. 如果显示 `Background execution not allowed`，说明静态接收器被限制——**GalleryScreen 和 CameraScreen 各自通过 DisposableEffect 动态注册接收器，导航切换时必须确保目标 Screen 已挂载**
+5. **常见陷阱**：修改代码后只运行 `compileDebugKotlin` 不会重新生成 APK，必须运行 `assembleDebug`
+6. **常见陷阱**：`GalleryScreen` 的 `LaunchedEffect` 闭包不能读取 `remember` 局部变量（会被捕获旧值），命令处理时须用 `viewModel.allMedia.value` 读取最新状态
 
 ### 状态未更新
 - 状态快照在 CameraScreen 的 LaunchedEffect 中更新
