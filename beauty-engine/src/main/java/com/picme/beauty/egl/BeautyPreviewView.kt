@@ -454,6 +454,16 @@ class BeautyPreviewView @JvmOverloads constructor(
         Log.d(TAG, "Visibility changed: $visibility")
     }
 
+    fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {
+        if (!isRendererInitialized) return
+        renderer.startRecording(encoderSurface, width, height)
+    }
+
+    fun stopRecording() {
+        if (!isRendererInitialized) return
+        renderer.stopRecording()
+    }
+
     fun release() {
         displaySurface = null
         cameraSurface?.release()

@@ -2,6 +2,7 @@ package com.picme.features.camera
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Build
 import android.provider.MediaStore
 import androidx.camera.core.ImageCapture
 import androidx.camera.video.MediaStoreOutputOptions
@@ -10,7 +11,9 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
+import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.beauty.api.Face
+import com.picme.beauty.recorder.BeautyVideoRecorder
 import com.picme.core.image.ImageProcessor
 import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
@@ -18,6 +21,7 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.beauty.api.FilterType
 import com.picme.features.gallery.MediaViewModel
+import java.io.File
 
 @SuppressLint("MissingPermission")
 internal fun handleCaptureClick(
@@ -34,6 +38,8 @@ internal fun handleCaptureClick(
     lensFacing: Int,
     cachedFaces: List<Face> = emptyList(),
     beautyStrategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY,
+    glPreviewProvider: BeautyPreviewEngine?,
+    beautyVideoRecorder: BeautyVideoRecorder?,
     onRecordingChanged: (Recording?) -> Unit,
     onIsRecordingChanged: (Boolean) -> Unit
 ) {
@@ -55,13 +61,75 @@ internal fun handleCaptureClick(
     }
 
     if (isRecording) {
-        recording?.stop()
+        // 优先停止美颜录制（如果正在使用）
+        if (beautyVideoRecorder != null && glPreviewProvider != null) {
+            glPreviewProvider.stopRecording()
+            beautyVideoRecorder.stop()
+        } else {
+            recording?.stop()
+        }
         onRecordingChanged(null)
         onIsRecordingChanged(false)
         return
     }
 
+    // 判断是否可以使用美颜录制：BIG_BEAUTY 策略且 GL Provider 已就绪
+    val canUseBeautyRecording = beautyStrategy == BeautyStrategy.BIG_BEAUTY
+        && glPreviewProvider != null
+        && glPreviewProvider.isReady()
+        && beautyVideoRecorder != null
+
     val name = "PicMe_" + System.currentTimeMillis() + ".mp4"
+
+    if (canUseBeautyRecording) {
+        // 美颜录制路径：通过 OpenGL 管线直接输出到编码器
+        val outputDir = context.getExternalFilesDir(null) ?: context.cacheDir
+        val outputFile = File(outputDir, name)
+
+        val recordingWidth = 1920
+        val recordingHeight = 1080
+
+        onIsRecordingChanged(true)
+        beautyVideoRecorder.start(
+            outputFile = outputFile,
+            width = recordingWidth,
+            height = recordingHeight,
+            callback = object : BeautyVideoRecorder.Callback {
+                override fun onStarted() {
+                    glPreviewProvider.startRecording(
+                        beautyVideoRecorder.getInputSurface(),
+                        recordingWidth,
+                        recordingHeight
+                    )
+                }
+
+                override fun onFinished(outputPath: String) {
+                    val uri = insertVideoToMediaStore(context, outputFile, name)
+                    if (uri != null) {
+                        viewModel.insertMedia(
+                            MediaAsset(
+                                uri = uri.toString(),
+                                type = MediaType.VIDEO,
+                                captureDate = System.currentTimeMillis(),
+                                fileName = name
+                            )
+                        )
+                    }
+                    onRecordingChanged(null)
+                    onIsRecordingChanged(false)
+                }
+
+                override fun onError(error: Throwable) {
+                    onRecordingChanged(null)
+                    onIsRecordingChanged(false)
+                }
+            }
+        )
+        onRecordingChanged(null)
+        return
+    }
+
+    //  fallback 路径：CameraX 原生 Recorder（无美颜）
     val contentValues = android.content.ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, name)
         put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
@@ -98,5 +166,29 @@ internal fun handleCaptureClick(
             }
         }
     onRecordingChanged(newRecording)
+}
+
+private fun insertVideoToMediaStore(context: Context, file: File, displayName: String): android.net.Uri? {
+    return try {
+        val values = android.content.ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
+            }
+        }
+        val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+        if (uri != null) {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                file.inputStream().use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+        }
+        uri
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
 }
 
