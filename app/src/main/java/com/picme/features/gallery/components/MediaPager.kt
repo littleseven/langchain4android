@@ -143,6 +143,37 @@ fun MediaPager(
     val scope = rememberCoroutineScope()
     val currentAsset = assets.getOrNull(pagerState.currentPage)
     val editState by photoEditState.collectAsState()
+
+    // 启动照片编辑（长按或工具栏按钮共用）
+    val startPhotoEdit = {
+        val asset = currentAsset
+        if (asset != null && asset.type == MediaType.PHOTO) {
+            Log.d("PicMe:UX", "Start photo editing mode")
+            isEditing = true
+            editSettings = BeautySettings(enabled = true)
+            processedBitmap = null
+            loadedBitmap = null
+            onClearEditState()
+
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
+                        BitmapFactory.decodeStream(it)
+                    }
+                    if (bitmap != null) {
+                        loadedBitmap = bitmap
+                        withContext(Dispatchers.Main) {
+                            onPrepareEdit(bitmap)
+                        }
+                    } else {
+                        Log.e("PicMe:Gallery", "Failed to decode bitmap for editing")
+                    }
+                } catch (e: Exception) {
+                    Log.e("PicMe:Gallery", "Failed to load bitmap for editing: ${e.message}", e)
+                }
+            }
+        }
+    }
     val landmarkState = rememberFaceLandmarkDetection(
         imageUri = currentAsset?.uri.orEmpty(),
         enabled = showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO && !isEditing
@@ -212,9 +243,9 @@ fun MediaPager(
                         },
                         onLongClick = {
                             if (!isEditing) {
-                                Log.d("PicMe:UX", "Trigger OCR via long press")
+                                Log.d("PicMe:UX", "Trigger photo edit via long press")
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onStartOcr(asset.uri)
+                                startPhotoEdit()
                             }
                         },
                         onZoomStateChanged = { scale ->
@@ -250,33 +281,7 @@ fun MediaPager(
             onToggleLandmarks = {
                 showLandmarkOverlay = !showLandmarkOverlay
             },
-            onStartEdit = {
-                Log.d("PicMe:UX", "Start photo editing mode")
-                isEditing = true
-                editSettings = BeautySettings(enabled = true)
-                processedBitmap = null
-                loadedBitmap = null
-                onClearEditState()
-
-                val asset = currentAsset ?: return@MediaPagerTopControls
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
-                            BitmapFactory.decodeStream(it)
-                        }
-                        if (bitmap != null) {
-                            loadedBitmap = bitmap
-                            withContext(Dispatchers.Main) {
-                                onPrepareEdit(bitmap)
-                            }
-                        } else {
-                            Log.e("PicMe:Gallery", "Failed to decode bitmap for editing")
-                        }
-                    } catch (e: Exception) {
-                        Log.e("PicMe:Gallery", "Failed to load bitmap for editing: ${e.message}", e)
-                    }
-                }
-            },
+            onStartEdit = startPhotoEdit,
             onDelete = {
                 val selectedAsset = assets[pagerState.currentPage]
                 Log.d("PicMe:UX", "Request delete media: ${selectedAsset.id}")

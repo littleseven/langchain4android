@@ -161,7 +161,9 @@ fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
 ### 2.5 静态图美颜编辑（2026-05 新增）
 
 **技术规范**:
-- **入口**: MediaPager 顶部工具栏 ✨ 编辑按钮（`AutoFixHigh` icon），仅 `MediaType.PHOTO` 显示
+- **入口**: 
+  - MediaPager 顶部工具栏 ✨ 编辑按钮（`AutoFixHigh` icon），仅 `MediaType.PHOTO` 显示
+  - **长按图片区域**：直接进入编辑模式（带 `HapticFeedbackType.LongPress` 触感反馈）
 - **状态管理**: 使用 `MutableStateFlow<PhotoEditState>` 密封类管理编辑状态
   - `Idle`: 未进入编辑模式
   - `Analyzing`: 正在执行人脸检测
@@ -209,7 +211,7 @@ fun processPhoto(bitmap: Bitmap, settings: BeautySettings, lensFacing: Int = 1) 
 **技术规范**:
 - **触发入口**: 
   - 工具栏"提取文字"按钮
-  - 长按图片文字区域（快捷操作）
+  - ~~长按图片文字区域（已改为进入图片编辑）~~
 - **状态管理**: 使用 `MutableStateFlow<OcrResult?>` 管理识别状态（Loading/Success/Error）
 - **资源释放**: ViewModel `onCleared()` 时调用 `ocrUseCase.close()` 释放 ML Kit 资源
 - **结果展示**: 原位浮层卡片展示识别结果，支持复制与分享
