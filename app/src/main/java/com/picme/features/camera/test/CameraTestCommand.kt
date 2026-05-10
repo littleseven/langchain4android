@@ -139,6 +139,123 @@ sealed class CameraTestCommand {
      */
     data object GetState : CameraTestCommand()
 
+    // ============================================
+    // 相册 / 媒体查看器 测试命令
+    // ============================================
+
+    /**
+     * 进入相册（从相机界面）
+     *
+     * adb: --es action "enter_gallery"
+     */
+    data object EnterGallery : CameraTestCommand()
+
+    /**
+     * 打开指定索引的照片进行预览
+     *
+     * @param index 照片索引，从 0 开始
+     *
+     * adb: --es action "open_photo" --ei index 0
+     */
+    data class OpenPhoto(val index: Int) : CameraTestCommand()
+
+    /**
+     * 长按当前照片（触发编辑模式）
+     *
+     * adb: --es action "long_press_photo"
+     */
+    data object LongPressPhoto : CameraTestCommand()
+
+    /**
+     * 进入照片编辑模式（通过工具栏按钮）
+     *
+     * adb: --es action "start_edit"
+     */
+    data object StartEdit : CameraTestCommand()
+
+    /**
+     * 保存编辑后的照片
+     *
+     * adb: --es action "save_edit"
+     */
+    data object SaveEdit : CameraTestCommand()
+
+    /**
+     * 取消编辑
+     *
+     * adb: --es action "cancel_edit"
+     */
+    data object CancelEdit : CameraTestCommand()
+
+    /**
+     * 设置编辑模式磨皮强度
+     *
+     * @param value 强度值 0-100
+     *
+     * adb: --es action "set_smooth" --ei value 80
+     */
+    data class SetSmooth(val value: Int) : CameraTestCommand()
+
+    /**
+     * 设置编辑模式美白强度
+     *
+     * @param value 强度值 0-100
+     *
+     * adb: --es action "set_whiten" --ei value 60
+     */
+    data class SetWhiten(val value: Int) : CameraTestCommand()
+
+    /**
+     * 设置编辑模式滤镜
+     *
+     * @param filter 滤镜名称
+     *
+     * adb: --es action "set_edit_filter" --es filter "leica_classic"
+     */
+    data class SetEditFilter(val filter: String) : CameraTestCommand()
+
+    /**
+     * 触发 OCR 识别
+     *
+     * adb: --es action "start_ocr"
+     */
+    data object StartOcr : CameraTestCommand()
+
+    /**
+     * 关闭 OCR 结果浮层
+     *
+     * adb: --es action "dismiss_ocr"
+     */
+    data object DismissOcr : CameraTestCommand()
+
+    /**
+     * 切换人脸关键点覆盖层显示
+     *
+     * adb: --es action "toggle_landmark"
+     */
+    data object ToggleLandmark : CameraTestCommand()
+
+    /**
+     * 切换照片信息浮层
+     *
+     * adb: --es action "toggle_info"
+     */
+    data object ToggleInfo : CameraTestCommand()
+
+    /**
+     * 删除当前照片
+     *
+     * adb: --es action "delete_photo"
+     */
+    data object DeletePhoto : CameraTestCommand()
+
+    /**
+     * 分享当前照片
+     *
+     * adb: --es action "share_photo"
+     */
+    data object SharePhoto : CameraTestCommand()
+
     /**
      * 未知/无效命令
      */
@@ -178,6 +295,22 @@ sealed class CameraTestCommand {
                 "toggle_filter" -> ToggleFilterPanel
                 "toggle_settings" -> ToggleSettingsPanel
                 "get_state" -> GetState
+                // Gallery / MediaPager commands
+                "enter_gallery" -> EnterGallery
+                "open_photo" -> OpenPhoto(extras.getInt("index", 0))
+                "long_press_photo" -> LongPressPhoto
+                "start_edit" -> StartEdit
+                "save_edit" -> SaveEdit
+                "cancel_edit" -> CancelEdit
+                "set_smooth" -> SetSmooth(extras.getInt("value", 0))
+                "set_whiten" -> SetWhiten(extras.getInt("value", 0))
+                "set_edit_filter" -> SetEditFilter(extras.getString("filter") ?: "none")
+                "start_ocr" -> StartOcr
+                "dismiss_ocr" -> DismissOcr
+                "toggle_landmark" -> ToggleLandmark
+                "toggle_info" -> ToggleInfo
+                "delete_photo" -> DeletePhoto
+                "share_photo" -> SharePhoto
                 else -> Unknown(action)
             }
         }

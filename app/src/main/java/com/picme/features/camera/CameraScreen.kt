@@ -932,6 +932,19 @@ fun CameraContent(
                         CameraTestResult.Error(command, "Unknown command: ${command.rawAction}")
                     )
                 }
+                is CameraTestCommand.EnterGallery -> {
+                    onNavigateToGallery()
+                    Logger.i("PicMe:CameraTest", "Navigate to gallery requested")
+                    CameraTestCommandDispatcher.emitResult(
+                        CameraTestResult.Success(command, "Navigated to gallery")
+                    )
+                }
+                else -> {
+                    // Gallery 相关命令在 CameraScreen 中不支持
+                    CameraTestCommandDispatcher.emitResult(
+                        CameraTestResult.Error(command, "Command not supported in camera mode")
+                    )
+                }
             }
         }
     }
