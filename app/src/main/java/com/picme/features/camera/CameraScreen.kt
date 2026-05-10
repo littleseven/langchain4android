@@ -70,6 +70,7 @@ import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
+import com.picme.beauty.recorder.BeautyVideoRecorder
 import com.picme.features.camera.test.CameraTestCommand
 import com.picme.features.camera.test.CameraTestCommandConverters
 import com.picme.features.camera.test.CameraTestCommandDispatcher
@@ -768,6 +769,8 @@ fun CameraContent(
     val videoCapture = remember { VideoCapture.withOutput(recorder) }
     var recording: Recording? by remember { mutableStateOf(null) }
 
+    val beautyVideoRecorder = remember { BeautyVideoRecorder() }
+
     var cameraControl: CameraControl? by remember { mutableStateOf(null) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var minZoomRatio by remember { mutableFloatStateOf(1f) }
@@ -831,6 +834,8 @@ fun CameraContent(
                         lensFacing = lensFacing,
                         cachedFaces = emptyList(),
                         beautyStrategy = beautyStrategy,
+                        glPreviewProvider = glPreviewProvider,
+                        beautyVideoRecorder = beautyVideoRecorder,
                         onRecordingChanged = { updated -> recording = updated },
                         onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
                     )
@@ -1304,6 +1309,8 @@ CameraPreviewContent(
                 lensFacing = lensFacing,
                 cachedFaces = emptyList(),
                 beautyStrategy = beautyStrategy,
+                glPreviewProvider = glPreviewProvider,
+                beautyVideoRecorder = beautyVideoRecorder,
                 onRecordingChanged = { updated -> recording = updated },
                 onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
             )

@@ -170,6 +170,14 @@ class GlBeautyPreviewProvider(
 
     override fun getPerfStats(): BeautyPerfStats = beautyPreviewView?.getPerfStats() ?: BeautyPerfStats.EMPTY
 
+    override fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {
+        beautyPreviewView?.startRecording(encoderSurface, width, height)
+    }
+
+    override fun stopRecording() {
+        beautyPreviewView?.stopRecording()
+    }
+
     /**
      * 设置 Shader 调试模式
      * @param mode 0=正常, 1=显示 Skin Mask, 2=显示 Warp 偏移

@@ -5,6 +5,7 @@ import android.opengl.EGLConfig
 import android.opengl.EGLContext
 import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
+import android.opengl.EGLExt
 import android.util.Log
 import android.view.Surface
 
@@ -56,11 +57,12 @@ class EGLCore {
             EGL14.EGL_BLUE_SIZE, 8,
             EGL14.EGL_ALPHA_SIZE, 8,
             EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+            EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT or EGL14.EGL_PBUFFER_BIT,
             EGL_RECORDABLE_ANDROID, 1,
             EGL14.EGL_NONE
         )
 
-        val configs = arrayOfNulls<EGLConfig>(1)
+        val configs = arrayOfNulls<EGLConfig>(16)
         val numConfigs = IntArray(1)
 
         if (!EGL14.eglChooseConfig(
@@ -73,8 +75,32 @@ class EGLCore {
             return false
         }
 
-        eglConfig = configs[0]
-        Log.d(TAG, "EGL initialized successfully")
+        val num = numConfigs[0]
+        if (num <= 0) {
+            Log.e(TAG, "No matching EGL config found")
+            return false
+        }
+
+        // 遍历所有 config，选择同时支持 WINDOW + RECORDABLE 的 config
+        var selectedConfig: EGLConfig? = null
+        for (i in 0 until num) {
+            val config = configs[i] ?: continue
+            val surfaceType = IntArray(1)
+            EGL14.eglGetConfigAttrib(eglDisplay, config, EGL14.EGL_SURFACE_TYPE, surfaceType, 0)
+            val recordable = IntArray(1)
+            EGL14.eglGetConfigAttrib(eglDisplay, config, EGL_RECORDABLE_ANDROID, recordable, 0)
+            val redSize = IntArray(1)
+            EGL14.eglGetConfigAttrib(eglDisplay, config, EGL14.EGL_RED_SIZE, redSize, 0)
+            Log.d(TAG, "Config[$i]: surfaceType=${surfaceType[0]}, recordable=${recordable[0]}, redSize=${redSize[0]}")
+            if (surfaceType[0] and EGL14.EGL_WINDOW_BIT != 0 && recordable[0] == 1) {
+                selectedConfig = config
+                Log.i(TAG, "Selected config[$i] for recording")
+                break
+            }
+        }
+
+        eglConfig = selectedConfig ?: configs[0]
+        Log.d(TAG, "EGL initialized successfully, selected config recordable=${eglConfig != null}")
         return true
     }
 
@@ -160,6 +186,18 @@ class EGLCore {
             return false
         }
         return EGL14.eglSwapBuffers(eglDisplay, surface)
+    }
+
+    fun setPresentationTime(surface: EGLSurface, nsecs: Long): Boolean {
+        if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
+            Log.e(TAG, "EGL not initialized")
+            return false
+        }
+        val result = EGLExt.eglPresentationTimeANDROID(eglDisplay, surface, nsecs)
+        if (!result) {
+            Log.e(TAG, "eglPresentationTimeANDROID failed, error=${EGL14.eglGetError()}")
+        }
+        return result
     }
 
     fun release() {

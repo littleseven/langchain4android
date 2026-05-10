@@ -30,9 +30,11 @@ class CameraPreviewRenderer(private val context: Context) {
     private val eglCore = EGLCore()
     private var eglContext: android.opengl.EGLContext? = null
     private var windowSurface: WindowSurface? = null
+    private var recordingWindowSurface: WindowSurface? = null
     private lateinit var beautyRenderer: BeautyRenderer
     private var renderThread: Thread? = null
 
+    @Volatile
     var isRendering = false
         private set
 
@@ -73,6 +75,19 @@ class CameraPreviewRenderer(private val context: Context) {
 
     @Volatile
     private var currentViewportHeight: Int = DEFAULT_HEIGHT
+
+    @Volatile
+    private var isRecordingVideo: Boolean = false
+
+    @Volatile
+    private var recordingViewportWidth: Int = 1920
+
+    @Volatile
+    private var recordingViewportHeight: Int = 1080
+
+    private var recordingStartTimeNs: Long = 0
+    private var recordedFrameCount: Long = 0
+    private val recordingFrameIntervalNs: Long = 33_333_333L // 30fps
 
     private val textureMatrixLock = Any()
     private val latestTextureTransformMatrix = FloatArray(16).apply {
@@ -188,6 +203,28 @@ class CameraPreviewRenderer(private val context: Context) {
         }
     }
 
+    fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {
+        glEventQueue.offer {
+            recordingWindowSurface?.release()
+            recordingWindowSurface = WindowSurface(encoderSurface, eglCore).apply { create() }
+            recordingViewportWidth = width
+            recordingViewportHeight = height
+            isRecordingVideo = true
+            recordingStartTimeNs = System.nanoTime()
+            recordedFrameCount = 0
+            Log.d(TAG, "Recording started on GL thread: ${width}x${height}, surface=${encoderSurface.hashCode()}")
+        }
+    }
+
+    fun stopRecording() {
+        glEventQueue.offer {
+            isRecordingVideo = false
+            recordingWindowSurface?.release()
+            recordingWindowSurface = null
+            Log.d(TAG, "Recording stopped on GL thread, totalFrames=$recordedFrameCount")
+        }
+    }
+
     private fun startRendering() {
         if (renderThread?.isAlive == true) {
             Log.d(TAG, "Render thread already running")
@@ -290,7 +327,49 @@ class CameraPreviewRenderer(private val context: Context) {
                         beautyRenderer.setTexelSize(cameraInputWidth, cameraInputHeight)
 
                         beautyRenderer.onRender()
-                        
+
+                        // 录制输出：将同一帧渲染到录制 Surface
+                        val rs = recordingWindowSurface
+                        if (rs != null && isRecordingVideo) {
+                            val nowNs = System.nanoTime()
+                            if (nowNs - recordingStartTimeNs >= recordedFrameCount * recordingFrameIntervalNs) {
+                                val recContext = eglContext
+                                if (recContext != null) {
+                                    val makeCurrentOk = eglCore.makeCurrent(rs.getEglSurface(), recContext)
+                                    if (makeCurrentOk) {
+                                        GLES20.glViewport(0, 0, recordingViewportWidth, recordingViewportHeight)
+                                        GLES20.glClearColor(0f, 0f, 0f, 1f)
+                                        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+                                        beautyRenderer.onRender()
+
+                                        // [关键] 设置帧 presentation time，使用基于实际渲染时间的相对时间戳
+                                        val presentationTimeNs = (System.nanoTime() - recordingStartTimeNs).coerceAtLeast(1000L)
+                                        recordedFrameCount++
+                                        val ptsOk = eglCore.setPresentationTime(rs.getEglSurface(), presentationTimeNs)
+
+                                        val glErrorAfterRender = GLES20.glGetError()
+                                        if (glErrorAfterRender != GLES20.GL_NO_ERROR) {
+                                            Log.w(TAG, "GL error after beauty render to recording surface: $glErrorAfterRender")
+                                        }
+
+                                        val swapOk = rs.swapBuffers()
+                                        if (recordedFrameCount <= 5L || recordedFrameCount % 30L == 0L) {
+                                            Log.d(TAG, "Recording frame submitted: pts=${presentationTimeNs}ns, count=$recordedFrameCount, ptsOk=$ptsOk, swapBuffers=$swapOk")
+                                        }
+
+                                        // 切回预览 Surface
+                                        val restoreOk = eglCore.makeCurrent(ws.getEglSurface(), recContext)
+                                        if (!restoreOk) {
+                                            Log.e(TAG, "Failed to restore preview surface")
+                                        }
+                                    } else {
+                                        Log.e(TAG, "Failed to make recording surface current")
+                                    }
+                                }
+                            }
+                        }
+
                         // 交换缓冲区
                         if (!ws.swapBuffers()) {
                             statsNullFrames++
@@ -712,6 +791,8 @@ class CameraPreviewRenderer(private val context: Context) {
         renderThread = null
         windowSurface?.release()
         windowSurface = null
+        recordingWindowSurface?.release()
+        recordingWindowSurface = null
         if (textureId != -1) {
             val textures = intArrayOf(textureId)
             GLES20.glDeleteTextures(1, textures, 0)
