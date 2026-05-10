@@ -469,7 +469,7 @@ fun FaceLandmarkControlBar(
             .fillMaxWidth()
             .background(Color.Black.copy(alpha = 0.58f))
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 24.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
