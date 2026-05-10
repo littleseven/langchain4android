@@ -469,7 +469,7 @@ fun FaceLandmarkControlBar(
             .fillMaxWidth()
             .background(Color.Black.copy(alpha = 0.58f))
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 6.dp),
+            .padding(horizontal = 24.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -504,20 +504,20 @@ fun FaceLandmarkControlBar(
         when {
             state.isLoading -> {
                 Row(
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(12.dp),
-                        strokeWidth = 1.5.dp,
+                        modifier = Modifier.size(6.dp),
+                        strokeWidth = 0.8.dp,
                         color = Color.White
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = stringResource(R.string.landmark_loading),
                         color = Color.White,
-                        fontSize = 10.sp
+                        fontSize = 6.sp
                     )
                 }
             }
@@ -526,8 +526,8 @@ fun FaceLandmarkControlBar(
                 Text(
                     text = state.errorMessage,
                     color = Color(0xFFFFB4AB),
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(top = 6.dp)
+                    fontSize = 6.sp,
+                    modifier = Modifier.padding(top = 3.dp)
                 )
             }
         }
@@ -548,22 +548,22 @@ private fun LandmarkToggle(
     ) {
         Box(
             modifier = Modifier
-                .size(10.dp)
+                .size(6.dp)
                 .background(
                     color = if (enabled) color else Color.Gray.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(5.dp)
+                    shape = RoundedCornerShape(3.dp)
                 )
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Column {
             Text(
                 text = label,
-                fontSize = 12.sp,
+                fontSize = 8.sp,
                 color = if (enabled) Color.White else Color.Gray
             )
             Text(
                 text = subLabel,
-                fontSize = 9.sp,
+                fontSize = 6.sp,
                 color = Color.Gray.copy(alpha = 0.8f)
             )
         }
