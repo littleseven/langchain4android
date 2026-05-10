@@ -61,8 +61,35 @@ docs/FEATURES.md (How: 交互与体验规则)
 2. **路由**：`CO` 复杂度分级并维护状态板。
 3. **对齐**：`PM/RD` 对齐 `PRODUCT.md`、`FEATURES.md` 与模块 `AGENTS.md`。
 4. **执行**：`RD` 原子化修改并记录关键决策。
-5. **自愈**：修复编译 Error → `./gradlew assembleDebug` 验证 → 超限上报备选方案。
+5. **自愈**：
+   - 修复编译 Error → `./gradlew assembleDebug` 验证
+   - **设备连接时自动闭环**：编译通过后自动 `adb install -r` → 启动应用 → 截屏/日志收集
+   - 使用 `./scripts/auto-dev-loop.sh` 一键完成代码→设备的完整验证
+   - 超限上报备选方案
 6. **审计**：`CR` 规范复核，`QA` 核心验收，`CO` 对外汇总。
+
+### 5.1 自动化测试工具链（消除人工干预）
+
+| 脚本/工具 | 用途 | 人工干预点消除 |
+|-----------|------|----------------|
+| `./scripts/ai-gate.sh` | 代码级质量门禁 | 编译后自动检测设备安装并验证 |
+| `./scripts/auto-dev-loop.sh` | 一键开发自循环 | **编译→安装→启动→截屏→日志→报告**全自动 |
+| `./scripts/regression-test.sh` | P0 端到端回归 | 相机/美颜/相册核心用例自动执行 |
+| `adb-bot` Skill | ADB 命令参考 | 提供标准化设备操作命令集 |
+
+**标准工作流（有设备连接时）**：
+```bash
+# RD 完成代码修改后执行：
+./scripts/auto-dev-loop.sh
+
+# 自动输出：
+# - 代码检查报告 (ktlint/detekt/unit test)
+# - 编译结果
+# - 安装状态
+# - 设备截屏 (screen_startup.png / screen_after_capture.png)
+# - PicMe 日志 (logcat_picme.txt)
+# - Markdown 汇总报告 (report.md)
+```
 
 ## 6. 文档索引
 
