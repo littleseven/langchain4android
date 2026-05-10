@@ -75,7 +75,11 @@ docs/FEATURES.md (How: 交互与体验规则)
 | `./scripts/ai-gate.sh` | 代码级质量门禁 | 编译后自动检测设备安装并验证 |
 | `./scripts/auto-dev-loop.sh` | 一键开发自循环 | **编译→安装→启动→截屏→日志→报告**全自动 |
 | `./scripts/regression-test.sh` | P0 端到端回归 | 相机/美颜/相册核心用例自动执行 |
+| `./scripts/quick-compile.sh` | 分层快速编译 | **语法→编译→Dex→APK**分层递进，失败即停 |
+| `./scripts/impact-analyzer.sh` | 变更影响分析 | 自动识别影响模块、红线、需同步文档 |
 | `adb-bot` Skill | ADB 命令参考 | 提供标准化设备操作命令集 |
+| `intent-router` Skill | 意图路由 | 自然语言→技术术语→上下文自动加载 |
+| `error-healer` Skill | 编译错误修复 | 错误分类→定向修复策略→自愈循环 |
 
 **标准工作流（有设备连接时）**：
 ```bash

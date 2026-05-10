@@ -27,8 +27,10 @@ ln -sf ../../.lingma/skills/my-new-skill .openclaw/skills/my-new-skill
 | av-gl-expert | 音视频与 OpenGL 渲染专家 |
 | coordinate-system-standard | 人脸关键点坐标系规范化 |
 | doc-sync-guardian | 三层文档体系一致性检查 |
+| error-healer | **编译错误修复**：Kotlin/Gradle 错误分类与自愈策略 |
 | gpupixel-porting | 历史参考：GPUPixel 算法移植规范（GPUPixel 已移除） |
 | image-quality-checker | 截屏图片质量分析 |
+| intent-router | **意图路由**：自然语言需求解析与上下文自动加载 |
 | mediapipe-landmark-mapping | MediaPipe 关键点映射规范 |
 
 ## 注意事项
