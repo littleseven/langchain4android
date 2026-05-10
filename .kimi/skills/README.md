@@ -32,6 +32,7 @@ ln -sf ../../.lingma/skills/my-new-skill .openclaw/skills/my-new-skill
 | image-quality-checker | 截屏图片质量分析 |
 | intent-router | **意图路由**：自然语言需求解析与上下文自动加载 |
 | mediapipe-landmark-mapping | MediaPipe 关键点映射规范 |
+| rd-reflection | **RD 复盘模板**：开发陷阱记录与流程优化 |
 
 ## 注意事项
 
