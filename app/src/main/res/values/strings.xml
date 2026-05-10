@@ -86,6 +86,9 @@
 
     <string name="edit">Edit</string>
     <string name="save">Save</string>
+    <string name="apply">Apply</string>
+    <string name="processing">Processing...</string>
+    <string name="analyzing_face">Analyzing face...</string>
     <string name="doodle">Doodle</string>
     <string name="mosaic">Mosaic</string>
     <string name="undo">Undo</string>

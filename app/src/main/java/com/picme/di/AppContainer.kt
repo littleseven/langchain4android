@@ -25,7 +25,9 @@ data class MediaViewModelDependencies(
     val repository: MediaRepository,
     val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
-    val ocrUseCase: OcrProcessor
+    val ocrUseCase: OcrProcessor,
+    val photoProcessor: PhotoProcessor,
+    val faceDetector: FaceDetector
 )
 
 class MediaViewModelFactory(
@@ -39,7 +41,9 @@ class MediaViewModelFactory(
                 repository = dependencies.repository,
                 getGroupedMediaUseCase = dependencies.getGroupedMediaUseCase,
                 findDuplicateMediaUseCase = dependencies.findDuplicateMediaUseCase,
-                ocrUseCase = dependencies.ocrUseCase
+                ocrUseCase = dependencies.ocrUseCase,
+                photoProcessor = dependencies.photoProcessor,
+                faceDetector = dependencies.faceDetector
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
@@ -80,8 +84,11 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         FaceDetectorFactory.create(context)
     }
 
+    private val photoProcessor: PhotoProcessor by lazy {
+        GlBeautyPreviewProviderFactory().createPhotoProcessor(context)
+    }
+
     override val imageProcessor: ImageProcessor by lazy {
-        val photoProcessor: PhotoProcessor = GlBeautyPreviewProviderFactory().createPhotoProcessor(context)
         ImageProcessorImpl(beautyProcessor, photoProcessor, faceDetector)
     }
 
@@ -94,7 +101,9 @@ class AppContainerImpl(private val context: Context) : AppContainer {
             repository = repository,
             getGroupedMediaUseCase = GetGroupedMediaUseCase(),
             findDuplicateMediaUseCase = FindDuplicateMediaUseCase(repository),
-            ocrUseCase = ocrProcessor
+            ocrUseCase = ocrProcessor,
+            photoProcessor = photoProcessor,
+            faceDetector = faceDetector
         )
     }
 

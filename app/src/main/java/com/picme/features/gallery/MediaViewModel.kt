@@ -2,10 +2,17 @@ package com.picme.features.gallery
 
 import android.content.Context
 import android.content.IntentSender
+import android.graphics.Bitmap
 import android.net.Uri
+import android.provider.MediaStore
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.picme.beauty.api.PhotoProcessor
+import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.toBeautyParams
+import com.picme.beauty.internal.facedetect.Face106ToWarpParams
 import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.GroupedMedia
 import com.picme.domain.model.GroupingMode
@@ -14,6 +21,7 @@ import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
 import com.picme.domain.usecase.OcrProcessor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,12 +29,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MediaViewModel(
     private val repository: MediaRepository,
     private val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     private val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
-    private val ocrUseCase: OcrProcessor
+    private val ocrUseCase: OcrProcessor,
+    private val photoProcessor: PhotoProcessor,
+    private val faceDetector: FaceDetector
 ) : ViewModel() {
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
@@ -242,5 +253,141 @@ class MediaViewModel(
                 _duplicateGroups.value = emptyList()
             }
         }
+    }
+
+    // ========================================
+    // 静态图美颜编辑（相册预览页）
+    // ========================================
+
+    sealed class PhotoEditState {
+        object Idle : PhotoEditState()
+        object Analyzing : PhotoEditState()
+        object Processing : PhotoEditState()
+        data class Ready(val bitmap: Bitmap, val faceData: com.picme.beauty.api.FaceData?) : PhotoEditState()
+        data class Error(val message: String) : PhotoEditState()
+    }
+
+    private val _photoEditState = MutableStateFlow<PhotoEditState>(PhotoEditState.Idle)
+    val photoEditState: StateFlow<PhotoEditState> = _photoEditState.asStateFlow()
+
+    private var cachedEditFaceData: com.picme.beauty.api.FaceData? = null
+
+    /**
+     * 进入编辑模式时预处理：加载图片并执行一次人脸检测，缓存 FaceData 供后续复用
+     */
+    fun preparePhotoEdit(bitmap: Bitmap, lensFacing: Int = 1) {
+        viewModelScope.launch(Dispatchers.Default) {
+            _photoEditState.value = PhotoEditState.Analyzing
+            try {
+                val detectionResult = faceDetector.detectPhoto(bitmap, lensFacing)
+                val faceData = detectionResult?.landmarks106?.toFaceData(bitmap.width, bitmap.height)
+                cachedEditFaceData = faceData
+
+                if (faceData != null) {
+                    Log.d("PicMe:Gallery", "Face detected for editing, landmarks=${detectionResult.landmarks106.size}")
+                } else {
+                    Log.w("PicMe:Gallery", "No face detected for editing")
+                }
+
+                _photoEditState.value = PhotoEditState.Ready(bitmap, faceData)
+            } catch (e: Exception) {
+                Log.e("PicMe:Gallery", "Face detection failed: ${e.message}", e)
+                _photoEditState.value = PhotoEditState.Error("人脸检测失败：${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 对静态 Bitmap 应用美颜处理（GPU 离屏渲染）
+     * 若已调用 [preparePhotoEdit] 缓存 FaceData，则跳过重复检测
+     *
+     * @param bitmap 原始图片
+     * @param settings 美颜设置
+     * @param lensFacing 镜头方向（影响人脸检测镜像）
+     */
+    fun processPhoto(bitmap: Bitmap, settings: com.picme.beauty.api.BeautySettings, lensFacing: Int = 1) {
+        viewModelScope.launch(Dispatchers.Default) {
+            _photoEditState.value = PhotoEditState.Processing
+            try {
+                Log.d("PicMe:Gallery", "Processing photo: smoothing=${settings.smoothing}, filter=${settings.colorFilter}, style=${settings.styleFilter}")
+
+                val faceData = cachedEditFaceData ?: run {
+                    val detectionResult = faceDetector.detectPhoto(bitmap, lensFacing)
+                    detectionResult?.landmarks106?.toFaceData(bitmap.width, bitmap.height)
+                }
+
+                val params = settings.toBeautyParams()
+                val processedBitmap = photoProcessor.process(bitmap, params, faceData)
+
+                Log.d("PicMe:Gallery", "Photo processing completed")
+                _photoEditState.value = PhotoEditState.Ready(processedBitmap, faceData)
+            } catch (e: Exception) {
+                Log.e("PicMe:Gallery", "Photo processing failed: ${e.message}", e)
+                _photoEditState.value = PhotoEditState.Error("处理失败：${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 将处理后的 Bitmap 保存为新的图片文件
+     */
+    fun saveProcessedPhoto(context: Context, bitmap: Bitmap) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val contentValues = android.content.ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "EDITED_${System.currentTimeMillis()}.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+                }
+                val uri = context.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    contentValues
+                )
+                uri?.let { imageUri ->
+                    context.contentResolver.openOutputStream(imageUri)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
+                    }
+                    Log.d("PicMe:Gallery", "Saved edited photo to $imageUri")
+                    // 刷新媒体库
+                    repository.refreshMediaLibrary()
+                }
+            } catch (e: Exception) {
+                Log.e("PicMe:Gallery", "Failed to save edited photo: ${e.message}", e)
+            }
+        }
+    }
+
+    fun clearPhotoEditState() {
+        _photoEditState.value = PhotoEditState.Idle
+        cachedEditFaceData = null
+    }
+
+    /**
+     * 106 点 landmarks → FaceData 转换（用于静态图编辑路径）
+     */
+    private fun FloatArray.toFaceData(imageWidth: Int, imageHeight: Int): com.picme.beauty.api.FaceData? {
+        if (this.size < 212) return null
+        val warpParams = Face106ToWarpParams.convert(this, FaceDetectionSource.MEDIAPIPE)
+        return com.picme.beauty.api.FaceData(
+            faceCenterX = warpParams.faceCenterX,
+            faceCenterY = warpParams.faceCenterY,
+            leftEyeX = warpParams.leftEyeX,
+            leftEyeY = warpParams.leftEyeY,
+            rightEyeX = warpParams.rightEyeX,
+            rightEyeY = warpParams.rightEyeY,
+            mouthCenterX = warpParams.mouthCenterX,
+            mouthCenterY = warpParams.mouthCenterY,
+            mouthLeftX = warpParams.mouthLeftX,
+            mouthLeftY = warpParams.mouthLeftY,
+            mouthRightX = warpParams.mouthRightX,
+            mouthRightY = warpParams.mouthRightY,
+            upperLipCenterX = warpParams.upperLipCenterX,
+            upperLipCenterY = warpParams.upperLipCenterY,
+            lowerLipCenterX = warpParams.lowerLipCenterX,
+            lowerLipCenterY = warpParams.lowerLipCenterY,
+            faceRadius = warpParams.faceRadius,
+            hasFace = true,
+            landmarks106 = this
+        )
     }
 }
