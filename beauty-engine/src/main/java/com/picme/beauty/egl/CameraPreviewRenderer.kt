@@ -343,8 +343,8 @@ class CameraPreviewRenderer(private val context: Context) {
 
                                         beautyRenderer.onRender()
 
-                                        // [关键] 设置帧 presentation time，使用基于实际渲染时间的相对时间戳
-                                        val presentationTimeNs = (System.nanoTime() - recordingStartTimeNs).coerceAtLeast(1000L)
+                                        // [关键] 设置帧 presentation time，使用绝对时间戳确保编码器正确消费帧
+                                        val presentationTimeNs = System.nanoTime()
                                         recordedFrameCount++
                                         val ptsOk = eglCore.setPresentationTime(rs.getEglSurface(), presentationTimeNs)
 

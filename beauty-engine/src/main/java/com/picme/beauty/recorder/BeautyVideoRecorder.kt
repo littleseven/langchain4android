@@ -151,6 +151,7 @@ class BeautyVideoRecorder {
         val maxTryAgainCount = 1000 // 10秒超时（1000 * 10ms）
         var outputFrameCount = 0
         var configFrameCount = 0
+        var eosReached = false
 
         while (true) {
             val outputBufferId = codec.dequeueOutputBuffer(bufferInfo, 10_000)
@@ -209,9 +210,21 @@ class BeautyVideoRecorder {
 
                     if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
                         Log.i(TAG, "Encoder EOS reached, totalOutputFrames=$outputFrameCount, configFrames=$configFrameCount")
+                        eosReached = true
                         break
                     }
                 }
+            }
+        }
+
+        // [关键修复] 确保 Muxer 正确停止，写入 MP4 文件尾
+        if (muxerStarted) {
+            try {
+                Log.i(TAG, "Stopping muxer...")
+                muxer.stop()
+                Log.i(TAG, "Muxer stopped successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to stop muxer", e)
             }
         }
 
