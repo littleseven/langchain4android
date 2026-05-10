@@ -464,16 +464,16 @@ fun FaceLandmarkControlBar(
     onToggleInsightFace106: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.58f))
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(Color.Black.copy(alpha = 0.58f)),
+        contentAlignment = Alignment.Center
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -498,38 +498,6 @@ fun FaceLandmarkControlBar(
                 enabled = showInsightFace106,
                 onClick = onToggleInsightFace106
             )
-
-        }
-
-        when {
-            state.isLoading -> {
-                Row(
-                    modifier = Modifier.padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(6.dp),
-                        strokeWidth = 0.8.dp,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.landmark_loading),
-                        color = Color.White,
-                        fontSize = 6.sp
-                    )
-                }
-            }
-
-            state.errorMessage != null -> {
-                Text(
-                    text = state.errorMessage,
-                    color = Color(0xFFFFB4AB),
-                    fontSize = 6.sp,
-                    modifier = Modifier.padding(top = 3.dp)
-                )
-            }
         }
     }
 }
@@ -548,22 +516,22 @@ private fun LandmarkToggle(
     ) {
         Box(
             modifier = Modifier
-                .size(6.dp)
+                .size(12.dp)
                 .background(
                     color = if (enabled) color else Color.Gray.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(3.dp)
+                    shape = RoundedCornerShape(6.dp)
                 )
         )
-        Spacer(modifier = Modifier.width(4.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Column {
             Text(
                 text = label,
-                fontSize = 8.sp,
+                fontSize = 16.sp,
                 color = if (enabled) Color.White else Color.Gray
             )
             Text(
                 text = subLabel,
-                fontSize = 6.sp,
+                fontSize = 12.sp,
                 color = Color.Gray.copy(alpha = 0.8f)
             )
         }
