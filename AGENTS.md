@@ -82,6 +82,10 @@ docs/FEATURES.md (How: 交互与体验规则)
 | `./scripts/crash-detector.sh` | Crash 自动检测 | 扫描 FATAL/ANR/Native crash/GL 错误 |
 | `./scripts/ui-check.py` | UI 自动校验 | 黑屏/快门按钮/网格布局/关键点覆盖层检测 |
 | `./scripts/test-generator.py` | 测试骨架生成 | 基于 public 方法自动生成 mockk 测试 |
+| `./scripts/doc-sync-guardian.sh` | 文档同步提醒 | git diff → 自动识别需更新的文档 |
+| `./scripts/smart-commit.sh` | 智能 Commit | 基于变更自动生成 Conventional Commits |
+| `./scripts/change-report.sh` | 变更影响报告 | 统计影响范围、测试覆盖、风险项 |
+| `./scripts/release-automation.sh` | 版本发布自动化 | 版本号更新 + CHANGELOG + 构建 + Tag |
 | `adb-bot` Skill | ADB 命令参考 | 提供标准化设备操作命令集 |
 | `intent-router` Skill | 意图路由 | 自然语言→技术术语→上下文自动加载 |
 | `error-healer` Skill | 编译错误修复 | 错误分类→定向修复策略→自愈循环 |
