@@ -248,4 +248,118 @@ class BeautySettingsTest {
 
         assertEquals(settings1.hashCode(), settings2.hashCode())
     }
+
+    // ==================== 新增参数 hasAnyEffect() 测试 ====================
+
+    @Test
+    fun `hasAnyEffect returns true when colorFilter is not NONE`() {
+        val settings = BeautySettings(
+            colorFilter = FilterType.LEICA_CLASSIC,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when styleFilter is not NONE`() {
+        val settings = BeautySettings(
+            styleFilter = StyleFilter.TOON,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when exposure is non-zero`() {
+        val settings = BeautySettings(
+            exposure = 1f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when contrast is not default`() {
+        val settings = BeautySettings(
+            contrast = 60f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when saturation is not default`() {
+        val settings = BeautySettings(
+            saturation = 90f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when temperature is not default`() {
+        val settings = BeautySettings(
+            temperature = 5500f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when tint is non-zero`() {
+        val settings = BeautySettings(
+            tint = 10f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when brightness is non-zero`() {
+        val settings = BeautySettings(
+            brightness = 10f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when redAdjustment is not default`() {
+        val settings = BeautySettings(
+            redAdjustment = 110f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when greenAdjustment is not default`() {
+        val settings = BeautySettings(
+            greenAdjustment = 110f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns true when blueAdjustment is not default`() {
+        val settings = BeautySettings(
+            blueAdjustment = 110f,
+            lipColor = 0f, blush = 0f, eyebrow = 0f
+        )
+        assertTrue(settings.hasAnyEffect())
+    }
+
+    @Test
+    fun `hasAnyEffect returns false when all color grade params are at default`() {
+        val settings = BeautySettings(
+            lipColor = 0f, blush = 0f, eyebrow = 0f,
+            colorFilter = FilterType.NONE,
+            styleFilter = StyleFilter.NONE,
+            exposure = 0f, contrast = 50f, saturation = 100f,
+            temperature = 5000f, tint = 0f, brightness = 0f,
+            redAdjustment = 100f, greenAdjustment = 100f, blueAdjustment = 100f
+        )
+        assertFalse(settings.hasAnyEffect())
+    }
 }
