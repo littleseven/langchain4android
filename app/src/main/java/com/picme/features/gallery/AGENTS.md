@@ -250,7 +250,56 @@ override fun onCleared() {
 - **OOM 保护**: 系统内存紧张时自动降低非可见图片质量
 - **位置记录**: 使用 `mutableStateMapOf<Long, Rect>` 记录缩略图位置，支持展开动画
 
-## 3. Agent 执行规约 (Execution Rules)
+## 3. adb 自动化测试命令 (Gallery Test Commands)
+
+MediaPager 集成与 Camera 同源的广播命令体系（`com.picme.TEST_COMMAND`），支持通过 adb 精确控制相册操作，无需图像识别。
+
+**命令列表**:
+
+| 命令 | 参数 | 说明 |
+|------|------|------|
+| `enter_gallery` | — | 从相机页进入相册（CameraScreen 处理） |
+| `open_photo` | `index` (int) | 跳转到指定索引的图片 |
+| `long_press_photo` | — | 长按照片，触发进入编辑模式 |
+| `start_edit` | — | 进入图片编辑模式（等效长按/✨按钮） |
+| `save_edit` | — | 保存当前编辑结果 |
+| `cancel_edit` | — | 取消编辑并退出编辑模式 |
+| `set_smooth` | `value` (0-100) | 设置磨皮强度 |
+| `set_whiten` | `value` (0-100) | 设置美白强度 |
+| `set_edit_filter` | `filter` (string) | 设置色调滤镜 |
+| `start_ocr` | — | 触发 OCR 文字识别 |
+| `dismiss_ocr` | — | 关闭 OCR 结果浮层 |
+| `toggle_landmark` | — | 切换人脸关键点覆盖层 |
+| `toggle_info` | — | 切换信息浮层显示 |
+| `delete_photo` | — | 删除当前照片 |
+| `share_photo` | — | 分享当前照片 |
+
+**adb 示例**:
+```bash
+# 进入相册
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action enter_gallery
+
+# 打开第 3 张图片（索引从 0 开始）
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action open_photo --ei index 2
+
+# 进入编辑模式
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action start_edit
+
+# 设置磨皮 50、美白 30
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action set_smooth --ei value 50
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action set_whiten --ei value 30
+
+# 保存编辑
+adb shell am broadcast -a com.picme.TEST_COMMAND --es action save_edit
+```
+
+**实现细节**:
+- 命令定义: `CameraTestCommand` sealed class（位于 `features/camera/test/`）
+- 分发器: `CameraTestCommandDispatcher.commandFlow`（SharedFlow，Camera 与 Gallery 共用）
+- 收集器: `MediaPager` 内通过 `LaunchedEffect(Unit)` 订阅，仅响应 Gallery 相关命令
+- 编辑参数命令（`set_smooth` 等）仅在 `isEditing=true` 时生效，否则返回 Error
+
+## 4. Agent 执行规约 (Execution Rules)
 
 - **图片加载**: 必须使用 Coil 框架，配置内存与磁盘缓存策略
 - **线程管理**: 分组计算、OCR 识别必须在后台线程执行
@@ -261,7 +310,7 @@ override fun onCleared() {
 - **权限处理**: 读取相册需申请 `READ_MEDIA_IMAGES` / `READ_EXTERNAL_STORAGE` 权限
 - **状态持久化**: 分组模式切换后无需持久化，应用重启恢复默认 `NONE`
 
-## 4. 常见陷阱检查清单 (Checklist)
+## 5. 常见陷阱检查清单 (Checklist)
 
 - [ ] 是否在 UI 线程中执行了分组计算？(必须使用 Dispatchers.Default)
 - [ ] LruCache 是否设置了合理的上限？(避免 OOM)
@@ -276,7 +325,7 @@ override fun onCleared() {
 - [ ] 沉浸式模式是否在 DisposableEffect 中正确清理？(onDispose 恢复系统栏)
 - [ ] 缩略图位置记录是否在重组时丢失？(使用 remember)
 
-## 5. 与产品文档对照 (Product Alignment)
+## 6. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**:
 - ✅ 高刷流畅滚动 → LazyVerticalGrid + Coil 缓存 + beyondBoundsPageCount

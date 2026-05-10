@@ -1,7 +1,9 @@
 package com.picme.features.gallery
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
@@ -94,6 +96,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
+import com.picme.core.common.Logger
 import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.GroupTitleType
 import com.picme.domain.model.GroupedMedia
@@ -107,6 +110,10 @@ import com.picme.domain.model.GroupingMode.SEXY
 import com.picme.domain.model.GroupingMode.SWIMWEAR
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import com.picme.features.camera.test.CameraTestCommand
+import com.picme.features.camera.test.CameraTestCommandDispatcher
+import com.picme.features.camera.test.CameraTestCommandReceiver
+import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
 import java.io.File
@@ -255,6 +262,59 @@ fun GalleryScreen(
 
         onDispose {
             insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    // 动态注册测试命令广播接收器（解决 Android 8.0+ 后台广播限制）
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == CameraTestCommandReceiver.ACTION_TEST_COMMAND) {
+                    Logger.i("PicMe:GalleryTest", "Broadcast received: ${intent.getStringExtra("action")}")
+                    CameraTestCommandDispatcher.dispatchFromIntent(intent)
+                }
+            }
+        }
+        val filter = IntentFilter(CameraTestCommandReceiver.ACTION_TEST_COMMAND)
+        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        Logger.i("PicMe:GalleryTest", "Test command receiver registered dynamically")
+
+        onDispose {
+            context.unregisterReceiver(receiver)
+            Logger.i("PicMe:GalleryTest", "Test command receiver unregistered")
+        }
+    }
+
+    // Gallery 测试命令收集器：处理需要在网格层面响应的命令
+    LaunchedEffect(Unit) {
+        CameraTestCommandDispatcher.commandFlow.collect { command ->
+            when (command) {
+                is CameraTestCommand.EnterGallery -> {
+                    Logger.i("PicMe:GalleryTest", "Already in gallery screen")
+                    CameraTestCommandDispatcher.emitResult(
+                        CameraTestResult.Success(command, "Already in gallery screen")
+                    )
+                }
+                is CameraTestCommand.OpenPhoto -> {
+                    val currentMedia = viewModel.allMedia.value
+                    val maxIndex = (currentMedia.size - 1).coerceAtLeast(0)
+                    val targetIndex = command.index.coerceIn(0, maxIndex)
+                    if (currentMedia.isNotEmpty()) {
+                        selectedMediaIndex = targetIndex
+                        Logger.i("PicMe:GalleryTest", "OpenPhoto set index to $targetIndex")
+                        CameraTestCommandDispatcher.emitResult(
+                            CameraTestResult.Success(command, "Opened photo at index $targetIndex")
+                        )
+                    } else {
+                        CameraTestCommandDispatcher.emitResult(
+                            CameraTestResult.Error(command, "No photos available, media library may still be loading")
+                        )
+                    }
+                }
+                else -> {
+                    // 其他命令由 MediaPager 处理，此处静默忽略
+                }
+            }
         }
     }
 
