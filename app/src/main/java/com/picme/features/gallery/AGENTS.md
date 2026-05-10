@@ -158,7 +158,53 @@ fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
 }
 ```
 
-### 2.5 OCR 文字识别集成
+### 2.5 静态图美颜编辑（2026-05 新增）
+
+**技术规范**:
+- **入口**: MediaPager 顶部工具栏 ✨ 编辑按钮（`AutoFixHigh` icon），仅 `MediaType.PHOTO` 显示
+- **状态管理**: 使用 `MutableStateFlow<PhotoEditState>` 密封类管理编辑状态
+  - `Idle`: 未进入编辑模式
+  - `Analyzing`: 正在执行人脸检测
+  - `Ready(bitmap, faceData)`: 准备就绪，可显示 BeautySelector 面板
+  - `Processing`: GPU 离屏渲染处理中
+  - `Error(message)`: 处理失败
+- **人脸检测缓存**: 
+  - `preparePhotoEdit(bitmap, lensFacing=1)` 执行一次检测，缓存 `FaceData` 到 `cachedEditFaceData`
+  - `processPhoto(bitmap, settings)` 复用缓存，跳过重复检测
+  - `clearPhotoEditState()` 同步清除缓存
+- **实时预览触发**: Compose 层使用 `snapshotFlow { editSettings }.drop(1).debounce(200).filter { enabled && hasAnyEffect() }` 自动触发处理
+- **GPU 处理**: 调用 `PhotoProcessor.process(bitmap, params, faceData)`，在 `Dispatchers.Default` 执行
+- **保存策略**: `saveProcessedPhoto(context, bitmap)` 在 `Dispatchers.IO` 写入 MediaStore，文件名 `EDITED_${timestamp}.jpg`
+- **坐标系注意**: 相册编辑路径传入 `lensFacing=1`（后置），避免 `MediaPipe468Adapter` 对 X 坐标做镜像；`PhotoProcessorImpl` 中照片路径**不做 Y 翻转**（`GLUtils.texImage2D` 纹理坐标与图像坐标天然对齐）
+
+**代码示例**:
+```kotlin
+// ViewModel 层
+fun preparePhotoEdit(bitmap: Bitmap, lensFacing: Int = 1) {
+    viewModelScope.launch(Dispatchers.Default) {
+        _photoEditState.value = PhotoEditState.Analyzing
+        val detectionResult = faceDetector.detectPhoto(bitmap, lensFacing)
+        val faceData = detectionResult?.landmarks106?.toFaceData(bitmap.width, bitmap.height)
+        cachedEditFaceData = faceData
+        _photoEditState.value = PhotoEditState.Ready(bitmap, faceData)
+    }
+}
+
+fun processPhoto(bitmap: Bitmap, settings: BeautySettings, lensFacing: Int = 1) {
+    viewModelScope.launch(Dispatchers.Default) {
+        _photoEditState.value = PhotoEditState.Processing
+        val faceData = cachedEditFaceData ?: run {
+            faceDetector.detectPhoto(bitmap, lensFacing)
+                ?.landmarks106?.toFaceData(bitmap.width, bitmap.height)
+        }
+        val params = settings.toBeautyParams()
+        val processed = photoProcessor.process(bitmap, params, faceData)
+        _photoEditState.value = PhotoEditState.Ready(processed, faceData)
+    }
+}
+```
+
+### 2.6 OCR 文字识别集成
 
 **技术规范**:
 - **触发入口**: 

@@ -38,6 +38,10 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
+# AI tool workspace files
+.openclaw/workspace/
+USER.md
+
 # Quality check output
 output_quality_check/
 
