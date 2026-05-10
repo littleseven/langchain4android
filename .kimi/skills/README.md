@@ -23,6 +23,7 @@ ln -sf ../../.lingma/skills/my-new-skill .openclaw/skills/my-new-skill
 |-------|------|
 | adb-bot | ADB 自动化控制与调试 |
 | android-build-debug | Android 编译、安装、日志调试流程 |
+| auto-dev-loop | **开发自循环**：一键完成编译→安装→验证→报告完整闭环 |
 | av-gl-expert | 音视频与 OpenGL 渲染专家 |
 | coordinate-system-standard | 人脸关键点坐标系规范化 |
 | doc-sync-guardian | 三层文档体系一致性检查 |

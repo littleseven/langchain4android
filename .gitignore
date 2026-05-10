@@ -45,6 +45,9 @@ USER.md
 # Quality check output
 output_quality_check/
 
+# Auto test output
+scripts/auto_test_output/
+
 # Android Studio local configuration
 .gradle/
 .idea/
