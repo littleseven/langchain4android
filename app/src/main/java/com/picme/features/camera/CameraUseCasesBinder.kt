@@ -82,12 +82,17 @@ internal fun bindCameraUseCases(
             rotation
         ).build()
 
-        androidx.camera.core.UseCaseGroup.Builder()
+        val builder = androidx.camera.core.UseCaseGroup.Builder()
             .addUseCase(preview)
-            .addUseCase(imageCapture)
             .addUseCase(imageAnalysis)
             .setViewPort(viewport)
-            .build()
+
+        when (captureMode) {
+            MediaType.VIDEO -> builder.addUseCase(videoCapture)
+            else -> builder.addUseCase(imageCapture)
+        }
+
+        builder.build()
     } else {
         null
     }
