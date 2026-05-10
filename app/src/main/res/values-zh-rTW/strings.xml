@@ -83,6 +83,9 @@
 
     <string name="edit">編輯</string>
     <string name="save">儲存</string>
+    <string name="apply">應用</string>
+    <string name="processing">處理中...</string>
+    <string name="analyzing_face">分析人臉中...</string>
     <string name="doodle">塗鴉</string>
     <string name="mosaic">馬賽克</string>
     <string name="undo">復原</string>

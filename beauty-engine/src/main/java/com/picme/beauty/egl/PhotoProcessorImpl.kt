@@ -338,7 +338,9 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         // 人脸数据
         if (faceData != null && faceData.hasFace) {
-            // 照片路径坐标直接使用，不做 Y-flip（见方法头部注释）
+            // 照片路径：GLUtils.texImage2D 上传 Bitmap 后，纹理 T=0 对应图像顶部，
+            // 与 FaceData 的图像坐标系（Y=0 在顶部）天然对齐，无需翻转。
+            // 预览路径需翻转是因为 SurfaceTexture 的纹理坐标是上下颠倒的。
             renderer.updateFaceWarpParams(
                 faceCenterX = faceData.faceCenterX,
                 faceCenterY = faceData.faceCenterY,

@@ -1,6 +1,8 @@
 package com.picme.features.gallery.components
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -10,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -37,6 +40,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
@@ -62,11 +67,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -88,14 +95,23 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.picme.R
+import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import com.picme.features.camera.components.BeautySelector
 import com.picme.features.gallery.MediaViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
 fun MediaPager(
     assets: List<MediaAsset>,
@@ -104,7 +120,12 @@ fun MediaPager(
     onDelete: (MediaAsset) -> Unit,
     onStartOcr: (String) -> Unit,
     onDismissOcr: () -> Unit,
-    ocrState: StateFlow<MediaViewModel.OcrResult?>
+    ocrState: StateFlow<MediaViewModel.OcrResult?>,
+    photoEditState: StateFlow<MediaViewModel.PhotoEditState>,
+    onPrepareEdit: (Bitmap) -> Unit,
+    onProcessPhoto: (Bitmap, BeautySettings) -> Unit,
+    onSavePhoto: (Bitmap) -> Unit,
+    onClearEditState: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(true) }
@@ -113,12 +134,18 @@ fun MediaPager(
     var showBigBeauty106 by remember { mutableStateOf(true) }
     var showInsightFace106 by remember { mutableStateOf(true) }
     var currentPageZoomed by remember { mutableStateOf(false) }
+    var isEditing by remember { mutableStateOf(false) }
+    var editSettings by remember { mutableStateOf(BeautySettings()) }
+    var processedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var loadedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     val currentAsset = assets.getOrNull(pagerState.currentPage)
+    val editState by photoEditState.collectAsState()
     val landmarkState = rememberFaceLandmarkDetection(
         imageUri = currentAsset?.uri.orEmpty(),
-        enabled = showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO
+        enabled = showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO && !isEditing
     )
 
     LaunchedEffect(pagerState.currentPage) {
@@ -128,51 +155,129 @@ fun MediaPager(
         }
     }
 
+    LaunchedEffect(editState) {
+        when (val state = editState) {
+            is MediaViewModel.PhotoEditState.Ready -> {
+                processedBitmap = state.bitmap
+            }
+            is MediaViewModel.PhotoEditState.Idle -> {
+                processedBitmap = null
+                loadedBitmap = null
+            }
+            else -> {}
+        }
+    }
+
+    // 实时预览：editSettings 变化后 debounce 200ms 自动触发处理
+    LaunchedEffect(isEditing) {
+        if (!isEditing) return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { editSettings }
+            .drop(1) // 跳过初始值，避免进入编辑模式时自动触发
+            .debounce(200)
+            .filter { it.enabled && it.hasAnyEffect() }
+            .collect { settings ->
+                loadedBitmap?.let { bitmap ->
+                    onProcessPhoto(bitmap, settings)
+                }
+            }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxSize(),
             pageSpacing = 16.dp,
-            userScrollEnabled = !currentPageZoomed
+            userScrollEnabled = !currentPageZoomed && !isEditing
         ) { pageIndex ->
             val asset = assets[pageIndex]
             if (asset.type == MediaType.VIDEO) {
                 VideoPlayer(uri = asset.uri)
             } else {
-                ZoomableImage(
-                    uri = asset.uri,
-                    onClick = {
-                        Log.d("PicMe:UX", "Toggle info visibility via click")
-                        showInfo = !showInfo
-                    },
-                    onLongClick = {
-                        Log.d("PicMe:UX", "Trigger OCR via long press")
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onStartOcr(asset.uri)
-                    },
-                    onZoomStateChanged = { scale ->
-                        if (pageIndex == pagerState.currentPage) {
-                            currentPageZoomed = scale > 1.02f
+                val showProcessed = pageIndex == pagerState.currentPage && processedBitmap != null && isEditing
+                if (showProcessed) {
+                    Image(
+                        bitmap = processedBitmap!!.asImageBitmap(),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    ZoomableImage(
+                        uri = asset.uri,
+                        onClick = {
+                            if (!isEditing) {
+                                Log.d("PicMe:UX", "Toggle info visibility via click")
+                                showInfo = !showInfo
+                            }
+                        },
+                        onLongClick = {
+                            if (!isEditing) {
+                                Log.d("PicMe:UX", "Trigger OCR via long press")
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onStartOcr(asset.uri)
+                            }
+                        },
+                        onZoomStateChanged = { scale ->
+                            if (pageIndex == pagerState.currentPage) {
+                                currentPageZoomed = scale > 1.02f
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
 
         // Top Controls
         MediaPagerTopControls(
-            onClose = onClose,
-            showInfo = showInfo,
-            showLandmarkAction = currentAsset?.type == MediaType.PHOTO,
+            onClose = {
+                if (isEditing) {
+                    isEditing = false
+                    editSettings = BeautySettings()
+                    processedBitmap = null
+                    onClearEditState()
+                } else {
+                    onClose()
+                }
+            },
+            showInfo = showInfo && !isEditing,
+            showLandmarkAction = currentAsset?.type == MediaType.PHOTO && !isEditing,
             showLandmarkOverlay = showLandmarkOverlay,
-            onToggleInfo = { 
+            isEditing = isEditing,
+            onToggleInfo = {
                 Log.d("PicMe:UX", "Toggle info visibility via button")
-                showInfo = !showInfo 
+                showInfo = !showInfo
             },
             onToggleLandmarks = {
                 showLandmarkOverlay = !showLandmarkOverlay
             },
-            onDelete = { 
+            onStartEdit = {
+                Log.d("PicMe:UX", "Start photo editing mode")
+                isEditing = true
+                editSettings = BeautySettings(enabled = true)
+                processedBitmap = null
+                loadedBitmap = null
+                onClearEditState()
+
+                val asset = currentAsset ?: return@MediaPagerTopControls
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
+                            BitmapFactory.decodeStream(it)
+                        }
+                        if (bitmap != null) {
+                            loadedBitmap = bitmap
+                            withContext(Dispatchers.Main) {
+                                onPrepareEdit(bitmap)
+                            }
+                        } else {
+                            Log.e("PicMe:Gallery", "Failed to decode bitmap for editing")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("PicMe:Gallery", "Failed to load bitmap for editing: ${e.message}", e)
+                    }
+                }
+            },
+            onDelete = {
                 val selectedAsset = assets[pagerState.currentPage]
                 Log.d("PicMe:UX", "Request delete media: ${selectedAsset.id}")
                 onDelete(selectedAsset)
@@ -194,7 +299,7 @@ fun MediaPager(
             }
         )
 
-        if (showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO) {
+        if (showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO && !isEditing) {
             FaceLandmarkCanvasOverlay(
                 state = landmarkState,
                 show468Points = show468Points,
@@ -215,10 +320,10 @@ fun MediaPager(
 
         // Source Info Overlay (Bottom Left)
         SourceInfoOverlay(
-            visible = showInfo && currentAsset?.source != null && !showLandmarkOverlay,
+            visible = showInfo && currentAsset?.source != null && !showLandmarkOverlay && !isEditing,
             source = currentAsset?.source
         )
-        
+
         // OCR Result Overlay
         OcrResultOverlay(
             ocrState = ocrState,
@@ -227,6 +332,32 @@ fun MediaPager(
                 onDismissOcr()
             }
         )
+
+        // Photo Edit Panel
+        if (isEditing && currentAsset?.type == MediaType.PHOTO) {
+            PhotoEditPanel(
+                editState = editState,
+                settings = editSettings,
+                onSettingsChanged = { editSettings = it },
+                onSave = {
+                    processedBitmap?.let { bitmap ->
+                        onSavePhoto(bitmap)
+                        isEditing = false
+                        editSettings = BeautySettings()
+                        processedBitmap = null
+                        loadedBitmap = null
+                        onClearEditState()
+                    }
+                },
+                onCancel = {
+                    isEditing = false
+                    editSettings = BeautySettings()
+                    processedBitmap = null
+                    loadedBitmap = null
+                    onClearEditState()
+                }
+            )
+        }
     }
 }
 
@@ -506,8 +637,10 @@ private fun MediaPagerTopControls(
     showInfo: Boolean,
     showLandmarkAction: Boolean,
     showLandmarkOverlay: Boolean,
+    isEditing: Boolean,
     onToggleInfo: () -> Unit,
     onToggleLandmarks: () -> Unit,
+    onStartEdit: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
     onStartOcr: () -> Unit
@@ -521,15 +654,19 @@ private fun MediaPagerTopControls(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(
-            onClick = { 
-                Log.d("PicMe:UX", "Close MediaPager")
-                onClose() 
+            onClick = {
+                Log.d("PicMe:UX", if (isEditing) "Cancel editing mode" else "Close MediaPager")
+                onClose()
             },
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = Color.Black.copy(alpha = 0.5f)
             )
         ) {
-            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.close), tint = Color.White)
+            Icon(
+                imageVector = if (isEditing) Icons.Rounded.Close else Icons.Rounded.Close,
+                contentDescription = stringResource(R.string.close),
+                tint = Color.White
+            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -552,6 +689,21 @@ private fun MediaPagerTopControls(
                 }
             }
 
+            if (!isEditing) {
+                IconButton(
+                    onClick = onStartEdit,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Black.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Icon(
+                        Icons.Rounded.AutoFixHigh,
+                        contentDescription = stringResource(R.string.edit),
+                        tint = Color.White
+                    )
+                }
+            }
+
             IconButton(
                 onClick = { onStartOcr() },
                 colors = IconButtonDefaults.iconButtonColors(
@@ -564,7 +716,7 @@ private fun MediaPagerTopControls(
                     tint = Color.White
                 )
             }
-            
+
             IconButton(
                 onClick = { onToggleInfo() },
                 colors = IconButtonDefaults.iconButtonColors(
@@ -642,6 +794,103 @@ private fun SourceInfoOverlay(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PhotoEditPanel(
+    editState: MediaViewModel.PhotoEditState,
+    settings: BeautySettings,
+    onSettingsChanged: (BeautySettings) -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 16.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            when (editState) {
+                is MediaViewModel.PhotoEditState.Analyzing -> {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.analyzing_face),
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
+                else -> {
+                    BeautySelector(
+                        settings = settings,
+                        onSettingsChanged = onSettingsChanged
+                    )
+
+                    Spacer(modifier = Modifier.padding(vertical = 8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        val isProcessing = editState is MediaViewModel.PhotoEditState.Processing
+
+                        OutlinedButton(
+                            onClick = onCancel,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(
+                                text = stringResource(R.string.cancel),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Button(
+                            onClick = onSave,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
+                            enabled = !isProcessing
+                        ) {
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.save),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
             }
         }
     }

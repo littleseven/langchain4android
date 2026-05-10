@@ -447,7 +447,20 @@ fun GalleryScreen(
                         onDismissOcr = {
                             viewModel.clearOcrResult()
                         },
-                        ocrState = viewModel.ocrState
+                        ocrState = viewModel.ocrState,
+                        photoEditState = viewModel.photoEditState,
+                        onPrepareEdit = { bitmap ->
+                            viewModel.preparePhotoEdit(bitmap)
+                        },
+                        onProcessPhoto = { bitmap, settings ->
+                            viewModel.processPhoto(bitmap, settings)
+                        },
+                        onSavePhoto = { bitmap ->
+                            viewModel.saveProcessedPhoto(context, bitmap)
+                        },
+                        onClearEditState = {
+                            viewModel.clearPhotoEditState()
+                        }
                     )
                 }
             }
