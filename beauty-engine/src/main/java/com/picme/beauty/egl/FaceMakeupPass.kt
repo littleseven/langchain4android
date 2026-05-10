@@ -179,10 +179,22 @@ class FaceMakeupPass(private val context: Context) {
     private var baseTextureCoordLocation: Int = -1
     private var baseInputTextureLocation: Int = -1
 
-    private val vertexBuffer: FloatBuffer = ByteBuffer
+    // [双缓冲机制] 解决人脸关键点更新与渲染帧率不同步导致的妆容甩飞问题
+    // - writeBuffer: 由 updateFaceLandmarks() 写入新的人脸关键点
+    // - readBuffer: 由 renderMakeupTriangles() 读取用于渲染
+    // - 在 render() 开始时交换两个缓冲区，确保一帧内使用一致的顶点数据
+    private val writeBuffer: FloatBuffer = ByteBuffer
         .allocateDirect(VERTEX_COUNT * 2 * 4)
         .order(ByteOrder.nativeOrder())
         .asFloatBuffer()
+
+    private val readBuffer: FloatBuffer = ByteBuffer
+        .allocateDirect(VERTEX_COUNT * 2 * 4)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
+
+    private val bufferLock = Any()
+    private var hasNewLandmarks = false
 
     private val runtimeTexCoordBuffer: FloatBuffer = ByteBuffer
         .allocateDirect(FACE_TEXTURE_COORDS.size * 4)
@@ -307,14 +319,37 @@ class FaceMakeupPass(private val context: Context) {
             return
         }
 
-        vertexBuffer.clear()
-        for (index in 0 until VERTEX_COUNT) {
-            val x = landmarks[index * 2]
-            val y = landmarks[index * 2 + 1]
-            vertexBuffer.put(x * 2f - 1f)
-            vertexBuffer.put(y * 2f - 1f)
+        // [双缓冲] 写入 writeBuffer，标记有新数据待交换
+        synchronized(bufferLock) {
+            writeBuffer.clear()
+            for (index in 0 until VERTEX_COUNT) {
+                val x = landmarks[index * 2]
+                val y = landmarks[index * 2 + 1]
+                writeBuffer.put(x * 2f - 1f)
+                writeBuffer.put(y * 2f - 1f)
+            }
+            writeBuffer.flip()
+            hasNewLandmarks = true
         }
-        vertexBuffer.flip()
+    }
+
+    /**
+     * 交换读写缓冲区，确保渲染使用最新的人脸关键点。
+     * 在 render() 开始时调用，保证一帧内顶点数据一致。
+     */
+    private fun swapBuffers() {
+        synchronized(bufferLock) {
+            if (hasNewLandmarks) {
+                // 将 writeBuffer 内容复制到 readBuffer
+                readBuffer.clear()
+                val tempArray = FloatArray(VERTEX_COUNT * 2)
+                writeBuffer.position(0)
+                writeBuffer.get(tempArray)
+                readBuffer.put(tempArray)
+                readBuffer.flip()
+                hasNewLandmarks = false
+            }
+        }
     }
 
     fun setIntensity(value: Float) {
@@ -355,6 +390,9 @@ class FaceMakeupPass(private val context: Context) {
             )
             return false
         }
+
+        // [双缓冲] 在渲染前交换缓冲区，确保本帧使用一致的顶点数据
+        swapBuffers()
 
         updateTextureCoordinates(loadedTexture.bounds)
 
@@ -440,8 +478,8 @@ class FaceMakeupPass(private val context: Context) {
         }
 
         GLES20.glEnableVertexAttribArray(aPositionLocation)
-        vertexBuffer.position(0)
-        GLES20.glVertexAttribPointer(aPositionLocation, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer)
+        readBuffer.position(0)
+        GLES20.glVertexAttribPointer(aPositionLocation, 2, GLES20.GL_FLOAT, false, 0, readBuffer)
 
         GLES20.glEnableVertexAttribArray(aTextureCoordLocation)
         runtimeTexCoordBuffer.position(0)
