@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
+import android.util.Log
 import androidx.camera.core.ImageCapture
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Recorder
@@ -86,8 +87,27 @@ internal fun handleCaptureClick(
         val outputDir = context.getExternalFilesDir(null) ?: context.cacheDir
         val outputFile = File(outputDir, name)
 
-        val recordingWidth = 1920
-        val recordingHeight = 1080
+        // [修复] 根据预览视图实际尺寸设置录制分辨率，保持竖屏/横屏比例一致
+        val previewView = glPreviewProvider.getView()
+        val previewWidth = previewView.width.coerceAtLeast(1)
+        val previewHeight = previewView.height.coerceAtLeast(1)
+
+        // 计算目标录制分辨率：短边对齐 1080p，保持原始比例
+        val (recordingWidth, recordingHeight) = if (previewHeight > previewWidth) {
+            // 竖屏：高度为 1920，宽度按比例计算
+            val targetHeight = 1920
+            val targetWidth = (targetHeight * previewWidth.toFloat() / previewHeight.toFloat()).toInt().coerceAtLeast(720)
+            // 确保宽度为偶数（编码器要求）
+            Pair(targetWidth - (targetWidth % 2), targetHeight)
+        } else {
+            // 横屏：宽度为 1920，高度按比例计算
+            val targetWidth = 1920
+            val targetHeight = (targetWidth * previewHeight.toFloat() / previewWidth.toFloat()).toInt().coerceAtLeast(720)
+            // 确保高度为偶数（编码器要求）
+            Pair(targetWidth, targetHeight - (targetHeight % 2))
+        }
+
+        Log.i("PicMe:CameraCapture", "Recording resolution: ${recordingWidth}x${recordingHeight} (preview: ${previewWidth}x${previewHeight})")
 
         onIsRecordingChanged(true)
         beautyVideoRecorder.start(
