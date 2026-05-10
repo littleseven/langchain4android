@@ -1,115 +1,172 @@
 ---
 name: rd-reflection
-description: RD 工程师任务复盘与流程优化模板。用于记录开发过程中的陷阱、根因分析和预防措施，形成可复用的经验资产。
+description: RD 工程师自我进化系统。结构化复盘模板 + 累积经验资产 + 动态检查清单 + 跨 skill 联动更新。每次任务后自动提取教训、更新检查清单、反哺相关 skill，形成越用越准的团队知识库。
 ---
 
-# RD 开发流程反省与优化
+# RD 自我进化系统 (Self-Evolving Reflection)
 
-## 本次任务：Gallery adb 测试命令扩展
-
-### 一、问题清单（按严重程度排序）
-
-#### 🔴 P0: 前置调研严重不足
-**问题**: 没有先阅读项目已有的 `adb-bot` skill，其中已明确记载了：
-- 动态注册 `BroadcastReceiver` 的必要性（解决 Android 8.0+ 后台广播限制）
-- `Background execution not allowed` 的故障排除方法
-- `CameraScreen` 通过 `DisposableEffect` 注册/注销 receiver 的机制
-
-**根因**: 急于编码，跳过了"读文档 → 画架构 → 写伪代码"的前置步骤。
-**时间浪费**: ~25 分钟在调试为什么 `open_photo` 广播被"吞掉"。
-
-#### 🔴 P0: 架构分层理解断层
-**问题**: 没有意识到 `CameraScreen` 和 `GalleryScreen` 是两个独立的 Composable，各自需要独立的动态 receiver。以为静态注册的 `CameraTestCommandReceiver` 足够。
-
-**根因**: 没有画出命令流向图（Broadcast → Receiver → Dispatcher → Screen → Flow → Handler）。
-**时间浪费**: ~15 分钟在确认 receiver 注册状态。
-
-#### 🟠 P1: Compose 闭包捕获陷阱
-**问题**: `GalleryScreen` 的 `LaunchedEffect(Unit)` 闭包捕获了初始值为空的 `allFlatMedia`，导致 `open_photo` 命令处理时始终认为没有照片。
-
-**根因**: 对 Compose 的 `LaunchedEffect` 闭包语义理解不深，没有意识到 `val allFlatMedia = remember(...)` 在 lambda 中被捕获的是挂载时刻的值。
-**时间浪费**: ~20 分钟在反复发送 `open_photo` 并困惑为什么 `size=0`。
-**正确做法**: 在 `when` 分支内使用 `viewModel.allMedia.value` 直接读取最新 StateFlow 值。
-
-#### 🟠 P1: 调试方法原始且低效
-**问题**: 
-- 没有使用 `adb logcat -c` 清除日志，导致新旧进程日志混杂
-- 没有使用 `adb shell pidof com.picme` 确认进程号，grep 过滤经常抓到旧进程
-- 修改代码后只运行 `compileDebugKotlin`，没有重新打包 APK，导致安装的是旧代码
-- 日志过滤标签不准确，多次遗漏关键日志
-
-**时间浪费**: ~20 分钟在"修改代码→编译→安装→测试→发现没变化→困惑"的循环中。
-
-#### 🟡 P2: 批量修改导致编译错误
-**问题**: 一次性在 `CameraTestCommand` 中添加了 16 个子类，导致 `CameraScreen` 的 exhaustive `when` 编译失败。事后用 `else` 分支补救。
-
-**根因**: 没有增量开发——应该先添加命令定义 + 一个处理分支，验证编译通过后再扩展。
-**时间浪费**: ~5 分钟修复编译错误。
+> **定位**：不是静态文档，而是活的系统。每次任务后自动生长，下次类似任务自动预警。
+> 
+> **核心循环**：`任务执行 → 结构化复盘 → 经验沉淀 → 清单更新 → skill 联动 → 下次任务预警`
 
 ---
 
-### 二、优化措施（已落地或待执行）
+## 一、使用流程（Task Lifecycle）
 
-#### ✅ 措施 1: 强制前置调研 Checklist
-任何涉及现有子系统的任务，编码前必须完成：
-1. [ ] 检索项目 skills（`adb-bot`, `av-gl-expert`, `coordinate-system-standard` 等）
-2. [ ] 阅读相关模块 `AGENTS.md`
-3. [ ] 画出核心数据流/命令流图（哪怕只是文字描述）
-4. [ ] 确认需要修改的文件清单和影响范围
+### Phase 1: 任务启动 — 动态检查清单（Prevent）
 
-#### ✅ 措施 2: Compose 状态读取规范
-在 `LaunchedEffect(Unit)` 的 `collect` lambda 中：
-- **禁止**直接读取 `remember` 计算的局部变量（会被闭包捕获旧值）
-- **必须**使用 `viewModel.xxxStateFlow.value` 或 `snapshotFlow { xxx }.first()` 获取最新值
-- 文档已更新到 `gallery/AGENTS.md` §3
+**任何涉及现有子系统的任务，编码前 MUST 执行：**
 
-#### ✅ 措施 3: adb 调试标准化流程
-每次设备调试必须遵循：
 ```bash
-# 1. 确认进程
-adb shell pidof com.picme
-
-# 2. 清除日志
-adb logcat -c
-
-# 3. 修改代码后必须重新打包
-./gradlew :app:assembleDebug
-
-# 4. 强制停止后安装（避免热更新残留）
-adb shell am force-stop com.picme
-adb install -r app/build/outputs/apk/debug/picme-debug.apk
-
-# 5. 发送命令
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "xxx"
-
-# 6. 按进程号过滤日志
-adb logcat -d | grep "PID"
+# 自动读取当前检查清单
+cat .lingma/skills/rd-reflection/CHECKLIST.md
 ```
 
-#### ✅ 措施 4: 增量开发原则
-扩展命令体系时：
-1. 先添加 1 个命令定义
-2. 在 Dispatcher 中添加 describe
-3. 在目标 Screen 中添加处理分支
-4. 编译 → 安装 → 验证
-5. 通过后再批量添加剩余命令
+系统会根据任务关键词（如 "gallery", "adb", "compose"）自动匹配相关陷阱并高亮预警。
+
+### Phase 2: 任务执行 — 实时标记（Observe）
+
+执行过程中，一旦遇到以下情况，立即在 `TASK_LOG.md` 中记录：
+- 某处花了超过 10 分钟仍未解决
+- 发现与已有 skill 文档不一致的行为
+- 踩到了已知陷阱（即使检查清单已提醒）
+
+### Phase 3: 任务结束 — 结构化复盘（Reflect）
+
+**必须回答以下 5 个问题：**
+
+1. **时间分布**：各阶段实际耗时 vs 预估？最大偏差在哪里？
+2. **陷阱清单**：遇到了哪些坑？严重级别？是否已有 skill 覆盖？
+3. **根因分析**：每个陷阱的根本原因是什么？（知识盲区 / 流程缺失 / 工具不熟）
+4. **措施落地**：具体改什么？（代码 / 文档 / skill / 流程）
+5. **效果验证**：如何确保下次不再踩？（检查清单更新 / 自动化测试）
+
+**复盘输出格式**（见 §三）：
+- 追加到 `EXPERIENCE_LOG.md`
+- 更新 `CHECKLIST.md`
+- 如有必要，联动更新相关 skill
+
+### Phase 4: 经验发酵 — 跨 skill 联动（Evolve）
+
+当某个陷阱被不同任务重复踩到时，自动触发：
+1. 在相关 skill 的"常见陷阱"章节追加
+2. 如果 skill 文档与经验冲突，标记 `⚠️ 文档漂移` 待修复
+3. 生成 `EVOLUTION_REPORT.md` 月度报告
 
 ---
 
-### 三、已更新的项目资产
+## 二、文件体系
 
-| 资产 | 更新内容 |
-|------|----------|
-| `adb-bot/SKILL.md` | 新增 Gallery 命令列表、故障排除 "命令无响应" 章节 |
-| `gallery/AGENTS.md` | 新增 §3 adb 测试命令完整文档 |
-| `CameraTestCommand.kt` | 新增 16 个 Gallery 命令 |
-| `CameraTestCommandDispatcher.kt` | 新增 describe 映射 |
-| `GalleryScreen.kt` | 新增动态 receiver + 命令收集器 |
-| `MediaPager.kt` | 新增命令收集器 + 编辑参数控制 |
-| `CameraScreen.kt` | 新增 `EnterGallery` 支持 + `else` 分支容错 |
+```
+rd-reflection/
+├── SKILL.md                    # 本文件：系统定义与使用流程
+├── CHECKLIST.md                # 动态检查清单：任务前自动读取
+├── EXPERIENCE_LOG.md           # 累积经验日志：按时间倒序，每次任务后追加
+├── EVOLUTION_REPORT.md         # 月度进化报告：自动生成常见陷阱 TOP N
+├── TASK_LOG.md                 # 当前任务实时记录（临时，任务完成后归档到 EXPERIENCE_LOG）
+└── scripts/
+    ├── new_task.sh             # 启动新任务：读取检查清单 + 初始化 TASK_LOG
+    ├── reflect.sh              # 任务复盘：引导 5 个问题 + 自动更新 CHECKLIST + EXPERIENCE_LOG
+    ├── update_skill.sh         # 跨 skill 联动：将经验同步到相关 skill 的"常见陷阱"
+    └── evolution_report.sh     # 生成月度进化报告
+```
 
 ---
 
-### 四、经验沉淀（一句话原则）
+## 三、复盘输出模板（追加到 EXPERIENCE_LOG.md）
 
-> **"先读 skill 再画流图，闭包捕获用 StateFlow，调试必清日志查 pid，增量验证再批量扩。"**
+```markdown
+## [YYYY-MM-DD] 任务标题
+
+**关联技能**: `adb-bot`, `compose-lifecycle`, `gallery`
+**严重级别**: 🔴 P0 / 🟠 P1 / 🟡 P2
+**时间偏差**: 预估 X 分钟 → 实际 Y 分钟（偏差 +Z%）
+
+### 陷阱清单
+
+| # | 陷阱描述 | 级别 | 已有 skill 覆盖？ | 时间浪费 |
+|---|----------|------|-------------------|----------|
+| 1 | xxx | P0 | ❌ 无 / ⚠️ 有但未读 / ✅ 有但不够 | 25min |
+
+### 根因分析
+
+- **陷阱 1**: 根因是 xxx，属于 [知识盲区 / 流程缺失 / 工具不熟]
+
+### 措施落地
+
+| 措施 | 目标资产 | 状态 |
+|------|----------|------|
+| 更新 adb-bot skill 故障排除 | `.lingma/skills/adb-bot/SKILL.md` | ✅ 已提交 |
+| 新增 Compose 闭包捕获规范 | `gallery/AGENTS.md` | ✅ 已提交 |
+
+### 检查清单更新
+
+- [x] 新增：编码前必须检索相关 skill
+- [x] 新增：LaunchedEffect 中禁止读取 remember 局部变量
+
+### 一句话总结
+
+> xxx
+```
+
+---
+
+## 四、自我进化机制
+
+### 进化规则 1：重复陷阱自动升级
+
+如果同一个陷阱在 30 天内被踩到 2 次+，自动：
+1. 在 `CHECKLIST.md` 中标记为 `🔴 高频陷阱`
+2. 在相关 skill 的"常见陷阱"章节追加，并标记 `🚨 已确认 X 次`
+3. 在 `EVOLUTION_REPORT.md` 中列入 TOP 3
+
+### 进化规则 2：文档漂移检测
+
+当经验与 skill 文档冲突时，标记 `⚠️ 文档漂移`：
+```markdown
+- [⚠️ 文档漂移] adb-bot/SKILL.md §故障排除 说"静态接收器足够"，
+  但实际经验证明 GalleryScreen 必须动态注册。待修复。
+```
+
+### 进化规则 3：检查清单智能排序
+
+`CHECKLIST.md` 中的条目按以下权重排序：
+1. 高频陷阱（重复次数）
+2. 高时间浪费（单次 >15 分钟）
+3. 最近 7 天新增
+
+---
+
+## 五、与项目资产的联动矩阵
+
+| 本系统输出 | 联动目标 | 触发条件 |
+|------------|----------|----------|
+| CHECKLIST.md | 任务启动时自动读取 | 每次任务 |
+| EXPERIENCE_LOG.md | 季度代码审查参考 | 每季度 |
+| EVOLUTION_REPORT.md | 团队技术分享素材 | 每月 |
+| skill 常见陷阱更新 | 相关 skill 的 SKILL.md | 陷阱重复 2 次+ |
+| 文档漂移标记 | 专项修复任务 | 发现即标记 |
+
+---
+
+## 六、快速命令
+
+```bash
+# 启动新任务（读取检查清单）
+./.lingma/skills/rd-reflection/scripts/new_task.sh "任务名称"
+
+# 任务复盘（引导 5 个问题，自动更新清单和日志）
+./.lingma/skills/rd-reflection/scripts/reflect.sh
+
+# 生成月度进化报告
+./.lingma/skills/rd-reflection/scripts/evolution_report.sh
+
+# 将经验同步到相关 skill
+./.lingma/skills/rd-reflection/scripts/update_skill.sh adb-bot
+```
+
+---
+
+## 七、已有经验资产（截至 2026-05-10）
+
+见 `EXPERIENCE_LOG.md`
