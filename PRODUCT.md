@@ -82,6 +82,11 @@
         - **MediaPipe Face Mesh 468→106（备选）**：异步分析流，通过精确的 468→106 点语义映射支撑大美丽模式的精细美型与妆容贴合。当 InsightFace 连续漏检或初始化失败时自动回退。
         - **Auto 模式**：优先使用 InsightFace，主链路异常时允许自动回退到 MediaPipe，保障可用性。
         - **Selfie Segmentation（Phase 2-3）**：引入 ML Kit Selfie Segmentation 获取人像前景 Mask，实现背景虚化、背景替换、美体边缘保护。完全端侧运行，符合 `[PRIVACY]` 红线。
+    - **帧同步美妆系统（2026-05 规划中）**：
+        - **问题**：人脸检测 ~10fps 与渲染 30~60fps 不同步，导致妆容滞后于人脸移动（"美妆与人脸分离"）。
+        - **方案**：全局 `FrameId` 绑定 + 时序对齐队列 + 运动预测补偿，实现妆容与相机帧精确对齐。
+        - **效果目标**：快速转头场景妆容偏差 < 8px @1080p，人脸出画 3 帧内妆容消失。
+        - **详细设计**：见 `docs/PRD-FRAME-SYNC-MAKEUP.md` 与 `docs/TECH-SPEC-FRAME-SYNC-MAKEUP.md`。
     - **美颜引擎技术路线（2026-05 更新）**：
         - **当前主引擎**：大美丽（自研 OpenGL ES + EGL）为唯一引擎；GPUPixel 已于 2026-05 完全移除。
         - **大美丽当前渲染**：基础美颜由主 Shader 实时处理；唇色/腮红启用时切换到 `FaceMakeupPass + 主 Shader` 的多 Pass GPU 链路，仍保持端侧实时预览。

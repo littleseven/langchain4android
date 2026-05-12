@@ -85,6 +85,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     // GPUPixel 风格瘦脸/大眼：106点人脸关键点
     private val facePointsBuffer = FloatArray(106 * 2)
+    private val faceSyncLock = Any()  // [帧同步 P0] 保护 facePointsBuffer 与 hasFace 的线程安全
     private var useGpupixelWarp: Int = 1  // 默认启用GPUPixel风格warp
     private var viewportWidth: Int = 0
     private var viewportHeight: Int = 0
@@ -255,7 +256,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         this.lowerLipCenterX = lowerLipCenterX.coerceIn(0f, 1f)
         this.lowerLipCenterY = lowerLipCenterY.coerceIn(0f, 1f)
         this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
-        this.hasFace = if (hasFace) 1f else 0f
+        synchronized(faceSyncLock) {
+            this.hasFace = if (hasFace) 1f else 0f
+        }
     }
 
     fun setColorGradeParams(
@@ -362,7 +365,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * 无需逆矩阵还原，直接透传即可保证与 FBO 纹理坐标系一致。
      */
     private fun toStandardUvFacePoints(): FloatArray {
-        return facePointsBuffer.clone()
+        synchronized(faceSyncLock) {
+            return facePointsBuffer.clone()
+        }
     }
 
     private fun inverseTransformVec2(x: Float, y: Float): Pair<Float, Float> {
@@ -383,13 +388,35 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
      */
     fun updateFacePoints106(landmarks106: FloatArray?) {
-        if (landmarks106 == null || landmarks106.isEmpty()) {
-            hasFace = 0f
-            return
+        synchronized(faceSyncLock) {
+            if (landmarks106 == null || landmarks106.isEmpty()) {
+                hasFace = 0f
+                return
+            }
+            val count = minOf(landmarks106.size, facePointsBuffer.size)
+            System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
+            hasFace = 1f
         }
-        val count = minOf(landmarks106.size, facePointsBuffer.size)
-        System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
-        hasFace = 1f
+    }
+
+    /**
+     * [帧同步] 更新同步后的106点人脸关键点
+     * 与 updateFacePoints106 的区别：不控制 hasFace 状态，由调用方通过 setHasFace 独立控制
+     */
+    fun updateSyncedFacePoints106(landmarks106: FloatArray) {
+        synchronized(faceSyncLock) {
+            val count = minOf(landmarks106.size, facePointsBuffer.size)
+            System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
+        }
+    }
+
+    /**
+     * [帧同步] 独立设置人脸存在状态
+     */
+    fun setHasFace(hasFace: Boolean) {
+        synchronized(faceSyncLock) {
+            this.hasFace = if (hasFace) 1f else 0f
+        }
     }
 
     /**
@@ -1476,8 +1503,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             )
         }
 
+        // [帧同步] FaceMakeupPass 使用帧同步后的关键点（已通过 updateSyncedFacePoints106 写入 facePointsBuffer）
         if (hasFace > 0.5f) {
-            faceMakeupPass.updateFaceLandmarks(toStandardUvFacePoints())
+            faceMakeupPass.updateFaceLandmarksSynced(toStandardUvFacePoints())
         }
 
         var currentTextureId = inputTextureId

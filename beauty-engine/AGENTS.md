@@ -401,8 +401,74 @@ if (fps < 25 || processingMs > 20) {
 - 输入/显示 Surface 解耦：避免 CameraX 与 View 生命周期抖动互相影响
 - 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档“盒式模糊”描述已纠正）。后续评估引导滤波（O(N) 无序复杂度）作为 Phase 2 升级方向
 - 基础美颜优先走主 Shader；妆容纹理通过 `FaceMakeupPass` 独立 Pass 处理，在效果与实时性间平衡
-
 - `api/` 纯 Kotlin 接口层：为后续独立发布 AAR/Maven 做准备
+- 帧同步系统（2026-05）：解决人脸检测 ~10fps 与渲染 30~60fps 不同步导致的妆容滞后问题
+
+---
+
+## 5. 帧同步系统规范（Frame-Sync Makeup System，2026-05）
+
+### 5.1 架构定位
+帧同步是 beauty-engine 的**横切能力**，沉淀在 `internal/framesync/` 包下：
+- `api/` 层新增 `FrameId`、`FrameSyncConfig`、`FrameSyncResult` 数据契约
+- `internal/framesync/` 实现时序对齐核心，不侵入 `egl/` 具体 Pass
+- `FaceMakeupPass` 只消费同步后的顶点数据，不关心同步逻辑
+
+### 5.2 核心组件
+
+| 组件 | 职责 | 线程 |
+|------|------|------|
+| `FrameId` | 单调递增全局帧标识符 | 任意（AtomicLong） |
+| `FrameSyncBridge` | 线程安全共享分析线程的最新 FrameId 给渲染线程 | 分析线程写 / 渲染线程读 |
+| `FrameSyncManager` | 时序对齐：精确匹配 → 历史回退 → 预测补偿 → 缺失隐藏 | 渲染线程读 / 检测线程写 |
+| `MotionTracker` | 速度外推预测算法，保留 3 帧历史 | 渲染线程读 / 检测线程写 |
+| `DetectionQueue` | 带 FrameId 的检测任务队列，深度限制 2，超时 200ms | 分析线程写 / 检测线程读 |
+| `FaceDetectionWorker` | 消费 DetectionQueue，异步执行人脸检测 | 独立工作线程 |
+
+### 5.3 FrameId 传递机制（CR-P0-1 修复后）
+```
+CameraFrameAnalyzer（分析线程）
+    ↓ FrameId.next()
+    ├── FrameSyncBridge.setLatestFrameId(frameId) ──→ 渲染线程读取
+    ├── DetectionQueue.offer(Task(frameId, ...)) ───→ FaceDetectionWorker 异步检测
+    └── faceDetector.detect() 同步检测 ─────────────→ FrameSyncManager.storeResult()
+
+CameraPreviewRenderer（渲染线程）
+    ↓ FrameSyncBridge.getLatestFrameId()
+    └── FrameSyncManager.query(frameId) → applySyncResultToRenderer()
+```
+
+**关键约束**：
+- 分析线程和渲染线程**共用同一套 FrameId 序列**，通过 `FrameSyncBridge` 共享
+- 同步检测路径（FaceWarpParams 用）和异步检测路径（妆容用）**都存入 FrameSyncManager**，统一数据源（CR-P0-2）
+- `FrameSyncBridge` 在 `CameraPreviewRenderer.release()` 时调用 `reset()` 清理
+
+### 5.4 同步模式
+
+| 模式 | 行为 | 适用场景 |
+|------|------|----------|
+| `STRICT` | 精确匹配；超过缺失阈值隐藏妆容 | 默认，追求精确对齐 |
+| `SMOOTH` | 精确匹配；无匹配时历史回退+预测补偿 | 快移场景，追求平滑 |
+| `OFF` | 关闭帧同步，恢复原有双缓冲插值 | 对比测试 / 降级 |
+
+### 5.5 性能约束
+- `MotionTracker.predict()` 内部复用预分配缓冲区，避免每帧 GC（CR-P1-1）
+- `CameraPreviewRenderer.applySyncResultToRenderer()` 复用 `syncMappedBuffer`，避免每帧 new FloatArray
+- `DetectionQueue` 队列深度 2，超时 200ms，防止检测线程积压
+
+### 5.6 资源生命周期
+- `CameraPreviewRenderer.release()` 必须调用：
+  1. `frameSyncManager.clear()` — 清空历史检测结果
+  2. `FrameSyncBridge.reset()` — 重置共享 FrameId
+  3. `stopFaceDetectionWorker()` — 停止检测工作线程
+
+### 5.7 检查清单
+- [ ] `FrameSyncBridge.setLatestFrameId()` 在每次分析帧检测前调用
+- [ ] 同步检测路径和异步检测路径都调用 `FrameSyncManager.storeResult()`
+- [ ] `CameraPreviewRenderer` 使用 `FrameSyncBridge.getLatestFrameId()` 而非 `FrameId.next()`
+- [ ] `release()` 时清理 `FrameSyncManager` + `FrameSyncBridge` + `FaceDetectionWorker`
+- [ ] `FaceMakeupPass.updateFaceLandmarksSynced()` 输入为 UV [0,1]，内部转 NDC [-1,1]
+- [ ] `FrameSyncManager.updateConfig()` 能真正生效（config 为 var）
 
 ---
 
