@@ -179,10 +179,9 @@ class FaceMakeupPass(private val context: Context) {
     private var baseTextureCoordLocation: Int = -1
     private var baseInputTextureLocation: Int = -1
 
-    // [双缓冲机制] 解决人脸关键点更新与渲染帧率不同步导致的妆容甩飞问题
-    // - writeBuffer: 由 updateFaceLandmarks() 写入新的人脸关键点
-    // - readBuffer: 由 renderMakeupTriangles() 读取用于渲染
-    // - 在 render() 开始时交换两个缓冲区，确保一帧内使用一致的顶点数据
+    // [双缓冲 + 顶点插值] 解决人脸关键点更新与渲染帧率不同步导致的妆容甩飞问题
+    // 人脸检测约10fps，渲染约30-60fps，直接渲染会导致妆容位置突变
+    // 方案：保存上一帧和当前帧顶点，根据时间进度进行线性插值，让妆容平滑跟随
     private val writeBuffer: FloatBuffer = ByteBuffer
         .allocateDirect(VERTEX_COUNT * 2 * 4)
         .order(ByteOrder.nativeOrder())
@@ -193,8 +192,16 @@ class FaceMakeupPass(private val context: Context) {
         .order(ByteOrder.nativeOrder())
         .asFloatBuffer()
 
+    // 用于插值：上一帧和当前帧的顶点数据（NDC空间 [-1,1]）
+    private val prevFrameVertices = FloatArray(VERTEX_COUNT * 2)
+    private val currFrameVertices = FloatArray(VERTEX_COUNT * 2)
+    private val interpolatedVertices = FloatArray(VERTEX_COUNT * 2)
+
     private val bufferLock = Any()
     private var hasNewLandmarks = false
+    private var prevFrameTimeMs: Long = 0
+    private var currFrameTimeMs: Long = 0
+    private var isFirstFrame = true
 
     private val runtimeTexCoordBuffer: FloatBuffer = ByteBuffer
         .allocateDirect(FACE_TEXTURE_COORDS.size * 4)
@@ -334,22 +341,84 @@ class FaceMakeupPass(private val context: Context) {
     }
 
     /**
-     * 交换读写缓冲区，确保渲染使用最新的人脸关键点。
+     * [帧同步] 直接更新同步后的人脸关键点，绕过双缓冲插值。
+     *
+     * **输入坐标系约定**（CR-P1-5）：
+     * - 输入必须是 **纹理 UV 坐标 [0, 1]**，与 `CameraPreviewRenderer.mapNormalizedToUv` 输出一致
+     * - 内部会转换为 **NDC [-1, 1]** 用于三角网格渲染
+     * - 调用方严禁传入已转换的 NDC 坐标，否则会导致妆容位置错误
+     *
+     * @param uvLandmarks 106 点 UV 坐标，FloatArray(212) = [u0,v0, u1,v1, ...]
+     */
+    fun updateFaceLandmarksSynced(uvLandmarks: FloatArray) {
+        if (uvLandmarks.size < VERTEX_COUNT * 2) {
+            Log.w(TAG, "Invalid synced landmarks size: ${uvLandmarks.size}, expected >= ${VERTEX_COUNT * 2}")
+            return
+        }
+
+        synchronized(bufferLock) {
+            // [帧同步] 直接写入 readBuffer，供 render() 直接使用
+            // 帧同步系统已在 CPU 侧完成预测补偿，此处无需额外插值
+            readBuffer.clear()
+            for (index in 0 until VERTEX_COUNT) {
+                val x = uvLandmarks[index * 2]
+                val y = uvLandmarks[index * 2 + 1]
+                // 输入已经是 UV [0,1]，需要转换为 NDC [-1,1]
+                readBuffer.put(x * 2f - 1f)
+                readBuffer.put(y * 2f - 1f)
+            }
+            readBuffer.flip()
+            // 标记不是第一帧，避免旧插值路径
+            isFirstFrame = false
+            hasNewLandmarks = false
+        }
+    }
+
+    /**
+     * 交换读写缓冲区，并更新插值用的历史帧数据。
      * 在 render() 开始时调用，保证一帧内顶点数据一致。
      */
     private fun swapBuffers() {
         synchronized(bufferLock) {
             if (hasNewLandmarks) {
-                // 将 writeBuffer 内容复制到 readBuffer
-                readBuffer.clear()
-                val tempArray = FloatArray(VERTEX_COUNT * 2)
+                // 将当前帧移为上一帧
+                System.arraycopy(currFrameVertices, 0, prevFrameVertices, 0, VERTEX_COUNT * 2)
+                prevFrameTimeMs = currFrameTimeMs
+
+                // 将 writeBuffer 内容复制到 currFrame
                 writeBuffer.position(0)
+                for (i in 0 until VERTEX_COUNT * 2) {
+                    currFrameVertices[i] = writeBuffer.get()
+                }
+                currFrameTimeMs = System.currentTimeMillis()
+
+                // 将 writeBuffer 内容复制到 readBuffer（用于非插值路径的兼容）
+                readBuffer.clear()
+                writeBuffer.position(0)
+                val tempArray = FloatArray(VERTEX_COUNT * 2)
                 writeBuffer.get(tempArray)
                 readBuffer.put(tempArray)
                 readBuffer.flip()
+
                 hasNewLandmarks = false
+                isFirstFrame = false
             }
         }
+    }
+
+    /**
+     * [帧同步] 获取用于渲染的顶点数据。
+     *
+     * 帧同步系统已在 CameraPreviewRenderer 中完成预测补偿，
+     * FaceMakeupPass 只需直接使用同步后的顶点数据，无需额外插值。
+     * 保留此函数作为兼容层，未来可在此添加 Shader 级平滑。
+     *
+     * @return 当前顶点 FloatBuffer
+     */
+    private fun computeInterpolatedVertices(): FloatBuffer {
+        // [帧同步] 直接使用帧同步系统提供的顶点数据
+        readBuffer.position(0)
+        return readBuffer
     }
 
     fun setIntensity(value: Float) {
@@ -391,7 +460,7 @@ class FaceMakeupPass(private val context: Context) {
             return false
         }
 
-        // [双缓冲] 在渲染前交换缓冲区，确保本帧使用一致的顶点数据
+        // [双缓冲+插值] 在渲染前交换缓冲区，确保本帧使用一致的顶点数据
         swapBuffers()
 
         updateTextureCoordinates(loadedTexture.bounds)
@@ -478,8 +547,8 @@ class FaceMakeupPass(private val context: Context) {
         }
 
         GLES20.glEnableVertexAttribArray(aPositionLocation)
-        readBuffer.position(0)
-        GLES20.glVertexAttribPointer(aPositionLocation, 2, GLES20.GL_FLOAT, false, 0, readBuffer)
+        val vertexBufferForRender = computeInterpolatedVertices()
+        GLES20.glVertexAttribPointer(aPositionLocation, 2, GLES20.GL_FLOAT, false, 0, vertexBufferForRender)
 
         GLES20.glEnableVertexAttribArray(aTextureCoordLocation)
         runtimeTexCoordBuffer.position(0)

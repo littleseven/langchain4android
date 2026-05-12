@@ -219,13 +219,16 @@ class BeautyPreviewView @JvmOverloads constructor(
             LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT
         )
-        surfaceView.setZOrderMediaOverlay(true)
+        // [诊断] 暂时禁用 setZOrderMediaOverlay，测试是否是它导致 surfaceCreated 不触发
+        // surfaceView.setZOrderMediaOverlay(true)
         addView(surfaceView)
 
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 val surface = holder.surface
                 Log.d(TAG, "Display SurfaceView ready: ${surfaceView.width}x${surfaceView.height}")
+                surfaceCheckRunnable?.let { removeCallbacks(it) }
+                surfaceCheckRunnable = null
                 ensureRendererInitialized()
                 bindDisplaySurface(surface)
             }
@@ -431,15 +434,51 @@ class BeautyPreviewView @JvmOverloads constructor(
         super.onAttachedToWindow()
         Log.d(TAG, "BeautyPreviewView attached to window")
         post {
-            val holder = surfaceView.holder
-            val surface = holder.surface
-            if (surface != null && surface.isValid) {
-                ensureRendererInitialized()
-                bindDisplaySurface(surface)
-            } else {
-                Log.w(TAG, "Surface not yet valid, waiting for surfaceCreated callback")
+            tryBindSurfaceFromHolder()
+        }
+    }
+
+    private fun tryBindSurfaceFromHolder() {
+        val holder = surfaceView.holder
+        val surface = holder.surface
+        if (surface != null && surface.isValid) {
+            Log.d(TAG, "Surface valid in onAttachedToWindow post, binding directly")
+            ensureRendererInitialized()
+            bindDisplaySurface(surface)
+        } else {
+            Log.w(TAG, "Surface not yet valid, waiting for surfaceCreated callback")
+            // SurfaceView 在动态添加时 surfaceCreated 可能延迟，启动轮询兜底
+            postDelayedSurfaceCheck()
+        }
+    }
+
+    private var surfaceCheckRunnable: Runnable? = null
+
+    private fun postDelayedSurfaceCheck() {
+        surfaceCheckRunnable?.let { removeCallbacks(it) }
+        val runnable = object : Runnable {
+            private var attemptCount = 0
+            override fun run() {
+                attemptCount++
+                val holder = surfaceView.holder
+                val surface = holder.surface
+                if (surface != null && surface.isValid) {
+                    Log.d(TAG, "Delayed surface check succeeded at attempt=$attemptCount")
+                    ensureRendererInitialized()
+                    bindDisplaySurface(surface)
+                    surfaceCheckRunnable = null
+                    return
+                }
+                if (attemptCount < 30) {
+                    postDelayed(this, 50)
+                } else {
+                    Log.e(TAG, "Delayed surface check failed after 30 attempts (~1.5s)")
+                    surfaceCheckRunnable = null
+                }
             }
         }
+        surfaceCheckRunnable = runnable
+        postDelayed(runnable, 50)
     }
 
     override fun onDetachedFromWindow() {

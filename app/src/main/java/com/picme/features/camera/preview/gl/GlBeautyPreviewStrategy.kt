@@ -10,6 +10,7 @@ import com.picme.beauty.api.toBeautyParams
 import com.picme.domain.model.BeautyStrategy
 import com.picme.beauty.api.BeautySettings
 import com.picme.features.camera.AspectRatio
+import com.picme.features.camera.stopFaceDetectionWorker
 import com.picme.features.camera.preview.core.BeautyPreviewEngineStrategy
 import com.picme.beauty.api.facedetect.FaceWarpParams
 
@@ -100,23 +101,18 @@ internal class GlBeautyPreviewStrategy(
                     Pair(contourPoint.x, contourPoint.y)
                 }
             )
-            // 传递106点关键点给风格瘦脸/大眼
-            val bigBeautyLandmarks = params.bigBeautyLandmarks
-            if (bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()) {
-                val landmarks106 = FloatArray(bigBeautyLandmarks.points.size * 2)
-                for (i in bigBeautyLandmarks.points.indices) {
-                    val point = bigBeautyLandmarks.points[i]
-                    landmarks106[i * 2] = point.x
-                    landmarks106[i * 2 + 1] = point.y
-                }
-                glBeautyPreviewProvider.updateFacePoints106(landmarks106)
-            }
+            // [帧同步 P2] 106点关键点不再由分析线程直接写入 BeautyRenderer。
+            // 帧同步系统（CameraPreviewRenderer.applySyncResultToRenderer）已在 GL 线程
+            // 通过 updateSyncedFacePoints106 完成每帧预测补偿后的顶点更新。
+            // 分析线程仅负责将检测结果存入 FrameSyncManager，不再直接操作渲染 buffer。
         }.onFailure { error ->
             Logger.w("Camera", "GL beauty face params update failed", error)
         }
     }
 
     override fun release() {
+        // [帧同步] 停止全局 FaceDetectionWorker（若残留），再释放 GL 资源
+        stopFaceDetectionWorker()
         glBeautyPreviewProvider.release()
     }
 }

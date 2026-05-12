@@ -5,10 +5,13 @@ import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.picme.core.common.Logger
+import com.picme.beauty.api.FrameId
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.internal.facedetect.Face106ToWarpParams
+import com.picme.beauty.internal.framesync.FrameSyncBridge
+import com.picme.beauty.internal.framesync.FrameSyncManager
 import com.picme.features.camera.facedetect.ImageUtils
 
 /**
@@ -145,6 +148,14 @@ internal fun transformFaceCoordinateSimple(
 }
 
 /**
+ * [帧同步] 停止全局 FaceDetectionWorker
+ * （供 CameraPreviewRenderer.release() 调用，兼容清理残留 Worker）
+ */
+internal fun stopFaceDetectionWorker() {
+    // Phase 1 已移除异步检测 Worker，此处保留空实现供外部兼容调用
+}
+
+/**
  * MediaPipe 版本的人脸分析帧处理
  * 使用 MediaPipe Face Landmarker 检测 468 点，映射为 106 点
  *
@@ -184,16 +195,16 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         // [方案1优化] InsightFace 性能优化: 智能帧跳过 + 运动检测
         val isInsightFaceMode = detectionEngineMode == EngineType.INSIGHTFACE
-        
+
         // 获取上次的人脸中心点用于运动检测
         val lastFaceCenter = existingWarpParams?.let {
             Offset(it.faceCenterX, it.faceCenterY)
         }
-        
-        val shouldSkipDetection = isInsightFaceMode && 
-                                   !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) && 
+
+        val shouldSkipDetection = isInsightFaceMode &&
+                                   !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) &&
                                    existingWarpParams?.hasFace == true
-        
+
         if (shouldSkipDetection) {
             // 跳过检测,复用上一帧的结果
             Logger.d("Camera", "[Perf] Skip frame")
@@ -202,19 +213,34 @@ internal fun handleImageAnalysisFrameMediaPipe(
             return
         }
 
-        // 人脸检测（MediaPipe / InsightFace / AUTO）
-        val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return
-        // [修复] ImageUtils.imageProxyToBitmap() 已将 bitmap 旋转为 upright，
-        // 此处不再传递 rotationDegrees，避免 MediaPipeFaceDetector.detect() 二次旋转。
+        // [帧同步] 同步检测路径：直接检测并将结果存入 FrameSyncManager
+        val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
+        if (bitmap == null) {
+            imageProxy.close()
+            return
+        }
+
+        // [帧同步 CR-P0-1] 获取渲染线程的最新 FrameId，确保检测-渲染使用同一套 ID
+        val frameId = FrameSyncBridge.getLatestFrameId().takeIf { it != FrameId.INVALID } ?: FrameId.next()
+
         val detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
+        // [帧同步 CR-P0-3] 回收 bitmap，避免内存泄漏
         bitmap.recycle()
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
-            // 缓存人脸检测结果供拍照使用
             FaceDetectionCache.updateLandmarks106(landmarks106)
 
-            // 构建 FaceWarpParams
+            // [帧同步 CR-P0-2] 同步结果也存入 FrameSyncManager，供渲染线程查询
+            FrameSyncManager.getInstance().storeResult(
+                FrameSyncManager.DetectionResult(
+                    frameId = frameId,
+                    landmarks106 = landmarks106.clone(),
+                    detectionSource = detectionResult.detectionSource,
+                    detectionLatencyMs = 0L
+                )
+            )
+
             val faceWarpParams = Face106ToWarpParams.convert(
                 landmarks106 = landmarks106,
                 detectionSource = detectionResult.detectionSource
@@ -222,14 +248,12 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 requestedDetectionEngineMode = detectionEngineMode,
                 roiRect = detectionResult.roiRect
             )
-            
-            // [优化] 更新人脸中心点记录,用于运动检测
+
             FaceDetectionFrameCounter.updateLastFaceCenter(
                 faceWarpParams.faceCenterX,
                 faceWarpParams.faceCenterY
             )
 
-            // 人脸中心点（用于聚焦指示器）
             val screenPoint = Offset(
                 x = faceWarpParams.faceCenterX * previewWidth,
                 y = faceWarpParams.faceCenterY * previewHeight
@@ -238,11 +262,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
             onShowFocusIndicatorChanged(true)
 
             if (isDualMode) {
-                // 双模式下仍需保留主分析流的完整美颜参数，
-                // 保留已有的人脸关键点，避免把轮廓/中心点清空后触发预览黑屏。
                 onFaceWarpParamsChanged(faceWarpParams)
             } else {
-                // 单模式：直接返回大美丽参数
                 onFaceWarpParamsChanged(faceWarpParams)
             }
         } else {

@@ -22,7 +22,10 @@ data class BeautyPerfStats(
     val cpuUsage: Float = 0f,
     val nullFrames: Int = 0,
     val errorCategory: String = "",
-    val errorReason: String = ""
+    val errorReason: String = "",
+    val detectionLatencyMs: Long = 0L,
+    val syncStatus: String = "",
+    val predictedOffsetPx: Float = 0f
 ) {
     companion object {
         val EMPTY = BeautyPerfStats()
