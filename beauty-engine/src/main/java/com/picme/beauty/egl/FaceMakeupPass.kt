@@ -196,6 +196,10 @@ class FaceMakeupPass(private val context: Context) {
     private val prevFrameVertices = FloatArray(VERTEX_COUNT * 2)
     private val currFrameVertices = FloatArray(VERTEX_COUNT * 2)
     private val interpolatedVertices = FloatArray(VERTEX_COUNT * 2)
+    private val interpolatedBuffer: FloatBuffer = ByteBuffer
+        .allocateDirect(VERTEX_COUNT * 2 * 4)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
 
     private val bufferLock = Any()
     private var hasNewLandmarks = false
@@ -407,18 +411,41 @@ class FaceMakeupPass(private val context: Context) {
     }
 
     /**
-     * [帧同步] 获取用于渲染的顶点数据。
+     * 获取用于渲染的顶点数据。
      *
-     * 帧同步系统已在 CameraPreviewRenderer 中完成预测补偿，
-     * FaceMakeupPass 只需直接使用同步后的顶点数据，无需额外插值。
-     * 保留此函数作为兼容层，未来可在此添加 Shader 级平滑。
+     * 行为分两种模式：
+     * 1. **帧同步模式**：CPU 侧已完成预测补偿，直接返回 readBuffer。
+     * 2. **旧路径模式**：基于 prev/curr 历史帧进行线性外推插值，消除检测帧之间的妆容甩飞。
+     *
+     * 插值公式：`result = curr + t * (curr - prev)`，其中 `t ∈ [0, 1.5]`
+     * - t = 0：使用最新检测位置
+     * - t = 1：外推到下一检测时刻的预测位置
+     * - t > 1：允许少量超调，但限制在 1.5 避免过度外推
      *
      * @return 当前顶点 FloatBuffer
      */
     private fun computeInterpolatedVertices(): FloatBuffer {
-        // [帧同步] 直接使用帧同步系统提供的顶点数据
-        readBuffer.position(0)
-        return readBuffer
+        // 帧同步路径：直接使用同步后的顶点，无需额外插值
+        if (isFirstFrame || prevFrameTimeMs == 0L) {
+            readBuffer.position(0)
+            return readBuffer
+        }
+
+        val now = System.currentTimeMillis()
+        val dt = (currFrameTimeMs - prevFrameTimeMs).coerceAtLeast(1L)
+        val elapsed = now - currFrameTimeMs
+        val t = (elapsed / dt.toFloat()).coerceIn(0f, 1.5f)
+
+        // 线性外推插值：result = curr + t * (curr - prev)
+        for (i in 0 until VERTEX_COUNT * 2) {
+            interpolatedVertices[i] = currFrameVertices[i] +
+                t * (currFrameVertices[i] - prevFrameVertices[i])
+        }
+
+        interpolatedBuffer.clear()
+        interpolatedBuffer.put(interpolatedVertices)
+        interpolatedBuffer.flip()
+        return interpolatedBuffer
     }
 
     fun setIntensity(value: Float) {

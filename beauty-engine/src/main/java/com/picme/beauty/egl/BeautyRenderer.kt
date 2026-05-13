@@ -26,6 +26,13 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         private const val MAX_LIP_CONTOUR_POINTS = 20
     }
 
+    /**
+     * [帧同步] 与 CameraPreviewRenderer.frameSyncEnabled 保持同步。
+     * 决定 FaceMakeupPass 使用帧同步路径（updateFaceLandmarksSynced）还是旧路径（updateFaceLandmarks）。
+     */
+    @Volatile
+    var frameSyncEnabled: Boolean = false
+
     private var renderMode: Int = MODE_BEAUTY
 
     private var smoothingStrength: Float = 0.5f
@@ -237,7 +244,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         lowerLipCenterX: Float,
         lowerLipCenterY: Float,
         faceRadius: Float,
-        hasFace: Boolean
+        hasFace: Boolean?
     ) {
         this.faceCenterX = faceCenterX.coerceIn(0f, 1f)
         this.faceCenterY = faceCenterY.coerceIn(0f, 1f)
@@ -256,8 +263,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         this.lowerLipCenterX = lowerLipCenterX.coerceIn(0f, 1f)
         this.lowerLipCenterY = lowerLipCenterY.coerceIn(0f, 1f)
         this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
-        synchronized(faceSyncLock) {
-            this.hasFace = if (hasFace) 1f else 0f
+        // [帧同步] hasFace 为 null 表示由帧同步路径独占控制，旧路径不修改
+        if (hasFace != null) {
+            synchronized(faceSyncLock) {
+                this.hasFace = if (hasFace) 1f else 0f
+            }
         }
     }
 
@@ -1505,7 +1515,14 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // [帧同步] FaceMakeupPass 使用帧同步后的关键点（已通过 updateSyncedFacePoints106 写入 facePointsBuffer）
         if (hasFace > 0.5f) {
-            faceMakeupPass.updateFaceLandmarksSynced(toStandardUvFacePoints())
+            val facePoints = toStandardUvFacePoints()
+            if (frameSyncEnabled) {
+                // 帧同步路径：CPU 侧已完成预测补偿，直接写入
+                faceMakeupPass.updateFaceLandmarksSynced(facePoints)
+            } else {
+                // 旧路径：使用双缓冲避免读写竞争，配合插值消除甩飞
+                faceMakeupPass.updateFaceLandmarks(facePoints)
+            }
         }
 
         var currentTextureId = inputTextureId

@@ -240,6 +240,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                     detectionLatencyMs = 0L
                 )
             )
+            Logger.d("Camera", "[FrameSync] Stored result for frameId=$frameId, landmarks=${landmarks106.size}")
 
             val faceWarpParams = Face106ToWarpParams.convert(
                 landmarks106 = landmarks106,
