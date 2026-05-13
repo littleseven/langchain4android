@@ -10,9 +10,9 @@ package com.picme.beauty.api
  */
 data class FrameSyncConfig(
     val maxStoredResults: Int = 10,
-    val missingThresholdFrames: Int = 3,
+    val missingThresholdFrames: Int = 10,
     val predictionMaxRatio: Float = 1.5f,
-    val syncMode: SyncMode = SyncMode.STRICT
+    val syncMode: SyncMode = SyncMode.SMOOTH
 ) {
     enum class SyncMode {
         STRICT,

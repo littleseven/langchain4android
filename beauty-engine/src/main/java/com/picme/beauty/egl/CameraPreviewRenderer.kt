@@ -108,6 +108,16 @@ class CameraPreviewRenderer(private val context: Context) {
     private val frameSyncManager = FrameSyncManager.getInstance()
     private var currentFrameId: FrameId = FrameId.INVALID
 
+    /**
+     * [帧同步] 当启用帧同步时，旧路径（UI线程回调）不再写入 hasFace 和 facePointsBuffer，
+     * 避免双路径竞争导致妆容/瘦脸效果抖动。
+     *
+     * 注意：当前帧同步系统仍在调试中，默认禁用以避免妆容/瘦脸完全失效。
+     * 当帧同步路径能稳定提供有效结果后再启用。
+     */
+    @Volatile
+    var frameSyncEnabled: Boolean = false
+
     interface OnTextureAvailableListener {
         fun onTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int)
         fun onTextureDestroyed()
@@ -144,6 +154,7 @@ class CameraPreviewRenderer(private val context: Context) {
         }
 
         beautyRenderer = BeautyRenderer(context)
+        beautyRenderer.frameSyncEnabled = frameSyncEnabled
         beautyRenderer.onInit()
         // [帧同步 P2] 预生成首个 FrameId，避免分析线程与渲染线程首次序号分叉
         FrameSyncBridge.setLatestFrameId(FrameId.next())
@@ -292,6 +303,10 @@ class CameraPreviewRenderer(private val context: Context) {
                         frameSyncManager.bindFrameId(currentFrameId, surfaceTexture?.timestamp ?: 0L)
 
                         val syncResult = frameSyncManager.query(currentFrameId)
+                        if (frameCount % 60 == 0) {
+                            Log.d(TAG, "[FrameSync] Query frameId=$currentFrameId, status=${syncResult.syncStatus}, " +
+                                "stored=${frameSyncManager.getStoredResultCount()}")
+                        }
                         applySyncResultToRenderer(syncResult)
 
                         val currentTime = System.currentTimeMillis()
@@ -619,6 +634,9 @@ class CameraPreviewRenderer(private val context: Context) {
         val mappedUpperLipCenter = mapViewNormalizedToUv(upperLipCenterX, upperLipCenterY)
         val mappedLowerLipCenter = mapViewNormalizedToUv(lowerLipCenterX, lowerLipCenterY)
 
+        // [帧同步] 启用帧同步时，旧路径不再写入 hasFace，避免双路径竞争抖动
+        val effectiveHasFace = if (frameSyncEnabled) null else hasFace
+
         beautyRenderer.updateFaceWarpParams(
             faceCenterX = mappedFaceCenter.first,
             faceCenterY = mappedFaceCenter.second,
@@ -637,7 +655,7 @@ class CameraPreviewRenderer(private val context: Context) {
             lowerLipCenterX = mappedLowerLipCenter.first,
             lowerLipCenterY = mappedLowerLipCenter.second,
             faceRadius = faceRadius,
-            hasFace = hasFace
+            hasFace = effectiveHasFace
         )
     }
 
@@ -646,6 +664,9 @@ class CameraPreviewRenderer(private val context: Context) {
      * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
      */
     fun updateFacePoints106(landmarks106: FloatArray) {
+        // [帧同步] 启用帧同步时，旧路径不再写入 facePointsBuffer，避免双路径竞争抖动
+        if (frameSyncEnabled) return
+
         // 106点坐标需要经过与 FaceWarpParams 相同的 mapViewNormalizedToUv 映射
         // 才能与 Shader UV 坐标系对齐
         val mapped = FloatArray(landmarks106.size)
@@ -797,10 +818,19 @@ class CameraPreviewRenderer(private val context: Context) {
     // [帧同步] 预分配映射缓冲区，避免每帧 GC（CR-P1-1 修复）
     private val syncMappedBuffer = FloatArray(106 * 2)
 
+    // [帧同步] 启动期降级：前 N 帧允许旧路径提供数据，避免启动时无效果
+    private var frameSyncStartupFrames: Int = 0
+    private val FRAME_SYNC_STARTUP_GRACE_PERIOD = 30
+
     /**
      * [帧同步] 将同步结果应用到 BeautyRenderer
      */
     private fun applySyncResultToRenderer(syncResult: FrameSyncResult) {
+        // [帧同步] 未启用时不干扰旧路径，避免新旧路径竞争导致 hasFace 抖动
+        if (!frameSyncEnabled) return
+        frameSyncStartupFrames++
+        val isStartupGracePeriod = frameSyncStartupFrames <= FRAME_SYNC_STARTUP_GRACE_PERIOD
+
         when (syncResult.syncStatus) {
             FrameSyncResult.SyncStatus.EXACT_MATCH,
             FrameSyncResult.SyncStatus.HISTORICAL_FALLBACK,
@@ -816,12 +846,24 @@ class CameraPreviewRenderer(private val context: Context) {
                     }
                     beautyRenderer.updateSyncedFacePoints106(syncMappedBuffer)
                     beautyRenderer.setHasFace(true)
+                    if (frameSyncStartupFrames % 60 == 0) {
+                        Log.d(TAG, "[FrameSync] Applied ${syncResult.syncStatus}, frameId=${syncResult.frameId}, " +
+                            "stored=${frameSyncManager.getStoredResultCount()}, startup=$isStartupGracePeriod")
+                    }
                 } else {
                     beautyRenderer.setHasFace(false)
+                    Log.w(TAG, "[FrameSync] ${syncResult.syncStatus} but landmarks empty")
                 }
             }
             FrameSyncResult.SyncStatus.MISSING -> {
-                beautyRenderer.setHasFace(false)
+                // 启动期内不强制清除 hasFace，允许旧路径短暂提供数据
+                if (!isStartupGracePeriod) {
+                    beautyRenderer.setHasFace(false)
+                }
+                if (frameSyncStartupFrames % 60 == 0) {
+                    Log.d(TAG, "[FrameSync] MISSING, stored=${frameSyncManager.getStoredResultCount()}, " +
+                        "startup=$isStartupGracePeriod, startupFrames=$frameSyncStartupFrames")
+                }
             }
         }
     }

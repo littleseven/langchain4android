@@ -177,6 +177,16 @@ class FrameSyncManager private constructor(
     }
 
     /**
+     * 获取当前存储的检测结果数量（用于调试）
+     */
+    fun getStoredResultCount(): Int = resultStore.size
+
+    /**
+     * 获取存储的所有 FrameId（用于调试）
+     */
+    fun getStoredFrameIds(): List<Long> = frameHistory.map { it.value }.toList()
+
+    /**
      * 获取最近一次 query 的结果（用于调试浮层）
      */
     fun getLastQueryResult(): FrameSyncResult = lastQueryResult
