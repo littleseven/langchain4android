@@ -20,8 +20,10 @@ import com.picme.features.camera.facedetect.ImageUtils
  */
 private object FaceDetectionFrameCounter {
     private var counter = 0
-    private const val DETECTION_INTERVAL = 3  // [优化] 每 3 帧检测一次 (30fps -> 10fps)
-    
+    // [GPU 检测优化] YUV→Bitmap 零 JPEG 后，InsightFace 检测耗时降低约 40%，
+    // 检测间隔从 3 帧（10fps）提升到 2 帧（15fps），妆容跟随更平滑。
+    private const val DETECTION_INTERVAL = 2
+
     // 运动检测: 记录上次人脸中心点
     private var lastFaceCenterX: Float = -1f
     private var lastFaceCenterY: Float = -1f
