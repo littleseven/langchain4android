@@ -216,18 +216,26 @@ internal fun handleImageAnalysisFrameMediaPipe(
         }
 
         // [帧同步] 同步检测路径：直接检测并将结果存入 FrameSyncManager
-        val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
-        if (bitmap == null) {
-            imageProxy.close()
-            return
-        }
-
-        // [帧同步 CR-P0-1] 获取渲染线程的最新 FrameId，确保检测-渲染使用同一套 ID
+        // [GPU 检测优化 Phase 2] MediaPipe 模式直接传入 YUV Image，跳过 Bitmap 转换
         val frameId = FrameSyncBridge.getLatestFrameId().takeIf { it != FrameId.INVALID } ?: FrameId.next()
 
-        val detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
-        // [帧同步 CR-P0-3] 回收 bitmap，避免内存泄漏
-        bitmap.recycle()
+        val detectionResult = if (detectionEngineMode == EngineType.MEDIAPIPE) {
+            val mediaImage = imageProxy.image
+            if (mediaImage == null) {
+                imageProxy.close()
+                return
+            }
+            faceDetector.detect(mediaImage, imageProxy.imageInfo.rotationDegrees, lensFacing)
+        } else {
+            val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
+            if (bitmap == null) {
+                imageProxy.close()
+                return
+            }
+            val result = faceDetector.detect(bitmap, 0, lensFacing)
+            bitmap.recycle()
+            result
+        }
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
