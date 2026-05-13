@@ -10,7 +10,7 @@ import android.graphics.Bitmap
  */
 interface FaceDetector {
     /**
-     * 实时预览帧检测
+     * 实时预览帧检测（Bitmap 输入）
      *
      * @param bitmap RGBA Bitmap（已由调用方从 CameraX ImageProxy 转换）
      * @param rotationDegrees 图像旋转角度（0/90/180/270）
@@ -18,6 +18,19 @@ interface FaceDetector {
      * @return 检测结果，无人脸返回 null
      */
     fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult?
+
+    /**
+     * [GPU 检测优化 Phase 2] 实时预览帧检测（YUV Image 直接输入）
+     *
+     * MediaPipe 专用路径：跳过 CPU 端 Bitmap 生成，直接从 YUV_420_888
+     * 数据进行 GPU 推理。结果坐标根据 rotationDegrees 在适配层旋转。
+     *
+     * @param mediaImage android.media.Image（YUV_420_888）
+     * @param rotationDegrees 图像旋转角度（0/90/180/270）
+     * @param lensFacing 镜头方向
+     * @return 检测结果，无人脸返回 null
+     */
+    fun detect(mediaImage: android.media.Image, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult?
 
     /**
      * 拍照后静态图检测

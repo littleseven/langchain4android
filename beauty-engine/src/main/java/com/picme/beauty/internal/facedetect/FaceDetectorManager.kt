@@ -114,48 +114,91 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 }
 
                 EngineType.INSIGHTFACE -> {
-                    val roiStartTime = SystemClock.elapsedRealtime()
-                    val roi = roiDetector?.detectRoi(bitmap)
-                    val roiTime = SystemClock.elapsedRealtime() - roiStartTime
-
-                    val landmarkStart = SystemClock.elapsedRealtime()
-                    val rawResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roi)
-                    val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
-
-                    lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
-                    Log.d(TAG, "[Perf] InsightFace breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
-
-                    if (rawResult != null) {
-                        lastDetectionSource = FaceDetectionSource.INSIGHTFACE
-                        val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.INSIGHTFACE)
-                            as? InsightFaceAdapter
-                            ?: return null
-                        val adaptedResult = adapter.adapt(rawResult, lensFacing).getOrNull()
-                        if (adaptedResult != null) {
-                            Log.d(TAG, "InsightFace detection success in ${lastProcessTimeMs}ms")
-                            val normalizedRoi = roi?.let { r ->
-                                android.graphics.RectF(
-                                    r.left / bitmap.width.toFloat(),
-                                    r.top / bitmap.height.toFloat(),
-                                    r.right / bitmap.width.toFloat(),
-                                    r.bottom / bitmap.height.toFloat()
-                                )
-                            }
-                            FaceDetectionResult(adaptedResult, lastDetectionSource, normalizedRoi)
-                        } else {
-                            Log.w(TAG, "InsightFace adaptation failed")
-                            null
-                        }
-                    } else {
-                        Log.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
-                        null
-                    }
+                    detectInsightFace(bitmap, lensFacing, startTime)
                 }
             }
         } catch (e: Exception) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
             Log.e(TAG, "Face detection failed in ${detectionEngineMode.name} mode", e)
+            null
+        }
+    }
+
+    /**
+     * [GPU 检测优化 Phase 2] MediaPipe 直接 YUV Image 检测
+     *
+     * 跳过 CPU 端 Bitmap 生成，MediaPipe 内部直接从 YUV_420_888 做 GPU 推理。
+     *
+     * @param mediaImage CameraX ImageProxy.image
+     * @param rotationDegrees 图像旋转角度，用于结果坐标旋转补偿
+     * @param lensFacing 镜头方向
+     * @return 检测结果，无人脸返回 null
+     */
+    override fun detect(mediaImage: android.media.Image, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
+        val startTime = SystemClock.elapsedRealtime()
+        lastDetectionSource = FaceDetectionSource.NONE
+
+        val detector = mediaPipeDetector
+        if (detector == null || !detector.isReady()) {
+            Log.w(TAG, "MediaPipe detector not ready for direct image")
+            return null
+        }
+
+        return try {
+            val mediaPipeResult = detector.detect(mediaImage, rotationDegrees, lensFacing)
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+            if (mediaPipeResult != null) {
+                lastDetectionSource = FaceDetectionSource.MEDIAPIPE
+                Log.d(TAG, "Face detected by MediaPipe (direct image) in ${lastProcessTimeMs}ms")
+                FaceDetectionResult(mediaPipeResult, lastDetectionSource)
+            } else {
+                Log.d(TAG, "No face detected by MediaPipe direct image (${lastProcessTimeMs}ms)")
+                null
+            }
+        } catch (e: Exception) {
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Log.e(TAG, "MediaPipe direct image detection failed", e)
+            null
+        }
+    }
+
+    private fun detectInsightFace(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
+        val roiStartTime = SystemClock.elapsedRealtime()
+        val roi = roiDetector?.detectRoi(bitmap)
+        val roiTime = SystemClock.elapsedRealtime() - roiStartTime
+
+        val landmarkStart = SystemClock.elapsedRealtime()
+        val rawResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roi)
+        val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
+
+        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+        Log.d(TAG, "[Perf] InsightFace breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
+
+        return if (rawResult != null) {
+            lastDetectionSource = FaceDetectionSource.INSIGHTFACE
+            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.INSIGHTFACE)
+                as? InsightFaceAdapter
+                ?: return null
+            val adaptedResult = adapter.adapt(rawResult, lensFacing).getOrNull()
+            if (adaptedResult != null) {
+                Log.d(TAG, "InsightFace detection success in ${lastProcessTimeMs}ms")
+                val normalizedRoi = roi?.let { r ->
+                    android.graphics.RectF(
+                        r.left / bitmap.width.toFloat(),
+                        r.top / bitmap.height.toFloat(),
+                        r.right / bitmap.width.toFloat(),
+                        r.bottom / bitmap.height.toFloat()
+                    )
+                }
+                FaceDetectionResult(adaptedResult, lastDetectionSource, normalizedRoi)
+            } else {
+                Log.w(TAG, "InsightFace adaptation failed")
+                null
+            }
+        } else {
+            Log.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
             null
         }
     }
