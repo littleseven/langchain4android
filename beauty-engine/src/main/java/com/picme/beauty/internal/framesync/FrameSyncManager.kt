@@ -74,11 +74,28 @@ class FrameSyncManager private constructor(
     @Volatile
     private var lastQueryResult: FrameSyncResult = FrameSyncResult.MISSING
 
+    // [帧同步] 记录每帧的绑定时间戳，用于计算检测延迟
+    private val frameBindTimestamps = ConcurrentHashMap<FrameId, Long>()
+
     /**
      * 绑定当前渲染帧的 FrameId（由渲染线程调用）
+     * 记录帧绑定时间戳，用于后续计算检测-渲染延迟。
      */
     fun bindFrameId(frameId: FrameId, timestampNs: Long) {
-        // 记录帧时间戳，用于计算检测延迟（当前仅保留接口，未来可扩展）
+        frameBindTimestamps[frameId] = SystemClock.elapsedRealtime()
+        // 清理过旧的绑定记录（保留最近 120 帧）
+        while (frameBindTimestamps.size > 120) {
+            val oldest = frameBindTimestamps.keys.minByOrNull { it.value } ?: break
+            frameBindTimestamps.remove(oldest)
+        }
+    }
+
+    /**
+     * 计算从帧绑定到检测结果存储的延迟（毫秒）
+     */
+    fun calculateDetectionLatency(frameId: FrameId): Long {
+        val bindTime = frameBindTimestamps[frameId] ?: return 0L
+        return SystemClock.elapsedRealtime() - bindTime
     }
 
     /**
@@ -192,11 +209,20 @@ class FrameSyncManager private constructor(
     fun getLastQueryResult(): FrameSyncResult = lastQueryResult
 
     private fun findNearestHistoricalResult(currentFrameId: FrameId): DetectionResult? {
+        // [性能优化] 反向遍历 frameHistory，通常最近的历史帧在队列尾部，
+        // 这样可以更快找到最优结果，减少遍历次数。
         var nearestId: FrameId? = null
-        for (frameId in frameHistory) {
+        val historySnapshot = frameHistory.toTypedArray()
+        for (index in historySnapshot.size - 1 downTo 0) {
+            val frameId = historySnapshot[index]
             if (frameId <= currentFrameId && resultStore.containsKey(frameId)) {
                 if (nearestId == null || frameId.value > nearestId.value) {
                     nearestId = frameId
+                    // 由于是从后向前遍历，如果已经找到等于 currentFrameId-1 的帧，
+                    // 这就是最优结果，可以直接返回
+                    if (frameId.value >= currentFrameId.value - 1) {
+                        break
+                    }
                 }
             }
         }
@@ -232,6 +258,7 @@ class FrameSyncManager private constructor(
         resultStore.clear()
         frameHistory.clear()
         motionTracker.clear()
+        frameBindTimestamps.clear()
         lastQueryResult = FrameSyncResult.MISSING
     }
 

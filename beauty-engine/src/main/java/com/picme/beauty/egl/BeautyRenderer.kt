@@ -29,9 +29,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     /**
      * [帧同步] 与 CameraPreviewRenderer.frameSyncEnabled 保持同步。
      * 决定 FaceMakeupPass 使用帧同步路径（updateFaceLandmarksSynced）还是旧路径（updateFaceLandmarks）。
+     *
+     * 在 feature/frame-sync-makeup 分支上默认启用 true。
      */
     @Volatile
-    var frameSyncEnabled: Boolean = false
+    var frameSyncEnabled: Boolean = true
 
     private var renderMode: Int = MODE_BEAUTY
 
@@ -1521,6 +1523,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 faceMakeupPass.updateFaceLandmarksSynced(facePoints)
             } else {
                 // 旧路径：使用双缓冲避免读写竞争，配合插值消除甩飞
+                faceMakeupPass.resetFrameSync()
                 faceMakeupPass.updateFaceLandmarks(facePoints)
             }
         }
@@ -1709,6 +1712,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         shaderProgram2D.release()
         shaderProgram2DCompiled = false
         clearLastRenderError()
+        // [帧同步] 重置帧同步状态
+        frameSyncEnabled = true
         super.release()
     }
 }

@@ -207,6 +207,12 @@ class FaceMakeupPass(private val context: Context) {
     private var currFrameTimeMs: Long = 0
     private var isFirstFrame = true
 
+    /**
+     * [帧同步] 标记当前是否使用帧同步路径。
+     * 当为 true 时，computeInterpolatedVertices() 直接返回 readBuffer，跳过所有插值。
+     */
+    private var frameSyncActive = false
+
     private val runtimeTexCoordBuffer: FloatBuffer = ByteBuffer
         .allocateDirect(FACE_TEXTURE_COORDS.size * 4)
         .order(ByteOrder.nativeOrder())
@@ -375,6 +381,8 @@ class FaceMakeupPass(private val context: Context) {
             // 标记不是第一帧，避免旧插值路径
             isFirstFrame = false
             hasNewLandmarks = false
+            // 显式标记帧同步路径激活，确保 computeInterpolatedVertices() 直接返回 readBuffer
+            frameSyncActive = true
         }
     }
 
@@ -426,6 +434,13 @@ class FaceMakeupPass(private val context: Context) {
      */
     private fun computeInterpolatedVertices(): FloatBuffer {
         // 帧同步路径：直接使用同步后的顶点，无需额外插值
+        // FrameSyncManager 已在 CPU 侧完成精确匹配/历史回退/预测补偿
+        if (frameSyncActive) {
+            readBuffer.position(0)
+            return readBuffer
+        }
+
+        // 旧路径：第一帧或没有历史数据时直接返回 readBuffer
         if (isFirstFrame || prevFrameTimeMs == 0L) {
             readBuffer.position(0)
             return readBuffer
@@ -591,6 +606,18 @@ class FaceMakeupPass(private val context: Context) {
 
         GLES20.glDisableVertexAttribArray(aPositionLocation)
         GLES20.glDisableVertexAttribArray(aTextureCoordLocation)
+    }
+
+    /**
+     * [帧同步] 重置帧同步状态，当切换回旧路径时调用
+     */
+    fun resetFrameSync() {
+        synchronized(bufferLock) {
+            frameSyncActive = false
+            isFirstFrame = true
+            prevFrameTimeMs = 0
+            currFrameTimeMs = 0
+        }
     }
 
     fun release() {
