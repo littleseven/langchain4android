@@ -112,11 +112,10 @@ class CameraPreviewRenderer(private val context: Context) {
      * [帧同步] 当启用帧同步时，旧路径（UI线程回调）不再写入 hasFace 和 facePointsBuffer，
      * 避免双路径竞争导致妆容/瘦脸效果抖动。
      *
-     * 注意：当前帧同步系统仍在调试中，默认禁用以避免妆容/瘦脸完全失效。
-     * 当帧同步路径能稳定提供有效结果后再启用。
+     * 在 feature/frame-sync-makeup 分支上默认启用，实现妆容与人脸按帧对齐合成。
      */
     @Volatile
-    var frameSyncEnabled: Boolean = false
+    var frameSyncEnabled: Boolean = true
 
     interface OnTextureAvailableListener {
         fun onTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int)
@@ -157,7 +156,7 @@ class CameraPreviewRenderer(private val context: Context) {
         beautyRenderer.frameSyncEnabled = frameSyncEnabled
         beautyRenderer.onInit()
         // [帧同步 P2] 预生成首个 FrameId，避免分析线程与渲染线程首次序号分叉
-        FrameSyncBridge.setLatestFrameId(FrameId.next())
+        FrameSyncBridge.setLatestFrameId(FrameId.next(), surfaceTexture?.timestamp ?: 0L)
         
         eglCore.clearCurrent()
 
@@ -299,8 +298,9 @@ class CameraPreviewRenderer(private val context: Context) {
 
                         // [帧同步 CR-P0-1] 每帧生成独立 FrameId，与相机帧严格绑定
                         currentFrameId = FrameId.next()
-                        FrameSyncBridge.setLatestFrameId(currentFrameId)
-                        frameSyncManager.bindFrameId(currentFrameId, surfaceTexture?.timestamp ?: 0L)
+                        val frameTimestampNs = surfaceTexture?.timestamp ?: 0L
+                        FrameSyncBridge.setLatestFrameId(currentFrameId, frameTimestampNs)
+                        frameSyncManager.bindFrameId(currentFrameId, frameTimestampNs)
 
                         val syncResult = frameSyncManager.query(currentFrameId)
                         if (frameCount % 60 == 0) {
@@ -902,6 +902,8 @@ class CameraPreviewRenderer(private val context: Context) {
         // [帧同步] 释放时清理全局状态（CR-P2-3 修复）
         frameSyncManager.clear()
         FrameSyncBridge.reset()
+        // [帧同步] 重置启动期计数器，下次启动时重新进入 grace period
+        frameSyncStartupFrames = 0
         textureListener?.onTextureDestroyed()
         Log.d(TAG, "Released")
     }

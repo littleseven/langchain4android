@@ -207,17 +207,47 @@ internal fun handleImageAnalysisFrameMediaPipe(
                                    !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) &&
                                    existingWarpParams?.hasFace == true
 
+        // [帧同步 CR-P0-3] 使用 ImageProxy 时间戳精确查询对应的 FrameId。
+        // ImageProxy.imageInfo.timestamp 与 SurfaceTexture.timestamp 共享相机硬件时间基准。
+        // 通过 FrameSyncBridge.getFrameIdByTimestamp() 精确关联检测输入帧与渲染帧，
+        // 避免检测结果绑定到错误的 FrameId 导致 query() 时预测补偿产生甩飞。
+        val imageTimestampNs = imageProxy.imageInfo.timestamp
+        val frameIdByTimestamp = FrameSyncBridge.getFrameIdByTimestamp(imageTimestampNs)
+        val frameId = if (frameIdByTimestamp != FrameId.INVALID) {
+            frameIdByTimestamp
+        } else {
+            // 回退：时间戳映射未就绪时（启动期），使用最新 FrameId
+            FrameSyncBridge.getLatestFrameId().takeIf { it != FrameId.INVALID } ?: FrameId.next()
+        }
+
         if (shouldSkipDetection) {
             // 跳过检测,复用上一帧的结果
             Logger.d("Camera", "[Perf] Skip frame")
             onFaceWarpParamsChanged(existingWarpParams)
+
+            // [帧同步关键修复] 跳帧时也必须向 FrameSyncManager 存储结果，
+            // 否则渲染线程查询这些帧时会得到 MISSING，导致妆容闪烁/消失。
+            // 使用缓存的最新 landmarks 和当前 frameId 存储"复用结果"。
+            val cachedLandmarks = FaceDetectionCache.getCachedLandmarks106()
+            if (cachedLandmarks != null && existingWarpParams?.hasFace == true) {
+                FrameSyncManager.getInstance().storeResult(
+                    FrameSyncManager.DetectionResult(
+                        frameId = frameId,
+                        landmarks106 = cachedLandmarks,
+                        detectionSource = existingWarpParams.detectionSource,
+                        detectionLatencyMs = 0L
+                    )
+                )
+                Logger.d("Camera", "[FrameSync] Stored skip-frame result for frameId=$frameId")
+            }
+
             imageProxy.close()
             return
         }
 
-        // [帧同步] 同步检测路径：直接检测并将结果存入 FrameSyncManager
+        val detectionStartMs = System.currentTimeMillis()
+
         // [GPU 检测优化 Phase 2] MediaPipe 模式直接传入 YUV Image，跳过 Bitmap 转换
-        val frameId = FrameSyncBridge.getLatestFrameId().takeIf { it != FrameId.INVALID } ?: FrameId.next()
 
         val detectionResult = if (detectionEngineMode == EngineType.MEDIAPIPE) {
             val mediaImage = imageProxy.image
@@ -242,12 +272,13 @@ internal fun handleImageAnalysisFrameMediaPipe(
             FaceDetectionCache.updateLandmarks106(landmarks106)
 
             // [帧同步 CR-P0-2] 同步结果也存入 FrameSyncManager，供渲染线程查询
+            val detectionLatencyMs = System.currentTimeMillis() - detectionStartMs
             FrameSyncManager.getInstance().storeResult(
                 FrameSyncManager.DetectionResult(
                     frameId = frameId,
                     landmarks106 = landmarks106.clone(),
                     detectionSource = detectionResult.detectionSource,
-                    detectionLatencyMs = 0L
+                    detectionLatencyMs = detectionLatencyMs
                 )
             )
             Logger.d("Camera", "[FrameSync] Stored result for frameId=$frameId, landmarks=${landmarks106.size}")

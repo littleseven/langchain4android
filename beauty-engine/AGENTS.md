@@ -406,13 +406,14 @@ if (fps < 25 || processingMs > 20) {
 
 ---
 
-## 5. 帧同步系统规范（Frame-Sync Makeup System，2026-05）
+## 5. 帧同步系统规范（Frame-Sync Makeup System，2026-05）— 解决妆容甩飞
 
 ### 5.1 架构定位
-帧同步是 beauty-engine 的**横切能力**，沉淀在 `internal/framesync/` 包下：
+帧同步是 beauty-engine 的**横切能力**，核心目标是**解决妆容甩飞问题**（妆容粘屏幕不跟脸、悬空残留、录制跳变）。沉淀在 `internal/framesync/` 包下：
 - `api/` 层新增 `FrameId`、`FrameSyncConfig`、`FrameSyncResult` 数据契约
 - `internal/framesync/` 实现时序对齐核心，不侵入 `egl/` 具体 Pass
 - `FaceMakeupPass` 只消费同步后的顶点数据，不关心同步逻辑
+- **录制场景强制启用**：视频录制必须复用预览同一套帧同步逻辑，确保录制帧与预览帧行为一致
 
 ### 5.2 核心组件
 
@@ -436,12 +437,17 @@ CameraFrameAnalyzer（分析线程）
 CameraPreviewRenderer（渲染线程）
     ↓ FrameSyncBridge.getLatestFrameId()
     └── FrameSyncManager.query(frameId) → applySyncResultToRenderer()
+
+录制链路（MediaRecorder / Codec）
+    ↓ 复用同一 CameraPreviewRenderer 渲染循环
+    └── 同一 FrameSyncManager.query(frameId) 结果 → 录制 Surface
 ```
 
 **关键约束**：
 - 分析线程和渲染线程**共用同一套 FrameId 序列**，通过 `FrameSyncBridge` 共享
 - 同步检测路径（FaceWarpParams 用）和异步检测路径（妆容用）**都存入 FrameSyncManager**，统一数据源（CR-P0-2）
-- `FrameSyncBridge` 在 `CameraPreviewRenderer.release()` 时调用 `reset()` 清理
+- **`FrameSyncBridge` 在 `CameraPreviewRenderer.release()` 时调用 `reset()` 清理**
+- **录制链路必须复用同一 `FrameSyncManager` 实例**，禁止录制时单独创建新的帧同步上下文（防止预览和录制行为不一致）
 
 ### 5.4 同步模式
 
@@ -469,6 +475,9 @@ CameraPreviewRenderer（渲染线程）
 - [ ] `release()` 时清理 `FrameSyncManager` + `FrameSyncBridge` + `FaceDetectionWorker`
 - [ ] `FaceMakeupPass.updateFaceLandmarksSynced()` 输入为 UV [0,1]，内部转 NDC [-1,1]
 - [ ] `FrameSyncManager.updateConfig()` 能真正生效（config 为 var）
+- [ ] **录制场景复用同一 `FrameSyncManager` 实例，预览与录制帧同步行为一致**
+- [ ] **人脸出画后 `uHasFace` 在 N 帧内置 0，妆容 Pass 跳过，无悬空残留**
+- [ ] **快转头场景（>90°/s）录制视频逐帧分析，妆容偏差 < 16px @1080p（P0），< 8px（P1）**
 
 ---
 
