@@ -4,6 +4,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
+import android.os.SystemClock
 import com.picme.core.common.Logger
 import com.picme.beauty.api.FrameId
 import com.picme.beauty.api.facedetect.EngineType
@@ -257,11 +258,14 @@ internal fun handleImageAnalysisFrameMediaPipe(
             }
             faceDetector.detect(mediaImage, imageProxy.imageInfo.rotationDegrees, lensFacing)
         } else {
+            val yuvStart = SystemClock.elapsedRealtime()
             val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
+            val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
             if (bitmap == null) {
                 imageProxy.close()
                 return
             }
+            Logger.d("Camera", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
             val result = faceDetector.detect(bitmap, 0, lensFacing)
             bitmap.recycle()
             result
@@ -283,6 +287,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
             )
             Logger.d("Camera", "[FrameSync] Stored result for frameId=$frameId, landmarks=${landmarks106.size}")
 
+            val convertStart = SystemClock.elapsedRealtime()
             val faceWarpParams = Face106ToWarpParams.convert(
                 landmarks106 = landmarks106,
                 detectionSource = detectionResult.detectionSource
@@ -290,6 +295,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 requestedDetectionEngineMode = detectionEngineMode,
                 roiRect = detectionResult.roiRect
             )
+            val convertElapsed = SystemClock.elapsedRealtime() - convertStart
+            Logger.d("Camera", "[Perf] Face106ToWarpParams.convert: ${convertElapsed}ms")
 
             FaceDetectionFrameCounter.updateLastFaceCenter(
                 faceWarpParams.faceCenterX,

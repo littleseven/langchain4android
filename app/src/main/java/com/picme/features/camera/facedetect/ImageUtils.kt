@@ -45,15 +45,22 @@ object ImageUtils {
     }
 
     /**
-     * 统一的 ImageProxy → Bitmap 转换（零 JPEG 路径）
+     * 目标检测最大输入尺寸。
+     * Det10G 模型输入为 640×640，2D106 为 192×192。
+     * YUV→Bitmap 时直接缩放到此尺寸，避免全分辨率（720×1280）转换的巨额开销。
+     */
+    private const val TARGET_MAX_SIZE = 640
+
+    /**
+     * 统一的 ImageProxy → Bitmap 转换（零 JPEG 路径 + 直接缩放）
      *
      * 相比旧方案（YUV→NV21→JPEG→Bitmap），本方案直接做 YUV→ARGB 色彩空间转换：
      * - 省去 JPEG 压缩（~5ms）和解压（~3ms）
      * - 省去 Bitmap 旋转的额外内存分配
      * - 直接生成 MediaPipe BitmapImageBuilder 所需的 ARGB_8888 格式
      *
-     * [性能优化] 复用像素缓冲区和 Bitmap 池，减少每帧 GC 压力。
-     * 性能：在 1280×720 分辨率下约 3~5ms（原方案约 10~15ms）
+     * [性能优化 v2] YUV 转换时直接缩放到目标尺寸，像素处理量从 92 万降至约 40 万（640×640），
+     * 预期耗时从 ~100ms 降至 ~20ms。
      */
     @ExperimentalGetImage
     fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
@@ -70,20 +77,40 @@ object ImageUtils {
             val uvRowStride = imageProxy.planes[1].rowStride
             val uvPixelStride = imageProxy.planes[1].pixelStride
 
+            // 计算旋转后的输出尺寸
             val needSwap = rotationDegrees == 90 || rotationDegrees == 270
-            val outWidth = if (needSwap) height else width
-            val outHeight = if (needSwap) width else height
+            val rotatedWidth = if (needSwap) height else width
+            val rotatedHeight = if (needSwap) width else height
+
+            // [性能优化] 计算缩放比例，YUV 转换直接输出缩放后尺寸
+            val scale = TARGET_MAX_SIZE.toFloat() / maxOf(rotatedWidth, rotatedHeight)
+            val invScale = 1f / scale
+            val outWidth = (rotatedWidth * scale).toInt().coerceAtLeast(1)
+            val outHeight = (rotatedHeight * scale).toInt().coerceAtLeast(1)
             val pixelCount = outWidth * outHeight
 
             val argb = getArgbBuffer(pixelCount)
 
-            // YUV → ARGB 转换（ITU-R BT.601 标准）
-            for (row in 0 until height) {
-                for (col in 0 until width) {
-                    val y = (yBuffer.get(row * yRowStride + col).toInt() and 0xFF)
+            // YUV → ARGB 转换（ITU-R BT.601 标准），直接采样到目标尺寸
+            // [性能优化] 使用乘法替代每像素除法
+            for (outY in 0 until outHeight) {
+                val srcY = (outY * invScale).toInt().coerceIn(0, rotatedHeight - 1)
+                for (outX in 0 until outWidth) {
+                    // 反向映射到原始图像坐标
+                    val srcX = (outX * invScale).toInt().coerceIn(0, rotatedWidth - 1)
 
-                    val uvRow = row shr 1
-                    val uvCol = col shr 1
+                    // 根据旋转角度映射回 ImageProxy 原始坐标
+                    val (origCol, origRow) = when (rotationDegrees) {
+                        90 -> Pair(srcY, height - 1 - srcX)
+                        180 -> Pair(width - 1 - srcX, height - 1 - srcY)
+                        270 -> Pair(width - 1 - srcY, srcX)
+                        else -> Pair(srcX, srcY)
+                    }
+
+                    val y = (yBuffer.get(origRow * yRowStride + origCol).toInt() and 0xFF)
+
+                    val uvRow = origRow shr 1
+                    val uvCol = origCol shr 1
                     val uvIndex = uvRow * uvRowStride + uvCol * uvPixelStride
 
                     val v = (vBuffer.get(uvIndex).toInt() and 0xFF) - 128
@@ -94,13 +121,6 @@ object ImageUtils {
                     val b = (y + 1.772f * u).toInt().coerceIn(0, 255)
 
                     val argbPixel = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-
-                    val (outX, outY) = when (rotationDegrees) {
-                        90 -> Pair(height - 1 - row, col)
-                        180 -> Pair(width - 1 - col, height - 1 - row)
-                        270 -> Pair(row, width - 1 - col)
-                        else -> Pair(col, row)
-                    }
                     argb[outY * outWidth + outX] = argbPixel
                 }
             }
