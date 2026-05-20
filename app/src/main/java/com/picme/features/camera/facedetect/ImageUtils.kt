@@ -13,6 +13,37 @@ import androidx.camera.core.ImageProxy
  */
 object ImageUtils {
 
+    // [性能优化] 复用 ARGB 像素缓冲区，避免每帧 new IntArray
+    private var reusableArgbBuffer: IntArray? = null
+    private var reusableArgbBufferSize: Int = 0
+
+    // [性能优化] 复用 Bitmap 池，避免每帧 Bitmap.createBitmap
+    private var reusableBitmap: Bitmap? = null
+    private var reusableBitmapWidth: Int = 0
+    private var reusableBitmapHeight: Int = 0
+
+    private fun getArgbBuffer(size: Int): IntArray {
+        var buffer = reusableArgbBuffer
+        if (buffer == null || buffer.size < size) {
+            buffer = IntArray(size)
+            reusableArgbBuffer = buffer
+            reusableArgbBufferSize = size
+        }
+        return buffer
+    }
+
+    private fun getReusableBitmap(width: Int, height: Int): Bitmap {
+        var bmp = reusableBitmap
+        if (bmp == null || bmp.isRecycled || bmp.width != width || bmp.height != height) {
+            bmp?.recycle()
+            bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            reusableBitmap = bmp
+            reusableBitmapWidth = width
+            reusableBitmapHeight = height
+        }
+        return bmp
+    }
+
     /**
      * 统一的 ImageProxy → Bitmap 转换（零 JPEG 路径）
      *
@@ -21,6 +52,7 @@ object ImageUtils {
      * - 省去 Bitmap 旋转的额外内存分配
      * - 直接生成 MediaPipe BitmapImageBuilder 所需的 ARGB_8888 格式
      *
+     * [性能优化] 复用像素缓冲区和 Bitmap 池，减少每帧 GC 压力。
      * 性能：在 1280×720 分辨率下约 3~5ms（原方案约 10~15ms）
      */
     @ExperimentalGetImage
@@ -38,17 +70,14 @@ object ImageUtils {
             val uvRowStride = imageProxy.planes[1].rowStride
             val uvPixelStride = imageProxy.planes[1].pixelStride
 
-            // 是否需要旋转 90°/270°（前置摄像头常见）
             val needSwap = rotationDegrees == 90 || rotationDegrees == 270
             val outWidth = if (needSwap) height else width
             val outHeight = if (needSwap) width else height
+            val pixelCount = outWidth * outHeight
 
-            val argb = IntArray(outWidth * outHeight)
+            val argb = getArgbBuffer(pixelCount)
 
             // YUV → ARGB 转换（ITU-R BT.601 标准）
-            // R = Y + 1.402 * (V - 128)
-            // G = Y - 0.344136 * (U - 128) - 0.714136 * (V - 128)
-            // B = Y + 1.772 * (U - 128)
             for (row in 0 until height) {
                 for (col in 0 until width) {
                     val y = (yBuffer.get(row * yRowStride + col).toInt() and 0xFF)
@@ -66,7 +95,6 @@ object ImageUtils {
 
                     val argbPixel = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
 
-                    // 根据旋转角度映射到输出位置
                     val (outX, outY) = when (rotationDegrees) {
                         90 -> Pair(height - 1 - row, col)
                         180 -> Pair(width - 1 - col, height - 1 - row)
@@ -77,9 +105,21 @@ object ImageUtils {
                 }
             }
 
-            Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888).apply {
-                setPixels(argb, 0, outWidth, 0, 0, outWidth, outHeight)
-            }
+            val bitmap = getReusableBitmap(outWidth, outHeight)
+            bitmap.setPixels(argb, 0, outWidth, 0, 0, outWidth, outHeight)
+            bitmap
         }
+    }
+
+    /**
+     * 释放复用的 Bitmap 资源（在相机销毁时调用）
+     */
+    fun release() {
+        reusableBitmap?.recycle()
+        reusableBitmap = null
+        reusableArgbBuffer = null
+        reusableArgbBufferSize = 0
+        reusableBitmapWidth = 0
+        reusableBitmapHeight = 0
     }
 }

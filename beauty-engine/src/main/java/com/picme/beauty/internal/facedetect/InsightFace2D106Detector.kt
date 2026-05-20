@@ -48,6 +48,13 @@ class InsightFace2D106Detector(context: Context) {
     private var inputMean: Float = DEFAULT_INPUT_MEAN
     private var inputStd: Float = DEFAULT_INPUT_STD
 
+    // [性能优化] 复用像素和 CHW 缓冲区，避免每帧 new IntArray/FloatArray
+    private val reusablePixelBuffer = IntArray(INPUT_SIZE * INPUT_SIZE)
+    private val reusableChwBuffer = FloatArray(INPUT_CHANNELS * INPUT_SIZE * INPUT_SIZE)
+    // [性能优化] 复用结果数组和临时点数组
+    private val reusableResult = FloatArray(POINT_COUNT * 2)
+    private val reusableMappedPoint = floatArrayOf(0f, 0f)
+
     init {
         initialize()
     }
@@ -108,18 +115,18 @@ class InsightFace2D106Detector(context: Context) {
             }
             Log.d(TAG, "[Diag] rawOutput sample values: $sampleValues")
 
-            // [修复] InsightFace 2d106det 模型输出在 [-1, 1] 范围，使用固定公式转换
-            val result = FloatArray(POINT_COUNT * 2)
-            val mappedPoint = floatArrayOf(0f, 0f)
+            // [性能优化] 复用预分配的 result 和 mappedPoint 数组
+            val result = reusableResult
+            val mappedPoint = reusableMappedPoint
+            val bitmapWidth = bitmap.width.toFloat()
+            val bitmapHeight = bitmap.height.toFloat()
+            val halfInputSize = INPUT_SIZE / 2f
             for (index in 0 until POINT_COUNT) {
-                // 标准公式：将 [-1, 1] 映射到 [0, INPUT_SIZE]
-                mappedPoint[0] = (rawOutput[index * 2] + 1f) * (INPUT_SIZE / 2f)
-                mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * (INPUT_SIZE / 2f)
+                mappedPoint[0] = (rawOutput[index * 2] + 1f) * halfInputSize
+                mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * halfInputSize
                 crop.inverseTransform.mapPoints(mappedPoint)
-                val normalizedX = mappedPoint[0] / bitmap.width.toFloat()
-                val normalizedY = mappedPoint[1] / bitmap.height.toFloat()
-                result[index * 2] = normalizedX.coerceIn(0f, 1f)
-                result[index * 2 + 1] = normalizedY.coerceIn(0f, 1f)
+                result[index * 2] = (mappedPoint[0] / bitmapWidth).coerceIn(0f, 1f)
+                result[index * 2 + 1] = (mappedPoint[1] / bitmapHeight).coerceIn(0f, 1f)
             }
 
             // [调试] 打印前3个点的归一化坐标
@@ -138,6 +145,30 @@ class InsightFace2D106Detector(context: Context) {
         det10gDetector = null
         ortSession = null
         inputName = null
+    }
+
+    // [性能优化] 复用 Bitmap 池，避免每帧 createBitmap
+    private var reusableCropBitmap: Bitmap? = null
+    private var reusableCropCanvas: Canvas? = null
+
+    private fun getReusableCropBitmap(): Bitmap {
+        var bmp = reusableCropBitmap
+        if (bmp == null || bmp.isRecycled) {
+            bmp = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
+            reusableCropBitmap = bmp
+        }
+        return bmp
+    }
+
+    private fun getReusableCropCanvas(): Canvas {
+        var cvs = reusableCropCanvas
+        if (cvs == null) {
+            cvs = Canvas(getReusableCropBitmap())
+            reusableCropCanvas = cvs
+        } else {
+            cvs.setBitmap(getReusableCropBitmap())
+        }
+        return cvs
     }
 
     private fun initialize() {
@@ -190,10 +221,13 @@ class InsightFace2D106Detector(context: Context) {
 
 
 
+    // [性能优化] 复用 Matrix 对象，避免每帧创建
+    private val reusableTransformMatrix = Matrix()
+    private val reusableInverseMatrix = Matrix()
+
     private fun buildLooseFaceCrop(bitmap: Bitmap, faceBounds: Rect): LooseCrop? {
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
         val faceHeight = faceBounds.height().toFloat().coerceAtLeast(1f)
-        // [修复] 不做任何扩展，直接使用原始人脸框
         val looseSize = max(faceWidth, faceHeight) * LOOSE_CROP_SCALE
         if (looseSize <= 0f) {
             return null
@@ -202,25 +236,22 @@ class InsightFace2D106Detector(context: Context) {
         val centerX = faceBounds.exactCenterX()
         val centerY = faceBounds.exactCenterY()
         val inputScale = INPUT_SIZE / looseSize
-        // [修复] 使用 setValues 直接构造变换矩阵，避免 postScale+postTranslate 右乘导致平移被重复缩放
-        val transform = Matrix().apply {
-            setValues(
-                floatArrayOf(
-                    inputScale, 0f, INPUT_SIZE / 2f - centerX * inputScale,
-                    0f, inputScale, INPUT_SIZE / 2f - centerY * inputScale,
-                    0f, 0f, 1f
-                )
-            )
-        }
-        val inverseTransform = Matrix().apply {
-            transform.invert(this)
-        }
 
-        val croppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(croppedBitmap)
+        reusableTransformMatrix.setValues(
+            floatArrayOf(
+                inputScale, 0f, INPUT_SIZE / 2f - centerX * inputScale,
+                0f, inputScale, INPUT_SIZE / 2f - centerY * inputScale,
+                0f, 0f, 1f
+            )
+        )
+        reusableInverseMatrix.reset()
+        reusableTransformMatrix.invert(reusableInverseMatrix)
+
+        val croppedBitmap = getReusableCropBitmap()
+        val canvas = getReusableCropCanvas()
         canvas.drawColor(android.graphics.Color.BLACK)
-        canvas.drawBitmap(bitmap, transform, null)
-        return LooseCrop(bitmap = croppedBitmap, inverseTransform = inverseTransform)
+        canvas.drawBitmap(bitmap, reusableTransformMatrix, null)
+        return LooseCrop(bitmap = croppedBitmap, inverseTransform = Matrix(reusableInverseMatrix))
     }
 
     private fun runInference(session: OrtSession, bitmap: Bitmap): FloatArray {
@@ -250,10 +281,10 @@ class InsightFace2D106Detector(context: Context) {
 
     private fun createInputTensor(bitmap: Bitmap): OnnxTensor {
         val pixelCount = INPUT_SIZE * INPUT_SIZE
-        val pixels = IntArray(pixelCount)
+        val pixels = reusablePixelBuffer
         bitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
 
-        val chw = FloatArray(INPUT_CHANNELS * pixelCount)
+        val chw = reusableChwBuffer
         for (index in 0 until pixelCount) {
             val pixel = pixels[index]
             val red = (pixel shr 16 and 0xFF).toFloat()
