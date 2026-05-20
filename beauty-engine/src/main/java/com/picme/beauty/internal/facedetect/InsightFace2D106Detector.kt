@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Rect
+import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.nio.FloatBuffer
@@ -71,6 +72,7 @@ class InsightFace2D106Detector(context: Context) {
      */
     fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
         val session = ortSession ?: return null
+        val totalStart = SystemClock.elapsedRealtime()
 
         // [两阶段检测] 第一阶段：如果没有提供 faceBounds，使用 Det10G 检测
         val actualFaceBounds = faceBounds ?: run {
@@ -84,38 +86,31 @@ class InsightFace2D106Detector(context: Context) {
                 Log.w(TAG, "[Diag] Det10G no face detected")
                 return null
             }
-            Log.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
             bounds
         }
 
-        Log.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
+        Log.d(TAG, "[Perf] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
         return try {
-            // 将 RectF 转换为 Rect
             val rectBounds = android.graphics.Rect(
                 actualFaceBounds.left.toInt().coerceIn(0, bitmap.width),
                 actualFaceBounds.top.toInt().coerceIn(0, bitmap.height),
                 actualFaceBounds.right.toInt().coerceIn(0, bitmap.width),
                 actualFaceBounds.bottom.toInt().coerceIn(0, bitmap.height)
             )
-            Log.d(TAG, "[Diag] 2d106det rectBounds=$rectBounds")
 
+            val cropStart = SystemClock.elapsedRealtime()
             val crop = buildLooseFaceCrop(bitmap, rectBounds) ?: run {
                 Log.w(TAG, "[Diag] 2d106det buildLooseFaceCrop returned null")
                 return null
             }
-            Log.d(TAG, "[Diag] 2d106det crop bitmap=${crop.bitmap.width}x${crop.bitmap.height}")
+            val cropElapsed = SystemClock.elapsedRealtime() - cropStart
 
+            val inferenceStart = SystemClock.elapsedRealtime()
             val rawOutput = runInference(session, crop.bitmap)
             crop.bitmap.recycle()
-            Log.d(TAG, "[Diag] 2d106det rawOutput size=${rawOutput.size}")
+            val inferenceElapsed = SystemClock.elapsedRealtime() - inferenceStart
 
-            // [调试] 采样 rawOutput 范围用于诊断
-            val sampleValues = (0 until minOf(POINT_COUNT, 10)).flatMap {
-                listOf(rawOutput[it * 2], rawOutput[it * 2 + 1])
-            }
-            Log.d(TAG, "[Diag] rawOutput sample values: $sampleValues")
-
-            // [性能优化] 复用预分配的 result 和 mappedPoint 数组
+            val transformStart = SystemClock.elapsedRealtime()
             val result = reusableResult
             val mappedPoint = reusableMappedPoint
             val bitmapWidth = bitmap.width.toFloat()
@@ -128,10 +123,10 @@ class InsightFace2D106Detector(context: Context) {
                 result[index * 2] = (mappedPoint[0] / bitmapWidth).coerceIn(0f, 1f)
                 result[index * 2 + 1] = (mappedPoint[1] / bitmapHeight).coerceIn(0f, 1f)
             }
+            val transformElapsed = SystemClock.elapsedRealtime() - transformStart
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
-            // [调试] 打印前3个点的归一化坐标
-            Log.d(TAG, "[Diag] 2d106det RESULT: firstPoint=(${result[0]},${result[1]}), secondPoint=(${result[2]},${result[3]}), thirdPoint=(${result[4]},${result[5]})")
-            Log.d(TAG, "[Diag] 2d106det lastPoint=(${result[210]},${result[211]})")
+            Log.d(TAG, "[Perf] 2d106det DONE: total=${totalElapsed}ms, crop=${cropElapsed}ms, inference=${inferenceElapsed}ms, transform=${transformElapsed}ms")
             result
         } catch (error: Exception) {
             Log.e(TAG, "[Diag] InsightFace 2D106 detection failed", error)
@@ -175,20 +170,23 @@ class InsightFace2D106Detector(context: Context) {
         runCatching {
             // 初始化 Det10G 检测器（内部使用）
             det10gDetector = InsightFaceDet10GDetector(appContext)
-            
+
             val modelFile = ensureModelFile()
-            
-            // [优化] 配置 ONNX Runtime SessionOptions,优先使用 GPU
+
+            // [优化] 配置 ONNX Runtime SessionOptions,强制使用 GPU 推理
             val sessionOptions = OrtSession.SessionOptions()
-            
+
             try {
-                // 尝试添加 NNAPI (Android GPU/NPU 加速)
-                sessionOptions.addNnapi()
-                Log.i(TAG, "NNAPI execution provider enabled for 2D106")
+                // NNAPI 配置: 使用 FP16 加速,允许 GPU/NPU 执行支持的操作
+                val nnapiFlags = java.util.EnumSet.of(
+                    ai.onnxruntime.providers.NNAPIFlags.USE_FP16
+                )
+                sessionOptions.addNnapi(nnapiFlags)
+                Log.i(TAG, "NNAPI execution provider enabled with FP16 for 2D106 (flags=$nnapiFlags)")
             } catch (e: Exception) {
                 Log.w(TAG, "NNAPI not available for 2D106, falling back to CPU", e)
             }
-            
+
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)

@@ -6,6 +6,7 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
+import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.nio.FloatBuffer
@@ -87,10 +88,12 @@ class InsightFaceDet10GDetector(context: Context) {
         val session = ortSession ?: return null
         val origW = bitmap.width.toFloat()
         val origH = bitmap.height.toFloat()
-        Log.d(TAG, "[Diag] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
+        val totalStart = SystemClock.elapsedRealtime()
+        Log.d(TAG, "[Perf] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
         return try {
             val faces = runInference(session, bitmap)
-            Log.d(TAG, "[Diag] detectLargestFace after inference: faces=${faces.size}")
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+            Log.d(TAG, "[Perf] detectLargestFace DONE: total=${totalElapsed}ms, faces=${faces.size}")
             if (faces.isNotEmpty()) {
                 Log.d(TAG, "[Diag] First face: [${faces[0].x1.toInt()},${faces[0].y1.toInt()},${faces[0].x2.toInt()},${faces[0].y2.toInt()}] conf=${faces[0].confidence}")
             }
@@ -173,21 +176,22 @@ class InsightFaceDet10GDetector(context: Context) {
     private fun initialize() {
         runCatching {
             val modelFile = ensureModelFile()
-            
-            // [优化] 配置 ONNX Runtime SessionOptions,优先使用 GPU
+
+            // [优化] 配置 ONNX Runtime SessionOptions,强制使用 GPU 推理
             val sessionOptions = OrtSession.SessionOptions()
-            
+
             try {
-                // 尝试添加 NNAPI (Android GPU/NPU 加速)
-                sessionOptions.addNnapi()
-                Log.i(TAG, "NNAPI execution provider enabled")
+                // NNAPI 配置: 使用 FP16 加速,允许 GPU/NPU 执行支持的操作
+                // 注意: 不设置 CPU_DISABLED,让 NNAPI 自动决定哪些层用 GPU,哪些回退 CPU
+                val nnapiFlags = java.util.EnumSet.of(
+                    ai.onnxruntime.providers.NNAPIFlags.USE_FP16
+                )
+                sessionOptions.addNnapi(nnapiFlags)
+                Log.i(TAG, "NNAPI execution provider enabled with FP16 (flags=$nnapiFlags)")
             } catch (e: Exception) {
                 Log.w(TAG, "NNAPI not available, falling back to CPU", e)
             }
-            
-            // [备选] 如果 NNAPI 不可用,可以尝试 XNNPACK (CPU 优化)
-            // sessionOptions.addXnnpack()
-            
+
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)
@@ -218,13 +222,27 @@ class InsightFaceDet10GDetector(context: Context) {
     }
 
     private fun runInference(session: OrtSession, bitmap: Bitmap): List<FaceBox> {
+        val tensorStart = SystemClock.elapsedRealtime()
         val inputTensor = createInputTensor(bitmap)
+        val tensorElapsed = SystemClock.elapsedRealtime() - tensorStart
+
+        val inferenceStart = SystemClock.elapsedRealtime()
         try {
             val modelInputName = inputName ?: error("Det10G input name missing")
             val results = session.run(mapOf(modelInputName to inputTensor))
+            val inferenceElapsed = SystemClock.elapsedRealtime() - inferenceStart
+
+            val parseStart = SystemClock.elapsedRealtime()
             try {
                 val faces = parseOutputs(results)
-                return applyNMS(faces)
+                val parseElapsed = SystemClock.elapsedRealtime() - parseStart
+
+                val nmsStart = SystemClock.elapsedRealtime()
+                val nmsResult = applyNMS(faces)
+                val nmsElapsed = SystemClock.elapsedRealtime() - nmsStart
+
+                Log.d(TAG, "[Perf] Det10G breakdown: tensor=${tensorElapsed}ms, inference=${inferenceElapsed}ms, parse=${parseElapsed}ms, NMS=${nmsElapsed}ms")
+                return nmsResult
             } finally {
                 results.close()
             }

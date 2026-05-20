@@ -1,5 +1,7 @@
 package com.picme.beauty.internal.facedetect.adapter
 
+import android.os.SystemClock
+import android.util.Log
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 // CameraSelector.LENS_FACING_FRONT = 0, LENS_FACING_BACK = 1
@@ -106,6 +108,7 @@ class InsightFaceAdapter : FaceLandmarkAdapter {
             )
         }
 
+        val startTime = SystemClock.elapsedRealtime()
         val isFrontCamera = lensFacing == LENS_FACING_FRONT
         val unified = FloatArray(POINT_COUNT * 2)
 
@@ -114,15 +117,12 @@ class InsightFaceAdapter : FaceLandmarkAdapter {
             val insightIdx = FULL_REMAP[unifiedIdx]
             val srcX = nativeLandmarks[insightIdx * 2]
             val srcY = nativeLandmarks[insightIdx * 2 + 1]
-
-            // [调试] 打印前3个点的原始值和镜像后的值
-            if (unifiedIdx < 3) {
-                android.util.Log.d("PicMe:InsightAdapter", "Point $unifiedIdx: src=($srcX,$srcY), isFront=$isFrontCamera, mirrored=${if (isFrontCamera) 1f - srcX else srcX}")
-            }
-
             unified[unifiedIdx * 2] = if (isFrontCamera) 1f - srcX else srcX
             unified[unifiedIdx * 2 + 1] = srcY
         }
+
+        val elapsed = SystemClock.elapsedRealtime() - startTime
+        Log.d("PicMe:InsightAdapter", "[Perf] adapt DONE: ${elapsed}ms")
 
         return Result.success(unified)
     }
