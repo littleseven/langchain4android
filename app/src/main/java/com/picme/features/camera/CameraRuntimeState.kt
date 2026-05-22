@@ -28,6 +28,7 @@ import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InsightFaceLandmarkDetectorType
 import com.picme.domain.model.InsightFaceRoiDetectorType
 import com.picme.domain.repository.UserSettingsRepository
+import kotlinx.coroutines.flow.first
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -80,32 +81,34 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         initial = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
     )
     val lifecycleOwner = LocalLifecycleOwner.current
-
-    // 监听 InsightFace 流水线配置变化并更新 FaceDetectorManager
-    LaunchedEffect(insightFaceRoiDetectorType, insightFaceLandmarkDetectorType) {
-        Logger.d("Camera", "=== InsightFace Config Change Detected ===")
-        Logger.d("Camera", "  ROI Detector: $insightFaceRoiDetectorType")
-        Logger.d("Camera", "  Landmark Detector: $insightFaceLandmarkDetectorType")
-
+    
+    // [关键修复] 在 LaunchedEffect 中使用 produceState 确保首次发射后触发配置更新
+    LaunchedEffect(Unit) {
+        // 等待 DataStore 发射初始值
+        val roiValue = userPreferencesRepository.insightFaceRoiDetectorTypeFlow.first()
+        val landmarkValue = userPreferencesRepository.insightFaceLandmarkDetectorTypeFlow.first()
+        
+        Logger.d("Camera", "=== First-time Config Initialization ===")
+        Logger.d("Camera", "  ROI Detector from DataStore: $roiValue")
+        Logger.d("Camera", "  Landmark Detector from DataStore: $landmarkValue")
+        
         val config = DetectionPipelineConfig(
-            roiDetector = when (insightFaceRoiDetectorType) {
+            roiDetector = when (roiValue) {
                 InsightFaceRoiDetectorType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
                 InsightFaceRoiDetectorType.DET10G -> RoiDetectorType.DET10G
                 InsightFaceRoiDetectorType.MNN -> RoiDetectorType.MNN
+                else -> RoiDetectorType.DET10G
             },
-            landmarkDetector = when (insightFaceLandmarkDetectorType) {
+            landmarkDetector = when (landmarkValue) {
                 InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
                 InsightFaceLandmarkDetectorType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
                 InsightFaceLandmarkDetectorType.MNN -> LandmarkDetectorType.MNN
+                else -> LandmarkDetectorType.INSIGHTFACE_2D106
             }
         )
         
-        Logger.d("Camera", "  Converting to internal config:")
-        Logger.d("Camera", "    roiDetector=${config.roiDetector}")
-        Logger.d("Camera", "    landmarkDetector=${config.landmarkDetector}")
-        
         faceDetectorManager.updatePipelineConfig(config)
-        Logger.d("Camera", "  Pipeline config updated successfully")
+        Logger.d("Camera", "  Initial pipeline config applied successfully")
         Logger.d("Camera", "========================================")
     }
 
