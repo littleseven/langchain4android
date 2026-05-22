@@ -177,6 +177,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
     faceDetector: FaceDetector,
     lensFacing: Int,
     detectionEngineMode: EngineType,
+    showFaceDebugOverlay: Boolean = false,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
@@ -274,6 +275,20 @@ internal fun handleImageAnalysisFrameMediaPipe(
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
             FaceDetectionCache.updateLandmarks106(landmarks106)
+
+            // [调试信息] 显示检测器类型和 GPU 状态
+            if (showFaceDebugOverlay) {
+                val detectorInfo = buildString {
+                    append("ROI: ${detectionResult.roiDetectorName} ")
+                    append(if (detectionResult.useGpuForRoi) "GPU✓" else "CPU")
+                    append(" | Landmark: ${detectionResult.landmarkDetectorName} ")
+                    append(if (detectionResult.useGpuForLandmark) "GPU✓" else "CPU")
+                }
+                // 从 landmarks 计算人脸中心点
+                val centerX = landmarks106[48] // 索引 96 (第 49 个点 x 坐标)
+                val centerY = landmarks106[97] // 索引 97 (第 49 个点 y 坐标)
+                Logger.d("Camera", "[Debug] $detectorInfo, faceCenter=($centerX, $centerY)")
+            }
 
             // [帧同步 CR-P0-2] 同步结果也存入 FrameSyncManager，供渲染线程查询
             val detectionLatencyMs = System.currentTimeMillis() - detectionStartMs

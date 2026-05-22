@@ -74,10 +74,10 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val insightFaceRoiDetectorType by userPreferencesRepository.insightFaceRoiDetectorTypeFlow.collectAsState(
-        initial = InsightFaceRoiDetectorType.MEDIAPIPE
+        initial = InsightFaceRoiDetectorType.MNN
     )
     val insightFaceLandmarkDetectorType by userPreferencesRepository.insightFaceLandmarkDetectorTypeFlow.collectAsState(
-        initial = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+        initial = InsightFaceLandmarkDetectorType.MNN
     )
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -86,15 +86,17 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         Logger.d("Camera", "=== InsightFace Config Change Detected ===")
         Logger.d("Camera", "  ROI Detector: $insightFaceRoiDetectorType")
         Logger.d("Camera", "  Landmark Detector: $insightFaceLandmarkDetectorType")
-        
+
         val config = DetectionPipelineConfig(
             roiDetector = when (insightFaceRoiDetectorType) {
                 InsightFaceRoiDetectorType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
                 InsightFaceRoiDetectorType.DET10G -> RoiDetectorType.DET10G
+                InsightFaceRoiDetectorType.MNN -> RoiDetectorType.MNN
             },
             landmarkDetector = when (insightFaceLandmarkDetectorType) {
                 InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
                 InsightFaceLandmarkDetectorType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
+                InsightFaceLandmarkDetectorType.MNN -> LandmarkDetectorType.MNN
             }
         )
         

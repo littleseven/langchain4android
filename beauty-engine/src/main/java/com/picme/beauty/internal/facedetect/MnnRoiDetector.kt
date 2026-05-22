@@ -1,0 +1,190 @@
+package com.picme.beauty.internal.facedetect
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.RectF
+import android.os.SystemClock
+import android.util.Log
+import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
+import java.io.File
+
+/**
+ * 基于 MNN + Vulkan GPU 的 ROI 检测器
+ * 替代 InsightFace Det10G (ONNX Runtime)，提供更快的 GPU 推理
+ *
+ * 兼容骁龙 765G + Adreno 620（Vulkan 1.1）
+ */
+class MnnRoiDetector(context: Context) : RoiDetector {
+
+    companion object {
+        private const val TAG = "PicMe:MnnRoi"
+        private const val MODEL_ASSET_PATH = "insightface/det_10g.mnn"
+        private const val MODEL_FILE_NAME = "mnn_det_10g.mnn"
+        private const val INPUT_SIZE = 320  // [优化] 从 640 降低到 320，提升推理速度
+        private const val CONFIDENCE_THRESHOLD = 0.5f
+
+        // RetinaFace 9 个输出层名称（与 MNNConvert 输出一致）
+        private val OUTPUT_NAMES = arrayOf(
+            "448", "471", "494",   // scale 1: score, bbox, landmark
+            "451", "474", "497",   // scale 2: score, bbox, landmark
+            "454", "477", "500"    // scale 3: score, bbox, landmark
+        )
+    }
+
+    private val appContext = context.applicationContext
+    private var detector: MnnFaceDetector? = null
+    private var isInitialized = false
+    
+    // [性能优化] Bitmap 缩放复用池
+    private var reusableScaledBitmap: Bitmap? = null
+
+    /**
+     * 懒加载初始化 - 仅在首次 detect 时调用
+     */
+    private fun ensureInitialized() {
+        if (isInitialized) return
+        
+        synchronized(this) {
+            if (isInitialized) return
+            
+            initialize()
+            isInitialized = true
+        }
+    }
+
+    init {
+        // [优化] 不立即初始化，改为懒加载
+        Log.d(TAG, "MnnRoiDetector created (lazy initialization)")
+    }
+
+    private fun initialize() {
+        try {
+            val modelFile = ensureModelFile(MODEL_FILE_NAME, MODEL_ASSET_PATH)
+
+            Log.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU...")
+            val initStart = SystemClock.elapsedRealtime()
+            detector = MnnFaceDetector.create(
+                modelPath = modelFile.absolutePath,
+                inputSize = INPUT_SIZE,
+                useGpu = true,
+                inputName = "input.1",
+                outputNames = OUTPUT_NAMES
+            )
+            val initElapsed = SystemClock.elapsedRealtime() - initStart
+
+            if (detector != null) {
+                Log.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with Vulkan GPU")
+            } else {
+                Log.e(TAG, "Failed to initialize MNN RetinaFace detector")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize MnnRoiDetector", e)
+            detector = null
+        }
+    }
+
+    override fun detectRoi(bitmap: Bitmap): RectF? {
+        // [优化] 懒加载初始化
+        ensureInitialized()
+        
+        val totalStart = SystemClock.elapsedRealtime()
+        val det = detector
+
+        if (det == null) {
+            Log.w(TAG, "[Perf] MnnRoiDetector not initialized after lazy init, skipping")
+            return null
+        }
+
+        return try {
+            val scaleStart = SystemClock.elapsedRealtime()
+            val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
+            val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
+
+            Log.d(TAG, "[Perf] MnnRoi START: original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+
+            val inferStart = SystemClock.elapsedRealtime()
+            val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
+            val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+
+            if (result == null || result.size < 5) {
+                Log.d(TAG, "[Perf] MnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
+                return null
+            }
+
+            // result: [x1, y1, x2, y2, score, landmarks(10)]
+            // 坐标已经是 INPUT_SIZE 尺度下的，需要映射回原图
+            val scaleRatio = bitmap.width.toFloat() / scaledBitmap.width
+            val roi = RectF(
+                result[0] * scaleRatio,
+                result[1] * scaleRatio,
+                result[2] * scaleRatio,
+                result[3] * scaleRatio
+            )
+
+            Log.i(TAG, "[Perf] MnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
+            roi
+        } catch (e: Exception) {
+            Log.e(TAG, "MnnRoi detection failed", e)
+            null
+        }
+    }
+
+    /**
+     * 获取复用的缩放 Bitmap，避免每帧创建
+     */
+    private fun getScaledBitmap(source: Bitmap, targetSize: Int): Bitmap {
+        if (source.width == targetSize && source.height == targetSize) {
+            return source
+        }
+        var bmp = reusableScaledBitmap
+        if (bmp == null || bmp.isRecycled || bmp.width != targetSize || bmp.height != targetSize) {
+            bmp?.recycle()
+            bmp = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+            reusableScaledBitmap = bmp
+        }
+        val canvas = android.graphics.Canvas(bmp)
+        canvas.drawColor(android.graphics.Color.BLACK)
+        val matrix = android.graphics.Matrix()
+        val scale = targetSize.toFloat() / maxOf(source.width, source.height)
+        val scaledW = (source.width * scale).toInt()
+        val scaledH = (source.height * scale).toInt()
+        val left = (targetSize - scaledW) / 2f
+        val top = (targetSize - scaledH) / 2f
+        matrix.setScale(scale, scale)
+        matrix.postTranslate(left, top)
+        canvas.drawBitmap(source, matrix, null)
+        return bmp
+    }
+
+    override fun release() {
+        detector?.release()
+        detector = null
+        reusableScaledBitmap?.recycle()
+        reusableScaledBitmap = null
+        Log.i(TAG, "MnnRoiDetector released")
+    }
+
+    private fun ensureModelFile(fileName: String, assetPath: String): File {
+        val file = File(appContext.filesDir, fileName)
+        if (file.exists() && file.length() > 0L) {
+            return file
+        }
+
+        // 从 assets 复制
+        try {
+            appContext.assets.open(assetPath).use { input ->
+                file.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Log.d(TAG, "Model copied from assets: $assetPath -> ${file.absolutePath}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to copy model from assets: $assetPath", e)
+            throw e
+        }
+
+        return file
+    }
+}

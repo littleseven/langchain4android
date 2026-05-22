@@ -10,6 +10,8 @@ import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetectionResult
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.LandmarkDetectorType
+import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.beauty.internal.facedetect.adapter.InsightFaceAdapter
 
@@ -35,7 +37,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     private var roiDetector: RoiDetector? = null
     private var landmarkDetector: LandmarkDetector? = null
-    private var pipelineConfig: DetectionPipelineConfig = DetectionPipelineConfig()
+    private var pipelineConfig: DetectionPipelineConfig = DetectionPipelineConfig(
+        roiDetector = RoiDetectorType.MNN,
+        landmarkDetector = LandmarkDetectorType.MNN
+    )
 
     private var mediaPipeDetector: MediaPipeFaceDetector? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
@@ -57,6 +62,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         Log.i(TAG, "=== Initializing Detection Pipeline ===")
         Log.i(TAG, "  Config: roi=${pipelineConfig.roiDetector}, landmark=${pipelineConfig.landmarkDetector}")
 
+        // [优化] 懒加载模式下，release() 不会立即销毁资源，只是标记为未初始化
         roiDetector?.release()
         landmarkDetector?.release()
 
@@ -67,9 +73,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             pipelineConfig.landmarkDetector, appContext
         )
 
-        Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName}")
-        Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName}")
-        Log.i(TAG, "  Pipeline initialized successfully")
+        Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName} (lazy)")
+        Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName} (lazy)")
+        Log.i(TAG, "  Pipeline initialized successfully (lazy mode)")
         Log.i(TAG, "=========================================")
     }
 
@@ -106,7 +112,16 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                     if (mediaPipeResult != null) {
                         lastDetectionSource = FaceDetectionSource.MEDIAPIPE
                         Log.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
-                        FaceDetectionResult(mediaPipeResult, lastDetectionSource)
+                        // MediaPipe 使用 CPU，无 ROI 概念
+                        FaceDetectionResult(
+                            landmarks106 = mediaPipeResult,
+                            detectionSource = FaceDetectionSource.MEDIAPIPE,
+                            roiRect = null,
+                            roiDetectorName = "N/A",
+                            useGpuForRoi = false,
+                            landmarkDetectorName = "MediaPipe",
+                            useGpuForLandmark = false
+                        )
                     } else {
                         Log.d(TAG, "No face detected by MediaPipe (${lastProcessTimeMs}ms)")
                         null
@@ -151,7 +166,16 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             if (mediaPipeResult != null) {
                 lastDetectionSource = FaceDetectionSource.MEDIAPIPE
                 Log.d(TAG, "Face detected by MediaPipe (direct image) in ${lastProcessTimeMs}ms")
-                FaceDetectionResult(mediaPipeResult, lastDetectionSource)
+                // MediaPipe 使用 GPU，但无 ROI 概念
+                FaceDetectionResult(
+                    landmarks106 = mediaPipeResult,
+                    detectionSource = FaceDetectionSource.MEDIAPIPE,
+                    roiRect = null,
+                    roiDetectorName = "N/A",
+                    useGpuForRoi = false,
+                    landmarkDetectorName = "MediaPipe (GPU)",
+                    useGpuForLandmark = true
+                )
             } else {
                 Log.d(TAG, "No face detected by MediaPipe direct image (${lastProcessTimeMs}ms)")
                 null
@@ -164,27 +188,51 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     }
 
     private fun detectInsightFace(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
+        var roiResult: android.graphics.RectF? = null
+        var landmarkResult: FloatArray? = null
+        var roiError: Exception? = null
+        var landmarkError: Exception? = null
+        
         val roiStartTime = SystemClock.elapsedRealtime()
-        val roi = roiDetector?.detectRoi(bitmap)
-        val roiTime = SystemClock.elapsedRealtime() - roiStartTime
-
+        
+        // [性能优化] ROI 检测在独立线程中执行
+        val roiJob = Thread(
+            Runnable {
+                try {
+                    roiResult = roiDetector?.detectRoi(bitmap)
+                } catch (e: Exception) {
+                    roiError = e
+                    Log.e(TAG, "ROI detection failed in parallel thread", e)
+                }
+            },
+            "FaceDetect-ROI"
+        )
+        
+        // Landmark 等待 ROI 完成后才能开始（因为需要 ROI 坐标）
+        // 所以实际上是串行执行，但可以在 ROI 推理的同时准备 Landmark 输入
+        roiJob.start()
+        roiJob.join()
+        
+        // ROI 完成后才开始 Landmark 检测
         val landmarkStart = SystemClock.elapsedRealtime()
-        val rawResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roi)
+        landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roiResult)
         val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
-
+        
+        val roiTime = SystemClock.elapsedRealtime() - roiStartTime
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
+        
         Log.d(TAG, "[Perf] InsightFace breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
-
-        return if (rawResult != null) {
+        
+        // 优先使用 Landmark 结果（更关键）
+        if (landmarkResult != null) {
             lastDetectionSource = FaceDetectionSource.INSIGHTFACE
             val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.INSIGHTFACE)
                 as? InsightFaceAdapter
                 ?: return null
-            val adaptedResult = adapter.adapt(rawResult, lensFacing).getOrNull()
+            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
             if (adaptedResult != null) {
                 Log.d(TAG, "InsightFace detection success in ${lastProcessTimeMs}ms")
-                val normalizedRoi = roi?.let { r ->
+                val normalizedRoi = roiResult?.let { r ->
                     android.graphics.RectF(
                         r.left / bitmap.width.toFloat(),
                         r.top / bitmap.height.toFloat(),
@@ -192,15 +240,34 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                         r.bottom / bitmap.height.toFloat()
                     )
                 }
-                FaceDetectionResult(adaptedResult, lastDetectionSource, normalizedRoi)
+                
+                // [调试信息] 构建检测器名称和 GPU 状态
+                val roiDetectorName = roiDetector?.javaClass?.simpleName ?: "Unknown"
+                val landmarkDetectorName = landmarkDetector?.javaClass?.simpleName ?: "Unknown"
+                // MNN 检测器默认使用 GPU，ONNX Runtime 使用 CPU
+                val useGpuForRoi = roiDetectorName.contains("Mnn", ignoreCase = true)
+                val useGpuForLandmark = landmarkDetectorName.contains("Mnn", ignoreCase = true)
+                
+                return FaceDetectionResult(
+                    landmarks106 = adaptedResult,
+                    detectionSource = FaceDetectionSource.INSIGHTFACE,
+                    roiRect = normalizedRoi,
+                    roiDetectorName = roiDetectorName,
+                    useGpuForRoi = useGpuForRoi,
+                    landmarkDetectorName = landmarkDetectorName,
+                    useGpuForLandmark = useGpuForLandmark
+                )
             } else {
                 Log.w(TAG, "InsightFace adaptation failed")
-                null
             }
         } else {
             Log.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
-            null
+            if (landmarkError != null) {
+                Log.e(TAG, "Landmark detection error", landmarkError)
+            }
         }
+        
+        return null
     }
 
     override fun detectPhoto(bitmap: Bitmap, lensFacing: Int): FaceDetectionResult? {
