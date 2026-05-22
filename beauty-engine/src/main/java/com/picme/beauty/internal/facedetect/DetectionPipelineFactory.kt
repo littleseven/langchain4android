@@ -15,6 +15,7 @@ internal object DetectionPipelineFactory {
         return when (type) {
             RoiDetectorType.MEDIAPIPE -> MediaPipeRoiDetector(context)
             RoiDetectorType.DET10G -> Det10GRoiDetector(context)
+            RoiDetectorType.MNN -> MnnRoiDetector(context)
         }
     }
 
@@ -27,6 +28,8 @@ internal object DetectionPipelineFactory {
                 InsightFaceLandmarkDetector(context)
             LandmarkDetectorType.MEDIAPIPE ->
                 MediaPipeLandmarkDetector(context)
+            LandmarkDetectorType.MNN ->
+                MnnLandmarkDetector(context)
         }
     }
 }

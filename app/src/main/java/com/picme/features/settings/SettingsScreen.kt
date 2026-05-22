@@ -42,6 +42,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
+import com.picme.core.designsystem.PicMeTheme
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
@@ -76,7 +77,7 @@ fun SettingsScreen(
 
     val themeMode by viewModel.themeMode.collectAsState()
     val appLanguage by viewModel.appLanguage.collectAsState()
-    val beautyStrategy by viewModel.beautyStrategy.collectAsState()
+
     val debugUiEnabled by viewModel.debugUiEnabled.collectAsState()
     val showCameraInfoInPreview by viewModel.showCameraInfoInPreview.collectAsState()
     val showFaceDebugOverlay by viewModel.showFaceDebugOverlay.collectAsState()
@@ -88,11 +89,9 @@ fun SettingsScreen(
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
     val insightFaceRoiDetectorType by viewModel.insightFaceRoiDetectorType.collectAsState()
     val insightFaceLandmarkDetectorType by viewModel.insightFaceLandmarkDetectorType.collectAsState()
-
     SettingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
-        beautyStrategy = beautyStrategy,
         debugUiEnabled = debugUiEnabled,
         showCameraInfoInPreview = showCameraInfoInPreview,
         showFaceDebugOverlay = showFaceDebugOverlay,
@@ -106,7 +105,6 @@ fun SettingsScreen(
         insightFaceLandmarkDetectorType = insightFaceLandmarkDetectorType,
         onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
-        onBeautyStrategySelected = { strategy -> viewModel.setBeautyStrategy(strategy) },
         onDebugUiEnabledChange = { enabled -> viewModel.setDebugUiEnabled(enabled) },
         onShowCameraInfoInPreviewChange = { show -> viewModel.setShowCameraInfoInPreview(show) },
         onShowFaceDebugOverlayChange = { show -> viewModel.setShowFaceDebugOverlay(show) },
@@ -135,7 +133,6 @@ fun SettingsScreen(
 private fun SettingsContent(
     themeMode: ThemeMode,
     appLanguage: AppLanguage,
-    beautyStrategy: BeautyStrategy,
     debugUiEnabled: Boolean,
     showCameraInfoInPreview: Boolean,
     showFaceDebugOverlay: Boolean,
@@ -149,7 +146,6 @@ private fun SettingsContent(
     insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
-    onBeautyStrategySelected: (BeautyStrategy) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
     onShowCameraInfoInPreviewChange: (Boolean) -> Unit,
     onShowFaceDebugOverlayChange: (Boolean) -> Unit,
@@ -209,17 +205,7 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            SettingsSection(
-                title = stringResource(R.string.beauty_engine),
-                description = stringResource(R.string.settings_beauty_engine_desc)
-            ) {
-                BeautyStrategySelection(
-                    currentStrategy = beautyStrategy,
-                    onStrategySelected = onBeautyStrategySelected
-                )
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(
                 title = stringResource(R.string.face_detection),
@@ -287,13 +273,11 @@ private fun SettingsContent(
                         checked = showLogOverlay,
                         onCheckedChange = onShowLogOverlayChange
                     )
-                    if (beautyStrategy == BeautyStrategy.BIG_BEAUTY) {
-                        // 兼容链路使用独立 shader 调试面板，默认主链路不暴露该入口。
-                        ShaderDebugModeSelection(
-                            currentMode = debugShaderMode,
-                            onModeSelected = onDebugShaderModeSelected
-                        )
-                    }
+                    // Shader debug mode is always available in the current BIG_BEAUTY architecture.
+                    ShaderDebugModeSelection(
+                        currentMode = debugShaderMode,
+                        onModeSelected = onDebugShaderModeSelected
+                    )
                 }
             }
 
@@ -369,22 +353,7 @@ fun LanguageSelection(
     )
 }
 
-@Composable
-fun BeautyStrategySelection(
-    currentStrategy: BeautyStrategy,
-    onStrategySelected: (BeautyStrategy) -> Unit
-) {
-    val options = listOf(
-        BeautyStrategy.BIG_BEAUTY to stringResource(R.string.beauty_engine_rplan)
-    )
 
-    CompactOptionChips(
-        options = options,
-        currentValue = currentStrategy,
-        maxLines = 2,
-        onSelected = onStrategySelected
-    )
-}
 
 @Composable
 private fun FaceDetectionEngineSelection(
@@ -483,7 +452,8 @@ private fun InsightFacePipelineSelection(
     
     val roiOptions = listOf(
         InsightFaceRoiDetectorType.MEDIAPIPE to "MediaPipe (快速+精确)",
-        InsightFaceRoiDetectorType.DET10G to "Det10G (轻量级)"
+        InsightFaceRoiDetectorType.DET10G to "Det10G (轻量级)",
+        InsightFaceRoiDetectorType.MNN to "MNN Vulkan GPU (极速+)"
     )
     
     CompactOptionChips(
@@ -503,7 +473,8 @@ private fun InsightFacePipelineSelection(
     
     val landmarkOptions = listOf(
         InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 to "InsightFace 2D106 (高精度)",
-        InsightFaceLandmarkDetectorType.MEDIAPIPE to "MediaPipe (468点)"
+        InsightFaceLandmarkDetectorType.MEDIAPIPE to "MediaPipe (468点)",
+        InsightFaceLandmarkDetectorType.MNN to "MNN Vulkan GPU (极速+)"
     )
     
     CompactOptionChips(
@@ -582,7 +553,6 @@ fun SettingsScreenPreview() {
         SettingsContent(
             themeMode = ThemeMode.SYSTEM,
             appLanguage = AppLanguage.ENGLISH,
-            beautyStrategy = BeautyStrategy.BIG_BEAUTY,
             debugUiEnabled = true,
             showCameraInfoInPreview = false,
             showFaceDebugOverlay = false,
@@ -597,7 +567,6 @@ fun SettingsScreenPreview() {
             insightFaceLandmarkDetectorType = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106,
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
-            onBeautyStrategySelected = {},
             onDebugUiEnabledChange = {},
             onShowCameraInfoInPreviewChange = {},
             onShowFaceDebugOverlayChange = {},

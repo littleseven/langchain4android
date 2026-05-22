@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew :app:assembleDebug 2>&1 | tail -100)",
+      "Bash(adb logcat -d | grep -E \"FATAL|AndroidRuntime|Crash|picme\" | tail -50)"
+    ]
+  }
+}

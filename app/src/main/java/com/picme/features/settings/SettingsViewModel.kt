@@ -33,12 +33,7 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             initialValue = AppLanguage.SYSTEM
         )
 
-    val beautyStrategy: StateFlow<BeautyStrategy> = repository.beautyStrategyFlow
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = BeautyStrategy.BIG_BEAUTY
-        )
+
 
     val debugUiEnabled: StateFlow<Boolean> = repository.debugUiEnabledFlow
         .stateIn(
@@ -104,14 +99,14 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = InsightFaceRoiDetectorType.MEDIAPIPE
+            initialValue = InsightFaceRoiDetectorType.MNN
         )
 
     val insightFaceLandmarkDetectorType: StateFlow<InsightFaceLandmarkDetectorType> = repository.insightFaceLandmarkDetectorTypeFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+            initialValue = InsightFaceLandmarkDetectorType.MNN
         )
 
     fun setThemeMode(mode: ThemeMode) {
@@ -126,14 +121,7 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         }
     }
 
-    fun setBeautyStrategy(strategy: BeautyStrategy) {
-        viewModelScope.launch {
-            repository.updateBeautyStrategy(strategy)
-            if (strategy == BeautyStrategy.BIG_BEAUTY) {
-                repository.triggerManualGlEngineRecovery()
-            }
-        }
-    }
+
 
     fun setDebugUiEnabled(enabled: Boolean) {
         viewModelScope.launch {

@@ -326,6 +326,29 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     }
 
     // ── InsightFace 流水线配置 ─────────────────────────────
+    // [迁移] NCNN 已移除，DET10G/INSIGHTFACE_2D106 降级为备选，MNN 成为默认
+    private fun migrateRoiType(typeName: String?): InsightFaceRoiDetectorType {
+        if (typeName == null) return InsightFaceRoiDetectorType.MNN
+        return runCatching {
+            when (val type = InsightFaceRoiDetectorType.valueOf(typeName)) {
+                InsightFaceRoiDetectorType.MNN -> type
+                // DET10G 和 MEDIAPIPE 仍可用，但默认推荐 MNN
+                else -> type
+            }
+        }.getOrDefault(InsightFaceRoiDetectorType.MNN)
+    }
+
+    private fun migrateLandmarkType(typeName: String?): InsightFaceLandmarkDetectorType {
+        if (typeName == null) return InsightFaceLandmarkDetectorType.MNN
+        return runCatching {
+            when (val type = InsightFaceLandmarkDetectorType.valueOf(typeName)) {
+                InsightFaceLandmarkDetectorType.MNN -> type
+                // INSIGHTFACE_2D106 和 MEDIAPIPE 仍可用
+                else -> type
+            }
+        }.getOrDefault(InsightFaceLandmarkDetectorType.MNN)
+    }
+
     override val insightFaceRoiDetectorTypeFlow: Flow<InsightFaceRoiDetectorType> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
@@ -335,10 +358,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            val typeName = preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE]
-                ?: InsightFaceRoiDetectorType.MEDIAPIPE.name
-            runCatching { InsightFaceRoiDetectorType.valueOf(typeName) }
-                .getOrDefault(InsightFaceRoiDetectorType.MEDIAPIPE)
+            migrateRoiType(preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE])
         }
 
     override suspend fun updateInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType) {
@@ -356,10 +376,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            val typeName = preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE]
-                ?: InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106.name
-            runCatching { InsightFaceLandmarkDetectorType.valueOf(typeName) }
-                .getOrDefault(InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106)
+            migrateLandmarkType(preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE])
         }
 
     override suspend fun updateInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType) {
@@ -367,4 +384,5 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE] = type.name
         }
     }
+
 }
