@@ -78,6 +78,7 @@ object FaceLandmarkAdapterRegistry {
 
         register(FaceDetectionSource.MEDIAPIPE, MediaPipe468Adapter())
         register(FaceDetectionSource.INSIGHTFACE, InsightFaceAdapter())
+        register(FaceDetectionSource.MNN, MnnLandmarkAdapter())  // [性能优化] MNN GPU 检测器
 
         Log.i(TAG, "Default adapters initialized: ${adapters.size} registered")
     }

@@ -442,18 +442,28 @@ private fun InsightFacePipelineSelection(
     onRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -> Unit,
     onLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -> Unit
 ) {
-    // ROI 检测器选择
+    // [三级设置] 检测流水线配置
+    
+    // 第一级标题
     Text(
-        text = "ROI 检测器:",
-        style = MaterialTheme.typography.bodyMedium,
+        text = "🔧 检测流水线配置",
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 8.dp)
+    )
+    
+    // ROI 检测器选择（第二级）
+    Text(
+        text = "1️⃣ ROI 检测器",
+        style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
+        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
     )
     
     val roiOptions = listOf(
-        InsightFaceRoiDetectorType.MEDIAPIPE to "MediaPipe (快速+精确)",
+        InsightFaceRoiDetectorType.MEDIAPIPE to "MediaPipe (快速 + 精确)",
         InsightFaceRoiDetectorType.DET10G to "Det10G (轻量级)",
-        InsightFaceRoiDetectorType.MNN to "MNN Vulkan GPU (极速+)"
+        InsightFaceRoiDetectorType.MNN to "MNN Vulkan GPU (极速⚡)"
     )
     
     CompactOptionChips(
@@ -463,18 +473,20 @@ private fun InsightFacePipelineSelection(
         onSelected = onRoiDetectorTypeSelected
     )
     
-    // 关键点检测器选择
+    Spacer(modifier = Modifier.height(16.dp))
+    
+    // 关键点检测器选择（第三级）
     Text(
-        text = "关键点检测器:",
-        style = MaterialTheme.typography.bodyMedium,
+        text = "2️⃣ 关键点检测器",
+        style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
+        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
     )
     
     val landmarkOptions = listOf(
         InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 to "InsightFace 2D106 (高精度)",
-        InsightFaceLandmarkDetectorType.MEDIAPIPE to "MediaPipe (468点)",
-        InsightFaceLandmarkDetectorType.MNN to "MNN Vulkan GPU (极速+)"
+        InsightFaceLandmarkDetectorType.MEDIAPIPE to "MediaPipe (468 点)",
+        InsightFaceLandmarkDetectorType.MNN to "MNN Vulkan GPU (极速⚡)"
     )
     
     CompactOptionChips(

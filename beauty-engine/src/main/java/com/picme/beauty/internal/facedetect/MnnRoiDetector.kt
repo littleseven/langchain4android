@@ -114,14 +114,32 @@ class MnnRoiDetector(context: Context) : RoiDetector {
             }
 
             // result: [x1, y1, x2, y2, score, landmarks(10)]
-            // 坐标已经是 INPUT_SIZE 尺度下的，需要映射回原图
-            val scaleRatio = bitmap.width.toFloat() / scaledBitmap.width
+            // [关键修复] MNN native 层输出的是 320x320 letterbox 空间的坐标
+            // 需要逆向 letterbox 变换映射回原图尺寸 (355x640)
+            val scale = INPUT_SIZE.toFloat() / maxOf(bitmap.width, bitmap.height)
+            val scaledW = (bitmap.width * scale).toInt()
+            val scaledH = (bitmap.height * scale).toInt()
+            val leftOffset = (INPUT_SIZE - scaledW) / 2f
+            val topOffset = (INPUT_SIZE - scaledH) / 2f
+            
+            Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, offset=($leftOffset,$topOffset)")
+            Log.d(TAG, "[Diag] Raw MNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
+            
+            // 1. 减去 letterbox 偏移，得到在缩放图中的坐标
+            val x1InScaled = (result[0] - leftOffset).coerceAtLeast(0f)
+            val y1InScaled = (result[1] - topOffset).coerceAtLeast(0f)
+            val x2InScaled = (result[2] - leftOffset).coerceAtMost(scaledW.toFloat())
+            val y2InScaled = (result[3] - topOffset).coerceAtMost(scaledH.toFloat())
+            
+            // 2. 除以缩放比例，映射回原图
             val roi = RectF(
-                result[0] * scaleRatio,
-                result[1] * scaleRatio,
-                result[2] * scaleRatio,
-                result[3] * scaleRatio
+                x1InScaled / scale,
+                y1InScaled / scale,
+                x2InScaled / scale,
+                y2InScaled / scale
             )
+            
+            Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
 
             Log.i(TAG, "[Perf] MnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
             roi
