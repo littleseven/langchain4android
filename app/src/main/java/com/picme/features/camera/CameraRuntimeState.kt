@@ -74,10 +74,10 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     val insightFaceRoiDetectorType by userPreferencesRepository.insightFaceRoiDetectorTypeFlow.collectAsState(
-        initial = InsightFaceRoiDetectorType.MNN
+        initial = InsightFaceRoiDetectorType.DET10G
     )
     val insightFaceLandmarkDetectorType by userPreferencesRepository.insightFaceLandmarkDetectorTypeFlow.collectAsState(
-        initial = InsightFaceLandmarkDetectorType.MNN
+        initial = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
     )
     val lifecycleOwner = LocalLifecycleOwner.current
 

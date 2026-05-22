@@ -326,27 +326,27 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     }
 
     // ── InsightFace 流水线配置 ─────────────────────────────
-    // [迁移] NCNN 已移除，DET10G/INSIGHTFACE_2D106 降级为备选，MNN 成为默认
+    // [切换回 ONNX] 使用 ONNX Runtime + NNAPI 作为默认检测器
     private fun migrateRoiType(typeName: String?): InsightFaceRoiDetectorType {
-        if (typeName == null) return InsightFaceRoiDetectorType.MNN
+        if (typeName == null) return InsightFaceRoiDetectorType.DET10G
         return runCatching {
             when (val type = InsightFaceRoiDetectorType.valueOf(typeName)) {
-                InsightFaceRoiDetectorType.MNN -> type
-                // DET10G 和 MEDIAPIPE 仍可用，但默认推荐 MNN
+                InsightFaceRoiDetectorType.DET10G -> type
+                // DET10G 作为 ROI 检测器，INSIGHTFACE_2D106 作为 Landmark
                 else -> type
             }
-        }.getOrDefault(InsightFaceRoiDetectorType.MNN)
+        }.getOrDefault(InsightFaceRoiDetectorType.DET10G)
     }
 
     private fun migrateLandmarkType(typeName: String?): InsightFaceLandmarkDetectorType {
-        if (typeName == null) return InsightFaceLandmarkDetectorType.MNN
+        if (typeName == null) return InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
         return runCatching {
             when (val type = InsightFaceLandmarkDetectorType.valueOf(typeName)) {
-                InsightFaceLandmarkDetectorType.MNN -> type
-                // INSIGHTFACE_2D106 和 MEDIAPIPE 仍可用
+                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> type
+                // INSIGHTFACE_2D106 基于 ONNX Runtime + NNAPI
                 else -> type
             }
-        }.getOrDefault(InsightFaceLandmarkDetectorType.MNN)
+        }.getOrDefault(InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106)
     }
 
     override val insightFaceRoiDetectorTypeFlow: Flow<InsightFaceRoiDetectorType> = context.dataStore.data
