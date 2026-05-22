@@ -99,14 +99,14 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = InsightFaceRoiDetectorType.DET10G
+            initialValue = InsightFaceRoiDetectorType.MNN  // [性能优化] MNN Vulkan GPU 最快
         )
 
     val insightFaceLandmarkDetectorType: StateFlow<InsightFaceLandmarkDetectorType> = repository.insightFaceLandmarkDetectorTypeFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+            initialValue = InsightFaceLandmarkDetectorType.MNN  // [性能优化] MNN Vulkan GPU 最快
         )
 
     fun setThemeMode(mode: ThemeMode) {

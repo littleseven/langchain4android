@@ -44,6 +44,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     private var mediaPipeDetector: MediaPipeFaceDetector? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
+    
+    // [性能优化] MNN GPU 检测器
+    private var mnnRoiDetector: MnnRoiDetector? = null
+    private var mnnLandmarkDetector: MnnLandmarkDetector? = null
 
     private var lastProcessTimeMs: Long = 0
     private var lastDetectionSource: FaceDetectionSource = FaceDetectionSource.NONE
@@ -158,6 +162,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
                 EngineType.INSIGHTFACE -> {
                     detectInsightFace(bitmap, lensFacing, startTime)
+                }
+
+                EngineType.MNN -> {
+                    detectMnn(bitmap, lensFacing, startTime)
                 }
             }
         } catch (e: Exception) {
@@ -296,6 +304,68 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         }
         
         return null
+    }
+
+    private fun detectMnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
+        var roiResult: android.graphics.RectF? = null
+        var landmarkResult: FloatArray? = null
+        
+        val roiStartTime = SystemClock.elapsedRealtime()
+        val roiDetector = mnnRoiDetector
+        if (roiDetector != null) {
+            try {
+                roiResult = roiDetector.detectRoi(bitmap)
+                Log.i(TAG, "[Perf] MNN ROI detection completed in ${SystemClock.elapsedRealtime() - roiStartTime}ms")
+            } catch (e: Exception) {
+                Log.e(TAG, "MNN ROI detection failed", e)
+            }
+        }
+        
+        if (roiResult == null) {
+            Log.d(TAG, "No face detected by MNN ROI (${SystemClock.elapsedRealtime() - startTime}ms)")
+            return null
+        }
+        
+        // [性能优化] Landmark 检测使用 MnnLandmarkDetector
+        val landmarkStartTime = SystemClock.elapsedRealtime()
+        val landmarkDetector = mnnLandmarkDetector
+        if (landmarkDetector != null) {
+            try {
+                landmarkResult = landmarkDetector.detectLandmarks(bitmap, lensFacing, roiResult)
+                Log.i(TAG, "[Perf] MNN Landmark detection completed in ${SystemClock.elapsedRealtime() - landmarkStartTime}ms")
+            } catch (e: Exception) {
+                Log.e(TAG, "MNN Landmark detection failed", e)
+            }
+        }
+        
+        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+        
+        return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
+            lastDetectionSource = FaceDetectionSource.MNN
+            
+            // 归一化 ROI 坐标
+            val normalizedRoi = android.graphics.RectF(
+                roiResult.left / bitmap.width.toFloat(),
+                roiResult.top / bitmap.height.toFloat(),
+                roiResult.right / bitmap.width.toFloat(),
+                roiResult.bottom / bitmap.height.toFloat()
+            )
+            
+            Log.i(TAG, "[Perf] MNN detection DONE: total=${lastProcessTimeMs}ms, GPU✓")
+            
+            FaceDetectionResult(
+                landmarks106 = landmarkResult,
+                detectionSource = FaceDetectionSource.MNN,
+                roiRect = normalizedRoi,
+                roiDetectorName = "MnnRoiDetector",
+                useGpuForRoi = true,
+                landmarkDetectorName = "MnnLandmarkDetector",
+                useGpuForLandmark = true
+            )
+        } else {
+            Log.w(TAG, "MNN landmark adaptation failed")
+            null
+        }
     }
 
     override fun detectPhoto(bitmap: Bitmap, lensFacing: Int): FaceDetectionResult? {

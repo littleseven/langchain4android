@@ -106,6 +106,7 @@ class MnnLandmarkDetector(context: Context) : LandmarkDetector {
                 return null
             }
 
+            // MNN 输出已经是统一 106 格式，直接返回（不需要 InsightFaceAdapter 的重排）
             val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, roi)
 
             Log.d(TAG, "[Perf] MnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")

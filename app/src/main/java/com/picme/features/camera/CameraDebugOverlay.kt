@@ -51,11 +51,13 @@ internal fun FaceDebugOverlay(
     val detectionLabel = when (faceWarpParams.detectionSource) {
         FaceDetectionSource.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         FaceDetectionSource.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
+        FaceDetectionSource.MNN -> stringResource(R.string.face_detection_engine_mode_mnn)
         FaceDetectionSource.NONE -> stringResource(R.string.face_detection_source_none)
     }
     val requestedLabel = when (faceWarpParams.requestedDetectionEngineMode) {
         EngineType.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         EngineType.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
+        EngineType.MNN -> stringResource(R.string.face_detection_engine_mode_mnn)
     }
     val requestedColor = faceDebugRequestedColor(faceWarpParams.requestedDetectionEngineMode)
     val detectionColor = faceDebugSourceColor(faceWarpParams.detectionSource)
@@ -156,6 +158,7 @@ private fun faceDebugRequestedColor(mode: EngineType): Color {
     return when (mode) {
         EngineType.MEDIAPIPE -> Color(0xFF4DB6AC)
         EngineType.INSIGHTFACE -> Color(0xFFFFB300)
+        EngineType.MNN -> Color(0xFF7E57C2)  // [性能优化] MNN Vulkan GPU
     }
 }
 
@@ -163,6 +166,7 @@ private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
     return when (source) {
         FaceDetectionSource.MEDIAPIPE -> Color(0xFF26A69A)
         FaceDetectionSource.INSIGHTFACE -> Color(0xFFFF8F00)
+        FaceDetectionSource.MNN -> Color(0xFFAB47BC)  // [性能优化] MNN Vulkan GPU
         FaceDetectionSource.NONE -> Color(0xFF9E9E9E)
     }
 }

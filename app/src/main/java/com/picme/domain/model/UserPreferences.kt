@@ -28,7 +28,8 @@ enum class BeautyStrategy {
  */
 enum class FaceDetectionEngineMode {
     MEDIAPIPE,
-    INSIGHTFACE
+    INSIGHTFACE,
+    MNN        // [性能优化] MNN Vulkan GPU 检测器
 }
 
 /**

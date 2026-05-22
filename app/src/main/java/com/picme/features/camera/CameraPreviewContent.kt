@@ -248,11 +248,13 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     val requestedEngineLabel = when (uiState.faceDetectionEngineMode) {
         FaceDetectionEngineMode.MEDIAPIPE -> "MEDIAPIPE"
         FaceDetectionEngineMode.INSIGHTFACE -> "INSIGHTFACE"
+        FaceDetectionEngineMode.MNN -> "MNN GPU"
     }
     val activeSourceLabel = when (uiState.faceWarpParams.detectionSource) {
         FaceDetectionSource.NONE -> "NONE"
         FaceDetectionSource.MEDIAPIPE -> "MEDIAPIPE"
         FaceDetectionSource.INSIGHTFACE -> "INSIGHTFACE"
+        FaceDetectionSource.MNN -> "MNN GPU"
     }
     val detectionCompact = "Detect ${requestedEngineLabel} -> ${activeSourceLabel}"
     val rendererErrorCompact = if (uiState.beautyDebugState.rendererErrorCategory.isNotBlank()) {
@@ -308,6 +310,7 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                     color = when (uiState.faceWarpParams.detectionSource) {
                         FaceDetectionSource.INSIGHTFACE -> Color(0xFFFFAB91)
                         FaceDetectionSource.MEDIAPIPE -> Color(0xFF80CBC4)
+                        FaceDetectionSource.MNN -> Color(0xFFCE93D8)  // [性能优化] MNN GPU
                         FaceDetectionSource.NONE -> Color(0xFFA5D6A7)
                     },
                     fontSize = 9.sp

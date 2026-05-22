@@ -327,20 +327,20 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     }
 
     // ── InsightFace 流水线配置 ─────────────────────────────
-    // [切换回 ONNX] 使用 ONNX Runtime + NNAPI 作为默认检测器
+    // [性能优化] 使用 MNN Vulkan GPU 作为默认检测器
     private fun migrateRoiType(typeName: String?): InsightFaceRoiDetectorType {
         Logger.d("DataStore", "migrateRoiType called with typeName=$typeName")
         if (typeName == null) {
-            Logger.d("DataStore", "migrateRoiType: No value in storage, returning default DET10G")
-            return InsightFaceRoiDetectorType.DET10G
+            Logger.d("DataStore", "migrateRoiType: No value in storage, returning default MNN")
+            return InsightFaceRoiDetectorType.MNN
         }
         val result = runCatching {
             when (val type = InsightFaceRoiDetectorType.valueOf(typeName)) {
-                InsightFaceRoiDetectorType.DET10G -> type
-                // DET10G 作为 ROI 检测器，INSIGHTFACE_2D106 作为 Landmark
-                else -> type
+                InsightFaceRoiDetectorType.MEDIAPIPE,
+                InsightFaceRoiDetectorType.DET10G,
+                InsightFaceRoiDetectorType.MNN -> type
             }
-        }.getOrDefault(InsightFaceRoiDetectorType.DET10G)
+        }.getOrDefault(InsightFaceRoiDetectorType.MNN)
         Logger.d("DataStore", "migrateRoiType: Migrated '$typeName' to $result")
         return result
     }
@@ -348,16 +348,16 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     private fun migrateLandmarkType(typeName: String?): InsightFaceLandmarkDetectorType {
         Logger.d("DataStore", "migrateLandmarkType called with typeName=$typeName")
         if (typeName == null) {
-            Logger.d("DataStore", "migrateLandmarkType: No value in storage, returning default INSIGHTFACE_2D106")
-            return InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+            Logger.d("DataStore", "migrateLandmarkType: No value in storage, returning default MNN")
+            return InsightFaceLandmarkDetectorType.MNN
         }
         val result = runCatching {
             when (val type = InsightFaceLandmarkDetectorType.valueOf(typeName)) {
-                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> type
-                // INSIGHTFACE_2D106 基于 ONNX Runtime + NNAPI
-                else -> type
+                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106,
+                InsightFaceLandmarkDetectorType.MEDIAPIPE,
+                InsightFaceLandmarkDetectorType.MNN -> type
             }
-        }.getOrDefault(InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106)
+        }.getOrDefault(InsightFaceLandmarkDetectorType.MNN)
         Logger.d("DataStore", "migrateLandmarkType: Migrated '$typeName' to $result")
         return result
     }
