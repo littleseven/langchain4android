@@ -17,8 +17,10 @@ import com.picme.core.image.ImageProcessor
 import com.picme.PicMeApplication
 import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.beauty.api.facedetect.DetectionPipelineConfig
+import com.picme.beauty.api.facedetect.DevicePreference
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.InferenceBackendType
 import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.core.common.Logger
@@ -99,14 +101,34 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
             roiDetector = when (roiConfig.modelType) {
                 DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
                 DetectionModelType.INSIGHTFACE_DET10G -> RoiDetectorType.DET10G
-                DetectionModelType.MNN -> RoiDetectorType.MNN
                 else -> RoiDetectorType.DET10G
             },
             landmarkDetector = when (landmarkConfig.modelType) {
                 DetectionModelType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
                 DetectionModelType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
-                DetectionModelType.MNN -> LandmarkDetectorType.MNN
                 else -> LandmarkDetectorType.INSIGHTFACE_2D106
+            },
+            roiEngine = when (roiConfig.engineType) {
+                InferenceEngineType.ONNX -> InferenceBackendType.ONNX
+                InferenceEngineType.MNN -> InferenceBackendType.MNN
+                InferenceEngineType.NCNN -> InferenceBackendType.NCNN
+                InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
+            },
+            landmarkEngine = when (landmarkConfig.engineType) {
+                InferenceEngineType.ONNX -> InferenceBackendType.ONNX
+                InferenceEngineType.MNN -> InferenceBackendType.MNN
+                InferenceEngineType.NCNN -> InferenceBackendType.NCNN
+                InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
+            },
+            roiDevice = when (roiConfig.devicePreference) {
+                InferenceDevicePreference.AUTO -> DevicePreference.AUTO
+                InferenceDevicePreference.FORCE_CPU -> DevicePreference.FORCE_CPU
+                InferenceDevicePreference.FORCE_GPU -> DevicePreference.FORCE_GPU
+            },
+            landmarkDevice = when (landmarkConfig.devicePreference) {
+                InferenceDevicePreference.AUTO -> DevicePreference.AUTO
+                InferenceDevicePreference.FORCE_CPU -> DevicePreference.FORCE_CPU
+                InferenceDevicePreference.FORCE_GPU -> DevicePreference.FORCE_GPU
             }
         )
         

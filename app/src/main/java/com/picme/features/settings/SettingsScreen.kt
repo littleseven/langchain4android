@@ -528,8 +528,8 @@ private fun ModelTypeSelection(
             DetectionModelType.INSIGHTFACE_DET10G to stringResource(R.string.model_insightface_det10g)
         )
         DetectionStage.LANDMARK -> listOf(
-            DetectionModelType.INSIGHTFACE_2D106 to stringResource(R.string.model_insightface_2d106),
-            DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe)
+            DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe),
+            DetectionModelType.INSIGHTFACE_2D106 to stringResource(R.string.model_insightface_2d106)
         )
     }
 
