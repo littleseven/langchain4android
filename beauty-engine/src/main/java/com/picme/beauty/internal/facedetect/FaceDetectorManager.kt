@@ -37,10 +37,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     private var roiDetector: RoiDetector? = null
     private var landmarkDetector: LandmarkDetector? = null
-    private var pipelineConfig: DetectionPipelineConfig = DetectionPipelineConfig(
-        roiDetector = RoiDetectorType.MNN,
-        landmarkDetector = LandmarkDetectorType.MNN
-    )
+    
+    // [关键修复] 使用懒加载，首次 detect 时才从 DataStore 读取配置
+    private var pipelineConfig: DetectionPipelineConfig? = null
+    private var isPipelineInitialized = false
 
     private var mediaPipeDetector: MediaPipeFaceDetector? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
@@ -54,33 +54,56 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     private fun initialize(context: Context) {
         mediaPipeDetector = MediaPipeFaceDetector(context)
-        initializePipeline()
-        Log.i(TAG, "FaceDetectorManager initialized")
+        // [关键修复] 不在 init 时初始化 pipeline，改为懒加载
+        Log.i(TAG, "FaceDetectorManager initialized (lazy pipeline)")
     }
 
     private fun initializePipeline() {
         Log.i(TAG, "=== Initializing Detection Pipeline ===")
-        Log.i(TAG, "  Config: roi=${pipelineConfig.roiDetector}, landmark=${pipelineConfig.landmarkDetector}")
+        Log.i(TAG, "  Config: roi=${pipelineConfig?.roiDetector}, landmark=${pipelineConfig?.landmarkDetector}")
 
         // [优化] 懒加载模式下，release() 不会立即销毁资源，只是标记为未初始化
         roiDetector?.release()
         landmarkDetector?.release()
 
         roiDetector = DetectionPipelineFactory.createRoiDetector(
-            pipelineConfig.roiDetector, appContext
+            pipelineConfig!!.roiDetector, appContext
         )
         landmarkDetector = DetectionPipelineFactory.createLandmarkDetector(
-            pipelineConfig.landmarkDetector, appContext
+            pipelineConfig!!.landmarkDetector, appContext
         )
 
         Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName} (lazy)")
         Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName} (lazy)")
         Log.i(TAG, "  Pipeline initialized successfully (lazy mode)")
         Log.i(TAG, "=========================================")
+        
+        isPipelineInitialized = true
+    }
+    
+    // [关键修复] 从 DataStore 读取配置并初始化 pipeline
+    private fun loadAndInitializePipeline() {
+        if (isPipelineInitialized) return
+        
+        Log.i(TAG, "Loading pipeline config from DataStore...")
+        
+        // [临时方案] 使用默认值，由 CameraRuntimeState 的 LaunchedEffect 调用 updatePipelineConfig 来设置
+        pipelineConfig = DetectionPipelineConfig(
+            roiDetector = RoiDetectorType.DET10G,
+            landmarkDetector = LandmarkDetectorType.INSIGHTFACE_2D106
+        )
+        
+        Log.i(TAG, "DataStore values - ROI: DET10G, Landmark: INSIGHTFACE_2D106 (default)")
+        
+        initializePipeline()
     }
 
     override fun updatePipelineConfig(newConfig: DetectionPipelineConfig) {
-        if (pipelineConfig == newConfig) return
+        Log.i(TAG, "updatePipelineConfig called: roi=${newConfig.roiDetector}, landmark=${newConfig.landmarkDetector}")
+        if (pipelineConfig == newConfig) {
+            Log.w(TAG, "Config unchanged, skipping update")
+            return
+        }
 
         pipelineConfig = newConfig
         initializePipeline()
@@ -94,6 +117,11 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     }
 
     override fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
+        // [关键修复] 首次 detect 时从 DataStore 读取配置并初始化 pipeline
+        if (!isPipelineInitialized) {
+            loadAndInitializePipeline()
+        }
+        
         val startTime = SystemClock.elapsedRealtime()
         lastDetectionSource = FaceDetectionSource.NONE
 

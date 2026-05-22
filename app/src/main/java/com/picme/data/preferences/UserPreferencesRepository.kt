@@ -18,6 +18,7 @@ import com.picme.domain.model.InsightFaceLandmarkDetectorType
 import com.picme.domain.model.InsightFaceRoiDetectorType
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
+import com.picme.core.common.Logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -328,40 +329,56 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     // ── InsightFace 流水线配置 ─────────────────────────────
     // [切换回 ONNX] 使用 ONNX Runtime + NNAPI 作为默认检测器
     private fun migrateRoiType(typeName: String?): InsightFaceRoiDetectorType {
-        if (typeName == null) return InsightFaceRoiDetectorType.DET10G
-        return runCatching {
+        Logger.d("DataStore", "migrateRoiType called with typeName=$typeName")
+        if (typeName == null) {
+            Logger.d("DataStore", "migrateRoiType: No value in storage, returning default DET10G")
+            return InsightFaceRoiDetectorType.DET10G
+        }
+        val result = runCatching {
             when (val type = InsightFaceRoiDetectorType.valueOf(typeName)) {
                 InsightFaceRoiDetectorType.DET10G -> type
                 // DET10G 作为 ROI 检测器，INSIGHTFACE_2D106 作为 Landmark
                 else -> type
             }
         }.getOrDefault(InsightFaceRoiDetectorType.DET10G)
+        Logger.d("DataStore", "migrateRoiType: Migrated '$typeName' to $result")
+        return result
     }
 
     private fun migrateLandmarkType(typeName: String?): InsightFaceLandmarkDetectorType {
-        if (typeName == null) return InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
-        return runCatching {
+        Logger.d("DataStore", "migrateLandmarkType called with typeName=$typeName")
+        if (typeName == null) {
+            Logger.d("DataStore", "migrateLandmarkType: No value in storage, returning default INSIGHTFACE_2D106")
+            return InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+        }
+        val result = runCatching {
             when (val type = InsightFaceLandmarkDetectorType.valueOf(typeName)) {
                 InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> type
                 // INSIGHTFACE_2D106 基于 ONNX Runtime + NNAPI
                 else -> type
             }
         }.getOrDefault(InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106)
+        Logger.d("DataStore", "migrateLandmarkType: Migrated '$typeName' to $result")
+        return result
     }
 
     override val insightFaceRoiDetectorTypeFlow: Flow<InsightFaceRoiDetectorType> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
+                Logger.e("DataStore", "Failed to read ROI detector type, using default DET10G")
                 emit(emptyPreferences())
             } else {
                 throw exception
             }
         }
         .map { preferences ->
-            migrateRoiType(preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE])
+            val rawValue = preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE]
+            Logger.d("DataStore", "ROI Detector - Raw value from storage: $rawValue, Migrated to: ${migrateRoiType(rawValue)}")
+            migrateRoiType(rawValue)
         }
 
     override suspend fun updateInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType) {
+        Logger.d("DataStore", "Updating ROI detector type to: $type")
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE] = type.name
         }
@@ -370,13 +387,16 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override val insightFaceLandmarkDetectorTypeFlow: Flow<InsightFaceLandmarkDetectorType> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
+                Logger.e("DataStore", "Failed to read landmark detector type, using default INSIGHTFACE_2D106")
                 emit(emptyPreferences())
             } else {
                 throw exception
             }
         }
         .map { preferences ->
-            migrateLandmarkType(preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE])
+            val rawValue = preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE]
+            Logger.d("DataStore", "Landmark Detector - Raw value from storage: $rawValue, Migrated to: ${migrateLandmarkType(rawValue)}")
+            migrateLandmarkType(rawValue)
         }
 
     override suspend fun updateInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType) {
