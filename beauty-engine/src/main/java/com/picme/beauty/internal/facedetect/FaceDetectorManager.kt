@@ -64,22 +64,23 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     private fun initializePipeline() {
         Log.i(TAG, "=== Initializing Detection Pipeline ===")
-        Log.i(TAG, "  Config: roi=${pipelineConfig?.roiDetector}, landmark=${pipelineConfig?.landmarkDetector}")
+        val config = pipelineConfig!!
+        Log.i(TAG, "  ROI: ${config.roiDetector.displayName} + ${config.roiEngine.displayName} + ${config.roiDevice.displayName}")
+        Log.i(TAG, "  Landmark: ${config.landmarkDetector.displayName} + ${config.landmarkEngine.displayName} + ${config.landmarkDevice.displayName}")
 
         // [优化] 懒加载模式下，release() 不会立即销毁资源，只是标记为未初始化
         roiDetector?.release()
         landmarkDetector?.release()
 
-        roiDetector = DetectionPipelineFactory.createRoiDetector(
-            pipelineConfig!!.roiDetector, appContext
+        val (newRoiDetector, newLandmarkDetector) = DetectionPipelineFactory.createPipeline(
+            config, appContext
         )
-        landmarkDetector = DetectionPipelineFactory.createLandmarkDetector(
-            pipelineConfig!!.landmarkDetector, appContext
-        )
+        roiDetector = newRoiDetector
+        landmarkDetector = newLandmarkDetector
 
-        Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName} (lazy)")
-        Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName} (lazy)")
-        Log.i(TAG, "  Pipeline initialized successfully (lazy mode)")
+        Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName}")
+        Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName}")
+        Log.i(TAG, "  Pipeline initialized successfully")
         Log.i(TAG, "=========================================")
         
         isPipelineInitialized = true

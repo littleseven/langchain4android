@@ -14,7 +14,10 @@ import java.io.File
  *
  * 兼容骁龙 765G + Adreno 620（Vulkan 1.1）
  */
-class MnnRoiDetector(context: Context) : RoiDetector {
+class MnnRoiDetector(
+    context: Context,
+    private val requireGpu: Boolean = true
+) : RoiDetector {
 
     companion object {
         private const val TAG = "PicMe:MnnRoi"
@@ -54,14 +57,14 @@ class MnnRoiDetector(context: Context) : RoiDetector {
 
     init {
         // [优化] 不立即初始化，改为懒加载
-        Log.d(TAG, "MnnRoiDetector created (lazy initialization)")
+        Log.d(TAG, "MnnRoiDetector created (lazy initialization, requireGpu=$requireGpu)")
     }
 
     private fun initialize() {
         try {
             val modelFile = ensureModelFile(MODEL_FILE_NAME, MODEL_ASSET_PATH)
 
-            Log.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU...")
+            Log.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
             detector = MnnFaceDetector.create(
                 modelPath = modelFile.absolutePath,
@@ -75,10 +78,16 @@ class MnnRoiDetector(context: Context) : RoiDetector {
             if (detector != null) {
                 Log.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with Vulkan GPU")
             } else {
-                Log.e(TAG, "Failed to initialize MNN RetinaFace detector")
+                // [关键策略] 要求 GPU 时初始化失败，直接放弃，不降级到 CPU
+                if (requireGpu) {
+                    Log.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
+                } else {
+                    Log.w(TAG, "MNN GPU initialization failed, attempting CPU fallback...")
+                    // TODO: 实现 CPU 降级逻辑（如果需要）
+                }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MnnRoiDetector", e)
+            Log.e(TAG, "Failed to initialize MnnRoiDetector (requireGpu=$requireGpu)", e)
             detector = null
         }
     }
