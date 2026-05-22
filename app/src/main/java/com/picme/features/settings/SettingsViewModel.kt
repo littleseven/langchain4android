@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.picme.core.common.Logger
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InsightFaceLandmarkDetectorType
-import com.picme.domain.model.InsightFaceRoiDetectorType
+import com.picme.domain.model.InferenceDevicePreference
+import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -95,18 +97,19 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
     private val _debugShaderMode = kotlinx.coroutines.flow.MutableStateFlow(0)
     val debugShaderMode: StateFlow<Int> = _debugShaderMode
 
-    val insightFaceRoiDetectorType: StateFlow<InsightFaceRoiDetectorType> = repository.insightFaceRoiDetectorTypeFlow
+    // ── 阶段独立配置（ROI / Landmark）────────────────────────
+    val roiStageConfig: StateFlow<StageConfig> = repository.roiStageConfigFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = InsightFaceRoiDetectorType.MNN  // [性能优化] MNN Vulkan GPU 最快
+            initialValue = StageConfig.defaultRoi()
         )
 
-    val insightFaceLandmarkDetectorType: StateFlow<InsightFaceLandmarkDetectorType> = repository.insightFaceLandmarkDetectorTypeFlow
+    val landmarkStageConfig: StateFlow<StageConfig> = repository.landmarkStageConfigFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = InsightFaceLandmarkDetectorType.MNN  // [性能优化] MNN Vulkan GPU 最快
+            initialValue = StageConfig.defaultLandmark()
         )
 
     fun setThemeMode(mode: ThemeMode) {
@@ -186,15 +189,58 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         }
     }
 
-    fun setInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType) {
+    // ── 阶段独立配置方法 ────────────────────────────────────
+    fun setRoiModelType(modelType: DetectionModelType) {
         viewModelScope.launch {
-            repository.updateInsightFaceRoiDetectorType(type)
+            val current = roiStageConfig.value
+            val updated = current.copy(modelType = modelType)
+            Logger.d("UX", "ROI model type changed: ${modelType.name}")
+            repository.updateRoiStageConfig(updated)
         }
     }
 
-    fun setInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType) {
+    fun setRoiEngineType(engineType: InferenceEngineType) {
         viewModelScope.launch {
-            repository.updateInsightFaceLandmarkDetectorType(type)
+            val current = roiStageConfig.value
+            val updated = current.copy(engineType = engineType)
+            Logger.d("UX", "ROI engine type changed: ${engineType.name}")
+            repository.updateRoiStageConfig(updated)
+        }
+    }
+
+    fun setRoiDevicePreference(preference: InferenceDevicePreference) {
+        viewModelScope.launch {
+            val current = roiStageConfig.value
+            val updated = current.copy(devicePreference = preference)
+            Logger.d("UX", "ROI device preference changed: ${preference.name}")
+            repository.updateRoiStageConfig(updated)
+        }
+    }
+
+    fun setLandmarkModelType(modelType: DetectionModelType) {
+        viewModelScope.launch {
+            val current = landmarkStageConfig.value
+            val updated = current.copy(modelType = modelType)
+            Logger.d("UX", "Landmark model type changed: ${modelType.name}")
+            repository.updateLandmarkStageConfig(updated)
+        }
+    }
+
+    fun setLandmarkEngineType(engineType: InferenceEngineType) {
+        viewModelScope.launch {
+            val current = landmarkStageConfig.value
+            val updated = current.copy(engineType = engineType)
+            Logger.d("UX", "Landmark engine type changed: ${engineType.name}")
+            repository.updateLandmarkStageConfig(updated)
+        }
+    }
+
+    fun setLandmarkDevicePreference(preference: InferenceDevicePreference) {
+        viewModelScope.launch {
+            val current = landmarkStageConfig.value
+            val updated = current.copy(devicePreference = preference)
+            Logger.d("UX", "Landmark device preference changed: ${preference.name}")
+            repository.updateLandmarkStageConfig(updated)
         }
     }
 

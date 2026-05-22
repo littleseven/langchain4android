@@ -42,13 +42,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
-import com.picme.core.designsystem.PicMeTheme
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InsightFaceLandmarkDetectorType
-import com.picme.domain.model.InsightFaceRoiDetectorType
+import com.picme.domain.model.InferenceDevicePreference
+import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 
 @Composable
@@ -87,8 +89,8 @@ fun SettingsScreen(
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
-    val insightFaceRoiDetectorType by viewModel.insightFaceRoiDetectorType.collectAsState()
-    val insightFaceLandmarkDetectorType by viewModel.insightFaceLandmarkDetectorType.collectAsState()
+    val roiStageConfig by viewModel.roiStageConfig.collectAsState()
+    val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
     SettingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
@@ -101,8 +103,8 @@ fun SettingsScreen(
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
         debugShaderMode = debugShaderMode,
-        insightFaceRoiDetectorType = insightFaceRoiDetectorType,
-        insightFaceLandmarkDetectorType = insightFaceLandmarkDetectorType,
+        roiStageConfig = roiStageConfig,
+        landmarkStageConfig = landmarkStageConfig,
         onThemeModeSelected = { mode -> viewModel.setThemeMode(mode) },
         onAppLanguageSelected = { language -> viewModel.setAppLanguage(language) },
         onDebugUiEnabledChange = { enabled -> viewModel.setDebugUiEnabled(enabled) },
@@ -122,8 +124,12 @@ fun SettingsScreen(
             viewModel.setFaceDetectIntervalProfile(profile)
         },
         onDebugShaderModeSelected = { mode -> viewModel.setDebugShaderMode(mode) },
-        onInsightFaceRoiDetectorTypeSelected = { type -> viewModel.setInsightFaceRoiDetectorType(type) },
-        onInsightFaceLandmarkDetectorTypeSelected = { type -> viewModel.setInsightFaceLandmarkDetectorType(type) },
+        onRoiModelTypeSelected = { type -> viewModel.setRoiModelType(type) },
+        onRoiEngineTypeSelected = { type -> viewModel.setRoiEngineType(type) },
+        onRoiDevicePreferenceSelected = { preference -> viewModel.setRoiDevicePreference(preference) },
+        onLandmarkModelTypeSelected = { type -> viewModel.setLandmarkModelType(type) },
+        onLandmarkEngineTypeSelected = { type -> viewModel.setLandmarkEngineType(type) },
+        onLandmarkDevicePreferenceSelected = { preference -> viewModel.setLandmarkDevicePreference(preference) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -142,8 +148,8 @@ private fun SettingsContent(
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
     debugShaderMode: Int,
-    insightFaceRoiDetectorType: InsightFaceRoiDetectorType,
-    insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType,
+    roiStageConfig: StageConfig,
+    landmarkStageConfig: StageConfig,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
@@ -155,8 +161,12 @@ private fun SettingsContent(
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
     onDebugShaderModeSelected: (Int) -> Unit,
-    onInsightFaceRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -> Unit,
-    onInsightFaceLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -> Unit,
+    onRoiModelTypeSelected: (DetectionModelType) -> Unit,
+    onRoiEngineTypeSelected: (InferenceEngineType) -> Unit,
+    onRoiDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
+    onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
+    onLandmarkEngineTypeSelected: (InferenceEngineType) -> Unit,
+    onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -205,8 +215,6 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-
-
             SettingsSection(
                 title = stringResource(R.string.face_detection),
                 description = stringResource(R.string.settings_face_detection_desc)
@@ -231,20 +239,29 @@ private fun SettingsContent(
                         onProfileSelected = onFaceDetectIntervalProfileSelected
                     )
                 }
-                
-                // InsightFace 流水线配置（仅在 INSIGHTFACE 模式下显示）
-                if (faceDetectionEngineMode == FaceDetectionEngineMode.INSIGHTFACE) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    InsightFacePipelineSelection(
-                        roiDetectorType = insightFaceRoiDetectorType,
-                        landmarkDetectorType = insightFaceLandmarkDetectorType,
-                        onRoiDetectorTypeSelected = onInsightFaceRoiDetectorTypeSelected,
-                        onLandmarkDetectorTypeSelected = onInsightFaceLandmarkDetectorTypeSelected
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            // ROI 阶段配置
+            StageConfigSection(
+                stage = DetectionStage.ROI,
+                config = roiStageConfig,
+                onModelTypeSelected = onRoiModelTypeSelected,
+                onEngineTypeSelected = onRoiEngineTypeSelected,
+                onDevicePreferenceSelected = onRoiDevicePreferenceSelected
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Landmark 阶段配置
+            StageConfigSection(
+                stage = DetectionStage.LANDMARK,
+                config = landmarkStageConfig,
+                onModelTypeSelected = onLandmarkModelTypeSelected,
+                onEngineTypeSelected = onLandmarkEngineTypeSelected,
+                onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected
+            )
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -436,64 +453,130 @@ private fun ShaderDebugModeSelection(
 }
 
 @Composable
-private fun InsightFacePipelineSelection(
-    roiDetectorType: InsightFaceRoiDetectorType,
-    landmarkDetectorType: InsightFaceLandmarkDetectorType,
-    onRoiDetectorTypeSelected: (InsightFaceRoiDetectorType) -> Unit,
-    onLandmarkDetectorTypeSelected: (InsightFaceLandmarkDetectorType) -> Unit
+private fun StageConfigSection(
+    stage: DetectionStage,
+    config: StageConfig,
+    onModelTypeSelected: (DetectionModelType) -> Unit,
+    onEngineTypeSelected: (InferenceEngineType) -> Unit,
+    onDevicePreferenceSelected: (InferenceDevicePreference) -> Unit
 ) {
-    // [三级设置] 检测流水线配置
-    
-    // 第一级标题
-    Text(
-        text = "🔧 检测流水线配置",
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 8.dp)
-    )
-    
-    // ROI 检测器选择（第二级）
-    Text(
-        text = "1️⃣ ROI 检测器",
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
-    )
-    
-    val roiOptions = listOf(
-        InsightFaceRoiDetectorType.MEDIAPIPE to "MediaPipe (快速 + 精确)",
-        InsightFaceRoiDetectorType.DET10G to "Det10G (轻量级)",
-        InsightFaceRoiDetectorType.MNN to "MNN Vulkan GPU (极速⚡)"
-    )
-    
+    val title = when (stage) {
+        DetectionStage.ROI -> stringResource(R.string.stage_roi_title)
+        DetectionStage.LANDMARK -> stringResource(R.string.stage_landmark_title)
+    }
+    val description = when (stage) {
+        DetectionStage.ROI -> stringResource(R.string.stage_roi_desc)
+        DetectionStage.LANDMARK -> stringResource(R.string.stage_landmark_desc)
+    }
+
+    SettingsSection(
+        title = title,
+        description = description
+    ) {
+        // 模型选择
+        Text(
+            text = stringResource(R.string.model_type),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
+        )
+        ModelTypeSelection(
+            currentType = config.modelType,
+            stage = stage,
+            onTypeSelected = onModelTypeSelected
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 推理引擎选择
+        Text(
+            text = stringResource(R.string.inference_engine),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
+        )
+        InferenceEngineSelection(
+            currentType = config.engineType,
+            onTypeSelected = onEngineTypeSelected
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 设备偏好选择
+        Text(
+            text = stringResource(R.string.inference_device_preference),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
+        )
+        InferenceDevicePreferenceSelection(
+            currentPreference = config.devicePreference,
+            onPreferenceSelected = onDevicePreferenceSelected
+        )
+    }
+}
+
+@Composable
+private fun ModelTypeSelection(
+    currentType: DetectionModelType,
+    stage: DetectionStage,
+    onTypeSelected: (DetectionModelType) -> Unit
+) {
+    val options = when (stage) {
+        DetectionStage.ROI -> listOf(
+            DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe),
+            DetectionModelType.INSIGHTFACE_DET10G to stringResource(R.string.model_insightface_det10g)
+        )
+        DetectionStage.LANDMARK -> listOf(
+            DetectionModelType.INSIGHTFACE_2D106 to stringResource(R.string.model_insightface_2d106),
+            DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe)
+        )
+    }
+
     CompactOptionChips(
-        options = roiOptions,
-        currentValue = roiDetectorType,
+        options = options,
+        currentValue = currentType,
         maxLines = 1,
-        onSelected = onRoiDetectorTypeSelected
+        onSelected = onTypeSelected
     )
-    
-    Spacer(modifier = Modifier.height(16.dp))
-    
-    // 关键点检测器选择（第三级）
-    Text(
-        text = "2️⃣ 关键点检测器",
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+}
+
+@Composable
+private fun InferenceEngineSelection(
+    currentType: InferenceEngineType,
+    onTypeSelected: (InferenceEngineType) -> Unit
+) {
+    val options = listOf(
+        InferenceEngineType.ONNX to stringResource(R.string.inference_engine_onnx),
+        InferenceEngineType.MNN to stringResource(R.string.inference_engine_mnn),
+        InferenceEngineType.NCNN to stringResource(R.string.inference_engine_ncnn),
+        InferenceEngineType.TFLITE to stringResource(R.string.inference_engine_tflite)
     )
-    
-    val landmarkOptions = listOf(
-        InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 to "InsightFace 2D106 (高精度)",
-        InsightFaceLandmarkDetectorType.MEDIAPIPE to "MediaPipe (468 点)",
-        InsightFaceLandmarkDetectorType.MNN to "MNN Vulkan GPU (极速⚡)"
-    )
-    
+
     CompactOptionChips(
-        options = landmarkOptions,
-        currentValue = landmarkDetectorType,
+        options = options,
+        currentValue = currentType,
         maxLines = 1,
-        onSelected = onLandmarkDetectorTypeSelected
+        onSelected = onTypeSelected
+    )
+}
+
+@Composable
+private fun InferenceDevicePreferenceSelection(
+    currentPreference: InferenceDevicePreference,
+    onPreferenceSelected: (InferenceDevicePreference) -> Unit
+) {
+    val options = listOf(
+        InferenceDevicePreference.AUTO to stringResource(R.string.device_preference_auto),
+        InferenceDevicePreference.FORCE_CPU to stringResource(R.string.device_preference_force_cpu),
+        InferenceDevicePreference.FORCE_GPU to stringResource(R.string.device_preference_force_gpu)
+    )
+
+    CompactOptionChips(
+        options = options,
+        currentValue = currentPreference,
+        maxLines = 1,
+        onSelected = onPreferenceSelected
     )
 }
 
@@ -575,8 +658,8 @@ fun SettingsScreenPreview() {
             adaptiveFaceDetectionIntervalEnabled = true,
             faceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
             debugShaderMode = 0,
-            insightFaceRoiDetectorType = InsightFaceRoiDetectorType.MEDIAPIPE,
-            insightFaceLandmarkDetectorType = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106,
+            roiStageConfig = StageConfig.defaultRoi(),
+            landmarkStageConfig = StageConfig.defaultLandmark(),
             onThemeModeSelected = {},
             onAppLanguageSelected = {},
             onDebugUiEnabledChange = {},
@@ -588,8 +671,12 @@ fun SettingsScreenPreview() {
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
             onDebugShaderModeSelected = {},
-            onInsightFaceRoiDetectorTypeSelected = {},
-            onInsightFaceLandmarkDetectorTypeSelected = {},
+            onRoiModelTypeSelected = {},
+            onRoiEngineTypeSelected = {},
+            onRoiDevicePreferenceSelected = {},
+            onLandmarkModelTypeSelected = {},
+            onLandmarkEngineTypeSelected = {},
+            onLandmarkDevicePreferenceSelected = {},
             onNavigateBack = {}
         )
     }

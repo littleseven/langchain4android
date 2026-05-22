@@ -24,9 +24,12 @@ import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InsightFaceLandmarkDetectorType
-import com.picme.domain.model.InsightFaceRoiDetectorType
+import com.picme.domain.model.InferenceDevicePreference
+import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.StageConfig
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.first
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
@@ -49,8 +52,8 @@ internal data class CameraRuntimeContext(
     val glRecoveryAvailableAtMs: Long,
     val lifecycleOwner: LifecycleOwner,
     val faceDetectorManager: FaceDetector,
-    val insightFaceRoiDetectorType: InsightFaceRoiDetectorType,
-    val insightFaceLandmarkDetectorType: InsightFaceLandmarkDetectorType
+    val roiStageConfig: StageConfig,
+    val landmarkStageConfig: StageConfig
 )
 
 @Composable
@@ -74,35 +77,35 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
-    val insightFaceRoiDetectorType by userPreferencesRepository.insightFaceRoiDetectorTypeFlow.collectAsState(
-        initial = InsightFaceRoiDetectorType.DET10G
+    val roiStageConfig by userPreferencesRepository.roiStageConfigFlow.collectAsState(
+        initial = StageConfig.defaultRoi()
     )
-    val insightFaceLandmarkDetectorType by userPreferencesRepository.insightFaceLandmarkDetectorTypeFlow.collectAsState(
-        initial = InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106
+    val landmarkStageConfig by userPreferencesRepository.landmarkStageConfigFlow.collectAsState(
+        initial = StageConfig.defaultLandmark()
     )
     val lifecycleOwner = LocalLifecycleOwner.current
     
     // [关键修复] 在 LaunchedEffect 中使用 produceState 确保首次发射后触发配置更新
     LaunchedEffect(Unit) {
         // 等待 DataStore 发射初始值
-        val roiValue = userPreferencesRepository.insightFaceRoiDetectorTypeFlow.first()
-        val landmarkValue = userPreferencesRepository.insightFaceLandmarkDetectorTypeFlow.first()
+        val roiConfig = userPreferencesRepository.roiStageConfigFlow.first()
+        val landmarkConfig = userPreferencesRepository.landmarkStageConfigFlow.first()
         
         Logger.d("Camera", "=== First-time Config Initialization ===")
-        Logger.d("Camera", "  ROI Detector from DataStore: $roiValue")
-        Logger.d("Camera", "  Landmark Detector from DataStore: $landmarkValue")
+        Logger.d("Camera", "  ROI Config from DataStore: $roiConfig")
+        Logger.d("Camera", "  Landmark Config from DataStore: $landmarkConfig")
         
         val config = DetectionPipelineConfig(
-            roiDetector = when (roiValue) {
-                InsightFaceRoiDetectorType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
-                InsightFaceRoiDetectorType.DET10G -> RoiDetectorType.DET10G
-                InsightFaceRoiDetectorType.MNN -> RoiDetectorType.MNN
+            roiDetector = when (roiConfig.modelType) {
+                DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
+                DetectionModelType.INSIGHTFACE_DET10G -> RoiDetectorType.DET10G
+                DetectionModelType.MNN -> RoiDetectorType.MNN
                 else -> RoiDetectorType.DET10G
             },
-            landmarkDetector = when (landmarkValue) {
-                InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
-                InsightFaceLandmarkDetectorType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
-                InsightFaceLandmarkDetectorType.MNN -> LandmarkDetectorType.MNN
+            landmarkDetector = when (landmarkConfig.modelType) {
+                DetectionModelType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
+                DetectionModelType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
+                DetectionModelType.MNN -> LandmarkDetectorType.MNN
                 else -> LandmarkDetectorType.INSIGHTFACE_2D106
             }
         )
@@ -126,8 +129,8 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
         lifecycleOwner = lifecycleOwner,
         faceDetectorManager = faceDetectorManager,
-        insightFaceRoiDetectorType = insightFaceRoiDetectorType,
-        insightFaceLandmarkDetectorType = insightFaceLandmarkDetectorType
+        roiStageConfig = roiStageConfig,
+        landmarkStageConfig = landmarkStageConfig
     )
 }
 
