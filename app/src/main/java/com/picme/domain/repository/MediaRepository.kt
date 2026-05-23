@@ -16,17 +16,17 @@ interface MediaRepository {
     suspend fun getMediaById(id: Long): MediaAsset?
 
     suspend fun refreshMediaLibrary()
-    
+
     /**
      * 获取需要用户授权删除的 URI 列表（Android 11+）
      */
     fun getPendingDeleteUris(): List<Uri>
-    
+
     /**
      * 清除待删除的 URI 列表
      */
     fun clearPendingDeleteUris()
-    
+
     /**
      * 获取 Android 10 (API 29) 的单条恢复性删除 IntentSender
      */

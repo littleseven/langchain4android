@@ -28,7 +28,8 @@ enum class BeautyStrategy {
  */
 enum class FaceDetectionEngineMode {
     MEDIAPIPE,
-    INSIGHTFACE
+    INSIGHTFACE,
+    MNN        // [性能优化] MNN Vulkan GPU 检测器
 }
 
 /**
@@ -41,18 +42,69 @@ enum class FaceDetectIntervalProfile {
 }
 
 /**
- * InsightFace ROI 检测器类型（领域模型）
+ * 检测阶段类型（领域模型）
  */
-enum class InsightFaceRoiDetectorType {
-    MEDIAPIPE,  // MediaPipe 468 点计算 ROI
-    DET10G      // InsightFace Det10G 检测 ROI
+enum class DetectionStage {
+    ROI,        // ROI 检测阶段
+    LANDMARK    // 关键点检测阶段
 }
 
 /**
- * InsightFace 关键点检测器类型（领域模型）
+ * 检测模型类型（领域模型）
+ * 用于 ROI 和 Landmark 阶段的模型选择
  */
-enum class InsightFaceLandmarkDetectorType {
-    INSIGHTFACE_2D106,  // InsightFace 2d106det (106 点)
-    MEDIAPIPE           // MediaPipe FaceLandmarker (468 点 → 适配为 106)
+enum class DetectionModelType {
+    MEDIAPIPE,          // MediaPipe 系列模型
+    INSIGHTFACE_DET10G, // InsightFace Det10G (ROI)
+    INSIGHTFACE_2D106,  // InsightFace 2D106 (Landmark)
+    MNN                 // MNN 系列模型
+}
+
+/**
+ * 推理引擎类型（领域模型）
+ * 用于控制人脸检测和关键点检测的底层推理框架
+ */
+enum class InferenceEngineType {
+    ONNX,               // ONNX Runtime (CPU/NNAPI)
+    MNN,                // MNN (支持 CPU/GPU)
+    NCNN,               // NCNN (轻量级)
+    TFLITE              // TensorFlow Lite (MediaPipe 默认)
+}
+
+/**
+ * 推理设备偏好（领域模型）
+ * 用于强制指定推理引擎使用 CPU 或 GPU
+ */
+enum class InferenceDevicePreference {
+    AUTO,               // 自动选择（默认）
+    FORCE_CPU,          // 强制使用 CPU
+    FORCE_GPU           // 强制使用 GPU
+}
+
+/**
+ * 阶段配置数据类（领域模型）
+ * 每个检测阶段（ROI/Landmark）独立配置模型、推理引擎和设备偏好
+ */
+data class StageConfig(
+    val stage: DetectionStage,
+    val modelType: DetectionModelType,
+    val engineType: InferenceEngineType,
+    val devicePreference: InferenceDevicePreference
+) {
+    companion object {
+        fun defaultRoi(): StageConfig = StageConfig(
+            stage = DetectionStage.ROI,
+            modelType = DetectionModelType.MEDIAPIPE,
+            engineType = InferenceEngineType.TFLITE,
+            devicePreference = InferenceDevicePreference.AUTO
+        )
+
+        fun defaultLandmark(): StageConfig = StageConfig(
+            stage = DetectionStage.LANDMARK,
+            modelType = DetectionModelType.INSIGHTFACE_2D106,
+            engineType = InferenceEngineType.TFLITE,
+            devicePreference = InferenceDevicePreference.AUTO
+        )
+    }
 }
 

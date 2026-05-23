@@ -2,6 +2,7 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 
@@ -17,15 +18,17 @@ class MediaPipeRoiDetector(context: Context) : RoiDetector {
     private val faceDetector = MediaPipeFaceDetector(context)
 
     override fun detectRoi(bitmap: Bitmap): android.graphics.RectF? {
+        val startTime = SystemClock.elapsedRealtime()
         return try {
-            Log.d(TAG, "=== MediaPipe ROI Detection ===")
-            Log.d(TAG, "  Bitmap size: ${bitmap.width}x${bitmap.height}")
+            Log.d(TAG, "[Perf] MediaPipe ROI START: bitmap=${bitmap.width}x${bitmap.height}")
 
             val mpImage = BitmapImageBuilder(bitmap).build()
+            val inferenceStart = SystemClock.elapsedRealtime()
             val result = faceDetector.videoLandmarker?.detectForVideo(
                 mpImage,
                 android.os.SystemClock.uptimeMillis()
             )
+            val inferenceTime = SystemClock.elapsedRealtime() - inferenceStart
 
             result?.faceLandmarks()?.firstOrNull()?.let { landmarks ->
                 var minX = 1f
@@ -49,13 +52,12 @@ class MediaPipeRoiDetector(context: Context) : RoiDetector {
                     maxY * bitmap.height.toFloat()
                 )
 
-                Log.d(TAG, "  MediaPipe normalized bounds: ($minX,$minY)-($maxX,$maxY)")
-                Log.d(TAG, "  ROI in pixels (using Bitmap size): $roi")
-                Log.d(TAG, "=====================================")
+                val totalTime = SystemClock.elapsedRealtime() - startTime
+                Log.d(TAG, "[Perf] MediaPipe ROI DONE: total=${totalTime}ms, inference=${inferenceTime}ms, roi=$roi")
                 roi
             } ?: run {
-                Log.w(TAG, "  No face detected by MediaPipe")
-                Log.d(TAG, "=====================================")
+                val totalTime = SystemClock.elapsedRealtime() - startTime
+                Log.w(TAG, "[Perf] MediaPipe ROI DONE: total=${totalTime}ms, no face detected")
                 null
             }
         } catch (e: Exception) {
@@ -63,7 +65,7 @@ class MediaPipeRoiDetector(context: Context) : RoiDetector {
             null
         }
     }
-    
+
     override fun release() {
         faceDetector.release()
     }

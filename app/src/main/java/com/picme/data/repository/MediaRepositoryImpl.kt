@@ -28,7 +28,7 @@ class MediaRepositoryImpl(
 
     private val appContext = context.applicationContext
     private val refreshVersion = MutableStateFlow(0)
-    
+
     // 存储待删除的 URI 列表，用于权限请求后重试
     private val pendingDeleteUris = mutableListOf<Uri>()
     private var pendingRecoverableIntentSender: android.content.IntentSender? = null

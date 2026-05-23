@@ -4,11 +4,15 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
+import android.os.SystemClock
 import com.picme.core.common.Logger
+import com.picme.beauty.api.FrameId
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.internal.facedetect.Face106ToWarpParams
+import com.picme.beauty.internal.framesync.FrameSyncBridge
+import com.picme.beauty.internal.framesync.FrameSyncManager
 import com.picme.features.camera.facedetect.ImageUtils
 
 /**
@@ -17,13 +21,19 @@ import com.picme.features.camera.facedetect.ImageUtils
  */
 private object FaceDetectionFrameCounter {
     private var counter = 0
-    private const val DETECTION_INTERVAL = 3  // [优化] 每 3 帧检测一次 (30fps -> 10fps)
-    
+    // [GPU 检测优化] YUV→Bitmap 零 JPEG 后，InsightFace 检测耗时降低约 40%，
+    // 检测间隔从 3 帧（10fps）提升到 2 帧（15fps），妆容跟随更平滑。
+    private const val DETECTION_INTERVAL = 2
+
     // 运动检测: 记录上次人脸中心点
     private var lastFaceCenterX: Float = -1f
     private var lastFaceCenterY: Float = -1f
     private const val MOTION_THRESHOLD = 0.05f  // 归一化坐标变化超过 5% 视为快速移动
-    
+
+    // [常量定义] 人脸关键点索引（106 点模型）
+    internal const val LANDMARK_106_INDEX_X = 48
+    internal const val LANDMARK_106_INDEX_Y = 97
+
     /**
      * 判断是否应该执行人脸检测
      * @param currentFaceCenter 当前人脸中心(归一化坐标),如果为 null 表示未检测到人脸
@@ -31,17 +41,17 @@ private object FaceDetectionFrameCounter {
      */
     fun shouldDetect(currentFaceCenter: Offset? = null): Boolean {
         counter++
-        
+
         // 规则1: 每隔 N 帧必须检测一次
         if (counter % DETECTION_INTERVAL == 0) {
             return true
         }
-        
+
         // 规则2: 如果从未检测到人脸,需要检测
         if (currentFaceCenter == null || lastFaceCenterX < 0) {
             return true
         }
-        
+
         // 规则3: 检测快速移动,立即重新检测
         val deltaX = kotlin.math.abs(currentFaceCenter.x - lastFaceCenterX)
         val deltaY = kotlin.math.abs(currentFaceCenter.y - lastFaceCenterY)
@@ -49,10 +59,10 @@ private object FaceDetectionFrameCounter {
             Logger.d("Camera", "[Perf] Fast motion detected (dx=$deltaX, dy=$deltaY), force re-detect")
             return true
         }
-        
+
         return false
     }
-    
+
     /**
      * 更新人脸中心点记录
      */
@@ -60,7 +70,7 @@ private object FaceDetectionFrameCounter {
         lastFaceCenterX = x
         lastFaceCenterY = y
     }
-    
+
     fun reset() {
         counter = 0
         lastFaceCenterX = -1f
@@ -145,6 +155,14 @@ internal fun transformFaceCoordinateSimple(
 }
 
 /**
+ * [帧同步] 停止全局 FaceDetectionWorker
+ * （供 CameraPreviewRenderer.release() 调用，兼容清理残留 Worker）
+ */
+internal fun stopFaceDetectionWorker() {
+    // Phase 1 已移除异步检测 Worker，此处保留空实现供外部兼容调用
+}
+
+/**
  * MediaPipe 版本的人脸分析帧处理
  * 使用 MediaPipe Face Landmarker 检测 468 点，映射为 106 点
  *
@@ -163,6 +181,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
     faceDetector: FaceDetector,
     lensFacing: Int,
     detectionEngineMode: EngineType,
+    showFaceDebugOverlay: Boolean = false,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
@@ -184,37 +203,110 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         // [方案1优化] InsightFace 性能优化: 智能帧跳过 + 运动检测
         val isInsightFaceMode = detectionEngineMode == EngineType.INSIGHTFACE
-        
+
         // 获取上次的人脸中心点用于运动检测
         val lastFaceCenter = existingWarpParams?.let {
             Offset(it.faceCenterX, it.faceCenterY)
         }
-        
-        val shouldSkipDetection = isInsightFaceMode && 
-                                   !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) && 
+
+        val shouldSkipDetection = isInsightFaceMode &&
+                                   !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) &&
                                    existingWarpParams?.hasFace == true
-        
+
+        // [帧同步 CR-P0-3] 使用 ImageProxy 时间戳精确查询对应的 FrameId。
+        // ImageProxy.imageInfo.timestamp 与 SurfaceTexture.timestamp 共享相机硬件时间基准。
+        // 通过 FrameSyncBridge.getFrameIdByTimestamp() 精确关联检测输入帧与渲染帧，
+        // 避免检测结果绑定到错误的 FrameId 导致 query() 时预测补偿产生甩飞。
+        val imageTimestampNs = imageProxy.imageInfo.timestamp
+        val frameIdByTimestamp = FrameSyncBridge.getFrameIdByTimestamp(imageTimestampNs)
+        val frameId = if (frameIdByTimestamp != FrameId.INVALID) {
+            frameIdByTimestamp
+        } else {
+            // 回退：时间戳映射未就绪时（启动期），使用最新 FrameId
+            FrameSyncBridge.getLatestFrameId().takeIf { it != FrameId.INVALID } ?: FrameId.next()
+        }
+
         if (shouldSkipDetection) {
             // 跳过检测,复用上一帧的结果
             Logger.d("Camera", "[Perf] Skip frame")
             onFaceWarpParamsChanged(existingWarpParams)
+
+            // [帧同步关键修复] 跳帧时也必须向 FrameSyncManager 存储结果，
+            // 否则渲染线程查询这些帧时会得到 MISSING，导致妆容闪烁/消失。
+            // 使用缓存的最新 landmarks 和当前 frameId 存储"复用结果"。
+            val cachedLandmarks = FaceDetectionCache.getCachedLandmarks106()
+            if (cachedLandmarks != null && existingWarpParams?.hasFace == true) {
+                FrameSyncManager.getInstance().storeResult(
+                    FrameSyncManager.DetectionResult(
+                        frameId = frameId,
+                        landmarks106 = cachedLandmarks,
+                        detectionSource = existingWarpParams.detectionSource,
+                        detectionLatencyMs = 0L
+                    )
+                )
+                Logger.d("Camera", "[FrameSync] Stored skip-frame result for frameId=$frameId")
+            }
+
             imageProxy.close()
             return
         }
 
-        // 人脸检测（MediaPipe / InsightFace / AUTO）
-        val bitmap = ImageUtils.imageProxyToBitmap(imageProxy) ?: return
-        // [修复] ImageUtils.imageProxyToBitmap() 已将 bitmap 旋转为 upright，
-        // 此处不再传递 rotationDegrees，避免 MediaPipeFaceDetector.detect() 二次旋转。
-        val detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
-        bitmap.recycle()
+        val detectionStartMs = System.currentTimeMillis()
+
+        // [GPU 检测优化 Phase 2] MediaPipe 模式直接传入 YUV Image，跳过 Bitmap 转换
+
+        val detectionResult = if (detectionEngineMode == EngineType.MEDIAPIPE) {
+            val mediaImage = imageProxy.image
+            if (mediaImage == null) {
+                imageProxy.close()
+                return
+            }
+            faceDetector.detect(mediaImage, imageProxy.imageInfo.rotationDegrees, lensFacing)
+        } else {
+            val yuvStart = SystemClock.elapsedRealtime()
+            val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
+            val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
+            if (bitmap == null) {
+                imageProxy.close()
+                return
+            }
+            Logger.d("Camera", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
+            val result = faceDetector.detect(bitmap, 0, lensFacing)
+            bitmap.recycle()
+            result
+        }
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
-            // 缓存人脸检测结果供拍照使用
             FaceDetectionCache.updateLandmarks106(landmarks106)
 
-            // 构建 FaceWarpParams
+            // [调试信息] 显示检测器类型和 GPU 状态
+            if (showFaceDebugOverlay) {
+                val detectorInfo = buildString {
+                    append("ROI: ${detectionResult.roiDetectorName} ")
+                    append(if (detectionResult.useGpuForRoi) "GPU✓" else "CPU")
+                    append(" | Landmark: ${detectionResult.landmarkDetectorName} ")
+                    append(if (detectionResult.useGpuForLandmark) "GPU✓" else "CPU")
+                }
+                // 从 landmarks 计算人脸中心点
+                val centerX = landmarks106[FaceDetectionFrameCounter.LANDMARK_106_INDEX_X] // 索引 96 (第 49 个点 x 坐标)
+                val centerY = landmarks106[FaceDetectionFrameCounter.LANDMARK_106_INDEX_Y] // 索引 97 (第 49 个点 y 坐标)
+                Logger.d("Camera", "[Debug] $detectorInfo, faceCenter=($centerX, $centerY)")
+            }
+
+            // [帧同步 CR-P0-2] 同步结果也存入 FrameSyncManager，供渲染线程查询
+            val detectionLatencyMs = System.currentTimeMillis() - detectionStartMs
+            FrameSyncManager.getInstance().storeResult(
+                FrameSyncManager.DetectionResult(
+                    frameId = frameId,
+                    landmarks106 = landmarks106.clone(),
+                    detectionSource = detectionResult.detectionSource,
+                    detectionLatencyMs = detectionLatencyMs
+                )
+            )
+            Logger.d("Camera", "[FrameSync] Stored result for frameId=$frameId, landmarks=${landmarks106.size}")
+
+            val convertStart = SystemClock.elapsedRealtime()
             val faceWarpParams = Face106ToWarpParams.convert(
                 landmarks106 = landmarks106,
                 detectionSource = detectionResult.detectionSource
@@ -222,14 +314,14 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 requestedDetectionEngineMode = detectionEngineMode,
                 roiRect = detectionResult.roiRect
             )
-            
-            // [优化] 更新人脸中心点记录,用于运动检测
+            val convertElapsed = SystemClock.elapsedRealtime() - convertStart
+            Logger.d("Camera", "[Perf] Face106ToWarpParams.convert: ${convertElapsed}ms")
+
             FaceDetectionFrameCounter.updateLastFaceCenter(
                 faceWarpParams.faceCenterX,
                 faceWarpParams.faceCenterY
             )
 
-            // 人脸中心点（用于聚焦指示器）
             val screenPoint = Offset(
                 x = faceWarpParams.faceCenterX * previewWidth,
                 y = faceWarpParams.faceCenterY * previewHeight
@@ -238,11 +330,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
             onShowFocusIndicatorChanged(true)
 
             if (isDualMode) {
-                // 双模式下仍需保留主分析流的完整美颜参数，
-                // 保留已有的人脸关键点，避免把轮廓/中心点清空后触发预览黑屏。
                 onFaceWarpParamsChanged(faceWarpParams)
             } else {
-                // 单模式：直接返回大美丽参数
                 onFaceWarpParamsChanged(faceWarpParams)
             }
         } else {

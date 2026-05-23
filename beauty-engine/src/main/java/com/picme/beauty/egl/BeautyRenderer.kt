@@ -26,6 +26,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         private const val MAX_LIP_CONTOUR_POINTS = 20
     }
 
+    /**
+     * [帧同步] 与 CameraPreviewRenderer.frameSyncEnabled 保持同步。
+     * 决定 FaceMakeupPass 使用帧同步路径（updateFaceLandmarksSynced）还是旧路径（updateFaceLandmarks）。
+     *
+     * 在 feature/frame-sync-makeup 分支上默认启用 true。
+     */
+    @Volatile
+    var frameSyncEnabled: Boolean = true
+
     private var renderMode: Int = MODE_BEAUTY
 
     private var smoothingStrength: Float = 0.5f
@@ -85,6 +94,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     // GPUPixel 风格瘦脸/大眼：106点人脸关键点
     private val facePointsBuffer = FloatArray(106 * 2)
+    private val faceSyncLock = Any()  // [帧同步 P0] 保护 facePointsBuffer 与 hasFace 的线程安全
     private var useGpupixelWarp: Int = 1  // 默认启用GPUPixel风格warp
     private var viewportWidth: Int = 0
     private var viewportHeight: Int = 0
@@ -236,7 +246,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         lowerLipCenterX: Float,
         lowerLipCenterY: Float,
         faceRadius: Float,
-        hasFace: Boolean
+        hasFace: Boolean?
     ) {
         this.faceCenterX = faceCenterX.coerceIn(0f, 1f)
         this.faceCenterY = faceCenterY.coerceIn(0f, 1f)
@@ -255,7 +265,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         this.lowerLipCenterX = lowerLipCenterX.coerceIn(0f, 1f)
         this.lowerLipCenterY = lowerLipCenterY.coerceIn(0f, 1f)
         this.faceRadius = faceRadius.coerceIn(0.08f, 0.45f)
-        this.hasFace = if (hasFace) 1f else 0f
+        // [帧同步] hasFace 为 null 表示由帧同步路径独占控制，旧路径不修改
+        if (hasFace != null) {
+            synchronized(faceSyncLock) {
+                this.hasFace = if (hasFace) 1f else 0f
+            }
+        }
     }
 
     fun setColorGradeParams(
@@ -362,7 +377,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * 无需逆矩阵还原，直接透传即可保证与 FBO 纹理坐标系一致。
      */
     private fun toStandardUvFacePoints(): FloatArray {
-        return facePointsBuffer.clone()
+        synchronized(faceSyncLock) {
+            return facePointsBuffer.clone()
+        }
     }
 
     private fun inverseTransformVec2(x: Float, y: Float): Pair<Float, Float> {
@@ -383,13 +400,35 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
      */
     fun updateFacePoints106(landmarks106: FloatArray?) {
-        if (landmarks106 == null || landmarks106.isEmpty()) {
-            hasFace = 0f
-            return
+        synchronized(faceSyncLock) {
+            if (landmarks106 == null || landmarks106.isEmpty()) {
+                hasFace = 0f
+                return
+            }
+            val count = minOf(landmarks106.size, facePointsBuffer.size)
+            System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
+            hasFace = 1f
         }
-        val count = minOf(landmarks106.size, facePointsBuffer.size)
-        System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
-        hasFace = 1f
+    }
+
+    /**
+     * [帧同步] 更新同步后的106点人脸关键点
+     * 与 updateFacePoints106 的区别：不控制 hasFace 状态，由调用方通过 setHasFace 独立控制
+     */
+    fun updateSyncedFacePoints106(landmarks106: FloatArray) {
+        synchronized(faceSyncLock) {
+            val count = minOf(landmarks106.size, facePointsBuffer.size)
+            System.arraycopy(landmarks106, 0, facePointsBuffer, 0, count)
+        }
+    }
+
+    /**
+     * [帧同步] 独立设置人脸存在状态
+     */
+    fun setHasFace(hasFace: Boolean) {
+        synchronized(faceSyncLock) {
+            this.hasFace = if (hasFace) 1f else 0f
+        }
     }
 
     /**
@@ -825,11 +864,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 使用 2D 主 Shader 渲染
         shaderProgram2D.use()
-        
+
         // [调试] 检查 Shader 程序是否有效
         val programId = shaderProgram2D.getProgramId()
         Log.d(TAG, "renderMainShaderFromFbo2D: using shader program $programId")
-        
+
         // [调试] 检查当前绑定的 FBO
         val boundFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, boundFbo, 0)
@@ -957,7 +996,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 绘制
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        
+
         // [调试] 检查绘制后的 GL 错误
         val drawError = GLES20.glGetError()
         if (drawError != GLES20.GL_NO_ERROR) {
@@ -1408,7 +1447,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     /**
      * 设置调试模式
-     * @param mode 0=正常, 1=Skin Mask, 2=Warp Offset, 
+     * @param mode 0=正常, 1=Skin Mask, 2=Warp Offset,
      *             3=BigEye Radius, 4=ThinFace Radius, 5=All Warp
      */
     fun setDebugMode(mode: Int) {
@@ -1476,8 +1515,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             )
         }
 
+        // [帧同步] FaceMakeupPass 使用帧同步后的关键点（已通过 updateSyncedFacePoints106 写入 facePointsBuffer）
         if (hasFace > 0.5f) {
-            faceMakeupPass.updateFaceLandmarks(toStandardUvFacePoints())
+            val facePoints = toStandardUvFacePoints()
+            if (frameSyncEnabled) {
+                // 帧同步路径：CPU 侧已完成预测补偿，直接写入
+                faceMakeupPass.updateFaceLandmarksSynced(facePoints)
+            } else {
+                // 旧路径：使用双缓冲避免读写竞争，配合插值消除甩飞
+                faceMakeupPass.resetFrameSync()
+                faceMakeupPass.updateFaceLandmarks(facePoints)
+            }
         }
 
         var currentTextureId = inputTextureId
@@ -1527,12 +1575,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     /**
      * 离屏渲染（用于拍照）
-     * 
+     *
      * 与预览保持一致的完整多 Pass 管线：
      * 1. executeBeautyPasses: CopyPass + BeautyUnitPass（磨皮+美白+LUT）
      * 2. renderFaceMakeupPass: 唇色 + 腮红
      * 3. renderMainShaderFromFbo: 美型 + 调色 → 输出到当前绑定的 FBO
-     * 
+     *
      * @param width 渲染宽度
      * @param height 渲染高度
      */
@@ -1542,27 +1590,27 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, entryFbo, 0)
         val savedFboId = entryFbo[0]  // 保存入口时的 FBO ID
         Log.d(TAG, "renderBeautyMultiPass ENTRY: bound FBO=$savedFboId")
-        
+
         // 设置 viewport
         GLES20.glViewport(0, 0, width, height)
-        
+
         clearLastRenderError()
         val activeStyle = styleEffectShader.getActiveStyle()
-        
+
         // 步骤1: 执行磨皮/美白 Pass
         Log.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
         val beautyPassSuccess = executeBeautyPasses(skipCopyPass)
         Log.d(TAG, "renderBeautyMultiPass(offscreen): executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
-        
+
         // [调试] 检查 executeBeautyPasses 后的 FBO 状态
         val afterBeautyFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, afterBeautyFbo, 0)
         Log.d(TAG, "After executeBeautyPasses: bound FBO=${afterBeautyFbo[0]}")
-        
+
         // [关键修复] executeBeautyPasses 会 unbind FBO，需要重新绑定
         // 但我们不知道外部绑定的 FBO ID，所以需要在调用前保存
         // 暂时跳过，看后面是否有问题
-        
+
         // [关键修复] 如果 executeBeautyPasses 返回 false（无需 FBO 管线），使用外部纹理 ID
         val finalInputTextureId = if (beautyPassSuccess) {
             beautyPassOutputTextureId
@@ -1574,7 +1622,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         if (!beautyPassSuccess) {
             Log.d(TAG, "Skipping FBO pipeline, using external texture directly")
         }
-        
+
         // 步骤2: FaceMakeupPass 妆容渲染
         Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
         var currentTextureId = finalInputTextureId
@@ -1586,22 +1634,22 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 currentTextureId = renderFaceMakeupPass(finalInputTextureId, ping, pong)
             }
         }
-        
+
         // [调试] 检查 FaceMakeupPass 后的 FBO 状态
         val afterMakeupFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, afterMakeupFbo, 0)
         Log.d(TAG, "After FaceMakeupPass: bound FBO=${afterMakeupFbo[0]}")
-        
+
         // 步骤3: 使用主 Shader 渲染到当前绑定的 FBO
         // [关键修复] 不能调用 renderMainShaderFromFbo(null)，因为它会解绑 FBO
         // 而是应该直接使用 renderMainShaderFromFbo2D，它不会绑定/解绑 FBO
-        
+
         // [关键修复] 重新绑定入口时的 FBO，因为 executeBeautyPasses/renderFaceMakeupPass 会 unbind
         if (savedFboId > 0) {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
             Log.d(TAG, "Rebound to saved FBO: $savedFboId")
         }
-        
+
         // [关键修复] 重新绑定入口时的 FBO，因为 executeBeautyPasses/renderFaceMakeupPass 会 unbind
         if (savedFboId > 0) {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
@@ -1612,17 +1660,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // [关键修复] 使用 currentTextureId（而非 beautyPassOutputTextureId），
         // 因为 FaceMakeupPass 可能已改变输出纹理
         Log.d(TAG, "renderMainShaderFromFbo2D(offscreen): input=$currentTextureId")
-        
+
         // [调试] 检查输入纹理是否有效
         if (currentTextureId <= 0) {
             Log.e(TAG, "ERROR: currentTextureId is invalid: $currentTextureId")
         }
-        
+
         // [调试] 检查当前绑定的 FBO
         val currentFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, currentFbo, 0)
         Log.d(TAG, "Current bound FBO before renderMainShaderFromFbo2D: ${currentFbo[0]}")
-        
+
         if (activeStyle != StyleEffect.NONE) {
             // 有风格特效：先渲染主Shader到 intermediateFbo，再应用风格特效到 savedFboId
             updateFramebufferSize(width, height)
@@ -1664,6 +1712,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         shaderProgram2D.release()
         shaderProgram2DCompiled = false
         clearLastRenderError()
+        // [帧同步] 重置帧同步状态
+        frameSyncEnabled = true
         super.release()
     }
 }

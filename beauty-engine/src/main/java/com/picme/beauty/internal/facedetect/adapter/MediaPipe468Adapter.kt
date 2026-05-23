@@ -120,13 +120,23 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
     }
 
     /**
+     * MediaPipe 专用适配方法（兼容旧接口，rotationDegrees 默认 0）
+     */
+    fun adapt(landmarks: List<NormalizedLandmark>, lensFacing: Int): Result<FloatArray> {
+        return adapt(landmarks, lensFacing, 0)
+    }
+
+    /**
      * MediaPipe 专用适配方法
      *
      * @param landmarks MediaPipe 468 个 NormalizedLandmark
      * @param lensFacing 镜头方向
+     * @param rotationDegrees 图像旋转角度（0/90/180/270）。
+     *                        MediaPipe 直接检测原始 YUV Image 时，
+     *                        结果坐标需旋转后才能与预览/渲染坐标系对齐。
      * @return 统一 106 点 FloatArray(212)
      */
-    fun adapt(landmarks: List<NormalizedLandmark>, lensFacing: Int): Result<FloatArray> {
+    fun adapt(landmarks: List<NormalizedLandmark>, lensFacing: Int, rotationDegrees: Int): Result<FloatArray> {
         if (landmarks.size < 468) {
             return Result.failure(
                 IllegalArgumentException(
@@ -138,6 +148,18 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
         val result = FloatArray(POINT_COUNT * 2)
         val isFrontCamera = lensFacing == LENS_FACING_FRONT
 
+        // 辅助函数：旋转归一化坐标
+        // MediaPipe 在原始（未旋转）图像上检测，输出坐标基于原始图像方向。
+        // 需根据 rotationDegrees 旋转到与预览/渲染对齐的方向。
+        fun rotateNormalized(x: Float, y: Float, degrees: Int): Pair<Float, Float> {
+            return when (degrees) {
+                90 -> Pair(1f - y, x)
+                180 -> Pair(1f - x, 1f - y)
+                270 -> Pair(y, 1f - x)
+                else -> Pair(x, y)
+            }
+        }
+
         // 辅助函数：获取 MediaPipe 点坐标
         // [坐标系对齐] 后置 textureMatrix(det=-1) 已包含 X 轴翻转，FBO 人脸朝右；
         // 前置 textureMatrix(det=1) 无翻转，FBO 人脸朝左。
@@ -147,10 +169,16 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
             val landmark = landmarks[index]
             var x = landmark.x()
             val y = landmark.y()
+
+            // 先旋转坐标（针对直接 YUV Image 检测路径）
+            val (rx, ry) = rotateNormalized(x, y, rotationDegrees)
+            x = rx
+            val finalY = ry
+
             if (isFrontCamera) {
                 x = 1f - x
             }
-            return Pair(x, y)
+            return Pair(x, finalY)
         }
 
         // 辅助函数：计算两点中点

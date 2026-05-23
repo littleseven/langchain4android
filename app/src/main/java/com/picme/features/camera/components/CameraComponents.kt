@@ -156,7 +156,7 @@ fun CameraRightControls(
             onTogglePanel = onToggleBeauty,
             onToggleEnabled = onToggleBeautyEnabled
         )
-        
+
         Spacer(modifier = Modifier.height(8.dp))
 
         // 构图类工具：画幅 -> 网格
@@ -322,7 +322,7 @@ fun ControlPanel(
                     )
                 )
         )
-        
+
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1309,7 +1309,7 @@ private fun ExpandableSection(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val rotation by animateFloatAsState(if (isExpanded) 180f else 0f, label = "rotation")
-    
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1351,7 +1351,7 @@ private fun ExpandableSection(
                 fontWeight = FontWeight.Medium
             )
         }
-        
+
         AnimatedVisibility(
             visible = isExpanded,
             enter = expandVertically() + fadeIn(initialAlpha = 0.3f),
@@ -1469,7 +1469,7 @@ fun LipColorSelector(
         Color(0xFFB22222), // 火砖色
         Color(0xFFFF1493)  // 深粉色
     )
-    
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // 色号选择 Header
         Row(
@@ -1498,7 +1498,7 @@ fun LipColorSelector(
                     fontWeight = FontWeight.Medium
                 )
             }
-            
+
             Text(
                 text = if (strength > 0) "${strength.toInt()}" else "--",
                 color = if (strength > 0) {
@@ -1510,7 +1510,7 @@ fun LipColorSelector(
                 fontWeight = FontWeight.Bold
             )
         }
-        
+
         // 12 色号网格
         LazyHorizontalGrid(
             rows = GridCells.Fixed(2),
@@ -1538,7 +1538,7 @@ fun LipColorSelector(
                 )
             }
         }
-        
+
         // 强度滑块
         Slider(
             value = strength.coerceIn(0f, 100f),

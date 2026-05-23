@@ -29,7 +29,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class MediaViewModel(
     private val repository: MediaRepository,
@@ -42,13 +41,13 @@ class MediaViewModel(
 
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
     val groupingMode = _groupingMode.asStateFlow()
-    
+
     private val _showDuplicateManager = MutableStateFlow(false)
     val showDuplicateManager = _showDuplicateManager.asStateFlow()
-    
+
     private val _duplicateGroups = MutableStateFlow<List<DuplicateGroup>>(emptyList())
     val duplicateGroups = _duplicateGroups.asStateFlow()
-    
+
     private val _ocrState = MutableStateFlow<OcrResult?>(null)
     val ocrState: StateFlow<OcrResult?> = _ocrState.asStateFlow()
 
@@ -70,7 +69,7 @@ class MediaViewModel(
         Log.d("PicMe:Gallery", "Clearing OCR result")
         _ocrState.value = null
     }
-    
+
     override fun onCleared() {
         super.onCleared()
         Log.d("PicMe:Gallery", "MediaViewModel cleared, releasing OCR resources")
@@ -159,19 +158,19 @@ class MediaViewModel(
     fun consumeDeleteAuthRequest() {
         _deleteAuthRequest.value = null
     }
-    
+
     /**
      * 获取待删除的 URI 列表（用于权限请求）
      */
     fun getPendingDeleteUris() = repository.getPendingDeleteUris()
-    
+
     /**
      * 清除待删除的 URI 列表
      */
     fun clearPendingDeleteUris() {
         repository.clearPendingDeleteUris()
     }
-    
+
     /**
      * 获取 Android 10 恢复性删除的 IntentSender
      */
@@ -193,14 +192,14 @@ class MediaViewModel(
             repository.executePendingDeletes()
         }
     }
-    
+
     fun toggleDuplicateManager(show: Boolean) {
         _showDuplicateManager.value = show
         if (show && _duplicateGroups.value.isEmpty()) {
             scanForDuplicates()
         }
     }
-    
+
     private fun scanForDuplicates() {
         viewModelScope.launch {
             Log.d("PicMe:Gallery", "Scanning for duplicates")
@@ -216,7 +215,7 @@ class MediaViewModel(
             }
         }
     }
-    
+
     fun deleteDuplicateGroup(group: DuplicateGroup, keepIndex: Int = 0) {
         viewModelScope.launch {
             val urisToDelete = if (keepIndex == 0) {
@@ -224,30 +223,30 @@ class MediaViewModel(
             } else {
                 group.fileUris.filterIndexed { index, _ -> index != keepIndex }
             }
-            
+
             val idsToDelete = allMedia.value
                 .filter { asset -> asset.uri in urisToDelete }
                 .map { asset -> asset.id }
-            
+
             if (idsToDelete.isNotEmpty()) {
                 deleteMediaByIds(idsToDelete)
                 _duplicateGroups.value = _duplicateGroups.value.filter { groupItem -> groupItem.id != group.id }
             }
         }
     }
-    
+
     fun deleteAllDuplicatesExceptOne() {
         viewModelScope.launch {
             Log.d("PicMe:Gallery", "Deleting all duplicates except one per group")
             val allIdsToDelete = mutableListOf<Long>()
-            
+
             _duplicateGroups.value.forEach { group ->
                 val idsInGroup = allMedia.value
                     .filter { asset -> asset.uri in group.getDeleteUris() }
                     .map { asset -> asset.id }
                 allIdsToDelete.addAll(idsInGroup)
             }
-            
+
             if (allIdsToDelete.isNotEmpty()) {
                 deleteMediaByIds(allIdsToDelete)
                 _duplicateGroups.value = emptyList()

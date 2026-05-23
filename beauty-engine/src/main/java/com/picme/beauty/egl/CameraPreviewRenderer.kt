@@ -8,6 +8,11 @@ import android.opengl.Matrix
 import android.util.Log
 import android.view.View
 import com.picme.beauty.api.BeautyPerfStats
+import com.picme.beauty.api.FrameId
+import com.picme.beauty.api.FrameSyncConfig
+import com.picme.beauty.api.FrameSyncResult
+import com.picme.beauty.internal.framesync.FrameSyncBridge
+import com.picme.beauty.internal.framesync.FrameSyncManager
 import java.util.concurrent.ConcurrentLinkedQueue
 
 /**
@@ -100,6 +105,18 @@ class CameraPreviewRenderer(private val context: Context) {
     // GL 线程任务队列：用于将需要在 GL 线程执行的操作从 UI 线程投递过来
     private val glEventQueue = ConcurrentLinkedQueue<() -> Unit>()
 
+    private val frameSyncManager = FrameSyncManager.getInstance()
+    private var currentFrameId: FrameId = FrameId.INVALID
+
+    /**
+     * [帧同步] 当启用帧同步时，旧路径（UI线程回调）不再写入 hasFace 和 facePointsBuffer，
+     * 避免双路径竞争导致妆容/瘦脸效果抖动。
+     *
+     * 在 feature/frame-sync-makeup 分支上默认启用，实现妆容与人脸按帧对齐合成。
+     */
+    @Volatile
+    var frameSyncEnabled: Boolean = true
+
     interface OnTextureAvailableListener {
         fun onTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int)
         fun onTextureDestroyed()
@@ -136,8 +153,11 @@ class CameraPreviewRenderer(private val context: Context) {
         }
 
         beautyRenderer = BeautyRenderer(context)
+        beautyRenderer.frameSyncEnabled = frameSyncEnabled
         beautyRenderer.onInit()
-        
+        // [帧同步 P2] 预生成首个 FrameId，避免分析线程与渲染线程首次序号分叉
+        FrameSyncBridge.setLatestFrameId(FrameId.next(), surfaceTexture?.timestamp ?: 0L)
+
         eglCore.clearCurrent()
 
         textureListener?.onTextureAvailable(surfaceTexture!!, DEFAULT_WIDTH, DEFAULT_HEIGHT)
@@ -276,6 +296,19 @@ class CameraPreviewRenderer(private val context: Context) {
                         frameAvailable = false
                         framesReceived++
 
+                        // [帧同步 CR-P0-1] 每帧生成独立 FrameId，与相机帧严格绑定
+                        currentFrameId = FrameId.next()
+                        val frameTimestampNs = surfaceTexture?.timestamp ?: 0L
+                        FrameSyncBridge.setLatestFrameId(currentFrameId, frameTimestampNs)
+                        frameSyncManager.bindFrameId(currentFrameId, frameTimestampNs)
+
+                        val syncResult = frameSyncManager.query(currentFrameId)
+                        if (frameCount % 60 == 0) {
+                            Log.d(TAG, "[FrameSync] Query frameId=$currentFrameId, status=${syncResult.syncStatus}, " +
+                                "stored=${frameSyncManager.getStoredResultCount()}")
+                        }
+                        applySyncResultToRenderer(syncResult)
+
                         val currentTime = System.currentTimeMillis()
                         // 限流：fps 日志 1 秒最多打一次
                         if (currentTime - lastFpsLogMs >= 1_000L) {
@@ -398,6 +431,7 @@ class CameraPreviewRenderer(private val context: Context) {
                             val delayMs = (frameBudgetMs - avgProcessingMs).coerceAtLeast(0)
                             val cpuUsage =
                                 (statsProcessingTotalMs * 100f / statsElapsedMs.toFloat()).coerceIn(0f, 100f)
+                            val lastSyncResult = frameSyncManager.getLastQueryResult()
                             latestPerfStats = BeautyPerfStats(
                                 fps = fps,
                                 processingMs = avgProcessingMs,
@@ -405,7 +439,10 @@ class CameraPreviewRenderer(private val context: Context) {
                                 cpuUsage = cpuUsage,
                                 nullFrames = statsNullFrames,
                                 errorCategory = beautyRenderer.getLastErrorCategory(),
-                                errorReason = beautyRenderer.getLastErrorReason()
+                                errorReason = beautyRenderer.getLastErrorReason(),
+                                detectionLatencyMs = lastSyncResult.detectionLatencyMs,
+                                syncStatus = lastSyncResult.syncStatus.name,
+                                predictedOffsetPx = lastSyncResult.predictedOffsetPx
                             )
                             statsWindowStartMs = statsNowMs
                             statsFrameCount = 0
@@ -597,6 +634,9 @@ class CameraPreviewRenderer(private val context: Context) {
         val mappedUpperLipCenter = mapViewNormalizedToUv(upperLipCenterX, upperLipCenterY)
         val mappedLowerLipCenter = mapViewNormalizedToUv(lowerLipCenterX, lowerLipCenterY)
 
+        // [帧同步] 启用帧同步时，旧路径不再写入 hasFace，避免双路径竞争抖动
+        val effectiveHasFace = if (frameSyncEnabled) null else hasFace
+
         beautyRenderer.updateFaceWarpParams(
             faceCenterX = mappedFaceCenter.first,
             faceCenterY = mappedFaceCenter.second,
@@ -615,7 +655,7 @@ class CameraPreviewRenderer(private val context: Context) {
             lowerLipCenterX = mappedLowerLipCenter.first,
             lowerLipCenterY = mappedLowerLipCenter.second,
             faceRadius = faceRadius,
-            hasFace = hasFace
+            hasFace = effectiveHasFace
         )
     }
 
@@ -624,6 +664,9 @@ class CameraPreviewRenderer(private val context: Context) {
      * @param landmarks106 FloatArray(212) = [x0,y0, x1,y1, ..., x105,y105]
      */
     fun updateFacePoints106(landmarks106: FloatArray) {
+        // [帧同步] 启用帧同步时，旧路径不再写入 facePointsBuffer，避免双路径竞争抖动
+        if (frameSyncEnabled) return
+
         // 106点坐标需要经过与 FaceWarpParams 相同的 mapViewNormalizedToUv 映射
         // 才能与 Shader UV 坐标系对齐
         val mapped = FloatArray(landmarks106.size)
@@ -772,6 +815,59 @@ class CameraPreviewRenderer(private val context: Context) {
         beautyRenderer.setDebugMode(mode)
     }
 
+    // [帧同步] 预分配映射缓冲区，避免每帧 GC（CR-P1-1 修复）
+    private val syncMappedBuffer = FloatArray(106 * 2)
+
+    // [帧同步] 启动期降级：前 N 帧允许旧路径提供数据，避免启动时无效果
+    private var frameSyncStartupFrames: Int = 0
+    private val FRAME_SYNC_STARTUP_GRACE_PERIOD = 30
+
+    /**
+     * [帧同步] 将同步结果应用到 BeautyRenderer
+     */
+    private fun applySyncResultToRenderer(syncResult: FrameSyncResult) {
+        // [帧同步] 未启用时不干扰旧路径，避免新旧路径竞争导致 hasFace 抖动
+        if (!frameSyncEnabled) return
+        frameSyncStartupFrames++
+        val isStartupGracePeriod = frameSyncStartupFrames <= FRAME_SYNC_STARTUP_GRACE_PERIOD
+
+        when (syncResult.syncStatus) {
+            FrameSyncResult.SyncStatus.EXACT_MATCH,
+            FrameSyncResult.SyncStatus.HISTORICAL_FALLBACK,
+            FrameSyncResult.SyncStatus.PREDICTED -> {
+                val landmarks = syncResult.landmarks106
+                if (landmarks != null && landmarks.isNotEmpty()) {
+                    // 复用预分配缓冲区（CR-P1-1）
+                    val count = minOf(landmarks.size, syncMappedBuffer.size)
+                    for (i in 0 until count step 2) {
+                        val uv = mapNormalizedToUv(landmarks[i], landmarks[i + 1])
+                        syncMappedBuffer[i] = uv.first
+                        syncMappedBuffer[i + 1] = uv.second
+                    }
+                    beautyRenderer.updateSyncedFacePoints106(syncMappedBuffer)
+                    beautyRenderer.setHasFace(true)
+                    if (frameSyncStartupFrames % 60 == 0) {
+                        Log.d(TAG, "[FrameSync] Applied ${syncResult.syncStatus}, frameId=${syncResult.frameId}, " +
+                            "stored=${frameSyncManager.getStoredResultCount()}, startup=$isStartupGracePeriod")
+                    }
+                } else {
+                    beautyRenderer.setHasFace(false)
+                    Log.w(TAG, "[FrameSync] ${syncResult.syncStatus} but landmarks empty")
+                }
+            }
+            FrameSyncResult.SyncStatus.MISSING -> {
+                // 启动期内不强制清除 hasFace，允许旧路径短暂提供数据
+                if (!isStartupGracePeriod) {
+                    beautyRenderer.setHasFace(false)
+                }
+                if (frameSyncStartupFrames % 60 == 0) {
+                    Log.d(TAG, "[FrameSync] MISSING, stored=${frameSyncManager.getStoredResultCount()}, " +
+                        "startup=$isStartupGracePeriod, startupFrames=$frameSyncStartupFrames")
+                }
+            }
+        }
+    }
+
     fun getSurfaceTexture(): SurfaceTexture? = surfaceTexture
 
     fun getSurfaceForCamera(): android.view.Surface? {
@@ -803,6 +899,11 @@ class CameraPreviewRenderer(private val context: Context) {
         surfaceTexture = null
         beautyRenderer.release()
         eglCore.release()
+        // [帧同步] 释放时清理全局状态（CR-P2-3 修复）
+        frameSyncManager.clear()
+        FrameSyncBridge.reset()
+        // [帧同步] 重置启动期计数器，下次启动时重新进入 grace period
+        frameSyncStartupFrames = 0
         textureListener?.onTextureDestroyed()
         Log.d(TAG, "Released")
     }

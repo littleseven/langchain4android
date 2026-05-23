@@ -43,9 +43,6 @@
     <string name="big_eyes">大眼</string>
     <string name="youth">年轻化</string>
     <string name="filter_none">原图</string>
-    <string name="filter_beauty">美颜</string>
-    <string name="filter_grayscale">黑白</string>
-    <string name="filter_sepia">怀旧</string>
     <string name="filter_vintage">复古</string>
     <string name="filter_cool">冷色</string>
     <string name="filter_warm">暖色</string>
