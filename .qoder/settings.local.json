@@ -28,7 +28,14 @@
       "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ./gradlew :app:compileDebugKotlin --console=plain 2>&1 | tail -5)",
       "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ./gradlew :app:compileDebugKotlin --console=plain 2>&1 | grep \"e: file:\" | head -10)",
       "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ./gradlew :app:compileDebugKotlin --console=plain 2>&1 | grep \"e: file:\")",
-      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ./scripts/auto-dev-loop.sh 2>&1 | tail -60)"
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ./scripts/auto-dev-loop.sh 2>&1 | tail -60)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ls -la gradle/wrapper/)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && ./gradlew wrapper --gradle-version=9.3.1 --distribution-type bin)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git status)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git diff gradle/wrapper/gradle-wrapper.properties)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git diff gradlew | head -20)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git checkout gradlew gradlew.bat)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git add -A && git status)"
     ]
   }
 }
