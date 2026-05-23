@@ -156,18 +156,63 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
         return {};
     }
 
-    // 创建临时输入张量（从用户数据）
+    // [关键修复] 使用与 ONNX 完全相同的 letterbox 预处理
+    // 1. 计算保持宽高比的缩放比例
+    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
+    int scaledW = static_cast<int>(width * scale);
+    int scaledH = static_cast<int>(height * scale);
+    int padLeft = (inputSize_ - scaledW) / 2;
+    int padTop = (inputSize_ - scaledH) / 2;
+
+    // 2. 创建临时输入张量并填充黑色
     MNN::Tensor tmpInput(inputTensor_, MNN::Tensor::DimensionType::CAFFE);
+    float *inputData = tmpInput.host<float>();
+    int totalPixels = inputSize_ * inputSize_;
+    float blackValue = (0.0f - 127.5f) / 128.0f;
+    for (int i = 0; i < totalPixels * 3; i++) {
+        inputData[i] = blackValue;
+    }
 
-    // 使用 ImageProcess 进行 resize + normalize
-    // 源数据格式：RGB 连续存储
-    MNN::CV::Matrix transform;
-    transform.setScale((float)width / inputSize_, (float)height / inputSize_);
-    pretreat_->setMatrix(transform);
+    // 3. 手动进行 letterbox resize + normalize
+    for (int y = 0; y < scaledH; y++) {
+        for (int x = 0; x < scaledW; x++) {
+            float srcX = (x + 0.5f) * width / scaledW - 0.5f;
+            float srcY = (y + 0.5f) * height / scaledH - 0.5f;
+            
+            int srcX0 = static_cast<int>(srcX);
+            int srcY0 = static_cast<int>(srcY);
+            int srcX1 = std::min(srcX0 + 1, width - 1);
+            int srcY1 = std::min(srcY0 + 1, height - 1);
+            
+            float fx = srcX - srcX0;
+            float fy = srcY - srcY0;
+            
+            int dstX = padLeft + x;
+            int dstY = padTop + y;
+            int dstIdx = dstY * inputSize_ + dstX;
+            
+            for (int c = 0; c < 3; c++) {
+                int srcIdx00 = (srcY0 * width + srcX0) * 3 + c;
+                int srcIdx01 = (srcY0 * width + srcX1) * 3 + c;
+                int srcIdx10 = (srcY1 * width + srcX0) * 3 + c;
+                int srcIdx11 = (srcY1 * width + srcX1) * 3 + c;
+                
+                float val00 = imageData[srcIdx00];
+                float val01 = imageData[srcIdx01];
+                float val10 = imageData[srcIdx10];
+                float val11 = imageData[srcIdx11];
+                
+                float val = val00 * (1-fx) * (1-fy) +
+                           val01 * fx * (1-fy) +
+                           val10 * (1-fx) * fy +
+                           val11 * fx * fy;
+                
+                inputData[c * totalPixels + dstIdx] = (val - 127.5f) / 128.0f;
+            }
+        }
+    }
 
-    pretreat_->convert(imageData, width, height, 0, &tmpInput);
-
-    // 拷贝到会话输入
+    // 4. 拷贝到会话输入
     inputTensor_->copyFromHostTensor(&tmpInput);
 
     // 运行推理
@@ -201,48 +246,139 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
         return {};
     }
 
-    // 预处理
+    // [关键修复] 如果输入已经是 inputSize_ x inputSize_，直接复制并归一化
+    // 因为 Kotlin 层已经做了 letterbox 预处理
     MNN::Tensor tmpInput(inputTensor_, MNN::Tensor::DimensionType::CAFFE);
-    MNN::CV::Matrix transform;
-    transform.setScale((float)width / inputSize_, (float)height / inputSize_);
-    pretreat_->setMatrix(transform);
-    pretreat_->convert(imageData, width, height, 0, &tmpInput);
+    float *inputData = tmpInput.host<float>();
+    int totalPixels = inputSize_ * inputSize_;
+
+    if (width == inputSize_ && height == inputSize_) {
+        // 直接复制并归一化，无需 letterbox
+        for (int i = 0; i < totalPixels; i++) {
+            for (int c = 0; c < 3; c++) {
+                float val = imageData[i * 3 + c];
+                inputData[c * totalPixels + i] = (val - 127.5f) / 128.0f;
+            }
+        }
+        // [诊断] 输出前 10 个像素的归一化值
+        char pixelLog[512];
+        snprintf(pixelLog, sizeof(pixelLog), "[Diag] MNN First 10 pixels normalized (R,G,B): ");
+        for (int i = 0; i < 10 && i < totalPixels; i++) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ", 
+                     inputData[i], inputData[totalPixels + i], inputData[totalPixels * 2 + i]);
+            strncat(pixelLog, buf, sizeof(pixelLog) - strlen(pixelLog) - 1);
+        }
+        LOGD("%s", pixelLog);
+        
+        // 输入数据已准备就绪
+    } else {
+        // [关键修复] 使用与 ONNX 完全相同的 letterbox 预处理
+        // 1. 计算保持宽高比的缩放比例
+        float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
+        int scaledW = static_cast<int>(width * scale);
+        int scaledH = static_cast<int>(height * scale);
+        int padLeft = (inputSize_ - scaledW) / 2;
+        int padTop = (inputSize_ - scaledH) / 2;
+
+        // 2. 填充黑色背景
+        float blackValue = (0.0f - 127.5f) / 128.0f;
+        for (int i = 0; i < totalPixels * 3; i++) {
+            inputData[i] = blackValue;
+        }
+
+        // 3. 手动进行 letterbox resize + normalize
+        for (int y = 0; y < scaledH; y++) {
+            for (int x = 0; x < scaledW; x++) {
+                float srcX = (x + 0.5f) * width / scaledW - 0.5f;
+                float srcY = (y + 0.5f) * height / scaledH - 0.5f;
+                
+                int srcX0 = static_cast<int>(srcX);
+                int srcY0 = static_cast<int>(srcY);
+                int srcX1 = std::min(srcX0 + 1, width - 1);
+                int srcY1 = std::min(srcY0 + 1, height - 1);
+                
+                float fx = srcX - srcX0;
+                float fy = srcY - srcY0;
+                
+                int dstX = padLeft + x;
+                int dstY = padTop + y;
+                int dstIdx = dstY * inputSize_ + dstX;
+                
+                for (int c = 0; c < 3; c++) {
+                    int srcIdx00 = (srcY0 * width + srcX0) * 3 + c;
+                    int srcIdx01 = (srcY0 * width + srcX1) * 3 + c;
+                    int srcIdx10 = (srcY1 * width + srcX0) * 3 + c;
+                    int srcIdx11 = (srcY1 * width + srcX1) * 3 + c;
+                    
+                    float val00 = imageData[srcIdx00];
+                    float val01 = imageData[srcIdx01];
+                    float val10 = imageData[srcIdx10];
+                    float val11 = imageData[srcIdx11];
+                    
+                    float val = val00 * (1-fx) * (1-fy) +
+                               val01 * fx * (1-fy) +
+                               val10 * (1-fx) * fy +
+                               val11 * fx * fy;
+                    
+                    inputData[c * totalPixels + dstIdx] = (val - 127.5f) / 128.0f;
+                }
+            }
+        }
+    }
+
+    // 拷贝到会话输入
     inputTensor_->copyFromHostTensor(&tmpInput);
 
     // 推理
     interpreter_->runSession(session_);
 
-    // RetinaFace 输出：9 个张量（3 个尺度 × 3 个分支）
-    // 根据 MNNConvert 输出顺序：
-    // outputNames = {"448", "471", "494", "451", "474", "497", "454", "477", "500"}
-    // 对应：score1, bbox1, landmark1, score2, bbox2, landmark2, score3, bbox3, landmark3
+    // RetinaFace 输出：9 个张量
+    // [关键修复] MNN 转换后的输出顺序是按类型分组，不是按尺度分组：
+    // score  outputs: 448 (stride=8, 3200), 471 (stride=16, 800), 494 (stride=32, 200)
+    // bbox   outputs: 451 (stride=8, 3200*4), 474 (stride=16, 800*4), 497 (stride=32, 200*4)
+    // landmark outputs: 454 (stride=8, 3200*10), 477 (stride=16, 800*10), 500 (stride=32, 200*10)
 
     std::vector<FaceBox> allFaces;
 
-    // 尺度 1: stride=8, featureSize 从张量形状动态获取
-    // [兼容处理] MNN 可能输出扁平化形状如 [12800, 1, 1, 1] 而非 [1, 2, 80, 80]
+    // 尺度 1: stride=8, featureSize=40 (320/8)
     {
         MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "448");
-        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "471");
-        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "494");
+        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "451");
+        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "454");
         if (!scoreOut || !bboxOut || !landmarkOut) {
             LOGE("Failed to get scale 1 outputs");
         } else {
             int featH = scoreOut->height();
             int featW = scoreOut->width();
             int featureSize;
+            int scoreChannels = scoreOut->channel();
             if (featH > 1 && featW > 1) {
-                // 标准 NCHW 形状: [1, C, H, W]
                 featureSize = featH;
+                scoreChannels = scoreOut->channel();
             } else {
-                // 扁平化形状: 从总元素数推导 featureSize
-                // score 有 2 个通道 (bg + face)
                 int totalElements = scoreOut->elementSize();
-                featureSize = static_cast<int>(std::sqrt(totalElements / 2.0f));
+                if (scoreOut->batch() > 1 && scoreOut->channel() >= 1) {
+                    scoreChannels = scoreOut->channel();
+                    // [关键修复] 扁平化输出: [anchors*2, channels, 1, 1] 或 [anchors, channels, 1, 1]
+                    // 对于 RetinaFace，anchors = featureSize * featureSize * numAnchorsPerLocation
+                    // 每个位置有 2 个 anchor，所以 batch = featureSize^2 * 2 (如果 channel=1)
+                    // 或 batch = featureSize^2 (如果 channel=2，包含 bg+face)
+                    if (scoreChannels == 1) {
+                        // 只有 face score: batch = featureSize^2 * 2
+                        featureSize = static_cast<int>(std::sqrt(scoreOut->batch() / 2.0f));
+                    } else {
+                        // 包含 bg+face: batch = featureSize^2
+                        featureSize = static_cast<int>(std::sqrt(scoreOut->batch()));
+                    }
+                } else {
+                    scoreChannels = 2;
+                    featureSize = static_cast<int>(std::sqrt(totalElements / 2.0f));
+                }
                 if (featureSize <= 0) featureSize = inputSize_ / 8;
             }
-            LOGD("Scale 1 (stride=8): featureSize=%d, scoreShape=[%d,%d,%d,%d]",
-                 featureSize, scoreOut->batch(), scoreOut->channel(),
+            LOGD("Scale 1 (stride=8): featureSize=%d, scoreChannels=%d, scoreShape=[%d,%d,%d,%d]",
+                 featureSize, scoreChannels, scoreOut->batch(), scoreOut->channel(),
                  scoreOut->height(), scoreOut->width());
 
             MNN::Tensor scoreTensor(scoreOut, MNN::Tensor::DimensionType::CAFFE);
@@ -258,31 +394,43 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             if (!scoreData || !bboxData || !landmarkData) {
                 LOGE("Scale 1 host data is null, skipping");
             } else {
-                processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 8, allFaces, confidenceThreshold);
+                processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 8, scoreChannels, allFaces, confidenceThreshold);
             }
         }
     }
 
-    // 尺度 2: stride=16
+    // 尺度 2: stride=16, featureSize=20 (320/16)
     {
-        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "451");
+        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "471");
         MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "474");
-        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "497");
+        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "477");
         if (!scoreOut || !bboxOut || !landmarkOut) {
             LOGE("Failed to get scale 2 outputs");
         } else {
             int featH = scoreOut->height();
             int featW = scoreOut->width();
             int featureSize;
+            int scoreChannels = scoreOut->channel();
             if (featH > 1 && featW > 1) {
                 featureSize = featH;
+                scoreChannels = scoreOut->channel();
             } else {
                 int totalElements = scoreOut->elementSize();
-                featureSize = static_cast<int>(std::sqrt(totalElements / 2.0f));
+                if (scoreOut->batch() > 1 && scoreOut->channel() >= 1) {
+                    scoreChannels = scoreOut->channel();
+                    if (scoreChannels == 1) {
+                        featureSize = static_cast<int>(std::sqrt(scoreOut->batch() / 2.0f));
+                    } else {
+                        featureSize = static_cast<int>(std::sqrt(scoreOut->batch()));
+                    }
+                } else {
+                    scoreChannels = 2;
+                    featureSize = static_cast<int>(std::sqrt(totalElements / 2.0f));
+                }
                 if (featureSize <= 0) featureSize = inputSize_ / 16;
             }
-            LOGD("Scale 2 (stride=16): featureSize=%d, scoreShape=[%d,%d,%d,%d]",
-                 featureSize, scoreOut->batch(), scoreOut->channel(),
+            LOGD("Scale 2 (stride=16): featureSize=%d, scoreChannels=%d, scoreShape=[%d,%d,%d,%d]",
+                 featureSize, scoreChannels, scoreOut->batch(), scoreOut->channel(),
                  scoreOut->height(), scoreOut->width());
 
             MNN::Tensor scoreTensor(scoreOut, MNN::Tensor::DimensionType::CAFFE);
@@ -298,15 +446,15 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             if (!scoreData || !bboxData || !landmarkData) {
                 LOGE("Scale 2 host data is null, skipping");
             } else {
-                processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 16, allFaces, confidenceThreshold);
+                processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 16, scoreChannels, allFaces, confidenceThreshold);
             }
         }
     }
 
-    // 尺度 3: stride=32
+    // 尺度 3: stride=32, featureSize=10 (320/32)
     {
-        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "454");
-        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "477");
+        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "494");
+        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "497");
         MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "500");
         if (!scoreOut || !bboxOut || !landmarkOut) {
             LOGE("Failed to get scale 3 outputs");
@@ -314,15 +462,27 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             int featH = scoreOut->height();
             int featW = scoreOut->width();
             int featureSize;
+            int scoreChannels = scoreOut->channel();
             if (featH > 1 && featW > 1) {
                 featureSize = featH;
+                scoreChannels = scoreOut->channel();
             } else {
                 int totalElements = scoreOut->elementSize();
-                featureSize = static_cast<int>(std::sqrt(totalElements / 2.0f));
+                if (scoreOut->batch() > 1 && scoreOut->channel() >= 1) {
+                    scoreChannels = scoreOut->channel();
+                    if (scoreChannels == 1) {
+                        featureSize = static_cast<int>(std::sqrt(scoreOut->batch() / 2.0f));
+                    } else {
+                        featureSize = static_cast<int>(std::sqrt(scoreOut->batch()));
+                    }
+                } else {
+                    scoreChannels = 2;
+                    featureSize = static_cast<int>(std::sqrt(totalElements / 2.0f));
+                }
                 if (featureSize <= 0) featureSize = inputSize_ / 32;
             }
-            LOGD("Scale 3 (stride=32): featureSize=%d, scoreShape=[%d,%d,%d,%d]",
-                 featureSize, scoreOut->batch(), scoreOut->channel(),
+            LOGD("Scale 3 (stride=32): featureSize=%d, scoreChannels=%d, scoreShape=[%d,%d,%d,%d]",
+                 featureSize, scoreChannels, scoreOut->batch(), scoreOut->channel(),
                  scoreOut->height(), scoreOut->width());
 
             MNN::Tensor scoreTensor(scoreOut, MNN::Tensor::DimensionType::CAFFE);
@@ -338,7 +498,7 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             if (!scoreData || !bboxData || !landmarkData) {
                 LOGE("Scale 3 host data is null, skipping");
             } else {
-                processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 32, allFaces, confidenceThreshold);
+                processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 32, scoreChannels, allFaces, confidenceThreshold);
             }
         }
     }
@@ -356,51 +516,102 @@ void MnnFaceDetector::processRetinaFaceOutput(const float *score,
                                               const float *landmark,
                                               int featureSize,
                                               int stride,
+                                              int scoreChannels,
                                               std::vector<FaceBox> &faces,
                                               float threshold) {
-    // MNN 输出格式：NCHW
-    // score: [1, 2, H, W] -> channel 0=bg, channel 1=face
-    // bbox: [1, 4, H, W] -> dx, dy, dw, dh
-    // landmark: [1, 10, H, W] -> 5 points * 2
+    // MNN 输出格式：NCHW (或扁平化 [anchors, channels, 1, 1])
+    // score: [anchors, C, 1, 1] 或 [1, C, H, W] -> C=1 (face only) 或 C=2 (bg+face)
+    // bbox: [anchors, 4, 1, 1] 或 [1, 4, H, W] -> dx, dy, dw, dh
+    //        [关键修复] MNN 模型从 ONNX 转换而来，bbox 输出格式与 ONNX 一致：
+    //        dx = 从 anchor 中心到 bbox 左边界的距离（已除以 stride）
+    //        dy = 从 anchor 中心到 bbox 上边界的距离（已除以 stride）
+    //        dw = 从 anchor 中心到 bbox 右边界的距离（已除以 stride）
+    //        dh = 从 anchor 中心到 bbox 下边界的距离（已除以 stride）
+    // landmark: [anchors, 10, 1, 1] 或 [1, 10, H, W] -> 5 points * 2
+    //
+    // [关键修复] 每个位置有 2 个 anchor（不同 minSize），所以总 anchor 数 = spatialSize * 2
+    // 输出数据按 [anchor0, anchor1, anchor0, anchor1, ...] 排列
 
     int spatialSize = featureSize * featureSize;
+    int numAnchorsPerLocation = 2;
+    int totalAnchors = spatialSize * numAnchorsPerLocation;
+
+    // [对齐 ONNX] 使用与 InsightFaceDet10GDetector 相同的 minSizes
+    float minSizes[2];
+    if (stride == 8) {
+        minSizes[0] = 16.0f;
+        minSizes[1] = 32.0f;
+    } else if (stride == 16) {
+        minSizes[0] = 64.0f;
+        minSizes[1] = 128.0f;
+    } else { // stride == 32
+        minSizes[0] = 256.0f;
+        minSizes[1] = 512.0f;
+    }
 
     for (int y = 0; y < featureSize; y++) {
         for (int x = 0; x < featureSize; x++) {
-            int idx = y * featureSize + x;
-
-            // face score 在 channel 1
-            float faceScore = score[spatialSize + idx];
-            if (faceScore < threshold) continue;
-
-            // 解码 bbox (channel first)
-            float dx = bbox[idx];
-            float dy = bbox[spatialSize + idx];
-            float dw = bbox[spatialSize * 2 + idx];
-            float dh = bbox[spatialSize * 3 + idx];
-
+            int spatialIdx = y * featureSize + x;
             float cx = (x + 0.5f) * stride;
             float cy = (y + 0.5f) * stride;
 
-            float boxW = std::exp(dw) * stride;
-            float boxH = std::exp(dh) * stride;
+            for (int a = 0; a < numAnchorsPerLocation; a++) {
+                int anchorIdx = spatialIdx * numAnchorsPerLocation + a;
 
-            FaceBox box;
-            box.x1 = cx - boxW * 0.5f;
-            box.y1 = cy - boxH * 0.5f;
-            box.x2 = cx + boxW * 0.5f;
-            box.y2 = cy + boxH * 0.5f;
-            box.confidence = faceScore;
+                // [关键修复] 根据实际的 scoreChannels 读取 face score
+                float faceScore;
+                if (scoreChannels == 1) {
+                    // MNN 转换后的模型: 只有 face score
+                    faceScore = score[anchorIdx];
+                } else {
+                    // 原始 ONNX 格式: channel 0=bg, channel 1=face
+                    faceScore = score[totalAnchors + anchorIdx];
+                }
+                
+                if (faceScore < threshold) continue;
 
-            // 解码 5 点关键点
-            for (int i = 0; i < 5; i++) {
-                float lx = landmark[spatialSize * (i * 2) + idx];
-                float ly = landmark[spatialSize * (i * 2 + 1) + idx];
-                box.landmarks[i * 2] = cx + lx * stride;
-                box.landmarks[i * 2 + 1] = cy + ly * stride;
+                // [关键修复] MNN NCHW 布局: [totalAnchors, 4, 1, 1]
+                // 线性索引 = anchorIdx * 4 + channel
+                // dx = bbox[anchorIdx * 4 + 0], dy = bbox[anchorIdx * 4 + 1]
+                // dw = bbox[anchorIdx * 4 + 2], dh = bbox[anchorIdx * 4 + 3]
+                float dx = bbox[anchorIdx * 4 + 0];
+                float dy = bbox[anchorIdx * 4 + 1];
+                float dw = bbox[anchorIdx * 4 + 2];
+                float dh = bbox[anchorIdx * 4 + 3];
+
+                // [对齐 ONNX] x1 = cx - dx * stride, x2 = cx + dw * stride
+                float x1 = cx - dx * stride;
+                float y1 = cy - dy * stride;
+                float x2 = cx + dw * stride;
+                float y2 = cy + dh * stride;
+
+                // [关键修复] 限制坐标在有效范围内
+                float maxSize = static_cast<float>(inputSize_);
+                x1 = std::max(0.0f, std::min(x1, maxSize));
+                y1 = std::max(0.0f, std::min(y1, maxSize));
+                x2 = std::max(0.0f, std::min(x2, maxSize));
+                y2 = std::max(0.0f, std::min(y2, maxSize));
+
+                if (x1 >= x2 || y1 >= y2) continue;
+
+                FaceBox box;
+                box.x1 = x1;
+                box.y1 = y1;
+                box.x2 = x2;
+                box.y2 = y2;
+                box.confidence = faceScore;
+                            
+                // [关键修复] landmark NCHW 布局: [totalAnchors, 10, 1, 1]
+                // 线性索引 = anchorIdx * 10 + channel
+                for (int i = 0; i < 5; i++) {
+                    float lx = landmark[anchorIdx * 10 + i * 2];
+                    float ly = landmark[anchorIdx * 10 + i * 2 + 1];
+                    box.landmarks[i * 2] = cx + lx * stride;
+                    box.landmarks[i * 2 + 1] = cy + ly * stride;
+                }
+
+                faces.push_back(box);
             }
-
-            faces.push_back(box);
         }
     }
 }

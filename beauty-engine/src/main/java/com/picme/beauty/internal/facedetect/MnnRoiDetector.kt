@@ -23,8 +23,9 @@ class MnnRoiDetector(
         private const val TAG = "PicMe:MnnRoi"
         private const val MODEL_ASSET_PATH = "insightface/det_10g.mnn"
         private const val MODEL_FILE_NAME = "mnn_det_10g.mnn"
-        private const val INPUT_SIZE = 320  // [优化] 从 640 降低到 320，提升推理速度
+        private const val INPUT_SIZE = 640  // [对齐 ONNX] 使用与 ONNX 相同的输入尺寸，确保检测结果一致
         private const val CONFIDENCE_THRESHOLD = 0.5f
+        private const val ROI_EXPAND_RATIO = 1.2f  // [对齐 ONNX] ROI 扩展比例，与 InsightFaceDet10G 一致
 
         // RetinaFace 9 个输出层名称（与 MNNConvert 输出一致）
         private val OUTPUT_NAMES = arrayOf(
@@ -69,7 +70,7 @@ class MnnRoiDetector(
             detector = MnnFaceDetector.create(
                 modelPath = modelFile.absolutePath,
                 inputSize = INPUT_SIZE,
-                useGpu = true,
+                useGpu = requireGpu,
                 inputName = "input.1",
                 outputNames = OUTPUT_NAMES
             )
@@ -124,29 +125,38 @@ class MnnRoiDetector(
 
             // result: [x1, y1, x2, y2, score, landmarks(10)]
             // [关键修复] MNN native 层输出的是 320x320 letterbox 空间的坐标
-            // 需要逆向 letterbox 变换映射回原图尺寸 (355x640)
-            val scale = INPUT_SIZE.toFloat() / maxOf(bitmap.width, bitmap.height)
-            val scaledW = (bitmap.width * scale).toInt()
-            val scaledH = (bitmap.height * scale).toInt()
-            val leftOffset = (INPUT_SIZE - scaledW) / 2f
-            val topOffset = (INPUT_SIZE - scaledH) / 2f
+            // 需要逆向 letterbox 变换映射回原图尺寸
+            val origW = bitmap.width.toFloat()
+            val origH = bitmap.height.toFloat()
+            val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
+            val scaledW = (origW * scale).toInt()
+            val scaledH = (origH * scale).toInt()
+            val padLeft = (INPUT_SIZE - scaledW) / 2f
+            val padTop = (INPUT_SIZE - scaledH) / 2f
             
-            Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, offset=($leftOffset,$topOffset)")
+            Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
             Log.d(TAG, "[Diag] Raw MNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
             
-            // 1. 减去 letterbox 偏移，得到在缩放图中的坐标
-            val x1InScaled = (result[0] - leftOffset).coerceAtLeast(0f)
-            val y1InScaled = (result[1] - topOffset).coerceAtLeast(0f)
-            val x2InScaled = (result[2] - leftOffset).coerceAtMost(scaledW.toFloat())
-            val y2InScaled = (result[3] - topOffset).coerceAtMost(scaledH.toFloat())
+            // [对齐 ONNX] 1. 减去 letterbox padding，再除以缩放比例，映射回原图
+            var mappedX1 = ((result[0] - padLeft) / scale)
+            var mappedY1 = ((result[1] - padTop) / scale)
+            var mappedX2 = ((result[2] - padLeft) / scale)
+            var mappedY2 = ((result[3] - padTop) / scale)
             
-            // 2. 除以缩放比例，映射回原图
-            val roi = RectF(
-                x1InScaled / scale,
-                y1InScaled / scale,
-                x2InScaled / scale,
-                y2InScaled / scale
-            )
+            // [对齐 ONNX] 2. 放大 ROI 区域，以包含更多面部上下文
+            val centerX = (mappedX1 + mappedX2) / 2f
+            val centerY = (mappedY1 + mappedY2) / 2f
+            val width = mappedX2 - mappedX1
+            val height = mappedY2 - mappedY1
+            val newWidth = width * ROI_EXPAND_RATIO
+            val newHeight = height * ROI_EXPAND_RATIO
+            
+            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+            
+            val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
             
             Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
 

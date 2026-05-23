@@ -90,6 +90,7 @@ private:
                                  const float *landmark,
                                  int featureSize,
                                  int stride,
+                                 int scoreChannels,
                                  std::vector<FaceBox> &faces,
                                  float threshold);
     float calculateIoU(const FaceBox &a, const FaceBox &b);

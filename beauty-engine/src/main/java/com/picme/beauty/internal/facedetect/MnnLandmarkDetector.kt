@@ -2,6 +2,9 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Rect
 import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
@@ -88,7 +91,7 @@ class MnnLandmarkDetector(
     override fun detectLandmarks(bitmap: Bitmap, lensFacing: Int, roi: RectF?): FloatArray? {
         // [优化] 懒加载初始化
         ensureInitialized()
-        
+
         val totalStart = SystemClock.elapsedRealtime()
         val det = detector
 
@@ -99,13 +102,13 @@ class MnnLandmarkDetector(
 
         return try {
             val prepStart = SystemClock.elapsedRealtime()
-            val inputBitmap = prepareInputBitmap(bitmap, roi)
+            val cropResult = prepareInputBitmap(bitmap, roi)
             val prepElapsed = SystemClock.elapsedRealtime() - prepStart
 
-            Log.d(TAG, "[Perf] MnnLandmark START: original=${bitmap.width}x${bitmap.height}, input=${inputBitmap.width}x${inputBitmap.height}, roi=$roi")
+            Log.d(TAG, "[Perf] MnnLandmark START: original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
 
             val inferStart = SystemClock.elapsedRealtime()
-            val result = det.detect(inputBitmap)
+            val result = det.detect(cropResult.bitmap)
             val inferElapsed = SystemClock.elapsedRealtime() - inferStart
 
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
@@ -115,8 +118,8 @@ class MnnLandmarkDetector(
                 return null
             }
 
-            // MNN 输出已经是统一 106 格式，直接返回（不需要 InsightFaceAdapter 的重排）
-            val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, roi)
+            // 使用逆变换矩阵将模型输出坐标映射回原始图像
+            val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
 
             Log.d(TAG, "[Perf] MnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
             landmarks
@@ -127,18 +130,60 @@ class MnnLandmarkDetector(
     }
 
     /**
-     * 准备输入 Bitmap：裁剪 ROI 并缩放到 INPUT_SIZE
+     * 裁剪信息，包含裁剪后的 Bitmap 和逆变换矩阵
      */
-    private fun prepareInputBitmap(source: Bitmap, roi: RectF?): Bitmap {
-        val crop = if (roi != null) {
-            cropFaceRegion(source, roi)
+    private data class CropResult(
+        val bitmap: Bitmap,
+        val inverseTransform: Matrix
+    )
+
+    /**
+     * 准备输入 Bitmap：裁剪 ROI 并缩放到 INPUT_SIZE
+     * 使用与 InsightFace2D106Detector 相同的变换逻辑：
+     * - 以人脸中心为锚点缩放
+     * - 将人脸中心对齐到 INPUT_SIZE/2
+     * - 计算逆变换矩阵用于坐标映射回原始图像
+     */
+    private fun prepareInputBitmap(source: Bitmap, roi: RectF?): CropResult {
+        // 计算有效的人脸边界框（与 ONNX 版本的 rectBounds 对应）
+        val faceBounds = if (roi != null) {
+            android.graphics.Rect(
+                roi.left.toInt().coerceIn(0, source.width),
+                roi.top.toInt().coerceIn(0, source.height),
+                roi.right.toInt().coerceIn(0, source.width),
+                roi.bottom.toInt().coerceIn(0, source.height)
+            )
         } else {
-            source
+            // 无 ROI 时使用全图
+            android.graphics.Rect(0, 0, source.width, source.height)
         }
 
-        if (crop.width == INPUT_SIZE && crop.height == INPUT_SIZE) {
-            return crop
+        val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
+        val faceHeight = faceBounds.height().toFloat().coerceAtLeast(1f)
+        val looseSize = maxOf(faceWidth, faceHeight)
+        if (looseSize <= 0f) {
+            // 回退：直接返回全图缩放
+            return buildFallbackCrop(source)
         }
+
+        val centerX = faceBounds.exactCenterX()
+        val centerY = faceBounds.exactCenterY()
+        val inputScale = INPUT_SIZE / looseSize
+
+        // [关键修复] 使用与 ONNX 版本完全相同的变换矩阵构造方式
+        // 变换公式：dst = inputScale * src + (INPUT_SIZE/2 - center * inputScale)
+        // 即将人脸中心 (centerX, centerY) 映射到画布中心 (INPUT_SIZE/2, INPUT_SIZE/2)
+        val transformMatrix = Matrix()
+        transformMatrix.setValues(
+            floatArrayOf(
+                inputScale, 0f, INPUT_SIZE / 2f - centerX * inputScale,
+                0f, inputScale, INPUT_SIZE / 2f - centerY * inputScale,
+                0f, 0f, 1f
+            )
+        )
+
+        val inverseMatrix = Matrix()
+        transformMatrix.invert(inverseMatrix)
 
         var scaled = reusableScaledBitmap
         if (scaled == null || scaled.isRecycled || scaled.width != INPUT_SIZE || scaled.height != INPUT_SIZE) {
@@ -147,82 +192,89 @@ class MnnLandmarkDetector(
             reusableScaledBitmap = scaled
         }
 
-        val canvas = android.graphics.Canvas(scaled)
+        val canvas = Canvas(scaled)
         canvas.drawColor(android.graphics.Color.BLACK)
-        val matrix = android.graphics.Matrix()
-        val scale = INPUT_SIZE.toFloat() / maxOf(crop.width, crop.height)
-        val scaledW = (crop.width * scale).toInt()
-        val scaledH = (crop.height * scale).toInt()
+        canvas.drawBitmap(source, transformMatrix, null)
+
+        return CropResult(scaled, inverseMatrix)
+    }
+
+    /**
+     * 回退裁剪：当 ROI 无效时，使用全图居中缩放
+     */
+    private fun buildFallbackCrop(source: Bitmap): CropResult {
+        val sourceWidth = source.width.toFloat()
+        val sourceHeight = source.height.toFloat()
+        val scale = INPUT_SIZE / maxOf(sourceWidth, sourceHeight)
+        val scaledW = sourceWidth * scale
+        val scaledH = sourceHeight * scale
         val left = (INPUT_SIZE - scaledW) / 2f
         val top = (INPUT_SIZE - scaledH) / 2f
-        matrix.setScale(scale, scale)
-        matrix.postTranslate(left, top)
-        canvas.drawBitmap(crop, matrix, null)
 
-        if (crop !== source) {
-            crop.recycle()
+        val transformMatrix = Matrix()
+        transformMatrix.setValues(
+            floatArrayOf(
+                scale, 0f, left,
+                0f, scale, top,
+                0f, 0f, 1f
+            )
+        )
+
+        val inverseMatrix = Matrix()
+        transformMatrix.invert(inverseMatrix)
+
+        var scaled = reusableScaledBitmap
+        if (scaled == null || scaled.isRecycled || scaled.width != INPUT_SIZE || scaled.height != INPUT_SIZE) {
+            scaled?.recycle()
+            scaled = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
+            reusableScaledBitmap = scaled
         }
 
-        return scaled
+        val canvas = Canvas(scaled)
+        canvas.drawColor(android.graphics.Color.BLACK)
+        canvas.drawBitmap(source, transformMatrix, null)
+
+        return CropResult(scaled, inverseMatrix)
     }
 
     /**
      * 解析 MNN 输出的 106 点关键点
+     * 使用逆变换矩阵将模型坐标系 [-1, 1] 映射回原始图像坐标系
+     * 
+     * 与 InsightFace2D106Detector 保持一致：
+     * 1. 模型输出 [-1, 1] → INPUT_SIZE 像素坐标
+     * 2. 逆变换矩阵映射回原始图像空间
+     * 3. 归一化到 [0, 1]
      */
     private fun parseLandmarks(
         output: FloatArray,
         bitmapWidth: Int,
         bitmapHeight: Int,
-        roi: RectF?
+        inverseTransform: Matrix
     ): FloatArray {
         val points = FloatArray(POINT_COUNT * 2)
         val outputPoints = minOf(output.size / 2, POINT_COUNT)
+        val halfInputSize = INPUT_SIZE / 2f
+        val mappedPoint = floatArrayOf(0f, 0f)
 
         for (i in 0 until outputPoints) {
-            var x = output[i * 2]
-            var y = output[i * 2 + 1]
+            val x = output[i * 2]
+            val y = output[i * 2 + 1]
 
-            // 如果输出是 [-1, 1] 范围，转换到 [0, 1]
-            if (x < 0f || x > 1f) {
-                x = (x + 1f) * 0.5f
-            }
-            if (y < 0f || y > 1f) {
-                y = (y + 1f) * 0.5f
-            }
+            // 模型输出 [-1, 1] → INPUT_SIZE 像素坐标
+            // 与 ONNX 版本完全一致：(value + 1) * halfInputSize
+            mappedPoint[0] = (x + 1f) * halfInputSize
+            mappedPoint[1] = (y + 1f) * halfInputSize
 
-            // 如果有 ROI，将相对坐标转为全图坐标
-            if (roi != null) {
-                x = roi.left / bitmapWidth + x * (roi.width() / bitmapWidth)
-                y = roi.top / bitmapHeight + y * (roi.height() / bitmapHeight)
-            }
+            // 使用逆变换矩阵映射回原始图像坐标
+            inverseTransform.mapPoints(mappedPoint)
 
-            points[i * 2] = x.coerceIn(0f, 1f)
-            points[i * 2 + 1] = y.coerceIn(0f, 1f)
+            // 归一化到 [0, 1]
+            points[i * 2] = (mappedPoint[0] / bitmapWidth).coerceIn(0f, 1f)
+            points[i * 2 + 1] = (mappedPoint[1] / bitmapHeight).coerceIn(0f, 1f)
         }
 
         return points
-    }
-
-    private fun cropFaceRegion(bitmap: Bitmap, roi: RectF): Bitmap {
-        // 严格验证 ROI 有效性
-        val left = roi.left.toInt().coerceIn(0, maxOf(0, bitmap.width - 1))
-        val top = roi.top.toInt().coerceIn(0, maxOf(0, bitmap.height - 1))
-        
-        // 计算有效宽度高度，确保至少为 1
-        val maxWidth = maxOf(1, bitmap.width - left)
-        val maxHeight = maxOf(1, bitmap.height - top)
-        
-        val width = roi.width().toInt().coerceIn(1, maxWidth)
-        val height = roi.height().toInt().coerceIn(1, maxHeight)
-        
-        // 再次验证 ROI 有效性，避免创建失败
-        if (width <= 0 || height <= 0 || left + width > bitmap.width || top + height > bitmap.height) {
-            Log.w(TAG, "Invalid ROI detected: left=$left, top=$top, width=$width, height=$height, bitmap=${bitmap.width}x${bitmap.height}, roi=$roi")
-            // 返回全图缩放到 INPUT_SIZE
-            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height)
-        }
-        
-        return Bitmap.createBitmap(bitmap, left, top, width, height)
     }
 
     override fun release() {
