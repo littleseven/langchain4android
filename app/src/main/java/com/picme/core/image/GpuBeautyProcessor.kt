@@ -31,33 +31,33 @@ import kotlin.math.sqrt
 // context 保留以维持构造函数签名兼容性；未来如需 Canvas 硬件加速或其他平台 API 仍可使用
 @Suppress("UnusedPrivateProperty")
 class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
-    
+
     companion object {
         private const val TAG = "PicMe:ImageProc"
     }
-    
+
     override suspend fun applySmoothing(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
                 if (strength <= 0f || faces.isEmpty()) {
                     return@withContext bitmap
                 }
-                
+
                 // [修复] 使用高斯模糊 + 人脸 Mask 实现磨皮，更接近预览的双边滤波效果
                 // 实时预览磨皮由 beauty-engine 的双边滤波 Shader 实现
                 val ratio = strength.coerceIn(0f, 100f) / 100f
-                
+
                 // 1. 创建模糊层（高斯模糊近似双边滤波）
                 val blurRadius = (5f + ratio * 15f).toInt() // 5-20px 模糊半径
                 val downsampleDivisor = (4f - ratio * 2f).coerceIn(2f, 4f)
                 val downscaledWidth = (bitmap.width / downsampleDivisor).toInt().coerceAtLeast(1)
                 val downscaledHeight = (bitmap.height / downsampleDivisor).toInt().coerceAtLeast(1)
-                
+
                 // 缩小 -> 模糊 -> 放大，模拟高斯模糊
                 val downscaled = Bitmap.createScaledBitmap(bitmap, downscaledWidth, downscaledHeight, true)
                 val blurLayer = Bitmap.createScaledBitmap(downscaled, bitmap.width, bitmap.height, true)
                 downscaled.recycle()
-                
+
                 // 2. 创建人脸蒙版（只对人脸区域应用磨皮）
                 val maskBitmap = createFaceMaskBitmap(
                     width = bitmap.width,
@@ -69,35 +69,35 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     blurLayer.recycle()
                     return@withContext bitmap
                 }
-                
+
                 // 3. 合并：原图 + 模糊层 * 蒙版 * 强度
                 val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 val canvas = Canvas(output)
-                
+
                 // 先画原图
                 canvas.drawBitmap(bitmap, 0f, 0f, null)
-                
+
                 // 再画磨皮效果（只在人脸区域）
                 val alpha = (120 + ratio * 135).toInt().coerceIn(0, 255) // 120-255
                 val blendPaint = Paint().apply {
                     this.alpha = alpha
                     xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_OVER)
                 }
-                
+
                 // 使用蒙版只覆盖人脸区域
                 val maskedCanvas = Canvas(blurLayer)
                 val maskPaint = Paint().apply {
                     xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
                 }
                 maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskPaint)
-                
+
                 // 绘制磨皮层
                 canvas.drawBitmap(blurLayer, 0f, 0f, blendPaint)
-                
+
                 // 清理
                 blurLayer.recycle()
                 maskBitmap.recycle()
-                
+
                 Logger.d(TAG, "Smoothing applied (blur + mask): strength=$strength, faces=${faces.size}")
                 output
             } catch (e: Exception) {
@@ -106,7 +106,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     /**
      * 创建人脸蒙版 Bitmap
      */
@@ -125,7 +125,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             color = 0xFFFFFFFF.toInt()
             maskFilter = android.graphics.BlurMaskFilter(featherRadius, android.graphics.BlurMaskFilter.Blur.NORMAL)
         }
-        
+
         var regionCount = 0
         faces.forEach { face ->
             val contourPoints = face.getContour(FaceContour.FACE)?.points
@@ -160,7 +160,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 }
             }
         }
-        
+
         return if (regionCount == 0) {
             Logger.d(TAG, "$logPrefix mask skipped: no face regions")
             maskBitmap.recycle()
@@ -169,17 +169,17 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             maskBitmap
         }
     }
-    
+
     override suspend fun applyWhitening(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
                 if (strength <= 0f || faces.isEmpty()) {
                     return@withContext bitmap
                 }
-                
+
                 // [修复] 使用 ColorMatrix + 人脸 Mask 实现局部美白，与预览一致
                 val ratio = strength.coerceIn(0f, 100f) / 100f
-                
+
                 // 1. 创建美白层
                 val brightness = ratio * 50f // 最大 +50 亮度
                 val colorMatrix = ColorMatrix().apply {
@@ -190,7 +190,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         0f, 0f, 0f, 1f, 0f
                     ))
                 }
-                
+
                 val whitenedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 val canvas = Canvas(whitenedBitmap)
                 val paint = Paint().apply {
@@ -198,7 +198,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     isAntiAlias = true
                 }
                 canvas.drawBitmap(bitmap, 0f, 0f, paint)
-                
+
                 // 2. 创建人脸蒙版
                 val maskBitmap = createFaceMaskBitmap(
                     width = bitmap.width,
@@ -210,35 +210,35 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     whitenedBitmap.recycle()
                     return@withContext bitmap
                 }
-                
+
                 // 3. 合并：原图 + 美白层 * 蒙版
                 val output = bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 val outputCanvas = Canvas(output)
-                
+
                 // 先画原图
                 outputCanvas.drawBitmap(bitmap, 0f, 0f, null)
-                
+
                 // 再画美白效果（只在人脸区域）
                 val alpha = (130 + ratio * 100f).toInt().coerceIn(0, 255) // 130-230
                 val blendPaint = Paint().apply {
                     this.alpha = alpha
                     xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_OVER)
                 }
-                
+
                 // 使用蒙版只覆盖人脸区域
                 val maskedCanvas = Canvas(whitenedBitmap)
                 val maskPaint = Paint().apply {
                     xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
                 }
                 maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskPaint)
-                
+
                 // 绘制美白层
                 outputCanvas.drawBitmap(whitenedBitmap, 0f, 0f, blendPaint)
-                
+
                 // 清理
                 whitenedBitmap.recycle()
                 maskBitmap.recycle()
-                
+
                 Logger.d(TAG, "Whitening applied (masked): strength=$strength, faces=${faces.size}")
                 output
             } catch (e: Exception) {
@@ -247,13 +247,13 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     override suspend fun applySlimFace(bitmap: Bitmap, strength: Float, faces: List<Face>, isFrontCamera: Boolean): Bitmap {
         return withContext(Dispatchers.Default) {
             if (faces.isEmpty() || strength == 0f) {
                 return@withContext bitmap
             }
-            
+
             try {
                 // [修复] 使用与预览（Shader）一致的瘦脸算法：沿眼轴方向水平收缩
                 // 强度范围：-50~+50（负值为丰满，正值为瘦脸）
@@ -265,7 +265,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 val count = (meshWidth + 1) * (meshHeight + 1)
                 val verts = FloatArray(count * 2)
                 val orig = FloatArray(count * 2)
-                
+
                 // 初始化网格顶点
                 var index = 0
                 for (y in 0..meshHeight) {
@@ -279,24 +279,24 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         index++
                     }
                 }
-                
+
                 // 对每个人脸应用瘦脸变形
                 faces.forEach { face ->
                     val bounds = face.boundingBox
                     val centerX = bounds.centerX().toFloat()
                     val centerY = bounds.centerY().toFloat()
-                    
+
                     // 获取双眼位置计算眼轴方向
                     val leftEyeRaw = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
                     val rightEyeRaw = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
-                    
+
                     // [修复] 前置摄像头需要反转 eye 顺序以匹配预览坐标系
                     val (leftEye, rightEye) = if (isFrontCamera) {
                         Pair(rightEyeRaw, leftEyeRaw)
                     } else {
                         Pair(leftEyeRaw, rightEyeRaw)
                     }
-                    
+
                     // 计算眼轴方向（归一化）
                     val eyeAxisX: Float
                     val eyeAxisY: Float
@@ -315,20 +315,20 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         eyeAxisX = 1f
                         eyeAxisY = 0f
                     }
-                    
+
                     // 瘦脸影响半径：脸部宽度的 75%
                     val slimRadius = bounds.width() * 0.75f
-                    
+
                     // 应用瘦脸变形（与 Shader 一致：沿眼轴方向水平收缩）
                     for (i in 0 until count) {
                         val vx = orig[i * 2 + 0]
                         val vy = orig[i * 2 + 1]
-                        
+
                         // 计算到人脸中心的距离
                         val dx = vx - centerX
                         val dy = vy - centerY
                         val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                        
+
                         if (dist < slimRadius) {
                             // 与 Shader 一致的计算：
                             // Shader 链路: slimFace/50*1.35 -> intensity -> intensity*0.45*percent^2
@@ -336,10 +336,10 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                             val percent = 1f - dist / slimRadius
                             val intensityNorm = (strength / 50f) * 1.35f * 0.45f  // [修复] 完整链路：1.35 * 0.45
                             val str = intensityNorm * percent * percent
-                            
+
                             // 计算在眼轴上的投影
                             val axisOffset = (dx * eyeAxisX + dy * eyeAxisY) / slimRadius
-                            
+
                             // 沿眼轴方向偏移（注意：+ 表示瘦脸，- 表示丰脸）
                             // 经测试，CPU 需要与 Shader 相反的符号
                             verts[i * 2 + 0] += eyeAxisX * axisOffset * str * slimRadius
@@ -347,13 +347,13 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         }
                     }
                 }
-                
+
                 // 应用网格变形
                 val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(outputBitmap)
                 canvas.drawBitmapMesh(sourceBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
                 sourceBitmap.recycle()
-                
+
                 Logger.d(TAG, "Slim face applied (aligned with preview): strength=$strength, faces=${faces.size}")
                 outputBitmap
             } catch (e: Exception) {
@@ -362,25 +362,25 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     override suspend fun applyBigEyes(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {
         return withContext(Dispatchers.Default) {
             if (faces.isEmpty() || strength == 0f) {
                 return@withContext bitmap
             }
-            
+
             try {
                 // 使用基于人脸 landmarks 的眼睛区域放大算法
                 // 强度范围：0-100（放大系数 1.0 - 1.3）
                 val sourceBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
-                
+
                 // 创建网格变形系统
                 val meshWidth = 20
                 val meshHeight = 20
                 val count = (meshWidth + 1) * (meshHeight + 1)
                 val verts = FloatArray(count * 2)
                 val orig = FloatArray(count * 2)
-                
+
                 // 初始化网格顶点
                 var index = 0
                 for (y in 0..meshHeight) {
@@ -394,7 +394,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         index++
                     }
                 }
-                
+
                 // 对每个人脸应用眼睛放大
                 faces.forEach { face ->
                     val leftEye = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
@@ -402,18 +402,18 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     val bounds = face.boundingBox
                     // 眼睛影响半径：脸部宽度的 20%
                     val eyeRadius = bounds.width() * 0.2f
-                    
+
                     // 应用大眼变形
                     for (i in 0 until count) {
                         val vx = orig[i * 2 + 0]
                         val vy = orig[i * 2 + 1]
-                        
+
                         // 对每只眼睛进行径向放大
                         listOfNotNull(leftEye, rightEye).forEach { eye ->
                             val dx = vx - eye.x
                             val dy = vy - eye.y
                             val dist = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-                            
+
                             if (dist < eyeRadius) {
                                 // 强度映射：0-100 -> 变形系数 (0.0 - 0.4)
                                 val push = (strength / 100f) * 0.4f * (1f - dist / eyeRadius)
@@ -424,13 +424,13 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         }
                     }
                 }
-                
+
                 // 应用网格变形，避免在同一位图上读写导致裂纹伪影
                 val outputBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(outputBitmap)
                 canvas.drawBitmapMesh(sourceBitmap, meshWidth, meshHeight, verts, 0, null, 0, null)
                 sourceBitmap.recycle()
-                
+
                 Logger.d(TAG, "Big eyes applied: strength=$strength, faces=${faces.size}")
                 outputBitmap
             } catch (e: Exception) {
@@ -439,7 +439,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     override suspend fun applyLipColor(
         bitmap: Bitmap,
         strength: Float,
@@ -455,7 +455,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     private data class LipRegion(
         val centerX: Float,
         val centerY: Float,
@@ -677,7 +677,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         val targetB = targetColor and 0xFF
 
         var processedPixelCount = 0
-        
+
         faces.forEach { face ->
             val region = resolveLipRegion(face) ?: return@forEach
             val lipContours = extractLipContours(face)
@@ -767,7 +767,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
         result.setPixels(pixels, 0, width, 0, 0, width, height)
         return result
     }
-    
+
     override suspend fun applyBlush(bitmap: Bitmap, strength: Float, colorFamily: Int): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
@@ -788,15 +788,15 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         0f, 0f, 0f, 1f, 0f
                     ))
                 }
-                
+
                 val paint = Paint().apply {
                     colorFilter = ColorMatrixColorFilter(colorMatrix)
                     isAntiAlias = true
                 }
-                
+
                 val canvas = android.graphics.Canvas(mutableBitmap)
                 canvas.drawBitmap(bitmap, 0f, 0f, paint)
-                
+
                 mutableBitmap
             } catch (e: Exception) {
                 Logger.e(TAG, "Blush error", e)
@@ -804,15 +804,15 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     override suspend fun applyEyebrow(bitmap: Bitmap, strength: Float): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
+
                 // 使用 ColorMatrix 增强眉毛对比度
                 val intensity = (strength / 100f) * 0.5f
-                
+
                 val colorMatrix = ColorMatrix().apply {
                     set(floatArrayOf(
                         1f - intensity * 0.2f, 0f, 0f, 0f, -intensity * 20f,
@@ -821,15 +821,15 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                         0f, 0f, 0f, 1f, 0f
                     ))
                 }
-                
+
                 val paint = Paint().apply {
                     colorFilter = ColorMatrixColorFilter(colorMatrix)
                     isAntiAlias = true
                 }
-                
+
                 val canvas = android.graphics.Canvas(mutableBitmap)
                 canvas.drawBitmap(bitmap, 0f, 0f, paint)
-                
+
                 mutableBitmap
             } catch (e: Exception) {
                 Logger.e(TAG, "Eyebrow error", e)
@@ -837,22 +837,22 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     override suspend fun applyBodyEnhancement(bitmap: Bitmap, strength: Float): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
                 // 使用基于人体关键点检测的上半身拉伸算法
                 // 强度范围：-30~+30（拉伸系数 0.85 - 1.15）
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
+
                 // 上半身目标区域（25% - 50% 高度）
                 val upperBodyStart = (bitmap.height * 0.25).toInt()
                 val upperBodyEnd = (bitmap.height * 0.5).toInt()
                 val upperBodyHeight = upperBodyEnd - upperBodyStart
-                
+
                 // 强度映射：-30~+30 -> 纵向拉伸系数 (0.85 - 1.15)
                 val stretchFactor = 1f + (strength / 30f) * 0.15
-                
+
                 // 创建拉伸区域的新 bitmap
                 val stretchedRegion = Bitmap.createBitmap(
                     mutableBitmap,
@@ -861,7 +861,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     bitmap.width,
                     upperBodyHeight
                 )
-                
+
                 val newHeight = (upperBodyHeight * stretchFactor).toInt()
                 val scaledRegion = Bitmap.createScaledBitmap(
                     stretchedRegion,
@@ -869,14 +869,14 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     newHeight,
                     true
                 )
-                
+
                 // 将拉伸后的区域贴回原图
                 val canvas = Canvas(mutableBitmap)
                 canvas.drawBitmap(scaledRegion, 0f, upperBodyStart.toFloat(), null)
-                
+
                 stretchedRegion.recycle()
                 scaledRegion.recycle()
-                
+
                 Logger.d(TAG, "Body enhancement applied: strength=$strength, stretch=$stretchFactor")
                 mutableBitmap
             } catch (e: Exception) {
@@ -885,21 +885,21 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     override suspend fun applyLegExtension(bitmap: Bitmap, strength: Float): Bitmap {
         return withContext(Dispatchers.Default) {
             try {
                 // 使用基于人体关键点检测的下半身拉伸算法
                 // 强度范围：0-50（拉伸系数 1.0 - 1.15）
                 val mutableBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                
+
                 // 下半身目标区域（50% - 100% 高度）
                 val lowerBodyStart = (bitmap.height * 0.5).toInt()
                 val lowerBodyHeight = bitmap.height - lowerBodyStart
-                
+
                 // 强度映射：0-50 -> 纵向拉伸系数 (1.0 - 1.15)
                 val stretchFactor = 1f + (strength / 50f) * 0.15
-                
+
                 // 创建拉伸区域的新 bitmap
                 val lowerBodyRegion = Bitmap.createBitmap(
                     mutableBitmap,
@@ -908,7 +908,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     bitmap.width,
                     lowerBodyHeight
                 )
-                
+
                 val newHeight = (lowerBodyHeight * stretchFactor).toInt()
                 val scaledRegion = Bitmap.createScaledBitmap(
                     lowerBodyRegion,
@@ -916,17 +916,17 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     newHeight,
                     true
                 )
-                
+
                 // 计算需要裁剪的底部超出部分
                 val cropTop = (scaledRegion.height - lowerBodyHeight).coerceAtLeast(0)
-                
+
                 // 创建最终 bitmap（保持原始尺寸）
                 val finalBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(finalBitmap)
-                
+
                 // 绘制上半部分（不变）
                 canvas.drawBitmap(mutableBitmap, 0f, 0f, null)
-                
+
                 // 绘制拉伸后的下半部分（裁剪掉超出部分）
                 canvas.drawBitmap(
                     scaledRegion,
@@ -934,11 +934,11 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     lowerBodyStart.toFloat(),
                     Paint()
                 )
-                
+
                 lowerBodyRegion.recycle()
                 scaledRegion.recycle()
                 mutableBitmap.recycle()
-                
+
                 Logger.d(TAG, "Leg extension applied: strength=$strength, stretch=$stretchFactor")
                 finalBitmap
             } catch (e: Exception) {
@@ -947,7 +947,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             }
         }
     }
-    
+
     /**
      * 清理资源
      */

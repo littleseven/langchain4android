@@ -12,12 +12,16 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InsightFaceLandmarkDetectorType
-import com.picme.domain.model.InsightFaceRoiDetectorType
+import com.picme.domain.model.InferenceDevicePreference
+import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
+import com.picme.core.common.Logger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
@@ -45,8 +49,15 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
         val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
         val DEBUG_SHADER_MODE = intPreferencesKey("debug_shader_mode")
-        val INSIGHTFACE_ROI_DETECTOR_TYPE = stringPreferencesKey("insightface_roi_detector_type")
-        val INSIGHTFACE_LANDMARK_DETECTOR_TYPE = stringPreferencesKey("insightface_landmark_detector_type")
+
+        // 阶段独立配置（ROI / Landmark）
+        val ROI_MODEL_TYPE = stringPreferencesKey("roi_model_type")
+        val ROI_ENGINE_TYPE = stringPreferencesKey("roi_engine_type")
+        val ROI_DEVICE_PREFERENCE = stringPreferencesKey("roi_device_preference")
+
+        val LANDMARK_MODEL_TYPE = stringPreferencesKey("landmark_model_type")
+        val LANDMARK_ENGINE_TYPE = stringPreferencesKey("landmark_engine_type")
+        val LANDMARK_DEVICE_PREFERENCE = stringPreferencesKey("landmark_device_preference")
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -325,46 +336,91 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
     }
 
-    // ── InsightFace 流水线配置 ─────────────────────────────
-    override val insightFaceRoiDetectorTypeFlow: Flow<InsightFaceRoiDetectorType> = context.dataStore.data
+    // ── 阶段独立配置（ROI / Landmark）────────────────────────
+
+    private fun parseStageConfig(
+        stage: DetectionStage,
+        modelTypeName: String?,
+        engineTypeName: String?,
+        devicePreferenceName: String?
+    ): StageConfig {
+        val defaultConfig = when (stage) {
+            DetectionStage.ROI -> StageConfig.defaultRoi()
+            DetectionStage.LANDMARK -> StageConfig.defaultLandmark()
+        }
+
+        val modelType = runCatching {
+            modelTypeName?.let { DetectionModelType.valueOf(it) }
+        }.getOrNull() ?: defaultConfig.modelType
+
+        val engineType = runCatching {
+            engineTypeName?.let { InferenceEngineType.valueOf(it) }
+        }.getOrNull() ?: defaultConfig.engineType
+
+        val devicePreference = runCatching {
+            devicePreferenceName?.let { InferenceDevicePreference.valueOf(it) }
+        }.getOrNull() ?: defaultConfig.devicePreference
+
+        return StageConfig(
+            stage = stage,
+            modelType = modelType,
+            engineType = engineType,
+            devicePreference = devicePreference
+        )
+    }
+
+    override val roiStageConfigFlow: Flow<StageConfig> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
+                Logger.e("DataStore", "Failed to read ROI stage config, using default")
                 emit(emptyPreferences())
             } else {
                 throw exception
             }
         }
         .map { preferences ->
-            val typeName = preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE]
-                ?: InsightFaceRoiDetectorType.MEDIAPIPE.name
-            runCatching { InsightFaceRoiDetectorType.valueOf(typeName) }
-                .getOrDefault(InsightFaceRoiDetectorType.MEDIAPIPE)
+            parseStageConfig(
+                stage = DetectionStage.ROI,
+                modelTypeName = preferences[PreferencesKeys.ROI_MODEL_TYPE],
+                engineTypeName = preferences[PreferencesKeys.ROI_ENGINE_TYPE],
+                devicePreferenceName = preferences[PreferencesKeys.ROI_DEVICE_PREFERENCE]
+            )
         }
 
-    override suspend fun updateInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType) {
+    override suspend fun updateRoiStageConfig(config: StageConfig) {
+        Logger.d("DataStore", "Updating ROI stage config: $config")
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.INSIGHTFACE_ROI_DETECTOR_TYPE] = type.name
+            preferences[PreferencesKeys.ROI_MODEL_TYPE] = config.modelType.name
+            preferences[PreferencesKeys.ROI_ENGINE_TYPE] = config.engineType.name
+            preferences[PreferencesKeys.ROI_DEVICE_PREFERENCE] = config.devicePreference.name
         }
     }
 
-    override val insightFaceLandmarkDetectorTypeFlow: Flow<InsightFaceLandmarkDetectorType> = context.dataStore.data
+    override val landmarkStageConfigFlow: Flow<StageConfig> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
+                Logger.e("DataStore", "Failed to read Landmark stage config, using default")
                 emit(emptyPreferences())
             } else {
                 throw exception
             }
         }
         .map { preferences ->
-            val typeName = preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE]
-                ?: InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106.name
-            runCatching { InsightFaceLandmarkDetectorType.valueOf(typeName) }
-                .getOrDefault(InsightFaceLandmarkDetectorType.INSIGHTFACE_2D106)
+            parseStageConfig(
+                stage = DetectionStage.LANDMARK,
+                modelTypeName = preferences[PreferencesKeys.LANDMARK_MODEL_TYPE],
+                engineTypeName = preferences[PreferencesKeys.LANDMARK_ENGINE_TYPE],
+                devicePreferenceName = preferences[PreferencesKeys.LANDMARK_DEVICE_PREFERENCE]
+            )
         }
 
-    override suspend fun updateInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType) {
+    override suspend fun updateLandmarkStageConfig(config: StageConfig) {
+        Logger.d("DataStore", "Updating Landmark stage config: $config")
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.INSIGHTFACE_LANDMARK_DETECTOR_TYPE] = type.name
+            preferences[PreferencesKeys.LANDMARK_MODEL_TYPE] = config.modelType.name
+            preferences[PreferencesKeys.LANDMARK_ENGINE_TYPE] = config.engineType.name
+            preferences[PreferencesKeys.LANDMARK_DEVICE_PREFERENCE] = config.devicePreference.name
         }
     }
+
 }

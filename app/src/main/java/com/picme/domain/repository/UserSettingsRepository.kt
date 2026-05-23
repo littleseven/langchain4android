@@ -4,8 +4,7 @@ import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InsightFaceLandmarkDetectorType
-import com.picme.domain.model.InsightFaceRoiDetectorType
+import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
@@ -67,11 +66,11 @@ interface UserSettingsRepository {
     val faceDetectIntervalProfileFlow: Flow<FaceDetectIntervalProfile>
     suspend fun updateFaceDetectIntervalProfile(profile: FaceDetectIntervalProfile)
 
-    // ── InsightFace 流水线配置 ─────────────────────────────
-    val insightFaceRoiDetectorTypeFlow: Flow<InsightFaceRoiDetectorType>
-    suspend fun updateInsightFaceRoiDetectorType(type: InsightFaceRoiDetectorType)
+    // ── 阶段独立配置（ROI / Landmark）────────────────────────
+    val roiStageConfigFlow: Flow<StageConfig>
+    suspend fun updateRoiStageConfig(config: StageConfig)
 
-    val insightFaceLandmarkDetectorTypeFlow: Flow<InsightFaceLandmarkDetectorType>
-    suspend fun updateInsightFaceLandmarkDetectorType(type: InsightFaceLandmarkDetectorType)
+    val landmarkStageConfigFlow: Flow<StageConfig>
+    suspend fun updateLandmarkStageConfig(config: StageConfig)
 }
 

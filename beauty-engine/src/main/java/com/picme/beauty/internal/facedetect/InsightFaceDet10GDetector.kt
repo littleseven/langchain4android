@@ -6,6 +6,7 @@ import ai.onnxruntime.OrtSession
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
+import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.nio.FloatBuffer
@@ -27,11 +28,41 @@ class InsightFaceDet10GDetector(context: Context) {
         private const val MODEL_FILE_NAME = "insightface_det_10g.onnx"
         private const val INPUT_SIZE = 640
         private const val INPUT_CHANNELS = 3
-        private const val CONFIDENCE_THRESHOLD = 0.8f  // [修复] 进一步提高阈值,只保留高质量的人脸检测
+        private const val CONFIDENCE_THRESHOLD = 0.8f
         private const val NMS_THRESHOLD = 0.4f
         private const val DEFAULT_INPUT_MEAN = 127.5f
         private const val DEFAULT_INPUT_STD = 128.0f
-        private const val ROI_EXPAND_RATIO = 1.2f  // ROI 区域放大系数(1.2倍)
+        private const val ROI_EXPAND_RATIO = 1.2f
+
+        // [性能优化] 预计算并缓存 anchors，避免每帧重复生成 ~16K 个对象
+        private val CACHED_ANCHORS: List<FloatArray> by lazy { generateAnchorsStatic() }
+
+        private fun generateAnchorsStatic(): List<FloatArray> {
+            val anchors = ArrayList<FloatArray>(16800)
+            val minSizesList = listOf(
+                listOf(16f, 32f),
+                listOf(64f, 128f),
+                listOf(256f, 512f)
+            )
+            val steps = listOf(8f, 16f, 32f)
+
+            for (level in steps.indices) {
+                val step = steps[level]
+                val minSizes = minSizesList[level]
+                val featureMapSize = (INPUT_SIZE / step).toInt()
+
+                for (y in 0 until featureMapSize) {
+                    val cy = (y + 0.5f) * step
+                    for (x in 0 until featureMapSize) {
+                        val cx = (x + 0.5f) * step
+                        for (minSize in minSizes) {
+                            anchors.add(floatArrayOf(cx, cy, minSize, minSize, step))
+                        }
+                    }
+                }
+            }
+            return anchors
+        }
     }
 
     private val appContext = context.applicationContext
@@ -43,6 +74,10 @@ class InsightFaceDet10GDetector(context: Context) {
     private var inputStd: Float = DEFAULT_INPUT_STD
     private var debugImageSaved: Boolean = false
 
+    // [性能优化] 复用像素缓冲区，避免每帧 new IntArray / FloatArray
+    private val reusablePixelBuffer = IntArray(INPUT_SIZE * INPUT_SIZE)
+    private val reusableChwBuffer = FloatArray(INPUT_CHANNELS * INPUT_SIZE * INPUT_SIZE)
+
     init {
         initialize()
     }
@@ -53,10 +88,12 @@ class InsightFaceDet10GDetector(context: Context) {
         val session = ortSession ?: return null
         val origW = bitmap.width.toFloat()
         val origH = bitmap.height.toFloat()
-        Log.d(TAG, "[Diag] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
+        val totalStart = SystemClock.elapsedRealtime()
+        Log.d(TAG, "[Perf] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
         return try {
             val faces = runInference(session, bitmap)
-            Log.d(TAG, "[Diag] detectLargestFace after inference: faces=${faces.size}")
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+            Log.d(TAG, "[Perf] detectLargestFace DONE: total=${totalElapsed}ms, faces=${faces.size}")
             if (faces.isNotEmpty()) {
                 Log.d(TAG, "[Diag] First face: [${faces[0].x1.toInt()},${faces[0].y1.toInt()},${faces[0].x2.toInt()},${faces[0].y2.toInt()}] conf=${faces[0].confidence}")
             }
@@ -75,13 +112,13 @@ class InsightFaceDet10GDetector(context: Context) {
             val scaledH = (origH * scale).toInt()
             val padLeft = (INPUT_SIZE - scaledW) / 2f
             val padTop = (INPUT_SIZE - scaledH) / 2f
-            
+
             // 将 640x640 坐标映射回原图，确保坐标在有效范围内
             var mappedX1 = ((largestFace.x1 - padLeft) / scale)
             var mappedY1 = ((largestFace.y1 - padTop) / scale)
             var mappedX2 = ((largestFace.x2 - padLeft) / scale)
             var mappedY2 = ((largestFace.y2 - padTop) / scale)
-            
+
             // [新增] 放大 ROI 区域,以包含更多面部上下文
             val centerX = (mappedX1 + mappedX2) / 2f
             val centerY = (mappedY1 + mappedY2) / 2f
@@ -89,12 +126,12 @@ class InsightFaceDet10GDetector(context: Context) {
             val height = mappedY2 - mappedY1
             val newWidth = width * ROI_EXPAND_RATIO
             val newHeight = height * ROI_EXPAND_RATIO
-            
+
             mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
             mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
             mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
             mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
-            
+
             val mappedFace = FaceBox(
                 x1 = mappedX1,
                 y1 = mappedY1,
@@ -132,26 +169,29 @@ class InsightFaceDet10GDetector(context: Context) {
         runCatching { ortSession?.close() }
         ortSession = null
         inputName = null
+        reusablePaddedBitmap?.recycle()
+        reusablePaddedBitmap = null
     }
 
     private fun initialize() {
         runCatching {
             val modelFile = ensureModelFile()
-            
-            // [优化] 配置 ONNX Runtime SessionOptions,优先使用 GPU
+
+            // [优化] 配置 ONNX Runtime SessionOptions,强制使用 GPU 推理
             val sessionOptions = OrtSession.SessionOptions()
-            
+
             try {
-                // 尝试添加 NNAPI (Android GPU/NPU 加速)
-                sessionOptions.addNnapi()
-                Log.i(TAG, "NNAPI execution provider enabled")
+                // NNAPI 配置: 使用 FP16 加速,允许 GPU/NPU 执行支持的操作
+                // 注意: 不设置 CPU_DISABLED,让 NNAPI 自动决定哪些层用 GPU,哪些回退 CPU
+                val nnapiFlags = java.util.EnumSet.of(
+                    ai.onnxruntime.providers.NNAPIFlags.USE_FP16
+                )
+                sessionOptions.addNnapi(nnapiFlags)
+                Log.i(TAG, "NNAPI execution provider enabled with FP16 (flags=$nnapiFlags)")
             } catch (e: Exception) {
                 Log.w(TAG, "NNAPI not available, falling back to CPU", e)
             }
-            
-            // [备选] 如果 NNAPI 不可用,可以尝试 XNNPACK (CPU 优化)
-            // sessionOptions.addXnnpack()
-            
+
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)
@@ -182,13 +222,27 @@ class InsightFaceDet10GDetector(context: Context) {
     }
 
     private fun runInference(session: OrtSession, bitmap: Bitmap): List<FaceBox> {
+        val tensorStart = SystemClock.elapsedRealtime()
         val inputTensor = createInputTensor(bitmap)
+        val tensorElapsed = SystemClock.elapsedRealtime() - tensorStart
+
+        val inferenceStart = SystemClock.elapsedRealtime()
         try {
             val modelInputName = inputName ?: error("Det10G input name missing")
             val results = session.run(mapOf(modelInputName to inputTensor))
+            val inferenceElapsed = SystemClock.elapsedRealtime() - inferenceStart
+
+            val parseStart = SystemClock.elapsedRealtime()
             try {
                 val faces = parseOutputs(results)
-                return applyNMS(faces)
+                val parseElapsed = SystemClock.elapsedRealtime() - parseStart
+
+                val nmsStart = SystemClock.elapsedRealtime()
+                val nmsResult = applyNMS(faces)
+                val nmsElapsed = SystemClock.elapsedRealtime() - nmsStart
+
+                Log.d(TAG, "[Perf] Det10G breakdown: tensor=${tensorElapsed}ms, inference=${inferenceElapsed}ms, parse=${parseElapsed}ms, NMS=${nmsElapsed}ms")
+                return nmsResult
             } finally {
                 results.close()
             }
@@ -197,50 +251,56 @@ class InsightFaceDet10GDetector(context: Context) {
         }
     }
 
+    // [性能优化] 复用 Bitmap 池，避免每帧 createBitmap
+    private var reusablePaddedBitmap: Bitmap? = null
+
+    private fun getReusablePaddedBitmap(): Bitmap {
+        var bmp = reusablePaddedBitmap
+        if (bmp == null || bmp.isRecycled) {
+            bmp = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
+            reusablePaddedBitmap = bmp
+        }
+        return bmp
+    }
+
     private fun createInputTensor(bitmap: Bitmap): OnnxTensor {
-        // [修复] 保持宽高比缩放,避免图像变形
         val origW = bitmap.width
         val origH = bitmap.height
         val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
         val scaledW = (origW * scale).toInt()
         val scaledH = (origH * scale).toInt()
-            
-        // 创建正方形画布并居中绘制(letterbox padding)
-        val paddedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
+
+        val paddedBitmap = getReusablePaddedBitmap()
         val canvas = android.graphics.Canvas(paddedBitmap)
         canvas.drawColor(android.graphics.Color.BLACK)
-            
+
         val left = (INPUT_SIZE - scaledW) / 2f
         val top = (INPUT_SIZE - scaledH) / 2f
-            
+
         val scaledBmp = Bitmap.createScaledBitmap(bitmap, scaledW, scaledH, true)
         canvas.drawBitmap(scaledBmp, left, top, null)
         scaledBmp.recycle()
-            
+
         val pixelCount = INPUT_SIZE * INPUT_SIZE
-        val pixels = IntArray(pixelCount)
+        val pixels = reusablePixelBuffer
         paddedBitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
-    
-        val chw = FloatArray(INPUT_CHANNELS * pixelCount)
+
+        val chw = reusableChwBuffer
         for (index in 0 until pixelCount) {
             val pixel = pixels[index]
-            // InsightFace Det10G 使用 RGB 格式 (与 cv2.dnn.blobFromImage swapRB=True 一致)
             val red = (pixel shr 16 and 0xFF).toFloat()
             val green = (pixel shr 8 and 0xFF).toFloat()
             val blue = (pixel and 0xFF).toFloat()
-                
-            // 归一化到 [-1, 1] 范围: (pixel - 127.5) / 128.0
+
             chw[index] = (red - inputMean) / inputStd
             chw[pixelCount + index] = (green - inputMean) / inputStd
             chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
         }
-        
-        // [调试] 保存 letterbox 后的图像(仅首次)
+
         if (!debugImageSaved) {
-            saveDebugBitmap(paddedBitmap, "det10g_letterbox_${System.currentTimeMillis()}.jpg")
+            saveDebugBitmap(paddedBitmap.copy(Bitmap.Config.ARGB_8888, true), "det10g_letterbox_${System.currentTimeMillis()}.jpg")
             debugImageSaved = true
-            
-            // 打印前10个像素的归一化值用于诊断
+
             val sampleSize = minOf(10, pixelCount)
             val sampleValues = StringBuilder()
             for (i in 0 until sampleSize) {
@@ -249,15 +309,17 @@ class InsightFaceDet10GDetector(context: Context) {
             Log.d(TAG, "[Diag] First $sampleSize pixels normalized (R,G,B): $sampleValues")
             Log.d(TAG, "[Diag] Using mean=$inputMean, std=$inputStd")
         }
-        
-        paddedBitmap.recycle()
-    
+
         return OnnxTensor.createTensor(
             ortEnvironment,
             FloatBuffer.wrap(chw),
             longArrayOf(1, INPUT_CHANNELS.toLong(), INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
         )
     }
+
+    // [性能优化] 预分配固定大小数组，避免 NMS 阶段 mutableList 频繁扩容
+    private val reusableAllScores = FloatArray(20000)
+    private val reusableAllBoxes = Array(20000) { FloatArray(4) }
 
     private fun parseOutputs(results: OrtSession.Result): List<FaceBox> {
         val faces = mutableListOf<FaceBox>()
@@ -269,56 +331,67 @@ class InsightFaceDet10GDetector(context: Context) {
             Log.d(TAG, "[Diag] Output $i shape: ${tensor.info.shape.joinToString(",")}")
         }
 
-        // RetinaFace Det10G 有 9 个输出：
-        // - 3 个尺度的 scores: outputs[0], [1], [2]
-        // - 3 个尺度的 boxes: outputs[3], [4], [5]
-        // - 3 个尺度的 landmarks: outputs[6], [7], [8]
         if (outputCount < 6) {
             Log.w(TAG, "[Diag] Unexpected output count: $outputCount, expected >= 6 for RetinaFace")
             return emptyList()
         }
 
-        // 收集所有尺度的 scores 和 boxes
-        val allScores = mutableListOf<Float>()
-        val allBoxes = mutableListOf<FloatArray>()
+        var scoreCount = 0
+        var boxCount = 0
 
-        // 合并 3 个尺度的 scores (每个是 [N, 1] -> face confidence)
-        // [关键修复] 官方实现中 scores 已经是概率,不需要 sigmoid
+        // [性能优化] 直接解析 ONNX 输出为 FloatArray，避免 flattenFloatArray 递归+动态列表开销
+        // [关键修复] ONNX 输出可能是嵌套数组（如 Array<FloatArray>），需先展平
         for (i in 0..2) {
             val scoresTensor = results.get(i) as? OnnxTensor ?: continue
-            val rawScores = flattenFloatArray(scoresTensor.value) ?: continue
-            var maxScore = Float.MIN_VALUE
-            var minScore = Float.MAX_VALUE
-            var sumScore = 0.0
-            for (score in rawScores) {
-                allScores.add(score)
-                if (score > maxScore) maxScore = score
-                if (score < minScore) minScore = score
-                sumScore += score
+            val rawScores = flattenOnnxOutput(scoresTensor.value)
+            if (rawScores == null) {
+                Log.w(TAG, "[Diag] Scale $i scores: failed to flatten ONNX output, type=${scoresTensor.value?.javaClass}")
+                continue
             }
-            val avgScore = sumScore / rawScores.size
-            Log.d(TAG, "[Diag] Scale $i scores: range=[$minScore, $maxScore], avg=$avgScore, count=${rawScores.size}")
+            for (score in rawScores) {
+                if (scoreCount < reusableAllScores.size) {
+                    reusableAllScores[scoreCount++] = score
+                }
+            }
+            if (rawScores.isNotEmpty()) {
+                var maxScore = Float.MIN_VALUE
+                var minScore = Float.MAX_VALUE
+                var sumScore = 0.0
+                for (score in rawScores) {
+                    if (score > maxScore) maxScore = score
+                    if (score < minScore) minScore = score
+                    sumScore += score
+                }
+                Log.d(TAG, "[Diag] Scale $i scores: range=[$minScore, $maxScore], avg=${sumScore / rawScores.size}, count=${rawScores.size}")
+            }
         }
 
-        // 合并 3 个尺度的 boxes (每个是 [N, 4])
         for (i in 3..5) {
             val boxesTensor = results.get(i) as? OnnxTensor ?: continue
-            val boxes = flattenFloatArray(boxesTensor.value) ?: continue
-            // 每 4 个值组成一个 box
+            val boxes = flattenOnnxOutput(boxesTensor.value)
+            if (boxes == null) {
+                Log.w(TAG, "[Diag] Scale $i boxes: failed to flatten ONNX output, type=${boxesTensor.value?.javaClass}")
+                continue
+            }
             for (j in boxes.indices step 4) {
-                allBoxes.add(floatArrayOf(boxes[j], boxes[j+1], boxes[j+2], boxes[j+3]))
+                if (boxCount < reusableAllBoxes.size) {
+                    reusableAllBoxes[boxCount][0] = boxes[j]
+                    reusableAllBoxes[boxCount][1] = boxes[j + 1]
+                    reusableAllBoxes[boxCount][2] = boxes[j + 2]
+                    reusableAllBoxes[boxCount][3] = boxes[j + 3]
+                    boxCount++
+                }
             }
         }
 
-        if (allScores.isEmpty() || allBoxes.isEmpty()) {
+        if (scoreCount == 0 || boxCount == 0) {
             Log.w(TAG, "[Diag] Failed to extract scores or boxes")
             return emptyList()
         }
 
-        val scores = allScores.toFloatArray()
-        val numAnchors = scores.size
+        val numAnchors = scoreCount
 
-        Log.d(TAG, "[Diag] Merged scores length=${scores.size}, boxes count=${allBoxes.size}")
+        Log.d(TAG, "[Diag] Merged scores length=$scoreCount, boxes count=$boxCount")
 
         // 生成 anchors 并解码 bboxes
         val anchors = generateAnchors()
@@ -330,30 +403,20 @@ class InsightFaceDet10GDetector(context: Context) {
         var aboveThreshold = 0
         var invalidBox = 0
         for (i in 0 until numAnchors) {
-            val score = scores[i]
+            val score = reusableAllScores[i]
             if (score < CONFIDENCE_THRESHOLD) continue
             aboveThreshold++
 
-            // [修复] RetinaFace Det10G 使用 distance2bbox 解码方式
-            // 模型输出的是从 anchor 中心到四条边的距离: [left, top, right, bottom]
-            // 正确公式:
-            //   x1 = anchor_cx - left * stride
-            //   y1 = anchor_cy - top * stride
-            //   x2 = anchor_cx + right * stride
-            //   y2 = anchor_cy + bottom * stride
-            val boxOffset = allBoxes[i]
+            val boxOffset = reusableAllBoxes[i]
             val anchor = anchors[i]
-            
-            // [修复] 使用 anchor 中存储的 stride (anchor[4])，而不是计算出来的
+
             val stride = if (anchor.size >= 5) anchor[4] else anchor[2] / 2f
-            
-            // distance2bbox 解码
+
             val x1 = anchor[0] - boxOffset[0] * stride
             val y1 = anchor[1] - boxOffset[1] * stride
             val x2 = anchor[0] + boxOffset[2] * stride
             val y2 = anchor[1] + boxOffset[3] * stride
-            
-            // [修复] 先裁剪到 640x640 模型空间，再进行 letterbox 反变换
+
             val x1Clipped = x1.coerceIn(0f, INPUT_SIZE.toFloat())
             val y1Clipped = y1.coerceIn(0f, INPUT_SIZE.toFloat())
             val x2Clipped = x2.coerceIn(0f, INPUT_SIZE.toFloat())
@@ -367,7 +430,6 @@ class InsightFaceDet10GDetector(context: Context) {
                 continue
             }
 
-            // [新增] 过滤过小的人脸框（小于 10x10 像素的视为无效检测）
             val boxWidth = x2Clipped - x1Clipped
             val boxHeight = y2Clipped - y1Clipped
             if (boxWidth < 10f || boxHeight < 10f) {
@@ -388,46 +450,9 @@ class InsightFaceDet10GDetector(context: Context) {
     }
 
     /**
-     * 生成 RetinaFace Det10G 的 anchors
-     * 
-     * 根据 InsightFace Det10G (RetinaFace) 的标准配置：
-     * - 3 个 FPN 层级，对应 stride [8, 16, 32]
-     * - 每个位置 2 个 anchor（不同尺寸）
-     * - Anchor 尺寸基于 stride 计算
+     * [性能优化] 使用预缓存的 anchors，避免每帧重复生成
      */
-    private fun generateAnchors(): List<FloatArray> {
-        val anchors = mutableListOf<FloatArray>()
-        
-        // RetinaFace 标准配置（来自官方实现）
-        val minSizesList = listOf(
-            listOf(16f, 32f),      // stride=8 的 anchor 尺寸
-            listOf(64f, 128f),     // stride=16 的 anchor 尺寸  
-            listOf(256f, 512f)     // stride=32 的 anchor 尺寸
-        )
-        val steps = listOf(8f, 16f, 32f)
-        
-        for (level in steps.indices) {
-            val step = steps[level]
-            val minSizes = minSizesList[level]
-            // [修复] 使用 floor 而不是 ceil，与官方实现一致
-            val featureMapHeight = (INPUT_SIZE / step).toInt()
-            val featureMapWidth = (INPUT_SIZE / step).toInt()
-            
-            for (y in 0 until featureMapHeight) {
-                for (x in 0 until featureMapWidth) {
-                    for (minSize in minSizes) {
-                        val cx = (x + 0.5f) * step
-                        val cy = (y + 0.5f) * step
-                        // [新增] 存储 stride 信息在 anchor[4] 中，用于 distance2bbox 解码
-                        anchors.add(floatArrayOf(cx, cy, minSize, minSize, step))
-                    }
-                }
-            }
-        }
-        
-        Log.d(TAG, "[Diag] Generated ${anchors.size} anchors")
-        return anchors
-    }
+    private fun generateAnchors(): List<FloatArray> = CACHED_ANCHORS
 
     private fun applyNMS(faces: List<FaceBox>): List<FaceBox> {
         if (faces.isEmpty()) {
@@ -438,7 +463,7 @@ class InsightFaceDet10GDetector(context: Context) {
         // [优化] Top-K 策略：只取前 100 个最高分的框，避免 NMS 处理过多框
         val topK = 100
         val topFaces = faces.sortedByDescending { it.confidence }.take(topK)
-        
+
         if (faces.size > topK) {
             Log.d(TAG, "[Diag] Top-K: reduced from ${faces.size} to $topK")
         }
@@ -475,6 +500,49 @@ class InsightFaceDet10GDetector(context: Context) {
 
         val unionArea = a.area() + b.area() - intersectionArea
         return if (unionArea > 0) intersectionArea / unionArea else 0f
+    }
+
+    /**
+     * [性能优化] 展平 ONNX 输出为 FloatArray。
+     *
+     * ONNX Runtime Java API 中，OnnxTensor.value 的类型取决于输出维度：
+     * - 1D [N] → FloatArray（直接返回）
+     * - 2D [M, N] → Array<FloatArray>（展平）
+     * - 3D [B, M, N] → Array<Array<FloatArray>>（展平）
+     *
+     * 本方法使用预分配缓冲区避免动态列表扩容，比原 flattenFloatArray 更高效。
+     */
+    private fun flattenOnnxOutput(value: Any?): FloatArray? {
+        return when (value) {
+            is FloatArray -> value
+            is Array<*> -> {
+                // 预计算总元素数（避免动态列表扩容）
+                var totalSize = 0
+                fun countElements(node: Any?) {
+                    when (node) {
+                        is FloatArray -> totalSize += node.size
+                        is Array<*> -> node.forEach { countElements(it) }
+                    }
+                }
+                countElements(value)
+                if (totalSize == 0) return null
+
+                val result = FloatArray(totalSize)
+                var index = 0
+                fun copyElements(node: Any?) {
+                    when (node) {
+                        is FloatArray -> {
+                            System.arraycopy(node, 0, result, index, node.size)
+                            index += node.size
+                        }
+                        is Array<*> -> node.forEach { copyElements(it) }
+                    }
+                }
+                copyElements(value)
+                result
+            }
+            else -> null
+        }
     }
 
     private fun flattenFloatArray(value: Any?): FloatArray? {

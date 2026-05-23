@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Rect
+import android.os.SystemClock
 import android.util.Log
 import java.io.File
 import java.nio.FloatBuffer
@@ -20,7 +21,7 @@ import kotlin.math.min
  * 内部采用两阶段检测架构：
  * - 第一阶段：Det10G (RetinaFace) 快速检测人脸存在性并提供 ROI
  * - 第二阶段：2d106det.onnx 在 ROI 内输出 106 点关键点
- * 
+ *
  * 外部调用者无需关心内部实现细节，只需调用 detect() 方法即可。
  */
 class InsightFace2D106Detector(context: Context) {
@@ -48,6 +49,13 @@ class InsightFace2D106Detector(context: Context) {
     private var inputMean: Float = DEFAULT_INPUT_MEAN
     private var inputStd: Float = DEFAULT_INPUT_STD
 
+    // [性能优化] 复用像素和 CHW 缓冲区，避免每帧 new IntArray/FloatArray
+    private val reusablePixelBuffer = IntArray(INPUT_SIZE * INPUT_SIZE)
+    private val reusableChwBuffer = FloatArray(INPUT_CHANNELS * INPUT_SIZE * INPUT_SIZE)
+    // [性能优化] 复用结果数组和临时点数组
+    private val reusableResult = FloatArray(POINT_COUNT * 2)
+    private val reusableMappedPoint = floatArrayOf(0f, 0f)
+
     init {
         initialize()
     }
@@ -64,6 +72,7 @@ class InsightFace2D106Detector(context: Context) {
      */
     fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
         val session = ortSession ?: return null
+        val totalStart = SystemClock.elapsedRealtime()
 
         // [两阶段检测] 第一阶段：如果没有提供 faceBounds，使用 Det10G 检测
         val actualFaceBounds = faceBounds ?: run {
@@ -77,54 +86,54 @@ class InsightFace2D106Detector(context: Context) {
                 Log.w(TAG, "[Diag] Det10G no face detected")
                 return null
             }
-            Log.d(TAG, "[Diag] Det10G provided faceBounds=$bounds")
             bounds
         }
 
-        Log.d(TAG, "[Diag] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
+        Log.d(TAG, "[Perf] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
         return try {
-            // 将 RectF 转换为 Rect
             val rectBounds = android.graphics.Rect(
                 actualFaceBounds.left.toInt().coerceIn(0, bitmap.width),
                 actualFaceBounds.top.toInt().coerceIn(0, bitmap.height),
                 actualFaceBounds.right.toInt().coerceIn(0, bitmap.width),
                 actualFaceBounds.bottom.toInt().coerceIn(0, bitmap.height)
             )
-            Log.d(TAG, "[Diag] 2d106det rectBounds=$rectBounds")
 
+            val cropStart = SystemClock.elapsedRealtime()
             val crop = buildLooseFaceCrop(bitmap, rectBounds) ?: run {
                 Log.w(TAG, "[Diag] 2d106det buildLooseFaceCrop returned null")
                 return null
             }
-            Log.d(TAG, "[Diag] 2d106det crop bitmap=${crop.bitmap.width}x${crop.bitmap.height}")
+            val cropElapsed = SystemClock.elapsedRealtime() - cropStart
 
+            val inferenceStart = SystemClock.elapsedRealtime()
             val rawOutput = runInference(session, crop.bitmap)
             crop.bitmap.recycle()
-            Log.d(TAG, "[Diag] 2d106det rawOutput size=${rawOutput.size}")
+            val inferenceElapsed = SystemClock.elapsedRealtime() - inferenceStart
 
-            // [调试] 采样 rawOutput 范围用于诊断
-            val sampleValues = (0 until minOf(POINT_COUNT, 10)).flatMap {
-                listOf(rawOutput[it * 2], rawOutput[it * 2 + 1])
+            // [诊断日志] 输出原始模型输出前 10 个点
+            val sb = StringBuilder("[Diag] ONNX raw output first 10 points: ")
+            for (i in 0 until 10) {
+                sb.append("(${String.format("%.3f", rawOutput[i * 2])},${String.format("%.3f", rawOutput[i * 2 + 1])}) ")
             }
-            Log.d(TAG, "[Diag] rawOutput sample values: $sampleValues")
+            Log.d(TAG, sb.toString())
 
-            // [修复] InsightFace 2d106det 模型输出在 [-1, 1] 范围，使用固定公式转换
-            val result = FloatArray(POINT_COUNT * 2)
-            val mappedPoint = floatArrayOf(0f, 0f)
+            val transformStart = SystemClock.elapsedRealtime()
+            val result = reusableResult
+            val mappedPoint = reusableMappedPoint
+            val bitmapWidth = bitmap.width.toFloat()
+            val bitmapHeight = bitmap.height.toFloat()
+            val halfInputSize = INPUT_SIZE / 2f
             for (index in 0 until POINT_COUNT) {
-                // 标准公式：将 [-1, 1] 映射到 [0, INPUT_SIZE]
-                mappedPoint[0] = (rawOutput[index * 2] + 1f) * (INPUT_SIZE / 2f)
-                mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * (INPUT_SIZE / 2f)
+                mappedPoint[0] = (rawOutput[index * 2] + 1f) * halfInputSize
+                mappedPoint[1] = (rawOutput[index * 2 + 1] + 1f) * halfInputSize
                 crop.inverseTransform.mapPoints(mappedPoint)
-                val normalizedX = mappedPoint[0] / bitmap.width.toFloat()
-                val normalizedY = mappedPoint[1] / bitmap.height.toFloat()
-                result[index * 2] = normalizedX.coerceIn(0f, 1f)
-                result[index * 2 + 1] = normalizedY.coerceIn(0f, 1f)
+                result[index * 2] = (mappedPoint[0] / bitmapWidth).coerceIn(0f, 1f)
+                result[index * 2 + 1] = (mappedPoint[1] / bitmapHeight).coerceIn(0f, 1f)
             }
+            val transformElapsed = SystemClock.elapsedRealtime() - transformStart
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
-            // [调试] 打印前3个点的归一化坐标
-            Log.d(TAG, "[Diag] 2d106det RESULT: firstPoint=(${result[0]},${result[1]}), secondPoint=(${result[2]},${result[3]}), thirdPoint=(${result[4]},${result[5]})")
-            Log.d(TAG, "[Diag] 2d106det lastPoint=(${result[210]},${result[211]})")
+            Log.d(TAG, "[Perf] 2d106det DONE: total=${totalElapsed}ms, crop=${cropElapsed}ms, inference=${inferenceElapsed}ms, transform=${transformElapsed}ms")
             result
         } catch (error: Exception) {
             Log.e(TAG, "[Diag] InsightFace 2D106 detection failed", error)
@@ -140,24 +149,51 @@ class InsightFace2D106Detector(context: Context) {
         inputName = null
     }
 
+    // [性能优化] 复用 Bitmap 池，避免每帧 createBitmap
+    private var reusableCropBitmap: Bitmap? = null
+    private var reusableCropCanvas: Canvas? = null
+
+    private fun getReusableCropBitmap(): Bitmap {
+        var bmp = reusableCropBitmap
+        if (bmp == null || bmp.isRecycled) {
+            bmp = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
+            reusableCropBitmap = bmp
+        }
+        return bmp
+    }
+
+    private fun getReusableCropCanvas(): Canvas {
+        var cvs = reusableCropCanvas
+        if (cvs == null) {
+            cvs = Canvas(getReusableCropBitmap())
+            reusableCropCanvas = cvs
+        } else {
+            cvs.setBitmap(getReusableCropBitmap())
+        }
+        return cvs
+    }
+
     private fun initialize() {
         runCatching {
             // 初始化 Det10G 检测器（内部使用）
             det10gDetector = InsightFaceDet10GDetector(appContext)
-            
+
             val modelFile = ensureModelFile()
-            
-            // [优化] 配置 ONNX Runtime SessionOptions,优先使用 GPU
+
+            // [优化] 配置 ONNX Runtime SessionOptions,强制使用 GPU 推理
             val sessionOptions = OrtSession.SessionOptions()
-            
+
             try {
-                // 尝试添加 NNAPI (Android GPU/NPU 加速)
-                sessionOptions.addNnapi()
-                Log.i(TAG, "NNAPI execution provider enabled for 2D106")
+                // NNAPI 配置: 使用 FP16 加速,允许 GPU/NPU 执行支持的操作
+                val nnapiFlags = java.util.EnumSet.of(
+                    ai.onnxruntime.providers.NNAPIFlags.USE_FP16
+                )
+                sessionOptions.addNnapi(nnapiFlags)
+                Log.i(TAG, "NNAPI execution provider enabled with FP16 for 2D106 (flags=$nnapiFlags)")
             } catch (e: Exception) {
                 Log.w(TAG, "NNAPI not available for 2D106, falling back to CPU", e)
             }
-            
+
             ortSession = ortEnvironment.createSession(modelFile.absolutePath, sessionOptions)
             inputName = ortSession?.inputNames?.firstOrNull()
             resolveInputNormalization(modelFile)
@@ -190,10 +226,13 @@ class InsightFace2D106Detector(context: Context) {
 
 
 
+    // [性能优化] 复用 Matrix 对象，避免每帧创建
+    private val reusableTransformMatrix = Matrix()
+    private val reusableInverseMatrix = Matrix()
+
     private fun buildLooseFaceCrop(bitmap: Bitmap, faceBounds: Rect): LooseCrop? {
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
         val faceHeight = faceBounds.height().toFloat().coerceAtLeast(1f)
-        // [修复] 不做任何扩展，直接使用原始人脸框
         val looseSize = max(faceWidth, faceHeight) * LOOSE_CROP_SCALE
         if (looseSize <= 0f) {
             return null
@@ -202,25 +241,22 @@ class InsightFace2D106Detector(context: Context) {
         val centerX = faceBounds.exactCenterX()
         val centerY = faceBounds.exactCenterY()
         val inputScale = INPUT_SIZE / looseSize
-        // [修复] 使用 setValues 直接构造变换矩阵，避免 postScale+postTranslate 右乘导致平移被重复缩放
-        val transform = Matrix().apply {
-            setValues(
-                floatArrayOf(
-                    inputScale, 0f, INPUT_SIZE / 2f - centerX * inputScale,
-                    0f, inputScale, INPUT_SIZE / 2f - centerY * inputScale,
-                    0f, 0f, 1f
-                )
-            )
-        }
-        val inverseTransform = Matrix().apply {
-            transform.invert(this)
-        }
 
-        val croppedBitmap = Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(croppedBitmap)
+        reusableTransformMatrix.setValues(
+            floatArrayOf(
+                inputScale, 0f, INPUT_SIZE / 2f - centerX * inputScale,
+                0f, inputScale, INPUT_SIZE / 2f - centerY * inputScale,
+                0f, 0f, 1f
+            )
+        )
+        reusableInverseMatrix.reset()
+        reusableTransformMatrix.invert(reusableInverseMatrix)
+
+        val croppedBitmap = getReusableCropBitmap()
+        val canvas = getReusableCropCanvas()
         canvas.drawColor(android.graphics.Color.BLACK)
-        canvas.drawBitmap(bitmap, transform, null)
-        return LooseCrop(bitmap = croppedBitmap, inverseTransform = inverseTransform)
+        canvas.drawBitmap(bitmap, reusableTransformMatrix, null)
+        return LooseCrop(bitmap = croppedBitmap, inverseTransform = Matrix(reusableInverseMatrix))
     }
 
     private fun runInference(session: OrtSession, bitmap: Bitmap): FloatArray {
@@ -250,10 +286,10 @@ class InsightFace2D106Detector(context: Context) {
 
     private fun createInputTensor(bitmap: Bitmap): OnnxTensor {
         val pixelCount = INPUT_SIZE * INPUT_SIZE
-        val pixels = IntArray(pixelCount)
+        val pixels = reusablePixelBuffer
         bitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
 
-        val chw = FloatArray(INPUT_CHANNELS * pixelCount)
+        val chw = reusableChwBuffer
         for (index in 0 until pixelCount) {
             val pixel = pixels[index]
             val red = (pixel shr 16 and 0xFF).toFloat()
@@ -263,6 +299,13 @@ class InsightFace2D106Detector(context: Context) {
             chw[pixelCount + index] = (green - inputMean) / inputStd
             chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
         }
+
+        // [诊断日志] 输出前 10 个像素的归一化值
+        val sb = StringBuilder("[Diag] ONNX First 10 pixels normalized (R,G,B): ")
+        for (i in 0 until 10) {
+            sb.append("[${String.format("%.2f", chw[i])},${String.format("%.2f", chw[pixelCount + i])},${String.format("%.2f", chw[pixelCount * 2 + i])}] ")
+        }
+        Log.d(TAG, sb.toString())
 
         return OnnxTensor.createTensor(
             ortEnvironment,

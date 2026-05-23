@@ -1,7 +1,9 @@
 package com.picme.beauty.api
 
 import com.picme.beauty.egl.StyleEffect
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**

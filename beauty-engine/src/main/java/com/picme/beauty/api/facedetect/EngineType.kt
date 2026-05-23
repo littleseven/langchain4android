@@ -5,5 +5,6 @@ package com.picme.beauty.api.facedetect
  */
 enum class EngineType {
     MEDIAPIPE,
-    INSIGHTFACE
+    INSIGHTFACE,
+    MNN        // [性能优化] MNN Vulkan GPU 检测器
 }

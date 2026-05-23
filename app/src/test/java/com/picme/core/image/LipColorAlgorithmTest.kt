@@ -25,7 +25,7 @@ class LipColorAlgorithmTest {
 
         assertTrue("Red pixel should be detected as lip", isLipCandidate)
     }
-    
+
     @Test
     fun `new lip detection is very permissive`() {
         // 测试超宽松条件 - 几乎任何有颜色的像素都能通过
@@ -36,12 +36,12 @@ class LipColorAlgorithmTest {
             Triple(200, 100, 80),  // 亮红色
             Triple(60, 40, 30)     // 暗色
         )
-        
+
         for ((r, g, b) in testCases) {
             val hasColor = r > 40 && g > 20 && b > 15
             val notTooBright = (r + g + b) < 600
             val isLipCandidate = hasColor && notTooBright
-            
+
             assertTrue("Pixel ($r,$g,$b) should be detected with new logic", isLipCandidate)
         }
     }

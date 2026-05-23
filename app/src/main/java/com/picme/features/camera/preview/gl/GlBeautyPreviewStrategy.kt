@@ -10,6 +10,7 @@ import com.picme.beauty.api.toBeautyParams
 import com.picme.domain.model.BeautyStrategy
 import com.picme.beauty.api.BeautySettings
 import com.picme.features.camera.AspectRatio
+import com.picme.features.camera.stopFaceDetectionWorker
 import com.picme.features.camera.preview.core.BeautyPreviewEngineStrategy
 import com.picme.beauty.api.facedetect.FaceWarpParams
 
@@ -100,7 +101,7 @@ internal class GlBeautyPreviewStrategy(
                     Pair(contourPoint.x, contourPoint.y)
                 }
             )
-            // 传递106点关键点给风格瘦脸/大眼
+            // 传递106点关键点给GPUPixel风格瘦脸/大眼
             val bigBeautyLandmarks = params.bigBeautyLandmarks
             if (bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()) {
                 val landmarks106 = FloatArray(bigBeautyLandmarks.points.size * 2)
@@ -117,6 +118,8 @@ internal class GlBeautyPreviewStrategy(
     }
 
     override fun release() {
+        // [帧同步] 停止全局 FaceDetectionWorker（若残留），再释放 GL 资源
+        stopFaceDetectionWorker()
         glBeautyPreviewProvider.release()
     }
 }
