@@ -89,7 +89,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         try {
             // 1. 初始化 EGL 环境（如果未初始化）并绑定到当前线程
             ensureEglInitialized()
-            
+
             // 确保 EGL 上下文在当前线程激活（关键修复：线程池可能导致线程切换）
             if (!eglCore.makeCurrent(eglSurface, eglContext)) {
                 Log.w(TAG, "Failed to rebind EGL context, reinitializing...")
@@ -410,21 +410,21 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         // [关键修复] 调用完整的渲染管线，确保与预览一致
         // 这会执行：BeautyUnitPass → FaceMakeupPass → MainShader
         Log.d(TAG, "Before renderBeautyMultiPass: inputTex=$inputTextureId, fbo=$fboId")
-        
+
         // 设置输入纹理 ID（让 BeautyRenderer 从该纹理采样）
         renderer.setExternalTextureId(inputTextureId)
-        
+
         // 绑定我们的 FBO 作为渲染目标
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-        
+
         // [调试] 检查 FBO 状态
         val fboStatus = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
         Log.d(TAG, "FBO status before renderBeautyMultiPass: $fboStatus")
-        
+
         // 清屏
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-        
+
         // 判断是否需要完整多 Pass 管线
         val needMultiPass = params.smoothing > 0.001f ||
             params.whitening > 0.001f ||
@@ -469,12 +469,12 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
     private fun readPixelsDirect(width: Int, height: Int): Bitmap {
         // [关键修复] 必须绑定 FBO 才能读取其内容
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-        
+
         val buffer = ByteBuffer.allocateDirect(width * height * 4)
         buffer.order(ByteOrder.nativeOrder())
 
         GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buffer)
-        
+
         // 检查 GL 错误
         val glError = GLES20.glGetError()
         if (glError != GLES20.GL_NO_ERROR) {
@@ -484,7 +484,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         buffer.rewind()
         bitmap.copyPixelsFromBuffer(buffer)
-        
+
         // 解绑 FBO
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
 

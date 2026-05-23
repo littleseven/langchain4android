@@ -2,12 +2,8 @@ package com.picme.domain.repository
 
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.DetectionModelType
-import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InferenceDevicePreference
-import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow

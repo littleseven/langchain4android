@@ -65,7 +65,7 @@ class MediaPipeRoiDetector(context: Context) : RoiDetector {
             null
         }
     }
-    
+
     override fun release() {
         faceDetector.release()
     }

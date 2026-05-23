@@ -16,7 +16,7 @@ class FindDuplicateMediaUseCase(
 ) {
     suspend operator fun invoke(): List<DuplicateGroup> = withContext(Dispatchers.IO) {
         val allAssets = repository.allMedia.firstOrNull() ?: return@withContext emptyList()
-        
+
         // 将 URI 转换为 File 对象
         val files = allAssets.mapNotNull { asset ->
             try {
@@ -26,10 +26,10 @@ class FindDuplicateMediaUseCase(
                 null
             }
         }
-        
+
         // 使用 DuplicateImageDetector 查找重复图片
         val duplicateGroups = DuplicateImageDetector.findDuplicates(files)
-        
+
         // 转换为领域模型（使用 URI 而不是 File）
         duplicateGroups.map { group ->
             DuplicateGroup(

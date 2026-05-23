@@ -29,7 +29,11 @@ private object FaceDetectionFrameCounter {
     private var lastFaceCenterX: Float = -1f
     private var lastFaceCenterY: Float = -1f
     private const val MOTION_THRESHOLD = 0.05f  // 归一化坐标变化超过 5% 视为快速移动
-    
+
+    // [常量定义] 人脸关键点索引（106 点模型）
+    internal const val LANDMARK_106_INDEX_X = 48
+    internal const val LANDMARK_106_INDEX_Y = 97
+
     /**
      * 判断是否应该执行人脸检测
      * @param currentFaceCenter 当前人脸中心(归一化坐标),如果为 null 表示未检测到人脸
@@ -37,17 +41,17 @@ private object FaceDetectionFrameCounter {
      */
     fun shouldDetect(currentFaceCenter: Offset? = null): Boolean {
         counter++
-        
+
         // 规则1: 每隔 N 帧必须检测一次
         if (counter % DETECTION_INTERVAL == 0) {
             return true
         }
-        
+
         // 规则2: 如果从未检测到人脸,需要检测
         if (currentFaceCenter == null || lastFaceCenterX < 0) {
             return true
         }
-        
+
         // 规则3: 检测快速移动,立即重新检测
         val deltaX = kotlin.math.abs(currentFaceCenter.x - lastFaceCenterX)
         val deltaY = kotlin.math.abs(currentFaceCenter.y - lastFaceCenterY)
@@ -55,10 +59,10 @@ private object FaceDetectionFrameCounter {
             Logger.d("Camera", "[Perf] Fast motion detected (dx=$deltaX, dy=$deltaY), force re-detect")
             return true
         }
-        
+
         return false
     }
-    
+
     /**
      * 更新人脸中心点记录
      */
@@ -66,7 +70,7 @@ private object FaceDetectionFrameCounter {
         lastFaceCenterX = x
         lastFaceCenterY = y
     }
-    
+
     fun reset() {
         counter = 0
         lastFaceCenterX = -1f
@@ -285,8 +289,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
                     append(if (detectionResult.useGpuForLandmark) "GPU✓" else "CPU")
                 }
                 // 从 landmarks 计算人脸中心点
-                val centerX = landmarks106[48] // 索引 96 (第 49 个点 x 坐标)
-                val centerY = landmarks106[97] // 索引 97 (第 49 个点 y 坐标)
+                val centerX = landmarks106[FaceDetectionFrameCounter.LANDMARK_106_INDEX_X] // 索引 96 (第 49 个点 x 坐标)
+                val centerY = landmarks106[FaceDetectionFrameCounter.LANDMARK_106_INDEX_Y] // 索引 97 (第 49 个点 y 坐标)
                 Logger.d("Camera", "[Debug] $detectorInfo, faceCenter=($centerX, $centerY)")
             }
 

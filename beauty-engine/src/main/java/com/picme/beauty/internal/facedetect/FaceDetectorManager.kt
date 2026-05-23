@@ -39,14 +39,14 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     private var roiDetector: RoiDetector? = null
     private var landmarkDetector: LandmarkDetector? = null
-    
+
     // [关键修复] 使用懒加载，首次 detect 时才从 DataStore 读取配置
     private var pipelineConfig: DetectionPipelineConfig? = null
     private var isPipelineInitialized = false
 
     private var mediaPipeDetector: MediaPipeFaceDetector? = null
     private var insightFaceDetector: InsightFace2D106Detector? = null
-    
+
     // [性能优化] MNN GPU 检测器
     private var mnnRoiDetector: MnnRoiDetector? = null
     private var mnnLandmarkDetector: MnnLandmarkDetector? = null
@@ -99,16 +99,16 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName}")
         Log.i(TAG, "  Pipeline initialized successfully")
         Log.i(TAG, "=========================================")
-        
+
         isPipelineInitialized = true
     }
-    
+
     // [关键修复] 从 DataStore 读取配置并初始化 pipeline
     private fun loadAndInitializePipeline() {
         if (isPipelineInitialized) return
-        
+
         Log.i(TAG, "Loading pipeline config from DataStore...")
-        
+
         // [临时方案] 使用默认值，由 CameraRuntimeState 的 LaunchedEffect 调用 updatePipelineConfig 来设置
         // [临时方案] 使用默认值，由 CameraRuntimeState 的 LaunchedEffect 调用 updatePipelineConfig 来设置
         pipelineConfig = DetectionPipelineConfig(
@@ -117,7 +117,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         )
 
         Log.i(TAG, "DataStore values - ROI: DET10G, Landmark: INSIGHTFACE_2D106 (default)")
-        
+
         initializePipeline()
     }
 
@@ -144,7 +144,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         if (!isPipelineInitialized) {
             loadAndInitializePipeline()
         }
-        
+
         val startTime = SystemClock.elapsedRealtime()
         lastDetectionSource = FaceDetectionSource.NONE
 
@@ -247,9 +247,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         var landmarkResult: FloatArray? = null
         var roiError: Exception? = null
         var landmarkError: Exception? = null
-        
+
         val roiStartTime = SystemClock.elapsedRealtime()
-        
+
         // [性能优化] ROI 检测在独立线程中执行
         val roiJob = Thread(
             Runnable {
@@ -262,22 +262,22 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             },
             "FaceDetect-ROI"
         )
-        
+
         // Landmark 等待 ROI 完成后才能开始（因为需要 ROI 坐标）
         // 所以实际上是串行执行，但可以在 ROI 推理的同时准备 Landmark 输入
         roiJob.start()
         roiJob.join()
-        
+
         // ROI 完成后才开始 Landmark 检测
         val landmarkStart = SystemClock.elapsedRealtime()
         landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roiResult)
         val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
-        
+
         val roiTime = SystemClock.elapsedRealtime() - roiStartTime
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-        
+
         Log.d(TAG, "[Perf] InsightFace breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
-        
+
         // 优先使用 Landmark 结果（更关键）
         if (landmarkResult != null) {
             lastDetectionSource = FaceDetectionSource.INSIGHTFACE
@@ -295,14 +295,14 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                         r.bottom / bitmap.height.toFloat()
                     )
                 }
-                
+
                 // [调试信息] 构建检测器名称和 GPU 状态
                 val roiDetectorName = roiDetector?.javaClass?.simpleName ?: "Unknown"
                 val landmarkDetectorName = landmarkDetector?.javaClass?.simpleName ?: "Unknown"
                 // MNN 检测器默认使用 GPU，ONNX Runtime 使用 CPU
                 val useGpuForRoi = roiDetectorName.contains("Mnn", ignoreCase = true)
                 val useGpuForLandmark = landmarkDetectorName.contains("Mnn", ignoreCase = true)
-                
+
                 return FaceDetectionResult(
                     landmarks106 = adaptedResult,
                     detectionSource = FaceDetectionSource.INSIGHTFACE,
@@ -321,14 +321,14 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 Log.e(TAG, "Landmark detection error", landmarkError)
             }
         }
-        
+
         return null
     }
-    
+
     private fun detectMnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
         var roiResult: android.graphics.RectF? = null
         var landmarkResult: FloatArray? = null
-        
+
         val roiStartTime = SystemClock.elapsedRealtime()
         val roiDetector = mnnRoiDetector
         if (roiDetector != null) {
@@ -339,12 +339,12 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 Log.e(TAG, "MNN ROI detection failed", e)
             }
         }
-        
+
         if (roiResult == null) {
             Log.d(TAG, "No face detected by MNN ROI (${SystemClock.elapsedRealtime() - startTime}ms)")
             return null
         }
-        
+
         // [性能优化] Landmark 检测使用 MnnLandmarkDetector
         val landmarkStartTime = SystemClock.elapsedRealtime()
         val landmarkDetector = mnnLandmarkDetector
@@ -356,12 +356,12 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 Log.e(TAG, "MNN Landmark detection failed", e)
             }
         }
-        
+
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-        
+
         return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
             lastDetectionSource = FaceDetectionSource.MNN
-            
+
             // [关键修复] 使用 MnnLandmarkAdapter 进行点序映射
             val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MNN)
                 ?: return null
@@ -370,7 +370,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 Log.w(TAG, "MNN landmark adaptation failed")
                 return null
             }
-            
+
             // 归一化 ROI 坐标
             val normalizedRoi = android.graphics.RectF(
                 roiResult.left / bitmap.width.toFloat(),
@@ -378,9 +378,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 roiResult.right / bitmap.width.toFloat(),
                 roiResult.bottom / bitmap.height.toFloat()
             )
-            
+
             Log.i(TAG, "[Perf] MNN detection DONE: total=${lastProcessTimeMs}ms, GPU✓")
-            
+
             FaceDetectionResult(
                 landmarks106 = adaptedResult,
                 detectionSource = FaceDetectionSource.MNN,

@@ -12,9 +12,9 @@ class InsightFaceLandmarkDetector(context: Context) : LandmarkDetector {
     companion object {
         private const val TAG = "PicMe:InsightFaceLandmark"
     }
-    
+
     private val detector = InsightFace2D106Detector(context)
-    
+
     override fun detectLandmarks(
         bitmap: Bitmap,
         lensFacing: Int,
@@ -22,18 +22,18 @@ class InsightFaceLandmarkDetector(context: Context) : LandmarkDetector {
     ): FloatArray? {
         return try {
             val result = detector.detect(bitmap, lensFacing, roi)
-            
+
             if (result != null) {
                 Log.d(TAG, "InsightFace landmarks detected: ${result.size / 2} points")
             }
-            
+
             result
         } catch (e: Exception) {
             Log.e(TAG, "InsightFace landmark detection failed", e)
             null
         }
     }
-    
+
     override fun release() {
         detector.release()
     }

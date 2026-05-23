@@ -171,10 +171,14 @@ fun MediaPager(
                             onPrepareEdit(bitmap)
                         }
                     } else {
-                        Log.e("PicMe:Gallery", "Failed to decode bitmap for editing")
+                        Logger.e("PicMe:Gallery", "Failed to decode bitmap for editing")
                     }
-                } catch (e: Exception) {
-                    Log.e("PicMe:Gallery", "Failed to load bitmap for editing: ${e.message}", e)
+                } catch (e: java.io.IOException) {
+                    Logger.e("PicMe:Gallery", "IO error when loading bitmap: ${e.message}")
+                } catch (e: OutOfMemoryError) {
+                    Logger.e("PicMe:Gallery", "OOM when loading bitmap: ${e.message}")
+                } catch (e: IllegalArgumentException) {
+                    Logger.e("PicMe:Gallery", "Invalid image data: ${e.message}")
                 }
             }
         }
@@ -437,7 +441,7 @@ fun MediaPager(
         }
 
         // Top Controls
-        MediaPagerTopControls(
+        mediaPagerTopControls(
             onClose = {
                 if (isEditing) {
                     isEditing = false
@@ -518,7 +522,7 @@ fun MediaPager(
 
         // Photo Edit Panel
         if (isEditing && currentAsset?.type == MediaType.PHOTO) {
-            PhotoEditPanel(
+            photoEditPanel(
                 editState = editState,
                 settings = editSettings,
                 onSettingsChanged = { editSettings = it },
@@ -713,12 +717,12 @@ private fun OcrResultOverlay(
                                     }
                                 }
                             }
-                            
+
                             Divider(
                                 modifier = Modifier.padding(vertical = 8.dp),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
                             )
-                            
+
                             val scrollState = rememberScrollState()
                             // Scrollable text content with constrained height
                             Text(
@@ -733,7 +737,7 @@ private fun OcrResultOverlay(
                                 color = Color.Black,
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            
+
                             // Action buttons at bottom
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -815,7 +819,7 @@ private fun OcrResultOverlay(
 }
 
 @Composable
-private fun MediaPagerTopControls(
+private fun mediaPagerTopControls(
     onClose: () -> Unit,
     showInfo: Boolean,
     showLandmarkAction: Boolean,
@@ -983,7 +987,7 @@ private fun SourceInfoOverlay(
 }
 
 @Composable
-private fun PhotoEditPanel(
+private fun photoEditPanel(
     editState: MediaViewModel.PhotoEditState,
     settings: BeautySettings,
     onSettingsChanged: (BeautySettings) -> Unit,
@@ -1003,75 +1007,72 @@ private fun PhotoEditPanel(
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            when (editState) {
-                is MediaViewModel.PhotoEditState.Analyzing -> {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.analyzing_face),
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                }
-                else -> {
-                    BeautySelector(
-                        settings = settings,
-                        onSettingsChanged = onSettingsChanged
-                    )
+            if (editState is MediaViewModel.PhotoEditState.Analyzing) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                Text(
+                    text = stringResource(R.string.analyzing_face),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            } else {
+                BeautySelector(
+                    settings = settings,
+                    onSettingsChanged = onSettingsChanged
+                )
 
-                    Spacer(modifier = Modifier.padding(vertical = 8.dp))
+                Spacer(modifier = Modifier.padding(vertical = 8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val isProcessing = editState is MediaViewModel.PhotoEditState.Processing
+
+                    OutlinedButton(
+                        onClick = onCancel,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color.White
+                        )
                     ) {
-                        val isProcessing = editState is MediaViewModel.PhotoEditState.Processing
+                        Text(
+                            text = stringResource(R.string.cancel),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
 
-                        OutlinedButton(
-                            onClick = onCancel,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color.White
+                    Button(
+                        onClick = onSave,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f),
+                        enabled = !isProcessing
+                    ) {
+                        if (isProcessing) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
                             )
-                        ) {
-                            Text(
-                                text = stringResource(R.string.cancel),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-
-                        Button(
-                            onClick = onSave,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.weight(1f),
-                            enabled = !isProcessing
-                        ) {
-                            if (isProcessing) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Rounded.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(R.string.save),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.save),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }

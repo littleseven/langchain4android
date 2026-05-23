@@ -26,11 +26,7 @@ import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.DetectionModelType
-import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.InferenceDevicePreference
-import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.first
@@ -86,17 +82,17 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         initial = StageConfig.defaultLandmark()
     )
     val lifecycleOwner = LocalLifecycleOwner.current
-    
+
     // [关键修复] 在 LaunchedEffect 中使用 produceState 确保首次发射后触发配置更新
     LaunchedEffect(Unit) {
         // 等待 DataStore 发射初始值
         val roiConfig = userPreferencesRepository.roiStageConfigFlow.first()
         val landmarkConfig = userPreferencesRepository.landmarkStageConfigFlow.first()
-        
+
         Logger.d("Camera", "=== First-time Config Initialization ===")
         Logger.d("Camera", "  ROI Config from DataStore: $roiConfig")
         Logger.d("Camera", "  Landmark Config from DataStore: $landmarkConfig")
-        
+
         // [诊断测试] 临时强制使用 MNN 进行对比
         val config = DetectionPipelineConfig(
             roiDetector = RoiDetectorType.DET10G,
@@ -106,7 +102,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
             roiDevice = DevicePreference.FORCE_GPU,
             landmarkDevice = DevicePreference.FORCE_GPU
         )
-        
+
         faceDetectorManager.updatePipelineConfig(config)
         Logger.d("Camera", "  Initial pipeline config applied successfully")
         Logger.d("Camera", "========================================")

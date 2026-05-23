@@ -864,11 +864,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 使用 2D 主 Shader 渲染
         shaderProgram2D.use()
-        
+
         // [调试] 检查 Shader 程序是否有效
         val programId = shaderProgram2D.getProgramId()
         Log.d(TAG, "renderMainShaderFromFbo2D: using shader program $programId")
-        
+
         // [调试] 检查当前绑定的 FBO
         val boundFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, boundFbo, 0)
@@ -996,7 +996,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 绘制
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        
+
         // [调试] 检查绘制后的 GL 错误
         val drawError = GLES20.glGetError()
         if (drawError != GLES20.GL_NO_ERROR) {
@@ -1447,7 +1447,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     /**
      * 设置调试模式
-     * @param mode 0=正常, 1=Skin Mask, 2=Warp Offset, 
+     * @param mode 0=正常, 1=Skin Mask, 2=Warp Offset,
      *             3=BigEye Radius, 4=ThinFace Radius, 5=All Warp
      */
     fun setDebugMode(mode: Int) {
@@ -1575,12 +1575,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     /**
      * 离屏渲染（用于拍照）
-     * 
+     *
      * 与预览保持一致的完整多 Pass 管线：
      * 1. executeBeautyPasses: CopyPass + BeautyUnitPass（磨皮+美白+LUT）
      * 2. renderFaceMakeupPass: 唇色 + 腮红
      * 3. renderMainShaderFromFbo: 美型 + 调色 → 输出到当前绑定的 FBO
-     * 
+     *
      * @param width 渲染宽度
      * @param height 渲染高度
      */
@@ -1590,27 +1590,27 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, entryFbo, 0)
         val savedFboId = entryFbo[0]  // 保存入口时的 FBO ID
         Log.d(TAG, "renderBeautyMultiPass ENTRY: bound FBO=$savedFboId")
-        
+
         // 设置 viewport
         GLES20.glViewport(0, 0, width, height)
-        
+
         clearLastRenderError()
         val activeStyle = styleEffectShader.getActiveStyle()
-        
+
         // 步骤1: 执行磨皮/美白 Pass
         Log.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
         val beautyPassSuccess = executeBeautyPasses(skipCopyPass)
         Log.d(TAG, "renderBeautyMultiPass(offscreen): executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
-        
+
         // [调试] 检查 executeBeautyPasses 后的 FBO 状态
         val afterBeautyFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, afterBeautyFbo, 0)
         Log.d(TAG, "After executeBeautyPasses: bound FBO=${afterBeautyFbo[0]}")
-        
+
         // [关键修复] executeBeautyPasses 会 unbind FBO，需要重新绑定
         // 但我们不知道外部绑定的 FBO ID，所以需要在调用前保存
         // 暂时跳过，看后面是否有问题
-        
+
         // [关键修复] 如果 executeBeautyPasses 返回 false（无需 FBO 管线），使用外部纹理 ID
         val finalInputTextureId = if (beautyPassSuccess) {
             beautyPassOutputTextureId
@@ -1622,7 +1622,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         if (!beautyPassSuccess) {
             Log.d(TAG, "Skipping FBO pipeline, using external texture directly")
         }
-        
+
         // 步骤2: FaceMakeupPass 妆容渲染
         Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
         var currentTextureId = finalInputTextureId
@@ -1634,22 +1634,22 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 currentTextureId = renderFaceMakeupPass(finalInputTextureId, ping, pong)
             }
         }
-        
+
         // [调试] 检查 FaceMakeupPass 后的 FBO 状态
         val afterMakeupFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, afterMakeupFbo, 0)
         Log.d(TAG, "After FaceMakeupPass: bound FBO=${afterMakeupFbo[0]}")
-        
+
         // 步骤3: 使用主 Shader 渲染到当前绑定的 FBO
         // [关键修复] 不能调用 renderMainShaderFromFbo(null)，因为它会解绑 FBO
         // 而是应该直接使用 renderMainShaderFromFbo2D，它不会绑定/解绑 FBO
-        
+
         // [关键修复] 重新绑定入口时的 FBO，因为 executeBeautyPasses/renderFaceMakeupPass 会 unbind
         if (savedFboId > 0) {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
             Log.d(TAG, "Rebound to saved FBO: $savedFboId")
         }
-        
+
         // [关键修复] 重新绑定入口时的 FBO，因为 executeBeautyPasses/renderFaceMakeupPass 会 unbind
         if (savedFboId > 0) {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFboId)
@@ -1660,17 +1660,17 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // [关键修复] 使用 currentTextureId（而非 beautyPassOutputTextureId），
         // 因为 FaceMakeupPass 可能已改变输出纹理
         Log.d(TAG, "renderMainShaderFromFbo2D(offscreen): input=$currentTextureId")
-        
+
         // [调试] 检查输入纹理是否有效
         if (currentTextureId <= 0) {
             Log.e(TAG, "ERROR: currentTextureId is invalid: $currentTextureId")
         }
-        
+
         // [调试] 检查当前绑定的 FBO
         val currentFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, currentFbo, 0)
         Log.d(TAG, "Current bound FBO before renderMainShaderFromFbo2D: ${currentFbo[0]}")
-        
+
         if (activeStyle != StyleEffect.NONE) {
             // 有风格特效：先渲染主Shader到 intermediateFbo，再应用风格特效到 savedFboId
             updateFramebufferSize(width, height)

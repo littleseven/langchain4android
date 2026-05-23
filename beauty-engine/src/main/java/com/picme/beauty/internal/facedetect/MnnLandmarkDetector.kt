@@ -33,7 +33,7 @@ class MnnLandmarkDetector(
     private val appContext = context.applicationContext
     private var detector: MnnFaceDetector? = null
     private var isInitialized = false
-    
+
     // [性能优化] 复用 Bitmap 池
     private var reusableScaledBitmap: Bitmap? = null
 
@@ -42,10 +42,10 @@ class MnnLandmarkDetector(
      */
     private fun ensureInitialized() {
         if (isInitialized) return
-        
+
         synchronized(this) {
             if (isInitialized) return
-            
+
             initialize()
             isInitialized = true
         }
@@ -249,7 +249,7 @@ class MnnLandmarkDetector(
     /**
      * 解析 MNN 输出的 106 点关键点
      * 使用逆变换矩阵将模型坐标系 [-1, 1] 映射回原始图像坐标系
-     * 
+     *
      * 与 InsightFace2D106Detector 保持一致：
      * 1. 模型输出 [-1, 1] → INPUT_SIZE 像素坐标
      * 2. 逆变换矩阵映射回原始图像空间

@@ -40,6 +40,15 @@ import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.api.facedetect.GpuPixelLandmarks
 import kotlin.math.sqrt
 
+// [常量定义] 调试颜色
+private val MEDIAPIPE_DEBUG_COLOR = Color(0xFF4DB6AC)
+private val INSIGHTFACE_DEBUG_COLOR = Color(0xFFFFB300)
+private val MNN_DEBUG_COLOR = Color(0xFF7E57C2)
+private val MEDIAPIPE_SOURCE_COLOR = Color(0xFF26A69A)
+private val INSIGHTFACE_SOURCE_COLOR = Color(0xFFFF8F00)
+private val MNN_SOURCE_COLOR = Color(0xFFAB47BC)
+private val NONE_DEBUG_COLOR = Color(0xFF9E9E9E)
+
 @Composable
 internal fun FaceDebugOverlay(
     faceWarpParams: FaceWarpParams,
@@ -156,18 +165,18 @@ private fun FaceDebugStatusRow(
 
 private fun faceDebugRequestedColor(mode: EngineType): Color {
     return when (mode) {
-        EngineType.MEDIAPIPE -> Color(0xFF4DB6AC)
-        EngineType.INSIGHTFACE -> Color(0xFFFFB300)
-        EngineType.MNN -> Color(0xFF7E57C2)  // [性能优化] MNN Vulkan GPU
+        EngineType.MEDIAPIPE -> MEDIAPIPE_DEBUG_COLOR
+        EngineType.INSIGHTFACE -> INSIGHTFACE_DEBUG_COLOR
+        EngineType.MNN -> MNN_DEBUG_COLOR  // [性能优化] MNN Vulkan GPU
     }
 }
 
 private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
     return when (source) {
-        FaceDetectionSource.MEDIAPIPE -> Color(0xFF26A69A)
-        FaceDetectionSource.INSIGHTFACE -> Color(0xFFFF8F00)
-        FaceDetectionSource.MNN -> Color(0xFFAB47BC)  // [性能优化] MNN Vulkan GPU
-        FaceDetectionSource.NONE -> Color(0xFF9E9E9E)
+        FaceDetectionSource.MEDIAPIPE -> MEDIAPIPE_SOURCE_COLOR
+        FaceDetectionSource.INSIGHTFACE -> INSIGHTFACE_SOURCE_COLOR
+        FaceDetectionSource.MNN -> MNN_SOURCE_COLOR  // [性能优化] MNN Vulkan GPU
+        FaceDetectionSource.NONE -> NONE_DEBUG_COLOR
     }
 }
 
@@ -221,7 +230,7 @@ private fun FaceDebugOverlayBigBeauty(
             val roiTop = contentOffsetY + roi.top.coerceIn(0f, 1f) * contentHeight
             val roiRight = contentOffsetX + roi.right.coerceIn(0f, 1f) * contentWidth
             val roiBottom = contentOffsetY + roi.bottom.coerceIn(0f, 1f) * contentHeight
-            
+
             // 绘制 ROI 边框
             drawRect(
                 color = Color(0xFFFF6D00).copy(alpha = 0.8f),
@@ -229,7 +238,7 @@ private fun FaceDebugOverlayBigBeauty(
                 size = androidx.compose.ui.geometry.Size(roiRight - roiLeft, roiBottom - roiTop),
                 style = Stroke(width = 3.dp.toPx())
             )
-            
+
             // 绘制 ROI 四个角点
             val cornerSize = 15.dp.toPx()
             // 左上角
@@ -244,7 +253,7 @@ private fun FaceDebugOverlayBigBeauty(
             // 右下角
             drawLine(color = Color.Yellow, start = Offset(roiRight, roiBottom), end = Offset(roiRight - cornerSize, roiBottom), strokeWidth = 4.dp.toPx())
             drawLine(color = Color.Yellow, start = Offset(roiRight, roiBottom), end = Offset(roiRight, roiBottom - cornerSize), strokeWidth = 4.dp.toPx())
-            
+
             // 标注 ROI 尺寸
             val textPaint = Paint().apply {
                 textSize = 12.dp.toPx()

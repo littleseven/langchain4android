@@ -12,12 +12,12 @@ interface SmoothingShader {
      * @return 输出纹理 ID（可能是新的纹理，也可能是输入纹理）
      */
     fun render(inputTexture: Int, intensity: Int): Int
-    
+
     /**
      * 设置强度参数
      */
     fun setIntensity(intensity: Int)
-    
+
     /**
      * 释放资源
      */
