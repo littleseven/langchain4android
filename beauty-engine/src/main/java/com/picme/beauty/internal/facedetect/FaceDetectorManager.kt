@@ -344,6 +344,15 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
             lastDetectionSource = FaceDetectionSource.MNN
             
+            // [关键修复] 使用 MnnLandmarkAdapter 进行点序映射
+            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MNN)
+                ?: return null
+            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
+            if (adaptedResult == null) {
+                Log.w(TAG, "MNN landmark adaptation failed")
+                return null
+            }
+            
             // 归一化 ROI 坐标
             val normalizedRoi = android.graphics.RectF(
                 roiResult.left / bitmap.width.toFloat(),
@@ -355,7 +364,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             Log.i(TAG, "[Perf] MNN detection DONE: total=${lastProcessTimeMs}ms, GPU✓")
             
             FaceDetectionResult(
-                landmarks106 = landmarkResult,
+                landmarks106 = adaptedResult,
                 detectionSource = FaceDetectionSource.MNN,
                 roiRect = normalizedRoi,
                 roiDetectorName = "MnnRoiDetector",
@@ -364,7 +373,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 useGpuForLandmark = true
             )
         } else {
-            Log.w(TAG, "MNN landmark adaptation failed")
+            Log.w(TAG, "MNN landmark result invalid: size=${landmarkResult?.size}")
             null
         }
     }

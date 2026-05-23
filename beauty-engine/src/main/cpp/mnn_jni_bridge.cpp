@@ -119,17 +119,27 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetina
         return nullptr;
     }
 
+    // [对齐 ONNX] 选择置信度 * 面积最大的人脸
+    const picme::FaceBox *selectedFace = &faces[0];
+    float maxScore = faces[0].confidence * faces[0].area();
+    for (size_t i = 1; i < faces.size(); i++) {
+        float score = faces[i].confidence * faces[i].area();
+        if (score > maxScore) {
+            maxScore = score;
+            selectedFace = &faces[i];
+        }
+    }
+
     // 取置信度最高的人脸，返回 [x1, y1, x2, y2, score, landmarks(10)]
-    const auto &face = faces[0];
     const int OUTPUT_SIZE = 15; // 4 bbox + 1 score + 10 landmarks
     float output[OUTPUT_SIZE];
-    output[0] = face.x1;
-    output[1] = face.y1;
-    output[2] = face.x2;
-    output[3] = face.y2;
-    output[4] = face.confidence;
+    output[0] = selectedFace->x1;
+    output[1] = selectedFace->y1;
+    output[2] = selectedFace->x2;
+    output[3] = selectedFace->y2;
+    output[4] = selectedFace->confidence;
     for (int i = 0; i < 10; i++) {
-        output[5 + i] = face.landmarks[i];
+        output[5 + i] = selectedFace->landmarks[i];
     }
 
     jfloatArray result = env->NewFloatArray(OUTPUT_SIZE);
