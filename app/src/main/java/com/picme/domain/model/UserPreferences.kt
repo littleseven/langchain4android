@@ -24,12 +24,12 @@ enum class BeautyStrategy {
 }
 
 /**
- * 人脸检测算法引擎模式（领域模型）
+ * 人脸检测算法模式（领域模型）
+ * 表示使用的检测算法/模型系列
  */
 enum class FaceDetectionEngineMode {
-    MEDIAPIPE,
-    INSIGHTFACE,
-    MNN        // [性能优化] MNN Vulkan GPU 检测器
+    MEDIAPIPE,  // MediaPipe 算法系列
+    INSIGHTFACE // InsightFace 算法系列 (Det10G + 2D106)
 }
 
 /**
@@ -56,8 +56,7 @@ enum class DetectionStage {
 enum class DetectionModelType {
     MEDIAPIPE,          // MediaPipe 系列模型
     INSIGHTFACE_DET10G, // InsightFace Det10G (ROI)
-    INSIGHTFACE_2D106,  // InsightFace 2D106 (Landmark)
-    MNN                 // MNN 系列模型
+    INSIGHTFACE_2D106   // InsightFace 2D106 (Landmark)
 }
 
 /**

@@ -44,9 +44,11 @@ import kotlin.math.sqrt
 private val MEDIAPIPE_DEBUG_COLOR = Color(0xFF4DB6AC)
 private val INSIGHTFACE_DEBUG_COLOR = Color(0xFFFFB300)
 private val MNN_DEBUG_COLOR = Color(0xFF7E57C2)
+private val NCNN_DEBUG_COLOR = Color(0xFF42A5F5)
 private val MEDIAPIPE_SOURCE_COLOR = Color(0xFF26A69A)
 private val INSIGHTFACE_SOURCE_COLOR = Color(0xFFFF8F00)
 private val MNN_SOURCE_COLOR = Color(0xFFAB47BC)
+private val NCNN_SOURCE_COLOR = Color(0xFF64B5F6)
 private val NONE_DEBUG_COLOR = Color(0xFF9E9E9E)
 
 @Composable
@@ -60,13 +62,15 @@ internal fun FaceDebugOverlay(
     val detectionLabel = when (faceWarpParams.detectionSource) {
         FaceDetectionSource.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         FaceDetectionSource.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
-        FaceDetectionSource.MNN -> stringResource(R.string.face_detection_engine_mode_mnn)
+        FaceDetectionSource.MNN -> stringResource(R.string.inference_engine_mnn)
+        FaceDetectionSource.NCNN -> stringResource(R.string.inference_engine_ncnn)
         FaceDetectionSource.NONE -> stringResource(R.string.face_detection_source_none)
     }
     val requestedLabel = when (faceWarpParams.requestedDetectionEngineMode) {
         EngineType.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         EngineType.INSIGHTFACE -> stringResource(R.string.face_detection_engine_mode_insightface)
-        EngineType.MNN -> stringResource(R.string.face_detection_engine_mode_mnn)
+        EngineType.MNN -> stringResource(R.string.inference_engine_mnn)
+        EngineType.NCNN -> stringResource(R.string.inference_engine_ncnn)
     }
     val requestedColor = faceDebugRequestedColor(faceWarpParams.requestedDetectionEngineMode)
     val detectionColor = faceDebugSourceColor(faceWarpParams.detectionSource)
@@ -168,6 +172,7 @@ private fun faceDebugRequestedColor(mode: EngineType): Color {
         EngineType.MEDIAPIPE -> MEDIAPIPE_DEBUG_COLOR
         EngineType.INSIGHTFACE -> INSIGHTFACE_DEBUG_COLOR
         EngineType.MNN -> MNN_DEBUG_COLOR  // [性能优化] MNN Vulkan GPU
+        EngineType.NCNN -> NCNN_DEBUG_COLOR  // [性能优化] NCNN 轻量级检测器
     }
 }
 
@@ -176,6 +181,7 @@ private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
         FaceDetectionSource.MEDIAPIPE -> MEDIAPIPE_SOURCE_COLOR
         FaceDetectionSource.INSIGHTFACE -> INSIGHTFACE_SOURCE_COLOR
         FaceDetectionSource.MNN -> MNN_SOURCE_COLOR  // [性能优化] MNN Vulkan GPU
+        FaceDetectionSource.NCNN -> NCNN_SOURCE_COLOR  // [性能优化] NCNN 轻量级检测器
         FaceDetectionSource.NONE -> NONE_DEBUG_COLOR
     }
 }

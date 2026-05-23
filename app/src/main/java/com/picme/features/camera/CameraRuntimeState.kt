@@ -27,6 +27,9 @@ import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.InferenceDevicePreference
+import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.first
@@ -35,6 +38,32 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
+
+// 领域模型 → 推理引擎层模型转换
+private fun DetectionModelType.toRoiDetectorType(): RoiDetectorType = when (this) {
+    DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
+    DetectionModelType.INSIGHTFACE_DET10G -> RoiDetectorType.DET10G
+    DetectionModelType.INSIGHTFACE_2D106 -> error("2D106 is not a valid ROI detector model")
+}
+
+private fun DetectionModelType.toLandmarkDetectorType(): LandmarkDetectorType = when (this) {
+    DetectionModelType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
+    DetectionModelType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
+    DetectionModelType.INSIGHTFACE_DET10G -> error("DET10G is not a valid Landmark detector model")
+}
+
+private fun InferenceEngineType.toInferenceBackendType(): InferenceBackendType = when (this) {
+    InferenceEngineType.ONNX -> InferenceBackendType.ONNX
+    InferenceEngineType.MNN -> InferenceBackendType.MNN
+    InferenceEngineType.NCNN -> InferenceBackendType.NCNN
+    InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
+}
+
+private fun InferenceDevicePreference.toDevicePreference(): DevicePreference = when (this) {
+    InferenceDevicePreference.AUTO -> DevicePreference.AUTO
+    InferenceDevicePreference.FORCE_CPU -> DevicePreference.FORCE_CPU
+    InferenceDevicePreference.FORCE_GPU -> DevicePreference.FORCE_GPU
+}
 
 internal data class CameraRuntimeContext(
     val imageProcessor: ImageProcessor,
@@ -93,14 +122,14 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         Logger.d("Camera", "  ROI Config from DataStore: $roiConfig")
         Logger.d("Camera", "  Landmark Config from DataStore: $landmarkConfig")
 
-        // [诊断测试] 临时强制使用 MNN 进行对比
+        // 使用 DataStore 中的阶段配置创建检测流水线
         val config = DetectionPipelineConfig(
-            roiDetector = RoiDetectorType.DET10G,
-            landmarkDetector = LandmarkDetectorType.INSIGHTFACE_2D106,
-            roiEngine = InferenceBackendType.MNN,
-            landmarkEngine = InferenceBackendType.MNN,
-            roiDevice = DevicePreference.FORCE_GPU,
-            landmarkDevice = DevicePreference.FORCE_GPU
+            roiDetector = roiConfig.modelType.toRoiDetectorType(),
+            landmarkDetector = landmarkConfig.modelType.toLandmarkDetectorType(),
+            roiEngine = roiConfig.engineType.toInferenceBackendType(),
+            landmarkEngine = landmarkConfig.engineType.toInferenceBackendType(),
+            roiDevice = roiConfig.devicePreference.toDevicePreference(),
+            landmarkDevice = landmarkConfig.devicePreference.toDevicePreference()
         )
 
         faceDetectorManager.updatePipelineConfig(config)
