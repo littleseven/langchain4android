@@ -35,7 +35,9 @@
       "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git diff gradle/wrapper/gradle-wrapper.properties)",
       "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git diff gradlew | head -20)",
       "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git checkout gradlew gradlew.bat)",
-      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git add -A && git status)"
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git add -A && git status)",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git commit -m \"fix: 修复 Detekt 静态分析问题和 Gradle Wrapper 配置\n\n- 移除未使用的导入 \\(UnusedImports\\)\n- 清理末尾空格 \\(TrailingWhitespace\\)\n- 重命名函数为小驼峰命名 \\(FunctionNaming\\)\n- 替换魔法数字为命名常量 \\(MagicNumber\\)\n- 改进异常处理 \\(Exception Handling\\)\n- 使用 if-else 替代 binary when \\(UseIfInsteadOfWhen\\)\n- 恢复 Gradle Wrapper 配置文件\")",
+      "Bash(cd /Users/guoshuai/AndroidStudioProjects/PicMe && git push origin feature/frame-sync-makeup)"
     ]
   }
 }
