@@ -21,7 +21,7 @@ import kotlin.math.min
  * 内部采用两阶段检测架构：
  * - 第一阶段：Det10G (RetinaFace) 快速检测人脸存在性并提供 ROI
  * - 第二阶段：2d106det.onnx 在 ROI 内输出 106 点关键点
- * 
+ *
  * 外部调用者无需关心内部实现细节，只需调用 detect() 方法即可。
  */
 class InsightFace2D106Detector(context: Context) {

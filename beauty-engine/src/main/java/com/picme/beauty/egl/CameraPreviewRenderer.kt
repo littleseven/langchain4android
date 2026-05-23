@@ -157,7 +157,7 @@ class CameraPreviewRenderer(private val context: Context) {
         beautyRenderer.onInit()
         // [帧同步 P2] 预生成首个 FrameId，避免分析线程与渲染线程首次序号分叉
         FrameSyncBridge.setLatestFrameId(FrameId.next(), surfaceTexture?.timestamp ?: 0L)
-        
+
         eglCore.clearCurrent()
 
         textureListener?.onTextureAvailable(surfaceTexture!!, DEFAULT_WIDTH, DEFAULT_HEIGHT)

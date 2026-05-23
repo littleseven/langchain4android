@@ -38,7 +38,7 @@ class MnnRoiDetector(
     private val appContext = context.applicationContext
     private var detector: MnnFaceDetector? = null
     private var isInitialized = false
-    
+
     // [性能优化] Bitmap 缩放复用池
     private var reusableScaledBitmap: Bitmap? = null
 
@@ -47,10 +47,10 @@ class MnnRoiDetector(
      */
     private fun ensureInitialized() {
         if (isInitialized) return
-        
+
         synchronized(this) {
             if (isInitialized) return
-            
+
             initialize()
             isInitialized = true
         }
@@ -96,7 +96,7 @@ class MnnRoiDetector(
     override fun detectRoi(bitmap: Bitmap): RectF? {
         // [优化] 懒加载初始化
         ensureInitialized()
-        
+
         val totalStart = SystemClock.elapsedRealtime()
         val det = detector
 
@@ -133,16 +133,16 @@ class MnnRoiDetector(
             val scaledH = (origH * scale).toInt()
             val padLeft = (INPUT_SIZE - scaledW) / 2f
             val padTop = (INPUT_SIZE - scaledH) / 2f
-            
+
             Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
             Log.d(TAG, "[Diag] Raw MNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
-            
+
             // [对齐 ONNX] 1. 减去 letterbox padding，再除以缩放比例，映射回原图
             var mappedX1 = ((result[0] - padLeft) / scale)
             var mappedY1 = ((result[1] - padTop) / scale)
             var mappedX2 = ((result[2] - padLeft) / scale)
             var mappedY2 = ((result[3] - padTop) / scale)
-            
+
             // [对齐 ONNX] 2. 放大 ROI 区域，以包含更多面部上下文
             val centerX = (mappedX1 + mappedX2) / 2f
             val centerY = (mappedY1 + mappedY2) / 2f
@@ -150,14 +150,14 @@ class MnnRoiDetector(
             val height = mappedY2 - mappedY1
             val newWidth = width * ROI_EXPAND_RATIO
             val newHeight = height * ROI_EXPAND_RATIO
-            
+
             mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
             mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
             mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
             mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
-            
+
             val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
-            
+
             Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
 
             Log.i(TAG, "[Perf] MnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")

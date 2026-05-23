@@ -12,9 +12,9 @@ class MediaPipeLandmarkDetector(context: Context) : LandmarkDetector {
     companion object {
         private const val TAG = "PicMe:MediaPipeLandmark"
     }
-    
+
     private val faceDetector = MediaPipeFaceDetector(context)
-    
+
     override fun detectLandmarks(
         bitmap: Bitmap,
         lensFacing: Int,
@@ -23,18 +23,18 @@ class MediaPipeLandmarkDetector(context: Context) : LandmarkDetector {
         return try {
             // MediaPipe 不需要 ROI,直接检测全图
             val result = faceDetector.detectForPhoto(bitmap, lensFacing)
-            
+
             if (result != null) {
                 Log.d(TAG, "MediaPipe landmarks detected: ${result.size / 2} points")
             }
-            
+
             result
         } catch (e: Exception) {
             Log.e(TAG, "MediaPipe landmark detection failed", e)
             null
         }
     }
-    
+
     override fun release() {
         faceDetector.release()
     }

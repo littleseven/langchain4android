@@ -9,9 +9,9 @@ import org.junit.runners.Parameterized
 
 /**
  * 人脸数据流端到端测试
- * 
+ *
  * 按照数据传递流程顺序设计，确保可以定位哪个子流程发生异常
- * 
+ *
  * 数据流：
  * Stage 1: ML Kit 人脸检测 → 图像坐标 (faceX, faceY)
  * Stage 2: 坐标转换 → PreviewView 像素坐标 (screenX, screenY)

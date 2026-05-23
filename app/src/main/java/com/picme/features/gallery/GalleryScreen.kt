@@ -184,7 +184,7 @@ fun GalleryScreen(
     ) {
         hasMediaPermission = hasGalleryPermission(context)
     }
-    
+
     // Android 10 (API 29) 恢复性删除权限请求 launcher
     val api29DeleteLauncher = if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
         rememberLauncherForActivityResult(
@@ -738,7 +738,7 @@ private fun DuplicateManagerScreen(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
-            
+
             items(
                 count = duplicateGroups.size,
                 key = { index -> index }
@@ -759,7 +759,7 @@ private fun DuplicateGroupCard(
     onDeleteGroup: (DuplicateGroup) -> Unit
 ) {
     var showPreview by remember { mutableStateOf(false) }
-    
+
     androidx.compose.material3.Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -784,7 +784,7 @@ private fun DuplicateGroupCard(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -805,7 +805,7 @@ private fun DuplicateGroupCard(
                     )
                 }
             }
-            
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

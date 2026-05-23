@@ -40,7 +40,7 @@ fun DocumentDetectionOverlay(
                     // 绘制四个角的引导框
                     val cornerLength = 40f
                     val strokeWidth = 6f
-                    
+
                     // 左上角
                     drawLine(
                         color = Color.Unspecified,
@@ -54,7 +54,7 @@ fun DocumentDetectionOverlay(
                         end = androidx.compose.ui.geometry.Offset(bounds.left + cornerLength, bounds.top),
                         strokeWidth = strokeWidth
                     )
-                    
+
                     // 右上角
                     drawLine(
                         color = Color.Unspecified,
@@ -68,7 +68,7 @@ fun DocumentDetectionOverlay(
                         end = androidx.compose.ui.geometry.Offset(bounds.right, bounds.top + cornerLength),
                         strokeWidth = strokeWidth
                     )
-                    
+
                     // 右下角
                     drawLine(
                         color = Color.Unspecified,
@@ -82,7 +82,7 @@ fun DocumentDetectionOverlay(
                         end = androidx.compose.ui.geometry.Offset(bounds.right - cornerLength, bounds.bottom),
                         strokeWidth = strokeWidth
                     )
-                    
+
                     // 左下角
                     drawLine(
                         color = Color.Unspecified,
@@ -96,7 +96,7 @@ fun DocumentDetectionOverlay(
                         end = androidx.compose.ui.geometry.Offset(bounds.left, bounds.bottom - cornerLength),
                         strokeWidth = strokeWidth
                     )
-                    
+
                     // 半透明遮罩
                     drawRect(
                         brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.1f))),

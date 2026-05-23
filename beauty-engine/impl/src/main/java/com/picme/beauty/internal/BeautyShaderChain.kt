@@ -2,9 +2,9 @@ package com.picme.beauty.internal
 
 /**
  * 统一美颜 Shader 链
- * 
+ *
  * 核心设计：预览和拍照共用同一套 Shader 实例，确保 100% 一致性
- * 
+ *
  * Shader 执行顺序（按美颜管线）：
  * 1. 磨皮 (Smoothing) - 双边滤波
  * 2. 美白 (Whitening) - YUV 亮度
@@ -13,7 +13,7 @@ package com.picme.beauty.internal
  * 5. 唇色 (LipColor) - HSV 色相调整
  * 6. 腮红 (Blush) - 椭圆染色
  * 7. 滤镜 (Filter) - ColorMatrix
- * 
+ *
  * 每个 Shader 的输出作为下一个 Shader 的输入，形成链式处理
  */
 class BeautyShaderChain(
@@ -33,7 +33,7 @@ class BeautyShaderChain(
             field = value
             updateShaderParams(value)
         }
-    
+
     /**
      * 人脸数据（用于瘦脸、大眼等需要关键点的效果）
      */
@@ -42,51 +42,51 @@ class BeautyShaderChain(
             field = value
             updateFaceData(value)
         }
-    
+
     /**
      * 执行 Shader 链渲染
-     * 
+     *
      * @param inputTexture 输入纹理 ID
      * @param outputTexture 输出纹理 ID（通常绑定到 FBO）
      */
     fun render(inputTexture: Int, outputTexture: Int) {
         var currentTexture = inputTexture
-        
+
         // 1. 磨皮（如果启用）
         if (params.smoothing > 0 && smoothingShader != null) {
             currentTexture = smoothingShader.render(currentTexture, params.smoothing)
         }
-        
+
         // 2. 美白（如果启用）
         if (params.whitening > 0 && whiteningShader != null) {
             currentTexture = whiteningShader.render(currentTexture, params.whitening)
         }
-        
+
         // 3. 瘦脸（如果启用且有面部数据）
         if (params.slimFace != 0f && slimFaceShader != null && faceData != null) {
             currentTexture = slimFaceShader.render(currentTexture, faceData!!, params.slimFace)
         }
-        
+
         // 4. 大眼（如果启用且有面部数据）
         if (params.bigEyes > 0 && bigEyesShader != null && faceData != null) {
             currentTexture = bigEyesShader.render(currentTexture, faceData!!, params.bigEyes)
         }
-        
+
         // 5. 唇色（如果启用）
         if (params.lipColorIntensity > 0 && lipColorShader != null && faceData != null) {
             currentTexture = lipColorShader.render(
-                currentTexture, 
-                faceData!!, 
+                currentTexture,
+                faceData!!,
                 params.lipColorIntensity,
                 params.lipColorIndex
             )
         }
-        
+
         // 6. 腮红（如果启用）
         if (params.blush > 0 && blushShader != null && faceData != null) {
             currentTexture = blushShader.render(currentTexture, faceData!!, params.blush)
         }
-        
+
         // 7. 滤镜（始终执行，默认无效果）
         filterShader?.renderToOutput(currentTexture, outputTexture, params.filterType)
             ?: run {
@@ -94,7 +94,7 @@ class BeautyShaderChain(
                 copyTexture(currentTexture, outputTexture)
             }
     }
-    
+
     /**
      * 更新所有 Shader 的参数
      */
@@ -108,7 +108,7 @@ class BeautyShaderChain(
         blushShader?.setIntensity(params.blush)
         filterShader?.setFilterType(params.filterType)
     }
-    
+
     /**
      * 更新人脸数据到需要它的 Shader
      */
@@ -119,14 +119,14 @@ class BeautyShaderChain(
         lipColorShader?.setFaceData(faceData)
         blushShader?.setFaceData(faceData)
     }
-    
+
     /**
      * 简单的纹理复制（当没有滤镜 Shader 时使用）
      */
     private fun copyTexture(input: Int, output: Int) {
         // TODO: 实现纹理复制，或使用默认 passthrough shader
     }
-    
+
     /**
      * 释放所有 Shader 资源
      */

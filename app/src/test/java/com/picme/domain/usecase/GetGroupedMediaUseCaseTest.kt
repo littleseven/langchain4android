@@ -83,7 +83,7 @@ class GetGroupedMediaUseCaseTest {
 
         assertEquals(2, result.size)
         assertTrue(result.all { it.titleType == GroupTitleType.DATE })
-        
+
         // 验证每个分组的数量
         val groupSizes = result.map { it.items.size }.sorted()
         assertEquals(listOf(2, 2), groupSizes)
@@ -133,10 +133,10 @@ class GetGroupedMediaUseCaseTest {
         val result = useCase(media, GroupingMode.FACE)
 
         assertEquals(2, result.size)
-        
+
         val withFaces = result.find { it.titleType == GroupTitleType.WITH_FACES }
         val noFaces = result.find { it.titleType == GroupTitleType.NO_FACES }
-        
+
         assertNotNull(withFaces)
         assertNotNull(noFaces)
         assertEquals(2, withFaces!!.items.size)
@@ -195,10 +195,10 @@ class GetGroupedMediaUseCaseTest {
 
         assertEquals(2, result.size)
         assertTrue(result.all { it.titleType == GroupTitleType.PERSON })
-        
+
         val personA = result.find { it.titleValue == "person_A" }
         val personB = result.find { it.titleValue == "person_B" }
-        
+
         assertNotNull(personA)
         assertNotNull(personB)
         assertEquals(2, personA!!.items.size)

@@ -44,6 +44,13 @@ import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
 
+// [常量定义] 调试文本颜色
+private val INSIGHTFACE_DEBUG_TEXT_COLOR = Color(0xFFFFAB91)
+private val MEDIAPIPE_DEBUG_TEXT_COLOR = Color(0xFF80CBC4)
+private val MNN_DEBUG_TEXT_COLOR = Color(0xFFCE93D8)
+private val NONE_DEBUG_TEXT_COLOR = Color(0xFFA5D6A7)
+private val LIP_HIGHLIGHT_COLOR = Color(0xFFFF80AB)
+
 @Composable
 internal fun CameraPreviewContent(
     previewView: @Composable () -> Unit,
@@ -308,17 +315,17 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                 Text(
                     text = detectionCompact,
                     color = when (uiState.faceWarpParams.detectionSource) {
-                        FaceDetectionSource.INSIGHTFACE -> Color(0xFFFFAB91)
-                        FaceDetectionSource.MEDIAPIPE -> Color(0xFF80CBC4)
-                        FaceDetectionSource.MNN -> Color(0xFFCE93D8)  // [性能优化] MNN GPU
-                        FaceDetectionSource.NONE -> Color(0xFFA5D6A7)
+                        FaceDetectionSource.INSIGHTFACE -> INSIGHTFACE_DEBUG_TEXT_COLOR
+                        FaceDetectionSource.MEDIAPIPE -> MEDIAPIPE_DEBUG_TEXT_COLOR
+                        FaceDetectionSource.MNN -> MNN_DEBUG_TEXT_COLOR  // [性能优化] MNN GPU
+                        FaceDetectionSource.NONE -> NONE_DEBUG_TEXT_COLOR
                     },
                     fontSize = 9.sp
                 )
 
                 Text(
                     text = lipCompactText,
-                    color = if (uiState.beautySettings.lipColor > 0) Color(0xFFFF80AB) else Color.White.copy(alpha = 0.6f),
+                    color = if (uiState.beautySettings.lipColor > 0) LIP_HIGHLIGHT_COLOR else Color.White.copy(alpha = 0.6f),
                     fontSize = 9.sp
                 )
                 Text(

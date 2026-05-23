@@ -112,13 +112,13 @@ class InsightFaceDet10GDetector(context: Context) {
             val scaledH = (origH * scale).toInt()
             val padLeft = (INPUT_SIZE - scaledW) / 2f
             val padTop = (INPUT_SIZE - scaledH) / 2f
-            
+
             // 将 640x640 坐标映射回原图，确保坐标在有效范围内
             var mappedX1 = ((largestFace.x1 - padLeft) / scale)
             var mappedY1 = ((largestFace.y1 - padTop) / scale)
             var mappedX2 = ((largestFace.x2 - padLeft) / scale)
             var mappedY2 = ((largestFace.y2 - padTop) / scale)
-            
+
             // [新增] 放大 ROI 区域,以包含更多面部上下文
             val centerX = (mappedX1 + mappedX2) / 2f
             val centerY = (mappedY1 + mappedY2) / 2f
@@ -126,12 +126,12 @@ class InsightFaceDet10GDetector(context: Context) {
             val height = mappedY2 - mappedY1
             val newWidth = width * ROI_EXPAND_RATIO
             val newHeight = height * ROI_EXPAND_RATIO
-            
+
             mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
             mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
             mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
             mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
-            
+
             val mappedFace = FaceBox(
                 x1 = mappedX1,
                 y1 = mappedY1,
@@ -463,7 +463,7 @@ class InsightFaceDet10GDetector(context: Context) {
         // [优化] Top-K 策略：只取前 100 个最高分的框，避免 NMS 处理过多框
         val topK = 100
         val topFaces = faces.sortedByDescending { it.confidence }.take(topK)
-        
+
         if (faces.size > topK) {
             Log.d(TAG, "[Diag] Top-K: reduced from ${faces.size} to $topK")
         }

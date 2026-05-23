@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import com.picme.beauty.api.BeautyPreviewEngine
 import com.picme.beauty.api.Face
 import com.picme.beauty.recorder.BeautyVideoRecorder
+import com.picme.core.common.Logger
 import com.picme.core.image.ImageProcessor
 import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
@@ -23,6 +24,11 @@ import com.picme.domain.model.MediaType
 import com.picme.beauty.api.FilterType
 import com.picme.features.gallery.MediaViewModel
 import java.io.File
+
+// [常量定义] 视频录制分辨率
+private const val TARGET_RECORDING_WIDTH = 1920
+private const val TARGET_RECORDING_HEIGHT = 1920
+private const val MIN_RECORDING_DIMENSION = 720
 
 @SuppressLint("MissingPermission")
 internal fun handleCaptureClick(
@@ -95,14 +101,14 @@ internal fun handleCaptureClick(
         // 计算目标录制分辨率：短边对齐 1080p，保持原始比例
         val (recordingWidth, recordingHeight) = if (previewHeight > previewWidth) {
             // 竖屏：高度为 1920，宽度按比例计算
-            val targetHeight = 1920
-            val targetWidth = (targetHeight * previewWidth.toFloat() / previewHeight.toFloat()).toInt().coerceAtLeast(720)
+            val targetHeight = TARGET_RECORDING_HEIGHT
+            val targetWidth = (targetHeight * previewWidth.toFloat() / previewHeight.toFloat()).toInt().coerceAtLeast(MIN_RECORDING_DIMENSION)
             // 确保宽度为偶数（编码器要求）
             Pair(targetWidth - (targetWidth % 2), targetHeight)
         } else {
             // 横屏：宽度为 1920，高度按比例计算
-            val targetWidth = 1920
-            val targetHeight = (targetWidth * previewHeight.toFloat() / previewWidth.toFloat()).toInt().coerceAtLeast(720)
+            val targetWidth = TARGET_RECORDING_WIDTH
+            val targetHeight = (targetWidth * previewHeight.toFloat() / previewWidth.toFloat()).toInt().coerceAtLeast(MIN_RECORDING_DIMENSION)
             // 确保高度为偶数（编码器要求）
             Pair(targetWidth, targetHeight - (targetHeight % 2))
         }
@@ -206,8 +212,17 @@ private fun insertVideoToMediaStore(context: Context, file: File, displayName: S
             }
         }
         uri
-    } catch (e: Exception) {
-        e.printStackTrace()
+    } catch (e: SecurityException) {
+        Logger.e("PicMe:Camera", "Permission denied when saving video: ${e.message}")
+        null
+    } catch (e: java.io.IOException) {
+        Logger.e("PicMe:Camera", "IO error when saving video: ${e.message}")
+        null
+    } catch (e: IllegalArgumentException) {
+        Logger.e("PicMe:Camera", "Invalid arguments when saving video: ${e.message}")
+        null
+    } catch (e: IllegalStateException) {
+        Logger.e("PicMe:Camera", "Activity state error: ${e.message}")
         null
     }
 }

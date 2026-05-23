@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.core.common.Logger
 import com.picme.domain.model.AppLanguage
-import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode

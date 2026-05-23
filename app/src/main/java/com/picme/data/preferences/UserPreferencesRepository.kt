@@ -49,12 +49,12 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val FACE_DETECT_INTERVAL_PROFILE = stringPreferencesKey("face_detect_interval_profile")
         val GL_ENGINE_RECOVERY_AVAILABLE_AT_MS = longPreferencesKey("gl_engine_recovery_available_at_ms")
         val DEBUG_SHADER_MODE = intPreferencesKey("debug_shader_mode")
-        
+
         // 阶段独立配置（ROI / Landmark）
         val ROI_MODEL_TYPE = stringPreferencesKey("roi_model_type")
         val ROI_ENGINE_TYPE = stringPreferencesKey("roi_engine_type")
         val ROI_DEVICE_PREFERENCE = stringPreferencesKey("roi_device_preference")
-        
+
         val LANDMARK_MODEL_TYPE = stringPreferencesKey("landmark_model_type")
         val LANDMARK_ENGINE_TYPE = stringPreferencesKey("landmark_engine_type")
         val LANDMARK_DEVICE_PREFERENCE = stringPreferencesKey("landmark_device_preference")
@@ -337,7 +337,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     }
 
     // ── 阶段独立配置（ROI / Landmark）────────────────────────
-    
+
     private fun parseStageConfig(
         stage: DetectionStage,
         modelTypeName: String?,
@@ -348,19 +348,19 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             DetectionStage.ROI -> StageConfig.defaultRoi()
             DetectionStage.LANDMARK -> StageConfig.defaultLandmark()
         }
-        
+
         val modelType = runCatching {
             modelTypeName?.let { DetectionModelType.valueOf(it) }
         }.getOrNull() ?: defaultConfig.modelType
-        
+
         val engineType = runCatching {
             engineTypeName?.let { InferenceEngineType.valueOf(it) }
         }.getOrNull() ?: defaultConfig.engineType
-        
+
         val devicePreference = runCatching {
             devicePreferenceName?.let { InferenceDevicePreference.valueOf(it) }
         }.getOrNull() ?: defaultConfig.devicePreference
-        
+
         return StageConfig(
             stage = stage,
             modelType = modelType,

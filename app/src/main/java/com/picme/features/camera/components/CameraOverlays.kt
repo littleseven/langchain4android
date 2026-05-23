@@ -382,13 +382,13 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
 
 /**
  * [RD] 人脸对焦十字星组件 - 重构版
- * 
+ *
  * 设计规范：
  * - 颜色：使用 Primary 色 (#00E5FF) 符合 HyperOS 设计系统
  * - 动画：弹簧动画 (Spring Animation) 实现流畅出现/消失
  * - 结构：四角 L 型标记 + 中心十字 + 中心点
  * - 尺寸：100dp 外框 + 16dp 中心十字
- * 
+ *
  * @param offset 十字星中心点在屏幕上的坐标
  * @param alpha 透明度 (0f - 1f)
  * @param isActive 是否处于激活状态（影响颜色亮度）
@@ -401,7 +401,7 @@ fun FaceFocusCrosshair(
 ) {
     // 弹簧动画：实现自然的出现/消失效果
     val scaleAnimatable = remember { Animatable(0.6f) }
-    
+
     LaunchedEffect(alpha) {
         val targetScale = if (alpha > 0.5f) 1f else 0.6f
         scaleAnimatable.animateTo(
@@ -412,7 +412,7 @@ fun FaceFocusCrosshair(
             )
         )
     }
-    
+
     // 颜色定义：使用 Primary 色系统
     val primaryColor = Color(0xFF00E5FF)
     val crosshairColor = if (isActive) {
@@ -420,7 +420,7 @@ fun FaceFocusCrosshair(
     } else {
         primaryColor.copy(alpha = 0.5f)
     }
-    
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -434,14 +434,14 @@ fun FaceFocusCrosshair(
             val strokeWidth = 3.dp.toPx()
             val cornerLength = 20.dp.toPx()
             val indicatorSize = 100.dp.toPx()
-            
+
             val centerX = offset.x
             val centerY = offset.y
             val left = centerX - indicatorSize / 2
             val top = centerY - indicatorSize / 2
             val right = left + indicatorSize
             val bottom = top + indicatorSize
-            
+
             // 绘制四角 L 型标记
             drawCrosshairCorner(
                 color = crosshairColor,
@@ -483,11 +483,11 @@ fun FaceFocusCrosshair(
                 bottom = bottom,
                 corner = Corner.BOTTOM_LEFT
             )
-            
+
             // 绘制中心十字
             val centerCrossSize = 16.dp.toPx()
             val crossStrokeWidth = 2.dp.toPx()
-            
+
             // 水平线
             drawLine(
                 color = crosshairColor.copy(alpha = 0.8f),
@@ -495,7 +495,7 @@ fun FaceFocusCrosshair(
                 end = Offset(centerX + centerCrossSize / 2, centerY),
                 strokeWidth = crossStrokeWidth
             )
-            
+
             // 垂直线
             drawLine(
                 color = crosshairColor.copy(alpha = 0.8f),
@@ -503,7 +503,7 @@ fun FaceFocusCrosshair(
                 end = Offset(centerX, centerY + centerCrossSize / 2),
                 strokeWidth = crossStrokeWidth
             )
-            
+
             // 中心点
             drawCircle(
                 color = crosshairColor,
@@ -656,12 +656,12 @@ private fun OcrTextPreviewOverlay(
                     color = Color.White.copy(alpha = 0.7f)
                 )
             }
-            
+
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 8.dp),
                 color = Color.White.copy(alpha = 0.2f)
             )
-            
+
             Text(
                 text = text,
                 fontSize = 14.sp,

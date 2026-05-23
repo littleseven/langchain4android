@@ -43,7 +43,6 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.domain.model.AppLanguage
-import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
@@ -91,7 +90,7 @@ fun SettingsScreen(
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
     val roiStageConfig by viewModel.roiStageConfig.collectAsState()
     val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
-    SettingsContent(
+    settingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
         debugUiEnabled = debugUiEnabled,
@@ -136,7 +135,7 @@ fun SettingsScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsContent(
+private fun settingsContent(
     themeMode: ThemeMode,
     appLanguage: AppLanguage,
     debugUiEnabled: Boolean,
@@ -195,7 +194,7 @@ private fun SettingsContent(
                 title = stringResource(R.string.theme_mode),
                 description = stringResource(R.string.settings_theme_mode_desc)
             ) {
-                ThemeSelection(
+                themeSelection(
                     currentMode = themeMode,
                     onModeSelected = onThemeModeSelected
                 )
@@ -207,7 +206,7 @@ private fun SettingsContent(
                 title = stringResource(R.string.language),
                 description = stringResource(R.string.settings_language_desc)
             ) {
-                LanguageSelection(
+                languageSelection(
                     currentLanguage = appLanguage,
                     onLanguageSelected = onAppLanguageSelected
                 )
@@ -332,7 +331,7 @@ private fun SettingsSection(
 }
 
 @Composable
-fun ThemeSelection(
+private fun themeSelection(
     currentMode: ThemeMode,
     onModeSelected: (ThemeMode) -> Unit
 ) {
@@ -351,7 +350,7 @@ fun ThemeSelection(
 }
 
 @Composable
-fun LanguageSelection(
+private fun languageSelection(
     currentLanguage: AppLanguage,
     onLanguageSelected: (AppLanguage) -> Unit
 ) {
@@ -480,7 +479,7 @@ private fun StageConfigSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
         )
-        ModelTypeSelection(
+        modelTypeSelection(
             currentType = config.modelType,
             stage = stage,
             onTypeSelected = onModelTypeSelected
@@ -495,7 +494,7 @@ private fun StageConfigSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
         )
-        InferenceEngineSelection(
+        inferenceEngineSelection(
             currentType = config.engineType,
             onTypeSelected = onEngineTypeSelected
         )
@@ -509,7 +508,7 @@ private fun StageConfigSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
         )
-        InferenceDevicePreferenceSelection(
+        inferenceDevicePreferenceSelection(
             currentPreference = config.devicePreference,
             onPreferenceSelected = onDevicePreferenceSelected
         )
@@ -517,7 +516,7 @@ private fun StageConfigSection(
 }
 
 @Composable
-private fun ModelTypeSelection(
+private fun modelTypeSelection(
     currentType: DetectionModelType,
     stage: DetectionStage,
     onTypeSelected: (DetectionModelType) -> Unit
@@ -542,7 +541,7 @@ private fun ModelTypeSelection(
 }
 
 @Composable
-private fun InferenceEngineSelection(
+private fun inferenceEngineSelection(
     currentType: InferenceEngineType,
     onTypeSelected: (InferenceEngineType) -> Unit
 ) {
@@ -562,7 +561,7 @@ private fun InferenceEngineSelection(
 }
 
 @Composable
-private fun InferenceDevicePreferenceSelection(
+private fun inferenceDevicePreferenceSelection(
     currentPreference: InferenceDevicePreference,
     onPreferenceSelected: (InferenceDevicePreference) -> Unit
 ) {
@@ -645,7 +644,7 @@ private fun DebugOptionRow(
 @Composable
 fun SettingsScreenPreview() {
     PicMeTheme {
-        SettingsContent(
+        settingsContent(
             themeMode = ThemeMode.SYSTEM,
             appLanguage = AppLanguage.ENGLISH,
             debugUiEnabled = true,

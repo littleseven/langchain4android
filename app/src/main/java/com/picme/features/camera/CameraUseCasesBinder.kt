@@ -87,9 +87,10 @@ internal fun bindCameraUseCases(
             .addUseCase(imageAnalysis)
             .setViewPort(viewport)
 
-        when (captureMode) {
-            MediaType.VIDEO -> builder.addUseCase(videoCapture)
-            else -> builder.addUseCase(imageCapture)
+        if (captureMode == MediaType.VIDEO) {
+            builder.addUseCase(videoCapture)
+        } else {
+            builder.addUseCase(imageCapture)
         }
 
         builder.build()

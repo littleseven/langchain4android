@@ -112,7 +112,7 @@ object AspectRatio {
  * 1. 归一化：ML Kit 坐标 → [0,1] 归一化坐标
  * 2. 镜像处理：前置摄像头需要水平翻转
  * 3. 旋转补偿：根据设备旋转角度调整坐标系
- * 
+ *
  * 【关键发现】所有坐标系都使用左上角原点，X 向右，Y 向下
  * 因此只需要关注旋转和镜像，不需要考虑坐标轴翻转
  */
@@ -130,16 +130,16 @@ internal fun transformFaceCoordinate(
         90, 270 -> Pair(imageProxyHeight, imageProxyWidth)
         else -> Pair(imageProxyWidth, imageProxyHeight)
     }
-    
+
     val normX = faceX / rotatedWidth
     val normY = faceY / rotatedHeight
-    
+
     Logger.d(
         "PicMe:Camera",
         "Step1 [归一化]: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, " +
             "norm=($normX,$normY)"
     )
-    
+
     // ========== Step 2: 镜像处理（前置摄像头） ==========
     // 在旋转之前先镜像 X 轴（传感器坐标系）
     val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
@@ -147,13 +147,13 @@ internal fun transformFaceCoordinate(
     } else {
         normX
     }
-    
+
     Logger.d(
         "PicMe:Camera",
         "Step2 [镜像]: lens=${if (lensFacing == CameraSelector.LENS_FACING_FRONT) "前" else "后"}, " +
             "norm=($normX,$normY), mirrored=($mirroredX,$normY)"
     )
-    
+
     // ========== Step 3: 旋转补偿 ==========
     // 根据旋转角度调整坐标方向
     val (adjustedX, adjustedY) = when (rotationDegrees) {
@@ -163,27 +163,27 @@ internal fun transformFaceCoordinate(
         270 -> Pair(mirroredX, normY)    // 逆时针 90°: 不交换 XY
         else -> Pair(mirroredX, normY)
     }
-    
+
     Logger.d(
         "PicMe:Camera",
         "Step3 [旋转补偿]: rot=$rotationDegrees, mirrored=($mirroredX,$normY), " +
             "adjusted=($adjustedX,$adjustedY)"
     )
-    
+
     // ========== Step 4: 转换为像素坐标 ==========
     // 将归一化坐标转换为 PreviewView 的物理像素坐标
     val previewWidth = previewView.width.toFloat()
     val previewHeight = previewView.height.toFloat()
-    
+
     val screenX = adjustedX * previewWidth
     val screenY = adjustedY * previewHeight
-    
+
     Logger.d(
         "PicMe:Camera",
         "Step4 [像素转换]: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}, " +
             "screen=($screenX,$screenY)"
     )
-    
+
     return Offset(screenX, screenY)
 }
 
@@ -420,7 +420,7 @@ private fun buildCameraPreviewActions(
         onToggleEyebrow = { panelState.openMakeupEntry(MakeupEntry.EYEBROW) },
         onToggleBodyManagement = panelState::toggleBodyManagement,
         onZoomPresetClick = { ratio -> cameraControl?.setZoomRatio(ratio) },
-        onExposureChange = { exposure -> 
+        onExposureChange = { exposure ->
             onExposureCompensationChanged(exposure)
             cameraControl?.setExposureCompensationIndex(exposure)
             android.util.Log.d("ProMode", "Local state updated: exposure=$exposure")
@@ -575,7 +575,7 @@ fun CameraContent(
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val shutterSound = remember { MediaActionSound() }
-    
+
     var previewRebindSignal by remember { mutableIntStateOf(0) }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
@@ -733,7 +733,7 @@ fun CameraContent(
 
     var currentScene by remember { mutableStateOf(ScenePreset.NONE) }
     var currentGrid by remember { mutableStateOf(GridType.NONE) }
-    
+
     var isStable by remember { mutableStateOf(true) }
     val sensorManager = remember {
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -776,7 +776,7 @@ fun CameraContent(
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var minZoomRatio by remember { mutableFloatStateOf(1f) }
     var maxZoomRatio by remember { mutableFloatStateOf(1f) }
-    
+
     var facePoint by remember { mutableStateOf(Offset.Zero) }
     var isFaceLocked by remember { mutableStateOf(false) }
     var lastAutoFocusAtMs by remember { mutableStateOf(0L) }
@@ -1018,7 +1018,7 @@ fun CameraContent(
             }
         }
     }
-    
+
 
 
     LaunchedEffect(faceDetectionEngineMode) {
@@ -1338,7 +1338,7 @@ CameraPreviewContent(
 )
 
         if (debugUiEnabled && showLogOverlay) {
-            LogOverlay(onDismiss = { 
+            LogOverlay(onDismiss = {
                 logOverlayScope.launch {
                     userPreferencesRepository.updateShowLogOverlay(false)
                 }
