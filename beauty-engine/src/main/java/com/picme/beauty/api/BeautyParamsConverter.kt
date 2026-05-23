@@ -1,6 +1,6 @@
 package com.picme.beauty.api
 
-import com.picme.beauty.egl.StyleEffect
+import com.picme.beauty.render.StyleEffect
 
 /**
  * BeautySettings -> BeautyParams 转换扩展

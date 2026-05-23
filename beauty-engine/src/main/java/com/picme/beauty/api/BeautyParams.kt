@@ -1,6 +1,6 @@
 package com.picme.beauty.api
 
-import com.picme.beauty.egl.StyleEffect
+import com.picme.beauty.render.StyleEffect
 
 /**
  * R Plan 美颜参数
