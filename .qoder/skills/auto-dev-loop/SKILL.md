@@ -198,6 +198,6 @@ fi
 - `scripts/auto-dev-loop.sh` — 一键开发自循环
 - `scripts/regression-test.sh` — 端到端回归测试
 - `scripts/ai-gate.sh` — 代码级质量门禁
-- `.kimi/skills/android-build-debug/SKILL.md` — 编译调试参考
-- `.kimi/skills/adb-bot/SKILL.md` — adb 命令参考
-- `.kimi/skills/image-quality-checker/SKILL.md` — 图片质量分析
+- `.qoder/skills/android-build-debug/SKILL.md` — 编译调试参考
+- `.qoder/skills/adb-bot/SKILL.md` — adb 命令参考
+- `.qoder/skills/image-quality-checker/SKILL.md` — 图片质量分析

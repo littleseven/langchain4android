@@ -230,7 +230,7 @@ Intent Router 处理:
 
 ### 添加新术语
 
-在 `.lingma/skills/intent-router/TERMS.md` 中维护扩展术语表：
+在 `.qoder/skills/intent-router/TERMS.md` 中维护扩展术语表：
 
 ```markdown
 ## 新模块: editor
