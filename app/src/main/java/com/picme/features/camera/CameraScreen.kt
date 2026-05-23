@@ -77,7 +77,7 @@ import com.picme.features.camera.test.CameraTestCommandDispatcher
 import com.picme.features.camera.test.CameraTestCommandReceiver
 import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.camera.test.CameraTestStateSnapshot
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.internal.facedetect.Face106ToWarpParams
 import com.picme.beauty.api.facedetect.FaceDetectionSource
