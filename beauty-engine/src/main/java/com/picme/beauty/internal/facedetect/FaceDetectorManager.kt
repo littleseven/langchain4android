@@ -273,11 +273,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roiResult)
         val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
         
-        // [诊断对比] 同时运行 ONNX 路径进行对比（仅当 MNN Landmark 成功时）
-        if (landmarkResult != null && landmarkDetector is MnnLandmarkDetector) {
-            compareWithOnnx(bitmap, lensFacing, roiResult, landmarkResult)
-        }
-        
         val roiTime = SystemClock.elapsedRealtime() - roiStartTime
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
         
@@ -330,68 +325,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         return null
     }
     
-    /**
-     * [诊断对比] 同时运行 ONNX 路径，对比 MNN 和 ONNX 的原始输出
-     */
-    private fun compareWithOnnx(
-        bitmap: Bitmap,
-        lensFacing: Int,
-        roiResult: android.graphics.RectF?,
-        mnnResult: FloatArray
-    ) {
-        try {
-            // 懒加载 ONNX 检测器
-            if (insightFaceDetector == null) {
-                insightFaceDetector = InsightFace2D106Detector(appContext)
-                Log.d(TAG, "[Diag] ONNX detector created for comparison")
-            }
-            
-            val onnxStart = SystemClock.elapsedRealtime()
-            val onnxResult = insightFaceDetector?.detect(bitmap, lensFacing, roiResult)
-            val onnxTime = SystemClock.elapsedRealtime() - onnxStart
-            
-            if (onnxResult != null && onnxResult.size == mnnResult.size) {
-                // 计算每点差异
-                var maxDiff = 0f
-                var maxDiffIdx = 0
-                var totalDiff = 0f
-                val diffCount = mnnResult.size
-                
-                for (i in 0 until diffCount) {
-                    val diff = kotlin.math.abs(mnnResult[i] - onnxResult[i])
-                    totalDiff += diff
-                    if (diff > maxDiff) {
-                        maxDiff = diff
-                        maxDiffIdx = i
-                    }
-                }
-                
-                val avgDiff = totalDiff / diffCount
-                val pointIdx = maxDiffIdx / 2
-                val isX = maxDiffIdx % 2 == 0
-                
-                Log.i(TAG, "[Diag] MNN vs ONNX comparison: avgDiff=${String.format("%.4f", avgDiff)}, maxDiff=${String.format("%.4f", maxDiff)} at point $pointIdx ${if (isX) "X" else "Y"}, onnxTime=${onnxTime}ms")
-                
-                // 输出前 10 个点的对比
-                val sb = StringBuilder("[Diag] First 10 points MNN vs ONNX: ")
-                for (i in 0 until 10) {
-                    val mnnX = mnnResult[i * 2]
-                    val mnnY = mnnResult[i * 2 + 1]
-                    val onnxX = onnxResult[i * 2]
-                    val onnxY = onnxResult[i * 2 + 1]
-                    val dx = kotlin.math.abs(mnnX - onnxX)
-                    val dy = kotlin.math.abs(mnnY - onnxY)
-                    sb.append("P$i: MNN(${String.format("%.3f", mnnX)},${String.format("%.3f", mnnY)}) ONNX(${String.format("%.3f", onnxX)},${String.format("%.3f", onnxY)}) diff(${String.format("%.3f", dx)},${String.format("%.3f", dy)}) ")
-                }
-                Log.i(TAG, sb.toString())
-            } else {
-                Log.w(TAG, "[Diag] ONNX result null or size mismatch: onnx=${onnxResult?.size}, mnn=${mnnResult.size}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "[Diag] ONNX comparison failed", e)
-        }
-    }
-
     private fun detectMnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
         var roiResult: android.graphics.RectF? = null
         var landmarkResult: FloatArray? = null
