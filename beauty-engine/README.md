@@ -6,9 +6,11 @@
 
 ## 模块定位
 
-- **能力层**：对外暴露稳定的 `api/` 接口（`BeautyPreviewEngine`、`BeautyParams`、`BeautySettings`、`FilterType`、`StyleFilter`、`Face` 等）。
+- **能力层**：对外暴露稳定的 `api/` 接口（`BeautyPreviewEngine`、`BeautyParams`、`BeautySettings`、`FilterType`、`StyleFilter`、`Face`、`PhotoProcessor` 等）。
 - **大美丽实现层**：内部封装 OpenGL ES + EGL 多 Pass 渲染管线（`egl/` 包），禁止外部直接引用。
+- **帧同步系统**：独立的时序对齐机制（`internal/framesync/`），解决妆容甩飞问题，预览与录制链路共用同一套同步逻辑。
 - **性能目标**：零拷贝 GPU 数据流，单帧处理 ≤ 16ms（60fps），参数响应延迟 < 100ms。
+- **拍照 GPU 化**：支持 GPU 离屏渲染拍照，复用预览同一套 Shader 管线，1080p < 300ms, 4K < 800ms。
 
 ---
 
@@ -38,24 +40,37 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── BeautyPreviewCapability.kt     # GL 能力扩展接口（FaceWarp/LipMask 等）
 │   ├── BeautyPreviewProvider.kt       # 预览 Provider 基础接口
 │   ├── BeautyPreviewEngine.kt         # 组合接口（Provider + Capability + getView）
-│   └── BeautyPreviewProviderFactory.kt
+│   ├── BeautyPreviewProviderFactory.kt # Factory（未来 DI 扩展点）
+│   ├── FrameId.kt                     # 帧同步全局帧标识符
+│   ├── FrameSyncConfig.kt             # 帧同步配置
+│   ├── FrameSyncResult.kt             # 帧同步结果
+│   └── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染）
 ├── egl/                               # 大美丽内部实现（GL 渲染管线层）
 │   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现（内部适配器）
 │   ├── BeautyPreviewView.kt           # 自定义 View（SurfaceView 封装）
-│   ├── CameraPreviewRenderer.kt       # 渲染管线核心
+│   ├── CameraPreviewRenderer.kt       # 渲染管线核心（含帧同步逻辑）
 │   ├── BeautyRenderer.kt              # 美颜 Shader 渲染器
 │   ├── StyleEffectShader.kt           # 风格特效 Shader 管理
 │   ├── BeautyShaders.kt               # GLSL Shader 源码
 │   ├── ShaderProgram.kt               # Shader 编译与链接
 │   ├── EGLCore.kt                     # EGL 上下文与 Surface 管理
-│   └── WindowSurface.kt               # EGL Window Surface 封装
-└── internal/                          # 内部工具与 Shader 链路辅助
-    └── BeautyShaderChain.kt
+│   ├── WindowSurface.kt               # EGL Window Surface 封装
+│   └── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现
+├── internal/                          # 内部工具与帧同步系统
+│   ├── BeautyShaderChain.kt           # Shader 链路辅助
+│   └── framesync/                     # 帧同步系统核心
+│       ├── FrameSyncBridge.kt         # 线程安全 FrameId 共享
+│       ├── FrameSyncManager.kt        # 时序对齐核心
+│       ├── MotionTracker.kt           # 速度外推预测算法
+│       ├── DetectionQueue.kt          # 检测任务队列
+│       └── FaceDetectionWorker.kt     # 异步人脸检测工作线程
+└── domain/model/                      # 领域模型
+    └── UserPreferences.kt             # 用户偏好设置（BeautyStrategy 等）
 ```
 
 **依赖方向红线**：
 - `api/` 包：**禁止**依赖 `egl/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
-- App 层：只允许依赖 `api/` 接口，**禁止**直接实例化 `egl/` 内部类
+- App 层：只允许依赖 `api/` 接口，**禁止**直接实例化 `egl/` 或 `internal/` 内部类
 
 ---
 
@@ -71,9 +86,10 @@ dependencies {
 
 ## 最小初始化
 
+### 预览美颜
+
 ```kotlin
 // 1. 通过 GlBeautyPreviewProvider 获取实例（app 层通过 rememberGlBeautyPreviewProvider 管理）
-//    实际使用中由 Composable 负责创建与释放，无需手动 new
 val provider: BeautyPreviewEngine = GlBeautyPreviewProvider(context)
 
 // 2. 初始化引擎（离屏 EGL + Shader 编译）
@@ -93,9 +109,53 @@ provider.updateFilters(
         smoothing = 0.3f,
         whitening = 0.2f,
         bigEyes = 0.1f,
-        slimFace = 0.15f
+        slimFace = 0.15f,
+        lipColor = 0.4f,
+        blush = 0.2f,
+        filterType = FilterType.LEICA_CLASSIC,
+        styleEffect = StyleFilter.NONE
     )
 )
+```
+
+### 拍照 GPU 化
+
+```kotlin
+// 使用 PhotoProcessor 进行拍照后处理（GPU 离屏渲染）
+val photoProcessor = (provider as GlBeautyPreviewProvider).createPhotoProcessor()
+
+val originalBitmap = loadOriginalImage() // 从 ImageCapture 获取的原始 Bitmap
+val faceData = getLatestFaceData()      // 从预览缓存获取的人脸数据
+
+val processedBitmap = photoProcessor.process(
+    bitmap = originalBitmap,
+    params = BeautyParams(...),          // 与预览相同的美颜参数
+    faceData = faceData
+)
+
+// 处理后的 Bitmap 保存到 MediaStore
+saveToMediaStore(processedBitmap)
+```
+
+**性能指标**：
+- 1080p 照片：< 300ms
+- 4K 照片：< 800ms
+
+**降级策略**：GPU 路径失败时自动回退 CPU 路径，拍照不失败。
+
+### 帧同步系统
+
+帧同步系统在 `CameraPreviewRenderer` 内部自动启用，无需手动配置。录制场景自动复用预览的帧同步逻辑。
+
+**开发者选项**（调试用）：
+```kotlin
+// 在 CameraScreen 中配置帧同步模式
+val frameSyncConfig = FrameSyncConfig(
+    mode = FrameSyncMode.STRICT,           // STRICT / SMOOTH / OFF
+    predictionAlgorithm = PredictionAlgorithm.VELLOCITY_EXTRAPOLATION,
+    missingThreshold = 3                   // 1~10 帧
+)
+frameSyncManager.updateConfig(frameSyncConfig)
 ```
 
 ---
@@ -140,6 +200,8 @@ override fun onCleared() {
 | `BeautySettings` | ✅ 稳定 | 美颜设置领域模型，已从 app 层下沉至 api/ |
 | `FilterType` / `StyleFilter` | ✅ 稳定 | 滤镜/风格枚举，已下沉至 api/ |
 | `BeautyParams` | ✅ 稳定 | 新增参数默认 `0.0f`，向后兼容 |
+| `PhotoProcessor` | ✅ 稳定 | 拍照 GPU 化接口（2026-05 新增） |
+| `FrameId` / `FrameSyncConfig` / `FrameSyncResult` | ⚠️ 实验性 | 帧同步系统 API，可能随优化调整 |
 | `BeautyPerfStats` | ⚠️ 实验性 | 字段可能随观测需求微调 |
 | 独立发布 AAR | ⏳ 未开始 | 预计 M3 完成后进入 Maven 发布流程 |
 
@@ -161,6 +223,9 @@ override fun onCleared() {
 | 交叉线 | Crosshatch Shader（基于亮度绘制交叉线） | ✅ |
 | 色调滤镜 | ColorMatrix（OpenGL Shader） | ✅ |
 | 人脸关键点 | MediaPipe 468→106 / InsightFace 2D106 | ✅ |
+| **帧同步系统** | FrameSyncManager + MotionTracker 速度外推 | ✅ |
+| **GPU 拍照** | PhotoProcessorImpl（离屏渲染复用预览管线） | ✅ |
+| **视频录制美颜** | 复用预览帧同步与渲染管线 | ✅ |
 
 ---
 
@@ -173,6 +238,10 @@ override fun onCleared() {
 | 参数更新不生效 | 在 `initialize()` 之前调用了 `updateFilters()` | 确保在 `isReady() == true` 后再更新参数 |
 | 内存泄漏 / ANR | `release()` 未被调用或调用时机过晚 | 在 `ViewModel.onCleared()` 或 `DisposableEffect.onDispose` 中释放 |
 | 帧率过低 | Shader 复杂度过高或 FBO 频繁创建 | 检查 `getPerfStats()` 中的 `processingMs` 是否 > 16ms |
+| **妆容甩飞 / 滞后** | 帧同步系统未启用或配置错误 | 检查 `FrameSyncManager` 是否复用，确认 `FrameSyncBridge` 正确传递 FrameId |
+| **拍照效果与预览不一致** | GPU 拍照路径失败或未使用相同参数 | 检查 `PhotoProcessorImpl` 日志，确认使用了与预览相同的 `BeautyParams` |
+| **GPU 拍照耗时过长** | 图片分辨率过高或 PBO 读取阻塞 | 确认图片尺寸在合理范围（<4096），检查是否使用 PBO 双缓冲 |
+| **录制视频妆容跳变** | 录制链路未复用预览帧同步逻辑 | 确认录制时使用的是同一 `CameraPreviewRenderer` 实例 |
 
 ---
 
@@ -182,3 +251,6 @@ override fun onCleared() {
 - `docs/BIG_BEAUTY_TECH_SPEC.md` — 大美丽渲染链路、容灾回退、冷却恢复与观测指标
 - `docs/BEAUTY_ENGINE_FALLBACK.md` — 跨模块容灾降级统一说明
 - `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 执行清单
+- `PRD-FRAME-SYNC-MAKEUP.md` — 帧同步美妆系统产品需求
+- `TECH-SPEC-FRAME-SYNC-MAKEUP.md` — 帧同步美妆系统技术规格
+- `docs/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU 离屏渲染拍照架构决策记录
