@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import com.picme.beauty.api.BeautyPreviewEngine
-import com.picme.beauty.egl.GlBeautyPreviewProvider
+import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautyStrategy
 
