@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 
 #define LOG_TAG "PicMe:MnnFaceDetect"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -12,7 +13,7 @@
 namespace picme {
 
 MnnFaceDetector::MnnFaceDetector()
-    : session_(nullptr), inputTensor_(nullptr), inputSize_(0), useGpu_(false), loaded_(false) {
+    : session_(nullptr), inputTensor_(nullptr), inputSize_(0), useGpu_(false), loaded_(false), hasBuiltInNormalization_(false) {
 }
 
 MnnFaceDetector::~MnnFaceDetector() {
@@ -142,9 +143,23 @@ bool MnnFaceDetector::load(const std::string &modelPath,
 
     pretreat_.reset(MNN::CV::ImageProcess::create(pretreatConfig));
 
+    // [关键修复] 检测模型是否包含内置归一化节点
+    // 2d106det.mnn 包含 _minusscalar0 和 _mulscalar0，有内置归一化
+    // det_10g.mnn 没有这些节点，需要外部归一化
+    std::ifstream modelCheck(modelPath.c_str(), std::ios::binary);
+    if (modelCheck.is_open()) {
+        std::string modelContent((std::istreambuf_iterator<char>(modelCheck)),
+                                  std::istreambuf_iterator<char>());
+        hasBuiltInNormalization_ = (modelContent.find("_minusscalar0") != std::string::npos) &&
+                                   (modelContent.find("_mulscalar0") != std::string::npos);
+        modelCheck.close();
+        LOGI("Model normalization check: hasBuiltIn=%s", hasBuiltInNormalization_ ? "true" : "false");
+    }
+
     loaded_ = true;
-    LOGI("MNN detector ready: inputSize=%d, useGpu=%s, outputs=%zu",
-         inputSize_, useGpu_ ? "true" : "false", outputTensors_.size());
+    LOGI("MNN detector ready: inputSize=%d, useGpu=%s, outputs=%zu, builtInNorm=%s",
+         inputSize_, useGpu_ ? "true" : "false", outputTensors_.size(),
+         hasBuiltInNormalization_ ? "true" : "false");
     return true;
 }
 
@@ -156,63 +171,115 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
         return {};
     }
 
-    // [关键修复] 使用与 ONNX 完全相同的 letterbox 预处理
-    // 1. 计算保持宽高比的缩放比例
-    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
-    int scaledW = static_cast<int>(width * scale);
-    int scaledH = static_cast<int>(height * scale);
-    int padLeft = (inputSize_ - scaledW) / 2;
-    int padTop = (inputSize_ - scaledH) / 2;
+    // [关键修复] 使用与输入张量相同的维度类型，避免 copyFromHostTensor 时数据重排
+    MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
+    LOGD("[Diag] Input tensor dimension type: %d (CAFFE=0, TENSORFLOW=1, CAFFE_C4=2)",
+         (int)inputDimType);
 
-    // 2. 创建临时输入张量并填充黑色
-    MNN::Tensor tmpInput(inputTensor_, MNN::Tensor::DimensionType::CAFFE);
+    MNN::Tensor tmpInput(inputTensor_, inputDimType);
     float *inputData = tmpInput.host<float>();
     int totalPixels = inputSize_ * inputSize_;
-    float blackValue = (0.0f - 127.5f) / 128.0f;
-    for (int i = 0; i < totalPixels * 3; i++) {
-        inputData[i] = blackValue;
-    }
 
-    // 3. 手动进行 letterbox resize + normalize
-    for (int y = 0; y < scaledH; y++) {
-        for (int x = 0; x < scaledW; x++) {
-            float srcX = (x + 0.5f) * width / scaledW - 0.5f;
-            float srcY = (y + 0.5f) * height / scaledH - 0.5f;
-            
-            int srcX0 = static_cast<int>(srcX);
-            int srcY0 = static_cast<int>(srcY);
-            int srcX1 = std::min(srcX0 + 1, width - 1);
-            int srcY1 = std::min(srcY0 + 1, height - 1);
-            
-            float fx = srcX - srcX0;
-            float fy = srcY - srcY0;
-            
-            int dstX = padLeft + x;
-            int dstY = padTop + y;
-            int dstIdx = dstY * inputSize_ + dstX;
-            
+    // [关键修复] 根据模型是否有内置归一化选择归一化方式
+    // 2d106det.mnn 有内置归一化 (_minusscalar0, _mulscalar0) -> 直接传递原始像素值
+    //   ONNX 版本也检测到内置归一化 (mean=0, std=1)，直接传递 0-255
+    // det_10g.mnn 无内置归一化 -> 做 (x-127.5)/128.0
+    float normMean = hasBuiltInNormalization_ ? 0.0f : 127.5f;
+    float normStd = hasBuiltInNormalization_ ? 1.0f : 128.0f;
+
+    if (width == inputSize_ && height == inputSize_) {
+        LOGD("[Diag] detect: direct normalize %dx%d -> %dx%d (no letterbox, builtInNorm=%s, normMean=%.1f, normStd=%.1f, dimType=%d)",
+             width, height, inputSize_, inputSize_, hasBuiltInNormalization_ ? "true" : "false", normMean, normStd, (int)inputDimType);
+        // [关键修复] 根据维度类型选择正确的数据布局
+        // CAFFE (NCHW): inputData[c * totalPixels + i]
+        // TENSORFLOW (NHWC): inputData[i * 3 + c]
+        bool isNCHW = (inputDimType == MNN::Tensor::DimensionType::CAFFE);
+        for (int i = 0; i < totalPixels; i++) {
             for (int c = 0; c < 3; c++) {
-                int srcIdx00 = (srcY0 * width + srcX0) * 3 + c;
-                int srcIdx01 = (srcY0 * width + srcX1) * 3 + c;
-                int srcIdx10 = (srcY1 * width + srcX0) * 3 + c;
-                int srcIdx11 = (srcY1 * width + srcX1) * 3 + c;
-                
-                float val00 = imageData[srcIdx00];
-                float val01 = imageData[srcIdx01];
-                float val10 = imageData[srcIdx10];
-                float val11 = imageData[srcIdx11];
-                
-                float val = val00 * (1-fx) * (1-fy) +
-                           val01 * fx * (1-fy) +
-                           val10 * (1-fx) * fy +
-                           val11 * fx * fy;
-                
-                inputData[c * totalPixels + dstIdx] = (val - 127.5f) / 128.0f;
+                float val = imageData[i * 3 + c];
+                if (isNCHW) {
+                    inputData[c * totalPixels + i] = (val - normMean) / normStd;
+                } else {
+                    inputData[i * 3 + c] = (val - normMean) / normStd;
+                }
+            }
+        }
+        // [诊断] 输出前 10 个像素的归一化值
+        char pixelLog[512];
+        snprintf(pixelLog, sizeof(pixelLog), "[Diag] MNN First 10 pixels normalized (R,G,B): ");
+        for (int i = 0; i < 10 && i < totalPixels; i++) {
+            char buf[64];
+            if (isNCHW) {
+                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ",
+                         inputData[i], inputData[totalPixels + i], inputData[totalPixels * 2 + i]);
+            } else {
+                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ",
+                         inputData[i * 3], inputData[i * 3 + 1], inputData[i * 3 + 2]);
+            }
+            strncat(pixelLog, buf, sizeof(pixelLog) - strlen(pixelLog) - 1);
+        }
+        LOGD("%s", pixelLog);
+    } else {
+        // [关键修复] 使用与 ONNX 完全相同的 letterbox 预处理
+        // 1. 计算保持宽高比的缩放比例
+        float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
+        int scaledW = static_cast<int>(width * scale);
+        int scaledH = static_cast<int>(height * scale);
+        int padLeft = (inputSize_ - scaledW) / 2;
+        int padTop = (inputSize_ - scaledH) / 2;
+
+        // 2. 填充黑色背景
+        float blackValue = (0.0f - normMean) / normStd;
+        for (int i = 0; i < totalPixels * 3; i++) {
+            inputData[i] = blackValue;
+        }
+
+        // 3. 手动进行 letterbox resize + normalize
+        bool isNCHW = (inputDimType == MNN::Tensor::DimensionType::CAFFE);
+        for (int y = 0; y < scaledH; y++) {
+            for (int x = 0; x < scaledW; x++) {
+                float srcX = (x + 0.5f) * width / scaledW - 0.5f;
+                float srcY = (y + 0.5f) * height / scaledH - 0.5f;
+
+                int srcX0 = static_cast<int>(srcX);
+                int srcY0 = static_cast<int>(srcY);
+                int srcX1 = std::min(srcX0 + 1, width - 1);
+                int srcY1 = std::min(srcY0 + 1, height - 1);
+
+                float fx = srcX - srcX0;
+                float fy = srcY - srcY0;
+
+                int dstX = padLeft + x;
+                int dstY = padTop + y;
+                int dstIdx = dstY * inputSize_ + dstX;
+
+                for (int c = 0; c < 3; c++) {
+                    int srcIdx00 = (srcY0 * width + srcX0) * 3 + c;
+                    int srcIdx01 = (srcY0 * width + srcX1) * 3 + c;
+                    int srcIdx10 = (srcY1 * width + srcX0) * 3 + c;
+                    int srcIdx11 = (srcY1 * width + srcX1) * 3 + c;
+
+                    float val00 = imageData[srcIdx00];
+                    float val01 = imageData[srcIdx01];
+                    float val10 = imageData[srcIdx10];
+                    float val11 = imageData[srcIdx11];
+
+                    float val = val00 * (1-fx) * (1-fy) +
+                               val01 * fx * (1-fy) +
+                               val10 * (1-fx) * fy +
+                               val11 * fx * fy;
+
+                    if (isNCHW) {
+                        inputData[c * totalPixels + dstIdx] = (val - normMean) / normStd;
+                    } else {
+                        inputData[dstIdx * 3 + c] = (val - normMean) / normStd;
+                    }
+                }
             }
         }
     }
 
-    // 4. 拷贝到会话输入
+    // 拷贝到会话输入
     inputTensor_->copyFromHostTensor(&tmpInput);
 
     // 运行推理
@@ -220,14 +287,31 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
 
     // 获取输出
     MNN::Tensor *output = outputTensors_[0];
-    MNN::Tensor tmpOutput(output, MNN::Tensor::DimensionType::CAFFE);
+    // [关键修复] 使用与输出张量相同的维度类型
+    MNN::Tensor::DimensionType outputDimType = output->getDimensionType();
+    MNN::Tensor tmpOutput(output, outputDimType);
     output->copyToHostTensor(&tmpOutput);
+
+    // [诊断] 输出张量形状
+    LOGD("[Diag] Output tensor shape: [%d, %d, %d, %d]",
+         output->batch(), output->channel(), output->height(), output->width());
 
     // 转为 vector
     int elementSize = tmpOutput.elementSize();
     std::vector<float> result;
     result.reserve(elementSize);
     const float *data = tmpOutput.host<float>();
+
+    // [诊断] 输出原始数据前 20 个值
+    char rawLog[512];
+    snprintf(rawLog, sizeof(rawLog), "[Diag] Raw output first 20 values: ");
+    for (int i = 0; i < 20 && i < elementSize; i++) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.3f ", data[i]);
+        strncat(rawLog, buf, sizeof(rawLog) - strlen(rawLog) - 1);
+    }
+    LOGD("%s", rawLog);
+
     for (int i = 0; i < elementSize; i++) {
         result.push_back(data[i]);
     }
@@ -248,16 +332,27 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
 
     // [关键修复] 如果输入已经是 inputSize_ x inputSize_，直接复制并归一化
     // 因为 Kotlin 层已经做了 letterbox 预处理
-    MNN::Tensor tmpInput(inputTensor_, MNN::Tensor::DimensionType::CAFFE);
+    // [关键修复] 使用与输入张量相同的维度类型
+    MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
+    MNN::Tensor tmpInput(inputTensor_, inputDimType);
     float *inputData = tmpInput.host<float>();
     int totalPixels = inputSize_ * inputSize_;
+    bool isNCHW = (inputDimType == MNN::Tensor::DimensionType::CAFFE);
+
+    // [关键修复] 根据模型是否有内置归一化选择归一化方式
+    float normMean = hasBuiltInNormalization_ ? 0.0f : 127.5f;
+    float normStd = hasBuiltInNormalization_ ? 1.0f : 128.0f;
 
     if (width == inputSize_ && height == inputSize_) {
         // 直接复制并归一化，无需 letterbox
         for (int i = 0; i < totalPixels; i++) {
             for (int c = 0; c < 3; c++) {
                 float val = imageData[i * 3 + c];
-                inputData[c * totalPixels + i] = (val - 127.5f) / 128.0f;
+                if (isNCHW) {
+                    inputData[c * totalPixels + i] = (val - normMean) / normStd;
+                } else {
+                    inputData[i * 3 + c] = (val - normMean) / normStd;
+                }
             }
         }
         // [诊断] 输出前 10 个像素的归一化值
@@ -265,8 +360,13 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
         snprintf(pixelLog, sizeof(pixelLog), "[Diag] MNN First 10 pixels normalized (R,G,B): ");
         for (int i = 0; i < 10 && i < totalPixels; i++) {
             char buf[64];
-            snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ", 
-                     inputData[i], inputData[totalPixels + i], inputData[totalPixels * 2 + i]);
+            if (isNCHW) {
+                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ", 
+                         inputData[i], inputData[totalPixels + i], inputData[totalPixels * 2 + i]);
+            } else {
+                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ", 
+                         inputData[i * 3], inputData[i * 3 + 1], inputData[i * 3 + 2]);
+            }
             strncat(pixelLog, buf, sizeof(pixelLog) - strlen(pixelLog) - 1);
         }
         LOGD("%s", pixelLog);
@@ -282,7 +382,7 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
         int padTop = (inputSize_ - scaledH) / 2;
 
         // 2. 填充黑色背景
-        float blackValue = (0.0f - 127.5f) / 128.0f;
+        float blackValue = (0.0f - normMean) / normStd;
         for (int i = 0; i < totalPixels * 3; i++) {
             inputData[i] = blackValue;
         }
@@ -292,36 +392,40 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             for (int x = 0; x < scaledW; x++) {
                 float srcX = (x + 0.5f) * width / scaledW - 0.5f;
                 float srcY = (y + 0.5f) * height / scaledH - 0.5f;
-                
+
                 int srcX0 = static_cast<int>(srcX);
                 int srcY0 = static_cast<int>(srcY);
                 int srcX1 = std::min(srcX0 + 1, width - 1);
                 int srcY1 = std::min(srcY0 + 1, height - 1);
-                
+
                 float fx = srcX - srcX0;
                 float fy = srcY - srcY0;
-                
+
                 int dstX = padLeft + x;
                 int dstY = padTop + y;
                 int dstIdx = dstY * inputSize_ + dstX;
-                
+
                 for (int c = 0; c < 3; c++) {
                     int srcIdx00 = (srcY0 * width + srcX0) * 3 + c;
                     int srcIdx01 = (srcY0 * width + srcX1) * 3 + c;
                     int srcIdx10 = (srcY1 * width + srcX0) * 3 + c;
                     int srcIdx11 = (srcY1 * width + srcX1) * 3 + c;
-                    
+
                     float val00 = imageData[srcIdx00];
                     float val01 = imageData[srcIdx01];
                     float val10 = imageData[srcIdx10];
                     float val11 = imageData[srcIdx11];
-                    
+
                     float val = val00 * (1-fx) * (1-fy) +
                                val01 * fx * (1-fy) +
                                val10 * (1-fx) * fy +
                                val11 * fx * fy;
-                    
-                    inputData[c * totalPixels + dstIdx] = (val - 127.5f) / 128.0f;
+
+                    if (isNCHW) {
+                        inputData[c * totalPixels + dstIdx] = (val - normMean) / normStd;
+                    } else {
+                        inputData[dstIdx * 3 + c] = (val - normMean) / normStd;
+                    }
                 }
             }
         }

@@ -97,39 +97,14 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         Logger.d("Camera", "  ROI Config from DataStore: $roiConfig")
         Logger.d("Camera", "  Landmark Config from DataStore: $landmarkConfig")
         
+        // [诊断测试] 临时强制使用 MNN 进行对比
         val config = DetectionPipelineConfig(
-            roiDetector = when (roiConfig.modelType) {
-                DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
-                DetectionModelType.INSIGHTFACE_DET10G -> RoiDetectorType.DET10G
-                else -> RoiDetectorType.DET10G
-            },
-            landmarkDetector = when (landmarkConfig.modelType) {
-                DetectionModelType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
-                DetectionModelType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
-                else -> LandmarkDetectorType.INSIGHTFACE_2D106
-            },
-            roiEngine = when (roiConfig.engineType) {
-                InferenceEngineType.ONNX -> InferenceBackendType.ONNX
-                InferenceEngineType.MNN -> InferenceBackendType.MNN
-                InferenceEngineType.NCNN -> InferenceBackendType.NCNN
-                InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
-            },
-            landmarkEngine = when (landmarkConfig.engineType) {
-                InferenceEngineType.ONNX -> InferenceBackendType.ONNX
-                InferenceEngineType.MNN -> InferenceBackendType.MNN
-                InferenceEngineType.NCNN -> InferenceBackendType.NCNN
-                InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
-            },
-            roiDevice = when (roiConfig.devicePreference) {
-                InferenceDevicePreference.AUTO -> DevicePreference.AUTO
-                InferenceDevicePreference.FORCE_CPU -> DevicePreference.FORCE_CPU
-                InferenceDevicePreference.FORCE_GPU -> DevicePreference.FORCE_GPU
-            },
-            landmarkDevice = when (landmarkConfig.devicePreference) {
-                InferenceDevicePreference.AUTO -> DevicePreference.AUTO
-                InferenceDevicePreference.FORCE_CPU -> DevicePreference.FORCE_CPU
-                InferenceDevicePreference.FORCE_GPU -> DevicePreference.FORCE_GPU
-            }
+            roiDetector = RoiDetectorType.DET10G,
+            landmarkDetector = LandmarkDetectorType.INSIGHTFACE_2D106,
+            roiEngine = InferenceBackendType.MNN,
+            landmarkEngine = InferenceBackendType.MNN,
+            roiDevice = DevicePreference.FORCE_GPU,
+            landmarkDevice = DevicePreference.FORCE_GPU
         )
         
         faceDetectorManager.updatePipelineConfig(config)

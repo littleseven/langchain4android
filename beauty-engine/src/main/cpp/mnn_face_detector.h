@@ -78,6 +78,7 @@ private:
     int inputSize_;
     bool useGpu_;
     bool loaded_;
+    bool hasBuiltInNormalization_;  // [关键] 模型是否包含内置归一化节点
     std::string inputName_;
     std::vector<std::string> outputNames_;
 

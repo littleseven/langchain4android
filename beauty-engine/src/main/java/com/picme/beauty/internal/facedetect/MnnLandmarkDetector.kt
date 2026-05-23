@@ -26,7 +26,7 @@ class MnnLandmarkDetector(
         private const val TAG = "PicMe:MnnLandmark"
         private const val MODEL_ASSET_PATH = "insightface/2d106det.mnn"
         private const val MODEL_FILE_NAME = "mnn_2d106det.mnn"
-        private const val INPUT_SIZE = 128  // [性能优化] 从 192 降到 128，推理速度 +56%
+        private const val INPUT_SIZE = 192  // [对齐 ONNX] 与 InsightFace2D106Detector 保持一致
         private const val POINT_COUNT = 106
     }
 
@@ -110,6 +110,15 @@ class MnnLandmarkDetector(
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detect(cropResult.bitmap)
             val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+
+            // [诊断日志] 输出原始模型输出前 10 个点
+            if (result != null && result.isNotEmpty()) {
+                val sb = StringBuilder("[Diag] MNN raw output first 10 points: ")
+                for (i in 0 until minOf(10, result.size / 2)) {
+                    sb.append("(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
+                }
+                Log.d(TAG, sb.toString())
+            }
 
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 

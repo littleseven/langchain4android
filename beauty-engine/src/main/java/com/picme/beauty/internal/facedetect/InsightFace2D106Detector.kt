@@ -110,6 +110,13 @@ class InsightFace2D106Detector(context: Context) {
             crop.bitmap.recycle()
             val inferenceElapsed = SystemClock.elapsedRealtime() - inferenceStart
 
+            // [诊断日志] 输出原始模型输出前 10 个点
+            val sb = StringBuilder("[Diag] ONNX raw output first 10 points: ")
+            for (i in 0 until 10) {
+                sb.append("(${String.format("%.3f", rawOutput[i * 2])},${String.format("%.3f", rawOutput[i * 2 + 1])}) ")
+            }
+            Log.d(TAG, sb.toString())
+
             val transformStart = SystemClock.elapsedRealtime()
             val result = reusableResult
             val mappedPoint = reusableMappedPoint
@@ -292,6 +299,20 @@ class InsightFace2D106Detector(context: Context) {
             chw[pixelCount + index] = (green - inputMean) / inputStd
             chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
         }
+
+        // [诊断日志] 输出前 10 个像素的归一化值和原始像素值
+        val sb = StringBuilder("[Diag] ONNX First 10 pixels normalized (R,G,B): ")
+        val sbRaw = StringBuilder("[Diag] ONNX First 10 pixels raw (R,G,B): ")
+        for (i in 0 until 10) {
+            val pixel = pixels[i]
+            val red = (pixel shr 16 and 0xFF).toFloat()
+            val green = (pixel shr 8 and 0xFF).toFloat()
+            val blue = (pixel and 0xFF).toFloat()
+            sb.append("[${String.format("%.2f", chw[i])},${String.format("%.2f", chw[pixelCount + i])},${String.format("%.2f", chw[pixelCount * 2 + i])}] ")
+            sbRaw.append("[${red.toInt()},${green.toInt()},${blue.toInt()}] ")
+        }
+        Log.d(TAG, sb.toString())
+        Log.d(TAG, sbRaw.toString())
 
         return OnnxTensor.createTensor(
             ortEnvironment,
