@@ -51,6 +51,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     private var mnnRoiDetector: MnnRoiDetector? = null
     private var mnnLandmarkDetector: MnnLandmarkDetector? = null
 
+    // [性能优化] NCNN 轻量级检测器
+    private var ncnnRoiDetector: NcnnRoiDetector? = null
+    private var ncnnLandmarkDetector: NcnnLandmarkDetector? = null
+
     private var lastProcessTimeMs: Long = 0
     private var lastDetectionSource: FaceDetectionSource = FaceDetectionSource.NONE
 
@@ -74,6 +78,21 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize MNN Landmark detector", e)
             mnnLandmarkDetector = null
+        }
+        // [性能优化] 初始化 NCNN 检测器（GPU 优先，失败不降级）
+        try {
+            ncnnRoiDetector = NcnnRoiDetector(context, requireGpu = true)
+            Log.i(TAG, "NCNN ROI detector initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize NCNN ROI detector", e)
+            ncnnRoiDetector = null
+        }
+        try {
+            ncnnLandmarkDetector = NcnnLandmarkDetector(context, requireGpu = true)
+            Log.i(TAG, "NCNN Landmark detector initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize NCNN Landmark detector", e)
+            ncnnLandmarkDetector = null
         }
         // [关键修复] 不在 init 时初始化 pipeline，改为懒加载
         Log.i(TAG, "FaceDetectorManager initialized (lazy pipeline)")
@@ -185,6 +204,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
                 EngineType.MNN -> {
                     detectMnn(bitmap, lensFacing, startTime)
+                }
+
+                EngineType.NCNN -> {
+                    detectNcnn(bitmap, lensFacing, startTime)
                 }
             }
         } catch (e: Exception) {
@@ -325,6 +348,77 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         return null
     }
 
+    private fun detectNcnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
+        var roiResult: android.graphics.RectF? = null
+        var landmarkResult: FloatArray? = null
+
+        val roiStartTime = SystemClock.elapsedRealtime()
+        val roiDetector = ncnnRoiDetector
+        if (roiDetector != null) {
+            try {
+                roiResult = roiDetector.detectRoi(bitmap)
+                Log.i(TAG, "[Perf] NCNN ROI detection completed in ${SystemClock.elapsedRealtime() - roiStartTime}ms")
+            } catch (e: Exception) {
+                Log.e(TAG, "NCNN ROI detection failed", e)
+            }
+        }
+
+        if (roiResult == null) {
+            Log.d(TAG, "No face detected by NCNN ROI (${SystemClock.elapsedRealtime() - startTime}ms)")
+            return null
+        }
+
+        // [性能优化] Landmark 检测使用 NcnnLandmarkDetector
+        val landmarkStartTime = SystemClock.elapsedRealtime()
+        val landmarkDetector = ncnnLandmarkDetector
+        if (landmarkDetector != null) {
+            try {
+                landmarkResult = landmarkDetector.detectLandmarks(bitmap, lensFacing, roiResult)
+                Log.i(TAG, "[Perf] NCNN Landmark detection completed in ${SystemClock.elapsedRealtime() - landmarkStartTime}ms")
+            } catch (e: Exception) {
+                Log.e(TAG, "NCNN Landmark detection failed", e)
+            }
+        }
+
+        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+        return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
+            lastDetectionSource = FaceDetectionSource.NCNN
+
+            // [关键修复] 使用 NcnnLandmarkAdapter 进行点序映射
+            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.NCNN)
+                ?: return null
+            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
+            if (adaptedResult == null) {
+                Log.w(TAG, "NCNN landmark adaptation failed")
+                return null
+            }
+
+            // 归一化 ROI 坐标
+            val normalizedRoi = android.graphics.RectF(
+                roiResult.left / bitmap.width.toFloat(),
+                roiResult.top / bitmap.height.toFloat(),
+                roiResult.right / bitmap.width.toFloat(),
+                roiResult.bottom / bitmap.height.toFloat()
+            )
+
+            Log.i(TAG, "[Perf] NCNN detection DONE: total=${lastProcessTimeMs}ms, GPU✓")
+
+            FaceDetectionResult(
+                landmarks106 = adaptedResult,
+                detectionSource = FaceDetectionSource.NCNN,
+                roiRect = normalizedRoi,
+                roiDetectorName = "NcnnRoiDetector",
+                useGpuForRoi = true,
+                landmarkDetectorName = "NcnnLandmarkDetector",
+                useGpuForLandmark = true
+            )
+        } else {
+            Log.w(TAG, "NCNN landmark result invalid: size=${landmarkResult?.size}")
+            null
+        }
+    }
+
     private fun detectMnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
         var roiResult: android.graphics.RectF? = null
         var landmarkResult: FloatArray? = null
@@ -430,6 +524,14 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         mediaPipeDetector = null
         insightFaceDetector?.release()
         insightFaceDetector = null
+        mnnRoiDetector?.release()
+        mnnRoiDetector = null
+        mnnLandmarkDetector?.release()
+        mnnLandmarkDetector = null
+        ncnnRoiDetector?.release()
+        ncnnRoiDetector = null
+        ncnnLandmarkDetector?.release()
+        ncnnLandmarkDetector = null
         lastDetectionSource = FaceDetectionSource.NONE
         Log.i(TAG, "FaceDetectorManager released")
     }

@@ -35,6 +35,7 @@
     <string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
     <string name="settings_beauty_runtime_desc">影响实时性能与人脸分析行为。</string>
     <string name="face_detection">人脸检测</string>
+    <string name="face_detection_desc">选择人脸检测算法，影响瘦脸、大眼、妆容等效果的定位精度。</string>
     <string name="settings_face_detection_desc">选择人脸关键点检测引擎，影响瘦脸、大眼、妆容等效果的定位精度。</string>
     <string name="face_detection_engine_title">人脸检测引擎</string>
 <string name="face_detection_engine_mode_mediapipe">MediaPipe</string>

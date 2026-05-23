@@ -214,30 +214,15 @@ private fun settingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // 人脸检测算法模式选择
             SettingsSection(
                 title = stringResource(R.string.face_detection),
-                description = stringResource(R.string.settings_face_detection_desc)
+                description = stringResource(R.string.face_detection_desc)
             ) {
                 FaceDetectionEngineSelection(
                     currentMode = faceDetectionEngineMode,
                     onModeSelected = onFaceDetectionEngineModeSelected
                 )
-                DebugOptionRow(
-                    title = stringResource(R.string.face_landmark_mode),
-                    checked = faceDetectionLandmarkModeEnabled,
-                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
-                )
-                DebugOptionRow(
-                    title = stringResource(R.string.adaptive_face_detect_interval),
-                    checked = adaptiveFaceDetectionIntervalEnabled,
-                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
-                )
-                if (adaptiveFaceDetectionIntervalEnabled) {
-                    FaceDetectProfileSelection(
-                        currentProfile = faceDetectIntervalProfile,
-                        onProfileSelected = onFaceDetectIntervalProfileSelected
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -261,6 +246,30 @@ private fun settingsContent(
                 onEngineTypeSelected = onLandmarkEngineTypeSelected,
                 onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.face_detection_advanced),
+                description = stringResource(R.string.settings_face_detection_advanced_desc)
+            ) {
+                DebugOptionRow(
+                    title = stringResource(R.string.face_landmark_mode),
+                    checked = faceDetectionLandmarkModeEnabled,
+                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
+                )
+                DebugOptionRow(
+                    title = stringResource(R.string.adaptive_face_detect_interval),
+                    checked = adaptiveFaceDetectionIntervalEnabled,
+                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
+                )
+                if (adaptiveFaceDetectionIntervalEnabled) {
+                    FaceDetectProfileSelection(
+                        currentProfile = faceDetectIntervalProfile,
+                        onProfileSelected = onFaceDetectIntervalProfileSelected
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -555,7 +564,7 @@ private fun inferenceEngineSelection(
     CompactOptionChips(
         options = options,
         currentValue = currentType,
-        maxLines = 1,
+        maxLines = 2,
         onSelected = onTypeSelected
     )
 }

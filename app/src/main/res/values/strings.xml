@@ -34,11 +34,13 @@
     <string name="settings_beauty_engine_desc">Big Beauty is the default engine. Compatibility mode is only for fallback verification.</string>
     <string name="settings_beauty_runtime_desc">Affects real-time performance and face analysis behavior.</string>
     <string name="face_detection">Face Detection</string>
+    <string name="face_detection_desc">Select face detection algorithm. Affects accuracy of slim face, big eyes, and makeup effects.</string>
     <string name="settings_face_detection_desc">Select face landmark detection engine. Affects accuracy of slim face, big eyes, and makeup effects.</string>
     <string name="face_detection_engine_title">Face detection engine</string>
     <string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
     <string name="face_detection_engine_mode_insightface">InsightFace</string>
-    <string name="face_detection_engine_mode_mnn">MNN Vulkan GPU</string>  // [性能优化] MNN GPU 检测器
+    <string name="face_detection_advanced">Detection Options</string>
+    <string name="settings_face_detection_advanced_desc">Advanced face detection settings.</string>
     <string name="inference_engine">Inference Engine</string>
     <string name="settings_inference_engine_desc">Select the underlying inference framework for face detection and landmark processing.</string>
     <string name="inference_engine_onnx">ONNX (CPU/NNAPI)</string>

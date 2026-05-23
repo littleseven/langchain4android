@@ -277,7 +277,6 @@ internal data class CameraPreviewActions(
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
     FaceDetectionEngineMode.MEDIAPIPE -> EngineType.MEDIAPIPE
     FaceDetectionEngineMode.INSIGHTFACE -> EngineType.INSIGHTFACE
-    FaceDetectionEngineMode.MNN -> EngineType.MNN
 }
 
 private fun buildCameraPreviewUiState(

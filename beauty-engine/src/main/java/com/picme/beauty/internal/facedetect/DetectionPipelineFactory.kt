@@ -35,7 +35,11 @@ internal object DetectionPipelineFactory {
                         val requireGpu = device != DevicePreference.FORCE_CPU
                         MnnRoiDetector(context, requireGpu = requireGpu)
                     }
-                    else -> Det10GRoiDetector(context) // ONNX/NCNN/TFLITE 默认用 ONNX
+                    InferenceBackendType.NCNN -> {
+                        val requireGpu = device != DevicePreference.FORCE_CPU
+                        NcnnRoiDetector(context, requireGpu = requireGpu)
+                    }
+                    else -> Det10GRoiDetector(context) // ONNX/TFLITE 默认用 ONNX
                 }
             }
         }
@@ -59,7 +63,11 @@ internal object DetectionPipelineFactory {
                         val requireGpu = device != DevicePreference.FORCE_CPU
                         MnnLandmarkDetector(context, requireGpu = requireGpu)
                     }
-                    else -> InsightFaceLandmarkDetector(context) // ONNX/NCNN/TFLITE 默认用 ONNX
+                    InferenceBackendType.NCNN -> {
+                        val requireGpu = device != DevicePreference.FORCE_CPU
+                        NcnnLandmarkDetector(context, requireGpu = requireGpu)
+                    }
+                    else -> InsightFaceLandmarkDetector(context) // ONNX/TFLITE 默认用 ONNX
                 }
             }
             LandmarkDetectorType.MEDIAPIPE -> {
