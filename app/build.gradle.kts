@@ -1,5 +1,3 @@
-import com.picme.build.NoFullyQualifiedNameTask
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -26,7 +24,9 @@ ktlint {
 }
 
 // 注册禁止完全限定名检查任务（仅在本地开发环境启用，CI 跳过以避免 buildSrc 编译问题）
-if (System.getenv("CI") == null) {
+if (System.getenv("CI").orEmpty().toBoolean()) {
+    // In CI, skip the custom task to avoid buildSrc compilation issues
+} else {
     tasks.register<NoFullyQualifiedNameTask>("checkNoFullyQualifiedName") {
         group = "verification"
         description = "检查 Kotlin 源码中是否使用了完全限定名（禁止）"
