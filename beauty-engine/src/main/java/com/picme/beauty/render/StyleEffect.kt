@@ -1,4 +1,4 @@
-package com.picme.beauty.egl
+package com.picme.beauty.render
 
 /**
  * 风格特效枚举

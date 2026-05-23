@@ -1,4 +1,4 @@
-package com.picme.beauty.egl
+package com.picme.beauty.render
 
 import android.content.Context
 import com.picme.beauty.api.BeautyPreviewProvider

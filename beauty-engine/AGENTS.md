@@ -22,7 +22,7 @@
 - **[PERF] 参数响应延迟 < 100ms**：美颜参数通过 `uniform` 实时传递，无需重新编译 Shader
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
 - **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
-- **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `egl/` 内部实现类
+- **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `render/` 内部实现类
 - **[INTEGRATION] 单引擎架构**：仅保留自研 `beauty-engine`（BIG_BEAUTY）引擎，GPUPixel 已于 2026-05 完全移除
 - **[ROADMAP] 拍照 GPU 化（2026-05 已落地）**：`PhotoProcessorImpl` 已实现拍照后处理 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。GPU 路径失败时自动回退 CPU 路径。详见 `docs/ADR-002-opengl-offscreen-unified-pipeline.md`
 
@@ -48,7 +48,7 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── BeautyPreviewEngine.kt         # 组合接口（Provider + Capability + getView）
 │   ├── BeautyPreviewProviderFactory.kt # Factory（未来 DI 扩展点）
 │   └── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染，2026-05 新增）
-├── egl/                               # 内部实现（GL 渲染管线层）
+├── render/                               # 内部实现（GL 渲染管线层）
 │   ├── BeautyPreviewView.kt           # 自定义 View（SurfaceView 封装）
 │   ├── CameraPreviewRenderer.kt       # 渲染管线核心
 │   ├── BeautyRenderer.kt              # 美颜 Shader 渲染器
@@ -63,9 +63,9 @@ beauty-engine/src/main/java/com/picme/beauty/
 ```
 
 **依赖方向红线**：
-- `api/` 包：**禁止**依赖 `egl/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
-- `egl/` 包：允许实现 `api/` 接口，允许依赖 `android.*` 和 OpenGL ES 相关库
-- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `egl/` 内部类
+- `api/` 包：**禁止**依赖 `render/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
+- `render/` 包：允许实现 `api/` 接口，允许依赖 `android.*` 和 OpenGL ES 相关库
+- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `render/` 内部类
 
 ### 2.2 对外 API 层 (`api/`)
 
@@ -103,10 +103,10 @@ beauty-engine/src/main/java/com/picme/beauty/
 
 #### BeautyPerfStats
 - 统一输出字段：`fps`, `processingMs`, `delayMs`, `cpuUsage`, `nullFrames`, `errorCategory`, `errorReason`
-- 数据由 `egl/` 渲染线程每秒聚合一次，通过回调或状态流暴露给 App 层调试浮层
+- 数据由 `render/` 渲染线程每秒聚合一次，通过回调或状态流暴露给 App 层调试浮层
 - `errorCategory` 用于输出 `PicMe:BeautyRenderer` 分类错误（如 `shader_compile`、`fbo_pipeline`、`texture_input`、`face_makeup`、`style_effect`）
 
-### 2.3 内部实现层 (`egl/`)
+### 2.3 内部实现层 (`render/`)
 
 #### CameraPreviewRenderer
 - **初始化阶段**：在主线程调用 `init()`，完成 EGL 上下文创建、外部纹理生成、SurfaceTexture 创建、Shader 编译
@@ -305,8 +305,8 @@ if (fps < 25 || processingMs > 20) {
 ## 4. 常见陷阱检查清单 (Checklist)
 
 ### 4.1 架构与接口
-- [ ] `api/` 包是否引入了 `egl/` 或 CameraX 的实现依赖？（严禁反向依赖）
-- [ ] App 层是否直接实例化了 `egl/` 内部类？（应通过 Factory 或 DI 获取接口实现）
+- [ ] `api/` 包是否引入了 `render/` 或 CameraX 的实现依赖？（严禁反向依赖）
+- [ ] App 层是否直接实例化了 `render/` 内部类？（应通过 Factory 或 DI 获取接口实现）
 - [ ] 新增公开 API 是否补充了默认值与向后兼容处理？
 
 ### 4.2 EGL / OpenGL
@@ -393,7 +393,7 @@ if (fps < 25 || processingMs > 20) {
 - ✅ 参数响应延迟 < 100ms → `uniform` 实时传递，禁止运行时 Shader 重编译
 - ✅ 本地隐私保证 → 所有处理在设备 GPU 完成，无网络交互
 - ✅ 自动容灾降级 → `BeautyPreviewProvider` 接口收敛初始化/运行时异常，返回 `Result.failure`
-- ✅ 长期库化目标 → `api/` 与 `egl/` 严格分层，App 仅依赖能力契约
+- ✅ 长期库化目标 → `api/` 与 `render/` 严格分层，App 仅依赖能力契约
 
 **技术决策记录**：
 - 选择 OpenGL ES 而非 Vulkan：CameraX 兼容性更好、设备覆盖率更高、开发周期更短
@@ -411,7 +411,7 @@ if (fps < 25 || processingMs > 20) {
 ### 5.1 架构定位
 帧同步是 beauty-engine 的**横切能力**，核心目标是**解决妆容甩飞问题**（妆容粘屏幕不跟脸、悬空残留、录制跳变）。沉淀在 `internal/framesync/` 包下：
 - `api/` 层新增 `FrameId`、`FrameSyncConfig`、`FrameSyncResult` 数据契约
-- `internal/framesync/` 实现时序对齐核心，不侵入 `egl/` 具体 Pass
+- `internal/framesync/` 实现时序对齐核心，不侵入 `render/` 具体 Pass
 - `FaceMakeupPass` 只消费同步后的顶点数据，不关心同步逻辑
 - **录制场景强制启用**：视频录制必须复用预览同一套帧同步逻辑，确保录制帧与预览帧行为一致
 
@@ -489,4 +489,4 @@ CameraPreviewRenderer（渲染线程）
 - `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` - 大美丽 QA 独立执行清单
 - `app/src/main/java/com/picme/features/camera/AGENTS.md` - Camera 模块实现规范
 - `beauty-engine/src/main/java/com/picme/beauty/api/` - 对外稳定 API
-- `beauty-engine/src/main/java/com/picme/beauty/egl/` - OpenGL ES 渲染管线实现
+- `beauty-engine/src/main/java/com/picme/beauty/render/` - OpenGL ES 渲染管线实现

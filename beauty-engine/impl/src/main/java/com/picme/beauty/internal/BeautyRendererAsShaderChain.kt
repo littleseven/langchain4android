@@ -2,7 +2,7 @@ package com.picme.beauty.internal
 
 import android.opengl.GLES20
 import android.util.Log
-import com.picme.beauty.egl.BeautyRenderer
+import com.picme.beauty.render.BeautyRenderer
 
 /**
  * BeautyRenderer 到 BeautyShaderChain 的适配器

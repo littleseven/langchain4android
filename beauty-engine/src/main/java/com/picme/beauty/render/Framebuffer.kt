@@ -1,4 +1,4 @@
-package com.picme.beauty.egl
+package com.picme.beauty.render
 
 import android.opengl.GLES20
 import android.util.Log

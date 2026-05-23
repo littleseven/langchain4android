@@ -1,4 +1,4 @@
-package com.picme.beauty.egl
+package com.picme.beauty.render
 
 /**
  * R 计划 - 美颜顶点着色器定义

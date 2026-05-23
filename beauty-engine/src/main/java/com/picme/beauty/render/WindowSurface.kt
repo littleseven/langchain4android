@@ -1,4 +1,4 @@
-package com.picme.beauty.egl
+package com.picme.beauty.render
 
 import android.opengl.EGL14
 import android.opengl.EGLContext
