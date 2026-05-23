@@ -173,9 +173,6 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
 
     // [关键修复] 使用与输入张量相同的维度类型，避免 copyFromHostTensor 时数据重排
     MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
-    LOGD("[Diag] Input tensor dimension type: %d (CAFFE=0, TENSORFLOW=1, CAFFE_C4=2)",
-         (int)inputDimType);
-
     MNN::Tensor tmpInput(inputTensor_, inputDimType);
     float *inputData = tmpInput.host<float>();
     int totalPixels = inputSize_ * inputSize_;
@@ -187,13 +184,12 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
     float normMean = hasBuiltInNormalization_ ? 0.0f : 127.5f;
     float normStd = hasBuiltInNormalization_ ? 1.0f : 128.0f;
 
+    bool isNCHW = (inputDimType == MNN::Tensor::DimensionType::CAFFE);
+
     if (width == inputSize_ && height == inputSize_) {
-        LOGD("[Diag] detect: direct normalize %dx%d -> %dx%d (no letterbox, builtInNorm=%s, normMean=%.1f, normStd=%.1f, dimType=%d)",
-             width, height, inputSize_, inputSize_, hasBuiltInNormalization_ ? "true" : "false", normMean, normStd, (int)inputDimType);
         // [关键修复] 根据维度类型选择正确的数据布局
         // CAFFE (NCHW): inputData[c * totalPixels + i]
         // TENSORFLOW (NHWC): inputData[i * 3 + c]
-        bool isNCHW = (inputDimType == MNN::Tensor::DimensionType::CAFFE);
         for (int i = 0; i < totalPixels; i++) {
             for (int c = 0; c < 3; c++) {
                 float val = imageData[i * 3 + c];
@@ -204,21 +200,6 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
                 }
             }
         }
-        // [诊断] 输出前 10 个像素的归一化值
-        char pixelLog[512];
-        snprintf(pixelLog, sizeof(pixelLog), "[Diag] MNN First 10 pixels normalized (R,G,B): ");
-        for (int i = 0; i < 10 && i < totalPixels; i++) {
-            char buf[64];
-            if (isNCHW) {
-                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ",
-                         inputData[i], inputData[totalPixels + i], inputData[totalPixels * 2 + i]);
-            } else {
-                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ",
-                         inputData[i * 3], inputData[i * 3 + 1], inputData[i * 3 + 2]);
-            }
-            strncat(pixelLog, buf, sizeof(pixelLog) - strlen(pixelLog) - 1);
-        }
-        LOGD("%s", pixelLog);
     } else {
         // [关键修复] 使用与 ONNX 完全相同的 letterbox 预处理
         // 1. 计算保持宽高比的缩放比例
@@ -292,25 +273,11 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
     MNN::Tensor tmpOutput(output, outputDimType);
     output->copyToHostTensor(&tmpOutput);
 
-    // [诊断] 输出张量形状
-    LOGD("[Diag] Output tensor shape: [%d, %d, %d, %d]",
-         output->batch(), output->channel(), output->height(), output->width());
-
     // 转为 vector
     int elementSize = tmpOutput.elementSize();
     std::vector<float> result;
     result.reserve(elementSize);
     const float *data = tmpOutput.host<float>();
-
-    // [诊断] 输出原始数据前 20 个值
-    char rawLog[512];
-    snprintf(rawLog, sizeof(rawLog), "[Diag] Raw output first 20 values: ");
-    for (int i = 0; i < 20 && i < elementSize; i++) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%.3f ", data[i]);
-        strncat(rawLog, buf, sizeof(rawLog) - strlen(rawLog) - 1);
-    }
-    LOGD("%s", rawLog);
 
     for (int i = 0; i < elementSize; i++) {
         result.push_back(data[i]);
@@ -355,23 +322,6 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
                 }
             }
         }
-        // [诊断] 输出前 10 个像素的归一化值
-        char pixelLog[512];
-        snprintf(pixelLog, sizeof(pixelLog), "[Diag] MNN First 10 pixels normalized (R,G,B): ");
-        for (int i = 0; i < 10 && i < totalPixels; i++) {
-            char buf[64];
-            if (isNCHW) {
-                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ", 
-                         inputData[i], inputData[totalPixels + i], inputData[totalPixels * 2 + i]);
-            } else {
-                snprintf(buf, sizeof(buf), "[%.2f,%.2f,%.2f] ", 
-                         inputData[i * 3], inputData[i * 3 + 1], inputData[i * 3 + 2]);
-            }
-            strncat(pixelLog, buf, sizeof(pixelLog) - strlen(pixelLog) - 1);
-        }
-        LOGD("%s", pixelLog);
-        
-        // 输入数据已准备就绪
     } else {
         // [关键修复] 使用与 ONNX 完全相同的 letterbox 预处理
         // 1. 计算保持宽高比的缩放比例
