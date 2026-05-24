@@ -44,6 +44,19 @@ object ModelManager {
         val version: String
     )
 
+    /**
+     * LLM 模型信息（MNN-LLM 需要整个目录）
+     *
+     * @param assetDir assets 中的目录路径
+     * @param cacheDirName 复制到 filesDir 后的目录名
+     * @param version 模型版本号
+     */
+    data class LlmModelInfo(
+        val assetDir: String,
+        val cacheDirName: String,
+        val version: String
+    )
+
     // ── 模型注册表 ───────────────────────────────────────────
 
     private val MODEL_REGISTRY = mapOf(
@@ -85,6 +98,14 @@ object ModelManager {
             binAssetPath = "models/ncnn/2d106det.bin",
             paramCacheName = "2d106det.param",
             binCacheName = "2d106det.bin",
+            version = "1.0"
+        )
+    )
+
+    private val LLM_MODEL_REGISTRY = mapOf(
+        "qwen3_0_6b" to LlmModelInfo(
+            assetDir = "models/llm/Qwen3-0.6B-MNN",
+            cacheDirName = "Qwen3-0.6B-MNN",
             version = "1.0"
         )
     )
@@ -144,6 +165,66 @@ object ModelManager {
         val binFile = File(context.filesDir, info.binCacheName)
         return paramFile.exists() && paramFile.length() > 0L &&
             binFile.exists() && binFile.length() > 0L
+    }
+
+    // ── LLM 模型 API ─────────────────────────────────────────
+
+    /**
+     * 准备 LLM 模型目录（MNN-LLM 需要整个目录结构）
+     *
+     * @param key LLM 模型注册表中的 key
+     * @param context Context
+     * @return 复制后的模型目录绝对路径
+     * @throws IllegalArgumentException 如果 key 不存在
+     */
+    fun prepareLlmModel(key: String, context: Context): String {
+        val info = LLM_MODEL_REGISTRY[key]
+            ?: throw IllegalArgumentException("Unknown LLM model key: $key")
+
+        val destDir = File(context.filesDir, info.cacheDirName)
+        if (destDir.exists() && isLlmModelComplete(destDir)) {
+            Log.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
+            return destDir.absolutePath
+        }
+
+        copyAssetDir(info.assetDir, destDir, context)
+        Log.i(TAG, "LLM model prepared: ${destDir.absolutePath}")
+        return destDir.absolutePath
+    }
+
+    /**
+     * 检查 LLM 模型是否已缓存
+     */
+    fun isLlmModelCached(key: String, context: Context): Boolean {
+        val info = LLM_MODEL_REGISTRY[key] ?: return false
+        val destDir = File(context.filesDir, info.cacheDirName)
+        return destDir.exists() && isLlmModelComplete(destDir)
+    }
+
+    private fun isLlmModelComplete(dir: File): Boolean {
+        return dir.walkTopDown().any { it.name.endsWith(".mnn") }
+    }
+
+    private fun copyAssetDir(assetPath: String, destDir: File, context: Context) {
+        destDir.mkdirs()
+        val assets = context.assets
+        val files = assets.list(assetPath) ?: return
+
+        for (file in files) {
+            val srcPath = "$assetPath/$file"
+            val dstFile = File(destDir, file)
+
+            if (assets.list(srcPath)?.isNotEmpty() == true) {
+                copyAssetDir(srcPath, dstFile, context)
+            } else {
+                assets.open(srcPath).use { input ->
+                    dstFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                Log.d(TAG, "Copied: $srcPath -> ${dstFile.absolutePath}")
+            }
+        }
     }
 
     // ── 内部实现 ─────────────────────────────────────────────
