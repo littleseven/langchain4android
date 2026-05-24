@@ -58,3 +58,8 @@ captures/
 .cache/
 *.swp
 *~
+
+# Signing keys (NEVER commit to Git)
+*.jks
+*.keystore
+app/keystore/
