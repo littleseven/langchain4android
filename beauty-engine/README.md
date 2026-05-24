@@ -253,6 +253,39 @@ override fun onCleared() {
 
 ---
 
+## 版本里程碑
+
+| 版本 | 日期 | 关键交付 |
+|------|------|----------|
+| **M1** | 2026-04 | 大美丽渲染基础：磨皮/美白/瘦脸/大眼/唇色/腮红/滤镜 |
+| **M2** | 2026-05 | 人脸检测重构：MediaPipe / NCNN / MNN / ONNX 四引擎独立配置；帧同步系统；GPU 拍照；视频录制 |
+| **M3** | 2026-06 (计划) | 独立 AAR 发布；性能基线自动化；低端机自动降级策略 |
+
+### M2 已完成项
+
+- ✅ 多引擎 ROI + Landmark 双阶段检测（引擎类型独立配置）
+- ✅ NCNN Vulkan GPU 推理（RetinaFace + 2D106）
+- ✅ MNN Vulkan GPU 推理（RetinaFace + 2D106）
+- ✅ ONNX Runtime CPU/GPU 推理（InsightFace 原始模型）
+- ✅ MediaPipe TFLite GPU 推理（FaceLandmarker）
+- ✅ 帧同步系统（FrameSyncManager + MotionTracker）
+- ✅ GPU 离屏渲染拍照（PhotoProcessorImpl）
+- ✅ 美颜视频录制（BeautyVideoRecorder）
+- ✅ 设置页检测引擎切换（DataStore 持久化）
+- ✅ C++ 层细分性能计时（preprocess/infer/nms）
+- ✅ ANR 修复（异步初始化 + 懒加载）
+- ✅ NCNN OpenMP 崩溃修复（JNI_OnLoad 设置 KMP_AFFINITY）
+- ✅ 移除 armeabi-v7a（仅保留 arm64-v8a，节省 54MB）
+
+### M3 待办项
+
+- ⏳ 低端机自动降级（GPU 推理 >200ms 时自动切 MediaPipe）
+- ⏳ NCNN libncnn.so 体积优化（strip / 自定义编译裁剪）
+- ⏳ 独立 AAR Maven 发布
+- ⏳ 性能基线自动化测试（CI 集成 perf-baseline.sh）
+
+---
+
 ## 已接入能力
 
 | 能力 | 实现方式 | 状态 |
