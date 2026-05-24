@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.picme.core.common.Logger
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
@@ -141,7 +142,37 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         viewModelScope.launch {
             Logger.d("UX", "Face detection engine mode changed: ${mode.name}")
             repository.updateFaceDetectionEngineMode(mode)
+
+            if (mode != FaceDetectionEngineMode.CUSTOM) {
+                val (roiConfig, landmarkConfig) = mode.toStageConfigs()
+                repository.updateRoiStageConfig(roiConfig)
+                repository.updateLandmarkStageConfig(landmarkConfig)
+                Logger.d("UX", "Auto-updated StageConfig for $mode")
+            }
         }
+    }
+
+    private fun FaceDetectionEngineMode.toStageConfigs(): Pair<StageConfig, StageConfig> = when (this) {
+        FaceDetectionEngineMode.MEDIAPIPE -> Pair(
+            StageConfig(DetectionStage.ROI, DetectionModelType.MEDIAPIPE, InferenceEngineType.TFLITE, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.TFLITE, InferenceDevicePreference.AUTO)
+        )
+        FaceDetectionEngineMode.INSIGHTFACE -> Pair(
+            StageConfig(DetectionStage.ROI, DetectionModelType.INSIGHTFACE_DET10G, InferenceEngineType.ONNX, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.INSIGHTFACE_2D106, InferenceEngineType.ONNX, InferenceDevicePreference.AUTO)
+        )
+        FaceDetectionEngineMode.MNN -> Pair(
+            StageConfig(DetectionStage.ROI, DetectionModelType.INSIGHTFACE_DET10G, InferenceEngineType.MNN, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.INSIGHTFACE_2D106, InferenceEngineType.MNN, InferenceDevicePreference.AUTO)
+        )
+        FaceDetectionEngineMode.NCNN -> Pair(
+            StageConfig(DetectionStage.ROI, DetectionModelType.INSIGHTFACE_DET10G, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.INSIGHTFACE_2D106, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO)
+        )
+        FaceDetectionEngineMode.CUSTOM -> Pair(
+            StageConfig.defaultRoi(),
+            StageConfig.defaultLandmark()
+        )
     }
 
     fun setFaceDetectionLandmarkModeEnabled(enabled: Boolean) {

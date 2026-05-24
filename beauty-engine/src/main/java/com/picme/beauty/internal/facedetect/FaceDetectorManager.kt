@@ -6,7 +6,6 @@ import android.graphics.PointF
 import android.os.SystemClock
 import android.util.Log
 import com.picme.beauty.api.facedetect.DetectionPipelineConfig
-import com.picme.beauty.api.facedetect.DevicePreference
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetectionResult
 import com.picme.beauty.api.facedetect.FaceDetectionSource
@@ -20,12 +19,12 @@ import com.picme.beauty.internal.facedetect.adapter.InsightFaceAdapter
 /**
  * 人脸检测管理器
  *
- * 双引擎调度器（MediaPipe + InsightFace），实现 FaceDetector 公开接口。
+ * 多引擎调度器（MediaPipe + InsightFace + MNN + NCNN），实现 FaceDetector 公开接口。
  * 所有检测输入均为 Bitmap，ImageProxy → Bitmap 转换由调用方负责。
+ *
+ * 配置来源：设置页的 StageConfig（ROI + Landmark 独立配置），通过 updatePipelineConfig() 传入。
  */
 class FaceDetectorManager(context: Context) : FaceDetector {
-
-    private var detectionEngineMode: EngineType = EngineType.INSIGHTFACE
 
     companion object {
         private const val TAG = "PicMe:FaceDetector"
@@ -40,108 +39,27 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     private var roiDetector: RoiDetector? = null
     private var landmarkDetector: LandmarkDetector? = null
 
-    // [关键修复] 使用懒加载，首次 detect 时才从 DataStore 读取配置
     private var pipelineConfig: DetectionPipelineConfig? = null
     private var isPipelineInitialized = false
 
-    private var mediaPipeDetector: MediaPipeFaceDetector? = null
-    private var insightFaceDetector: InsightFace2D106Detector? = null
-
-    // [性能优化] MNN GPU 检测器
-    private var mnnRoiDetector: MnnRoiDetector? = null
-    private var mnnLandmarkDetector: MnnLandmarkDetector? = null
-
-    // [性能优化] NCNN 轻量级检测器
-    private var ncnnRoiDetector: NcnnRoiDetector? = null
-    private var ncnnLandmarkDetector: NcnnLandmarkDetector? = null
+    // [性能优化] 按需延迟初始化，只在实际使用时创建
+    private val mediaPipeDetector by lazy { MediaPipeFaceDetector(appContext) }
+    private val insightFaceDetector by lazy { InsightFace2D106Detector(appContext) }
+    private val mnnRoiDetector by lazy { MnnRoiDetector(appContext, requireGpu = true) }
+    private val mnnLandmarkDetector by lazy { MnnLandmarkDetector(appContext, requireGpu = true) }
+    private val ncnnRoiDetector by lazy { NcnnRoiDetector(appContext, requireGpu = true) }
+    private val ncnnLandmarkDetector by lazy { NcnnLandmarkDetector(appContext, requireGpu = true) }
 
     private var lastProcessTimeMs: Long = 0
     private var lastDetectionSource: FaceDetectionSource = FaceDetectionSource.NONE
 
-    init {
-        initialize(context)
-    }
-
-    private fun initialize(context: Context) {
-        mediaPipeDetector = MediaPipeFaceDetector(context)
-        // [关键修复] 初始化 MNN 检测器（GPU 优先，失败不降级）
-        try {
-            mnnRoiDetector = MnnRoiDetector(context, requireGpu = true)
-            Log.i(TAG, "MNN ROI detector initialized")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MNN ROI detector", e)
-            mnnRoiDetector = null
-        }
-        try {
-            mnnLandmarkDetector = MnnLandmarkDetector(context, requireGpu = true)
-            Log.i(TAG, "MNN Landmark detector initialized")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MNN Landmark detector", e)
-            mnnLandmarkDetector = null
-        }
-        // [性能优化] 初始化 NCNN 检测器（GPU 优先，失败不降级）
-        try {
-            ncnnRoiDetector = NcnnRoiDetector(context, requireGpu = true)
-            Log.i(TAG, "NCNN ROI detector initialized")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize NCNN ROI detector", e)
-            ncnnRoiDetector = null
-        }
-        try {
-            ncnnLandmarkDetector = NcnnLandmarkDetector(context, requireGpu = true)
-            Log.i(TAG, "NCNN Landmark detector initialized")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize NCNN Landmark detector", e)
-            ncnnLandmarkDetector = null
-        }
-        // [关键修复] 不在 init 时初始化 pipeline，改为懒加载
-        Log.i(TAG, "FaceDetectorManager initialized (lazy pipeline)")
-    }
-
-    private fun initializePipeline() {
-        Log.i(TAG, "=== Initializing Detection Pipeline ===")
-        val config = pipelineConfig!!
-        Log.i(TAG, "  ROI: ${config.roiDetector.displayName} + ${config.roiEngine.displayName} + ${config.roiDevice.displayName}")
-        Log.i(TAG, "  Landmark: ${config.landmarkDetector.displayName} + ${config.landmarkEngine.displayName} + ${config.landmarkDevice.displayName}")
-
-        // [优化] 懒加载模式下，release() 不会立即销毁资源，只是标记为未初始化
-        roiDetector?.release()
-        landmarkDetector?.release()
-
-        val (newRoiDetector, newLandmarkDetector) = DetectionPipelineFactory.createPipeline(
-            config, appContext
-        )
-        roiDetector = newRoiDetector
-        landmarkDetector = newLandmarkDetector
-
-        Log.i(TAG, "  ROI Detector: ${roiDetector?.javaClass?.simpleName}")
-        Log.i(TAG, "  Landmark Detector: ${landmarkDetector?.javaClass?.simpleName}")
-        Log.i(TAG, "  Pipeline initialized successfully")
-        Log.i(TAG, "=========================================")
-
-        isPipelineInitialized = true
-    }
-
-    // [关键修复] 从 DataStore 读取配置并初始化 pipeline
-    private fun loadAndInitializePipeline() {
-        if (isPipelineInitialized) return
-
-        Log.i(TAG, "Loading pipeline config from DataStore...")
-
-        // [临时方案] 使用默认值，由 CameraRuntimeState 的 LaunchedEffect 调用 updatePipelineConfig 来设置
-        // [临时方案] 使用默认值，由 CameraRuntimeState 的 LaunchedEffect 调用 updatePipelineConfig 来设置
-        pipelineConfig = DetectionPipelineConfig(
-            roiDetector = RoiDetectorType.DET10G,
-            landmarkDetector = LandmarkDetectorType.INSIGHTFACE_2D106
-        )
-
-        Log.i(TAG, "DataStore values - ROI: DET10G, Landmark: INSIGHTFACE_2D106 (default)")
-
-        initializePipeline()
+    @Deprecated("设置页为唯一配置来源，使用 updatePipelineConfig() 替代")
+    override fun setEngineMode(mode: EngineType) {
+        Log.w(TAG, "setEngineMode() is deprecated, use updatePipelineConfig() instead")
     }
 
     override fun updatePipelineConfig(newConfig: DetectionPipelineConfig) {
-        Log.i(TAG, "updatePipelineConfig called: roi=${newConfig.roiDetector}, landmark=${newConfig.landmarkDetector}")
+        Log.i(TAG, "updatePipelineConfig: roi=${newConfig.roiDetector}/${newConfig.roiEngine}, landmark=${newConfig.landmarkDetector}/${newConfig.landmarkEngine}")
         if (pipelineConfig == newConfig) {
             Log.w(TAG, "Config unchanged, skipping update")
             return
@@ -151,88 +69,156 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         initializePipeline()
     }
 
-    override fun setEngineMode(mode: EngineType) {
-        if (detectionEngineMode != mode) {
-            detectionEngineMode = mode
-            Log.i(TAG, "Detection engine mode switched to: ${mode.name}")
-        }
+    private fun initializePipeline() {
+        val config = pipelineConfig ?: return
+
+        roiDetector?.release()
+        landmarkDetector?.release()
+
+        val (newRoiDetector, newLandmarkDetector) = DetectionPipelineFactory.createPipeline(
+            config, appContext
+        )
+        roiDetector = newRoiDetector
+        landmarkDetector = newLandmarkDetector
+        isPipelineInitialized = true
+
+        Log.i(TAG, "Pipeline initialized: ROI=${newRoiDetector.javaClass.simpleName}, Landmark=${newLandmarkDetector.javaClass.simpleName}")
     }
 
     override fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
-        // [关键修复] 首次 detect 时从 DataStore 读取配置并初始化 pipeline
         if (!isPipelineInitialized) {
-            loadAndInitializePipeline()
+            Log.w(TAG, "Pipeline not initialized, using default config")
+            pipelineConfig = DetectionPipelineConfig(
+                roiDetector = RoiDetectorType.DET10G,
+                landmarkDetector = LandmarkDetectorType.INSIGHTFACE_2D106
+            )
+            initializePipeline()
         }
 
+        val config = pipelineConfig!!
         val startTime = SystemClock.elapsedRealtime()
         lastDetectionSource = FaceDetectionSource.NONE
 
         return try {
-            when (detectionEngineMode) {
-                EngineType.MEDIAPIPE -> {
-                    val detector = mediaPipeDetector
-                    if (detector == null || !detector.isReady()) {
-                        Log.w(TAG, "MediaPipe detector not ready")
-                        return null
-                    }
-
-                    val mediaPipeResult = detector.detect(bitmap, rotationDegrees, lensFacing)
-                    lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
-                    if (mediaPipeResult != null) {
-                        lastDetectionSource = FaceDetectionSource.MEDIAPIPE
-                        Log.d(TAG, "Face detected by MediaPipe in ${lastProcessTimeMs}ms")
-                        // MediaPipe 使用 CPU，无 ROI 概念
-                        FaceDetectionResult(
-                            landmarks106 = mediaPipeResult,
-                            detectionSource = FaceDetectionSource.MEDIAPIPE,
-                            roiRect = null,
-                            roiDetectorName = "N/A",
-                            useGpuForRoi = false,
-                            landmarkDetectorName = "MediaPipe",
-                            useGpuForLandmark = false
-                        )
-                    } else {
-                        Log.d(TAG, "No face detected by MediaPipe (${lastProcessTimeMs}ms)")
-                        null
-                    }
+            when {
+                config.roiDetector == RoiDetectorType.MEDIAPIPE &&
+                    config.landmarkDetector == LandmarkDetectorType.MEDIAPIPE -> {
+                    detectMediaPipe(bitmap, rotationDegrees, lensFacing, startTime)
                 }
-
-                EngineType.INSIGHTFACE -> {
-                    detectInsightFace(bitmap, lensFacing, startTime)
-                }
-
-                EngineType.MNN -> {
-                    detectMnn(bitmap, lensFacing, startTime)
-                }
-
-                EngineType.NCNN -> {
-                    detectNcnn(bitmap, lensFacing, startTime)
+                else -> {
+                    detectPipeline(bitmap, lensFacing, config, startTime)
                 }
             }
         } catch (e: Exception) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Log.e(TAG, "Face detection failed in ${detectionEngineMode.name} mode", e)
+            Log.e(TAG, "Face detection failed", e)
             null
         }
     }
 
-    /**
-     * [GPU 检测优化 Phase 2] MediaPipe 直接 YUV Image 检测
-     *
-     * 跳过 CPU 端 Bitmap 生成，MediaPipe 内部直接从 YUV_420_888 做 GPU 推理。
-     *
-     * @param mediaImage CameraX ImageProxy.image
-     * @param rotationDegrees 图像旋转角度，用于结果坐标旋转补偿
-     * @param lensFacing 镜头方向
-     * @return 检测结果，无人脸返回 null
-     */
+    private fun detectMediaPipe(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int, startTime: Long): FaceDetectionResult? {
+        val detector = mediaPipeDetector
+        if (!detector.isReady()) {
+            Log.w(TAG, "MediaPipe detector not ready")
+            return null
+        }
+
+        val mediaPipeResult = detector.detect(bitmap, rotationDegrees, lensFacing)
+        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+        return if (mediaPipeResult != null) {
+            lastDetectionSource = FaceDetectionSource.MEDIAPIPE
+            FaceDetectionResult(
+                landmarks106 = mediaPipeResult,
+                detectionSource = FaceDetectionSource.MEDIAPIPE,
+                roiRect = null,
+                roiDetectorName = "N/A",
+                useGpuForRoi = false,
+                landmarkDetectorName = "MediaPipe",
+                useGpuForLandmark = false
+            )
+        } else {
+            null
+        }
+    }
+
+    private fun detectPipeline(bitmap: Bitmap, lensFacing: Int, config: DetectionPipelineConfig, startTime: Long): FaceDetectionResult? {
+        var roiResult: android.graphics.RectF? = null
+        var landmarkResult: FloatArray? = null
+
+        val roiStartTime = SystemClock.elapsedRealtime()
+
+        // ROI 检测
+        roiResult = when (config.roiEngine) {
+            InferenceBackendType.MNN -> mnnRoiDetector.detectRoi(bitmap)
+            InferenceBackendType.NCNN -> ncnnRoiDetector.detectRoi(bitmap)
+            else -> roiDetector?.detectRoi(bitmap)
+        }
+
+        val roiTime = SystemClock.elapsedRealtime() - roiStartTime
+
+        if (roiResult == null) {
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Log.d(TAG, "No face detected by ROI (${lastProcessTimeMs}ms)")
+            return null
+        }
+
+        // Landmark 检测
+        val landmarkStart = SystemClock.elapsedRealtime()
+        landmarkResult = when (config.landmarkEngine) {
+            InferenceBackendType.MNN -> mnnLandmarkDetector.detectLandmarks(bitmap, lensFacing, roiResult)
+            InferenceBackendType.NCNN -> ncnnLandmarkDetector.detectLandmarks(bitmap, lensFacing, roiResult)
+            else -> landmarkDetector?.detectLandmarks(bitmap, lensFacing, roiResult)
+        }
+        val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
+        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+        Log.d(TAG, "[Perf] Detection breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
+
+        return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
+            val detectionSource = when (config.landmarkEngine) {
+                InferenceBackendType.MNN -> FaceDetectionSource.MNN
+                InferenceBackendType.NCNN -> FaceDetectionSource.NCNN
+                else -> FaceDetectionSource.INSIGHTFACE
+            }
+            lastDetectionSource = detectionSource
+
+            val adapter = FaceLandmarkAdapterRegistry.getAdapter(detectionSource)
+                ?: return null
+            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
+                ?: return null
+
+            val normalizedRoi = android.graphics.RectF(
+                roiResult.left / bitmap.width.toFloat(),
+                roiResult.top / bitmap.height.toFloat(),
+                roiResult.right / bitmap.width.toFloat(),
+                roiResult.bottom / bitmap.height.toFloat()
+            )
+
+            val useGpu = config.landmarkEngine == InferenceBackendType.MNN ||
+                config.landmarkEngine == InferenceBackendType.NCNN
+
+            FaceDetectionResult(
+                landmarks106 = adaptedResult,
+                detectionSource = detectionSource,
+                roiRect = normalizedRoi,
+                roiDetectorName = config.roiEngine.name,
+                useGpuForRoi = useGpu,
+                landmarkDetectorName = config.landmarkEngine.name,
+                useGpuForLandmark = useGpu
+            )
+        } else {
+            Log.w(TAG, "Landmark result invalid: size=${landmarkResult?.size}")
+            null
+        }
+    }
+
     override fun detect(mediaImage: android.media.Image, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
         val startTime = SystemClock.elapsedRealtime()
         lastDetectionSource = FaceDetectionSource.NONE
 
         val detector = mediaPipeDetector
-        if (detector == null || !detector.isReady()) {
+        if (!detector.isReady()) {
             Log.w(TAG, "MediaPipe detector not ready for direct image")
             return null
         }
@@ -243,8 +229,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
             if (mediaPipeResult != null) {
                 lastDetectionSource = FaceDetectionSource.MEDIAPIPE
-                Log.d(TAG, "Face detected by MediaPipe (direct image) in ${lastProcessTimeMs}ms")
-                // MediaPipe 使用 GPU，但无 ROI 概念
                 FaceDetectionResult(
                     landmarks106 = mediaPipeResult,
                     detectionSource = FaceDetectionSource.MEDIAPIPE,
@@ -255,7 +239,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                     useGpuForLandmark = true
                 )
             } else {
-                Log.d(TAG, "No face detected by MediaPipe direct image (${lastProcessTimeMs}ms)")
                 null
             }
         } catch (e: Exception) {
@@ -265,234 +248,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         }
     }
 
-    private fun detectInsightFace(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
-        var roiResult: android.graphics.RectF? = null
-        var landmarkResult: FloatArray? = null
-        var roiError: Exception? = null
-        var landmarkError: Exception? = null
-
-        val roiStartTime = SystemClock.elapsedRealtime()
-
-        // [性能优化] ROI 检测在独立线程中执行
-        val roiJob = Thread(
-            Runnable {
-                try {
-                    roiResult = roiDetector?.detectRoi(bitmap)
-                } catch (e: Exception) {
-                    roiError = e
-                    Log.e(TAG, "ROI detection failed in parallel thread", e)
-                }
-            },
-            "FaceDetect-ROI"
-        )
-
-        // Landmark 等待 ROI 完成后才能开始（因为需要 ROI 坐标）
-        // 所以实际上是串行执行，但可以在 ROI 推理的同时准备 Landmark 输入
-        roiJob.start()
-        roiJob.join()
-
-        // ROI 完成后才开始 Landmark 检测
-        val landmarkStart = SystemClock.elapsedRealtime()
-        landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roiResult)
-        val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
-
-        val roiTime = SystemClock.elapsedRealtime() - roiStartTime
-        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
-        Log.d(TAG, "[Perf] InsightFace breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
-
-        // 优先使用 Landmark 结果（更关键）
-        if (landmarkResult != null) {
-            lastDetectionSource = FaceDetectionSource.INSIGHTFACE
-            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.INSIGHTFACE)
-                as? InsightFaceAdapter
-                ?: return null
-            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
-            if (adaptedResult != null) {
-                Log.d(TAG, "InsightFace detection success in ${lastProcessTimeMs}ms")
-                val normalizedRoi = roiResult?.let { r ->
-                    android.graphics.RectF(
-                        r.left / bitmap.width.toFloat(),
-                        r.top / bitmap.height.toFloat(),
-                        r.right / bitmap.width.toFloat(),
-                        r.bottom / bitmap.height.toFloat()
-                    )
-                }
-
-                // [调试信息] 构建检测器名称和 GPU 状态
-                val roiDetectorName = roiDetector?.javaClass?.simpleName ?: "Unknown"
-                val landmarkDetectorName = landmarkDetector?.javaClass?.simpleName ?: "Unknown"
-                // MNN 检测器默认使用 GPU，ONNX Runtime 使用 CPU
-                val useGpuForRoi = roiDetectorName.contains("Mnn", ignoreCase = true)
-                val useGpuForLandmark = landmarkDetectorName.contains("Mnn", ignoreCase = true)
-
-                return FaceDetectionResult(
-                    landmarks106 = adaptedResult,
-                    detectionSource = FaceDetectionSource.INSIGHTFACE,
-                    roiRect = normalizedRoi,
-                    roiDetectorName = roiDetectorName,
-                    useGpuForRoi = useGpuForRoi,
-                    landmarkDetectorName = landmarkDetectorName,
-                    useGpuForLandmark = useGpuForLandmark
-                )
-            } else {
-                Log.w(TAG, "InsightFace adaptation failed")
-            }
-        } else {
-            Log.d(TAG, "No face detected by InsightFace (${lastProcessTimeMs}ms)")
-            if (landmarkError != null) {
-                Log.e(TAG, "Landmark detection error", landmarkError)
-            }
-        }
-
-        return null
-    }
-
-    private fun detectNcnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
-        var roiResult: android.graphics.RectF? = null
-        var landmarkResult: FloatArray? = null
-
-        val roiStartTime = SystemClock.elapsedRealtime()
-        val roiDetector = ncnnRoiDetector
-        if (roiDetector != null) {
-            try {
-                roiResult = roiDetector.detectRoi(bitmap)
-                Log.i(TAG, "[Perf] NCNN ROI detection completed in ${SystemClock.elapsedRealtime() - roiStartTime}ms")
-            } catch (e: Exception) {
-                Log.e(TAG, "NCNN ROI detection failed", e)
-            }
-        }
-
-        if (roiResult == null) {
-            Log.d(TAG, "No face detected by NCNN ROI (${SystemClock.elapsedRealtime() - startTime}ms)")
-            return null
-        }
-
-        // [性能优化] Landmark 检测使用 NcnnLandmarkDetector
-        val landmarkStartTime = SystemClock.elapsedRealtime()
-        val landmarkDetector = ncnnLandmarkDetector
-        if (landmarkDetector != null) {
-            try {
-                landmarkResult = landmarkDetector.detectLandmarks(bitmap, lensFacing, roiResult)
-                Log.i(TAG, "[Perf] NCNN Landmark detection completed in ${SystemClock.elapsedRealtime() - landmarkStartTime}ms")
-            } catch (e: Exception) {
-                Log.e(TAG, "NCNN Landmark detection failed", e)
-            }
-        }
-
-        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
-        return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
-            lastDetectionSource = FaceDetectionSource.NCNN
-
-            // [关键修复] 使用 NcnnLandmarkAdapter 进行点序映射
-            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.NCNN)
-                ?: return null
-            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
-            if (adaptedResult == null) {
-                Log.w(TAG, "NCNN landmark adaptation failed")
-                return null
-            }
-
-            // 归一化 ROI 坐标
-            val normalizedRoi = android.graphics.RectF(
-                roiResult.left / bitmap.width.toFloat(),
-                roiResult.top / bitmap.height.toFloat(),
-                roiResult.right / bitmap.width.toFloat(),
-                roiResult.bottom / bitmap.height.toFloat()
-            )
-
-            Log.i(TAG, "[Perf] NCNN detection DONE: total=${lastProcessTimeMs}ms, GPU✓")
-
-            FaceDetectionResult(
-                landmarks106 = adaptedResult,
-                detectionSource = FaceDetectionSource.NCNN,
-                roiRect = normalizedRoi,
-                roiDetectorName = "NcnnRoiDetector",
-                useGpuForRoi = true,
-                landmarkDetectorName = "NcnnLandmarkDetector",
-                useGpuForLandmark = true
-            )
-        } else {
-            Log.w(TAG, "NCNN landmark result invalid: size=${landmarkResult?.size}")
-            null
-        }
-    }
-
-    private fun detectMnn(bitmap: Bitmap, lensFacing: Int, startTime: Long): FaceDetectionResult? {
-        var roiResult: android.graphics.RectF? = null
-        var landmarkResult: FloatArray? = null
-
-        val roiStartTime = SystemClock.elapsedRealtime()
-        val roiDetector = mnnRoiDetector
-        if (roiDetector != null) {
-            try {
-                roiResult = roiDetector.detectRoi(bitmap)
-                Log.i(TAG, "[Perf] MNN ROI detection completed in ${SystemClock.elapsedRealtime() - roiStartTime}ms")
-            } catch (e: Exception) {
-                Log.e(TAG, "MNN ROI detection failed", e)
-            }
-        }
-
-        if (roiResult == null) {
-            Log.d(TAG, "No face detected by MNN ROI (${SystemClock.elapsedRealtime() - startTime}ms)")
-            return null
-        }
-
-        // [性能优化] Landmark 检测使用 MnnLandmarkDetector
-        val landmarkStartTime = SystemClock.elapsedRealtime()
-        val landmarkDetector = mnnLandmarkDetector
-        if (landmarkDetector != null) {
-            try {
-                landmarkResult = landmarkDetector.detectLandmarks(bitmap, lensFacing, roiResult)
-                Log.i(TAG, "[Perf] MNN Landmark detection completed in ${SystemClock.elapsedRealtime() - landmarkStartTime}ms")
-            } catch (e: Exception) {
-                Log.e(TAG, "MNN Landmark detection failed", e)
-            }
-        }
-
-        lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
-        return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
-            lastDetectionSource = FaceDetectionSource.MNN
-
-            // [关键修复] 使用 MnnLandmarkAdapter 进行点序映射
-            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MNN)
-                ?: return null
-            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
-            if (adaptedResult == null) {
-                Log.w(TAG, "MNN landmark adaptation failed")
-                return null
-            }
-
-            // 归一化 ROI 坐标
-            val normalizedRoi = android.graphics.RectF(
-                roiResult.left / bitmap.width.toFloat(),
-                roiResult.top / bitmap.height.toFloat(),
-                roiResult.right / bitmap.width.toFloat(),
-                roiResult.bottom / bitmap.height.toFloat()
-            )
-
-            Log.i(TAG, "[Perf] MNN detection DONE: total=${lastProcessTimeMs}ms, GPU✓")
-
-            FaceDetectionResult(
-                landmarks106 = adaptedResult,
-                detectionSource = FaceDetectionSource.MNN,
-                roiRect = normalizedRoi,
-                roiDetectorName = "MnnRoiDetector",
-                useGpuForRoi = true,
-                landmarkDetectorName = "MnnLandmarkDetector",
-                useGpuForLandmark = true
-            )
-        } else {
-            Log.w(TAG, "MNN landmark result invalid: size=${landmarkResult?.size}")
-            null
-        }
-    }
-
     override fun detectPhoto(bitmap: Bitmap, lensFacing: Int): FaceDetectionResult? {
         val detector = mediaPipeDetector
-        if (detector == null || !detector.isReady()) {
+        if (!detector.isReady()) {
             Log.w(TAG, "MediaPipe detector not ready for photo")
             return null
         }
@@ -519,19 +277,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         landmarkDetector?.release()
         roiDetector = null
         landmarkDetector = null
-
-        mediaPipeDetector?.release()
-        mediaPipeDetector = null
-        insightFaceDetector?.release()
-        insightFaceDetector = null
-        mnnRoiDetector?.release()
-        mnnRoiDetector = null
-        mnnLandmarkDetector?.release()
-        mnnLandmarkDetector = null
-        ncnnRoiDetector?.release()
-        ncnnRoiDetector = null
-        ncnnLandmarkDetector?.release()
-        ncnnLandmarkDetector = null
+        isPipelineInitialized = false
         lastDetectionSource = FaceDetectionSource.NONE
         Log.i(TAG, "FaceDetectorManager released")
     }

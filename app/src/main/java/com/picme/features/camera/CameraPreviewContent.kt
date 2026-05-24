@@ -256,6 +256,9 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
     val requestedEngineLabel = when (uiState.faceDetectionEngineMode) {
         FaceDetectionEngineMode.MEDIAPIPE -> "MEDIAPIPE"
         FaceDetectionEngineMode.INSIGHTFACE -> "INSIGHTFACE"
+        FaceDetectionEngineMode.MNN -> "MNN"
+        FaceDetectionEngineMode.NCNN -> "NCNN"
+        FaceDetectionEngineMode.CUSTOM -> "CUSTOM"
     }
     val activeSourceLabel = when (uiState.faceWarpParams.detectionSource) {
         FaceDetectionSource.NONE -> "NONE"

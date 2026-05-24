@@ -8,6 +8,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
+import com.picme.beauty.internal.model.ModelManager
 import java.io.File
 
 /**
@@ -21,10 +22,7 @@ class NcnnLandmarkDetector(
 
     companion object {
         private const val TAG = "PicMe:NcnnLandmark"
-        private const val MODEL_PARAM_ASSET_PATH = "insightface/2d106det.param"
-        private const val MODEL_BIN_ASSET_PATH = "insightface/2d106det.bin"
-        private const val MODEL_PARAM_FILE_NAME = "ncnn_2d106det.param"
-        private const val MODEL_BIN_FILE_NAME = "ncnn_2d106det.bin"
+        private const val MODEL_KEY = "2d106_ncnn"
         private const val INPUT_SIZE = 192
         private const val POINT_COUNT = 106
     }
@@ -56,8 +54,7 @@ class NcnnLandmarkDetector(
 
     private fun initialize() {
         try {
-            val paramFile = ensureModelFile(MODEL_PARAM_FILE_NAME, MODEL_PARAM_ASSET_PATH)
-            val binFile = ensureModelFile(MODEL_BIN_FILE_NAME, MODEL_BIN_ASSET_PATH)
+            val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
             Log.i(TAG, "Initializing NCNN landmark detector (requireGpu=$requireGpu)...")
             Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
@@ -78,25 +75,8 @@ class NcnnLandmarkDetector(
                 return
             }
 
-            // 如果 GPU 初始化失败，尝试 CPU fallback
-            if (requireGpu) {
-                Log.w(TAG, "NCNN GPU initialization failed, attempting CPU fallback...")
-                detector = NcnnFaceDetector.create(
-                    paramPath = paramFile.absolutePath,
-                    binPath = binFile.absolutePath,
-                    inputSize = INPUT_SIZE,
-                    useGpu = false,
-                    inputName = "data",
-                    outputNames = arrayOf("fc1")
-                )
-                if (detector != null) {
-                    Log.i(TAG, "NcnnLandmarkDetector initialized with CPU fallback in ${SystemClock.elapsedRealtime() - initStart}ms")
-                } else {
-                    Log.e(TAG, "NCNN CPU fallback also failed, detector will remain null")
-                }
-            } else {
-                Log.e(TAG, "NCNN CPU initialization failed, detector will remain null")
-            }
+            // [CO指令] 不启用 fallback，直接报告失败
+            Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize NcnnLandmarkDetector (requireGpu=$requireGpu)", e)
             detector = null
@@ -290,24 +270,4 @@ class NcnnLandmarkDetector(
         Log.i(TAG, "NcnnLandmarkDetector released")
     }
 
-    private fun ensureModelFile(fileName: String, assetPath: String): File {
-        val file = File(appContext.filesDir, fileName)
-        if (file.exists() && file.length() > 0L) {
-            return file
-        }
-
-        try {
-            appContext.assets.open(assetPath).use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Log.d(TAG, "Model copied from assets: $assetPath -> ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy model from assets: $assetPath", e)
-            throw e
-        }
-
-        return file
-    }
 }

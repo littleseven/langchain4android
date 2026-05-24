@@ -448,6 +448,29 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             if (!scoreData || !bboxData || !landmarkData) {
                 LOGE("Scale 1 host data is null, skipping");
             } else {
+                // [调试] 打印该 scale 的最高 score
+                int totalAnchors = featureSize * featureSize * 2;
+                float maxScore = 0.0f;
+                int maxScoreIdx = -1;
+                for (int i = 0; i < totalAnchors; i++) {
+                    float s = scoreChannels == 1 ? scoreData[i] : scoreData[totalAnchors + i];
+                    if (s > maxScore) {
+                        maxScore = s;
+                        maxScoreIdx = i;
+                    }
+                }
+                if (maxScoreIdx >= 0) {
+                    float dx = bboxData[maxScoreIdx * 4 + 0];
+                    float dy = bboxData[maxScoreIdx * 4 + 1];
+                    float dw = bboxData[maxScoreIdx * 4 + 2];
+                    float dh = bboxData[maxScoreIdx * 4 + 3];
+                    int y = maxScoreIdx / (featureSize * 2);
+                    int x = (maxScoreIdx % (featureSize * 2)) / 2;
+                    float cx = (x + 0.5f) * 8;
+                    float cy = (y + 0.5f) * 8;
+                    LOGD("  Scale 1 max score: idx=%d, score=%.4f, cx=%.1f, cy=%.1f, dx=%.3f, dy=%.3f, dw=%.3f, dh=%.3f",
+                         maxScoreIdx, maxScore, cx, cy, dx, dy, dw, dh);
+                }
                 processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 8, scoreChannels, allFaces, confidenceThreshold);
             }
         }
@@ -500,6 +523,29 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             if (!scoreData || !bboxData || !landmarkData) {
                 LOGE("Scale 2 host data is null, skipping");
             } else {
+                // [调试] 打印该 scale 的最高 score
+                int totalAnchors = featureSize * featureSize * 2;
+                float maxScore = 0.0f;
+                int maxScoreIdx = -1;
+                for (int i = 0; i < totalAnchors; i++) {
+                    float s = scoreChannels == 1 ? scoreData[i] : scoreData[totalAnchors + i];
+                    if (s > maxScore) {
+                        maxScore = s;
+                        maxScoreIdx = i;
+                    }
+                }
+                if (maxScoreIdx >= 0) {
+                    float dx = bboxData[maxScoreIdx * 4 + 0];
+                    float dy = bboxData[maxScoreIdx * 4 + 1];
+                    float dw = bboxData[maxScoreIdx * 4 + 2];
+                    float dh = bboxData[maxScoreIdx * 4 + 3];
+                    int y = maxScoreIdx / (featureSize * 2);
+                    int x = (maxScoreIdx % (featureSize * 2)) / 2;
+                    float cx = (x + 0.5f) * 16;
+                    float cy = (y + 0.5f) * 16;
+                    LOGD("  Scale 2 max score: idx=%d, score=%.4f, cx=%.1f, cy=%.1f, dx=%.3f, dy=%.3f, dw=%.3f, dh=%.3f",
+                         maxScoreIdx, maxScore, cx, cy, dx, dy, dw, dh);
+                }
                 processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 16, scoreChannels, allFaces, confidenceThreshold);
             }
         }
@@ -552,6 +598,29 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
             if (!scoreData || !bboxData || !landmarkData) {
                 LOGE("Scale 3 host data is null, skipping");
             } else {
+                // [调试] 打印该 scale 的最高 score
+                int totalAnchors = featureSize * featureSize * 2;
+                float maxScore = 0.0f;
+                int maxScoreIdx = -1;
+                for (int i = 0; i < totalAnchors; i++) {
+                    float s = scoreChannels == 1 ? scoreData[i] : scoreData[totalAnchors + i];
+                    if (s > maxScore) {
+                        maxScore = s;
+                        maxScoreIdx = i;
+                    }
+                }
+                if (maxScoreIdx >= 0) {
+                    float dx = bboxData[maxScoreIdx * 4 + 0];
+                    float dy = bboxData[maxScoreIdx * 4 + 1];
+                    float dw = bboxData[maxScoreIdx * 4 + 2];
+                    float dh = bboxData[maxScoreIdx * 4 + 3];
+                    int y = maxScoreIdx / (featureSize * 2);
+                    int x = (maxScoreIdx % (featureSize * 2)) / 2;
+                    float cx = (x + 0.5f) * 32;
+                    float cy = (y + 0.5f) * 32;
+                    LOGD("  Scale 3 max score: idx=%d, score=%.4f, cx=%.1f, cy=%.1f, dx=%.3f, dy=%.3f, dw=%.3f, dh=%.3f",
+                         maxScoreIdx, maxScore, cx, cy, dx, dy, dw, dh);
+                }
                 processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize, 32, scoreChannels, allFaces, confidenceThreshold);
             }
         }

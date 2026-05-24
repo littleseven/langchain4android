@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
+import com.picme.beauty.internal.model.ModelManager
 import java.io.File
 
 /**
@@ -21,8 +22,7 @@ class MnnRoiDetector(
 
     companion object {
         private const val TAG = "PicMe:MnnRoi"
-        private const val MODEL_ASSET_PATH = "insightface/det_10g.mnn"
-        private const val MODEL_FILE_NAME = "mnn_det_10g.mnn"
+        private const val MODEL_KEY = "det10g_mnn"
         private const val INPUT_SIZE = 640  // [对齐 ONNX] 使用与 ONNX 相同的输入尺寸，确保检测结果一致
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f  // [对齐 ONNX] ROI 扩展比例，与 InsightFaceDet10G 一致
@@ -63,7 +63,7 @@ class MnnRoiDetector(
 
     private fun initialize() {
         try {
-            val modelFile = ensureModelFile(MODEL_FILE_NAME, MODEL_ASSET_PATH)
+            val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
             Log.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
@@ -203,25 +203,4 @@ class MnnRoiDetector(
         Log.i(TAG, "MnnRoiDetector released")
     }
 
-    private fun ensureModelFile(fileName: String, assetPath: String): File {
-        val file = File(appContext.filesDir, fileName)
-        if (file.exists() && file.length() > 0L) {
-            return file
-        }
-
-        // 从 assets 复制
-        try {
-            appContext.assets.open(assetPath).use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Log.d(TAG, "Model copied from assets: $assetPath -> ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy model from assets: $assetPath", e)
-            throw e
-        }
-
-        return file
-    }
 }

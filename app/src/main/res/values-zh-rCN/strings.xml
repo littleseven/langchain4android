@@ -40,6 +40,7 @@
     <string name="face_detection_engine_title">人脸检测引擎</string>
 <string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
 <string name="face_detection_engine_mode_insightface">InsightFace</string>
+    <string name="face_detection_engine_mode_custom">自定义</string>
     <string name="inference_engine">推理引擎</string>
     <string name="settings_inference_engine_desc">选择人脸检测和关键点处理的底层推理框架。</string>
     <string name="inference_engine_onnx">ONNX (CPU/NNAPI)</string>
