@@ -43,6 +43,11 @@ import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
+import com.picme.features.camera.agent.AiAgentButton
+import com.picme.features.camera.agent.AiAgentPanel
+import com.picme.features.camera.agent.AiAgentPanelState
+import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.domain.model.AiAgentCommand
 
 // [常量定义] 调试文本颜色
 private val INSIGHTFACE_DEBUG_TEXT_COLOR = Color(0xFFFFAB91)
@@ -56,7 +61,10 @@ private val LIP_HIGHLIGHT_COLOR = Color(0xFFFF80AB)
 internal fun CameraPreviewContent(
     previewView: @Composable () -> Unit,
     uiState: CameraPreviewUiState,
-    actions: CameraPreviewActions
+    actions: CameraPreviewActions,
+    aiAgentUseCase: AiAgentUseCase? = null,
+    aiAgentPanelState: AiAgentPanelState? = null,
+    onAiAgentCommand: ((AiAgentCommand) -> Unit)? = null
 ) {
     // 非美颜类面板开启状态（美颜面板用独立的 BeautyPanel 渲染，不走 PrimaryControlPanels）
     val isAnyPanelOpen = uiState.showFilterSelector || uiState.showRatioSelector ||
@@ -173,6 +181,37 @@ internal fun CameraPreviewContent(
             actions = actions,
             isAnyPanelOpen = isAnyPanelOpen
         )
+
+        // AI Agent 按钮与面板
+        if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null) {
+            // AI Agent 面板：底部 Sheet 样式
+            AiAgentPanel(
+                state = aiAgentPanelState,
+                useCase = aiAgentUseCase,
+                currentState = AiAgentUseCase.CameraStateSnapshot(
+                    beautySettings = uiState.beautySettings,
+                    filterType = uiState.selectedFilter,
+                    styleFilter = uiState.selectedStyleFilter,
+                    zoomRatio = uiState.zoomRatio,
+                    exposureCompensation = uiState.exposureCompensation,
+                    captureMode = uiState.captureMode,
+                    isRecording = uiState.isRecording
+                ),
+                onCommand = { command -> onAiAgentCommand(command) },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
+            // AI Agent 触发按钮：底部左侧，避免与其他控制按钮重叠
+            if (!aiAgentPanelState.isVisible) {
+                AiAgentButton(
+                    onClick = { aiAgentPanelState.toggle() },
+                    isActive = aiAgentPanelState.isVisible,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 16.dp, bottom = 120.dp)
+                )
+            }
+        }
     }
 }
 

@@ -72,5 +72,15 @@ interface UserSettingsRepository {
 
     val landmarkStageConfigFlow: Flow<StageConfig>
     suspend fun updateLandmarkStageConfig(config: StageConfig)
+
+    // ── AI Agent ────────────────────────────────────────────
+    val aiAgentApiKeyFlow: Flow<String>
+    suspend fun updateAiAgentApiKey(apiKey: String)
+
+    val aiAgentModelFlow: Flow<String>
+    suspend fun updateAiAgentModel(model: String)
+
+    val aiAgentBaseUrlFlow: Flow<String>
+    suspend fun updateAiAgentBaseUrl(baseUrl: String)
 }
 
