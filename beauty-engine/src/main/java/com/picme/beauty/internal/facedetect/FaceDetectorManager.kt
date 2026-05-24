@@ -213,41 +213,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         }
     }
 
-    override fun detect(mediaImage: android.media.Image, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
-        val startTime = SystemClock.elapsedRealtime()
-        lastDetectionSource = FaceDetectionSource.NONE
-
-        val detector = mediaPipeDetector
-        if (!detector.isReady()) {
-            Log.w(TAG, "MediaPipe detector not ready for direct image")
-            return null
-        }
-
-        return try {
-            val mediaPipeResult = detector.detect(mediaImage, rotationDegrees, lensFacing)
-            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-
-            if (mediaPipeResult != null) {
-                lastDetectionSource = FaceDetectionSource.MEDIAPIPE
-                FaceDetectionResult(
-                    landmarks106 = mediaPipeResult,
-                    detectionSource = FaceDetectionSource.MEDIAPIPE,
-                    roiRect = null,
-                    roiDetectorName = "N/A",
-                    useGpuForRoi = false,
-                    landmarkDetectorName = "MediaPipe (GPU)",
-                    useGpuForLandmark = true
-                )
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Log.e(TAG, "MediaPipe direct image detection failed", e)
-            null
-        }
-    }
-
     override fun detectPhoto(bitmap: Bitmap, lensFacing: Int): FaceDetectionResult? {
         val detector = mediaPipeDetector
         if (!detector.isReady()) {

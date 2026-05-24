@@ -286,5 +286,14 @@
     <string name="ai_agent_api_key_set">API Key configured</string>
     <string name="ai_agent_api_key_empty">Not configured (AI Agent disabled)</string>
     <string name="ai_agent_input_hint">Ask AI Agent...</string>
+    <string name="ai_model_manager">AI Model Manager</string>
+    <string name="ai_model_manager_desc">Manage on-device AI models.</string>
+    <string name="downloaded_models">Downloaded Models</string>
+    <string name="available_models">Available Models</string>
+    <string name="all_models_downloaded">All models are downloaded.</string>
+    <string name="download">Download</string>
+    <string name="download_failed">Download failed. Please try again.</string>
+    <string name="delete_model_title">Delete Model</string>
+    <string name="delete_model_confirm">Delete %1$s? This cannot be undone.</string>
 
 </resources>

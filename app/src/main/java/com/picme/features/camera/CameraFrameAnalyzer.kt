@@ -253,16 +253,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         val detectionStartMs = System.currentTimeMillis()
 
-        // [GPU 检测优化 Phase 2] MediaPipe 模式直接传入 YUV Image，跳过 Bitmap 转换
-
-        val detectionResult = if (detectionEngineMode == EngineType.MEDIAPIPE) {
-            val mediaImage = imageProxy.image
-            if (mediaImage == null) {
-                imageProxy.close()
-                return
-            }
-            faceDetector.detect(mediaImage, imageProxy.imageInfo.rotationDegrees, lensFacing)
-        } else {
+        // MediaPipe 需要 RGBA_8888 Bitmap，不能直接传入 YUV Image
+        val detectionResult = run {
             val yuvStart = SystemClock.elapsedRealtime()
             val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
             val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart

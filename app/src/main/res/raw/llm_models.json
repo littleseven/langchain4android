@@ -1,0 +1,18 @@
+[
+  {
+    "id": "qwen3-0.6b",
+    "name": "Qwen3-0.6B",
+    "description": "阿里通义千问3 0.6B轻量版，适合移动端本地推理",
+    "size": 451000000,
+    "sources": {
+      "huggingface": "taobao-mnn/Qwen3-0.6B-MNN",
+      "modelscope": "MNN/Qwen3-0.6B-MNN"
+    },
+    "files": [
+      "config.json",
+      "llm.mnn",
+      "llm.mnn.weight",
+      "tokenizer.txt"
+    ]
+  }
+]

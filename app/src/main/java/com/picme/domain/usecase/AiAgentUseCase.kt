@@ -301,17 +301,3 @@ class AiAgentUseCase(
         private const val DEFAULT_BASE_URL = "https://api.moonshot.cn/v1/"
     }
 }
-    }
-}
-        private const val DEFAULT_MODEL = "moonshot-v1-8k"
-        private const val DEFAULT_BASE_URL = "https://api.moonshot.cn/v1/"
-    }
-}
-        return regex.find(json)?.groupValues?.get(1)?.toIntOrNull()
-    }
-
-    companion object {
-        private const val DEFAULT_MODEL = "moonshot-v1-8k"
-        private const val DEFAULT_BASE_URL = "https://api.moonshot.cn/v1/"
-    }
-}
