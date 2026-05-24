@@ -1,10 +1,10 @@
 # PRD：帧同步美妆系统（Frame-Sync Makeup System）— 解决妆容甩飞问题
 
-**版本**：2.0  
-**状态**：需求冻结，技术评审通过，待 RD 排期  
-**优先级**：P0（阻塞妆容精细化与视频录制质量）  
-**负责人**：PM / RD / QA  
-**最后更新**：2026-05-11  
+**版本**：2.1
+**状态**：🔄 部分实现（框架已落地：FrameSyncManager / MotionTracker / DetectionQueue / FrameSyncBridge；预测补偿与 hide 策略待收尾）
+**优先级**：P0（阻塞妆容精细化与视频录制质量）
+**负责人**：PM / RD / QA
+**最后更新**：2026-05-24  
 **关联文档**：`TECH-SPEC-FRAME-SYNC-MAKEUP.md`、`BIG_BEAUTY_TECH_SPEC.md`、`beauty-engine/AGENTS.md`
 
 ---
