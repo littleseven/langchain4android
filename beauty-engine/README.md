@@ -6,21 +6,26 @@
 
 ## 模块定位
 
-- **能力层**：对外暴露稳定的 `api/` 接口（`BeautyPreviewEngine`、`BeautyParams`、`BeautySettings`、`FilterType`、`StyleFilter`、`Face`、`PhotoProcessor` 等）。
-- **大美丽实现层**：内部封装 OpenGL ES + EGL 多 Pass 渲染管线（`egl/` 包），禁止外部直接引用。
+- **能力层**：对外暴露稳定的 `api/` 接口（`BeautyPreviewEngine`、`BeautyParams`、`BeautySettings`、`FilterType`、`StyleFilter`、`Face`、`PhotoProcessor`、`FaceDetector` 等）。
+- **渲染实现层**：内部封装 OpenGL ES + EGL 多 Pass 渲染管线（`render/` 包），禁止外部直接引用。
+- **人脸检测层**：多引擎 ROI + Landmark 双阶段检测（`internal/facedetect/`），支持 MediaPipe / NCNN / MNN / ONNX 四引擎独立配置。
 - **帧同步系统**：独立的时序对齐机制（`internal/framesync/`），解决妆容甩飞问题，预览与录制链路共用同一套同步逻辑。
-- **性能目标**：零拷贝 GPU 数据流，单帧处理 ≤ 16ms（60fps），参数响应延迟 < 100ms。
+- **录制系统**：GPU 离屏渲染视频录制（`recorder/`），复用预览渲染管线。
+- **性能目标**：零拷贝 GPU 数据流，单帧处理 ≤ 16ms（60fps），参数响应延迟 < 100ms，人脸检测 < 100ms（高端机）。
 - **拍照 GPU 化**：支持 GPU 离屏渲染拍照，复用预览同一套 Shader 管线，1080p < 300ms, 4K < 800ms。
 
 ---
 
-## 单引擎架构
+## 架构概览
 
-| 引擎 | 包路径 | 技术栈 | 状态 |
+| 子系统 | 包路径 | 技术栈 | 状态 |
 |---|---|---|---|
-| 大美丽（BIG_BEAUTY） | `egl/` | 自研 OpenGL ES + EGL | ✅ 唯一引擎 |
+| 大美丽渲染（BIG_BEAUTY） | `render/` | 自研 OpenGL ES + EGL | ✅ 稳定 |
+| 人脸检测（FACE_DETECT） | `internal/facedetect/` | MediaPipe / NCNN / MNN / ONNX | ✅ 多引擎 |
+| 帧同步（FRAME_SYNC） | `internal/framesync/` | 速度外推 + 时序对齐 | ✅ 稳定 |
+| 视频录制（RECORDER） | `recorder/` | GPU 离屏渲染 + MediaCodec | ✅ 稳定 |
 
-> GPUPixel 实验性模块已于 2026-05 完全移除。当前仅保留自研大美丽单链路。
+> GPUPixel 实验性模块已于 2026-05 完全移除。
 
 ---
 
@@ -44,33 +49,72 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── FrameId.kt                     # 帧同步全局帧标识符
 │   ├── FrameSyncConfig.kt             # 帧同步配置
 │   ├── FrameSyncResult.kt             # 帧同步结果
-│   └── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染）
-├── egl/                               # 大美丽内部实现（GL 渲染管线层）
-│   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现（内部适配器）
+│   ├── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染）
+│   └── facedetect/                    # 人脸检测对外 API
+│       ├── FaceDetector.kt            # 人脸检测器接口
+│       ├── FaceDetectorFactory.kt     # 检测器工厂
+│       ├── FaceDetectionResult.kt     # 检测结果数据类
+│       ├── FaceContourData.kt         # 人脸轮廓数据
+│       ├── FaceWarpParams.kt          # 变形参数
+│       ├── DetectionPipelineConfig.kt # 检测流水线配置（ROI/Landmark 引擎独立）
+│       ├── EngineType.kt              # 引擎类型枚举
+│       └── FaceDetectionSource.kt     # 检测来源枚举
+├── render/                            # 大美丽渲染实现（GL 渲染管线层）
+│   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现
+│   ├── GlBeautyPreviewProviderFactory.kt # Provider 工厂
 │   ├── BeautyPreviewView.kt           # 自定义 View（SurfaceView 封装）
 │   ├── CameraPreviewRenderer.kt       # 渲染管线核心（含帧同步逻辑）
 │   ├── BeautyRenderer.kt              # 美颜 Shader 渲染器
+│   ├── BeautyPass.kt                  # 美颜渲染 Pass
+│   ├── FaceMakeupPass.kt              # 妆容渲染 Pass
 │   ├── StyleEffectShader.kt           # 风格特效 Shader 管理
 │   ├── BeautyShaders.kt               # GLSL Shader 源码
 │   ├── ShaderProgram.kt               # Shader 编译与链接
+│   ├── ShaderModuleLoader.kt          # Shader 模块加载器
 │   ├── EGLCore.kt                     # EGL 上下文与 Surface 管理
 │   ├── WindowSurface.kt               # EGL Window Surface 封装
-│   └── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现
-├── internal/                          # 内部工具与帧同步系统
+│   ├── Framebuffer.kt                 # FBO 封装
+│   ├── FramebufferPool.kt             # FBO 对象池
+│   ├── GLRenderer.kt                  # GL 渲染器基类
+│   ├── LutTextureLoader.kt            # LUT 纹理加载器
+│   ├── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现
+│   └── StyleEffect.kt                 # 风格特效数据类
+├── internal/                          # 内部工具、帧同步与人脸检测
 │   ├── BeautyShaderChain.kt           # Shader 链路辅助
-│   └── framesync/                     # 帧同步系统核心
-│       ├── FrameSyncBridge.kt         # 线程安全 FrameId 共享
-│       ├── FrameSyncManager.kt        # 时序对齐核心
-│       ├── MotionTracker.kt           # 速度外推预测算法
-│       ├── DetectionQueue.kt          # 检测任务队列
-│       └── FaceDetectionWorker.kt     # 异步人脸检测工作线程
-└── domain/model/                      # 领域模型
-    └── UserPreferences.kt             # 用户偏好设置（BeautyStrategy 等）
+│   ├── facedetect/                    # 人脸检测实现（多引擎）
+│   │   ├── FaceDetectorManager.kt     # 检测管理器（双阶段流水线）
+│   │   ├── DetectionPipelineFactory.kt # 流水线工厂
+│   │   ├── Face106ToWarpParams.kt     # 106点→变形参数转换
+│   │   ├── MediaPipeFaceDetector.kt   # MediaPipe 检测器
+│   │   ├── MediaPipeRoiDetector.kt    # MediaPipe ROI 检测器
+│   │   ├── MediaPipeLandmarkDetector.kt # MediaPipe Landmark 检测器
+│   │   ├── InsightFaceDet10GDetector.kt # InsightFace ROI (ONNX)
+│   │   ├── InsightFace2D106Detector.kt  # InsightFace Landmark (ONNX)
+│   │   ├── InsightFaceLandmarkDetector.kt # InsightFace 适配器
+│   │   ├── MnnRoiDetector.kt          # MNN ROI 检测器
+│   │   ├── MnnLandmarkDetector.kt     # MNN Landmark 检测器
+│   │   ├── NcnnRoiDetector.kt         # NCNN ROI 检测器
+│   │   ├── NcnnLandmarkDetector.kt    # NCNN Landmark 检测器
+│   │   ├── Det10GRoiDetector.kt       # Det10G ROI 接口
+│   │   ├── RoiDetector.kt             # ROI 检测器接口
+│   │   ├── LandmarkDetector.kt        # Landmark 检测器接口
+│   │   ├── adapter/                   # 检测适配器
+│   │   ├── mnn/                       # MNN JNI 桥接
+│   │   └── ncnn/                      # NCNN JNI 桥接
+│   ├── framesync/                     # 帧同步系统核心
+│   │   ├── FrameSyncBridge.kt         # 线程安全 FrameId 共享
+│   │   ├── FrameSyncManager.kt        # 时序对齐核心
+│   │   └── MotionTracker.kt           # 速度外推预测算法
+│   └── model/                         # 领域模型
+│       └── UserPreferences.kt         # 用户偏好设置
+├── recorder/                          # 视频录制
+│   └── BeautyVideoRecorder.kt         # GPU 美颜视频录制器
+└── engine/                            # （预留扩展）
 ```
 
 **依赖方向红线**：
-- `api/` 包：**禁止**依赖 `egl/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
-- App 层：只允许依赖 `api/` 接口，**禁止**直接实例化 `egl/` 或 `internal/` 内部类
+- `api/` 包：**禁止**依赖 `render/`、`internal/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
+- App 层：只允许依赖 `api/` 接口，**禁止**直接实例化 `render/` 或 `internal/` 内部类
 
 ---
 
@@ -201,6 +245,8 @@ override fun onCleared() {
 | `FilterType` / `StyleFilter` | ✅ 稳定 | 滤镜/风格枚举，已下沉至 api/ |
 | `BeautyParams` | ✅ 稳定 | 新增参数默认 `0.0f`，向后兼容 |
 | `PhotoProcessor` | ✅ 稳定 | 拍照 GPU 化接口（2026-05 新增） |
+| `FaceDetector` / `FaceDetectionResult` | ✅ 稳定 | 人脸检测接口（2026-05 新增多引擎支持） |
+| `DetectionPipelineConfig` | ✅ 稳定 | ROI/Landmark 引擎独立配置 |
 | `FrameId` / `FrameSyncConfig` / `FrameSyncResult` | ⚠️ 实验性 | 帧同步系统 API，可能随优化调整 |
 | `BeautyPerfStats` | ⚠️ 实验性 | 字段可能随观测需求微调 |
 | 独立发布 AAR | ⏳ 未开始 | 预计 M3 完成后进入 Maven 发布流程 |
@@ -223,9 +269,10 @@ override fun onCleared() {
 | 交叉线 | Crosshatch Shader（基于亮度绘制交叉线） | ✅ |
 | 色调滤镜 | ColorMatrix（OpenGL Shader） | ✅ |
 | 人脸关键点 | MediaPipe 468→106 / InsightFace 2D106 | ✅ |
+| **多引擎人脸检测** | MediaPipe / NCNN / MNN / ONNX 四引擎独立配置 | ✅ |
 | **帧同步系统** | FrameSyncManager + MotionTracker 速度外推 | ✅ |
 | **GPU 拍照** | PhotoProcessorImpl（离屏渲染复用预览管线） | ✅ |
-| **视频录制美颜** | 复用预览帧同步与渲染管线 | ✅ |
+| **视频录制美颜** | BeautyVideoRecorder 复用预览渲染管线 | ✅ |
 
 ---
 
