@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
+// Release signing config from environment variables (secure)
+val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: "keystore/picme-release.jks"
+val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD") ?: ""
+val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: "picme"
+val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: ""
+
 detekt {
     buildUponDefaultConfig = true
     allRules = false
@@ -51,6 +57,30 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(releaseStoreFile)
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
