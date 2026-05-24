@@ -165,7 +165,7 @@ class LlmModelDownloadManager(private val context: Context) {
             var totalDownloaded = 0L
 
             try {
-                Logger.i("PicMe:Download", "Trying source '$source' for model $modelId")
+                Logger.i("PicMe:Download", "Trying source '$source' for model $modelId, repo=$repoPath")
 
                 for (fileName in config.files) {
                     if (activeDownloads[modelId]?.isCanceled() == true) {
@@ -174,6 +174,8 @@ class LlmModelDownloadManager(private val context: Context) {
 
                     val url = buildDownloadUrl(repoPath, fileName, source)
                     val destFile = File(modelDir, fileName)
+
+                    Logger.d("PicMe:Download", "Downloading $fileName from $url")
 
                     if (destFile.exists() && destFile.length() > 0) {
                         totalDownloaded += destFile.length()
@@ -187,11 +189,11 @@ class LlmModelDownloadManager(private val context: Context) {
 
                     call.execute().use { response ->
                         if (!response.isSuccessful) {
-                            throw IOException("HTTP ${response.code} for $fileName from $source")
+                            throw IOException("HTTP ${response.code} for $fileName from $source, url=$url")
                         }
 
                         val body = response.body
-                            ?: throw IOException("Empty response for $fileName")
+                            ?: throw IOException("Empty response for $fileName from $url")
 
                         body.byteStream().use { input ->
                             destFile.outputStream().use { output ->
@@ -223,7 +225,8 @@ class LlmModelDownloadManager(private val context: Context) {
                     emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
                     return@flow
                 }
-                Logger.w("PicMe:Download", "Source '$source' failed for $modelId, will try fallback", e)
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                Logger.w("PicMe:Download", "Source '$source' failed for $modelId, error=$errorMsg, will try fallback")
                 lastException = e
             }
         }
@@ -231,7 +234,8 @@ class LlmModelDownloadManager(private val context: Context) {
         // All sources failed
         _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
         emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
-        Logger.e("PicMe:Download", "All sources failed for model: $modelId", lastException)
+        val finalError = lastException?.message ?: "Unknown error"
+        Logger.e("PicMe:Download", "All sources failed for model: $modelId, lastError=$finalError")
     }.flowOn(Dispatchers.IO)
 
     private fun buildDownloadUrl(repoPath: String, fileName: String, source: String): String {
