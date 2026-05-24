@@ -89,7 +89,7 @@ class AiAgentUseCase(
         // 3. 都不可用，提示配置
         Result.success(
             AiAgentCommand.TextReply(
-                "Please configure your Moonshot API Key in Settings to enable AI Agent mode."
+                "请在设置中配置 Moonshot API Key 以启用 AI Agent 模式。"
             )
         )
     }
