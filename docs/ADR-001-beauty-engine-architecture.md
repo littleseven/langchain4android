@@ -1,7 +1,8 @@
 # ADR-001: 大美丽单引擎分层架构
 
 **状态**: 已接受 (Accepted)  
-**日期**: 2026-04-17  
+**日期**: 2026-04-17
+**最后同步**: 2026-05-24（`impl/` 包已重构为 `render/`，与代码结构对齐）  
 **决策**: RD  
 **PM Review**: 已完成
 
@@ -40,10 +41,10 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
 └────────────────────┬──────────────────────────────────┘
                      │
 ┌────────────────────▼──────────────────────────────────┐
-│  Data Layer: beauty-engine:impl                         │
-│  ├─ BeautyEngineImpl                                  │
-│  ├─ BigBeautyEngine (自研 OpenGL ES 管线)            │
-│  └─ EGLContextManager                                 │
+│  Data Layer: beauty-engine:render                       │
+│  ├─ GlBeautyPreviewProvider                           │
+│  ├─ CameraPreviewRenderer (自研 OpenGL ES 管线)      │
+│  └─ EGLCore                                           │
 └────────────────────┬──────────────────────────────────┘
                      │
 ┌────────────────────▼──────────────────────────────────┐
@@ -57,11 +58,11 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
 
 | 决策项 | 方案 |
 |--------|------|
-| **分层策略** | Domain(api) / Data(impl) / External 三层分离 |
-| **依赖方向** | App → api → impl → 底层 GPU 驱动 (单向) |
-| **接口定义** | `BeautyEngine` 接口类，对外唯一出口 |
-| **引擎封装** | 自研引擎统一走 `impl/` 包，OpenGL ES 调用集中在 `BigBeautyEngine` |
-| **线程模型** | HandlerThread GL线程，egl层管理独立EGLContext |
+| **分层策略** | Domain(api) / Data(render) / External 三层分离 |
+| **依赖方向** | App → api → render → 底层 GPU 驱动 (单向) |
+| **接口定义** | `BeautyPreviewProvider` 接口类，对外唯一出口 |
+| **引擎封装** | 自研引擎统一走 `render/` 包，OpenGL ES 调用集中在 `CameraPreviewRenderer` |
+| **线程模型** | 独立渲染线程，EGLCore 管理共享 EGLContext |
 
 ---
 
@@ -71,11 +72,14 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
 ```
 beauty-engine/
 ├── api/                    # Domain Layer - 公开接口
-│   └── BeautyEngine.kt     # 核心接口
-└── impl/                   # Data Layer - 自研引擎 GL 渲染实现
-    ├── BeautyEngineImpl.kt # 接口实现
-    ├── BigBeautyEngine.kt  # 自研 OpenGL ES 管线
-    └── EGLContextManager.kt # EGL 管理
+│   ├── BeautyPreviewProvider.kt  # 预览 Provider 接口
+│   ├── BeautyParams.kt           # Shader 参数
+│   └── PhotoProcessor.kt         # 拍照后处理接口
+└── render/                 # Data Layer - 自研引擎 GL 渲染实现
+    ├── GlBeautyPreviewProvider.kt  # Provider 接口实现
+    ├── CameraPreviewRenderer.kt    # 渲染管线核心
+    ├── BeautyRenderer.kt           # 美颜 Shader 渲染器
+    └── EGLCore.kt                  # EGL 上下文管理
 ```
 
 ### 4.2 依赖规则 (Gradle)
@@ -83,10 +87,10 @@ beauty-engine/
 // App 层（只允许依赖 api）
 dependencies {
     implementation project(':beauty-engine')
-    // 禁止: implementation project(':beauty-engine:impl')
+    // 禁止: implementation project(':beauty-engine:render')
 }
 
-// impl 模块（内部实现）
+// render 模块（内部实现）
 dependencies {
     api project(':beauty-engine:api')
 }
@@ -94,11 +98,11 @@ dependencies {
 
 ### 4.3 ArchUnit 依赖检查
 ```kotlin
-// 规则: App 层严禁直接依赖 impl 内部实现包
+// 规则: App 层严禁直接依赖 render 内部实现包
 noClasses()
     .that().resideInAPackage("..app..")
     .should().dependOnClassesThat()
-    .resideInAPackage("..beautyengine.impl..")
+    .resideInAPackage("..beautyengine.render..")
 ```
 
 ---

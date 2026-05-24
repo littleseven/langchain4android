@@ -1,8 +1,8 @@
 # 大美丽：实时美颜完整指南
 
-**版本**：6.0
+**版本**：7.0
 **状态**：实施中（大美丽 BIG_BEAUTY 单引擎）
-**最后更新**：2026-05-03（GPU 离屏渲染拍照已落地，`PhotoProcessorImpl` 生产可用）
+**最后更新**：2026-05-24（文档同步更新，修正引擎描述与包名）
 **技术路线**：自研 GPU 加速管线 + EGL 共享上下文 + SurfaceTexture 直通 + GPU 离屏渲染拍照（CPU Fallback 降级）
 
 ---
@@ -191,7 +191,7 @@ BeautyStrategy（domain.model.UserPreferences）
     ↓
 CameraPreviewStrategies.rememberPreviewStrategyBundle()
     └── BeautyStrategy.BIG_BEAUTY → GlBeautyPreviewStrategy
-            → GlBeautyPreviewProvider（beauty-engine/egl）
+            → GlBeautyPreviewProvider（beauty-engine/render）
                 → BeautyPreviewView → CameraPreviewRenderer → BeautyRenderer
 ```
 
@@ -199,11 +199,12 @@ CameraPreviewStrategies.rememberPreviewStrategyBundle()
 
 #### 拍照处理架构（2026-04 当前实现）
 
-**当前路线（方案 B 变种）**：
+**标准路径（GPU 离屏渲染，✅ 已落地）**：
 - 预览：CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
-- 拍照：CameraX → ImageCapture → Bitmap → CPU 处理(Canvas) → 保存
+- 拍照：CameraX → ImageCapture → Bitmap → `PhotoProcessorImpl` GPU 离屏渲染 → 保存
+- 预览与拍照复用同一套 Shader 管线，效果一致性 ≥ 99%。详见 `ADR-002-opengl-offscreen-unified-pipeline.md`。
 
-**长期目标（方案 A）**：拍照迁移到 GPU 离屏渲染，与预览共用同一套 Shader 管线。详见 `ADR-002-opengl-offscreen-unified-pipeline.md`。
+**降级路径（CPU Canvas）**：GPU 路径失败时回退到 `GpuBeautyProcessor`（`core/image/`），确保拍照不失败。
 
 **关键优化点**：
 1. 人脸检测复用：预览阶段检测结果缓存，拍照时直接使用 `FaceWarpParams`
@@ -354,7 +355,7 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 3.5 难点 5：MediaPipe 468 点 → 106 点映射
 
-**背景**：当前主分析链路使用 MediaPipe Face Landmarker（468 点），需将 468 点映射为火山引擎 106 点标准格式，供大美丽链路复用。
+**背景**：人脸检测双引擎统一输出 106 点标准格式。MediaPipe Face Landmarker 输出 468 点，需映射为 106 点；InsightFace 2D106 直接输出 106 点，仅需重排。两种来源供大美丽链路复用。
 
 **关键说明**：具体映射关系以代码实现为准，本文档仅记录核心原则。
 
@@ -436,7 +437,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 
 ---
 
-## 4. 当前实现快照（2026-04-11）
+## 4. 当前实现快照（2026-05）
 
 ### 4.1 已落地能力
 
@@ -448,8 +449,11 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - [x] 已输出 `BeautyPerfStats(fps, processingMs, delayMs, cpuUsage, nullFrames, errorCategory, errorReason)` 供调试浮层展示。
 - [x] `BeautyPreviewEngine` 组合接口统一 `BeautyPreviewProvider` + `BeautyPreviewCapability`，App 层通过接口访问。
 - [x] `BeautyStrategy`、`FaceDetectIntervalProfile` 等枚举迁移至 `domain.model.UserPreferences`，实现分层解耦。
-- [x] **方案 B 变种**：`FaceDetectionCache` 实现预览/拍照人脸检测复用，减少效果差异。
+- [x] **人脸检测缓存**：`FaceDetectionCache` 实现预览/拍照人脸检测复用，减少效果差异。
 - [x] **滤镜一致性修复**：`FilterType` 新增 `toAndroidColorMatrix()` 方法，修复 Compose ColorMatrix 与 Android ColorMatrix 类型不兼容导致的滤镜失效问题。
+- [x] **GPU 离屏拍照**：`PhotoProcessorImpl` 实现 GPU 离屏渲染拍照路径，预览与拍照复用同一套 Shader 管线，效果一致性 ≥ 99%。
+- [x] **风格特效**：`BeautyShaders` 新增 `LEICA_CLASSIC`、`FILM_GOLD`、`COOL`、`WARM` 等风格滤镜 Shader。
+- [x] **帧同步美妆（🔄 部分实现）**：`FrameSyncManager` + `MotionTracker` + `DetectionQueue` 框架已落地，解决检测帧率（~10fps）与渲染帧率（30~60fps）不同步导致的妆容飞脱问题。完整预测补偿与 hide 策略待收尾。
 
 ### 4.2 引擎现状
 
@@ -457,14 +461,14 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值，唯一值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
-- **人脸检测**：默认使用 `FaceDetectorManager` 的 468→106 点结果构建 `FaceWarpParams`（支持 MediaPipe 主链路 + InsightFace `2d106det` 备选），再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
+- **人脸检测**：默认使用 InsightFace `2d106det` 输出 106 点构建 `FaceWarpParams`（ONNX Runtime + NNAPI 加速），MediaPipe Face Mesh 468→106 作为 fallback 备选，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
 
 ### 4.3 下一步技术项（RD，优先级排序）
 
 #### 🔴 P0 — 稳定性与文档一致性
 - [ ] 将自动回退结果提示与 I18N 文案在 UI 层彻底打通（当前以日志和调试态为主）。
-- [ ] `beauty-engine/AGENTS.md` 中磨皮算法描述（"Box Blur"）与实际代码对齐，更新为"双边滤波快速近似"。
+- [x] `beauty-engine/AGENTS.md` 中磨皮算法描述已与实际代码对齐（"双边滤波快速近似"）。✅ 已完成
 
 #### 🟡 P1 — 性能与可观测性
 - [ ] 补充低端机专项压测基线（720p/1080p，前后置，连续 5 分钟）。
@@ -480,13 +484,15 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - 固化 CR 检查项：分层越界、I18N 漏同步、回退链路失败一票否决。
 - 统一调试指标采集与日志字段，确保回归可追踪。
 
-#### Phase 2：架构边界收敛（4~8 周）🔄 进行中（核心完成）
-- 已落地（2026-04）：
+#### Phase 2：架构边界收敛（4~8 周）✅ 已完成
+- 已落地（2026-04~05）：
   - [x] `BeautyStrategy`、`ThemeMode`、`AppLanguage`、`FaceDetectIntervalProfile` 迁移至 `domain.model.UserPreferences`。
   - [x] `LensFacing` 去除 CameraX 直接依赖，改为纯 Kotlin 枚举。
   - [x] `OcrUseCase` 实现下沉至 `data/local/MlKitOcrProcessor`，domain 层仅保留 `OcrProcessor` 接口。
   - [x] 新增 `domain/repository/UserSettingsRepository` 接口，ViewModel 依赖接口而非实现类。
-- 剩余事项：
+  - [x] `PhotoProcessorImpl` GPU 离屏渲染拍照路径落地，预览/拍照 Shader 管线统一。
+  - [x] 帧同步美妆框架（`FrameSyncManager`、`MotionTracker`、`DetectionQueue`）落地。
+- 剩余事项（⏳ 待排期）：
   - [ ] gallery 层 ViewModel 依赖审计与收敛。
   - [ ] camera 层其余直接调用 data 层的用例审计。
 
@@ -497,7 +503,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 
 #### 跨阶段验收标准
 - M1：P0 自动化真实断言通过率 100%，关键链路可无人值守回归。✅
-- M2：核心模块完成边界收敛，domain 层无跨层污染。🔄
+- M2：核心模块完成边界收敛，domain 层无跨层污染。✅
 - M3：大美丽 完成接口化接入，具备独立版本演进能力。⏳
 
 ---

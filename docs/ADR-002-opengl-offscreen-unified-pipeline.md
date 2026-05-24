@@ -2,7 +2,7 @@
 
 **状态**: 已接受 (Accepted)  
 **日期**: 2026-04-17  
-**最后同步**: 2026-05-02（`OffscreenRenderer` 已落地于 `beauty-engine/impl`）  
+**最后同步**: 2026-05-24（`PhotoProcessorImpl` 已落地于 `beauty-engine/render`，替代早期 `OffscreenRenderer` 设计）  
 **决策**: PM/RD 联合评审  
 **依赖**: ADR-001 (分层架构重构)
 
@@ -43,13 +43,14 @@
 └──────────────────────┬──────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────────────┐
-│  Data Layer: beauty-engine:impl                           │
-│  ├─ BeautyEngineImpl                                      │
-│  ├─ OffscreenRenderer (NEW - OpenGL FBO 离屏渲染)        │
+│  Data Layer: beauty-engine:render                         │
+│  ├─ GlBeautyPreviewProvider                               │
+│  ├─ PhotoProcessorImpl (OpenGL FBO 离屏渲染，2026-05 落地) │
 │  │   ├─ 预览: SurfaceTexture → SurfaceView (实时)          │
 │  │   └─ 拍照: Bitmap → FBO → Bitmap (离屏)               │
+│  ├─ CameraPreviewRenderer (渲染管线核心)                 │
 │  ├─ BeautyRenderer (自研 Shader 管线)                    │
-│  └─ BigBeautyEngine (自研引擎)                            │
+│  └─ EGLCore (EGL 上下文管理)                             │
 └──────────────────────┬──────────────────────────────────────┘
                        │
         ┌──────────────────────────────┐
@@ -83,9 +84,9 @@
 ### 3.1 新增模块: OffscreenRenderer
 
 ```kotlin
-// beauty-engine/impl/src/.../internal/OffscreenRenderer.kt
+// beauty-engine/render/src/.../render/PhotoProcessorImpl.kt（实际落地类名）
 
-class OffscreenRenderer(
+class PhotoProcessorImpl(
     private val eglContext: EGLContext
 ) {
     private var fboId: Int = 0
@@ -204,13 +205,13 @@ class BeautyPreviewView {
 }
 
 // 拍照时
-class OffscreenRenderer {
-    private val shaderChain: BeautyShaderChain // 同一实例
+class PhotoProcessorImpl {
+    private val beautyRenderer: BeautyRenderer // 同一实例
     
     fun processPhoto(bitmap: Bitmap): Bitmap {
         // 离屏渲染，复用相同 Shader
         val inputTexture = bitmapToTexture(bitmap)
-        shaderChain.render(inputTexture, fboTexture)
+        beautyRenderer.render(inputTexture, fboTexture)
         return fboToBitmap()
     }
 }
@@ -224,13 +225,13 @@ class OffscreenRenderer {
 
 | 任务 | 负责人 | 输出 |
 |------|--------|------|
-| OffscreenRenderer 框架 | RD | 类实现 + 单元测试 |
+| PhotoProcessorImpl 框架 | RD | 类实现 + 单元测试 |
 | FBO/Texture 管理封装 | RD | 资源管理器 |
-| glReadPixels 优化 | RD | PBO 异步读取 |
-| Shader 加载器重构 | RD | 支持 .glsl 文件 |
+| glReadPixels 优化 | RD | PBO 异步读取（⏳ 待优化） |
+| Shader 加载器重构 | RD | 支持 .glsl 文件（⏳ 待优化） |
 
 **验收标准**:
-- [ ] OffscreenRenderer 可独立单元测试
+- [x] PhotoProcessorImpl 可独立单元测试
 - [ ] 1080p 图片处理 < 500ms
 - [ ] 内存无泄漏（连续处理 100 张）
 
@@ -255,7 +256,7 @@ class OffscreenRenderer {
 
 | 步骤 | 操作 |
 |------|------|
-| 1 | GpuBeautyProcessor 调用 OffscreenRenderer |
+| 1 | GpuBeautyProcessor 调用 PhotoProcessorImpl |
 | 2 | A/B 测试：对比 CPU vs GPU 路径效果 |
 | 3 | 灰度发布：50% 用户使用 GPU 路径 |
 | 4 | 全量切换：100% GPU 路径 |
@@ -322,14 +323,14 @@ class OffscreenRenderer {
 
 | 任务 | 状态 | 产出文件 |
 |------|------|---------|
-| OffscreenRenderer 框架 | ✅ 完成 | `OffscreenRenderer.kt` |
-| BeautyShaderChain 抽象 | ✅ 完成 | `BeautyShaderChain.kt` |
-| Shader 接口定义 | ✅ 完成 | `ShaderInterfaces.kt` |
-| 单元测试骨架 | ✅ 完成 | `OffscreenRendererTest.kt` |
+| PhotoProcessorImpl 框架 | ✅ 完成 | `PhotoProcessorImpl.kt` |
+| BeautyRenderer 复用 | ✅ 完成 | `BeautyRenderer.kt` |
+| Shader 统一 | ✅ 完成 | `BeautyShaders.kt` |
+| 单元测试骨架 | ✅ 完成 | `PhotoProcessorImplTest.kt` |
 
 ### 已完成代码文件
 
-**OffscreenRenderer.kt** - 核心离屏渲染器
+**PhotoProcessorImpl.kt** - 核心离屏渲染器（实际落地类名，替代早期 `OffscreenRenderer` 设计）
 - Bitmap → Texture → FBO → Bitmap 完整流程
 - PBO 异步读取优化（双缓冲）
 - 资源自动管理（FBO/Texture 复用）
@@ -341,21 +342,21 @@ class OffscreenRenderer {
 - 链式 Shader 执行逻辑
 - 与预览渲染共享同一套参数更新机制
 
-**ShaderInterfaces.kt** - Shader 接口契约
-- 磨皮、美白、瘦脸、大眼、唇色、腮红、滤镜 7 个 Shader 接口
-- 统一的生命周期管理（setIntensity, release）
+**BeautyShaders.kt** - Shader 源码契约
+- 磨皮、美白、瘦脸、大眼、唇色、腮红、滤镜 7 个效果内联于 GLSL
+- 统一的生命周期管理（compile/link/use）
 
 ### 验收进度
 
 Phase 1 验收标准：
-- [x] OffscreenRenderer 框架实现（支持 Bitmap 输入输出）
+- [x] PhotoProcessorImpl 框架实现（支持 Bitmap 输入输出）
 - [x] 单元测试通过（真实 EGL 环境验证）
 - [x] 1080p 图片处理 < 500ms（设备实测 200ms 以内）
 - [x] 内存无泄漏测试（连续 100 张压力测试通过）
 
 ### 落地实现记录（2026-05）
 
-GPU 离屏渲染拍照已由 `PhotoProcessorImpl` 在 `beauty-engine/egl` 中完整落地，关键实现要点：
+GPU 离屏渲染拍照已由 `PhotoProcessorImpl` 在 `beauty-engine/render` 中完整落地，关键实现要点：
 
 1. **独立 EGL 上下文与 Pbuffer Surface**：在 `PhotoProcessorImpl` 中创建独立 EGL 上下文，避免与预览线程竞争，实现后台线程异步处理。
 2. **渲染管线重构**：引入 `renderMainShaderFromFbo2D()` 方法，使用专用 `shaderProgram2D`（基于 `VERTEX_SHADER_2D` 和 `FRAGMENT_SHADER_2D`），复用 `BeautyRenderer` 的渲染逻辑。

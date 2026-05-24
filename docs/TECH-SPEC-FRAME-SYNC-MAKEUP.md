@@ -1,9 +1,9 @@
 # 技术文档：帧同步美妆系统（Frame-Sync Makeup System）
 
-**版本**：1.0  
-**状态**：技术评审中  
-**依赖**：`BIG_BEAUTY_TECH_SPEC.md`（已落地）  
-**最后更新**：2026-05-11
+**版本**：1.1
+**状态**：🔄 部分实现（核心组件 FrameSyncManager / MotionTracker / DetectionQueue / FrameSyncBridge 已落地；预测补偿算法与 hide 降级策略待收尾）
+**依赖**：`BIG_BEAUTY_TECH_SPEC.md`（已落地）
+**最后更新**：2026-05-24
 
 ---
 

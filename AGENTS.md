@@ -108,9 +108,9 @@ docs/FEATURES.md (How: 交互与体验规则)
 
 | 类型 | 文档 |
 |------|------|
-| **模块规范** | `core/AGENTS.md`, `data/AGENTS.md`, `di/AGENTS.md`, `features/camera/AGENTS.md`, `features/gallery/AGENTS.md`, `features/editor/AGENTS.md`, `features/settings/AGENTS.md`, `features/debug/AGENTS.md`, `beauty-engine/AGENTS.md` |
-| **技术专项** | `docs/BIG_BEAUTY_TECH_SPEC.md`, `docs/CAMERA_PREVIEW_TECH_SPEC.md`, `docs/BEAUTY_ENGINE_FALLBACK.md` |
-| **AI 工具配置** | `AI_TOOLS.md`, `.kimi/AGENTS.md`, `.openclaw/workspace/`, `.lingma/skills/` |
+| **模块规范** | `app/src/main/java/com/picme/core/AGENTS.md`, `app/src/main/java/com/picme/core/designsystem/AGENTS.md`, `app/src/main/java/com/picme/data/AGENTS.md`, `app/src/main/java/com/picme/di/AGENTS.md`, `app/src/main/java/com/picme/features/camera/AGENTS.md`, `app/src/main/java/com/picme/features/gallery/AGENTS.md`, `app/src/main/java/com/picme/features/editor/AGENTS.md`, `app/src/main/java/com/picme/features/settings/AGENTS.md`, `app/src/main/java/com/picme/features/debug/AGENTS.md`, `beauty-engine/AGENTS.md` |
+| **技术专项** | `docs/BIG_BEAUTY_TECH_SPEC.md`, `docs/CAMERA_PREVIEW_TECH_SPEC.md`, `docs/BEAUTY_ENGINE_FALLBACK.md`, `docs/FACE_DETECTION_ENGINE_ARCHITECTURE.md`, `docs/ADR-001-beauty-engine-architecture.md`, `docs/ADR-002-opengl-offscreen-unified-pipeline.md`, `docs/ADR-003-coordinate-system-management.md` |
+| **AI 工具配置** | `AI_TOOLS.md`, `.kimi/AGENTS.md`, `.openclaw/workspace/`, `.qoder/skills/` |
 | **写作规范** | `docs/AGENTS_SPEC.md`, `PRODUCT.md`, `docs/FEATURES.md` |
 
 ## 7. 交付审计清单

@@ -73,14 +73,14 @@ private fun onGlWarmUpFallback(reason: String) {
 
 - `:beauty-engine` 模块**不依赖** `:app` 模块，也不感知外部策略的存在。
 - `:beauty-engine` 仅在初始化失败时抛出异常；兜底决策完全由 `:app` 的相机预览策略层负责。
-- 禁止 `:beauty-engine` 的 `egl/` 内部实现类被 `:app` 直接引用；`:app` 只能通过 `api/BeautyPreviewProvider` 访问能力。
+- 禁止 `:beauty-engine` 的 `render/` 内部实现类被 `:app` 直接引用；`:app` 只能通过 `api/BeautyPreviewProvider` 访问能力。
 
 ---
 
 ## 5. 相关文档
 
 - `beauty-engine/AGENTS.md` — 主引擎实现规范
-- `beauty-engine/README.md` — 调用方 Quick Start
+- `beauty-engine/AGENTS.md` — 引擎实现规范与调用方 Quick Start（模块级单一入口）
 - `docs/BIG_BEAUTY_TECH_SPEC.md` — 渲染链路、冷却恢复与观测指标
 - `app/src/main/java/com/picme/di/AGENTS.md` — DI 层实现规范
 - `app/src/main/java/com/picme/features/camera/AGENTS.md` — Camera 模块实现规范
