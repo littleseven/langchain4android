@@ -404,86 +404,82 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
         LOGD("  BBox output: dims=%d, w=%d, h=%d, c=%d, total=%d", bboxOut.dims, bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.total());
         LOGD("  Landmark output: dims=%d, w=%d, h=%d, c=%d, total=%d", landmarkOut.dims, landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.total());
 
-        if (scoreOut.dims == 3 && scoreOut.w == featureSize && scoreOut.h == featureSize) {
-            // [w, h, c] 格式: 空间特征图，每个 channel 对应一个属性
-            for (int y = 0; y < featureSize; y++) {
-                for (int x = 0; x < featureSize; x++) {
-                    int spatialIdx = y * featureSize + x;
-                    for (int a = 0; a < 2; a++) {
-                        int anchorIdx = spatialIdx * 2 + a;
-                        for (int c = 0; c < scoreChannels; c++) {
-                            scoreData[anchorIdx * scoreChannels + c] = scoreOut.channel(c * 2 + a).row(y)[x];
-                        }
-                        for (int c = 0; c < 4; c++) {
-                            bboxData[anchorIdx * 4 + c] = bboxOut.channel(c * 2 + a).row(y)[x];
-                        }
-                        for (int c = 0; c < 10; c++) {
-                            landmarkData[anchorIdx * 10 + c] = landmarkOut.channel(c * 2 + a).row(y)[x];
+        // [关键修复] NCNN onnx2ncnn 转换后的 Permute + Reshape 产生的数据布局
+        // 与 ONNX Transpose + Reshape 不同，需要重新排列数据。
+        //
+        // ONNX 布局 (期望):  for y: for x: for anchor -> index = y*F*2 + x*2 + a
+        // NCNN 实际布局:     for y: for anchor: for x -> index = y*F*2 + a*F + x
+        // 其中 F = featureSize
+        //
+        // 修复: 读取 NCNN 输出后，按正确顺序重新排列到 scoreData/bboxData/landmarkData
+
+        auto reorderNcnnData = [&](const ncnn::Mat &mat, float *dst, int channelsPerAnchor) {
+            // mat: 2D [w=totalAnchors*channelsPerAnchor, h=1] 或 1D [w=totalElements]
+            // 数据在 NCNN 中的实际顺序: for y: for a: for x: for c
+            // 期望顺序: for y: for x: for a: for c
+            int totalElements = mat.total();
+            int expectedElements = totalAnchors * channelsPerAnchor;
+            if (totalElements < expectedElements) {
+                LOGD("  Reorder: insufficient data, expected %d, got %d", expectedElements, totalElements);
+                return;
+            }
+
+            // 临时缓冲区保存原始数据
+            std::vector<float> src(totalElements);
+            if (mat.dims == 1) {
+                for (int i = 0; i < totalElements; i++) src[i] = mat[i];
+            } else if (mat.dims == 2) {
+                // 2D Mat [w=N, h=C]: row-major, each row has w elements
+                for (int h = 0; h < mat.h; h++) {
+                    for (int w = 0; w < mat.w; w++) {
+                        src[h * mat.w + w] = mat.row(h)[w];
+                    }
+                }
+            } else {
+                // 3D Mat [w, h, c]: channel-major
+                int idx = 0;
+                for (int c = 0; c < mat.c; c++) {
+                    for (int h = 0; h < mat.h; h++) {
+                        for (int w = 0; w < mat.w; w++) {
+                            src[idx++] = mat.channel(c).row(h)[w];
                         }
                     }
                 }
             }
-        } else if (scoreOut.dims == 2) {
-            // 2D 格式: [w=N, h=C]
-            // 数据按行存储：每行是一个通道，每列是一个 anchor
-            int numAnchors = scoreOut.w;
-            
-            // Score: [w=numAnchors, h=scoreChannels]
-            for (int a = 0; a < numAnchors && a < totalAnchors; a++) {
-                for (int c = 0; c < scoreChannels && c < scoreOut.h; c++) {
-                    scoreData[a * scoreChannels + c] = scoreOut.row(c)[a];
+
+            // 重新排列: NCNN 顺序 (y,a,x,c) -> 期望顺序 (y,x,a,c)
+            for (int y = 0; y < featureSize; y++) {
+                for (int a = 0; a < 2; a++) {
+                    for (int x = 0; x < featureSize; x++) {
+                        for (int c = 0; c < channelsPerAnchor; c++) {
+                            // NCNN source index
+                            int srcIdx = ((y * 2 + a) * featureSize + x) * channelsPerAnchor + c;
+                            // Expected destination index
+                            int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + c;
+                            if (srcIdx < totalElements && dstIdx < expectedElements) {
+                                dst[dstIdx] = src[srcIdx];
+                            }
+                        }
+                    }
                 }
             }
-            
-            // BBox: [w=numAnchors, h=4]
-            for (int a = 0; a < numAnchors && a < totalAnchors; a++) {
-                for (int c = 0; c < 4 && c < bboxOut.h; c++) {
-                    bboxData[a * 4 + c] = bboxOut.row(c)[a];
-                }
-            }
-            
-            // Landmark: [w=numAnchors, h=10]
-            for (int a = 0; a < numAnchors && a < totalAnchors; a++) {
-                for (int c = 0; c < 10 && c < landmarkOut.h; c++) {
-                    landmarkData[a * 10 + c] = landmarkOut.row(c)[a];
-                }
-            }
+        };
+
+        // Score 数据重新排列
+        if (scoreChannels == 1) {
+            // 只有 face score，每个 anchor 1 个值
+            reorderNcnnData(scoreOut, scoreData.data(), 1);
         } else {
-            // 1D 格式: [w=totalElements, h=1, c=1]
-            // 数据线性排列，直接复制
-            // [关键修复] 1D Mat 时 h=1，不能按行读取
-            int scoreTotal = scoreOut.total();
-            int bboxTotal = bboxOut.total();
-            int landmarkTotal = landmarkOut.total();
-
-            LOGD("  Using 1D flat copy: scoreTotal=%d, bboxTotal=%d, landmarkTotal=%d", scoreTotal, bboxTotal, landmarkTotal);
-
-            // Score: 线性复制
-            if (scoreTotal >= totalAnchors * scoreChannels) {
-                for (int i = 0; i < totalAnchors * scoreChannels; i++) {
-                    scoreData[i] = scoreOut[i];
-                }
-            } else if (scoreTotal >= totalAnchors) {
-                // 可能只有 face score (scoreChannels=1)
-                for (int i = 0; i < totalAnchors; i++) {
-                    scoreData[i] = scoreOut[i];
-                }
-            }
-
-            // BBox: 线性复制 [dx0, dy0, dw0, dh0, dx1, dy1, dw1, dh1, ...]
-            if (bboxTotal >= totalAnchors * 4) {
-                for (int i = 0; i < totalAnchors * 4; i++) {
-                    bboxData[i] = bboxOut[i];
-                }
-            }
-
-            // Landmark: 线性复制
-            if (landmarkTotal >= totalAnchors * 10) {
-                for (int i = 0; i < totalAnchors * 10; i++) {
-                    landmarkData[i] = landmarkOut[i];
-                }
-            }
+            // bg + face score，每个 anchor 2 个值
+            // NCNN 输出可能是 [totalAnchors, 2] 或扁平化的 [totalAnchors*2]
+            reorderNcnnData(scoreOut, scoreData.data(), scoreChannels);
         }
+
+        // BBox 数据重新排列: 每个 anchor 4 个值
+        reorderNcnnData(bboxOut, bboxData.data(), 4);
+
+        // Landmark 数据重新排列: 每个 anchor 10 个值
+        reorderNcnnData(landmarkOut, landmarkData.data(), 10);
 
         // [调试] 打印该 scale 的最高 score
         float maxScore = 0.0f;
