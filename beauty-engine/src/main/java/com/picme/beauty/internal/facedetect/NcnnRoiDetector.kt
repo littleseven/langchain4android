@@ -24,6 +24,10 @@ class NcnnRoiDetector(
         private const val INPUT_SIZE = 640
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f
+        private const val ENGINE_NAME = "NCNN-Vulkan"
+
+        // [全局锁] NCNN Net::load_model 非线程安全，所有 NCNN 初始化共享此锁
+        private val NCNN_INIT_LOCK = Any()
 
         // RetinaFace 9 个输出 blob 名称
         private val OUTPUT_NAMES = arrayOf(
@@ -36,6 +40,7 @@ class NcnnRoiDetector(
     private val appContext = context.applicationContext
     private var detector: NcnnFaceDetector? = null
     private var isInitialized = false
+    private var isGpuEnabled: Boolean = false
 
     // [性能优化] Bitmap 缩放复用池
     private var reusableScaledBitmap: Bitmap? = null
@@ -59,41 +64,46 @@ class NcnnRoiDetector(
     }
 
     private fun initialize() {
-        try {
-            val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
+        // [修复崩溃] NCNN Net::load_model 非线程安全，必须全局同步
+        synchronized(NCNN_INIT_LOCK) {
+            try {
+                val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
-            Log.i(TAG, "Initializing NCNN RetinaFace detector (requireGpu=$requireGpu)...")
-            Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
+                Log.i(TAG, "Initializing NCNN RetinaFace detector (requireGpu=$requireGpu)...")
+                Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
 
-            // [诊断] 验证文件可读性
-            if (!paramFile.canRead()) {
-                Log.e(TAG, "Param file not readable: ${paramFile.absolutePath}")
+                // [诊断] 验证文件可读性
+                if (!paramFile.canRead()) {
+                    Log.e(TAG, "Param file not readable: ${paramFile.absolutePath}")
+                }
+                if (!binFile.canRead()) {
+                    Log.e(TAG, "Bin file not readable: ${binFile.absolutePath}")
+                }
+
+                val initStart = SystemClock.elapsedRealtime()
+                detector = NcnnFaceDetector.create(
+                    paramPath = paramFile.absolutePath,
+                    binPath = binFile.absolutePath,
+                    inputSize = INPUT_SIZE,
+                    useGpu = requireGpu,
+                    inputName = "input.1",
+                    outputNames = OUTPUT_NAMES
+                )
+                val initElapsed = SystemClock.elapsedRealtime() - initStart
+
+                if (detector != null) {
+                    isGpuEnabled = true
+                    Log.i(TAG, "NcnnRoiDetector initialized in ${initElapsed}ms")
+                    return
+                }
+
+                // [CO指令] 不启用 fallback，直接报告失败
+                isGpuEnabled = false
+                Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize NcnnRoiDetector (requireGpu=$requireGpu)", e)
+                detector = null
             }
-            if (!binFile.canRead()) {
-                Log.e(TAG, "Bin file not readable: ${binFile.absolutePath}")
-            }
-
-            val initStart = SystemClock.elapsedRealtime()
-            detector = NcnnFaceDetector.create(
-                paramPath = paramFile.absolutePath,
-                binPath = binFile.absolutePath,
-                inputSize = INPUT_SIZE,
-                useGpu = requireGpu,
-                inputName = "input.1",
-                outputNames = OUTPUT_NAMES
-            )
-            val initElapsed = SystemClock.elapsedRealtime() - initStart
-
-            if (detector != null) {
-                Log.i(TAG, "NcnnRoiDetector initialized in ${initElapsed}ms")
-                return
-            }
-
-            // [CO指令] 不启用 fallback，直接报告失败
-            Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize NcnnRoiDetector (requireGpu=$requireGpu)", e)
-            detector = null
         }
     }
 
@@ -124,7 +134,7 @@ class NcnnRoiDetector(
         val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
         val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
-        Log.d(TAG, "[Perf] NcnnRoi START: original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+        Log.d(TAG, "[Perf] NcnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
 
         val inferStart = SystemClock.elapsedRealtime()
         val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.3f)
@@ -133,7 +143,7 @@ class NcnnRoiDetector(
         val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
         if (result == null || result.size < 5) {
-            Log.d(TAG, "[Perf] NcnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
+            Log.d(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
             return null
         }
 
@@ -168,7 +178,7 @@ class NcnnRoiDetector(
         val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
 
         Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
-        Log.i(TAG, "[Perf] NcnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
+        Log.i(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
         return roi
     }
 

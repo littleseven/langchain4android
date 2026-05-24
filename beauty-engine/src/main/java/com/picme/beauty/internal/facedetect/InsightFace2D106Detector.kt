@@ -36,6 +36,7 @@ class InsightFace2D106Detector(context: Context) {
         private const val LOOSE_CROP_SCALE = 1f
         private const val DEFAULT_INPUT_MEAN = 127.5f
         private const val DEFAULT_INPUT_STD = 128.0f
+        private const val ENGINE_NAME = "ONNX-Nnapi"
     }
 
     private val appContext = context.applicationContext
@@ -48,6 +49,8 @@ class InsightFace2D106Detector(context: Context) {
     private var inputName: String? = null
     private var inputMean: Float = DEFAULT_INPUT_MEAN
     private var inputStd: Float = DEFAULT_INPUT_STD
+    private var isGpuEnabled: Boolean = false
+    private var isInitialized = false
 
     // [性能优化] 复用像素和 CHW 缓冲区，避免每帧 new IntArray/FloatArray
     private val reusablePixelBuffer = IntArray(INPUT_SIZE * INPUT_SIZE)
@@ -57,10 +60,28 @@ class InsightFace2D106Detector(context: Context) {
     private val reusableMappedPoint = floatArrayOf(0f, 0f)
 
     init {
-        initialize()
+        // [ANR 修复] 改为懒加载，不立即初始化，避免主线程阻塞
+        Log.d(TAG, "InsightFace2D106Detector created (lazy initialization)")
     }
 
-    fun isReady(): Boolean = ortSession != null && det10gDetector?.isReady() == true
+    /**
+     * 懒加载初始化 - 仅在首次 detect 时调用
+     */
+    private fun ensureInitialized() {
+        if (isInitialized) return
+
+        synchronized(this) {
+            if (isInitialized) return
+
+            initialize()
+            isInitialized = true
+        }
+    }
+
+    fun isReady(): Boolean {
+        ensureInitialized()
+        return ortSession != null && det10gDetector?.isReady() == true
+    }
 
     /**
      * 检测人脸关键点
@@ -71,6 +92,9 @@ class InsightFace2D106Detector(context: Context) {
      * @return 106 点归一化坐标数组，未检测到返回 null
      */
     fun detect(bitmap: Bitmap, lensFacing: Int, faceBounds: android.graphics.RectF? = null): FloatArray? {
+        // [ANR 修复] 懒加载初始化
+        ensureInitialized()
+
         val session = ortSession ?: return null
         val totalStart = SystemClock.elapsedRealtime()
 
@@ -89,7 +113,7 @@ class InsightFace2D106Detector(context: Context) {
             bounds
         }
 
-        Log.d(TAG, "[Perf] 2d106det START: bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
+        Log.d(TAG, "[Perf] 2d106det START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, bitmap=${bitmap.width}x${bitmap.height}, faceBounds=$actualFaceBounds")
         return try {
             val rectBounds = android.graphics.Rect(
                 actualFaceBounds.left.toInt().coerceIn(0, bitmap.width),
@@ -133,7 +157,7 @@ class InsightFace2D106Detector(context: Context) {
             val transformElapsed = SystemClock.elapsedRealtime() - transformStart
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
-            Log.d(TAG, "[Perf] 2d106det DONE: total=${totalElapsed}ms, crop=${cropElapsed}ms, inference=${inferenceElapsed}ms, transform=${transformElapsed}ms")
+            Log.d(TAG, "[Perf] 2d106det DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms, crop=${cropElapsed}ms, inference=${inferenceElapsed}ms, transform=${transformElapsed}ms")
             result
         } catch (error: Exception) {
             Log.e(TAG, "[Diag] InsightFace 2D106 detection failed", error)
@@ -189,8 +213,10 @@ class InsightFace2D106Detector(context: Context) {
                     ai.onnxruntime.providers.NNAPIFlags.USE_FP16
                 )
                 sessionOptions.addNnapi(nnapiFlags)
+                isGpuEnabled = true
                 Log.i(TAG, "NNAPI execution provider enabled with FP16 for 2D106 (flags=$nnapiFlags)")
             } catch (e: Exception) {
+                isGpuEnabled = false
                 Log.w(TAG, "NNAPI not available for 2D106, falling back to CPU", e)
             }
 

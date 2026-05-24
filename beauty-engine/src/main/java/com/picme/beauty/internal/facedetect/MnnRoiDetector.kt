@@ -26,6 +26,7 @@ class MnnRoiDetector(
         private const val INPUT_SIZE = 640  // [对齐 ONNX] 使用与 ONNX 相同的输入尺寸，确保检测结果一致
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f  // [对齐 ONNX] ROI 扩展比例，与 InsightFaceDet10G 一致
+        private const val ENGINE_NAME = "MNN-Vulkan"
 
         // RetinaFace 9 个输出层名称（与 MNNConvert 输出一致）
         private val OUTPUT_NAMES = arrayOf(
@@ -38,6 +39,7 @@ class MnnRoiDetector(
     private val appContext = context.applicationContext
     private var detector: MnnFaceDetector? = null
     private var isInitialized = false
+    private var isGpuEnabled: Boolean = false
 
     // [性能优化] Bitmap 缩放复用池
     private var reusableScaledBitmap: Bitmap? = null
@@ -77,9 +79,11 @@ class MnnRoiDetector(
             val initElapsed = SystemClock.elapsedRealtime() - initStart
 
             if (detector != null) {
+                isGpuEnabled = true
                 Log.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with Vulkan GPU")
             } else {
                 // [关键策略] 要求 GPU 时初始化失败，直接放弃，不降级到 CPU
+                isGpuEnabled = false
                 if (requireGpu) {
                     Log.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
                 } else {
@@ -110,7 +114,7 @@ class MnnRoiDetector(
             val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
             val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
-            Log.d(TAG, "[Perf] MnnRoi START: original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+            Log.d(TAG, "[Perf] MnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
 
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
@@ -119,7 +123,7 @@ class MnnRoiDetector(
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.size < 5) {
-                Log.d(TAG, "[Perf] MnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
+                Log.d(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
                 return null
             }
 
@@ -160,7 +164,7 @@ class MnnRoiDetector(
 
             Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
 
-            Log.i(TAG, "[Perf] MnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
+            Log.i(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
             roi
         } catch (e: Exception) {
             Log.e(TAG, "MnnRoi detection failed", e)

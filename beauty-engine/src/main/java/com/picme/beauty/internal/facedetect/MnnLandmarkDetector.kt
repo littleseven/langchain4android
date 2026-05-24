@@ -28,11 +28,13 @@ class MnnLandmarkDetector(
         private const val MODEL_KEY = "2d106_mnn"
         private const val INPUT_SIZE = 192  // [对齐 ONNX] 与 InsightFace2D106Detector 保持一致
         private const val POINT_COUNT = 106
+        private const val ENGINE_NAME = "MNN-Vulkan"
     }
 
     private val appContext = context.applicationContext
     private var detector: MnnFaceDetector? = null
     private var isInitialized = false
+    private var isGpuEnabled: Boolean = false
 
     // [性能优化] 复用 Bitmap 池
     private var reusableScaledBitmap: Bitmap? = null
@@ -72,9 +74,11 @@ class MnnLandmarkDetector(
             val initElapsed = SystemClock.elapsedRealtime() - initStart
 
             if (detector != null) {
+                isGpuEnabled = true
                 Log.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with Vulkan GPU")
             } else {
                 // [关键策略] 要求 GPU 时初始化失败，直接放弃，不降级到 CPU
+                isGpuEnabled = false
                 if (requireGpu) {
                     Log.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
                 } else {
@@ -105,7 +109,7 @@ class MnnLandmarkDetector(
             val cropResult = prepareInputBitmap(bitmap, roi)
             val prepElapsed = SystemClock.elapsedRealtime() - prepStart
 
-            Log.d(TAG, "[Perf] MnnLandmark START: original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
+            Log.d(TAG, "[Perf] MnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
 
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detect(cropResult.bitmap)
@@ -123,14 +127,14 @@ class MnnLandmarkDetector(
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.isEmpty()) {
-                Log.d(TAG, "[Perf] MnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
+                Log.d(TAG, "[Perf] MnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
                 return null
             }
 
             // 使用逆变换矩阵将模型输出坐标映射回原始图像
             val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
 
-            Log.d(TAG, "[Perf] MnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
+            Log.d(TAG, "[Perf] MnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
             landmarks
         } catch (e: Exception) {
             Log.e(TAG, "MnnLandmark detection failed", e)

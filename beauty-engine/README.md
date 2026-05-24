@@ -88,7 +88,7 @@ dependencies {
 
 ### 预览美颜
 
-```kotlin
+```
 // 1. 通过 GlBeautyPreviewProvider 获取实例（app 层通过 rememberGlBeautyPreviewProvider 管理）
 val provider: BeautyPreviewEngine = GlBeautyPreviewProvider(context)
 
@@ -120,7 +120,7 @@ provider.updateFilters(
 
 ### 拍照 GPU 化
 
-```kotlin
+```
 // 使用 PhotoProcessor 进行拍照后处理（GPU 离屏渲染）
 val photoProcessor = (provider as GlBeautyPreviewProvider).createPhotoProcessor()
 
@@ -148,7 +148,7 @@ saveToMediaStore(processedBitmap)
 帧同步系统在 `CameraPreviewRenderer` 内部自动启用，无需手动配置。录制场景自动复用预览的帧同步逻辑。
 
 **开发者选项**（调试用）：
-```kotlin
+```
 // 在 CameraScreen 中配置帧同步模式
 val frameSyncConfig = FrameSyncConfig(
     mode = FrameSyncMode.STRICT,           // STRICT / SMOOTH / OFF
@@ -164,7 +164,7 @@ frameSyncManager.updateConfig(frameSyncConfig)
 
 `BeautyPreviewEngine` 持有 EGL 上下文、渲染线程和 GPU 资源，**必须**在合适的生命周期节点释放：
 
-```kotlin
+```
 // Composable 场景由 DisposableEffect 自动管理
 DisposableEffect(provider) {
     onDispose { provider.release() }
@@ -226,6 +226,54 @@ override fun onCleared() {
 | **帧同步系统** | FrameSyncManager + MotionTracker 速度外推 | ✅ |
 | **GPU 拍照** | PhotoProcessorImpl（离屏渲染复用预览管线） | ✅ |
 | **视频录制美颜** | 复用预览帧同步与渲染管线 | ✅ |
+
+---
+
+## 人脸检测引擎性能基准
+
+> 测试日期：2026-05-24 | 测试模型：RetinaFace det_10g (ROI) + InsightFace 2D106 (Landmark)
+
+### 测试机型
+
+| 机型 | SoC | GPU | 定位 |
+|------|-----|-----|------|
+| 机型 A (中端) | - | Adreno 620 | 中端设备 |
+| 机型 B (高端) | - | Adreno 740+ | 旗舰设备 |
+
+### 各引擎推理耗时对比
+
+#### 高端机 (Adreno 740+)
+
+| 引擎配置 | ROI | Landmark | 总检测 | 推荐度 |
+|----------|-----|----------|--------|--------|
+| **NCNN + NCNN** | **~45ms** | **~4ms** | **~50ms** | ⭐⭐⭐⭐⭐ |
+| MNN + NCNN | ~37ms | ~35ms | ~70ms | ⭐⭐⭐⭐ |
+| MediaPipe + MediaPipe | ~25ms | ~5ms | ~30ms | ⭐⭐⭐⭐ (精度不同) |
+| ONNX + ONNX | ~340ms | ~13ms | ~350ms | ⭐⭐ (太慢) |
+
+#### 中端机 (Adreno 620)
+
+| 引擎配置 | ROI | Landmark | 总检测 | 推荐度 |
+|----------|-----|----------|--------|--------|
+| **MediaPipe + MediaPipe** | **~30ms** | **~5ms** | **~35ms** | ⭐⭐⭐⭐⭐ |
+| MNN + MNN | ~550ms | - | ~550ms | ⭐⭐ (ROI 太慢) |
+| NCNN + NCNN | ~900ms | ~35ms | ~935ms | ⭐ (ROI 极慢) |
+| ONNX + ONNX | ~500ms+ | - | ~500ms+ | ⭐⭐ (CPU 执行) |
+
+### 关键结论
+
+1. **NCNN 是高端机最佳方案**：速度接近 MediaPipe，但保持 InsightFace 106 点精度
+2. **MediaPipe 是中端机最佳方案**：TFLite GPU delegate 优化好，跨设备性能稳定
+3. **ONNX Runtime 移动端性能差**：NNAPI/GPU delegate 对 RetinaFace 支持不佳，实际 fallback 到 CPU
+4. **MNN ROI 性能一般**：Vulkan 后端对 640x640 RetinaFace 优化不足
+5. **GPU 算力是主要瓶颈**：同一模型同一框架，Adreno 740+ 比 Adreno 620 快 10-20 倍
+
+### 已知问题与修复
+
+| 问题 | 现象 | 根因 | 修复方案 |
+|------|------|------|----------|
+| NCNN OpenMP 崩溃 | `SIGABRT` in `__kmp_affinity_initialize` | `setenv("KMP_AFFINITY", "disabled")` 调用太晚 | 提前到 `JNI_OnLoad` 中设置 |
+| ANR (启动卡死) | Input dispatching timed out | 检测器在 `init {}` 中同步初始化 | 改为协程异步初始化 + 懒加载 |
 
 ---
 
