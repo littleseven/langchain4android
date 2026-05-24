@@ -219,8 +219,7 @@ class BeautyPreviewView @JvmOverloads constructor(
             LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT
         )
-        // [诊断] 暂时禁用 setZOrderMediaOverlay，测试是否是它导致 surfaceCreated 不触发
-        // surfaceView.setZOrderMediaOverlay(true)
+        surfaceView.setZOrderMediaOverlay(true)
         addView(surfaceView)
 
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
