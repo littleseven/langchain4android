@@ -487,9 +487,23 @@ private fun sendMessage(
                     )
                 }
                 else -> {
+                    val commandName = when (command) {
+                        is AiAgentCommand.AdjustBeauty -> "已调整美颜参数"
+                        is AiAgentCommand.SwitchFilter -> "已切换滤镜"
+                        is AiAgentCommand.SwitchStyle -> "已切换风格"
+                        is AiAgentCommand.SwitchScene -> "已切换场景"
+                        is AiAgentCommand.SwitchRatio -> "已切换画幅比例"
+                        is AiAgentCommand.AdjustExposure -> "已调整曝光"
+                        is AiAgentCommand.AdjustZoom -> "已调整变焦"
+                        is AiAgentCommand.FlipCamera -> "已翻转摄像头"
+                        is AiAgentCommand.CapturePhoto -> "已拍照"
+                        is AiAgentCommand.ToggleRecording -> "已切换录像状态"
+                        is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
+                        else -> "已完成"
+                    }
                     state.addMessage(
                         AiAgentMessage(
-                            content = "Done!",
+                            content = commandName,
                             isFromUser = false
                         )
                     )

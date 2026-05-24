@@ -277,5 +277,14 @@
     <string name="ai_agent_api_key_set">API Key 已設定</string>
     <string name="ai_agent_api_key_empty">未設定（AI 智慧助手已停用）</string>
     <string name="ai_agent_input_hint">向 AI 助手提問...</string>
+    <string name="ai_model_manager">AI 模型管理</string>
+    <string name="ai_model_manager_desc">管理本地 AI 模型。</string>
+    <string name="downloaded_models">已下載模型</string>
+    <string name="available_models">可下載模型</string>
+    <string name="all_models_downloaded">所有模型已下載。</string>
+    <string name="download">下載</string>
+    <string name="download_failed">下載失敗，請重試。</string>
+    <string name="delete_model_title">刪除模型</string>
+    <string name="delete_model_confirm">刪除 %1$s？此操作不可復原。</string>
 
 </resources>

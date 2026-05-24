@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
@@ -60,7 +61,8 @@ import com.picme.domain.model.ThemeMode
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToLlmModelManager: () -> Unit = {}
 ) {
     // 沉浸式模式
     val view = LocalView.current
@@ -143,6 +145,7 @@ fun SettingsScreen(
         onAiAgentModelChange = { model -> viewModel.setAiAgentModel(model) },
         aiAgentBaseUrl = aiAgentBaseUrl,
         onAiAgentBaseUrlChange = { url -> viewModel.setAiAgentBaseUrl(url) },
+        onNavigateToLlmModelManager = onNavigateToLlmModelManager,
         onNavigateBack = onNavigateBack
     )
 }
@@ -186,6 +189,7 @@ private fun settingsContent(
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
     onLandmarkEngineTypeSelected: (InferenceEngineType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
+    onNavigateToLlmModelManager: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -333,6 +337,9 @@ private fun settingsContent(
                 title = stringResource(R.string.ai_agent),
                 description = stringResource(R.string.ai_agent_desc)
             ) {
+                AiAgentModelManagerRow(
+                    onClick = onNavigateToLlmModelManager
+                )
                 AiAgentBaseUrlSelection(
                     currentBaseUrl = aiAgentBaseUrl,
                     onBaseUrlSelected = onAiAgentBaseUrlChange
@@ -421,6 +428,39 @@ private fun AiAgentApiKeyRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun AiAgentModelManagerRow(
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = stringResource(R.string.ai_model_manager),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = stringResource(R.string.ai_model_manager_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            modifier = Modifier
+                .size(20.dp)
+                .padding(start = 4.dp)
+        )
     }
 }
 
@@ -870,6 +910,7 @@ fun SettingsScreenPreview() {
             onAiAgentModelChange = {},
             aiAgentBaseUrl = "",
             onAiAgentBaseUrlChange = {},
+            onNavigateToLlmModelManager = {},
             onNavigateBack = {}
         )
     }

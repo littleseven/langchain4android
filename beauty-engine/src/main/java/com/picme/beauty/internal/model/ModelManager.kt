@@ -181,22 +181,39 @@ object ModelManager {
         val info = LLM_MODEL_REGISTRY[key]
             ?: throw IllegalArgumentException("Unknown LLM model key: $key")
 
+        // 1. 优先检查下载目录 (llm_models/)
+        val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
+        if (downloadDir.exists() && isLlmModelComplete(downloadDir)) {
+            Log.d(TAG, "LLM model found in download dir: ${downloadDir.absolutePath}")
+            return downloadDir.absolutePath
+        }
+
+        // 2. 检查传统缓存目录
         val destDir = File(context.filesDir, info.cacheDirName)
         if (destDir.exists() && isLlmModelComplete(destDir)) {
             Log.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
             return destDir.absolutePath
         }
 
+        // 3. 从 assets 复制
         copyAssetDir(info.assetDir, destDir, context)
-        Log.i(TAG, "LLM model prepared: ${destDir.absolutePath}")
+        Log.i(TAG, "LLM model prepared from assets: ${destDir.absolutePath}")
         return destDir.absolutePath
     }
 
     /**
-     * 检查 LLM 模型是否已缓存
+     * 检查 LLM 模型是否已缓存（支持下载目录和 assets 复制目录）
      */
     fun isLlmModelCached(key: String, context: Context): Boolean {
         val info = LLM_MODEL_REGISTRY[key] ?: return false
+
+        // 检查下载目录
+        val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
+        if (downloadDir.exists() && isLlmModelComplete(downloadDir)) {
+            return true
+        }
+
+        // 检查传统缓存目录
         val destDir = File(context.filesDir, info.cacheDirName)
         return destDir.exists() && isLlmModelComplete(destDir)
     }
