@@ -112,6 +112,27 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             initialValue = StageConfig.defaultLandmark()
         )
 
+    val aiAgentApiKey: StateFlow<String> = repository.aiAgentApiKeyFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val aiAgentModel: StateFlow<String> = repository.aiAgentModelFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "moonshot-v1-8k"
+        )
+
+    val aiAgentBaseUrl: StateFlow<String> = repository.aiAgentBaseUrlFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             repository.updateThemeMode(mode)
@@ -271,6 +292,24 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             val updated = current.copy(devicePreference = preference)
             Logger.d("UX", "Landmark device preference changed: ${preference.name}")
             repository.updateLandmarkStageConfig(updated)
+        }
+    }
+
+    fun setAiAgentApiKey(apiKey: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentApiKey(apiKey)
+        }
+    }
+
+    fun setAiAgentModel(model: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentModel(model)
+        }
+    }
+
+    fun setAiAgentBaseUrl(baseUrl: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentBaseUrl(baseUrl)
         }
     }
 

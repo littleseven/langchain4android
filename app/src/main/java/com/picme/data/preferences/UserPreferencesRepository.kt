@@ -58,6 +58,11 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val LANDMARK_MODEL_TYPE = stringPreferencesKey("landmark_model_type")
         val LANDMARK_ENGINE_TYPE = stringPreferencesKey("landmark_engine_type")
         val LANDMARK_DEVICE_PREFERENCE = stringPreferencesKey("landmark_device_preference")
+
+        // AI Agent
+        val AI_AGENT_API_KEY = stringPreferencesKey("ai_agent_api_key")
+        val AI_AGENT_MODEL = stringPreferencesKey("ai_agent_model")
+        val AI_AGENT_BASE_URL = stringPreferencesKey("ai_agent_base_url")
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -420,6 +425,60 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             preferences[PreferencesKeys.LANDMARK_MODEL_TYPE] = config.modelType.name
             preferences[PreferencesKeys.LANDMARK_ENGINE_TYPE] = config.engineType.name
             preferences[PreferencesKeys.LANDMARK_DEVICE_PREFERENCE] = config.devicePreference.name
+        }
+    }
+
+    override val aiAgentApiKeyFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_API_KEY] ?: ""
+        }
+
+    override suspend fun updateAiAgentApiKey(apiKey: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_API_KEY] = apiKey
+        }
+    }
+
+    override val aiAgentModelFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_MODEL] ?: "moonshot-v1-8k"
+        }
+
+    override suspend fun updateAiAgentModel(model: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_MODEL] = model
+        }
+    }
+
+    override val aiAgentBaseUrlFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_BASE_URL] ?: ""
+        }
+
+    override suspend fun updateAiAgentBaseUrl(baseUrl: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_BASE_URL] = baseUrl
         }
     }
 

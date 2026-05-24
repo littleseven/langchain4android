@@ -84,6 +84,11 @@ import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
+import com.picme.features.camera.agent.rememberAiAgentPanelState
+import com.picme.features.camera.agent.AiAgentPanelState
+import com.picme.beauty.api.llm.MnnLlmClient
+import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.domain.model.AiAgentCommand
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -727,6 +732,27 @@ fun CameraContent(
     }
 
     val panelState = rememberCameraPanelState()
+    val aiAgentPanelState = rememberAiAgentPanelState()
+    val aiAgentApiKey by userPreferencesRepository.aiAgentApiKeyFlow.collectAsState(initial = "")
+    val aiAgentModel by userPreferencesRepository.aiAgentModelFlow.collectAsState(initial = "moonshot-v1-8k")
+    val aiAgentBaseUrl by userPreferencesRepository.aiAgentBaseUrlFlow.collectAsState(initial = "")
+    val mnnLlmClient = remember(context) { MnnLlmClient(context) }
+    val aiAgentUseCase = remember(aiAgentApiKey, aiAgentModel, aiAgentBaseUrl, mnnLlmClient) {
+        AiAgentUseCase(
+            apiKey = aiAgentApiKey.takeIf { it.isNotBlank() },
+            model = aiAgentModel,
+            baseUrl = aiAgentBaseUrl.takeIf { it.isNotBlank() },
+            localLlmClient = mnnLlmClient
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        if (!mnnLlmClient.isLoaded) {
+            Logger.i("PicMe:AiAgent", "Loading local MNN-LLM model in background...")
+            val success = mnnLlmClient.load()
+            Logger.i("PicMe:AiAgent", "Local MNN-LLM model load result: $success")
+        }
+    }
     val logOverlayScope = rememberCoroutineScope()
     // 移除本地 state,改用设置页配置
     // var showCameraInfo by remember { mutableStateOf(false) }
@@ -1286,6 +1312,102 @@ CameraPreviewContent(
         whiteBalanceMode = whiteBalanceMode,
         beautyStrategy = beautyStrategy
     ),
+    aiAgentUseCase = aiAgentUseCase,
+    aiAgentPanelState = aiAgentPanelState,
+    onAiAgentCommand = { command ->
+        when (command) {
+            is AiAgentCommand.AdjustBeauty -> {
+                beautySettings = resolveNextBeautySettings(
+                    currentSettings = beautySettings,
+                    updatedSettings = command.settings
+                )
+            }
+            is AiAgentCommand.SwitchFilter -> {
+                selectedFilter = command.filterType
+                beautySettings = beautySettings.copy(colorFilter = command.filterType)
+            }
+            is AiAgentCommand.SwitchStyle -> {
+                beautySettings = beautySettings.copy(styleFilter = command.styleFilter)
+            }
+            is AiAgentCommand.SwitchScene -> {
+                val scene = when (command.sceneName.lowercase()) {
+                    "night" -> ScenePreset.NIGHT
+                    "moon" -> ScenePreset.MOON
+                    else -> ScenePreset.NONE
+                }
+                currentScene = scene
+            }
+            is AiAgentCommand.SwitchRatio -> {
+                val ratio = when (command.ratio) {
+                    "4:3" -> AspectRatio.RATIO_4_3
+                    "16:9" -> AspectRatio.RATIO_16_9
+                    else -> AspectRatio.RATIO_FULL
+                }
+                aspectRatio = ratio
+            }
+            is AiAgentCommand.AdjustExposure -> {
+                exposureCompensation = command.exposure.coerceIn(-2, 2)
+                cameraControl?.setExposureCompensationIndex(exposureCompensation)
+            }
+            is AiAgentCommand.AdjustZoom -> {
+                val clampedZoom = command.zoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
+                zoomRatio = clampedZoom
+                cameraControl?.setZoomRatio(clampedZoom)
+            }
+            is AiAgentCommand.FlipCamera -> {
+                val nextLens = nextLensFacing(lensFacing)
+                lensFacing = nextLens
+            }
+            is AiAgentCommand.CapturePhoto -> {
+                handleCaptureClick(
+                    context = context,
+                    captureMode = captureMode,
+                    isRecording = isRecording,
+                    recording = recording,
+                    videoCapture = videoCapture,
+                    viewModel = viewModel,
+                    imageCapture = imageCapture,
+                    imageProcessor = imageProcessor,
+                    selectedFilter = selectedFilter,
+                    beautySettings = beautySettings,
+                    lensFacing = lensFacing,
+                    cachedFaces = emptyList(),
+                    beautyStrategy = beautyStrategy,
+                    glPreviewProvider = glPreviewProvider,
+                    beautyVideoRecorder = beautyVideoRecorder,
+                    onRecordingChanged = { updated -> recording = updated },
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                )
+            }
+            is AiAgentCommand.ToggleRecording -> {
+                handleCaptureClick(
+                    context = context,
+                    captureMode = captureMode,
+                    isRecording = isRecording,
+                    recording = recording,
+                    videoCapture = videoCapture,
+                    viewModel = viewModel,
+                    imageCapture = imageCapture,
+                    imageProcessor = imageProcessor,
+                    selectedFilter = selectedFilter,
+                    beautySettings = beautySettings,
+                    lensFacing = lensFacing,
+                    cachedFaces = emptyList(),
+                    beautyStrategy = beautyStrategy,
+                    glPreviewProvider = glPreviewProvider,
+                    beautyVideoRecorder = beautyVideoRecorder,
+                    onRecordingChanged = { updated -> recording = updated },
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                )
+            }
+            is AiAgentCommand.SwitchMode -> {
+                captureMode = command.mode
+            }
+            is AiAgentCommand.TextReply -> {
+                // 文本回复已在面板中显示，无需额外操作
+            }
+        }
+    },
             actions = buildCameraPreviewActions(
                 onNavigateToSettings = onNavigateToSettings,
                 lensFacing = lensFacing,

@@ -268,4 +268,23 @@
     <string name="screenshot_saved">Screenshot saved to %1$s</string>
     <string name="screenshot_failed">Screenshot failed</string>
 
+    <!-- AI Agent -->
+    <string name="ai_agent">AI Agent</string>
+    <string name="ai_agent_desc">Configure API Key to enable natural language camera control.</string>
+    <string name="ai_agent_base_url">API Endpoint</string>
+    <string name="ai_agent_base_url_default">Official (Moonshot)</string>
+    <string name="ai_agent_base_url_moonshot">Moonshot</string>
+    <string name="ai_agent_base_url_tencent">Tencent Cloud</string>
+    <string name="ai_agent_model">Model</string>
+    <string name="ai_agent_model_8k">Moonshot 8K</string>
+    <string name="ai_agent_model_32k">Moonshot 32K</string>
+    <string name="ai_agent_model_128k">Moonshot 128K</string>
+    <string name="ai_agent_model_latest">Kimi Latest</string>
+    <string name="ai_agent_model_k2_6">Kimi K2.6</string>
+    <string name="ai_agent_api_key">API Key</string>
+    <string name="ai_agent_api_key_hint">Enter your API Key</string>
+    <string name="ai_agent_api_key_set">API Key configured</string>
+    <string name="ai_agent_api_key_empty">Not configured (AI Agent disabled)</string>
+    <string name="ai_agent_input_hint">Ask AI Agent...</string>
+
 </resources>

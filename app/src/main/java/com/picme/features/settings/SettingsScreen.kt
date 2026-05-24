@@ -25,11 +25,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -90,6 +95,9 @@ fun SettingsScreen(
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
     val roiStageConfig by viewModel.roiStageConfig.collectAsState()
     val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
+    val aiAgentApiKey by viewModel.aiAgentApiKey.collectAsState()
+    val aiAgentModel by viewModel.aiAgentModel.collectAsState()
+    val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
     settingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
@@ -129,6 +137,12 @@ fun SettingsScreen(
         onLandmarkModelTypeSelected = { type -> viewModel.setLandmarkModelType(type) },
         onLandmarkEngineTypeSelected = { type -> viewModel.setLandmarkEngineType(type) },
         onLandmarkDevicePreferenceSelected = { preference -> viewModel.setLandmarkDevicePreference(preference) },
+        aiAgentApiKey = aiAgentApiKey,
+        onAiAgentApiKeyChange = { key -> viewModel.setAiAgentApiKey(key) },
+        aiAgentModel = aiAgentModel,
+        onAiAgentModelChange = { model -> viewModel.setAiAgentModel(model) },
+        aiAgentBaseUrl = aiAgentBaseUrl,
+        onAiAgentBaseUrlChange = { url -> viewModel.setAiAgentBaseUrl(url) },
         onNavigateBack = onNavigateBack
     )
 }
@@ -149,6 +163,12 @@ private fun settingsContent(
     debugShaderMode: Int,
     roiStageConfig: StageConfig,
     landmarkStageConfig: StageConfig,
+    aiAgentApiKey: String,
+    onAiAgentApiKeyChange: (String) -> Unit,
+    aiAgentModel: String,
+    onAiAgentModelChange: (String) -> Unit,
+    aiAgentBaseUrl: String,
+    onAiAgentBaseUrlChange: (String) -> Unit,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
@@ -306,7 +326,163 @@ private fun settingsContent(
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // AI Agent 配置
+            SettingsSection(
+                title = stringResource(R.string.ai_agent),
+                description = stringResource(R.string.ai_agent_desc)
+            ) {
+                AiAgentBaseUrlSelection(
+                    currentBaseUrl = aiAgentBaseUrl,
+                    onBaseUrlSelected = onAiAgentBaseUrlChange
+                )
+                AiAgentModelSelection(
+                    currentModel = aiAgentModel,
+                    onModelSelected = onAiAgentModelChange
+                )
+                AiAgentApiKeyRow(
+                    apiKey = aiAgentApiKey,
+                    onApiKeyChange = onAiAgentApiKeyChange
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun AiAgentApiKeyRow(
+    apiKey: String,
+    onApiKeyChange: (String) -> Unit
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(apiKey) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_api_key),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (isEditing) {
+            androidx.compose.material3.OutlinedTextField(
+                value = editText,
+                onValueChange = { editText = it },
+                placeholder = { Text(stringResource(R.string.ai_agent_api_key_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Row {
+                        TextButton(onClick = {
+                            onApiKeyChange(editText.trim())
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.save))
+                        }
+                        TextButton(onClick = {
+                            editText = apiKey
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                }
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isEditing = true },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (apiKey.isNotBlank()) {
+                        stringResource(R.string.ai_agent_api_key_set)
+                    } else {
+                        stringResource(R.string.ai_agent_api_key_empty)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (apiKey.isNotBlank()) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.edit),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAgentBaseUrlSelection(
+    currentBaseUrl: String,
+    onBaseUrlSelected: (String) -> Unit
+) {
+    val presets = listOf(
+        "" to stringResource(R.string.ai_agent_base_url_default),
+        "https://api.moonshot.cn/v1/" to stringResource(R.string.ai_agent_base_url_moonshot),
+        "https://tokenhub.tencentmaas.com/v1/" to stringResource(R.string.ai_agent_base_url_tencent)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_base_url),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = presets,
+            currentValue = currentBaseUrl,
+            maxLines = 2,
+            onSelected = onBaseUrlSelected
+        )
+    }
+}
+
+@Composable
+private fun AiAgentModelSelection(
+    currentModel: String,
+    onModelSelected: (String) -> Unit
+) {
+    val models = listOf(
+        "moonshot-v1-8k" to stringResource(R.string.ai_agent_model_8k),
+        "moonshot-v1-32k" to stringResource(R.string.ai_agent_model_32k),
+        "moonshot-v1-128k" to stringResource(R.string.ai_agent_model_128k),
+        "kimi-latest" to stringResource(R.string.ai_agent_model_latest),
+        "kimi-k2.6" to stringResource(R.string.ai_agent_model_k2_6)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = models,
+            currentValue = currentModel,
+            maxLines = 2,
+            onSelected = onModelSelected
+        )
     }
 }
 
@@ -688,6 +864,12 @@ fun SettingsScreenPreview() {
             onLandmarkModelTypeSelected = {},
             onLandmarkEngineTypeSelected = {},
             onLandmarkDevicePreferenceSelected = {},
+            aiAgentApiKey = "",
+            onAiAgentApiKeyChange = {},
+            aiAgentModel = "moonshot-v1-8k",
+            onAiAgentModelChange = {},
+            aiAgentBaseUrl = "",
+            onAiAgentBaseUrlChange = {},
             onNavigateBack = {}
         )
     }

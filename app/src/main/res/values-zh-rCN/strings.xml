@@ -259,4 +259,23 @@
     <string name="media_info_size">大小：%1$s</string>
     <string name="media_info_resolution">分辨率：%1$s</string>
 
+    <!-- AI Agent -->
+    <string name="ai_agent">AI 智能助手</string>
+    <string name="ai_agent_desc">配置 API Key，启用自然语言控制相机功能。</string>
+    <string name="ai_agent_base_url">API 接入点</string>
+    <string name="ai_agent_base_url_default">官方 (Moonshot)</string>
+    <string name="ai_agent_base_url_moonshot">Moonshot</string>
+    <string name="ai_agent_base_url_tencent">腾讯云</string>
+    <string name="ai_agent_model">模型</string>
+    <string name="ai_agent_model_8k">Moonshot 8K</string>
+    <string name="ai_agent_model_32k">Moonshot 32K</string>
+    <string name="ai_agent_model_128k">Moonshot 128K</string>
+    <string name="ai_agent_model_latest">Kimi 最新</string>
+    <string name="ai_agent_model_k2_6">Kimi K2.6</string>
+    <string name="ai_agent_api_key">API 密钥</string>
+    <string name="ai_agent_api_key_hint">输入你的 API Key</string>
+    <string name="ai_agent_api_key_set">API Key 已配置</string>
+    <string name="ai_agent_api_key_empty">未配置（AI 智能助手已禁用）</string>
+    <string name="ai_agent_input_hint">向 AI 助手提问...</string>
+
 </resources>

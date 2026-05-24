@@ -40,6 +40,24 @@ if(EXISTS ${MNN_VULKAN_SO_PATH})
     set_target_properties(mnn_vulkan PROPERTIES IMPORTED_LOCATION ${MNN_VULKAN_SO_PATH})
 endif()
 
+# MNN-LLM 库
+set(MNN_LLM_SO_PATH "${MNN_LIB_DIR}/libllm.so")
+if(EXISTS ${MNN_LLM_SO_PATH})
+    message(STATUS "Using MNN-LLM library: ${MNN_LLM_SO_PATH}")
+    add_library(mnn_llm SHARED IMPORTED)
+    set_target_properties(mnn_llm PROPERTIES IMPORTED_LOCATION ${MNN_LLM_SO_PATH})
+else()
+    message(STATUS "libllm.so not found. MNN-LLM support disabled.")
+endif()
+
+# MNN Express 库（LLM 依赖）
+set(MNN_EXPRESS_SO_PATH "${MNN_LIB_DIR}/libMNN_Express.so")
+if(EXISTS ${MNN_EXPRESS_SO_PATH})
+    message(STATUS "Using MNN Express library: ${MNN_EXPRESS_SO_PATH}")
+    add_library(mnn_express SHARED IMPORTED)
+    set_target_properties(mnn_express PROPERTIES IMPORTED_LOCATION ${MNN_EXPRESS_SO_PATH})
+endif()
+
 # ── NCNN 配置 ───────────────────────────────────────────
 set(NCNN_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../libs/ncnn")
 set(NCNN_HEADER_DIR "${NCNN_ROOT_DIR}/include")
@@ -72,6 +90,7 @@ set(NATIVE_SOURCES
     mnn_face_detector.cpp
     ncnn_jni_bridge.cpp
     ncnn_face_detector.cpp
+    llm_jni_bridge.cpp
 )
 
 if(NCNN_LINK_AVAILABLE)
@@ -104,6 +123,14 @@ set(LINK_LIBRARIES
     ${jnigraphics-lib}
     vulkan
 )
+
+if(TARGET mnn_llm)
+    list(APPEND LINK_LIBRARIES mnn_llm)
+endif()
+
+if(TARGET mnn_express)
+    list(APPEND LINK_LIBRARIES mnn_express)
+endif()
 
 if(NCNN_LINK_AVAILABLE)
     list(APPEND LINK_LIBRARIES ncnn)
