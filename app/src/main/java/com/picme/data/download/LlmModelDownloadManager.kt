@@ -142,7 +142,7 @@ class LlmModelDownloadManager(private val context: Context) {
      * @param source 下载源，如 "huggingface" 或 "modelscope"
      * @return Flow<DownloadProgress> 下载进度流
      */
-    fun downloadModel(modelId: String, source: String = "huggingface"): Flow<DownloadProgress> = flow {
+    fun downloadModel(modelId: String, source: String = "modelscope"): Flow<DownloadProgress> = flow {
         // [Fix] 在 IO 线程执行网络下载，避免主线程网络异常
         val config = loadAvailableModels().find { it.id == modelId }
             ?: throw IllegalArgumentException("Unknown model: $modelId")
