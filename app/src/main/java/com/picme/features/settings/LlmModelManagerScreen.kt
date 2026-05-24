@@ -131,7 +131,7 @@ fun LlmModelManagerScreen(
                         downloadState = state,
                         onDownload = {
                             coroutineScope.launch {
-                                downloadManager.downloadModel(model.id, "huggingface")
+                                downloadManager.downloadModel(model.id, "modelscope")
                                     .collect { progress ->
                                         if (progress.status == DownloadStatus.COMPLETED) {
                                             downloadedModels = downloadManager.getDownloadedModels()
