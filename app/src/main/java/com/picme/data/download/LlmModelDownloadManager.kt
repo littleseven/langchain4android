@@ -138,89 +138,100 @@ class LlmModelDownloadManager(private val context: Context) {
     /**
      * 下载模型
      *
+     * 策略：优先 ModelScope（国内稳定），失败时自动回退到 HuggingFace。
+     *
      * @param modelId 模型 ID
-     * @param source 下载源，如 "huggingface" 或 "modelscope"
+     * @param preferredSource 首选下载源，如 "modelscope" 或 "huggingface"
      * @return Flow<DownloadProgress> 下载进度流
      */
-    fun downloadModel(modelId: String, source: String = "modelscope"): Flow<DownloadProgress> = flow {
+    fun downloadModel(modelId: String, preferredSource: String = "modelscope"): Flow<DownloadProgress> = flow {
         // [Fix] 在 IO 线程执行网络下载，避免主线程网络异常
         val config = loadAvailableModels().find { it.id == modelId }
             ?: throw IllegalArgumentException("Unknown model: $modelId")
 
-        val repoPath = config.sources[source]
-            ?: throw IllegalArgumentException("Source not available: $source")
+        val sourcesToTry = if (preferredSource == "modelscope") {
+            listOf("modelscope", "huggingface")
+        } else {
+            listOf("huggingface", "modelscope")
+        }
 
         val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
-
         _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, config.size)) }
 
-        var totalDownloaded = 0L
+        var lastException: Exception? = null
 
-        try {
-            for (fileName in config.files) {
-                if (activeDownloads[modelId]?.isCanceled() == true) {
-                    throw IOException("Download cancelled")
-                }
+        for (source in sourcesToTry) {
+            val repoPath = config.sources[source] ?: continue
+            var totalDownloaded = 0L
 
-                val url = buildDownloadUrl(repoPath, fileName, source)
-                val destFile = File(modelDir, fileName)
+            try {
+                Logger.i("PicMe:Download", "Trying source '$source' for model $modelId")
 
-                if (destFile.exists() && destFile.length() > 0) {
-                    totalDownloaded += destFile.length()
-                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
-                    continue
-                }
-
-                val request = Request.Builder().url(url).build()
-                val call = client.newCall(request)
-                activeDownloads[modelId] = call
-
-                call.execute().use { response ->
-                    if (!response.isSuccessful) {
-                        throw IOException("Failed to download $fileName: ${response.code}")
+                for (fileName in config.files) {
+                    if (activeDownloads[modelId]?.isCanceled() == true) {
+                        throw IOException("Download cancelled")
                     }
 
-                    val body = response.body
-                        ?: throw IOException("Empty response for $fileName")
+                    val url = buildDownloadUrl(repoPath, fileName, source)
+                    val destFile = File(modelDir, fileName)
 
-                    val fileLength = body.contentLength()
-                    body.byteStream().use { input ->
-                        destFile.outputStream().use { output ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            var bytesRead: Int
-                            var fileDownloaded = 0L
+                    if (destFile.exists() && destFile.length() > 0) {
+                        totalDownloaded += destFile.length()
+                        emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                        continue
+                    }
 
-                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                if (call.isCanceled()) {
-                                    throw IOException("Download cancelled")
+                    val request = Request.Builder().url(url).build()
+                    val call = client.newCall(request)
+                    activeDownloads[modelId] = call
+
+                    call.execute().use { response ->
+                        if (!response.isSuccessful) {
+                            throw IOException("HTTP ${response.code} for $fileName from $source")
+                        }
+
+                        val body = response.body
+                            ?: throw IOException("Empty response for $fileName")
+
+                        body.byteStream().use { input ->
+                            destFile.outputStream().use { output ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                var bytesRead: Int
+
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    if (call.isCanceled()) {
+                                        throw IOException("Download cancelled")
+                                    }
+                                    output.write(buffer, 0, bytesRead)
+                                    totalDownloaded += bytesRead
+
+                                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                                 }
-                                output.write(buffer, 0, bytesRead)
-                                fileDownloaded += bytesRead
-                                totalDownloaded += bytesRead
-
-                                emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                             }
                         }
                     }
                 }
-            }
 
-            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
-            emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
-            Logger.i("PicMe:Download", "Model download completed: $modelId")
+                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
+                emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
+                Logger.i("PicMe:Download", "Model download completed from $source: $modelId")
+                return@flow
 
-        } catch (e: Exception) {
-            val status = if (e.message?.contains("cancelled", ignoreCase = true) == true) {
-                DownloadStatus.CANCELLED
-            } else {
-                DownloadStatus.FAILED
+            } catch (e: Exception) {
+                if (e.message?.contains("cancelled", ignoreCase = true) == true) {
+                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                    emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                    return@flow
+                }
+                Logger.w("PicMe:Download", "Source '$source' failed for $modelId, will try fallback", e)
+                lastException = e
             }
-            _downloadStates.update { it + (modelId to DownloadState(modelId, status, totalDownloaded, config.size)) }
-            emit(DownloadProgress(modelId, totalDownloaded, config.size, status))
-            Logger.e("PicMe:Download", "Model download failed: $modelId", e)
-        } finally {
-            activeDownloads.remove(modelId)
         }
+
+        // All sources failed
+        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
+        emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
+        Logger.e("PicMe:Download", "All sources failed for model: $modelId", lastException)
     }.flowOn(Dispatchers.IO)
 
     private fun buildDownloadUrl(repoPath: String, fileName: String, source: String): String {
