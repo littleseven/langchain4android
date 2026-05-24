@@ -33,6 +33,7 @@ class InsightFaceDet10GDetector(context: Context) {
         private const val DEFAULT_INPUT_MEAN = 127.5f
         private const val DEFAULT_INPUT_STD = 128.0f
         private const val ROI_EXPAND_RATIO = 1.2f
+        private const val ENGINE_NAME = "ONNX-Nnapi"
 
         // [性能优化] 预计算并缓存 anchors，避免每帧重复生成 ~16K 个对象
         private val CACHED_ANCHORS: List<FloatArray> by lazy { generateAnchorsStatic() }
@@ -73,27 +74,50 @@ class InsightFaceDet10GDetector(context: Context) {
     private var inputMean: Float = DEFAULT_INPUT_MEAN
     private var inputStd: Float = DEFAULT_INPUT_STD
     private var debugImageSaved: Boolean = false
+    private var isGpuEnabled: Boolean = false
+    private var isInitialized = false
 
     // [性能优化] 复用像素缓冲区，避免每帧 new IntArray / FloatArray
     private val reusablePixelBuffer = IntArray(INPUT_SIZE * INPUT_SIZE)
     private val reusableChwBuffer = FloatArray(INPUT_CHANNELS * INPUT_SIZE * INPUT_SIZE)
 
     init {
-        initialize()
+        // [ANR 修复] 改为懒加载，不立即初始化，避免主线程阻塞
+        Log.d(TAG, "InsightFaceDet10GDetector created (lazy initialization)")
     }
 
-    fun isReady(): Boolean = ortSession != null
+    /**
+     * 懒加载初始化 - 仅在首次 detect 时调用
+     */
+    private fun ensureInitialized() {
+        if (isInitialized) return
+
+        synchronized(this) {
+            if (isInitialized) return
+
+            initialize()
+            isInitialized = true
+        }
+    }
+
+    fun isReady(): Boolean {
+        ensureInitialized()
+        return ortSession != null
+    }
 
     fun detectLargestFace(bitmap: Bitmap): RectF? {
+        // [ANR 修复] 懒加载初始化
+        ensureInitialized()
+
         val session = ortSession ?: return null
         val origW = bitmap.width.toFloat()
         val origH = bitmap.height.toFloat()
         val totalStart = SystemClock.elapsedRealtime()
-        Log.d(TAG, "[Perf] detectLargestFace START: bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
+        Log.d(TAG, "[Perf] detectLargestFace START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, bitmap=${origW.toInt()}x${origH.toInt()}, modelInput=$INPUT_SIZE")
         return try {
             val faces = runInference(session, bitmap)
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
-            Log.d(TAG, "[Perf] detectLargestFace DONE: total=${totalElapsed}ms, faces=${faces.size}")
+            Log.d(TAG, "[Perf] detectLargestFace DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms, faces=${faces.size}")
             if (faces.isNotEmpty()) {
                 Log.d(TAG, "[Diag] First face: [${faces[0].x1.toInt()},${faces[0].y1.toInt()},${faces[0].x2.toInt()},${faces[0].y2.toInt()}] conf=${faces[0].confidence}")
             }
@@ -141,7 +165,7 @@ class InsightFaceDet10GDetector(context: Context) {
             )
             Log.d(
                 TAG,
-                "[Diag] Det10G face SELECTED: conf=${mappedFace.confidence}, " +
+                "[Diag] Det10G face SELECTED: engine=$ENGINE_NAME, gpu=$isGpuEnabled, conf=${mappedFace.confidence}, " +
                     "640bbox=[${largestFace.x1.toInt()},${largestFace.y1.toInt()},${largestFace.x2.toInt()},${largestFace.y2.toInt()}], " +
                     "origBBox=[${mappedFace.x1.toInt()},${mappedFace.y1.toInt()},${mappedFace.x2.toInt()},${mappedFace.y2.toInt()}], " +
                     "scale=$scale, pad=($padLeft,$padTop)"
@@ -154,6 +178,9 @@ class InsightFaceDet10GDetector(context: Context) {
     }
 
     fun detectAllFaces(bitmap: Bitmap): List<FaceBox> {
+        // [ANR 修复] 懒加载初始化
+        ensureInitialized()
+
         val session = ortSession ?: return emptyList()
         return try {
             val faces = runInference(session, bitmap)
@@ -187,8 +214,10 @@ class InsightFaceDet10GDetector(context: Context) {
                     ai.onnxruntime.providers.NNAPIFlags.USE_FP16
                 )
                 sessionOptions.addNnapi(nnapiFlags)
+                isGpuEnabled = true
                 Log.i(TAG, "NNAPI execution provider enabled with FP16 (flags=$nnapiFlags)")
             } catch (e: Exception) {
+                isGpuEnabled = false
                 Log.w(TAG, "NNAPI not available, falling back to CPU", e)
             }
 

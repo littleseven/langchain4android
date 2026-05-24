@@ -25,11 +25,16 @@ class NcnnLandmarkDetector(
         private const val MODEL_KEY = "2d106_ncnn"
         private const val INPUT_SIZE = 192
         private const val POINT_COUNT = 106
+        private const val ENGINE_NAME = "NCNN-Vulkan"
+
+        // [全局锁] NCNN Net::load_model 非线程安全，所有 NCNN 初始化共享此锁
+        private val NCNN_INIT_LOCK = Any()
     }
 
     private val appContext = context.applicationContext
     private var detector: NcnnFaceDetector? = null
     private var isInitialized = false
+    private var isGpuEnabled: Boolean = false
 
     // [性能优化] 复用 Bitmap 池
     private var reusableScaledBitmap: Bitmap? = null
@@ -53,33 +58,38 @@ class NcnnLandmarkDetector(
     }
 
     private fun initialize() {
-        try {
-            val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
+        // [修复崩溃] NCNN Net::load_model 非线程安全，必须全局同步
+        synchronized(NCNN_INIT_LOCK) {
+            try {
+                val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
-            Log.i(TAG, "Initializing NCNN landmark detector (requireGpu=$requireGpu)...")
-            Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
+                Log.i(TAG, "Initializing NCNN landmark detector (requireGpu=$requireGpu)...")
+                Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
 
-            val initStart = SystemClock.elapsedRealtime()
-            detector = NcnnFaceDetector.create(
-                paramPath = paramFile.absolutePath,
-                binPath = binFile.absolutePath,
-                inputSize = INPUT_SIZE,
-                useGpu = requireGpu,
-                inputName = "data",
-                outputNames = arrayOf("fc1")
-            )
-            val initElapsed = SystemClock.elapsedRealtime() - initStart
+                val initStart = SystemClock.elapsedRealtime()
+                detector = NcnnFaceDetector.create(
+                    paramPath = paramFile.absolutePath,
+                    binPath = binFile.absolutePath,
+                    inputSize = INPUT_SIZE,
+                    useGpu = requireGpu,
+                    inputName = "data",
+                    outputNames = arrayOf("fc1")
+                )
+                val initElapsed = SystemClock.elapsedRealtime() - initStart
 
-            if (detector != null) {
-                Log.i(TAG, "NcnnLandmarkDetector initialized in ${initElapsed}ms")
-                return
+                if (detector != null) {
+                    isGpuEnabled = true
+                    Log.i(TAG, "NcnnLandmarkDetector initialized in ${initElapsed}ms")
+                    return
+                }
+
+                // [CO指令] 不启用 fallback，直接报告失败
+                isGpuEnabled = false
+                Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize NcnnLandmarkDetector (requireGpu=$requireGpu)", e)
+                detector = null
             }
-
-            // [CO指令] 不启用 fallback，直接报告失败
-            Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize NcnnLandmarkDetector (requireGpu=$requireGpu)", e)
-            detector = null
         }
     }
 
@@ -99,7 +109,7 @@ class NcnnLandmarkDetector(
             val cropResult = prepareInputBitmap(bitmap, roi)
             val prepElapsed = SystemClock.elapsedRealtime() - prepStart
 
-            Log.d(TAG, "[Perf] NcnnLandmark START: original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
+            Log.d(TAG, "[Perf] NcnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
 
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detect(cropResult.bitmap)
@@ -116,13 +126,13 @@ class NcnnLandmarkDetector(
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.isEmpty()) {
-                Log.d(TAG, "[Perf] NcnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
+                Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
                 return null
             }
 
             val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
 
-            Log.d(TAG, "[Perf] NcnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
+            Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
             landmarks
         } catch (e: Exception) {
             Log.e(TAG, "NcnnLandmark detection failed", e)

@@ -1,6 +1,7 @@
 #include "mnn_face_detector.h"
 #include <android/log.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -297,6 +298,8 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
         return {};
     }
 
+    auto totalStart = std::chrono::high_resolution_clock::now();
+
     // [关键修复] 如果输入已经是 inputSize_ x inputSize_，直接复制并归一化
     // 因为 Kotlin 层已经做了 letterbox 预处理
     // [关键修复] 使用与输入张量相同的维度类型
@@ -382,10 +385,16 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
     }
 
     // 拷贝到会话输入
+    auto tCopyStart = std::chrono::high_resolution_clock::now();
     inputTensor_->copyFromHostTensor(&tmpInput);
+    auto tCopyEnd = std::chrono::high_resolution_clock::now();
+    auto copyMs = std::chrono::duration_cast<std::chrono::milliseconds>(tCopyEnd - tCopyStart).count();
 
     // 推理
+    auto tInferStart = std::chrono::high_resolution_clock::now();
     interpreter_->runSession(session_);
+    auto tInferEnd = std::chrono::high_resolution_clock::now();
+    auto inferMs = std::chrono::duration_cast<std::chrono::milliseconds>(tInferEnd - tInferStart).count();
 
     // RetinaFace 输出：9 个张量
     // [关键修复] MNN 转换后的输出顺序是按类型分组，不是按尺度分组：
@@ -629,7 +638,18 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
     LOGD("RetinaFace raw detections: %zu", allFaces.size());
 
     // NMS
+    auto tNmsStart = std::chrono::high_resolution_clock::now();
     auto result = applyNMS(allFaces, nmsThreshold);
+    auto tNmsEnd = std::chrono::high_resolution_clock::now();
+    auto nmsMs = std::chrono::duration_cast<std::chrono::milliseconds>(tNmsEnd - tNmsStart).count();
+
+    auto totalEnd = std::chrono::high_resolution_clock::now();
+    auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(totalEnd - totalStart).count();
+
+    LOGI("[Perf] MNN RetinaFace DONE: total=%ldms (preprocess+fill=%ldms, copyToDevice=%ldms, infer=%ldms, postprocess=%ldms, nms=%ldms), faces=%zu, backend=%s",
+         totalMs, totalMs - copyMs - inferMs - nmsMs, copyMs, inferMs, totalMs - copyMs - inferMs - nmsMs - (totalMs - copyMs - inferMs - nmsMs), nmsMs, result.size(),
+         useGpu_ ? "Vulkan" : "CPU");
+
     LOGD("RetinaFace after NMS: %zu", result.size());
     return result;
 }

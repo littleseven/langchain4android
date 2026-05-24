@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <chrono>
 
 #define LOG_TAG "PicMe:NcnnFaceDetect"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -45,16 +46,25 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
     net_.opt.use_packing_layout = true;
     net_.opt.use_sgemm_convolution = true;
     net_.opt.use_winograd_convolution = true;
+    net_.opt.use_fp16_packed = true;
+    net_.opt.use_fp16_storage = true;
+    net_.opt.use_fp16_arithmetic = true;
+    net_.opt.use_int8_inference = true;
 
     if (useGpu_) {
         net_.opt.use_vulkan_compute = true;
         LOGI("Requesting Vulkan GPU backend...");
         // [诊断] 检查 Vulkan 是否实际可用
-        if (ncnn::get_gpu_count() == 0) {
-            LOGE("No Vulkan GPU available on this device!");
-            // 不直接返回 false，让 NCNN 自行处理（可能内部回退 CPU）
+        int gpuCount = ncnn::get_gpu_count();
+        if (gpuCount == 0) {
+            LOGE("No Vulkan GPU available on this device! Falling back to CPU");
+            net_.opt.use_vulkan_compute = false;
+            useGpu_ = false;
         } else {
-            LOGI("Vulkan GPU count: %d", ncnn::get_gpu_count());
+            LOGI("Vulkan GPU count: %d, device=%s", gpuCount, ncnn::get_gpu_info(0).device_name());
+            // [关键修复] 必须显式设置 Vulkan 设备，否则 create_extractor 不会使用 Vulkan
+            net_.set_vulkan_device(0);
+            LOGI("Vulkan device set to index 0");
         }
     } else {
         net_.opt.use_vulkan_compute = false;
@@ -151,8 +161,9 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
     LOGI("NCNN model loaded: %s + %s", paramPath.c_str(), binPath.c_str());
 
     loaded_ = true;
-    LOGI("NCNN detector ready: inputSize=%d, useGpu=%s, outputs=%zu",
-         inputSize_, useGpu_ ? "true" : "false", outputNames_.size());
+    LOGI("NCNN detector ready: inputSize=%d, useGpu=%s, vulkan=%s, outputs=%zu",
+         inputSize_, useGpu_ ? "true" : "false",
+         net_.opt.use_vulkan_compute ? "true" : "false", outputNames_.size());
     return true;
 }
 
@@ -311,11 +322,21 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
         return {};
     }
 
+    auto totalStart = std::chrono::high_resolution_clock::now();
+
+    auto t1 = std::chrono::high_resolution_clock::now();
     ncnn::Mat in = preprocess(imageData, width, height, channels);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto preprocessMs = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
 
     // 创建提取器
+    t1 = std::chrono::high_resolution_clock::now();
     ncnn::Extractor ex = net_.create_extractor();
     ex.input(inputName_.c_str(), in);
+    t2 = std::chrono::high_resolution_clock::now();
+    auto inputMs = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+
+    LOGI("[Perf] NCNN RetinaFace inference START: input=%dx%d, vulkan=%s", inputSize_, inputSize_, net_.opt.use_vulkan_compute ? "true" : "false");
 
     // RetinaFace 输出：9 个 blob
     // 假设输出名称与 MNN 一致，按类型分组
@@ -324,6 +345,8 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
     // landmark outputs: stride=8, 16, 32
 
     std::vector<FaceBox> allFaces;
+
+    t1 = std::chrono::high_resolution_clock::now();
 
     // 尝试使用常见的 NCNN RetinaFace 输出名
     // 如果 outputNames_ 已提供，使用提供的名称；否则使用默认名
@@ -533,11 +556,21 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
                                 allFaces, confidenceThreshold);
     }
 
+    auto t3 = std::chrono::high_resolution_clock::now();
+    auto extractMs = std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t1).count();
+
     LOGD("RetinaFace raw detections: %zu", allFaces.size());
 
     // NMS
+    t1 = std::chrono::high_resolution_clock::now();
     auto nmsResult = applyNMS(allFaces, nmsThreshold);
-    LOGD("RetinaFace after NMS: %zu", nmsResult.size());
+    auto t4 = std::chrono::high_resolution_clock::now();
+    auto nmsMs = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - t1).count();
+
+    auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(t4 - totalStart).count();
+    LOGI("[Perf] NCNN RetinaFace DONE: total=%ldms (preprocess=%ldms, input=%ldms, extract=%ldms, nms=%ldms), faces=%zu, vulkan=%s",
+         totalMs, preprocessMs, inputMs, extractMs, nmsMs, nmsResult.size(),
+         net_.opt.use_vulkan_compute ? "true" : "false");
 
     return nmsResult;
 }

@@ -2,6 +2,7 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.MediaImageBuilder
@@ -12,6 +13,11 @@ import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.beauty.internal.facedetect.adapter.MediaPipe468Adapter
 import com.picme.beauty.api.facedetect.FaceDetectionSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * MediaPipe 人脸检测器
@@ -36,18 +42,33 @@ class MediaPipeFaceDetector(context: Context) {
     // 拍照路径：IMAGE 模式（无时间戳限制）
     private var imageLandmarker: FaceLandmarker? = null
 
+    // [ANR 修复] 使用协程异步初始化，避免主线程阻塞
+    private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var isInitializing = false
+
     init {
-        // [修复] 捕获 UnsatisfiedLinkError，支持模拟器 x86_64 架构（MediaPipe 不提供 x86_64 库）
-        try {
-            initialize()
-        } catch (linkError: UnsatisfiedLinkError) {
-            Log.w(TAG, "MediaPipe native library not found (x86_64 simulator?), disabling MediaPipe detection")
-        } catch (error: Exception) {
-            Log.e(TAG, "Unexpected error initializing MediaPipe", error)
+        // [ANR 修复] 异步延迟初始化，不阻塞主线程
+        initScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    initialize()
+                }
+            } catch (linkError: UnsatisfiedLinkError) {
+                Log.w(TAG, "MediaPipe native library not found (x86_64 simulator?), disabling MediaPipe detection")
+            } catch (error: Exception) {
+                Log.e(TAG, "Unexpected error initializing MediaPipe", error)
+            }
         }
     }
 
-    fun isReady(): Boolean = videoLandmarker != null || imageLandmarker != null
+    fun isReady(): Boolean {
+        // [ANR 修复] 如果正在初始化中，返回 false，等待异步初始化完成
+        if (isInitializing) {
+            Log.d(TAG, "MediaPipe still initializing, not ready yet")
+            return false
+        }
+        return videoLandmarker != null || imageLandmarker != null
+    }
 
     /**
      * 预览路径检测（VIDEO 模式）—— Bitmap 输入
@@ -153,11 +174,18 @@ class MediaPipeFaceDetector(context: Context) {
     }
 
     private fun initialize() {
+        isInitializing = true
+        val startTime = SystemClock.elapsedRealtime()
+
         // 初始化预览路径 FaceLandmarker（VIDEO 模式）
         initializeVideoLandmarker()
 
         // 初始化拍照路径 FaceLandmarker（IMAGE 模式）
         initializeImageLandmarker()
+
+        val elapsed = SystemClock.elapsedRealtime() - startTime
+        Log.i(TAG, "MediaPipe initialization completed in ${elapsed}ms")
+        isInitializing = false
     }
 
     private fun initializeVideoLandmarker() {
