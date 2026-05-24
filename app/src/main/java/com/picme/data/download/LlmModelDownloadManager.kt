@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -142,6 +143,7 @@ class LlmModelDownloadManager(private val context: Context) {
      * @return Flow<DownloadProgress> 下载进度流
      */
     fun downloadModel(modelId: String, source: String = "huggingface"): Flow<DownloadProgress> = flow {
+        // [Fix] 在 IO 线程执行网络下载，避免主线程网络异常
         val config = loadAvailableModels().find { it.id == modelId }
             ?: throw IllegalArgumentException("Unknown model: $modelId")
 
@@ -219,7 +221,7 @@ class LlmModelDownloadManager(private val context: Context) {
         } finally {
             activeDownloads.remove(modelId)
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     private fun buildDownloadUrl(repoPath: String, fileName: String, source: String): String {
         return when (source) {
