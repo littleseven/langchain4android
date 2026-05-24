@@ -287,14 +287,6 @@ class InsightFaceDet10GDetector(context: Context) {
         if (!debugImageSaved) {
             saveDebugBitmap(paddedBitmap.copy(Bitmap.Config.ARGB_8888, true), "det10g_letterbox_${System.currentTimeMillis()}.jpg")
             debugImageSaved = true
-
-            val sampleSize = minOf(10, pixelCount)
-            val sampleValues = StringBuilder()
-            for (i in 0 until sampleSize) {
-                sampleValues.append("[${String.format("%.2f", chw[i])},${String.format("%.2f", chw[pixelCount + i])},${String.format("%.2f", chw[pixelCount * 2 + i])}] ")
-            }
-            Log.d(TAG, "[Diag] First $sampleSize pixels normalized (R,G,B): $sampleValues")
-            Log.d(TAG, "[Diag] Using mean=$inputMean, std=$inputStd")
         }
 
         return OnnxTensor.createTensor(

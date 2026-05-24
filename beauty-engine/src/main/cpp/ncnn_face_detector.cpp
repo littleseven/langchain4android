@@ -400,9 +400,9 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
         // - landmark: [w=totalAnchors*10, h=1, c=1] (1D) 或 [w=totalAnchors, h=10, c=1] (2D)
 
         // [调试] 打印输出维度信息
-        LOGD("  Score output: dims=%d, w=%d, h=%d, c=%d, total=%d", scoreOut.dims, scoreOut.w, scoreOut.h, scoreOut.c, scoreOut.total());
-        LOGD("  BBox output: dims=%d, w=%d, h=%d, c=%d, total=%d", bboxOut.dims, bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.total());
-        LOGD("  Landmark output: dims=%d, w=%d, h=%d, c=%d, total=%d", landmarkOut.dims, landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.total());
+        LOGD("  Score output: dims=%d, w=%d, h=%d, c=%d, total=%zu", scoreOut.dims, scoreOut.w, scoreOut.h, scoreOut.c, scoreOut.total());
+        LOGD("  BBox output: dims=%d, w=%d, h=%d, c=%d, total=%zu", bboxOut.dims, bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.total());
+        LOGD("  Landmark output: dims=%d, w=%d, h=%d, c=%d, total=%zu", landmarkOut.dims, landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.total());
 
         // [关键修复] NCNN onnx2ncnn 转换后的 Permute + Reshape 产生的数据布局
         // 与 ONNX Transpose + Reshape 不同，需要重新排列数据。
@@ -414,9 +414,13 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
         // 修复: 读取 NCNN 输出后，按正确顺序重新排列到 scoreData/bboxData/landmarkData
 
         auto reorderNcnnData = [&](const ncnn::Mat &mat, float *dst, int channelsPerAnchor) {
-            // mat: 2D [w=totalAnchors*channelsPerAnchor, h=1] 或 1D [w=totalElements]
-            // 数据在 NCNN 中的实际顺序: for y: for a: for x: for c
-            // 期望顺序: for y: for x: for a: for c
+            // [关键修复] NCNN Permute(order=[0,2,1]) 对 [C,H,W] 输出 [C,W,H]
+            // 然后 Reshape 成 2D Mat [w=spatial*channelsPerRow, h=numRows]
+            // 其中 spatial = featureSize*featureSize, 每行包含 channelsPerRow 个 channel
+            //
+            // 原始内存顺序: for row: for channelInRow: for spatial
+            //   spatial = x * featureSize + y (先遍历 y，再遍历 x)
+            // 期望顺序 (ONNX): (y, x, a, c)
             int totalElements = mat.total();
             int expectedElements = totalAnchors * channelsPerAnchor;
             if (totalElements < expectedElements) {
@@ -424,41 +428,56 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
                 return;
             }
 
-            // 临时缓冲区保存原始数据
-            std::vector<float> src(totalElements);
+            int spatialSize = featureSize * featureSize;
+
             if (mat.dims == 1) {
-                for (int i = 0; i < totalElements; i++) src[i] = mat[i];
+                // 1D Mat: 线性排列, 顺序为 (a, spatial) 即 globalChannel 先变, spatial 后变
+                // NCNN Permute+Reshape 后的 spatial 顺序: (y, x) — 先遍历 x，再遍历 y
+                for (int i = 0; i < totalElements; i++) {
+                    int spatial = i % spatialSize;
+                    int globalChannel = i / spatialSize;
+                    int y = spatial / featureSize;
+                    int x = spatial % featureSize;
+                    int a = globalChannel / channelsPerAnchor;
+                    int c = globalChannel % channelsPerAnchor;
+                    int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + c;
+                    dst[dstIdx] = mat[i];
+                }
             } else if (mat.dims == 2) {
-                // 2D Mat [w=N, h=C]: row-major, each row has w elements
-                for (int h = 0; h < mat.h; h++) {
-                    for (int w = 0; w < mat.w; w++) {
-                        src[h * mat.w + w] = mat.row(h)[w];
+                // 2D Mat [w=N, h=C]: 每行包含 channelsPerRow 个 channel
+                // NCNN Permute+Reshape 后的 spatial 顺序: (y, x) — 先遍历 x，再遍历 y
+                int channelsPerRow = mat.w / spatialSize;
+                for (int row = 0; row < mat.h; row++) {
+                    for (int col = 0; col < mat.w; col++) {
+                        int spatial = col % spatialSize;
+                        int channelInRow = col / spatialSize;
+                        int globalChannel = row * channelsPerRow + channelInRow;
+                        int y = spatial / featureSize;
+                        int x = spatial % featureSize;
+                        int a = globalChannel / channelsPerAnchor;
+                        int c = globalChannel % channelsPerAnchor;
+                        int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + c;
+                        dst[dstIdx] = mat.row(row)[col];
                     }
                 }
             } else {
                 // 3D Mat [w, h, c]: channel-major
+                // spatial 顺序: (y, x) — 先遍历 x，再遍历 y
                 int idx = 0;
                 for (int c = 0; c < mat.c; c++) {
                     for (int h = 0; h < mat.h; h++) {
                         for (int w = 0; w < mat.w; w++) {
-                            src[idx++] = mat.channel(c).row(h)[w];
-                        }
-                    }
-                }
-            }
-
-            // 重新排列: NCNN 顺序 (y,a,x,c) -> 期望顺序 (y,x,a,c)
-            for (int y = 0; y < featureSize; y++) {
-                for (int a = 0; a < 2; a++) {
-                    for (int x = 0; x < featureSize; x++) {
-                        for (int c = 0; c < channelsPerAnchor; c++) {
-                            // NCNN source index
-                            int srcIdx = ((y * 2 + a) * featureSize + x) * channelsPerAnchor + c;
-                            // Expected destination index
-                            int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + c;
-                            if (srcIdx < totalElements && dstIdx < expectedElements) {
-                                dst[dstIdx] = src[srcIdx];
+                            int spatial = w * mat.h + h;
+                            int globalChannel = c;
+                            int y = spatial / featureSize;
+                            int x = spatial % featureSize;
+                            int a = globalChannel / channelsPerAnchor;
+                            int cc = globalChannel % channelsPerAnchor;
+                            int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + cc;
+                            if (dstIdx < expectedElements) {
+                                dst[dstIdx] = mat.channel(c).row(h)[w];
                             }
+                            idx++;
                         }
                     }
                 }
@@ -512,24 +531,9 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
 
     LOGD("RetinaFace raw detections: %zu", allFaces.size());
 
-    // [调试] 打印所有 raw detections 的坐标（前 5 个）
-    for (size_t i = 0; i < allFaces.size() && i < 5; i++) {
-        LOGD("  Raw face #%zu: [%.1f,%.1f,%.1f,%.1f] score=%.3f", 
-             i, allFaces[i].x1, allFaces[i].y1, allFaces[i].x2, allFaces[i].y2, allFaces[i].confidence);
-    }
-
     // NMS
     auto nmsResult = applyNMS(allFaces, nmsThreshold);
     LOGD("RetinaFace after NMS: %zu", nmsResult.size());
-
-    // [调试] 打印 NMS 后所有人脸的坐标
-    for (size_t i = 0; i < nmsResult.size() && i < 3; i++) {
-        LOGD("  NMS face #%zu: [%.1f,%.1f,%.1f,%.1f] score=%.3f",
-             i, nmsResult[i].x1, nmsResult[i].y1, nmsResult[i].x2, nmsResult[i].y2, nmsResult[i].confidence);
-    }
-
-    // [对齐 MNN] 按置信度排序，返回置信度最高的框
-    // NMS 已经按置信度降序排列，第一个就是置信度最高的
 
     return nmsResult;
 }
