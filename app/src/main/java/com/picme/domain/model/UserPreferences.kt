@@ -28,8 +28,11 @@ enum class BeautyStrategy {
  * 表示使用的检测算法/模型系列
  */
 enum class FaceDetectionEngineMode {
-    MEDIAPIPE,  // MediaPipe 算法系列
-    INSIGHTFACE // InsightFace 算法系列 (Det10G + 2D106)
+    MEDIAPIPE,  // MediaPipe 算法系列 (TFLite)
+    INSIGHTFACE, // InsightFace 算法系列 (ONNX)
+    MNN,        // MNN GPU 加速
+    NCNN,       // NCNN 轻量级 GPU
+    CUSTOM      // 使用 StageConfig 独立配置
 }
 
 /**

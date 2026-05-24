@@ -387,7 +387,10 @@ private fun FaceDetectionEngineSelection(
 ) {
     val options = listOf(
         FaceDetectionEngineMode.MEDIAPIPE to stringResource(R.string.face_detection_engine_mode_mediapipe),
-        FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface)
+        FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface),
+        FaceDetectionEngineMode.MNN to stringResource(R.string.inference_engine_mnn),
+        FaceDetectionEngineMode.NCNN to stringResource(R.string.inference_engine_ncnn),
+        FaceDetectionEngineMode.CUSTOM to stringResource(R.string.face_detection_engine_mode_custom)
     )
 
     Text(

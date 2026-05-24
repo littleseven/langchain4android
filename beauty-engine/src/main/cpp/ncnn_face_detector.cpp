@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 
 #define LOG_TAG "PicMe:NcnnFaceDetect"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -16,6 +17,8 @@ namespace picme {
 
 NcnnFaceDetector::NcnnFaceDetector()
     : inputSize_(0), useGpu_(false), loaded_(false) {
+    // [修复 OpenMP 崩溃] 禁用线程亲和性，避免 SIGABRT
+    setenv("KMP_AFFINITY", "disabled", 1);
 }
 
 NcnnFaceDetector::~NcnnFaceDetector() {
@@ -36,11 +39,23 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
     outputNames_ = outputNames;
 
     // 配置 NCNN 选项
+    // [修复 OpenMP 崩溃] 禁用线程亲和性，避免 SIGABRT
+    // [对齐 MNN] 启用标准优化选项，确保推理精度与 MNN 一致
     net_.opt.num_threads = 4;
+    net_.opt.use_packing_layout = true;
+    net_.opt.use_sgemm_convolution = true;
+    net_.opt.use_winograd_convolution = true;
 
     if (useGpu_) {
         net_.opt.use_vulkan_compute = true;
         LOGI("Requesting Vulkan GPU backend...");
+        // [诊断] 检查 Vulkan 是否实际可用
+        if (ncnn::get_gpu_count() == 0) {
+            LOGE("No Vulkan GPU available on this device!");
+            // 不直接返回 false，让 NCNN 自行处理（可能内部回退 CPU）
+        } else {
+            LOGI("Vulkan GPU count: %d", ncnn::get_gpu_count());
+        }
     } else {
         net_.opt.use_vulkan_compute = false;
         LOGI("Using CPU backend with %d threads", net_.opt.num_threads);
@@ -63,17 +78,60 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
 
     LOGI("NCNN model files exist: param=%s, bin=%s", paramPath.c_str(), binPath.c_str());
 
+    // [诊断] 尝试用 load_param_mem 加载，获取更详细的错误信息
+    {
+        FILE* fp = fopen(paramPath.c_str(), "rb");
+        if (fp) {
+            fseek(fp, 0, SEEK_END);
+            long size = ftell(fp);
+            fseek(fp, 0, SEEK_SET);
+            char* mem = (char*)malloc(size + 1);
+            if (mem) {
+                fread(mem, 1, size, fp);
+                mem[size] = '\0';
+                // 打印前 200 字节用于诊断
+                char preview[201];
+                int preview_len = size < 200 ? (int)size : 200;
+                memcpy(preview, mem, preview_len);
+                preview[preview_len] = '\0';
+                // 将换行替换为 |
+                for (int i = 0; i < preview_len; i++) {
+                    if (preview[i] == '\n' || preview[i] == '\r') preview[i] = '|';
+                }
+                LOGI("Param file first 200 bytes: %s", preview);
+                free(mem);
+            }
+            fclose(fp);
+        }
+    }
+
     // 加载模型
     int ret = net_.load_param(paramPath.c_str());
     if (ret != 0) {
         LOGE("Failed to load NCNN param: %s, ret=%d", paramPath.c_str(), ret);
         return false;
     }
+    LOGI("NCNN param loaded successfully: %s", paramPath.c_str());
 
     ret = net_.load_model(binPath.c_str());
     if (ret != 0) {
         LOGE("Failed to load NCNN bin: %s, ret=%d", binPath.c_str(), ret);
         return false;
+    }
+    LOGI("NCNN bin loaded successfully: %s", binPath.c_str());
+
+    // [诊断] 打印输入输出 blob 名称
+    LOGI("NCNN model inputs:");
+    for (int i = 0; i < (int)net_.input_indexes().size(); i++) {
+        int idx = net_.input_indexes()[i];
+        const char* name = net_.blobs()[idx].name.c_str();
+        LOGI("  input[%d] = %s", i, name);
+    }
+    LOGI("NCNN model outputs:");
+    for (int i = 0; i < (int)net_.output_indexes().size(); i++) {
+        int idx = net_.output_indexes()[i];
+        const char* name = net_.blobs()[idx].name.c_str();
+        LOGI("  output[%d] = %s", i, name);
     }
 
     LOGI("NCNN model loaded: %s + %s", paramPath.c_str(), binPath.c_str());
@@ -85,45 +143,96 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
 }
 
 ncnn::Mat NcnnFaceDetector::preprocess(const unsigned char *imageData, int width, int height, int channels) {
-    // NCNN 使用 NCHW 格式，但通过 from_pixels_resize 可以直接处理 RGB 数据
-    // 输入数据已经是 RGB ByteArray，需要归一化到 [-1, 1] (mean=127.5, std=128)
+    // [对齐 MNN] 使用与 MNN 相同的手动数据复制方式，避免 from_pixels 的潜在问题
+    // 输入数据是 RGB ByteArray，需要转为 NCHW float 并归一化到 [-1, 1]
 
-    ncnn::Mat in;
+    // 创建 NCHW 格式的输入 Mat
+    ncnn::Mat in = ncnn::Mat(inputSize_, inputSize_, 3);
+    in.fill(0.0f);
+
+    // [调试] 检查输入数据范围
+    unsigned char min_byte = 255, max_byte = 0;
+    for (int i = 0; i < width * height * 3; i++) {
+        if (imageData[i] < min_byte) min_byte = imageData[i];
+        if (imageData[i] > max_byte) max_byte = imageData[i];
+    }
+    LOGD("JNI input byte range: [%u, %u]", min_byte, max_byte);
 
     if (width == inputSize_ && height == inputSize_) {
-        // 直接转换，无需 resize
-        in = ncnn::Mat::from_pixels(imageData, ncnn::Mat::PIXEL_RGB, width, height);
+        // 直接复制，无需 resize
+        // [对齐 ONNX] 使用 RGB 顺序，与 InsightFaceDet10GDetector 一致
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int srcIdx = (y * width + x) * 3;
+                in.channel(0).row(y)[x] = static_cast<float>(imageData[srcIdx + 0]); // R
+                in.channel(1).row(y)[x] = static_cast<float>(imageData[srcIdx + 1]); // G
+                in.channel(2).row(y)[x] = static_cast<float>(imageData[srcIdx + 2]); // B
+            }
+        }
     } else {
-        // 需要 letterbox resize
+        // [对齐 ONNX] 使用与 ONNX 相同的 letterbox resize + 双线性插值
         float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
         int scaledW = static_cast<int>(width * scale);
         int scaledH = static_cast<int>(height * scale);
-
-        // 先缩放到目标尺寸
-        ncnn::Mat scaled = ncnn::Mat::from_pixels_resize(imageData, ncnn::Mat::PIXEL_RGB,
-                                                          width, height, scaledW, scaledH);
-
-        // 创建固定尺寸的输入 Mat，填充黑色背景
-        in = ncnn::Mat(inputSize_, inputSize_, 3);
-        in.fill(0.0f);
-
-        // 将缩放后的图像居中粘贴
         int padLeft = (inputSize_ - scaledW) / 2;
         int padTop = (inputSize_ - scaledH) / 2;
 
         for (int y = 0; y < scaledH; y++) {
             for (int x = 0; x < scaledW; x++) {
+                float srcX = (x + 0.5f) * width / scaledW - 0.5f;
+                float srcY = (y + 0.5f) * height / scaledH - 0.5f;
+
+                int srcX0 = static_cast<int>(srcX);
+                int srcY0 = static_cast<int>(srcY);
+                int srcX1 = std::min(srcX0 + 1, width - 1);
+                int srcY1 = std::min(srcY0 + 1, height - 1);
+
+                float fx = srcX - srcX0;
+                float fy = srcY - srcY0;
+
+                int dstX = padLeft + x;
+                int dstY = padTop + y;
+
                 for (int c = 0; c < 3; c++) {
-                    in.channel(c).row(padTop + y)[padLeft + x] = scaled.channel(c).row(y)[x];
+                    int srcIdx00 = (srcY0 * width + srcX0) * 3 + c;
+                    int srcIdx01 = (srcY0 * width + srcX1) * 3 + c;
+                    int srcIdx10 = (srcY1 * width + srcX0) * 3 + c;
+                    int srcIdx11 = (srcY1 * width + srcX1) * 3 + c;
+
+                    float val00 = imageData[srcIdx00];
+                    float val01 = imageData[srcIdx01];
+                    float val10 = imageData[srcIdx10];
+                    float val11 = imageData[srcIdx11];
+
+                    float val = val00 * (1-fx) * (1-fy) +
+                               val01 * fx * (1-fy) +
+                               val10 * (1-fx) * fy +
+                               val11 * fx * fy;
+
+                    // [对齐 ONNX] RGB 顺序：c=0→R(channel0), c=1→G(channel1), c=2→B(channel2)
+                    in.channel(c).row(dstY)[dstX] = val;
                 }
             }
         }
     }
 
     // 归一化: (x - 127.5) / 128.0
-    const float mean_vals[3] = {127.5f, 127.5f, 127.5f};
-    const float norm_vals[3] = {1.0f / 128.0f, 1.0f / 128.0f, 1.0f / 128.0f};
-    in.substract_mean_normalize(mean_vals, norm_vals);
+    float min_val = 999.0f, max_val = -999.0f;
+    float min_raw = 999.0f, max_raw = -999.0f;
+    for (int c = 0; c < 3; c++) {
+        float mean_val = 127.5f;
+        float norm_val = 1.0f / 128.0f;
+        float* ptr = in.channel(c);
+        int total = in.w * in.h;
+        for (int i = 0; i < total; i++) {
+            if (ptr[i] < min_raw) min_raw = ptr[i];
+            if (ptr[i] > max_raw) max_raw = ptr[i];
+            ptr[i] = (ptr[i] - mean_val) * norm_val;
+            if (ptr[i] < min_val) min_val = ptr[i];
+            if (ptr[i] > max_val) max_val = ptr[i];
+        }
+    }
+    LOGD("Input raw range: [%.1f, %.1f], after norm: [%.3f, %.3f]", min_raw, max_raw, min_val, max_val);
 
     return in;
 }
@@ -258,26 +367,45 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
 
         // 计算 featureSize
         int featureSize = inputSize_ / scales[s].stride;
-        int scoreChannels = scoreOut.c > 1 ? scoreOut.c : 2;
+        // [关键修复] 根据实际输出维度确定 scoreChannels
+        // NCNN 输出格式: [w=totalAnchors, h=channels, c=1]
+        // 如果 h=1，表示只有 face score (scoreChannels=1)
+        // 如果 h=2，表示 bg+face (scoreChannels=2)
+        int scoreChannels = scoreOut.h > 1 ? scoreOut.h : 1;
+        LOGD("  scoreChannels detected: %d (h=%d, c=%d)", scoreChannels, scoreOut.h, scoreOut.c);
 
-        LOGD("Scale %d (stride=%d): featureSize=%d, score=[w=%d,h=%d,c=%d], bbox=[w=%d,h=%d,c=%d], landmark=[w=%d,h=%d,c=%d]",
+        LOGD("Scale %d (stride=%d): featureSize=%d, score=[w=%d,h=%d,c=%d,dims=%d], bbox=[w=%d,h=%d,c=%d,dims=%d], landmark=[w=%d,h=%d,c=%d,dims=%d]",
              s + 1, scales[s].stride, featureSize,
-             scoreOut.w, scoreOut.h, scoreOut.c,
-             bboxOut.w, bboxOut.h, bboxOut.c,
-             landmarkOut.w, landmarkOut.h, landmarkOut.c);
+             scoreOut.w, scoreOut.h, scoreOut.c, scoreOut.dims,
+             bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.dims,
+             landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.dims);
 
         // 将 ncnn::Mat 数据转为 float 数组
         int spatialSize = featureSize * featureSize;
         int totalAnchors = spatialSize * 2; // 每个位置 2 个 anchor
-
+        
         std::vector<float> scoreData(totalAnchors * scoreChannels);
         std::vector<float> bboxData(totalAnchors * 4);
         std::vector<float> landmarkData(totalAnchors * 10);
 
-        // 根据 NCNN 输出格式读取数据
-        // 假设输出格式为 [w=featureSize, h=featureSize, c=channels]
+        // [关键修复] 根据 NCNN 输出格式读取数据
+        // NCNN Mat 数据布局：
+        // - 1D Mat: [w=N] - 线性扁平化数据
+        // - 2D Mat: [w=N, h=C] - N=anchors, C=channels
+        // - 3D Mat: [w=featureSize, h=featureSize, c=C] - 空间特征图
+        //
+        // onnx2ncnn 转换后的 RetinaFace 输出通常是 1D 或 2D Mat：
+        // - score: [w=totalAnchors*scoreChannels, h=1, c=1] (1D) 或 [w=totalAnchors, h=scoreChannels, c=1] (2D)
+        // - bbox: [w=totalAnchors*4, h=1, c=1] (1D) 或 [w=totalAnchors, h=4, c=1] (2D)
+        // - landmark: [w=totalAnchors*10, h=1, c=1] (1D) 或 [w=totalAnchors, h=10, c=1] (2D)
+
+        // [调试] 打印输出维度信息
+        LOGD("  Score output: dims=%d, w=%d, h=%d, c=%d, total=%d", scoreOut.dims, scoreOut.w, scoreOut.h, scoreOut.c, scoreOut.total());
+        LOGD("  BBox output: dims=%d, w=%d, h=%d, c=%d, total=%d", bboxOut.dims, bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.total());
+        LOGD("  Landmark output: dims=%d, w=%d, h=%d, c=%d, total=%d", landmarkOut.dims, landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.total());
+
         if (scoreOut.dims == 3 && scoreOut.w == featureSize && scoreOut.h == featureSize) {
-            // [w, h, c] 格式
+            // [w, h, c] 格式: 空间特征图，每个 channel 对应一个属性
             for (int y = 0; y < featureSize; y++) {
                 for (int x = 0; x < featureSize; x++) {
                     int spatialIdx = y * featureSize + x;
@@ -295,27 +423,90 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
                     }
                 }
             }
+        } else if (scoreOut.dims == 2) {
+            // 2D 格式: [w=N, h=C]
+            // 数据按行存储：每行是一个通道，每列是一个 anchor
+            int numAnchors = scoreOut.w;
+            
+            // Score: [w=numAnchors, h=scoreChannels]
+            for (int a = 0; a < numAnchors && a < totalAnchors; a++) {
+                for (int c = 0; c < scoreChannels && c < scoreOut.h; c++) {
+                    scoreData[a * scoreChannels + c] = scoreOut.row(c)[a];
+                }
+            }
+            
+            // BBox: [w=numAnchors, h=4]
+            for (int a = 0; a < numAnchors && a < totalAnchors; a++) {
+                for (int c = 0; c < 4 && c < bboxOut.h; c++) {
+                    bboxData[a * 4 + c] = bboxOut.row(c)[a];
+                }
+            }
+            
+            // Landmark: [w=numAnchors, h=10]
+            for (int a = 0; a < numAnchors && a < totalAnchors; a++) {
+                for (int c = 0; c < 10 && c < landmarkOut.h; c++) {
+                    landmarkData[a * 10 + c] = landmarkOut.row(c)[a];
+                }
+            }
         } else {
-            // 扁平化输出，直接复制
+            // 1D 格式: [w=totalElements, h=1, c=1]
+            // 数据线性排列，直接复制
+            // [关键修复] 1D Mat 时 h=1，不能按行读取
             int scoreTotal = scoreOut.total();
             int bboxTotal = bboxOut.total();
             int landmarkTotal = landmarkOut.total();
 
-            if (scoreTotal >= totalAnchors) {
-                for (int i = 0; i < scoreTotal && i < (int)scoreData.size(); i++) {
+            LOGD("  Using 1D flat copy: scoreTotal=%d, bboxTotal=%d, landmarkTotal=%d", scoreTotal, bboxTotal, landmarkTotal);
+
+            // Score: 线性复制
+            if (scoreTotal >= totalAnchors * scoreChannels) {
+                for (int i = 0; i < totalAnchors * scoreChannels; i++) {
+                    scoreData[i] = scoreOut[i];
+                }
+            } else if (scoreTotal >= totalAnchors) {
+                // 可能只有 face score (scoreChannels=1)
+                for (int i = 0; i < totalAnchors; i++) {
                     scoreData[i] = scoreOut[i];
                 }
             }
+
+            // BBox: 线性复制 [dx0, dy0, dw0, dh0, dx1, dy1, dw1, dh1, ...]
             if (bboxTotal >= totalAnchors * 4) {
-                for (int i = 0; i < bboxTotal && i < (int)bboxData.size(); i++) {
+                for (int i = 0; i < totalAnchors * 4; i++) {
                     bboxData[i] = bboxOut[i];
                 }
             }
+
+            // Landmark: 线性复制
             if (landmarkTotal >= totalAnchors * 10) {
-                for (int i = 0; i < landmarkTotal && i < (int)landmarkData.size(); i++) {
+                for (int i = 0; i < totalAnchors * 10; i++) {
                     landmarkData[i] = landmarkOut[i];
                 }
             }
+        }
+
+        // [调试] 打印该 scale 的最高 score
+        float maxScore = 0.0f;
+        int maxScoreIdx = -1;
+        for (int i = 0; i < totalAnchors; i++) {
+            float s = scoreChannels == 1 ? scoreData[i] : scoreData[totalAnchors + i];
+            if (s > maxScore) {
+                maxScore = s;
+                maxScoreIdx = i;
+            }
+        }
+        if (maxScoreIdx >= 0) {
+            float dx = bboxData[maxScoreIdx * 4 + 0];
+            float dy = bboxData[maxScoreIdx * 4 + 1];
+            float dw = bboxData[maxScoreIdx * 4 + 2];
+            float dh = bboxData[maxScoreIdx * 4 + 3];
+            int y = maxScoreIdx / (featureSize * 2);
+            int x = (maxScoreIdx % (featureSize * 2)) / 2;
+            int a = maxScoreIdx % 2;
+            float cx = (x + 0.5f) * scales[s].stride;
+            float cy = (y + 0.5f) * scales[s].stride;
+            LOGD("  Scale %d max score: idx=%d, score=%.4f, cx=%.1f, cy=%.1f, dx=%.3f, dy=%.3f, dw=%.3f, dh=%.3f",
+                 s+1, maxScoreIdx, maxScore, cx, cy, dx, dy, dw, dh);
         }
 
         processRetinaFaceOutput(scoreData.data(), bboxData.data(), landmarkData.data(),
@@ -325,10 +516,26 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
 
     LOGD("RetinaFace raw detections: %zu", allFaces.size());
 
+    // [调试] 打印所有 raw detections 的坐标（前 5 个）
+    for (size_t i = 0; i < allFaces.size() && i < 5; i++) {
+        LOGD("  Raw face #%zu: [%.1f,%.1f,%.1f,%.1f] score=%.3f", 
+             i, allFaces[i].x1, allFaces[i].y1, allFaces[i].x2, allFaces[i].y2, allFaces[i].confidence);
+    }
+
     // NMS
-    auto result = applyNMS(allFaces, nmsThreshold);
-    LOGD("RetinaFace after NMS: %zu", result.size());
-    return result;
+    auto nmsResult = applyNMS(allFaces, nmsThreshold);
+    LOGD("RetinaFace after NMS: %zu", nmsResult.size());
+
+    // [调试] 打印 NMS 后所有人脸的坐标
+    for (size_t i = 0; i < nmsResult.size() && i < 3; i++) {
+        LOGD("  NMS face #%zu: [%.1f,%.1f,%.1f,%.1f] score=%.3f",
+             i, nmsResult[i].x1, nmsResult[i].y1, nmsResult[i].x2, nmsResult[i].y2, nmsResult[i].confidence);
+    }
+
+    // [对齐 MNN] 按置信度排序，返回置信度最高的框
+    // NMS 已经按置信度降序排列，第一个就是置信度最高的
+
+    return nmsResult;
 }
 
 void NcnnFaceDetector::processRetinaFaceOutput(const float *score,
@@ -343,7 +550,7 @@ void NcnnFaceDetector::processRetinaFaceOutput(const float *score,
     int numAnchorsPerLocation = 2;
     int totalAnchors = spatialSize * numAnchorsPerLocation;
 
-    // [对齐 ONNX/MNN] 使用相同的 minSizes
+    // [对齐 MNN] 使用与 MNN 相同的 minSizes
     float minSizes[2];
     if (stride == 8) {
         minSizes[0] = 16.0f;
@@ -381,7 +588,7 @@ void NcnnFaceDetector::processRetinaFaceOutput(const float *score,
                 float dw = bbox[anchorIdx * 4 + 2];
                 float dh = bbox[anchorIdx * 4 + 3];
 
-                // [对齐 ONNX/MNN]
+                // [对齐 MNN] RetinaFace bbox 解码使用 stride
                 float x1 = cx - dx * stride;
                 float y1 = cy - dy * stride;
                 float x2 = cx + dw * stride;
@@ -389,21 +596,23 @@ void NcnnFaceDetector::processRetinaFaceOutput(const float *score,
 
                 // 限制坐标在有效范围内
                 float maxSize = static_cast<float>(inputSize_);
-                x1 = std::max(0.0f, std::min(x1, maxSize));
-                y1 = std::max(0.0f, std::min(y1, maxSize));
-                x2 = std::max(0.0f, std::min(x2, maxSize));
-                y2 = std::max(0.0f, std::min(y2, maxSize));
+                float clampedX1 = std::max(0.0f, std::min(x1, maxSize));
+                float clampedY1 = std::max(0.0f, std::min(y1, maxSize));
+                float clampedX2 = std::max(0.0f, std::min(x2, maxSize));
+                float clampedY2 = std::max(0.0f, std::min(y2, maxSize));
 
-                if (x1 >= x2 || y1 >= y2) continue;
+                if (clampedX1 >= clampedX2 || clampedY1 >= clampedY2) {
+                    continue;
+                }
 
                 FaceBox box;
-                box.x1 = x1;
-                box.y1 = y1;
-                box.x2 = x2;
-                box.y2 = y2;
+                box.x1 = clampedX1;
+                box.y1 = clampedY1;
+                box.x2 = clampedX2;
+                box.y2 = clampedY2;
                 box.confidence = faceScore;
 
-                // 读取 landmark
+                // [对齐 MNN] landmark 解码使用 stride
                 for (int i = 0; i < 5; i++) {
                     float lx = landmark[anchorIdx * 10 + i * 2];
                     float ly = landmark[anchorIdx * 10 + i * 2 + 1];

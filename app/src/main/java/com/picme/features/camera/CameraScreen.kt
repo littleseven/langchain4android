@@ -277,6 +277,9 @@ internal data class CameraPreviewActions(
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
     FaceDetectionEngineMode.MEDIAPIPE -> EngineType.MEDIAPIPE
     FaceDetectionEngineMode.INSIGHTFACE -> EngineType.INSIGHTFACE
+    FaceDetectionEngineMode.MNN -> EngineType.MNN
+    FaceDetectionEngineMode.NCNN -> EngineType.NCNN
+    FaceDetectionEngineMode.CUSTOM -> EngineType.INSIGHTFACE // CUSTOM 模式由 StageConfig 决定
 }
 
 private fun buildCameraPreviewUiState(
@@ -1020,11 +1023,13 @@ fun CameraContent(
 
 
 
+    // [重构] 设置页为唯一配置来源，StageConfig 通过 DataStore 下发
+    // faceDetectionEngineMode 变化时，SettingsViewModel 已自动更新 StageConfig
+    // CameraRuntimeState 监听 StageConfig 变化并调用 updatePipelineConfig()
     LaunchedEffect(faceDetectionEngineMode) {
         val engineType = faceDetectionEngineMode.toEngineType()
         faceWarpParams = faceWarpParams.copy(requestedDetectionEngineMode = engineType)
         previewFaceWarpParams = previewFaceWarpParams.copy(requestedDetectionEngineMode = engineType)
-        runtimeContext.faceDetectorManager.setEngineMode(engineType)
     }
 
     LaunchedEffect(lensFacing) {

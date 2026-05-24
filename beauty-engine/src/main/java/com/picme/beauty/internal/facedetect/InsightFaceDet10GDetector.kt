@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
+import com.picme.beauty.internal.model.ModelManager
 import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.ceil
@@ -24,8 +25,7 @@ class InsightFaceDet10GDetector(context: Context) {
 
     companion object {
         private const val TAG = "PicMe:InsightFaceDet10G"
-        private const val MODEL_ASSET_PATH = "insightface/det_10g.onnx"
-        private const val MODEL_FILE_NAME = "insightface_det_10g.onnx"
+        private const val MODEL_KEY = "det10g_onnx"
         private const val INPUT_SIZE = 640
         private const val INPUT_CHANNELS = 3
         private const val CONFIDENCE_THRESHOLD = 0.8f
@@ -175,7 +175,7 @@ class InsightFaceDet10GDetector(context: Context) {
 
     private fun initialize() {
         runCatching {
-            val modelFile = ensureModelFile()
+            val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
             // [优化] 配置 ONNX Runtime SessionOptions,强制使用 GPU 推理
             val sessionOptions = OrtSession.SessionOptions()
@@ -206,19 +206,6 @@ class InsightFaceDet10GDetector(context: Context) {
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
         }
-    }
-
-    private fun ensureModelFile(): File {
-        val modelFile = File(appContext.filesDir, MODEL_FILE_NAME)
-        if (modelFile.exists() && modelFile.length() > 0L) {
-            return modelFile
-        }
-        modelFile.outputStream().use { output ->
-            appContext.assets.open(MODEL_ASSET_PATH).use { input ->
-                input.copyTo(output)
-            }
-        }
-        return modelFile
     }
 
     private fun runInference(session: OrtSession, bitmap: Bitmap): List<FaceBox> {

@@ -10,6 +10,7 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Log
+import com.picme.beauty.internal.model.ModelManager
 import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.max
@@ -28,8 +29,7 @@ class InsightFace2D106Detector(context: Context) {
 
     companion object {
         private const val TAG = "PicMe:InsightFace106"
-        private const val MODEL_ASSET_PATH = "insightface/2d106det.onnx"
-        private const val MODEL_FILE_NAME = "insightface_2d106det.onnx"
+        private const val MODEL_KEY = "2d106_onnx"
         private const val INPUT_SIZE = 192
         private const val INPUT_CHANNELS = 3
         private const val POINT_COUNT = 106
@@ -178,7 +178,7 @@ class InsightFace2D106Detector(context: Context) {
             // 初始化 Det10G 检测器（内部使用）
             det10gDetector = InsightFaceDet10GDetector(appContext)
 
-            val modelFile = ensureModelFile()
+            val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
             // [优化] 配置 ONNX Runtime SessionOptions,强制使用 GPU 推理
             val sessionOptions = OrtSession.SessionOptions()
@@ -209,19 +209,6 @@ class InsightFace2D106Detector(context: Context) {
             inputMean = DEFAULT_INPUT_MEAN
             inputStd = DEFAULT_INPUT_STD
         }
-    }
-
-    private fun ensureModelFile(): File {
-        val modelFile = File(appContext.filesDir, MODEL_FILE_NAME)
-        if (modelFile.exists() && modelFile.length() > 0L) {
-            return modelFile
-        }
-        modelFile.outputStream().use { output ->
-            appContext.assets.open(MODEL_ASSET_PATH).use { input ->
-                input.copyTo(output)
-            }
-        }
-        return modelFile
     }
 
 

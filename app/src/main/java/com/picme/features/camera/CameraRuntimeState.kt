@@ -112,29 +112,20 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     )
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // [关键修复] 在 LaunchedEffect 中使用 produceState 确保首次发射后触发配置更新
-    LaunchedEffect(Unit) {
-        // 等待 DataStore 发射初始值
-        val roiConfig = userPreferencesRepository.roiStageConfigFlow.first()
-        val landmarkConfig = userPreferencesRepository.landmarkStageConfigFlow.first()
-
-        Logger.d("Camera", "=== First-time Config Initialization ===")
-        Logger.d("Camera", "  ROI Config from DataStore: $roiConfig")
-        Logger.d("Camera", "  Landmark Config from DataStore: $landmarkConfig")
-
-        // 使用 DataStore 中的阶段配置创建检测流水线
+    // [重构] 监听 StageConfig 变化，统一调用 updatePipelineConfig()
+    // SettingsViewModel 在快捷模式选择时已自动更新 StageConfig
+    LaunchedEffect(roiStageConfig, landmarkStageConfig) {
         val config = DetectionPipelineConfig(
-            roiDetector = roiConfig.modelType.toRoiDetectorType(),
-            landmarkDetector = landmarkConfig.modelType.toLandmarkDetectorType(),
-            roiEngine = roiConfig.engineType.toInferenceBackendType(),
-            landmarkEngine = landmarkConfig.engineType.toInferenceBackendType(),
-            roiDevice = roiConfig.devicePreference.toDevicePreference(),
-            landmarkDevice = landmarkConfig.devicePreference.toDevicePreference()
+            roiDetector = roiStageConfig.modelType.toRoiDetectorType(),
+            landmarkDetector = landmarkStageConfig.modelType.toLandmarkDetectorType(),
+            roiEngine = roiStageConfig.engineType.toInferenceBackendType(),
+            landmarkEngine = landmarkStageConfig.engineType.toInferenceBackendType(),
+            roiDevice = roiStageConfig.devicePreference.toDevicePreference(),
+            landmarkDevice = landmarkStageConfig.devicePreference.toDevicePreference()
         )
 
         faceDetectorManager.updatePipelineConfig(config)
-        Logger.d("Camera", "  Initial pipeline config applied successfully")
-        Logger.d("Camera", "========================================")
+        Logger.d("Camera", "Pipeline config updated: ROI=${roiStageConfig.engineType}, Landmark=${landmarkStageConfig.engineType}")
     }
 
     return CameraRuntimeContext(

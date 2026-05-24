@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
+import com.picme.beauty.internal.model.ModelManager
 import java.io.File
 
 /**
@@ -24,8 +25,7 @@ class MnnLandmarkDetector(
 
     companion object {
         private const val TAG = "PicMe:MnnLandmark"
-        private const val MODEL_ASSET_PATH = "insightface/2d106det.mnn"
-        private const val MODEL_FILE_NAME = "mnn_2d106det.mnn"
+        private const val MODEL_KEY = "2d106_mnn"
         private const val INPUT_SIZE = 192  // [对齐 ONNX] 与 InsightFace2D106Detector 保持一致
         private const val POINT_COUNT = 106
     }
@@ -58,7 +58,7 @@ class MnnLandmarkDetector(
 
     private fun initialize() {
         try {
-            val modelFile = ensureModelFile(MODEL_FILE_NAME, MODEL_ASSET_PATH)
+            val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
             Log.i(TAG, "Initializing MNN landmark detector with Vulkan GPU (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
@@ -294,24 +294,4 @@ class MnnLandmarkDetector(
         Log.i(TAG, "MnnLandmarkDetector released")
     }
 
-    private fun ensureModelFile(fileName: String, assetPath: String): File {
-        val file = File(appContext.filesDir, fileName)
-        if (file.exists() && file.length() > 0L) {
-            return file
-        }
-
-        try {
-            appContext.assets.open(assetPath).use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Log.d(TAG, "Model copied from assets: $assetPath -> ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy model from assets: $assetPath", e)
-            throw e
-        }
-
-        return file
-    }
 }

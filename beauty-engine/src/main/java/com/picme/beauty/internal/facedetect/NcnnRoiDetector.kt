@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
+import com.picme.beauty.internal.model.ModelManager
 import java.io.File
 
 /**
@@ -19,10 +20,7 @@ class NcnnRoiDetector(
 
     companion object {
         private const val TAG = "PicMe:NcnnRoi"
-        private const val MODEL_PARAM_ASSET_PATH = "insightface/det_10g.param"
-        private const val MODEL_BIN_ASSET_PATH = "insightface/det_10g.bin"
-        private const val MODEL_PARAM_FILE_NAME = "ncnn_det_10g.param"
-        private const val MODEL_BIN_FILE_NAME = "ncnn_det_10g.bin"
+        private const val MODEL_KEY = "det10g_ncnn"
         private const val INPUT_SIZE = 640
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f
@@ -62,11 +60,18 @@ class NcnnRoiDetector(
 
     private fun initialize() {
         try {
-            val paramFile = ensureModelFile(MODEL_PARAM_FILE_NAME, MODEL_PARAM_ASSET_PATH)
-            val binFile = ensureModelFile(MODEL_BIN_FILE_NAME, MODEL_BIN_ASSET_PATH)
+            val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
             Log.i(TAG, "Initializing NCNN RetinaFace detector (requireGpu=$requireGpu)...")
             Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
+
+            // [诊断] 验证文件可读性
+            if (!paramFile.canRead()) {
+                Log.e(TAG, "Param file not readable: ${paramFile.absolutePath}")
+            }
+            if (!binFile.canRead()) {
+                Log.e(TAG, "Bin file not readable: ${binFile.absolutePath}")
+            }
 
             val initStart = SystemClock.elapsedRealtime()
             detector = NcnnFaceDetector.create(
@@ -84,25 +89,8 @@ class NcnnRoiDetector(
                 return
             }
 
-            // 如果 GPU 初始化失败，尝试 CPU fallback
-            if (requireGpu) {
-                Log.w(TAG, "NCNN GPU initialization failed, attempting CPU fallback...")
-                detector = NcnnFaceDetector.create(
-                    paramPath = paramFile.absolutePath,
-                    binPath = binFile.absolutePath,
-                    inputSize = INPUT_SIZE,
-                    useGpu = false,
-                    inputName = "input.1",
-                    outputNames = OUTPUT_NAMES
-                )
-                if (detector != null) {
-                    Log.i(TAG, "NcnnRoiDetector initialized with CPU fallback in ${SystemClock.elapsedRealtime() - initStart}ms")
-                } else {
-                    Log.e(TAG, "NCNN CPU fallback also failed, detector will remain null")
-                }
-            } else {
-                Log.e(TAG, "NCNN CPU initialization failed, detector will remain null")
-            }
+            // [CO指令] 不启用 fallback，直接报告失败
+            Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize NcnnRoiDetector (requireGpu=$requireGpu)", e)
             detector = null
@@ -120,61 +108,68 @@ class NcnnRoiDetector(
             return null
         }
 
-        return try {
-            val scaleStart = SystemClock.elapsedRealtime()
-            val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
-            val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
-
-            Log.d(TAG, "[Perf] NcnnRoi START: original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
-
-            val inferStart = SystemClock.elapsedRealtime()
-            val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
-            val inferElapsed = SystemClock.elapsedRealtime() - inferStart
-
-            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
-
-            if (result == null || result.size < 5) {
-                Log.d(TAG, "[Perf] NcnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
-                return null
+        // [修复崩溃] NCNN extractor 非线程安全，必须同步
+        return synchronized(this) {
+            try {
+                detectRoiLocked(bitmap, det, totalStart)
+            } catch (e: Exception) {
+                Log.e(TAG, "NcnnRoi detection failed", e)
+                null
             }
-
-            val origW = bitmap.width.toFloat()
-            val origH = bitmap.height.toFloat()
-            val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
-            val scaledW = (origW * scale).toInt()
-            val scaledH = (origH * scale).toInt()
-            val padLeft = (INPUT_SIZE - scaledW) / 2f
-            val padTop = (INPUT_SIZE - scaledH) / 2f
-
-            Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
-            Log.d(TAG, "[Diag] Raw NCNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
-
-            var mappedX1 = ((result[0] - padLeft) / scale)
-            var mappedY1 = ((result[1] - padTop) / scale)
-            var mappedX2 = ((result[2] - padLeft) / scale)
-            var mappedY2 = ((result[3] - padTop) / scale)
-
-            val centerX = (mappedX1 + mappedX2) / 2f
-            val centerY = (mappedY1 + mappedY2) / 2f
-            val width = mappedX2 - mappedX1
-            val height = mappedY2 - mappedY1
-            val newWidth = width * ROI_EXPAND_RATIO
-            val newHeight = height * ROI_EXPAND_RATIO
-
-            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
-            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
-            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
-            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
-
-            val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
-
-            Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
-            Log.i(TAG, "[Perf] NcnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
-            roi
-        } catch (e: Exception) {
-            Log.e(TAG, "NcnnRoi detection failed", e)
-            null
         }
+    }
+
+    private fun detectRoiLocked(bitmap: Bitmap, det: NcnnFaceDetector, totalStart: Long): RectF? {
+        val scaleStart = SystemClock.elapsedRealtime()
+        val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
+        val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
+
+        Log.d(TAG, "[Perf] NcnnRoi START: original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+
+        val inferStart = SystemClock.elapsedRealtime()
+        val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.3f)
+        val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+
+        val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+
+        if (result == null || result.size < 5) {
+            Log.d(TAG, "[Perf] NcnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
+            return null
+        }
+
+        val origW = bitmap.width.toFloat()
+        val origH = bitmap.height.toFloat()
+        val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
+        val scaledW = (origW * scale).toInt()
+        val scaledH = (origH * scale).toInt()
+        val padLeft = (INPUT_SIZE - scaledW) / 2f
+        val padTop = (INPUT_SIZE - scaledH) / 2f
+
+        Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
+        Log.d(TAG, "[Diag] Raw NCNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
+
+        var mappedX1 = ((result[0] - padLeft) / scale)
+        var mappedY1 = ((result[1] - padTop) / scale)
+        var mappedX2 = ((result[2] - padLeft) / scale)
+        var mappedY2 = ((result[3] - padTop) / scale)
+
+        val centerX = (mappedX1 + mappedX2) / 2f
+        val centerY = (mappedY1 + mappedY2) / 2f
+        val width = mappedX2 - mappedX1
+        val height = mappedY2 - mappedY1
+        val newWidth = width * ROI_EXPAND_RATIO
+        val newHeight = height * ROI_EXPAND_RATIO
+
+        mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+        mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+        mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+        mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+
+        val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
+
+        Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
+        Log.i(TAG, "[Perf] NcnnRoi DONE: total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
+        return roi
     }
 
     /**
@@ -212,24 +207,4 @@ class NcnnRoiDetector(
         Log.i(TAG, "NcnnRoiDetector released")
     }
 
-    private fun ensureModelFile(fileName: String, assetPath: String): File {
-        val file = File(appContext.filesDir, fileName)
-        if (file.exists() && file.length() > 0L) {
-            return file
-        }
-
-        try {
-            appContext.assets.open(assetPath).use { input ->
-                file.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            Log.d(TAG, "Model copied from assets: $assetPath -> ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy model from assets: $assetPath", e)
-            throw e
-        }
-
-        return file
-    }
 }
