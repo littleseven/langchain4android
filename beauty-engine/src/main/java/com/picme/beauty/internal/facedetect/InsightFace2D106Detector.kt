@@ -287,13 +287,6 @@ class InsightFace2D106Detector(context: Context) {
             chw[pixelCount * 2 + index] = (blue - inputMean) / inputStd
         }
 
-        // [诊断日志] 输出前 10 个像素的归一化值
-        val sb = StringBuilder("[Diag] ONNX First 10 pixels normalized (R,G,B): ")
-        for (i in 0 until 10) {
-            sb.append("[${String.format("%.2f", chw[i])},${String.format("%.2f", chw[pixelCount + i])},${String.format("%.2f", chw[pixelCount * 2 + i])}] ")
-        }
-        Log.d(TAG, sb.toString())
-
         return OnnxTensor.createTensor(
             ortEnvironment,
             FloatBuffer.wrap(chw),

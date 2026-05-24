@@ -79,6 +79,7 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
     LOGI("NCNN model files exist: param=%s, bin=%s", paramPath.c_str(), binPath.c_str());
 
     // [诊断] 尝试用 load_param_mem 加载，获取更详细的错误信息
+    // [关键修复] 检测模型是否有内置归一化节点（如 _minusscalar0/_mulscalar0）
     {
         FILE* fp = fopen(paramPath.c_str(), "rb");
         if (fp) {
@@ -99,6 +100,19 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
                     if (preview[i] == '\n' || preview[i] == '\r') preview[i] = '|';
                 }
                 LOGI("Param file first 200 bytes: %s", preview);
+
+                // 检测内置归一化节点
+                bool hasMinus = strstr(mem, "_minusscalar0") != nullptr ||
+                                strstr(mem, "_minus") != nullptr ||
+                                strstr(mem, "bn_data") != nullptr;
+                bool hasMul = strstr(mem, "_mulscalar0") != nullptr ||
+                              strstr(mem, "_mul") != nullptr ||
+                              strstr(mem, "bn_data") != nullptr;
+                hasBuiltInNormalization_ = hasMinus && hasMul;
+                LOGI("Model normalization check: hasMinus=%s, hasMul=%s, builtInNorm=%s",
+                     hasMinus ? "true" : "false", hasMul ? "true" : "false",
+                     hasBuiltInNormalization_ ? "true" : "false");
+
                 free(mem);
             }
             fclose(fp);
@@ -149,14 +163,6 @@ ncnn::Mat NcnnFaceDetector::preprocess(const unsigned char *imageData, int width
     // 创建 NCHW 格式的输入 Mat
     ncnn::Mat in = ncnn::Mat(inputSize_, inputSize_, 3);
     in.fill(0.0f);
-
-    // [调试] 检查输入数据范围
-    unsigned char min_byte = 255, max_byte = 0;
-    for (int i = 0; i < width * height * 3; i++) {
-        if (imageData[i] < min_byte) min_byte = imageData[i];
-        if (imageData[i] > max_byte) max_byte = imageData[i];
-    }
-    LOGD("JNI input byte range: [%u, %u]", min_byte, max_byte);
 
     if (width == inputSize_ && height == inputSize_) {
         // 直接复制，无需 resize
@@ -217,22 +223,20 @@ ncnn::Mat NcnnFaceDetector::preprocess(const unsigned char *imageData, int width
     }
 
     // 归一化: (x - 127.5) / 128.0
-    float min_val = 999.0f, max_val = -999.0f;
-    float min_raw = 999.0f, max_raw = -999.0f;
-    for (int c = 0; c < 3; c++) {
-        float mean_val = 127.5f;
-        float norm_val = 1.0f / 128.0f;
-        float* ptr = in.channel(c);
-        int total = in.w * in.h;
-        for (int i = 0; i < total; i++) {
-            if (ptr[i] < min_raw) min_raw = ptr[i];
-            if (ptr[i] > max_raw) max_raw = ptr[i];
-            ptr[i] = (ptr[i] - mean_val) * norm_val;
-            if (ptr[i] < min_val) min_val = ptr[i];
-            if (ptr[i] > max_val) max_val = ptr[i];
+    // [关键修复] 如果模型有内置归一化节点（如 _minusscalar0/_mulscalar0），跳过外部归一化
+    if (hasBuiltInNormalization_) {
+        LOGD("Skipping external normalization (model has built-in normalization nodes)");
+    } else {
+        for (int c = 0; c < 3; c++) {
+            float mean_val = 127.5f;
+            float norm_val = 1.0f / 128.0f;
+            float* ptr = in.channel(c);
+            int total = in.w * in.h;
+            for (int i = 0; i < total; i++) {
+                ptr[i] = (ptr[i] - mean_val) * norm_val;
+            }
         }
     }
-    LOGD("Input raw range: [%.1f, %.1f], after norm: [%.3f, %.3f]", min_raw, max_raw, min_val, max_val);
 
     return in;
 }

@@ -76,6 +76,7 @@ private:
     int inputSize_;
     bool useGpu_;
     bool loaded_;
+    bool hasBuiltInNormalization_;
     std::string inputName_;
     std::vector<std::string> outputNames_;
 
