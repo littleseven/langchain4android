@@ -181,25 +181,39 @@ class AiAgentUseCase(
     }
 
     private fun parseLlmResponse(content: String, state: CameraStateSnapshot): AiAgentCommand {
-        // 1. 移除 <think>...</think> 思考标签及其内容
+
+        // 1. 移除 <think>...</think> 思考标签及其内容（支持多个标签）
         var cleaned = content.trim()
-        val thinkStart = cleaned.indexOf("<think>")
-        val thinkEnd = cleaned.indexOf("</think>")
-        if (thinkStart >= 0 && thinkEnd > thinkStart) {
-            cleaned = cleaned.removeRange(thinkStart, thinkEnd + "</think>".length).trim()
+        while (true) {
+            val thinkStart = cleaned.indexOf("<think>")
+            val thinkEnd = cleaned.indexOf("</think>")
+            if (thinkStart >= 0 && thinkEnd > thinkStart) {
+                cleaned = cleaned.removeRange(thinkStart, thinkEnd + "</think>".length).trim()
+            } else {
+                break
+            }
+        }
+
+        // 如果还有残留的 <think> 开头（没有闭合标签），移除从 <think> 开始到末尾的所有内容
+        val orphanThinkStart = cleaned.indexOf("<think>")
+        if (orphanThinkStart >= 0) {
+            cleaned = cleaned.substring(0, orphanThinkStart).trim()
         }
 
         // 2. 移除 markdown 代码块标记
         cleaned = cleaned.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
 
+        Logger.d("PicMe:AiAgent", "Cleaned response: '$cleaned'")
+
         // 3. 检查是否包含 JSON action 字段
-        val hasJsonAction = cleaned.contains("\"action\"") || cleaned.contains(""""action""".trimIndent())
+        val hasJsonAction = cleaned.contains("\"action\"")
 
         // 4. 如果不包含 JSON 指令，直接作为自由聊天文本返回
         if (!hasJsonAction) {
-            Logger.d("PicMe:AiAgent", "No JSON action found, treating as free chat: $cleaned")
+            Logger.d("PicMe:AiAgent", "No JSON action found, treating as free chat")
             return AiAgentCommand.TextReply(cleaned.ifBlank { "你好，我是 PicMe 相机的 AI 助手，有什么可以帮你的吗？" })
         }
+
 
         // 5. 提取 JSON 部分（可能混有自然语言，取第一个 { 到最后一个 }）
         val jsonStart = cleaned.indexOf('{')
