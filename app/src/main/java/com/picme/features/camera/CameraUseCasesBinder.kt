@@ -109,6 +109,7 @@ internal fun bindCameraUseCases(
 
     var frameCount = 0
     var lastFrameLogMs = 0L
+    val beautyEnabledAtBind = beautySettings.enabled
     imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
         frameCount++
         // 限流：帧计数日志 1 秒最多打一次
@@ -127,7 +128,8 @@ internal fun bindCameraUseCases(
             onFacePointChanged = onFacePointChanged,
             onFaceWarpParamsChanged = onFaceWarpParamsChanged,
             onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
-            isDualMode = false
+            isDualMode = false,
+            beautyEnabled = beautyEnabledAtBind
         )
     }
 
@@ -174,7 +176,14 @@ internal fun bindCameraUseCases(
                 "useCaseGroup=${useCaseGroup != null}, aspectRatio=$aspectRatio"
         )
     } catch (error: Exception) {
-        Logger.e("Camera", "Binding failed", error)
+        Logger.e("Camera", "Camera binding failed, attempting recovery", error)
+        // 相机绑定失败时尝试清理并重新绑定
+        try {
+            cameraProvider.unbindAll()
+            Logger.d("Camera", "Unbound all use cases after failure, retry may be triggered by recomposition")
+        } catch (cleanupError: Exception) {
+            Logger.e("Camera", "Cleanup after binding failure also failed", cleanupError)
+        }
     }
 }
 

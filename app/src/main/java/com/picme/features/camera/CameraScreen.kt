@@ -590,7 +590,7 @@ fun CameraContent(
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
     var isRecording by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
-    var beautySettings by remember { mutableStateOf(BeautySettings(enabled = true)) }
+    var beautySettings by remember { mutableStateOf(BeautySettings(enabled = false)) }
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
     var exposureCompensation by remember { mutableIntStateOf(0) }
     var whiteBalanceMode by remember { mutableIntStateOf(0) }
@@ -814,7 +814,10 @@ fun CameraContent(
 
     val mediaAssets by viewModel.allMedia.collectAsState()
     val lastMedia = mediaAssets.firstOrNull()
-    val debugShaderMode by userPreferencesRepository.debugShaderModeFlow.collectAsState(initial = 0)
+
+    // Shader debug mode: 强制为 0（正常渲染），不从 DataStore 读取，避免调试模式导致蓝屏
+    val debugShaderMode = 0
+
     val beautyPreviewStatus = if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
         BeautyPreviewStatus.ACTIVE
     } else {

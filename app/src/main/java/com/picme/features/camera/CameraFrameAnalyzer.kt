@@ -173,6 +173,7 @@ internal fun stopFaceDetectionWorker() {
  * @param onFacePointChanged 人脸中心点回调（屏幕坐标，用于聚焦指示器）
  * @param onFaceWarpParamsChanged FaceWarpParams 回调
  * @param onShowFocusIndicatorChanged 聚焦指示器显示回调
+ * @param beautyEnabled 美颜是否启用，未启用时跳过人脸检测以节省性能
  */
 @ExperimentalGetImage
 internal fun handleImageAnalysisFrameMediaPipe(
@@ -186,9 +187,16 @@ internal fun handleImageAnalysisFrameMediaPipe(
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
     isDualMode: Boolean = false,
-    existingWarpParams: FaceWarpParams? = null
+    existingWarpParams: FaceWarpParams? = null,
+    beautyEnabled: Boolean = false
 ) {
     try {
+        // 美颜未启用时，跳过人脸检测，直接释放资源
+        if (!beautyEnabled) {
+            imageProxy.close()
+            return
+        }
+
         val mediaImage = imageProxy.image
         if (mediaImage == null) {
             imageProxy.close()
