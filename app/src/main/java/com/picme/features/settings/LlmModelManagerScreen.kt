@@ -58,10 +58,16 @@ fun LlmModelManagerScreen(
     val downloadManager = remember { LlmModelDownloadManager(context) }
     val coroutineScope = rememberCoroutineScope()
 
-    val availableModels = remember { downloadManager.loadAvailableModels() }
+    var availableModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
     val downloadStates by downloadManager.downloadStates.collectAsState()
 
-    var downloadedModels by remember { mutableStateOf(downloadManager.getDownloadedModels()) }
+    var downloadedModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
+
+    // [Fix] 异步加载模型列表，避免主线程网络请求导致 NetworkOnMainThreadException
+    LaunchedEffect(Unit) {
+        availableModels = downloadManager.loadAvailableModels()
+        downloadedModels = downloadManager.getDownloadedModels()
+    }
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
 
     Scaffold(
@@ -131,9 +137,9 @@ fun LlmModelManagerScreen(
                         downloadState = state,
                         onDownload = {
                             coroutineScope.launch {
-                                downloadManager.downloadModel(model.id, "modelscope")
+                                downloadManager.downloadModel(model.id, modelConfig = model)
                                     .collect { progress ->
-                                        if (progress.status == DownloadStatus.COMPLETED) {
+                                        if (progress.status == DownloadStatus.COMPLETED || progress.status == DownloadStatus.FAILED) {
                                             downloadedModels = downloadManager.getDownloadedModels()
                                         }
                                     }
@@ -144,6 +150,20 @@ fun LlmModelManagerScreen(
                         }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            // 显示下载错误提示
+            val failedDownloads = downloadStates.values.filter { it.status == DownloadStatus.FAILED }
+            failedDownloads.forEach { failedState ->
+                val model = availableModels.find { it.id == failedState.modelId }
+                if (model != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${model.name} ${stringResource(R.string.download_failed)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }

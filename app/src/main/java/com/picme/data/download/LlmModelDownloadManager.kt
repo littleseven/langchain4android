@@ -18,15 +18,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
-import java.io.InputStream
-import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 
 /**
  * LLM 模型下载管理器
  *
- * 负责从 HuggingFace/ModelScope 下载 MNN-LLM 模型文件到本地存储。
- * 支持下载进度追踪、取消下载、删除已下载模型。
+ * 从 MNN 官方模型市场获取模型列表，支持从 ModelScope（魔搭）下载 MNN-LLM 模型。
+ * 参考 MNN Chat 官方实现：使用 https://meta.alicdn.com/data/mnn/apis/model_market.json 获取模型配置。
  */
 class LlmModelDownloadManager(private val context: Context) {
 
@@ -34,6 +32,8 @@ class LlmModelDownloadManager(private val context: Context) {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     private val downloadDir: File
@@ -45,9 +45,114 @@ class LlmModelDownloadManager(private val context: Context) {
     private val activeDownloads = mutableMapOf<String, okhttp3.Call>()
 
     /**
-     * 加载可用模型配置
+     * MNN-LLM 模型固定文件列表
      */
-    fun loadAvailableModels(): List<ModelConfig> {
+    private val LLM_MODEL_FILES = listOf(
+        "config.json",
+        "llm.mnn",
+        "llm.mnn.weight",
+        "tokenizer.txt"
+    )
+
+    /**
+     * 加载可用模型配置
+     *
+     * 优先从 MNN 官方模型市场获取，失败时回退到本地配置。
+     * 注意：此函数包含网络请求，必须在 IO 线程调用。
+     */
+    suspend fun loadAvailableModels(): List<ModelConfig> = withContext(Dispatchers.IO) {
+        loadMarketData().models
+    }
+
+    /**
+     * 加载模型市场数据（包含标签翻译）
+     */
+    suspend fun loadMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
+        // 1. 尝试从网络获取 MNN 官方模型市场
+        val remoteData = fetchMarketData()
+        if (remoteData.models.isNotEmpty()) {
+            return@withContext remoteData
+        }
+
+        // 2. 回退到本地配置
+        return@withContext ModelMarketData(loadLocalModels(), DEFAULT_TAG_TRANSLATIONS)
+    }
+
+    /**
+     * 从 MNN 官方模型市场获取模型列表和标签翻译
+     */
+    private fun fetchMarketData(): ModelMarketData {
+        return try {
+            val request = Request.Builder()
+                .url(MODEL_MARKET_URL)
+                .header("User-Agent", "PicMe-Android/1.0")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Logger.w("PicMe:Download", "Model market fetch failed: HTTP ${response.code}")
+                    return ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
+                }
+
+                val body = response.body?.string() ?: return ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
+                val json = JSONObject(body)
+                val modelsArray = json.getJSONArray("models")
+
+                // 解析标签翻译
+                val tagTranslations = mutableMapOf<String, String>()
+                val tagTranslationsObj = json.optJSONObject("tagTranslations")
+                if (tagTranslationsObj != null) {
+                    tagTranslationsObj.keys().forEach { key ->
+                        tagTranslations[key] = tagTranslationsObj.getString(key)
+                    }
+                }
+
+                val result = mutableListOf<ModelConfig>()
+                for (i in 0 until modelsArray.length()) {
+                    val obj = modelsArray.getJSONObject(i)
+                    val modelName = obj.getString("modelName")
+
+                    // 只加载 MNN 格式模型
+                    if (!modelName.endsWith("-MNN")) continue
+
+                    val sourcesObj = obj.getJSONObject("sources")
+                    val sources = mutableMapOf<String, String>()
+                    sourcesObj.keys().forEach { key ->
+                        sources[key] = sourcesObj.getString(key)
+                    }
+
+                    // 解析标签
+                    val tagsArray = obj.optJSONArray("tags")
+                    val tags = if (tagsArray != null) {
+                        (0 until tagsArray.length()).map { tagsArray.getString(it) }
+                    } else emptyList()
+
+                    result.add(
+                        ModelConfig(
+                            id = modelName.lowercase().replace("-mnn", "").replace(".", "-"),
+                            name = modelName,
+                            description = buildDescription(obj),
+                            size = obj.optLong("file_size", 0L),
+                            sources = sources,
+                            files = LLM_MODEL_FILES,
+                            tags = tags
+                        )
+                    )
+                }
+
+                Logger.i("PicMe:Download", "Loaded ${result.size} models from MNN market")
+                ModelMarketData(result, tagTranslations)
+            }
+        } catch (e: Exception) {
+            Logger.w("PicMe:Download", "Failed to fetch model market, fallback to local", e)
+            ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
+        }
+    }
+
+    /**
+     * 从本地 raw 资源加载模型配置
+     */
+    private fun loadLocalModels(): List<ModelConfig> {
         return try {
             val json = context.resources.openRawResource(R.raw.llm_models).bufferedReader().use { it.readText() }
             val array = JSONArray(json)
@@ -64,14 +169,29 @@ class LlmModelDownloadManager(private val context: Context) {
                     description = obj.getString("description"),
                     size = obj.getLong("size"),
                     sources = sources,
-                    files = (0 until obj.getJSONArray("files").length()).map {
-                        obj.getJSONArray("files").getString(it)
-                    }
+                    files = LLM_MODEL_FILES
                 )
             }
         } catch (e: Exception) {
-            Logger.e("PicMe:Download", "Failed to load model config", e)
+            Logger.e("PicMe:Download", "Failed to load local model config", e)
             emptyList()
+        }
+    }
+
+    private fun buildDescription(obj: JSONObject): String {
+        val vendor = obj.optString("vendor", "")
+        val tags = obj.optJSONArray("tags")
+        val tagList = if (tags != null) {
+            (0 until tags.length()).map { tags.getString(it) }
+        } else emptyList()
+
+        return buildString {
+            append(vendor)
+            if (tagList.isNotEmpty()) {
+                append(" ")
+                append(tagList.joinToString(", "))
+            }
+            append(" 本地推理模型")
         }
     }
 
@@ -82,8 +202,7 @@ class LlmModelDownloadManager(private val context: Context) {
         val modelDir = File(downloadDir, modelId)
         if (!modelDir.exists()) return false
 
-        val config = loadAvailableModels().find { it.id == modelId } ?: return false
-        return config.files.all { fileName ->
+        return LLM_MODEL_FILES.all { fileName ->
             File(modelDir, fileName).exists()
         }
     }
@@ -102,7 +221,7 @@ class LlmModelDownloadManager(private val context: Context) {
     /**
      * 获取已下载模型列表
      */
-    fun getDownloadedModels(): List<ModelConfig> {
+    suspend fun getDownloadedModels(): List<ModelConfig> {
         return loadAvailableModels().filter { isModelDownloaded(it.id) }
     }
 
@@ -138,116 +257,130 @@ class LlmModelDownloadManager(private val context: Context) {
     /**
      * 下载模型
      *
-     * 策略：优先 ModelScope（国内稳定），失败时自动回退到 HuggingFace。
+     * 策略：仅使用 ModelScope（魔搭）源，国内访问最稳定。
      *
      * @param modelId 模型 ID
-     * @param preferredSource 首选下载源，如 "modelscope" 或 "huggingface"
      * @return Flow<DownloadProgress> 下载进度流
      */
-    fun downloadModel(modelId: String, preferredSource: String = "modelscope"): Flow<DownloadProgress> = flow {
-        // [Fix] 在 IO 线程执行网络下载，避免主线程网络异常
-        val config = loadAvailableModels().find { it.id == modelId }
+    fun downloadModel(modelId: String, modelConfig: ModelConfig? = null): Flow<DownloadProgress> = flow {
+        val config = modelConfig ?: loadAvailableModels().find { it.id == modelId }
             ?: throw IllegalArgumentException("Unknown model: $modelId")
-
-        val sourcesToTry = if (preferredSource == "modelscope") {
-            listOf("modelscope", "huggingface")
-        } else {
-            listOf("huggingface", "modelscope")
-        }
 
         val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
         _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, config.size)) }
 
-        var lastException: Exception? = null
+        try {
+            // 仅使用 ModelScope 源
+            val repoPath = config.sources["ModelScope"]
+                ?: config.sources["modelscope"]
+                ?: throw IOException("ModelScope source not available for $modelId")
 
-        for (source in sourcesToTry) {
-            val repoPath = config.sources[source] ?: continue
+            Logger.i("PicMe:Download", "Downloading model $modelId from ModelScope: $repoPath")
+
             var totalDownloaded = 0L
 
-            try {
-                Logger.i("PicMe:Download", "Trying source '$source' for model $modelId, repo=$repoPath")
+            for (fileName in LLM_MODEL_FILES) {
+                if (activeDownloads[modelId]?.isCanceled() == true) {
+                    throw IOException("Download cancelled")
+                }
 
-                for (fileName in config.files) {
-                    if (activeDownloads[modelId]?.isCanceled() == true) {
-                        throw IOException("Download cancelled")
+                val url = buildModelScopeUrl(repoPath, fileName)
+                val destFile = File(modelDir, fileName)
+
+                Logger.d("PicMe:Download", "Downloading $fileName from $url")
+
+                if (destFile.exists() && destFile.length() > 0) {
+                    totalDownloaded += destFile.length()
+                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                    continue
+                }
+
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "PicMe-Android/1.0")
+                    .build()
+                val call = client.newCall(request)
+                activeDownloads[modelId] = call
+
+                call.execute().use { response ->
+                    Logger.d("PicMe:Download", "Response: HTTP ${response.code} for $fileName")
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()?.take(200) ?: ""
+                        throw IOException("HTTP ${response.code} for $fileName, url=$url, body=$errorBody")
                     }
 
-                    val url = buildDownloadUrl(repoPath, fileName, source)
-                    val destFile = File(modelDir, fileName)
+                    val body = response.body
+                        ?: throw IOException("Empty response for $fileName from $url")
 
-                    Logger.d("PicMe:Download", "Downloading $fileName from $url")
+                    body.byteStream().use { input ->
+                        destFile.outputStream().use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var bytesRead: Int
+                            var lastEmitTime = System.currentTimeMillis()
+                            var lastEmitBytes = totalDownloaded
 
-                    if (destFile.exists() && destFile.length() > 0) {
-                        totalDownloaded += destFile.length()
-                        emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
-                        continue
-                    }
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                if (call.isCanceled()) {
+                                    throw IOException("Download cancelled")
+                                }
+                                output.write(buffer, 0, bytesRead)
+                                totalDownloaded += bytesRead
 
-                    val request = Request.Builder().url(url).build()
-                    val call = client.newCall(request)
-                    activeDownloads[modelId] = call
-
-                    call.execute().use { response ->
-                        if (!response.isSuccessful) {
-                            throw IOException("HTTP ${response.code} for $fileName from $source, url=$url")
-                        }
-
-                        val body = response.body
-                            ?: throw IOException("Empty response for $fileName from $url")
-
-                        body.byteStream().use { input ->
-                            destFile.outputStream().use { output ->
-                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                                var bytesRead: Int
-
-                                while (input.read(buffer).also { bytesRead = it } != -1) {
-                                    if (call.isCanceled()) {
-                                        throw IOException("Download cancelled")
-                                    }
-                                    output.write(buffer, 0, bytesRead)
-                                    totalDownloaded += bytesRead
-
+                                // [Perf] 限制进度 emit 频率：每 500ms 或每下载 1MB 才 emit 一次
+                                val now = System.currentTimeMillis()
+                                val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
+                                if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
                                     emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                                    lastEmitTime = now
+                                    lastEmitBytes = totalDownloaded
                                 }
                             }
                         }
                     }
                 }
-
-                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
-                emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
-                Logger.i("PicMe:Download", "Model download completed from $source: $modelId")
-                return@flow
-
-            } catch (e: Exception) {
-                if (e.message?.contains("cancelled", ignoreCase = true) == true) {
-                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
-                    emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
-                    return@flow
-                }
-                val errorMsg = e.message ?: e.javaClass.simpleName
-                Logger.w("PicMe:Download", "Source '$source' failed for $modelId, error=$errorMsg, will try fallback")
-                lastException = e
             }
-        }
 
-        // All sources failed
-        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
-        emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
-        val finalError = lastException?.message ?: "Unknown error"
-        Logger.e("PicMe:Download", "All sources failed for model: $modelId, lastError=$finalError")
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
+            emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
+            Logger.i("PicMe:Download", "Model download completed: $modelId")
+
+        } catch (e: Exception) {
+            if (e.message?.contains("cancelled", ignoreCase = true) == true) {
+                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                return@flow
+            }
+            val errorMsg = e.message ?: e.javaClass.simpleName
+            Logger.e("PicMe:Download", "Download failed for $modelId: $errorMsg")
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
+            emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
+        }
     }.flowOn(Dispatchers.IO)
 
-    private fun buildDownloadUrl(repoPath: String, fileName: String, source: String): String {
-        return when (source) {
-            "huggingface" -> "https://huggingface.co/$repoPath/resolve/main/$fileName"
-            "modelscope" -> "https://modelscope.cn/models/$repoPath/resolve/master/$fileName"
-            else -> throw IllegalArgumentException("Unknown source: $source")
-        }
+    private fun buildModelScopeUrl(repoPath: String, fileName: String): String {
+        return "https://modelscope.cn/models/$repoPath/resolve/master/$fileName"
     }
 
     companion object {
         private const val DEFAULT_BUFFER_SIZE = 8192
+        private const val MODEL_MARKET_URL = "https://meta.alicdn.com/data/mnn/apis/model_market.json"
+
+        /**
+         * 默认标签翻译（MNN 官方 tagTranslations 的本地回退）
+         */
+        val DEFAULT_TAG_TRANSLATIONS = mapOf(
+            "Vision" to "图像理解",
+            "Video" to "视频理解",
+            "Audio" to "音频理解",
+            "Code" to "代码",
+            "Math" to "数学",
+            "ImageGen" to "文生图",
+            "AudioGen" to "音频生成",
+            "Think" to "深度思考",
+            "Chat" to "对话",
+            "Safety" to "安全",
+            "NPU" to "NPU加速"
+        )
     }
 }
 
@@ -260,7 +393,16 @@ data class ModelConfig(
     val description: String,
     val size: Long,
     val sources: Map<String, String>,
-    val files: List<String>
+    val files: List<String>,
+    val tags: List<String> = emptyList()
+)
+
+/**
+ * 模型市场数据（包含模型列表和标签翻译）
+ */
+data class ModelMarketData(
+    val models: List<ModelConfig>,
+    val tagTranslations: Map<String, String>
 )
 
 /**

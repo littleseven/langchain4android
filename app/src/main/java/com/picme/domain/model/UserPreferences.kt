@@ -110,3 +110,12 @@ data class StageConfig(
     }
 }
 
+/**
+ * AI Agent 推理模式（领域模型）
+ * 控制使用本地 MNN-LLM 模型还是远程 API
+ */
+enum class AiAgentMode {
+    LOCAL,   // 本地 MNN-LLM 模型（默认，符合隐私红线）
+    REMOTE   // 远程 Kimi/Moonshot API
+}
+

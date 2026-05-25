@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.core.common.Logger
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
@@ -127,6 +128,20 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         )
 
     val aiAgentBaseUrl: StateFlow<String> = repository.aiAgentBaseUrlFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val aiAgentMode: StateFlow<AiAgentMode> = repository.aiAgentModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AiAgentMode.LOCAL
+        )
+
+    val aiAgentLocalModel: StateFlow<String> = repository.aiAgentLocalModelFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -295,6 +310,18 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
         }
     }
 
+    fun setAiAgentMode(mode: AiAgentMode) {
+        viewModelScope.launch {
+            repository.updateAiAgentMode(mode)
+        }
+    }
+
+    fun setAiAgentLocalModel(modelId: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentLocalModel(modelId)
+        }
+    }
+
     fun setAiAgentApiKey(apiKey: String) {
         viewModelScope.launch {
             repository.updateAiAgentApiKey(apiKey)
@@ -312,6 +339,7 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             repository.updateAiAgentBaseUrl(baseUrl)
         }
     }
+
 
 }
 

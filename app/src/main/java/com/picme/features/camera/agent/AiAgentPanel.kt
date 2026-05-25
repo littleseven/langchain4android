@@ -70,6 +70,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
+import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.CoroutineScope
@@ -464,7 +465,7 @@ private fun VoiceInputButton(
     }
 }
 
-private fun sendMessage(
+internal fun sendMessage(
     scope: CoroutineScope,
     state: AiAgentPanelState,
     useCase: AiAgentUseCase,
@@ -499,7 +500,7 @@ private fun sendMessage(
                         is AiAgentCommand.CapturePhoto -> "已拍照"
                         is AiAgentCommand.ToggleRecording -> "已切换录像状态"
                         is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
-                        else -> "已完成"
+                        is AiAgentCommand.TextReply -> ""
                     }
                     state.addMessage(
                         AiAgentMessage(
@@ -511,9 +512,10 @@ private fun sendMessage(
                 }
             }
         }.onFailure { error ->
+            Logger.e("PicMe:AiAgent", "AI processing failed: ${error.message}", error)
             state.addMessage(
                 AiAgentMessage(
-                    content = "Error: ${error.message}",
+                    content = "处理出错了：${error.message ?: "未知错误"}",
                     isFromUser = false
                 )
             )

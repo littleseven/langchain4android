@@ -30,6 +30,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +49,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
+import com.picme.data.download.LlmModelDownloadManager
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
@@ -97,6 +100,8 @@ fun SettingsScreen(
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
     val roiStageConfig by viewModel.roiStageConfig.collectAsState()
     val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
+    val aiAgentMode by viewModel.aiAgentMode.collectAsState()
+    val aiAgentLocalModel by viewModel.aiAgentLocalModel.collectAsState()
     val aiAgentApiKey by viewModel.aiAgentApiKey.collectAsState()
     val aiAgentModel by viewModel.aiAgentModel.collectAsState()
     val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
@@ -139,6 +144,10 @@ fun SettingsScreen(
         onLandmarkModelTypeSelected = { type -> viewModel.setLandmarkModelType(type) },
         onLandmarkEngineTypeSelected = { type -> viewModel.setLandmarkEngineType(type) },
         onLandmarkDevicePreferenceSelected = { preference -> viewModel.setLandmarkDevicePreference(preference) },
+        aiAgentMode = aiAgentMode,
+        onAiAgentModeChange = { mode -> viewModel.setAiAgentMode(mode) },
+        aiAgentLocalModel = aiAgentLocalModel,
+        onAiAgentLocalModelChange = { modelId -> viewModel.setAiAgentLocalModel(modelId) },
         aiAgentApiKey = aiAgentApiKey,
         onAiAgentApiKeyChange = { key -> viewModel.setAiAgentApiKey(key) },
         aiAgentModel = aiAgentModel,
@@ -166,6 +175,10 @@ private fun settingsContent(
     debugShaderMode: Int,
     roiStageConfig: StageConfig,
     landmarkStageConfig: StageConfig,
+    aiAgentMode: AiAgentMode,
+    onAiAgentModeChange: (AiAgentMode) -> Unit,
+    aiAgentLocalModel: String,
+    onAiAgentLocalModelChange: (String) -> Unit,
     aiAgentApiKey: String,
     onAiAgentApiKeyChange: (String) -> Unit,
     aiAgentModel: String,
@@ -337,22 +350,140 @@ private fun settingsContent(
                 title = stringResource(R.string.ai_agent),
                 description = stringResource(R.string.ai_agent_desc)
             ) {
-                AiAgentModelManagerRow(
-                    onClick = onNavigateToLlmModelManager
+                // 模式选择：本地模型 / 远程模型
+                AiAgentModeSelection(
+                    currentMode = aiAgentMode,
+                    onModeSelected = onAiAgentModeChange
                 )
-                AiAgentBaseUrlSelection(
-                    currentBaseUrl = aiAgentBaseUrl,
-                    onBaseUrlSelected = onAiAgentBaseUrlChange
+
+                when (aiAgentMode) {
+                    AiAgentMode.LOCAL -> {
+                        AiAgentLocalModelSection(
+                            currentLocalModel = aiAgentLocalModel,
+                            onLocalModelSelected = onAiAgentLocalModelChange,
+                            onNavigateToModelManager = onNavigateToLlmModelManager
+                        )
+                    }
+                    AiAgentMode.REMOTE -> {
+                        AiAgentBaseUrlSelection(
+                            currentBaseUrl = aiAgentBaseUrl,
+                            onBaseUrlSelected = onAiAgentBaseUrlChange
+                        )
+                        AiAgentModelSelection(
+                            currentModel = aiAgentModel,
+                            onModelSelected = onAiAgentModelChange
+                        )
+                        AiAgentApiKeyRow(
+                            apiKey = aiAgentApiKey,
+                            onApiKeyChange = onAiAgentApiKeyChange
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAgentModeSelection(
+    currentMode: AiAgentMode,
+    onModeSelected: (AiAgentMode) -> Unit
+) {
+    val options = listOf(
+        AiAgentMode.LOCAL to stringResource(R.string.ai_agent_mode_local),
+        AiAgentMode.REMOTE to stringResource(R.string.ai_agent_mode_remote)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_mode),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = options,
+            currentValue = currentMode,
+            maxLines = 1,
+            onSelected = onModeSelected
+        )
+    }
+}
+
+@Composable
+private fun AiAgentLocalModelSection(
+    currentLocalModel: String,
+    onLocalModelSelected: (String) -> Unit,
+    onNavigateToModelManager: () -> Unit
+) {
+    val context = LocalContext.current
+    val downloadManager = remember { LlmModelDownloadManager(context) }
+
+    var downloadedModels by remember { mutableStateOf<List<com.picme.data.download.ModelConfig>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        downloadedModels = downloadManager.getDownloadedModels()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        // 已下载模型选择
+        Text(
+            text = stringResource(R.string.ai_agent_local_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (downloadedModels.isEmpty()) {
+            Text(
+                text = stringResource(R.string.ai_agent_no_local_model),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            val options = downloadedModels.map { it.id to it.name }
+            CompactOptionChips(
+                options = options,
+                currentValue = currentLocalModel,
+                maxLines = 2,
+                onSelected = onLocalModelSelected
+            )
+        }
+
+        // 跳转到模型管理器
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToModelManager)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.ai_model_manager),
+                    style = MaterialTheme.typography.bodyMedium
                 )
-                AiAgentModelSelection(
-                    currentModel = aiAgentModel,
-                    onModelSelected = onAiAgentModelChange
-                )
-                AiAgentApiKeyRow(
-                    apiKey = aiAgentApiKey,
-                    onApiKeyChange = onAiAgentApiKeyChange
+                Text(
+                    text = stringResource(R.string.ai_model_manager_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(20.dp)
+                    .padding(start = 4.dp)
+            )
         }
     }
 }
@@ -904,6 +1035,10 @@ fun SettingsScreenPreview() {
             onLandmarkModelTypeSelected = {},
             onLandmarkEngineTypeSelected = {},
             onLandmarkDevicePreferenceSelected = {},
+            aiAgentMode = AiAgentMode.LOCAL,
+            onAiAgentModeChange = {},
+            aiAgentLocalModel = "",
+            onAiAgentLocalModelChange = {},
             aiAgentApiKey = "",
             onAiAgentApiKeyChange = {},
             aiAgentModel = "moonshot-v1-8k",
