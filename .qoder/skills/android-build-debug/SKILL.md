@@ -1,6 +1,11 @@
 ---
 name: android-build-debug
-description: Android 项目编译、安装、日志调试的标准化流程。Use when building Android APK, installing to device, checking logcat, or debugging runtime issues in the PicMe app.
+description: Android 项目编译、安装、日志调试的标准化流程。
+version: 1.1.0
+created: 2026-05-03
+updated: 2026-05-25
+maintainer: [RD] 全栈工程师
+tags: [android, gradle, build, debug, apk]
 ---
 
 # Android 编译调试 Skill
@@ -9,7 +14,7 @@ description: Android 项目编译、安装、日志调试的标准化流程。Us
 
 ### 1. 编译 Debug APK
 ```bash
-cd /Users/guoshuai/AndroidStudioProjects/PicMe
+# 在项目根目录执行
 ./gradlew :app:assembleDebug
 ```
 
@@ -58,7 +63,6 @@ adb shell am start -n com.picme/.MainActivity
 
 ## 项目特定路径
 
-- 项目根目录：`/Users/guoshuai/AndroidStudioProjects/PicMe`
 - APK 输出：`app/build/outputs/apk/debug/picme-debug.apk`
 - Shader 目录：`beauty-engine/src/main/assets/shaders/`
 - Java/Kotlin 源码：`app/src/main/java/com/picme/`

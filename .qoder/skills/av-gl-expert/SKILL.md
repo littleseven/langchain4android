@@ -1,6 +1,11 @@
 ---
 name: av-gl-expert
-description: PicMe OpenGL/CameraX 专家。诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。Use when debugging rendering, CameraX integration, or GPU performance.
+description: PicMe OpenGL/CameraX 专家。诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。
+version: 1.1.0
+created: 2026-05-03
+updated: 2026-05-25
+maintainer: [RD] 全栈工程师 + [CR] 规范守护者
+tags: [opengl, camerax, egl, shader, gpu, rendering]
 ---
 
 # AV-GL Expert (PicMe)
@@ -530,7 +535,6 @@ imageAnalysis.setAnalyzer(Dispatchers.IO.asExecutor()) { imageProxy ->
         val mediaImage = imageProxy.image ?: return@setAnalyzer
         
         // 大美丽引擎：YUV 数据由 SurfaceTexture 直接输入 GPU Shader
-        // 不再经过 CPU 侧 I420/RGBA 转换（GPUPixel 旧链路已移除）
         // 人脸检测在独立 ImageAnalysis 线程异步完成
         
         // 将 MediaPipe/InsightFace 检测结果更新到 BeautyRenderer
@@ -541,12 +545,6 @@ imageAnalysis.setAnalyzer(Dispatchers.IO.asExecutor()) { imageProxy ->
         
         imageProxy.close()
         return@setAnalyzer
-        
-        // 以下为 GPUPixel 历史代码参考（已移除）：
-        // val buffers = GPUPixel.YUV_420_888toI420AndRGBA(...)
-        // gpupixelProvider.onYuvFrame(...)
-            )
-        }
     } catch (e: Exception) {
         Log.e(TAG, "YUV conversion error", e)
     } finally {
@@ -592,7 +590,7 @@ class DualCameraManager {
 
 #### 坐标系转换流程
 
-**重要说明**：本文档中所有"左/右"描述均基于**图像坐标系**（观察者视角），详见 [COORDINATE_SYSTEM_STANDARD.md](../../docs/COORDINATE_SYSTEM_STANDARD.md)。
+**重要说明**：本文档中所有"左/右"描述均基于**图像坐标系**（观察者视角），详见 [COORDINATE_SYSTEM_STANDARD.md](docs/COORDINATE_SYSTEM_STANDARD.md)。
 
 ```
 MediaPipe 468 点 (3D NDC)
@@ -891,10 +889,10 @@ fun LandmarkDebugOverlay(
 ## 📚 参考文档
 
 ### 内部文档
-- [CAMERA_PREVIEW_TECH_SPEC.md](../CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规格
-- [BIG_BEAUTY_TECH_SPEC.md](../BIG_BEAUTY_TECH_SPEC.md) - 大美丽引擎技术规格
-- [ADR-002-opengl-offscreen-unified-pipeline.md](../ADR-002-opengl-offscreen-unified-pipeline.md) - 离屏渲染架构决策
-- [BEAUTY_ENGINE_FALLBACK.md](../BEAUTY_ENGINE_FALLBACK.md) - 引擎容灾降级策略
+- [CAMERA_PREVIEW_TECH_SPEC.md](docs/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规格
+- [BIG_BEAUTY_TECH_SPEC.md](docs/BIG_BEAUTY_TECH_SPEC.md) - 大美丽引擎技术规格
+- [ADR-002-opengl-offscreen-unified-pipeline.md](docs/ADR-002-opengl-offscreen-unified-pipeline.md) - 离屏渲染架构决策
+- [BEAUTY_ENGINE_FALLBACK.md](docs/BEAUTY_ENGINE_FALLBACK.md) - 引擎容灾降级策略
 
 ### 外部资源
 - [OpenGL ES 2.0 Reference](https://www.khronos.org/opengles/sdk/docs/man/)

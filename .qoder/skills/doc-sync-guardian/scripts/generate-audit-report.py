@@ -129,8 +129,8 @@ def main():
 
 ```bash
 # 重新运行审计
-cd /Users/guoshuai/AndroidStudioProjects/PicMe
-./.lingma/skills/doc-sync-guardian/scripts/check-doc-consistency.sh
+# 在项目根目录执行
+./.qoder/skills/doc-sync-guardian/scripts/check-doc-consistency.sh
 
 # 查看 I18N 详细报告
 ls -lt docs/i18n_sync_report_*.md | head -1

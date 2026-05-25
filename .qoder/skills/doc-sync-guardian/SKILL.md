@@ -1,6 +1,11 @@
 ---
 name: doc-sync-guardian
-description: 自动维护 PRODUCT.md → docs/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。Use when checking documentation consistency across product specs, feature docs, and module implementation specs during PicMe project iterations.
+description: 自动维护 PRODUCT.md → docs/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。
+version: 1.1.0
+created: 2026-05-03
+updated: 2026-05-25
+maintainer: [CR] 规范守护者 + [CO] 协调者
+tags: [documentation, sync, audit, agents, product]
 ---
 
 # PicMe 文档一致性守护者 (DocSync Guardian)
@@ -389,7 +394,7 @@ wc -l AGENTS.md  # 如果超过 500 行，可能需要瘦身
 - [ ] 文档引用链断裂（A 引用 B，但 B 已删除）？
 
 #### Step 2: 执行内容分流
-根据 [AGENTS_SPEC.md Section 4.4](../docs/AGENTS_SPEC.md#44-顶层-agents-瘦身流程新增)：
+根据 AGENTS_SPEC.md Section 4.4：
 
 ```markdown
 ## 内容分流操作
@@ -621,10 +626,10 @@ if __name__ == "__main__":
 
 ## 📚 参考文档
 
-- [AGENTS.md](../AGENTS.md) - 顶层 Agent 治理规范
-- [docs/AGENTS_SPEC.md](AGENTS_SPEC.md) - AGENTS.md 编写规范
-- [PRODUCT.md](../PRODUCT.md) - 产品需求规格说明书
-- [docs/FEATURES.md](FEATURES.md) - 功能交互细节规范
+- [AGENTS.md](AGENTS.md) - 顶层 Agent 治理规范
+- [docs/AGENTS_SPEC.md](docs/AGENTS_SPEC.md) - AGENTS.md 编写规范
+- [PRODUCT.md](PRODUCT.md) - 产品需求规格说明书
+- [docs/FEATURES.md](docs/FEATURES.md) - 功能交互细节规范
 - [Google Technical Writing](https://developers.google.com/tech-writing) - 技术文档写作指南
 
 ---

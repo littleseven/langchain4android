@@ -1,6 +1,11 @@
 ---
 name: coordinate-system-standard
-description: 人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。Use when normalizing face landmark coordinates, rendering pipeline coordinates, or UI annotation coordinate systems in the PicMe project.
+description: 人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。
+version: 1.1.0
+created: 2026-05-03
+updated: 2026-05-25
+maintainer: [RD] 全栈工程师 + [CR] 规范守护者
+tags: [coordinate-system, landmark, opengl, rendering, standard]
 ---
 
 # Coordinate System Standard Skill
@@ -442,10 +447,10 @@ Log.d(TAG, "Step4 [像素映射]: screen=($screenX,$screenY)")
 
 ## 📖 相关文档
 
-- [COORDINATE_SYSTEM_STANDARD.md](../COORDINATE_SYSTEM_STANDARD.md) - 坐标系规范详细说明
-- [ADR-003-coordinate-system-management.md](../ADR-003-coordinate-system-management.md) - 技术决策文档
-- [CAMERA_PREVIEW_TECH_SPEC.md](../CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
-- [INSIGHTFACE_106_MAPPING.md](../face-detection/INSIGHTFACE_106_MAPPING.md) - 关键点映射文档
+- [COORDINATE_SYSTEM_STANDARD.md](docs/COORDINATE_SYSTEM_STANDARD.md) - 坐标系规范详细说明
+- [ADR-003-coordinate-system-management.md](docs/ADR-003-coordinate-system-management.md) - 技术决策文档
+- [CAMERA_PREVIEW_TECH_SPEC.md](docs/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
+- [INSIGHTFACE_106_MAPPING.md](docs/face-detection/INSIGHTFACE_106_MAPPING.md) - 关键点映射文档
 
 ---
 

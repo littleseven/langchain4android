@@ -1,6 +1,11 @@
 ---
 name: rd-reflection
-description: RD 工程师自我进化系统。结构化复盘模板 + 累积经验资产 + 动态检查清单 + 跨 skill 联动更新。每次任务后自动提取教训、更新检查清单、反哺相关 skill，形成越用越准的团队知识库。
+description: RD 工程师自我进化系统。结构化复盘模板 + 累积经验资产 + 动态检查清单 + 跨 skill 联动更新。
+version: 1.1.0
+created: 2026-05-10
+updated: 2026-05-25
+maintainer: [RD] 全栈工程师
+tags: [reflection, checklist, evolution, experience, learning]
 ---
 
 # RD 自我进化系统 (Self-Evolving Reflection)
@@ -96,7 +101,7 @@ rd-reflection/
 
 | 措施 | 目标资产 | 状态 |
 |------|----------|------|
-| 更新 adb-bot skill 故障排除 | `.lingma/skills/adb-bot/SKILL.md` | ✅ 已提交 |
+| 更新 adb-bot skill 故障排除 | `.qoder/skills/adb-bot/SKILL.md` | ✅ 已提交 |
 | 新增 Compose 闭包捕获规范 | `gallery/AGENTS.md` | ✅ 已提交 |
 
 ### 检查清单更新
