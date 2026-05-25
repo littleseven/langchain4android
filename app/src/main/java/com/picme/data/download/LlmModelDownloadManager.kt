@@ -445,6 +445,7 @@ class LlmModelDownloadManager(private val context: Context) {
                                 val now = System.currentTimeMillis()
                                 val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
                                 if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
+                                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, config.size)) }
                                     emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                                     lastEmitTime = now
                                     lastEmitBytes = totalDownloaded
