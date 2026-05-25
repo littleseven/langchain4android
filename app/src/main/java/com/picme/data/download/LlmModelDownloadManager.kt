@@ -422,7 +422,8 @@ class LlmModelDownloadManager(private val context: Context) {
 
             var totalDownloaded = 0L
 
-            val expectedFiles = getModelFiles(modelId)
+            // 优先使用模型配置中的文件列表（从模型市场或本地配置获取）
+            val expectedFiles = config.files.takeIf { it.isNotEmpty() } ?: getModelFiles(modelId)
             for (fileName in expectedFiles) {
                 if (activeDownloads[modelId]?.isCanceled() == true) {
                     throw IOException("Download cancelled")
