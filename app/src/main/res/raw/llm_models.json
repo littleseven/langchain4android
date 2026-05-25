@@ -12,7 +12,7 @@
       "whisper.mnn",
       "vocab.json"
     ],
-    "tags": ["speech", "asr", "chinese"]
+    "tags": ["ASR", "speech", "chinese"]
   },
   {
     "id": "qwen3-0.6b",

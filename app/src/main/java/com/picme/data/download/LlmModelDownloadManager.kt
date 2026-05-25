@@ -282,17 +282,26 @@ class LlmModelDownloadManager(private val context: Context) {
                     sources[key] = sourcesObj.getString(key)
                 }
 
+                val modelId = obj.getString("id")
+                val modelTags = if (obj.has("tags")) {
+                    val tagsArray = obj.getJSONArray("tags")
+                    (0 until tagsArray.length()).map { tagsArray.getString(it) }
+                } else emptyList()
+                val modelFiles = if (obj.has("files")) {
+                    val filesArray = obj.getJSONArray("files")
+                    (0 until filesArray.length()).map { filesArray.getString(it) }
+                } else {
+                    getModelFiles(modelId)
+                }
+
                 ModelConfig(
-                    id = obj.getString("id"),
+                    id = modelId,
                     name = obj.getString("name"),
                     description = obj.getString("description"),
                     size = obj.getLong("size"),
                     sources = sources,
-                    files = LLM_MODEL_FILES,
-                    tags = if (obj.has("tags")) {
-                        val tagsArray = obj.getJSONArray("tags")
-                        (0 until tagsArray.length()).map { tagsArray.getString(it) }
-                    } else emptyList()
+                    files = modelFiles,
+                    tags = modelTags
                 )
             }
         } catch (e: Exception) {
