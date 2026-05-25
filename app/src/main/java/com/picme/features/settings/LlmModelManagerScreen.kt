@@ -58,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +73,7 @@ import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
 import com.picme.domain.model.ModelCategory
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.launch
 
 /**
  * 根据标签获取对应的图标
@@ -108,6 +110,9 @@ fun LlmModelManagerScreen(
 
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+
+    // 收集下载进度用的协程作用域
+    val coroutineScope = rememberCoroutineScope()
 
     // 同步 Tab 索引
     LaunchedEffect(currentTab, modelTypeLabels) {
@@ -158,10 +163,14 @@ fun LlmModelManagerScreen(
                             downloadState = downloadStates[model.id],
                             tagTranslations = tagTranslations,
                             onDownload = {
-                                // TODO: 实现下载逻辑
+                                coroutineScope.launch {
+                                    downloadManager.downloadModel(model.id, model).collect { progress ->
+                                        // 进度通过 downloadStates 自动收集，无需额外处理
+                                    }
+                                }
                             },
                             onCancel = {
-                                // TODO: 实现取消下载逻辑
+                                downloadManager.cancelDownload(model.id)
                             },
                             onDelete = { modelToDelete = model }
                         )
@@ -180,8 +189,13 @@ fun LlmModelManagerScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        // TODO: 实现删除逻辑
-                        modelToDelete = null
+                        coroutineScope.launch {
+                            modelToDelete?.let { model ->
+                                downloadManager.deleteModel(model.id)
+                                viewModel.refreshModels()
+                            }
+                            modelToDelete = null
+                        }
                     }
                 ) {
                     Text(stringResource(R.string.delete))
