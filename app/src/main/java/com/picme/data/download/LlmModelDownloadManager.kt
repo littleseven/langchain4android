@@ -271,6 +271,7 @@ class LlmModelDownloadManager(private val context: Context) {
                     put("vendor", "")
                     put("tags", JSONArray(model.tags))
                     put("sources", JSONObject(model.sources.toMap()))
+                    put("files", JSONArray(model.files))
                 })
             }
             val json = JSONObject().apply {
@@ -351,7 +352,15 @@ class LlmModelDownloadManager(private val context: Context) {
         val modelDir = File(downloadDir, modelId)
         if (!modelDir.exists()) return false
 
-        val expectedFiles = getModelFiles(modelId)
+        // 尝试从已知模型配置获取文件列表，否则按 ID 推断
+        val expectedFiles = try {
+            runBlocking(Dispatchers.IO) {
+                loadAvailableModels().find { it.id == modelId }?.files
+            }
+        } catch (e: Exception) {
+            null
+        } ?: getModelFiles(modelId)
+
         return expectedFiles.all { fileName ->
             File(modelDir, fileName).exists()
         }
