@@ -1,2 +1,0 @@
-*.mnn filter=lfs diff=lfs merge=lfs -text
-*.mnn.weight filter=lfs diff=lfs merge=lfs -text
