@@ -206,3 +206,6 @@ fi
 - `.qoder/skills/android-build-debug/SKILL.md` — 编译调试参考
 - `.qoder/skills/adb-bot/SKILL.md` — adb 命令参考
 - `.qoder/skills/image-quality-checker/SKILL.md` — 图片质量分析
+- `.qoder/skills/compose-ui-expert/SKILL.md` — UI 验证参考
+- `.qoder/skills/perf-optimizer/SKILL.md` — 性能基线对比
+- `.qoder/skills/i18n-validator/SKILL.md` — 多语言验证

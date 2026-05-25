@@ -35,13 +35,50 @@ adb shell am force-stop com.picme
 adb shell am start -n com.picme/.MainActivity
 ```
 
+## 分层编译策略（减少等待）
+
+```bash
+# 第 1 层: 语法/格式检查（~2s）
+./gradlew :app:ktlintCheck
+
+# 第 2 层: Kotlin 编译到 class（~5-30s）
+./gradlew :app:compileDebugKotlin
+
+# 第 3 层: beauty-engine 模块编译（~10-60s）
+./gradlew :beauty-engine:assembleDebug
+
+# 第 4 层: 完整 APK（~30-120s，仅最终验证）
+./gradlew :app:assembleDebug
+```
+
+**规则**：每层失败后立即修复，不继续下一层。详见 [error-healer](.qoder/skills/error-healer/SKILL.md) 的分层验证策略。
+
 ## 编译错误排查
+
+### 快速失败日志解析
+```bash
+# 提取关键错误信息（前 3 个错误）
+./gradlew :app:compileDebugKotlin 2>&1 | \
+    grep -E "^e:\s+" | head -3 > /tmp/compile_errors.txt
+
+# 提取文件和行号
+./gradlew :app:compileDebugKotlin 2>&1 | \
+    grep -E "\.kt:\d+:\d+" | head -3 > /tmp/error_locations.txt
+```
 
 ### 常见错误处理
 1. **Kotlin 编译错误**：检查语法、导入、类型匹配
 2. **Shader 编译错误**：检查 GLSL 语法、varying/uniform 声明一致性
 3. **资源缺失错误**：检查 assets/、res/ 目录文件是否存在
 4. **依赖冲突**：检查 gradle/libs.versions.toml
+
+### 修复策略（联动 error-healer）
+- 语法错误 → [error-healer Class A](.qoder/skills/error-healer/SKILL.md)
+- 类型不匹配 → [error-healer Class B](.qoder/skills/error-healer/SKILL.md)
+- 未解析引用 → [error-healer Class C](.qoder/skills/error-healer/SKILL.md)
+- 可见性问题 → [error-healer Class D](.qoder/skills/error-healer/SKILL.md)
+- 空安全错误 → [error-healer Class E](.qoder/skills/error-healer/SKILL.md)
+- Gradle 构建错误 → [error-healer Class G](.qoder/skills/error-healer/SKILL.md)
 
 ### 快速修复流程
 1. 读取错误日志定位文件和行号
@@ -66,3 +103,10 @@ adb shell am start -n com.picme/.MainActivity
 - APK 输出：`app/build/outputs/apk/debug/picme-debug.apk`
 - Shader 目录：`beauty-engine/src/main/assets/shaders/`
 - Java/Kotlin 源码：`app/src/main/java/com/picme/`
+- 日志标签过滤：`adb logcat -s PicMe:* *:S`
+
+## 相关 Skill
+
+- [error-healer](.qoder/skills/error-healer/SKILL.md) — 编译错误自动分类与修复
+- [adb-bot](.qoder/skills/adb-bot/SKILL.md) — 设备控制与日志收集
+- [auto-dev-loop](.qoder/skills/auto-dev-loop/SKILL.md) — 一键开发自循环

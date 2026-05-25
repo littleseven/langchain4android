@@ -1,6 +1,6 @@
 ---
 name: skill-name
-description: 简短描述（<120字）
+description: 具体描述本 Skill 做什么、何时使用。使用第三人称，包含触发关键词。Use when working with X or when the user mentions Y.
 version: 1.0.0
 created: 2026-05-25
 updated: 2026-05-25
@@ -9,6 +9,11 @@ tags: [tag1, tag2, tag3]
 ---
 
 # Skill 标题
+
+> **定位**：一句话说明本 Skill 解决什么问题。
+> **触发时机**：何时自动应用本 Skill。
+
+---
 
 ## 触发条件
 
@@ -58,3 +63,24 @@ tags: [tag1, tag2, tag3]
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | 1.0.0 | 2026-05-25 | 初始版本 |
+
+---
+
+## Skill 编写规范（维护者必读）
+
+### 长度控制
+- **SKILL.md 正文 < 500 行**。超过则拆分代码示例到 `reference.md`。
+- 使用渐进式披露：核心流程在 SKILL.md，详细代码在 reference.md。
+
+### 代码示例
+- 单个代码块不超过 30 行。
+- 超过 30 行的代码应移至 `reference.md`，SKILL.md 中只保留说明和链接。
+
+### 引用规范
+- 引用其他 Skill 使用相对路径：`.qoder/skills/xxx/SKILL.md`
+- 引用项目文档使用相对路径：`docs/XXX.md`
+
+### 版本管理
+- 每次更新必须修改 `updated` 字段和「版本历史」表格。
+- 重大结构调整应升级 minor 版本（1.0 → 1.1）。
+- 内容重写或架构变更应升级 major 版本（1.x → 2.0）。

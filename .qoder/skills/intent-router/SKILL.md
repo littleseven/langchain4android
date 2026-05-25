@@ -154,6 +154,18 @@ tags: [requirement, routing, context, module, terminology]
   - app/src/main/res/values/themes.xml
   - app/src/main/res/values/colors.xml
   - docs/FEATURES.md (设计规范章节)
+  - [.qoder/skills/compose-ui-expert/SKILL.md](.qoder/skills/compose-ui-expert/SKILL.md)
+
+[Perf]:
+  - 相关模块 AGENTS.md
+  - docs/BIG_BEAUTY_TECH_SPEC.md (性能章节)
+  - 基准测试数据
+  - Profiler 配置说明
+  - [.qoder/skills/perf-optimizer/SKILL.md](.qoder/skills/perf-optimizer/SKILL.md)
+
+[I18N]:
+  - res/values*/strings.xml
+  - [.qoder/skills/i18n-validator/SKILL.md](.qoder/skills/i18n-validator/SKILL.md)
 ```
 
 ## 歧义消除策略
@@ -235,7 +247,7 @@ Intent Router 处理:
 
 ### 添加新术语
 
-在 `.qoder/skills/intent-router/TERMS.md` 中维护扩展术语表：
+直接在 SKILL.md 的「术语对齐表」中追加新行：
 
 ```markdown
 ## 新模块: editor

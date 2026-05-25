@@ -74,119 +74,41 @@ Log.d(TAG, "  - surfaceTexture: ${surfaceTexture != null}")
 Log.d(TAG, "  - textureId: $textureId")
 Log.d(TAG, "  - isRendering: $isRendering")
 
-// 验证 EGL 上下文是否有效
 val currentContext = EGL14.eglGetCurrentContext()
 Log.d(TAG, "  - Current EGL Context: ${currentContext != EGL14.EGL_NO_CONTEXT}")
 ```
 
-**预期输出**：
-```
-✅ eglContext: true
-✅ surfaceTexture: true
-✅ textureId: 1
-✅ isRendering: true
-✅ Current EGL Context: true
-```
-
-**如果任一为 false**：
-- `eglContext == null` → EGL 初始化失败，检查 `EGLCore.init()`
-- `surfaceTexture == null` → SurfaceTexture 创建失败，检查 `createExternalTexture()`
-- `textureId == 0` → 纹理生成失败，检查 `glGenTextures` 返回值
-- `isRendering == false` → 渲染线程未启动，检查 `startRendering()`
+**预期输出**：全部 true。任一 false 说明对应组件初始化失败。
 
 #### Step 2: 检查 Shader 编译状态
 
-```kotlin
-// 在 BeautyRenderer.kt 中添加 Shader 编译检查
-private fun checkShaderCompilation(programId: Int, shaderType: String): Boolean {
-    val compileStatus = IntArray(1)
-    GLES20.glGetShaderiv(programId, GLES20.GL_COMPILE_STATUS, compileStatus, 0)
-    
-    if (compileStatus[0] == 0) {
-        val infoLen = IntArray(1)
-        GLES20.glGetShaderiv(programId, GLES20.GL_INFO_LOG_LENGTH, infoLen, 0)
-        val infoLog = CharArray(infoLen[0])
-        GLES20.glGetShaderInfoLog(programId, infoLen[0], null, infoLog)
-        Log.e(TAG, "$shaderType 编译失败: ${String(infoLog)}")
-        return false
-    }
-    
-    Log.d(TAG, "$shaderType 编译成功")
-    return true
-}
-```
+使用 `glGetShaderiv(GL_COMPILE_STATUS)` 和 `glGetShaderInfoLog()` 检查编译结果。
 
 **常见 Shader 编译错误**：
-```glsl
-❌ 错误 1: Uniform 声明但未使用
-uniform float uUnused;  // 编译器会优化掉，导致 glGetUniformLocation 返回 -1
-
-❌ 错误 2: 精度限定符缺失（ES 2.0）
-float value = 1.0;  // ❌ 应改为 mediump float value = 1.0;
-
-❌ 错误 3: 纹理采样器类型不匹配
-uniform sampler2D uTexture;  // 但绑定的是 GL_TEXTURE_EXTERNAL_OES
-// 应改为 uniform samplerExternalOES uTexture;
-```
+- Uniform 声明但未使用 → `glGetUniformLocation` 返回 -1
+- 精度限定符缺失（ES 2.0）→ 应使用 `mediump float`
+- 纹理采样器类型不匹配 → 外部纹理应使用 `samplerExternalOES`
 
 #### Step 3: 检查纹理绑定
 
-```kotlin
-// 验证纹理是否正确绑定
-GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-
-val error = GLES20.glGetError()
-if (error != GLES20.GL_NO_ERROR) {
-    Log.e(TAG, "纹理绑定失败: glGetError() = 0x${error.toString(16)}")
-} else {
-    Log.d(TAG, "纹理绑定成功: textureId=$textureId")
-}
-```
-
-**常见纹理错误**：
-- `GL_INVALID_ENUM` → 纹理类型错误（应使用 `GL_TEXTURE_EXTERNAL_OES`）
-- `GL_INVALID_VALUE` → textureId 无效（未生成或已删除）
-- `GL_INVALID_OPERATION` → 上下文不正确
+验证 `glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)` 是否成功，检查 `glGetError()` 返回值。
 
 #### Step 4: 检查 FBO 状态
 
 ```kotlin
-// 在渲染前检查 FBO 完整性
 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
 val status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
-
-if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
-    Log.e(TAG, "FBO 不完整: status=0x${status.toString(16)}")
-    when (status) {
-        GLES20.GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT -> 
-            Log.e(TAG, "  - 附件不完整")
-        GLES20.GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT -> 
-            Log.e(TAG, "  - 缺少附件")
-        GLES20.GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS -> 
-            Log.e(TAG, "  - 附件尺寸不匹配")
-        GLES20.GL_FRAMEBUFFER_UNSUPPORTED -> 
-            Log.e(TAG, "  - 格式不支持")
-    }
-} else {
-    Log.d(TAG, "FBO 完整")
-}
+if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) { /* 处理错误 */ }
 ```
 
 #### Step 5: 检查 Viewport 设置
 
 ```kotlin
-// 验证 Viewport 是否正确设置
 GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
 Log.d(TAG, "Viewport: [${viewportArray[0]}, ${viewportArray[1]}, ${viewportArray[2]}x${viewportArray[3]}]")
-
-// 预期输出（1080x1920 竖屏）：
-// Viewport: [0, 0, 1080, 1920]
 ```
 
-**常见问题**：
-- Viewport 为 `[0, 0, 0, 0]` → 未调用 `glViewport`
-- Viewport 尺寸与屏幕不符 → 宽高比计算错误
+完整代码示例见 [reference.md](reference.md) §1-§2。
 
 ---
 
@@ -194,76 +116,23 @@ Log.d(TAG, "Viewport: [${viewportArray[0]}, ${viewportArray[1]}, ${viewportArray
 
 **触发命令**：`debug-shader` 或 `调试 Shader`
 
-#### 工具 1: 红色测试 Shader（验证渲染链路）
+#### 工具 1: 红色测试 Shader
 
-```glsl
-// FRAGMENT_SHADER_DEBUG_RED
-precision mediump float;
-varying vec2 vTextureCoord;
-
-void main() {
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);  // 纯红色
-}
-```
-
-**用途**：如果屏幕显示纯红色，说明渲染链路正常，问题在纹理采样或 Shader 逻辑。
+纯红色输出，验证渲染链路是否通畅。
 
 #### 工具 2: 纹理 R 通道灰度显示
 
-```glsl
-// FRAGMENT_SHADER_DEBUG_TEXTURE_R
-precision mediump float;
-varying vec2 vTextureCoord;
-uniform samplerExternalOES uTexture;
-
-void main() {
-    vec4 color = texture2D(uTexture, vTextureCoord);
-    float gray = color.r;  // 仅显示 R 通道
-    gl_FragColor = vec4(gray, gray, gray, 1.0);
-}
-```
-
-**用途**：验证纹理是否正确加载，R 通道应有明暗变化。
+仅显示 R 通道，验证纹理是否正确加载。
 
 #### 工具 3: UV 坐标可视化
 
-```glsl
-// FRAGMENT_SHADER_DEBUG_UV
-precision mediump float;
-varying vec2 vTextureCoord;
-
-void main() {
-    // R 通道 = U 坐标，G 通道 = V 坐标
-    gl_FragColor = vec4(vTextureCoord.x, vTextureCoord.y, 0.0, 1.0);
-}
-```
-
-**用途**：检查纹理坐标是否正确映射。预期效果：
-- 左上角：黑色 (0, 0)
-- 右下角：黄色 (1, 1)
-- 渐变过渡平滑
+R=U, G=V，验证纹理坐标映射。预期：左上黑(0,0)，右下黄(1,1)。
 
 #### 工具 4: Uniform 值打印
 
-```kotlin
-// 在 BeautyRenderer.kt 中添加 Uniform 验证
-fun debugUniforms() {
-    val smoothingLoc = shaderProgram.getUniformLocation("uSmoothing")
-    val whiteningLoc = shaderProgram.getUniformLocation("uWhitening")
-    
-    if (smoothingLoc >= 0) {
-        val values = FloatArray(1)
-        GLES20.glGetUniformfv(shaderProgram.programId, smoothingLoc, values, 0)
-        Log.d(TAG, "uSmoothing = ${values[0]}")
-    }
-    
-    if (whiteningLoc >= 0) {
-        val values = FloatArray(1)
-        GLES20.glGetUniformfv(shaderProgram.programId, whiteningLoc, values, 0)
-        Log.d(TAG, "uWhitening = ${values[0]}")
-    }
-}
-```
+通过 `glGetUniformfv` 读取 Uniform 实际值，验证参数传递。
+
+完整 Shader 代码和 Kotlin 实现见 [reference.md](reference.md) §1。
 
 ---
 
@@ -273,28 +142,7 @@ fun debugUniforms() {
 
 #### 指标 1: 渲染 FPS 监控
 
-```kotlin
-// 在 CameraPreviewRenderer.kt 中添加 FPS 统计
-private var frameCount = 0L
-private var lastFpsUpdateTime = 0L
-private var currentFps = 0
-
-fun updateFpsStats() {
-    frameCount++
-    val currentTime = System.currentTimeMillis()
-    
-    if (currentTime - lastFpsUpdateTime >= 1000) {
-        currentFps = frameCount
-        frameCount = 0
-        lastFpsUpdateTime = currentTime
-        
-        Log.d(TAG, "FPS: $currentFps")
-        
-        // 更新性能统计
-        latestPerfStats = latestPerfStats.copy(fps = currentFps)
-    }
-}
-```
+每秒统计帧数，目标 ≥ 55fps。
 
 **性能标准**：
 - ✅ **优秀**: ≥ 55 fps
@@ -303,163 +151,21 @@ fun updateFpsStats() {
 
 #### 指标 2: 单帧渲染耗时
 
-```kotlin
-// 在 BeautyRenderer.onDrawFrame() 中添加耗时统计
-fun onDrawFrame() {
-    val startTime = System.nanoTime()
-    
-    // ... 渲染逻辑 ...
-    
-    val endTime = System.nanoTime()
-    val renderTimeMs = (endTime - startTime) / 1_000_000.0
-    
-    latestPerfStats = latestPerfStats.copy(
-        renderTimeMs = renderTimeMs.toFloat()
-    )
-    
-    if (renderTimeMs > 16.67) {  // 超过 60fps 预算
-        Log.w(TAG, "渲染超时: ${renderTimeMs}ms (>16.67ms)")
-    }
-}
-```
+使用 `System.nanoTime()` 测量 `onDrawFrame()` 耗时，目标 < 16.67ms。
 
-**耗时分解**：
-```
-总耗时 12ms:
-├─ Shader 执行: 3ms (25%)
-├─ 纹理上传: 2ms (17%)
-├─ FBO 切换: 1ms (8%)
-├─ 人脸检测: 4ms (33%)
-└─ 其他: 2ms (17%)
-```
+#### 指标 3: 空帧计数
 
-#### 指标 3: 空帧计数 (Null Frames)
-
-```kotlin
-// 统计 SurfaceTexture 无新帧的情况
-var statsNullFrames = 0
-
-if (!frameAvailable) {
-    statsNullFrames++
-    Log.w(TAG, "空帧 #$statsNullFrames: SurfaceTexture 无新数据")
-} else {
-    surfaceTexture?.updateTexImage()
-    frameAvailable = false
-}
-```
-
-**正常范围**：
-- ✅ 空帧率 < 5%（偶尔发生）
-- ⚠️ 空帧率 5-15%（需优化 CameraX 配置）
-- ❌ 空帧率 > 15%（严重性能问题）
+统计 SurfaceTexture 无新帧的情况，空帧率应 < 5%。
 
 #### 优化技巧 1: FBO 复用
 
-```kotlin
-// ❌ 错误：每帧创建新 FBO
-fun onDrawFrame() {
-    val fboId = IntArray(1)
-    GLES20.glGenFramebuffers(1, fboId, 0)  // 频繁分配/释放
-    // ...
-    GLES20.glDeleteFramebuffers(1, fboId, 0)
-}
-
-// ✅ 正确：初始化时创建，按需调整尺寸
-private var fboId: Int = 0
-private var fboWidth: Int = 0
-private var fboHeight: Int = 0
-
-fun ensureFBO(width: Int, height: Int) {
-    if (fboId == 0 || fboWidth != width || fboHeight != height) {
-        // 释放旧 FBO
-        if (fboId != 0) {
-            GLES20.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
-            GLES20.glDeleteTextures(1, intArrayOf(fboTextureId), 0)
-        }
-        
-        // 创建新 FBO
-        val fbos = IntArray(1)
-        GLES20.glGenFramebuffers(1, fbos, 0)
-        fboId = fbos[0]
-        
-        val textures = IntArray(1)
-        GLES20.glGenTextures(1, textures, 0)
-        fboTextureId = textures[0]
-        
-        // 绑定纹理
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, fboTextureId)
-        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 
-                           width, height, 0, GLES20.GL_RGBA, 
-                           GLES20.GL_UNSIGNED_BYTE, null)
-        
-        // 绑定 FBO
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, 
-                                     GLES20.GL_COLOR_ATTACHMENT0,
-                                     GLES20.GL_TEXTURE_2D, fboTextureId, 0)
-        
-        fboWidth = width
-        fboHeight = height
-        
-        Log.d(TAG, "FBO 创建: ${width}x${height}")
-    }
-}
-```
+禁止每帧创建/销毁 FBO。初始化时创建，尺寸变化时重建。
 
 #### 优化技巧 2: PBO 异步读取
 
-```kotlin
-// OffscreenRenderer.kt 中的 PBO 实现
-private fun readPixelsWithPBO(width: Int, height: Int): Bitmap {
-    val pixelCount = width * height
-    val bufferSize = pixelCount * 4  // RGBA
-    
-    // 初始化 PBO 双缓冲
-    if (pboIds == null) {
-        val pbos = IntArray(PBO_COUNT)
-        GLES20.glGenBuffers(PBO_COUNT, pbos, 0)
-        pboIds = pbos
-        
-        for (i in 0 until PBO_COUNT) {
-            GLES20.glBindBuffer(GLES20.GL_PIXEL_PACK_BUFFER, pbos[i])
-            GLES20.glBufferData(GLES20.GL_PIXEL_PACK_BUFFER, bufferSize, 
-                               null, GLES20.GL_DYNAMIC_READ)
-        }
-        GLES20.glBindBuffer(GLES20.GL_PIXEL_PACK_BUFFER, 0)
-    }
-    
-    // 异步读取（当前帧）
-    val readPboIndex = pboIndex
-    val nextPboIndex = (pboIndex + 1) % PBO_COUNT
-    
-    GLES20.glBindBuffer(GLES20.GL_PIXEL_PACK_BUFFER, pboIds!![readPboIndex])
-    GLES20.glReadPixels(0, 0, width, height, 
-                       GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, 0)
-    
-    // 上一帧数据已就绪，映射到 CPU
-    GLES20.glBindBuffer(GLES20.GL_PIXEL_PACK_BUFFER, pboIds!![nextPboIndex])
-    val buffer = GLES20.glMapBufferRange(
-        GLES20.GL_PIXEL_PACK_BUFFER,
-        0, bufferSize,
-        GLES20.GL_MAP_READ_BIT
-    ) as ByteBuffer
-    
-    // 创建 Bitmap
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    buffer.rewind()
-    bitmap.copyPixelsFromBuffer(buffer)
-    
-    GLES20.glUnmapBuffer(GLES20.GL_PIXEL_PACK_BUFFER)
-    GLES20.glBindBuffer(GLES20.GL_PIXEL_PACK_BUFFER, 0)
-    
-    pboIndex = nextPboIndex
-    return bitmap
-}
-```
+使用双缓冲 PBO 实现异步像素读取，将 `glReadPixels` 从 ~50ms 降至 ~15ms。
 
-**性能提升**：
-- 直接 `glReadPixels`: ~50ms（同步阻塞）
-- PBO 异步读取: ~15ms（重叠执行）
+完整实现代码见 [reference.md](reference.md) §2。
 
 ---
 
@@ -469,118 +175,23 @@ private fun readPixelsWithPBO(width: Int, height: Int): Bitmap {
 
 #### 问题 1: Preview Surface 绑定失败
 
-**症状**：
-```
-E/PicMe:CameraPreview: Surface not ready after 120 attempts
-```
+**症状**：`Surface not ready after 120 attempts`
 
-**排查步骤**：
+**根因**：Renderer 未在正确线程初始化，或 Surface 尚未就绪就尝试绑定。
 
-```kotlin
-// 1. 检查 BeautyPreviewView 初始化顺序
-fun initializeCamera() {
-    // ✅ 正确：先初始化 Renderer，再获取 Surface
-    beautyPreviewView.initialize()  // 触发 EGL 初始化和 SurfaceTexture 创建
-    
-    // 等待 Surface 就绪
-    repeat(120) { attempt ->
-        val surface = beautyPreviewView.getSurfaceForCamera()
-        if (surface != null && surface.isValid) {
-            Log.i(TAG, "Surface ready on attempt ${attempt + 1}")
-            bindCamera(surface)
-            return
-        }
-        Thread.sleep(30)
-    }
-    
-    throw IllegalStateException("Surface not ready")
-}
-
-// 2. 检查 EGL 上下文是否在正确的线程创建
-class CameraPreviewRenderer(context: Context) {
-    private val eglCore = EGLCore()
-    
-    fun init(view: View) {
-        // ✅ 必须在渲染线程中初始化
-        if (!eglCore.init()) {
-            throw RuntimeException("EGL init failed")
-        }
-        
-        // 创建 Pbuffer Surface 用于离线纹理生成
-        val pbufferSurface = eglCore.createSurface(null, 1, 1)
-        eglCore.makeCurrent(pbufferSurface, eglContext!!)
-        
-        // 创建外部纹理
-        createExternalTexture()
-        
-        eglCore.clearCurrent()
-    }
-}
-```
+**修复**：确保 `beautyPreviewView.initialize()` 在渲染线程执行，等待 Surface valid 后再绑定。
 
 #### 问题 2: ImageAnalysis YUV 数据流中断
 
-**症状**：
-```
-W/PicMe:Camera: ImageProxy closed before processing
-```
+**症状**：`ImageProxy closed before processing`
 
-**解决方案**：
-
-```kotlin
-// CameraUseCasesBinder.kt
-imageAnalysis.setAnalyzer(Dispatchers.IO.asExecutor()) { imageProxy ->
-    try {
-        // ✅ 立即提取数据，避免 ImageProxy 过早关闭
-        val mediaImage = imageProxy.image ?: return@setAnalyzer
-        
-        // 大美丽引擎：YUV 数据由 SurfaceTexture 直接输入 GPU Shader
-        // 人脸检测在独立 ImageAnalysis 线程异步完成
-        
-        // 将 MediaPipe/InsightFace 检测结果更新到 BeautyRenderer
-        val landmarks = faceDetector.detect(mediaImage, rotationDegrees)
-        if (landmarks != null) {
-            beautyRenderer.updateFaceLandmarks(landmarks)
-        }
-        
-        imageProxy.close()
-        return@setAnalyzer
-    } catch (e: Exception) {
-        Log.e(TAG, "YUV conversion error", e)
-    } finally {
-        // ✅ 确保释放
-        imageProxy.close()
-    }
-}
-```
+**修复**：立即提取 `mediaImage`，在 `finally` 中确保 `imageProxy.close()`。
 
 #### 问题 3: 前后置摄像头切换卡顿
 
-**优化方案**：
+**优化**：预初始化双摄像头 Surface，切换时直接复用。
 
-```kotlin
-// 预初始化双摄像头 Surface
-class DualCameraManager {
-    private var frontSurface: Surface? = null
-    private var backSurface: Surface? = null
-    
-    fun switchCamera(lensFacing: Int) {
-        val targetSurface = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-            frontSurface ?: createSurfaceForLens(lensFacing).also { 
-                frontSurface = it 
-            }
-        } else {
-            backSurface ?: createSurfaceForLens(lensFacing).also { 
-                backSurface = it 
-            }
-        }
-        
-        // 快速切换，无需重新初始化
-        cameraControl.unbindAll()
-        bindCamera(targetSurface!!)
-    }
-}
-```
+完整代码示例见 [reference.md](reference.md) §5。
 
 ---
 
@@ -590,162 +201,31 @@ class DualCameraManager {
 
 #### 坐标系转换流程
 
-**重要说明**：本文档中所有"左/右"描述均基于**图像坐标系**（观察者视角），详见 [COORDINATE_SYSTEM_STANDARD.md](docs/COORDINATE_SYSTEM_STANDARD.md)。
+**重要说明**：所有"左/右"描述均基于**图像坐标系**（观察者视角），详见 [COORDINATE_SYSTEM_STANDARD.md](docs/COORDINATE_SYSTEM_STANDARD.md)。
 
 ```
-MediaPipe 468 点 (3D NDC)
-    ↓ 468→106 语义映射
-InsightFace 2D106 点 (2D 图像坐标)
-    ↓ 旋转校正 (rotationDegrees)
-旋转后图像坐标
-    ↓ 归一化 (0.0~1.0)
-归一化坐标
-    ↓ 镜像翻转 (前置摄像头)
-镜像后归一化坐标
-    ↓ Viewport 映射
-屏幕像素坐标
-    ↓ UV 映射
-OpenGL 纹理坐标
+MediaPipe 468 点 → 468→106 语义映射 → 旋转校正 → 归一化 → 镜像翻转 → Viewport 映射 → UV 映射
 ```
 
 **关键理解**：
 - **图像左侧** = 观察者看到的左边 = x 坐标较小的一侧
-- **图像右侧** = 观察者看到的右边 = x 坐标较大的一侧
-- 前置摄像头镜像后：图像左侧对应被拍摄者的右脸，图像右侧对应被拍摄者的左脸
+- 前置摄像头镜像后：图像左侧对应被拍摄者的右脸
 
 #### 关键函数解析
 
-```kotlin
-// Stage 1: 图像坐标 → 归一化坐标
-fun normalizeLandmark(
-    x: Float, y: Float,
-    imageWidth: Int, imageHeight: Int
-): Pair<Float, Float> {
-    val normX = x / imageWidth
-    val normY = y / imageHeight
-    return Pair(normX, normY)
-}
-
-// Stage 2: 旋转校正
-fun rotateLandmark(
-    normX: Float, normY: Float,
-    rotationDegrees: Int,
-    imageWidth: Int, imageHeight: Int
-): Pair<Float, Float> {
-    val rotatedWidth = if (rotationDegrees % 180 == 0) imageWidth else imageHeight
-    val rotatedHeight = if (rotationDegrees % 180 == 0) imageHeight else imageWidth
-    
-    return when (rotationDegrees) {
-        90 -> Pair(normY, 1f - normX)
-        180 -> Pair(1f - normX, 1f - normY)
-        270 -> Pair(1f - normY, normX)
-        else -> Pair(normX, normY)
-    }
-}
-
-// Stage 3: 镜像翻转（前置摄像头）
-// 注意：镜像后，图像左侧的点会变成被拍摄者右脸的点
-fun mirrorLandmark(
-    normX: Float, normY: Float,
-    lensFacing: Int
-): Pair<Float, Float> {
-    val mirroredX = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
-        // 前置摄像头：x 轴翻转
-        // 原本在图像左侧的点（x 小）会翻转到图像右侧（x 大）
-        1f - normX
-    } else {
-        normX
-    }
-    return Pair(mirroredX, normY)
-}
-
-// Stage 4: 屏幕坐标映射
-fun toScreenCoordinate(
-    normX: Float, normY: Float,
-    previewWidth: Int, previewHeight: Int
-): Offset {
-    val screenX = normX * previewWidth
-    val screenY = normY * previewHeight
-    return Offset(screenX, screenY)
-}
-
-// Stage 5: UV 坐标映射（考虑 Viewport）
-fun toUVCoordinate(
-    normX: Float, normY: Float,
-    outputWidth: Int, outputHeight: Int,
-    cameraInputWidth: Int, cameraInputHeight: Int,
-    isFillCenter: Boolean
-): Pair<Float, Float> {
-    val rawSourceAspect = cameraInputWidth.toFloat() / cameraInputHeight
-    val rotatedSourceAspect = if (isFillCenter) rawSourceAspect else 1f / rawSourceAspect
-    val outputAspect = outputWidth.toFloat() / outputHeight
-    
-    val uvX: Float
-    val uvY: Float
-    
-    if (isFillCenter) {
-        if (rotatedSourceAspect > outputAspect) {
-            // 宽度填满，高度裁剪
-            val scale = outputAspect / rotatedSourceAspect
-            uvX = normX
-            uvY = (normY - 0.5f) / scale + 0.5f
-        } else {
-            // 高度填满，宽度裁剪
-            val scale = rotatedSourceAspect / outputAspect
-            uvX = (normX - 0.5f) / scale + 0.5f
-            uvY = normY
-        }
-    } else {
-        // FIT_CENTER：保持比例，可能有黑边
-        uvX = normX
-        uvY = normY
-    }
-    
-    return Pair(uvX.coerceIn(0f, 1f), uvY.coerceIn(0f, 1f))
-}
-```
+| Stage | 函数 | 说明 |
+|-------|------|------|
+| 1 | `normalizeLandmark()` | 图像坐标 → [0,1] 归一化 |
+| 2 | `rotateLandmark()` | 根据 rotationDegrees 旋转校正 |
+| 3 | `mirrorLandmark()` | 前置摄像头 x 轴翻转 |
+| 4 | `toScreenCoordinate()` | 归一化 → 屏幕像素坐标 |
+| 5 | `toUVCoordinate()` | 考虑 Viewport 和画幅比例的 UV 映射 |
 
 #### 调试可视化
 
-```kotlin
-// 在 CameraDebugOverlay.kt 中添加关键点绘制
-@Composable
-fun LandmarkDebugOverlay(
-    landmarks: List<Pair<Float, Float>>,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier.fillMaxSize()) {
-        // 绘制 106 个点
-        landmarks.forEachIndexed { index, (x, y) ->
-            val color = when {
-                index < 33 -> Color.Red      // 轮廓
-                index < 43 -> Color.Green    // 左眉
-                index < 53 -> Color.Blue     // 右眉
-                index < 61 -> Color.Yellow   // 左眼
-                index < 69 -> Color.Cyan     // 右眼
-                index < 77 -> Color.Magenta  // 鼻子
-                else -> Color.White          // 嘴巴
-            }
-            
-            drawCircle(
-                color = color,
-                radius = 3.dp.toPx(),
-                center = Offset(x, y)
-            )
-            
-            // 绘制索引号（仅关键点）
-            if (index % 10 == 0) {
-                drawContext.canvas.nativeCanvas.drawText(
-                    "$index", x + 5, y - 5, Paint().apply {
-                        textSize = 20f
-                        color = android.graphics.Color.WHITE
-                    }
-                )
-            }
-        }
-    }
-}
-```
+使用 Compose Canvas 绘制 106 个关键点，按区域着色（轮廓红、眉毛绿/蓝、眼睛黄/青、鼻子紫、嘴巴白）。
+
+完整代码实现见 [reference.md](reference.md) §3-§4。
 
 ---
 
@@ -906,90 +386,26 @@ fun LandmarkDebugOverlay(
 
 ### 1. 渲染线程管理
 
-```kotlin
-// ✅ 推荐：专用渲染线程，最高优先级
-renderThread = Thread {
-    while (isRendering) {
-        try {
-            renderFrame()
-        } catch (e: Exception) {
-            Log.e(TAG, "Render error", e)
-        }
-    }
-}.apply {
-    name = "CameraPreviewRender"
-    priority = Thread.MAX_PRIORITY  // 减少调度延迟
-    start()
-}
-```
+专用渲染线程，设置 `Thread.MAX_PRIORITY` 减少调度延迟。
 
 ### 2. 错误处理
 
-```kotlin
-// ✅ 推荐：每步检查 GL 错误
-fun checkGLError(operation: String) {
-    var error: Int
-    while (GLES20.glGetError().also { error = it } != GLES20.GL_NO_ERROR) {
-        Log.e(TAG, "GL Error after $operation: 0x${error.toString(16)}")
-    }
-}
-
-// 使用
-GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-checkGLError("glBindFramebuffer")
-```
+每步 OpenGL 操作后检查 `glGetError()`，使用结构化日志标签。
 
 ### 3. 资源清理
 
-```kotlin
-// ✅ 推荐：按相反顺序释放资源
-fun release() {
-    // 1. 停止渲染线程
-    isRendering = false
-    renderThread?.join(300)
-    
-    // 2. 释放 FBO
-    if (fboId != 0) {
-        GLES20.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
-        fboId = 0
-    }
-    
-    // 3. 释放纹理
-    if (textureId != 0) {
-        GLES20.glDeleteTextures(1, intArrayOf(textureId), 0)
-        textureId = 0
-    }
-    
-    // 4. 释放 Surface
-    surfaceTexture?.release()
-    surfaceTexture = null
-    
-    // 5. 释放 EGL
-    eglCore.release()
-}
-```
+按相反顺序释放：停止线程 → FBO → 纹理 → Surface → EGL。
 
 ### 4. 日志规范
 
-```kotlin
-// ✅ 推荐：结构化日志，便于过滤
-companion object {
-    private const val TAG = "PicMe:BeautyRenderer"
-}
+统一使用 `PicMe:[ModuleName]` 标签，如 `PicMe:BeautyRenderer`。
 
-// 性能日志
-Log.d(TAG, "perf: fps=$currentFps render_time=${renderTimeMs}ms null_frames=$statsNullFrames")
-
-// 错误日志
-Log.e(TAG, "shader_compile: failed - $errorLog")
-
-// 状态变更
-Log.i(TAG, "engine_switched: from=$oldEngine to=$newEngine")
-```
+完整代码示例见 [reference.md](reference.md) §6。
 
 ---
 
-**Skill 版本**: 1.0  
+**Skill 版本**: 1.2.0  
 **创建日期**: 2026-05-03  
+**更新日期**: 2026-05-25  
 **维护者**: [RD] 全栈工程师 + [CR] 规范守护者  
 **适用范围**: PicMe 项目音视频与 OpenGL 相关开发

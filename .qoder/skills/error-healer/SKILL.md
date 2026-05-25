@@ -280,6 +280,8 @@ import com.picme.beauty.internal.*          // 错误（app 模块不应引用�
 | [av-gl-expert](.qoder/skills/av-gl-expert/SKILL.md) | Shader/EGL 相关错误时读取 |
 | [coordinate-system-standard](.qoder/skills/coordinate-system-standard/SKILL.md) | 坐标相关错误时读取 |
 | [mediapipe-landmark-mapping](.qoder/skills/mediapipe-landmark-mapping/SKILL.md) | 人脸关键点相关错误时读取 |
+| [compose-ui-expert](.qoder/skills/compose-ui-expert/SKILL.md) | Compose UI 编译错误时读取 |
+| [perf-optimizer](.qoder/skills/perf-optimizer/SKILL.md) | 性能相关构建问题时读取 |
 
 ## 关键指标
 
