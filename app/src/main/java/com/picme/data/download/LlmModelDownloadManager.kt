@@ -65,6 +65,15 @@ class LlmModelDownloadManager(private val context: Context) {
     )
 
     /**
+     * TTS 模型固定文件列表
+     */
+    private val TTS_MODEL_FILES = listOf(
+        "config.json",
+        "tts.mnn",
+        "vocab.txt"
+    )
+
+    /**
      * 加载可用模型配置
      *
      * 优先从 MNN 官方模型市场获取，失败时回退到本地配置。
@@ -201,13 +210,21 @@ class LlmModelDownloadManager(private val context: Context) {
             (0 until tagsArray.length()).map { tagsArray.getString(it) }
         } else defaultTags
 
+        // 从 JSON 读取文件列表，若不存在则根据模型类型推断
+        val filesArray = obj.optJSONArray("files")
+        val modelFiles = if (filesArray != null) {
+            (0 until filesArray.length()).map { filesArray.getString(it) }
+        } else {
+            getModelFilesByTags(modelName, tags)
+        }
+
         return ModelConfig(
             id = modelName.lowercase().replace("-mnn", "").replace(".", "-"),
             name = modelName,
             description = buildDescription(obj),
             size = obj.optLong("file_size", 0L),
             sources = sources,
-            files = LLM_MODEL_FILES,
+            files = modelFiles,
             tags = tags
         )
     }
@@ -345,6 +362,18 @@ class LlmModelDownloadManager(private val context: Context) {
      */
     private fun getModelFiles(modelId: String): List<String> {
         return when {
+            modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
+            else -> LLM_MODEL_FILES
+        }
+    }
+
+    /**
+     * 根据模型标签推断文件列表
+     */
+    private fun getModelFilesByTags(modelId: String, tags: List<String>): List<String> {
+        return when {
+            tags.any { it.equals("ASR", ignoreCase = true) } -> ASR_MODEL_FILES
+            tags.any { it.equals("TTS", ignoreCase = true) } -> TTS_MODEL_FILES
             modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
             else -> LLM_MODEL_FILES
         }
