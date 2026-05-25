@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -25,11 +28,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,6 +51,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
+import com.picme.data.download.LlmModelDownloadManager
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
@@ -51,11 +62,13 @@ import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
+import com.picme.domain.model.VoiceCommandMode
 
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToLlmModelManager: () -> Unit = {}
 ) {
     // 沉浸式模式
     val view = LocalView.current
@@ -90,6 +103,13 @@ fun SettingsScreen(
     val debugShaderMode by viewModel.debugShaderMode.collectAsState()
     val roiStageConfig by viewModel.roiStageConfig.collectAsState()
     val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
+    val aiAgentMode by viewModel.aiAgentMode.collectAsState()
+    val aiAgentLocalModel by viewModel.aiAgentLocalModel.collectAsState()
+    val aiAgentApiKey by viewModel.aiAgentApiKey.collectAsState()
+    val aiAgentModel by viewModel.aiAgentModel.collectAsState()
+    val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
+    val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
+    val localAsrModel by viewModel.localAsrModel.collectAsState()
     settingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
@@ -129,6 +149,21 @@ fun SettingsScreen(
         onLandmarkModelTypeSelected = { type -> viewModel.setLandmarkModelType(type) },
         onLandmarkEngineTypeSelected = { type -> viewModel.setLandmarkEngineType(type) },
         onLandmarkDevicePreferenceSelected = { preference -> viewModel.setLandmarkDevicePreference(preference) },
+        aiAgentMode = aiAgentMode,
+        onAiAgentModeChange = { mode -> viewModel.setAiAgentMode(mode) },
+        aiAgentLocalModel = aiAgentLocalModel,
+        onAiAgentLocalModelChange = { modelId -> viewModel.setAiAgentLocalModel(modelId) },
+        aiAgentApiKey = aiAgentApiKey,
+        onAiAgentApiKeyChange = { key -> viewModel.setAiAgentApiKey(key) },
+        aiAgentModel = aiAgentModel,
+        onAiAgentModelChange = { model -> viewModel.setAiAgentModel(model) },
+        aiAgentBaseUrl = aiAgentBaseUrl,
+        onAiAgentBaseUrlChange = { url -> viewModel.setAiAgentBaseUrl(url) },
+        voiceCommandMode = voiceCommandMode,
+        onVoiceCommandModeChange = { mode -> viewModel.setVoiceCommandMode(mode) },
+        localAsrModel = localAsrModel,
+        onLocalAsrModelChange = { modelId -> viewModel.setLocalAsrModel(modelId) },
+        onNavigateToLlmModelManager = onNavigateToLlmModelManager,
         onNavigateBack = onNavigateBack
     )
 }
@@ -149,6 +184,20 @@ private fun settingsContent(
     debugShaderMode: Int,
     roiStageConfig: StageConfig,
     landmarkStageConfig: StageConfig,
+    aiAgentMode: AiAgentMode,
+    onAiAgentModeChange: (AiAgentMode) -> Unit,
+    aiAgentLocalModel: String,
+    onAiAgentLocalModelChange: (String) -> Unit,
+    aiAgentApiKey: String,
+    onAiAgentApiKeyChange: (String) -> Unit,
+    aiAgentModel: String,
+    onAiAgentModelChange: (String) -> Unit,
+    aiAgentBaseUrl: String,
+    onAiAgentBaseUrlChange: (String) -> Unit,
+    voiceCommandMode: VoiceCommandMode,
+    onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
+    localAsrModel: String,
+    onLocalAsrModelChange: (String) -> Unit,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
@@ -166,6 +215,7 @@ private fun settingsContent(
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
     onLandmarkEngineTypeSelected: (InferenceEngineType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
+    onNavigateToLlmModelManager: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -190,26 +240,60 @@ private fun settingsContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
+            // AI Agent 配置 - 放到最顶部
             SettingsSection(
-                title = stringResource(R.string.theme_mode),
-                description = stringResource(R.string.settings_theme_mode_desc)
+                title = stringResource(R.string.ai_agent),
+                description = stringResource(R.string.ai_agent_desc)
             ) {
-                themeSelection(
-                    currentMode = themeMode,
-                    onModeSelected = onThemeModeSelected
+                // 模式选择：本地模型 / 远程模型
+                AiAgentModeSelection(
+                    currentMode = aiAgentMode,
+                    onModeSelected = onAiAgentModeChange
                 )
+
+                when (aiAgentMode) {
+                    AiAgentMode.LOCAL -> {
+                        AiAgentLocalModelSection(
+                            currentLocalModel = aiAgentLocalModel,
+                            onLocalModelSelected = onAiAgentLocalModelChange,
+                            onNavigateToModelManager = onNavigateToLlmModelManager
+                        )
+                    }
+                    AiAgentMode.REMOTE -> {
+                        AiAgentBaseUrlSelection(
+                            currentBaseUrl = aiAgentBaseUrl,
+                            onBaseUrlSelected = onAiAgentBaseUrlChange
+                        )
+                        AiAgentModelSelection(
+                            currentModel = aiAgentModel,
+                            onModelSelected = onAiAgentModelChange
+                        )
+                        AiAgentApiKeyRow(
+                            apiKey = aiAgentApiKey,
+                            onApiKeyChange = onAiAgentApiKeyChange
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // 语音控制配置
             SettingsSection(
-                title = stringResource(R.string.language),
-                description = stringResource(R.string.settings_language_desc)
+                title = stringResource(R.string.voice_control),
+                description = stringResource(R.string.voice_control_desc)
             ) {
-                languageSelection(
-                    currentLanguage = appLanguage,
-                    onLanguageSelected = onAppLanguageSelected
+                VoiceCommandModeSelection(
+                    currentMode = voiceCommandMode,
+                    onModeSelected = onVoiceCommandModeChange
                 )
+
+                if (voiceCommandMode != VoiceCommandMode.DISABLED) {
+                    LocalAsrModelSelection(
+                        currentModel = localAsrModel,
+                        onModelSelected = onLocalAsrModelChange
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -306,7 +390,375 @@ private fun settingsContent(
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.theme_mode),
+                description = stringResource(R.string.settings_theme_mode_desc)
+            ) {
+                themeSelection(
+                    currentMode = themeMode,
+                    onModeSelected = onThemeModeSelected
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.language),
+                description = stringResource(R.string.settings_language_desc)
+            ) {
+                languageSelection(
+                    currentLanguage = appLanguage,
+                    onLanguageSelected = onAppLanguageSelected
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun VoiceCommandModeSelection(
+    currentMode: VoiceCommandMode,
+    onModeSelected: (VoiceCommandMode) -> Unit
+) {
+    val options = listOf(
+        VoiceCommandMode.DISABLED to stringResource(R.string.voice_command_mode_disabled),
+        VoiceCommandMode.PUSH_TO_TALK to stringResource(R.string.voice_command_mode_push_to_talk),
+        VoiceCommandMode.WAKE_WORD to stringResource(R.string.voice_command_mode_wake_word)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.voice_command_mode),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = options,
+            currentValue = currentMode,
+            maxLines = 1,
+            onSelected = onModeSelected
+        )
+    }
+}
+
+@Composable
+private fun LocalAsrModelSelection(
+    currentModel: String,
+    onModelSelected: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val downloadManager = remember { LlmModelDownloadManager(context) }
+    var downloadedModels by remember { mutableStateOf<List<com.picme.data.download.ModelConfig>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        downloadedModels = downloadManager.getDownloadedModels()
+            .filter { model ->
+                model.tags.any { tag -> tag.equals("ASR", ignoreCase = true) } ||
+                    model.id.contains("asr", ignoreCase = true)
+            }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.local_asr_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (downloadedModels.isEmpty()) {
+            Text(
+                text = stringResource(R.string.local_asr_model_fallback),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            val options = downloadedModels.map { it.id to it.name }
+            CompactOptionChips(
+                options = options,
+                currentValue = currentModel,
+                maxLines = 2,
+                onSelected = onModelSelected
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiAgentModeSelection(
+    currentMode: AiAgentMode,
+    onModeSelected: (AiAgentMode) -> Unit
+) {
+    val options = listOf(
+        AiAgentMode.LOCAL to stringResource(R.string.ai_agent_mode_local),
+        AiAgentMode.REMOTE to stringResource(R.string.ai_agent_mode_remote)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_mode),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = options,
+            currentValue = currentMode,
+            maxLines = 1,
+            onSelected = onModeSelected
+        )
+    }
+}
+
+@Composable
+private fun AiAgentLocalModelSection(
+    currentLocalModel: String,
+    onLocalModelSelected: (String) -> Unit,
+    onNavigateToModelManager: () -> Unit
+) {
+    val context = LocalContext.current
+    val downloadManager = remember { LlmModelDownloadManager(context) }
+
+    var downloadedModels by remember { mutableStateOf<List<com.picme.data.download.ModelConfig>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        downloadedModels = downloadManager.getDownloadedModels()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        // 已下载模型选择
+        Text(
+            text = stringResource(R.string.ai_agent_local_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (downloadedModels.isEmpty()) {
+            Text(
+                text = stringResource(R.string.ai_agent_no_local_model),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            val options = downloadedModels.map { it.id to it.name }
+            CompactOptionChips(
+                options = options,
+                currentValue = currentLocalModel,
+                maxLines = 2,
+                onSelected = onLocalModelSelected
+            )
+        }
+
+        // 跳转到模型管理器
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToModelManager)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.ai_model_manager),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = stringResource(R.string.ai_model_manager_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.CloudDownload,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(22.dp)
+                    .padding(start = 4.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiAgentApiKeyRow(
+    apiKey: String,
+    onApiKeyChange: (String) -> Unit
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(apiKey) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_api_key),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (isEditing) {
+            androidx.compose.material3.OutlinedTextField(
+                value = editText,
+                onValueChange = { editText = it },
+                placeholder = { Text(stringResource(R.string.ai_agent_api_key_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Row {
+                        TextButton(onClick = {
+                            onApiKeyChange(editText.trim())
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.save))
+                        }
+                        TextButton(onClick = {
+                            editText = apiKey
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                }
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isEditing = true },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (apiKey.isNotBlank()) {
+                        stringResource(R.string.ai_agent_api_key_set)
+                    } else {
+                        stringResource(R.string.ai_agent_api_key_empty)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (apiKey.isNotBlank()) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.edit),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAgentModelManagerRow(
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = stringResource(R.string.ai_model_manager),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = stringResource(R.string.ai_model_manager_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            modifier = Modifier
+                .size(20.dp)
+                .padding(start = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun AiAgentBaseUrlSelection(
+    currentBaseUrl: String,
+    onBaseUrlSelected: (String) -> Unit
+) {
+    val presets = listOf(
+        "https://tokenhub.tencentmaas.com/v1/" to stringResource(R.string.ai_agent_base_url_tencent)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_base_url),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = presets,
+            currentValue = currentBaseUrl,
+            maxLines = 2,
+            onSelected = onBaseUrlSelected
+        )
+    }
+}
+
+@Composable
+private fun AiAgentModelSelection(
+    currentModel: String,
+    onModelSelected: (String) -> Unit
+) {
+    val models = listOf(
+        "kimi-k2.6" to stringResource(R.string.ai_agent_model_k2_6)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = models,
+            currentValue = currentModel,
+            maxLines = 2,
+            onSelected = onModelSelected
+        )
     }
 }
 
@@ -388,8 +840,6 @@ private fun FaceDetectionEngineSelection(
     val options = listOf(
         FaceDetectionEngineMode.MEDIAPIPE to stringResource(R.string.face_detection_engine_mode_mediapipe),
         FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface),
-        FaceDetectionEngineMode.MNN to stringResource(R.string.inference_engine_mnn),
-        FaceDetectionEngineMode.NCNN to stringResource(R.string.inference_engine_ncnn),
         FaceDetectionEngineMode.CUSTOM to stringResource(R.string.face_detection_engine_mode_custom)
     )
 
@@ -688,6 +1138,21 @@ fun SettingsScreenPreview() {
             onLandmarkModelTypeSelected = {},
             onLandmarkEngineTypeSelected = {},
             onLandmarkDevicePreferenceSelected = {},
+            aiAgentMode = AiAgentMode.LOCAL,
+            onAiAgentModeChange = {},
+            aiAgentLocalModel = "",
+            onAiAgentLocalModelChange = {},
+            aiAgentApiKey = "",
+            onAiAgentApiKeyChange = {},
+            aiAgentModel = "moonshot-v1-8k",
+            onAiAgentModelChange = {},
+            aiAgentBaseUrl = "",
+            onAiAgentBaseUrlChange = {},
+            voiceCommandMode = VoiceCommandMode.DISABLED,
+            onVoiceCommandModeChange = {},
+            localAsrModel = "",
+            onLocalAsrModelChange = {},
+            onNavigateToLlmModelManager = {},
             onNavigateBack = {}
         )
     }

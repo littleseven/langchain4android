@@ -1,6 +1,12 @@
 ---
 name: gpupixel-porting
-description: 历史参考：GPUPixel 算法向大美丽模式移植的规范流程。GPUPixel 已于 2026-05 完全移除，本 Skill 保留作为 Shader 适配与坐标映射的技术参考。Use when porting legacy filter algorithms or adapting shader logic to the PicMe beauty engine.
+description: 【已归档】GPUPixel 算法向大美丽模式移植的规范流程。GPUPixel 已于 2026-05 完全移除，本 Skill 仅保留作为历史技术参考。
+version: 1.0.0-archived
+created: 2026-05-03
+updated: 2026-05-25
+maintainer: [RD] 全栈工程师
+tags: [archived, gpupixel, shader, legacy]
+status: archived
 ---
 
 # GPUPixel 移植 Skill

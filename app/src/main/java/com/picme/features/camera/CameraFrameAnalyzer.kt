@@ -173,6 +173,7 @@ internal fun stopFaceDetectionWorker() {
  * @param onFacePointChanged 人脸中心点回调（屏幕坐标，用于聚焦指示器）
  * @param onFaceWarpParamsChanged FaceWarpParams 回调
  * @param onShowFocusIndicatorChanged 聚焦指示器显示回调
+ * @param beautyEnabled 美颜是否启用，未启用时跳过人脸检测以节省性能
  */
 @ExperimentalGetImage
 internal fun handleImageAnalysisFrameMediaPipe(
@@ -186,9 +187,16 @@ internal fun handleImageAnalysisFrameMediaPipe(
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
     isDualMode: Boolean = false,
-    existingWarpParams: FaceWarpParams? = null
+    existingWarpParams: FaceWarpParams? = null,
+    beautyEnabled: Boolean = false
 ) {
     try {
+        // 美颜未启用时，跳过人脸检测，直接释放资源
+        if (!beautyEnabled) {
+            imageProxy.close()
+            return
+        }
+
         val mediaImage = imageProxy.image
         if (mediaImage == null) {
             imageProxy.close()
@@ -253,16 +261,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         val detectionStartMs = System.currentTimeMillis()
 
-        // [GPU 检测优化 Phase 2] MediaPipe 模式直接传入 YUV Image，跳过 Bitmap 转换
-
-        val detectionResult = if (detectionEngineMode == EngineType.MEDIAPIPE) {
-            val mediaImage = imageProxy.image
-            if (mediaImage == null) {
-                imageProxy.close()
-                return
-            }
-            faceDetector.detect(mediaImage, imageProxy.imageInfo.rotationDegrees, lensFacing)
-        } else {
+        // MediaPipe 需要 RGBA_8888 Bitmap，不能直接传入 YUV Image
+        val detectionResult = run {
             val yuvStart = SystemClock.elapsedRealtime()
             val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
             val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart

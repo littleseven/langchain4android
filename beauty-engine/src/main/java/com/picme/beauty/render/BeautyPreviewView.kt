@@ -36,13 +36,13 @@ class BeautyPreviewView @JvmOverloads constructor(
     private var isFillCenter: Boolean = true
     private var isFrontCamera: Boolean = false
 
-    var smoothingStrength: Float = 0.5f
+    var smoothingStrength: Float = 0f
         set(value) {
             field = value.coerceIn(0f, 1f)
             updateBeautyParamsInternal()
         }
 
-    var whiteningStrength: Float = 0.5f
+    var whiteningStrength: Float = 0f
         set(value) {
             field = value.coerceIn(0f, 1f)
             updateBeautyParamsInternal()
