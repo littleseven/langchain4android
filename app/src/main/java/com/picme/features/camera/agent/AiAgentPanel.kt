@@ -73,6 +73,7 @@ import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -137,6 +138,7 @@ fun AiAgentPanel(
     useCase: AiAgentUseCase,
     currentState: AiAgentUseCase.CameraStateSnapshot,
     onCommand: (AiAgentCommand) -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -196,7 +198,8 @@ fun AiAgentPanel(
                                 input = input,
                                 onCommand = onCommand
                             )
-                        }
+                        },
+                        voiceCoordinator = voiceCoordinator
                     )
                 }
             }
@@ -309,6 +312,7 @@ private fun ChatBubble(
 private fun ChatInputBar(
     isProcessing: Boolean,
     onSend: (String) -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator?,
     modifier: Modifier = Modifier
 ) {
     var text by remember { mutableStateOf("") }
@@ -316,7 +320,7 @@ private fun ChatInputBar(
     val context = LocalContext.current
     var isListening by remember { mutableStateOf(false) }
 
-    // 语音 recognizer
+    // 语音 recognizer（当没有外部 VoiceCommandCoordinator 时使用）
     val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
     DisposableEffect(Unit) {
         onDispose {
@@ -335,23 +339,38 @@ private fun ChatInputBar(
             isListening = isListening,
             onStartListening = {
                 isListening = true
-                startVoiceRecognition(
-                    context = context,
-                    speechRecognizer = speechRecognizer,
-                    onResult = { result ->
+                val coordinator = voiceCoordinator
+                if (coordinator != null) {
+                    coordinator.startPushToTalk { result ->
                         isListening = false
                         if (result.isNotBlank()) {
                             onSend(result)
                         }
-                    },
-                    onError = {
-                        isListening = false
                     }
-                )
+                } else {
+                    startVoiceRecognition(
+                        context = context,
+                        speechRecognizer = speechRecognizer,
+                        onResult = { result ->
+                            isListening = false
+                            if (result.isNotBlank()) {
+                                onSend(result)
+                            }
+                        },
+                        onError = {
+                            isListening = false
+                        }
+                    )
+                }
             },
             onStopListening = {
                 isListening = false
-                speechRecognizer.stopListening()
+                val coordinator = voiceCoordinator
+                if (coordinator != null) {
+                    coordinator.stopPushToTalk()
+                } else {
+                    speechRecognizer.stopListening()
+                }
             }
         )
 

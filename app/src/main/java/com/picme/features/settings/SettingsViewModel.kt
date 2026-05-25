@@ -18,6 +18,7 @@ import com.picme.domain.model.ModelCategory
 import com.picme.domain.model.TagTranslations
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
+import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -151,6 +152,20 @@ class SettingsViewModel(
         )
 
     val aiAgentLocalModel: StateFlow<String> = repository.aiAgentLocalModelFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val voiceCommandMode: StateFlow<VoiceCommandMode> = repository.voiceCommandModeFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = VoiceCommandMode.DISABLED
+        )
+
+    val localAsrModel: StateFlow<String> = repository.localAsrModelFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -452,6 +467,18 @@ class SettingsViewModel(
         }
     }
 
+    fun setVoiceCommandMode(mode: VoiceCommandMode) {
+        viewModelScope.launch {
+            Logger.d("UX", "Voice command mode changed: ${mode.name}")
+            repository.updateVoiceCommandMode(mode)
+        }
+    }
+
+    fun setLocalAsrModel(modelId: String) {
+        viewModelScope.launch {
+            repository.updateLocalAsrModel(modelId)
+        }
+    }
 
 }
 

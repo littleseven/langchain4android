@@ -181,6 +181,13 @@ class AiAgentUseCase(
             appendLine("- 绝对不要输出<think>标签或思考过程")
             appendLine("- 所有回复必须使用中文")
             appendLine("- '自然妆'=磨皮20,美白15,瘦脸5,大眼5。'浓妆'=唇色80,腮红60,眉毛50。相对调整基于当前状态。")
+            appendLine()
+            appendLine("语音控制规则:")
+            appendLine("- 用户可能通过语音与你交互，如果用户说'小觅'或'小觅助手'开头，表示要控制相机")
+            appendLine("- 如果用户只是聊天（没有唤醒词），友好地用中文回复，不要输出JSON")
+            appendLine("- 如果用户说了唤醒词+控制意图，只输出JSON指令")
+            appendLine("- 支持相对调整：'美颜高一点' = 在当前基础上增加适量值")
+            appendLine("- 支持组合指令：'小觅，把滤镜换成复古然后拍照' = 先 switch_filter 再 capture")
         }
     }
 

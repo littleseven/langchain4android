@@ -306,6 +306,16 @@
     <string name="ai_chat_error">處理請求失敗</string>
     <string name="ai_chat_examples">試試：調亮、復古濾鏡、增強色彩...</string>
 
+    <!-- Voice Control -->
+    <string name="voice_control">語音控制</string>
+    <string name="voice_control_desc">透過語音指令控制相機拍攝和參數調整。</string>
+    <string name="voice_command_mode">語音互動模式</string>
+    <string name="voice_command_mode_disabled">關閉</string>
+    <string name="voice_command_mode_push_to_talk">按住說話</string>
+    <string name="voice_command_mode_wake_word">喚醒詞</string>
+    <string name="local_asr_model">本地語音識別模型</string>
+    <string name="local_asr_model_fallback">未下載本地 ASR 模型，將自動回退到系統語音識別。</string>
+
     <!-- Model Manager -->
     <string name="model_type_asr">語音</string>
     <string name="model_type_llm">對話</string>

@@ -106,9 +106,9 @@ class AiAgentUseCaseParseTest {
         val defaultState = AiAgentUseCase.CameraStateSnapshot()
         val prompt = method.invoke(useCase, defaultState) as String
 
-        assertTrue("System prompt should require Chinese reply", prompt.contains("用中文回复"))
-        assertTrue("System prompt should mention free chat", prompt.contains("自由聊天"))
-        assertTrue("System prompt should mention JSON output", prompt.contains("ONLY JSON"))
+        assertTrue("System prompt should require Chinese reply", prompt.contains("用中文回复用户"))
+        assertTrue("System prompt should mention chat behavior", prompt.contains("如果用户只是聊天"))
+        assertTrue("System prompt should mention JSON output", prompt.contains("不要输出JSON"))
     }
 
     @Test
