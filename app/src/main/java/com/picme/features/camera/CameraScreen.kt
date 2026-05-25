@@ -84,6 +84,16 @@ import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
+import com.picme.features.camera.agent.rememberAiAgentPanelState
+import com.picme.features.camera.agent.AiAgentPanelState
+import com.picme.features.camera.agent.sendMessage
+import com.picme.beauty.api.llm.MnnLlmClient
+import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.domain.model.AiAgentCommand
+import com.picme.domain.model.VoiceCommandMode
+import com.picme.features.camera.voice.MnnAsrClient
+import com.picme.features.camera.voice.SystemAsrEngine
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -584,7 +594,7 @@ fun CameraContent(
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
     var isRecording by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(FilterType.NONE) }
-    var beautySettings by remember { mutableStateOf(BeautySettings(enabled = true)) }
+    var beautySettings by remember { mutableStateOf(BeautySettings(enabled = false)) }
     var aspectRatio by remember { mutableIntStateOf(AspectRatio.RATIO_FULL) }
     var exposureCompensation by remember { mutableIntStateOf(0) }
     var whiteBalanceMode by remember { mutableIntStateOf(0) }
@@ -727,6 +737,70 @@ fun CameraContent(
     }
 
     val panelState = rememberCameraPanelState()
+    val aiAgentPanelState = rememberAiAgentPanelState()
+    val aiAgentApiKey by userPreferencesRepository.aiAgentApiKeyFlow.collectAsState(initial = "")
+    val aiAgentModel by userPreferencesRepository.aiAgentModelFlow.collectAsState(initial = "moonshot-v1-8k")
+    val aiAgentBaseUrl by userPreferencesRepository.aiAgentBaseUrlFlow.collectAsState(initial = "")
+    val mnnLlmClient = remember(context) { MnnLlmClient(context) }
+    val aiAgentUseCase = remember(aiAgentApiKey, aiAgentModel, aiAgentBaseUrl, mnnLlmClient) {
+        AiAgentUseCase(
+            apiKey = aiAgentApiKey.takeIf { it.isNotBlank() },
+            model = aiAgentModel,
+            baseUrl = aiAgentBaseUrl.takeIf { it.isNotBlank() },
+            localLlmClient = mnnLlmClient
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        if (!mnnLlmClient.isLoaded) {
+            Logger.i("PicMe:AiAgent", "Loading local MNN-LLM model in background...")
+            val success = mnnLlmClient.load()
+            Logger.i("PicMe:AiAgent", "Local MNN-LLM model load result: $success")
+        }
+    }
+
+    // 语音命令协调器
+    val voiceCommandMode by userPreferencesRepository.voiceCommandModeFlow.collectAsState(
+        initial = VoiceCommandMode.PUSH_TO_TALK
+    )
+    val mnnAsrClient = remember(context) { MnnAsrClient(context) }
+    val asrEngine = remember(mnnAsrClient) {
+        if (mnnAsrClient.isAvailable()) {
+            mnnAsrClient
+        } else {
+            SystemAsrEngine(context)
+        }
+    }
+    val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
+        VoiceCommandCoordinator(
+            asrEngine = asrEngine,
+            aiAgentUseCase = aiAgentUseCase,
+            onCommand = { command ->
+                // 委托给 onAiAgentCommand 处理
+                // 注意：这里通过 aiAgentPanelState 间接触发
+            },
+            scope = coroutineScope
+        )
+    }
+
+    // 同步相机状态到语音协调器
+    voiceCoordinator.mode = voiceCommandMode
+
+    // 根据模式启停唤醒词监听
+    LaunchedEffect(voiceCommandMode) {
+        when (voiceCommandMode) {
+            VoiceCommandMode.WAKE_WORD -> voiceCoordinator.startWakeWordListening()
+            else -> voiceCoordinator.stopWakeWordListening()
+        }
+    }
+
+    // 页面退出时释放语音资源
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceCoordinator.release()
+        }
+    }
+
     val logOverlayScope = rememberCoroutineScope()
     // 移除本地 state,改用设置页配置
     // var showCameraInfo by remember { mutableStateOf(false) }
@@ -787,7 +861,10 @@ fun CameraContent(
 
     val mediaAssets by viewModel.allMedia.collectAsState()
     val lastMedia = mediaAssets.firstOrNull()
-    val debugShaderMode by userPreferencesRepository.debugShaderModeFlow.collectAsState(initial = 0)
+
+    // Shader debug mode: 强制为 0（正常渲染），不从 DataStore 读取，避免调试模式导致蓝屏
+    val debugShaderMode = 0
+
     val beautyPreviewStatus = if (beautySettings.enabled && beautySettings.hasAnyEffect()) {
         BeautyPreviewStatus.ACTIVE
     } else {
@@ -1286,6 +1363,115 @@ CameraPreviewContent(
         whiteBalanceMode = whiteBalanceMode,
         beautyStrategy = beautyStrategy
     ),
+    aiAgentUseCase = aiAgentUseCase,
+    aiAgentPanelState = aiAgentPanelState,
+    voiceCoordinator = voiceCoordinator,
+    isWakeWordActive = voiceCommandMode == VoiceCommandMode.WAKE_WORD,
+    onAiAgentCommand = { command ->
+        when (command) {
+            is AiAgentCommand.AdjustBeauty -> {
+                beautySettings = resolveNextBeautySettings(
+                    currentSettings = beautySettings,
+                    updatedSettings = command.settings
+                )
+            }
+            is AiAgentCommand.SwitchFilter -> {
+                selectedFilter = command.filterType
+                beautySettings = beautySettings.copy(colorFilter = command.filterType)
+            }
+            is AiAgentCommand.SwitchStyle -> {
+                beautySettings = beautySettings.copy(styleFilter = command.styleFilter)
+            }
+            is AiAgentCommand.SwitchScene -> {
+                val scene = when (command.sceneName.lowercase()) {
+                    "night" -> ScenePreset.NIGHT
+                    "moon" -> ScenePreset.MOON
+                    else -> ScenePreset.NONE
+                }
+                currentScene = scene
+            }
+            is AiAgentCommand.SwitchRatio -> {
+                val ratio = when (command.ratio) {
+                    "4:3" -> AspectRatio.RATIO_4_3
+                    "16:9" -> AspectRatio.RATIO_16_9
+                    else -> AspectRatio.RATIO_FULL
+                }
+                aspectRatio = ratio
+            }
+            is AiAgentCommand.AdjustExposure -> {
+                exposureCompensation = command.exposure.coerceIn(-2, 2)
+                cameraControl?.setExposureCompensationIndex(exposureCompensation)
+            }
+            is AiAgentCommand.AdjustZoom -> {
+                val clampedZoom = command.zoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
+                zoomRatio = clampedZoom
+                cameraControl?.setZoomRatio(clampedZoom)
+            }
+            is AiAgentCommand.FlipCamera -> {
+                val nextLens = nextLensFacing(lensFacing)
+                lensFacing = nextLens
+            }
+            is AiAgentCommand.CapturePhoto -> {
+                handleCaptureClick(
+                    context = context,
+                    captureMode = captureMode,
+                    isRecording = isRecording,
+                    recording = recording,
+                    videoCapture = videoCapture,
+                    viewModel = viewModel,
+                    imageCapture = imageCapture,
+                    imageProcessor = imageProcessor,
+                    selectedFilter = selectedFilter,
+                    beautySettings = beautySettings,
+                    lensFacing = lensFacing,
+                    cachedFaces = emptyList(),
+                    beautyStrategy = beautyStrategy,
+                    glPreviewProvider = glPreviewProvider,
+                    beautyVideoRecorder = beautyVideoRecorder,
+                    onRecordingChanged = { updated -> recording = updated },
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                )
+            }
+            is AiAgentCommand.ToggleRecording -> {
+                handleCaptureClick(
+                    context = context,
+                    captureMode = captureMode,
+                    isRecording = isRecording,
+                    recording = recording,
+                    videoCapture = videoCapture,
+                    viewModel = viewModel,
+                    imageCapture = imageCapture,
+                    imageProcessor = imageProcessor,
+                    selectedFilter = selectedFilter,
+                    beautySettings = beautySettings,
+                    lensFacing = lensFacing,
+                    cachedFaces = emptyList(),
+                    beautyStrategy = beautyStrategy,
+                    glPreviewProvider = glPreviewProvider,
+                    beautyVideoRecorder = beautyVideoRecorder,
+                    onRecordingChanged = { updated -> recording = updated },
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                )
+            }
+            is AiAgentCommand.SwitchMode -> {
+                captureMode = command.mode
+            }
+            is AiAgentCommand.TextReply -> {
+                // 文本回复已在面板中显示，无需额外操作
+            }
+        }
+    },
+    onUpdateVoiceCoordinatorState = {
+        voiceCoordinator.currentCameraState = VoiceCommandCoordinator.CameraStateSnapshot(
+            beautySettings = beautySettings,
+            filterType = selectedFilter,
+            styleFilter = beautySettings.styleFilter,
+            zoomRatio = zoomRatio,
+            exposureCompensation = exposureCompensation,
+            captureMode = captureMode,
+            isRecording = isRecording
+        )
+    },
             actions = buildCameraPreviewActions(
                 onNavigateToSettings = onNavigateToSettings,
                 lensFacing = lensFacing,
@@ -1350,5 +1536,3 @@ CameraPreviewContent(
         }
 
 }
-
-

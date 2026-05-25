@@ -1,11 +1,13 @@
 package com.picme.domain.repository
 
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
+import com.picme.domain.model.VoiceCommandMode
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -72,5 +74,29 @@ interface UserSettingsRepository {
 
     val landmarkStageConfigFlow: Flow<StageConfig>
     suspend fun updateLandmarkStageConfig(config: StageConfig)
+
+    // ── AI Agent ────────────────────────────────────────────
+    val aiAgentModeFlow: Flow<AiAgentMode>
+    suspend fun updateAiAgentMode(mode: AiAgentMode)
+
+    val aiAgentLocalModelFlow: Flow<String>
+    suspend fun updateAiAgentLocalModel(modelId: String)
+
+    val aiAgentApiKeyFlow: Flow<String>
+    suspend fun updateAiAgentApiKey(apiKey: String)
+
+    val aiAgentModelFlow: Flow<String>
+    suspend fun updateAiAgentModel(model: String)
+
+    val aiAgentBaseUrlFlow: Flow<String>
+    suspend fun updateAiAgentBaseUrl(baseUrl: String)
+
+    // ── 语音控制 ────────────────────────────────────────────
+    val voiceCommandModeFlow: Flow<VoiceCommandMode>
+    suspend fun updateVoiceCommandMode(mode: VoiceCommandMode)
+
+    val localAsrModelFlow: Flow<String>
+    suspend fun updateLocalAsrModel(modelId: String)
 }
+
 

@@ -37,22 +37,21 @@ class MediaPipeFaceDetector(context: Context) {
     private val appContext: Context = context.applicationContext
 
     // 预览路径：VIDEO 模式（需要时间戳）
+    @Volatile
     internal var videoLandmarker: FaceLandmarker? = null
 
     // 拍照路径：IMAGE 模式（无时间戳限制）
+    @Volatile
     private var imageLandmarker: FaceLandmarker? = null
 
-    // [ANR 修复] 使用协程异步初始化，避免主线程阻塞
+    // [Crash Fix] MediaPipe native 初始化必须在主线程执行，否则 Graph.nativeStartRunningGraph 会 SIGBUS
     private val initScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var isInitializing = false
 
     init {
-        // [ANR 修复] 异步延迟初始化，不阻塞主线程
         initScope.launch {
             try {
-                withContext(Dispatchers.IO) {
-                    initialize()
-                }
+                initialize()
             } catch (linkError: UnsatisfiedLinkError) {
                 Log.w(TAG, "MediaPipe native library not found (x86_64 simulator?), disabling MediaPipe detection")
             } catch (error: Exception) {
@@ -72,18 +71,13 @@ class MediaPipeFaceDetector(context: Context) {
 
     /**
      * 预览路径检测（VIDEO 模式）—— Bitmap 输入
-     *
-     * @param bitmap 输入 Bitmap（已旋转到正确方向）
-     * @param rotationDegrees 图像旋转角度（保留参数兼容，但内部不再二次旋转）
-     * @param lensFacing 镜头方向
-     * @return 106 点归一化坐标，未检测到返回 null
      */
     fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FloatArray? {
         val landmarker = videoLandmarker ?: return null
 
         return try {
             val mpImage = BitmapImageBuilder(bitmap).build()
-            val result = landmarker.detectForVideo(mpImage, android.os.SystemClock.uptimeMillis())
+            val result = landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
 
             if (result.faceLandmarks().isEmpty()) {
                 return null
@@ -96,49 +90,16 @@ class MediaPipeFaceDetector(context: Context) {
             adapter.adapt(result.faceLandmarks()[0], lensFacing, rotationDegrees).getOrNull()
         } catch (e: Exception) {
             Log.e(TAG, "MediaPipe preview detection failed", e)
-            null
-        }
-    }
-
-    /**
-     * [GPU 检测优化 Phase 2] 预览路径检测（VIDEO 模式）—— 直接 YUV Image 输入
-     *
-     * 跳过 CPU 端的 Bitmap 生成，MediaPipe 直接从 YUV_420_888 数据进行 GPU 推理。
-     * 坐标旋转在适配层（MediaPipe468Adapter）完成。
-     *
-     * @param mediaImage CameraX ImageProxy.image（YUV_420_888）
-     * @param rotationDegrees 图像旋转角度（0/90/180/270），用于结果坐标旋转
-     * @param lensFacing 镜头方向
-     * @return 106 点归一化坐标，未检测到返回 null
-     */
-    fun detect(mediaImage: android.media.Image, rotationDegrees: Int, lensFacing: Int): FloatArray? {
-        val landmarker = videoLandmarker ?: return null
-
-        return try {
-            val mpImage = MediaImageBuilder(mediaImage).build()
-            val result = landmarker.detectForVideo(mpImage, android.os.SystemClock.uptimeMillis())
-
-            if (result.faceLandmarks().isEmpty()) {
-                return null
+            // 如果检测过程中发生崩溃（通常是 GPU 驱动问题），尝试释放并标记不可用
+            if (e is RuntimeException && e.message?.contains("native") == true) {
+                handleNativeCrash()
             }
-
-            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MEDIAPIPE)
-                as? MediaPipe468Adapter
-                ?: return null
-
-            adapter.adapt(result.faceLandmarks()[0], lensFacing, rotationDegrees).getOrNull()
-        } catch (e: Exception) {
-            Log.e(TAG, "MediaPipe direct image detection failed", e)
             null
         }
     }
 
     /**
      * 拍照路径检测（IMAGE 模式）
-     *
-     * @param bitmap 输入图像
-     * @param lensFacing 镜头方向
-     * @return 106 点归一化坐标，未检测到返回 null
      */
     fun detectForPhoto(bitmap: Bitmap, lensFacing: Int): FloatArray? {
         val landmarker = imageLandmarker ?: return null
@@ -162,14 +123,31 @@ class MediaPipeFaceDetector(context: Context) {
         }
     }
 
+    private fun handleNativeCrash() {
+        Log.e(TAG, "MediaPipe native layer error detected, disabling GPU acceleration")
+        release()
+        // 可以在此处标记下一次启动不使用 GPU
+    }
+
     /**
      * 释放资源
      */
     fun release() {
-        videoLandmarker?.close()
-        videoLandmarker = null
-        imageLandmarker?.close()
-        imageLandmarker = null
+        synchronized(this) {
+            try {
+                videoLandmarker?.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error closing video landmarker", e)
+            }
+            videoLandmarker = null
+            
+            try {
+                imageLandmarker?.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error closing image landmarker", e)
+            }
+            imageLandmarker = null
+        }
         Log.i(TAG, "MediaPipeFaceDetector released")
     }
 
@@ -189,9 +167,10 @@ class MediaPipeFaceDetector(context: Context) {
     }
 
     private fun initializeVideoLandmarker() {
+        // [Crash Fix] 默认使用 CPU delegate，避免 GPU 上下文线程冲突导致 SIGBUS
         try {
             val baseOptions = BaseOptions.builder()
-                .setDelegate(Delegate.GPU)
+                .setDelegate(Delegate.CPU)
                 .setModelAssetPath(MODEL_PATH)
                 .build()
 
@@ -206,35 +185,17 @@ class MediaPipeFaceDetector(context: Context) {
                 .build()
 
             videoLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-            Log.i(TAG, "MediaPipe FaceLandmarker initialized (GPU, VIDEO mode)")
+            Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU, VIDEO mode)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize with GPU, fallback to CPU", e)
-            try {
-                val baseOptions = BaseOptions.builder()
-                    .setDelegate(Delegate.CPU)
-                    .setModelAssetPath(MODEL_PATH)
-                    .build()
-                val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-                    .setBaseOptions(baseOptions)
-                    .setMinFaceDetectionConfidence(0.4f)
-                    .setMinTrackingConfidence(0.4f)
-                    .setMinFacePresenceConfidence(0.4f)
-                    .setNumFaces(1)
-                    .setOutputFaceBlendshapes(false)
-                    .setRunningMode(RunningMode.VIDEO)
-                    .build()
-                videoLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-                Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU, VIDEO mode)")
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to initialize video landmarker", e2)
-            }
+            Log.e(TAG, "Failed to initialize video landmarker", e)
         }
     }
 
     private fun initializeImageLandmarker() {
+        // [Crash Fix] 默认使用 CPU delegate，避免 GPU 上下文线程冲突导致 SIGBUS
         try {
             val baseOptions = BaseOptions.builder()
-                .setDelegate(Delegate.GPU)
+                .setDelegate(Delegate.CPU)
                 .setModelAssetPath(MODEL_PATH)
                 .build()
             val options = FaceLandmarker.FaceLandmarkerOptions.builder()
@@ -246,29 +207,9 @@ class MediaPipeFaceDetector(context: Context) {
                 .setRunningMode(RunningMode.IMAGE)
                 .build()
             imageLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-            Log.i(TAG, "MediaPipe FaceLandmarker initialized (GPU, IMAGE mode)")
+            Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU, IMAGE mode)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize photo landmarker with GPU, fallback to CPU", e)
-            try {
-                val baseOptions = BaseOptions.builder()
-                    .setDelegate(Delegate.CPU)
-                    .setModelAssetPath(MODEL_PATH)
-                    .build()
-                val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-                    .setBaseOptions(baseOptions)
-                    .setMinFaceDetectionConfidence(0.5f)
-                    .setMinFacePresenceConfidence(0.5f)
-                    .setNumFaces(1)
-                    .setOutputFaceBlendshapes(false)
-                    .setRunningMode(RunningMode.IMAGE)
-                    .build()
-                imageLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-                Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU, IMAGE mode)")
-            } catch (e2: Exception) {
-                Log.e(TAG, "Failed to initialize image landmarker", e2)
-            }
+            Log.e(TAG, "Failed to initialize image landmarker", e)
         }
     }
-
-
 }

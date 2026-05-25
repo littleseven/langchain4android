@@ -63,3 +63,9 @@ captures/
 *.jks
 *.keystore
 app/keystore/
+
+# Kotlin compiler error logs
+.kotlin/errors/
+
+# Temporary model download cache
+tmp_models/

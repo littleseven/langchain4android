@@ -1,0 +1,36 @@
+[
+  {
+    "id": "whisper-tiny-zh",
+    "name": "Whisper Tiny 中文",
+    "description": "轻量级语音识别模型，支持中文普通话，用于声控拍摄功能",
+    "type": "ASR",
+    "size": 75000000,
+    "sources": {
+      "ModelScope": "picme/whisper-tiny-zh"
+    },
+    "files": [
+      "whisper.mnn",
+      "vocab.json"
+    ],
+    "tags": ["ASR", "speech", "chinese"]
+  },
+  {
+    "id": "qwen3-0.6b",
+    "name": "Qwen3-0.6B-MNN",
+    "description": "阿里通义千问 3 0.6B 轻量版，适合移动端本地推理",
+    "type": "LLM",
+    "size": 454473462,
+    "sources": {
+      "HuggingFace": "taobao-mnn/Qwen3-0.6B-MNN",
+      "ModelScope": "MNN/Qwen3-0.6B-MNN",
+      "Modelers": "MNN/Qwen3-0.6B-MNN"
+    },
+    "files": [
+      "config.json",
+      "llm.mnn",
+      "llm.mnn.weight",
+      "tokenizer.txt"
+    ],
+    "tags": ["chat", "lightweight", "multilingual"]
+  }
+]

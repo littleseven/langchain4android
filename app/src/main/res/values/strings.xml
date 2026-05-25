@@ -268,4 +268,70 @@
     <string name="screenshot_saved">Screenshot saved to %1$s</string>
     <string name="screenshot_failed">Screenshot failed</string>
 
+    <!-- AI Agent -->
+    <string name="ai_agent">AI Agent</string>
+    <string name="ai_agent_desc">Select local or remote model for natural language camera control.</string>
+    <string name="ai_agent_mode">Inference Mode</string>
+    <string name="ai_agent_mode_local">Local Model</string>
+    <string name="ai_agent_mode_remote">Remote Model</string>
+    <string name="ai_agent_local_model">Selected Model</string>
+    <string name="ai_agent_no_local_model">No downloaded models. Go to Model Manager to download.</string>
+    <string name="ai_agent_base_url">API Endpoint</string>
+    <string name="ai_agent_base_url_default">Official (Moonshot)</string>
+    <string name="ai_agent_base_url_moonshot">Moonshot</string>
+    <string name="ai_agent_base_url_tencent">Tencent Cloud</string>
+    <string name="ai_agent_model">Model</string>
+    <string name="ai_agent_model_8k">Moonshot 8K</string>
+    <string name="ai_agent_model_32k">Moonshot 32K</string>
+    <string name="ai_agent_model_128k">Moonshot 128K</string>
+    <string name="ai_agent_model_latest">Kimi Latest</string>
+    <string name="ai_agent_model_k2_6">Kimi K2.6</string>
+    <string name="ai_agent_api_key">API Key</string>
+    <string name="ai_agent_api_key_hint">Enter your API Key</string>
+    <string name="ai_agent_api_key_set">API Key configured</string>
+    <string name="ai_agent_api_key_empty">Not configured (AI Agent disabled)</string>
+    <string name="ai_agent_input_hint">Ask AI Agent...</string>
+    <string name="ai_model_manager">AI Model Manager</string>
+    <string name="ai_model_manager_desc">Manage on-device AI models.</string>
+    <string name="downloaded_models">Downloaded Models</string>
+    <string name="available_models">Available Models</string>
+    <string name="all_models_downloaded">All models are downloaded.</string>
+    <string name="download">Download</string>
+    <string name="download_failed">Download failed. Please try again.</string>
+    <string name="delete_model_title">Delete Model</string>
+    <string name="delete_model_confirm">Delete %1$s? This cannot be undone.</string>
+    <string name="all_models">All</string>
+    <string name="no_models_for_tag">No models available for this category.</string>
+
+    <!-- AI Chat Image Editing -->
+    <string name="ai_chat_edit">AI Edit</string>
+    <string name="ai_chat_title">AI Image Editing</string>
+    <string name="ai_chat_input_hint">Describe how you want to edit this image, e.g., \'make it more vibrant\', \'apply vintage filter\'...</string>
+    <string name="ai_chat_processing">Processing...</string>
+    <string name="ai_chat_apply">Apply</string>
+    <string name="ai_chat_cancel">Cancel</string>
+    <string name="ai_chat_saving">Saving...</string>
+    <string name="ai_chat_success">Edit applied successfully</string>
+    <string name="ai_chat_error">Failed to process request</string>
+    <string name="ai_chat_examples">Try: \'brighten\', \'vintage filter\', \'enhance colors\'...</string>
+
+    <!-- Voice Control -->
+    <string name="voice_control">Voice Control</string>
+    <string name="voice_control_desc">Enable voice-driven camera control via push-to-talk or wake word.</string>
+    <string name="voice_command_mode">Voice Interaction Mode</string>
+    <string name="voice_command_mode_disabled">Disabled</string>
+    <string name="voice_command_mode_push_to_talk">Push to Talk</string>
+    <string name="voice_command_mode_wake_word">Wake Word</string>
+    <string name="local_asr_model">Local ASR Model</string>
+    <string name="local_asr_model_fallback">No local ASR model. System SpeechRecognizer will be used as fallback.</string>
+
+    <!-- Model Manager -->
+    <string name="model_type_asr">ASR</string>
+    <string name="model_type_llm">LLM</string>
+    <string name="model_type_beauty">BEAUTY</string>
+    <string name="model_type_landmark">LANDMARK</string>
+    <string name="model_label_lightweight">Lightweight</string>
+    <string name="model_downloaded">Downloaded</string>
+    <string name="no_models_available">No models available</string>
+
 </resources>
