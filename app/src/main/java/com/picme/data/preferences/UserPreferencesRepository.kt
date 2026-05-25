@@ -21,6 +21,7 @@ import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
+import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.repository.UserSettingsRepository
 import com.picme.core.common.Logger
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +67,10 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_API_KEY = stringPreferencesKey("ai_agent_api_key")
         val AI_AGENT_MODEL = stringPreferencesKey("ai_agent_model")
         val AI_AGENT_BASE_URL = stringPreferencesKey("ai_agent_base_url")
+
+        // 语音控制
+        val VOICE_COMMAND_MODE = stringPreferencesKey("voice_command_mode")
+        val LOCAL_ASR_MODEL = stringPreferencesKey("local_asr_model")
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -520,6 +525,45 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentBaseUrl(baseUrl: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_BASE_URL] = baseUrl
+        }
+    }
+
+    override val voiceCommandModeFlow: Flow<VoiceCommandMode> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val modeName = preferences[PreferencesKeys.VOICE_COMMAND_MODE]
+                ?: VoiceCommandMode.PUSH_TO_TALK.name
+            runCatching { VoiceCommandMode.valueOf(modeName) }
+                .getOrDefault(VoiceCommandMode.PUSH_TO_TALK)
+        }
+
+    override suspend fun updateVoiceCommandMode(mode: VoiceCommandMode) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.VOICE_COMMAND_MODE] = mode.name
+        }
+    }
+
+    override val localAsrModelFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.LOCAL_ASR_MODEL] ?: ""
+        }
+
+    override suspend fun updateLocalAsrModel(modelId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOCAL_ASR_MODEL] = modelId
         }
     }
 

@@ -315,6 +315,16 @@
     <string name="ai_chat_error">Failed to process request</string>
     <string name="ai_chat_examples">Try: \'brighten\', \'vintage filter\', \'enhance colors\'...</string>
 
+    <!-- Voice Control -->
+    <string name="voice_control">Voice Control</string>
+    <string name="voice_control_desc">Enable voice-driven camera control via push-to-talk or wake word.</string>
+    <string name="voice_command_mode">Voice Interaction Mode</string>
+    <string name="voice_command_mode_disabled">Disabled</string>
+    <string name="voice_command_mode_push_to_talk">Push to Talk</string>
+    <string name="voice_command_mode_wake_word">Wake Word</string>
+    <string name="local_asr_model">Local ASR Model</string>
+    <string name="local_asr_model_fallback">No local ASR model. System SpeechRecognizer will be used as fallback.</string>
+
     <!-- Model Manager -->
     <string name="model_type_asr">ASR</string>
     <string name="model_type_llm">LLM</string>

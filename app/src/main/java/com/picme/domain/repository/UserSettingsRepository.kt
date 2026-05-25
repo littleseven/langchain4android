@@ -7,6 +7,7 @@ import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
+import com.picme.domain.model.VoiceCommandMode
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -89,6 +90,13 @@ interface UserSettingsRepository {
 
     val aiAgentBaseUrlFlow: Flow<String>
     suspend fun updateAiAgentBaseUrl(baseUrl: String)
+
+    // ── 语音控制 ────────────────────────────────────────────
+    val voiceCommandModeFlow: Flow<VoiceCommandMode>
+    suspend fun updateVoiceCommandMode(mode: VoiceCommandMode)
+
+    val localAsrModelFlow: Flow<String>
+    suspend fun updateLocalAsrModel(modelId: String)
 }
 
 

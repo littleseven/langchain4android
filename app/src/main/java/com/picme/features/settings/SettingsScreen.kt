@@ -62,6 +62,7 @@ import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
+import com.picme.domain.model.VoiceCommandMode
 
 @Composable
 fun SettingsScreen(
@@ -107,6 +108,8 @@ fun SettingsScreen(
     val aiAgentApiKey by viewModel.aiAgentApiKey.collectAsState()
     val aiAgentModel by viewModel.aiAgentModel.collectAsState()
     val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
+    val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
+    val localAsrModel by viewModel.localAsrModel.collectAsState()
     settingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
@@ -156,6 +159,10 @@ fun SettingsScreen(
         onAiAgentModelChange = { model -> viewModel.setAiAgentModel(model) },
         aiAgentBaseUrl = aiAgentBaseUrl,
         onAiAgentBaseUrlChange = { url -> viewModel.setAiAgentBaseUrl(url) },
+        voiceCommandMode = voiceCommandMode,
+        onVoiceCommandModeChange = { mode -> viewModel.setVoiceCommandMode(mode) },
+        localAsrModel = localAsrModel,
+        onLocalAsrModelChange = { modelId -> viewModel.setLocalAsrModel(modelId) },
         onNavigateToLlmModelManager = onNavigateToLlmModelManager,
         onNavigateBack = onNavigateBack
     )
@@ -187,6 +194,10 @@ private fun settingsContent(
     onAiAgentModelChange: (String) -> Unit,
     aiAgentBaseUrl: String,
     onAiAgentBaseUrlChange: (String) -> Unit,
+    voiceCommandMode: VoiceCommandMode,
+    onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
+    localAsrModel: String,
+    onLocalAsrModelChange: (String) -> Unit,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
@@ -262,6 +273,26 @@ private fun settingsContent(
                             onApiKeyChange = onAiAgentApiKeyChange
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 语音控制配置
+            SettingsSection(
+                title = stringResource(R.string.voice_control),
+                description = stringResource(R.string.voice_control_desc)
+            ) {
+                VoiceCommandModeSelection(
+                    currentMode = voiceCommandMode,
+                    onModeSelected = onVoiceCommandModeChange
+                )
+
+                if (voiceCommandMode != VoiceCommandMode.DISABLED) {
+                    LocalAsrModelSelection(
+                        currentModel = localAsrModel,
+                        onModelSelected = onLocalAsrModelChange
+                    )
                 }
             }
 
@@ -382,6 +413,83 @@ private fun settingsContent(
                     onLanguageSelected = onAppLanguageSelected
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun VoiceCommandModeSelection(
+    currentMode: VoiceCommandMode,
+    onModeSelected: (VoiceCommandMode) -> Unit
+) {
+    val options = listOf(
+        VoiceCommandMode.DISABLED to stringResource(R.string.voice_command_mode_disabled),
+        VoiceCommandMode.PUSH_TO_TALK to stringResource(R.string.voice_command_mode_push_to_talk),
+        VoiceCommandMode.WAKE_WORD to stringResource(R.string.voice_command_mode_wake_word)
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.voice_command_mode),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CompactOptionChips(
+            options = options,
+            currentValue = currentMode,
+            maxLines = 1,
+            onSelected = onModeSelected
+        )
+    }
+}
+
+@Composable
+private fun LocalAsrModelSelection(
+    currentModel: String,
+    onModelSelected: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val downloadManager = remember { LlmModelDownloadManager(context) }
+    var downloadedModels by remember { mutableStateOf<List<com.picme.data.download.ModelConfig>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        downloadedModels = downloadManager.getDownloadedModels()
+            .filter { model ->
+                model.tags.any { tag -> tag.equals("ASR", ignoreCase = true) } ||
+                    model.id.contains("asr", ignoreCase = true)
+            }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.local_asr_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (downloadedModels.isEmpty()) {
+            Text(
+                text = stringResource(R.string.local_asr_model_fallback),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            val options = downloadedModels.map { it.id to it.name }
+            CompactOptionChips(
+                options = options,
+                currentValue = currentModel,
+                maxLines = 2,
+                onSelected = onModelSelected
+            )
         }
     }
 }
@@ -1040,6 +1148,10 @@ fun SettingsScreenPreview() {
             onAiAgentModelChange = {},
             aiAgentBaseUrl = "",
             onAiAgentBaseUrlChange = {},
+            voiceCommandMode = VoiceCommandMode.DISABLED,
+            onVoiceCommandModeChange = {},
+            localAsrModel = "",
+            onLocalAsrModelChange = {},
             onNavigateToLlmModelManager = {},
             onNavigateBack = {}
         )

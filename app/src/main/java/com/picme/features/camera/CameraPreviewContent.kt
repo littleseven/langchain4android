@@ -46,6 +46,8 @@ import com.picme.features.camera.components.UnifiedFilterSelector
 import com.picme.features.camera.agent.AiAgentButton
 import com.picme.features.camera.agent.AiAgentPanel
 import com.picme.features.camera.agent.AiAgentPanelState
+import com.picme.features.camera.voice.VoiceCommandCoordinator
+import com.picme.features.camera.voice.VoiceWakeIndicator
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
 
@@ -64,7 +66,10 @@ internal fun CameraPreviewContent(
     actions: CameraPreviewActions,
     aiAgentUseCase: AiAgentUseCase? = null,
     aiAgentPanelState: AiAgentPanelState? = null,
-    onAiAgentCommand: ((AiAgentCommand) -> Unit)? = null
+    voiceCoordinator: VoiceCommandCoordinator? = null,
+    isWakeWordActive: Boolean = false,
+    onAiAgentCommand: ((AiAgentCommand) -> Unit)? = null,
+    onUpdateVoiceCoordinatorState: (() -> Unit)? = null
 ) {
     // 非美颜类面板开启状态（美颜面板用独立的 BeautyPanel 渲染，不走 PrimaryControlPanels）
     val isAnyPanelOpen = uiState.showFilterSelector || uiState.showRatioSelector ||
@@ -90,6 +95,12 @@ internal fun CameraPreviewContent(
         contentAlignment = Alignment.Center
     ) {
         previewView()
+
+        // 唤醒词监听状态指示器
+        VoiceWakeIndicator(
+            isListening = isWakeWordActive,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
 
         CameraOverlays(
             isStable = uiState.isStable,
@@ -182,6 +193,9 @@ internal fun CameraPreviewContent(
             isAnyPanelOpen = isAnyPanelOpen
         )
 
+        // 同步语音协调器状态
+        onUpdateVoiceCoordinatorState?.invoke()
+
         // AI Agent 按钮与面板
         if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null) {
             // AI Agent 面板：底部 Sheet 样式
@@ -198,6 +212,7 @@ internal fun CameraPreviewContent(
                     isRecording = uiState.isRecording
                 ),
                 onCommand = { command -> onAiAgentCommand(command) },
+                voiceCoordinator = voiceCoordinator,
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
 
