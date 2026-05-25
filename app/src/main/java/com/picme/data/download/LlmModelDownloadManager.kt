@@ -352,15 +352,14 @@ class LlmModelDownloadManager(private val context: Context) {
         val modelDir = File(downloadDir, modelId)
         if (!modelDir.exists()) return false
 
-        // 尝试从已知模型配置获取文件列表，否则按 ID 推断
-        val expectedFiles = try {
-            runBlocking(Dispatchers.IO) {
-                loadAvailableModels().find { it.id == modelId }?.files
-            }
-        } catch (e: Exception) {
-            null
-        } ?: getModelFiles(modelId)
+        // ASR 模型：检查目录中是否存在 .mnn 文件（避免硬编码文件名）
+        if (modelId.contains("zipformer", ignoreCase = true) ||
+            modelId.contains("whisper", ignoreCase = true)
+        ) {
+            return modelDir.walkTopDown().any { it.name.endsWith(".mnn") }
+        }
 
+        val expectedFiles = getModelFiles(modelId)
         return expectedFiles.all { fileName ->
             File(modelDir, fileName).exists()
         }
