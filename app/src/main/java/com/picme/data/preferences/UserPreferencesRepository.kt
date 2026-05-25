@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.DetectionModelType
@@ -60,6 +61,8 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val LANDMARK_DEVICE_PREFERENCE = stringPreferencesKey("landmark_device_preference")
 
         // AI Agent
+        val AI_AGENT_MODE = stringPreferencesKey("ai_agent_mode")
+        val AI_AGENT_LOCAL_MODEL = stringPreferencesKey("ai_agent_local_model")
         val AI_AGENT_API_KEY = stringPreferencesKey("ai_agent_api_key")
         val AI_AGENT_MODEL = stringPreferencesKey("ai_agent_model")
         val AI_AGENT_BASE_URL = stringPreferencesKey("ai_agent_base_url")
@@ -425,6 +428,44 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             preferences[PreferencesKeys.LANDMARK_MODEL_TYPE] = config.modelType.name
             preferences[PreferencesKeys.LANDMARK_ENGINE_TYPE] = config.engineType.name
             preferences[PreferencesKeys.LANDMARK_DEVICE_PREFERENCE] = config.devicePreference.name
+        }
+    }
+
+    override val aiAgentModeFlow: Flow<AiAgentMode> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val modeName = preferences[PreferencesKeys.AI_AGENT_MODE] ?: AiAgentMode.LOCAL.name
+            runCatching { AiAgentMode.valueOf(modeName) }
+                .getOrDefault(AiAgentMode.LOCAL)
+        }
+
+    override suspend fun updateAiAgentMode(mode: AiAgentMode) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_MODE] = mode.name
+        }
+    }
+
+    override val aiAgentLocalModelFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_LOCAL_MODEL] ?: ""
+        }
+
+    override suspend fun updateAiAgentLocalModel(modelId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_LOCAL_MODEL] = modelId
         }
     }
 

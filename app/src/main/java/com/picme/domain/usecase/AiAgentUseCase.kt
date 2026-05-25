@@ -1,6 +1,5 @@
 package com.picme.domain.usecase
 
-
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
@@ -154,7 +153,7 @@ class AiAgentUseCase(
 
     private fun buildSystemPrompt(state: CameraStateSnapshot): String {
         return buildString {
-            appendLine("你是PicMe相机的AI助手，用中文回复用户。你可以自由聊天，也可以帮用户控制相机。")
+            appendLine("你是PicMe相机的AI助手。你必须用中文回复用户。")
             appendLine()
             appendLine("当前相机状态: 美颜=${state.beautySettings.enabled}, 磨皮=${state.beautySettings.smoothing.toInt()}, 美白=${state.beautySettings.whitening.toInt()}, 瘦脸=${state.beautySettings.slimFace.toInt()}, 大眼=${state.beautySettings.bigEyes.toInt()}, 唇色=${state.beautySettings.lipColor.toInt()}, 腮红=${state.beautySettings.blush.toInt()}, 眉毛=${state.beautySettings.eyebrow.toInt()}, 滤镜=${state.filterType.name}, 风格=${state.styleFilter.name}, 变焦=${state.zoomRatio}x, 曝光=${state.exposureCompensation}, 模式=${state.captureMode.name}")
             appendLine()
@@ -176,7 +175,12 @@ class AiAgentUseCase(
             appendLine("11. 切换模式: {\"action\":\"switch_mode\",\"mode\":\"PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT\"}")
             appendLine("12. 文本回复: {\"action\":\"text_reply\",\"message\":\"回复内容\"}")
             appendLine()
-            appendLine("规则: 如果用户只是聊天，直接友好地用中文回复。如果用户想控制相机，输出ONLY JSON，不要markdown。'自然妆'=磨皮20,美白15,瘦脸5,大眼5。'浓妆'=唇色80,腮红60,眉毛50。相对调整基于当前状态。")
+            appendLine("重要规则:")
+            appendLine("- 如果用户只是聊天，直接友好地用中文回复，不要输出JSON")
+            appendLine("- 如果用户想控制相机，只输出JSON，不要输出其他文字")
+            appendLine("- 绝对不要输出<think>标签或思考过程")
+            appendLine("- 所有回复必须使用中文")
+            appendLine("- '自然妆'=磨皮20,美白15,瘦脸5,大眼5。'浓妆'=唇色80,腮红60,眉毛50。相对调整基于当前状态。")
         }
     }
 

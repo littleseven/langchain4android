@@ -1,5 +1,6 @@
 package com.picme.domain.repository
 
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
@@ -74,6 +75,12 @@ interface UserSettingsRepository {
     suspend fun updateLandmarkStageConfig(config: StageConfig)
 
     // ── AI Agent ────────────────────────────────────────────
+    val aiAgentModeFlow: Flow<AiAgentMode>
+    suspend fun updateAiAgentMode(mode: AiAgentMode)
+
+    val aiAgentLocalModelFlow: Flow<String>
+    suspend fun updateAiAgentLocalModel(modelId: String)
+
     val aiAgentApiKeyFlow: Flow<String>
     suspend fun updateAiAgentApiKey(apiKey: String)
 
@@ -83,4 +90,5 @@ interface UserSettingsRepository {
     val aiAgentBaseUrlFlow: Flow<String>
     suspend fun updateAiAgentBaseUrl(baseUrl: String)
 }
+
 

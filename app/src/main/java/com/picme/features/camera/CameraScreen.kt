@@ -86,6 +86,7 @@ import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.camera.agent.rememberAiAgentPanelState
 import com.picme.features.camera.agent.AiAgentPanelState
+import com.picme.features.camera.agent.sendMessage
 import com.picme.beauty.api.llm.MnnLlmClient
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
@@ -1472,5 +1473,3 @@ CameraPreviewContent(
         }
 
 }
-
-

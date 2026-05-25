@@ -270,7 +270,12 @@
 
     <!-- AI Agent -->
     <string name="ai_agent">AI Agent</string>
-    <string name="ai_agent_desc">Configure API Key to enable natural language camera control.</string>
+    <string name="ai_agent_desc">Select local or remote model for natural language camera control.</string>
+    <string name="ai_agent_mode">Inference Mode</string>
+    <string name="ai_agent_mode_local">Local Model</string>
+    <string name="ai_agent_mode_remote">Remote Model</string>
+    <string name="ai_agent_local_model">Selected Model</string>
+    <string name="ai_agent_no_local_model">No downloaded models. Go to Model Manager to download.</string>
     <string name="ai_agent_base_url">API Endpoint</string>
     <string name="ai_agent_base_url_default">Official (Moonshot)</string>
     <string name="ai_agent_base_url_moonshot">Moonshot</string>
@@ -295,5 +300,19 @@
     <string name="download_failed">Download failed. Please try again.</string>
     <string name="delete_model_title">Delete Model</string>
     <string name="delete_model_confirm">Delete %1$s? This cannot be undone.</string>
+    <string name="all_models">All</string>
+    <string name="no_models_for_tag">No models available for this category.</string>
+
+    <!-- AI Chat Image Editing -->
+    <string name="ai_chat_edit">AI Edit</string>
+    <string name="ai_chat_title">AI Image Editing</string>
+    <string name="ai_chat_input_hint">Describe how you want to edit this image, e.g., \'make it more vibrant\', \'apply vintage filter\'...</string>
+    <string name="ai_chat_processing">Processing...</string>
+    <string name="ai_chat_apply">Apply</string>
+    <string name="ai_chat_cancel">Cancel</string>
+    <string name="ai_chat_saving">Saving...</string>
+    <string name="ai_chat_success">Edit applied successfully</string>
+    <string name="ai_chat_error">Failed to process request</string>
+    <string name="ai_chat_examples">Try: \'brighten\', \'vintage filter\', \'enhance colors\'...</string>
 
 </resources>

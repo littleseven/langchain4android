@@ -261,7 +261,12 @@
 
     <!-- AI Agent -->
     <string name="ai_agent">AI 智慧助手</string>
-    <string name="ai_agent_desc">設定 API Key，啟用自然語言控制相機功能。</string>
+    <string name="ai_agent_desc">選擇本地或遠端模型，啟用自然語言控制相機功能。</string>
+    <string name="ai_agent_mode">推理模式</string>
+    <string name="ai_agent_mode_local">本地模型</string>
+    <string name="ai_agent_mode_remote">遠端模型</string>
+    <string name="ai_agent_local_model">已選模型</string>
+    <string name="ai_agent_no_local_model">暫無已下載模型，前往模型管理下載。</string>
     <string name="ai_agent_base_url">API 接入點</string>
     <string name="ai_agent_base_url_default">官方 (Moonshot)</string>
     <string name="ai_agent_base_url_moonshot">Moonshot</string>
@@ -286,5 +291,19 @@
     <string name="download_failed">下載失敗，請重試。</string>
     <string name="delete_model_title">刪除模型</string>
     <string name="delete_model_confirm">刪除 %1$s？此操作不可復原。</string>
+    <string name="all_models">全部</string>
+    <string name="no_models_for_tag">該分類下暫無可用模型。</string>
+
+    <!-- AI Chat Image Editing -->
+    <string name="ai_chat_edit">AI 編輯</string>
+    <string name="ai_chat_title">AI 圖片編輯</string>
+    <string name="ai_chat_input_hint">描述你想如何編輯這張圖片，例如：讓色彩更鮮豔、應用復古濾鏡...</string>
+    <string name="ai_chat_processing">處理中...</string>
+    <string name="ai_chat_apply">應用</string>
+    <string name="ai_chat_cancel">取消</string>
+    <string name="ai_chat_saving">儲存中...</string>
+    <string name="ai_chat_success">編輯成功應用</string>
+    <string name="ai_chat_error">處理請求失敗</string>
+    <string name="ai_chat_examples">試試：調亮、復古濾鏡、增強色彩...</string>
 
 </resources>
