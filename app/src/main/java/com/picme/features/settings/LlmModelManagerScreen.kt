@@ -1,7 +1,10 @@
 package com.picme.features.settings
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,22 +13,41 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.SmartToy
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Functions
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.Audiotrack
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -33,12 +55,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,28 +70,50 @@ import com.picme.R
 import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
-import kotlinx.coroutines.launch
+import com.picme.domain.model.ModelCategory
+import androidx.compose.ui.text.font.FontWeight
+
+/**
+ * 根据标签获取对应的图标
+ */
+@Composable
+private fun getCategoryIcon(tag: String): androidx.compose.ui.graphics.vector.ImageVector {
+    return when (tag) {
+        "Vision" -> Icons.Outlined.Visibility
+        "Think" -> Icons.Outlined.SmartToy
+        "Audio", "AudioGen" -> Icons.Outlined.Audiotrack
+        "ImageGen" -> Icons.Outlined.Image
+        "Code" -> Icons.Outlined.Code
+        "Math" -> Icons.Outlined.Functions
+        "Chat" -> Icons.AutoMirrored.Outlined.Chat
+        else -> Icons.Outlined.Palette
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LlmModelManagerScreen(
+    viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
-    val coroutineScope = rememberCoroutineScope()
 
-    var availableModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
+    val groupedModels by viewModel.groupedModels.collectAsState()
+    val currentTab by viewModel.currentTab.collectAsState()
+    val modelTypeLabels = viewModel.getModelTypeLabels()
     val downloadStates by downloadManager.downloadStates.collectAsState()
+    val tagTranslations by viewModel.tagTranslations.collectAsState()
+    val categories by viewModel.categories.collectAsState()
 
-    var downloadedModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
-
-    // [Fix] 异步加载模型列表，避免主线程网络请求导致 NetworkOnMainThreadException
-    LaunchedEffect(Unit) {
-        availableModels = downloadManager.loadAvailableModels()
-        downloadedModels = downloadManager.getDownloadedModels()
-    }
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+
+    // 同步 Tab 索引
+    LaunchedEffect(currentTab, modelTypeLabels) {
+        val index = modelTypeLabels.keys.indexOf(currentTab)
+        selectedTabIndex = index.coerceAtLeast(0)
+    }
 
     Scaffold(
         topBar = {
@@ -85,85 +130,42 @@ fun LlmModelManagerScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            // 已下载模型区域
-            if (downloadedModels.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.downloaded_models),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                downloadedModels.forEach { model ->
-                    DownloadedModelCard(
-                        model = model,
-                        onDelete = { modelToDelete = model }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+        Column(modifier = Modifier.padding(innerPadding)) {
+            // 可滚动的分类 Tab 栏
+            ScrollableCategoryTabs(
+                categories = modelTypeLabels,
+                selectedIndex = selectedTabIndex,
+                onCategorySelected = { index, category ->
+                    selectedTabIndex = index
+                    viewModel.switchTab(category)
                 }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            // 可用模型区域
-            Text(
-                text = stringResource(R.string.available_models),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(8.dp))
 
-            val notDownloaded = availableModels.filter { model ->
-                downloadedModels.none { it.id == model.id }
-            }
+            // 模型列表
+            val currentModels = groupedModels[currentTab] ?: emptyList()
 
-            if (notDownloaded.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.all_models_downloaded),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
+            if (currentModels.isEmpty()) {
+                EmptyModelList()
             } else {
-                notDownloaded.forEach { model ->
-                    val state = downloadStates[model.id]
-                    AvailableModelCard(
-                        model = model,
-                        downloadState = state,
-                        onDownload = {
-                            coroutineScope.launch {
-                                downloadManager.downloadModel(model.id, modelConfig = model)
-                                    .collect { progress ->
-                                        if (progress.status == DownloadStatus.COMPLETED || progress.status == DownloadStatus.FAILED) {
-                                            downloadedModels = downloadManager.getDownloadedModels()
-                                        }
-                                    }
-                            }
-                        },
-                        onCancel = {
-                            downloadManager.cancelDownload(model.id)
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-
-            // 显示下载错误提示
-            val failedDownloads = downloadStates.values.filter { it.status == DownloadStatus.FAILED }
-            failedDownloads.forEach { failedState ->
-                val model = availableModels.find { it.id == failedState.modelId }
-                if (model != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "${model.name} ${stringResource(R.string.download_failed)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(currentModels) { model ->
+                        ModelCardWithBadge(
+                            model = model,
+                            downloadState = downloadStates[model.id],
+                            tagTranslations = tagTranslations,
+                            onDownload = {
+                                // TODO: 实现下载逻辑
+                            },
+                            onCancel = {
+                                // TODO: 实现取消下载逻辑
+                            },
+                            onDelete = { modelToDelete = model }
+                        )
+                    }
                 }
             }
         }
@@ -174,15 +176,12 @@ fun LlmModelManagerScreen(
         AlertDialog(
             onDismissRequest = { modelToDelete = null },
             title = { Text(stringResource(R.string.delete_model_title)) },
-            text = { Text(stringResource(R.string.delete_model_confirm, modelToDelete!!.name)) },
+            text = { Text(stringResource(R.string.delete_model_confirm, modelToDelete?.name ?: "")) },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        coroutineScope.launch {
-                            downloadManager.deleteModel(modelToDelete!!.id)
-                            downloadedModels = downloadManager.getDownloadedModels()
-                            modelToDelete = null
-                        }
+                        // TODO: 实现删除逻辑
+                        modelToDelete = null
                     }
                 ) {
                     Text(stringResource(R.string.delete))
@@ -197,58 +196,119 @@ fun LlmModelManagerScreen(
     }
 }
 
+/**
+ * 可滚动的分类 Tab 栏 - 使用 Chip 风格替代 TabRow，避免文字截断
+ */
 @Composable
-private fun DownloadedModelCard(
-    model: ModelConfig,
-    onDelete: () -> Unit
+private fun ScrollableCategoryTabs(
+    categories: Map<ModelCategory, String>,
+    selectedIndex: Int,
+    onCategorySelected: (Int, ModelCategory) -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+    val scrollState = rememberScrollState()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = model.name,
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Text(
-                    text = model.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = formatFileSize(model.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = stringResource(R.string.delete),
-                    tint = MaterialTheme.colorScheme.error
-                )
+        categories.entries.forEachIndexed { index, entry ->
+            val category = entry.key
+            val label = entry.value
+            val isSelected = selectedIndex == index
+
+            Surface(
+                onClick = { onCategorySelected(index, category) },
+                modifier = Modifier.height(36.dp),
+                shape = CircleShape,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                },
+                shadowElevation = if (isSelected) 2.dp else 0.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 0.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = getCategoryIcon(category.tag),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AvailableModelCard(
+private fun EmptyModelList() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = Icons.Outlined.SmartToy,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.no_models_available),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 根据标签获取对应的颜色
+ */
+@Composable
+private fun getTagColor(tag: String): androidx.compose.ui.graphics.Color {
+    return when (tag) {
+        "Think" -> MaterialTheme.colorScheme.primary
+        "Vision" -> MaterialTheme.colorScheme.tertiary
+        "Audio", "AudioGen" -> MaterialTheme.colorScheme.secondary
+        "ImageGen" -> androidx.compose.ui.graphics.Color(0xFF9C27B0)
+        "Code" -> androidx.compose.ui.graphics.Color(0xFF2196F3)
+        "Math" -> androidx.compose.ui.graphics.Color(0xFFFF9800)
+        "Chat" -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.outline
+    }
+}
+
+@Composable
+private fun ModelCardWithBadge(
     model: ModelConfig,
     downloadState: com.picme.data.download.DownloadState?,
+    tagTranslations: Map<String, String>,
     onDownload: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val isDownloading = downloadState?.status == DownloadStatus.DOWNLOADING
     val progress = if (downloadState != null && downloadState.totalBytes > 0) {
@@ -257,22 +317,45 @@ private fun AvailableModelCard(
         0f
     }
 
+    val primaryTag = model.tags.firstOrNull() ?: "Chat"
+    val tagColor = getTagColor(primaryTag)
+
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // 顶部：模型名 + 操作按钮
             Row(
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
+                // 左侧：名称和标签
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = model.name,
-                        style = MaterialTheme.typography.titleSmall
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = model.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // 标签徽章 - 紧凑样式
+                        val tagLabel = tagTranslations[primaryTag] ?: primaryTag
+                        TagBadge(label = tagLabel, color = tagColor)
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // 描述
                     Text(
                         text = model.description,
                         style = MaterialTheme.typography.bodySmall,
@@ -280,54 +363,162 @@ private fun AvailableModelCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = formatFileSize(model.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // 底部信息行：大小 + 轻量版标签
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = formatFileSize(model.size),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        if (model.isSmallModel) {
+                            LightweightBadge()
+                        }
+                    }
                 }
 
-                if (isDownloading) {
-                    IconButton(onClick = onCancel) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
-                } else {
-                    IconButton(
-                        onClick = onDownload,
-                        enabled = downloadState?.status != DownloadStatus.COMPLETED
-                    ) {
-                        Icon(
-                            Icons.Default.Download,
-                            contentDescription = stringResource(R.string.download)
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // 右侧：操作按钮
+                ModelActionButton(
+                    downloadState = downloadState,
+                    isDownloading = isDownloading,
+                    onDownload = onDownload,
+                    onDelete = onDelete
+                )
             }
 
+            // 下载进度条
             if (isDownloading) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${(progress * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             if (downloadState?.status == DownloadStatus.FAILED) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = stringResource(R.string.download_failed),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error
                 )
             }
+        }
+    }
+}
+
+/**
+ * 紧凑的标签徽章
+ */
+@Composable
+private fun TagBadge(label: String, color: androidx.compose.ui.graphics.Color) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.12f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            maxLines = 1
+        )
+    }
+}
+
+/**
+ * 轻量版标签
+ */
+@Composable
+private fun LightweightBadge() {
+    Text(
+        text = stringResource(R.string.model_label_lightweight),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
+}
+
+/**
+ * 模型操作按钮
+ */
+@Composable
+private fun ModelActionButton(
+    downloadState: com.picme.data.download.DownloadState?,
+    isDownloading: Boolean,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        when {
+            isDownloading -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    strokeWidth = 2.dp
+                )
+            }
+            downloadState?.status == DownloadStatus.COMPLETED -> {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = stringResource(R.string.model_downloaded),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            else -> {
+                IconButton(
+                    onClick = onDownload,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Download,
+                        contentDescription = stringResource(R.string.download),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+
+        IconButton(
+            onClick = onDelete,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = stringResource(R.string.delete),
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

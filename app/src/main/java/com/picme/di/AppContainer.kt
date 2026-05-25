@@ -16,6 +16,7 @@ import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.data.repository.MediaRepositoryImpl
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.repository.UserSettingsRepository
+import com.picme.data.download.LlmModelDownloadManager
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
 import com.picme.domain.usecase.OcrProcessor
@@ -55,6 +56,7 @@ interface AppContainer {
     val userPreferencesRepository: UserSettingsRepository
     val imageProcessor: ImageProcessor
     val faceDetector: FaceDetector
+    val llmModelDownloadManager: LlmModelDownloadManager
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
 }
@@ -90,6 +92,10 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     override val imageProcessor: ImageProcessor by lazy {
         ImageProcessorImpl(beautyProcessor, photoProcessor, faceDetector)
+    }
+
+    override val llmModelDownloadManager: LlmModelDownloadManager by lazy {
+        LlmModelDownloadManager(context)
     }
 
     private val ocrProcessor: OcrProcessor by lazy {

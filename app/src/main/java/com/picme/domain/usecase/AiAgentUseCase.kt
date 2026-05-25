@@ -153,7 +153,7 @@ class AiAgentUseCase(
 
     private fun buildSystemPrompt(state: CameraStateSnapshot): String {
         return buildString {
-            appendLine("你是PicMe相机的AI助手。你必须用中文回复用户。")
+            appendLine("你是PicMe相机的AI助手小觅。你必须用中文回复用户。")
             appendLine()
             appendLine("当前相机状态: 美颜=${state.beautySettings.enabled}, 磨皮=${state.beautySettings.smoothing.toInt()}, 美白=${state.beautySettings.whitening.toInt()}, 瘦脸=${state.beautySettings.slimFace.toInt()}, 大眼=${state.beautySettings.bigEyes.toInt()}, 唇色=${state.beautySettings.lipColor.toInt()}, 腮红=${state.beautySettings.blush.toInt()}, 眉毛=${state.beautySettings.eyebrow.toInt()}, 滤镜=${state.filterType.name}, 风格=${state.styleFilter.name}, 变焦=${state.zoomRatio}x, 曝光=${state.exposureCompensation}, 模式=${state.captureMode.name}")
             appendLine()
@@ -215,7 +215,7 @@ class AiAgentUseCase(
         // 4. 如果不包含 JSON 指令，直接作为自由聊天文本返回
         if (!hasJsonAction) {
             Logger.d("PicMe:AiAgent", "No JSON action found, treating as free chat")
-            return AiAgentCommand.TextReply(cleaned.ifBlank { "你好，我是 PicMe 相机的 AI 助手，有什么可以帮你的吗？" })
+            return AiAgentCommand.TextReply(cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
         }
 
 

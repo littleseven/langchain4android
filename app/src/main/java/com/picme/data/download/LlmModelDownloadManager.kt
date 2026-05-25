@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.picme.R
 import com.picme.core.common.Logger
+import com.picme.domain.model.ModelCategory
+import com.picme.domain.model.TagTranslations
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,14 +70,35 @@ class LlmModelDownloadManager(private val context: Context) {
      * 加载模型市场数据（包含标签翻译）
      */
     suspend fun loadMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
-        // 1. 尝试从网络获取 MNN 官方模型市场
+        // 1. 尝试从网络获取 MNN 官方模型市场（优先网络）
         val remoteData = fetchMarketData()
         if (remoteData.models.isNotEmpty()) {
+            // 保存到本地缓存
+            saveCachedMarketData(remoteData)
             return@withContext remoteData
         }
 
-        // 2. 回退到本地配置
+        // 2. 网络失败，尝试从本地缓存读取
+        val cachedData = loadCachedMarketData()
+        if (cachedData != null && cachedData.models.isNotEmpty()) {
+            Logger.i("PicMe:Download", "Using cached market data with ${cachedData.models.size} models")
+            return@withContext cachedData
+        }
+
+        // 3. 回退到本地 raw 资源
         return@withContext ModelMarketData(loadLocalModels(), DEFAULT_TAG_TRANSLATIONS)
+    }
+
+    /**
+     * 刷新模型市场数据（强制从网络获取并更新缓存）
+     */
+    suspend fun refreshMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
+        val remoteData = fetchMarketData()
+        if (remoteData.models.isNotEmpty()) {
+            saveCachedMarketData(remoteData)
+            Logger.i("PicMe:Download", "Market data refreshed: ${remoteData.models.size} models")
+        }
+        remoteData
     }
 
     /**
@@ -95,57 +118,144 @@ class LlmModelDownloadManager(private val context: Context) {
                 }
 
                 val body = response.body?.string() ?: return ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
-                val json = JSONObject(body)
-                val modelsArray = json.getJSONArray("models")
-
-                // 解析标签翻译
-                val tagTranslations = mutableMapOf<String, String>()
-                val tagTranslationsObj = json.optJSONObject("tagTranslations")
-                if (tagTranslationsObj != null) {
-                    tagTranslationsObj.keys().forEach { key ->
-                        tagTranslations[key] = tagTranslationsObj.getString(key)
-                    }
-                }
-
-                val result = mutableListOf<ModelConfig>()
-                for (i in 0 until modelsArray.length()) {
-                    val obj = modelsArray.getJSONObject(i)
-                    val modelName = obj.getString("modelName")
-
-                    // 只加载 MNN 格式模型
-                    if (!modelName.endsWith("-MNN")) continue
-
-                    val sourcesObj = obj.getJSONObject("sources")
-                    val sources = mutableMapOf<String, String>()
-                    sourcesObj.keys().forEach { key ->
-                        sources[key] = sourcesObj.getString(key)
-                    }
-
-                    // 解析标签
-                    val tagsArray = obj.optJSONArray("tags")
-                    val tags = if (tagsArray != null) {
-                        (0 until tagsArray.length()).map { tagsArray.getString(it) }
-                    } else emptyList()
-
-                    result.add(
-                        ModelConfig(
-                            id = modelName.lowercase().replace("-mnn", "").replace(".", "-"),
-                            name = modelName,
-                            description = buildDescription(obj),
-                            size = obj.optLong("file_size", 0L),
-                            sources = sources,
-                            files = LLM_MODEL_FILES,
-                            tags = tags
-                        )
-                    )
-                }
-
-                Logger.i("PicMe:Download", "Loaded ${result.size} models from MNN market")
-                ModelMarketData(result, tagTranslations)
+                parseMarketJson(body)
             }
         } catch (e: Exception) {
             Logger.w("PicMe:Download", "Failed to fetch model market, fallback to local", e)
             ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
+        }
+    }
+
+    /**
+     * 解析 model_market.json 响应体
+     */
+    private fun parseMarketJson(jsonBody: String): ModelMarketData {
+        val json = JSONObject(jsonBody)
+
+        // 解析标签翻译
+        val tagTranslations = mutableMapOf<String, String>()
+        val tagTranslationsObj = json.optJSONObject("tagTranslations")
+        if (tagTranslationsObj != null) {
+            tagTranslationsObj.keys().forEach { key ->
+                tagTranslations[key] = tagTranslationsObj.getString(key)
+            }
+        }
+
+        val result = mutableListOf<ModelConfig>()
+
+        // 解析主模型列表
+        val modelsArray = json.optJSONArray("models")
+        if (modelsArray != null) {
+            for (i in 0 until modelsArray.length()) {
+                parseModelObject(modelsArray.getJSONObject(i))?.let { result.add(it) }
+            }
+        }
+
+        // 解析 TTS 模型
+        val ttsArray = json.optJSONArray("tts_models")
+        if (ttsArray != null) {
+            for (i in 0 until ttsArray.length()) {
+                parseModelObject(ttsArray.getJSONObject(i), defaultTags = listOf("TTS"))?.let { result.add(it) }
+            }
+        }
+
+        // 解析 ASR 模型
+        val asrArray = json.optJSONArray("asr_models")
+        if (asrArray != null) {
+            for (i in 0 until asrArray.length()) {
+                parseModelObject(asrArray.getJSONObject(i), defaultTags = listOf("ASR"))?.let { result.add(it) }
+            }
+        }
+
+        Logger.i("PicMe:Download", "Parsed ${result.size} models from MNN market")
+        return ModelMarketData(result, tagTranslations)
+    }
+
+    /**
+     * 解析单个模型 JSON 对象
+     */
+    private fun parseModelObject(obj: JSONObject, defaultTags: List<String> = emptyList()): ModelConfig? {
+        val modelName = obj.optString("modelName", "")
+        if (modelName.isBlank()) return null
+
+        val sourcesObj = obj.optJSONObject("sources")
+        val sources = mutableMapOf<String, String>()
+        if (sourcesObj != null) {
+            sourcesObj.keys().forEach { key ->
+                sources[key] = sourcesObj.getString(key)
+            }
+        }
+        if (sources.isEmpty()) return null
+
+        // 解析标签
+        val tagsArray = obj.optJSONArray("tags")
+        val tags = if (tagsArray != null) {
+            (0 until tagsArray.length()).map { tagsArray.getString(it) }
+        } else defaultTags
+
+        return ModelConfig(
+            id = modelName.lowercase().replace("-mnn", "").replace(".", "-"),
+            name = modelName,
+            description = buildDescription(obj),
+            size = obj.optLong("file_size", 0L),
+            sources = sources,
+            files = LLM_MODEL_FILES,
+            tags = tags
+        )
+    }
+
+    /**
+     * 本地缓存文件路径
+     */
+    private val cacheFile: File
+        get() = File(context.cacheDir, "model_market_cache.json")
+
+    /**
+     * 从本地缓存加载市场数据
+     */
+    private fun loadCachedMarketData(): ModelMarketData? {
+        return try {
+            val file = cacheFile
+            if (!file.exists() || !file.canRead()) return null
+
+            // 检查缓存是否过期（7天）
+            val maxAgeMs = 7L * 24 * 60 * 60 * 1000
+            if (System.currentTimeMillis() - file.lastModified() > maxAgeMs) {
+                Logger.d("PicMe:Download", "Market cache expired")
+                return null
+            }
+
+            val jsonBody = file.readText()
+            parseMarketJson(jsonBody)
+        } catch (e: Exception) {
+            Logger.w("PicMe:Download", "Failed to load cached market data", e)
+            null
+        }
+    }
+
+    /**
+     * 保存市场数据到本地缓存
+     */
+    private fun saveCachedMarketData(data: ModelMarketData) {
+        try {
+            val modelsArray = JSONArray()
+            data.models.forEach { model ->
+                modelsArray.put(JSONObject().apply {
+                    put("modelName", model.name)
+                    put("file_size", model.size)
+                    put("vendor", "")
+                    put("tags", JSONArray(model.tags))
+                    put("sources", JSONObject(model.sources.toMap()))
+                })
+            }
+            val json = JSONObject().apply {
+                put("tagTranslations", JSONObject(data.tagTranslations.toMap()))
+                put("models", modelsArray)
+            }
+            cacheFile.writeText(json.toString())
+            Logger.d("PicMe:Download", "Market data cached: ${data.models.size} models")
+        } catch (e: Exception) {
+            Logger.w("PicMe:Download", "Failed to cache market data", e)
         }
     }
 
@@ -163,13 +273,18 @@ class LlmModelDownloadManager(private val context: Context) {
                 sourcesObj.keys().forEach { key ->
                     sources[key] = sourcesObj.getString(key)
                 }
+
                 ModelConfig(
                     id = obj.getString("id"),
                     name = obj.getString("name"),
                     description = obj.getString("description"),
                     size = obj.getLong("size"),
                     sources = sources,
-                    files = LLM_MODEL_FILES
+                    files = LLM_MODEL_FILES,
+                    tags = if (obj.has("tags")) {
+                        val tagsArray = obj.getJSONArray("tags")
+                        (0 until tagsArray.length()).map { tagsArray.getString(it) }
+                    } else emptyList()
                 )
             }
         } catch (e: Exception) {
@@ -395,15 +510,82 @@ data class ModelConfig(
     val sources: Map<String, String>,
     val files: List<String>,
     val tags: List<String> = emptyList()
-)
+) {
+    /**
+     * 便捷属性：判断是否为小模型 (< 50MB)
+     */
+    val isSmallModel: Boolean get() = size < 50 * 1024 * 1024
+
+    /**
+     * 获取模型的第一个分类标签，用于确定所属 Tab
+     */
+    fun primaryCategory(): ModelCategory {
+        val firstTag = tags.firstOrNull { it != "TTS" && it != "ASR" }
+            ?: tags.firstOrNull()
+            ?: "Chat"
+        return ModelCategory(firstTag)
+    }
+
+    /**
+     * 获取模型类型的简短标签
+     */
+    fun getTypeLabel(tagTranslations: TagTranslations): String {
+        val primaryTag = tags.firstOrNull() ?: "Chat"
+        return tagTranslations[primaryTag] ?: primaryTag
+    }
+}
 
 /**
  * 模型市场数据（包含模型列表和标签翻译）
  */
 data class ModelMarketData(
     val models: List<ModelConfig>,
-    val tagTranslations: Map<String, String>
-)
+    val tagTranslations: TagTranslations
+) {
+    /**
+     * 获取所有可用的分类标签（按 tagTranslations 顺序）
+     */
+    fun getCategories(): List<ModelCategory> {
+        val allTags = models.flatMap { it.tags }.toSet()
+        // 按 tagTranslations 中定义的顺序排列
+        val ordered = tagTranslations.keys
+            .filter { it in allTags }
+            .map { ModelCategory(it) }
+        // 补充未在 tagTranslations 中定义的标签
+        val remaining = allTags
+            .filter { it !in tagTranslations.keys }
+            .map { ModelCategory(it) }
+        return ordered + remaining
+    }
+
+    /**
+     * 按分类标签分组模型
+     */
+    fun groupByCategory(): Map<ModelCategory, List<ModelConfig>> {
+        val categories = getCategories()
+        val result = mutableMapOf<ModelCategory, List<ModelConfig>>()
+
+        // 每个模型放入其第一个匹配的分类
+        val assigned = mutableSetOf<String>()
+        for (category in categories) {
+            val categoryModels = models.filter { model ->
+                model.id !in assigned && category.tag in model.tags
+            }
+            if (categoryModels.isNotEmpty()) {
+                result[category] = categoryModels
+                assigned.addAll(categoryModels.map { it.id })
+            }
+        }
+
+        // 未分类的放入 "All"
+        val unassigned = models.filter { it.id !in assigned }
+        if (unassigned.isNotEmpty()) {
+            result[ModelCategory.ALL] = unassigned
+        }
+
+        return result
+    }
+}
 
 /**
  * 下载进度

@@ -69,7 +69,10 @@ class MainActivity : ComponentActivity() {
                 factory = app.container.createMediaViewModelFactory()
             )
             val settingsViewModel: SettingsViewModel = viewModel(
-                factory = SettingsViewModelFactory(app.container.userPreferencesRepository)
+                factory = SettingsViewModelFactory(
+                    app.container.userPreferencesRepository,
+                    app.container.llmModelDownloadManager
+                )
             )
 
             val themeMode by settingsViewModel.themeMode.collectAsState()
@@ -145,6 +148,7 @@ class MainActivity : ComponentActivity() {
                             }
                             composable(Screen.LlmModelManager.route) {
                                 LlmModelManagerScreen(
+                                    viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() }
                                 )
                             }
