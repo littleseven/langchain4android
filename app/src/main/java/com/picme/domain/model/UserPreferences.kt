@@ -119,3 +119,42 @@ enum class AiAgentMode {
     REMOTE   // 远程 Kimi/Moonshot API
 }
 
+/**
+ * 模型分类标签（基于 MNN model_market.json 的 tagTranslations）
+ *
+ * 每个标签对应一个 Tab 分类，标签名来自 API 返回的 tagTranslations key。
+ * 使用 value class 包装 String，支持动态标签且保持类型安全。
+ *
+ * @property tag 标签英文名（如 "Vision", "Think", "Audio"）
+ */
+@JvmInline
+value class ModelCategory(val tag: String) {
+    companion object {
+        /** 所有模型（无标签过滤） */
+        val ALL = ModelCategory("All")
+
+        /** 预置的常见分类，用于本地缓存缺失时的默认展示 */
+        val DEFAULT_CATEGORIES = listOf(
+            ModelCategory("Think"),
+            ModelCategory("Vision"),
+            ModelCategory("Audio"),
+            ModelCategory("Code"),
+            ModelCategory("Math"),
+            ModelCategory("ImageGen"),
+            ModelCategory("AudioGen"),
+            ModelCategory("Chat")
+        )
+    }
+
+    override fun toString(): String = tag
+}
+
+/**
+ * 模型分类标签翻译映射
+ *
+ * 来自 MNN model_market.json 的 tagTranslations 字段。
+ * key: 英文标签（如 "Vision"）
+ * value: 中文翻译（如 "图像理解"）
+ */
+typealias TagTranslations = Map<String, String>
+

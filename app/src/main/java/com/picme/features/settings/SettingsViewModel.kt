@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.core.common.Logger
+import com.picme.data.download.LlmModelDownloadManager
+import com.picme.data.download.ModelConfig
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
@@ -12,15 +14,22 @@ import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.ModelCategory
+import com.picme.domain.model.TagTranslations
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.repository.UserSettingsRepository
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class SettingsViewModel(private val repository: UserSettingsRepository) : ViewModel() {
+class SettingsViewModel(
+    private val repository: UserSettingsRepository,
+    private val modelDownloadManager: LlmModelDownloadManager
+) : ViewModel() {
 
     val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
         .stateIn(
@@ -147,6 +156,109 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = ""
         )
+
+    // 模型管理相关 Flow
+    private val _allModels = MutableStateFlow<List<ModelConfig>>(emptyList())
+    val allModels: StateFlow<List<ModelConfig>> = _allModels.asStateFlow()
+
+    private val _downloadedModels = MutableStateFlow<List<ModelConfig>>(emptyList())
+    val downloadedModels: StateFlow<List<ModelConfig>> = _downloadedModels.asStateFlow()
+
+    private val _groupedModels = MutableStateFlow<Map<ModelCategory, List<ModelConfig>>>(emptyMap())
+    val groupedModels: StateFlow<Map<ModelCategory, List<ModelConfig>>> = _groupedModels.asStateFlow()
+
+    private val _tagTranslations = MutableStateFlow<TagTranslations>(emptyMap())
+    val tagTranslations: StateFlow<TagTranslations> = _tagTranslations.asStateFlow()
+
+    private val _categories = MutableStateFlow<List<ModelCategory>>(emptyList())
+    val categories: StateFlow<List<ModelCategory>> = _categories.asStateFlow()
+
+    private val _currentTab = MutableStateFlow(ModelCategory.ALL)
+    val currentTab: StateFlow<ModelCategory> = _currentTab.asStateFlow()
+
+    init {
+        loadModels()
+    }
+
+    private fun loadModels() {
+        viewModelScope.launch {
+            try {
+                val marketData = modelDownloadManager.loadMarketData()
+                _allModels.value = marketData.models
+                _tagTranslations.value = marketData.tagTranslations
+
+                val grouped = marketData.groupByCategory()
+                _groupedModels.value = grouped
+                _categories.value = grouped.keys.toList()
+
+                // 默认选中第一个分类
+                if (_currentTab.value == ModelCategory.ALL && grouped.isNotEmpty()) {
+                    _currentTab.value = grouped.keys.first()
+                }
+
+                val downloaded = modelDownloadManager.getDownloadedModels()
+                _downloadedModels.value = downloaded
+
+                Logger.i("PicMe:Settings", "Loaded ${marketData.models.size} models, " +
+                    "categories: ${grouped.keys.map { it.tag }}")
+            } catch (e: Exception) {
+                Logger.e("PicMe:Settings", "Failed to load models", e)
+            }
+        }
+    }
+
+    /**
+     * 切换 Tab
+     */
+    fun switchTab(tab: ModelCategory) {
+        _currentTab.value = tab
+    }
+
+    /**
+     * 获取当前 Tab 对应的模型列表
+     */
+    fun getCurrentTabModels(): List<ModelConfig> {
+        return _groupedModels.value[_currentTab.value] ?: emptyList()
+    }
+
+    /**
+     * 获取所有模型分类标签（用于 TabRow）
+     * 返回 Map<分类标签, 中文翻译>
+     */
+    fun getModelTypeLabels(): Map<ModelCategory, String> {
+        val translations = _tagTranslations.value
+        return _categories.value.associateWith { category ->
+            translations[category.tag] ?: category.tag
+        }
+    }
+
+    /**
+     * 刷新模型列表（强制从网络获取）
+     */
+    fun refreshModels() {
+        viewModelScope.launch {
+            try {
+                val marketData = modelDownloadManager.refreshMarketData()
+                _allModels.value = marketData.models
+                _tagTranslations.value = marketData.tagTranslations
+
+                val grouped = marketData.groupByCategory()
+                _groupedModels.value = grouped
+                _categories.value = grouped.keys.toList()
+
+                if (_currentTab.value !in grouped.keys && grouped.isNotEmpty()) {
+                    _currentTab.value = grouped.keys.first()
+                }
+
+                val downloaded = modelDownloadManager.getDownloadedModels()
+                _downloadedModels.value = downloaded
+
+                Logger.i("PicMe:Settings", "Refreshed ${marketData.models.size} models")
+            } catch (e: Exception) {
+                Logger.e("PicMe:Settings", "Failed to refresh models", e)
+            }
+        }
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
@@ -344,13 +456,14 @@ class SettingsViewModel(private val repository: UserSettingsRepository) : ViewMo
 }
 
 class SettingsViewModelFactory(
-    private val repository: UserSettingsRepository
+    private val repository: UserSettingsRepository,
+    private val modelDownloadManager: LlmModelDownloadManager
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return SettingsViewModel(repository) as T
+            return SettingsViewModel(repository, modelDownloadManager) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -306,4 +306,13 @@
     <string name="ai_chat_error">处理请求失败</string>
     <string name="ai_chat_examples">试试：调亮、复古滤镜、增强色彩...</string>
 
+    <!-- Model Manager -->
+    <string name="model_type_asr">语音</string>
+    <string name="model_type_llm">对话</string>
+    <string name="model_type_beauty">美颜</string>
+    <string name="model_type_landmark">人脸</string>
+    <string name="model_label_lightweight">轻量版</string>
+    <string name="model_downloaded">已下载</string>
+    <string name="no_models_available">暂无可用模型</string>
+
 </resources>
