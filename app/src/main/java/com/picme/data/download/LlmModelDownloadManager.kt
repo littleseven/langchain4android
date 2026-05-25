@@ -57,6 +57,14 @@ class LlmModelDownloadManager(private val context: Context) {
     )
 
     /**
+     * ASR 模型固定文件列表
+     */
+    private val ASR_MODEL_FILES = listOf(
+        "whisper.mnn",
+        "vocab.json"
+    )
+
+    /**
      * 加载可用模型配置
      *
      * 优先从 MNN 官方模型市场获取，失败时回退到本地配置。
@@ -317,8 +325,19 @@ class LlmModelDownloadManager(private val context: Context) {
         val modelDir = File(downloadDir, modelId)
         if (!modelDir.exists()) return false
 
-        return LLM_MODEL_FILES.all { fileName ->
+        val expectedFiles = getModelFiles(modelId)
+        return expectedFiles.all { fileName ->
             File(modelDir, fileName).exists()
+        }
+    }
+
+    /**
+     * 根据模型 ID 获取对应的文件列表
+     */
+    private fun getModelFiles(modelId: String): List<String> {
+        return when {
+            modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
+            else -> LLM_MODEL_FILES
         }
     }
 
@@ -394,7 +413,8 @@ class LlmModelDownloadManager(private val context: Context) {
 
             var totalDownloaded = 0L
 
-            for (fileName in LLM_MODEL_FILES) {
+            val expectedFiles = getModelFiles(modelId)
+            for (fileName in expectedFiles) {
                 if (activeDownloads[modelId]?.isCanceled() == true) {
                     throw IOException("Download cancelled")
                 }
