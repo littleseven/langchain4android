@@ -16,6 +16,8 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -227,26 +229,40 @@ private fun settingsContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
+            // AI Agent 配置 - 放到最顶部
             SettingsSection(
-                title = stringResource(R.string.theme_mode),
-                description = stringResource(R.string.settings_theme_mode_desc)
+                title = stringResource(R.string.ai_agent),
+                description = stringResource(R.string.ai_agent_desc)
             ) {
-                themeSelection(
-                    currentMode = themeMode,
-                    onModeSelected = onThemeModeSelected
+                // 模式选择：本地模型 / 远程模型
+                AiAgentModeSelection(
+                    currentMode = aiAgentMode,
+                    onModeSelected = onAiAgentModeChange
                 )
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            SettingsSection(
-                title = stringResource(R.string.language),
-                description = stringResource(R.string.settings_language_desc)
-            ) {
-                languageSelection(
-                    currentLanguage = appLanguage,
-                    onLanguageSelected = onAppLanguageSelected
-                )
+                when (aiAgentMode) {
+                    AiAgentMode.LOCAL -> {
+                        AiAgentLocalModelSection(
+                            currentLocalModel = aiAgentLocalModel,
+                            onLocalModelSelected = onAiAgentLocalModelChange,
+                            onNavigateToModelManager = onNavigateToLlmModelManager
+                        )
+                    }
+                    AiAgentMode.REMOTE -> {
+                        AiAgentBaseUrlSelection(
+                            currentBaseUrl = aiAgentBaseUrl,
+                            onBaseUrlSelected = onAiAgentBaseUrlChange
+                        )
+                        AiAgentModelSelection(
+                            currentModel = aiAgentModel,
+                            onModelSelected = onAiAgentModelChange
+                        )
+                        AiAgentApiKeyRow(
+                            apiKey = aiAgentApiKey,
+                            onApiKeyChange = onAiAgentApiKeyChange
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -345,40 +361,26 @@ private fun settingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // AI Agent 配置
             SettingsSection(
-                title = stringResource(R.string.ai_agent),
-                description = stringResource(R.string.ai_agent_desc)
+                title = stringResource(R.string.theme_mode),
+                description = stringResource(R.string.settings_theme_mode_desc)
             ) {
-                // 模式选择：本地模型 / 远程模型
-                AiAgentModeSelection(
-                    currentMode = aiAgentMode,
-                    onModeSelected = onAiAgentModeChange
+                themeSelection(
+                    currentMode = themeMode,
+                    onModeSelected = onThemeModeSelected
                 )
+            }
 
-                when (aiAgentMode) {
-                    AiAgentMode.LOCAL -> {
-                        AiAgentLocalModelSection(
-                            currentLocalModel = aiAgentLocalModel,
-                            onLocalModelSelected = onAiAgentLocalModelChange,
-                            onNavigateToModelManager = onNavigateToLlmModelManager
-                        )
-                    }
-                    AiAgentMode.REMOTE -> {
-                        AiAgentBaseUrlSelection(
-                            currentBaseUrl = aiAgentBaseUrl,
-                            onBaseUrlSelected = onAiAgentBaseUrlChange
-                        )
-                        AiAgentModelSelection(
-                            currentModel = aiAgentModel,
-                            onModelSelected = onAiAgentModelChange
-                        )
-                        AiAgentApiKeyRow(
-                            apiKey = aiAgentApiKey,
-                            onApiKeyChange = onAiAgentApiKeyChange
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.language),
+                description = stringResource(R.string.settings_language_desc)
+            ) {
+                languageSelection(
+                    currentLanguage = appLanguage,
+                    onLanguageSelected = onAppLanguageSelected
+                )
             }
         }
     }
@@ -478,11 +480,12 @@ private fun AiAgentLocalModelSection(
                 )
             }
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                imageVector = Icons.Outlined.CloudDownload,
                 contentDescription = null,
                 modifier = Modifier
-                    .size(20.dp)
-                    .padding(start = 4.dp)
+                    .size(22.dp)
+                    .padding(start = 4.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -601,8 +604,6 @@ private fun AiAgentBaseUrlSelection(
     onBaseUrlSelected: (String) -> Unit
 ) {
     val presets = listOf(
-        "" to stringResource(R.string.ai_agent_base_url_default),
-        "https://api.moonshot.cn/v1/" to stringResource(R.string.ai_agent_base_url_moonshot),
         "https://tokenhub.tencentmaas.com/v1/" to stringResource(R.string.ai_agent_base_url_tencent)
     )
 
@@ -631,10 +632,6 @@ private fun AiAgentModelSelection(
     onModelSelected: (String) -> Unit
 ) {
     val models = listOf(
-        "moonshot-v1-8k" to stringResource(R.string.ai_agent_model_8k),
-        "moonshot-v1-32k" to stringResource(R.string.ai_agent_model_32k),
-        "moonshot-v1-128k" to stringResource(R.string.ai_agent_model_128k),
-        "kimi-latest" to stringResource(R.string.ai_agent_model_latest),
         "kimi-k2.6" to stringResource(R.string.ai_agent_model_k2_6)
     )
 
@@ -735,8 +732,6 @@ private fun FaceDetectionEngineSelection(
     val options = listOf(
         FaceDetectionEngineMode.MEDIAPIPE to stringResource(R.string.face_detection_engine_mode_mediapipe),
         FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface),
-        FaceDetectionEngineMode.MNN to stringResource(R.string.inference_engine_mnn),
-        FaceDetectionEngineMode.NCNN to stringResource(R.string.inference_engine_ncnn),
         FaceDetectionEngineMode.CUSTOM to stringResource(R.string.face_detection_engine_mode_custom)
     )
 
