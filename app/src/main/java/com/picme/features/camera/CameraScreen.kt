@@ -742,7 +742,9 @@ fun CameraContent(
     val aiAgentModel by userPreferencesRepository.aiAgentModelFlow.collectAsState(initial = "moonshot-v1-8k")
     val aiAgentBaseUrl by userPreferencesRepository.aiAgentBaseUrlFlow.collectAsState(initial = "")
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
-    val aiAgentUseCase = remember(context, aiAgentApiKey, aiAgentModel, aiAgentBaseUrl, aiAgentLocalModel) {
+
+    // 使用 remember 只基于 context，避免 DataStore 值变化时重新创建 UseCase
+    val aiAgentUseCase = remember(context) {
         AiAgentUseCase(
             context = context,
             apiKey = aiAgentApiKey.takeIf { it.isNotBlank() },
@@ -752,10 +754,11 @@ fun CameraContent(
         )
     }
 
+    // 当设置中的模型 ID 变化时，重新配置并加载模型
     LaunchedEffect(aiAgentLocalModel) {
-        if (!aiAgentUseCase.isLocalModelLoaded) {
-            Logger.i("PicMe:AiAgent", "Loading local MNN-LLM model in background...")
-            val result = aiAgentUseCase.loadLocalModel()
+        if (aiAgentLocalModel.isNotBlank() && !aiAgentUseCase.isLocalModelLoaded) {
+            Logger.i("PicMe:AiAgent", "Loading local MNN-LLM model: $aiAgentLocalModel")
+            val result = aiAgentUseCase.loadLocalModel(aiAgentLocalModel)
             Logger.i("PicMe:AiAgent", "Local MNN-LLM model load result: $result")
         }
     }
