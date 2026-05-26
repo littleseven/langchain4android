@@ -456,10 +456,11 @@ private fun VoiceInputButton(
 
     var isLongPressing by remember { mutableStateOf(false) }
 
+    // 监听长按状态变化，触发录音控制
     LaunchedEffect(isLongPressing) {
-        if (isLongPressing && !isListening) {
+        if (isLongPressing) {
             onStartListening()
-        } else if (!isLongPressing && isListening) {
+        } else {
             onStopListening()
         }
     }
