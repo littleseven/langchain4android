@@ -112,6 +112,11 @@ object ModelManager {
             assetDir = "models/llm/Qwen3-0.6B-MNN",
             cacheDirName = "Qwen3-0.6B-MNN",
             version = "1.0"
+        ),
+        "qwen3-0-6b" to LlmModelInfo(
+            assetDir = "models/llm/Qwen3-0.6B-MNN",
+            cacheDirName = "Qwen3-0.6B-MNN",
+            version = "1.0"
         )
     )
 
