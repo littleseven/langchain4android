@@ -328,5 +328,11 @@
     <string name="model_label_lightweight">輕量版</string>
     <string name="model_downloaded">已下載</string>
     <string name="no_models_available">暫無可用模型</string>
+    <string name="model_properties">模型屬性</string>
+    <string name="copy">複製</string>
+    <string name="copied_to_clipboard">已複製到剪貼簿</string>
+    <string name="cancel_download">取消下載</string>
+    <string name="pause_download">暫停</string>
+    <string name="resume_download">繼續</string>
 
 </resources>

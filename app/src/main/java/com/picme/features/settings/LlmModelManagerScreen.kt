@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,8 +23,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Visibility
@@ -63,10 +68,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.picme.R
 import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
@@ -109,6 +120,7 @@ fun LlmModelManagerScreen(
     val categories by viewModel.categories.collectAsState()
 
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
+    var modelToShowProperties by remember { mutableStateOf<ModelConfig?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     // 收集下载进度用的协程作用域
@@ -158,21 +170,35 @@ fun LlmModelManagerScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(currentModels) { model ->
+                        val downloadState = downloadStates[model.id]
+                        val isPaused = downloadState?.status == DownloadStatus.PAUSED
                         ModelCardWithBadge(
                             model = model,
-                            downloadState = downloadStates[model.id],
+                            downloadState = downloadState,
                             tagTranslations = tagTranslations,
                             onDownload = {
-                                coroutineScope.launch {
-                                    downloadManager.downloadModel(model.id, model).collect { progress ->
-                                        // 进度通过 downloadStates 自动收集，无需额外处理
+                                if (isPaused) {
+                                    coroutineScope.launch {
+                                        downloadManager.resumeDownload(model.id, model).collect { progress ->
+                                            // 进度通过 downloadStates 自动收集
+                                        }
+                                    }
+                                } else {
+                                    coroutineScope.launch {
+                                        downloadManager.downloadModel(model.id, model).collect { progress ->
+                                            // 进度通过 downloadStates 自动收集
+                                        }
                                     }
                                 }
                             },
                             onCancel = {
                                 downloadManager.cancelDownload(model.id)
                             },
-                            onDelete = { modelToDelete = model }
+                            onPause = {
+                                downloadManager.pauseDownload(model.id)
+                            },
+                            onDelete = { modelToDelete = model },
+                            onShowProperties = { modelToShowProperties = model }
                         )
                     }
                 }
@@ -206,6 +232,14 @@ fun LlmModelManagerScreen(
                     Text(stringResource(R.string.cancel))
                 }
             }
+        )
+    }
+
+    // 模型属性对话框
+    if (modelToShowProperties != null) {
+        ModelPropertiesDialog(
+            model = modelToShowProperties!!,
+            onDismiss = { modelToShowProperties = null }
         )
     }
 }
@@ -322,9 +356,12 @@ private fun ModelCardWithBadge(
     tagTranslations: Map<String, String>,
     onDownload: () -> Unit,
     onCancel: () -> Unit,
-    onDelete: () -> Unit
+    onPause: () -> Unit,
+    onDelete: () -> Unit,
+    onShowProperties: () -> Unit
 ) {
     val isDownloading = downloadState?.status == DownloadStatus.DOWNLOADING
+    val isPaused = downloadState?.status == DownloadStatus.PAUSED
     val progress = if (downloadState != null && downloadState.totalBytes > 0) {
         downloadState.downloadedBytes.toFloat() / downloadState.totalBytes.toFloat()
     } else {
@@ -335,7 +372,13 @@ private fun ModelCardWithBadge(
     val tagColor = getTagColor(primaryTag)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onLongPress = { onShowProperties() }
+                )
+            },
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(12.dp)
@@ -404,25 +447,33 @@ private fun ModelCardWithBadge(
                 ModelActionButton(
                     downloadState = downloadState,
                     isDownloading = isDownloading,
+                    isPaused = isPaused,
                     onDownload = onDownload,
+                    onCancel = onCancel,
+                    onPause = onPause,
                     onDelete = onDelete
                 )
             }
 
             // 下载进度条
-            if (isDownloading) {
+            if (isDownloading || isPaused) {
                 Spacer(modifier = Modifier.height(10.dp))
                 LinearProgressIndicator(
                     progress = { progress.coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
+                    color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant
                 )
                 Spacer(modifier = Modifier.height(4.dp))
+                val statusText = if (isPaused) {
+                    "${(progress * 100).toInt()}% — ${stringResource(R.string.pause_download)}"
+                } else {
+                    "${(progress * 100).toInt()}%"
+                }
                 Text(
-                    text = "${(progress * 100).toInt()}%",
+                    text = statusText,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isPaused) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -489,16 +540,54 @@ private fun LightweightBadge() {
 private fun ModelActionButton(
     downloadState: com.picme.data.download.DownloadState?,
     isDownloading: Boolean,
+    isPaused: Boolean,
     onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onPause: () -> Unit,
     onDelete: () -> Unit
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         when {
             isDownloading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp
-                )
+                // 下载中：显示暂停和取消按钮
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = onPause,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Pause,
+                            contentDescription = stringResource(R.string.pause_download),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onCancel,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.cancel_download),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+            isPaused -> {
+                // 暂停中：显示继续按钮
+                IconButton(
+                    onClick = onDownload,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = stringResource(R.string.resume_download),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
             downloadState?.status == DownloadStatus.COMPLETED -> {
                 Icon(
@@ -543,5 +632,113 @@ private fun formatFileSize(bytes: Long): String {
         bytes >= 1024 * 1024 -> String.format("%.2f MB", bytes / (1024.0 * 1024.0))
         bytes >= 1024 -> String.format("%.2f KB", bytes / 1024.0)
         else -> "$bytes B"
+    }
+}
+
+/**
+ * 模型属性对话框 —— 以 JSON 格式展示模型信息，支持复制
+ */
+@Composable
+private fun ModelPropertiesDialog(
+    model: ModelConfig,
+    onDismiss: () -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+    var showCopiedToast by remember { mutableStateOf(false) }
+
+    val propertiesJson = remember(model) {
+        buildString {
+            appendLine("{")
+            appendLine("  \"id\": \"${model.id}\",")
+            appendLine("  \"name\": \"${model.name}\",")
+            appendLine("  \"description\": \"${model.description}\",")
+            appendLine("  \"size\": ${model.size},")
+            appendLine("  \"sizeFormatted\": \"${formatFileSize(model.size)}\",")
+            appendLine("  \"tags\": ${model.tags},")
+            appendLine("  \"files\": ${model.files},")
+            appendLine("  \"sources\": {")
+            model.sources.entries.forEachIndexed { index, entry ->
+                val comma = if (index < model.sources.size - 1) "," else ""
+                appendLine("    \"${entry.key}\": \"${entry.value}\"$comma")
+            }
+            appendLine("  },")
+            appendLine("  \"isSmallModel\": ${model.isSmallModel}")
+            appendLine("}")
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                // 标题栏
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.model_properties),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    IconButton(onClick = {
+                        clipboardManager.setText(AnnotatedString(propertiesJson))
+                        showCopiedToast = true
+                    }) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = stringResource(R.string.copy),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // JSON 内容区域
+                OutlinedTextField(
+                    value = propertiesJson,
+                    onValueChange = { },
+                    readOnly = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 200.dp, max = 400.dp),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    ),
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    ),
+                    enabled = false
+                )
+
+                if (showCopiedToast) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.copied_to_clipboard),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 关闭按钮
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text(stringResource(R.string.close))
+                }
+            }
+        }
     }
 }
