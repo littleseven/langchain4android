@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <mutex>
+#include <streambuf>
 
 #include <MNN/llm/llm.hpp>
 
@@ -13,6 +14,33 @@
 extern "C" {
 
 static std::mutex g_llm_mutex;
+
+/**
+ * 自定义 streambuf，用于收集 generate() 输出的 token
+ * 参考官方 MnnLlmChat 实现
+ */
+class LlmStreamBuffer : public std::streambuf {
+public:
+    LlmStreamBuffer() {
+        setp(buffer_, buffer_ + sizeof(buffer_) - 1);
+    }
+
+    std::string str() const {
+        return std::string(pbase(), pptr() - pbase());
+    }
+
+protected:
+    virtual int_type overflow(int_type c) override {
+        if (c != traits_type::eof()) {
+            *pptr() = c;
+            pbump(1);
+        }
+        return c;
+    }
+
+private:
+    char buffer_[4096];
+};
 
 JNIEXPORT jlong JNICALL
 Java_com_picme_beauty_api_llm_MnnLlmClient_nativeCreate(
@@ -75,15 +103,38 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerate(
 
     LOGD("Generating response for prompt: %s", promptStr.c_str());
 
-    std::ostringstream oss;
+    std::string result;
     {
         std::lock_guard<std::mutex> lock(g_llm_mutex);
-        llm->response(promptStr, &oss, nullptr, maxNewTokens);
+
+        // 阶段1: prefill —— 处理输入 prompt，不生成输出
+        LlmStreamBuffer streamBuffer;
+        std::ostream outputStream(&streamBuffer);
+        llm->response(promptStr, &outputStream, "<eop>", 0);
+
+        // 阶段2: decode —— 循环生成 token
+        int generatedTokens = 0;
+        const int maxTokens = maxNewTokens > 0 ? maxNewTokens : 128;
+        bool finished = false;
+
+        while (generatedTokens < maxTokens && !finished) {
+            llm->generate(1);
+            generatedTokens++;
+
+            // 检查状态
+            const MNN::Transformer::LlmContext *ctx = llm->getContext();
+            if (ctx != nullptr) {
+                if (ctx->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED ||
+                    ctx->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED) {
+                    finished = true;
+                }
+            }
+        }
+
+        result = streamBuffer.str();
     }
 
-    std::string result = oss.str();
     LOGD("Generated response: %s", result.c_str());
-
     return env->NewStringUTF(result.c_str());
 }
 
