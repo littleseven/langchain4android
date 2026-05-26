@@ -454,31 +454,50 @@ private fun VoiceInputButton(
         Color.White.copy(alpha = 0.15f)
     }
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    var isLongPressing by remember { mutableStateOf(false) }
 
-    LaunchedEffect(isPressed) {
-        if (isPressed && !isListening) {
+    LaunchedEffect(isLongPressing) {
+        if (isLongPressing && !isListening) {
             onStartListening()
-        } else if (!isPressed && isListening) {
+        } else if (!isLongPressing && isListening) {
             onStopListening()
         }
     }
 
-    IconButton(
-        onClick = { },
-        interactionSource = interactionSource,
+    Box(
         modifier = modifier
             .size(40.dp)
             .clip(CircleShape)
             .background(
-                if (isListening || isPressed) Color(0xFFE53935) else Color.White.copy(alpha = 0.15f)
+                if (isListening || isLongPressing) Color(0xFFE53935) else Color.White.copy(alpha = 0.15f)
             )
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { change ->
+                            if (change.pressed && !change.isConsumed) {
+                                // 手指按下且未消费
+                                if (!isLongPressing) {
+                                    isLongPressing = true
+                                }
+                            } else if (!change.pressed && change.isConsumed) {
+                                // 手指抬起且已消费
+                                if (isLongPressing) {
+                                    isLongPressing = false
+                                }
+                            }
+                            change.consume()
+                        }
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = if (isListening || isPressed) Icons.Rounded.Stop else Icons.Rounded.KeyboardVoice,
-            contentDescription = if (isListening || isPressed) "Recording..." else "Hold to speak",
-            tint = if (isListening || isPressed) Color.White else Color.White.copy(alpha = 0.8f),
+            imageVector = if (isListening || isLongPressing) Icons.Rounded.Stop else Icons.Rounded.KeyboardVoice,
+            contentDescription = if (isListening || isLongPressing) "Recording..." else "Hold to speak",
+            tint = if (isListening || isLongPressing) Color.White else Color.White.copy(alpha = 0.8f),
             modifier = Modifier.size(20.dp)
         )
     }
