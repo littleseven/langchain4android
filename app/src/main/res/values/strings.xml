@@ -337,5 +337,11 @@
     <string name="model_label_lightweight">Lightweight</string>
     <string name="model_downloaded">Downloaded</string>
     <string name="no_models_available">No models available</string>
+    <string name="model_properties">Model Properties</string>
+    <string name="copy">Copy</string>
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="cancel_download">Cancel Download</string>
+    <string name="pause_download">Pause</string>
+    <string name="resume_download">Resume</string>
 
 </resources>

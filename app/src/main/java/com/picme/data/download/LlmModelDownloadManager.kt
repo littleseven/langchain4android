@@ -47,6 +47,11 @@ class LlmModelDownloadManager(private val context: Context) {
     private val activeDownloads = mutableMapOf<String, okhttp3.Call>()
 
     /**
+     * 暂停的下载任务：记录已下载的字节数，用于断点续传
+     */
+    private val pausedDownloads = mutableMapOf<String, Long>()
+
+    /**
      * MNN-LLM 模型固定文件列表
      */
     private val LLM_MODEL_FILES = listOf(
@@ -429,10 +434,162 @@ class LlmModelDownloadManager(private val context: Context) {
     fun cancelDownload(modelId: String) {
         activeDownloads[modelId]?.cancel()
         activeDownloads.remove(modelId)
+        pausedDownloads.remove(modelId)
         _downloadStates.update { current ->
             current + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, 0))
         }
     }
+
+    /**
+     * 暂停正在进行的下载
+     */
+    fun pauseDownload(modelId: String) {
+        val call = activeDownloads[modelId] ?: return
+        val currentState = _downloadStates.value[modelId]
+        val downloadedBytes = currentState?.downloadedBytes ?: 0
+        call.cancel()
+        activeDownloads.remove(modelId)
+        pausedDownloads[modelId] = downloadedBytes
+        _downloadStates.update { current ->
+            current + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, downloadedBytes, currentState?.totalBytes ?: 0))
+        }
+        Logger.i("PicMe:Download", "Download paused: $modelId at ${downloadedBytes} bytes")
+    }
+
+    /**
+     * 恢复暂停的下载
+     */
+    fun resumeDownload(modelId: String, modelConfig: ModelConfig? = null): Flow<DownloadProgress> = flow {
+        val config = modelConfig ?: loadAvailableModels().find { it.id == modelId }
+            ?: throw IllegalArgumentException("Unknown model: $modelId")
+
+        val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
+        val resumeFromBytes = pausedDownloads[modelId] ?: 0L
+        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, resumeFromBytes, config.size)) }
+
+        try {
+            val repoPath = config.sources["ModelScope"]
+                ?: config.sources["modelscope"]
+                ?: throw IOException("ModelScope source not available for $modelId")
+
+            Logger.i("PicMe:Download", "Resuming model $modelId from $resumeFromBytes bytes")
+
+            var totalDownloaded = resumeFromBytes
+
+            val expectedFiles = config.files.takeIf { it.isNotEmpty() } ?: getModelFiles(modelId)
+
+            // 计算已完成的文件和当前文件中的偏移量
+            var bytesToSkip = resumeFromBytes
+            var resumeFileIndex = 0
+            var resumeFileOffset = 0L
+
+            for ((index, fileName) in expectedFiles.withIndex()) {
+                val file = File(modelDir, fileName)
+                val fileSize = if (file.exists()) file.length() else 0L
+                if (bytesToSkip >= fileSize) {
+                    bytesToSkip -= fileSize
+                    totalDownloaded += fileSize
+                } else {
+                    resumeFileIndex = index
+                    resumeFileOffset = bytesToSkip
+                    break
+                }
+            }
+
+            for (fileIndex in resumeFileIndex until expectedFiles.size) {
+                val fileName = expectedFiles[fileIndex]
+
+                if (activeDownloads[modelId]?.isCanceled() == true) {
+                    throw IOException("Download cancelled")
+                }
+
+                val url = buildModelScopeUrl(repoPath, fileName)
+                val destFile = File(modelDir, fileName)
+
+                // 文件已完整下载
+                if (destFile.exists() && fileIndex > resumeFileIndex) {
+                    totalDownloaded += destFile.length()
+                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                    continue
+                }
+
+                // 部分下载的文件：使用 Range 请求断点续传
+                val requestBuilder = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "PicMe-Android/1.0")
+
+                if (fileIndex == resumeFileIndex && resumeFileOffset > 0 && destFile.exists()) {
+                    requestBuilder.header("Range", "bytes=$resumeFileOffset-")
+                    Logger.d("PicMe:Download", "Resuming $fileName from byte $resumeFileOffset")
+                }
+
+                val call = client.newCall(requestBuilder.build())
+                activeDownloads[modelId] = call
+
+                call.execute().use { response ->
+                    Logger.d("PicMe:Download", "Response: HTTP ${response.code} for $fileName")
+                    if (!response.isSuccessful && response.code != 206) {
+                        val errorBody = response.body?.string()?.take(200) ?: ""
+                        throw IOException("HTTP ${response.code} for $fileName, url=$url, body=$errorBody")
+                    }
+
+                    val body = response.body
+                        ?: throw IOException("Empty response for $fileName from $url")
+
+                    body.byteStream().use { input ->
+                        val output = if (fileIndex == resumeFileIndex && resumeFileOffset > 0) {
+                            destFile.outputStream().apply { channel.truncate(resumeFileOffset) }
+                        } else {
+                            destFile.outputStream()
+                        }
+
+                        output.use { out ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var bytesRead: Int
+                            var lastEmitTime = System.currentTimeMillis()
+                            var lastEmitBytes = totalDownloaded
+
+                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                if (call.isCanceled()) {
+                                    throw IOException("Download cancelled")
+                                }
+                                out.write(buffer, 0, bytesRead)
+                                totalDownloaded += bytesRead
+
+                                val now = System.currentTimeMillis()
+                                val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
+                                if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
+                                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, config.size)) }
+                                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                                    lastEmitTime = now
+                                    lastEmitBytes = totalDownloaded
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 重置偏移量（后续文件从头下载）
+                resumeFileOffset = 0
+            }
+
+            pausedDownloads.remove(modelId)
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
+            emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
+            Logger.i("PicMe:Download", "Model download completed: $modelId")
+
+        } catch (e: Exception) {
+            if (e.message?.contains("cancelled", ignoreCase = true) == true) {
+                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                return@flow
+            }
+            val errorMsg = e.message ?: e.javaClass.simpleName
+            Logger.e("PicMe:Download", "Download failed for $modelId: $errorMsg")
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
+            emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
+        }
+    }.flowOn(Dispatchers.IO)
 
     /**
      * 下载模型
@@ -674,6 +831,7 @@ data class DownloadProgress(
 enum class DownloadStatus {
     PENDING,
     DOWNLOADING,
+    PAUSED,
     COMPLETED,
     FAILED,
     CANCELLED
