@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.CloudDownload
@@ -39,6 +40,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.clickable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -252,6 +256,14 @@ private fun settingsContent(
                 )
 
                 when (aiAgentMode) {
+                    AiAgentMode.OFF -> {
+                        Text(
+                            text = stringResource(R.string.ai_agent_mode_off),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                     AiAgentMode.LOCAL -> {
                         AiAgentLocalModelSection(
                             currentLocalModel = aiAgentLocalModel,
@@ -536,6 +548,14 @@ private fun AiAgentLocalModelSection(
 
     LaunchedEffect(Unit) {
         downloadedModels = downloadManager.getDownloadedModels()
+    }
+
+    // 当界面重新获得焦点时刷新已下载模型列表（从模型管理器返回后）
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            downloadedModels = downloadManager.getDownloadedModels()
+        }
     }
 
     Column(

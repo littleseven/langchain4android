@@ -40,19 +40,20 @@ class MnnAsrClient(private val context: Context) : AsrEngine {
      * 尝试加载本地 ASR 模型
      *
      * 检查模型是否已下载到 llm_models 目录。
+     * 注意：当前 MNN ASR 的 JNI 尚未实现，暂时返回 false 使用系统 ASR。
      */
     private fun tryLoadModel(): Boolean {
-        val modelDir = context.filesDir.resolve("llm_models/mnn-asr")
+        val modelDir = context.filesDir.resolve("llm_models/streaming-zipformer-bilingual-zh-en-2023-02-20")
         if (!modelDir.exists()) {
             Logger.d(tag, "MNN ASR model not found at ${modelDir.absolutePath}")
             return false
         }
 
-        // JNI model loading reserved for future implementation
+        // TODO: 实现 JNI 桥接调用 MNN ASR C++ 库
         // nativeHandle = nativeCreate(modelDir.absolutePath)
         // return nativeHandle != 0L
 
-        Logger.i(tag, "MNN ASR model directory exists, but JNI not yet implemented")
+        Logger.i(tag, "MNN ASR model directory exists, but JNI not yet implemented. Using system ASR instead.")
         return false
     }
 

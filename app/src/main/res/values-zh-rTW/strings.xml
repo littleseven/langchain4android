@@ -263,8 +263,12 @@
     <string name="ai_agent">AI 智慧助手</string>
     <string name="ai_agent_desc">選擇本地或遠端模型，啟用自然語言控制相機功能。</string>
     <string name="ai_agent_mode">推理模式</string>
+    <string name="ai_agent_mode_off">關閉</string>
     <string name="ai_agent_mode_local">本地模型</string>
     <string name="ai_agent_mode_remote">遠端模型</string>
+    <string name="ai_agent_privacy_level">隱私級別</string>
+    <string name="ai_agent_privacy_strict">嚴格（僅本地）</string>
+    <string name="ai_agent_privacy_permissive">寬鬆（允許遠端）</string>
     <string name="ai_agent_local_model">已選模型</string>
     <string name="ai_agent_no_local_model">暫無已下載模型，前往模型管理下載。</string>
     <string name="ai_agent_base_url">API 接入點</string>

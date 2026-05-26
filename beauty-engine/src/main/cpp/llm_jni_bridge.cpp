@@ -84,12 +84,7 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerate(
     std::string result = oss.str();
     LOGD("Generated response: %s", result.c_str());
 
-    jstring jResult = env->NewStringUTF(result.c_str());
-    if (jResult == nullptr) {
-        LOGE("NewStringUTF failed for response, returning empty string");
-        return env->NewStringUTF("");
-    }
-    return jResult;
+    return env->NewStringUTF(result.c_str());
 }
 
 JNIEXPORT jstring JNICALL
@@ -129,14 +124,9 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerateWithSystem(
     }
 
     std::string result = oss.str();
-    LOGD("Generated with system response length=%zu, content=%s", result.length(), result.c_str());
+    LOGD("Generated response: %s", result.c_str());
 
-    jstring jResult = env->NewStringUTF(result.c_str());
-    if (jResult == nullptr) {
-        LOGE("NewStringUTF failed for system prompt response, returning empty string");
-        return env->NewStringUTF("");
-    }
-    return jResult;
+    return env->NewStringUTF(result.c_str());
 }
 
 JNIEXPORT jboolean JNICALL
