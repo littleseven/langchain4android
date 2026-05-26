@@ -40,7 +40,7 @@ object AgentCommandParser {
                     break
                 }
             }
-            // 处理未闭合标签：不要简单截断，尝试从标签后提取 JSON
+            // 处理未闭合开始标签：尝试从标签后提取 JSON
             val orphanStart = cleaned.indexOf(startTag)
             if (orphanStart >= 0) {
                 val afterTag = cleaned.substring(orphanStart + startTag.length).trim()
@@ -52,6 +52,8 @@ object AgentCommandParser {
                     beforeTag
                 }
             }
+            // 处理单独的结束标签（如模型只输出了 </think>）
+            cleaned = cleaned.replace(endTag, "").trim()
         }
 
         // 2. 移除 markdown 代码块标记
