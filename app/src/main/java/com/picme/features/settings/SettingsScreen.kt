@@ -252,6 +252,9 @@ private fun settingsContent(
                 )
 
                 when (aiAgentMode) {
+                    AiAgentMode.OFF -> {
+                        // Agent 已关闭，不显示任何配置
+                    }
                     AiAgentMode.LOCAL -> {
                         AiAgentLocalModelSection(
                             currentLocalModel = aiAgentLocalModel,

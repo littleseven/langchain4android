@@ -115,8 +115,18 @@ data class StageConfig(
  * 控制使用本地 MNN-LLM 模型还是远程 API
  */
 enum class AiAgentMode {
+    OFF,     // 完全关闭 Agent
     LOCAL,   // 本地 MNN-LLM 模型（默认，符合隐私红线）
-    REMOTE   // 远程 Kimi/Moonshot API
+    REMOTE   // 远程 Kimi/Moonshot API（开发者/高级用户选项）
+}
+
+/**
+ * AI Agent 隐私级别（领域模型）
+ * 控制是否允许远程 API 调用
+ */
+enum class AiAgentPrivacyLevel {
+    STRICT,      // 绝对本地，禁止任何远程调用
+    PERMISSIVE   // 允许远程（需用户显式确认）
 }
 
 /**
