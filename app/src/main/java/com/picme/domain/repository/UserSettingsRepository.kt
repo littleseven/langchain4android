@@ -1,6 +1,7 @@
 package com.picme.domain.repository
 
 import com.picme.domain.model.AiAgentMode
+import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
@@ -78,6 +79,9 @@ interface UserSettingsRepository {
     // ── AI Agent ────────────────────────────────────────────
     val aiAgentModeFlow: Flow<AiAgentMode>
     suspend fun updateAiAgentMode(mode: AiAgentMode)
+
+    val aiAgentPrivacyLevelFlow: Flow<AiAgentPrivacyLevel>
+    suspend fun updateAiAgentPrivacyLevel(level: AiAgentPrivacyLevel)
 
     val aiAgentLocalModelFlow: Flow<String>
     suspend fun updateAiAgentLocalModel(modelId: String)

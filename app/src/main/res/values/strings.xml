@@ -272,8 +272,12 @@
     <string name="ai_agent">AI Agent</string>
     <string name="ai_agent_desc">Select local or remote model for natural language camera control.</string>
     <string name="ai_agent_mode">Inference Mode</string>
+    <string name="ai_agent_mode_off">Disabled</string>
     <string name="ai_agent_mode_local">Local Model</string>
     <string name="ai_agent_mode_remote">Remote Model</string>
+    <string name="ai_agent_privacy_level">Privacy Level</string>
+    <string name="ai_agent_privacy_strict">Strict (Local Only)</string>
+    <string name="ai_agent_privacy_permissive">Permissive (Allow Remote)</string>
     <string name="ai_agent_local_model">Selected Model</string>
     <string name="ai_agent_no_local_model">No downloaded models. Go to Model Manager to download.</string>
     <string name="ai_agent_base_url">API Endpoint</string>
