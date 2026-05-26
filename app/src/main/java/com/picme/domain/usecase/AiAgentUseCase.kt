@@ -1,39 +1,61 @@
 package com.picme.domain.usecase
 
+import android.content.Context
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.beauty.api.llm.MnnLlmClient
 import com.picme.core.common.Logger
 import com.picme.data.remote.kimi.KimiApiClient
 import com.picme.data.remote.kimi.KimiChatRequest
 import com.picme.data.remote.kimi.KimiMessage
+import com.picme.domain.agent.AgentOrchestrator
+import com.picme.domain.agent.capability.CameraCapability
+import com.picme.domain.agent.model.AgentAction
+import com.picme.domain.agent.model.AgentCommand
+import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.model.AiAgentCommand
+import com.picme.domain.model.AiAgentMode
+import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.MediaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * AI Agent 核心用例
+ * AI Agent 核心用例（Facade）
  *
- * 负责：
- * 1. 构建系统 Prompt，将当前相机状态注入上下文
- * 2. 优先使用本地 MNN-LLM 模型推理，失败时回退到远程 Kimi API
- * 3. 将 LLM 的 JSON 响应映射为 [AiAgentCommand]
+ * 向后兼容的入口类。内部委托给 [AgentOrchestrator]，保留原有接口不变。
+ * 核心变更：删除自动远程 API 回退逻辑，默认 100% 本地执行。
  *
- * @param apiKey Moonshot/Tencent API Key，为空时仅使用本地模型
- * @param model 模型 ID，默认 moonshot-v1-8k
+ * @param context Application Context
+ * @param apiKey Moonshot/Tencent API Key，为空时禁用远程推理
+ * @param model 远程模型 ID，默认 moonshot-v1-8k
  * @param baseUrl API Base URL，默认 Moonshot 官方地址
- * @param localLlmClient 本地 MNN-LLM 客户端，为 null 时禁用本地推理
+ * @param agentMode Agent 运行模式，默认 LOCAL
+ * @param privacyLevel 隐私级别，默认 STRICT
+ * @param localModelId 本地模型 ID，默认 qwen3_0_6b
  */
 class AiAgentUseCase(
+    context: Context,
     apiKey: String?,
     private val model: String = DEFAULT_MODEL,
     baseUrl: String? = null,
-    private val localLlmClient: MnnLlmClient? = null
+    agentMode: AiAgentMode = AiAgentMode.LOCAL,
+    privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
+    localModelId: String = "qwen3_0_6b"
 ) {
 
-    private val client: KimiApiClient? = apiKey?.takeIf { it.isNotBlank() }?.let {
+    private val tag = "PicMe:AiAgent"
+
+    /**
+     * 新的 Agent Runtime 编排器
+     */
+    private val orchestrator = AgentOrchestrator(context)
+
+    /**
+     * 远程 API 客户端（仅在 REMOTE 模式下使用）
+     */
+    private val remoteClient: KimiApiClient? = apiKey?.takeIf { it.isNotBlank() }?.let {
         KimiApiClient(
             apiKey = it,
             baseUrl = baseUrl ?: DEFAULT_BASE_URL,
@@ -42,15 +64,61 @@ class AiAgentUseCase(
     }
 
     /**
+     * 当前 Agent 模式
+     */
+    val currentMode: AiAgentMode = agentMode
+
+    /**
+     * 当前配置的本地模型 ID
+     */
+    private var currentLocalModelId: String = localModelId
+
+    init {
+        orchestrator.configure(
+            mode = agentMode,
+            modelId = localModelId,
+            privacyLevel = privacyLevel
+        )
+    }
+
+    /**
+     * 注册相机 Capability
+     */
+    fun registerCameraCapability(capability: CameraCapability) {
+        orchestrator.registerCapability(capability)
+    }
+
+    /**
      * 本地模型是否已加载
      */
     val isLocalModelLoaded: Boolean
-        get() = localLlmClient?.isLoaded == true
+        get() = orchestrator.isModelLoaded
+
+    /**
+     * 加载本地模型
+     *
+     * @param modelId 模型 ID，为空时使用当前配置的模型。如果模型 ID 与当前加载的不同，会先卸载旧模型。
+     */
+    suspend fun loadLocalModel(modelId: String? = null): Result<Unit> {
+        val targetModel = modelId ?: currentLocalModelId
+        if (targetModel != currentLocalModelId && modelId != null) {
+            currentLocalModelId = targetModel
+            orchestrator.configure(
+                mode = currentMode,
+                modelId = targetModel,
+                privacyLevel = AiAgentPrivacyLevel.STRICT
+            )
+        }
+        return orchestrator.loadModel(targetModel)
+    }
 
     /**
      * 发送用户指令到 LLM，返回解析后的命令
      *
-     * 策略：优先本地模型 → 远程 API → 提示配置
+     * 新策略：
+     * 1. 本地模型可用 → 本地推理（默认）
+     * 2. 本地模型不可用 → 提示下载模型
+     * 3. REMOTE 显式模式 + API Key 配置 → 远程推理
      *
      * @param userInput 用户自然语言输入
      * @param currentState 当前相机状态快照，用于上下文感知
@@ -59,46 +127,56 @@ class AiAgentUseCase(
         userInput: String,
         currentState: CameraStateSnapshot
     ): Result<AiAgentCommand> = withContext(Dispatchers.IO) {
-        val systemPrompt = buildSystemPrompt(currentState)
+        // 构建 AgentContext
+        val agentContext = AgentContext(
+            scene = AgentScene.CAMERA,
+            beautySettings = currentState.beautySettings,
+            filterType = currentState.filterType,
+            styleFilter = currentState.styleFilter,
+            zoomRatio = currentState.zoomRatio,
+            exposureCompensation = currentState.exposureCompensation,
+            captureMode = currentState.captureMode,
+            isRecording = currentState.isRecording,
+            memorySessionId = "camera"
+        )
 
-        // 1. 优先尝试本地模型
-        if (localLlmClient != null && localLlmClient.isLoaded) {
-            try {
-                Logger.d("PicMe:AiAgent", "Using local MNN-LLM model")
-                val content = localLlmClient.generateWithSystem(
-                    systemPrompt = systemPrompt,
-                    userPrompt = userInput,
-                    maxNewTokens = 128
-                )
-                if (content.isNotBlank()) {
-                    Logger.d("PicMe:AiAgent", "Local LLM response: $content")
-                    val command = parseLlmResponse(content, currentState)
-                    return@withContext Result.success(command)
-                }
-            } catch (exception: Exception) {
-                Logger.w("PicMe:AiAgent", "Local LLM failed, fallback to remote", exception)
+        // 优先本地推理
+        if (currentMode == AiAgentMode.LOCAL || currentMode == AiAgentMode.OFF) {
+            val result = orchestrator.processUserInput(userInput, agentContext)
+            return@withContext result.map { action ->
+                mapAgentActionToLegacyCommand(action)
             }
         }
 
-        // 2. 本地不可用，尝试远程 API
-        if (client != null) {
-            return@withContext callRemoteApi(userInput, systemPrompt, currentState)
+        // REMOTE 模式：尝试远程 API
+        if (currentMode == AiAgentMode.REMOTE && remoteClient != null) {
+            return@withContext callRemoteApi(userInput, currentState)
         }
 
-        // 3. 都不可用，提示配置
+        // 都不可用
         Result.success(
             AiAgentCommand.TextReply(
-                "请在设置中配置 Moonshot API Key 以启用 AI Agent 模式。"
+                "请在设置中下载本地模型或配置 API Key 以启用 AI Agent。"
             )
         )
     }
 
+    /**
+     * 清空对话记忆
+     */
+    suspend fun clearMemory() {
+        orchestrator.clearMemory("camera")
+    }
+
+    /**
+     * 远程 API 调用（仅在显式 REMOTE 模式下使用）
+     */
     private suspend fun callRemoteApi(
         userInput: String,
-        systemPrompt: String,
         currentState: CameraStateSnapshot
     ): Result<AiAgentCommand> {
         try {
+            val systemPrompt = buildSystemPrompt(currentState)
             val temperature = if (model.contains("k2.6")) 1.0 else 0.2
             val request = KimiChatRequest(
                 model = model,
@@ -111,12 +189,12 @@ class AiAgentUseCase(
                 stream = false
             )
 
-            Logger.d("PicMe:AiAgent", "Sending remote request: model=$model, input=$userInput")
+            Logger.d(tag, "Sending remote request: model=$model, input=$userInput")
 
-            val response = client!!.service.chatCompletions(request)
+            val response = remoteClient!!.service.chatCompletions(request)
             if (!response.isSuccessful) {
                 val errorBody = response.errorBody()?.string()
-                Logger.e("PicMe:AiAgent", "API error: ${response.code()}, $errorBody")
+                Logger.e(tag, "API error: ${response.code()}, $errorBody")
                 return Result.failure(
                     RuntimeException("Moonshot API error: ${response.code()}")
                 )
@@ -128,13 +206,40 @@ class AiAgentUseCase(
             val content = body.choices.firstOrNull()?.message?.content?.trim()
                 ?: return Result.failure(RuntimeException("No choices in response"))
 
-            Logger.d("PicMe:AiAgent", "Remote LLM response: $content")
+            Logger.d(tag, "Remote LLM response: $content")
 
             val command = parseLlmResponse(content, currentState)
             return Result.success(command)
         } catch (exception: Exception) {
-            Logger.e("PicMe:AiAgent", "Remote API call failed", exception)
+            Logger.e(tag, "Remote API call failed", exception)
             return Result.failure(exception)
+        }
+    }
+
+    /**
+     * 将新的 AgentAction 映射为旧的 AiAgentCommand（向后兼容）
+     */
+    private fun mapAgentActionToLegacyCommand(action: AgentAction): AiAgentCommand {
+        return when (action) {
+            is AgentAction.Success -> {
+                when (val cmd = action.command) {
+                    is AgentCommand.AdjustBeauty -> AiAgentCommand.AdjustBeauty(cmd.settings)
+                    is AgentCommand.SwitchFilter -> AiAgentCommand.SwitchFilter(cmd.filterType)
+                    is AgentCommand.SwitchStyle -> AiAgentCommand.SwitchStyle(cmd.styleFilter)
+                    is AgentCommand.SwitchScene -> AiAgentCommand.SwitchScene(cmd.sceneName)
+                    is AgentCommand.SwitchRatio -> AiAgentCommand.SwitchRatio(cmd.ratio)
+                    is AgentCommand.AdjustExposure -> AiAgentCommand.AdjustExposure(cmd.exposure)
+                    is AgentCommand.AdjustZoom -> AiAgentCommand.AdjustZoom(cmd.zoomRatio)
+                    is AgentCommand.FlipCamera -> AiAgentCommand.FlipCamera
+                    is AgentCommand.CapturePhoto -> AiAgentCommand.CapturePhoto
+                    is AgentCommand.ToggleRecording -> AiAgentCommand.ToggleRecording
+                    is AgentCommand.SwitchMode -> AiAgentCommand.SwitchMode(cmd.mode)
+                    is AgentCommand.TextReply -> AiAgentCommand.TextReply(cmd.message)
+                    else -> AiAgentCommand.TextReply("操作已执行")
+                }
+            }
+            is AgentAction.TextReply -> AiAgentCommand.TextReply(action.message)
+            is AgentAction.Error -> AiAgentCommand.TextReply("处理出错了：${action.message}")
         }
     }
 
@@ -192,9 +297,8 @@ class AiAgentUseCase(
     }
 
     private fun parseLlmResponse(content: String, state: CameraStateSnapshot): AiAgentCommand {
-
-        // 1. 移除 <think>...</think> 思考标签及其内容（支持多个标签）
         var cleaned = content.trim()
+
         while (true) {
             val thinkStart = cleaned.indexOf("<think>")
             val thinkEnd = cleaned.indexOf("</think>")
@@ -205,28 +309,21 @@ class AiAgentUseCase(
             }
         }
 
-        // 如果还有残留的 <think> 开头（没有闭合标签），移除从 <think> 开始到末尾的所有内容
         val orphanThinkStart = cleaned.indexOf("<think>")
         if (orphanThinkStart >= 0) {
             cleaned = cleaned.substring(0, orphanThinkStart).trim()
         }
 
-        // 2. 移除 markdown 代码块标记
         cleaned = cleaned.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
 
-        Logger.d("PicMe:AiAgent", "Cleaned response: '$cleaned'")
+        Logger.d(tag, "Cleaned response: '$cleaned'")
 
-        // 3. 检查是否包含 JSON action 字段
         val hasJsonAction = cleaned.contains("\"action\"")
-
-        // 4. 如果不包含 JSON 指令，直接作为自由聊天文本返回
         if (!hasJsonAction) {
-            Logger.d("PicMe:AiAgent", "No JSON action found, treating as free chat")
+            Logger.d(tag, "No JSON action found, treating as free chat")
             return AiAgentCommand.TextReply(cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
         }
 
-
-        // 5. 提取 JSON 部分（可能混有自然语言，取第一个 { 到最后一个 }）
         val jsonStart = cleaned.indexOf('{')
         val jsonEnd = cleaned.lastIndexOf('}')
         val json = if (jsonStart >= 0 && jsonEnd > jsonStart) {
@@ -287,7 +384,7 @@ class AiAgentUseCase(
                     AiAgentCommand.AdjustZoom(zoom.coerceAtLeast(minZoom))
                 }
                 "flip_camera" -> AiAgentCommand.FlipCamera
-                "capture" -> AiAgentCommand.CapturePhoto
+                "capture", "photo" -> AiAgentCommand.CapturePhoto
                 "toggle_recording" -> AiAgentCommand.ToggleRecording
                 "switch_mode" -> {
                     val modeName = extractJsonField(json, "mode") ?: "PHOTO"
@@ -301,7 +398,7 @@ class AiAgentUseCase(
                 }
             }
         } catch (exception: Exception) {
-            Logger.w("PicMe:AiAgent", "Failed to parse LLM response, fallback to text: $json", exception)
+            Logger.w(tag, "Failed to parse LLM response, fallback to text: $json", exception)
             AiAgentCommand.TextReply(cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
         }
     }
