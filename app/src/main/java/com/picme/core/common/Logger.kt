@@ -67,6 +67,22 @@ object Logger {
     private val throttleMap = ConcurrentHashMap<String, Long>(64)
 
     /**
+     * 检测是否在真实的 Android 运行时环境中。
+     *
+     * 注意：Android 单元测试环境中 `android.util.Log` 类存在但方法是 stub，
+     * 调用会抛出 `RuntimeException: Method * in android.util.Log not mocked`。
+     * 因此需要实际调用一次来检测可用性。
+     */
+    private val isAndroidRuntime: Boolean by lazy {
+        try {
+            Log.i("PicMe:Logger", "Runtime check")
+            true
+        } catch (exception: RuntimeException) {
+            false
+        }
+    }
+
+    /**
      * 限流 Debug 日志：同一 key 最多每 [intervalMs] 毫秒打印一次（默认 1000ms）。
      * 适用于渲染循环、帧分析等高频场景，避免日志洪水。
      *
@@ -92,7 +108,11 @@ object Logger {
      */
     fun d(tag: String, message: String) {
         logToMemory(LogLevel.DEBUG, tag, message)
-        Log.d("$TAG_PREFIX$tag", message)
+        if (isAndroidRuntime) {
+            Log.d("$TAG_PREFIX$tag", message)
+        } else {
+            println("[DEBUG] $TAG_PREFIX$tag: $message")
+        }
     }
 
     /**
@@ -103,7 +123,11 @@ object Logger {
      */
     fun i(tag: String, message: String) {
         logToMemory(LogLevel.INFO, tag, message)
-        Log.i("$TAG_PREFIX$tag", message)
+        if (isAndroidRuntime) {
+            Log.i("$TAG_PREFIX$tag", message)
+        } else {
+            println("[INFO] $TAG_PREFIX$tag: $message")
+        }
     }
 
     /**
@@ -114,7 +138,11 @@ object Logger {
      */
     fun w(tag: String, message: String) {
         logToMemory(LogLevel.WARN, tag, message)
-        Log.w("$TAG_PREFIX$tag", message)
+        if (isAndroidRuntime) {
+            Log.w("$TAG_PREFIX$tag", message)
+        } else {
+            println("[WARN] $TAG_PREFIX$tag: $message")
+        }
     }
 
     /**
@@ -127,7 +155,12 @@ object Logger {
     fun w(tag: String, message: String, throwable: Throwable) {
         val fullMessage = "$message: ${throwable.localizedMessage}"
         logToMemory(LogLevel.WARN, tag, fullMessage)
-        Log.w("$TAG_PREFIX$tag", message, throwable)
+        if (isAndroidRuntime) {
+            Log.w("$TAG_PREFIX$tag", message, throwable)
+        } else {
+            println("[WARN] $TAG_PREFIX$tag: $message")
+            throwable.printStackTrace()
+        }
     }
 
     /**
@@ -145,10 +178,15 @@ object Logger {
         }
         logToMemory(LogLevel.ERROR, tag, fullMessage)
 
-        if (throwable != null) {
-            Log.e("$TAG_PREFIX$tag", message, throwable)
+        if (isAndroidRuntime) {
+            if (throwable != null) {
+                Log.e("$TAG_PREFIX$tag", message, throwable)
+            } else {
+                Log.e("$TAG_PREFIX$tag", message)
+            }
         } else {
-            Log.e("$TAG_PREFIX$tag", message)
+            println("[ERROR] $TAG_PREFIX$tag: $message")
+            throwable?.printStackTrace()
         }
     }
 
