@@ -515,16 +515,21 @@ internal fun sendMessage(
     input: String,
     onCommand: (AiAgentCommand) -> Unit
 ) {
+    Logger.i("PicMe:AiAgent", "sendMessage called with input='$input'")
     state.addMessage(AiAgentMessage(content = input, isFromUser = true))
     state.isProcessing = true
 
     scope.launch {
+        Logger.i("PicMe:AiAgent", "Calling useCase.processInput...")
         val result = useCase.processInput(input, currentState)
+        Logger.i("PicMe:AiAgent", "processInput returned: ${result.isSuccess}")
         state.isProcessing = false
 
         result.onSuccess { command ->
+            Logger.i("PicMe:AiAgent", "Command parsed: ${command.javaClass.simpleName}")
             when (command) {
                 is AiAgentCommand.TextReply -> {
+                    Logger.i("PicMe:AiAgent", "TextReply: ${command.message}")
                     state.addMessage(
                         AiAgentMessage(content = command.message, isFromUser = false)
                     )
@@ -544,13 +549,16 @@ internal fun sendMessage(
                         is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
                         is AiAgentCommand.TextReply -> ""
                     }
+                    Logger.i("PicMe:AiAgent", "Executing command: $commandName")
                     state.addMessage(
                         AiAgentMessage(
                             content = commandName,
                             isFromUser = false
                         )
                     )
+                    Logger.i("PicMe:AiAgent", "Calling onCommand callback")
                     onCommand(command)
+                    Logger.i("PicMe:AiAgent", "onCommand callback returned")
                 }
             }
         }.onFailure { error ->

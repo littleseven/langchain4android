@@ -32,5 +32,23 @@
       "tokenizer.txt"
     ],
     "tags": ["chat", "lightweight", "multilingual"]
+  },
+  {
+    "id": "qwen3.5-2b",
+    "name": "Qwen3.5-2B-MNN",
+    "description": "阿里通义千问 3.5 2B 版本，更强的推理能力，适合高端设备本地运行",
+    "type": "LLM",
+    "size": 1200000000,
+    "sources": {
+      "HuggingFace": "taobao-mnn/Qwen3.5-2B-MNN",
+      "ModelScope": "MNN/Qwen3.5-2B-MNN"
+    },
+    "files": [
+      "config.json",
+      "llm.mnn",
+      "llm.mnn.weight",
+      "tokenizer.txt"
+    ],
+    "tags": ["chat", "reasoning", "multilingual"]
   }
 ]
