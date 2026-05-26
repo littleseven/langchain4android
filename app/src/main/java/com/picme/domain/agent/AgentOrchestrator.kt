@@ -159,7 +159,9 @@ class AgentOrchestrator(private val context: Context) {
         val responseResult = localLlmEngine.generate(prompt, maxTokens = 128)
 
         responseResult.fold(
-            onSuccess = { response ->
+            onSuccess = { rawResponse ->
+                // 过滤 Qwen3 的 <think> 标签及其内容
+                val response = filterThinkTags(rawResponse)
                 Logger.i(tag, "LLM raw response: $response")
                 val command = parseLlmResponse(response, agentContext)
                 Logger.i(tag, "Parsed command: ${command.javaClass.simpleName}")
@@ -212,6 +214,33 @@ class AgentOrchestrator(private val context: Context) {
             appendLine("不要输出<think>标签。不要输出思考过程。")
             appendLine()
             appendLine("当前状态: 滤镜=${agentContext.filterType.name}, 模式=${agentContext.captureMode.name}")
+        }
+    }
+
+    /**
+     * 过滤 Qwen3 模型的 <think> 标签及其内容
+     *
+     * Qwen3 模型在某些输入下会输出思考过程，格式为：
+     * <think>...思考内容...</think>实际回复
+     *
+     * 本方法移除 <think>...</think> 及其内部内容，只保留实际回复。
+     * 如果只有开始标签没有结束标签，尝试从标签后提取内容（JSON 通常在 think 标签后）。
+     */
+    private fun filterThinkTags(response: String): String {
+        val thinkStart = response.indexOf("<think>")
+        if (thinkStart == -1) return response.trim()
+
+        val thinkEnd = response.indexOf("</think>", thinkStart)
+        return if (thinkEnd != -1) {
+            // 移除 <think>...</think> 及其内容
+            (response.substring(0, thinkStart) + response.substring(thinkEnd + 8))
+                .trim()
+        } else {
+            // 只有开始标签没有结束标签，尝试从标签后提取内容
+            val afterTag = response.substring(thinkStart + 7).trim()
+            val beforeTag = response.substring(0, thinkStart).trim()
+            // 优先使用标签后的内容（通常 JSON 在 think 标签后）
+            if (afterTag.contains("{")) afterTag else beforeTag
         }
     }
 

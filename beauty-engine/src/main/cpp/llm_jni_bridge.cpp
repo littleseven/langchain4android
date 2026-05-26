@@ -103,36 +103,13 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerate(
 
     LOGD("Generating response for prompt: %s", promptStr.c_str());
 
-    std::string result;
+    std::ostringstream oss;
     {
         std::lock_guard<std::mutex> lock(g_llm_mutex);
-
-        // 阶段1: prefill —— 处理输入 prompt，不生成输出
-        LlmStreamBuffer streamBuffer;
-        std::ostream outputStream(&streamBuffer);
-        llm->response(promptStr, &outputStream, "<eop>", 0);
-
-        // 阶段2: decode —— 循环生成 token
-        int generatedTokens = 0;
-        const int maxTokens = maxNewTokens > 0 ? maxNewTokens : 128;
-        bool finished = false;
-
-        while (generatedTokens < maxTokens && !finished) {
-            llm->generate(1);
-            generatedTokens++;
-
-            // 检查状态
-            const MNN::Transformer::LlmContext *ctx = llm->getContext();
-            if (ctx != nullptr) {
-                if (ctx->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED ||
-                    ctx->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED) {
-                    finished = true;
-                }
-            }
-        }
-
-        result = streamBuffer.str();
+        llm->response(promptStr, &oss, nullptr, maxNewTokens);
     }
+
+    std::string result = oss.str();
 
     LOGD("Generated response: %s", result.c_str());
     return env->NewStringUTF(result.c_str());
