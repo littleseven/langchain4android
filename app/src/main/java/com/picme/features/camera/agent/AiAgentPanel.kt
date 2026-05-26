@@ -477,15 +477,18 @@ private fun VoiceInputButton(
                     while (true) {
                         val event = awaitPointerEvent()
                         event.changes.forEach { change ->
-                            if (change.pressed && !change.isConsumed) {
+                            when {
                                 // 手指按下且未消费
-                                if (!isLongPressing) {
-                                    isLongPressing = true
+                                change.pressed && !change.isConsumed -> {
+                                    if (!isLongPressing) {
+                                        isLongPressing = true
+                                    }
                                 }
-                            } else if (!change.pressed && change.isConsumed) {
-                                // 手指抬起且已消费
-                                if (isLongPressing) {
-                                    isLongPressing = false
+                                // 手指抬起（任何状态都视为抬起）
+                                !change.pressed -> {
+                                    if (isLongPressing) {
+                                        isLongPressing = false
+                                    }
                                 }
                             }
                             change.consume()
