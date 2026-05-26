@@ -41,6 +41,32 @@ class MnnLlmClient(private val context: Context) {
             val modelDir = ModelManager.prepareLlmModel(modelKey, context)
             val configPath = "$modelDir/config.json"
 
+            // 验证 config.json 存在且有效
+            val configFile = java.io.File(configPath)
+            if (!configFile.exists() || configFile.length() == 0L) {
+                Log.e(tag, "LLM config not found or empty: $configPath")
+                return@withContext false
+            }
+
+            // 验证模型文件存在（llm.mnn 或 llm.mnn.weight 至少有一个）
+            val modelFile = java.io.File(modelDir, "llm.mnn")
+            val weightFile = java.io.File(modelDir, "llm.mnn.weight")
+            if (!modelFile.exists() && !weightFile.exists()) {
+                Log.e(tag, "LLM model files not found in: $modelDir")
+                return@withContext false
+            }
+
+            // 验证模型文件不是 Git LFS 指针（检查文件头）
+            if (modelFile.exists() && modelFile.length() < 1000) {
+                modelFile.bufferedReader().use { reader ->
+                    val firstLine = reader.readLine() ?: ""
+                    if (firstLine.contains("git-lfs")) {
+                        Log.e(tag, "LLM model file is a Git LFS pointer, not actual model: ${modelFile.absolutePath}")
+                        return@withContext false
+                    }
+                }
+            }
+
             Log.i(tag, "Loading LLM model from: $configPath")
             nativeHandle = nativeCreate(configPath)
 
@@ -52,7 +78,7 @@ class MnnLlmClient(private val context: Context) {
             Log.i(tag, "LLM model loaded successfully")
             true
         } catch (exception: Exception) {
-            Log.e(tag, "Failed to load LLM model", exception)
+            Log.e(tag, "Failed to load LLM model: ${exception.message}", exception)
             false
         }
     }
