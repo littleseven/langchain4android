@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.picme.domain.model.AiAgentMode
+import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.DetectionModelType
@@ -63,6 +64,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
 
         // AI Agent
         val AI_AGENT_MODE = stringPreferencesKey("ai_agent_mode")
+        val AI_AGENT_PRIVACY_LEVEL = stringPreferencesKey("ai_agent_privacy_level")
         val AI_AGENT_LOCAL_MODEL = stringPreferencesKey("ai_agent_local_model")
         val AI_AGENT_API_KEY = stringPreferencesKey("ai_agent_api_key")
         val AI_AGENT_MODEL = stringPreferencesKey("ai_agent_model")
@@ -453,6 +455,27 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentMode(mode: AiAgentMode) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_MODE] = mode.name
+        }
+    }
+
+    override val aiAgentPrivacyLevelFlow: Flow<AiAgentPrivacyLevel> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val levelName = preferences[PreferencesKeys.AI_AGENT_PRIVACY_LEVEL]
+                ?: AiAgentPrivacyLevel.STRICT.name
+            runCatching { AiAgentPrivacyLevel.valueOf(levelName) }
+                .getOrDefault(AiAgentPrivacyLevel.STRICT)
+        }
+
+    override suspend fun updateAiAgentPrivacyLevel(level: AiAgentPrivacyLevel) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_PRIVACY_LEVEL] = level.name
         }
     }
 

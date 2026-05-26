@@ -7,6 +7,7 @@ import com.picme.core.common.Logger
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
 import com.picme.domain.model.AiAgentMode
+import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
@@ -149,6 +150,13 @@ class SettingsViewModel(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = AiAgentMode.LOCAL
+        )
+
+    val aiAgentPrivacyLevel: StateFlow<AiAgentPrivacyLevel> = repository.aiAgentPrivacyLevelFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AiAgentPrivacyLevel.STRICT
         )
 
     val aiAgentLocalModel: StateFlow<String> = repository.aiAgentLocalModelFlow
@@ -440,6 +448,13 @@ class SettingsViewModel(
     fun setAiAgentMode(mode: AiAgentMode) {
         viewModelScope.launch {
             repository.updateAiAgentMode(mode)
+        }
+    }
+
+    fun setAiAgentPrivacyLevel(level: AiAgentPrivacyLevel) {
+        viewModelScope.launch {
+            Logger.d("UX", "AI Agent privacy level changed: ${level.name}")
+            repository.updateAiAgentPrivacyLevel(level)
         }
     }
 
