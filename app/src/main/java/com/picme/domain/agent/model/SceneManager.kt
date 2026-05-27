@@ -12,7 +12,18 @@ import kotlinx.coroutines.flow.asStateFlow
  * 2. 根据场景获取对应的 Capability 集合
  * 3. 管理场景切换时的上下文保存/恢复
  */
-class SceneManager {
+class SceneManager private constructor() {
+
+    companion object {
+        @Volatile
+        private var instance: SceneManager? = null
+
+        fun getInstance(): SceneManager {
+            return instance ?: synchronized(this) {
+                instance ?: SceneManager().also { instance = it }
+            }
+        }
+    }
 
     /**
      * 应用场景枚举

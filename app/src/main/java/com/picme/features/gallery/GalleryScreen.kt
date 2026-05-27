@@ -114,6 +114,8 @@ import com.picme.features.camera.test.CameraTestCommand
 import com.picme.features.camera.test.CameraTestCommandDispatcher
 import com.picme.features.camera.test.CameraTestCommandReceiver
 import com.picme.features.camera.test.CameraTestResult
+import com.picme.features.gallery.agent.GalleryAgentPanel
+import com.picme.features.gallery.agent.rememberGalleryAgentIntegration
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
 import java.io.File
@@ -254,6 +256,51 @@ fun GalleryScreen(
 
     val view = LocalView.current
 
+    // ===== Agent 集成 =====
+    val agentIntegration = rememberGalleryAgentIntegration(
+        context = context,
+        onNavigateTo = { destination ->
+            when (destination) {
+                "camera" -> onNavigateBack()
+                "settings" -> onNavigateToDebug()
+            }
+        },
+        onNavigateBack = onNavigateBack
+    )
+
+    // 注册 Gallery Capability
+    agentIntegration.registerCapabilities(
+        viewModel = viewModel,
+        onViewMedia = { asset ->
+            selectedMediaIndex = allFlatMedia.indexOfFirst { it.id == asset.id }
+        },
+        onDeleteMedia = { assets ->
+            viewModel.deleteMediaByIds(assets.map { it.id })
+        },
+        onShareMedia = { assets ->
+            shareMediaAssets(context, assets)
+        },
+        onSelectMedia = { asset, selected ->
+            if (selected) {
+                if (!selectedIds.contains(asset.id)) selectedIds.add(asset.id)
+            } else {
+                selectedIds.remove(asset.id)
+            }
+        },
+        onSearchMedia = { query ->
+            // TODO: 实现搜索功能
+            Log.d("PicMe:GalleryAgent", "Search query: $query")
+        },
+        onSwitchViewMode = { mode ->
+            // TODO: 实现视图切换
+            Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
+        },
+        onFavoriteMedia = { asset, favorite ->
+            // TODO: 实现收藏功能
+            Log.d("PicMe:GalleryAgent", "Favorite ${asset.id}: $favorite")
+        }
+    )
+
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
         val insetsController = WindowCompat.getInsetsController(window, view)
@@ -330,7 +377,18 @@ fun GalleryScreen(
         }
     }
 
-    Scaffold(
+    // 构建 PageContext 供 Agent 使用
+    val currentMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
+    val selectedItems = selectedIds.mapNotNull { mediaById[it] }
+    val pageContext = agentIntegration.buildPageContext(
+        currentMedia = currentMedia,
+        selectedItems = selectedItems,
+        isSelectionMode = isSelectionMode,
+        allMedia = allFlatMedia
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
         topBar = {
             if (selectedMediaIndex == null && !showDuplicateManager) {
                 GalleryTopBar(
@@ -525,6 +583,13 @@ fun GalleryScreen(
                 }
             }
         }
+
+        // Agent Panel（浮动在内容之上）
+        GalleryAgentPanel(
+            integration = agentIntegration,
+            pageContext = pageContext,
+            modifier = Modifier.align(Alignment.BottomEnd)
+        )
     }
 }
 

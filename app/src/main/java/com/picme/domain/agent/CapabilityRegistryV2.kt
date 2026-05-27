@@ -16,9 +16,20 @@ import com.picme.domain.agent.model.SceneManager
  * - 支持 CapabilityV2 接口
  * - 页面上下文传递
  */
-class CapabilityRegistryV2(
+class CapabilityRegistryV2 private constructor(
     private val sceneManager: SceneManager
 ) {
+
+    companion object {
+        @Volatile
+        private var instance: CapabilityRegistryV2? = null
+
+        fun getInstance(): CapabilityRegistryV2 {
+            return instance ?: synchronized(this) {
+                instance ?: CapabilityRegistryV2(SceneManager.getInstance()).also { instance = it }
+            }
+        }
+    }
 
     private val tag = "PicMe:CapabilityRegistryV2"
     private val registry = mutableMapOf<String, CapabilityV2>()

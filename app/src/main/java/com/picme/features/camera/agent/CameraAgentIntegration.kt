@@ -120,7 +120,7 @@ fun rememberCameraAgentIntegration(
 ): CameraAgentIntegration {
     val context = LocalContext.current
     val orchestrator = remember {
-        AgentOrchestratorV2(context.applicationContext).apply {
+        AgentOrchestratorV2.getInstance(context).apply {
             // 加载配置
             configure(
                 mode = com.picme.domain.model.AiAgentMode.LOCAL,
