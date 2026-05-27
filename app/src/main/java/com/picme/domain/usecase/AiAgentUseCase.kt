@@ -185,7 +185,7 @@ class AiAgentUseCase(
                     KimiMessage(role = "user", content = userInput)
                 ),
                 temperature = temperature,
-                maxTokens = 256,
+                maxTokens = 512,
                 stream = false
             )
 

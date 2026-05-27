@@ -101,7 +101,7 @@ class LocalLlmEngine(private val context: Context) {
      * @param maxTokens 最大生成 token 数
      * @return 生成的文本
      */
-    suspend fun generate(prompt: String, maxTokens: Int = 128): Result<String> = withContext(Dispatchers.IO) {
+    suspend fun generate(prompt: String, maxTokens: Int = 512): Result<String> = withContext(Dispatchers.IO) {
         if (!client.isLoaded) {
             Logger.w(tag, "LLM not loaded, cannot generate")
             return@withContext Result.failure(IllegalStateException("LLM model not loaded"))
@@ -138,7 +138,7 @@ class LocalLlmEngine(private val context: Context) {
     suspend fun generateWithSystem(
         systemPrompt: String,
         userPrompt: String,
-        maxTokens: Int = 128
+        maxTokens: Int = 512
     ): Result<String> = withContext(Dispatchers.IO) {
         if (!client.isLoaded) {
             Logger.w(tag, "LLM not loaded, cannot generate")
@@ -172,7 +172,7 @@ class LocalLlmEngine(private val context: Context) {
      */
     suspend fun generateWithHistory(
         messages: List<com.picme.domain.agent.model.ChatMessage>,
-        maxTokens: Int = 128
+        maxTokens: Int = 512
     ): Result<String> = withContext(Dispatchers.IO) {
         if (!client.isLoaded) {
             Logger.w(tag, "LLM not loaded, cannot generate")
