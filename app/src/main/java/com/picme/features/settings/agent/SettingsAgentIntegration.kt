@@ -76,7 +76,7 @@ class SettingsAgentIntegration(
                     "debug_ui" -> viewModel.setDebugUiEnabled(enabled)
                     "camera_info" -> viewModel.setShowCameraInfoInPreview(enabled)
                     "voice_command" -> viewModel.setVoiceCommandMode(
-                        if (enabled) com.picme.domain.model.VoiceCommandMode.WAKE_WORD else com.picme.domain.model.VoiceCommandMode.OFF
+                        if (enabled) com.picme.domain.model.VoiceCommandMode.WAKE_WORD else com.picme.domain.model.VoiceCommandMode.DISABLED
                     )
                     "agent_mode" -> viewModel.setAiAgentMode(
                         if (enabled) com.picme.domain.model.AiAgentMode.LOCAL else com.picme.domain.model.AiAgentMode.OFF

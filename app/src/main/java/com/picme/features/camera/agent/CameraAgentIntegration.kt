@@ -22,7 +22,7 @@ import com.picme.features.agent.rememberGlobalAgentPanelState
  * 提供向后兼容的桥梁
  */
 class CameraAgentIntegration(
-    private val orchestrator: AgentOrchestratorV2,
+    val orchestrator: AgentOrchestratorV2,
     private val useCase: AiAgentUseCase
 ) {
     /**
@@ -67,7 +67,7 @@ class CameraAgentIntegration(
             },
             onBack = onBack
         )
-        orchestrator.registerCapability(navigationCapability.toV2())
+        orchestrator.registerCapability(navigationCapability)
     }
 
     /**

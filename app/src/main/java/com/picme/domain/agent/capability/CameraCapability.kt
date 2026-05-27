@@ -131,6 +131,11 @@ class CameraCapability(
             is AgentCommand.Error -> {
                 Result.success(AgentAction.Error(command.reason))
             }
+
+            else -> {
+                Logger.w(tag, "Command not supported by CameraCapability: ${command::class.simpleName}")
+                Result.success(AgentAction.Error("相机页面不支持此命令"))
+            }
         }
     }
 }

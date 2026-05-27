@@ -140,11 +140,11 @@ class SettingsCapability(
     }
 
     private fun handleToggleSetting(command: AgentCommand.ToggleSetting): Result<AgentAction> {
-        if (command.key.isBlank()) {
+        if (command.settingKey.isBlank()) {
             return Result.success(AgentAction.Error("请指定设置项 key"))
         }
 
-        onToggleSetting?.invoke(command.key, command.enabled)
+        onToggleSetting?.invoke(command.settingKey, command.enabled)
         return Result.success(
             AgentAction.Success(command = command)
         )

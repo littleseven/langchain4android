@@ -275,8 +275,3 @@ class AgentOrchestratorV2 private constructor(private val context: Context) {
         return AgentCommandParser.parseLlmResponse(response, context)
     }
 }
-
-/**
- * 模型未找到异常
- */
-class LlmModelNotFoundException(message: String) : Exception(message)

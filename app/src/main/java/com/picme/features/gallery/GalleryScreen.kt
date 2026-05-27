@@ -593,6 +593,7 @@ fun GalleryScreen(
         )
     }
 }
+}
 
 private fun hasGalleryPermission(context: Context): Boolean {
     return galleryReadPermissions().all { permission ->
