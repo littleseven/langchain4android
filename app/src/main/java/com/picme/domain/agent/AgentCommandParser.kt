@@ -164,6 +164,80 @@ object AgentCommandParser {
                 val mode = runCatching { MediaType.valueOf(modeName) }.getOrDefault(MediaType.PHOTO)
                 AgentCommand.SwitchMode(mode)
             }
+
+            // ===== Gallery 命令 =====
+            "view_media" -> {
+                val mediaId = extractJsonField(json, "media_id")
+                AgentCommand.ViewMedia(mediaId)
+            }
+            "delete_media" -> {
+                val mediaIds = extractJsonStringList(json, "media_ids")
+                AgentCommand.DeleteMedia(mediaIds)
+            }
+            "share_media" -> {
+                val mediaIds = extractJsonStringList(json, "media_ids")
+                AgentCommand.ShareMedia(mediaIds)
+            }
+            "select_media" -> {
+                val mediaId = extractJsonField(json, "media_id") ?: ""
+                val selected = extractJsonBoolean(json, "selected") ?: true
+                AgentCommand.SelectMedia(mediaId, selected)
+            }
+            "search_media" -> {
+                val query = extractJsonField(json, "query") ?: ""
+                AgentCommand.SearchMedia(query)
+            }
+            "switch_view_mode" -> {
+                val mode = extractJsonField(json, "mode") ?: "grid"
+                AgentCommand.SwitchViewMode(mode)
+            }
+            "favorite_media" -> {
+                val mediaId = extractJsonField(json, "media_id") ?: ""
+                val favorite = extractJsonBoolean(json, "favorite") ?: true
+                AgentCommand.FavoriteMedia(mediaId, favorite)
+            }
+
+            // ===== 导航命令 =====
+            "navigate_to" -> {
+                val destination = extractJsonField(json, "destination") ?: ""
+                AgentCommand.NavigateTo(destination)
+            }
+            "go_back" -> AgentCommand.GoBack
+
+            // ===== 设置命令 =====
+            "change_theme" -> {
+                val theme = extractJsonField(json, "theme") ?: "system"
+                AgentCommand.ChangeTheme(theme)
+            }
+            "change_language" -> {
+                val language = extractJsonField(json, "language") ?: "zh"
+                AgentCommand.ChangeLanguage(language)
+            }
+            "download_model" -> {
+                val modelId = extractJsonField(json, "model_id") ?: ""
+                AgentCommand.DownloadModel(modelId)
+            }
+            "switch_face_engine" -> {
+                val engine = extractJsonField(json, "engine") ?: "mlkit"
+                AgentCommand.SwitchFaceEngine(engine)
+            }
+            "toggle_setting" -> {
+                val key = extractJsonField(json, "key") ?: ""
+                val enabled = extractJsonBoolean(json, "enabled") ?: true
+                AgentCommand.ToggleSetting(key, enabled)
+            }
+
+            // ===== 编辑命令 =====
+            "apply_edit" -> {
+                val editType = extractJsonField(json, "edit_type") ?: ""
+                val params = extractJsonFloatMap(json, "params")
+                AgentCommand.ApplyEdit(editType, params)
+            }
+            "save_edit" -> AgentCommand.SaveEdit
+            "undo_edit" -> AgentCommand.UndoEdit
+            "redo_edit" -> AgentCommand.RedoEdit
+
+            // ===== 默认文本回复 =====
             else -> {
                 val message = extractJsonField(json, "message")
                     ?: fallbackText.ifBlank { "收到，有什么其他需要帮忙的吗？" }
@@ -206,6 +280,20 @@ object AgentCommandParser {
             lower.contains("翻转") || lower.contains("切换摄像头") || lower.contains("前后") -> AgentCommand.FlipCamera
             // 录像
             lower.contains("录像") || lower.contains("录制") || lower.contains("拍视频") -> AgentCommand.ToggleRecording
+            // 导航相关
+            lower.contains("去相册") || lower.contains("打开相册") || lower.contains("看照片") ->
+                AgentCommand.NavigateTo("gallery")
+            lower.contains("去设置") || lower.contains("打开设置") || lower.contains("设置") ->
+                AgentCommand.NavigateTo("settings")
+            lower.contains("去相机") || lower.contains("回相机") || lower.contains("打开相机") ->
+                AgentCommand.NavigateTo("camera")
+            lower.contains("返回") || lower.contains("回去") || lower.contains("上一页") ->
+                AgentCommand.GoBack
+            // Gallery 相关
+            lower.contains("删除") || lower.contains("删掉") ->
+                AgentCommand.DeleteMedia(emptyList())
+            lower.contains("分享") ->
+                AgentCommand.ShareMedia(emptyList())
             else -> null
         }
     }
@@ -223,5 +311,58 @@ object AgentCommandParser {
     private fun extractJsonInt(json: String, key: String): Int? {
         val regex = """"$key"\s*:\s*(-?\d+)""".toRegex()
         return regex.find(json)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun extractJsonBoolean(json: String, key: String): Boolean? {
+        val regex = """"$key"\s*:\s*(true|false)""".toRegex()
+        return regex.find(json)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+    }
+
+    /**
+     * 提取字符串列表
+     * 支持格式: "key": ["item1", "item2"] 或 "key": "item1,item2"
+     */
+    private fun extractJsonStringList(json: String, key: String): List<String> {
+        // 尝试解析数组格式
+        val arrayRegex = """"$key"\s*:\s*\[([^\]]*)\]""".toRegex()
+        val arrayMatch = arrayRegex.find(json)
+        if (arrayMatch != null) {
+            val content = arrayMatch.groupValues[1]
+            return content.split(",").map { it.trim().removeSurrounding("\"") }.filter { it.isNotEmpty() }
+        }
+
+        // 尝试解析逗号分隔的字符串
+        val stringValue = extractJsonField(json, key)
+        if (stringValue != null) {
+            return stringValue.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        }
+
+        return emptyList()
+    }
+
+    /**
+     * 提取 Float 类型的 Map
+     */
+    private fun extractJsonFloatMap(json: String, key: String): Map<String, Float> {
+        val result = mutableMapOf<String, Float>()
+
+        // 尝试找到 key 对应的值（对象格式）
+        val objectRegex = """"$key"\s*:\s*\{([^}]*)\}""".toRegex()
+        val objectMatch = objectRegex.find(json)
+
+        if (objectMatch != null) {
+            val content = objectMatch.groupValues[1]
+            // 解析内部的 key: value 对
+            val pairRegex = """"([^"]+)"\s*:\s*(-?\d+\.?\d*)""".toRegex()
+            pairRegex.findAll(content).forEach { matchResult ->
+                val paramKey = matchResult.groupValues[1]
+                val paramValue = matchResult.groupValues[2].toFloatOrNull()
+                if (paramValue != null) {
+                    result[paramKey] = paramValue
+                }
+            }
+        }
+
+        return result
     }
 }
