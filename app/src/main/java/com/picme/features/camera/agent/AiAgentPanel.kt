@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -182,11 +183,16 @@ fun AiAgentDialogPanel(
             onDismissRequest = { state.close() },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = true
+                decorFitsSystemWindows = false
             )
         ) {
             Box(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 80.dp),
                 contentAlignment = Alignment.BottomCenter
             ) {
                 AiAgentPanelContent(
@@ -216,9 +222,6 @@ private fun AiAgentPanelContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .imePadding()
-            .padding(top = 8.dp, start = 12.dp, end = 12.dp)
             .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
             .background(Color.Black.copy(alpha = 0.88f))
             .padding(horizontal = 14.dp, vertical = 10.dp),
