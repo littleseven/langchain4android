@@ -573,7 +573,6 @@ fun CameraContent(
     val faceLandmarkModeEnabled = runtimeContext.faceLandmarkModeEnabled
     val glRecoveryAvailableAtMs = runtimeContext.glRecoveryAvailableAtMs
     val lifecycleOwner = runtimeContext.lifecycleOwner
-
     LaunchedEffect(beautyStrategy) {
         val fallbackReason = BeautyEngineRuntimeState.consumeGlEngineFallbackReason()
         if (fallbackReason != null) {
@@ -603,14 +602,6 @@ fun CameraContent(
     var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
     var previewFaceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
     var lastFaceWarpDetectedAtMs by remember { mutableStateOf(0L) }
-
-    // 当 landmark 模式关闭时，重置 faceWarpParams，使瘦脸/大眼等效果立即失效
-    LaunchedEffect(faceLandmarkModeEnabled) {
-        if (!faceLandmarkModeEnabled) {
-            faceWarpParams = FaceWarpParams()
-            previewFaceWarpParams = FaceWarpParams()
-        }
-    }
 
     val previewRuntimeViews = rememberPreviewRuntimeViews(
         context = context,
@@ -1134,7 +1125,7 @@ fun CameraContent(
             previewView = previewView,
             bindPreviewSurfaceProvider = bindPreviewSurfaceProvider,
             cameraExecutor = cameraExecutor,
-            beautyEnabledProvider = { beautySettings.enabled },
+            beautySettings = beautySettings,
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode.toEngineType(),
             videoCapture = videoCapture,
@@ -1151,7 +1142,7 @@ fun CameraContent(
             },
             onFacePointChanged = { point -> facePoint = point },
             onFaceWarpParamsChanged = { params ->
-                faceWarpParams = if (faceLandmarkModeEnabled) params else FaceWarpParams()
+                faceWarpParams = params
             },
             onShowFocusIndicatorChanged = { show ->
                 isFaceLocked = show
