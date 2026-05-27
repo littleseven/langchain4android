@@ -13,26 +13,26 @@ PicMe 是一个元实验（meta-experiment），同时探索三个层次：
 | 层次 | 实验对象 | 核心问题 |
 |------|----------|----------|
 | **运行时** | 端侧 Agent 架构 | LLM 能否成为应用的中枢神经系统？ |
-| **架构层** | Agent First 客户端框架 | 基础设施如何原子化为 Tools 层？ |
+| **架构层** | Agent First 客户端框架 | 什么样的架构让 Agent 最高效？ |
 | **流程层** | Agent First 研发流程 | Agent 如何通过编排 Tools 完成开发？ |
 
-**核心假设**：基础设施原子化为 Tools 层后，Agent 可以从「辅助工具」进化为「主导力量」。
+**核心假设**：当基础设施原子化为 Tools 层后，Agent 可以从「辅助工具」进化为「主导力量」。
 
 ---
 
 ## 2. Agent First 的代码架构原则
 
-PicMe 的所有代码遵循以下 Agent First 设计原则，确保基础设施可被 Agent 作为 Tools 调用：
+PicMe 的所有代码遵循以下原则，确保 Agent 能高效理解、修改、验证：
 
 ### 2.1 显式优于隐式（Explicit > Implicit）
 
 ```kotlin
-// ❌ AI 不友好：隐式依赖，全局状态
+// ❌ 隐式依赖：AI 需要全局搜索理解生命周期
 object BeautyEngine {
-    fun getInstance() = instance  // AI 需要全局搜索理解生命周期
+    fun getInstance() = instance
 }
 
-// ✅ AI 友好：显式依赖注入，构造函数即文档
+// ✅ 显式注入：构造函数即文档
 class CameraViewModel(
     private val beautyEngine: BeautyEngine,
     private val agentUseCase: AiAgentUseCase,
@@ -40,19 +40,19 @@ class CameraViewModel(
 ) : ViewModel()
 ```
 
-**AI 收益**：通过构造函数签名，AI 即可理解组件的协作关系，无需跨文件搜索。
+**收益**：通过构造函数签名，AI 即可理解组件协作关系，无需跨文件搜索。
 
 ### 2.2 枚举优于条件（Exhaustive > Conditional）
 
 ```kotlin
-// ❌ AI 不友好：分散的布尔标志，状态组合爆炸
+// ❌ 布尔标志组合爆炸
 class CameraState(
     val isLoading: Boolean,
     val hasError: Boolean,
     val isPreviewing: Boolean
 )
 
-// ✅ AI 友好：Sealed Class 枚举所有有效状态
+// ✅ 枚举所有合法状态
 sealed interface CameraState {
     data object Initializing : CameraState
     data class Previewing(val settings: BeautySettings) : CameraState
@@ -60,33 +60,33 @@ sealed interface CameraState {
 }
 ```
 
-**Agent 收益**：状态空间显式编码，Agent 可枚举所有边界情况，不会遗漏。
+**收益**：状态空间显式编码，AI 可枚举所有边界情况，不会遗漏。
 
 ### 2.3 自描述优于注释（Self-Describing > Commented）
 
 ```kotlin
-// ❌ AI 不友好：注释与代码可能脱节
+// ❌ 注释与代码可能脱节
 // 调节美颜参数
 fun adjust(params: Map<String, Int>) // AI 不知道有哪些参数
 
-// ✅ AI 友好：类型系统即文档
+// ✅ 类型系统即文档
 data class BeautyParameters(
     val smooth: IntRange = 0..100,
     val whiten: IntRange = 0..100,
     val slimFace: IntRange = -50..50
 )
-fun adjust(params: BeautyParameters) // AI 通过类型理解全部参数
+fun adjust(params: BeautyParameters) // 类型即契约
 ```
 
-**Agent 收益**：类型系统强制一致性，Agent 可靠类型推导而非易腐烂的注释。
+**收益**：类型系统强制一致性，AI 可靠类型推导而非易腐烂的注释。
 
 ### 2.4 结构化可观测性（Structured Observability）
 
 ```kotlin
-// ❌ AI 不友好：纯文本日志，需正则解析
+// ❌ 纯文本日志，需正则解析
 Log.d("Camera", "Agent parsed: $input -> $intent")
 
-// ✅ AI 友好：结构化事件，AI 可直接消费
+// ✅ 结构化事件，AI 可直接消费
 data class AgentCommandParsedEvent(
     val rawInput: String,
     val parsedIntent: Intent,
@@ -94,28 +94,28 @@ data class AgentCommandParsedEvent(
     val timestamp: Long
 ) : LogEvent
 
-Logger.log(AgentCommandParsedEvent(...)) // AI 可解析、可查询、可统计
+Logger.log(AgentCommandParsedEvent(...))
 ```
 
-**Agent 收益**：结构化日志可被 Agent 消费，实现自我诊断和自我改进。
+**收益**：结构化日志可被 AI 消费，实现自我诊断和自我改进。
 
 ---
 
-## 3. Agent 角色与 Tools 化协作流程
+## 3. Agent 角色与协作流程
 
-PicMe 采用**Agent 角色化协作模型**，基础设施原子化为 Tools 层，Agent 通过编排 Tools 完成开发任务。
+PicMe 采用**角色化协作模型**：每个 Agent 角色有明确的职责边界、输入输出契约。
 
 ### 3.1 角色定义
 
-| 角色 | 标识 | 职责 | 输入 | 输出 |
-|------|------|------|------|------|
-| **[CO]** 协调者 | `🤖CO` | 任务分级、流程路由、冲突仲裁 | 用户请求 | 任务清单、状态板 |
-| **[PM]** 产品经理 | `🤖PM` | 需求澄清、PRD 维护、验收标准 | 用户痛点 | PRODUCT.md、FEATURES.md |
-| **[RD]** 全栈工程师 | `🤖RD` | 端到端实现、文档同步、自愈修复 | PRD、技术规范 | 代码、模块 AGENTS.md |
-| **[CR]** 规范守护者 | `🤖CR` | 架构合规审查、代码质量裁决 | PR、变更 diff | 审查意见、合并决策 |
-| **[QA]** 质量专家 | `🤖QA` | 边界测试、性能基线、端到端验收 | 实现代码 | 测试报告、验收结论 |
+| 角色 | 标识 | 核心职责 | 关键能力 |
+|------|------|----------|----------|
+| **[CO]** 协调者 | `🤖CO` | 任务分级、流程路由、冲突仲裁 | 复杂度分析、状态板维护 |
+| **[PM]** 产品经理 | `🤖PM` | 需求澄清、PRD 维护、验收标准 | 需求拆解、文档同步 |
+| **[RD]** 全栈工程师 | `🤖RD` | 端到端实现、文档同步、Self-Heal | 代码生成、Tools 编排 |
+| **[CR]** 规范守护者 | `🤖CR` | 架构合规审查、代码质量裁决 | 红线检查、影响分析 |
+| **[QA]** 质量专家 | `🤖QA` | 边界测试、性能基线、端到端验收 | 场景设计、回归检测 |
 
-### 3.2 Tools 化执行流程
+### 3.2 协作流程
 
 ```
 用户请求
@@ -125,19 +125,33 @@ PicMe 采用**Agent 角色化协作模型**，基础设施原子化为 Tools 层
 [PM] 对齐 PRODUCT.md → 更新/澄清需求
     ↓
 [RD] 原子化实现 → 代码 + 文档同步
-    ↓  编排 Tools 完成验证
-[RD] Self-Heal 闭环 → CompileTool → InstallTool → ScreenshotTool → LogAnalysisTool
+    ↓  调用 Tools 完成验证
+[RD] Self-Heal 闭环 → 编译 → 安装 → 测试 → 日志
     ↓
-[CR] 规范审查 → DocSyncTool 验证文档一致性
+[CR] 规范审查 → 架构合规、代码质量
     ↓
-[QA] 验收测试 → ScreenshotDiffTool + PerfBaselineTool
+[QA] 验收测试 → 边界、性能、体验
     ↓
-[CO] 汇总交付 → ChangeReportTool 生成报告
+[CO] 汇总交付 → 报告、闭环
 ```
+
+### 3.3 Tools 层
+
+基础设施原子化为 **Tools**，供 Agent 编排调用：
+
+| Tool | 功能 | 调用者 |
+|------|------|--------|
+| `CompileTool` | 代码编译检查 | RD |
+| `InstallTool` | 安装到设备 | RD |
+| `ScreenshotTool` | 自动截屏 | RD/QA |
+| `LogAnalysisTool` | 结构化日志分析 | RD |
+| `DocSyncTool` | 文档同步检查 | CR |
+| `ScreenshotDiffTool` | UI 回归检测 | QA |
+| `PerfBaselineTool` | 性能基线对比 | QA |
 
 **关键转变**：从「人类操作脚本」到「Agent 编排 Tools」。
 
-### 3.3 触发口令
+### 3.4 触发口令
 
 | 口令 | 含义 | 适用场景 |
 |------|------|----------|
@@ -147,14 +161,13 @@ PicMe 采用**Agent 角色化协作模型**，基础设施原子化为 Tools 层
 
 ---
 
-## 4. Self-Heal 与 Tools 化基础设施
+## 4. Self-Heal 与自动化工具链
 
-PicMe 的核心创新是**基础设施 Tools 化**——将编译、安装、测试、验证等步骤原子化为 Agent 可调用的 Tools，让 Agent 具备闭环验证能力。
+PicMe 的核心创新是赋予 RD **闭环验证能力**——不仅能写代码，还能通过 Tools 自动验证正确性。
 
 ### 4.1 自愈工作流
 
 ```kotlin
-// RD Agent 的执行循环
 object RdAgent {
     fun implement(task: Task) {
         var attempts = 0
@@ -176,7 +189,7 @@ object RdAgent {
 }
 ```
 
-### 4.2 自动化工具链
+### 4.2 自动化脚本
 
 | 脚本 | 用途 | 调用者 |
 |------|------|--------|
@@ -187,13 +200,13 @@ object RdAgent {
 | `./scripts/test-generator.py` | 基于 public 方法生成测试骨架 | RD |
 | `./scripts/screenshot-diff.py` | UI 回归检测 | QA |
 
-**AI 收益**：AI 角色可调用标准化工具，消除人工操作的不确定性。
+**收益**：标准化工具消除人工操作的不确定性，AI 可编排完成复杂验证。
 
 ---
 
-## 5. 文档体系（Agent 可解析）
+## 5. 文档体系（AI 可解析）
 
-PicMe 的文档体系设计为**Agent 可消费**——结构清晰、机器可读、交叉引用完整，Agent 可直接解析为执行计划。
+PicMe 的文档设计为**机器可读、交叉引用完整**，AI 可直接解析为执行计划。
 
 ### 5.1 文档层级
 
@@ -209,7 +222,7 @@ FEATURES.md (How: 交互与体验)
 
 ### 5.2 任务标记规范 `[kimi-task]`
 
-AI 可直接解析 Spec 文档中的任务标记，生成执行计划：
+AI 可直接解析 Spec 中的任务标记，生成执行计划：
 
 ```markdown
 ### 调节美颜参数 [kimi-task:beauty-001]
@@ -223,7 +236,7 @@ AI 可直接解析 Spec 文档中的任务标记，生成执行计划：
 - **Acceptance**: AC-P0-1
 ```
 
-**Agent 收益**：需求→任务→代码的转换自动化，Agent 可直接解析为执行计划。
+**收益**：需求→任务→代码的转换自动化，减少信息损耗。
 
 ---
 
@@ -247,6 +260,7 @@ AI 可直接解析 Spec 文档中的任务标记，生成执行计划：
 2. **AI 重构能力**：AI 能否主导跨模块架构重构？
 3. **Self-Heal 成功率**：RD Agent 自动修复编译/运行时错误的成功率？
 4. **文档驱动开发的效率**：相比传统流程，AI 协作的效率提升？
+5. **Tools 扩展性**：新 Tools 能否被 Agent 自动发现和集成？
 
 ### 7.2 度量指标
 
@@ -274,7 +288,7 @@ AI 可直接解析 Spec 文档中的任务标记，生成执行计划：
 
 ## 9. 交付审计清单
 
-- [ ] 代码遵循 Agent First 原则（显式、枚举、自描述、Tools 化）
+- [ ] 代码遵循 Agent First 原则（显式、枚举、自描述、结构化）
 - [ ] PRODUCT.md 已更新或保持一致
 - [ ] FEATURES.md 已更新或保持一致
 - [ ] 模块 AGENTS.md 已更新实现细节
