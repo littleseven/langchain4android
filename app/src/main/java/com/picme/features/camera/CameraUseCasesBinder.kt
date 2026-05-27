@@ -34,7 +34,7 @@ internal fun bindCameraUseCases(
     previewView: PreviewView,
     bindPreviewSurfaceProvider: (Preview) -> Unit,
     cameraExecutor: ExecutorService,
-    beautySettings: BeautySettings,
+    beautyEnabledProvider: () -> Boolean,
     beautyStrategy: BeautyStrategy,
     detectionEngineMode: EngineType,
     videoCapture: VideoCapture<Recorder>,
@@ -109,7 +109,6 @@ internal fun bindCameraUseCases(
 
     var frameCount = 0
     var lastFrameLogMs = 0L
-    val beautyEnabledAtBind = beautySettings.enabled
     imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
         frameCount++
         // 限流：帧计数日志 1 秒最多打一次
@@ -129,7 +128,7 @@ internal fun bindCameraUseCases(
             onFaceWarpParamsChanged = onFaceWarpParamsChanged,
             onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
             isDualMode = false,
-            beautyEnabled = beautyEnabledAtBind
+            beautyEnabled = beautyEnabledProvider()
         )
     }
 
