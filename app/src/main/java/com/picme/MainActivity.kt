@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
 import com.picme.navigation.Screen
+import com.picme.domain.agent.model.SceneManager
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -126,6 +128,11 @@ class MainActivity : ComponentActivity() {
                             }
                         ) {
                             composable(Screen.Camera.route) {
+                                // 场景管理：进入 Camera 页面
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.CAMERA)
+                                    onDispose { }
+                                }
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
@@ -133,6 +140,11 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Screen.Gallery.route) {
+                                // 场景管理：进入 Gallery 页面
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
+                                    onDispose { }
+                                }
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
                                     onNavigateBack = { navController.popBackStack() },
@@ -140,6 +152,11 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Screen.Settings.route) {
+                                // 场景管理：进入 Settings 页面
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
+                                    onDispose { }
+                                }
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
@@ -147,12 +164,22 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             composable(Screen.LlmModelManager.route) {
+                                // 场景管理：进入 Settings 子页面（复用 SETTINGS 场景）
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
+                                    onDispose { }
+                                }
                                 LlmModelManagerScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() }
                                 )
                             }
                             composable(Screen.Debug.route) {
+                                // 场景管理：进入 Debug 页面
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.DEBUG)
+                                    onDispose { }
+                                }
                                 DebugScreen(
                                     onNavigateBack = { navController.popBackStack() },
                                     mediaViewModel = mediaViewModel
