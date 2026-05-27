@@ -5,7 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.picme.domain.agent.AgentOrchestratorV2
+import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.toV2
@@ -18,11 +18,11 @@ import com.picme.features.agent.rememberGlobalAgentPanelState
 /**
  * CameraScreen 的 Agent 集成
  *
- * 将新的 AgentOrchestratorV2 与现有 CameraScreen 集成
+ * 将 AgentOrchestrator 与现有 CameraScreen 集成
  * 提供向后兼容的桥梁
  */
 class CameraAgentIntegration(
-    val orchestrator: AgentOrchestratorV2,
+    val orchestrator: AgentOrchestrator,
     private val useCase: AiAgentUseCase
 ) {
     /**
@@ -124,7 +124,7 @@ fun rememberCameraAgentIntegration(
 ): CameraAgentIntegration {
     val context = LocalContext.current
     val orchestrator = remember {
-        AgentOrchestratorV2.getInstance(context).apply {
+        AgentOrchestrator.getInstance(context).apply {
             // 加载配置
             configure(
                 mode = com.picme.domain.model.AiAgentMode.LOCAL,

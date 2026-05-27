@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -69,6 +70,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
@@ -150,58 +153,118 @@ fun AiAgentPanel(
         exit = slideOutVertically { height -> height },
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(Color.Black.copy(alpha = 0.88f))
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // 标题栏：拖拽把手 + 折叠/关闭按钮
-            AiAgentHeader(
-                isExpanded = state.isExpanded,
-                onToggleExpand = { state.toggleExpand() },
-                onClose = { state.close() }
+        AiAgentPanelContent(
+            state = state,
+            useCase = useCase,
+            currentState = currentState,
+            onCommand = onCommand,
+            voiceCoordinator = voiceCoordinator
+        )
+    }
+}
+
+/**
+ * AI Agent 面板 - Dialog 版本
+ *
+ * 使用独立 Dialog 窗口渲染，输入法弹出时不会影响底层预览页面布局。
+ */
+@Composable
+fun AiAgentDialogPanel(
+    state: AiAgentPanelState,
+    useCase: AiAgentUseCase,
+    currentState: AiAgentUseCase.CameraStateSnapshot,
+    onCommand: (AiAgentCommand) -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator? = null,
+    modifier: Modifier = Modifier
+) {
+    if (state.isVisible) {
+        Dialog(
+            onDismissRequest = { state.close() },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = true
             )
-
-            // 可折叠内容区
-            AnimatedVisibility(
-                visible = state.isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 消息列表
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 180.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(state.messages) { message ->
-                            ChatBubble(message = message)
-                        }
-                    }
+                AiAgentPanelContent(
+                    state = state,
+                    useCase = useCase,
+                    currentState = currentState,
+                    onCommand = onCommand,
+                    voiceCoordinator = voiceCoordinator,
+                    modifier = modifier
+                )
+            }
+        }
+    }
+}
 
-                    // 输入栏（文字 + 语音）
-                    ChatInputBar(
-                        isProcessing = state.isProcessing,
-                        onSend = { input ->
-                            sendMessage(
-                                scope = scope,
-                                state = state,
-                                useCase = useCase,
-                                currentState = currentState,
-                                input = input,
-                                onCommand = onCommand
-                            )
-                        },
-                        voiceCoordinator = voiceCoordinator
-                    )
+@Composable
+private fun AiAgentPanelContent(
+    state: AiAgentPanelState,
+    useCase: AiAgentUseCase,
+    currentState: AiAgentUseCase.CameraStateSnapshot,
+    onCommand: (AiAgentCommand) -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator? = null,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding()
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+            .background(Color.Black.copy(alpha = 0.88f))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 标题栏：拖拽把手 + 折叠/关闭按钮
+        AiAgentHeader(
+            isExpanded = state.isExpanded,
+            onToggleExpand = { state.toggleExpand() },
+            onClose = { state.close() }
+        )
+
+        // 可折叠内容区
+        AnimatedVisibility(
+            visible = state.isExpanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 消息列表
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 180.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(state.messages) { message ->
+                        ChatBubble(message = message)
+                    }
                 }
+
+                // 输入栏（文字 + 语音）
+                ChatInputBar(
+                    isProcessing = state.isProcessing,
+                    onSend = { input ->
+                        sendMessage(
+                            scope = scope,
+                            state = state,
+                            useCase = useCase,
+                            currentState = currentState,
+                            input = input,
+                            onCommand = onCommand
+                        )
+                    },
+                    voiceCoordinator = voiceCoordinator
+                )
             }
         }
     }

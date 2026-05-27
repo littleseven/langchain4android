@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.picme.core.common.Logger
-import com.picme.domain.agent.AgentOrchestratorV2
+import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.toV2
@@ -43,7 +43,7 @@ class GalleryAgentIntegration(
     private val sceneManager = SceneManager.getInstance()
 
     // Orchestrator 单例
-    private val orchestrator = AgentOrchestratorV2.getInstance(appContext)
+    private val orchestrator = AgentOrchestrator.getInstance(appContext)
 
     /**
      * 进入 Gallery 场景时调用

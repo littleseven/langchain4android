@@ -70,6 +70,12 @@ object AgentCommandParser {
                 Logger.i(TAG, "Fallback JSON extraction succeeded: '$fallbackJson'")
                 cleaned = fallbackJson
             } else {
+                // 兜底 2：关键词匹配（小模型不输出 JSON 时的最终防线）
+                val keywordCommand = tryParseByKeywords(cleaned)
+                if (keywordCommand != null) {
+                    Logger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
+                    return keywordCommand
+                }
                 Logger.d(TAG, "No JSON action found, treating as free chat")
                 return AgentCommand.TextReply(cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
             }
@@ -132,12 +138,12 @@ object AgentCommandParser {
             }
             "switch_filter" -> {
                 val filterName = extractJsonField(json, "filter") ?: "NONE"
-                val filterType = runCatching { FilterType.valueOf(filterName) }.getOrDefault(FilterType.NONE)
+                val filterType = resolveFilterType(filterName)
                 AgentCommand.SwitchFilter(filterType)
             }
             "switch_style" -> {
                 val styleName = extractJsonField(json, "style") ?: "NONE"
-                val styleFilter = runCatching { StyleFilter.valueOf(styleName) }.getOrDefault(StyleFilter.NONE)
+                val styleFilter = resolveStyleFilter(styleName)
                 AgentCommand.SwitchStyle(styleFilter)
             }
             "switch_scene" -> {
@@ -295,6 +301,44 @@ object AgentCommandParser {
             lower.contains("分享") ->
                 AgentCommand.ShareMedia(emptyList())
             else -> null
+        }
+    }
+
+    /**
+     * 将 LLM 输出的 filter 名称解析为 FilterType
+     *
+     * 支持别名映射和模糊匹配，增强对小模型输出偏差的容错。
+     * 例如 LLM 输出 LEICA_MONOCHROME/RETRO/VIVID 等旧名称或近似名称时也能正确映射。
+     */
+    private fun resolveFilterType(name: String): FilterType {
+        val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
+        return when (normalized) {
+            "NONE" -> FilterType.NONE
+            "LEICA_CLASSIC" -> FilterType.LEICA_CLASSIC
+            "LEICA_VIBRANT", "VIBRANT", "LEICA_VIVID", "VIVID" -> FilterType.LEICA_VIBRANT
+            "LEICA_BW", "BW", "BLACK_WHITE", "LEICA_MONOCHROME", "MONOCHROME" -> FilterType.LEICA_BW
+            "FILM_GOLD" -> FilterType.FILM_GOLD
+            "FILM_FUJI" -> FilterType.FILM_FUJI
+            "VINTAGE", "RETRO", "OLD" -> FilterType.VINTAGE
+            "COOL", "COLD" -> FilterType.COOL
+            "WARM" -> FilterType.WARM
+            else -> runCatching { FilterType.valueOf(normalized) }.getOrDefault(FilterType.NONE)
+        }
+    }
+
+    /**
+     * 将 LLM 输出的 style 名称解析为 StyleFilter
+     */
+    private fun resolveStyleFilter(name: String): StyleFilter {
+        val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
+        return when (normalized) {
+            "NONE" -> StyleFilter.NONE
+            "TOON", "CARTOON", "COMIC" -> StyleFilter.TOON
+            "SKETCH" -> StyleFilter.SKETCH
+            "POSTERIZE", "POSTER" -> StyleFilter.POSTERIZE
+            "EMBOSS" -> StyleFilter.EMBOSS
+            "CROSSHATCH", "CROSS_HATCH" -> StyleFilter.CROSSHATCH
+            else -> runCatching { StyleFilter.valueOf(normalized) }.getOrDefault(StyleFilter.NONE)
         }
     }
 
