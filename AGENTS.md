@@ -1,125 +1,288 @@
 # PicMe AI Agent 系统：唯一事实来源 (SSOT)
 
-> 本文档为**顶层治理文档**，只保留跨模块通用规则。具体需求、交互、技术细节分别查阅 `PRODUCT.md`、`docs/FEATURES.md`、模块 `AGENTS.md` 与专项技术文档。
+> 本文档为**顶层治理文档**，定义 AI 主导的研发流程与协作规范。
+>
+> PicMe 的核心实验目标之一是**验证 AI 能否成为软件开发的主导力量**。本规范即为这一实验的操作手册。
 
-**项目背景**：PicMe 是一个以 AI Coding 范式与音视频技术为探索目标的技术研究项目。App 模块实验端侧 Agent 机制和以 Agent 为中心的应用架构；beauty-engine 模块实验音视频及美颜技术。相机产品是这两个方向交汇的具体 Case。本项目不追求商业化，核心价值在于技术探索与工程实践。
+---
 
-## 1. 角色与运行模式
+## 1. 项目背景：AI 友好的三重实验
 
-| 角色 | 职责 |
-|------|------|
-| **[CO] 协调者** | 任务分级、流程路由、状态板维护与统一交付汇总 |
-| **[PM] 产品经理** | `PRODUCT.md` 权威维护者，负责业务价值、UX Flow 与 I18N 文案 |
-| **[RD] 全栈工程师** | Domain 到 UI 完整实现，执行自愈闭环 |
-| **[CR] 规范守护者** | 规范一致性审查与技术文档合规裁决 |
-| **[QA] 质量专家** | 边界测试、性能基线与端到端验收 |
+PicMe 是一个元实验（meta-experiment），同时探索三个层次：
 
-**运行规则**：
-- 同一会话内按 `CO → PM → RD → CR → QA` 串行流转。
-- 触发口令：`自动执行`（默认）、`保守执行`（关键节点确认）。
-- RD 单任务最多自愈 **2 次**，超限必须上报并给出备选方案。
-- 仅在隐私风险、不可逆操作或缺失外部输入时请求用户确认。
+| 层次 | 实验对象 | 核心问题 |
+|------|----------|----------|
+| **运行时** | 端侧 Agent 架构 | LLM 能否成为应用的中枢神经系统？ |
+| **架构层** | AI 友好的客户端框架 | 什么样的代码结构让 AI 最高效？ |
+| **流程层** | AI 主导的研发流程 | AI 能否替代传统 SDLC 的人类角色？ |
 
-## 2. 文档体系
+**核心假设**：通过设计「AI 友好」的架构和流程，AI 可以从「辅助工具」进化为「主导力量」。
 
-```text
+---
+
+## 2. AI 友好的代码架构原则
+
+PicMe 的所有代码遵循以下 AI 优先设计原则：
+
+### 2.1 显式优于隐式（Explicit > Implicit）
+
+```kotlin
+// ❌ AI 不友好：隐式依赖，全局状态
+object BeautyEngine {
+    fun getInstance() = instance  // AI 需要全局搜索理解生命周期
+}
+
+// ✅ AI 友好：显式依赖注入，构造函数即文档
+class CameraViewModel(
+    private val beautyEngine: BeautyEngine,
+    private val agentUseCase: AiAgentUseCase,
+    private val settingsRepository: SettingsRepository
+) : ViewModel()
+```
+
+**AI 收益**：通过构造函数签名，AI 即可理解组件的协作关系，无需跨文件搜索。
+
+### 2.2 枚举优于条件（Exhaustive > Conditional）
+
+```kotlin
+// ❌ AI 不友好：分散的布尔标志，状态组合爆炸
+class CameraState(
+    val isLoading: Boolean,
+    val hasError: Boolean,
+    val isPreviewing: Boolean
+)
+
+// ✅ AI 友好：Sealed Class 枚举所有有效状态
+sealed interface CameraState {
+    data object Initializing : CameraState
+    data class Previewing(val settings: BeautySettings) : CameraState
+    data class Error(val reason: String) : CameraState
+}
+```
+
+**AI 收益**：状态空间显式编码，AI 可枚举所有边界情况，不会遗漏。
+
+### 2.3 自描述优于注释（Self-Describing > Commented）
+
+```kotlin
+// ❌ AI 不友好：注释与代码可能脱节
+// 调节美颜参数
+fun adjust(params: Map<String, Int>) // AI 不知道有哪些参数
+
+// ✅ AI 友好：类型系统即文档
+data class BeautyParameters(
+    val smooth: IntRange = 0..100,
+    val whiten: IntRange = 0..100,
+    val slimFace: IntRange = -50..50
+)
+fun adjust(params: BeautyParameters) // AI 通过类型理解全部参数
+```
+
+**AI 收益**：类型系统强制一致性，AI 可靠类型推导而非易腐烂的注释。
+
+### 2.4 结构化可观测性（Structured Observability）
+
+```kotlin
+// ❌ AI 不友好：纯文本日志，需正则解析
+Log.d("Camera", "Agent parsed: $input -> $intent")
+
+// ✅ AI 友好：结构化事件，AI 可直接消费
+data class AgentCommandParsedEvent(
+    val rawInput: String,
+    val parsedIntent: Intent,
+    val confidence: Float,
+    val timestamp: Long
+) : LogEvent
+
+Logger.log(AgentCommandParsedEvent(...)) // AI 可解析、可查询、可统计
+```
+
+**AI 收益**：AI 可消费自身产生的日志，实现自我诊断和自我改进。
+
+---
+
+## 3. AI 角色与协作流程
+
+PicMe 采用**角色化 AI 协作模型**，将传统 SDLC 映射为 AI 可执行的流程。
+
+### 3.1 角色定义
+
+| 角色 | 标识 | 职责 | 输入 | 输出 |
+|------|------|------|------|------|
+| **[CO]** 协调者 | `🤖CO` | 任务分级、流程路由、冲突仲裁 | 用户请求 | 任务清单、状态板 |
+| **[PM]** 产品经理 | `🤖PM` | 需求澄清、PRD 维护、验收标准 | 用户痛点 | PRODUCT.md、FEATURES.md |
+| **[RD]** 全栈工程师 | `🤖RD` | 端到端实现、文档同步、自愈修复 | PRD、技术规范 | 代码、模块 AGENTS.md |
+| **[CR]** 规范守护者 | `🤖CR` | 架构合规审查、代码质量裁决 | PR、变更 diff | 审查意见、合并决策 |
+| **[QA]** 质量专家 | `🤖QA` | 边界测试、性能基线、端到端验收 | 实现代码 | 测试报告、验收结论 |
+
+### 3.2 执行流程
+
+```
+用户请求
+    ↓
+[CO] 分析复杂度 → 分级（Simple/Medium/Complex）
+    ↓
+[PM] 对齐 PRODUCT.md → 更新/澄清需求
+    ↓
+[RD] 原子化实现 → 代码 + 文档同步
+    ↓  触发 ./scripts/auto-dev-loop.sh
+[RD] Self-Heal 闭环 → 编译→安装→测试→日志
+    ↓
+[CR] 规范审查 → 架构合规、代码质量
+    ↓
+[QA] 验收测试 → 边界、性能、体验
+    ↓
+[CO] 汇总交付 → 报告、闭环
+```
+
+### 3.3 触发口令
+
+| 口令 | 含义 | 适用场景 |
+|------|------|----------|
+| `自动执行` | AI 角色按流程自动流转 | 默认模式，RD 最多自愈 2 次 |
+| `保守执行` | 关键节点需人工确认 | 高风险变更、不可逆操作 |
+| `仅分析` | CO 仅输出分析，不启动执行 | 需求澄清、方案比选 |
+
+---
+
+## 4. Self-Heal 与自动化工具链
+
+PicMe 的核心创新之一是让 AI 具备**闭环验证能力**——不仅能写代码，还能验证代码的正确性。
+
+### 4.1 自愈工作流
+
+```kotlin
+// RD Agent 的执行循环
+object RdAgent {
+    fun implement(task: Task) {
+        var attempts = 0
+        while (attempts < MAX_RETRY) {
+            try {
+                writeCode(task)
+                val result = execute("./scripts/auto-dev-loop.sh")
+                if (result.success) {
+                    submitPR()
+                    return
+                }
+                analyzeAndFix(result.errors)
+                attempts++
+            } catch (e: Exception) {
+                if (attempts >= MAX_RETRY) escalateToHuman()
+            }
+        }
+    }
+}
+```
+
+### 4.2 自动化工具链
+
+| 脚本 | 用途 | 调用者 |
+|------|------|--------|
+| `./scripts/ai-gate.sh` | 代码质量门禁 | CI / RD |
+| `./scripts/auto-dev-loop.sh` | 编译→安装→启动→截屏→日志 | RD |
+| `./scripts/impact-analyzer.sh` | 变更影响分析 | CO |
+| `./scripts/doc-sync-guardian.sh` | 文档同步检查 | CR |
+| `./scripts/test-generator.py` | 基于 public 方法生成测试骨架 | RD |
+| `./scripts/screenshot-diff.py` | UI 回归检测 | QA |
+
+**AI 收益**：AI 角色可调用标准化工具，消除人工操作的不确定性。
+
+---
+
+## 5. 文档体系（AI 可解析）
+
+PicMe 的文档体系设计为**AI 可消费**——结构清晰、机器可读、交叉引用完整。
+
+### 5.1 文档层级
+
+```
 PRODUCT.md (What: 目标与约束)
-    ↓
-docs/FEATURES.md (How: 交互与体验规则)
-    ↓
-模块 AGENTS.md / 技术专项文档 (Implementation: 实现细则)
+    ↓ 引用
+FEATURES.md (How: 交互与体验)
+    ↓ 引用
+模块 AGENTS.md (Implementation: 实现约束)
+    ↓ 反向链接
+代码实现
 ```
 
-**单一可信源**：
-- 产品目标与验收口径 → `PRODUCT.md`
-- 交互流程与体验规则 → `docs/FEATURES.md`
-- 技术实现、代码规范与检查清单 → 模块 `AGENTS.md` / `docs/AGENTS_SPEC.md`
+### 5.2 任务标记规范 `[kimi-task]`
 
-**同步规则**：
-- 新增功能按 `PRODUCT.md → FEATURES.md → 模块 AGENTS.md` 顺序更新。
-- 修改功能同步更新所有相关文档，严禁只改代码不改文档。
-- 技术路线调整后，对应文档 24 小时内更新并标记旧方案状态（废弃/备选）。
+AI 可直接解析 Spec 文档中的任务标记，生成执行计划：
 
-## 3. 全局红线 [严格执行]
-
-- **[PRIVACY] 隐私至上**：所有 AI 处理（人脸、OCR、分类）必须 100% 本地化，严禁云端推理。
-- **[PERF] 极致反馈**：交互反馈 < 100ms，拍摄快门延迟 < 50ms。
-- **[I18N] 多语言同步**：禁止硬编码用户可见文案；必须同步 `values`、`values-zh-rCN`、`values-zh-rTW`。
-
-## 4. 工程基线规范
-
-- **架构**：Clean Architecture（Domain → Data → Features）。
-- **缩进**：Kotlin/Java 4 空格；XML/JSON/MD 2 空格。
-- **Lambda**：显式命名参数，禁止隐式 `it`。
-- **状态管理**：UI 状态优先使用 `Sealed Class` 建模。
-- **导入**：禁止通配符导入（`*`）。
-- **日志**：标签统一为 `PicMe:[ModuleName]`。
-
-> 详细代码风格与审查清单 → `docs/AGENTS_SPEC.md` / 对应模块 `AGENTS.md`。
-
-## 5. Self-Heal 执行工作流
-
-1. **触发**：按 `自动执行` 或 `保守执行` 启动。
-2. **路由**：`CO` 复杂度分级并维护状态板。
-3. **对齐**：`PM/RD` 对齐 `PRODUCT.md`、`FEATURES.md` 与模块 `AGENTS.md`。
-4. **执行**：`RD` 原子化修改并记录关键决策。
-5. **自愈**：
-   - 修复编译 Error → `./gradlew assembleDebug` 验证
-   - **设备连接时自动闭环**：编译通过后自动 `adb install -r` → 启动应用 → 截屏/日志收集
-   - 使用 `./scripts/auto-dev-loop.sh` 一键完成代码→设备的完整验证
-   - 超限上报备选方案
-6. **审计**：`CR` 规范复核，`QA` 核心验收，`CO` 对外汇总。
-
-### 5.1 自动化测试工具链（消除人工干预）
-
-| 脚本/工具 | 用途 | 人工干预点消除 |
-|-----------|------|----------------|
-| `./scripts/ai-gate.sh` | 代码级质量门禁 | 编译后自动检测设备安装并验证 |
-| `./scripts/auto-dev-loop.sh` | 一键开发自循环 | **编译→安装→启动→截屏→日志→报告**全自动 |
-| `./scripts/regression-test.sh` | P0 端到端回归 | 相机/美颜/相册核心用例自动执行 |
-| `./scripts/quick-compile.sh` | 分层快速编译 | **语法→编译→Dex→APK**分层递进，失败即停 |
-| `./scripts/impact-analyzer.sh` | 变更影响分析 | 自动识别影响模块、红线、需同步文档 |
-| `./scripts/screenshot-diff.py` | 截图像素级对比 | 基准截图 diff，检测 UI 回归和渲染异常 |
-| `./scripts/perf-baseline.sh` | 性能基线对比 | 自动提取 FPS/耗时，与基线对比告警 |
-| `./scripts/crash-detector.sh` | Crash 自动检测 | 扫描 FATAL/ANR/Native crash/GL 错误 |
-| `./scripts/ui-check.py` | UI 自动校验 | 黑屏/快门按钮/网格布局/关键点覆盖层检测 |
-| `./scripts/test-generator.py` | 测试骨架生成 | 基于 public 方法自动生成 mockk 测试 |
-| `./scripts/doc-sync-guardian.sh` | 文档同步提醒 | git diff → 自动识别需更新的文档 |
-| `./scripts/smart-commit.sh` | 智能 Commit | 基于变更自动生成 Conventional Commits |
-| `./scripts/change-report.sh` | 变更影响报告 | 统计影响范围、测试覆盖、风险项 |
-| `./scripts/release-automation.sh` | 版本发布自动化 | 版本号更新 + CHANGELOG + 构建 + Tag |
-| `adb-bot` Skill | ADB 命令参考 | 提供标准化设备操作命令集 |
-| `intent-router` Skill | 意图路由 | 自然语言→技术术语→上下文自动加载 |
-| `error-healer` Skill | 编译错误修复 | 错误分类→定向修复策略→自愈循环 |
-
-**标准工作流（有设备连接时）**：
-```bash
-# RD 完成代码修改后执行：
-./scripts/auto-dev-loop.sh
-
-# 自动输出：
-# - 代码检查报告 (ktlint/detekt/unit test)
-# - 编译结果
-# - 安装状态
-# - 设备截屏 (screen_startup.png / screen_after_capture.png)
-# - PicMe 日志 (logcat_picme.txt)
-# - Markdown 汇总报告 (report.md)
+```markdown
+### 调节美颜参数 [kimi-task:beauty-001]
+- **Assignee**: RD
+- **Scope**: `domain/agent/capability/AdjustBeautyCapability.kt`
+- **Expected Change**:
+  1. 实现 Capability 接口
+  2. 注册到 CapabilityRegistry
+  3. 添加单元测试
+- **Priority**: P0
+- **Acceptance**: AC-P0-1
 ```
 
-## 6. 文档索引
+**AI 收益**：需求→任务→代码的转换自动化，减少信息损耗。
+
+---
+
+## 6. 全局红线（不可突破）
+
+| 红线 | 定义 | 验证方式 |
+|------|------|----------|
+| **[PRIVACY]** | 100% 端侧 AI，零云端推理 | 权限清单扫描、网络抓包 |
+| **[PERF]** | 交互 < 100ms，快门 < 50ms | 性能测试、人工体感 |
+| **[I18N]** | 禁止硬编码，三语同步 | 资源文件检查 |
+| **[DOC-SYNC]** | 代码变更必须同步文档 | CI 文档检查 |
+| **[AI-FRIENDLY]** | 新代码必须遵循 AI 友好原则 | CR 审查 |
+
+---
+
+## 7. 研究问题与度量
+
+### 7.1 待验证的假设
+
+1. **AI 可处理代码规模上限**：当前 PicMe 约 2 万行 Kotlin，上限是多少？
+2. **AI 重构能力**：AI 能否主导跨模块架构重构？
+3. **Self-Heal 成功率**：RD Agent 自动修复编译/运行时错误的成功率？
+4. **文档驱动开发的效率**：相比传统流程，AI 协作的效率提升？
+
+### 7.2 度量指标
+
+| 指标 | 当前基线 | 目标 |
+|------|----------|------|
+| RD Self-Heal 成功率 | 待收集 | > 70% |
+| 文档→代码一致性 | 待评估 | > 95% |
+| AI 生成代码占比 | 待评估 | > 60% |
+| 人工介入频次 | 待评估 | < 20% |
+
+---
+
+## 8. 文档索引
 
 | 类型 | 文档 |
 |------|------|
-| **模块规范** | `app/src/main/java/com/picme/core/AGENTS.md`, `app/src/main/java/com/picme/core/designsystem/AGENTS.md`, `app/src/main/java/com/picme/data/AGENTS.md`, `app/src/main/java/com/picme/di/AGENTS.md`, `app/src/main/java/com/picme/domain/agent/AGENTS.md`, `app/src/main/java/com/picme/features/camera/AGENTS.md`, `app/src/main/java/com/picme/features/gallery/AGENTS.md`, `app/src/main/java/com/picme/features/editor/AGENTS.md`, `app/src/main/java/com/picme/features/settings/AGENTS.md`, `app/src/main/java/com/picme/features/debug/AGENTS.md`, `beauty-engine/AGENTS.md` |
-| **技术专项** | `docs/BIG_BEAUTY_TECH_SPEC.md`, `docs/CAMERA_PREVIEW_TECH_SPEC.md`, `docs/BEAUTY_ENGINE_FALLBACK.md`, `docs/FACE_DETECTION_ENGINE_ARCHITECTURE.md`, `docs/ADR-001-beauty-engine-architecture.md`, `docs/ADR-002-opengl-offscreen-unified-pipeline.md`, `docs/ADR-003-coordinate-system-management.md` |
-| **AI 工具配置** | `AI_TOOLS.md`, `.kimi/AGENTS.md`, `.openclaw/workspace/`, `.qoder/skills/` |
-| **Agent 协作角色** | `agents/README.md`, `agents/co_agent.md`, `agents/rd_agent.md`, `agents/pm_agent.md`, `agents/review_agent.md`, `agents/qa_agent.md` |
-| **写作规范** | `docs/AGENTS_SPEC.md`, `PRODUCT.md`, `docs/FEATURES.md` |
+| **顶层治理** | `AGENTS.md`（本文档） |
+| **产品定义** | `PRODUCT.md` |
+| **交互规范** | `docs/FEATURES.md` |
+| **AI 协作角色** | `agents/README.md`, `agents/co_agent.md`, `agents/rd_agent.md`, `agents/pm_agent.md`, `agents/review_agent.md`, `agents/qa_agent.md` |
+| **模块规范** | 各模块 `AGENTS.md` |
+| **技术专项** | `docs/*.md` |
 
-## 7. 交付审计清单
+---
 
-- [ ] 需求是否已在 `PRODUCT.md` 落地或保持一致。
-- [ ] 交互是否已在 `docs/FEATURES.md` 落地或保持一致。
-- [ ] 实现是否已在对应模块 `AGENTS.md` 补全规范。
-- [ ] 是否满足 `[PRIVACY]`、`[PERF]`、`[I18N]` 三条红线。
-- [ ] 是否完成编译自检与关键日志可观测性检查。
+## 9. 交付审计清单
+
+- [ ] 代码遵循 AI 友好原则（显式、枚举、自描述、结构化）
+- [ ] PRODUCT.md 已更新或保持一致
+- [ ] FEATURES.md 已更新或保持一致
+- [ ] 模块 AGENTS.md 已更新实现细节
+- [ ] 满足 [PRIVACY]、[PERF]、[I18N] 红线
+- [ ] Self-Heal 闭环验证通过
+- [ ] CR 架构合规审查通过
+- [ ] QA 核心验收通过
+
+---
+
+> **维护者**：CO Agent  
+> **最后更新**：2025-06  
+> **实验状态**：进行中
