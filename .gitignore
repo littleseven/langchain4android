@@ -69,3 +69,9 @@ app/keystore/
 
 # Temporary model download cache
 tmp_models/
+
+# LLM model files (downloaded at runtime via LlmModelDownloadManager, NOT embedded in APK)
+beauty-engine/src/main/assets/models/llm/
+*.mnn.weight
+*.mnn.lock
+*.qwen
