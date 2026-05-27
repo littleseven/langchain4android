@@ -107,6 +107,11 @@ object ModelManager {
             assetDir = "models/llm/Qwen3-0.6B-MNN",
             cacheDirName = "Qwen3-0.6B-MNN",
             version = "1.0"
+        ),
+        "qwen3-0.6b" to LlmModelInfo(
+            assetDir = "models/llm/Qwen3-0.6B-MNN",
+            cacheDirName = "Qwen3-0.6B-MNN",
+            version = "1.0"
         )
     )
 
@@ -172,63 +177,119 @@ object ModelManager {
     /**
      * 准备 LLM 模型目录（MNN-LLM 需要整个目录结构）
      *
+     * 支持三种模式：
+     * 1. 下载目录：files/llm_models/<cacheDirName>/
+     * 2. 传统缓存目录：files/<cacheDirName>/
+     * 3. 从 assets 复制（兜底）
+     *
      * @param key LLM 模型注册表中的 key
      * @param context Context
-     * @return 复制后的模型目录绝对路径
-     * @throws IllegalArgumentException 如果 key 不存在
+     * @return 模型目录绝对路径
+     * @throws IllegalArgumentException 如果 key 不存在且无法动态发现
      */
     fun prepareLlmModel(key: String, context: Context): String {
         val info = LLM_MODEL_REGISTRY[key]
-            ?: throw IllegalArgumentException("Unknown LLM model key: $key")
 
-        val destDir = File(context.filesDir, info.cacheDirName)
-        if (destDir.exists() && isLlmModelComplete(destDir)) {
-            Log.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
-            return destDir.absolutePath
+        if (info != null) {
+            // 1. 优先检查下载目录 (llm_models/)
+            val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
+            if (downloadDir.exists() && isLlmModelComplete(downloadDir)) {
+                Log.d(TAG, "LLM model found in download dir: ${downloadDir.absolutePath}")
+                return downloadDir.absolutePath
+            }
+
+            // 2. 检查传统缓存目录
+            val destDir = File(context.filesDir, info.cacheDirName)
+            if (destDir.exists() && isLlmModelComplete(destDir)) {
+                Log.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
+                return destDir.absolutePath
+            }
         }
 
-        copyAssetDir(info.assetDir, destDir, context)
-        Log.i(TAG, "LLM model prepared: ${destDir.absolutePath}")
-        return destDir.absolutePath
+        // 4. 动态发现：直接在 llm_models/<key>/ 查找（支持任意下载的模型）
+        val dynamicDir = File(context.filesDir, "llm_models/$key")
+        if (dynamicDir.exists() && isLlmModelComplete(dynamicDir)) {
+            Log.d(TAG, "LLM model found dynamically: ${dynamicDir.absolutePath}")
+            return dynamicDir.absolutePath
+        }
+
+        // 5. 规范化 key 尝试
+        val normalizedKeys = generateNormalizedKeys(key)
+        for (normalizedKey in normalizedKeys) {
+            val normalizedDir = File(context.filesDir, "llm_models/$normalizedKey")
+            if (normalizedDir.exists() && isLlmModelComplete(normalizedDir)) {
+                Log.d(TAG, "LLM model found with normalized key '$normalizedKey': ${normalizedDir.absolutePath}")
+                return normalizedDir.absolutePath
+            }
+        }
+
+        throw IllegalArgumentException("Unknown LLM model key: $key")
     }
 
     /**
-     * 检查 LLM 模型是否已缓存
+     * 检查 LLM 模型是否已缓存（支持下载目录和传统缓存目录）
      */
     fun isLlmModelCached(key: String, context: Context): Boolean {
-        val info = LLM_MODEL_REGISTRY[key] ?: return false
-        val destDir = File(context.filesDir, info.cacheDirName)
-        return destDir.exists() && isLlmModelComplete(destDir)
+        val info = LLM_MODEL_REGISTRY[key]
+
+        if (info != null) {
+            // 检查下载目录
+            val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
+            if (downloadDir.exists() && isLlmModelComplete(downloadDir)) {
+                Log.d(TAG, "Model found in download dir: ${downloadDir.absolutePath}")
+                return true
+            }
+
+            // 检查传统缓存目录
+            val destDir = File(context.filesDir, info.cacheDirName)
+            if (destDir.exists() && isLlmModelComplete(destDir)) {
+                Log.d(TAG, "Model found in cache dir: ${destDir.absolutePath}")
+                return true
+            }
+        }
+
+        // 动态发现
+        val dynamicDir = File(context.filesDir, "llm_models/$key")
+        if (dynamicDir.exists() && isLlmModelComplete(dynamicDir)) {
+            Log.d(TAG, "Model found dynamically: ${dynamicDir.absolutePath}")
+            return true
+        }
+
+        // 规范化 key 尝试
+        val normalizedKeys = generateNormalizedKeys(key)
+        for (normalizedKey in normalizedKeys) {
+            val normalizedDir = File(context.filesDir, "llm_models/$normalizedKey")
+            if (normalizedDir.exists() && isLlmModelComplete(normalizedDir)) {
+                Log.d(TAG, "Model found with normalized key: ${normalizedDir.absolutePath}")
+                return true
+            }
+        }
+
+        Log.w(TAG, "Model not available: $key")
+        return false
+    }
+
+    /**
+     * 生成规范化的 key 变体（处理下划线/点号/连字符差异）
+     */
+    private fun generateNormalizedKeys(key: String): List<String> {
+        val result = mutableSetOf<String>()
+        result.add(key.replace("_", "-"))
+        result.add(key.replace("-", "_"))
+        result.add(key.replace(".", "-"))
+        result.add(key.replace(".", "_"))
+        result.add(key.replace("_", "-").replace(".", "-"))
+        result.add(key.replace("-", "_").replace(".", "_"))
+        return result.filter { it != key }.toList()
     }
 
     private fun isLlmModelComplete(dir: File): Boolean {
         return dir.walkTopDown().any { it.name.endsWith(".mnn") }
     }
 
-    private fun copyAssetDir(assetPath: String, destDir: File, context: Context) {
-        destDir.mkdirs()
-        val assets = context.assets
-        val files = assets.list(assetPath) ?: return
-
-        for (file in files) {
-            val srcPath = "$assetPath/$file"
-            val dstFile = File(destDir, file)
-
-            if (assets.list(srcPath)?.isNotEmpty() == true) {
-                copyAssetDir(srcPath, dstFile, context)
-            } else {
-                assets.open(srcPath).use { input ->
-                    dstFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-                Log.d(TAG, "Copied: $srcPath -> ${dstFile.absolutePath}")
-            }
-        }
-    }
-
-    // ── 内部实现 ─────────────────────────────────────────────
-
+    /**
+     * 将单个 asset 文件复制到缓存目录
+     */
     private fun copyAssetToCache(assetPath: String, cacheName: String, context: Context): File {
         val file = File(context.filesDir, cacheName)
 

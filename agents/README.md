@@ -1,7 +1,9 @@
 # PicMe AI Agent 团队执行手册
 
-> **定位**：本文件为 OpenClaw / kimi-cli 会话内的**快速执行参考**，不重复根目录 `AGENTS.md` 的治理规范。  
+> **定位**：本文件为 AI 协作开发会话内的**快速执行参考**，不重复根目录 `AGENTS.md` 的治理规范。  
 > **完整治理规则**：`../AGENTS.md`（角色定义、全局红线、文档体系、审计清单）
+
+**项目背景**：PicMe 是一个以 AI Coding 范式与音视频技术为探索目标的技术研究项目，不追求商业化。开发流程 Agent 化（CO/PM/RD/CR/QA）与应用内 Agent Runtime 是对 AI Coding 范式的双重验证。
 
 ## 1. 角色速查
 

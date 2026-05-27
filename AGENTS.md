@@ -2,6 +2,8 @@
 
 > 本文档为**顶层治理文档**，只保留跨模块通用规则。具体需求、交互、技术细节分别查阅 `PRODUCT.md`、`docs/FEATURES.md`、模块 `AGENTS.md` 与专项技术文档。
 
+**项目背景**：PicMe 是一个以 AI Coding 范式与音视频技术为探索目标的技术研究项目。App 模块实验端侧 Agent 机制和以 Agent 为中心的应用架构；beauty-engine 模块实验音视频及美颜技术。相机产品是这两个方向交汇的具体 Case。本项目不追求商业化，核心价值在于技术探索与工程实践。
+
 ## 1. 角色与运行模式
 
 | 角色 | 职责 |
@@ -108,9 +110,10 @@ docs/FEATURES.md (How: 交互与体验规则)
 
 | 类型 | 文档 |
 |------|------|
-| **模块规范** | `app/src/main/java/com/picme/core/AGENTS.md`, `app/src/main/java/com/picme/core/designsystem/AGENTS.md`, `app/src/main/java/com/picme/data/AGENTS.md`, `app/src/main/java/com/picme/di/AGENTS.md`, `app/src/main/java/com/picme/features/camera/AGENTS.md`, `app/src/main/java/com/picme/features/gallery/AGENTS.md`, `app/src/main/java/com/picme/features/editor/AGENTS.md`, `app/src/main/java/com/picme/features/settings/AGENTS.md`, `app/src/main/java/com/picme/features/debug/AGENTS.md`, `beauty-engine/AGENTS.md` |
+| **模块规范** | `app/src/main/java/com/picme/core/AGENTS.md`, `app/src/main/java/com/picme/core/designsystem/AGENTS.md`, `app/src/main/java/com/picme/data/AGENTS.md`, `app/src/main/java/com/picme/di/AGENTS.md`, `app/src/main/java/com/picme/domain/agent/AGENTS.md`, `app/src/main/java/com/picme/features/camera/AGENTS.md`, `app/src/main/java/com/picme/features/gallery/AGENTS.md`, `app/src/main/java/com/picme/features/editor/AGENTS.md`, `app/src/main/java/com/picme/features/settings/AGENTS.md`, `app/src/main/java/com/picme/features/debug/AGENTS.md`, `beauty-engine/AGENTS.md` |
 | **技术专项** | `docs/BIG_BEAUTY_TECH_SPEC.md`, `docs/CAMERA_PREVIEW_TECH_SPEC.md`, `docs/BEAUTY_ENGINE_FALLBACK.md`, `docs/FACE_DETECTION_ENGINE_ARCHITECTURE.md`, `docs/ADR-001-beauty-engine-architecture.md`, `docs/ADR-002-opengl-offscreen-unified-pipeline.md`, `docs/ADR-003-coordinate-system-management.md` |
 | **AI 工具配置** | `AI_TOOLS.md`, `.kimi/AGENTS.md`, `.openclaw/workspace/`, `.qoder/skills/` |
+| **Agent 协作角色** | `agents/README.md`, `agents/co_agent.md`, `agents/rd_agent.md`, `agents/pm_agent.md`, `agents/review_agent.md`, `agents/qa_agent.md` |
 | **写作规范** | `docs/AGENTS_SPEC.md`, `PRODUCT.md`, `docs/FEATURES.md` |
 
 ## 7. 交付审计清单

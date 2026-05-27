@@ -1,6 +1,11 @@
 ---
 name: mnn-landmark-diagnosis
-description: Diagnose and fix MNN/ONNX inference engine alignment issues for face landmark detection in PicMe. Use when MNN landmark results are unstable, drifting, or inconsistent with ONNX baseline, when integrating new inference engines, or when debugging NCHW/NHWC dimension type mismatches in MNN.
+description: 诊断和修复 MNN/ONNX 推理引擎在人脸关键点检测中的对齐问题。
+version: 1.1.0
+created: 2026-05-03
+updated: 2026-05-25
+maintainer: [RD] 全栈工程师
+tags: [mnn, onnx, landmark, inference, alignment, nchw]
 ---
 
 # MNN Landmark 诊断与修复 Skill
@@ -262,6 +267,4 @@ adb logcat -d | grep "MNN vs ONNX"
 
 ## 附加资源
 
-- 详细技术文档: [docs/MNN_LANDMARK_DIAGNOSIS.md](../../../docs/MNN_LANDMARK_DIAGNOSIS.md)
-- 完整示例: [examples.md](examples.md)
-- 深度参考: [reference.md](reference.md)
+- 详细技术文档: [docs/MNN_LANDMARK_DIAGNOSIS.md](docs/MNN_LANDMARK_DIAGNOSIS.md)

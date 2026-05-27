@@ -34,6 +34,7 @@ import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
+import com.picme.features.settings.LlmModelManagerScreen
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
@@ -68,7 +69,10 @@ class MainActivity : ComponentActivity() {
                 factory = app.container.createMediaViewModelFactory()
             )
             val settingsViewModel: SettingsViewModel = viewModel(
-                factory = SettingsViewModelFactory(app.container.userPreferencesRepository)
+                factory = SettingsViewModelFactory(
+                    app.container.userPreferencesRepository,
+                    app.container.llmModelDownloadManager
+                )
             )
 
             val themeMode by settingsViewModel.themeMode.collectAsState()
@@ -137,6 +141,13 @@ class MainActivity : ComponentActivity() {
                             }
                             composable(Screen.Settings.route) {
                                 SettingsScreen(
+                                    viewModel = settingsViewModel,
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToLlmModelManager = { navController.navigate(Screen.LlmModelManager.route) }
+                                )
+                            }
+                            composable(Screen.LlmModelManager.route) {
+                                LlmModelManagerScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() }
                                 )
