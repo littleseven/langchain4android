@@ -4,6 +4,51 @@
 
 ---
 
+## 功能覆盖矩阵
+
+### 当前已接入功能（✅）
+
+| 功能域 | 具体功能 | 命令类型 | Capability | 状态 |
+|--------|----------|----------|------------|------|
+| **相机控制** | 拍照 | `CapturePhoto` | CameraCapability | ✅ |
+| | 开始/停止录像 | `ToggleRecording` | CameraCapability | ✅ |
+| | 翻转摄像头 | `FlipCamera` | CameraCapability | ✅ |
+| | 变焦调节 | `AdjustZoom` | CameraCapability | ✅ |
+| | 曝光调节 | `AdjustExposure` | CameraCapability | ✅ |
+| | 切换拍摄模式 | `SwitchMode` | CameraCapability | ✅ |
+| **美颜** | 磨皮/美白调节 | `AdjustBeauty` | CameraCapability | ✅ |
+| | 瘦脸/大眼调节 | `AdjustBeauty` | CameraCapability | ✅ |
+| | 唇色/腮红调节 | `AdjustBeauty` | CameraCapability | ✅ |
+| **滤镜/风格** | 切换滤镜 | `SwitchFilter` | CameraCapability | ✅ |
+| | 切换风格特效 | `SwitchStyle` | CameraCapability | ✅ |
+| | 切换场景模式 | `SwitchScene` | CameraCapability | ✅ |
+| | 切换画幅比例 | `SwitchRatio` | CameraCapability | ✅ |
+| **对话** | 文本回复/聊天 | `TextReply` | CameraCapability | ✅ |
+
+### V2 新增功能（🆕）
+
+| 功能域 | 具体功能 | 命令类型 | Capability | 优先级 |
+|--------|----------|----------|------------|--------|
+| **Gallery** | 查看照片 | `ViewMedia` | GalleryCapability | P0 |
+| | 删除照片 | `DeleteMedia` | GalleryCapability | P0 |
+| | 分享照片 | `ShareMedia` | GalleryCapability | P1 |
+| | 收藏照片 | `FavoriteMedia` | GalleryCapability | P2 |
+| | 照片搜索 | `SearchMedia` | GalleryCapability | P2 |
+| | 批量选择 | `SelectMedia` | GalleryCapability | P2 |
+| | 切换视图模式 | `SwitchViewMode` | GalleryCapability | P2 |
+| **设置** | 切换主题 | `ChangeTheme` | SettingsCapability | P1 |
+| | 切换语言 | `ChangeLanguage` | SettingsCapability | P1 |
+| | 下载模型 | `DownloadModel` | SettingsCapability | P1 |
+| | 切换人脸引擎 | `SwitchFaceEngine` | SettingsCapability | P2 |
+| | 开关调试模式 | `ToggleSetting` | SettingsCapability | P2 |
+| **导航** | 切换页面 | `NavigateTo` | NavigationCapability | P0 |
+| | 返回上一页 | `GoBack` | NavigationCapability | P0 |
+| **编辑** | 进入编辑 | `ApplyEdit` | EditCapability | P1 |
+| | 保存编辑 | `SaveEdit` | EditCapability | P1 |
+| | 撤销/重做 | `UndoEdit`/`RedoEdit` | EditCapability | P2 |
+
+---
+
 ## 架构图
 
 ```
@@ -375,6 +420,54 @@ sealed class AgentCommand {
     data class Error(val reason: String) : AgentCommand()
 }
 ```
+
+---
+
+## 架构问题诊断与改进方向
+
+### 当前架构问题
+
+1. **单一场景限制**
+   - AgentContext 仅支持 CAMERA/GALLERY/PHOTO_EDIT 三个场景
+   - 没有 SETTINGS/EDITOR 等场景支持
+   - 场景切换需要手动设置，Agent 无法自动感知
+
+2. **Capability 单一**
+   - 目前只有 CameraCapability
+   - Gallery、Settings、Navigation 等功能域无对应 Capability
+   - 所有回调都注册在 CameraCapability，耦合严重
+
+3. **System Prompt 硬编码**
+   - AgentOrchestrator 中硬编码 system prompt
+   - 不同场景需要不同的 prompt，目前无法动态切换
+   - 新增命令需要修改核心类
+
+4. **命令解析局限**
+   - 仅支持相机相关命令解析
+   - Gallery/Settings 等域的命令无解析逻辑
+
+5. **UI 与 Agent 绑定**
+   - AiAgentPanel 仅在 CameraScreen 中
+   - Gallery/Settings 等页面无 Agent 入口
+
+### V2 改进方向
+
+1. **多 Capability 架构**
+   - 新增 GalleryCapability、SettingsCapability、NavigationCapability
+   - 每个 Capability 自包含命令处理和执行逻辑
+
+2. **动态场景感知**
+   - Agent 自动感知当前页面（通过 Navigation 监听）
+   - 根据场景动态加载对应的 system prompt
+
+3. **全局 Agent 入口**
+   - Agent Panel 作为全局组件，可在任意页面唤起
+   - 支持悬浮球或手势触发
+
+4. **分层 System Prompt**
+   - 基础 prompt（通用能力）
+   - 场景 prompt（特定页面能力）
+   - 动态组合生成完整 prompt
 
 ---
 
