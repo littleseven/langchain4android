@@ -395,7 +395,7 @@ grep -r "leftEye\|rightEye" app/src/ --include="*.kt" | grep -v "imageLeft\|imag
 - `docs/face-detection/INSIGHTFACE_106_MAPPING.md`
 - `docs/BIG_BEAUTY_TECH_SPEC.md`
 - `docs/CAMERA_PREVIEW_TECH_SPEC.md`
-- `.lingma/skills/av-gl-expert/SKILL.md`
+- `.qoder/skills/av-gl-expert/SKILL.md`
 
 **修改示例**：
 

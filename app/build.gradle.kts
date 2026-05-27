@@ -49,6 +49,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    androidResources {
+        noCompress += "task"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -72,14 +76,15 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            isShrinkResources = true
+            isShrinkResources = false // 禁用资源压缩，避免大模型文件导致 AAPT2 失败
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
             signingConfig = signingConfigs.getByName("release")
         }
         debug {
+            isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
         }
     }

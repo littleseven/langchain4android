@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -143,6 +144,7 @@ fun MediaPager(
     var editSettings by remember { mutableStateOf(BeautySettings()) }
     var processedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var loadedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var showAiChatPanel by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -448,6 +450,8 @@ fun MediaPager(
                     editSettings = BeautySettings()
                     processedBitmap = null
                     onClearEditState()
+                } else if (showAiChatPanel) {
+                    showAiChatPanel = false
                 } else {
                     onClose()
                 }
@@ -456,6 +460,8 @@ fun MediaPager(
             showLandmarkAction = currentAsset?.type == MediaType.PHOTO && !isEditing,
             showLandmarkOverlay = showLandmarkOverlay,
             isEditing = isEditing,
+            showAiChat = true,
+            onToggleAiChat = { showAiChatPanel = !showAiChatPanel },
             onToggleInfo = {
                 Log.d("PicMe:UX", "Toggle info visibility via button")
                 showInfo = !showInfo
@@ -542,6 +548,18 @@ fun MediaPager(
                     processedBitmap = null
                     loadedBitmap = null
                     onClearEditState()
+                }
+            )
+        }
+
+        // AI Chat Panel for Natural Language Image Editing
+        if (showAiChatPanel && currentAsset?.type == MediaType.PHOTO) {
+            com.picme.features.gallery.components.AiChatPanel(
+                currentAsset = currentAsset,
+                onDismiss = { showAiChatPanel = false },
+                onApplyEdit = { bitmap ->
+                    onSavePhoto(bitmap)
+                    showAiChatPanel = false
                 }
             )
         }
@@ -825,6 +843,8 @@ private fun mediaPagerTopControls(
     showLandmarkAction: Boolean,
     showLandmarkOverlay: Boolean,
     isEditing: Boolean,
+    showAiChat: Boolean,
+    onToggleAiChat: () -> Unit,
     onToggleInfo: () -> Unit,
     onToggleLandmarks: () -> Unit,
     onStartEdit: () -> Unit,
@@ -872,6 +892,21 @@ private fun mediaPagerTopControls(
                         Icons.Rounded.Face,
                         contentDescription = stringResource(R.string.landmark_overlay),
                         tint = if (showLandmarkOverlay) Color.Black else Color.White
+                    )
+                }
+            }
+
+            if (showAiChat && !isEditing) {
+                IconButton(
+                    onClick = onToggleAiChat,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Black.copy(alpha = 0.5f)
+                    )
+                ) {
+                    Icon(
+                        Icons.Outlined.Chat,
+                        contentDescription = stringResource(R.string.ai_chat_edit),
+                        tint = Color.White
                     )
                 }
             }
