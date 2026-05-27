@@ -44,7 +44,7 @@ import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
 import com.picme.features.camera.agent.AiAgentButton
-import com.picme.features.camera.agent.AiAgentPanel
+import com.picme.features.camera.agent.AiAgentDialogPanel
 import com.picme.features.camera.agent.AiAgentPanelState
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.camera.voice.VoiceWakeIndicator
@@ -196,37 +196,36 @@ internal fun CameraPreviewContent(
         // 同步语音协调器状态
         onUpdateVoiceCoordinatorState?.invoke()
 
-        // AI Agent 按钮与面板
-        if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null) {
-            // AI Agent 面板：底部 Sheet 样式
-            AiAgentPanel(
-                state = aiAgentPanelState,
-                useCase = aiAgentUseCase,
-                currentState = AiAgentUseCase.CameraStateSnapshot(
-                    beautySettings = uiState.beautySettings,
-                    filterType = uiState.selectedFilter,
-                    styleFilter = uiState.selectedStyleFilter,
-                    zoomRatio = uiState.zoomRatio,
-                    exposureCompensation = uiState.exposureCompensation,
-                    captureMode = uiState.captureMode,
-                    isRecording = uiState.isRecording
-                ),
-                onCommand = { command -> onAiAgentCommand(command) },
-                voiceCoordinator = voiceCoordinator,
-                modifier = Modifier.align(Alignment.BottomCenter)
+        // AI Agent 触发按钮：左侧底部控制栏上方
+        if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null && !aiAgentPanelState.isVisible) {
+            AiAgentButton(
+                onClick = { aiAgentPanelState.toggle() },
+                isActive = aiAgentPanelState.isVisible,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 160.dp)
             )
-
-            // AI Agent 触发按钮：底部左侧，避免与其他控制按钮重叠
-            if (!aiAgentPanelState.isVisible) {
-                AiAgentButton(
-                    onClick = { aiAgentPanelState.toggle() },
-                    isActive = aiAgentPanelState.isVisible,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 16.dp, bottom = 120.dp)
-                )
-            }
         }
+    }
+
+    // AI Agent 面板：使用独立 Dialog 渲染
+    // 输入法弹出时仅影响 Dialog 内部布局，Camera 预览页完全不受影响
+    if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null) {
+        AiAgentDialogPanel(
+            state = aiAgentPanelState,
+            useCase = aiAgentUseCase,
+            currentState = AiAgentUseCase.CameraStateSnapshot(
+                beautySettings = uiState.beautySettings,
+                filterType = uiState.selectedFilter,
+                styleFilter = uiState.selectedStyleFilter,
+                zoomRatio = uiState.zoomRatio,
+                exposureCompensation = uiState.exposureCompensation,
+                captureMode = uiState.captureMode,
+                isRecording = uiState.isRecording
+            ),
+            onCommand = { command -> onAiAgentCommand(command) },
+            voiceCoordinator = voiceCoordinator
+        )
     }
 }
 

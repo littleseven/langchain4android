@@ -10,6 +10,7 @@ import com.picme.data.remote.kimi.KimiChatRequest
 import com.picme.data.remote.kimi.KimiMessage
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
+import com.picme.domain.agent.capability.toV2
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
@@ -48,9 +49,9 @@ class AiAgentUseCase(
     private val tag = "PicMe:AiAgent"
 
     /**
-     * 新的 Agent Runtime 编排器
+     * Agent Runtime 编排器（单例）
      */
-    private val orchestrator = AgentOrchestrator(context)
+    private val orchestrator = AgentOrchestrator.getInstance(context)
 
     /**
      * 远程 API 客户端（仅在 REMOTE 模式下使用）
@@ -85,7 +86,7 @@ class AiAgentUseCase(
      * 注册相机 Capability
      */
     fun registerCameraCapability(capability: CameraCapability) {
-        orchestrator.registerCapability(capability)
+        orchestrator.registerCapability(capability.toV2())
     }
 
     /**
@@ -140,9 +141,14 @@ class AiAgentUseCase(
             memorySessionId = "camera"
         )
 
-        // 优先本地推理
+        // 优先本地推理（传入高质量自定义 system prompt）
         if (currentMode == AiAgentMode.LOCAL || currentMode == AiAgentMode.OFF) {
-            val result = orchestrator.processUserInput(userInput, agentContext)
+            val systemPrompt = buildSystemPrompt(currentState)
+            val result = orchestrator.processUserInput(
+                input = userInput,
+                agentContext = agentContext,
+                customSystemPrompt = systemPrompt
+            )
             return@withContext result.map { action ->
                 mapAgentActionToLegacyCommand(action)
             }
@@ -258,41 +264,52 @@ class AiAgentUseCase(
 
     private fun buildSystemPrompt(state: CameraStateSnapshot): String {
         return buildString {
-            appendLine("你是PicMe相机的AI助手小觅。你必须用中文回复用户。")
+            appendLine("你是PicMe相机的AI助手小觅。用户通过语音或文字与你交互。")
             appendLine()
-            appendLine("当前相机状态: 美颜=${state.beautySettings.enabled}, 磨皮=${state.beautySettings.smoothing.toInt()}, 美白=${state.beautySettings.whitening.toInt()}, 瘦脸=${state.beautySettings.slimFace.toInt()}, 大眼=${state.beautySettings.bigEyes.toInt()}, 唇色=${state.beautySettings.lipColor.toInt()}, 腮红=${state.beautySettings.blush.toInt()}, 眉毛=${state.beautySettings.eyebrow.toInt()}, 滤镜=${state.filterType.name}, 风格=${state.styleFilter.name}, 变焦=${state.zoomRatio}x, 曝光=${state.exposureCompensation}, 模式=${state.captureMode.name}")
+            appendLine("【绝对规则 - 必须遵守】")
+            appendLine("1. 无论用户要求什么，你的回复永远只输出一行JSON，不要任何其他文字、解释、标点或换行")
+            appendLine("2. 控制相机格式: {\"action\":\"命令名\", 参数...}")
+            appendLine("3. 聊天回复格式: {\"action\":\"text_reply\",\"message\":\"用中文友好回复\"}")
+            appendLine("4. 绝对不要输出<think>标签或思考过程")
+            appendLine("5. 绝对不要输出markdown代码块```")
             appendLine()
-            appendLine("可用滤镜: 无, 徕卡经典, 徕卡鲜艳, 徕卡黑白, 胶片金, 胶片富士, 复古, 冷调, 暖调")
-            appendLine("可用风格: 无, 卡通, 素描, 色调分离, 浮雕, 交叉线")
-            appendLine("可用模式: 拍照, 录像, 人像, 专业, 文档")
+            appendLine("【当前相机状态】")
+            appendLine("美颜=${if (state.beautySettings.enabled) "开" else "关"}, 磨皮=${state.beautySettings.smoothing.toInt()}, 美白=${state.beautySettings.whitening.toInt()}, 瘦脸=${state.beautySettings.slimFace.toInt()}, 大眼=${state.beautySettings.bigEyes.toInt()}, 唇色=${state.beautySettings.lipColor.toInt()}, 腮红=${state.beautySettings.blush.toInt()}, 眉毛=${state.beautySettings.eyebrow.toInt()}")
+            appendLine("滤镜=${state.filterType.name}, 风格=${state.styleFilter.name}, 变焦=${state.zoomRatio}x, 曝光=${state.exposureCompensation}, 模式=${state.captureMode.name}")
             appendLine()
-            appendLine("如果用户想控制相机，输出JSON指令:")
-            appendLine("1. 调整美颜: {\"action\":\"adjust_beauty\",\"smoothing\":0-100,\"whitening\":0-100,\"slim_face\":-50~50,\"big_eyes\":0-100,\"lip_color\":0-100,\"blush\":0-100,\"eyebrow\":0-100}")
-            appendLine("2. 切换滤镜: {\"action\":\"switch_filter\",\"filter\":\"NAME\"}")
-            appendLine("3. 切换风格: {\"action\":\"switch_style\",\"style\":\"NAME\"}")
-            appendLine("4. 切换场景: {\"action\":\"switch_scene\",\"scene\":\"night|moon|none\"}")
-            appendLine("5. 切换比例: {\"action\":\"switch_ratio\",\"ratio\":\"4:3|16:9|full\"}")
-            appendLine("6. 调整曝光: {\"action\":\"adjust_exposure\",\"exposure\":-2~2}")
-            appendLine("7. 调整变焦: {\"action\":\"adjust_zoom\",\"zoom\":0.5~10.0}")
-            appendLine("8. 翻转摄像头: {\"action\":\"flip_camera\"}")
-            appendLine("9. 拍照: {\"action\":\"capture\"}")
-            appendLine("10. 切换录像: {\"action\":\"toggle_recording\"}")
-            appendLine("11. 切换模式: {\"action\":\"switch_mode\",\"mode\":\"PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT\"}")
-            appendLine("12. 文本回复: {\"action\":\"text_reply\",\"message\":\"回复内容\"}")
+            appendLine("【可用命令】")
+            appendLine("adjust_beauty: smoothing=0~100(磨皮), whitening=0~100(美白), slim_face=-50~50(瘦脸), big_eyes=0~100(大眼), lip_color=0~100(唇色), blush=0~100(腮红), eyebrow=0~100(眉毛)")
+            appendLine("switch_filter: filter=NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
+            appendLine("switch_style:  style=NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
+            appendLine("switch_scene:  scene=night|moon|none")
+            appendLine("switch_ratio:  ratio=4:3|16:9|full")
+            appendLine("adjust_exposure: exposure=-2~2")
+            appendLine("adjust_zoom:   zoom=0.5~10.0")
+            appendLine("flip_camera:   翻转前后摄像头")
+            appendLine("capture:       拍照")
+            appendLine("toggle_recording: 开始/停止录像")
+            appendLine("switch_mode:   mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
+            appendLine("text_reply:    普通聊天回复")
             appendLine()
-            appendLine("重要规则:")
-            appendLine("- 如果用户只是聊天，直接友好地用中文回复，不要输出JSON")
-            appendLine("- 如果用户想控制相机，只输出JSON，不要输出其他文字")
-            appendLine("- 绝对不要输出<think>标签或思考过程")
-            appendLine("- 所有回复必须使用中文")
-            appendLine("- '自然妆'=磨皮20,美白15,瘦脸5,大眼5。'浓妆'=唇色80,腮红60,眉毛50。相对调整基于当前状态。")
+            appendLine("【中文名称映射 - 用户说左边，你必须输出右边】")
+            appendLine("滤镜: 无→NONE, 徕卡经典→LEICA_CLASSIC, 徕卡鲜艳/徕卡生动→LEICA_VIBRANT, 徕卡黑白/黑白→LEICA_BW")
+            appendLine("滤镜: 胶片金→FILM_GOLD, 胶片富士→FILM_FUJI, 复古/怀旧→VINTAGE, 冷调→COOL, 暖调→WARM")
+            appendLine("风格: 无→NONE, 卡通/漫画→TOON, 素描→SKETCH, 色调分离/海报→POSTERIZE, 浮雕→EMBOSS, 交叉线→CROSSHATCH")
+            appendLine("模式: 拍照→PHOTO, 录像→VIDEO, 人像→PORTRAIT, 专业→PRO, 文档→DOCUMENT")
+            appendLine("场景: 夜景→night, 月亮→moon, 关闭→none")
+            appendLine("比例: 4比3→4:3, 16比9→16:9, 全屏→full")
             appendLine()
-            appendLine("语音控制规则:")
-            appendLine("- 用户可能通过语音与你交互，如果用户说'小觅'或'小觅助手'开头，表示要控制相机")
-            appendLine("- 如果用户只是聊天（没有唤醒词），友好地用中文回复，不要输出JSON")
-            appendLine("- 如果用户说了唤醒词+控制意图，只输出JSON指令")
-            appendLine("- 支持相对调整：'美颜高一点' = 在当前基础上增加适量值")
-            appendLine("- 支持组合指令：'小觅，把滤镜换成复古然后拍照' = 先 switch_filter 再 capture")
+            appendLine("【示例 - 严格模仿】")
+            appendLine("用户: 拍张照片 → {\"action\":\"capture\"}")
+            appendLine("用户: 磨皮调到80 → {\"action\":\"adjust_beauty\",\"smoothing\":80}")
+            appendLine("用户: 切换徕卡黑白 → {\"action\":\"switch_filter\",\"filter\":\"LEICA_BW\"}")
+            appendLine("用户: 你好 → {\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅！\"}")
+            appendLine("用户: 瘦脸开到20 → {\"action\":\"adjust_beauty\",\"slim_face\":20}")
+            appendLine()
+            appendLine("【额外规则】")
+            appendLine("- 相对调整: '高一点'='加一点' → 当前值+15左右; '低一点'='减一点' → 当前值-15左右")
+            appendLine("- 未提及的参数保持当前值不变")
+            appendLine("- 所有message字段必须使用中文")
         }
     }
 
@@ -358,12 +375,12 @@ class AiAgentUseCase(
                 }
                 "switch_filter" -> {
                     val filterName = extractJsonField(json, "filter") ?: "NONE"
-                    val filterType = runCatching { FilterType.valueOf(filterName) }.getOrDefault(FilterType.NONE)
+                    val filterType = resolveFilterType(filterName)
                     AiAgentCommand.SwitchFilter(filterType)
                 }
                 "switch_style" -> {
                     val styleName = extractJsonField(json, "style") ?: "NONE"
-                    val styleFilter = runCatching { StyleFilter.valueOf(styleName) }.getOrDefault(StyleFilter.NONE)
+                    val styleFilter = resolveStyleFilter(styleName)
                     AiAgentCommand.SwitchStyle(styleFilter)
                 }
                 "switch_scene" -> {
@@ -416,6 +433,41 @@ class AiAgentUseCase(
     private fun extractJsonInt(json: String, key: String): Int? {
         val regex = """"$key"\s*:\s*(-?\d+)""".toRegex()
         return regex.find(json)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    /**
+     * 将 LLM 输出的 filter 名称解析为 FilterType（支持别名/模糊匹配）
+     */
+    private fun resolveFilterType(name: String): FilterType {
+        val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
+        return when (normalized) {
+            "NONE" -> FilterType.NONE
+            "LEICA_CLASSIC" -> FilterType.LEICA_CLASSIC
+            "LEICA_VIBRANT", "VIBRANT", "LEICA_VIVID", "VIVID" -> FilterType.LEICA_VIBRANT
+            "LEICA_BW", "BW", "BLACK_WHITE", "LEICA_MONOCHROME", "MONOCHROME" -> FilterType.LEICA_BW
+            "FILM_GOLD" -> FilterType.FILM_GOLD
+            "FILM_FUJI" -> FilterType.FILM_FUJI
+            "VINTAGE", "RETRO", "OLD" -> FilterType.VINTAGE
+            "COOL", "COLD" -> FilterType.COOL
+            "WARM" -> FilterType.WARM
+            else -> runCatching { FilterType.valueOf(normalized) }.getOrDefault(FilterType.NONE)
+        }
+    }
+
+    /**
+     * 将 LLM 输出的 style 名称解析为 StyleFilter（支持别名/模糊匹配）
+     */
+    private fun resolveStyleFilter(name: String): StyleFilter {
+        val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
+        return when (normalized) {
+            "NONE" -> StyleFilter.NONE
+            "TOON", "CARTOON", "COMIC" -> StyleFilter.TOON
+            "SKETCH" -> StyleFilter.SKETCH
+            "POSTERIZE", "POSTER" -> StyleFilter.POSTERIZE
+            "EMBOSS" -> StyleFilter.EMBOSS
+            "CROSSHATCH", "CROSS_HATCH" -> StyleFilter.CROSSHATCH
+            else -> runCatching { StyleFilter.valueOf(normalized) }.getOrDefault(StyleFilter.NONE)
+        }
     }
 
     companion object {

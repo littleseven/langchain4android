@@ -56,7 +56,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.core.common.Logger
-import com.picme.domain.agent.AgentOrchestratorV2
+import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
@@ -122,7 +122,7 @@ fun GlobalAgentPanel(
 ) {
     val context = LocalContext.current
     val state = rememberGlobalAgentPanelState()
-    val orchestrator = remember { AgentOrchestratorV2.getInstance(context) }
+    val orchestrator = remember { AgentOrchestrator.getInstance(context) }
     val sceneManager = remember { SceneManager.getInstance() }
     val currentScene by sceneManager.currentScene.collectAsState()
     val agentScene = remember(currentScene) {
@@ -155,7 +155,7 @@ fun GlobalAgentPanel(
 @Composable
 fun GlobalAgentPanel(
     state: GlobalAgentPanelState,
-    orchestrator: AgentOrchestratorV2,
+    orchestrator: AgentOrchestrator,
     agentContext: AgentContext,
     pageContext: PageContext? = null,
     modifier: Modifier = Modifier
@@ -386,7 +386,7 @@ private fun AgentInputArea(
 private suspend fun sendMessage(
     text: String,
     state: GlobalAgentPanelState,
-    orchestrator: AgentOrchestratorV2,
+    orchestrator: AgentOrchestrator,
     agentContext: AgentContext,
     pageContext: PageContext?
 ) {
