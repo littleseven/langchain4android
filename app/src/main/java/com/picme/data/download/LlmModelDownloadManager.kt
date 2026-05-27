@@ -20,6 +20,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
@@ -71,6 +72,16 @@ class LlmModelDownloadManager(private val context: Context) {
         "config.json",
         "tts.mnn",
         "vocab.txt"
+    )
+
+    /**
+     * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
+     */
+    private val LLM_MODEL_OPTIONAL_FILES = listOf(
+        "configuration.json",
+        "llm_config.json",
+        "README.md",
+        "embeddings_bf16.bin"
     )
 
     /**
@@ -459,9 +470,49 @@ class LlmModelDownloadManager(private val context: Context) {
 
             var totalDownloaded = 0L
 
-            // 优先使用模型配置中的文件列表（从模型市场或本地配置获取）
-            val expectedFiles = config.files.takeIf { it.isNotEmpty() } ?: getModelFiles(modelId)
-            for (fileName in expectedFiles) {
+            // 优先从 ModelScope API 动态获取文件列表（包含完整文件信息和SHA256校验值）
+            // 如果 API 失败，则回退到模型配置中的文件列表或默认列表
+            val fileInfos = run {
+                // 1. 首先尝试从 ModelScope API 获取（最准确，包含所有文件和元数据）
+                val apiFileInfos = fetchModelFileInfosFromModelScope(repoPath)
+                if (apiFileInfos.isNotEmpty()) {
+                    Logger.i("PicMe:Download", "Using ${apiFileInfos.size} files from ModelScope API")
+                    return@run apiFileInfos
+                }
+
+                // 2. API 失败，尝试使用配置文件中的文件列表
+                if (config.files.isNotEmpty()) {
+                    Logger.w("PicMe:Download", "API failed, using files from config: ${config.files}")
+                    return@run config.files.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
+                }
+
+                // 3. 最后回退到默认文件列表
+                val defaultFiles = getModelFiles(modelId)
+                Logger.w("PicMe:Download", "API and config failed, using default files: $defaultFiles")
+                return@run defaultFiles.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
+            }
+
+            // 从 API 获取的文件列表已经是完整列表（包含必需和可选文件）
+            // 确定每个文件是否是可选文件
+            val allFileInfos = fileInfos.map { fileInfo ->
+                fileInfo to (fileInfo.name in LLM_MODEL_OPTIONAL_FILES)
+            }.filter { (fileInfo, _) ->
+                // 排除隐藏文件（如 .gitattributes）
+                !fileInfo.name.startsWith(".")
+            }.map { it.first }
+
+            if (allFileInfos.isEmpty()) {
+                throw IOException("No files to download for model: $modelId")
+            }
+
+            Logger.i("PicMe:Download", "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
+
+            for (fileInfo in allFileInfos) {
+                val fileName = fileInfo.name
+                val expectedSize = fileInfo.size
+                val expectedSha256 = fileInfo.sha256
+                val isOptional = fileName in LLM_MODEL_OPTIONAL_FILES
+
                 if (activeDownloads[modelId]?.isCanceled() == true) {
                     throw IOException("Download cancelled")
                 }
@@ -469,13 +520,52 @@ class LlmModelDownloadManager(private val context: Context) {
                 val url = buildModelScopeUrl(repoPath, fileName)
                 val destFile = File(modelDir, fileName)
 
-                Logger.d("PicMe:Download", "Downloading $fileName from $url")
-
+                // 检查文件是否已完整下载
                 if (destFile.exists() && destFile.length() > 0) {
-                    totalDownloaded += destFile.length()
-                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
-                    continue
+                    val actualSize = destFile.length()
+
+                    // 1. 校验文件大小
+                    if (expectedSize > 0 && actualSize == expectedSize) {
+                        // 大小匹配，进一步校验 SHA256（如果提供了）
+                        if (!expectedSha256.isNullOrEmpty()) {
+                            if (verifyFileSha256(destFile, expectedSha256)) {
+                                Logger.d("PicMe:Download", "File verified (size + SHA256): $fileName ($actualSize bytes)")
+                                totalDownloaded += actualSize
+                                emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                                continue
+                            } else {
+                                Logger.w("PicMe:Download", "SHA256 mismatch for $fileName, re-downloading")
+                                destFile.delete()
+                            }
+                        } else {
+                            // 没有 SHA256，仅大小校验通过
+                            Logger.d("PicMe:Download", "File size matches: $fileName ($actualSize bytes)")
+                            totalDownloaded += actualSize
+                            emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                            continue
+                        }
+                    } else if (expectedSize > 0 && actualSize != expectedSize) {
+                        // 大小不匹配，删除重新下载
+                        Logger.w("PicMe:Download", "File size mismatch for $fileName: expected=$expectedSize, actual=$actualSize, re-downloading")
+                        destFile.delete()
+                    } else if (expectedSize == 0L) {
+                        // API 没有返回大小信息，尝试 SHA256 校验
+                        if (!expectedSha256.isNullOrEmpty() && verifyFileSha256(destFile, expectedSha256)) {
+                            Logger.d("PicMe:Download", "File verified (SHA256 only): $fileName ($actualSize bytes)")
+                            totalDownloaded += actualSize
+                            emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                            continue
+                        } else {
+                            // 无法校验，假设文件完整
+                            Logger.d("PicMe:Download", "File exists (unknown size): $fileName ($actualSize bytes)")
+                            totalDownloaded += actualSize
+                            emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                            continue
+                        }
+                    }
                 }
+
+                Logger.d("PicMe:Download", "Downloading $fileName from $url (expected: $expectedSize bytes)")
 
                 val request = Request.Builder()
                     .url(url)
@@ -487,6 +577,11 @@ class LlmModelDownloadManager(private val context: Context) {
                 call.execute().use { response ->
                     Logger.d("PicMe:Download", "Response: HTTP ${response.code} for $fileName")
                     if (!response.isSuccessful) {
+                        // 可选文件404时跳过，不报错
+                        if (isOptional && response.code == 404) {
+                            Logger.d("PicMe:Download", "Optional file not found (404), skipping: $fileName")
+                            return@use
+                        }
                         val errorBody = response.body?.string()?.take(200) ?: ""
                         throw IOException("HTTP ${response.code} for $fileName, url=$url, body=$errorBody")
                     }
@@ -523,9 +618,46 @@ class LlmModelDownloadManager(private val context: Context) {
                 }
             }
 
+            // 下载完成后验证所有非可选文件的完整性
+            val failedFiles = mutableListOf<String>()
+            for (fileInfo in allFileInfos) {
+                val isOptional = fileInfo.name in LLM_MODEL_OPTIONAL_FILES
+                val destFile = File(modelDir, fileInfo.name)
+
+                if (!destFile.exists()) {
+                    if (!isOptional) {
+                        failedFiles.add("${fileInfo.name} (missing)")
+                    }
+                    continue
+                }
+
+                // 1. 校验文件大小
+                if (fileInfo.size > 0 && destFile.length() != fileInfo.size) {
+                    if (!isOptional) {
+                        failedFiles.add("${fileInfo.name} (size mismatch: ${destFile.length()} vs ${fileInfo.size})")
+                    }
+                    continue
+                }
+
+                // 2. 校验 SHA256（如果 API 提供了）
+                if (!fileInfo.sha256.isNullOrEmpty()) {
+                    if (!verifyFileSha256(destFile, fileInfo.sha256)) {
+                        if (!isOptional) {
+                            failedFiles.add("${fileInfo.name} (SHA256 mismatch)")
+                        }
+                        // 删除校验失败的文件，以便下次重新下载
+                        destFile.delete()
+                    }
+                }
+            }
+
+            if (failedFiles.isNotEmpty()) {
+                throw IOException("File integrity check failed: $failedFiles")
+            }
+
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
             emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
-            Logger.i("PicMe:Download", "Model download completed: $modelId")
+            Logger.i("PicMe:Download", "Model download completed and verified: $modelId")
 
         } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
@@ -542,6 +674,139 @@ class LlmModelDownloadManager(private val context: Context) {
 
     private fun buildModelScopeUrl(repoPath: String, fileName: String): String {
         return "https://modelscope.cn/models/$repoPath/resolve/master/$fileName"
+    }
+
+    /**
+     * 计算文件的 SHA256 哈希值
+     *
+     * @param file 要计算哈希的文件
+     * @return SHA256 字符串（小写十六进制），如果计算失败返回 null
+     */
+    private fun calculateFileSha256(file: File): String? {
+        return try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            Logger.e("PicMe:Download", "Failed to calculate SHA256 for ${file.name}", e)
+            null
+        }
+    }
+
+    /**
+     * 校验文件的 SHA256 哈希
+     *
+     * @param file 要校验的文件
+     * @param expectedSha256 期望的 SHA256 值
+     * @return 是否校验通过
+     */
+    private fun verifyFileSha256(file: File, expectedSha256: String?): Boolean {
+        if (expectedSha256.isNullOrEmpty()) {
+            // 没有提供 SHA256，跳过校验
+            return true
+        }
+
+        val actualSha256 = calculateFileSha256(file)
+        if (actualSha256 == null) {
+            Logger.w("PicMe:Download", "Failed to calculate SHA256 for ${file.name}, skipping verification")
+            return false
+        }
+
+        val match = actualSha256.equals(expectedSha256, ignoreCase = true)
+        if (match) {
+            Logger.d("PicMe:Download", "SHA256 verified for ${file.name}: $actualSha256")
+        } else {
+            Logger.e("PicMe:Download", "SHA256 mismatch for ${file.name}: expected=$expectedSha256, actual=$actualSha256")
+        }
+        return match
+    }
+
+    /**
+     * 从 ModelScope API 获取模型仓库的文件列表（包含元数据）
+     *
+     * API: https://modelscope.cn/api/v1/models/{repoPath}/repo/files?Revision=master
+     * 返回 Data.Files 数组，每个文件包含 Name、Size、Sha256 等字段
+     *
+     * @param repoPath 仓库路径，如 "MNN/Qwen3-0.6B-MNN"
+     * @return 文件信息列表，如果 API 调用失败则返回空列表
+     */
+    private suspend fun fetchModelFileInfosFromModelScope(repoPath: String): List<ModelFileInfo> = withContext(Dispatchers.IO) {
+        try {
+            val apiUrl = "https://modelscope.cn/api/v1/models/$repoPath/repo/files?Revision=master"
+            Logger.i("PicMe:Download", "Fetching file list from ModelScope API: $apiUrl")
+
+            val request = Request.Builder()
+                .url(apiUrl)
+                .header("User-Agent", "PicMe-Android/1.0")
+                .header("Accept", "application/json")
+                .build()
+
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Logger.w("PicMe:Download", "ModelScope API returned ${response.code}, falling back to default files")
+                    return@withContext emptyList<ModelFileInfo>()
+                }
+
+                val responseBody = response.body?.string()
+                if (responseBody.isNullOrEmpty()) {
+                    Logger.w("PicMe:Download", "ModelScope API returned empty body")
+                    return@withContext emptyList<ModelFileInfo>()
+                }
+
+                val json = JSONObject(responseBody)
+
+                // 检查 API 返回状态码
+                val code = json.optInt("Code", -1)
+                if (code != 200) {
+                    Logger.w("PicMe:Download", "ModelScope API returned Code=$code, Message=${json.optString("Message", "")}")
+                    return@withContext emptyList<ModelFileInfo>()
+                }
+
+                val data = json.optJSONObject("Data")
+                if (data == null) {
+                    Logger.w("PicMe:Download", "ModelScope API response missing Data field")
+                    return@withContext emptyList<ModelFileInfo>()
+                }
+
+                val files = data.optJSONArray("Files")
+                if (files == null) {
+                    Logger.w("PicMe:Download", "ModelScope API response missing Files field")
+                    return@withContext emptyList<ModelFileInfo>()
+                }
+
+                val fileList = mutableListOf<ModelFileInfo>()
+                for (i in 0 until files.length()) {
+                    val fileObj = files.optJSONObject(i)
+                    if (fileObj != null) {
+                        val name = fileObj.optString("Name", "")
+                        val path = fileObj.optString("Path", "")
+                        val size = fileObj.optLong("Size", 0)
+                        val sha256 = fileObj.optString("Sha256", "")
+
+                        // 只获取根目录下的文件（Path 不包含 /），排除子目录
+                        if (name.isNotEmpty() && path.isNotEmpty() && !path.contains("/")) {
+                            fileList.add(ModelFileInfo(
+                                name = name,
+                                size = size,
+                                sha256 = sha256.takeIf { it.isNotEmpty() }
+                            ))
+                        }
+                    }
+                }
+
+                Logger.i("PicMe:Download", "ModelScope API returned ${fileList.size} files with metadata")
+                return@withContext fileList
+            }
+        } catch (e: Exception) {
+            Logger.e("PicMe:Download", "Failed to fetch file list from ModelScope API", e)
+            return@withContext emptyList<ModelFileInfo>()
+        }
     }
 
     companion object {
@@ -566,6 +831,15 @@ class LlmModelDownloadManager(private val context: Context) {
         )
     }
 }
+
+/**
+ * 模型文件信息（从 API 获取的元数据）
+ */
+data class ModelFileInfo(
+    val name: String,
+    val size: Long,
+    val sha256: String?
+)
 
 /**
  * 模型配置
