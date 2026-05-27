@@ -1,6 +1,6 @@
 package com.picme.domain.agent
 
-import com.picme.domain.agent.capability.CapabilityV2
+import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.SceneManager
 
@@ -95,7 +95,7 @@ class PromptBuilder(
      * @return 完整的 system prompt
      */
     fun buildSystemPrompt(
-        capabilities: List<CapabilityV2>,
+        capabilities: List<Capability>,
         context: AgentContext
     ): String {
         val currentScene = sceneManager.currentScene.value

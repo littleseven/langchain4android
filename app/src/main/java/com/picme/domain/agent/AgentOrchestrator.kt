@@ -2,7 +2,7 @@ package com.picme.domain.agent
 
 import android.content.Context
 import com.picme.core.common.Logger
-import com.picme.domain.agent.capability.CapabilityV2
+import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
  * 2. 构建 system prompt（支持自定义覆盖）
  * 3. 调用 LocalLlmEngine 进行本地推理
  * 4. 解析 LLM 响应为 AgentCommand
- * 5. 通过 CapabilityRegistryV2 路由到对应 Capability 执行
+ * 5. 通过 CapabilityRegistry 路由到对应 Capability 执行
  *
  * @param context Application Context
  */
@@ -46,7 +46,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
     private val privacyGuard = PrivacyGuard()
     private val sceneManager = SceneManager.getInstance()
     private val promptBuilder = PromptBuilder(sceneManager)
-    private val capabilityRegistry = CapabilityRegistryV2.getInstance()
+    private val capabilityRegistry = CapabilityRegistry.getInstance()
 
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL
@@ -60,7 +60,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
     /**
      * 注册 Capability
      */
-    fun registerCapability(capability: CapabilityV2) {
+    fun registerCapability(capability: Capability) {
         capabilityRegistry.register(capability)
     }
 

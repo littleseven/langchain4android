@@ -218,7 +218,7 @@ private fun AiAgentPanelContent(
             .fillMaxWidth()
             .navigationBarsPadding()
             .imePadding()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(top = 8.dp, start = 12.dp, end = 12.dp)
             .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
             .background(Color.Black.copy(alpha = 0.88f))
             .padding(horizontal = 14.dp, vertical = 10.dp),

@@ -10,7 +10,6 @@ import com.picme.data.remote.kimi.KimiChatRequest
 import com.picme.data.remote.kimi.KimiMessage
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
-import com.picme.domain.agent.capability.toV2
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
@@ -86,7 +85,7 @@ class AiAgentUseCase(
      * 注册相机 Capability
      */
     fun registerCameraCapability(capability: CameraCapability) {
-        orchestrator.registerCapability(capability.toV2())
+        orchestrator.registerCapability(capability)
     }
 
     /**

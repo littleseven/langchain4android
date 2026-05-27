@@ -91,6 +91,9 @@ import com.picme.beauty.api.llm.MnnLlmClient
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.VoiceCommandMode
+import com.picme.domain.agent.AgentOrchestrator
+import com.picme.domain.agent.capability.CameraCapability
+import com.picme.domain.agent.model.SceneManager
 import com.picme.features.camera.voice.MnnAsrClient
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
@@ -760,6 +763,18 @@ fun CameraContent(
             Logger.i("PicMe:AiAgent", "Loading local MNN-LLM model: $aiAgentLocalModel")
             val result = aiAgentUseCase.loadLocalModel(aiAgentLocalModel)
             Logger.i("PicMe:AiAgent", "Local MNN-LLM model load result: $result")
+        }
+    }
+
+    // 注册 Camera Capability 并切换 Agent 场景到 CAMERA
+    DisposableEffect(aiAgentUseCase) {
+        val orchestrator = AgentOrchestrator.getInstance(context)
+        orchestrator.transitionToScene(SceneManager.Scene.CAMERA)
+        // 注册一个空回调的 CameraCapability，让 Orchestrator 能通过场景检查
+        // 实际命令执行由 onAiAgentCommand 回调在 UI 层完成
+        aiAgentUseCase.registerCameraCapability(CameraCapability())
+        onDispose {
+            orchestrator.transitionToScene(SceneManager.Scene.UNKNOWN)
         }
     }
 

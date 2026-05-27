@@ -26,7 +26,7 @@ class SettingsCapability(
     private val onDownloadModel: ((String) -> Unit)? = null,
     private val onSwitchFaceEngine: ((FaceDetectionEngineMode) -> Unit)? = null,
     private val onToggleSetting: ((String, Boolean) -> Unit)? = null
-) : CapabilityV2 {
+) : BaseCapability() {
 
     private val TAG = "SettingsCapability"
 
