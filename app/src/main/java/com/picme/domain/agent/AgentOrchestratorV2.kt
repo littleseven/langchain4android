@@ -164,7 +164,7 @@ class AgentOrchestratorV2 private constructor(private val context: Context) {
 
         // 4. 本地推理（简化版，不带历史）
         val prompt = "$systemPrompt\n\n用户：$input\n助手："
-        val responseResult = localLlmEngine.generate(prompt, maxTokens = 128)
+        val responseResult = localLlmEngine.generate(prompt, maxTokens = 512)
         val memorySessionId = agentContext.memorySessionId
 
         responseResult.fold(

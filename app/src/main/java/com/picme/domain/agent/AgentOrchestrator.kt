@@ -156,7 +156,7 @@ class AgentOrchestrator(private val context: Context) {
         // 3. 本地推理
         // ChatMessages API 在 Qwen3 模型上返回空，改用单 prompt 模式
         val prompt = buildPrompt(systemPrompt, input)
-        val responseResult = localLlmEngine.generate(prompt, maxTokens = 128)
+        val responseResult = localLlmEngine.generate(prompt, maxTokens = 512)
 
         responseResult.fold(
             onSuccess = { rawResponse ->
