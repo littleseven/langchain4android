@@ -42,35 +42,22 @@ enum class AgentScene {
 }
 
 /**
- * Agent 命令（Sealed Class）
+ * 对话消息
  *
- * 将 LLM 解析后的意图映射为结构化命令。
- * 复用并扩展现有 [com.picme.domain.model.AiAgentCommand]。
+ * @property role 消息角色
+ * @property content 消息内容
+ * @property timestamp 时间戳（毫秒）
  */
-sealed class AgentCommand {
+data class ChatMessage(
+    val role: ChatRole,
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
 
-    data class AdjustBeauty(val settings: BeautySettings) : AgentCommand()
-    data class SwitchFilter(val filterType: FilterType) : AgentCommand()
-    data class SwitchStyle(val styleFilter: StyleFilter) : AgentCommand()
-    data class SwitchScene(val sceneName: String) : AgentCommand()
-    data class SwitchRatio(val ratio: String) : AgentCommand()
-    data class AdjustExposure(val exposure: Int) : AgentCommand()
-    data class AdjustZoom(val zoomRatio: Float) : AgentCommand()
-    object FlipCamera : AgentCommand()
-    object CapturePhoto : AgentCommand()
-    object ToggleRecording : AgentCommand()
-    data class SwitchMode(val mode: MediaType) : AgentCommand()
-    data class TextReply(val message: String) : AgentCommand()
-
-    /**
-     * 未知命令（LLM 输出无法解析时）
-     */
-    data class Unknown(val raw: String) : AgentCommand()
-
-    /**
-     * 执行错误
-     */
-    data class Error(val reason: String) : AgentCommand()
+enum class ChatRole {
+    SYSTEM,
+    USER,
+    ASSISTANT
 }
 
 /**
@@ -92,23 +79,4 @@ sealed class AgentAction {
      * 执行失败
      */
     data class Error(val message: String) : AgentAction()
-}
-
-/**
- * 对话消息
- *
- * @property role 消息角色
- * @property content 消息内容
- * @property timestamp 时间戳（毫秒）
- */
-data class ChatMessage(
-    val role: ChatRole,
-    val content: String,
-    val timestamp: Long = System.currentTimeMillis()
-)
-
-enum class ChatRole {
-    SYSTEM,
-    USER,
-    ASSISTANT
 }

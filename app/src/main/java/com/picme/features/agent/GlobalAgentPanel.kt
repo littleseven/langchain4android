@@ -59,6 +59,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.AgentOrchestratorV2
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.launch
@@ -124,7 +125,14 @@ fun GlobalAgentPanel(
     val orchestrator = remember { AgentOrchestratorV2.getInstance(context) }
     val sceneManager = remember { SceneManager.getInstance() }
     val currentScene by sceneManager.currentScene.collectAsState()
-    val agentContext = remember(currentScene) { AgentContext(scene = currentScene) }
+    val agentScene = remember(currentScene) {
+        when (currentScene) {
+            SceneManager.Scene.CAMERA -> AgentScene.CAMERA
+            SceneManager.Scene.GALLERY -> AgentScene.GALLERY
+            else -> AgentScene.CAMERA
+        }
+    }
+    val agentContext = remember(agentScene) { AgentContext(scene = agentScene) }
 
     GlobalAgentPanel(
         state = state,
