@@ -5,7 +5,6 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.MemoryManager
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.AiAgentMode
@@ -41,11 +40,11 @@ class AgentOrchestratorV2 private constructor(private val context: Context) {
 
     // 核心组件
     private val localLlmEngine = LocalLlmEngine(context)
-    private val memoryManager = MemoryManager(context)
+    private val memoryManager = com.picme.domain.agent.MemoryManager(context)
     private val privacyGuard = PrivacyGuard()
-    private val sceneManager = SceneManager()
+    private val sceneManager = SceneManager.getInstance()
     private val promptBuilder = PromptBuilder(sceneManager)
-    private val capabilityRegistry = CapabilityRegistryV2(sceneManager)
+    private val capabilityRegistry = CapabilityRegistryV2.getInstance()
 
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL
@@ -163,12 +162,10 @@ class AgentOrchestratorV2 private constructor(private val context: Context) {
         // 3. 构建分层 system prompt
         val systemPrompt = promptBuilder.buildSystemPrompt(capabilities, agentContext)
 
-        // 4. 构建完整 prompt（带历史）
-        val memorySessionId = agentContext.memorySessionId
-        val prompt = buildPromptWithHistory(systemPrompt, input, memorySessionId)
-
-        // 5. 本地推理
+        // 4. 本地推理（简化版，不带历史）
+        val prompt = "$systemPrompt\n\n用户：$input\n助手："
         val responseResult = localLlmEngine.generate(prompt, maxTokens = 128)
+        val memorySessionId = agentContext.memorySessionId
 
         responseResult.fold(
             onSuccess = { rawResponse ->
@@ -232,30 +229,9 @@ class AgentOrchestratorV2 private constructor(private val context: Context) {
     }
 
     /**
-     * 构建带历史的 prompt
-     */
-    private fun buildPromptWithHistory(
-        systemPrompt: String,
-        userInput: String,
-        memorySessionId: String
-    ): String {
-        // 获取最近 3 轮历史
-        val history = memoryManager.getRecentHistory(memorySessionId, 3)
-            .filter { it.role.name.lowercase() != "system" }
-            .windowed(2, 2, partialWindows = false)
-            .map { pair ->
-                val userMsg = pair.find { it.role.name.lowercase() == "user" }?.content ?: ""
-                val assistantMsg = pair.find { it.role.name.lowercase() == "assistant" }?.content ?: ""
-                userMsg to assistantMsg
-            }
-
-        return promptBuilder.buildPrompt(systemPrompt, userInput, history)
-    }
-
-    /**
      * 保存对话
      */
-    private fun saveConversation(
+    private suspend fun saveConversation(
         sessionId: String,
         userInput: String,
         command: AgentCommand,
