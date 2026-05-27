@@ -268,9 +268,10 @@ fun GalleryScreen(
         onNavigateBack = onNavigateBack
     )
 
-    // 注册 Gallery Capability
+    // 注册 Gallery Capability（在 allFlatMedia 定义后调用）
     agentIntegration.registerCapabilities(
         viewModel = viewModel,
+        allMedia = allFlatMedia,
         onViewMedia = { asset ->
             selectedMediaIndex = allFlatMedia.indexOfFirst { it.id == asset.id }
         },

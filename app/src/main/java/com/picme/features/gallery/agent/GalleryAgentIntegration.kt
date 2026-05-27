@@ -1,31 +1,25 @@
 package com.picme.features.gallery.agent
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.picme.core.common.Logger
 import com.picme.domain.agent.AgentOrchestratorV2
-import com.picme.domain.agent.CapabilityRegistryV2
-import com.picme.domain.agent.PromptBuilder
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.GalleryPageContext
+import com.picme.domain.agent.capability.toV2
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.MediaAsset
 import com.picme.features.agent.GlobalAgentPanel
 import com.picme.features.gallery.MediaViewModel
-import kotlinx.coroutines.launch
 
 /**
  * GalleryScreen 的 Agent 集成
@@ -48,14 +42,8 @@ class GalleryAgentIntegration(
     // SceneManager 单例
     private val sceneManager = SceneManager.getInstance()
 
-    // CapabilityRegistry 单例
-    private val registry = CapabilityRegistryV2.getInstance()
-
     // Orchestrator 单例
     private val orchestrator = AgentOrchestratorV2.getInstance(appContext)
-
-    // PromptBuilder
-    private val promptBuilder = PromptBuilder(sceneManager)
 
     /**
      * 进入 Gallery 场景时调用
@@ -77,6 +65,7 @@ class GalleryAgentIntegration(
      */
     fun registerCapabilities(
         viewModel: MediaViewModel,
+        allMedia: List<MediaAsset>,
         onViewMedia: (MediaAsset) -> Unit,
         onDeleteMedia: (List<MediaAsset>) -> Unit,
         onShareMedia: (List<MediaAsset>) -> Unit,
@@ -87,58 +76,45 @@ class GalleryAgentIntegration(
     ) {
         // 注册 GalleryCapability
         val galleryCapability = GalleryCapability(
-            onViewMedia = onViewMedia,
-            onDeleteMedia = onDeleteMedia,
-            onShareMedia = onShareMedia,
-            onSelectMedia = onSelectMedia,
+            onViewMedia = { mediaId ->
+                mediaId?.let { id ->
+                    val asset = allMedia.find { it.id.toString() == id }
+                    asset?.let { onViewMedia(it) }
+                }
+            },
+            onDeleteMedia = { mediaIds ->
+                val assets = allMedia.filter { it.id.toString() in mediaIds }
+                onDeleteMedia(assets)
+            },
+            onShareMedia = { mediaIds ->
+                val assets = allMedia.filter { it.id.toString() in mediaIds }
+                onShareMedia(assets)
+            },
+            onSelectMedia = { mediaId, selected ->
+                val asset = allMedia.find { it.id.toString() == mediaId }
+                asset?.let { onSelectMedia(it, selected) }
+            },
             onSearch = onSearchMedia,
             onSwitchViewMode = { mode ->
-                onSwitchViewMode(if (mode) "list" else "grid")
+                onSwitchViewMode(mode.name.lowercase())
             },
-            onFavoriteMedia = onFavoriteMedia
+            onFavoriteMedia = { mediaId, favorite ->
+                val asset = allMedia.find { it.id.toString() == mediaId }
+                asset?.let { onFavoriteMedia(it, favorite) }
+            }
         )
-        registry.register(galleryCapability)
+        orchestrator.registerCapability(galleryCapability)
         Logger.i(TAG, "GalleryCapability registered")
 
         // 注册 NavigationCapability
         val navigationCapability = NavigationCapability(
             onNavigate = { destination ->
-                onNavigateTo(destination)
+                onNavigateTo(destination.name.lowercase())
             },
             onBack = onNavigateBack
         )
-        registry.register(navigationCapability)
+        orchestrator.registerCapability(navigationCapability)
         Logger.i(TAG, "NavigationCapability registered")
-    }
-
-    /**
-     * 执行 Agent 命令
-     */
-    suspend fun executeCommand(command: AgentCommand, pageContext: PageContext): Result<Any> {
-        val capabilities = registry.getCapabilitiesForScene(sceneManager.currentScene.value)
-
-        return try {
-            // 找到能处理该命令的 Capability
-            for (capability in capabilities) {
-                if (capability.canHandle(command)) {
-                    val result = capability.execute(command, buildAgentContext(), pageContext)
-                    return result.map { it as Any }
-                }
-            }
-            Result.failure(IllegalStateException("No capability can handle command: $command"))
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to execute command", e)
-            Result.failure(e)
-        }
-    }
-
-    /**
-     * 构建 AgentContext
-     */
-    private fun buildAgentContext(): com.picme.domain.agent.model.AgentContext {
-        return com.picme.domain.agent.model.AgentContext(
-            scene = sceneManager.currentScene.value
-        )
     }
 
     /**
@@ -150,11 +126,11 @@ class GalleryAgentIntegration(
         isSelectionMode: Boolean,
         allMedia: List<MediaAsset>
     ): PageContext {
-        return PageContext.Gallery(
+        return PageContext.GalleryContext(
             currentMedia = currentMedia,
             selectedItems = selectedItems,
             isSelectionMode = isSelectionMode,
-            allMedia = allMedia
+            viewMode = PageContext.GalleryViewMode.GRID
         )
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.picme.domain.agent.AgentOrchestratorV2
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.NavigationCapability
+import com.picme.domain.agent.capability.toV2
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.usecase.AiAgentUseCase
@@ -39,7 +40,7 @@ class CameraAgentIntegration(
         onCapturePhoto: () -> Unit,
         onToggleRecording: () -> Unit,
         onSwitchMode: (com.picme.domain.model.MediaType) -> Unit,
-        onNavigate: (NavigationCapability.Destination) -> Unit,
+        onNavigateTo: (String) -> Unit,
         onBack: () -> Unit
     ) {
         // 注册 CameraCapability
@@ -56,14 +57,17 @@ class CameraAgentIntegration(
             onToggleRecording = onToggleRecording,
             onSwitchMode = onSwitchMode
         )
-        orchestrator.registerCapability(cameraCapability)
+        orchestrator.registerCapability(cameraCapability.toV2())
 
-        // 注册 NavigationCapability
+        // 注册 NavigationCapability（使用 String 类型的回调）
         val navigationCapability = NavigationCapability(
-            onNavigate = onNavigate,
+            onNavigate = { destination ->
+                // 将 Destination 转换为 String
+                onNavigateTo(destination.name.lowercase())
+            },
             onBack = onBack
         )
-        orchestrator.registerCapability(navigationCapability)
+        orchestrator.registerCapability(navigationCapability.toV2())
     }
 
     /**

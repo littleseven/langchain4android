@@ -15,7 +15,7 @@ import com.picme.domain.model.ThemeMode
  *
  * 支持命令：
  * - change_theme: 切换主题（light/dark/system）
- * - change_language: 切换语言（zh/en/ja/ko）
+ * - change_language: 切换语言（zh/en）
  * - download_model: 下载模型
  * - switch_face_engine: 切换人脸检测引擎
  * - toggle_setting: 开关设置项
@@ -44,6 +44,16 @@ class SettingsCapability(
         "toggle_setting",
         "text_reply"
     )
+
+    override fun getCommandDescription(command: String): String = when (command) {
+        "change_theme" -> "切换主题模式，参数：theme (light/dark/system)"
+        "change_language" -> "切换应用语言，参数：language (zh/en)"
+        "download_model" -> "下载AI模型，参数：model_id"
+        "switch_face_engine" -> "切换人脸检测引擎，参数：engine (mediapipe/insightface/mnn/ncnn)"
+        "toggle_setting" -> "开关设置项，参数：key, enabled (true/false)"
+        "text_reply" -> "文本回复"
+        else -> "未知命令"
+    }
 
     override suspend fun execute(
         command: AgentCommand,
@@ -76,10 +86,7 @@ class SettingsCapability(
 
         onChangeTheme?.invoke(themeMode)
         return Result.success(
-            AgentAction.Success(
-                command,
-                message = "已切换到${getThemeName(themeMode)}模式"
-            )
+            AgentAction.Success(command = command)
         )
     }
 
@@ -87,21 +94,17 @@ class SettingsCapability(
         val language = when (command.language.lowercase()) {
             "zh", "中文", "简体中文", "cn" -> AppLanguage.CHINESE
             "en", "英文", "英语", "english" -> AppLanguage.ENGLISH
-            "ja", "日文", "日语", "japanese" -> AppLanguage.JAPANESE
-            "ko", "韩文", "韩语", "korean" -> AppLanguage.KOREAN
+            "system", "系统默认" -> AppLanguage.SYSTEM
             else -> {
                 return Result.success(
-                    AgentAction.Error("不支持的语言: ${command.language}，支持 zh/en/ja/ko")
+                    AgentAction.Error("不支持的语言: ${command.language}，支持 zh/en/system")
                 )
             }
         }
 
         onChangeLanguage?.invoke(language)
         return Result.success(
-            AgentAction.Success(
-                command,
-                message = "已切换到${getLanguageName(language)}"
-            )
+            AgentAction.Success(command = command)
         )
     }
 
@@ -112,30 +115,27 @@ class SettingsCapability(
 
         onDownloadModel?.invoke(command.modelId)
         return Result.success(
-            AgentAction.Success(
-                command,
-                message = "开始下载模型: ${command.modelId}"
-            )
+            AgentAction.Success(command = command)
         )
     }
 
     private fun handleSwitchFaceEngine(command: AgentCommand.SwitchFaceEngine): Result<AgentAction> {
         val engine = when (command.engine.lowercase()) {
-            "mlkit", "ml_kit" -> FaceDetectionEngineMode.ML_KIT
-            "effect", "effect_sdk" -> FaceDetectionEngineMode.EFFECT_SDK
+            "mediapipe" -> FaceDetectionEngineMode.MEDIAPIPE
+            "insightface" -> FaceDetectionEngineMode.INSIGHTFACE
+            "mnn" -> FaceDetectionEngineMode.MNN
+            "ncnn" -> FaceDetectionEngineMode.NCNN
+            "custom" -> FaceDetectionEngineMode.CUSTOM
             else -> {
                 return Result.success(
-                    AgentAction.Error("未知的人脸检测引擎: ${command.engine}，支持 mlkit/effect")
+                    AgentAction.Error("未知的人脸检测引擎: ${command.engine}，支持 mediapipe/insightface/mnn/ncnn/custom")
                 )
             }
         }
 
         onSwitchFaceEngine?.invoke(engine)
         return Result.success(
-            AgentAction.Success(
-                command,
-                message = "已切换到${getEngineName(engine)}"
-            )
+            AgentAction.Success(command = command)
         )
     }
 
@@ -146,10 +146,7 @@ class SettingsCapability(
 
         onToggleSetting?.invoke(command.key, command.enabled)
         return Result.success(
-            AgentAction.Success(
-                command,
-                message = "${command.key} 已${if (command.enabled) "开启" else "关闭"}"
-            )
+            AgentAction.Success(command = command)
         )
     }
 
@@ -162,12 +159,15 @@ class SettingsCapability(
     private fun getLanguageName(language: AppLanguage): String = when (language) {
         AppLanguage.CHINESE -> "中文"
         AppLanguage.ENGLISH -> "英文"
-        AppLanguage.JAPANESE -> "日文"
-        AppLanguage.KOREAN -> "韩文"
+        AppLanguage.SYSTEM -> "系统默认"
+        AppLanguage.TRADITIONAL_CHINESE -> "繁体中文"
     }
 
     private fun getEngineName(engine: FaceDetectionEngineMode): String = when (engine) {
-        FaceDetectionEngineMode.ML_KIT -> "ML Kit"
-        FaceDetectionEngineMode.EFFECT_SDK -> "特效 SDK"
+        FaceDetectionEngineMode.MEDIAPIPE -> "MediaPipe"
+        FaceDetectionEngineMode.INSIGHTFACE -> "InsightFace"
+        FaceDetectionEngineMode.MNN -> "MNN"
+        FaceDetectionEngineMode.NCNN -> "NCNN"
+        FaceDetectionEngineMode.CUSTOM -> "自定义"
     }
 }
