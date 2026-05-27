@@ -9,29 +9,29 @@ import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 
 /**
- * 能力注册表 V2
+ * 能力注册表
  *
- * 增强版本，支持：
+ * 负责：
  * - 按场景过滤 Capability
- * - 支持 Capability 接口
  * - 页面上下文传递
+ * - 命令分发到对应 Capability
  */
-class CapabilityRegistryV2 private constructor(
+class CapabilityRegistry private constructor(
     private val sceneManager: SceneManager
 ) {
 
     companion object {
         @Volatile
-        private var instance: CapabilityRegistryV2? = null
+        private var instance: CapabilityRegistry? = null
 
-        fun getInstance(): CapabilityRegistryV2 {
+        fun getInstance(): CapabilityRegistry {
             return instance ?: synchronized(this) {
-                instance ?: CapabilityRegistryV2(SceneManager.getInstance()).also { instance = it }
+                instance ?: CapabilityRegistry(SceneManager.getInstance()).also { instance = it }
             }
         }
     }
 
-    private val tag = "PicMe:CapabilityRegistryV2"
+    private val tag = "PicMe:CapabilityRegistry"
     private val registry = mutableMapOf<String, Capability>()
 
     /**

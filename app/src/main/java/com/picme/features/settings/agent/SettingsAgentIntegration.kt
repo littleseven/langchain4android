@@ -11,7 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistryV2
+import com.picme.domain.agent.CapabilityRegistry
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.SettingsCapability
 import com.picme.domain.agent.model.PageContext
@@ -41,7 +41,7 @@ class SettingsAgentIntegration(
     private val appContext = context.applicationContext
 
     private val sceneManager = SceneManager.getInstance()
-    private val registry = CapabilityRegistryV2.getInstance()
+    private val registry = CapabilityRegistry.getInstance()
 
     fun onEnterSettings() {
         Logger.i(TAG, "Entering SETTINGS scene")

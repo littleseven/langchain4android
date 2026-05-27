@@ -14,7 +14,6 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.domain.agent.capability.toV2
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.MediaAsset
