@@ -204,23 +204,6 @@ object ModelManager {
                 Log.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
                 return destDir.absolutePath
             }
-
-            // 3. 从 assets 复制（如果存在）
-            if (isAssetExists(info.assetDir, context)) {
-                Log.i(TAG, "Copying model from assets/${info.assetDir} to ${destDir.absolutePath}")
-                copyAssetDir(info.assetDir, destDir, context)
-
-                // 验证复制是否成功
-                if (isLlmModelComplete(destDir)) {
-                    Log.i(TAG, "Model successfully prepared from assets: ${destDir.absolutePath}")
-                    return destDir.absolutePath
-                } else {
-                    Log.e(TAG, "Model copy failed, directory incomplete: ${destDir.absolutePath}")
-                    throw IllegalStateException("Failed to copy model from assets to ${destDir.absolutePath}")
-                }
-            } else {
-                Log.w(TAG, "Model not found in assets: ${info.assetDir}")
-            }
         }
 
         // 4. 动态发现：直接在 llm_models/<key>/ 查找（支持任意下载的模型）
@@ -244,7 +227,7 @@ object ModelManager {
     }
 
     /**
-     * 检查 LLM 模型是否已缓存（支持下载目录、assets 复制目录和内置模型）
+     * 检查 LLM 模型是否已缓存（支持下载目录和传统缓存目录）
      */
     fun isLlmModelCached(key: String, context: Context): Boolean {
         val info = LLM_MODEL_REGISTRY[key]
@@ -261,12 +244,6 @@ object ModelManager {
             val destDir = File(context.filesDir, info.cacheDirName)
             if (destDir.exists() && isLlmModelComplete(destDir)) {
                 Log.d(TAG, "Model found in cache dir: ${destDir.absolutePath}")
-                return true
-            }
-
-            // 检查 assets 中是否存在（内置模型）
-            if (isAssetExists(info.assetDir, context)) {
-                Log.d(TAG, "Built-in model available in assets: ${info.assetDir}")
                 return true
             }
         }
@@ -311,69 +288,8 @@ object ModelManager {
     }
 
     /**
-     * 检查 assets 中是否存在指定路径
+     * 将单个 asset 文件复制到缓存目录
      */
-    private fun isAssetExists(assetPath: String, context: Context): Boolean {
-        return try {
-            val assets = context.assets
-            val list = assets.list(assetPath)
-            val exists = list != null && list.isNotEmpty()
-            if (exists) {
-                Log.d(TAG, "Assets path exists: $assetPath (${list!!.size} items)")
-            }
-            exists
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to check assets path: $assetPath", e)
-            false
-        }
-    }
-
-    private fun copyAssetDir(assetPath: String, destDir: File, context: Context) {
-        destDir.mkdirs()
-        val assets = context.assets
-        val files = assets.list(assetPath)
-
-        if (files == null) {
-            Log.e(TAG, "Assets path not found: $assetPath")
-            return
-        }
-
-        if (files.isEmpty()) {
-            Log.w(TAG, "Assets path is empty: $assetPath")
-            return
-        }
-
-        Log.d(TAG, "Copying ${files.size} files from assets/$assetPath to ${destDir.absolutePath}")
-
-        for (file in files) {
-            val srcPath = "$assetPath/$file"
-            val dstFile = File(destDir, file)
-
-            try {
-                val subFiles = assets.list(srcPath)
-                if (subFiles != null && subFiles.isNotEmpty()) {
-                    // 是目录，递归复制
-                    copyAssetDir(srcPath, dstFile, context)
-                } else {
-                    // 是文件，直接复制
-                    assets.open(srcPath).use { input ->
-                        dstFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    Log.d(TAG, "Copied: $srcPath -> ${dstFile.absolutePath} (${dstFile.length()} bytes)")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to copy $srcPath: ${e.message}")
-                throw e
-            }
-        }
-
-        Log.i(TAG, "Finished copying assets/$assetPath")
-    }
-
-    // ── 内部实现 ─────────────────────────────────────────────
-
     private fun copyAssetToCache(assetPath: String, cacheName: String, context: Context): File {
         val file = File(context.filesDir, cacheName)
 
