@@ -1,6 +1,7 @@
 package com.picme.features.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -67,6 +69,8 @@ import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
+import com.picme.features.settings.agent.SettingsAgentPanel
+import com.picme.features.settings.agent.rememberSettingsAgentIntegration
 
 @Composable
 fun SettingsScreen(
@@ -114,7 +118,30 @@ fun SettingsScreen(
     val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
-    settingsContent(
+
+    // ===== Agent 集成 =====
+    val agentIntegration = rememberSettingsAgentIntegration(
+        context = context,
+        onNavigateTo = { destination ->
+            when (destination) {
+                "camera" -> onNavigateBack()
+                "gallery" -> onNavigateBack()
+            }
+        },
+        onNavigateBack = onNavigateBack
+    )
+
+    // 注册 Settings Capability
+    agentIntegration.registerCapabilities(
+        viewModel = viewModel,
+        onNavigateToModelManager = onNavigateToLlmModelManager
+    )
+
+    // 构建 PageContext
+    val pageContext = agentIntegration.buildPageContext()
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        settingsContent(
         themeMode = themeMode,
         appLanguage = appLanguage,
         debugUiEnabled = debugUiEnabled,
@@ -170,6 +197,13 @@ fun SettingsScreen(
         onNavigateToLlmModelManager = onNavigateToLlmModelManager,
         onNavigateBack = onNavigateBack
     )
+
+        // Agent Panel（浮动在内容之上）
+        SettingsAgentPanel(
+            pageContext = pageContext,
+            modifier = Modifier.align(Alignment.BottomEnd)
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

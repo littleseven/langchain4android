@@ -58,6 +58,7 @@ import com.picme.domain.agent.AgentOrchestratorV2
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.PageContext
+import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.launch
 
 /**
@@ -104,6 +105,29 @@ class GlobalAgentPanelState {
 @Composable
 fun rememberGlobalAgentPanelState(): GlobalAgentPanelState {
     return remember { GlobalAgentPanelState() }
+}
+
+/**
+ * 全局 Agent Panel（简化版，使用单例）
+ *
+ * 可在任意页面使用，自动使用单例 Orchestrator 和创建 State
+ */
+@Composable
+fun GlobalAgentPanel(
+    pageContext: PageContext? = null,
+    modifier: Modifier = Modifier
+) {
+    val state = rememberGlobalAgentPanelState()
+    val orchestrator = AgentOrchestratorV2.getInstance()
+    val agentContext = remember { AgentContext(scene = SceneManager.getInstance().currentScene.value) }
+
+    GlobalAgentPanel(
+        state = state,
+        orchestrator = orchestrator,
+        agentContext = agentContext,
+        pageContext = pageContext,
+        modifier = modifier
+    )
 }
 
 /**

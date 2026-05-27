@@ -24,7 +24,18 @@ import kotlinx.coroutines.withContext
  *
  * @param context Application Context
  */
-class AgentOrchestratorV2(private val context: Context) {
+class AgentOrchestratorV2 private constructor(private val context: Context) {
+
+    companion object {
+        @Volatile
+        private var instance: AgentOrchestratorV2? = null
+
+        fun getInstance(context: Context): AgentOrchestratorV2 {
+            return instance ?: synchronized(this) {
+                instance ?: AgentOrchestratorV2(context.applicationContext).also { instance = it }
+            }
+        }
+    }
 
     private val tag = "PicMe:AgentOrchestratorV2"
 
