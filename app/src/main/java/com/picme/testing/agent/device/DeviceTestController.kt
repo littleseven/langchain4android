@@ -2,12 +2,15 @@ package com.picme.testing.agent.device
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.util.Log
+
+
+
+
 import com.picme.core.common.Logger
 import com.picme.features.camera.test.CameraTestCommand
 import com.picme.features.camera.test.CameraTestCommandDispatcher
-import com.picme.features.camera.test.CameraTestCommandReceiver
+
+
 import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.camera.test.CameraTestStateSnapshot
 import com.picme.testing.agent.core.AgentTestContext

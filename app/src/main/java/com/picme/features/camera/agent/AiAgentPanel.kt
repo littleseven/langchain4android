@@ -17,12 +17,14 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+
+
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -62,7 +64,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -593,39 +596,36 @@ internal fun sendMessage(
 
         result.onSuccess { command ->
             Logger.i("PicMe:AiAgent", "Command parsed: ${command.javaClass.simpleName}")
-            when (command) {
-                is AiAgentCommand.TextReply -> {
-                    Logger.i("PicMe:AiAgent", "TextReply: ${command.message}")
-                    state.addMessage(
-                        AiAgentMessage(content = command.message, isFromUser = false)
-                    )
+            if (command is AiAgentCommand.TextReply) {
+                Logger.i("PicMe:AiAgent", "TextReply: ${command.message}")
+                state.addMessage(
+                    AiAgentMessage(content = command.message, isFromUser = false)
+                )
+            } else {
+                val commandName = when (command) {
+                    is AiAgentCommand.AdjustBeauty -> "已调整美颜参数"
+                    is AiAgentCommand.SwitchFilter -> "已切换滤镜"
+                    is AiAgentCommand.SwitchStyle -> "已切换风格"
+                    is AiAgentCommand.SwitchScene -> "已切换场景"
+                    is AiAgentCommand.SwitchRatio -> "已切换画幅比例"
+                    is AiAgentCommand.AdjustExposure -> "已调整曝光"
+                    is AiAgentCommand.AdjustZoom -> "已调整变焦"
+                    is AiAgentCommand.FlipCamera -> "已翻转摄像头"
+                    is AiAgentCommand.CapturePhoto -> "已拍照"
+                    is AiAgentCommand.ToggleRecording -> "已切换录像状态"
+                    is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
+                    is AiAgentCommand.TextReply -> ""
                 }
-                else -> {
-                    val commandName = when (command) {
-                        is AiAgentCommand.AdjustBeauty -> "已调整美颜参数"
-                        is AiAgentCommand.SwitchFilter -> "已切换滤镜"
-                        is AiAgentCommand.SwitchStyle -> "已切换风格"
-                        is AiAgentCommand.SwitchScene -> "已切换场景"
-                        is AiAgentCommand.SwitchRatio -> "已切换画幅比例"
-                        is AiAgentCommand.AdjustExposure -> "已调整曝光"
-                        is AiAgentCommand.AdjustZoom -> "已调整变焦"
-                        is AiAgentCommand.FlipCamera -> "已翻转摄像头"
-                        is AiAgentCommand.CapturePhoto -> "已拍照"
-                        is AiAgentCommand.ToggleRecording -> "已切换录像状态"
-                        is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
-                        is AiAgentCommand.TextReply -> ""
-                    }
-                    Logger.i("PicMe:AiAgent", "Executing command: $commandName")
-                    state.addMessage(
-                        AiAgentMessage(
-                            content = commandName,
-                            isFromUser = false
-                        )
+                Logger.i("PicMe:AiAgent", "Executing command: $commandName")
+                state.addMessage(
+                    AiAgentMessage(
+                        content = commandName,
+                        isFromUser = false
                     )
-                    Logger.i("PicMe:AiAgent", "Calling onCommand callback")
-                    onCommand(command)
-                    Logger.i("PicMe:AiAgent", "onCommand callback returned")
-                }
+                )
+                Logger.i("PicMe:AiAgent", "Calling onCommand callback")
+                onCommand(command)
+                Logger.i("PicMe:AiAgent", "onCommand callback returned")
             }
         }.onFailure { error ->
             Logger.e("PicMe:AiAgent", "AI processing failed: ${error.message}", error)
