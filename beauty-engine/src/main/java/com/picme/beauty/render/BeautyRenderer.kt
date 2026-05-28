@@ -215,7 +215,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         whiteningStrength = whitening.coerceIn(0f, 1f)
         sharpenStrength = sharpen.coerceIn(0f, 1f)
         bigEyesStrength = bigEyes.coerceIn(0f, 1f)
-        slimFaceStrength = slimFace.coerceIn(-1f, 1f)
+        // [敏感度调整] 瘦脸形变范围缩减为原来的 1/5，避免过度变形
+        slimFaceStrength = (slimFace * 0.2f).coerceIn(-0.2f, 0.2f)
         lipColorStrength = lipColor.coerceIn(0f, 1f)
         this.lipColorIndex = lipColorIndex.coerceIn(0, 11)
         blushStrength = blush.coerceIn(0f, 1f)
