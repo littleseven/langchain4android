@@ -1140,7 +1140,7 @@ fun CameraContent(
             previewView = previewView,
             bindPreviewSurfaceProvider = bindPreviewSurfaceProvider,
             cameraExecutor = cameraExecutor,
-            beautySettings = beautySettings,
+            isBeautyEnabled = { beautySettings.enabled },
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode.toEngineType(),
             videoCapture = videoCapture,

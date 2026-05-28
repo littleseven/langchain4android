@@ -14,7 +14,6 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import com.google.common.util.concurrent.ListenableFuture
 import com.picme.core.common.Logger
-import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.domain.model.MediaType
@@ -34,7 +33,7 @@ internal fun bindCameraUseCases(
     previewView: PreviewView,
     bindPreviewSurfaceProvider: (Preview) -> Unit,
     cameraExecutor: ExecutorService,
-    beautySettings: BeautySettings,
+    isBeautyEnabled: () -> Boolean,
     beautyStrategy: BeautyStrategy,
     detectionEngineMode: EngineType,
     videoCapture: VideoCapture<Recorder>,
@@ -109,7 +108,6 @@ internal fun bindCameraUseCases(
 
     var frameCount = 0
     var lastFrameLogMs = 0L
-    val beautyEnabledAtBind = beautySettings.enabled
     imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
         frameCount++
         // 限流：帧计数日志 1 秒最多打一次
@@ -129,7 +127,7 @@ internal fun bindCameraUseCases(
             onFaceWarpParamsChanged = onFaceWarpParamsChanged,
             onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
             isDualMode = false,
-            beautyEnabled = beautyEnabledAtBind
+            beautyEnabled = isBeautyEnabled()
         )
     }
 

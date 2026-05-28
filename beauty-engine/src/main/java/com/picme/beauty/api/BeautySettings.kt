@@ -56,8 +56,8 @@ data class BeautySettings(
     }
 
     companion object {
-        const val DEFAULT_LIP_COLOR: Float = 40f
-        const val DEFAULT_BLUSH: Float = 20f
-        const val DEFAULT_EYEBROW: Float = 15f
+        const val DEFAULT_LIP_COLOR: Float = 0f
+        const val DEFAULT_BLUSH: Float = 0f
+        const val DEFAULT_EYEBROW: Float = 0f
     }
 }
