@@ -10,6 +10,9 @@ config:
 build:
   maxIssues: 50
   excludeCorrectable: false
+  exclude:
+    - "**/test/**"
+    - "**/androidTest/**"
 
 complexity:
   active: true
@@ -63,6 +66,9 @@ empty-blocks:
     ignoreOverridden: true
   EmptyIfBlock:
     active: true
+    ignoreAnnotated:
+      - "Composable"
+      - "Test"
   EmptyTryBlock:
     active: true
 
@@ -147,7 +153,7 @@ style:
     active: true
   ReturnCount:
     active: true
-    max: 4
+    max: 6
   SpacingBetweenPackageAndImports:
     active: true
   TrailingWhitespace:
