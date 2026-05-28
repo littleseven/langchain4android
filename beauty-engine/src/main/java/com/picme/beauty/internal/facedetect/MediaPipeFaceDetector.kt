@@ -167,49 +167,67 @@ class MediaPipeFaceDetector(context: Context) {
     }
 
     private fun initializeVideoLandmarker() {
-        // [Crash Fix] 默认使用 CPU delegate，避免 GPU 上下文线程冲突导致 SIGBUS
-        try {
-            val baseOptions = BaseOptions.builder()
-                .setDelegate(Delegate.CPU)
-                .setModelAssetPath(MODEL_PATH)
-                .build()
+        // [GPU First] 优先尝试 GPU delegate，失败自动降级 CPU
+        val delegateOrder = listOf(Delegate.GPU, Delegate.CPU)
+        for (delegate in delegateOrder) {
+            try {
+                val baseOptions = BaseOptions.builder()
+                    .setDelegate(delegate)
+                    .setModelAssetPath(MODEL_PATH)
+                    .build()
 
-            val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setMinFaceDetectionConfidence(0.4f)
-                .setMinTrackingConfidence(0.4f)
-                .setMinFacePresenceConfidence(0.4f)
-                .setNumFaces(1)
-                .setOutputFaceBlendshapes(false)
-                .setRunningMode(RunningMode.VIDEO)
-                .build()
+                val options = FaceLandmarker.FaceLandmarkerOptions.builder()
+                    .setBaseOptions(baseOptions)
+                    .setMinFaceDetectionConfidence(0.4f)
+                    .setMinTrackingConfidence(0.4f)
+                    .setMinFacePresenceConfidence(0.4f)
+                    .setNumFaces(1)
+                    .setOutputFaceBlendshapes(false)
+                    .setRunningMode(RunningMode.VIDEO)
+                    .build()
 
-            videoLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-            Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU, VIDEO mode)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize video landmarker", e)
+                videoLandmarker = FaceLandmarker.createFromOptions(appContext, options)
+                Log.i(TAG, "MediaPipe FaceLandmarker initialized (${delegate.name}, VIDEO mode)")
+                return
+            } catch (e: Exception) {
+                val isLast = delegate == delegateOrder.last()
+                if (isLast) {
+                    Log.e(TAG, "Failed to initialize video landmarker with all delegates", e)
+                } else {
+                    Log.w(TAG, "GPU delegate failed for video landmarker, falling back to CPU", e)
+                }
+            }
         }
     }
 
     private fun initializeImageLandmarker() {
-        // [Crash Fix] 默认使用 CPU delegate，避免 GPU 上下文线程冲突导致 SIGBUS
-        try {
-            val baseOptions = BaseOptions.builder()
-                .setDelegate(Delegate.CPU)
-                .setModelAssetPath(MODEL_PATH)
-                .build()
-            val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setMinFaceDetectionConfidence(0.5f)
-                .setMinFacePresenceConfidence(0.5f)
-                .setNumFaces(1)
-                .setOutputFaceBlendshapes(false)
-                .setRunningMode(RunningMode.IMAGE)
-                .build()
-            imageLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-            Log.i(TAG, "MediaPipe FaceLandmarker initialized (CPU, IMAGE mode)")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize image landmarker", e)
+        // [GPU First] 优先尝试 GPU delegate，失败自动降级 CPU
+        val delegateOrder = listOf(Delegate.GPU, Delegate.CPU)
+        for (delegate in delegateOrder) {
+            try {
+                val baseOptions = BaseOptions.builder()
+                    .setDelegate(delegate)
+                    .setModelAssetPath(MODEL_PATH)
+                    .build()
+                val options = FaceLandmarker.FaceLandmarkerOptions.builder()
+                    .setBaseOptions(baseOptions)
+                    .setMinFaceDetectionConfidence(0.5f)
+                    .setMinFacePresenceConfidence(0.5f)
+                    .setNumFaces(1)
+                    .setOutputFaceBlendshapes(false)
+                    .setRunningMode(RunningMode.IMAGE)
+                    .build()
+                imageLandmarker = FaceLandmarker.createFromOptions(appContext, options)
+                Log.i(TAG, "MediaPipe FaceLandmarker initialized (${delegate.name}, IMAGE mode)")
+                return
+            } catch (e: Exception) {
+                val isLast = delegate == delegateOrder.last()
+                if (isLast) {
+                    Log.e(TAG, "Failed to initialize image landmarker with all delegates", e)
+                } else {
+                    Log.w(TAG, "GPU delegate failed for image landmarker, falling back to CPU", e)
+                }
+            }
         }
     }
 }
