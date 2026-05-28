@@ -173,13 +173,13 @@ internal fun bindCameraUseCases(
             "Camera bound: lensFacing=${camera.cameraInfo.lensFacing}, selector=$lensFacing, " +
                 "useCaseGroup=${useCaseGroup != null}, aspectRatio=$aspectRatio"
         )
-    } catch (error: Exception) {
-        Logger.e("Camera", "Camera binding failed, attempting recovery", error)
+    } catch (error: IllegalStateException) {
+        Logger.e("Camera", "Camera binding failed (IllegalState), attempting recovery", error)
         // 相机绑定失败时尝试清理并重新绑定
         try {
             cameraProvider.unbindAll()
             Logger.d("Camera", "Unbound all use cases after failure, retry may be triggered by recomposition")
-        } catch (cleanupError: Exception) {
+        } catch (cleanupError: IllegalStateException) {
             Logger.e("Camera", "Cleanup after binding failure also failed", cleanupError)
         }
     }
