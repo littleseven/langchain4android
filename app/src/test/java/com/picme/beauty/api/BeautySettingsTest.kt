@@ -62,11 +62,11 @@ class BeautySettingsTest {
     // ==================== hasAnyEffect() 测试 ====================
 
     @Test
-    fun `hasAnyEffect returns true for default settings due to non-zero defaults`() {
+    fun `hasAnyEffect returns false for default settings`() {
         val settings = BeautySettings()
 
-        // 由于 lipColor, blush, eyebrow 有非零默认值，所以 hasAnyEffect 应该返回 true
-        assertTrue(settings.hasAnyEffect())
+        // 默认所有美颜参数为 0，hasAnyEffect 应该返回 false
+        assertFalse(settings.hasAnyEffect())
     }
 
     @Test
