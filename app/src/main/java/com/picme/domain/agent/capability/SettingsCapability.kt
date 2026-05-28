@@ -28,7 +28,9 @@ class SettingsCapability(
     private val onToggleSetting: ((String, Boolean) -> Unit)? = null
 ) : BaseCapability() {
 
-    private val TAG = "SettingsCapability"
+    companion object {
+        private const val TAG = "SettingsCapability"
+    }
 
     override val name = "settings"
     override val description = "应用设置控制：主题切换、语言切换、模型管理、调试选项"
@@ -150,24 +152,5 @@ class SettingsCapability(
         )
     }
 
-    private fun getThemeName(theme: ThemeMode): String = when (theme) {
-        ThemeMode.LIGHT -> "浅色"
-        ThemeMode.DARK -> "深色"
-        ThemeMode.SYSTEM -> "跟随系统"
-    }
 
-    private fun getLanguageName(language: AppLanguage): String = when (language) {
-        AppLanguage.CHINESE -> "中文"
-        AppLanguage.ENGLISH -> "英文"
-        AppLanguage.SYSTEM -> "系统默认"
-        AppLanguage.TRADITIONAL_CHINESE -> "繁体中文"
-    }
-
-    private fun getEngineName(engine: FaceDetectionEngineMode): String = when (engine) {
-        FaceDetectionEngineMode.MEDIAPIPE -> "MediaPipe"
-        FaceDetectionEngineMode.INSIGHTFACE -> "InsightFace"
-        FaceDetectionEngineMode.MNN -> "MNN"
-        FaceDetectionEngineMode.NCNN -> "NCNN"
-        FaceDetectionEngineMode.CUSTOM -> "自定义"
-    }
 }

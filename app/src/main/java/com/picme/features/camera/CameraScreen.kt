@@ -85,16 +85,12 @@ import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.camera.agent.rememberAiAgentPanelState
-import com.picme.features.camera.agent.AiAgentPanelState
-import com.picme.features.camera.agent.sendMessage
-import com.picme.beauty.api.llm.MnnLlmClient
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.model.SceneManager
-import com.picme.features.camera.voice.MnnAsrClient
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.delay
@@ -782,8 +778,8 @@ fun CameraContent(
     val voiceCommandMode by userPreferencesRepository.voiceCommandModeFlow.collectAsState(
         initial = VoiceCommandMode.PUSH_TO_TALK
     )
-    val mnnAsrClient = remember(context) { MnnAsrClient(context) }
-    // TODO: 当 MNN ASR JNI 实现后，改为使用 mnnAsrClient.isFullyReady()
+    // MNN ASR 客户端（当前使用系统 ASR，未来可切换）
+    // 保留引用以便未来 JNI 实现后直接替换
     val asrEngine = remember(context) { SystemAsrEngine(context) }
     val onCommandRef = remember { mutableStateOf<(AiAgentCommand) -> Unit>({}) }
     val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
@@ -802,9 +798,10 @@ fun CameraContent(
 
     // 根据模式启停唤醒词监听
     LaunchedEffect(voiceCommandMode) {
-        when (voiceCommandMode) {
-            VoiceCommandMode.WAKE_WORD -> voiceCoordinator.startWakeWordListening()
-            else -> voiceCoordinator.stopWakeWordListening()
+        if (voiceCommandMode == VoiceCommandMode.WAKE_WORD) {
+            voiceCoordinator.startWakeWordListening()
+        } else {
+            voiceCoordinator.stopWakeWordListening()
         }
     }
 
