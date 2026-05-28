@@ -210,9 +210,10 @@ class AgentOrchestrator private constructor(private val context: Context) {
      */
     private fun handleModelLoadError(loadResult: Result<Unit>): Result<AgentAction> {
         val error = loadResult.exceptionOrNull()
-        val message = when (error) {
-            is LlmModelNotFoundException -> error.message ?: "模型未下载"
-            else -> "模型加载失败：${error?.message ?: "未知错误"}"
+        val message = if (error is LlmModelNotFoundException) {
+            error.message ?: "模型未下载"
+        } else {
+            "模型加载失败：${error?.message ?: "未知错误"}"
         }
         return Result.success(AgentAction.Error(message))
     }
@@ -251,9 +252,10 @@ class AgentOrchestrator private constructor(private val context: Context) {
         command: AgentCommand,
         rawResponse: String
     ) {
-        val assistantResponse = when (command) {
-            is AgentCommand.TextReply -> command.message
-            else -> rawResponse
+        val assistantResponse = if (command is AgentCommand.TextReply) {
+            command.message
+        } else {
+            rawResponse
         }
         memoryManager.appendConversation(sessionId, userInput, assistantResponse)
     }

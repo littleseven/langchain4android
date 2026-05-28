@@ -16,9 +16,12 @@ import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.SettingsCapability
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
-import com.picme.domain.model.AppLanguage
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.ThemeMode
+
+
+
+
+
+
 import com.picme.features.agent.GlobalAgentPanel
 import com.picme.features.settings.SettingsViewModel
 
@@ -36,7 +39,7 @@ class SettingsAgentIntegration(
     private val onNavigateTo: (String) -> Unit,
     private val onNavigateBack: () -> Unit
 ) {
-    private val TAG = "SettingsAgent"
+    companion object { private const val TAG = "SettingsAgent" }
 
     private val appContext = context.applicationContext
 

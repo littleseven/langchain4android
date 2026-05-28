@@ -49,7 +49,7 @@ class MnnAsrClient(private val context: Context) : AsrEngine {
             return false
         }
 
-        // TODO: 实现 JNI 桥接调用 MNN ASR C++ 库
+        // 待实现: 实现 JNI 桥接调用 MNN ASR C++ 库
         // nativeHandle = nativeCreate(modelDir.absolutePath)
         // return nativeHandle != 0L
 

@@ -289,15 +289,15 @@ fun GalleryScreen(
             }
         },
         onSearchMedia = { query ->
-            // TODO: 实现搜索功能
+            // 待实现: 实现搜索功能
             Log.d("PicMe:GalleryAgent", "Search query: $query")
         },
         onSwitchViewMode = { mode ->
-            // TODO: 实现视图切换
+            // 待实现: 实现视图切换
             Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
         },
         onFavoriteMedia = { asset, favorite ->
-            // TODO: 实现收藏功能
+            // 待实现: 实现收藏功能
             Log.d("PicMe:GalleryAgent", "Favorite ${asset.id}: $favorite")
         }
     )

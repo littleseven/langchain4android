@@ -32,7 +32,8 @@ import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.repository.UserSettingsRepository
-import kotlinx.coroutines.flow.first
+
+
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch

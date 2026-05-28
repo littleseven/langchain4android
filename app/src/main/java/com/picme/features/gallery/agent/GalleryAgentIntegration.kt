@@ -34,7 +34,7 @@ class GalleryAgentIntegration(
     private val onNavigateTo: (String) -> Unit,
     private val onNavigateBack: () -> Unit
 ) {
-    private val TAG = "GalleryAgent"
+    companion object { private const val TAG = "GalleryAgent" }
 
     private val appContext = context.applicationContext
 

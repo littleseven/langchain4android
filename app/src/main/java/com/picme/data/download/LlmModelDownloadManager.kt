@@ -1,7 +1,8 @@
 package com.picme.data.download
 
 import android.content.Context
-import android.util.Log
+
+
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.ModelCategory
@@ -52,42 +53,7 @@ class LlmModelDownloadManager(private val context: Context) {
      */
     private val pausedDownloads = mutableMapOf<String, Long>()
 
-    /**
-     * MNN-LLM 模型固定文件列表
-     */
-    private val LLM_MODEL_FILES = listOf(
-        "config.json",
-        "llm.mnn",
-        "llm.mnn.weight",
-        "tokenizer.txt"
-    )
 
-    /**
-     * ASR 模型固定文件列表
-     */
-    private val ASR_MODEL_FILES = listOf(
-        "whisper.mnn",
-        "vocab.json"
-    )
-
-    /**
-     * TTS 模型固定文件列表
-     */
-    private val TTS_MODEL_FILES = listOf(
-        "config.json",
-        "tts.mnn",
-        "vocab.txt"
-    )
-
-    /**
-     * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
-     */
-    private val LLM_MODEL_OPTIONAL_FILES = listOf(
-        "configuration.json",
-        "llm_config.json",
-        "README.md",
-        "embeddings_bf16.bin"
-    )
 
     /**
      * 加载可用模型配置
@@ -385,9 +351,10 @@ class LlmModelDownloadManager(private val context: Context) {
      * 根据模型 ID 获取对应的文件列表
      */
     private fun getModelFiles(modelId: String): List<String> {
-        return when {
-            modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
-            else -> LLM_MODEL_FILES
+        return if (modelId.contains("whisper", ignoreCase = true)) {
+            ASR_MODEL_FILES
+        } else {
+            LLM_MODEL_FILES
         }
     }
 
@@ -969,6 +936,43 @@ class LlmModelDownloadManager(private val context: Context) {
     companion object {
         private const val DEFAULT_BUFFER_SIZE = 8192
         private const val MODEL_MARKET_URL = "https://meta.alicdn.com/data/mnn/apis/model_market.json"
+
+        /**
+         * MNN-LLM 模型固定文件列表
+         */
+        private val LLM_MODEL_FILES = listOf(
+            "config.json",
+            "llm.mnn",
+            "llm.mnn.weight",
+            "tokenizer.txt"
+        )
+
+        /**
+         * ASR 模型固定文件列表
+         */
+        private val ASR_MODEL_FILES = listOf(
+            "whisper.mnn",
+            "vocab.json"
+        )
+
+        /**
+         * TTS 模型固定文件列表
+         */
+        private val TTS_MODEL_FILES = listOf(
+            "config.json",
+            "tts.mnn",
+            "vocab.txt"
+        )
+
+        /**
+         * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
+         */
+        private val LLM_MODEL_OPTIONAL_FILES = listOf(
+            "configuration.json",
+            "llm_config.json",
+            "README.md",
+            "embeddings_bf16.bin"
+        )
 
         /**
          * 默认标签翻译（MNN 官方 tagTranslations 的本地回退）
