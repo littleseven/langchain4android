@@ -1,229 +1,120 @@
-# PicMe
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white" alt="Platform">
+  <img src="https://img.shields.io/badge/minSdk-24-3DDC84" alt="Min SDK">
+  <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/OpenGL-ES%203.0-5586A4?logo=opengl&logoColor=white" alt="OpenGL ES">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
+</p>
 
-> **Agent First 工程试验场** —— 以 Agent 为中心的客户端框架与研发流程
+<h1 align="center">PicMe</h1>
 
-PicMe 是一个元实验：我们探索「端侧 AI Agent 驱动应用」的技术可行性，更重要的是**验证 Agent First 的工程范式**——Agent 作为第一公民，主导从需求分析到质量验收的完整研发流程。
+<p align="center">
+  <b>下一代端侧 AI 智能相机</b><br>
+  <i>自然语言驱动 · 全链路 GPU 渲染 · 100% 隐私安全</i>
+</p>
 
-美颜相机只是试验载体，真正的研究对象是**面向 Agent 的架构设计与协作机制**。
-
----
-
-## 三重实验维度
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  维度 1: 端侧 Agent 架构（运行时）                                │
-│  ├─ 目标：验证 LLM 能否成为应用的中枢神经系统                      │
-│  └─ 产出：Agent Runtime、Capability 系统、对话式交互范式          │
-├─────────────────────────────────────────────────────────────────┤
-│  维度 2: Agent First 客户端框架（架构层）                          │
-│  ├─ 目标：让 Agent 高效理解、修改、扩展代码                        │
-│  └─ 产出：显式边界、声明式状态、自描述能力、结构化可观测性          │
-├─────────────────────────────────────────────────────────────────┤
-│  维度 3: Agent First 研发流程（流程层）                            │
-│  ├─ 目标：Agent 主导协作，基础设施原子化为可调用的 Tools           │
-│  └─ 产出：角色化协作、Self-Heal、即时验证、文档驱动开发            │
-└─────────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <a href="#-核心特性">特性</a> ·
+  <a href="#-技术架构">架构</a> ·
+  <a href="#-快速开始">快速开始</a> ·
+  <a href="#-文档">文档</a> ·
+  <a href="#-agent-first-研发范式">Agent 范式</a>
+</p>
 
 ---
 
-## 面向 Agent 的架构设计
+## 概览
 
-PicMe 的每一个架构决策都遵循**显式优于隐式**的原则——让 Agent 通过代码结构本身即可理解系统，而非依赖易腐烂的注释或隐性约定。
+PicMe 是一款探索「端侧 AI Agent 驱动应用」的智能相机应用。用户可以通过**自然语言**与相机交互——说「调高美颜」「换个冷调滤镜」「拍一张」即可控制全部功能，无需手动调节复杂参数。
 
-### 1. 显式架构边界
+项目同时是一个**Agent First 工程试验场**，验证 Agent 作为研发流程第一公民的可行性，探索面向 Agent 的架构设计、协作机制与研发范式。
 
-构造函数即文档，依赖关系一目了然。
-
-```kotlin
-// ❌ 隐式依赖：Agent 需要全局搜索才能理解
-class CameraViewModel {
-    private val beautyEngine = BeautyEngine.getInstance()
-}
-
-// ✅ 显式注入：Agent 通过签名即可理解协作关系
-class CameraViewModel(
-    private val beautyEngine: BeautyEngine,
-    private val agentUseCase: AiAgentUseCase,
-    private val settingsRepository: SettingsRepository
-) : ViewModel()
-```
-
-### 2. 声明式状态空间
-
-枚举所有合法状态，消除隐式组合。
-
-```kotlin
-sealed interface CameraUiState {
-    data object Initializing : CameraUiState
-    data class Previewing(
-        val beautySettings: BeautySettings,
-        val agentDialogState: AgentDialogState
-    ) : CameraUiState
-    data class Error(val reason: String, val recoverable: Boolean) : CameraUiState
-}
-```
-
-### 3. 自描述能力系统
-
-Capability 自包含元数据，Agent 可反射发现。
-
-```kotlin
-class AdjustBeautyCapability : Capability {
-    override val id = "adjust_beauty"
-    override val description = "调节美颜参数（磨皮、美白、瘦脸、大眼）"
-    override val parameters = listOf(
-        Parameter("smooth", ParameterType.INT, range = 0..100),
-        Parameter("whiten", ParameterType.INT, range = 0..100)
-    )
-    
-    override suspend fun execute(params: Map<String, Any>): Result<Unit> { }
-}
-```
-
-### 4. 结构化可观测性
-
-纯文本日志 → 结构化事件，Agent 可消费、可诊断。
-
-```kotlin
-Logger.log(LogEvent.AgentCommandParsed(
-    rawInput = "调高美颜",
-    parsedIntent = Intent.AdjustBeauty,
-    confidence = 0.95,
-    extractedParams = mapOf("smooth" to 50)
-))
-```
-
-### 5. 文档即契约
-
-| 文档 | 职责 | 价值 |
-|------|------|------|
-| `PRODUCT.md` | 产品目标与验收标准 | 理解「为什么做」 |
-| `docs/01-PRODUCT/FEATURES.md` | 交互流程与体验规则 | 理解「用户怎么用」 |
-| `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` | Agent 运行时架构 | 理解「系统怎么设计」 |
-| `docs/03-TECHNICAL-SPECS/*.md` | 模块技术规格 | 理解「代码怎么写」 |
-| `docs/04-AGENT-CAPABILITIES/CAPABILITY_REGISTRY.md` | Capability 注册表 | 理解「能力边界」 |
-| `docs/07-STANDARDS/GLOSSARY.md` | 统一术语词典 | 理解「语义一致性」 |
-| `[kimi-task]` | 可执行的任务描述 | 直接解析为执行计划 |
-
-**完整文档体系**: 参见 [`docs/00-INDEX.md`](docs/00-INDEX.md) 导航索引。
+> 美颜相机是试验载体，真正的研究对象是**端侧 Agent 运行时架构**与**Agent First 工程范式**。
 
 ---
 
-## Agent 协作与 Tools 层
+## ✨ 核心特性
 
-PicMe 采用**角色化协作模型**：CO、PM、RD、CR、QA 各司其职，通过标准化的 **Tools 层** 完成验证闭环。
+### 🤖 自然语言交互
 
-### Tools 层：基础设施的原子化
+| 你说 | PicMe 做 |
+|------|----------|
+| 「拍张照」 | 立即拍摄并保存 |
+| 「调高美颜」 | 平滑提升磨皮/美白强度 |
+| 「换个冷调滤镜」 | 切换冷色调风格滤镜 |
+| 「打开前置」 | 翻转至前置摄像头 |
 
-传统研发流程中，编译、安装、测试、验证是离散的手动步骤。在 Agent First 范式中，这些基础设施被封装为**原子化的 Tools**，供 Agent 按需调用、组合编排：
+- 端侧运行 **Qwen3-0.6B** 大模型，零网络依赖
+- **Capability 系统**支持热插拔扩展，新增能力无需修改 Agent 核心
+- 多轮对话上下文记忆，交互体验连贯自然
 
-```kotlin
-// RD 编排 Tools 完成验证闭环
-val verificationChain = listOf(
-    CompileTool(),        // 编译检查
-    InstallTool(),        // 安装到设备
-    ScreenshotTool(),     // 截屏验证
-    LogAnalysisTool()     // 日志分析
-)
+### 📷 自研实时美颜引擎
 
-fun selfHeal(task: Task) {
-    verificationChain.forEach { tool ->
-        val result = tool.execute()
-        if (!result.success) fixAndRetry(result.errors)
-    }
-}
-```
+- **全自研 OpenGL ES + EGL 渲染管线**（无第三方美颜 SDK）
+- 完整美颜链路：磨皮、美白、瘦脸、大眼、唇色、腮红、眉毛
+- **GPU 离屏拍照**：预览与输出使用同一套 Shader，效果一致性 99%+
+- 双引擎人脸检测：InsightFace 2D106（主）+ MediaPipe 468→106（备）
+- 帧同步妆容系统：解决检测帧率与渲染帧率不匹配导致的"妆容甩飞"问题
 
-**Tools 化带来的转变**：
-- 验证从「批量测试」变为「即时反馈」
-- 日志从「人工浏览」变为「结构化消费」
-- 修复从「被动等待」变为「主动自愈」
+### 🔒 100% 端侧隐私
 
-### 角色分工
+| 功能 | 运行位置 | 网络依赖 |
+|------|----------|----------|
+| LLM 推理 | 本地 MNN-LLM | ❌ 零网络 |
+| 人脸检测 | 本地 ONNX Runtime | ❌ 零网络 |
+| OCR 文字识别 | 本地 ML Kit | ❌ 零网络 |
+| 美颜渲染 | 本地 GPU | ❌ 零网络 |
 
-```
-User Request
-    ↓
-[CO] 协调者 ──→ 任务分级、状态板维护
-    ↓
-[PM] 产品经理 ──→ 更新 PRODUCT.md、FEATURES.md
-    ↓
-[RD] 全栈工程师 ──→ 代码实现、文档同步、Tools 编排验证
-    ↓
-[CR] 规范守护者 ──→ 架构合规审查
-    ↓
-[QA] 质量专家 ──→ 边界测试、验收确认
-    ↓
-Delivered
-```
-
-### 自动化脚本
-
-| 脚本 | 功能 | 触发者 |
-|------|------|--------|
-| `./scripts/auto-dev-loop.sh` | 编译→安装→截屏→日志→报告 | RD |
-| `./scripts/ai-gate.sh` | 代码质量门禁 | CI |
-| `./scripts/impact-analyzer.sh` | 变更影响分析 | CO |
-| `./scripts/doc-sync-guardian.sh` | 文档同步检查 | CR |
-| `./scripts/test-generator.py` | 测试骨架生成 | RD |
-| `./scripts/screenshot-diff.py` | UI 回归检测 | QA |
+所有 AI 处理完全在设备本地完成，**无需网络权限**，用户隐私零泄露风险。
 
 ---
 
-## 核心特性（运行时）
+## 🏗 技术架构
 
-### 🤖 Agent 交互
-- 自然语言控制相机：「调高美颜」「换个冷调滤镜」「拍一张」
-- 端侧 Qwen3-0.6B 推理，零网络依赖
-- Capability 系统支持热插拔
+```
+┌──────────────────────────────────────────────────────────────┐
+│  User Interface (Jetpack Compose)                             │
+│  ├─ 相机预览 + Agent 对话面板                                  │
+│  ├─ 实时美颜调节面板                                          │
+│  └─ 相册浏览与静态图编辑                                       │
+├──────────────────────────────────────────────────────────────┤
+│  Agent Runtime (domain/agent/)                                │
+│  ├─ AgentOrchestrator      意图解析与任务编排                  │
+│  ├─ LocalLlmEngine         Qwen3-0.6B / MNN-LLM 推理         │
+│  ├─ CapabilityRegistry     设备能力路由（自描述元数据）        │
+│  ├─ MemoryManager          多轮对话上下文管理                  │
+│  └─ PrivacyGuard           隐私分级守卫                        │
+├──────────────────────────────────────────────────────────────┤
+│  Capability Layer（可插拔、自描述）                            │
+│  ├─ CameraCapability       相机控制（拍摄/切换/参数）          │
+│  ├─ BeautyCapability       美颜参数调节                        │
+│  ├─ GalleryCapability      相册管理                            │
+│  ├─ SettingsCapability     设置管理                            │
+│  └─ NavigationCapability   页面导航                            │
+├──────────────────────────────────────────────────────────────┤
+│  beauty-engine (独立模块 · OpenGL ES + EGL)                   │
+│  ├─ CameraPreviewRenderer  实时预览渲染                        │
+│  ├─ BeautyRenderer         美颜 Shader 多 Pass 管线            │
+│  ├─ PhotoProcessorImpl     GPU 离屏拍照处理                    │
+│  ├─ FrameSyncManager       帧同步妆容系统                      │
+│  └─ FaceDetectionEngine    InsightFace + MediaPipe 双引擎      │
+└──────────────────────────────────────────────────────────────┘
+```
 
-### 📷 实时美颜
-- 自研 OpenGL ES 渲染管线
-- 磨皮、美白、瘦脸、大眼、唇色、腮红
-- GPU 离屏拍照，预览/输出一致性
+### 架构亮点
 
-### 🔒 100% 端侧
-- LLM、人脸检测、OCR 全部本地运行
-- 零云端，零网络权限
+- **显式优于隐式**：构造函数即文档，依赖关系一目了然
+- **声明式状态空间**：Sealed Class 枚举所有合法状态，消除隐式组合
+- **自描述 Capability**：Capability 自包含元数据，Agent 可反射发现与调用
+- **结构化可观测性**：纯文本日志 → 结构化事件，Agent 可消费、可诊断
+- **文档即契约**：PRODUCT.md → FEATURES.md → AGENTS.md 三层文档体系驱动开发
 
 ---
 
-## 架构概览
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  User Interface (Compose)                                 │
-│  ├─ 相机预览 + Agent 对话面板                              │
-│  └─ 传统控制栏（快捷入口）                                 │
-├─────────────────────────────────────────────────────────┤
-│  Agent Runtime (domain/agent/)                            │
-│  ├─ AgentOrchestrator      意图解析与任务编排              │
-│  ├─ LocalLlmEngine         Qwen3-0.6B / MNN-LLM           │
-│  ├─ CapabilityRegistry     设备能力路由（自描述）          │
-│  ├─ MemoryManager          对话上下文                     │
-│  └─ PrivacyGuard           隐私分级守卫                   │
-├─────────────────────────────────────────────────────────┤
-│  Capability Layer（可插拔、自描述）                        │
-│  ├─ CameraCapability       相机控制                       │
-│  ├─ BeautyCapability       美颜参数调节                   │
-│  └─ SystemCapability       系统级操作                     │
-├─────────────────────────────────────────────────────────┤
-│  beauty-engine (OpenGL ES + EGL)                          │
-│  ├─ CameraPreviewRenderer  预览渲染                       │
-│  ├─ BeautyRenderer         美颜 Shader 管线               │
-│  ├─ PhotoProcessorImpl     GPU 离屏拍照                   │
-│  └─ FaceDetectionEngine    多引擎人脸检测                 │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 快速开始
+## 🚀 快速开始
 
 ```bash
-# 克隆项目
+# 克隆仓库
 git clone https://github.com/littleseven/PicMe.git
 cd PicMe
 
@@ -233,52 +124,91 @@ cd PicMe
 # 安装到设备
 adb install -r app/build/outputs/apk/debug/picme-debug.apk
 
-# 自动化开发闭环（编译→安装→验证→报告）
+# 一键开发闭环（编译 → 安装 → 截屏 → 日志 → 报告）
 ./scripts/auto-dev-loop.sh
 ```
 
+### 常用命令
+
+| 命令 | 说明 |
+|------|------|
+| `./gradlew test` | 运行 JVM 单元测试 |
+| `./gradlew connectedAndroidTest` | 运行仪器测试（需设备） |
+| `./gradlew lint` | 静态代码检查 |
+| `./scripts/ai-gate.sh` | 代码质量门禁 |
+| `adb logcat -s "PicMe:*"` | 查看 PicMe 日志 |
+
 ---
 
-## 研究价值
+## 📚 文档
+
+PicMe 采用**文档驱动开发**，所有设计决策、技术规格、验收标准均以文档形式固化：
+
+| 层级 | 文档 | 读者 | 内容 |
+|------|------|------|------|
+| **导航** | [`docs/00-INDEX.md`](docs/00-INDEX.md) | 全部 | 完整文档导航索引 |
+| **产品层** | [`PRODUCT.md`](PRODUCT.md) | PM/RD/QA | 产品定义、核心命题、验收标准 |
+| | [`docs/01-PRODUCT/FEATURES.md`](docs/01-PRODUCT/FEATURES.md) | PM/RD/QA | 交互流程与体验规则 |
+| | [`docs/01-PRODUCT/NFR_SPEC.md`](docs/01-PRODUCT/NFR_SPEC.md) | QA/RD | 性能/稳定性/隐私量化指标 |
+| **架构层** | [`docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md) | RD/CO | Agent 运行时架构、Capability 模型 |
+| | [`docs/02-ARCHITECTURE/ADR/`](docs/02-ARCHITECTURE/ADR/) | RD/CR | 架构决策记录 |
+| **技术规范** | [`docs/03-TECHNICAL-SPECS/`](docs/03-TECHNICAL-SPECS/) | RD | 美颜引擎、帧同步、人脸检测、相机预览 |
+| **Agent 能力** | [`docs/04-AGENT-CAPABILITIES/`](docs/04-AGENT-CAPABILITIES/) | RD/PM | Capability 注册表、命令参考、实现指南 |
+| **开发规范** | [`docs/05-DEVELOPMENT/`](docs/05-DEVELOPMENT/) | RD/CO | 工作流、CR 检查清单、任务标记规范 |
+| **质量标准** | [`docs/06-QA/`](docs/06-QA/) | QA | 验收测试清单 |
+| **标准词典** | [`docs/07-STANDARDS/`](docs/07-STANDARDS/) | 全部 | 坐标系标准、统一术语词典 |
+| **容灾** | [`docs/08-FALLBACK/`](docs/08-FALLBACK/) | RD/QA | 引擎降级策略与恢复机制 |
+
+---
+
+## 🔬 Agent First 研发范式
+
+PicMe 不仅是一款应用，更是对「Agent 能否主导软件研发全流程」的系统性验证。
+
+### 三重实验维度
+
+| 维度 | 目标 | 关键产出 |
+|------|------|----------|
+| **端侧 Agent 架构** | 验证 LLM 能否成为应用的中枢神经系统 | Agent Runtime、Capability 系统、对话式交互 |
+| **Agent First 客户端框架** | 让 Agent 高效理解、修改、扩展代码 | 显式边界、声明式状态、自描述能力 |
+| **Agent First 研发流程** | Agent 主导协作，基础设施原子化为 Tools | 角色化协作、Self-Heal、即时验证 |
 
 ### 已验证的假设
 
-| 假设 | 结论 | 证据 |
-|------|------|------|
-| 显式架构可被 Agent 高效理解 | ✅ 成立 | RD Agent 成功实现多模块功能 |
-| 文档驱动开发减少沟通损耗 | ✅ 成立 | PRODUCT→FEATURES→AGENTS 链条有效 |
-| Tools 化支持 Self-Heal 闭环 | ✅ 成立 | 编译/安装/验证自动化 |
-| Capability 系统支持热插拔 | ✅ 成立 | 新增能力无需修改 Agent 核心 |
+| 假设 | 结论 |
+|------|------|
+| 显式架构可被 Agent 高效理解 | ✅ 成立 — RD Agent 成功实现跨模块功能 |
+| 文档驱动开发减少沟通损耗 | ✅ 成立 — PRODUCT→FEATURES→AGENTS 链条有效 |
+| Tools 化支持 Self-Heal 闭环 | ✅ 成立 — 编译/安装/验证全自动化 |
+| Capability 系统支持热插拔 | ✅ 成立 — 新增能力零侵入 Agent 核心 |
 
-### 待验证的问题
+### 待探索的问题
 
 1. **规模上限**：Agent 能高效处理的代码库规模上限是多少？
-2. **复杂重构**：Agent 能否主导跨模块架构重构？
-3. **跨项目迁移**：learned patterns 能否迁移到其他项目？
-4. **人机协作边界**：哪些决策必须人工介入？
-5. **Tools 扩展性**：新 Tools 能否被 Agent 自动发现？
+2. **复杂重构**：Agent 能否主导跨模块架构级重构？
+3. **跨项目迁移**：Learned patterns 能否泛化到其他项目？
+4. **人机协作边界**：哪些决策必须保留人工介入？
 
 ---
 
-## 文档
+## 🛠 自动化工具链
 
-| 层级 | 文档 | 内容 |
-|------|------|------|
-| **导航** | [`docs/00-INDEX.md`](docs/00-INDEX.md) | 完整文档导航索引 |
-| **产品层** | [`PRODUCT.md`](PRODUCT.md) | 产品定义、核心命题、验收标准 |
-| | [`docs/01-PRODUCT/FEATURES.md`](docs/01-PRODUCT/FEATURES.md) | 功能交互细节 |
-| | [`docs/01-PRODUCT/NFR_SPEC.md`](docs/01-PRODUCT/NFR_SPEC.md) | 非功能性需求（性能/稳定性指标） |
-| **架构层** | [`docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md) | Agent 运行时架构 |
-| | [`docs/02-ARCHITECTURE/ADR/`](docs/02-ARCHITECTURE/ADR/) | 架构决策记录 |
-| **技术规范** | [`docs/03-TECHNICAL-SPECS/`](docs/03-TECHNICAL-SPECS/) | 美颜引擎、帧同步、相机预览等技术规格 |
-| **Agent 能力** | [`docs/04-AGENT-CAPABILITIES/`](docs/04-AGENT-CAPABILITIES/) | Capability 注册表、命令参考、实现指南 |
-| **开发规范** | [`docs/05-DEVELOPMENT/`](docs/05-DEVELOPMENT/) | 工作流、CR 检查清单、任务标记规范 |
-| **质量标准** | [`docs/06-QA/QA_EXECUTION_CHECKLIST.md`](docs/06-QA/QA_EXECUTION_CHECKLIST.md) | QA 验收测试清单 |
-| **标准词典** | [`docs/07-STANDARDS/`](docs/07-STANDARDS/) | 坐标系标准、术语词典 |
-| **容灾** | [`docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md`](docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md) | 美颜引擎降级策略 |
+| 脚本 | 功能 | 触发者 |
+|------|------|--------|
+| [`auto-dev-loop.sh`](scripts/auto-dev-loop.sh) | 编译 → 安装 → 截屏 → 日志 → 报告 | RD |
+| [`ai-gate.sh`](scripts/ai-gate.sh) | 代码质量门禁（lint + 编译 + 安装检查） | CI |
+| [`impact-analyzer.sh`](scripts/impact-analyzer.sh) | 变更影响分析与文档同步提醒 | CO |
+| [`doc-sync-guardian.sh`](scripts/doc-sync-guardian.sh) | 三层文档一致性检查 | CR |
+| [`screenshot-diff.py`](scripts/screenshot-diff.py) | UI 回归像素级对比 | QA |
 
 ---
 
-## 许可
+## 📄 许可
 
-MIT License — 仅用于研究与学习目的。
+MIT License — 研究、学习、二次开发均可自由使用。
+
+---
+
+<p align="center">
+  <i>PicMe — 让相机听懂你说的话</i>
+</p>
