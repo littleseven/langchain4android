@@ -1,9 +1,11 @@
 {
-  "enabledPlugins": {},
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m 'docs: 修复 docs 目录重构后的失效引用 *)"
+      "Bash(git commit -m 'docs: 修复 docs 目录重构后的失效引用 *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'refactor\\(skills\\): 升级 .qoder skill 体系以匹配当前架构 *)"
     ]
-  }
+  },
+  "enabledPlugins": {}
 }

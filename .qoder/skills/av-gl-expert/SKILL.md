@@ -10,7 +10,7 @@ tags: [opengl, camerax, egl, shader, gpu, rendering]
 
 # AV-GL Expert (PicMe)
 
-## 🚀 Kimi-cli 快速执行指南
+## 🚀 PicMe CLI 快速执行指南
 
 ### 核心指令集
 | 触发词 | 动作 |

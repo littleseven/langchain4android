@@ -240,34 +240,33 @@ find app/src -name "AGENTS.md" -exec grep -l "Product Alignment" {} \;
 - 技术专项文档: [docs/XXX_TECH_SPEC.md]
 ```
 
-#### Step 2: 创建或更新技术专项文档
+#### Step 2: 确认技术专项文档位置
 ```bash
-# 如果不存在专项文档，创建新文件
-if ! exists "docs/PHOTO_GPU_TECH_SPEC.md":
-    create_file "docs/PHOTO_GPU_TECH_SPEC.md" with template
-
-# 追加决策记录到文档末尾
-append_decision_log "docs/PHOTO_GPU_TECH_SPEC.md"
+# 拍照 GPU 化技术方案已整合至现有文档
+# 无需创建新文件，直接更新以下内容：
+# - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (GPU 拍照章节)
+# - docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md (架构决策)
 ```
 
 #### Step 3: 更新三层文档的引用
 ```markdown
 # 在 PRODUCT.md 添加引用
-见 `docs/PHOTO_GPU_TECH_SPEC.md` 技术方案详情
+见 `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` 技术方案详情
 
 # 在 FEATURES.md 添加引用
-技术实现详见 `docs/PHOTO_GPU_TECH_SPEC.md`
+技术实现详见 `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 
 # 在模块 AGENTS.md 添加引用
-架构设计参考 `docs/PHOTO_GPU_TECH_SPEC.md Section 6`
+架构设计参考 `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md`
 ```
 
 #### Step 4: 提交并通知团队
 ```bash
-git add docs/PHOTO_GPU_TECH_SPEC.md PRODUCT.md docs/01-PRODUCT/FEATURES.md
-git commit -m "docs: 记录拍照 GPU 化技术决策
+git add docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md PRODUCT.md docs/01-PRODUCT/FEATURES.md
+git commit -m "docs: 更新拍照 GPU 化技术决策文档
 
-- 创建 PHOTO_GPU_TECH_SPEC.md 记录完整技术方案
+- 更新 BEAUTY_ENGINE_TECH_SPEC.md GPU 拍照章节
+- 同步 ADR-002 架构决策记录
 - 更新 PRODUCT.md 性能指标
 - 同步 FEATURES.md 用户体验目标
 - 关联 Camera AGENTS.md 实现细节"
@@ -302,7 +301,7 @@ wc -l AGENTS.md  # 如果超过 500 行，可能需要瘦身
 - [ ] 文档引用链断裂（A 引用 B，但 B 已删除）？
 
 #### Step 2: 执行内容分流
-根据 AGENTS_SPEC.md Section 4.4：
+根据 AGENTS.md 文档分层规范：
 
 ```markdown
 ## 内容分流操作
@@ -316,8 +315,8 @@ wc -l AGENTS.md  # 如果超过 500 行，可能需要瘦身
 📦 移动: 滤镜算法实现 -> `beauty-engine/AGENTS.md Section 2`
 
 ### 移动到技术专项文档
-📦 移动: MediaPipe 468→106 映射详解 -> `docs/MEDIAPIPE_MAPPING_TECH_SPEC.md`
-📦 移动: EGL 离屏渲染架构 -> `docs/OFFSCREEN_RENDERING_TECH_SPEC.md`
+📦 移动: MediaPipe 468→106 映射详解 -> `docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
+📦 移动: EGL 离屏渲染架构 -> `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md`
 
 ### 标记为废弃
 🗑️ 清理: GPUPixel 相关文档引用 -> 彻底移除或标注"已于 2026-05 移除"

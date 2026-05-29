@@ -108,6 +108,21 @@ tags: [requirement, routing, context, module, terminology]
 | NDC | 归一化设备坐标 | `[-1,1] 坐标系` |
 | UV 坐标 | 纹理坐标 | `[0,1] 坐标系` |
 
+### Agent 相关
+
+| 用户口语 | 项目术语 | 对应代码 | 所属模块 |
+|----------|----------|----------|----------|
+| 语音控制 | 语音命令 / Voice Command | `VoiceCommandCoordinator` | camera (app) |
+| 智能助手 | AI Agent / Agent Panel | `GlobalAgentPanel / AiAgentPanel` | app |
+| 拍张照 | 拍照指令 / Capture | `CameraCapability.CapturePhoto` | domain/agent |
+| 换滤镜 | 切换滤镜 / SwitchFilter | `CameraCapability.SwitchFilter` | domain/agent |
+| 美颜参数 | 美颜调整 / AdjustBeauty | `BeautyCapability.AdjustBeauty` | domain/agent |
+| 场景模式 | 场景切换 / SwitchScene | `CameraCapability.SwitchScene` | domain/agent |
+| 语音唤醒 | 唤醒词 / Wake Word | `WakeWordEngine` | camera (app) |
+| 推理模式 | 推理模式 / Inference Mode | `AdaptiveStrategySelector` | domain/agent |
+| 本地模型 | 端侧 LLM / On-device LLM | `LocalLlmEngine / MnnLlmClient` | domain/agent |
+| Capability | 能力接口 | `Capability` | domain/agent |
+
 ### 全局红线术语
 
 | 缩写 | 全称 | 含义 | 检查点 |
@@ -137,6 +152,12 @@ tags: [requirement, routing, context, module, terminology]
   - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md
   - beauty-engine/src/main/java/com/picme/beauty/**/*.kt
 
+[Feature] + agent:
+  - docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md
+  - app/src/main/java/com/picme/domain/agent/AGENTS.md
+  - docs/04-AGENT-CAPABILITIES/CAPABILITY_REGISTRY.md
+  - app/src/main/java/com/picme/domain/agent/**/*.kt
+
 [BugFix] + 任何模块:
   - 相关模块 AGENTS.md
   - 相关源码文件
@@ -148,6 +169,7 @@ tags: [requirement, routing, context, module, terminology]
   - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (性能章节)
   - 基准测试数据
   - Profiler 配置说明
+  - [.qoder/skills/perf-optimizer/SKILL.md](.qoder/skills/perf-optimizer/SKILL.md)
 
 [UIAdjust]:
   - 目标 Compose 文件
@@ -156,12 +178,10 @@ tags: [requirement, routing, context, module, terminology]
   - docs/01-PRODUCT/FEATURES.md (设计规范章节)
   - [.qoder/skills/compose-ui-expert/SKILL.md](.qoder/skills/compose-ui-expert/SKILL.md)
 
-[Perf]:
-  - 相关模块 AGENTS.md
-  - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (性能章节)
-  - 基准测试数据
-  - Profiler 配置说明
-  - [.qoder/skills/perf-optimizer/SKILL.md](.qoder/skills/perf-optimizer/SKILL.md)
+[Voice]:
+  - app/src/main/java/com/picme/features/camera/voice/ 目录下相关文件
+  - docs/01-PRODUCT/FEATURES.md (语音交互章节)
+  - docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md (语音命令路由)
 
 [I18N]:
   - res/values*/strings.xml
