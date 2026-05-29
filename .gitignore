@@ -75,3 +75,5 @@ beauty-engine/src/main/assets/models/llm/
 *.mnn.weight
 *.mnn.lock
 *.qwen
+.worktrees/
+worktrees/
