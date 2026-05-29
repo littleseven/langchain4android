@@ -86,15 +86,6 @@ interface UserSettingsRepository {
     val aiAgentLocalModelFlow: Flow<String>
     suspend fun updateAiAgentLocalModel(modelId: String)
 
-    val aiAgentApiKeyFlow: Flow<String>
-    suspend fun updateAiAgentApiKey(apiKey: String)
-
-    val aiAgentModelFlow: Flow<String>
-    suspend fun updateAiAgentModel(model: String)
-
-    val aiAgentBaseUrlFlow: Flow<String>
-    suspend fun updateAiAgentBaseUrl(baseUrl: String)
-
     // ── Kimi Coding API 配置 ─────────────────────────────────
     val aiAgentCodingApiKeyFlow: Flow<String>
     suspend fun updateAiAgentCodingApiKey(apiKey: String)

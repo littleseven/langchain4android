@@ -88,4 +88,13 @@ sealed class AiAgentCommand {
     data class TextReply(
         val message: String
     ) : AiAgentCommand()
+
+    /**
+     * 批量执行命令（远程模式 L2）
+     *
+     * 包含多个独立命令，按顺序依次执行。
+     */
+    data class BatchExecute(
+        val commands: List<AiAgentCommand>
+    ) : AiAgentCommand()
 }

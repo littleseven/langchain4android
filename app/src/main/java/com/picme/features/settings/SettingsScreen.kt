@@ -114,9 +114,6 @@ fun SettingsScreen(
     val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
     val aiAgentMode by viewModel.aiAgentMode.collectAsState()
     val aiAgentLocalModel by viewModel.aiAgentLocalModel.collectAsState()
-    val aiAgentApiKey by viewModel.aiAgentApiKey.collectAsState()
-    val aiAgentModel by viewModel.aiAgentModel.collectAsState()
-    val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
     val aiAgentCodingApiKey by viewModel.aiAgentCodingApiKey.collectAsState()
     val aiAgentCodingModel by viewModel.aiAgentCodingModel.collectAsState()
     val aiAgentCodingBaseUrl by viewModel.aiAgentCodingBaseUrl.collectAsState()
@@ -189,12 +186,6 @@ fun SettingsScreen(
         onAiAgentModeChange = { mode -> viewModel.setAiAgentMode(mode) },
         aiAgentLocalModel = aiAgentLocalModel,
         onAiAgentLocalModelChange = { modelId -> viewModel.setAiAgentLocalModel(modelId) },
-        aiAgentApiKey = aiAgentApiKey,
-        onAiAgentApiKeyChange = { key -> viewModel.setAiAgentApiKey(key) },
-        aiAgentModel = aiAgentModel,
-        onAiAgentModelChange = { model -> viewModel.setAiAgentModel(model) },
-        aiAgentBaseUrl = aiAgentBaseUrl,
-        onAiAgentBaseUrlChange = { url -> viewModel.setAiAgentBaseUrl(url) },
         aiAgentCodingApiKey = aiAgentCodingApiKey,
         onAiAgentCodingApiKeyChange = { key -> viewModel.setAiAgentCodingApiKey(key) },
         aiAgentCodingModel = aiAgentCodingModel,
@@ -240,12 +231,6 @@ private fun settingsContent(
     onAiAgentModeChange: (AiAgentMode) -> Unit,
     aiAgentLocalModel: String,
     onAiAgentLocalModelChange: (String) -> Unit,
-    aiAgentApiKey: String,
-    onAiAgentApiKeyChange: (String) -> Unit,
-    aiAgentModel: String,
-    onAiAgentModelChange: (String) -> Unit,
-    aiAgentBaseUrl: String,
-    onAiAgentBaseUrlChange: (String) -> Unit,
     aiAgentCodingApiKey: String,
     onAiAgentCodingApiKeyChange: (String) -> Unit,
     aiAgentCodingModel: String,
@@ -729,80 +714,6 @@ private fun AiAgentLocalModelSection(
 }
 
 @Composable
-private fun AiAgentApiKeyRow(
-    apiKey: String,
-    onApiKeyChange: (String) -> Unit
-) {
-    var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(apiKey) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.ai_agent_api_key),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (isEditing) {
-            androidx.compose.material3.OutlinedTextField(
-                value = editText,
-                onValueChange = { editText = it },
-                placeholder = { Text(stringResource(R.string.ai_agent_api_key_hint)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    Row {
-                        TextButton(onClick = {
-                            onApiKeyChange(editText.trim())
-                            isEditing = false
-                        }) {
-                            Text(stringResource(R.string.save))
-                        }
-                        TextButton(onClick = {
-                            editText = apiKey
-                            isEditing = false
-                        }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
-                }
-            )
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isEditing = true },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (apiKey.isNotBlank()) {
-                        stringResource(R.string.ai_agent_api_key_set)
-                    } else {
-                        stringResource(R.string.ai_agent_api_key_empty)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (apiKey.isNotBlank()) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Text(
-                    text = stringResource(R.string.edit),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun AiAgentModelManagerRow(
     onClick: () -> Unit
 ) {
@@ -997,62 +908,6 @@ private fun AiAgentCodingBaseUrlRow(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun AiAgentBaseUrlSelection(
-    currentBaseUrl: String,
-    onBaseUrlSelected: (String) -> Unit
-) {
-    val presets = listOf(
-        "https://tokenhub.tencentmaas.com/v1/" to stringResource(R.string.ai_agent_base_url_tencent)
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.ai_agent_base_url),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        CompactOptionChips(
-            options = presets,
-            currentValue = currentBaseUrl,
-            maxLines = 2,
-            onSelected = onBaseUrlSelected
-        )
-    }
-}
-
-@Composable
-private fun AiAgentModelSelection(
-    currentModel: String,
-    onModelSelected: (String) -> Unit
-) {
-    val models = listOf(
-        "kimi-k2.6" to stringResource(R.string.ai_agent_model_k2_6)
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.ai_agent_model),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        CompactOptionChips(
-            options = models,
-            currentValue = currentModel,
-            maxLines = 2,
-            onSelected = onModelSelected
-        )
     }
 }
 
@@ -1436,12 +1291,6 @@ fun SettingsScreenPreview() {
             onAiAgentModeChange = {},
             aiAgentLocalModel = "",
             onAiAgentLocalModelChange = {},
-            aiAgentApiKey = "",
-            onAiAgentApiKeyChange = {},
-            aiAgentModel = "moonshot-v1-8k",
-            onAiAgentModelChange = {},
-            aiAgentBaseUrl = "",
-            onAiAgentBaseUrlChange = {},
             aiAgentCodingApiKey = "",
             onAiAgentCodingApiKeyChange = {},
             aiAgentCodingModel = "kimi-for-coding",
