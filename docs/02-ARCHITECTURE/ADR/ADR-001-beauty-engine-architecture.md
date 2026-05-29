@@ -1,0 +1,142 @@
+# ADR-001: 大美丽单引擎分层架构
+
+**状态**: 已接受 (Accepted)  
+**日期**: 2026-04-17
+**最后同步**: 2026-05-24（`impl/` 包已重构为 `render/`，与代码结构对齐）  
+**决策**: RD  
+**PM Review**: 已完成
+
+---
+
+## 1. 背景与问题陈述
+
+### 重构前架构
+```
+App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
+```
+
+**核心问题**:
+1. **层次越界**: 大美丽直接包含 GPU 渲染代码，违反 Clean Architecture
+2. **强耦合**: App 层直接依赖引擎内部类，无法 Mock 测试
+3. **复用阻塞**: 渲染逻辑被业务逻辑污染，无法独立作为视觉能力库输出
+4. **性能风险**: EGL Context 管理分散，线程模型混乱
+
+> **演进说明**: 架构经过多次迭代，最终沉淀为单引擎方案，当前仅保留自研大美丽（BIG_BEAUTY）引擎。
+
+---
+
+## 2. 决策目标架构
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    App Layer                            │
+│              ↓ 依赖 beauty-engine:api                   │
+└────────────────────┬──────────────────────────────────┘
+                     │
+┌────────────────────▼──────────────────────────────────┐
+│  Domain Layer: beauty-engine:api                        │
+│  ├─ BeautyEngine (Interface)                          │
+│  ├─ FilterType / BeautyParams                         │
+│  └─ BeautyCallback                                    │
+└────────────────────┬──────────────────────────────────┘
+                     │
+┌────────────────────▼──────────────────────────────────┐
+│  Data Layer: beauty-engine:render                       │
+│  ├─ GlBeautyPreviewProvider                           │
+│  ├─ CameraPreviewRenderer (自研 OpenGL ES 管线)      │
+│  └─ EGLCore                                           │
+└────────────────────┬──────────────────────────────────┘
+                     │
+┌────────────────────▼──────────────────────────────────┐
+│              BIG_BEAUTY (自研引擎)                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. 关键决策
+
+| 决策项 | 方案 |
+|--------|------|
+| **分层策略** | Domain(api) / Data(render) / External 三层分离 |
+| **依赖方向** | App → api → render → 底层 GPU 驱动 (单向) |
+| **接口定义** | `BeautyPreviewProvider` 接口类，对外唯一出口 |
+| **引擎封装** | 自研引擎统一走 `render/` 包，OpenGL ES 调用集中在 `CameraPreviewRenderer` |
+| **线程模型** | 独立渲染线程，EGLCore 管理共享 EGLContext |
+
+---
+
+## 4. 技术实现
+
+### 4.1 模块结构
+```
+beauty-engine/
+├── api/                    # Domain Layer - 公开接口
+│   ├── BeautyPreviewProvider.kt  # 预览 Provider 接口
+│   ├── BeautyParams.kt           # Shader 参数
+│   └── PhotoProcessor.kt         # 拍照后处理接口
+└── render/                 # Data Layer - 自研引擎 GL 渲染实现
+    ├── GlBeautyPreviewProvider.kt  # Provider 接口实现
+    ├── CameraPreviewRenderer.kt    # 渲染管线核心
+    ├── BeautyRenderer.kt           # 美颜 Shader 渲染器
+    └── EGLCore.kt                  # EGL 上下文管理
+```
+
+### 4.2 依赖规则 (Gradle)
+```groovy
+// App 层（只允许依赖 api）
+dependencies {
+    implementation project(':beauty-engine')
+    // 禁止: implementation project(':beauty-engine:render')
+}
+
+// render 模块（内部实现）
+dependencies {
+    api project(':beauty-engine:api')
+}
+```
+
+### 4.3 ArchUnit 依赖检查
+```kotlin
+// 规则: App 层严禁直接依赖 render 内部实现包
+noClasses()
+    .that().resideInAPackage("..app..")
+    .should().dependOnClassesThat()
+    .resideInAPackage("..beautyengine.render..")
+```
+
+---
+
+## 5. 后果分析
+
+### 正面影响
+- ✅ 接口契约稳定，支持版本化管理
+- ✅ 单元测试可 Mock BeautyEngine 接口
+- ✅ 引擎实现完全隔离，可独立演进
+- ✅ GL 线程独立，不阻塞主线程
+- ✅ 4K 大图分块处理，无 OOM 风险
+
+### 负面影响
+- ⚠️ EGL Context 初始化约 50-100ms
+- ⚠️ Shader 编译首次加载约 100-200ms
+
+---
+
+## 6. 状态
+
+| 阶段 | 状态 | 日期 |
+|------|------|------|
+| 接口提取 (Phase 1) | ✅ 完成 | 2026-04-17 |
+| 实现迁移 (Phase 2) | ✅ 完成 | 2026-04-17 |
+| App层适配 (Phase 3) | ✅ 完成 | 2026-04-17 |
+| 引擎归一 (单引擎化) | ✅ 完成 | 2026-04-17 |
+| 编译验证 | ✅ 通过 | 2026-04-17 |
+| 安装运行 | ✅ 成功 | 2026-04-17 |
+
+---
+
+## 7. 相关文档
+
+- `README.md` - 项目总览与架构图
+- `beauty-engine/AGENTS.md` - 模块详细规范
+- `docs/BIG_BEAUTY_TECH_SPEC.md` - 大美丽引擎技术规范
