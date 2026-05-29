@@ -70,6 +70,14 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_MODEL = stringPreferencesKey("ai_agent_model")
         val AI_AGENT_BASE_URL = stringPreferencesKey("ai_agent_base_url")
 
+        // Kimi Coding API 配置
+        val AI_AGENT_CODING_API_KEY = stringPreferencesKey("ai_agent_coding_api_key")
+        val AI_AGENT_CODING_MODEL = stringPreferencesKey("ai_agent_coding_model")
+        val AI_AGENT_CODING_BASE_URL = stringPreferencesKey("ai_agent_coding_base_url")
+
+        // 强制使用远程模型（绕过本地模型检查）
+        val AI_AGENT_FORCE_REMOTE = booleanPreferencesKey("ai_agent_force_remote")
+
         // 语音控制
         val VOICE_COMMAND_MODE = stringPreferencesKey("voice_command_mode")
         val LOCAL_ASR_MODEL = stringPreferencesKey("local_asr_model")
@@ -548,6 +556,80 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentBaseUrl(baseUrl: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_BASE_URL] = baseUrl
+        }
+    }
+
+    // ── Kimi Coding API 配置 ─────────────────────────────────
+
+    override val aiAgentCodingApiKeyFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_CODING_API_KEY] ?: ""
+        }
+
+    override suspend fun updateAiAgentCodingApiKey(apiKey: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_CODING_API_KEY] = apiKey
+        }
+    }
+
+    override val aiAgentCodingModelFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_CODING_MODEL] ?: "kimi-for-coding"
+        }
+
+    override suspend fun updateAiAgentCodingModel(model: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_CODING_MODEL] = model
+        }
+    }
+
+    override val aiAgentCodingBaseUrlFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_CODING_BASE_URL] ?: "https://api.kimi.com/coding/v1/"
+        }
+
+    override suspend fun updateAiAgentCodingBaseUrl(baseUrl: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_CODING_BASE_URL] = baseUrl
+        }
+    }
+
+    override val aiAgentForceRemoteFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_FORCE_REMOTE] ?: false
+        }
+
+    override suspend fun updateAiAgentForceRemote(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_FORCE_REMOTE] = enabled
         }
     }
 

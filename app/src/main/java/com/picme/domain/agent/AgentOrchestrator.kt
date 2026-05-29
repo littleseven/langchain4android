@@ -132,6 +132,10 @@ class AgentOrchestrator private constructor(private val context: Context) {
     /**
      * 处理用户输入
      *
+     * 根据当前 agentMode 选择推理引擎：
+     * - LOCAL: 本地 MNN-LLM（默认，符合隐私红线）
+     * - REMOTE: 远程 Kimi/Moonshot API（兼容旧模式）
+     *
      * @param input 用户自然语言输入
      * @param agentContext 当前 Agent 上下文
      * @param pageContext 页面特定上下文（可选）
@@ -145,17 +149,9 @@ class AgentOrchestrator private constructor(private val context: Context) {
         pageContext: PageContext? = null,
         customSystemPrompt: String? = null
     ): Result<AgentAction> = withContext(Dispatchers.IO) {
-        Logger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}")
+        Logger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}, mode=$agentMode")
 
-        // 1. 检查本地模型状态
-        if (!localLlmEngine.isLoaded) {
-            val loadResult = tryLoadModel()
-            if (loadResult.isFailure) {
-                return@withContext handleModelLoadError(loadResult)
-            }
-        }
-
-        // 2. 获取当前场景的 Capability 列表
+        // 1. 获取当前场景的 Capability 列表
         val capabilities = capabilityRegistry.getCapabilitiesForCurrentScene()
         if (capabilities.isEmpty()) {
             Logger.w(tag, "No capabilities available for current scene")
@@ -164,21 +160,48 @@ class AgentOrchestrator private constructor(private val context: Context) {
             )
         }
 
-        // 3. 构建 system prompt（优先使用自定义，否则用 PromptBuilder 生成）
+        // 2. 构建 system prompt（优先使用自定义，否则用 PromptBuilder 生成）
         val systemPrompt = customSystemPrompt
             ?: promptBuilder.buildSystemPrompt(capabilities, agentContext)
 
-        // 4. 本地推理 - 使用 generateWithSystem，让 MNN-LLM 自动应用 chat template
         val userPrompt = buildString {
             appendLine("用户输入: $input")
             appendLine()
             appendLine("请只输出一行JSON，不要其他内容:")
         }
-        val responseResult = localLlmEngine.generateWithSystem(
-            systemPrompt = systemPrompt,
-            userPrompt = userPrompt,
-            maxTokens = 512
-        )
+
+        // 3. 根据模式选择推理引擎
+        val responseResult = when (agentMode) {
+            AiAgentMode.LOCAL -> {
+                // 本地模式：使用 MNN-LLM
+                if (!localLlmEngine.isLoaded) {
+                    val loadResult = tryLoadModel()
+                    if (loadResult.isFailure) {
+                        return@withContext handleModelLoadError(loadResult)
+                    }
+                }
+                Logger.d(tag, "Using local LLM (MNN-LLM)")
+                localLlmEngine.generateWithSystem(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    maxTokens = 512
+                )
+            }
+            AiAgentMode.REMOTE -> {
+                // 远程模式：由上层 AiAgentUseCase 处理，此处不直接调用
+                Logger.w(tag, "REMOTE mode should be handled by AiAgentUseCase")
+                return@withContext Result.success(
+                    AgentAction.Error("REMOTE 模式请通过 AiAgentUseCase 调用")
+                )
+            }
+            AiAgentMode.OFF -> {
+                Logger.w(tag, "Agent is OFF")
+                return@withContext Result.success(
+                    AgentAction.Error("AI Agent 已关闭")
+                )
+            }
+        }
+
         val memorySessionId = agentContext.memorySessionId
 
         responseResult.fold(
@@ -186,9 +209,9 @@ class AgentOrchestrator private constructor(private val context: Context) {
                 handleLlmResponse(rawResponse, input, agentContext, pageContext, memorySessionId)
             },
             onFailure = { error ->
-                Logger.e(tag, "Local LLM inference failed", error)
+                Logger.e(tag, "LLM inference failed (mode=$agentMode)", error)
                 Result.success(
-                    AgentAction.Error("本地模型推理失败：${error.message ?: "未知错误"}")
+                    AgentAction.Error("推理失败：${error.message ?: "未知错误"}")
                 )
             }
         )

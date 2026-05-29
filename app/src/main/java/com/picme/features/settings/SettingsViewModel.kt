@@ -145,6 +145,34 @@ class SettingsViewModel(
             initialValue = ""
         )
 
+    val aiAgentCodingApiKey: StateFlow<String> = repository.aiAgentCodingApiKeyFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
+    val aiAgentCodingModel: StateFlow<String> = repository.aiAgentCodingModelFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "kimi-for-coding"
+        )
+
+    val aiAgentCodingBaseUrl: StateFlow<String> = repository.aiAgentCodingBaseUrlFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = "https://api.kimi.com/coding/v1/"
+        )
+
+    val aiAgentForceRemote: StateFlow<Boolean> = repository.aiAgentForceRemoteFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
     val aiAgentMode: StateFlow<AiAgentMode> = repository.aiAgentModeFlow
         .stateIn(
             scope = viewModelScope,
@@ -479,6 +507,31 @@ class SettingsViewModel(
     fun setAiAgentBaseUrl(baseUrl: String) {
         viewModelScope.launch {
             repository.updateAiAgentBaseUrl(baseUrl)
+        }
+    }
+
+    fun setAiAgentCodingApiKey(apiKey: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentCodingApiKey(apiKey)
+        }
+    }
+
+    fun setAiAgentCodingModel(model: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentCodingModel(model)
+        }
+    }
+
+    fun setAiAgentCodingBaseUrl(baseUrl: String) {
+        viewModelScope.launch {
+            repository.updateAiAgentCodingBaseUrl(baseUrl)
+        }
+    }
+
+    fun setAiAgentForceRemote(enabled: Boolean) {
+        viewModelScope.launch {
+            Logger.d("UX", "AI Agent force remote changed: $enabled")
+            repository.updateAiAgentForceRemote(enabled)
         }
     }
 

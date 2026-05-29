@@ -6,6 +6,8 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.Face
 import com.picme.beauty.api.facedetect.FaceDetector
 import kotlinx.coroutines.runBlocking
+import android.graphics.Rect
+import android.graphics.PointF
 
 /**
  * 美颜业务能力接口
@@ -51,9 +53,11 @@ class BeautyCapability(
     ): CapabilityResult<Bitmap> = runCatching {
         val bitmap = inputBitmap ?: createTestBitmap()
         val faces = detectFaces(bitmap)
-        
-        val result = beautyProcessor.applySmoothing(bitmap, smoothness, faces)
-        
+
+        val result = runBlocking {
+            beautyProcessor.applySmoothing(bitmap, smoothness, faces)
+        }
+
         CapabilityResult.success(result)
     }.getOrElse { exception ->
         CapabilityResult.failure("Adjust smoothing failed: ${exception.message}", exception)
@@ -68,9 +72,11 @@ class BeautyCapability(
     ): CapabilityResult<Bitmap> = runCatching {
         val bitmap = inputBitmap ?: createTestBitmap()
         val faces = detectFaces(bitmap)
-        
-        val result = beautyProcessor.applyWhitening(bitmap, whitening, faces)
-        
+
+        val result = runBlocking {
+            beautyProcessor.applyWhitening(bitmap, whitening, faces)
+        }
+
         CapabilityResult.success(result)
     }.getOrElse { exception ->
         CapabilityResult.failure("Adjust whitening failed: ${exception.message}", exception)
@@ -85,9 +91,11 @@ class BeautyCapability(
     ): CapabilityResult<Bitmap> = runCatching {
         val bitmap = inputBitmap ?: createTestBitmap()
         val faces = detectFaces(bitmap)
-        
-        val result = beautyProcessor.applySlimFace(bitmap, slimFace, faces)
-        
+
+        val result = runBlocking {
+            beautyProcessor.applySlimFace(bitmap, slimFace, faces)
+        }
+
         CapabilityResult.success(result)
     }.getOrElse { exception ->
         CapabilityResult.failure("Adjust slim face failed: ${exception.message}", exception)
@@ -102,9 +110,11 @@ class BeautyCapability(
     ): CapabilityResult<Bitmap> = runCatching {
         val bitmap = inputBitmap ?: createTestBitmap()
         val faces = detectFaces(bitmap)
-        
-        val result = beautyProcessor.applyBigEyes(bitmap, bigEyes, faces)
-        
+
+        val result = runBlocking {
+            beautyProcessor.applyBigEyes(bitmap, bigEyes, faces)
+        }
+
         CapabilityResult.success(result)
     }.getOrElse { exception ->
         CapabilityResult.failure("Adjust big eyes failed: ${exception.message}", exception)
@@ -119,9 +129,11 @@ class BeautyCapability(
     ): CapabilityResult<Bitmap> = runCatching {
         val bitmap = inputBitmap ?: createTestBitmap()
         val faces = detectFaces(bitmap)
-        
-        val result = beautyProcessor.applyAllEffects(bitmap, settings, faces)
-        
+
+        val result = runBlocking {
+            beautyProcessor.applyAllEffects(bitmap, settings, faces)
+        }
+
         CapabilityResult.success(result)
     }.getOrElse { exception ->
         CapabilityResult.failure("Apply all effects failed: ${exception.message}", exception)
@@ -143,15 +155,28 @@ class BeautyCapability(
         if (faceDetector == null) {
             return emptyList()
         }
-        
+
         return runCatching {
-            val results = faceDetector.detect(inputBitmap)
-            results.filter { it.isValid }.map { result ->
-                Face(
-                    boundingBox = result.boundingBox,
-                    landmarks = result.landmarks,
-                    confidence = result.confidence
+            val result = faceDetector!!.detect(inputBitmap, rotationDegrees = 0, lensFacing = 0)
+            if (result != null) {
+                // 从 landmarks106 FloatArray 构建 landmarks Map
+                val landmarks = mutableMapOf<Int, PointF>()
+                val landmarks106 = result.landmarks106
+                for (i in landmarks106.indices step 2) {
+                    if (i + 1 < landmarks106.size) {
+                        landmarks[i / 2] = PointF(landmarks106[i], landmarks106[i + 1])
+                    }
+                }
+                // 构建一个默认的 boundingBox（使用全图范围作为占位）
+                val boundingBox = Rect(0, 0, inputBitmap.width, inputBitmap.height)
+                listOf(
+                    Face(
+                        boundingBox = boundingBox,
+                        landmarks = landmarks
+                    )
                 )
+            } else {
+                emptyList()
             }
         }.getOrElse { emptyList() }
     }
@@ -190,6 +215,6 @@ data class CapabilityResult<out T>(
         )
     }
     
-    fun getError(): String? = error
-    fun getData(): T? = data
+    fun errorOrNull(): String? = error
+    fun dataOrNull(): T? = data
 }
