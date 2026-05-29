@@ -351,10 +351,10 @@ class LlmModelDownloadManager(private val context: Context) {
      * 根据模型 ID 获取对应的文件列表
      */
     private fun getModelFiles(modelId: String): List<String> {
-        return if (modelId.contains("whisper", ignoreCase = true)) {
-            ASR_MODEL_FILES
-        } else {
-            LLM_MODEL_FILES
+        return when {
+            modelId.contains("zipformer", ignoreCase = true) -> ASR_MODEL_FILES
+            modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
+            else -> LLM_MODEL_FILES
         }
     }
 
@@ -365,6 +365,7 @@ class LlmModelDownloadManager(private val context: Context) {
         return when {
             tags.any { it.equals("ASR", ignoreCase = true) } -> ASR_MODEL_FILES
             tags.any { it.equals("TTS", ignoreCase = true) } -> TTS_MODEL_FILES
+            modelId.contains("zipformer", ignoreCase = true) -> ASR_MODEL_FILES
             modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
             else -> LLM_MODEL_FILES
         }
@@ -951,8 +952,10 @@ class LlmModelDownloadManager(private val context: Context) {
          * ASR 模型固定文件列表
          */
         private val ASR_MODEL_FILES = listOf(
-            "whisper.mnn",
-            "vocab.json"
+            "encoder-epoch-99-avg-1.int8.mnn",
+            "decoder-epoch-99-avg-1.int8.mnn",
+            "joiner-epoch-99-avg-1.int8.mnn",
+            "tokens.txt"
         )
 
         /**

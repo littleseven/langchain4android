@@ -328,6 +328,7 @@
     <string name="model_label_lightweight">轻量版</string>
     <string name="model_downloaded">已下载</string>
     <string name="no_models_available">暂无可用模型</string>
+    <string name="no_asr_models_available">暂无 ASR 模型，请检查网络连接</string>
     <string name="model_properties">模型属性</string>
     <string name="copy">复制</string>
     <string name="copied_to_clipboard">已复制到剪贴板</string>

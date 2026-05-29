@@ -4,6 +4,7 @@
 #include <sstream>
 #include <mutex>
 #include <streambuf>
+#include <dlfcn.h>
 
 #include <MNN/llm/llm.hpp>
 
@@ -177,6 +178,80 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeIsLoaded(
             ctx->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED ||
             ctx->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED)
            ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * 以 RTLD_GLOBAL 模式加载共享库，使其符号对所有后续 dlopen 加载的库可见。
+ * 注意：Android System.loadLibrary 使用独立的类加载器命名空间，
+ * dlopen(RTLD_GLOBAL) 的符号对 System.loadLibrary 不可见。
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_picme_features_camera_voice_SherpaMnnAsrEngine_00024Companion_nativeLoadLibraryGlobal(
+        JNIEnv *env,
+        jclass clazz,
+        jstring libName) {
+
+    const char *nameCStr = env->GetStringUTFChars(libName, nullptr);
+    if (nameCStr == nullptr) {
+        return JNI_FALSE;
+    }
+
+    std::string fullName = "lib";
+    fullName += nameCStr;
+    fullName += ".so";
+
+    void *handle = dlopen(fullName.c_str(), RTLD_GLOBAL | RTLD_NOW);
+    if (handle == nullptr) {
+        const char *err = dlerror();
+        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
+            "dlopen failed for %s: %s", fullName.c_str(), err ? err : "unknown");
+        env->ReleaseStringUTFChars(libName, nameCStr);
+        return JNI_FALSE;
+    }
+
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG,
+        "dlopen RTLD_GLOBAL succeeded: %s", fullName.c_str());
+    env->ReleaseStringUTFChars(libName, nameCStr);
+    return JNI_TRUE;
+}
+
+/**
+ * 使用 dlopen 直接加载 libsherpa-mnn-jni.so，绕过 System.loadLibrary 的命名空间隔离。
+ *
+ * 背景：sherpa-mnn-jni.so 依赖 libMNN_Express.so 中的 MNN::Express::Module::load 符号。
+ * 但 sherpa-mnn-jni.so 的 NEEDED 列表只有 libMNN.so，而符号实际在 libMNN_Express.so 中。
+ * Android 的 System.loadLibrary 使用类加载器命名空间，dlopen(RTLD_GLOBAL) 加载的库符号
+ * 对 System.loadLibrary 不可见。因此必须用 dlopen 加载 sherpa-mnn-jni.so，
+ * 这样 linker 才能在同一个命名空间中解析 libMNN_Express.so 的符号。
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_picme_features_camera_voice_SherpaMnnAsrEngine_00024Companion_nativeLoadSherpaMnnJni(
+        JNIEnv *env,
+        jclass clazz) {
+
+    // 1. 先以 RTLD_GLOBAL 加载 libMNN_Express.so，确保符号全局可见
+    void *mnnExpressHandle = dlopen("libMNN_Express.so", RTLD_GLOBAL | RTLD_NOW);
+    if (mnnExpressHandle == nullptr) {
+        const char *err = dlerror();
+        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
+            "dlopen libMNN_Express.so failed: %s", err ? err : "unknown");
+        return JNI_FALSE;
+    }
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG,
+        "dlopen libMNN_Express.so succeeded");
+
+    // 2. 再加载 libsherpa-mnn-jni.so
+    void *sherpaHandle = dlopen("libsherpa-mnn-jni.so", RTLD_NOW);
+    if (sherpaHandle == nullptr) {
+        const char *err = dlerror();
+        __android_log_print(ANDROID_LOG_ERROR, LOG_TAG,
+            "dlopen libsherpa-mnn-jni.so failed: %s", err ? err : "unknown");
+        return JNI_FALSE;
+    }
+    __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG,
+        "dlopen libsherpa-mnn-jni.so succeeded");
+
+    return JNI_TRUE;
 }
 
 } // extern "C"

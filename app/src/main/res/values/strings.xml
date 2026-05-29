@@ -327,7 +327,9 @@
     <string name="voice_command_mode_push_to_talk">Push to Talk</string>
     <string name="voice_command_mode_wake_word">Wake Word</string>
     <string name="local_asr_model">Local ASR Model</string>
-    <string name="local_asr_model_fallback">No local ASR model. System SpeechRecognizer will be used as fallback.</string>
+    <string name="local_asr_model_fallback">No local ASR model downloaded. Tap below to download.</string>
+    <string name="asr_model_manager">ASR Model Manager</string>
+    <string name="asr_model_manager_desc">Download and manage on-device speech recognition models.</string>
 
     <!-- Model Manager -->
     <string name="model_type_asr">ASR</string>
@@ -337,6 +339,7 @@
     <string name="model_label_lightweight">Lightweight</string>
     <string name="model_downloaded">Downloaded</string>
     <string name="no_models_available">No models available</string>
+    <string name="no_asr_models_available">No ASR models available. Check your network connection.</string>
     <string name="model_properties">Model Properties</string>
     <string name="copy">Copy</string>
     <string name="copied_to_clipboard">Copied to clipboard</string>

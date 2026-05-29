@@ -97,7 +97,7 @@ import java.util.Locale
  * 根据标签获取对应的图标
  */
 @Composable
-private fun getCategoryIcon(tag: String): androidx.compose.ui.graphics.vector.ImageVector {
+internal fun getCategoryIcon(tag: String): androidx.compose.ui.graphics.vector.ImageVector {
     return when (tag) {
         "Vision" -> Icons.Outlined.Visibility
         "Think" -> Icons.Outlined.SmartToy
@@ -317,7 +317,7 @@ private fun ScrollableCategoryTabs(
 }
 
 @Composable
-private fun EmptyModelList() {
+internal fun EmptyModelList() {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -343,7 +343,7 @@ private fun EmptyModelList() {
  * 根据标签获取对应的颜色
  */
 @Composable
-private fun getTagColor(tag: String): androidx.compose.ui.graphics.Color {
+internal fun getTagColor(tag: String): androidx.compose.ui.graphics.Color {
     return when (tag) {
         "Think" -> MaterialTheme.colorScheme.primary
         "Vision" -> MaterialTheme.colorScheme.tertiary
@@ -357,7 +357,7 @@ private fun getTagColor(tag: String): androidx.compose.ui.graphics.Color {
 }
 
 @Composable
-private fun ModelCardWithBadge(
+internal fun ModelCardWithBadge(
     model: ModelConfig,
     downloadState: com.picme.data.download.DownloadState?,
     tagTranslations: Map<String, String>,
@@ -500,7 +500,7 @@ private fun ModelCardWithBadge(
  * 紧凑的标签徽章
  */
 @Composable
-private fun TagBadge(label: String, color: androidx.compose.ui.graphics.Color) {
+internal fun TagBadge(label: String, color: androidx.compose.ui.graphics.Color) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
@@ -528,7 +528,7 @@ private fun TagBadge(label: String, color: androidx.compose.ui.graphics.Color) {
  * 轻量版标签
  */
 @Composable
-private fun LightweightBadge() {
+internal fun LightweightBadge() {
     Text(
         text = stringResource(R.string.model_label_lightweight),
         style = MaterialTheme.typography.labelSmall,
@@ -544,7 +544,7 @@ private fun LightweightBadge() {
  * 模型操作按钮
  */
 @Composable
-private fun ModelActionButton(
+internal fun ModelActionButton(
     downloadState: com.picme.data.download.DownloadState?,
     isDownloading: Boolean,
     isPaused: Boolean,
@@ -633,7 +633,7 @@ private fun ModelActionButton(
     }
 }
 
-private fun formatFileSize(bytes: Long): String {
+internal fun formatFileSize(bytes: Long): String {
     return when {
         bytes >= 1024 * 1024 * 1024 -> String.format(Locale.getDefault(), "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
         bytes >= 1024 * 1024 -> String.format(Locale.getDefault(), "%.2f MB", bytes / (1024.0 * 1024.0))
@@ -646,7 +646,7 @@ private fun formatFileSize(bytes: Long): String {
  * 模型属性对话框 —— 以 JSON 格式展示模型信息，支持复制
  */
 @Composable
-private fun ModelPropertiesDialog(
+internal fun ModelPropertiesDialog(
     model: ModelConfig,
     onDismiss: () -> Unit
 ) {

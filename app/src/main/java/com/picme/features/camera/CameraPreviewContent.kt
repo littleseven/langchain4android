@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -197,13 +200,16 @@ internal fun CameraPreviewContent(
         onUpdateVoiceCoordinatorState?.invoke()
 
         // AI Agent 触发按钮：左侧底部控制栏上方
+        // 使用 WindowInsets 动态计算导航栏高度，替代固定 160.dp
         if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null && !aiAgentPanelState.isVisible) {
+            val navigationBarsPadding = WindowInsets.navigationBars.asPaddingValues()
+            val bottomNavHeight = navigationBarsPadding.calculateBottomPadding()
             AiAgentButton(
                 onClick = { aiAgentPanelState.toggle() },
                 isActive = aiAgentPanelState.isVisible,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 160.dp)
+                    .padding(start = 16.dp, bottom = bottomNavHeight + 100.dp)
             )
         }
     }

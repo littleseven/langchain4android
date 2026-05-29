@@ -76,7 +76,8 @@ import com.picme.features.settings.agent.rememberSettingsAgentIntegration
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToLlmModelManager: () -> Unit = {}
+    onNavigateToLlmModelManager: () -> Unit = {},
+    onNavigateToAsrModelManager: () -> Unit = {}
 ) {
     // 沉浸式模式
     val view = LocalView.current
@@ -195,6 +196,7 @@ fun SettingsScreen(
         localAsrModel = localAsrModel,
         onLocalAsrModelChange = { modelId -> viewModel.setLocalAsrModel(modelId) },
         onNavigateToLlmModelManager = onNavigateToLlmModelManager,
+        onNavigateToAsrModelManager = onNavigateToAsrModelManager,
         onNavigateBack = onNavigateBack
     )
 
@@ -254,6 +256,7 @@ private fun settingsContent(
     onLandmarkEngineTypeSelected: (InferenceEngineType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onNavigateToLlmModelManager: () -> Unit,
+    onNavigateToAsrModelManager: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -337,7 +340,8 @@ private fun settingsContent(
                 if (voiceCommandMode != VoiceCommandMode.DISABLED) {
                     LocalAsrModelSelection(
                         currentModel = localAsrModel,
-                        onModelSelected = onLocalAsrModelChange
+                        onModelSelected = onLocalAsrModelChange,
+                        onNavigateToAsrModelManager = onNavigateToAsrModelManager
                     )
                 }
             }
@@ -496,7 +500,8 @@ private fun VoiceCommandModeSelection(
 @Composable
 private fun LocalAsrModelSelection(
     currentModel: String,
-    onModelSelected: (String) -> Unit
+    onModelSelected: (String) -> Unit,
+    onNavigateToAsrModelManager: () -> Unit
 ) {
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
@@ -535,6 +540,36 @@ private fun LocalAsrModelSelection(
                 currentValue = currentModel,
                 maxLines = 2,
                 onSelected = onModelSelected
+            )
+        }
+
+        // ASR 模型管理入口
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToAsrModelManager)
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.asr_model_manager),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = stringResource(R.string.asr_model_manager_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.CloudDownload,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(22.dp)
+                    .padding(start = 4.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -1207,6 +1242,7 @@ fun SettingsScreenPreview() {
             localAsrModel = "",
             onLocalAsrModelChange = {},
             onNavigateToLlmModelManager = {},
+            onNavigateToAsrModelManager = {},
             onNavigateBack = {}
         )
     }

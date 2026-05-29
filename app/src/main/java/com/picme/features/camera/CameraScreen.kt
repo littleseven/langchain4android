@@ -91,11 +91,14 @@ import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.model.SceneManager
+import com.picme.features.camera.voice.MnnAsrClient
+import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -778,9 +781,56 @@ fun CameraContent(
     val voiceCommandMode by userPreferencesRepository.voiceCommandModeFlow.collectAsState(
         initial = VoiceCommandMode.PUSH_TO_TALK
     )
-    // MNN ASR 客户端（当前使用系统 ASR，未来可切换）
-    // 保留引用以便未来 JNI 实现后直接替换
-    val asrEngine = remember(context) { SystemAsrEngine(context) }
+    // ASR 引擎选择：优先使用 Sherpa-MNN ASR（如果模型已下载），否则回退到系统 ASR
+    // 参考 VoiceModelsChecker: 检查模型文件是否真实存在，避免初始化失败
+    val localAsrModel by userPreferencesRepository.localAsrModelFlow.collectAsState(initial = "")
+    val asrEngine = remember(context, localAsrModel) {
+        if (localAsrModel.isNotBlank()) {
+            val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
+            val modelDirPath = modelDir.absolutePath
+
+            // 参考 VoiceModelsChecker: 先检查模型目录和文件是否存在
+            val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                // Sherpa-MNN Zipformer 模型：检查 .mnn 文件和 tokens.txt
+                modelDir.exists() && modelDir.isDirectory &&
+                    modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
+                    File(modelDir, "tokens.txt").exists()
+            } else {
+                // 其他模型：检查目录存在
+                modelDir.exists() && modelDir.isDirectory
+            }
+
+            if (!isModelReady) {
+                Logger.w("PicMe:Camera", "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
+                SystemAsrEngine(context)
+            } else {
+                // 1. 尝试 Sherpa-MNN ASR（zipformer 模型）
+                if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                    val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
+                    if (sherpaAsr.isAvailable()) {
+                        Logger.i("PicMe:Camera", "Using Sherpa-MNN ASR engine with model: $localAsrModel")
+                        sherpaAsr
+                    } else {
+                        Logger.w("PicMe:Camera", "Sherpa-MNN ASR init failed, falling back to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                } else {
+                    // 2. 尝试旧版 MnnAsrClient（whisper 模型）
+                    val mnnAsr = MnnAsrClient(context, localAsrModel)
+                    if (mnnAsr.isAvailable()) {
+                        Logger.i("PicMe:Camera", "Using MNN ASR engine with model: $localAsrModel")
+                        mnnAsr
+                    } else {
+                        Logger.w("PicMe:Camera", "MNN ASR not available, falling back to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                }
+            }
+        } else {
+            Logger.d("PicMe:Camera", "No local ASR model configured, using system ASR")
+            SystemAsrEngine(context)
+        }
+    }
     val onCommandRef = remember { mutableStateOf<(AiAgentCommand) -> Unit>({}) }
     val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
         VoiceCommandCoordinator(

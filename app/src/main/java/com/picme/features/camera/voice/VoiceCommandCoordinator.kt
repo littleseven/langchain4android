@@ -10,6 +10,8 @@ import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -18,6 +20,10 @@ import kotlinx.coroutines.withContext
  *
  * 统一管理两种语音交互模式（Push-to-Talk / WakeWord）、
  * ASR 引擎调用、LLM 意图解析和命令分发。
+ *
+ * 参考 MnnLlmChat VoiceChatPresenter 的 Channel 串行任务处理：
+ * - 使用 Channel 保证任务按序执行，避免并发问题
+ * - 识别 → LLM 推理 → 命令执行 形成串行流水线
  *
  * @param context Application Context
  * @param asrEngine ASR 引擎（优先本地 MNN，回退系统）
@@ -56,6 +62,25 @@ class VoiceCommandCoordinator(
      */
     var currentCameraState: CameraStateSnapshot = CameraStateSnapshot()
 
+    // 参考 VoiceChatPresenter: 使用 Channel 实现串行任务处理
+    private val taskChannel = Channel<VoiceTask>(Channel.UNLIMITED)
+
+    init {
+        // 启动串行处理器，确保识别 → LLM → 命令执行按序进行
+        scope.launch {
+            taskChannel.consumeEach { task ->
+                processTask(task)
+            }
+        }
+    }
+
+    /**
+     * 语音任务密封类（参考 VoiceChatPresenter.SerialTask）
+     */
+    private sealed class VoiceTask {
+        data class ProcessTranscript(val transcript: String) : VoiceTask()
+    }
+
     /**
      * 开始唤醒词监听
      *
@@ -71,7 +96,7 @@ class VoiceCommandCoordinator(
             return
         }
         wakeWordEngine.start { transcript ->
-            processTranscript(transcript)
+            enqueueTranscript(transcript)
         }
     }
 
@@ -96,7 +121,7 @@ class VoiceCommandCoordinator(
         pushToTalkEngine.start { transcript ->
             onResult(transcript)
             if (transcript.isNotBlank()) {
-                processTranscript(transcript)
+                enqueueTranscript(transcript)
             }
         }
     }
@@ -109,33 +134,53 @@ class VoiceCommandCoordinator(
     }
 
     /**
-     * 处理识别到的文本
-     *
-     * 1. 送入 AiAgentUseCase 进行 LLM 推理
-     * 2. 如果解析为有效命令（非 TextReply），通过 onCommand 回调执行
+     * 将识别文本加入串行处理队列
+     * 参考 VoiceChatPresenter: 通过 Channel 保证按序处理
      */
-    private fun processTranscript(transcript: String) {
+    private fun enqueueTranscript(transcript: String) {
         if (transcript.isBlank()) {
             Logger.d(tag, "Empty transcript, skipping")
             return
         }
+        Logger.i(tag, "Enqueuing transcript: $transcript")
+        scope.launch {
+            taskChannel.send(VoiceTask.ProcessTranscript(transcript))
+        }
+    }
 
+    /**
+     * 串行处理语音任务
+     * 参考 VoiceChatPresenter.processTask()
+     */
+    private suspend fun processTask(task: VoiceTask) {
+        when (task) {
+            is VoiceTask.ProcessTranscript -> {
+                processTranscriptInternal(task.transcript)
+            }
+        }
+    }
+
+    /**
+     * 处理识别到的文本（内部实现，在串行处理器中调用）
+     *
+     * 1. 送入 AiAgentUseCase 进行 LLM 推理
+     * 2. 如果解析为有效命令（非 TextReply），通过 onCommand 回调执行
+     */
+    private suspend fun processTranscriptInternal(transcript: String) {
         Logger.i(tag, "Processing transcript: $transcript")
 
-        scope.launch {
-            val result = aiAgentUseCase.processInput(transcript, currentCameraState.toAiAgentSnapshot())
-            result.onSuccess { command ->
-                if (command is AiAgentCommand.TextReply) {
-                    Logger.d(tag, "Text reply, no action: ${command.message}")
-                } else {
-                    Logger.i(tag, "Command detected: ${command.javaClass.simpleName}")
-                    withContext(Dispatchers.Main) {
-                        onCommand(command)
-                    }
+        val result = aiAgentUseCase.processInput(transcript, currentCameraState.toAiAgentSnapshot())
+        result.onSuccess { command ->
+            if (command is AiAgentCommand.TextReply) {
+                Logger.d(tag, "Text reply, no action: ${command.message}")
+            } else {
+                Logger.i(tag, "Command detected: ${command.javaClass.simpleName}")
+                withContext(Dispatchers.Main) {
+                    onCommand(command)
                 }
-            }.onFailure { error ->
-                Logger.e(tag, "Failed to process voice command", error)
             }
+        }.onFailure { error ->
+            Logger.e(tag, "Failed to process voice command", error)
         }
     }
 
@@ -145,6 +190,7 @@ class VoiceCommandCoordinator(
     fun release() {
         stopWakeWordListening()
         stopPushToTalk()
+        taskChannel.close()
         Logger.d(tag, "VoiceCommandCoordinator released")
     }
 
