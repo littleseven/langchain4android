@@ -61,7 +61,7 @@ Log.d(TAG, "Message: $data")
 
 ### 新增功能
 - [ ] 在 PRODUCT.md 中记录需求
-- [ ] 在 docs/FEATURES.md 中更新交互规范
+- [ ] 在 docs/01-PRODUCT/FEATURES.md 中更新交互规范
 - [ ] 创建/更新模块 AGENTS.md
 - [ ] 实现代码
 - [ ] 添加三语言字符串

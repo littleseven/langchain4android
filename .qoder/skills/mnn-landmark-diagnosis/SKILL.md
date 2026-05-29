@@ -267,4 +267,4 @@ adb logcat -d | grep "MNN vs ONNX"
 
 ## 附加资源
 
-- 详细技术文档: [docs/MNN_LANDMARK_DIAGNOSIS.md](docs/MNN_LANDMARK_DIAGNOSIS.md)
+- 详细技术文档: [docs/03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md](docs/03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md)

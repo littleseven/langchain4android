@@ -28,9 +28,9 @@
 ## 项目文档索引
 - 产品需求: `PRODUCT.md`
 - AI Agent 规范: `AGENTS.md`（根目录） / `.kimi/AGENTS.md`（kimi-cli 专用）
-- 交互规范: `docs/FEATURES.md`
+- 交互规范: `docs/01-PRODUCT/FEATURES.md`
 - 技术规范: `docs/AGENTS_SPEC.md`
-- 相机技术: `docs/CAMERA_PREVIEW_TECH_SPEC.md`
+- 相机技术: `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md`
 
 ## 快捷命令
 ```bash

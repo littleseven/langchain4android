@@ -184,8 +184,8 @@ AgentOrchestrator (domain/agent/)
 
 | 文档 | 说明 |
 |------|------|
-| `docs/FEATURES.md` | 功能交互细节（传统 PRD 内容） |
-| `docs/AGENT_ARCHITECTURE_MEMO.md` | Agent 架构详细设计 |
+| `docs/01-PRODUCT/FEATURES.md` | 功能交互细节（传统 PRD 内容） |
+| `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` | Agent 架构详细设计 |
 | `domain/agent/AGENTS.md` | Agent Runtime 实现规范 |
 | `agents/README.md` | AI 协作开发角色定义 |
 

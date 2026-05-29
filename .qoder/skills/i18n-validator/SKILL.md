@@ -117,7 +117,7 @@ python3 scripts/check_i18n_sync.py
 
 ## 相关文件
 
-- [docs/FEATURES.md](docs/FEATURES.md) — 多语言词汇表（Section 4.1.1）
+- [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 多语言词汇表（Section 4.1.1）
 - [PRODUCT.md](PRODUCT.md) — I18N 规范定义
 
 ---

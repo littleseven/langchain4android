@@ -1,6 +1,6 @@
 ---
 name: doc-sync-guardian
-description: 自动维护 PRODUCT.md → docs/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。
+description: 自动维护 PRODUCT.md → docs/01-PRODUCT/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
@@ -12,7 +12,7 @@ tags: [documentation, sync, audit, agents, product]
 
 ## 📋 Skill 概述
 
-本 Skill 用于在 PicMe 项目迭代过程中自动维护和检查三层文档体系的一致性，确保 `PRODUCT.md` → `docs/FEATURES.md` → 模块 `AGENTS.md` 的单向引用链完整、准确、同步。
+本 Skill 用于在 PicMe 项目迭代过程中自动维护和检查三层文档体系的一致性，确保 `PRODUCT.md` → `docs/01-PRODUCT/FEATURES.md` → 模块 `AGENTS.md` 的单向引用链完整、准确、同步。
 
 **核心价值**：
 - 🔍 **自动检测**：识别文档与代码的不一致
@@ -63,7 +63,7 @@ tags: [documentation, sync, audit, agents, product]
                │ 引用
                ▼
 ┌─────────────────────────────────────┐
-│  docs/FEATURES.md                   │
+│  docs/01-PRODUCT/FEATURES.md                   │
 │  How: 交互流程、体验规则、业务逻辑    │
 │  维护者: [PM] + [RD]                │
 └──────────────┬──────────────────────┘
@@ -82,8 +82,8 @@ tags: [documentation, sync, audit, agents, product]
 |---------|-----------|------|
 | 产品愿景与使命 | `PRODUCT.md` | "成为 Android 平台最快相机" |
 | 性能指标与红线 | `PRODUCT.md` | "冷启动 < 500ms" |
-| 交互流程描述 | `docs/FEATURES.md` | "点击快门触发三位一体反馈" |
-| UI 视觉规范 | `docs/FEATURES.md` | "大圆角 28dp+，毛玻璃效果" |
+| 交互流程描述 | `docs/01-PRODUCT/FEATURES.md` | "点击快门触发三位一体反馈" |
+| UI 视觉规范 | `docs/01-PRODUCT/FEATURES.md` | "大圆角 28dp+，毛玻璃效果" |
 | 技术架构设计 | 模块 `AGENTS.md` | "Clean Architecture 分层" |
 | 代码实现细节 | 模块 `AGENTS.md` | "Repository 层职责定义" |
 | 专项技术方案 | `docs/*_TECH_SPEC.md` | "CAMERA_PREVIEW_TECH_SPEC.md" |
@@ -113,7 +113,7 @@ grep -E "< \d+ms|>\s\d+%|严禁|必须" PRODUCT.md
 #### Step 2: 对照 FEATURES.md 交互规则
 ```bash
 # 检查 FEATURES.md 是否承接了 PRODUCT.md 的所有交互要求
-grep -E "交互|反馈|动效|动画" docs/FEATURES.md
+grep -E "交互|反馈|动效|动画" docs/01-PRODUCT/FEATURES.md
 ```
 
 **检查项**：
@@ -264,7 +264,7 @@ append_decision_log "docs/PHOTO_GPU_TECH_SPEC.md"
 
 #### Step 4: 提交并通知团队
 ```bash
-git add docs/PHOTO_GPU_TECH_SPEC.md PRODUCT.md docs/FEATURES.md
+git add docs/PHOTO_GPU_TECH_SPEC.md PRODUCT.md docs/01-PRODUCT/FEATURES.md
 git commit -m "docs: 记录拍照 GPU 化技术决策
 
 - 创建 PHOTO_GPU_TECH_SPEC.md 记录完整技术方案
@@ -330,7 +330,7 @@ wc -l AGENTS.md  # 如果超过 500 行，可能需要瘦身
 
 # 在目标文档添加回溯
 产品需求来源: `PRODUCT.md Section 3.1`
-交互规范来源: `docs/FEATURES.md Section 1.3`
+交互规范来源: `docs/01-PRODUCT/FEATURES.md Section 1.3`
 ```
 
 #### Step 4: 验证引用完整性
@@ -392,7 +392,7 @@ grep -r "已废弃" docs/*.md
   ├─ 是 → PRODUCT.md
   └─ 否
       ├─ 是用户可见的交互流程/体验规则？
-      │   ├─ 是 → docs/FEATURES.md
+      │   ├─ 是 → docs/01-PRODUCT/FEATURES.md
       │   └─ 否
       │       ├─ 是代码实现/架构设计/检查清单？
       │       │   ├─ 是 → 模块 AGENTS.md
@@ -425,7 +425,7 @@ grep -r "已废弃" docs/*.md
 
 **A**: 遵循单一可信源原则（SSOT）：
 1. **产品指标冲突**：以 `PRODUCT.md` 为准
-2. **交互规则冲突**：以 `docs/FEATURES.md` 为准
+2. **交互规则冲突**：以 `docs/01-PRODUCT/FEATURES.md` 为准
 3. **技术实现冲突**：以模块 `AGENTS.md` 为准
 4. **解决流程**：
    - [CR] 识别冲突点
@@ -440,7 +440,7 @@ grep -r "已废弃" docs/*.md
 - [AGENTS.md](AGENTS.md) - 顶层 Agent 治理规范
 - [docs/AGENTS_SPEC.md](docs/AGENTS_SPEC.md) - AGENTS.md 编写规范
 - [PRODUCT.md](PRODUCT.md) - 产品需求规格说明书
-- [docs/FEATURES.md](docs/FEATURES.md) - 功能交互细节规范
+- [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) - 功能交互细节规范
 - [Google Technical Writing](https://developers.google.com/tech-writing) - 技术文档写作指南
 
 ---

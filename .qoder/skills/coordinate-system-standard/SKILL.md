@@ -391,9 +391,9 @@ Log.d(TAG, "Step4 [像素映射]: screen=($screenX,$screenY)")
 
 ## 📖 相关文档
 
-- [COORDINATE_SYSTEM_STANDARD.md](docs/COORDINATE_SYSTEM_STANDARD.md) - 坐标系规范详细说明
-- [ADR-003-coordinate-system-management.md](docs/ADR-003-coordinate-system-management.md) - 技术决策文档
-- [CAMERA_PREVIEW_TECH_SPEC.md](docs/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
+- [COORDINATE_SYSTEM_STANDARD.md](docs/07-STANDARDS/COORDINATE_SYSTEM.md) - 坐标系规范详细说明
+- [ADR-003-coordinate-system-management.md](docs/02-ARCHITECTURE/ADR/ADR-003-coordinate-system-management.md) - 技术决策文档
+- [CAMERA_PREVIEW_TECH_SPEC.md](docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
 - [INSIGHTFACE_106_MAPPING.md](docs/face-detection/INSIGHTFACE_106_MAPPING.md) - 关键点映射文档
 
 ---

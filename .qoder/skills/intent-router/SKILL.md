@@ -123,18 +123,18 @@ tags: [requirement, routing, context, module, terminology]
 
 [Feature] + camera:
   - app/src/main/java/com/picme/features/camera/AGENTS.md
-  - docs/CAMERA_PREVIEW_TECH_SPEC.md
-  - docs/FEATURES.md (Section 2.1)
+  - docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md
+  - docs/01-PRODUCT/FEATURES.md (Section 2.1)
   - app/src/main/java/com/picme/features/camera/*.kt (最新修改的 3 个文件)
 
 [Feature] + gallery:
   - app/src/main/java/com/picme/features/gallery/AGENTS.md
-  - docs/FEATURES.md (Section 2.2)
+  - docs/01-PRODUCT/FEATURES.md (Section 2.2)
   - app/src/main/java/com/picme/features/gallery/*.kt
 
 [Feature] + beauty:
   - beauty-engine/AGENTS.md
-  - docs/BIG_BEAUTY_TECH_SPEC.md
+  - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md
   - beauty-engine/src/main/java/com/picme/beauty/**/*.kt
 
 [BugFix] + 任何模块:
@@ -145,7 +145,7 @@ tags: [requirement, routing, context, module, terminology]
 
 [Perf]:
   - 相关模块 AGENTS.md
-  - docs/BIG_BEAUTY_TECH_SPEC.md (性能章节)
+  - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (性能章节)
   - 基准测试数据
   - Profiler 配置说明
 
@@ -153,12 +153,12 @@ tags: [requirement, routing, context, module, terminology]
   - 目标 Compose 文件
   - app/src/main/res/values/themes.xml
   - app/src/main/res/values/colors.xml
-  - docs/FEATURES.md (设计规范章节)
+  - docs/01-PRODUCT/FEATURES.md (设计规范章节)
   - [.qoder/skills/compose-ui-expert/SKILL.md](.qoder/skills/compose-ui-expert/SKILL.md)
 
 [Perf]:
   - 相关模块 AGENTS.md
-  - docs/BIG_BEAUTY_TECH_SPEC.md (性能章节)
+  - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (性能章节)
   - 基准测试数据
   - Profiler 配置说明
   - [.qoder/skills/perf-optimizer/SKILL.md](.qoder/skills/perf-optimizer/SKILL.md)
@@ -201,7 +201,7 @@ Intent Router 处理:
 2. 术语对齐: "旋转" → `rotate()` / `Rotation` (UI 变换)
 3. 上下文加载:
    - app/src/main/java/com/picme/features/gallery/AGENTS.md
-   - docs/FEATURES.md §2.2 (相册交互规范)
+   - docs/01-PRODUCT/FEATURES.md §2.2 (相册交互规范)
    - MediaPager.kt (最近修改的 gallery 文件)
 4. 影响推断: gallery 模块，UI 层变更，涉及 [I18N]（新增按钮文案）
 5. 决策: 自动执行（单模块，无 API 破坏）
@@ -218,7 +218,7 @@ Intent Router 处理:
 2. 术语对齐: "偏红" → 色温/白平衡 / `temperature` / `tint`
 3. 上下文加载:
    - beauty-engine/AGENTS.md
-   - docs/BIG_BEAUTY_TECH_SPEC.md (调色章节)
+   - docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (调色章节)
    - PhotoProcessorImpl.kt, BeautySettings.kt
 4. 影响推断: beauty-engine 模块，调色参数问题
 5. 决策: 自动执行
@@ -266,5 +266,5 @@ Intent Router 处理:
 - `docs/AI_CODING_AUTONOMOUS_LOOP.md` - 自闭环架构设计
 - `AGENTS.md` - 角色与协作规则
 - `PRODUCT.md` - 产品需求规格
-- `docs/FEATURES.md` - 交互规范
+- `docs/01-PRODUCT/FEATURES.md` - 交互规范
 - 各模块 `AGENTS.md` - 技术实现规范

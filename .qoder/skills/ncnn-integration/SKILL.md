@@ -210,4 +210,4 @@ LOGD("Output: %dx%dx%d", out.w, out.h, out.c);
 - [NCNN GitHub](https://github.com/Tencent/ncnn)
 - [NCNN 参数文档](https://github.com/Tencent/ncnn/wiki/param-and-model-file-structure)
 - [NCNN Vulkan 使用](https://github.com/Tencent/ncnn/wiki/vulkan-notes)
-- `docs/MNN_LANDMARK_DIAGNOSIS.md` — 多引擎对齐诊断
+- `docs/03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md` — 多引擎对齐诊断

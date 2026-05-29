@@ -2,9 +2,9 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档仅承载 `beauty-engine` 独立库模块的实现细节（架构、代码约束、检查清单）。
-> - 产品目标与验收口径以 `PRODUCT.md` 为准；交互流程与体验规则以 `docs/FEATURES.md` 为准。
+> - 产品目标与验收口径以 `PRODUCT.md` 为准；交互流程与体验规则以 `docs/01-PRODUCT/FEATURES.md` 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
-> - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标：见 `docs/BIG_BEAUTY_TECH_SPEC.md`。
+> - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标：见 `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
 **模块定位**：`beauty-engine` 是 PicMe 美颜引擎的独立 Android Library 模块，承载自研 OpenGL ES + EGL 渲染管线（大美丽引擎），对外暴露稳定 API，对内封装 GPU 加速实现。长期演进为可独立发布的视觉能力基础库。
@@ -21,10 +21,10 @@
 - **[PERF] 单帧处理 ≤ 16ms**：目标 60fps；低端机保底 30fps
 - **[PERF] 参数响应延迟 < 100ms**：美颜参数通过 `uniform` 实时传递，无需重新编译 Shader
 - **[PRIVACY] 本地渲染**：所有图像处理在设备本地完成，严禁上传任何图像数据到云端
-- **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`
+- **[STABILITY] 容灾降级**：引擎初始化失败或运行异常时，通过 `BeautyPreviewProvider` 向 App 层报告。详细的兜底策略与状态记录机制请参阅 `docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md`
 - **[API_STABILITY] 库化演进**：App 仅依赖 `api/` 包下的能力契约，禁止直接引用 `render/` 内部实现类
 - **[INTEGRATION] 单引擎架构**：仅保留自研 `beauty-engine`（BIG_BEAUTY）引擎，GPUPixel 已于 2026-05 完全移除
-- **[ROADMAP] 拍照 GPU 化（2026-05 已落地）**：`PhotoProcessorImpl` 已实现拍照后处理 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。GPU 路径失败时自动回退 CPU 路径。详见 `docs/ADR-002-opengl-offscreen-unified-pipeline.md`
+- **[ROADMAP] 拍照 GPU 化（2026-05 已落地）**：`PhotoProcessorImpl` 已实现拍照后处理 GPU 离屏渲染，复用预览同一套 Shader 管线，彻底解决预览/拍照效果不一致问题。GPU 路径失败时自动回退 CPU 路径。详见 `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md`
 
 ---
 
@@ -82,7 +82,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - `release()` — 资源释放
   - `isReady(): Boolean` — 判断引擎是否已就绪
   - `getPerfStats(): BeautyPerfStats` — 获取实时性能统计（默认返回 `EMPTY`）
-- 初始化异常应通过抛出异常或状态查询供 App 层触发兜底。详见 `docs/BEAUTY_ENGINE_FALLBACK.md`
+- 初始化异常应通过抛出异常或状态查询供 App 层触发兜底。详见 `docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md`
 
 #### PhotoProcessor（拍照 GPU 化接口，2026-05 新增）
 - **定位**：拍照后处理的统一入口，将 Bitmap 通过 GPU 离屏渲染处理，复用预览同一套 Shader 管线
@@ -279,7 +279,7 @@ if (fps < 25 || processingMs > 20) {
 
 - `api/` 包内任何公开接口的变更（新增/修改/删除）必须同步：
   1. 更新本 AGENTS.md 的接口说明
-  2. 更新 `docs/BIG_BEAUTY_TECH_SPEC.md` 的库化章节
+  2. 更新 `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` 的库化章节
   3. 通知 App 层适配（features/camera 等调用方）
 - 优先使用扩展函数或新增重载，避免破坏现有接口二进制兼容
 
@@ -484,8 +484,8 @@ CameraPreviewRenderer（渲染线程）
 ## 6. 相关文档与实现入口
 
 - `PRODUCT.md` - 产品需求规格说明书（大美丽 产品策略）
-- `docs/FEATURES.md` - 功能交互规范
-- `docs/BIG_BEAUTY_TECH_SPEC.md` - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标
+- `docs/01-PRODUCT/FEATURES.md` - 功能交互规范
+- `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标
 - `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` - 大美丽 QA 独立执行清单
 - `app/src/main/java/com/picme/features/camera/AGENTS.md` - Camera 模块实现规范
 - `beauty-engine/src/main/java/com/picme/beauty/api/` - 对外稳定 API

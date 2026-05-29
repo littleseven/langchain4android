@@ -182,7 +182,7 @@ class BeautySettings : Observable() {
 - App 层仅依赖 `beauty-engine:api`
 - GPUPixel 相关代码全部清理
 
-详见: [ADR-001](../docs/ADR-001-beauty-engine-architecture.md)
+详见: [ADR-001](../docs/02-ARCHITECTURE/ADR/ADR-001-beauty-engine-architecture.md)
 
 ### ADR-002: OpenGL 离屏渲染统一管线
 
@@ -197,7 +197,7 @@ class BeautySettings : Observable() {
 - 预览: `SurfaceTexture → OpenGL ES → SurfaceView`
 - 拍照: `Bitmap → EGL Off-screen → OpenGL ES → Bitmap`
 
-详见: [ADR-002](../docs/ADR-002-opengl-offscreen-unified-pipeline.md)
+详见: [ADR-002](../docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md)
 
 ### ADR-003: 坐标系统标准
 
@@ -214,7 +214,7 @@ class BeautySettings : Observable() {
 - 归一化坐标: [0,1],Y 轴向下
 - 左右命名: 以人物视角为准 (非屏幕视角)
 
-详见: [ADR-003](../docs/ADR-003-coordinate-system-management.md)
+详见: [ADR-003](../docs/02-ARCHITECTURE/ADR/ADR-003-coordinate-system-management.md)
 
 ---
 

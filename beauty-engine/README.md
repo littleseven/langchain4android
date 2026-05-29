@@ -232,7 +232,7 @@ override fun onCleared() {
 2. **调用方**（`GlBeautyPreviewStrategy`）捕获异常，降级为 CameraX `PreviewView` 直出，并通过 `onWarmUpFallback` 通知 UI 层。
 3. `BeautyEngineRuntimeState` 记录回退原因，供 UI 层消费展示提示。
 4. `BeautyPerfStats` 会额外暴露 `errorCategory` / `errorReason`，用于调试浮层展示最近一次 `PicMe:BeautyRenderer` 错误分类。
-5. 详细的兜底策略与冷却恢复机制请参阅 `docs/BEAUTY_ENGINE_FALLBACK.md`。
+5. 详细的兜底策略与冷却恢复机制请参阅 `docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md`。
 
 ---
 
@@ -376,9 +376,9 @@ override fun onCleared() {
 ## 相关文档
 
 - `beauty-engine/AGENTS.md` — 内部实现规范与代码约束（详细）
-- `docs/BIG_BEAUTY_TECH_SPEC.md` — 大美丽渲染链路、容灾回退、冷却恢复与观测指标
-- `docs/BEAUTY_ENGINE_FALLBACK.md` — 跨模块容灾降级统一说明
+- `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` — 大美丽渲染链路、容灾回退、冷却恢复与观测指标
+- `docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md` — 跨模块容灾降级统一说明
 - `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 执行清单
 - `PRD-FRAME-SYNC-MAKEUP.md` — 帧同步美妆系统产品需求
 - `TECH-SPEC-FRAME-SYNC-MAKEUP.md` — 帧同步美妆系统技术规格
-- `docs/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU 离屏渲染拍照架构决策记录
+- `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU 离屏渲染拍照架构决策记录

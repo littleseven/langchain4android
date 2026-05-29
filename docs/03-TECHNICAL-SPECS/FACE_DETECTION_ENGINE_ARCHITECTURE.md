@@ -141,8 +141,8 @@ Landmark 检测器：
 - `docs/face-detection/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
 - `docs/face-detection/INSIGHTFACE_106_MAPPING.md`
 - `docs/face-detection/VOLCANO_106_POINTS.md`
-- `docs/COORDINATE_SYSTEM_STANDARD.md`
-- `docs/BIG_BEAUTY_TECH_SPEC.md`
+- `docs/07-STANDARDS/COORDINATE_SYSTEM.md`
+- `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 
 ---
 
