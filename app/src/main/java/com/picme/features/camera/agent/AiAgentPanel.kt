@@ -81,8 +81,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
@@ -175,14 +176,14 @@ fun AiAgentPanel(
 }
 
 /**
- * AI Agent 面板 - Dialog 版本
+ * AI Agent 面板 - ModalBottomSheet 版本
  *
- * 使用独立 Dialog 窗口渲染，输入法弹出时不会影响底层预览页面布局。
- * 底部距离计算参考 MnnLlmChat 的 fitsSystemWindows 行为：
- * - 导航栏高度通过 WindowInsets.navigationBars 获取
- * - 键盘高度通过 imePadding() 自动处理
- * - 底部预留 8.dp 基础间距（类似 MnnLlmChat 的 layout_marginBottom）
+ * 使用 ModalBottomSheet 替代 Dialog，系统会自动处理键盘 insets：
+ * - Sheet 内容在键盘弹出时自动上移
+ * - 无需手动计算 imePadding/navigationBarsPadding
+ * - 参考 MnnLlmChat activity_chat.xml: CoordinatorLayout + fitsSystemWindows
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiAgentDialogPanel(
     state: AiAgentPanelState,
@@ -192,39 +193,37 @@ fun AiAgentDialogPanel(
     voiceCoordinator: VoiceCommandCoordinator? = null,
     modifier: Modifier = Modifier
 ) {
-    if (state.isVisible) {
-        Dialog(
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = false
+    )
+
+    LaunchedEffect(state.isVisible) {
+        if (state.isVisible) {
+            sheetState.expand()
+        } else {
+            sheetState.hide()
+        }
+    }
+
+    if (state.isVisible || sheetState.isVisible) {
+        ModalBottomSheet(
             onDismissRequest = { state.close() },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false
-            )
+            sheetState = sheetState,
+            containerColor = Color.Transparent,
+            contentColor = Color.Transparent,
+            scrimColor = Color.Black.copy(alpha = 0.32f),
+            dragHandle = null
         ) {
-            // 参考 MnnLlmChat activity_chat.xml 的底部输入栏设计：
-            // 1. CoordinatorLayout + fitsSystemWindows="true" — 系统自动处理 insets
-            // 2. 输入容器 layout_gravity="bottom" — 贴底对齐
-            // 3. 不手动计算导航栏/键盘高度 — 完全依赖系统行为
-            //
-            // Compose 等价实现：
-            // - navigationBarsPadding() 自动避让导航栏
-            // - imePadding() 自动避让键盘
-            // - 两者不要混用，imePadding 已经包含导航栏处理
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                AiAgentPanelContent(
-                    state = state,
-                    useCase = useCase,
-                    currentState = currentState,
-                    onCommand = onCommand,
-                    voiceCoordinator = voiceCoordinator,
-                    modifier = modifier
-                )
-            }
+            // ModalBottomSheet 内部自动处理键盘 insets
+            // 无需 imePadding，系统会自动上移内容
+            AiAgentPanelContent(
+                state = state,
+                useCase = useCase,
+                currentState = currentState,
+                onCommand = onCommand,
+                voiceCoordinator = voiceCoordinator,
+                modifier = modifier
+            )
         }
     }
 }
