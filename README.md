@@ -100,9 +100,14 @@ Logger.log(LogEvent.AgentCommandParsed(
 | 文档 | 职责 | 价值 |
 |------|------|------|
 | `PRODUCT.md` | 产品目标与验收标准 | 理解「为什么做」 |
-| `docs/FEATURES.md` | 交互流程与体验规则 | 理解「用户怎么用」 |
-| `AGENTS.md` | 模块规范与实现约束 | 理解「代码怎么写」 |
+| `docs/01-PRODUCT/FEATURES.md` | 交互流程与体验规则 | 理解「用户怎么用」 |
+| `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` | Agent 运行时架构 | 理解「系统怎么设计」 |
+| `docs/03-TECHNICAL-SPECS/*.md` | 模块技术规格 | 理解「代码怎么写」 |
+| `docs/04-AGENT-CAPABILITIES/CAPABILITY_REGISTRY.md` | Capability 注册表 | 理解「能力边界」 |
+| `docs/07-STANDARDS/GLOSSARY.md` | 统一术语词典 | 理解「语义一致性」 |
 | `[kimi-task]` | 可执行的任务描述 | 直接解析为执行计划 |
+
+**完整文档体系**: 参见 [`docs/00-INDEX.md`](docs/00-INDEX.md) 导航索引。
 
 ---
 
@@ -257,12 +262,20 @@ adb install -r app/build/outputs/apk/debug/picme-debug.apk
 
 ## 文档
 
-| 文档 | 内容 |
-|------|------|
-| [`PRODUCT.md`](PRODUCT.md) | 产品定义、核心命题、验收标准 |
-| [`docs/FEATURES.md`](docs/FEATURES.md) | 功能交互细节 |
-| [`AGENTS.md`](AGENTS.md) | Agent First 治理规范 |
-| [`agents/README.md`](agents/README.md) | Agent 角色定义与执行手册 |
+| 层级 | 文档 | 内容 |
+|------|------|------|
+| **导航** | [`docs/00-INDEX.md`](docs/00-INDEX.md) | 完整文档导航索引 |
+| **产品层** | [`PRODUCT.md`](PRODUCT.md) | 产品定义、核心命题、验收标准 |
+| | [`docs/01-PRODUCT/FEATURES.md`](docs/01-PRODUCT/FEATURES.md) | 功能交互细节 |
+| | [`docs/01-PRODUCT/NFR_SPEC.md`](docs/01-PRODUCT/NFR_SPEC.md) | 非功能性需求（性能/稳定性指标） |
+| **架构层** | [`docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md) | Agent 运行时架构 |
+| | [`docs/02-ARCHITECTURE/ADR/`](docs/02-ARCHITECTURE/ADR/) | 架构决策记录 |
+| **技术规范** | [`docs/03-TECHNICAL-SPECS/`](docs/03-TECHNICAL-SPECS/) | 美颜引擎、帧同步、相机预览等技术规格 |
+| **Agent 能力** | [`docs/04-AGENT-CAPABILITIES/`](docs/04-AGENT-CAPABILITIES/) | Capability 注册表、命令参考、实现指南 |
+| **开发规范** | [`docs/05-DEVELOPMENT/`](docs/05-DEVELOPMENT/) | 工作流、CR 检查清单、任务标记规范 |
+| **质量标准** | [`docs/06-QA/QA_EXECUTION_CHECKLIST.md`](docs/06-QA/QA_EXECUTION_CHECKLIST.md) | QA 验收测试清单 |
+| **标准词典** | [`docs/07-STANDARDS/`](docs/07-STANDARDS/) | 坐标系标准、术语词典 |
+| **容灾** | [`docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md`](docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md) | 美颜引擎降级策略 |
 
 ---
 
