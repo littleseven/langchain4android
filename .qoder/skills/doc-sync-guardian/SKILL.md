@@ -438,7 +438,7 @@ grep -r "已废弃" docs/*.md
 ## 📚 参考文档
 
 - [AGENTS.md](AGENTS.md) - 顶层 Agent 治理规范
-- [docs/AGENTS_SPEC.md](docs/AGENTS_SPEC.md) - AGENTS.md 编写规范
+- [AGENTS.md](AGENTS.md) - 顶层 Agent 治理规范
 - [PRODUCT.md](PRODUCT.md) - 产品需求规格说明书
 - [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) - 功能交互细节规范
 - [Google Technical Writing](https://developers.google.com/tech-writing) - 技术文档写作指南

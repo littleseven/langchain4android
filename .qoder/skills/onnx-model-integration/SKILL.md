@@ -11,7 +11,7 @@ tags: [onnx, model, inference, integration, preprocessing]
 # ONNX 模型接入专家 (ONNX Model Integration)
 
 > **定位**：预防 AI 在接入 ONNX 模型时重复犯已验证过的错误（颜色格式、归一化、激活函数等）。
-> **来源**：`docs/AI_CODING_EXPERIENCE_SUMMARY.md` §3.4, §3.5
+> **来源**：项目 ONNX 模型集成实践经验
 > **触发时机**：接入任何新 ONNX 模型（InsightFace、MediaPipe、自定义模型）时
 
 ## 接入前必须回答的 5 个问题

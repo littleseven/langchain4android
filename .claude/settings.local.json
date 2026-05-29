@@ -1,3 +1,9 @@
 {
-  "enabledPlugins": {}
+  "enabledPlugins": {},
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m 'docs: 修复 docs 目录重构后的失效引用 *)"
+    ]
+  }
 }

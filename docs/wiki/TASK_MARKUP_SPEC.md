@@ -69,7 +69,7 @@
 | 文档 | 用途 |
 |------|------|
 | `PRODUCT.md` | 记录高层功能需求对应的开发任务 |
-| `docs/PRD-*.md` | 记录具体功能需求的开发任务 |
+| `docs/01-PRODUCT/FEATURES.md` | 记录具体功能需求的开发任务 |
 | `docs/01-PRODUCT/FEATURES.md` | 记录交互变更对应的 UI/UX 任务 |
 | `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` | 记录技术实现任务 |
 
@@ -87,7 +87,7 @@
 
 ```bash
 python scripts/parse_kimi_tasks.py \
-  --input docs/PRD-FRAME-SYNC-MAKEUP.md \
+  --input docs/03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md \
   --output tasks/frame-sync-tasks.json
 ```
 
@@ -95,7 +95,7 @@ python scripts/parse_kimi_tasks.py \
 
 ```json
 {
-  "source": "docs/PRD-FRAME-SYNC-MAKEUP.md",
+  "source": "docs/03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md",
   "extracted_at": "2026-05-14T10:00:00Z",
   "tasks": [
     {

@@ -345,7 +345,7 @@ MediaPipe 468 点 → 468→106 语义映射 → 旋转校正 → 归一化 → 
 
 **A**: 
 1. 检查坐标系是否统一使用**图像坐标系**（详见 [COORDINATE_SYSTEM_STANDARD.md](../../docs/07-STANDARDS/COORDINATE_SYSTEM.md)）
-2. 检查 468→106 映射表是否正确（参考 [INSIGHTFACE_106_MAPPING.md](../../docs/face-detection/INSIGHTFACE_106_MAPPING.md)）
+2. 检查 468→106 映射表是否正确（参考 [INSIGHTFACE_106_MAPPING.md](../../docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md)）
 3. 检查旋转校正是否应用：
    ```kotlin
    // 根据 rotationDegrees 调整坐标

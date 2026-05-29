@@ -19,9 +19,9 @@ private const val LENS_FACING_FRONT = 0
  * - 前置摄像头时水平镜像 x 坐标
  *
  * 参考文档：
- * - docs/face-detection/VOLCANO_106_POINTS.md
- * - docs/face-detection/MEDIAPIPE_468_REFERENCE.md
- * - docs/face-detection/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md
+ * - docs/03-TECHNICAL-SPECS/VOLCANO_106_POINTS.md
+ * - docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_REFERENCE.md
+ * - docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md
  */
 class MediaPipe468Adapter : FaceLandmarkAdapter {
 
@@ -35,7 +35,7 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
         const val NON_CONTOUR_POINT_COUNT = 73
 
         // MediaPipe 468 → 字节火山引擎 106 点映射表
-        // 映射依据：docs/face-detection/VOLCANO_106_POINTS.md + docs/face-detection/MEDIAPIPE_468_REFERENCE.md
+        // 映射依据：docs/03-TECHNICAL-SPECS/VOLCANO_106_POINTS.md + docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_REFERENCE.md
         // 106点标准拓扑（被摄者真实面部，前置摄像头镜像后）——严格遵循火山引擎标准：
         //   0-16: 右轮廓17点（画面左侧，从右上到下巴右）
         //   17-32: 左轮廓16点（画面右侧，从下巴左到左上）

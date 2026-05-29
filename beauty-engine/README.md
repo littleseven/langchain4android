@@ -378,7 +378,6 @@ override fun onCleared() {
 - `beauty-engine/AGENTS.md` — 内部实现规范与代码约束（详细）
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` — 大美丽渲染链路、容灾回退、冷却恢复与观测指标
 - `docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md` — 跨模块容灾降级统一说明
-- `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 执行清单
-- `PRD-FRAME-SYNC-MAKEUP.md` — 帧同步美妆系统产品需求
-- `TECH-SPEC-FRAME-SYNC-MAKEUP.md` — 帧同步美妆系统技术规格
+- `docs/06-QA/QA_EXECUTION_CHECKLIST.md` — QA 验收测试清单
+- `docs/03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md` — 帧同步美妆系统技术规格
 - `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU 离屏渲染拍照架构决策记录

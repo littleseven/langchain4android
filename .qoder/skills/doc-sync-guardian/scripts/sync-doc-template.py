@@ -179,7 +179,7 @@ def generate_update_draft(analysis: dict, commit_hash: str) -> str:
     
     # 如果有特性文档变更
     if analysis['has_features_change']:
-        draft += """### docs/FEATURES.md
+        draft += """### docs/01-PRODUCT/FEATURES.md
 - [ ] 交互流程描述是否完整？
 - [ ] 用户体验目标是否量化？
 - [ ] 视觉风格规范是否与 Design System 一致？

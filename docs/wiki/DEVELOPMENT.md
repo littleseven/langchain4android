@@ -76,7 +76,7 @@ Spec 文档更新（Consensus）
 ```kotlin
 // Spec: beauty-engine/AGENTS.md#5-frame-sync
 // Implements: AC-P0-3
-// Related: docs/PRD-FRAME-SYNC-MAKEUP.md#2.2-FR-5
+// Related: docs/03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md
 // ChangeLog: 2026-05-14 新增 missingThresholdFrames 字段
 class FrameSyncManager(
     private val config: FrameSyncConfig = FrameSyncConfig.DEFAULT

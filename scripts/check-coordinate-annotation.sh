@@ -41,7 +41,7 @@ done
 
 echo ""
 if [ $ERRORS -gt 0 ]; then
-    echo -e "\033[31m❌ 发现 $ERRORS 处问题，请参考 docs/COORDINATE_SYSTEM_STANDARD.md 修复\033[0m"
+    echo -e "\033[31m❌ 发现 $ERRORS 处问题，请参考 docs/07-STANDARDS/COORDINATE_SYSTEM.md 修复\033[0m"
     exit 1
 else
     echo -e "\033[32m✅ 坐标系标注检查通过\033[0m"

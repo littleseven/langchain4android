@@ -4,7 +4,7 @@
 
 本文档记录 PicMe 工程中 InsightFace 106 点到统一 106 标准（大美丽 106）的完整映射关系。
 
-**坐标系说明**：本文档中所有"左/右"描述均基于**图像坐标系**（观察者视角），详见 [COORDINATE_SYSTEM_STANDARD.md](../COORDINATE_SYSTEM_STANDARD.md)。
+**坐标系说明**：本文档中所有"左/右"描述均基于**图像坐标系**（观察者视角），详见 [COORDINATE_SYSTEM.md](../07-STANDARDS/COORDINATE_SYSTEM.md)。
 
 - **图像左侧** = 观察者看到的左边 = x 坐标较小的一侧
 - **图像右侧** = 观察者看到的右边 = x 坐标较大的一侧

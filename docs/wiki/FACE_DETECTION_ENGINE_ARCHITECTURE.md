@@ -102,7 +102,7 @@ Landmark 检测器：
 - 非轮廓 73 点：`NON_CONTOUR_MAPPING` 固定表映射
 - 前置镜头：`x = 1 - x`
 
-参考：`docs/face-detection/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
+参考：`docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
 
 ### 5.2 InsightFace 原生 106 -> 统一 106
 
@@ -112,7 +112,7 @@ Landmark 检测器：
 - 不存在 `index -> same index` 直通点
 - 前置镜头：`x = 1 - x`
 
-参考：`docs/face-detection/INSIGHTFACE_106_MAPPING.md`
+参考：`docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
 
 ## 6. 当前行为边界（避免文档误读）
 
@@ -138,9 +138,9 @@ Landmark 检测器：
 
 ## 8. 相关文档
 
-- `docs/face-detection/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
-- `docs/face-detection/INSIGHTFACE_106_MAPPING.md`
-- `docs/face-detection/VOLCANO_106_POINTS.md`
+- `docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
+- `docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
+- `docs/03-TECHNICAL-SPECS/VOLCANO_106_POINTS.md`
 - `docs/07-STANDARDS/COORDINATE_SYSTEM.md`
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 

@@ -76,7 +76,7 @@ Spec 文档更新（Consensus）
 ```kotlin
 // Spec: beauty-engine/AGENTS.md#5-frame-sync
 // Implements: AC-P0-3
-// Related: docs/PRD-FRAME-SYNC-MAKEUP.md#2.2-FR-5
+// Related: docs/03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md
 // ChangeLog: 2026-05-14 新增 missingThresholdFrames 字段
 class FrameSyncManager(
     private val config: FrameSyncConfig = FrameSyncConfig.DEFAULT
@@ -87,7 +87,7 @@ class FrameSyncManager(
 
 ### 2.5 Traceability Matrix
 
-维护 `docs/TRACEABILITY_MATRIX.md`，记录需求 → 代码 → 测试的映射关系：
+维护可追溯性矩阵（Traceability Matrix），记录需求 → 代码 → 测试的映射关系：
 
 | 需求 ID | 需求描述 | 实现文件 | 测试文件 | 验收条件 |
 |---------|---------|---------|---------|---------|
