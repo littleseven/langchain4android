@@ -150,7 +150,7 @@ ls -lt docs/comprehensive_audit_*.md | head -1 | xargs code
 
 ⚠️ 警告项 (3)
    • 缺少第 5 章: app/src/main/java/com/picme/features/editor/AGENTS.md
-   • 悬空引用: docs/FEATURES.md -> docs/OLD_FEATURE.md
+   • 悬空引用: docs/01-PRODUCT/FEATURES.md -> docs/OLD_FEATURE.md
 
 ❌ 错误项 (0)
 ```
@@ -351,7 +351,7 @@ echo "🔍 检查文档一致性..."
 - [AGENTS.md](../../AGENTS.md) - PicMe 顶层 Agent 治理规范
 - [docs/AGENTS_SPEC.md](../../docs/AGENTS_SPEC.md) - AGENTS.md 编写规范
 - [PRODUCT.md](../../PRODUCT.md) - 产品需求规格说明书
-- [docs/FEATURES.md](../../docs/FEATURES.md) - 功能交互细节规范
+- [docs/01-PRODUCT/FEATURES.md](../../docs/01-PRODUCT/FEATURES.md) - 功能交互细节规范
 
 ---
 

@@ -324,10 +324,10 @@ GPU 管线性能优化（P1）→ 1080p@30fps 不丢帧
 | 文档 | 说明 |
 |------|------|
 | `PRODUCT.md` | 产品需求规格说明书（SSOT） |
-| `docs/FEATURES.md` | 功能交互规范 |
-| `docs/NFR_SPEC.md` | 非功能性需求规格 |
+| `docs/01-PRODUCT/FEATURES.md` | 功能交互规范 |
+| `docs/01-PRODUCT/NFR_SPEC.md` | 非功能性需求规格 |
 | `docs/PRD-FRAME-SYNC-MAKEUP.md` | 帧同步美妆 PRD |
-| `docs/BIG_BEAUTY_TECH_SPEC.md` | 大美丽引擎技术规范 |
+| `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` | 大美丽引擎技术规范 |
 
 ---
 

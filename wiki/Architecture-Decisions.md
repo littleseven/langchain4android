@@ -23,7 +23,7 @@
 - App 层仅依赖 `beauty-engine:api`
 - 容灾降级展示无美颜原生预览
 
-详见: [ADR-001](../docs/ADR-001-beauty-engine-architecture.md)
+详见: [ADR-001](../docs/02-ARCHITECTURE/ADR/ADR-001-beauty-engine-architecture.md)
 
 ---
 
@@ -49,7 +49,7 @@
 - 自动回退到现有 CPU Canvas 路径
 - 确保拍照不失败
 
-详见: [ADR-002](../docs/ADR-002-opengl-offscreen-unified-pipeline.md)
+详见: [ADR-002](../docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md)
 
 ---
 
@@ -88,7 +88,7 @@ if (isFrontCamera) {
 }
 ```
 
-详见: [ADR-003](../docs/ADR-003-coordinate-system-management.md)
+详见: [ADR-003](../docs/02-ARCHITECTURE/ADR/ADR-003-coordinate-system-management.md)
 
 ---
 

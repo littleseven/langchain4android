@@ -1,108 +1,141 @@
 # PicMe Wiki
 
-欢迎使用 **PicMe** - Android 平台上最快、最私密、审美最纯粹的相机与相册应用。
-
-## 📖 快速导航
-
-### 🚀 入门指南
-- [项目概述](Home) - 了解 PicMe 的愿景与核心能力
-- [快速开始](Quick-Start) - 环境配置与构建指南
-- [架构概览](Architecture-Overview) - Clean Architecture + 单引擎设计
-
-### 🎨 核心功能
-- [实时美颜系统](Beauty-Engine) - 大美丽引擎技术详解
-- [人脸检测双引擎](Face-Detection-Engines) - InsightFace + MediaPipe 架构
-- [滤镜系统](Filter-System) - 色调滤镜与风格特效
-- [拍照 GPU 化](GPU-Photo-Processing) - 离屏渲染管线
-
-### 📐 技术文档
-- [架构决策记录 (ADR)](Architecture-Decisions) - 关键技术决策文档
-- [坐标系统标准](Coordinate-System) - 人脸关键点与渲染坐标系
-- [相机预览技术规范](Camera-Preview-Spec) - CameraX 集成与优化
-- [容灾降级机制](Fallback-Mechanism) - 引擎失败处理策略
-
-### 🛠️ 开发指南
-- [代码规范](Code-Standards) - Kotlin/Java 编码规范
-- [AI 协作流程](AI-Collaboration) - Agent Team 工作流
-- [测试指南](Testing-Guide) - 单元测试与仪器测试
-- [贡献指南](Contributing) - 如何参与项目开发
-
-### 📊 质量保障
-- [QA 执行清单](QA-Checklist) - 大美丽质量验收标准
-- [性能指标](Performance-Metrics) - FPS、延迟、内存监控
-- [隐私与安全](Privacy-Security) - 本地 AI 与数据保护
+> **Agent First 工程试验场** —— 以 Agent 为中心的客户端框架与研发流程
 
 ---
 
-## 🌟 项目亮点
+## 📚 快速导航
 
-### 1. 极致性能
-- **启动速度**: 冷启动 < 500ms,无启动页
-- **拍摄延迟**: 快门响应 < 50ms
-- **相册滚动**: 1000+ 照片保持 120fps
-- **拍照处理**: 1080p < 300ms (GPU 路径)
+### 核心文档
+- [产品定义](./Product-Definition) - 产品目标与验收标准
+- [功能交互](./Features-Specification) - 功能交互细节规范
+- [非功能性需求](./NFR-Specification) - 性能/稳定性指标
+- [架构设计](./Architecture-Overview) - 系统架构概览
 
-### 2. 隐私优先
-- **100% 本地 AI**: 人脸检测、OCR、分类全部端侧运行
-- **零云端依赖**: 不申请网络权限,离线可用
-- **数据安全**: 所有数据存储在设备本地
+### Agent 能力
+- [Agent 架构](./Agent-Architecture) - Agent 运行时架构
+- [Capability 注册表](./Capability-Registry) - 所有 Capability 列表
+- [命令参考](./Command-Reference) - 命令语法与示例
+- [实现指南](./Capability-Implementation-Guide) - 新增 Capability 步骤
 
-### 3. 先进架构
-- **Clean Architecture**: Domain → Data → Features 分层清晰
-- **单引擎设计**: 自研 OpenGL ES + EGL 渲染管线
-- **双人脸检测**: InsightFace (NNAPI 加速) + MediaPipe (备选回退)
-- **多 Pass 渲染**: FaceMakeupPass 支持唇色/腮红精细妆容
+### 技术规范
+- [美颜引擎](./Beauty-Engine) - 大美丽技术规格
+- [帧同步美妆](./Frame-Sync-Makeup) - 帧同步系统详解
+- [相机预览](./Camera-Preview) - 相机预览管线
+- [人脸检测](./Face-Detection-Engines) - 多引擎对比与映射
 
-### 4. HyperOS 美学
-- **大圆角设计**: 28dp+ 统一圆角
-- **流体动效**: Bezier 曲线模拟物理惯性
-- **实时高斯模糊**: 毛玻璃效果提升质感
-- **微交互反馈**: 触感 + 音效 + 视觉三位一体
+### 开发规范
+- [工作流](./Development-Workflow) - 双螺旋演进工作流
+- [代码审查](./Code-Review-Checklist) - CR 检查清单
+- [任务标记](./Task-Markup-Spec) - `[kimi-task]` 规范
 
----
+### 质量标准
+- [QA 验收](./QA-Execution-Checklist) - 端到端测试清单
+- [坐标系标准](./Coordinate-System) - 人脸关键点坐标规范
+- [术语词典](./Glossary) - 统一术语定义
 
-## 📦 技术栈
-
-| 类别 | 技术选型 |
-|------|----------|
-| **语言** | Kotlin 1.9+, Java 11 |
-| **UI 框架** | Jetpack Compose, Material Design 3 |
-| **相机** | CameraX (ImageCapture, ImageAnalysis, Preview) |
-| **人脸检测** | InsightFace 2D106 (ONNX Runtime + NNAPI), MediaPipe Face Mesh 468 |
-| **渲染引擎** | OpenGL ES 2.0, EGL Off-screen Rendering |
-| **数据存储** | Room Database, DataStore Preferences |
-| **依赖注入** | 手动 DI (Koin 评估中) |
-| **构建工具** | Gradle Kotlin DSL, KSP |
+### 容灾降级
+- [美颜引擎容灾](./Beauty-Engine-Fallback) - 降级策略与恢复机制
 
 ---
 
-## 🔗 相关资源
+## 🎯 项目目标
 
-- **GitHub Repository**: [PicMe](https://github.com/littleseven/PicMe)
-- **产品需求**: [PRODUCT.md](../PRODUCT.md)
-- **功能交互**: [docs/FEATURES.md](../docs/FEATURES.md)
-- **Agent 规范**: [AGENTS.md](../AGENTS.md)
-- **技术专项**: [docs/](../docs/)
+PicMe 是一个元实验，探索三个层次：
 
----
-
-## 📅 更新日志
-
-### v2026.05 (当前版本)
-- ✅ InsightFace 2D106 默认首选,启用 NNAPI GPU/NPU 加速
-- ✅ 拍照 GPU 化完成,预览/拍照效果一致性 99%+
-- ✅ 风格特效移植到大美丽引擎 (卡通/素描/浮雕/色块化/交叉线)
-- ✅ GPUPixel 完全移除,单引擎架构收敛
-- ✅ 人脸检测双引擎容灾机制落地
-
-### v2026.04
-- ✅ MediaPipe Face Mesh 468→106 映射完成
-- ✅ 大美丽多 Pass 渲染管线 (FaceMakeupPass)
-- ✅ Clean Architecture 重构 (Domain/Data/Features)
-- ✅ Agent Team 协作流程固化
+1. **运行时**: 端侧 AI Agent 架构 - LLM 能否成为应用的中枢神经系统？
+2. **架构层**: Agent First 客户端框架 - 什么样的架构让 Agent 最高效？
+3. **流程层**: Agent First 研发流程 - Agent 如何通过编排 Tools 完成开发？
 
 ---
 
-**最后更新**: 2026-05-05  
-**维护者**: PicMe RD Team  
-**许可证**: MIT License
+## 📖 文档体系
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  PRODUCT (产品层) - What & Why                          │
+│  • Product Definition                                   │
+│  • Features Specification                               │
+│  • NFR Specification                                    │
+└─────────────────────────────────────────────────────────┘
+                           ↓ 引用
+┌─────────────────────────────────────────────────────────┐
+│  ARCHITECTURE (架构层) - How                            │
+│  • Architecture Overview                                │
+│  • Agent Architecture                                   │
+│  • Architecture Decisions                               │
+└─────────────────────────────────────────────────────────┘
+                           ↓ 指导
+┌─────────────────────────────────────────────────────────┐
+│  TECHNICAL SPECS (技术规范) - Implementation            │
+│  • Beauty Engine                                        │
+│  • Frame Sync Makeup                                    │
+│  • Camera Preview                                       │
+│  • Face Detection Engines                               │
+└─────────────────────────────────────────────────────────┘
+                           ↓ 实现
+┌─────────────────────────────────────────────────────────┐
+│  CAPABILITIES (Agent 能力) - Commands & Tools           │
+│  • Capability Registry                                  │
+│  • Command Reference                                    │
+│  • Capability Implementation Guide                      │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 快速开始
+
+```bash
+# 克隆项目
+git clone https://github.com/littleseven/PicMe.git
+cd PicMe
+
+# 构建 Debug APK
+./gradlew :app:assembleDebug
+
+# 安装到设备
+adb install -r app/build/outputs/apk/debug/picme-debug.apk
+
+# 自动化开发闭环
+./scripts/auto-dev-loop.sh
+```
+
+---
+
+## 🤝 贡献指南
+
+### 文档更新流程
+
+1. **需求变更** → 更新 `PRODUCT.md` / `FEATURES.md`
+2. **架构调整** → 更新 `AGENT_ARCHITECTURE.md` + ADR
+3. **技术实现** → 更新 `*_TECH_SPEC.md`
+4. **代码同步** → 代码变更后同步更新对应 Spec 文档
+
+### 文档规范
+
+- 所有文档使用统一的头部格式（版本、状态、维护者）
+- 添加反向链接注释（`// Spec: ...`）
+- 遵循三层文档体系：`PRODUCT.md` → `FEATURES.md` → 模块 `AGENTS.md`
+
+---
+
+## 📊 项目统计
+
+- **文档总数**: 26 个 Markdown 文件
+- **目录结构**: 8 个逻辑层
+- **Agent 角色**: CO, PM, RD, CR, QA
+- **Capabilities**: Camera, Gallery, Settings, Navigation, Edit
+
+---
+
+## 🔗 相关链接
+
+- [GitHub Repository](https://github.com/littleseven/PicMe)
+- [AGENTS.md (顶层治理)](../AGENTS.md)
+- [00-INDEX.md (文档导航)](../docs/00-INDEX.md)
+
+---
+
+> **最后更新**: 2026-05-29  
+> **维护者**: CO Agent

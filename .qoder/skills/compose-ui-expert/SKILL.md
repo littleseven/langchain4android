@@ -91,7 +91,7 @@ tags: [compose, ui, jetpack, layout, state, performance, hyperos]
 
 ## 相关文件
 
-- [docs/FEATURES.md](docs/FEATURES.md) — 交互规范与设计系统
+- [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 交互规范与设计系统
 - [app/src/main/java/com/picme/core/designsystem/AGENTS.md](app/src/main/java/com/picme/core/designsystem/AGENTS.md) — 设计系统规范
 
 ---

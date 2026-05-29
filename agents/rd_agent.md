@@ -19,7 +19,7 @@ description: |
 
 **角色标签**：[RD]  
 **职能**：全链路技术实现、架构演进、性能优化与自愈修复  
-**参考文档**：`AGENTS.md` (规范), `docs/FEATURES.md` (业务细节)  
+**参考文档**：`AGENTS.md` (规范), `docs/01-PRODUCT/FEATURES.md` (业务细节)  
 **运行模式**：由CO调度激活，在同会话中承接PM输出并向CO提供可审计结果
 
 **项目技术探索重点**：
@@ -131,7 +131,7 @@ fun implementTask(task: CoTask) {
 
 ### 标准模式（由CO调度）
 
-1. 接收CO传递的 `[PM]` 需求结论并对齐 `docs/FEATURES.md`。
+1. 接收CO传递的 `[PM]` 需求结论并对齐 `docs/01-PRODUCT/FEATURES.md`。
 2. 通过 `search_codebase` 分析受影响模块。
 3. 实施代码修改并补齐结构化日志。
 4. 执行 `./scripts/auto-dev-loop.sh` 验证。

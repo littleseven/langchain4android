@@ -16,8 +16,8 @@
 | `check-doc-coordinate-annotation.sh` | 检测文档中未标注坐标系的描述 | `./check-doc-coordinate-annotation.sh` |
 
 **相关文档**：
-- [COORDINATE_SYSTEM_STANDARD.md](../docs/COORDINATE_SYSTEM_STANDARD.md)
-- [ADR-003-coordinate-system-management.md](../docs/ADR-003-coordinate-system-management.md)
+- [COORDINATE_SYSTEM_STANDARD.md](../docs/07-STANDARDS/COORDINATE_SYSTEM.md)
+- [ADR-003-coordinate-system-management.md](../docs/02-ARCHITECTURE/ADR/ADR-003-coordinate-system-management.md)
 
 ---
 
@@ -222,9 +222,9 @@ python scripts/generate_contour_mapping.py \
 
 ## 📖 相关文档
 
-- [COORDINATE_SYSTEM_STANDARD.md](../docs/COORDINATE_SYSTEM_STANDARD.md) - 坐标系规范
-- [CAMERA_PREVIEW_TECH_SPEC.md](../docs/CAMERA_PREVIEW_TECH_SPEC.md) - 相机技术规范
-- [BIG_BEAUTY_TECH_SPEC.md](../docs/BIG_BEAUTY_TECH_SPEC.md) - 美颜引擎规范
+- [COORDINATE_SYSTEM_STANDARD.md](../docs/07-STANDARDS/COORDINATE_SYSTEM.md) - 坐标系规范
+- [CAMERA_PREVIEW_TECH_SPEC.md](../docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 相机技术规范
+- [BIG_BEAUTY_TECH_SPEC.md](../docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 美颜引擎规范
 
 ---
 

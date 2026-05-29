@@ -161,16 +161,16 @@ The project follows a three-layer documentation system. When implementation reve
 
 ```
 PRODUCT.md          → Goals and constraints (What)
-docs/FEATURES.md    → Interaction and UX rules (How)
+docs/01-PRODUCT/FEATURES.md    → Interaction and UX rules (How)
 <module>/AGENTS.md  → Implementation specs and checklists
 ```
 
 Key technical specs:
-- `docs/BIG_BEAUTY_TECH_SPEC.md` — Rendering pipeline, fallback, cooldown recovery, observability
-- `docs/CAMERA_PREVIEW_TECH_SPEC.md` — Coordinate conversion, viewport calculation
-- `docs/FACE_DETECTION_ENGINE_ARCHITECTURE.md` — InsightFace + MediaPipe dual-engine architecture
-- `docs/ADR-001-beauty-engine-architecture.md` — Layered module architecture decision
-- `docs/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU off-screen rendering for photo processing
+- `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` — Rendering pipeline, fallback, cooldown recovery, observability
+- `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md` — Coordinate conversion, viewport calculation
+- `docs/03-TECHNICAL-SPECS/FACE_DETECTION_ENGINE_ARCHITECTURE.md` — InsightFace + MediaPipe dual-engine architecture
+- `docs/02-ARCHITECTURE/ADR/ADR-001-beauty-engine-architecture.md` — Layered module architecture decision
+- `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU off-screen rendering for photo processing
 
 ## Build Configuration
 

@@ -5,7 +5,7 @@
 本文件**不重复**项目通用规范，仅声明 OpenClaw / kimi-cli 的**运行时差异**。
 
 > **通用规范（唯一事实来源）**：`../../AGENTS.md`（项目根目录）  
-> **交互细节**：`../../docs/FEATURES.md`  
+> **交互细节**：`../../docs/01-PRODUCT/FEATURES.md`  
 > **技术规格**：`../../docs/AGENTS_SPEC.md`  
 
 ## kimi-cli 使用方式

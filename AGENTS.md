@@ -293,7 +293,7 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 |------|------|
 | **顶层治理** | `AGENTS.md`（本文档） |
 | **产品定义** | `PRODUCT.md` |
-| **交互规范** | `docs/FEATURES.md` |
+| **交互规范** | `docs/01-PRODUCT/FEATURES.md` |
 | **AI 协作角色** | `agents/README.md`, `agents/co_agent.md`, `agents/rd_agent.md`, `agents/pm_agent.md`, `agents/review_agent.md`, `agents/qa_agent.md` |
 | **模块规范** | 各模块 `AGENTS.md` |
 | **技术专项** | `docs/*.md` |

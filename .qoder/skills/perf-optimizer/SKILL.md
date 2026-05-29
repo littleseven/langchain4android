@@ -111,7 +111,7 @@ MemoryPeak: 186MB (基线: 180MB) ⚠️
 
 ## 相关文件
 
-- [docs/FEATURES.md](docs/FEATURES.md) — 性能指标定义
+- [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 性能指标定义
 
 ---
 

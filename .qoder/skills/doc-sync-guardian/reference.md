@@ -62,7 +62,7 @@ def determine_affected_docs(changed_files):
     """根据变更文件判断需要更新的文档"""
     affected_docs = {
         "PRODUCT.md": False,
-        "docs/FEATURES.md": False,
+        "docs/01-PRODUCT/FEATURES.md": False,
         "modules": set()
     }
     for file in changed_files:
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     - **性能指标**：1080p < 300ms，4K < 800ms
     - **降级策略**：GPU 失败时自动回退 CPU 路径
 
-### 2. docs/FEATURES.md
+### 2. docs/01-PRODUCT/FEATURES.md
 **当前位置**: Section 1.3.5
 **需要添加**:
 - **拍照后处理性能（大美丽 GPU 化，2026-05）**：
@@ -135,7 +135,7 @@ if __name__ == "__main__":
 - Texture -> PBO -> JPEG 编码
 - 检查清单：降级/OOM/耗时
 
-### 4. docs/BIG_BEAUTY_TECH_SPEC.md
+### 4. docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md
 **新增章节**: 拍照 GPU 化方案（架构设计 / EGL 管理 / 降级策略）
 
 ### 更新优先级
@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
 [CO] 识别变更范围：Git Commit xyz789 - "实现曝光滑杆实时预览"
 [CR] 确定需要更新的文档：
-     - docs/FEATURES.md Section 1.2（交互流程）
+     - docs/01-PRODUCT/FEATURES.md Section 1.2（交互流程）
      - app/.../camera/AGENTS.md Section 2（技术实现）
 [RD] 生成更新草案并应用...
      ✅ FEATURES.md: 补充滑杆触感反馈说明
