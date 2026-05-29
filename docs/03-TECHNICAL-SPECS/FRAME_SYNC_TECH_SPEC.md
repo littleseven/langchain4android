@@ -641,7 +641,7 @@ FrameSyncManager 初始化失败
 
 ## 11. 相关文档
 
-- 产品需求文档：`docs/PRD-FRAME-SYNC-MAKEUP.md`
+- 产品需求文档：`docs/01-PRODUCT/FEATURES.md`
 - 美颜引擎架构：`docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 - 产品交互规范：`docs/01-PRODUCT/FEATURES.md` Section 1.3
 - 模块实现约束：`beauty-engine/AGENTS.md`

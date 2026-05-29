@@ -155,7 +155,7 @@ open output_images/face001_left_eye.png
 ```bash
 python scripts/generate_contour_mapping.py \
     --input input_images/face.jpg \
-    --output docs/face-detection/contour_mapping.json
+    --output docs/03-TECHNICAL-SPECS/contour_mapping.json
 ```
 
 ---
@@ -224,7 +224,7 @@ python scripts/generate_contour_mapping.py \
 
 - [COORDINATE_SYSTEM_STANDARD.md](../docs/07-STANDARDS/COORDINATE_SYSTEM.md) - 坐标系规范
 - [CAMERA_PREVIEW_TECH_SPEC.md](../docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 相机技术规范
-- [BIG_BEAUTY_TECH_SPEC.md](../docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 美颜引擎规范
+- [BEAUTY_ENGINE_TECH_SPEC.md](../docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 美颜引擎规范
 
 ---
 

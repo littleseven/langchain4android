@@ -31,7 +31,7 @@ private const val LENS_FACING_FRONT = 0
  * - 不存在 i -> i 的直通点
  * - 前置摄像头时水平镜像 x 坐标
  *
- * 参考文档：docs/face-detection/INSIGHTFACE_106_MAPPING.md
+ * 参考文档：docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md
  */
 class InsightFaceAdapter : FaceLandmarkAdapter {
 

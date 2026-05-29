@@ -349,7 +349,7 @@ echo "🔍 检查文档一致性..."
 
 - [SKILL.md](SKILL.md) - 完整的 Skill 使用指南
 - [AGENTS.md](../../AGENTS.md) - PicMe 顶层 Agent 治理规范
-- [docs/AGENTS_SPEC.md](../../docs/AGENTS_SPEC.md) - AGENTS.md 编写规范
+- [AGENTS.md](../../AGENTS.md) - 顶层 Agent 治理规范
 - [PRODUCT.md](../../PRODUCT.md) - 产品需求规格说明书
 - [docs/01-PRODUCT/FEATURES.md](../../docs/01-PRODUCT/FEATURES.md) - 功能交互细节规范
 

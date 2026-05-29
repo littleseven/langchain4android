@@ -32,8 +32,8 @@ STATUS_PATTERNS = [
 # 需要同步状态标记的文件
 SYNC_FILES = [
     "PRODUCT.md",
-    "docs/FEATURES.md",
-    "docs/BIG_BEAUTY_TECH_SPEC.md",
+    "docs/01-PRODUCT/FEATURES.md",
+    "docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md",
     "beauty-engine/AGENTS.md",
     "README.md",
 ]

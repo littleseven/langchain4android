@@ -486,7 +486,7 @@ CameraPreviewRenderer（渲染线程）
 - `PRODUCT.md` - 产品需求规格说明书（大美丽 产品策略）
 - `docs/01-PRODUCT/FEATURES.md` - 功能交互规范
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` - 大美丽 渲染链路、容灾回退、冷却恢复与观测指标
-- `docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` - 大美丽 QA 独立执行清单
+- `docs/06-QA/QA_EXECUTION_CHECKLIST.md` - QA 验收测试清单
 - `app/src/main/java/com/picme/features/camera/AGENTS.md` - Camera 模块实现规范
 - `beauty-engine/src/main/java/com/picme/beauty/api/` - 对外稳定 API
 - `beauty-engine/src/main/java/com/picme/beauty/render/` - OpenGL ES 渲染管线实现

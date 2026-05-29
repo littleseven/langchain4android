@@ -34,7 +34,7 @@ python3 scripts/check_i18n_sync.py
 echo "📊 生成审计报告..."
 python3 scripts/generate_audit_report.py
 
-echo "✅ 检查完成！详见 docs/audit_report_$(date +%Y%m%d).md"
+echo "✅ 检查完成！详见 docs/05-DEVELOPMENT/audit_report_$(date +%Y%m%d).md"
 ```
 
 ### sync-doc-template.py

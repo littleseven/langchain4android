@@ -46,7 +46,7 @@ else
 fi
 
 # 检查 FEATURES.md 是否承接了交互要求
-if grep -q "交互\|反馈\|动效" "$PROJECT_ROOT/docs/FEATURES.md"; then
+if grep -q "交互\|反馈\|动效" "$PROJECT_ROOT/docs/01-PRODUCT/FEATURES.md"; then
     PASS_ITEMS+=("FEATURES.md 包含交互流程说明")
     ((PASS_COUNT++))
 else
@@ -221,7 +221,7 @@ echo "总计: ✅ $PASS_COUNT 通过 | ⚠️  $WARN_COUNT 警告 | ❌ $ERROR_C
 echo "═══════════════════════════════════════════════════════════"
 
 # 保存报告
-REPORT_FILE="$PROJECT_ROOT/docs/audit_report_$(date +%Y%m%d_%H%M%S).md"
+REPORT_FILE="$PROJECT_ROOT/docs/05-DEVELOPMENT/audit_report_$(date +%Y%m%d_%H%M%S).md"
 
 cat > "$REPORT_FILE" << EOF
 # 📊 文档一致性审计报告

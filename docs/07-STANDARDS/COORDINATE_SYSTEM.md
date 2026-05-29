@@ -392,7 +392,7 @@ grep -r "leftEye\|rightEye" app/src/ --include="*.kt" | grep -v "imageLeft\|imag
 #### 优先级 1: 技术文档（最高）
 
 **文件列表**：
-- `docs/face-detection/INSIGHTFACE_106_MAPPING.md`
+- `docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 - `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md`
 - `.qoder/skills/av-gl-expert/SKILL.md`
@@ -695,9 +695,9 @@ exit 0
 ## 📚 参考资源
 
 ### 内部文档
-- [INSIGHTFACE_106_MAPPING.md](./face-detection/INSIGHTFACE_106_MAPPING.md) - 需要按新标准修订
-- [CAMERA_PREVIEW_TECH_SPEC.md](./CAMERA_PREVIEW_TECH_SPEC.md) - 坐标转换章节
-- [BIG_BEAUTY_TECH_SPEC.md](./BIG_BEAUTY_TECH_SPEC.md) - 人脸关键点使用
+- [INSIGHTFACE_106_MAPPING.md](../03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md) - 需要按新标准修订
+- [CAMERA_PREVIEW_TECH_SPEC.md](../03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 坐标转换章节
+- [BEAUTY_ENGINE_TECH_SPEC.md](../03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 人脸关键点使用
 
 ### 外部资源
 - [OpenCV Coordinate System](https://docs.opencv.org/master/d2/d44/tutorial_py_image_basic_ops.html)
@@ -727,7 +727,7 @@ find app/src/ -name "*.kt" -exec grep -n "//.*左眼\|//.*右眼" {} +
 ## PicMe 开发规范
 
 ### 坐标系与命名
-- 阅读 [人脸坐标系与左右命名规范](./ADR-003-coordinate-system-management.md)
+- 阅读 [人脸坐标系与左右命名规范](../02-ARCHITECTURE/ADR/ADR-003-coordinate-system-management.md)
 - 理解图像坐标系 vs 人脸坐标系的区别
 - 掌握前置/后置摄像头的镜像差异
 ```

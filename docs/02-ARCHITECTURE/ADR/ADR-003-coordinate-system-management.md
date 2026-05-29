@@ -633,8 +633,8 @@ class BeautyController {
 
 ```bash
 # 运行检测脚本，必须全部通过
-docs/scripts/check-coordinate-annotation.sh    # ✅ 通过
-docs/scripts/check-doc-coordinate-annotation.sh # ✅ 通过
+scripts/check-coordinate-annotation.sh    # ✅ 通过
+scripts/check-doc-coordinate-annotation.sh # ✅ 通过
 ```
 
 ---
@@ -643,14 +643,14 @@ docs/scripts/check-doc-coordinate-annotation.sh # ✅ 通过
 
 ### 7.1 规范文档
 
-- [COORDINATE_SYSTEM_STANDARD.md](./COORDINATE_SYSTEM_STANDARD.md) - 坐标系规范详细说明
-- [CAMERA_PREVIEW_TECH_SPEC.md](./CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
-- [INSIGHTFACE_106_MAPPING.md](./face-detection/INSIGHTFACE_106_MAPPING.md) - 关键点映射文档
+- [COORDINATE_SYSTEM.md](../../07-STANDARDS/COORDINATE_SYSTEM.md) - 坐标系规范详细说明
+- [CAMERA_PREVIEW_TECH_SPEC.md](../../03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
+- [INSIGHTFACE_106_MAPPING.md](../../03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md) - 关键点映射文档
 
 ### 7.2 技术文档
 
-- [BIG_BEAUTY_TECH_SPEC.md](./BIG_BEAUTY_TECH_SPEC.md) - 大美丽引擎技术规范
-- [BEAUTY_ENGINE_FALLBACK.md](./BEAUTY_ENGINE_FALLBACK.md) - 容灾降级说明
+- [BEAUTY_ENGINE_TECH_SPEC.md](../../03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 大美丽引擎技术规范
+- [BEAUTY_ENGINE_FALLBACK.md](../../08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md) - 容灾降级说明
 
 ### 7.3 其他 ADR
 

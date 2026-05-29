@@ -95,11 +95,11 @@ ln -sf ../../.qoder/skills/my-skill .kimi/skills/my-skill
 |------|------|------|
 | 产品需求 | `PRODUCT.md` | 目标与约束 |
 | 交互规范 | `docs/01-PRODUCT/FEATURES.md` | 交互与体验规则 |
-| 技术规范 | `docs/AGENTS_SPEC.md` | 代码风格与审查清单 |
+| 技术规范 | `AGENTS.md` | 代码风格与审查清单 |
 | 相机技术 | `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md` | 坐标转换、Viewport 计算 |
 | 美颜引擎 | `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` | Shader 架构、多 Pass 渲染 |
 | 人脸检测架构 | `docs/03-TECHNICAL-SPECS/FACE_DETECTION_ENGINE_ARCHITECTURE.md` | 多引擎 ROI + Landmark 设计 |
-| 帧同步妆容 | `docs/TECH-SPEC-FRAME-SYNC-MAKEUP.md` | 时序对齐、甩飞问题根治 |
+| 帧同步妆容 | `docs/03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md` | 时序对齐、甩飞问题根治 |
 | 性能基线 | `beauty-engine/README.md` | 各引擎耗时对比与设备基准 |
 
 ## 快捷命令

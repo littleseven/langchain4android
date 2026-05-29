@@ -263,7 +263,7 @@ Intent Router 处理:
 
 ## 相关文件
 
-- `docs/AI_CODING_AUTONOMOUS_LOOP.md` - 自闭环架构设计
+- `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` - Agent 架构设计
 - `AGENTS.md` - 角色与协作规则
 - `PRODUCT.md` - 产品需求规格
 - `docs/01-PRODUCT/FEATURES.md` - 交互规范

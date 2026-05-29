@@ -22,7 +22,7 @@ if [ ! -z "$RESULTS" ]; then
     echo -e "\033[31m❌ 发现未标注坐标系的描述:\033[0m"
     echo "$RESULTS"
     echo ""
-    echo -e "\033[31m❌ 请参考 docs/COORDINATE_SYSTEM_STANDARD.md 修复\033[0m"
+    echo -e "\033[31m❌ 请参考 docs/07-STANDARDS/COORDINATE_SYSTEM.md 修复\033[0m"
     exit 1
 else
     echo -e "\033[32m✅ 文档坐标系标注检查通过\033[0m"

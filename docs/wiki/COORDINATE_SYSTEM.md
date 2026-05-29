@@ -392,7 +392,7 @@ grep -r "leftEye\|rightEye" app/src/ --include="*.kt" | grep -v "imageLeft\|imag
 #### 优先级 1: 技术文档（最高）
 
 **文件列表**：
-- `docs/face-detection/INSIGHTFACE_106_MAPPING.md`
+- `docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 - `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md`
 - `.qoder/skills/av-gl-expert/SKILL.md`

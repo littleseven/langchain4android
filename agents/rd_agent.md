@@ -92,7 +92,7 @@ fun implementTask(task: CoTask) {
 
 **隐性知识沉淀**：
 - **自愈归档**：当自愈成功解决一个非平凡错误时，必须调用 `update_memory` 将其存入 `common_pitfalls_experience`。
-- **决策溯源**：若修改涉及架构级决策，需同步更新 `docs/ADR` 并调用 `update_memory` 存入 `important_decision_experience`。
+- **决策溯源**：若修改涉及架构级决策，需同步更新 `docs/02-ARCHITECTURE/ADR/` 并调用 `update_memory` 存入 `important_decision_experience`。
 
 ### 3. 与CO的协作契约
 

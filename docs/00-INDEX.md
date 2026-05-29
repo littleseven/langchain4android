@@ -94,7 +94,6 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`FRAME_SYNC_TECH_SPEC.md`](./03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md) | 帧同步美妆系统详细设计 | RD |
 | [`CAMERA_PREVIEW_TECH_SPEC.md`](./03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) | 相机预览管线技术约束 | RD |
 | [`MNN_LANDMARK_DIAGNOSIS.md`](./03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
-| [`NCNN_ONNX_VALIDATION.md`](./03-TECHNICAL-SPECS/NCNN_ONNX_VALIDATION.md) | NCNN/ONNX 推理引擎验证方案 | RD |
 
 **核心内容**：
 - EGL 上下文管理、Shader 编译、资源释放

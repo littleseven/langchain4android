@@ -44,7 +44,7 @@
 | 顶层治理 | `../AGENTS.md` | 角色协作、全局红线、文档治理 |
 | 产品需求 | `../PRODUCT.md` | 目标与约束 |
 | 交互规范 | `../docs/01-PRODUCT/FEATURES.md` | 交互与体验规则 |
-| 技术规范 | `../docs/AGENTS_SPEC.md` | 代码风格与审查清单 |
+| 技术规范 | `../AGENTS.md` | 代码风格与审查清单 |
 | 模块规范 | `../app/src/main/java/com/picme/*/AGENTS.md` | 各模块实现细则 |
 
 ## 快捷命令

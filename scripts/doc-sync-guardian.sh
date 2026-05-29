@@ -48,23 +48,23 @@ done
 # 文档映射规则：代码路径前缀 → 需同步的文档（用 | 分隔）
 # 格式: "前缀|文档1|文档2|..."
 declare -a DOC_MAP_PAIRS=(
-    "app/src/main/java/com/picme/features/camera/|docs/FEATURES.md|app/src/main/java/com/picme/features/camera/AGENTS.md|docs/CAMERA_PREVIEW_TECH_SPEC.md"
-    "app/src/main/java/com/picme/features/gallery/|docs/FEATURES.md|app/src/main/java/com/picme/features/gallery/AGENTS.md"
-    "app/src/main/java/com/picme/features/editor/|docs/FEATURES.md|app/src/main/java/com/picme/features/editor/AGENTS.md"
-    "app/src/main/java/com/picme/features/settings/|docs/FEATURES.md|app/src/main/java/com/picme/features/settings/AGENTS.md"
-    "app/src/main/java/com/picme/features/debug/|docs/FEATURES.md|app/src/main/java/com/picme/features/debug/AGENTS.md"
+    "app/src/main/java/com/picme/features/camera/|docs/01-PRODUCT/FEATURES.md|app/src/main/java/com/picme/features/camera/AGENTS.md|docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md"
+    "app/src/main/java/com/picme/features/gallery/|docs/01-PRODUCT/FEATURES.md|app/src/main/java/com/picme/features/gallery/AGENTS.md"
+    "app/src/main/java/com/picme/features/editor/|docs/01-PRODUCT/FEATURES.md|app/src/main/java/com/picme/features/editor/AGENTS.md"
+    "app/src/main/java/com/picme/features/settings/|docs/01-PRODUCT/FEATURES.md|app/src/main/java/com/picme/features/settings/AGENTS.md"
+    "app/src/main/java/com/picme/features/debug/|docs/01-PRODUCT/FEATURES.md|app/src/main/java/com/picme/features/debug/AGENTS.md"
     "app/src/main/java/com/picme/data/|app/src/main/java/com/picme/data/AGENTS.md"
     "app/src/main/java/com/picme/di/|app/src/main/java/com/picme/di/AGENTS.md"
-    "beauty-engine/|beauty-engine/AGENTS.md|docs/BIG_BEAUTY_TECH_SPEC.md|docs/BEAUTY_ENGINE_FALLBACK.md"
+    "beauty-engine/|beauty-engine/AGENTS.md|docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md|docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md"
     "buildSrc/|DEVELOPMENT.md"
-    "app/src/main/res/values/strings.xml|docs/FEATURES.md|app/src/main/res/values-zh-rCN/strings.xml|app/src/main/res/values-zh-rTW/strings.xml"
+    "app/src/main/res/values/strings.xml|docs/01-PRODUCT/FEATURES.md|app/src/main/res/values-zh-rCN/strings.xml|app/src/main/res/values-zh-rTW/strings.xml"
     "app/src/main/res/values-zh-rCN/strings.xml|app/src/main/res/values/strings.xml|app/src/main/res/values-zh-rTW/strings.xml"
     "app/src/main/res/values-zh-rTW/strings.xml|app/src/main/res/values/strings.xml|app/src/main/res/values-zh-rCN/strings.xml"
-    "AGENTS.md|docs/AGENTS_SPEC.md"
-    "PRODUCT.md|docs/FEATURES.md"
-    "docs/FEATURES.md|PRODUCT.md"
-    "docs/BIG_BEAUTY_TECH_SPEC.md|beauty-engine/AGENTS.md"
-    "docs/CAMERA_PREVIEW_TECH_SPEC.md|app/src/main/java/com/picme/features/camera/AGENTS.md"
+    "AGENTS.md|AGENTS.md"
+    "PRODUCT.md|docs/01-PRODUCT/FEATURES.md"
+    "docs/01-PRODUCT/FEATURES.md|PRODUCT.md"
+    "docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md|beauty-engine/AGENTS.md"
+    "docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md|app/src/main/java/com/picme/features/camera/AGENTS.md"
 )
 
 # 查找文档映射（兼容 bash 3.2）
@@ -222,7 +222,7 @@ generate_sync_report() {
             echo ""
             echo "涉及核心模块变更，请确认以下文档是否需要更新："
             echo "- [ ] PRODUCT.md（产品规格）"
-            echo "- [ ] docs/FEATURES.md（交互规范）"
+            echo "- [ ] docs/01-PRODUCT/FEATURES.md（交互规范）"
             echo "- [ ] 对应模块 AGENTS.md（实现规范）"
             echo ""
         fi
@@ -272,21 +272,21 @@ generate_suggestions() {
     if [ -n "$camera_changes" ]; then
         echo "### 相机模块"
         echo -e "$camera_changes"
-        echo "建议更新: docs/FEATURES.md §相机功能, app/src/main/java/com/picme/features/camera/AGENTS.md"
+        echo "建议更新: docs/01-PRODUCT/FEATURES.md §相机功能, app/src/main/java/com/picme/features/camera/AGENTS.md"
         echo ""
     fi
     
     if [ -n "$gallery_changes" ]; then
         echo "### 相册模块"
         echo -e "$gallery_changes"
-        echo "建议更新: docs/FEATURES.md §相册功能, app/src/main/java/com/picme/features/gallery/AGENTS.md"
+        echo "建议更新: docs/01-PRODUCT/FEATURES.md §相册功能, app/src/main/java/com/picme/features/gallery/AGENTS.md"
         echo ""
     fi
     
     if [ -n "$beauty_changes" ]; then
         echo "### 美颜引擎"
         echo -e "$beauty_changes"
-        echo "建议更新: beauty-engine/AGENTS.md, docs/BIG_BEAUTY_TECH_SPEC.md"
+        echo "建议更新: beauty-engine/AGENTS.md, docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md"
         echo ""
     fi
 }

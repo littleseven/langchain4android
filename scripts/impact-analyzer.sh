@@ -147,15 +147,15 @@ doc_mapping() {
             docs="PRODUCT.md FEATURES.md"
             case "$impact" in
                 *ui-change*|*viewmodel-change*) docs="$docs app AGENTS.md FEATURES.md §2" ;;
-                *api-change*) docs="$docs app AGENTS.md docs/AGENTS_SPEC.md" ;;
+                *api-change*) docs="$docs app AGENTS.md AGENTS.md" ;;
                 *resource-change*) docs="$docs FEATURES.md (I18N check)" ;;
             esac
             ;;
         :beauty-engine)
-            docs="PRODUCT.md docs/BIG_BEAUTY_TECH_SPEC.md"
+            docs="PRODUCT.md docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md"
             case "$impact" in
-                *shader-change*) docs="$docs docs/BIG_BEAUTY_TECH_SPEC.md (Shader section)" ;;
-                *api-change*) docs="$docs beauty-engine/AGENTS.md docs/AGENTS_SPEC.md" ;;
+                *shader-change*) docs="$docs docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md (Shader section)" ;;
+                *api-change*) docs="$docs beauty-engine/AGENTS.md AGENTS.md" ;;
             esac
             ;;
         build-system|buildSrc)

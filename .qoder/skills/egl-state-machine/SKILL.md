@@ -11,7 +11,7 @@ tags: [opengl, egl, gpu, rendering, threading]
 # EGL 状态机专家 (EGL State Machine Expert)
 
 > **定位**：预防 AI 在操作 EGL 上下文、离屏渲染、拍照 GPU 化时陷入"线程与状态"泥潭。
-> **来源**：`docs/AI_CODING_EXPERIENCE_SUMMARY.md` §3.8, §3.9
+> **来源**：项目 EGL 离屏渲染实践经验
 > **触发时机**：修改 `PhotoProcessorImpl`、`EGLCore`、`CameraPreviewRenderer`、`BeautyRenderer` 时
 
 ## 核心原则：三元绑定关系

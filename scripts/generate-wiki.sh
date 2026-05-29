@@ -85,7 +85,7 @@ try {
 
 ## 🔄 MediaPipe 468→106 映射
 
-**映射文件**: `docs/face-detection/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
+**映射文件**: `docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
 
 **映射原则**:
 1. **语义对齐**: MediaPipe 索引点与火山引擎 106 点语义一致
@@ -152,7 +152,7 @@ fun getOrConvertBitmap(imageProxy: ImageProxy): Bitmap {
 ## 📚 相关文档
 
 - [完整技术架构](../docs/FACE_DETECTION_ENGINE_ARCHITECTURE.md)
-- [468→106 映射策略](../docs/face-detection/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md)
+- [468→106 映射策略](../docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md)
 - [坐标系统标准](Coordinate-System)
 
 ---
@@ -312,9 +312,8 @@ PhotoRepository.save() → MediaStore
 
 ## 📚 相关文档
 
-- [BIG_BEAUTY_TECH_SPEC](../docs/BIG_BEAUTY_TECH_SPEC.md)
-- [GPU_PHOTO_IMPLEMENTATION_GUIDE](../docs/GPU_PHOTO_IMPLEMENTATION_GUIDE.md)
-- [BEAUTY_ENGINE_FALLBACK](../docs/BEAUTY_ENGINE_FALLBACK.md)
+- [BEAUTY_ENGINE_TECH_SPEC](../docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md)
+- [BEAUTY_ENGINE_FALLBACK](../docs/08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md)
 
 ---
 
@@ -351,7 +350,7 @@ cat > "$WIKI_DIR/Architecture-Decisions.md" << 'EOF'
 - App 层仅依赖 `beauty-engine:api`
 - 容灾降级展示无美颜原生预览
 
-详见: [ADR-001](../docs/ADR-001-beauty-engine-architecture.md)
+详见: [ADR-001](../docs/02-ARCHITECTURE/ADR/ADR-001-beauty-engine-architecture.md)
 
 ---
 
@@ -377,7 +376,7 @@ cat > "$WIKI_DIR/Architecture-Decisions.md" << 'EOF'
 - 自动回退到现有 CPU Canvas 路径
 - 确保拍照不失败
 
-详见: [ADR-002](../docs/ADR-002-opengl-offscreen-unified-pipeline.md)
+详见: [ADR-002](../docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md)
 
 ---
 
@@ -416,7 +415,7 @@ if (isFrontCamera) {
 }
 ```
 
-详见: [ADR-003](../docs/ADR-003-coordinate-system-management.md)
+详见: [ADR-003](../docs/02-ARCHITECTURE/ADR/ADR-003-coordinate-system-management.md)
 
 ---
 
