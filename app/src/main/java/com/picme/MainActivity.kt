@@ -35,6 +35,7 @@ import com.picme.features.camera.CameraScreen
 import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
+import com.picme.features.settings.AsrModelManagerScreen
 import com.picme.features.settings.LlmModelManagerScreen
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
@@ -160,7 +161,8 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToLlmModelManager = { navController.navigate(Screen.LlmModelManager.route) }
+                                    onNavigateToLlmModelManager = { navController.navigate(Screen.LlmModelManager.route) },
+                                    onNavigateToAsrModelManager = { navController.navigate(Screen.AsrModelManager.route) }
                                 )
                             }
                             composable(Screen.LlmModelManager.route) {
@@ -170,6 +172,17 @@ class MainActivity : ComponentActivity() {
                                     onDispose { }
                                 }
                                 LlmModelManagerScreen(
+                                    viewModel = settingsViewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+                            composable(Screen.AsrModelManager.route) {
+                                // 场景管理：进入 Settings 子页面（复用 SETTINGS 场景）
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
+                                    onDispose { }
+                                }
+                                AsrModelManagerScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() }
                                 )

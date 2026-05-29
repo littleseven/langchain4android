@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -34,6 +35,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -47,6 +53,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -171,6 +178,10 @@ fun AiAgentPanel(
  * AI Agent 面板 - Dialog 版本
  *
  * 使用独立 Dialog 窗口渲染，输入法弹出时不会影响底层预览页面布局。
+ * 底部距离计算参考 MnnLlmChat 的 fitsSystemWindows 行为：
+ * - 导航栏高度通过 WindowInsets.navigationBars 获取
+ * - 键盘高度通过 imePadding() 自动处理
+ * - 底部预留 8.dp 基础间距（类似 MnnLlmChat 的 layout_marginBottom）
  */
 @Composable
 fun AiAgentDialogPanel(
@@ -189,13 +200,20 @@ fun AiAgentDialogPanel(
                 decorFitsSystemWindows = false
             )
         ) {
+            // 参考 MnnLlmChat activity_chat.xml 的底部输入栏设计：
+            // 1. CoordinatorLayout + fitsSystemWindows="true" — 系统自动处理 insets
+            // 2. 输入容器 layout_gravity="bottom" — 贴底对齐
+            // 3. 不手动计算导航栏/键盘高度 — 完全依赖系统行为
+            //
+            // Compose 等价实现：
+            // - navigationBarsPadding() 自动避让导航栏
+            // - imePadding() 自动避让键盘
+            // - 两者不要混用，imePadding 已经包含导航栏处理
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .imePadding()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 80.dp),
+                    .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.BottomCenter
             ) {
                 AiAgentPanelContent(
@@ -377,6 +395,25 @@ private fun ChatBubble(
     }
 }
 
+/**
+ * 输入模式枚举，参考 MnnLlmChat 的语音/文字切换设计
+ * - TEXT: 文字输入模式（显示输入框 + 发送按钮）
+ * - VOICE: 语音输入模式（显示"按住说话"大按钮）
+ */
+private enum class InputMode {
+    TEXT,
+    VOICE
+}
+
+/**
+ * 录音状态枚举，显式优于隐式（Agent First 原则）
+ */
+private enum class RecordingState {
+    IDLE,       // 未录音
+    RECORDING,  // 正在录音
+    CANCELING   // 手指移出，将取消
+}
+
 @Composable
 private fun ChatInputBar(
     isProcessing: Boolean,
@@ -387,7 +424,8 @@ private fun ChatInputBar(
     var text by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
-    var isListening by remember { mutableStateOf(false) }
+    var inputMode by remember { mutableStateOf(InputMode.TEXT) }
+    var recordingState by remember { mutableStateOf(RecordingState.IDLE) }
 
     // 语音 recognizer（当没有外部 VoiceCommandCoordinator 时使用）
     val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
@@ -397,56 +435,106 @@ private fun ChatInputBar(
         }
     }
 
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 语音录制提示（仅在语音模式且录音中时显示）
+        // 参考 MnnLlmChat: text_voice_hint 在底部 150dp 处显示
+        AnimatedVisibility(
+            visible = inputMode == InputMode.VOICE && recordingState != RecordingState.IDLE,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (recordingState == RecordingState.CANCELING) "松开取消" else "松开发送",
+                    color = if (recordingState == RecordingState.CANCELING)
+                        Color(0xFFE53935) else Color.White.copy(alpha = 0.8f),
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        // 输入栏主体 - 参考 MnnLlmChat 的切换方式
+        when (inputMode) {
+            InputMode.TEXT -> TextInputMode(
+                text = text,
+                onTextChange = { text = it },
+                isProcessing = isProcessing,
+                onSend = {
+                    if (text.isNotBlank() && !isProcessing) {
+                        onSend(text.trim())
+                        text = ""
+                        keyboardController?.hide()
+                    }
+                },
+                onSwitchToVoice = {
+                    inputMode = InputMode.VOICE
+                    keyboardController?.hide()
+                }
+            )
+            InputMode.VOICE -> VoiceInputMode(
+                recordingState = recordingState,
+                onRecordingStateChange = { recordingState = it },
+                onSwitchToText = {
+                    inputMode = InputMode.TEXT
+                    keyboardController?.show()
+                },
+                onVoiceResult = { result ->
+                    if (result.isNotBlank()) {
+                        onSend(result)
+                    }
+                },
+                voiceCoordinator = voiceCoordinator,
+                speechRecognizer = speechRecognizer,
+                context = context
+            )
+        }
+    }
+}
+
+/**
+ * 文字输入模式
+ * 参考 MnnLlmChat: EditText + 发送按钮 + 语音切换按钮
+ */
+@Composable
+private fun TextInputMode(
+    text: String,
+    onTextChange: (String) -> Unit,
+    isProcessing: Boolean,
+    onSend: () -> Unit,
+    onSwitchToVoice: () -> Unit
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     Row(
-        modifier = modifier
-            .fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 语音输入按钮
-        VoiceInputButton(
-            isListening = isListening,
-            onStartListening = {
-                isListening = true
-                val coordinator = voiceCoordinator
-                if (coordinator != null) {
-                    coordinator.startPushToTalk { result ->
-                        isListening = false
-                        if (result.isNotBlank()) {
-                            onSend(result)
-                        }
-                    }
-                } else {
-                    startVoiceRecognition(
-                        context = context,
-                        speechRecognizer = speechRecognizer,
-                        onResult = { result ->
-                            isListening = false
-                            if (result.isNotBlank()) {
-                                onSend(result)
-                            }
-                        },
-                        onError = {
-                            isListening = false
-                        }
-                    )
-                }
-            },
-            onStopListening = {
-                isListening = false
-                val coordinator = voiceCoordinator
-                if (coordinator != null) {
-                    coordinator.stopPushToTalk()
-                } else {
-                    speechRecognizer.stopListening()
-                }
-            }
-        )
+        // 语音模式切换按钮（参考 MnnLlmChat 的 bt_switch_audio）
+        IconButton(
+            onClick = onSwitchToVoice,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardVoice,
+                contentDescription = "Switch to voice",
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(22.dp)
+            )
+        }
 
         // 文字输入框
         OutlinedTextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = onTextChange,
             placeholder = {
                 Text(
                     stringResource(R.string.ai_agent_input_hint),
@@ -457,13 +545,7 @@ private fun ChatInputBar(
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(
-                onSend = {
-                    if (text.isNotBlank() && !isProcessing) {
-                        onSend(text.trim())
-                        text = ""
-                        keyboardController?.hide()
-                    }
-                }
+                onSend = { onSend() }
             ),
             textStyle = androidx.compose.ui.text.TextStyle(
                 color = Color.White,
@@ -481,13 +563,7 @@ private fun ChatInputBar(
 
         // 发送按钮
         IconButton(
-            onClick = {
-                if (text.isNotBlank() && !isProcessing) {
-                    onSend(text.trim())
-                    text = ""
-                    keyboardController?.hide()
-                }
-            },
+            onClick = onSend,
             enabled = text.isNotBlank() && !isProcessing,
             modifier = Modifier
                 .size(40.dp)
@@ -507,6 +583,210 @@ private fun ChatInputBar(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+/**
+ * 语音输入模式
+ * 参考 MnnLlmChat VoiceRecordingModule:
+ * - 大的"按住说话"按钮（类似 btn_voice_recording）
+ * - 键盘切换按钮（类似 bt_switch_audio 切换到键盘图标）
+ * - OnTouchListener 处理 DOWN/UP/MOVE
+ * - 移出按钮区域变红取消（isCancelRecord）
+ */
+@Composable
+private fun VoiceInputMode(
+    recordingState: RecordingState,
+    onRecordingStateChange: (RecordingState) -> Unit,
+    onSwitchToText: () -> Unit,
+    onVoiceResult: (String) -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator?,
+    speechRecognizer: SpeechRecognizer,
+    context: Context
+) {
+    var isListening by remember { mutableStateOf(false) }
+    var isCancelRecord by remember { mutableStateOf(false) }
+
+    // 同步 Compose state 到 RecordingState
+    LaunchedEffect(isListening, isCancelRecord) {
+        onRecordingStateChange(
+            when {
+                isListening && isCancelRecord -> RecordingState.CANCELING
+                isListening -> RecordingState.RECORDING
+                else -> RecordingState.IDLE
+            }
+        )
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 键盘切换按钮（参考 MnnLlmChat: bt_switch_audio 切换到 ic_keyboard）
+        IconButton(
+            onClick = onSwitchToText,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Keyboard,
+                contentDescription = "Switch to keyboard",
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        // 按住说话按钮（参考 MnnLlmChat 的 btn_voice_recording）
+        // 使用 pointerInput 模拟 OnTouchListener 的 DOWN/UP/MOVE
+        val buttonBackground = when {
+            isListening && !isCancelRecord -> MaterialTheme.colorScheme.primary
+            isListening && isCancelRecord -> Color(0xFFE53935)
+            else -> Color.White.copy(alpha = 0.12f)
+        }
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(buttonBackground)
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { change ->
+                                when {
+                                    // ACTION_DOWN: 开始录音
+                                    change.pressed && !change.isConsumed -> {
+                                        if (!isListening) {
+                                            isListening = true
+                                            isCancelRecord = false
+                                            startVoiceRecordingInternal(
+                                                context = context,
+                                                voiceCoordinator = voiceCoordinator,
+                                                speechRecognizer = speechRecognizer,
+                                                onResult = { result ->
+                                                    isListening = false
+                                                    isCancelRecord = false
+                                                    if (result.isNotBlank()) {
+                                                        onVoiceResult(result)
+                                                    }
+                                                },
+                                                onError = {
+                                                    isListening = false
+                                                    isCancelRecord = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                    // ACTION_UP: 结束录音
+                                    !change.pressed -> {
+                                        if (isListening) {
+                                            isListening = false
+                                            if (!isCancelRecord) {
+                                                stopVoiceRecordingInternal(
+                                                    voiceCoordinator = voiceCoordinator,
+                                                    speechRecognizer = speechRecognizer
+                                                )
+                                            } else {
+                                                cancelVoiceRecordingInternal(
+                                                    voiceCoordinator = voiceCoordinator,
+                                                    speechRecognizer = speechRecognizer
+                                                )
+                                            }
+                                            isCancelRecord = false
+                                        }
+                                    }
+                                }
+                                // ACTION_MOVE: 检测是否移出按钮区域
+                                if (isListening && change.pressed) {
+                                    val bounds = this@pointerInput.size
+                                    val x = change.position.x
+                                    val y = change.position.y
+                                    isCancelRecord = x < 0 || x > bounds.width ||
+                                            y < 0 || y > bounds.height
+                                }
+                                change.consume()
+                            }
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (isListening) "松开结束" else "按住说话",
+                color = if (isListening) Color.White else Color.White.copy(alpha = 0.8f),
+                fontSize = 14.sp
+            )
+        }
+
+        // 占位保持布局平衡（参考 MnnLlmChat 的对称设计）
+        Box(modifier = Modifier.size(40.dp))
+    }
+}
+
+/**
+ * 开始语音录音（内部辅助函数）
+ */
+private fun startVoiceRecordingInternal(
+    context: Context,
+    voiceCoordinator: VoiceCommandCoordinator?,
+    speechRecognizer: SpeechRecognizer,
+    onResult: (String) -> Unit,
+    onError: () -> Unit
+) {
+    val coordinator = voiceCoordinator
+    if (coordinator != null) {
+        coordinator.startPushToTalk { result ->
+            if (result.isNotBlank()) {
+                onResult(result)
+            } else {
+                onError()
+            }
+        }
+    } else {
+        startVoiceRecognition(
+            context = context,
+            speechRecognizer = speechRecognizer,
+            onResult = { result ->
+                if (result.isNotBlank()) {
+                    onResult(result)
+                } else {
+                    onError()
+                }
+            },
+            onError = onError
+        )
+    }
+}
+
+/**
+ * 停止语音录音（内部辅助函数）
+ */
+private fun stopVoiceRecordingInternal(
+    voiceCoordinator: VoiceCommandCoordinator?,
+    speechRecognizer: SpeechRecognizer
+) {
+    val coordinator = voiceCoordinator
+    if (coordinator != null) {
+        coordinator.stopPushToTalk()
+    } else {
+        speechRecognizer.stopListening()
+    }
+}
+
+/**
+ * 取消语音录音（内部辅助函数）
+ */
+private fun cancelVoiceRecordingInternal(
+    voiceCoordinator: VoiceCommandCoordinator?,
+    speechRecognizer: SpeechRecognizer
+) {
+    val coordinator = voiceCoordinator
+    if (coordinator != null) {
+        coordinator.stopPushToTalk()
+    } else {
+        speechRecognizer.cancel()
     }
 }
 

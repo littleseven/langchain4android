@@ -11,7 +11,10 @@ import com.picme.core.common.Logger
  *
  * @param context Application Context
  */
-class MnnAsrClient(private val context: Context) : AsrEngine {
+class MnnAsrClient(
+    private val context: Context,
+    private val modelId: String = ""
+) : AsrEngine {
 
     private val tag = "PicMe:MnnAsrClient"
     private var nativeHandle: Long = 0L
@@ -43,7 +46,11 @@ class MnnAsrClient(private val context: Context) : AsrEngine {
      * 注意：当前 MNN ASR 的 JNI 尚未实现，暂时返回 false 使用系统 ASR。
      */
     private fun tryLoadModel(): Boolean {
-        val modelDir = context.filesDir.resolve("llm_models/streaming-zipformer-bilingual-zh-en-2023-02-20")
+        val modelDir = if (modelId.isNotBlank()) {
+            context.filesDir.resolve("llm_models/$modelId")
+        } else {
+            context.filesDir.resolve("llm_models/streaming-zipformer-bilingual-zh-en-2023-02-20")
+        }
         if (!modelDir.exists()) {
             Logger.d(tag, "MNN ASR model not found at ${modelDir.absolutePath}")
             return false
