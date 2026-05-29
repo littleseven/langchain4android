@@ -87,6 +87,7 @@ import com.picme.features.gallery.MediaViewModel
 import com.picme.features.camera.agent.rememberAiAgentPanelState
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
+import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
@@ -745,14 +746,36 @@ fun CameraContent(
     val aiAgentBaseUrl by userPreferencesRepository.aiAgentBaseUrlFlow.collectAsState(initial = "")
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
 
-    // 使用 remember 只基于 context，避免 DataStore 值变化时重新创建 UseCase
-    val aiAgentUseCase = remember(context) {
+    val aiAgentCodingApiKey by userPreferencesRepository.aiAgentCodingApiKeyFlow.collectAsState(initial = "")
+    val aiAgentCodingModel by userPreferencesRepository.aiAgentCodingModelFlow.collectAsState(initial = "kimi-for-coding")
+    val aiAgentCodingBaseUrl by userPreferencesRepository.aiAgentCodingBaseUrlFlow.collectAsState(initial = "")
+    val aiAgentForceRemote by userPreferencesRepository.aiAgentForceRemoteFlow.collectAsState(initial = false)
+    val aiAgentMode by userPreferencesRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
+
+    // 当关键配置变化时重新创建 UseCase（mode/apiKey/forceRemote 等）
+    val aiAgentUseCase = remember(
+        context,
+        aiAgentMode,
+        aiAgentApiKey,
+        aiAgentModel,
+        aiAgentBaseUrl,
+        aiAgentLocalModel,
+        aiAgentCodingApiKey,
+        aiAgentCodingModel,
+        aiAgentCodingBaseUrl,
+        aiAgentForceRemote
+    ) {
         AiAgentUseCase(
             context = context,
             apiKey = aiAgentApiKey.takeIf { it.isNotBlank() },
             model = aiAgentModel,
             baseUrl = aiAgentBaseUrl.takeIf { it.isNotBlank() },
-            localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_0_6b"
+            agentMode = aiAgentMode,
+            localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_0_6b",
+            codingApiKey = aiAgentCodingApiKey.takeIf { it.isNotBlank() },
+            codingModel = aiAgentCodingModel,
+            codingBaseUrl = aiAgentCodingBaseUrl.takeIf { it.isNotBlank() },
+            forceRemote = aiAgentForceRemote
         )
     }
 

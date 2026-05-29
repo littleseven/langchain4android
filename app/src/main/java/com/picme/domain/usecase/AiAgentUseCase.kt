@@ -8,6 +8,9 @@ import com.picme.core.common.Logger
 import com.picme.data.remote.kimi.KimiApiClient
 import com.picme.data.remote.kimi.KimiChatRequest
 import com.picme.data.remote.kimi.KimiMessage
+import com.picme.data.remote.kimi.KimiCodingApiClient
+import com.picme.data.remote.kimi.KimiCodingMessage
+import com.picme.data.remote.kimi.KimiCodingRequest
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.model.AgentAction
@@ -42,7 +45,11 @@ class AiAgentUseCase(
     baseUrl: String? = null,
     agentMode: AiAgentMode = AiAgentMode.LOCAL,
     privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
-    localModelId: String = "qwen3_0_6b"
+    localModelId: String = "qwen3_0_6b",
+    codingApiKey: String? = null,
+    codingModel: String = "kimi-for-coding",
+    codingBaseUrl: String? = null,
+    forceRemote: Boolean = false
 ) {
 
     private val tag = "PicMe:AiAgent"
@@ -53,7 +60,7 @@ class AiAgentUseCase(
     private val orchestrator = AgentOrchestrator.getInstance(context)
 
     /**
-     * 远程 API 客户端（仅在 REMOTE 模式下使用）
+     * 远程 API 客户端（仅在 REMOTE 模式下使用，OpenAI 格式）
      */
     private val remoteClient: KimiApiClient? = apiKey?.takeIf { it.isNotBlank() }?.let {
         KimiApiClient(
@@ -64,9 +71,30 @@ class AiAgentUseCase(
     }
 
     /**
+     * Kimi Coding API 客户端（Claude 格式）
+     */
+    private val codingClient: KimiCodingApiClient? = codingApiKey?.takeIf { it.isNotBlank() }?.let {
+        KimiCodingApiClient(
+            apiKey = it,
+            baseUrl = codingBaseUrl ?: CODING_DEFAULT_BASE_URL,
+            enableLogging = true
+        )
+    }
+
+    /**
+     * 当前配置的 Coding 模型 ID
+     */
+    private val codingModel: String = codingModel
+
+    /**
      * 当前 Agent 模式
      */
     val currentMode: AiAgentMode = agentMode
+
+    /**
+     * 是否强制使用远程模型（绕过本地模型检查）
+     */
+    private val forceRemoteMode: Boolean = forceRemote
 
     /**
      * 当前配置的本地模型 ID
@@ -140,22 +168,39 @@ class AiAgentUseCase(
             memorySessionId = "camera"
         )
 
-        // 优先本地推理（传入高质量自定义 system prompt）
-        if (currentMode == AiAgentMode.LOCAL || currentMode == AiAgentMode.OFF) {
-            val systemPrompt = buildSystemPrompt(currentState)
-            val result = orchestrator.processUserInput(
-                input = userInput,
-                agentContext = agentContext,
-                customSystemPrompt = systemPrompt
-            )
-            return@withContext result.map { action ->
-                mapAgentActionToLegacyCommand(action)
+        // 根据模式选择推理路径
+        when (currentMode) {
+            AiAgentMode.LOCAL, AiAgentMode.OFF -> {
+                // 强制远程模式：直接走远程 API，不检查本地模型
+                if (forceRemoteMode) {
+                    Logger.d(tag, "Force remote enabled, bypassing local model")
+                    if (codingClient != null) {
+                        return@withContext callCodingApi(userInput, currentState)
+                    }
+                    if (remoteClient != null) {
+                        return@withContext callRemoteApi(userInput, currentState)
+                    }
+                }
+                // 本地推理（传入高质量自定义 system prompt）
+                val systemPrompt = buildSystemPrompt(currentState)
+                val result = orchestrator.processUserInput(
+                    input = userInput,
+                    agentContext = agentContext,
+                    customSystemPrompt = systemPrompt
+                )
+                return@withContext result.map { action ->
+                    mapAgentActionToLegacyCommand(action)
+                }
             }
-        }
-
-        // REMOTE 模式：尝试远程 API
-        if (currentMode == AiAgentMode.REMOTE && remoteClient != null) {
-            return@withContext callRemoteApi(userInput, currentState)
+            AiAgentMode.REMOTE -> {
+                // REMOTE 模式：优先尝试 Coding API，回退到 OpenAI 格式
+                if (codingClient != null) {
+                    return@withContext callCodingApi(userInput, currentState)
+                }
+                if (remoteClient != null) {
+                    return@withContext callRemoteApi(userInput, currentState)
+                }
+            }
         }
 
         // 都不可用
@@ -469,8 +514,56 @@ class AiAgentUseCase(
         }
     }
 
+    /**
+     * 调用 Kimi Coding API（Claude 格式）
+     */
+    private suspend fun callCodingApi(
+        userInput: String,
+        currentState: CameraStateSnapshot
+    ): Result<AiAgentCommand> {
+        try {
+            val systemPrompt = buildSystemPrompt(currentState)
+            val request = KimiCodingRequest(
+                model = codingModel,
+                messages = listOf(
+                    KimiCodingMessage(role = "user", content = userInput)
+                ),
+                system = systemPrompt,
+                maxTokens = 512,
+                temperature = 0.3,
+                stream = false
+            )
+
+            Logger.d(tag, "Sending Coding API request: model=$codingModel, input=$userInput")
+
+            val response = codingClient!!.service.messages(request)
+            if (!response.isSuccessful) {
+                val errorBody = response.errorBody()?.string()
+                Logger.e(tag, "Coding API error: ${response.code()}, $errorBody")
+                return Result.failure(
+                    RuntimeException("Kimi Coding API error: ${response.code()}")
+                )
+            }
+
+            val body = response.body()
+                ?: return Result.failure(RuntimeException("Empty response body"))
+
+            val content = body.content.firstOrNull()?.text?.trim()
+                ?: return Result.failure(RuntimeException("No content in response"))
+
+            Logger.d(tag, "Coding API response: $content")
+
+            val command = parseLlmResponse(content, currentState)
+            return Result.success(command)
+        } catch (exception: Exception) {
+            Logger.e(tag, "Coding API call failed", exception)
+            return Result.failure(exception)
+        }
+    }
+
     companion object {
         private const val DEFAULT_MODEL = "moonshot-v1-8k"
         private const val DEFAULT_BASE_URL = "https://api.moonshot.cn/v1/"
+        private const val CODING_DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1/"
     }
 }

@@ -95,6 +95,20 @@ interface UserSettingsRepository {
     val aiAgentBaseUrlFlow: Flow<String>
     suspend fun updateAiAgentBaseUrl(baseUrl: String)
 
+    // ── Kimi Coding API 配置 ─────────────────────────────────
+    val aiAgentCodingApiKeyFlow: Flow<String>
+    suspend fun updateAiAgentCodingApiKey(apiKey: String)
+
+    val aiAgentCodingModelFlow: Flow<String>
+    suspend fun updateAiAgentCodingModel(model: String)
+
+    val aiAgentCodingBaseUrlFlow: Flow<String>
+    suspend fun updateAiAgentCodingBaseUrl(baseUrl: String)
+
+    // ── 强制使用远程模型 ─────────────────────────────────────
+    val aiAgentForceRemoteFlow: Flow<Boolean>
+    suspend fun updateAiAgentForceRemote(enabled: Boolean)
+
     // ── 语音控制 ────────────────────────────────────────────
     val voiceCommandModeFlow: Flow<VoiceCommandMode>
     suspend fun updateVoiceCommandMode(mode: VoiceCommandMode)

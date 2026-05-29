@@ -266,6 +266,7 @@
     <string name="ai_agent_mode_off">關閉</string>
     <string name="ai_agent_mode_local">本地模型</string>
     <string name="ai_agent_mode_remote">遠端模型</string>
+
     <string name="ai_agent_privacy_level">隱私級別</string>
     <string name="ai_agent_privacy_strict">嚴格（僅本地）</string>
     <string name="ai_agent_privacy_permissive">寬鬆（允許遠端）</string>
@@ -285,6 +286,13 @@
     <string name="ai_agent_api_key_hint">輸入你的 API Key</string>
     <string name="ai_agent_api_key_set">API Key 已設定</string>
     <string name="ai_agent_api_key_empty">未設定（AI 智慧助手已停用）</string>
+    <string name="ai_agent_coding_api_key">Kimi Coding API Key</string>
+    <string name="ai_agent_coding_api_key_hint">輸入你的 sk-kimi- API Key</string>
+    <string name="ai_agent_coding_api_key_set">API Key 已設定</string>
+    <string name="ai_agent_coding_api_key_empty">未設定</string>
+    <string name="ai_agent_coding_model">Kimi Coding 模型</string>
+    <string name="ai_agent_coding_base_url">Kimi Coding 基礎 URL</string>
+    <string name="ai_agent_force_remote">強制使用遠端模型</string>
     <string name="ai_agent_input_hint">向 AI 助手提問...</string>
     <string name="ai_model_manager">AI 模型管理</string>
     <string name="ai_model_manager_desc">管理本地 AI 模型。</string>

@@ -117,6 +117,10 @@ fun SettingsScreen(
     val aiAgentApiKey by viewModel.aiAgentApiKey.collectAsState()
     val aiAgentModel by viewModel.aiAgentModel.collectAsState()
     val aiAgentBaseUrl by viewModel.aiAgentBaseUrl.collectAsState()
+    val aiAgentCodingApiKey by viewModel.aiAgentCodingApiKey.collectAsState()
+    val aiAgentCodingModel by viewModel.aiAgentCodingModel.collectAsState()
+    val aiAgentCodingBaseUrl by viewModel.aiAgentCodingBaseUrl.collectAsState()
+    val aiAgentForceRemote by viewModel.aiAgentForceRemote.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
 
@@ -191,6 +195,14 @@ fun SettingsScreen(
         onAiAgentModelChange = { model -> viewModel.setAiAgentModel(model) },
         aiAgentBaseUrl = aiAgentBaseUrl,
         onAiAgentBaseUrlChange = { url -> viewModel.setAiAgentBaseUrl(url) },
+        aiAgentCodingApiKey = aiAgentCodingApiKey,
+        onAiAgentCodingApiKeyChange = { key -> viewModel.setAiAgentCodingApiKey(key) },
+        aiAgentCodingModel = aiAgentCodingModel,
+        onAiAgentCodingModelChange = { model -> viewModel.setAiAgentCodingModel(model) },
+        aiAgentCodingBaseUrl = aiAgentCodingBaseUrl,
+        onAiAgentCodingBaseUrlChange = { url -> viewModel.setAiAgentCodingBaseUrl(url) },
+        aiAgentForceRemote = aiAgentForceRemote,
+        onAiAgentForceRemoteChange = { enabled -> viewModel.setAiAgentForceRemote(enabled) },
         voiceCommandMode = voiceCommandMode,
         onVoiceCommandModeChange = { mode -> viewModel.setVoiceCommandMode(mode) },
         localAsrModel = localAsrModel,
@@ -234,6 +246,14 @@ private fun settingsContent(
     onAiAgentModelChange: (String) -> Unit,
     aiAgentBaseUrl: String,
     onAiAgentBaseUrlChange: (String) -> Unit,
+    aiAgentCodingApiKey: String,
+    onAiAgentCodingApiKeyChange: (String) -> Unit,
+    aiAgentCodingModel: String,
+    onAiAgentCodingModelChange: (String) -> Unit,
+    aiAgentCodingBaseUrl: String,
+    onAiAgentCodingBaseUrlChange: (String) -> Unit,
+    aiAgentForceRemote: Boolean,
+    onAiAgentForceRemoteChange: (Boolean) -> Unit,
     voiceCommandMode: VoiceCommandMode,
     onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
     localAsrModel: String,
@@ -286,7 +306,35 @@ private fun settingsContent(
                 title = stringResource(R.string.ai_agent),
                 description = stringResource(R.string.ai_agent_desc)
             ) {
-                // 模式选择：本地模型 / 远程模型
+                // 第一行：模式选择 + 强制远程开关
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.ai_agent_mode),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.ai_agent_force_remote),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Switch(
+                            checked = aiAgentForceRemote,
+                            onCheckedChange = onAiAgentForceRemoteChange
+                        )
+                    }
+                }
+
                 AiAgentModeSelection(
                     currentMode = aiAgentMode,
                     onModeSelected = onAiAgentModeChange
@@ -309,17 +357,13 @@ private fun settingsContent(
                         )
                     }
                     AiAgentMode.REMOTE -> {
-                        AiAgentBaseUrlSelection(
-                            currentBaseUrl = aiAgentBaseUrl,
-                            onBaseUrlSelected = onAiAgentBaseUrlChange
+                        AiAgentCodingApiKeyRow(
+                            apiKey = aiAgentCodingApiKey,
+                            onApiKeyChange = onAiAgentCodingApiKeyChange
                         )
-                        AiAgentModelSelection(
-                            currentModel = aiAgentModel,
-                            onModelSelected = onAiAgentModelChange
-                        )
-                        AiAgentApiKeyRow(
-                            apiKey = aiAgentApiKey,
-                            onApiKeyChange = onAiAgentApiKeyChange
+                        AiAgentCodingBaseUrlRow(
+                            baseUrl = aiAgentCodingBaseUrl,
+                            onBaseUrlChange = onAiAgentCodingBaseUrlChange
                         )
                     }
                 }
@@ -520,11 +564,37 @@ private fun LocalAsrModelSelection(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
-        Text(
-            text = stringResource(R.string.local_asr_model),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.local_asr_model),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // ASR 模型管理入口（紧凑图标按钮）
+            Row(
+                modifier = Modifier
+                    .clickable(onClick = onNavigateToAsrModelManager)
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.asr_model_manager),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.Outlined.CloudDownload,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
 
         if (downloadedModels.isEmpty()) {
             Text(
@@ -540,36 +610,6 @@ private fun LocalAsrModelSelection(
                 currentValue = currentModel,
                 maxLines = 2,
                 onSelected = onModelSelected
-            )
-        }
-
-        // ASR 模型管理入口
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onNavigateToAsrModelManager)
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.asr_model_manager),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = stringResource(R.string.asr_model_manager_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Icon(
-                imageVector = Icons.Outlined.CloudDownload,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(22.dp)
-                    .padding(start = 4.dp),
-                tint = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -792,6 +832,171 @@ private fun AiAgentModelManagerRow(
                 .size(20.dp)
                 .padding(start = 4.dp)
         )
+    }
+}
+
+@Composable
+private fun AiAgentCodingApiKeyRow(
+    apiKey: String,
+    onApiKeyChange: (String) -> Unit
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(apiKey) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_coding_api_key),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (isEditing) {
+            androidx.compose.material3.OutlinedTextField(
+                value = editText,
+                onValueChange = { editText = it },
+                placeholder = { Text(stringResource(R.string.ai_agent_coding_api_key_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Row {
+                        TextButton(onClick = {
+                            onApiKeyChange(editText.trim())
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.save))
+                        }
+                        TextButton(onClick = {
+                            editText = apiKey
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                }
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isEditing = true },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (apiKey.isNotBlank()) {
+                        stringResource(R.string.ai_agent_coding_api_key_set)
+                    } else {
+                        stringResource(R.string.ai_agent_coding_api_key_empty)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (apiKey.isNotBlank()) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.edit),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiAgentCodingModelRow(
+    model: String,
+    onModelChange: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_coding_model),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        androidx.compose.material3.OutlinedTextField(
+            value = model,
+            onValueChange = onModelChange,
+            placeholder = { Text("kimi-for-coding") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun AiAgentCodingBaseUrlRow(
+    baseUrl: String,
+    onBaseUrlChange: (String) -> Unit
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember { mutableStateOf(baseUrl) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ai_agent_coding_base_url),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (isEditing) {
+            androidx.compose.material3.OutlinedTextField(
+                value = editText,
+                onValueChange = { editText = it },
+                placeholder = { Text("https://api.kimi.com/coding/v1/") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    Row {
+                        TextButton(onClick = {
+                            onBaseUrlChange(editText.trim())
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.save))
+                        }
+                        TextButton(onClick = {
+                            editText = baseUrl
+                            isEditing = false
+                        }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                }
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isEditing = true },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = baseUrl.ifBlank { "https://api.kimi.com/coding/v1/" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.edit),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 }
 
@@ -1237,6 +1442,14 @@ fun SettingsScreenPreview() {
             onAiAgentModelChange = {},
             aiAgentBaseUrl = "",
             onAiAgentBaseUrlChange = {},
+            aiAgentCodingApiKey = "",
+            onAiAgentCodingApiKeyChange = {},
+            aiAgentCodingModel = "kimi-for-coding",
+            onAiAgentCodingModelChange = {},
+            aiAgentCodingBaseUrl = "https://api.kimi.com/coding/v1/",
+            onAiAgentCodingBaseUrlChange = {},
+            aiAgentForceRemote = false,
+            onAiAgentForceRemoteChange = {},
             voiceCommandMode = VoiceCommandMode.DISABLED,
             onVoiceCommandModeChange = {},
             localAsrModel = "",
