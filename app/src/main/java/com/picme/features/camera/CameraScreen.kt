@@ -741,9 +741,6 @@ fun CameraContent(
 
     val panelState = rememberCameraPanelState()
     val aiAgentPanelState = rememberAiAgentPanelState()
-    val aiAgentApiKey by userPreferencesRepository.aiAgentApiKeyFlow.collectAsState(initial = "")
-    val aiAgentModel by userPreferencesRepository.aiAgentModelFlow.collectAsState(initial = "moonshot-v1-8k")
-    val aiAgentBaseUrl by userPreferencesRepository.aiAgentBaseUrlFlow.collectAsState(initial = "")
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
 
     val aiAgentCodingApiKey by userPreferencesRepository.aiAgentCodingApiKeyFlow.collectAsState(initial = "")
@@ -756,9 +753,6 @@ fun CameraContent(
     val aiAgentUseCase = remember(
         context,
         aiAgentMode,
-        aiAgentApiKey,
-        aiAgentModel,
-        aiAgentBaseUrl,
         aiAgentLocalModel,
         aiAgentCodingApiKey,
         aiAgentCodingModel,
@@ -767,9 +761,6 @@ fun CameraContent(
     ) {
         AiAgentUseCase(
             context = context,
-            apiKey = aiAgentApiKey.takeIf { it.isNotBlank() },
-            model = aiAgentModel,
-            baseUrl = aiAgentBaseUrl.takeIf { it.isNotBlank() },
             agentMode = aiAgentMode,
             localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_0_6b",
             codingApiKey = aiAgentCodingApiKey.takeIf { it.isNotBlank() },
@@ -1547,10 +1538,29 @@ CameraPreviewContent(
                 is AiAgentCommand.TextReply -> {
                     // 文本回复已在面板中显示，无需额外操作
                 }
+                is AiAgentCommand.BatchExecute -> {
+                    // 批量命令在 onAiAgentCommand 层面处理，不在 handler 内部递归
+                    Logger.w("PicMe:Camera", "BatchExecute should be handled at top level, not in handler")
+                }
             }
         }
         onCommandRef.value = handler
-        handler(command)
+        // BatchExecute 在协程中串行执行子命令
+        if (command is AiAgentCommand.BatchExecute) {
+            Logger.i("PicMe:Camera", "BatchExecute: ${command.commands.size} commands, launching sequentially")
+            logOverlayScope.launch {
+                command.commands.forEachIndexed { index, subCmd ->
+                    Logger.i("PicMe:Camera", "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
+                    handler(subCmd)
+                    if (index < command.commands.size - 1) {
+                        kotlinx.coroutines.delay(200)
+                    }
+                }
+                Logger.i("PicMe:Camera", "BatchExecute: all commands completed")
+            }
+        } else {
+            handler(command)
+        }
     },
     onUpdateVoiceCoordinatorState = {
         voiceCoordinator.currentCameraState = VoiceCommandCoordinator.CameraStateSnapshot(

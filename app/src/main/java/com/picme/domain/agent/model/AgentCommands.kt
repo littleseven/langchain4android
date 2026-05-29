@@ -174,6 +174,24 @@ sealed class AgentCommand {
 
     // ==================== 通用命令 ====================
 
+    // ==================== 远程模式专用命令 ====================
+
+    /**
+     * 批量执行命令（L2 Batch Function Calling）
+     *
+     * 仅远程模式支持，将多个命令打包为一个批量执行单元。
+     */
+    data class BatchExecute(val commands: List<AgentCommand>) : AgentCommand()
+
+    /**
+     * 执行计划（L3 Plan-and-Execute）
+     *
+     * 仅远程模式支持，包含条件判断和多步骤编排。
+     */
+    data class ExecutePlan(val plan: com.picme.domain.agent.remote.ExecutionPlan) : AgentCommand()
+
+    // ==================== 通用命令 ====================
+
     /**
      * 文本回复（聊天模式）
      */
@@ -223,6 +241,8 @@ sealed class AgentCommand {
             is SaveEdit -> "save_edit"
             is UndoEdit -> "undo_edit"
             is RedoEdit -> "redo_edit"
+            is BatchExecute -> "batch_execute"
+            is ExecutePlan -> "execute_plan"
             is TextReply -> "text_reply"
             is Unknown -> "unknown"
             is Error -> "error"

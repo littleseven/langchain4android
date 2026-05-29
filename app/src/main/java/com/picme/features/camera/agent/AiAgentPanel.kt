@@ -894,6 +894,7 @@ internal fun sendMessage(
                     is AiAgentCommand.ToggleRecording -> "已切换录像状态"
                     is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
                     is AiAgentCommand.TextReply -> ""
+                    is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
                 }
                 Logger.i("PicMe:AiAgent", "Executing command: $commandName")
                 state.addMessage(
