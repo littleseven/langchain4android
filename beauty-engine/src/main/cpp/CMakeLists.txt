@@ -50,14 +50,15 @@ else()
     message(STATUS "libllm.so not found. MNN-LLM support disabled.")
 endif()
 
-# MNN Express 库（已合并到 libMNN.so，保留兼容检测）
+# MNN Express 库（已合并到 libMNN.so，不再需要单独加载）
+# 从 MNN 源码编译的 libMNN.so 已包含 Express 符号
 set(MNN_EXPRESS_SO_PATH "${MNN_LIB_DIR}/libMNN_Express.so")
 if(EXISTS ${MNN_EXPRESS_SO_PATH})
     message(STATUS "Using MNN Express library: ${MNN_EXPRESS_SO_PATH}")
     add_library(mnn_express SHARED IMPORTED)
     set_target_properties(mnn_express PROPERTIES IMPORTED_LOCATION ${MNN_EXPRESS_SO_PATH})
 else()
-    message(STATUS "libMNN_Express.so not found, Express symbols should be in libMNN.so")
+    message(STATUS "libMNN_Express.so not found, Express symbols are in libMNN.so (unified build)")
 endif()
 
 # ── NCNN 配置 ───────────────────────────────────────────
