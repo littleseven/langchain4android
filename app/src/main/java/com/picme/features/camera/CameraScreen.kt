@@ -84,7 +84,6 @@ import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
-import com.picme.features.camera.agent.rememberAiAgentPanelState
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.AiAgentMode
@@ -95,7 +94,7 @@ import com.picme.domain.agent.model.SceneManager
 import com.picme.features.camera.voice.MnnAsrClient
 import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
-import com.picme.features.camera.agent.AgentMessage
+import com.picme.features.common.chat.AgentMessage
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -750,7 +749,9 @@ fun CameraContent(
     }
 
     val panelState = rememberCameraPanelState()
-    val aiAgentPanelState = rememberAiAgentPanelState()
+    var aiAgentChatVisible by remember { mutableStateOf(false) }
+    var aiAgentMessages by remember { mutableStateOf<List<AgentMessage>>(emptyList()) }
+    var aiAgentIsProcessing by remember { mutableStateOf(false) }
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
 
     val aiAgentCodingApiKey by userPreferencesRepository.aiAgentCodingApiKeyFlow.collectAsState(initial = "")
@@ -881,7 +882,7 @@ fun CameraContent(
             },
             scope = coroutineScope,
             onTranscript = { transcript ->
-                aiAgentPanelState?.addMessage(AgentMessage.UserText(content = transcript))
+                aiAgentMessages = aiAgentMessages + AgentMessage.UserText(content = transcript)
             },
             onAgentResponse = { result ->
                 result.onSuccess { command ->
@@ -900,10 +901,10 @@ fun CameraContent(
                         is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
                         is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
                     }
-                    aiAgentPanelState?.addMessage(AgentMessage.AgentText(content = responseText))
+                    aiAgentMessages = aiAgentMessages + AgentMessage.AgentText(content = responseText)
                 }.onFailure { error ->
-                    aiAgentPanelState?.addMessage(
-                        AgentMessage.AgentText(content = "处理出错了：${error.message ?: "未知错误"}")
+                    aiAgentMessages = aiAgentMessages + AgentMessage.AgentText(
+                        content = "处理出错了：${error.message ?: "未知错误"}"
                     )
                 }
             }
@@ -1601,7 +1602,12 @@ CameraPreviewContent(
         isVoiceControlEnabled = voiceCommandMode != VoiceCommandMode.DISABLED
     ),
     aiAgentUseCase = aiAgentUseCase,
-    aiAgentPanelState = aiAgentPanelState,
+    aiAgentChatVisible = aiAgentChatVisible,
+    aiAgentMessages = aiAgentMessages,
+    aiAgentIsProcessing = aiAgentIsProcessing,
+    onAiAgentChatVisibleChange = { aiAgentChatVisible = it },
+    onAiAgentMessagesChange = { aiAgentMessages = it },
+    onAiAgentIsProcessingChange = { aiAgentIsProcessing = it },
     voiceCoordinator = voiceCoordinator,
     isWakeWordActive = voiceCommandMode == VoiceCommandMode.WAKE_WORD,
     onAiAgentCommand = { command ->
@@ -1688,7 +1694,7 @@ CameraPreviewContent(
         onExposureCompensationChanged = { exposure -> exposureCompensation = exposure },
         onWhiteBalanceModeChanged = { wb -> whiteBalanceMode = wb },
         onToggleVoiceControl = onToggleVoiceControl,
-        onToggleAiAgentPanel = { aiAgentPanelState?.toggle() }
+        onToggleAiAgentPanel = { aiAgentChatVisible = !aiAgentChatVisible }
     )
 )
 
