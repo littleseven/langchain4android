@@ -60,14 +60,8 @@ import androidx.core.net.toUri
 import com.picme.features.gallery.components.shareMediaAssets
 import com.picme.features.gallery.agent.GalleryAgentPanel
 import com.picme.features.camera.voice.VoiceCommandCoordinator
-import com.picme.features.camera.voice.SystemAsrEngine
-import com.picme.features.camera.voice.SherpaMnnAsrEngine
-import com.picme.features.camera.voice.MnnAsrClient
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.usecase.AiAgentUseCase
-import com.picme.data.preferences.UserPreferencesRepository
-import kotlinx.coroutines.CoroutineScope
-import androidx.compose.runtime.rememberCoroutineScope
+import com.picme.features.common.chat.rememberAgentChatConfig
+import com.picme.domain.agent.model.AgentScene
 
 @Composable
 fun GalleryScreen(
@@ -165,73 +159,19 @@ fun GalleryScreen(
     val dragSelectionVisitedIds = remember { hashSetOf<Long>() }
 
     val view = LocalView.current
-    val coroutineScope = rememberCoroutineScope()
 
-    // ===== ASR 引擎（参照 SettingsScreen 实现）=====
-    val settingsRepository = remember { UserPreferencesRepository(context) }
-    val localAsrModel by settingsRepository.localAsrModelFlow.collectAsState(initial = "")
-    val asrEngine = remember(context, localAsrModel) {
-        if (localAsrModel.isNotBlank()) {
-            val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
-            val modelDirPath = modelDir.absolutePath
-            val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                modelDir.exists() && modelDir.isDirectory &&
-                    modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
-                    java.io.File(modelDir, "tokens.txt").exists()
-            } else {
-                modelDir.exists() && modelDir.isDirectory
-            }
-            if (!isModelReady) {
-                Logger.w("PicMe:Gallery", "ASR model not ready: $localAsrModel")
-                SystemAsrEngine(context)
-            } else {
-                if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                    val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
-                    if (sherpaAsr.isAvailable()) {
-                        Logger.i("PicMe:Gallery", "Using Sherpa-MNN ASR engine")
-                        sherpaAsr
-                    } else {
-                        Logger.w("PicMe:Gallery", "Sherpa-MNN ASR init failed, fallback to system ASR")
-                        SystemAsrEngine(context)
-                    }
-                } else {
-                    val mnnAsr = MnnAsrClient(context, localAsrModel)
-                    if (mnnAsr.isAvailable()) {
-                        Logger.i("PicMe:Gallery", "Using MNN ASR engine")
-                        mnnAsr
-                    } else {
-                        Logger.w("PicMe:Gallery", "MNN ASR not available, fallback to system ASR")
-                        SystemAsrEngine(context)
-                    }
-                }
-            }
-        } else {
-            Logger.d("PicMe:Gallery", "No local ASR model configured, using system ASR")
-            SystemAsrEngine(context)
+    // ===== Agent Chat 配置（使用公共组件）=====
+    val agentChatConfig = rememberAgentChatConfig(
+        context = context,
+        logTag = "PicMe:Gallery",
+        onCommand = { command ->
+            Logger.i("PicMe:Gallery", "Voice command: ${command.javaClass.simpleName}")
+        },
+        onTranscript = { transcript ->
+            Logger.d("PicMe:Gallery", "Voice transcript: $transcript")
         }
-    }
-
-    // ===== VoiceCommandCoordinator =====
-    val aiAgentUseCase = remember {
-        AiAgentUseCase(
-            context = context,
-            agentMode = AiAgentMode.LOCAL,
-            localModelId = "qwen3_0_6b"
-        )
-    }
-    val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
-        VoiceCommandCoordinator(
-            asrEngine = asrEngine,
-            aiAgentUseCase = aiAgentUseCase,
-            onCommand = { command ->
-                Logger.i("PicMe:Gallery", "Voice command: ${command.javaClass.simpleName}")
-            },
-            scope = coroutineScope,
-            onTranscript = { transcript ->
-                Logger.d("PicMe:Gallery", "Voice transcript: $transcript")
-            }
-        )
-    }
+    )
+    val voiceCoordinator = agentChatConfig.voiceCoordinator
     DisposableEffect(Unit) {
         onDispose {
             voiceCoordinator.release()
