@@ -7,14 +7,24 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardVoice
+// import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -128,7 +138,7 @@ internal fun CameraPreviewContent(
         }
 
         CameraPreviewDebugStatus(uiState = uiState)
-        CameraPreviewSideControls(uiState = uiState, actions = actions, aiAgentPanelState = aiAgentPanelState)
+        CameraPreviewSideControls(uiState = uiState, actions = actions)
 
         CameraBottomControls(
             lastMedia = uiState.lastMedia,
@@ -196,7 +206,11 @@ internal fun CameraPreviewContent(
         // 同步语音协调器状态
         onUpdateVoiceCoordinatorState?.invoke()
 
-        // AI Agent 触发按钮已移至右侧控制栏（CameraRightControls）
+        // AI Agent 和语音控制浮动按钮 - 右下角，方便拇指点击
+        CameraFloatingActionButtons(
+            onToggleAiAgentPanel = actions.onToggleAiAgentPanel,
+            modifier = Modifier.align(Alignment.BottomEnd)
+        )
     }
 
     // AI Agent 面板：使用独立 Dialog 渲染
@@ -404,8 +418,7 @@ private fun mapProviderFailReason(reason: String): String {
 @Composable
 private fun BoxScope.CameraPreviewSideControls(
     uiState: CameraPreviewUiState,
-    actions: CameraPreviewActions,
-    aiAgentPanelState: AiAgentPanelState? = null
+    actions: CameraPreviewActions
 ) {
     CameraLeftControls(
         onNavigateToSettings = actions.onNavigateToSettings,
@@ -423,16 +436,12 @@ private fun BoxScope.CameraPreviewSideControls(
                 uiState.beautySettings.copy(enabled = !uiState.beautySettings.enabled)
             )
         },
-        onToggleVoiceControl = actions.onToggleVoiceControl,
-        onToggleAiAgentPanel = actions.onToggleAiAgentPanel,
         isBeautySelected = uiState.showBeautySelector,
         isFilterSelected = uiState.showFilterSelector,
         isRatioSelected = uiState.showRatioSelector,
         isSceneActive = uiState.currentScene != ScenePreset.NONE,
         isGridActive = uiState.showGridSelector,
         isBeautyEnabled = uiState.beautySettings.enabled,
-        isVoiceControlEnabled = uiState.isVoiceControlEnabled,
-        aiAgentPanelState = aiAgentPanelState,
         currentRatio = uiState.aspectRatio,
         modifier = Modifier.align(Alignment.TopEnd)
     )
@@ -490,6 +499,40 @@ private fun BoxScope.PrimaryControlPanels(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 相机预览页右下角浮动按钮组
+ * - AI Chat 入口：使用 KeyboardVoice icon（与 Gallery/Settings 一致）
+ * - 语音控制入口：使用 RecordVoiceOver icon（区别于 Chat 入口）
+ */
+@Composable
+private fun CameraFloatingActionButtons(
+    onToggleAiAgentPanel: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(end = 16.dp, bottom = 100.dp)
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        // AI Chat 入口按钮 - 使用 KeyboardVoice（与 Gallery/Settings 一致）
+        FloatingActionButton(
+            onClick = onToggleAiAgentPanel,
+            modifier = Modifier.size(52.dp),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardVoice,
+                contentDescription = "AI Agent",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

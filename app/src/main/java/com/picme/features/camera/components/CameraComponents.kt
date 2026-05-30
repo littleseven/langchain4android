@@ -1,8 +1,5 @@
 package com.picme.features.camera.components
 
-import com.picme.features.camera.agent.AiAgentButton
-import com.picme.features.camera.agent.AiAgentPanelState
-
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -137,16 +134,12 @@ fun CameraRightControls(
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
     onToggleBeautyEnabled: () -> Unit,
-    onToggleVoiceControl: () -> Unit,
-    onToggleAiAgentPanel: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
     isRatioSelected: Boolean,
     isSceneActive: Boolean,
     isGridActive: Boolean,
     isBeautyEnabled: Boolean,
-    isVoiceControlEnabled: Boolean,
-    aiAgentPanelState: AiAgentPanelState? = null,
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -198,23 +191,6 @@ fun CameraRightControls(
             isActive = isFilterSelected
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // AI Agent 入口按钮
-        if (aiAgentPanelState != null) {
-            AiAgentButton(
-                onClick = onToggleAiAgentPanel,
-                isActive = aiAgentPanelState.isVisible,
-                modifier = Modifier
-            )
-        }
-
-        // 声控开关：开启后持续监听语音指令
-        ControlButton(
-            icon = Icons.Rounded.Mic,
-            onClick = onToggleVoiceControl,
-            isActive = isVoiceControlEnabled
-        )
     }
 }
 

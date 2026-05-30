@@ -93,7 +93,7 @@ class BeautyCapability(
         val faces = detectFaces(bitmap)
 
         val result = runBlocking {
-            beautyProcessor.applySlimFace(bitmap, slimFace, faces)
+            beautyProcessor.applySlimFace(bitmap, slimFace, faces, isFrontCamera = false)
         }
 
         CapabilityResult.success(result)

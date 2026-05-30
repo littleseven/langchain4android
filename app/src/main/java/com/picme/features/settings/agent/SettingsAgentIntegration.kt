@@ -3,12 +3,23 @@ package com.picme.features.settings.agent
 import android.content.Context
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardVoice
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.picme.core.common.Logger
 import com.picme.domain.agent.CapabilityRegistry
@@ -22,7 +33,9 @@ import com.picme.domain.agent.model.SceneManager
 
 
 
-import com.picme.features.agent.GlobalAgentPanel
+import com.picme.domain.model.AiAgentCommand
+import com.picme.features.common.chat.AgentMessage
+import com.picme.features.common.chat.AiChatScreen
 import com.picme.features.settings.SettingsViewModel
 
 /**
@@ -113,21 +126,62 @@ class SettingsAgentIntegration(
 
 /**
  * SettingsScreen 的 Agent Panel 组件
+ *
+ * 使用统一的 AiChatScreen 组件，与其他页面保持一致
  */
 @Composable
 fun SettingsAgentPanel(
     pageContext: PageContext,
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.BottomEnd
-    ) {
-        GlobalAgentPanel(
-            pageContext = pageContext,
-            modifier = Modifier.padding(16.dp)
-        )
+    var isVisible by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
+    val messages = remember { mutableStateOf<List<AgentMessage>>(emptyList()) }
+
+    // 浮动按钮触发 - 右下角，方便拇指点击
+    if (!isVisible) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            FloatingActionButton(
+                onClick = { isVisible = true },
+                modifier = Modifier
+                    .padding(end = 16.dp, bottom = 100.dp)
+                    .navigationBarsPadding(),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardVoice,
+                    contentDescription = "AI Agent",
+                    tint = Color.White
+                )
+            }
+        }
     }
+
+    // 统一的 AiChatScreen
+    AiChatScreen(
+        visible = isVisible,
+        messages = messages.value,
+        isProcessing = isProcessing,
+        onVisibleChange = { isVisible = it },
+        onSendMessage = { input ->
+            messages.value = messages.value + AgentMessage.UserText(content = input)
+            isProcessing = true
+            // TODO: 集成 AgentOrchestrator 处理消息
+            // 模拟响应
+            isProcessing = false
+            messages.value = messages.value + AgentMessage.AgentText(
+                content = "收到：$input"
+            )
+        },
+        onCommand = { command ->
+            // TODO: 处理命令
+        },
+        modifier = modifier
+    )
 }
 
 /**
