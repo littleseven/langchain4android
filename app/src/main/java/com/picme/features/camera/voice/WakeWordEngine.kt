@@ -27,7 +27,10 @@ class WakeWordEngine(
 
     private val tag = "PicMe:WakeWord"
     private val audioRecorder = AudioRecorder()
-    private val vadDetector = VadDetector(thresholdDb = 40f, minSpeechMs = 300)
+    // 降低阈值和最小语音时长以提高灵敏度，与 Chat 按住说话的敏感度接近
+    // thresholdDb: 40f → 30f（降低 10dB，捕获更轻声细语）
+    // minSpeechMs: 300ms → 100ms（更快触发，减少漏检）
+    private val vadDetector = VadDetector(thresholdDb = 30f, minSpeechMs = 100)
     private var isRunning = false
 
     /**
