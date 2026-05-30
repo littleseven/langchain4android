@@ -325,6 +325,20 @@ private fun settingsContent(
                     onModeSelected = onAiAgentModeChange
                 )
 
+                // 自动执行多步骤计划开关
+                var autoExecutePlans by remember { mutableStateOf(true) }
+                DebugOptionRow(
+                    title = stringResource(R.string.ai_agent_auto_execute_plans),
+                    checked = autoExecutePlans,
+                    onCheckedChange = { autoExecutePlans = it }
+                )
+                Text(
+                    text = stringResource(R.string.ai_agent_auto_execute_plans_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+
                 when (aiAgentMode) {
                     AiAgentMode.OFF -> {
                         Text(

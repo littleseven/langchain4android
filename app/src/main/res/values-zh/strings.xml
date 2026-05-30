@@ -160,4 +160,6 @@
     <string name="landmark_no_face_detected">未检测到人脸</string>
 <string name="landmark_big_beauty">大美丽</string>
 <string name="landmark_compatibility">GPUPixel</string>
+<string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
+<string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
 </resources>

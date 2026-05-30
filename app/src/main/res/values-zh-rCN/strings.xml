@@ -279,6 +279,8 @@
     <string name="ai_agent_coding_model">Kimi Coding 模型</string>
     <string name="ai_agent_coding_base_url">Kimi Coding 基础 URL</string>
     <string name="ai_agent_force_remote">强制使用远程模型</string>
+    <string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
+    <string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
     <string name="ai_agent_input_hint">向 AI 助手提问...</string>
     <string name="ai_model_manager">AI 模型管理</string>
     <string name="ai_model_manager_desc">管理本地 AI 模型。</string>
