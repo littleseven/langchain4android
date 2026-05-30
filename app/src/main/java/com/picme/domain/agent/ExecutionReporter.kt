@@ -35,8 +35,8 @@ interface ExecutionReporter {
  */
 class ExecutionReporterImpl : ExecutionReporter {
 
-    private val _stepResults = MutableSharedFlow<StepResult>(extraBufferCapacity = 64)
-    private val _executionResults = MutableSharedFlow<ExecutionResult>(extraBufferCapacity = 16)
+    private val _stepResults = MutableSharedFlow<StepResult>(replay = 10, extraBufferCapacity = 64)
+    private val _executionResults = MutableSharedFlow<ExecutionResult>(replay = 10, extraBufferCapacity = 16)
 
     /**
      * 步骤结果流
