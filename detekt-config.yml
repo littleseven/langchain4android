@@ -10,9 +10,6 @@ config:
 build:
   maxIssues: 50
   excludeCorrectable: false
-  exclude:
-    - "**/test/**"
-    - "**/androidTest/**"
 
 complexity:
   active: true
