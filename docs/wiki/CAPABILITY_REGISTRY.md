@@ -2,8 +2,8 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档定义所有 Agent Capability 的注册表、命令映射与执行逻辑。
-> - 架构设计以 [`../02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) 为准。
-> - 交互规范以 [`../01-PRODUCT/FEATURES.md`](../01-PRODUCT/FEATURES.md) 为准。
+> - 架构设计以 [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITECTURE.md) 为准。
+> - 交互规范以 [`FEATURES.md`](FEATURES.md) 为准。
 
 **模块定位**: Agent 能力注册表与命令映射  
 **主要维护者**: [RD] 全栈工程师  
@@ -313,6 +313,6 @@ sealed class AgentCommand {
 ---
 
 > **参考文档**:
-> - [AGENT_ARCHITECTURE.md](../02-ARCHITECTURE/AGENT_ARCHITECTURE.md) — Agent 架构设计
+> - [AGENT_ARCHITECTURE.md](AGENT_ARCHITECTURE.md) — Agent 架构设计
 > - [COMMAND_REFERENCE.md](./COMMAND_REFERENCE.md) — 命令语法参考
 > - [CAPABILITY_IMPLEMENTATION_GUIDE.md](./CAPABILITY_IMPLEMENTATION_GUIDE.md) — 实现指南

@@ -2,7 +2,7 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档定义端到端验收测试清单与性能基线验证方法。
-> - 性能指标以 [`../01-PRODUCT/NFR_SPEC.md`](../01-PRODUCT/NFR_SPEC.md) 为准。
+> - 性能指标以 [`NFR_SPEC.md`](../01-PRODUCT/NFR_SPEC.md) 为准。
 > - 技术规范以各模块 `*_TECH_SPEC.md` 为准。
 
 **模块定位**: QA 验收测试标准  
@@ -382,5 +382,5 @@ adb shell dumpsys meminfo com.picme | grep Total PSS
 
 > **参考文档**:
 > - [NFR_SPEC.md](../01-PRODUCT/NFR_SPEC.md) — 非功能性需求规格
-> - [FRAME_SYNC_TECH_SPEC.md](../03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md) — 帧同步技术规格
+> - [FRAME_SYNC_TECH_SPEC.md](FRAME_SYNC_TECH_SPEC.md) — 帧同步技术规格
 > - [CODE_REVIEW_CHECKLIST.md](./CODE_REVIEW_CHECKLIST.md) — CR 检查清单

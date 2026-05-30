@@ -2,7 +2,7 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档定义 PicMe AI Agent 的运行时架构、Capability 模型与推理模式选型。
-> - 产品目标与验收口径以 [`../01-PRODUCT/FEATURES.md`](./01-PRODUCT/FEATURES.md) 为准。
+> - 产品目标与验收口径以 [`FEATURES.md`](FEATURES.md) 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 [`AGENTS.md`](../../AGENTS.md) 为准。
 > - 模块级实现细节以 `app/src/main/java/com/picme/domain/agent/` 源码为准。
 
@@ -594,6 +594,6 @@ sealed class AgentCommand {
 ## 附录：参考文档
 
 - [AGENTS.md](../../AGENTS.md) — 顶层治理规则
-- [FEATURES.md](../01-PRODUCT/FEATURES.md) — 功能交互细节
-- [COMMAND_REFERENCE.md](../04-AGENT-CAPABILITIES/COMMAND_REFERENCE.md) — 命令参考手册
+- [FEATURES.md](FEATURES.md) — 功能交互细节
+- [COMMAND_REFERENCE.md](COMMAND_REFERENCE.md) — 命令参考手册
 - `app/src/main/java/com/picme/domain/agent/` — 源码目录

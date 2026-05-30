@@ -2,8 +2,8 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档定义所有 Agent 命令的语法、参数与使用示例。
-> - 架构设计以 [`../02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) 为准。
-> - 交互规范以 [`../01-PRODUCT/FEATURES.md`](../01-PRODUCT/FEATURES.md) 为准。
+> - 架构设计以 [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITECTURE.md) 为准。
+> - 交互规范以 [`FEATURES.md`](FEATURES.md) 为准。
 
 **模块定位**: Agent 命令语法与使用示例  
 **主要维护者**: [RD] 全栈工程师  
@@ -388,5 +388,5 @@ Agent: 已为你调高磨皮至 50，并切换到冷调滤镜
 
 > **参考文档**:
 > - [CAPABILITY_REGISTRY.md](./CAPABILITY_REGISTRY.md) — Capability 注册表
-> - [AGENT_ARCHITECTURE.md](../02-ARCHITECTURE/AGENT_ARCHITECTURE.md) — Agent 架构设计
-> - [FEATURES.md](../01-PRODUCT/FEATURES.md) — 功能交互规范
+> - [AGENT_ARCHITECTURE.md](AGENT_ARCHITECTURE.md) — Agent 架构设计
+> - [FEATURES.md](FEATURES.md) — 功能交互规范
