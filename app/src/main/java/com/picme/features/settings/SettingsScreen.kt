@@ -71,13 +71,11 @@ import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
-import com.picme.features.camera.voice.MnnAsrClient
-import com.picme.features.camera.voice.SherpaMnnAsrEngine
-import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.settings.agent.SettingsAgentPanel
 import com.picme.features.settings.agent.rememberSettingsAgentIntegration
-import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.features.common.chat.rememberAgentChatConfig
+import com.picme.domain.agent.model.AgentScene
 
 @Composable
 fun SettingsScreen(
@@ -128,70 +126,18 @@ fun SettingsScreen(
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
 
-    // ===== ASR 引擎 =====
-    val coroutineScope = rememberCoroutineScope()
-    val asrEngine = remember(context, localAsrModel) {
-        if (localAsrModel.isNotBlank()) {
-            val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
-            val modelDirPath = modelDir.absolutePath
-            val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                modelDir.exists() && modelDir.isDirectory &&
-                    modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
-                    java.io.File(modelDir, "tokens.txt").exists()
-            } else {
-                modelDir.exists() && modelDir.isDirectory
-            }
-            if (!isModelReady) {
-                Logger.w("PicMe:Settings", "ASR model not ready: $localAsrModel")
-                SystemAsrEngine(context)
-            } else {
-                if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                    val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
-                    if (sherpaAsr.isAvailable()) {
-                        Logger.i("PicMe:Settings", "Using Sherpa-MNN ASR engine")
-                        sherpaAsr
-                    } else {
-                        Logger.w("PicMe:Settings", "Sherpa-MNN ASR init failed, fallback to system ASR")
-                        SystemAsrEngine(context)
-                    }
-                } else {
-                    val mnnAsr = MnnAsrClient(context, localAsrModel)
-                    if (mnnAsr.isAvailable()) {
-                        Logger.i("PicMe:Settings", "Using MNN ASR engine")
-                        mnnAsr
-                    } else {
-                        Logger.w("PicMe:Settings", "MNN ASR not available, fallback to system ASR")
-                        SystemAsrEngine(context)
-                    }
-                }
-            }
-        } else {
-            Logger.d("PicMe:Settings", "No local ASR model configured, using system ASR")
-            SystemAsrEngine(context)
+    // ===== Agent Chat 配置（使用公共组件）=====
+    val agentChatConfig = rememberAgentChatConfig(
+        context = context,
+        logTag = "PicMe:Settings",
+        onCommand = { command ->
+            Logger.i("PicMe:Settings", "Voice command: ${command.javaClass.simpleName}")
+        },
+        onTranscript = { transcript ->
+            Logger.d("PicMe:Settings", "Voice transcript: $transcript")
         }
-    }
-
-    // ===== VoiceCommandCoordinator =====
-    val aiAgentUseCase = remember {
-        AiAgentUseCase(
-            context = context,
-            agentMode = AiAgentMode.LOCAL,
-            localModelId = "qwen3_0_6b"
-        )
-    }
-    val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
-        VoiceCommandCoordinator(
-            asrEngine = asrEngine,
-            aiAgentUseCase = aiAgentUseCase,
-            onCommand = { command ->
-                Logger.i("PicMe:Settings", "Voice command: ${command.javaClass.simpleName}")
-            },
-            scope = coroutineScope,
-            onTranscript = { transcript ->
-                Logger.d("PicMe:Settings", "Voice transcript: $transcript")
-            }
-        )
-    }
+    )
+    val voiceCoordinator = agentChatConfig.voiceCoordinator
     DisposableEffect(Unit) {
         onDispose {
             voiceCoordinator.release()

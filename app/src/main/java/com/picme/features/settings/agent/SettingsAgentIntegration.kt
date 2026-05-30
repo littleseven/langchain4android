@@ -1,43 +1,18 @@
 package com.picme.features.settings.agent
 
 import android.content.Context
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardVoice
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import com.picme.core.common.Logger
-import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.CapabilityRegistry
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.SettingsCapability
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
-
-
-
-
-
-
-import com.picme.domain.model.AiAgentCommand
-import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
-import com.picme.features.common.chat.AgentMessage
-import com.picme.features.common.chat.AiChatScreen
+import com.picme.features.common.chat.AgentChatPanel
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -133,7 +108,7 @@ class SettingsAgentIntegration(
 /**
  * SettingsScreen 的 Agent Panel 组件
  *
- * 使用统一的 AiChatScreen 组件，与其他页面保持一致
+ * 使用统一的 AgentChatPanel 组件，与其他页面保持一致
  */
 @Composable
 fun SettingsAgentPanel(
@@ -141,78 +116,12 @@ fun SettingsAgentPanel(
     voiceCoordinator: VoiceCommandCoordinator? = null,
     modifier: Modifier = Modifier
 ) {
-    var isVisible by remember { mutableStateOf(false) }
-    var isProcessing by remember { mutableStateOf(false) }
-    val messages = remember { mutableStateOf<List<AgentMessage>>(emptyList()) }
-
-    // 浮动按钮触发 - 右下角，方便拇指点击
-    if (!isVisible) {
-        FloatingActionButton(
-            onClick = { isVisible = true },
-            modifier = modifier
-                .padding(end = 16.dp, bottom = 16.dp)
-                .navigationBarsPadding(),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.primary
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.KeyboardVoice,
-                contentDescription = "AI Agent",
-                tint = Color.White
-            )
-        }
-    }
-
-    // 统一的 AiChatScreen - 使用 ModalBottomSheet，自动处理底部定位和键盘上移
-    val context = LocalContext.current
-    val orchestrator = remember { AgentOrchestrator.getInstance(context.applicationContext) }
-    val scope = rememberCoroutineScope()
-
-    AiChatScreen(
-        visible = isVisible,
-        messages = messages.value,
-        isProcessing = isProcessing,
-        onVisibleChange = { isVisible = it },
+    AgentChatPanel(
+        pageContext = pageContext,
+        agentScene = AgentScene.SETTINGS,
+        memorySessionId = "settings",
         voiceCoordinator = voiceCoordinator,
-        onSendMessage = { input ->
-            messages.value = messages.value + AgentMessage.UserText(content = input)
-            isProcessing = true
-
-            scope.launch {
-                val agentContext = AgentContext(
-                    scene = AgentScene.SETTINGS,
-                    memorySessionId = "settings"
-                )
-                val result = orchestrator.processUserInput(
-                    input = input,
-                    agentContext = agentContext,
-                    pageContext = pageContext
-                )
-                isProcessing = false
-                result.fold(
-                    onSuccess = { action ->
-                        val responseText = when (action) {
-                            is com.picme.domain.agent.model.AgentAction.Success -> {
-                                val commandName = action.command::class.simpleName ?: "操作"
-                                "已执行: $commandName"
-                            }
-                            is com.picme.domain.agent.model.AgentAction.TextReply -> action.message
-                            is com.picme.domain.agent.model.AgentAction.Error -> "抱歉，${action.message}"
-                        }
-                        messages.value = messages.value + AgentMessage.AgentText(content = responseText)
-                    },
-                    onFailure = { error ->
-                        messages.value = messages.value + AgentMessage.AgentText(
-                            content = "处理失败：${error.message ?: "未知错误"}"
-                        )
-                    }
-                )
-            }
-        },
-        onCommand = { command ->
-            // 命令已通过 AgentOrchestrator 执行
-        },
-        modifier = Modifier
+        modifier = modifier
     )
 }
 
