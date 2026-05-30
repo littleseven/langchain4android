@@ -54,12 +54,13 @@ import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
-import com.picme.features.camera.agent.AiAgentDialogPanel
-import com.picme.features.camera.agent.AiAgentPanelState
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.camera.voice.VoiceWakeIndicator
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
+import com.picme.features.common.chat.AiChatScreen
+import com.picme.features.common.chat.AgentMessage
+import kotlinx.coroutines.launch
 
 // [常量定义] 调试文本颜色
 private val INSIGHTFACE_DEBUG_TEXT_COLOR = Color(0xFFFFAB91)
@@ -75,7 +76,12 @@ internal fun CameraPreviewContent(
     uiState: CameraPreviewUiState,
     actions: CameraPreviewActions,
     aiAgentUseCase: AiAgentUseCase? = null,
-    aiAgentPanelState: AiAgentPanelState? = null,
+    aiAgentChatVisible: Boolean = false,
+    aiAgentMessages: List<AgentMessage> = emptyList(),
+    aiAgentIsProcessing: Boolean = false,
+    onAiAgentChatVisibleChange: (Boolean) -> Unit = {},
+    onAiAgentMessagesChange: (List<AgentMessage>) -> Unit = {},
+    onAiAgentIsProcessingChange: (Boolean) -> Unit = {},
     voiceCoordinator: VoiceCommandCoordinator? = null,
     isWakeWordActive: Boolean = false,
     onAiAgentCommand: ((AiAgentCommand) -> Unit)? = null,
@@ -215,23 +221,58 @@ internal fun CameraPreviewContent(
         )
     }
 
-    // AI Agent 面板：使用独立 Dialog 渲染
-    // 输入法弹出时仅影响 Dialog 内部布局，Camera 预览页完全不受影响
-    if (aiAgentUseCase != null && aiAgentPanelState != null && onAiAgentCommand != null) {
-        AiAgentDialogPanel(
-            state = aiAgentPanelState,
-            useCase = aiAgentUseCase,
-            currentState = AiAgentUseCase.CameraStateSnapshot(
-                beautySettings = uiState.beautySettings,
-                filterType = uiState.selectedFilter,
-                styleFilter = uiState.selectedStyleFilter,
-                zoomRatio = uiState.zoomRatio,
-                exposureCompensation = uiState.exposureCompensation,
-                captureMode = uiState.captureMode,
-                isRecording = uiState.isRecording
-            ),
-            onCommand = { command -> onAiAgentCommand(command) },
-            voiceCoordinator = voiceCoordinator
+    // AI Agent 面板：使用统一的 AiChatScreen
+    if (aiAgentUseCase != null && onAiAgentCommand != null) {
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        AiChatScreen(
+            visible = aiAgentChatVisible,
+            messages = aiAgentMessages,
+            isProcessing = aiAgentIsProcessing,
+            onVisibleChange = onAiAgentChatVisibleChange,
+            voiceCoordinator = voiceCoordinator,
+            onSendMessage = { input ->
+                onAiAgentMessagesChange(aiAgentMessages + AgentMessage.UserText(content = input))
+                onAiAgentIsProcessingChange(true)
+                scope.launch {
+                    val currentState = AiAgentUseCase.CameraStateSnapshot(
+                        beautySettings = uiState.beautySettings,
+                        filterType = uiState.selectedFilter,
+                        styleFilter = uiState.selectedStyleFilter,
+                        zoomRatio = uiState.zoomRatio,
+                        exposureCompensation = uiState.exposureCompensation,
+                        captureMode = uiState.captureMode,
+                        isRecording = uiState.isRecording
+                    )
+                    val result = aiAgentUseCase.processInput(input, currentState)
+                    onAiAgentIsProcessingChange(false)
+                    result.onSuccess { command ->
+                        val commandName = when (command) {
+                            is AiAgentCommand.TextReply -> command.message
+                            is AiAgentCommand.AdjustBeauty -> "已调整美颜参数"
+                            is AiAgentCommand.SwitchFilter -> "已切换滤镜"
+                            is AiAgentCommand.SwitchStyle -> "已切换风格"
+                            is AiAgentCommand.SwitchScene -> "已切换场景"
+                            is AiAgentCommand.SwitchRatio -> "已切换画幅比例"
+                            is AiAgentCommand.AdjustExposure -> "已调整曝光"
+                            is AiAgentCommand.AdjustZoom -> "已调整变焦"
+                            is AiAgentCommand.FlipCamera -> "已翻转摄像头"
+                            is AiAgentCommand.CapturePhoto -> "已拍照"
+                            is AiAgentCommand.ToggleRecording -> "已切换录像状态"
+                            is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
+                            is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
+                        }
+                        onAiAgentMessagesChange(aiAgentMessages + AgentMessage.UserText(content = input) + AgentMessage.AgentText(content = commandName))
+                        onAiAgentCommand(command)
+                    }.onFailure { error ->
+                        onAiAgentMessagesChange(
+                            aiAgentMessages + AgentMessage.UserText(content = input) + AgentMessage.AgentText(
+                                content = "处理出错了：${error.message ?: "未知错误"}"
+                            )
+                        )
+                    }
+                }
+            },
+            onCommand = onAiAgentCommand
         )
     }
 }
