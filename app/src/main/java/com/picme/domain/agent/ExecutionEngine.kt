@@ -162,6 +162,8 @@ class ExecutionEngine(
 
     /**
      * 执行单个步骤
+     *
+     * 支持：条件评估、等待条件、循环重复、失败回退
      */
     private suspend fun executeStep(planStep: PlanStep): StepResult {
         // 条件评估
@@ -173,25 +175,49 @@ class ExecutionEngine(
             )
         }
 
-        Logger.d(tag, "Executing step ${planStep.step}: ${planStep.description}")
+        // 等待条件评估
+        val waitResult = evaluateWaitCondition(planStep.waitCondition)
+        if (waitResult != null) {
+            Logger.d(tag, "Step ${planStep.step} wait condition failed: $waitResult")
+            return StepResult.Skipped(step = planStep, reason = waitResult)
+        }
+
+        Logger.d(tag, "Executing step ${planStep.step}: ${planStep.description}, repeat=${planStep.repeatCount}")
 
         return try {
-            val dispatchResult = dispatcher.dispatch(
-                command = planStep.action,
-                context = AgentContext(
-                    scene = com.picme.domain.agent.model.AgentScene.CAMERA
+            // 循环重复执行
+            var lastResult: Result<Unit> = Result.success(Unit)
+            repeat(planStep.repeatCount.coerceAtLeast(1)) { index ->
+                if (index > 0) {
+                    Logger.d(tag, "Step ${planStep.step} repeat ${index + 1}/${planStep.repeatCount}")
+                }
+                val dispatchResult = dispatcher.dispatch(
+                    command = planStep.action,
+                    context = AgentContext(
+                        scene = com.picme.domain.agent.model.AgentScene.CAMERA
+                    )
                 )
-            )
+                lastResult = if (dispatchResult.isSuccess) {
+                    Result.success(Unit)
+                } else {
+                    Result.failure(
+                        dispatchResult.exceptionOrNull()
+                            ?: RuntimeException("Step ${planStep.step} failed without exception")
+                    )
+                }
+                // 如果某次执行失败，中断循环
+                if (lastResult.isFailure) {
+                    return@repeat
+                }
+            }
 
-            if (dispatchResult.isSuccess) {
-                Logger.d(tag, "Step ${planStep.step} executed successfully")
+            if (lastResult.isSuccess) {
+                Logger.d(tag, "Step ${planStep.step} executed successfully (x${planStep.repeatCount})")
                 StepResult.Executed(step = planStep, result = Result.success(Unit))
             } else {
-                val error = dispatchResult.exceptionOrNull()
+                val error = lastResult.exceptionOrNull()
                     ?: RuntimeException("Step ${planStep.step} failed without exception")
                 Logger.e(tag, "Step ${planStep.step} failed: ${error.message}", error)
-
-                // 尝试 fallback
                 tryFallback(planStep, error)
             }
         } catch (throwable: Throwable) {
@@ -200,6 +226,46 @@ class ExecutionEngine(
             }
             Logger.e(tag, "Step ${planStep.step} threw exception: ${throwable.message}", throwable)
             tryFallback(planStep, throwable)
+        }
+    }
+
+    /**
+     * 评估等待条件
+     *
+     * @param waitCondition 等待条件
+     * @return null 表示条件已满足，非 null 表示等待失败的原因
+     */
+    private suspend fun evaluateWaitCondition(waitCondition: com.picme.domain.agent.remote.WaitCondition?): String? {
+        if (waitCondition == null) return null
+
+        return when (waitCondition) {
+            is com.picme.domain.agent.remote.WaitCondition.SmileDetected -> {
+                // 微笑检测预留，暂未实现具体逻辑
+                Logger.w(tag, "Smile detection not implemented yet, skipping wait")
+                "微笑检测暂未实现"
+            }
+            is com.picme.domain.agent.remote.WaitCondition.FaceDetected -> {
+                Logger.d(tag, "Waiting for face detection, timeout=${waitCondition.timeoutMs}ms")
+                val startTime = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startTime < waitCondition.timeoutMs) {
+                    if (com.picme.features.camera.FaceDetectionCache.isValid()) {
+                        Logger.d(tag, "Face detected")
+                        return null
+                    }
+                    delay(200)
+                }
+                "等待人脸检测超时"
+            }
+            is com.picme.domain.agent.remote.WaitCondition.Duration -> {
+                Logger.d(tag, "Waiting for duration: ${waitCondition.delayMs}ms")
+                delay(waitCondition.delayMs)
+                null
+            }
+            is com.picme.domain.agent.remote.WaitCondition.UserConfirm -> {
+                // 用户确认需要 UI 交互，暂不支持自动等待
+                Logger.w(tag, "User confirm wait not supported in auto mode")
+                "用户确认需手动操作"
+            }
         }
     }
 

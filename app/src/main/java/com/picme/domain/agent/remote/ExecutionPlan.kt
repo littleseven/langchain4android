@@ -24,6 +24,34 @@ enum class InteractionMode {
 }
 
 /**
+ * 等待条件密封类
+ *
+ * 支持执行计划中的条件等待步骤。
+ * 目前仅定义接口，具体条件检测逻辑在 ExecutionEngine 中实现。
+ */
+sealed class WaitCondition {
+    /**
+     * 等待检测到微笑（预留，暂未实现具体检测逻辑）
+     */
+    data class SmileDetected(val timeoutMs: Long = 15000) : WaitCondition()
+
+    /**
+     * 等待检测到人脸
+     */
+    data class FaceDetected(val timeoutMs: Long = 10000) : WaitCondition()
+
+    /**
+     * 等待固定时长
+     */
+    data class Duration(val delayMs: Long) : WaitCondition()
+
+    /**
+     * 等待用户确认（需要 UI 交互）
+     */
+    data class UserConfirm(val prompt: String = "") : WaitCondition()
+}
+
+/**
  * 执行计划（L3 Plan-and-Execute 模式）
  *
  * @property planId 计划唯一标识
@@ -48,6 +76,8 @@ data class ExecutionPlan(
  * @property step 步骤序号（从 1 开始）
  * @property action 要执行的命令
  * @property condition 执行条件（可选，为 null 时无条件执行）
+ * @property waitCondition 等待条件（可选，设置时会在执行前等待条件满足）
+ * @property repeatCount 重复执行次数（默认 1，大于 1 时重复执行 action）
  * @property description 步骤描述
  * @property delayMs 执行后延迟（毫秒，给 UI 反应时间）
  * @property fallbackAction 失败回退动作（可选，当此步骤执行失败时执行）
@@ -56,6 +86,8 @@ data class PlanStep(
     val step: Int,
     val action: AgentCommand,
     val condition: String? = null,
+    val waitCondition: WaitCondition? = null,
+    val repeatCount: Int = 1,
     val description: String = "",
     val delayMs: Long = 0,
     val fallbackAction: AgentCommand? = null

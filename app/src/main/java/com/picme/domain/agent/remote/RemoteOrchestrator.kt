@@ -305,6 +305,10 @@ class RemoteOrchestrator(
                     val condition = stepObject.optString("condition", "").takeIf { it.isNotBlank() }
                     val stepDescription = stepObject.optString("description", "")
                     val delayMs = stepObject.optLong("delayMs", 0L)
+                    val repeatCount = stepObject.optInt("repeat_count", 1).coerceAtLeast(1)
+
+                    // 解析等待条件
+                    val waitCondition = parseWaitCondition(stepObject.optJSONObject("wait_condition"))
 
                     val actionObject = stepObject.optJSONObject("action")
                     val action = if (actionObject != null) {
@@ -318,6 +322,8 @@ class RemoteOrchestrator(
                             step = stepNum,
                             action = action,
                             condition = condition,
+                            waitCondition = waitCondition,
+                            repeatCount = repeatCount,
                             description = stepDescription,
                             delayMs = delayMs
                         )
@@ -337,6 +343,30 @@ class RemoteOrchestrator(
                 steps = emptyList(),
                 description = "计划解析失败：${exception.message}"
             )
+        }
+    }
+
+    /**
+     * 解析等待条件 JSON
+     */
+    private fun parseWaitCondition(waitObject: org.json.JSONObject?): WaitCondition? {
+        if (waitObject == null) return null
+
+        val type = waitObject.optString("type", "")
+        return when (type) {
+            "smile_detected" -> WaitCondition.SmileDetected(
+                timeoutMs = waitObject.optLong("timeout_ms", 15000)
+            )
+            "face_detected" -> WaitCondition.FaceDetected(
+                timeoutMs = waitObject.optLong("timeout_ms", 10000)
+            )
+            "duration" -> WaitCondition.Duration(
+                delayMs = waitObject.optLong("delay_ms", 1000)
+            )
+            "user_confirm" -> WaitCondition.UserConfirm(
+                prompt = waitObject.optString("prompt", "")
+            )
+            else -> null
         }
     }
 
