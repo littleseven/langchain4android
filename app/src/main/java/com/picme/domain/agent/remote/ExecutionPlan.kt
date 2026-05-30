@@ -92,10 +92,12 @@ data class ExecutionResult(
     val stepResults: List<StepResult>
 ) {
     /**
-     * 是否全部成功
+     * 是否全部成功（Executed 成功 或 Skipped）
      */
     val isSuccess: Boolean
-        get() = stepResults.all { it is StepResult.Executed && it.result.isSuccess }
+        get() = stepResults.all {
+            (it is StepResult.Executed && it.result.isSuccess) || it is StepResult.Skipped
+        }
 
     /**
      * 执行成功的步骤数
