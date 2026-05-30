@@ -35,7 +35,9 @@ class VoiceCommandCoordinator(
     private val asrEngine: AsrEngine,
     private val aiAgentUseCase: AiAgentUseCase,
     private val onCommand: (AiAgentCommand) -> Unit,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val onTranscript: ((String) -> Unit)? = null,
+    private val onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null
 ) {
 
     private val tag = "PicMe:VoiceCommand"
@@ -169,7 +171,14 @@ class VoiceCommandCoordinator(
     private suspend fun processTranscriptInternal(transcript: String) {
         Logger.i(tag, "Processing transcript: $transcript")
 
+        // 通知上层语音文本已识别，可用于添加到对话历史
+        onTranscript?.invoke(transcript)
+
         val result = aiAgentUseCase.processInput(transcript, currentCameraState.toAiAgentSnapshot())
+
+        // 通知上层 Agent 响应结果，可用于添加到对话历史
+        onAgentResponse?.invoke(result)
+
         result.onSuccess { command ->
             if (command is AiAgentCommand.TextReply) {
                 Logger.d(tag, "Text reply, no action: ${command.message}")

@@ -1,5 +1,8 @@
 package com.picme.features.camera.components
 
+import com.picme.features.camera.agent.AiAgentButton
+import com.picme.features.camera.agent.AiAgentPanelState
+
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -58,6 +61,7 @@ import androidx.compose.material.icons.rounded.FilterBAndW
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Landscape
 import androidx.compose.material.icons.rounded.LineStyle
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Timeline
@@ -133,12 +137,16 @@ fun CameraRightControls(
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
     onToggleBeautyEnabled: () -> Unit,
+    onToggleVoiceControl: () -> Unit,
+    onToggleAiAgentPanel: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
     isRatioSelected: Boolean,
     isSceneActive: Boolean,
     isGridActive: Boolean,
     isBeautyEnabled: Boolean,
+    isVoiceControlEnabled: Boolean,
+    aiAgentPanelState: AiAgentPanelState? = null,
     currentRatio: Int,
     modifier: Modifier = Modifier
 ) {
@@ -188,6 +196,24 @@ fun CameraRightControls(
             icon = Icons.Rounded.FilterBAndW,
             onClick = onToggleFilter,
             isActive = isFilterSelected
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // AI Agent 入口按钮
+        if (aiAgentPanelState != null) {
+            AiAgentButton(
+                onClick = onToggleAiAgentPanel,
+                isActive = aiAgentPanelState.isVisible,
+                modifier = Modifier
+            )
+        }
+
+        // 声控开关：开启后持续监听语音指令
+        ControlButton(
+            icon = Icons.Rounded.Mic,
+            onClick = onToggleVoiceControl,
+            isActive = isVoiceControlEnabled
         )
     }
 }
