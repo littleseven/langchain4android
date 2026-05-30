@@ -2,12 +2,16 @@ package com.picme.domain.agent
 
 import android.content.Context
 import com.picme.core.common.Logger
+import com.picme.data.remote.kimi.KimiCodingApiClient
 import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.InferenceResult
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
+import com.picme.domain.agent.remote.AdaptiveStrategySelector
+import com.picme.domain.agent.remote.RemoteOrchestrator
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AiAgentPrivacyLevel
 import kotlinx.coroutines.Dispatchers
@@ -47,10 +51,48 @@ class AgentOrchestrator private constructor(private val context: Context) {
     private val sceneManager = SceneManager.getInstance()
     private val promptBuilder = PromptBuilder(sceneManager)
     private val capabilityRegistry = CapabilityRegistry.getInstance()
+    private val strategySelector = AdaptiveStrategySelector()
+
+    // 推理路由器（懒加载，避免在不需要时初始化远程组件）
+    private val inferenceRouter: InferenceRouter by lazy {
+        val remoteOrchestrator = createRemoteOrchestrator()
+        InferenceRouter(
+            localEngine = localLlmEngine,
+            remoteOrchestrator = remoteOrchestrator,
+            strategySelector = strategySelector,
+            privacyGuard = privacyGuard
+        )
+    }
 
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL
     private var currentModelId: String = "qwen3_0_6b"
+
+    /**
+     * 创建远程编排器
+     */
+    private fun createRemoteOrchestrator(): RemoteOrchestrator {
+        val apiKey = getApiKey()
+        val codingClient = KimiCodingApiClient(
+            apiKey = apiKey,
+            enableLogging = false
+        )
+        return RemoteOrchestrator(
+            codingClient = codingClient,
+            promptBuilder = promptBuilder
+        )
+    }
+
+    /**
+     * 获取 API Key（优先从 BuildConfig 读取，否则返回空字符串）
+     */
+    private fun getApiKey(): String {
+        return try {
+            com.picme.BuildConfig.KIMI_API_KEY
+        } catch (exception: Throwable) {
+            ""
+        }
+    }
 
     /**
      * 当前活跃场景（可观察）
@@ -171,7 +213,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
         }
 
         // 3. 根据模式选择推理引擎
-        val responseResult = when (agentMode) {
+        val inferenceResult = when (agentMode) {
             AiAgentMode.LOCAL -> {
                 // 本地模式：使用 MNN-LLM
                 if (!localLlmEngine.isLoaded) {
@@ -181,18 +223,54 @@ class AgentOrchestrator private constructor(private val context: Context) {
                     }
                 }
                 Logger.d(tag, "Using local LLM (MNN-LLM)")
-                localLlmEngine.generateWithSystem(
+                val responseResult = localLlmEngine.generateWithSystem(
                     systemPrompt = systemPrompt,
                     userPrompt = userPrompt,
                     maxTokens = 512
                 )
+                return@withContext responseResult.fold(
+                    onSuccess = { rawResponse ->
+                        handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
+                    },
+                    onFailure = { error ->
+                        Logger.e(tag, "LLM inference failed (mode=$agentMode)", error)
+                        Result.success(
+                            AgentAction.Error("推理失败：${error.message ?: "未知错误"}")
+                        )
+                    }
+                )
             }
             AiAgentMode.REMOTE -> {
-                // 远程模式：由上层 AiAgentUseCase 处理，此处不直接调用
-                Logger.w(tag, "REMOTE mode should be handled by AiAgentUseCase")
-                return@withContext Result.success(
-                    AgentAction.Error("REMOTE 模式请通过 AiAgentUseCase 调用")
-                )
+                // 远程模式：通过 InferenceRouter 进行混合编排
+                Logger.d(tag, "Using InferenceRouter for REMOTE mode")
+                try {
+                    inferenceRouter.processInput(input, agentContext)
+                } catch (exception: Exception) {
+                    Logger.e(tag, "Remote inference failed, falling back to local", exception)
+                    // 远程失败时回退到本地
+                    if (!localLlmEngine.isLoaded) {
+                        val loadResult = tryLoadModel()
+                        if (loadResult.isFailure) {
+                            return@withContext handleModelLoadError(loadResult)
+                        }
+                    }
+                    val fallbackResult = localLlmEngine.generateWithSystem(
+                        systemPrompt = systemPrompt,
+                        userPrompt = userPrompt,
+                        maxTokens = 512
+                    )
+                    return@withContext fallbackResult.fold(
+                        onSuccess = { rawResponse ->
+                            handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
+                        },
+                        onFailure = { error ->
+                            Logger.e(tag, "Fallback local inference also failed", error)
+                            Result.success(
+                                AgentAction.Error("推理失败：${error.message ?: "未知错误"}")
+                            )
+                        }
+                    )
+                }
             }
             AiAgentMode.OFF -> {
                 Logger.w(tag, "Agent is OFF")
@@ -202,19 +280,8 @@ class AgentOrchestrator private constructor(private val context: Context) {
             }
         }
 
-        val memorySessionId = agentContext.memorySessionId
-
-        responseResult.fold(
-            onSuccess = { rawResponse ->
-                handleLlmResponse(rawResponse, input, agentContext, pageContext, memorySessionId)
-            },
-            onFailure = { error ->
-                Logger.e(tag, "LLM inference failed (mode=$agentMode)", error)
-                Result.success(
-                    AgentAction.Error("推理失败：${error.message ?: "未知错误"}")
-                )
-            }
-        )
+        // 4. 处理 InferenceResult（REMOTE 模式）
+        return@withContext handleInferenceResult(inferenceResult, input, agentContext, pageContext)
     }
 
     /**
@@ -324,5 +391,64 @@ class AgentOrchestrator private constructor(private val context: Context) {
         fallbackText: String
     ): AgentCommand {
         return AgentCommandParser.parseCommandByAction(action, json, context, fallbackText)
+    }
+
+    /**
+     * 处理 InferenceResult 并转换为 AgentAction
+     *
+     * 将 InferenceRouter 返回的各种推理结果统一转换为 AgentAction。
+     *
+     * @param inferenceResult 推理结果
+     * @param userInput 用户原始输入
+     * @param agentContext Agent 上下文
+     * @param pageContext 页面上下文（可选）
+     * @return Agent 执行结果
+     */
+    private suspend fun handleInferenceResult(
+        inferenceResult: InferenceResult,
+        userInput: String,
+        agentContext: AgentContext,
+        pageContext: PageContext?
+    ): Result<AgentAction> {
+        val memorySessionId = agentContext.memorySessionId
+
+        return when (inferenceResult) {
+            is InferenceResult.Local -> {
+                Logger.d(tag, "Handling Local result: ${inferenceResult.command::class.simpleName}")
+                saveConversation(memorySessionId, userInput, inferenceResult.command, "")
+                capabilityRegistry.dispatch(inferenceResult.command, agentContext, pageContext)
+            }
+            is InferenceResult.Batch -> {
+                Logger.d(tag, "Handling Batch result: ${inferenceResult.commands.size} commands")
+                if (inferenceResult.commands.isEmpty()) {
+                    Result.success(AgentAction.Error("未解析到任何命令"))
+                } else {
+                    // 批量执行：将第一个命令作为主结果，其余通过 BatchExecute 包装
+                    val firstCommand = inferenceResult.commands.first()
+                    val remainingCommands = inferenceResult.commands.drop(1)
+                    val finalCommand = if (remainingCommands.isNotEmpty()) {
+                        AgentCommand.BatchExecute(
+                            commands = listOf(firstCommand) + remainingCommands
+                        )
+                    } else {
+                        firstCommand
+                    }
+                    saveConversation(memorySessionId, userInput, finalCommand, "")
+                    capabilityRegistry.dispatch(finalCommand, agentContext, pageContext)
+                }
+            }
+            is InferenceResult.Plan -> {
+                Logger.d(tag, "Handling Plan result: ${inferenceResult.plan.steps.size} steps")
+                val planCommand = AgentCommand.ExecutePlan(plan = inferenceResult.plan)
+                saveConversation(memorySessionId, userInput, planCommand, inferenceResult.plan.description)
+                capabilityRegistry.dispatch(planCommand, agentContext, pageContext)
+            }
+            is InferenceResult.Chat -> {
+                Logger.d(tag, "Handling Chat result: ${inferenceResult.message}")
+                val textCommand = AgentCommand.TextReply(message = inferenceResult.message)
+                saveConversation(memorySessionId, userInput, textCommand, inferenceResult.message)
+                Result.success(AgentAction.TextReply(message = inferenceResult.message))
+            }
+        }
     }
 }

@@ -94,6 +94,10 @@ android {
         buildConfig = true
     }
 
+    defaultConfig {
+        buildConfigField("String", "KIMI_API_KEY", "\"\"")
+    }
+
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
