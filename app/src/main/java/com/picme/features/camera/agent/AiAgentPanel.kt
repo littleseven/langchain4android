@@ -447,7 +447,7 @@ private fun ChatInputBar(
     var text by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
-    var inputMode by remember { mutableStateOf(InputMode.TEXT) }
+    var inputMode by remember { mutableStateOf(InputMode.VOICE) }
     var recordingState by remember { mutableStateOf(RecordingState.IDLE) }
 
     // 语音 recognizer（当没有外部 VoiceCommandCoordinator 时使用）

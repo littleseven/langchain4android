@@ -16,6 +16,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -72,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 
 /**
  * AI Chat Screen - 统一聊天界面组件
@@ -108,10 +111,10 @@ fun AiChatScreen(
     autoExecutePlans: Boolean = true,
     onPlanConfirm: () -> Unit = {},
     onPlanCancel: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val context = LocalContext.current
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -121,14 +124,15 @@ fun AiChatScreen(
         }
     }
 
-    if (visible) {
+    if (visible || sheetState.isVisible) {
         ModalBottomSheet(
             onDismissRequest = { onVisibleChange(false) },
             sheetState = sheetState,
             containerColor = Color.Transparent,
             contentColor = Color.Transparent,
             scrimColor = Color.Black.copy(alpha = 0.32f),
-            dragHandle = null
+            dragHandle = null,
+            modifier = modifier
         ) {
             AiChatScreenContent(
                 messages = messages,
@@ -139,7 +143,7 @@ fun AiChatScreen(
                 onDismiss = { onVisibleChange(false) },
                 onPlanConfirm = onPlanConfirm,
                 onPlanCancel = onPlanCancel,
-                modifier = modifier
+                voiceCoordinator = voiceCoordinator
             )
         }
     }
@@ -155,7 +159,8 @@ private fun AiChatScreenContent(
     onDismiss: () -> Unit,
     onPlanConfirm: () -> Unit,
     onPlanCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
     var isExpanded by remember { mutableStateOf(true) }
 
@@ -201,7 +206,8 @@ private fun AiChatScreenContent(
                 ChatInputBar(
                     isProcessing = isProcessing,
                     onSend = onSendMessage,
-                    onCommand = onCommand
+                    onCommand = onCommand,
+                    voiceCoordinator = voiceCoordinator
                 )
             }
         }
@@ -471,7 +477,8 @@ private fun ChatInputBar(
     isProcessing: Boolean,
     onSend: (String) -> Unit,
     onCommand: (AiAgentCommand) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
     var text by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -518,7 +525,8 @@ private fun ChatInputBar(
                     }
                 },
                 speechRecognizer = speechRecognizer,
-                context = context
+                context = context,
+                voiceCoordinator = voiceCoordinator
             )
         }
     }
@@ -610,10 +618,18 @@ private fun VoiceInputMode(
     onSwitchToText: () -> Unit,
     onVoiceResult: (String) -> Unit,
     speechRecognizer: SpeechRecognizer,
-    context: Context
+    context: Context,
+    voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
     var isListening by remember { mutableStateOf(false) }
     var isCancelRecord by remember { mutableStateOf(false) }
+
+    // 检查语音识别是否可用
+    val isRecognitionAvailable = remember(context) {
+        SpeechRecognizer.isRecognitionAvailable(context).also { available ->
+            Logger.i("PicMe:Voice", "SpeechRecognizer.isRecognitionAvailable = $available")
+        }
+    }
 
     LaunchedEffect(isListening, isCancelRecord) {
         // Track state
@@ -637,41 +653,7 @@ private fun VoiceInputMode(
             )
         }
 
-        // Hold to speak button - 使用 PressInteractionSource 实现可靠的按住说话
-        val interactionSource = remember { MutableInteractionSource() }
-        val isPressed by interactionSource.collectIsPressedAsState()
-
-        // 监听按下状态变化
-        LaunchedEffect(isPressed) {
-            if (isPressed) {
-                if (!isListening) {
-                    isListening = true
-                    isCancelRecord = false
-                    startVoiceRecognition(
-                        context = context,
-                        speechRecognizer = speechRecognizer,
-                        onResult = { result ->
-                            isListening = false
-                            isCancelRecord = false
-                            if (result.isNotBlank()) {
-                                onVoiceResult(result)
-                            }
-                        },
-                        onError = {
-                            isListening = false
-                            isCancelRecord = false
-                        }
-                    )
-                }
-            } else {
-                if (isListening) {
-                    isListening = false
-                    speechRecognizer.stopListening()
-                    isCancelRecord = false
-                }
-            }
-        }
-
+        // Hold to speak button - 使用 pointerInput 实现可靠的按住说话
         val buttonBackground = when {
             isListening && !isCancelRecord -> MaterialTheme.colorScheme.primary
             isListening && isCancelRecord -> Color(0xFFE53935)
@@ -684,11 +666,90 @@ private fun VoiceInputMode(
                 .height(44.dp)
                 .clip(RoundedCornerShape(22.dp))
                 .background(buttonBackground)
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = { /* 按住说话，单击无操作 */ }
-                ),
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            Logger.d("PicMe:Voice", "Pointer event: ${event.type}, changes=${event.changes.size}")
+                            event.changes.forEach { change ->
+                                Logger.d("PicMe:Voice", "Change: pressed=${change.pressed}, consumed=${change.isConsumed}, pos=${change.position}")
+                                when {
+                                    // 手指按下（只在从未按下变为按下时触发）
+                                    change.pressed && !change.isConsumed && !isListening -> {
+                                        Logger.d("PicMe:Voice", "Finger DOWN detected -> voiceCoordinator=${voiceCoordinator != null}, isRecognitionAvailable=$isRecognitionAvailable")
+                                        isListening = true
+                                        isCancelRecord = false
+                                        if (voiceCoordinator != null) {
+                                            Logger.d("PicMe:Voice", "Using VoiceCommandCoordinator for push-to-talk")
+                                            voiceCoordinator.startPushToTalk { result ->
+                                                Logger.i("PicMe:Voice", "VoiceCoordinator result: '$result'")
+                                                isListening = false
+                                                isCancelRecord = false
+                                                if (result.isNotBlank()) {
+                                                    onVoiceResult(result)
+                                                }
+                                            }
+                                        } else if (isRecognitionAvailable) {
+                                            Logger.d("PicMe:Voice", "Starting SpeechRecognizer...")
+                                            startVoiceRecognition(
+                                                context = context,
+                                                speechRecognizer = speechRecognizer,
+                                                onResult = { result ->
+                                                    Logger.i("PicMe:Voice", "Voice result: '$result'")
+                                                    isListening = false
+                                                    isCancelRecord = false
+                                                    if (result.isNotBlank()) {
+                                                        onVoiceResult(result)
+                                                    }
+                                                },
+                                                onError = { errorMsg ->
+                                                    Logger.e("PicMe:Voice", "Voice error: $errorMsg")
+                                                    isListening = false
+                                                    isCancelRecord = false
+                                                }
+                                            )
+                                        } else {
+                                            Logger.e("PicMe:Voice", "SpeechRecognizer NOT available on this device")
+                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "语音识别不可用，请检查系统设置或权限",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            isListening = false
+                                        }
+                                    }
+                                    // 手指抬起
+                                    !change.pressed -> {
+                                        Logger.d("PicMe:Voice", "Finger UP detected -> isListening=$isListening")
+                                        if (isListening) {
+                                            isListening = false
+                                            if (voiceCoordinator != null) {
+                                                voiceCoordinator.stopPushToTalk()
+                                            } else {
+                                                speechRecognizer.stopListening()
+                                            }
+                                            isCancelRecord = false
+                                        }
+                                    }
+                                }
+                                // ACTION_MOVE: 检测是否移出按钮区域以取消
+                                if (isListening && change.pressed) {
+                                    val bounds = this@pointerInput.size
+                                    val x = change.position.x
+                                    val y = change.position.y
+                                    val newCancel = x < 0 || x > bounds.width || y < 0 || y > bounds.height
+                                    if (newCancel != isCancelRecord) {
+                                        Logger.d("PicMe:Voice", "Cancel state changed: $isCancelRecord -> $newCancel")
+                                        isCancelRecord = newCancel
+                                    }
+                                }
+                                change.consume()
+                            }
+                        }
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -707,10 +768,10 @@ private fun startVoiceRecognition(
     context: Context,
     speechRecognizer: SpeechRecognizer,
     onResult: (String) -> Unit,
-    onError: () -> Unit
+    onError: (String) -> Unit
 ) {
     if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-        onError()
+        onError("SpeechRecognizer not available")
         return
     }
 
@@ -721,19 +782,48 @@ private fun startVoiceRecognition(
     }
 
     speechRecognizer.setRecognitionListener(object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) {}
-        override fun onBeginningOfSpeech() {}
+        override fun onReadyForSpeech(params: Bundle?) {
+            Logger.d("PicMe:Voice", "onReadyForSpeech")
+        }
+        override fun onBeginningOfSpeech() {
+            Logger.d("PicMe:Voice", "onBeginningOfSpeech")
+        }
         override fun onRmsChanged(rmsdB: Float) {}
         override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() {}
+        override fun onEndOfSpeech() {
+            Logger.d("PicMe:Voice", "onEndOfSpeech")
+        }
         override fun onEvent(eventType: Int, params: Bundle?) {}
-        override fun onError(error: Int) { onError() }
+        override fun onError(error: Int) {
+            val errorMsg = when (error) {
+                SpeechRecognizer.ERROR_AUDIO -> "AUDIO"
+                SpeechRecognizer.ERROR_CLIENT -> "CLIENT"
+                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "PERMISSIONS"
+                SpeechRecognizer.ERROR_NETWORK -> "NETWORK"
+                SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
+                SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "BUSY"
+                SpeechRecognizer.ERROR_SERVER -> "SERVER"
+                SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "TIMEOUT"
+                else -> "UNKNOWN($error)"
+            }
+            Logger.e("PicMe:Voice", "SpeechRecognizer error: $errorMsg")
+            onError(errorMsg)
+        }
         override fun onResults(results: Bundle?) {
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            onResult(matches?.firstOrNull() ?: "")
+            val result = matches?.firstOrNull() ?: ""
+            Logger.i("PicMe:Voice", "onResults: '$result'")
+            onResult(result)
         }
-        override fun onPartialResults(partialResults: Bundle?) {}
+        override fun onPartialResults(partialResults: Bundle?) {
+            val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            matches?.firstOrNull()?.let {
+                Logger.d("PicMe:Voice", "onPartialResults: '$it'")
+            }
+        }
     })
 
+    Logger.d("PicMe:Voice", "Calling speechRecognizer.startListening()")
     speechRecognizer.startListening(intent)
 }

@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardVoice
-// import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -209,6 +209,8 @@ internal fun CameraPreviewContent(
         // AI Agent 和语音控制浮动按钮 - 右下角，方便拇指点击
         CameraFloatingActionButtons(
             onToggleAiAgentPanel = actions.onToggleAiAgentPanel,
+            onToggleVoiceControl = actions.onToggleVoiceControl,
+            isVoiceControlEnabled = uiState.isVoiceControlEnabled,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
     }
@@ -511,6 +513,8 @@ private fun BoxScope.PrimaryControlPanels(
 @Composable
 private fun CameraFloatingActionButtons(
     onToggleAiAgentPanel: () -> Unit,
+    onToggleVoiceControl: () -> Unit,
+    isVoiceControlEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -520,6 +524,25 @@ private fun CameraFloatingActionButtons(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.End
     ) {
+        // 语音控制按钮 - 使用 RecordVoiceOver 区别于 Chat 入口
+        FloatingActionButton(
+            onClick = onToggleVoiceControl,
+            modifier = Modifier.size(52.dp),
+            shape = CircleShape,
+            containerColor = if (isVoiceControlEnabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                Color.Black.copy(alpha = 0.6f)
+            }
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.RecordVoiceOver,
+                contentDescription = "语音控制",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
         // AI Chat 入口按钮 - 使用 KeyboardVoice（与 Gallery/Settings 一致）
         FloatingActionButton(
             onClick = onToggleAiAgentPanel,
