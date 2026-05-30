@@ -585,9 +585,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
         .map { preferences ->
             val modeName = preferences[PreferencesKeys.VOICE_COMMAND_MODE]
-                ?: VoiceCommandMode.PUSH_TO_TALK.name
+                ?: VoiceCommandMode.DISABLED.name
             runCatching { VoiceCommandMode.valueOf(modeName) }
-                .getOrDefault(VoiceCommandMode.PUSH_TO_TALK)
+                .getOrDefault(VoiceCommandMode.DISABLED)
         }
 
     override suspend fun updateVoiceCommandMode(mode: VoiceCommandMode) {

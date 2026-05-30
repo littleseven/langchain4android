@@ -95,6 +95,7 @@ import com.picme.domain.agent.model.SceneManager
 import com.picme.features.camera.voice.MnnAsrClient
 import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
+import com.picme.features.camera.agent.AgentMessage
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -251,7 +252,8 @@ internal data class CameraPreviewUiState(
     val exposureCompensation: Int,
     val exposureRange: IntRange,
     val whiteBalanceMode: Int,
-    val beautyStrategy: BeautyStrategy
+    val beautyStrategy: BeautyStrategy,
+    val isVoiceControlEnabled: Boolean
 )
 
 internal data class CameraPreviewActions(
@@ -284,7 +286,9 @@ internal data class CameraPreviewActions(
     val onStyleFilterSelected: (StyleFilter) -> Unit,
     val onBeautySettingsChanged: (BeautySettings) -> Unit,
     val onRatioSelected: (Int) -> Unit,
-    val onDismissPanels: () -> Unit
+    val onDismissPanels: () -> Unit,
+    val onToggleVoiceControl: () -> Unit,
+    val onToggleAiAgentPanel: () -> Unit
 )
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
@@ -322,7 +326,8 @@ private fun buildCameraPreviewUiState(
     exposureCompensation: Int,
     exposureRange: IntRange,
     whiteBalanceMode: Int,
-    beautyStrategy: BeautyStrategy
+    beautyStrategy: BeautyStrategy,
+    isVoiceControlEnabled: Boolean
 ): CameraPreviewUiState {
     return CameraPreviewUiState(
         selectedFilter = selectedFilter,
@@ -359,7 +364,8 @@ private fun buildCameraPreviewUiState(
         exposureCompensation = exposureCompensation,
         exposureRange = exposureRange,
         whiteBalanceMode = whiteBalanceMode,
-        beautyStrategy = beautyStrategy
+        beautyStrategy = beautyStrategy,
+        isVoiceControlEnabled = isVoiceControlEnabled
     )
 }
 
@@ -380,7 +386,9 @@ private fun buildCameraPreviewActions(
     onBeautySettingsChanged: (BeautySettings) -> Unit,
     onAspectRatioChanged: (Int) -> Unit,
     onExposureCompensationChanged: (Int) -> Unit,
-    onWhiteBalanceModeChanged: (Int) -> Unit
+    onWhiteBalanceModeChanged: (Int) -> Unit,
+    onToggleVoiceControl: () -> Unit,
+    onToggleAiAgentPanel: () -> Unit
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onNavigateToSettings = onNavigateToSettings,
@@ -462,7 +470,9 @@ private fun buildCameraPreviewActions(
             onAspectRatioChanged(ratio)
             panelState.showRatioSelector = false
         },
-        onDismissPanels = panelState::closeAllPanels
+        onDismissPanels = panelState::closeAllPanels,
+        onToggleVoiceControl = onToggleVoiceControl,
+        onToggleAiAgentPanel = onToggleAiAgentPanel
     )
 }
 
@@ -793,8 +803,24 @@ fun CameraContent(
 
     // 语音命令协调器
     val voiceCommandMode by userPreferencesRepository.voiceCommandModeFlow.collectAsState(
-        initial = VoiceCommandMode.PUSH_TO_TALK
+        initial = VoiceCommandMode.DISABLED
     )
+
+    // 声控开关切换：DISABLED ↔ WAKE_WORD
+    val onToggleVoiceControl = remember(coroutineScope) {
+        {
+            val nextMode = if (voiceCommandMode == VoiceCommandMode.DISABLED) {
+                VoiceCommandMode.WAKE_WORD
+            } else {
+                VoiceCommandMode.DISABLED
+            }
+            coroutineScope.launch {
+                userPreferencesRepository.updateVoiceCommandMode(nextMode)
+                Logger.i("PicMe:Camera", "Voice control toggled to: $nextMode")
+            }
+            Unit
+        }
+    }
     // ASR 引擎选择：优先使用 Sherpa-MNN ASR（如果模型已下载），否则回退到系统 ASR
     // 参考 VoiceModelsChecker: 检查模型文件是否真实存在，避免初始化失败
     val localAsrModel by userPreferencesRepository.localAsrModelFlow.collectAsState(initial = "")
@@ -853,7 +879,34 @@ fun CameraContent(
             onCommand = { command ->
                 onCommandRef.value(command)
             },
-            scope = coroutineScope
+            scope = coroutineScope,
+            onTranscript = { transcript ->
+                aiAgentPanelState?.addMessage(AgentMessage.UserText(content = transcript))
+            },
+            onAgentResponse = { result ->
+                result.onSuccess { command ->
+                    val responseText = when (command) {
+                        is AiAgentCommand.TextReply -> command.message
+                        is AiAgentCommand.AdjustBeauty -> "已调整美颜参数"
+                        is AiAgentCommand.SwitchFilter -> "已切换滤镜"
+                        is AiAgentCommand.SwitchStyle -> "已切换风格"
+                        is AiAgentCommand.SwitchScene -> "已切换场景"
+                        is AiAgentCommand.SwitchRatio -> "已切换画幅比例"
+                        is AiAgentCommand.AdjustExposure -> "已调整曝光"
+                        is AiAgentCommand.AdjustZoom -> "已调整变焦"
+                        is AiAgentCommand.FlipCamera -> "已翻转摄像头"
+                        is AiAgentCommand.CapturePhoto -> "已拍照"
+                        is AiAgentCommand.ToggleRecording -> "已切换录像状态"
+                        is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
+                        is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
+                    }
+                    aiAgentPanelState?.addMessage(AgentMessage.AgentText(content = responseText))
+                }.onFailure { error ->
+                    aiAgentPanelState?.addMessage(
+                        AgentMessage.AgentText(content = "处理出错了：${error.message ?: "未知错误"}")
+                    )
+                }
+            }
         )
     }
 
@@ -927,6 +980,114 @@ fun CameraContent(
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var minZoomRatio by remember { mutableFloatStateOf(1f) }
     var maxZoomRatio by remember { mutableFloatStateOf(1f) }
+
+    // Agent 命令处理器：提取到顶层确保语音命令无需打开面板即可执行
+    val agentCommandHandler: (AiAgentCommand) -> Unit = { cmd ->
+        Logger.i("PicMe:Camera", "agentCommandHandler executing: ${cmd.javaClass.simpleName}")
+        when (cmd) {
+            is AiAgentCommand.AdjustBeauty -> {
+                beautySettings = resolveNextBeautySettings(
+                    currentSettings = beautySettings,
+                    updatedSettings = cmd.settings
+                )
+            }
+            is AiAgentCommand.SwitchFilter -> {
+                selectedFilter = cmd.filterType
+                beautySettings = beautySettings.copy(colorFilter = cmd.filterType)
+            }
+            is AiAgentCommand.SwitchStyle -> {
+                beautySettings = beautySettings.copy(styleFilter = cmd.styleFilter)
+            }
+            is AiAgentCommand.SwitchScene -> {
+                val scene = when (cmd.sceneName.lowercase()) {
+                    "night" -> ScenePreset.NIGHT
+                    "moon" -> ScenePreset.MOON
+                    else -> ScenePreset.NONE
+                }
+                currentScene = scene
+            }
+            is AiAgentCommand.SwitchRatio -> {
+                val ratio = when (cmd.ratio) {
+                    "4:3" -> AspectRatio.RATIO_4_3
+                    "16:9" -> AspectRatio.RATIO_16_9
+                    else -> AspectRatio.RATIO_FULL
+                }
+                aspectRatio = ratio
+            }
+            is AiAgentCommand.AdjustExposure -> {
+                exposureCompensation = cmd.exposure.coerceIn(-2, 2)
+                cameraControl?.setExposureCompensationIndex(exposureCompensation)
+            }
+            is AiAgentCommand.AdjustZoom -> {
+                val clampedZoom = cmd.zoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
+                zoomRatio = clampedZoom
+                cameraControl?.setZoomRatio(clampedZoom)
+            }
+            is AiAgentCommand.FlipCamera -> {
+                val nextLens = nextLensFacing(lensFacing)
+                lensFacing = nextLens
+            }
+            is AiAgentCommand.CapturePhoto -> {
+                Logger.i("PicMe:Camera", "Executing CapturePhoto command")
+                handleCaptureClick(
+                    context = context,
+                    captureMode = captureMode,
+                    isRecording = isRecording,
+                    recording = recording,
+                    videoCapture = videoCapture,
+                    viewModel = viewModel,
+                    imageCapture = imageCapture,
+                    imageProcessor = imageProcessor,
+                    selectedFilter = selectedFilter,
+                    beautySettings = beautySettings,
+                    lensFacing = lensFacing,
+                    cachedFaces = emptyList(),
+                    beautyStrategy = beautyStrategy,
+                    glPreviewProvider = glPreviewProvider,
+                    beautyVideoRecorder = beautyVideoRecorder,
+                    onRecordingChanged = { updated -> recording = updated },
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                )
+            }
+            is AiAgentCommand.ToggleRecording -> {
+                handleCaptureClick(
+                    context = context,
+                    captureMode = captureMode,
+                    isRecording = isRecording,
+                    recording = recording,
+                    videoCapture = videoCapture,
+                    viewModel = viewModel,
+                    imageCapture = imageCapture,
+                    imageProcessor = imageProcessor,
+                    selectedFilter = selectedFilter,
+                    beautySettings = beautySettings,
+                    lensFacing = lensFacing,
+                    cachedFaces = emptyList(),
+                    beautyStrategy = beautyStrategy,
+                    glPreviewProvider = glPreviewProvider,
+                    beautyVideoRecorder = beautyVideoRecorder,
+                    onRecordingChanged = { updated -> recording = updated },
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                )
+            }
+            is AiAgentCommand.SwitchMode -> {
+                captureMode = cmd.mode
+            }
+            is AiAgentCommand.TextReply -> {
+                // 文本回复已在面板中显示，无需额外操作
+            }
+            is AiAgentCommand.BatchExecute -> {
+                // 批量命令在顶层处理，不在 handler 内部递归
+                Logger.w("PicMe:Camera", "BatchExecute should be handled at top level, not in agentCommandHandler")
+            }
+        }
+    }
+
+    // 绑定命令处理器到语音协调器的回调引用
+    DisposableEffect(agentCommandHandler) {
+        onCommandRef.value = agentCommandHandler
+        onDispose { }
+    }
 
     var facePoint by remember { mutableStateOf(Offset.Zero) }
     var isFaceLocked by remember { mutableStateOf(false) }
@@ -1436,7 +1597,8 @@ CameraPreviewContent(
         exposureCompensation = exposureCompensation,
         exposureRange = -2..2,
         whiteBalanceMode = whiteBalanceMode,
-        beautyStrategy = beautyStrategy
+        beautyStrategy = beautyStrategy,
+        isVoiceControlEnabled = voiceCommandMode != VoiceCommandMode.DISABLED
     ),
     aiAgentUseCase = aiAgentUseCase,
     aiAgentPanelState = aiAgentPanelState,
@@ -1444,114 +1606,14 @@ CameraPreviewContent(
     isWakeWordActive = voiceCommandMode == VoiceCommandMode.WAKE_WORD,
     onAiAgentCommand = { command ->
         Logger.i("PicMe:Camera", "onAiAgentCommand received: ${command.javaClass.simpleName}")
-        val handler: (AiAgentCommand) -> Unit = { cmd ->
-            Logger.i("PicMe:Camera", "handler executing: ${cmd.javaClass.simpleName}")
-            when (cmd) {
-                is AiAgentCommand.AdjustBeauty -> {
-                    beautySettings = resolveNextBeautySettings(
-                        currentSettings = beautySettings,
-                        updatedSettings = cmd.settings
-                    )
-                }
-                is AiAgentCommand.SwitchFilter -> {
-                    selectedFilter = cmd.filterType
-                    beautySettings = beautySettings.copy(colorFilter = cmd.filterType)
-                }
-                is AiAgentCommand.SwitchStyle -> {
-                    beautySettings = beautySettings.copy(styleFilter = cmd.styleFilter)
-                }
-                is AiAgentCommand.SwitchScene -> {
-                    val scene = when (cmd.sceneName.lowercase()) {
-                        "night" -> ScenePreset.NIGHT
-                        "moon" -> ScenePreset.MOON
-                        else -> ScenePreset.NONE
-                    }
-                    currentScene = scene
-                }
-                is AiAgentCommand.SwitchRatio -> {
-                    val ratio = when (cmd.ratio) {
-                        "4:3" -> AspectRatio.RATIO_4_3
-                        "16:9" -> AspectRatio.RATIO_16_9
-                        else -> AspectRatio.RATIO_FULL
-                    }
-                    aspectRatio = ratio
-                }
-                is AiAgentCommand.AdjustExposure -> {
-                    exposureCompensation = cmd.exposure.coerceIn(-2, 2)
-                    cameraControl?.setExposureCompensationIndex(exposureCompensation)
-                }
-                is AiAgentCommand.AdjustZoom -> {
-                    val clampedZoom = cmd.zoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
-                    zoomRatio = clampedZoom
-                    cameraControl?.setZoomRatio(clampedZoom)
-                }
-                is AiAgentCommand.FlipCamera -> {
-                    val nextLens = nextLensFacing(lensFacing)
-                    lensFacing = nextLens
-                }
-                is AiAgentCommand.CapturePhoto -> {
-                    Logger.i("PicMe:Camera", "Executing CapturePhoto command")
-                    handleCaptureClick(
-                        context = context,
-                        captureMode = captureMode,
-                        isRecording = isRecording,
-                        recording = recording,
-                        videoCapture = videoCapture,
-                        viewModel = viewModel,
-                        imageCapture = imageCapture,
-                        imageProcessor = imageProcessor,
-                        selectedFilter = selectedFilter,
-                        beautySettings = beautySettings,
-                        lensFacing = lensFacing,
-                        cachedFaces = emptyList(),
-                        beautyStrategy = beautyStrategy,
-                        glPreviewProvider = glPreviewProvider,
-                        beautyVideoRecorder = beautyVideoRecorder,
-                        onRecordingChanged = { updated -> recording = updated },
-                        onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
-                    )
-                }
-                is AiAgentCommand.ToggleRecording -> {
-                    handleCaptureClick(
-                        context = context,
-                        captureMode = captureMode,
-                        isRecording = isRecording,
-                        recording = recording,
-                        videoCapture = videoCapture,
-                        viewModel = viewModel,
-                        imageCapture = imageCapture,
-                        imageProcessor = imageProcessor,
-                        selectedFilter = selectedFilter,
-                        beautySettings = beautySettings,
-                        lensFacing = lensFacing,
-                        cachedFaces = emptyList(),
-                        beautyStrategy = beautyStrategy,
-                        glPreviewProvider = glPreviewProvider,
-                        beautyVideoRecorder = beautyVideoRecorder,
-                        onRecordingChanged = { updated -> recording = updated },
-                        onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
-                    )
-                }
-                is AiAgentCommand.SwitchMode -> {
-                    captureMode = cmd.mode
-                }
-                is AiAgentCommand.TextReply -> {
-                    // 文本回复已在面板中显示，无需额外操作
-                }
-                is AiAgentCommand.BatchExecute -> {
-                    // 批量命令在 onAiAgentCommand 层面处理，不在 handler 内部递归
-                    Logger.w("PicMe:Camera", "BatchExecute should be handled at top level, not in handler")
-                }
-            }
-        }
-        onCommandRef.value = handler
+        onCommandRef.value = agentCommandHandler
         // BatchExecute 在协程中串行执行子命令
         if (command is AiAgentCommand.BatchExecute) {
             Logger.i("PicMe:Camera", "BatchExecute: ${command.commands.size} commands, launching sequentially")
             logOverlayScope.launch {
                 command.commands.forEachIndexed { index, subCmd ->
                     Logger.i("PicMe:Camera", "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
-                    handler(subCmd)
+                    agentCommandHandler(subCmd)
                     if (index < command.commands.size - 1) {
                         kotlinx.coroutines.delay(200)
                     }
@@ -1559,7 +1621,7 @@ CameraPreviewContent(
                 Logger.i("PicMe:Camera", "BatchExecute: all commands completed")
             }
         } else {
-            handler(command)
+            agentCommandHandler(command)
         }
     },
     onUpdateVoiceCoordinatorState = {
@@ -1624,7 +1686,9 @@ CameraPreviewContent(
         },
         onAspectRatioChanged = { ratio -> aspectRatio = ratio },
         onExposureCompensationChanged = { exposure -> exposureCompensation = exposure },
-        onWhiteBalanceModeChanged = { wb -> whiteBalanceMode = wb }
+        onWhiteBalanceModeChanged = { wb -> whiteBalanceMode = wb },
+        onToggleVoiceControl = onToggleVoiceControl,
+        onToggleAiAgentPanel = { aiAgentPanelState?.toggle() }
     )
 )
 
