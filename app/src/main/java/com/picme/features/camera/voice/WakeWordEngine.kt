@@ -98,10 +98,14 @@ class WakeWordEngine(
 
     /**
      * 停止唤醒词监听
+     *
+     * 直接调用 audioRecorder.stop() 确保 read/readSegment 立即退出，
+     * 避免与 start() 的竞态条件导致 AudioRecord 被重复释放。
      */
     fun stop() {
         if (!isRunning) return
         isRunning = false
+        audioRecorder.stop()
         Logger.d(tag, "Wake word engine stopping...")
     }
 }
