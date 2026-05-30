@@ -1,0 +1,300 @@
+package com.picme.domain.agent
+
+import com.picme.core.common.Logger
+import com.picme.domain.agent.model.AgentAction
+import com.picme.domain.agent.model.AgentCommand
+import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.ExecutionState
+import com.picme.domain.agent.model.PageContext
+import com.picme.domain.agent.remote.ExecutionPlan
+import com.picme.domain.agent.remote.ExecutionResult
+import com.picme.domain.agent.remote.PlanStep
+import com.picme.domain.agent.remote.StepResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/**
+ * 命令分发器接口
+ *
+ * 抽象 CapabilityRegistry 的分发能力，便于测试时注入 Fake。
+ */
+interface CommandDispatcher {
+
+    /**
+     * 分发命令并返回执行结果
+     */
+    suspend fun dispatch(
+        command: AgentCommand,
+        context: AgentContext,
+        pageContext: PageContext? = null
+    ): Result<AgentAction>
+}
+
+/**
+ * 执行引擎
+ *
+ * 负责顺序执行 ExecutionPlan 中的步骤，支持：
+ * - 条件评估（跳过不满足条件的步骤）
+ * - 步骤间延迟
+ * - 暂停 / 恢复 / 取消操作
+ * - 失败回退（fallbackAction）
+ * - 状态管理（StateFlow）
+ */
+class ExecutionEngine(
+    private val dispatcher: CommandDispatcher,
+    private val reporter: ExecutionReporter
+) {
+
+    /**
+     * 通过 CapabilityRegistry 构造执行引擎
+     */
+    constructor(
+        capabilityRegistry: CapabilityRegistry,
+        reporter: ExecutionReporter
+    ) : this(
+        dispatcher = object : CommandDispatcher {
+            override suspend fun dispatch(
+                command: AgentCommand,
+                context: AgentContext,
+                pageContext: PageContext?
+            ): Result<AgentAction> {
+                return capabilityRegistry.dispatch(command, context, pageContext)
+            }
+        },
+        reporter = reporter
+    )
+
+    private val tag = "PicMe:ExecutionEngine"
+
+    private val _stateFlow = MutableStateFlow<ExecutionState>(ExecutionState.Idle)
+    val stateFlow: StateFlow<ExecutionState> = _stateFlow.asStateFlow()
+
+    @Volatile
+    private var isPaused = false
+
+    @Volatile
+    private var isCancelled = false
+
+    /**
+     * 执行计划
+     *
+     * @param plan 执行计划
+     * @return 执行结果
+     */
+    suspend fun execute(plan: ExecutionPlan): ExecutionResult {
+        Logger.d(tag, "Starting execution of plan: ${plan.planId}, steps: ${plan.steps.size}")
+
+        isCancelled = false
+        isPaused = false
+        _stateFlow.value = ExecutionState.Running(
+            totalSteps = plan.steps.size,
+            completedSteps = 0
+        )
+
+        val stepResults = mutableListOf<StepResult>()
+
+        try {
+            for (planStep in plan.steps) {
+                if (isCancelled) {
+                    Logger.d(tag, "Execution cancelled at step ${planStep.step}")
+                    _stateFlow.value = ExecutionState.Cancelled
+                    val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
+                    reporter.report(result)
+                    return result
+                }
+
+                // 等待暂停恢复
+                while (isPaused && !isCancelled) {
+                    delay(100)
+                }
+
+                if (isCancelled) {
+                    Logger.d(tag, "Execution cancelled after pause at step ${planStep.step}")
+                    _stateFlow.value = ExecutionState.Cancelled
+                    val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
+                    reporter.report(result)
+                    return result
+                }
+
+                val stepResult = executeStep(planStep)
+                stepResults.add(stepResult)
+                reporter.emitStepResult(stepResult)
+
+                // 更新状态
+                _stateFlow.value = ExecutionState.Running(
+                    totalSteps = plan.steps.size,
+                    completedSteps = stepResults.size
+                )
+
+                // 步骤间延迟
+                if (planStep.delayMs > 0) {
+                    Logger.d(tag, "Delaying ${planStep.delayMs}ms after step ${planStep.step}")
+                    delay(planStep.delayMs)
+                }
+            }
+        } catch (exception: CancellationException) {
+            Logger.d(tag, "Execution cancelled via CancellationException")
+            _stateFlow.value = ExecutionState.Cancelled
+            val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
+            reporter.report(result)
+            return result
+        } catch (throwable: Throwable) {
+            Logger.e(tag, "Execution failed with unexpected error", throwable)
+            _stateFlow.value = ExecutionState.Completed(Result.failure(throwable))
+            val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
+            reporter.report(result)
+            return result
+        }
+
+        val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
+        _stateFlow.value = ExecutionState.Completed(
+            Result.success(Unit).takeIf { result.isSuccess }
+                ?: Result.failure(RuntimeException("Plan execution completed with failures"))
+        )
+        reporter.report(result)
+
+        Logger.d(tag, "Plan execution completed: ${plan.planId}, success=${result.isSuccess}")
+        return result
+    }
+
+    /**
+     * 执行单个步骤
+     */
+    private suspend fun executeStep(planStep: PlanStep): StepResult {
+        // 条件评估
+        if (!evaluateCondition(planStep.condition)) {
+            Logger.d(tag, "Step ${planStep.step} skipped: condition '${planStep.condition}' is false")
+            return StepResult.Skipped(
+                step = planStep,
+                reason = "Condition '${planStep.condition}' evaluated to false"
+            )
+        }
+
+        Logger.d(tag, "Executing step ${planStep.step}: ${planStep.description}")
+
+        return try {
+            val dispatchResult = dispatcher.dispatch(
+                command = planStep.action,
+                context = AgentContext(
+                    scene = com.picme.domain.agent.model.AgentScene.CAMERA
+                )
+            )
+
+            if (dispatchResult.isSuccess) {
+                Logger.d(tag, "Step ${planStep.step} executed successfully")
+                StepResult.Executed(step = planStep, result = Result.success(Unit))
+            } else {
+                val error = dispatchResult.exceptionOrNull()
+                    ?: RuntimeException("Step ${planStep.step} failed without exception")
+                Logger.e(tag, "Step ${planStep.step} failed: ${error.message}", error)
+
+                // 尝试 fallback
+                tryFallback(planStep, error)
+            }
+        } catch (throwable: Throwable) {
+            if (throwable is CancellationException) {
+                throw throwable
+            }
+            Logger.e(tag, "Step ${planStep.step} threw exception: ${throwable.message}", throwable)
+            tryFallback(planStep, throwable)
+        }
+    }
+
+    /**
+     * 尝试执行 fallback 动作
+     */
+    private suspend fun tryFallback(planStep: PlanStep, originalError: Throwable): StepResult {
+        val fallbackAction = planStep.fallbackAction
+        return if (fallbackAction != null) {
+            Logger.d(tag, "Trying fallback for step ${planStep.step}")
+            try {
+                val fallbackResult = dispatcher.dispatch(
+                    command = fallbackAction,
+                    context = AgentContext(
+                        scene = com.picme.domain.agent.model.AgentScene.CAMERA
+                    )
+                )
+                if (fallbackResult.isSuccess) {
+                    Logger.d(tag, "Fallback for step ${planStep.step} succeeded")
+                    StepResult.Executed(step = planStep, result = Result.success(Unit))
+                } else {
+                    val fallbackError = fallbackResult.exceptionOrNull()
+                        ?: RuntimeException("Fallback failed without exception")
+                    Logger.e(tag, "Fallback for step ${planStep.step} failed", fallbackError)
+                    StepResult.Failed(step = planStep, error = originalError)
+                }
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) {
+                    throw throwable
+                }
+                Logger.e(tag, "Fallback for step ${planStep.step} threw exception", throwable)
+                StepResult.Failed(step = planStep, error = originalError)
+            }
+        } else {
+            StepResult.Failed(step = planStep, error = originalError)
+        }
+    }
+
+    /**
+     * 评估条件表达式
+     *
+     * - "false" -> false
+     * - "true" -> true
+     * - null -> true（无条件执行）
+     *
+     * @param condition 条件表达式
+     * @return 是否满足条件
+     */
+    private fun evaluateCondition(condition: String?): Boolean {
+        return when (condition) {
+            null -> true
+            "false" -> false
+            "true" -> true
+            else -> true
+        }
+    }
+
+    /**
+     * 暂停执行
+     */
+    fun pause() {
+        if (_stateFlow.value is ExecutionState.Running) {
+            Logger.d(tag, "Execution paused")
+            isPaused = true
+            _stateFlow.value = ExecutionState.Paused
+        }
+    }
+
+    /**
+     * 恢复执行
+     */
+    fun resume() {
+        if (_stateFlow.value is ExecutionState.Paused) {
+            Logger.d(tag, "Execution resumed")
+            isPaused = false
+            // 状态会在 execute 循环中自动更新回 Running
+        }
+    }
+
+    /**
+     * 取消执行
+     */
+    fun cancel() {
+        Logger.d(tag, "Execution cancel requested")
+        isCancelled = true
+        isPaused = false
+    }
+
+    /**
+     * 重置引擎状态
+     */
+    fun reset() {
+        Logger.d(tag, "Execution engine reset")
+        isCancelled = false
+        isPaused = false
+        _stateFlow.value = ExecutionState.Idle
+    }
+}

@@ -251,7 +251,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `capabilityRegistry dispatch CapturePhoto without registered capability returns Success`() = runBlocking {
-        val registry = CapabilityRegistry()
+        val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.CapturePhoto
         val result = registry.dispatch(command, defaultContext)
         assertTrue(result.isSuccess)
@@ -262,7 +262,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `capabilityRegistry dispatch TextReply returns TextReply action`() = runBlocking {
-        val registry = CapabilityRegistry()
+        val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.TextReply("你好")
         val result = registry.dispatch(command, defaultContext)
         assertTrue(result.isSuccess)
@@ -273,7 +273,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `capabilityRegistry dispatch FlipCamera without registered capability returns Success`() = runBlocking {
-        val registry = CapabilityRegistry()
+        val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.FlipCamera
         val result = registry.dispatch(command, defaultContext)
         assertTrue(result.isSuccess)
