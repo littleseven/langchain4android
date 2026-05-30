@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -49,10 +50,11 @@ import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.outlined.Chat
+import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -106,6 +108,9 @@ import com.picme.features.camera.test.CameraTestCommandConverters
 import com.picme.features.camera.test.CameraTestCommandDispatcher
 import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.gallery.MediaViewModel
+import com.picme.features.common.chat.AgentMessage
+import com.picme.features.common.chat.AiChatScreen
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.StateFlow
@@ -131,7 +136,8 @@ fun MediaPager(
     onPrepareEdit: (Bitmap) -> Unit,
     onProcessPhoto: (Bitmap, BeautySettings) -> Unit,
     onSavePhoto: (Bitmap) -> Unit,
-    onClearEditState: () -> Unit
+    onClearEditState: () -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(false) }
@@ -460,8 +466,6 @@ fun MediaPager(
             showLandmarkAction = currentAsset?.type == MediaType.PHOTO && !isEditing,
             showLandmarkOverlay = showLandmarkOverlay,
             isEditing = isEditing,
-            showAiChat = true,
-            onToggleAiChat = { showAiChatPanel = !showAiChatPanel },
             onToggleInfo = {
                 Log.d("PicMe:UX", "Toggle info visibility via button")
                 showInfo = !showInfo
@@ -552,15 +556,48 @@ fun MediaPager(
             )
         }
 
-        // AI Chat Panel for Natural Language Image Editing
-        if (showAiChatPanel && currentAsset?.type == MediaType.PHOTO) {
-            com.picme.features.gallery.components.AiChatPanel(
-                currentAsset = currentAsset,
-                onDismiss = { showAiChatPanel = false },
-                onApplyEdit = { bitmap ->
-                    onSavePhoto(bitmap)
-                    showAiChatPanel = false
+        // AI Chat Panel - 右下角浮动按钮入口
+        if (!isEditing && currentAsset?.type == MediaType.PHOTO) {
+            if (!showAiChatPanel) {
+                FloatingActionButton(
+                    onClick = { showAiChatPanel = true },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp)
+                        .navigationBarsPadding(),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.KeyboardVoice,
+                        contentDescription = "AI Agent",
+                        tint = Color.White
+                    )
                 }
+            }
+
+            val pagerMessages = remember { mutableStateOf<List<AgentMessage>>(emptyList()) }
+            var pagerIsProcessing by remember { mutableStateOf(false) }
+
+            AiChatScreen(
+                visible = showAiChatPanel,
+                messages = pagerMessages.value,
+                isProcessing = pagerIsProcessing,
+                onVisibleChange = { showAiChatPanel = it },
+                voiceCoordinator = voiceCoordinator,
+                onSendMessage = { input ->
+                    pagerMessages.value = pagerMessages.value + AgentMessage.UserText(content = input)
+                    pagerIsProcessing = true
+                    // TODO: 集成图片编辑相关的 Agent 处理
+                    scope.launch {
+                        kotlinx.coroutines.delay(500)
+                        pagerIsProcessing = false
+                        pagerMessages.value = pagerMessages.value + AgentMessage.AgentText(
+                            content = "我收到了您的指令：$input。图片编辑功能正在开发中..."
+                        )
+                    }
+                },
+                onCommand = { /* TODO: 处理图片编辑命令 */ }
             )
         }
     }
@@ -843,8 +880,6 @@ private fun mediaPagerTopControls(
     showLandmarkAction: Boolean,
     showLandmarkOverlay: Boolean,
     isEditing: Boolean,
-    showAiChat: Boolean,
-    onToggleAiChat: () -> Unit,
     onToggleInfo: () -> Unit,
     onToggleLandmarks: () -> Unit,
     onStartEdit: () -> Unit,
@@ -892,21 +927,6 @@ private fun mediaPagerTopControls(
                         Icons.Rounded.Face,
                         contentDescription = stringResource(R.string.landmark_overlay),
                         tint = if (showLandmarkOverlay) Color.Black else Color.White
-                    )
-                }
-            }
-
-            if (showAiChat && !isEditing) {
-                IconButton(
-                    onClick = onToggleAiChat,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.Black.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Icon(
-                        Icons.Outlined.Chat,
-                        contentDescription = stringResource(R.string.ai_chat_edit),
-                        tint = Color.White
                     )
                 }
             }

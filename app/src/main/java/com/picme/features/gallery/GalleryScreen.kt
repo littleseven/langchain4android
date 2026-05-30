@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +58,16 @@ import com.picme.features.gallery.components.galleryReadPermissions
 import com.picme.features.gallery.components.hasGalleryPermission
 import androidx.core.net.toUri
 import com.picme.features.gallery.components.shareMediaAssets
+import com.picme.features.gallery.agent.GalleryAgentPanel
+import com.picme.features.camera.voice.VoiceCommandCoordinator
+import com.picme.features.camera.voice.SystemAsrEngine
+import com.picme.features.camera.voice.SherpaMnnAsrEngine
+import com.picme.features.camera.voice.MnnAsrClient
+import com.picme.domain.model.AiAgentMode
+import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.data.preferences.UserPreferencesRepository
+import kotlinx.coroutines.CoroutineScope
+import androidx.compose.runtime.rememberCoroutineScope
 
 @Composable
 fun GalleryScreen(
@@ -154,6 +165,78 @@ fun GalleryScreen(
     val dragSelectionVisitedIds = remember { hashSetOf<Long>() }
 
     val view = LocalView.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // ===== ASR 引擎（参照 SettingsScreen 实现）=====
+    val settingsRepository = remember { UserPreferencesRepository(context) }
+    val localAsrModel by settingsRepository.localAsrModelFlow.collectAsState(initial = "")
+    val asrEngine = remember(context, localAsrModel) {
+        if (localAsrModel.isNotBlank()) {
+            val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
+            val modelDirPath = modelDir.absolutePath
+            val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                modelDir.exists() && modelDir.isDirectory &&
+                    modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
+                    java.io.File(modelDir, "tokens.txt").exists()
+            } else {
+                modelDir.exists() && modelDir.isDirectory
+            }
+            if (!isModelReady) {
+                Logger.w("PicMe:Gallery", "ASR model not ready: $localAsrModel")
+                SystemAsrEngine(context)
+            } else {
+                if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                    val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
+                    if (sherpaAsr.isAvailable()) {
+                        Logger.i("PicMe:Gallery", "Using Sherpa-MNN ASR engine")
+                        sherpaAsr
+                    } else {
+                        Logger.w("PicMe:Gallery", "Sherpa-MNN ASR init failed, fallback to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                } else {
+                    val mnnAsr = MnnAsrClient(context, localAsrModel)
+                    if (mnnAsr.isAvailable()) {
+                        Logger.i("PicMe:Gallery", "Using MNN ASR engine")
+                        mnnAsr
+                    } else {
+                        Logger.w("PicMe:Gallery", "MNN ASR not available, fallback to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                }
+            }
+        } else {
+            Logger.d("PicMe:Gallery", "No local ASR model configured, using system ASR")
+            SystemAsrEngine(context)
+        }
+    }
+
+    // ===== VoiceCommandCoordinator =====
+    val aiAgentUseCase = remember {
+        AiAgentUseCase(
+            context = context,
+            agentMode = AiAgentMode.LOCAL,
+            localModelId = "qwen3_0_6b"
+        )
+    }
+    val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
+        VoiceCommandCoordinator(
+            asrEngine = asrEngine,
+            aiAgentUseCase = aiAgentUseCase,
+            onCommand = { command ->
+                Logger.i("PicMe:Gallery", "Voice command: ${command.javaClass.simpleName}")
+            },
+            scope = coroutineScope,
+            onTranscript = { transcript ->
+                Logger.d("PicMe:Gallery", "Voice transcript: $transcript")
+            }
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceCoordinator.release()
+        }
+    }
 
     // ===== Agent 集成 =====
     val agentIntegration = rememberGalleryAgentIntegration(
@@ -418,6 +501,16 @@ fun GalleryScreen(
             val activeMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
             val rect = activeMedia?.let { thumbnailPositions[it.id] }
 
+            // Agent Chat 入口 - 右下角浮动按钮
+            if (selectedMediaIndex == null && !showDuplicateManager) {
+                GalleryAgentPanel(
+                    integration = agentIntegration,
+                    pageContext = pageContext,
+                    voiceCoordinator = voiceCoordinator,
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                )
+            }
+
             AnimatedVisibility(
                 visible = selectedMediaIndex != null,
                 enter = fadeIn(animationSpec = tween(300)) + scaleIn(
@@ -473,7 +566,8 @@ fun GalleryScreen(
                         },
                         onClearEditState = {
                             viewModel.clearPhotoEditState()
-                        }
+                        },
+                        voiceCoordinator = voiceCoordinator
                     )
                 }
             }
