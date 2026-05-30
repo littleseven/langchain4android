@@ -1,27 +1,36 @@
 - [Home](Home.md)
-- [项目概述](Architecture-Overview.md)
-- [快速开始](Quick-Start.md)
-- [架构概览](Architecture-Overview.md)
+- [产品定义](../../PRODUCT.md)
+- [顶层治理](../../AGENTS.md)
+- [产品定义与路线图](../../PRODUCT.md)
 
 ## 🎨 核心功能
-- [实时美颜系统](Beauty-Engine.md)
-- [人脸检测双引擎](Face-Detection-Engines.md)
-- [滤镜系统](Filter-System.md)
-- [拍照 GPU 化](GPU-Photo-Processing.md)
+- [功能交互规范](FEATURES.md)
+- [实时美颜引擎](BEAUTY_ENGINE_TECH_SPEC.md)
+- [帧同步美妆](FRAME_SYNC_TECH_SPEC.md)
+- [人脸检测双引擎](FACE_DETECTION_ENGINE_ARCHITECTURE.md)
+- [相机预览技术](CAMERA_PREVIEW_TECH_SPEC.md)
 
-## 📐 技术文档
-- [架构决策记录 (ADR)](Architecture-Decisions.md)
-- [坐标系统标准](Coordinate-System.md)
-- [相机预览技术规范](Camera-Preview-Spec.md)
-- [容灾降级机制](Fallback-Mechanism.md)
+## 🤖 Agent 架构
+- [Agent 运行时架构](AGENT_ARCHITECTURE.md)
+- [Capability 注册表](CAPABILITY_REGISTRY.md)
+- [命令参考手册](COMMAND_REFERENCE.md)
+- [Capability 实现指南](CAPABILITY_IMPLEMENTATION_GUIDE.md)
 
-## 🛠️ 开发指南
-- [代码规范](Code-Standards.md)
-- [AI 协作流程](AI-Collaboration.md)
-- [测试指南](Testing-Guide.md)
-- [贡献指南](Contributing.md)
+## 📐 技术标准
+- [坐标系规范](COORDINATE_SYSTEM.md)
+- [术语词典](Glossary.md)
+- [InsightFace 106 映射](INSIGHTFACE_106_MAPPING.md)
+- [MediaPipe 468 参考](MEDIAPIPE_468_REFERENCE.md)
+- [MediaPipe 468→106 映射](MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md)
+- [火山 106 点标准](VOLCANO_106_POINTS.md)
+
+## 🛠️ 开发规范
+- [开发工作流](DEVELOPMENT.md)
+- [任务标记规范](TASK_MARKUP_SPEC.md)
+- [代码审查清单](CODE_REVIEW_CHECKLIST.md)
+- [MNN 关键点诊断](MNN_LANDMARK_DIAGNOSIS.md)
 
 ## 📊 质量保障
-- [QA 执行清单](QA-Checklist.md)
-- [性能指标](Performance-Metrics.md)
-- [隐私与安全](Privacy-Security.md)
+- [QA 验收清单](QA_EXECUTION_CHECKLIST.md)
+- [NFR 性能指标](NFR_SPEC.md)
+- [美颜引擎容灾](BEAUTY_ENGINE_FALLBACK.md)

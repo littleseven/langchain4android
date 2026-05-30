@@ -2,7 +2,7 @@
 
 > **边界声明（Boundary Statement）**
 > - 本文档指导如何新增或扩展 Agent Capability。
-> - 架构设计以 [`../02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) 为准。
+> - 架构设计以 [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITECTURE.md) 为准。
 > - 命令语法以 [`COMMAND_REFERENCE.md`](./COMMAND_REFERENCE.md) 为准。
 
 **模块定位**: Capability 实现步骤与最佳实践  
@@ -554,6 +554,6 @@ class YourCapability : Capability {
 ---
 
 > **参考文档**:
-> - [AGENT_ARCHITECTURE.md](../02-ARCHITECTURE/AGENT_ARCHITECTURE.md) — Agent 架构设计
+> - [AGENT_ARCHITECTURE.md](AGENT_ARCHITECTURE.md) — Agent 架构设计
 > - [CAPABILITY_REGISTRY.md](./CAPABILITY_REGISTRY.md) — 能力注册表
 > - [COMMAND_REFERENCE.md](./COMMAND_REFERENCE.md) — 命令参考手册

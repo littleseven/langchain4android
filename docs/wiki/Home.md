@@ -1,8 +1,8 @@
 # PicMe 文档导航索引
 
 > **维护者**: CO Agent  
-> **最后更新**: 2026-05-29  
-> **版本**: 1.0
+> **最后更新**: 2026-05-31  
+> **版本**: 1.1
 
 ---
 
@@ -28,11 +28,15 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 ┌─────────────────────────────────────────────────────────────────┐
 │  LAYER 3: TECHNICAL SPECS (技术规范层) - Implementation         │
 │  ─────────────────────────────────────────────────────────────  │
-│  • BEAUTY_ENGINE_TECH_SPEC.md - 大美丽引擎技术规格              │
-│  • FRAME_SYNC_TECH_SPEC.md    - 帧同步美妆技术规格              │
-│  • CAMERA_PREVIEW_TECH_SPEC.md - 相机预览技术规格               │
-│  • MNN_LANDMARK_DIAGNOSIS.md  - MNN 人脸关键点诊断               │
-│  • NCNN_ONNX_VALIDATION.md    - NCNN/ONNX 推理验证               │
+│  • BEAUTY_ENGINE_TECH_SPEC.md   - 大美丽引擎技术规格            │
+│  • FRAME_SYNC_TECH_SPEC.md      - 帧同步美妆技术规格            │
+│  • CAMERA_PREVIEW_TECH_SPEC.md  - 相机预览技术规格              │
+│  • FACE_DETECTION_ENGINE_ARCHITECTURE.md - 人脸检测多引擎架构   │
+│  • MNN_LANDMARK_DIAGNOSIS.md    - MNN 人脸关键点诊断            │
+│  • INSIGHTFACE_106_MAPPING.md   - InsightFace 106 点映射        │
+│  • MEDIAPIPE_468_REFERENCE.md   - MediaPipe 468 点参考手册      │
+│  • MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md - 468→106 映射策略  │
+│  • VOLCANO_106_POINTS.md        - 火山引擎 106 点标准语义       │
 └─────────────────────────────────────────────────────────────────┘
                            ↓ 实现
 ┌─────────────────────────────────────────────────────────────────┐
@@ -52,8 +56,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`FEATURES.md`](./01-PRODUCT/FEATURES.md) | 用户交互流程、体验规则、参数范围 | PM/RD/QA |
-| [`NFR_SPEC.md`](./01-PRODUCT/NFR_SPEC.md) | 性能/稳定性/隐私量化指标 | QA/RD |
+| [`FEATURES.md`](FEATURES.md) | 用户交互流程、体验规则、参数范围 | PM/RD/QA |
+| [`NFR_SPEC.md`](../01-PRODUCT/NFR_SPEC.md) | 性能/稳定性/隐私量化指标 | QA/RD |
 
 **核心内容**：
 - Agent 交互模式（对话/快捷）
@@ -69,8 +73,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) | Agent 运行时架构、Capability 模型 | RD/CO |
-| [`ADR/`](./02-ARCHITECTURE/ADR/) | 架构决策记录（历史决策背景与权衡） | RD/CR |
+| [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITECTURE.md) | Agent 运行时架构、Capability 模型 | RD/CO |
+| [`ADR/`](../02-ARCHITECTURE/ADR/) | 架构决策记录（历史决策背景与权衡） | RD/CR |
 
 **核心内容**：
 - AgentOrchestrator 编排器设计
@@ -90,17 +94,18 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`BEAUTY_ENGINE_TECH_SPEC.md`](./03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) | 大美丽引擎完整技术规格 | RD |
-| [`FRAME_SYNC_TECH_SPEC.md`](./03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md) | 帧同步美妆系统详细设计 | RD |
-| [`CAMERA_PREVIEW_TECH_SPEC.md`](./03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) | 相机预览管线技术约束 | RD |
-| [`MNN_LANDMARK_DIAGNOSIS.md`](./03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
-| [`NCNN_ONNX_VALIDATION.md`](./03-TECHNICAL-SPECS/NCNN_ONNX_VALIDATION.md) | NCNN/ONNX 推理引擎验证方案 | RD |
+| [`BEAUTY_ENGINE_TECH_SPEC.md`](BEAUTY_ENGINE_TECH_SPEC.md) | 大美丽引擎完整技术规格 | RD |
+| [`FRAME_SYNC_TECH_SPEC.md`](FRAME_SYNC_TECH_SPEC.md) | 帧同步美妆系统详细设计 | RD |
+| [`CAMERA_PREVIEW_TECH_SPEC.md`](CAMERA_PREVIEW_TECH_SPEC.md) | 相机预览管线技术约束 | RD |
+| [`MNN_LANDMARK_DIAGNOSIS.md`](MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
+| [`FACE_DETECTION_ENGINE_ARCHITECTURE.md`](FACE_DETECTION_ENGINE_ARCHITECTURE.md) | 多引擎 ROI + Landmark 设计 | RD |
 
 **核心内容**：
 - EGL 上下文管理、Shader 编译、资源释放
 - FrameId 体系、FrameSyncManager、预测补偿算法
-- InsightFace vs MediaPipe 引擎切换
+- InsightFace vs MediaPipe 引擎切换与 ROI 设计
 - ROC 关键点映射、MNN 维度类型修复
+- 火山引擎 106 点标准语义定义
 
 ---
 
@@ -108,9 +113,9 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`CAPABILITY_REGISTRY.md`](./04-AGENT-CAPABILITIES/CAPABILITY_REGISTRY.md) | 所有 Capability 列表与命令映射 | RD/CO |
-| [`COMMAND_REFERENCE.md`](./04-AGENT-CAPABILITIES/COMMAND_REFERENCE.md) | 命令语法、参数、示例 | RD/PM |
-| [`CAPABILITY_IMPLEMENTATION_GUIDE.md`](./04-AGENT-CAPABILITIES/CAPABILITY_IMPLEMENTATION_GUIDE.md) | 新增 Capability 的实现步骤 | RD |
+| [`CAPABILITY_REGISTRY.md`](CAPABILITY_REGISTRY.md) | 所有 Capability 列表与命令映射 | RD/CO |
+| [`COMMAND_REFERENCE.md`](COMMAND_REFERENCE.md) | 命令语法、参数、示例 | RD/PM |
+| [`CAPABILITY_IMPLEMENTATION_GUIDE.md`](CAPABILITY_IMPLEMENTATION_GUIDE.md) | 新增 Capability 的实现步骤 | RD |
 
 **核心内容**：
 - CameraCapability（拍照/录像/美颜/滤镜）
@@ -125,9 +130,9 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`DEVELOPMENT.md`](./05-DEVELOPMENT/DEVELOPMENT.md) | 双螺旋工作流、反向链接规范、CI 规则 | RD/CO |
-| [`TASK_MARKUP_SPEC.md`](./05-DEVELOPMENT/TASK_MARKUP_SPEC.md) | `[kimi-task]` 标记语法与解析规则 | PM/CO |
-| [`CODE_REVIEW_CHECKLIST.md`](./05-DEVELOPMENT/CODE_REVIEW_CHECKLIST.md) | CR 检查项与一票否决项 | CR/RD |
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | 双螺旋工作流、反向链接规范、CI 规则 | RD/CO |
+| [`TASK_MARKUP_SPEC.md`](TASK_MARKUP_SPEC.md) | `[kimi-task]` 标记语法与解析规则 | PM/CO |
+| [`CODE_REVIEW_CHECKLIST.md`](CODE_REVIEW_CHECKLIST.md) | CR 检查项与一票否决项 | CR/RD |
 
 **核心内容**：
 - Spec ↔ Code 双向演进规则
@@ -141,8 +146,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`QA_EXECUTION_CHECKLIST.md`](./06-QA/QA_EXECUTION_CHECKLIST.md) | 端到端验收测试清单 | QA |
-| [`PERFORMANCE_BASELINE.md`](../01-PRODUCT/NFR_SPEC.md#3-性能基线验证) | 性能基线数据与对比方法（参考 NFR） | QA/RD |
+| [`QA_EXECUTION_CHECKLIST.md`](QA_EXECUTION_CHECKLIST.md) | 端到端验收测试清单 | QA |
+| [`NFR_SPEC.md`](../01-PRODUCT/NFR_SPEC.md) | 性能基线数据与对比方法 | QA/RD |
 
 **核心内容**：
 - 帧同步专项验收（快转头/人脸出画/录制）
@@ -155,8 +160,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`COORDINATE_SYSTEM.md`](./07-STANDARDS/COORDINATE_SYSTEM.md) | 人脸关键点坐标、渲染管线坐标系 | RD |
-| [`GLOSSARY.md`](./07-STANDARDS/GLOSSARY.md) | 统一术语定义与禁用别名 | RD/PM |
+| [`COORDINATE_SYSTEM.md`](COORDINATE_SYSTEM.md) | 人脸关键点坐标、渲染管线坐标系 | RD |
+| [`Glossary.md`](Glossary.md) | 统一术语定义与禁用别名 | RD/PM |
 
 **核心内容**：
 - MediaPipe 468 点 → 106 点映射表
@@ -169,7 +174,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 | 文档 | 用途 | 读者 |
 |------|------|------|
-| [`BEAUTY_ENGINE_FALLBACK.md`](./08-FALLBACK/BEAUTY_ENGINE_FALLBACK.md) | 美颜引擎降级策略与恢复机制 | RD/QA |
+| [`BEAUTY_ENGINE_FALLBACK.md`](BEAUTY_ENGINE_FALLBACK.md) | 美颜引擎降级策略与恢复机制 | RD/QA |
 
 **核心内容**：
 - EGL 初始化失败降级到基础预览

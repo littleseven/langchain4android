@@ -61,20 +61,26 @@ ln -sf ../../.qoder/skills/my-skill .kimi/skills/my-skill
 | Skill | 描述 | 适用工具 |
 |-------|------|----------|
 | `adb-bot` | ADB 自动化控制与调试 | 全平台 |
+| `agent-test-framework` | Agent 能力自动化测试框架 | 全平台 |
 | `android-build-debug` | Android 编译、安装、日志调试 | 全平台 |
 | `auto-dev-loop` | **开发自循环**：编译→安装→验证→报告一键闭环 | 全平台 |
 | `av-gl-expert` | 音视频与 OpenGL 渲染专家 | 全平台 |
+| `compose-ui-expert` | Jetpack Compose UI 开发与性能优化 | 全平台 |
 | `coordinate-system-standard` | 人脸关键点坐标系规范化 | 全平台 |
 | `doc-sync-guardian` | 三层文档体系一致性检查 | 全平台 |
 | `egl-state-machine` | EGL 上下文与离屏渲染状态机规范 | 全平台 |
 | `error-healer` | **编译错误修复**：Kotlin/Gradle 错误分类与自愈 | 全平台 |
-| `gallery-delete-test` | 相册删除功能测试流程 | 全平台 |
-| `gpupixel-porting` | 历史参考：GPUPixel 算法移植规范（GPUPixel 已移除） | 全平台 |
+| `i18n-validator` | 国际化资源检查与三语同步验证 | 全平台 |
 | `image-quality-checker` | 截屏图片质量分析 | 全平台 |
 | `intent-router` | **意图路由**：自然语言需求解析与上下文加载 | 全平台 |
 | `mediapipe-landmark-mapping` | MediaPipe 关键点映射规范 | 全平台 |
+| `mnn-integration` | MNN 推理引擎集成规范 | 全平台 |
 | `mnn-landmark-diagnosis` | MNN 关键点诊断与调试（C++ 层计时分析） | 全平台 |
+| `mnn-llm-android` | MNN-LLM 端侧大模型部署指南 | 全平台 |
+| `ncnn-integration` | NCNN 推理引擎集成规范 | 全平台 |
 | `onnx-model-integration` | ONNX 模型接入 Checklist（颜色/归一化/激活函数） | 全平台 |
+| `perf-optimizer` | 性能分析与优化策略 | 全平台 |
+| `qa-acceptance` | QA 验收测试流程与清单 | 全平台 |
 | `rd-reflection` | **RD 复盘模板**：开发陷阱记录与流程优化 | 全平台 |
 
 ## 角色定义文件
@@ -144,3 +150,7 @@ cd ~/AndroidStudioProjects/PicMe && kimi-cli chat
 | 2026-05-20 | 新增 `gallery-delete-test` | 相册删除功能测试 Skill |
 | 2026-05-20 | 新增 `error-healer` / `intent-router` / `auto-dev-loop` | 编译自愈、意图路由、开发自循环 |
 | 2026-05-22 | 移除 `armeabi-v7a` 架构支持 | 仅保留 `arm64-v8a`，APK 减小 54MB |
+| 2026-05-25 | 新增 `compose-ui-expert` / `i18n-validator` / `perf-optimizer` | Jetpack Compose 专家、国际化验证、性能优化 |
+| 2026-05-25 | 新增 `mnn-integration` / `ncnn-integration` / `mnn-llm-android` | 推理引擎集成规范完善 |
+| 2026-05-28 | 新增 `agent-test-framework` / `qa-acceptance` | Agent 能力测试与 QA 验收流程 |
+| 2026-05-31 | 文档全面审计与更新 | 根目录文档与 wiki 一致性清理 |
