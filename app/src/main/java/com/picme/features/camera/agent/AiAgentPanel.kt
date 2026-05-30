@@ -92,14 +92,6 @@ import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/**
- * AI Agent 对话消息模型
- */
-data class AiAgentMessage(
-    val content: String,
-    val isFromUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
-)
 
 /**
  * AI Agent 面板状态
@@ -107,11 +99,16 @@ data class AiAgentMessage(
 class AiAgentPanelState {
     var isVisible by mutableStateOf(false)
     var isExpanded by mutableStateOf(true)
-    var messages by mutableStateOf<List<AiAgentMessage>>(emptyList())
+    var messages by mutableStateOf<List<AgentMessage>>(emptyList())
     var isProcessing by mutableStateOf(false)
+    var autoExecutePlans by mutableStateOf(true)
 
-    fun addMessage(message: AiAgentMessage) {
+    fun addMessage(message: AgentMessage) {
         messages = messages + message
+    }
+
+    fun replaceLastMessage(message: AgentMessage) {
+        messages = messages.dropLast(1) + message
     }
 
     fun toggle() {
@@ -265,7 +262,7 @@ private fun AiAgentPanelContent(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 180.dp),
+                        .heightIn(max = 280.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(state.messages) { message ->
@@ -367,28 +364,55 @@ private fun AiAgentHeader(
 
 @Composable
 private fun ChatBubble(
-    message: AiAgentMessage,
+    message: AgentMessage,
     modifier: Modifier = Modifier
 ) {
-    val backgroundColor = if (message.isFromUser) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
-    } else {
-        Color.DarkGray.copy(alpha = 0.8f)
+    when (message) {
+        is AgentMessage.UserText -> UserTextBubble(message, modifier)
+        is AgentMessage.AgentText -> AgentTextBubble(message, modifier)
+        is AgentMessage.PlanPreview -> PlanPreviewBubble(message, modifier)
+        is AgentMessage.PlanProgress -> PlanProgressBubble(message, modifier)
+        is AgentMessage.PlanResult -> PlanResultBubble(message, modifier)
     }
-    val textColor = Color.White
-    val alignment = if (message.isFromUser) Alignment.CenterEnd else Alignment.CenterStart
+}
 
+@Composable
+private fun UserTextBubble(
+    message: AgentMessage.UserText,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier.fillMaxWidth(),
-        contentAlignment = alignment
+        contentAlignment = Alignment.CenterEnd
     ) {
         Text(
             text = message.content,
-            color = textColor,
+            color = Color.White,
             fontSize = 13.sp,
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
-                .background(backgroundColor)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun AgentTextBubble(
+    message: AgentMessage.AgentText,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Text(
+            text = message.content,
+            color = Color.White,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.DarkGray.copy(alpha = 0.8f))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         )
     }
@@ -864,7 +888,7 @@ internal fun sendMessage(
     onCommand: (AiAgentCommand) -> Unit
 ) {
     Logger.i("PicMe:AiAgent", "sendMessage called with input='$input'")
-    state.addMessage(AiAgentMessage(content = input, isFromUser = true))
+    state.addMessage(AgentMessage.UserText(content = input))
     state.isProcessing = true
 
     scope.launch {
@@ -878,7 +902,7 @@ internal fun sendMessage(
             if (command is AiAgentCommand.TextReply) {
                 Logger.i("PicMe:AiAgent", "TextReply: ${command.message}")
                 state.addMessage(
-                    AiAgentMessage(content = command.message, isFromUser = false)
+                    AgentMessage.AgentText(content = command.message)
                 )
             } else {
                 val commandName = when (command) {
@@ -898,10 +922,7 @@ internal fun sendMessage(
                 }
                 Logger.i("PicMe:AiAgent", "Executing command: $commandName")
                 state.addMessage(
-                    AiAgentMessage(
-                        content = commandName,
-                        isFromUser = false
-                    )
+                    AgentMessage.AgentText(content = commandName)
                 )
                 Logger.i("PicMe:AiAgent", "Calling onCommand callback")
                 onCommand(command)
@@ -910,9 +931,8 @@ internal fun sendMessage(
         }.onFailure { error ->
             Logger.e("PicMe:AiAgent", "AI processing failed: ${error.message}", error)
             state.addMessage(
-                AiAgentMessage(
-                    content = "处理出错了：${error.message ?: "未知错误"}",
-                    isFromUser = false
+                AgentMessage.AgentText(
+                    content = "处理出错了：${error.message ?: "未知错误"}"
                 )
             )
         }
