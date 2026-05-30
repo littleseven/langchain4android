@@ -38,7 +38,8 @@ data class AgentContext(
 enum class AgentScene {
     CAMERA,
     GALLERY,
-    PHOTO_EDIT
+    PHOTO_EDIT,
+    SETTINGS
 }
 
 /**

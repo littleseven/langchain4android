@@ -40,6 +40,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
@@ -56,6 +57,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
+import com.picme.core.common.Logger
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.domain.model.AiAgentMode
@@ -69,8 +71,13 @@ import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
+import com.picme.features.camera.voice.MnnAsrClient
+import com.picme.features.camera.voice.SherpaMnnAsrEngine
+import com.picme.features.camera.voice.SystemAsrEngine
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.settings.agent.SettingsAgentPanel
 import com.picme.features.settings.agent.rememberSettingsAgentIntegration
+import com.picme.domain.usecase.AiAgentUseCase
 
 @Composable
 fun SettingsScreen(
@@ -120,6 +127,76 @@ fun SettingsScreen(
     val aiAgentForceRemote by viewModel.aiAgentForceRemote.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
+
+    // ===== ASR 引擎 =====
+    val coroutineScope = rememberCoroutineScope()
+    val asrEngine = remember(context, localAsrModel) {
+        if (localAsrModel.isNotBlank()) {
+            val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
+            val modelDirPath = modelDir.absolutePath
+            val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                modelDir.exists() && modelDir.isDirectory &&
+                    modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
+                    java.io.File(modelDir, "tokens.txt").exists()
+            } else {
+                modelDir.exists() && modelDir.isDirectory
+            }
+            if (!isModelReady) {
+                Logger.w("PicMe:Settings", "ASR model not ready: $localAsrModel")
+                SystemAsrEngine(context)
+            } else {
+                if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                    val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
+                    if (sherpaAsr.isAvailable()) {
+                        Logger.i("PicMe:Settings", "Using Sherpa-MNN ASR engine")
+                        sherpaAsr
+                    } else {
+                        Logger.w("PicMe:Settings", "Sherpa-MNN ASR init failed, fallback to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                } else {
+                    val mnnAsr = MnnAsrClient(context, localAsrModel)
+                    if (mnnAsr.isAvailable()) {
+                        Logger.i("PicMe:Settings", "Using MNN ASR engine")
+                        mnnAsr
+                    } else {
+                        Logger.w("PicMe:Settings", "MNN ASR not available, fallback to system ASR")
+                        SystemAsrEngine(context)
+                    }
+                }
+            }
+        } else {
+            Logger.d("PicMe:Settings", "No local ASR model configured, using system ASR")
+            SystemAsrEngine(context)
+        }
+    }
+
+    // ===== VoiceCommandCoordinator =====
+    val aiAgentUseCase = remember {
+        AiAgentUseCase(
+            context = context,
+            agentMode = AiAgentMode.LOCAL,
+            localModelId = "qwen3_0_6b"
+        )
+    }
+    val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
+        VoiceCommandCoordinator(
+            asrEngine = asrEngine,
+            aiAgentUseCase = aiAgentUseCase,
+            onCommand = { command ->
+                Logger.i("PicMe:Settings", "Voice command: ${command.javaClass.simpleName}")
+            },
+            scope = coroutineScope,
+            onTranscript = { transcript ->
+                Logger.d("PicMe:Settings", "Voice transcript: $transcript")
+            }
+        )
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceCoordinator.release()
+        }
+    }
 
     // ===== Agent 集成 =====
     val agentIntegration = rememberSettingsAgentIntegration(
@@ -206,6 +283,7 @@ fun SettingsScreen(
         // Agent Panel（浮动在内容之上）
         SettingsAgentPanel(
             pageContext = pageContext,
+            voiceCoordinator = voiceCoordinator,
             modifier = Modifier.align(Alignment.BottomEnd)
         )
     }

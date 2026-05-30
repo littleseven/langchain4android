@@ -3,8 +3,6 @@ package com.picme.features.gallery.agent
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -16,8 +14,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -29,9 +27,15 @@ import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.MediaAsset
+import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentScene
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.common.chat.AiChatScreen
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.gallery.MediaViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * GalleryScreen 的 Agent 集成
@@ -49,7 +53,7 @@ class GalleryAgentIntegration(
 ) {
     companion object { private const val TAG = "GalleryAgent" }
 
-    private val appContext = context.applicationContext
+    val appContext = context.applicationContext
 
     // SceneManager 单例
     private val sceneManager = SceneManager.getInstance()
@@ -156,6 +160,7 @@ class GalleryAgentIntegration(
 fun GalleryAgentPanel(
     integration: GalleryAgentIntegration,
     pageContext: PageContext,
+    voiceCoordinator: VoiceCommandCoordinator? = null,
     modifier: Modifier = Modifier
 ) {
     var isVisible by remember { mutableStateOf(false) }
@@ -164,47 +169,71 @@ fun GalleryAgentPanel(
 
     // 浮动按钮触发 - 右下角，方便拇指点击
     if (!isVisible) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomEnd
+        FloatingActionButton(
+            onClick = { isVisible = true },
+            modifier = modifier
+                .padding(end = 16.dp, bottom = 16.dp)
+                .navigationBarsPadding(),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.primary
         ) {
-            FloatingActionButton(
-                onClick = { isVisible = true },
-                modifier = Modifier
-                    .padding(end = 16.dp, bottom = 100.dp)
-                    .navigationBarsPadding(),
-                shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.KeyboardVoice,
-                    contentDescription = "AI Agent",
-                    tint = Color.White
-                )
-            }
+            Icon(
+                imageVector = Icons.Rounded.KeyboardVoice,
+                contentDescription = "AI Agent",
+                tint = Color.White
+            )
         }
     }
 
-    // 统一的 AiChatScreen
+    // 统一的 AiChatScreen - 使用 ModalBottomSheet，自动处理底部定位和键盘上移
+    val orchestrator = remember { AgentOrchestrator.getInstance(integration.appContext) }
+    val scope = rememberCoroutineScope()
+
     AiChatScreen(
         visible = isVisible,
         messages = messages.value,
         isProcessing = isProcessing,
         onVisibleChange = { isVisible = it },
+        voiceCoordinator = voiceCoordinator,
         onSendMessage = { input ->
             messages.value = messages.value + AgentMessage.UserText(content = input)
             isProcessing = true
-            // TODO: 集成 AgentOrchestrator 处理消息
-            // 模拟响应
-            isProcessing = false
-            messages.value = messages.value + AgentMessage.AgentText(
-                content = "收到：$input"
-            )
+
+            scope.launch {
+                val agentContext = AgentContext(
+                    scene = AgentScene.GALLERY,
+                    memorySessionId = "gallery"
+                )
+                val result = orchestrator.processUserInput(
+                    input = input,
+                    agentContext = agentContext,
+                    pageContext = pageContext
+                )
+                isProcessing = false
+                result.fold(
+                    onSuccess = { action ->
+                        val responseText = when (action) {
+                            is com.picme.domain.agent.model.AgentAction.Success -> {
+                                val commandName = action.command::class.simpleName ?: "操作"
+                                "已执行: $commandName"
+                            }
+                            is com.picme.domain.agent.model.AgentAction.TextReply -> action.message
+                            is com.picme.domain.agent.model.AgentAction.Error -> "抱歉，${action.message}"
+                        }
+                        messages.value = messages.value + AgentMessage.AgentText(content = responseText)
+                    },
+                    onFailure = { error ->
+                        messages.value = messages.value + AgentMessage.AgentText(
+                            content = "处理失败：${error.message ?: "未知错误"}"
+                        )
+                    }
+                )
+            }
         },
         onCommand = { command ->
-            // TODO: 处理命令
+            // 命令已通过 AgentOrchestrator 执行
         },
-        modifier = modifier
+        modifier = Modifier
     )
 }
 

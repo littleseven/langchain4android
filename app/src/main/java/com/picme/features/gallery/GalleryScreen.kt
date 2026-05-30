@@ -114,7 +114,6 @@ import com.picme.features.camera.test.CameraTestCommand
 import com.picme.features.camera.test.CameraTestCommandDispatcher
 import com.picme.features.camera.test.CameraTestCommandReceiver
 import com.picme.features.camera.test.CameraTestResult
-import com.picme.features.gallery.agent.GalleryAgentPanel
 import com.picme.features.gallery.agent.rememberGalleryAgentIntegration
 import com.picme.features.gallery.components.MediaGroupHeader
 import com.picme.features.gallery.components.MediaPager
@@ -388,8 +387,8 @@ fun GalleryScreen(
         allMedia = allFlatMedia
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
         topBar = {
             if (selectedMediaIndex == null && !showDuplicateManager) {
                 GalleryTopBar(
@@ -584,15 +583,7 @@ fun GalleryScreen(
                 }
             }
         }
-
-        // Agent Panel（浮动在内容之上）
-        GalleryAgentPanel(
-            integration = agentIntegration,
-            pageContext = pageContext,
-            modifier = Modifier.align(Alignment.BottomEnd)
-        )
     }
-}
 }
 
 private fun hasGalleryPermission(context: Context): Boolean {
