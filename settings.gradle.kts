@@ -8,9 +8,10 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        maven { url = uri("https://maven.aliyun.com/repository/public") } // 阿里云镜像（优先）
+        maven { url = uri("https://maven.aliyun.com/repository/google") } // 阿里云 Google 镜像
         google()
         mavenCentral()
-        maven { url = uri("https://maven.aliyun.com/repository/public") } // 阿里云镜像
     }
 }
 
