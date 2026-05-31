@@ -43,8 +43,7 @@ class SettingsCapability(
         "change_language",
         "download_model",
         "switch_face_engine",
-        "toggle_setting",
-        "text_reply"
+        "toggle_setting"
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
@@ -53,7 +52,6 @@ class SettingsCapability(
         "download_model" -> "下载AI模型，参数：model_id"
         "switch_face_engine" -> "切换人脸检测引擎，参数：engine (mediapipe/insightface/mnn/ncnn)"
         "toggle_setting" -> "开关设置项，参数：key, enabled (true/false)"
-        "text_reply" -> "文本回复"
         else -> "未知命令"
     }
 

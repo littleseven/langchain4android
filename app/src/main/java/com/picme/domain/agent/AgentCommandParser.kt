@@ -57,7 +57,7 @@ object AgentCommandParser {
         }
 
         // 2. 移除 markdown 代码块标记
-        cleaned = cleaned.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        cleaned = cleaned.removePrefix("``json").removePrefix("```").removeSuffix("```").trim()
 
         Logger.i(TAG, "Cleaned response: '$cleaned'")
 
@@ -232,16 +232,6 @@ object AgentCommandParser {
                 val enabled = extractJsonBoolean(json, "enabled") ?: true
                 AgentCommand.ToggleSetting(key, enabled)
             }
-
-            // ===== 编辑命令 =====
-            "apply_edit" -> {
-                val editType = extractJsonField(json, "edit_type") ?: ""
-                val params = extractJsonFloatMap(json, "params")
-                AgentCommand.ApplyEdit(editType, params)
-            }
-            "save_edit" -> AgentCommand.SaveEdit
-            "undo_edit" -> AgentCommand.UndoEdit
-            "redo_edit" -> AgentCommand.RedoEdit
 
             // ===== 默认文本回复 =====
             else -> {
