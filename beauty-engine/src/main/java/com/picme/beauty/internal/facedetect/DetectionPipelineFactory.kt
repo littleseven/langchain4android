@@ -21,12 +21,14 @@ internal object DetectionPipelineFactory {
         type: RoiDetectorType,
         engine: InferenceBackendType,
         device: DevicePreference,
-        context: Context
+        context: Context,
+        sharedMediaPipeDetector: MediaPipeFaceDetector? = null
     ): RoiDetector {
         return when (type) {
             RoiDetectorType.MEDIAPIPE -> {
                 // MediaPipe 固定使用 TFLite，忽略引擎和设备选择
-                MediaPipeRoiDetector(context)
+                // 使用共享的 MediaPipeFaceDetector 实例，避免重复初始化
+                MediaPipeRoiDetector(sharedMediaPipeDetector ?: MediaPipeFaceDetector(context))
             }
             RoiDetectorType.DET10G -> {
                 when (engine) {
@@ -53,7 +55,8 @@ internal object DetectionPipelineFactory {
         type: LandmarkDetectorType,
         engine: InferenceBackendType,
         device: DevicePreference,
-        context: Context
+        context: Context,
+        sharedMediaPipeDetector: MediaPipeFaceDetector? = null
     ): LandmarkDetector {
         return when (type) {
             LandmarkDetectorType.INSIGHTFACE_2D106 -> {
@@ -72,7 +75,8 @@ internal object DetectionPipelineFactory {
             }
             LandmarkDetectorType.MEDIAPIPE -> {
                 // MediaPipe 固定使用 TFLite，忽略引擎和设备选择
-                MediaPipeLandmarkDetector(context)
+                // 使用共享的 MediaPipeFaceDetector 实例，避免重复初始化
+                MediaPipeLandmarkDetector(sharedMediaPipeDetector ?: MediaPipeFaceDetector(context))
             }
         }
     }
@@ -84,17 +88,29 @@ internal object DetectionPipelineFactory {
         config: DetectionPipelineConfig,
         context: Context
     ): Pair<RoiDetector, LandmarkDetector> {
+        // [优化] 当 ROI 和 Landmark 都使用 MediaPipe 时，共享同一个 MediaPipeFaceDetector 实例
+        val sharedMediaPipeDetector = if (
+            config.roiDetector == RoiDetectorType.MEDIAPIPE &&
+            config.landmarkDetector == LandmarkDetectorType.MEDIAPIPE
+        ) {
+            MediaPipeFaceDetector(context)
+        } else {
+            null
+        }
+
         val roiDetector = createRoiDetector(
             config.roiDetector,
             config.roiEngine,
             config.roiDevice,
-            context
+            context,
+            sharedMediaPipeDetector
         )
         val landmarkDetector = createLandmarkDetector(
             config.landmarkDetector,
             config.landmarkEngine,
             config.landmarkDevice,
-            context
+            context,
+            sharedMediaPipeDetector
         )
         return Pair(roiDetector, landmarkDetector)
     }

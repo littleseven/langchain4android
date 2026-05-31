@@ -105,29 +105,38 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
-    val roiStageConfig by userPreferencesRepository.roiStageConfigFlow.collectAsState(
-        initial = StageConfig.defaultRoi()
+    // [关键修复] 使用 null 作为 initial，确保只在 DataStore 真实值到达后才初始化 detector
+    // 避免 collectAsState 先发射默认值导致创建错误的 detector 再释放
+    val roiStageConfigNullable by userPreferencesRepository.roiStageConfigFlow.collectAsState(
+        initial = null
     )
-    val landmarkStageConfig by userPreferencesRepository.landmarkStageConfigFlow.collectAsState(
-        initial = StageConfig.defaultLandmark()
+    val landmarkStageConfigNullable by userPreferencesRepository.landmarkStageConfigFlow.collectAsState(
+        initial = null
     )
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // [重构] 监听 StageConfig 变化，统一调用 updatePipelineConfig()
     // SettingsViewModel 在快捷模式选择时已自动更新 StageConfig
-    LaunchedEffect(roiStageConfig, landmarkStageConfig) {
+    LaunchedEffect(roiStageConfigNullable, landmarkStageConfigNullable) {
+        val roiConfig = roiStageConfigNullable ?: return@LaunchedEffect
+        val landmarkConfig = landmarkStageConfigNullable ?: return@LaunchedEffect
+
         val config = DetectionPipelineConfig(
-            roiDetector = roiStageConfig.modelType.toRoiDetectorType(),
-            landmarkDetector = landmarkStageConfig.modelType.toLandmarkDetectorType(),
-            roiEngine = roiStageConfig.engineType.toInferenceBackendType(),
-            landmarkEngine = landmarkStageConfig.engineType.toInferenceBackendType(),
-            roiDevice = roiStageConfig.devicePreference.toDevicePreference(),
-            landmarkDevice = landmarkStageConfig.devicePreference.toDevicePreference()
+            roiDetector = roiConfig.modelType.toRoiDetectorType(),
+            landmarkDetector = landmarkConfig.modelType.toLandmarkDetectorType(),
+            roiEngine = roiConfig.engineType.toInferenceBackendType(),
+            landmarkEngine = landmarkConfig.engineType.toInferenceBackendType(),
+            roiDevice = roiConfig.devicePreference.toDevicePreference(),
+            landmarkDevice = landmarkConfig.devicePreference.toDevicePreference()
         )
 
         faceDetectorManager.updatePipelineConfig(config)
-        Logger.d("Camera", "Pipeline config updated: ROI=${roiStageConfig.engineType}, Landmark=${landmarkStageConfig.engineType}")
+        Logger.d("Camera", "Pipeline config updated: ROI=${roiConfig.engineType}, Landmark=${landmarkConfig.engineType}")
     }
+
+    // 提供非 null 值给下游使用（真实值到达前使用默认值，但不触发 detector 创建）
+    val roiStageConfig = roiStageConfigNullable ?: StageConfig.defaultRoi()
+    val landmarkStageConfig = landmarkStageConfigNullable ?: StageConfig.defaultLandmark()
 
     return CameraRuntimeContext(
         imageProcessor = imageProcessor,
