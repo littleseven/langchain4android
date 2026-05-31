@@ -33,32 +33,31 @@ else()
     message(FATAL_ERROR "libMNN.so not found at ${MNN_SO_PATH}")
 endif()
 
+# [注意] libMNN_Vulkan.so 已合并到 libMNN.so（统一构建）
+# 新版本的 libMNN.so 包含 Vulkan 后端符号，不再需要单独链接
 set(MNN_VULKAN_SO_PATH "${MNN_LIB_DIR}/libMNN_Vulkan.so")
 if(EXISTS ${MNN_VULKAN_SO_PATH})
-    message(STATUS "Using MNN Vulkan backend: ${MNN_VULKAN_SO_PATH}")
-    add_library(mnn_vulkan SHARED IMPORTED)
-    set_target_properties(mnn_vulkan PROPERTIES IMPORTED_LOCATION ${MNN_VULKAN_SO_PATH})
+    message(STATUS "libMNN_Vulkan.so found but NOT linking - Vulkan symbols are already in libMNN.so (unified build)")
 endif()
 
 # MNN-LLM 库
+# [注意] 新版本的 libMNN.so 已包含 LLM 符号（统一构建）
+# 如果 libllm.so 存在则链接，否则依赖 libMNN.so 中的符号
 set(MNN_LLM_SO_PATH "${MNN_LIB_DIR}/libllm.so")
 if(EXISTS ${MNN_LLM_SO_PATH})
     message(STATUS "Using MNN-LLM library: ${MNN_LLM_SO_PATH}")
     add_library(mnn_llm SHARED IMPORTED)
     set_target_properties(mnn_llm PROPERTIES IMPORTED_LOCATION ${MNN_LLM_SO_PATH})
 else()
-    message(STATUS "libllm.so not found. MNN-LLM support disabled.")
+    message(STATUS "libllm.so not found. LLM symbols should be in libMNN.so (unified build)")
 endif()
 
 # MNN Express 库（已合并到 libMNN.so，不再需要单独加载）
 # 从 MNN 源码编译的 libMNN.so 已包含 Express 符号
+# [注意] 如果 libMNN_Express.so 存在，不要链接它，避免符号重复定义
 set(MNN_EXPRESS_SO_PATH "${MNN_LIB_DIR}/libMNN_Express.so")
 if(EXISTS ${MNN_EXPRESS_SO_PATH})
-    message(STATUS "Using MNN Express library: ${MNN_EXPRESS_SO_PATH}")
-    add_library(mnn_express SHARED IMPORTED)
-    set_target_properties(mnn_express PROPERTIES IMPORTED_LOCATION ${MNN_EXPRESS_SO_PATH})
-else()
-    message(STATUS "libMNN_Express.so not found, Express symbols are in libMNN.so (unified build)")
+    message(STATUS "libMNN_Express.so found but NOT linking - Express symbols are already in libMNN.so (unified build)")
 endif()
 
 # ── NCNN 配置 ───────────────────────────────────────────
@@ -118,9 +117,9 @@ target_compile_definitions(picme_native PRIVATE
 )
 
 # 链接库
+# [注意] mnn_vulkan 不再单独链接，Vulkan 符号已合并到 libMNN.so
 set(LINK_LIBRARIES
     mnn
-    mnn_vulkan
     ${log-lib}
     ${android-lib}
     ${jnigraphics-lib}
@@ -131,9 +130,11 @@ if(TARGET mnn_llm)
     list(APPEND LINK_LIBRARIES mnn_llm)
 endif()
 
-if(TARGET mnn_express)
-    list(APPEND LINK_LIBRARIES mnn_express)
-endif()
+# [注意] mnn_express 不再链接，因为 Express 符号已合并到 libMNN.so 中
+# 链接 libMNN_Express.so 会导致符号重复定义，引发运行时 SIGABRT
+# if(TARGET mnn_express)
+#     list(APPEND LINK_LIBRARIES mnn_express)
+# endif()
 
 if(NCNN_LINK_AVAILABLE)
     list(APPEND LINK_LIBRARIES ncnn)
