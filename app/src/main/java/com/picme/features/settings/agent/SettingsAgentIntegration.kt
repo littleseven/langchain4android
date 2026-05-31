@@ -96,6 +96,15 @@ class SettingsAgentIntegration(
         Logger.i(TAG, "NavigationCapability registered")
     }
 
+    /**
+     * 注销 Settings 相关的 Capability
+     */
+    fun unregisterCapabilities() {
+        registry.unregister("settings")
+        registry.unregister("navigation")
+        Logger.i(TAG, "Settings capabilities unregistered")
+    }
+
     fun buildPageContext(
         currentCategory: String? = null
     ): PageContext {

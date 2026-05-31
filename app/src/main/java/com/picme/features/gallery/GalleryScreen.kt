@@ -187,41 +187,50 @@ fun GalleryScreen(
                 "camera" -> onNavigateBack()
                 "settings" -> onNavigateToSettings()
                 "debug" -> onNavigateToDebug()
+                "llm_model_manager", "asr_model_manager" -> onNavigateToSettings() // 从相册到模型管理页需先进入设置
                 else -> Logger.w("PicMe:Gallery", "Unknown navigation destination: $destination")
             }
         },
         onNavigateBack = onNavigateBack
     )
 
-    agentIntegration.registerCapabilities(
-        viewModel = viewModel,
-        allMedia = allFlatMedia,
-        onViewMedia = { asset ->
-            selectedMediaIndex = allFlatMedia.indexOfFirst { it.id == asset.id }
-        },
-        onDeleteMedia = { assets ->
-            viewModel.deleteMediaByIds(assets.map { it.id })
-        },
-        onShareMedia = { assets ->
-            shareMediaAssets(context, assets)
-        },
-        onSelectMedia = { asset, selected ->
-            if (selected) {
-                if (!selectedIds.contains(asset.id)) selectedIds.add(asset.id)
-            } else {
-                selectedIds.remove(asset.id)
+    // 在 DisposableEffect 中注册 Capability，确保生命周期绑定
+    DisposableEffect(allFlatMedia.size) {
+        Logger.i("PicMe:Gallery", "Registering Gallery capabilities, mediaCount=${allFlatMedia.size}")
+        agentIntegration.registerCapabilities(
+            viewModel = viewModel,
+            allMedia = allFlatMedia,
+            onViewMedia = { asset ->
+                selectedMediaIndex = allFlatMedia.indexOfFirst { it.id == asset.id }
+            },
+            onDeleteMedia = { assets ->
+                viewModel.deleteMediaByIds(assets.map { it.id })
+            },
+            onShareMedia = { assets ->
+                shareMediaAssets(context, assets)
+            },
+            onSelectMedia = { asset, selected ->
+                if (selected) {
+                    if (!selectedIds.contains(asset.id)) selectedIds.add(asset.id)
+                } else {
+                    selectedIds.remove(asset.id)
+                }
+            },
+            onSearchMedia = { query ->
+                Log.d("PicMe:GalleryAgent", "Search query: $query")
+            },
+            onSwitchViewMode = { mode ->
+                Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
+            },
+            onFavoriteMedia = { asset, favorite ->
+                Log.d("PicMe:GalleryAgent", "Favorite ${asset.id}: $favorite")
             }
-        },
-        onSearchMedia = { query ->
-            Log.d("PicMe:GalleryAgent", "Search query: $query")
-        },
-        onSwitchViewMode = { mode ->
-            Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
-        },
-        onFavoriteMedia = { asset, favorite ->
-            Log.d("PicMe:GalleryAgent", "Favorite ${asset.id}: $favorite")
+        )
+        onDispose {
+            Logger.i("PicMe:Gallery", "Unregistering Gallery capabilities")
+            agentIntegration.unregisterCapabilities()
         }
-    )
+    }
 
     DisposableEffect(Unit) {
         val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}

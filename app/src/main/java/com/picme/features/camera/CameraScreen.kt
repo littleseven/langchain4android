@@ -790,13 +790,11 @@ fun CameraContent(
         }
     }
 
-    // 切换 Agent 场景到 CAMERA
-    DisposableEffect(aiAgentUseCase) {
-        val orchestrator = AgentOrchestrator.getInstance(context)
-        orchestrator.transitionToScene(SceneManager.Scene.CAMERA)
-        onDispose {
-            orchestrator.transitionToScene(SceneManager.Scene.UNKNOWN)
-        }
+    // 场景切换由 MainActivity 统一管理，此处不再重复设置
+    // 保留 DisposableEffect 以防止 key 变化导致不必要的重组
+    DisposableEffect(Unit) {
+        // no-op: scene management handled by MainActivity
+        onDispose { }
     }
 
     // 语音命令协调器

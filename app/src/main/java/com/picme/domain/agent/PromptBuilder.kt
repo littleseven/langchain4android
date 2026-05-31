@@ -31,59 +31,21 @@ class PromptBuilder(
      * - 参数范围明确
      */
     private val basePrompt = """
-你是 PicMe 的 AI 助手小觅，帮助用户控制相机和管理照片。
+你是PicMe助手小觅。只输出一行JSON。
+规则:1.控制格式{"action":"命令",参数...} 2.聊天{"action":"text_reply","message":"回复"} 3.禁止think标签和markdown 4.导航必须用navigate_to/go_back 5.无法理解{"action":"text_reply","message":"抱歉我没理解"}
 
-【绝对规则 - 必须遵守】
-1. 无论用户要求什么，回复永远只输出一行 JSON，不要任何其他文字、解释、标点或换行
-2. 控制设备格式: {"action": "action_name", 参数...}
-3. 聊天回复格式: {"action": "text_reply", "message": "用中文友好回复"}
-4. 绝对不要输出 <think> 标签或思考过程
-5. 绝对不要输出 markdown 代码块 ```
-6. 如果无法理解意图，输出 {"action": "text_reply", "message": "抱歉我没理解，请换一种说法"}
-
-【可用命令】
+命令:
 """.trimIndent()
 
     /**
      * 场景特定提示
      */
     private val scenePrompts = mapOf(
-        SceneManager.Scene.CAMERA to """
-当前在相机页面，可用操作：
-- 拍照、录像、翻转摄像头
-- 调节美颜（磨皮、美白、瘦脸、大眼、唇色、腮红）
-- 切换滤镜、风格、场景模式
-- 调节变焦、曝光
-- 切换画幅比例（4:3, 16:9, full）
-- 切换拍摄模式（照片/视频）
-""".trimIndent(),
-
-        SceneManager.Scene.GALLERY to """
-当前在相册页面，可用操作：
-- 查看照片/视频
-- 删除照片/视频
-- 分享照片/视频
-- 搜索照片
-- 切换视图模式（网格/列表/时间线）
-- 选择/取消选择（多选模式）
-""".trimIndent(),
-
-        SceneManager.Scene.SETTINGS to """
-当前在设置页面，可用操作：
-- 切换主题（浅色/深色/跟随系统）
-- 切换语言（中文/英文/繁体）
-- 下载 AI 模型
-- 切换人脸检测引擎
-- 开启/关闭各种设置项
-""".trimIndent(),
-
-        SceneManager.Scene.DEBUG to """
-当前在调试页面。
-""".trimIndent(),
-
-        SceneManager.Scene.UNKNOWN to """
-当前页面未知，只能进行页面导航。
-""".trimIndent()
+        SceneManager.Scene.CAMERA to "当前相机页:拍照/录像/翻转/美颜/滤镜/风格/变焦/曝光/比例/模式/导航",
+        SceneManager.Scene.GALLERY to "当前相册页:查看/删除/分享/搜索/视图切换/选择/导航",
+        SceneManager.Scene.SETTINGS to "当前设置页:主题/语言/模型下载/人脸引擎/开关设置",
+        SceneManager.Scene.DEBUG to "当前调试页",
+        SceneManager.Scene.UNKNOWN to "当前页面未知，只能导航"
     )
 
     /**
@@ -108,12 +70,10 @@ class PromptBuilder(
             appendLine("【当前页面】")
             appendLine(scenePrompts[currentScene] ?: scenePrompts[SceneManager.Scene.UNKNOWN])
 
-            // 3. Capability 详细说明
+            // 3. Capability 详细说明（使用压缩版）
             appendLine()
-            appendLine("【详细功能说明】")
-            capabilities.forEach { capability ->
-                appendLine(capability.buildCapabilityDescription())
-            }
+            appendLine("【命令】")
+            appendLine(buildCapabilitiesSection())
 
             // 4. 当前状态
             appendLine()
@@ -280,53 +240,35 @@ class PromptBuilder(
 
     private fun buildStateSection(context: AgentContext): String {
         return buildString {
-            appendLine("【当前相机状态】")
-            appendLine(
-                "美颜=${if (context.beautySettings.enabled) "开" else "关"}, " +
-                    "磨皮=${context.beautySettings.smoothing.toInt()}, " +
-                    "美白=${context.beautySettings.whitening.toInt()}, " +
-                    "瘦脸=${context.beautySettings.slimFace.toInt()}, " +
-                    "大眼=${context.beautySettings.bigEyes.toInt()}, " +
-                    "唇色=${context.beautySettings.lipColor.toInt()}, " +
-                    "腮红=${context.beautySettings.blush.toInt()}, " +
-                    "眉毛=${context.beautySettings.eyebrow.toInt()}"
-            )
-            appendLine(
-                "滤镜=${context.filterType.name}, " +
-                    "风格=${context.styleFilter.name}, " +
-                    "变焦=${context.zoomRatio}x, " +
-                    "曝光=${context.exposureCompensation}, " +
-                    "模式=${context.captureMode.name}"
-            )
+            append("状态:")
+            append("美颜${if (context.beautySettings.enabled) "开" else "关"}")
+            append("磨${context.beautySettings.smoothing.toInt()}")
+            append("白${context.beautySettings.whitening.toInt()}")
+            append("瘦${context.beautySettings.slimFace.toInt()}")
+            append("眼${context.beautySettings.bigEyes.toInt()}")
+            append("唇${context.beautySettings.lipColor.toInt()}")
+            append("腮${context.beautySettings.blush.toInt()}")
+            append("眉${context.beautySettings.eyebrow.toInt()}")
+            append("滤${context.filterType.name}")
+            append("风${context.styleFilter.name}")
+            append("焦${context.zoomRatio}x")
+            append("曝${context.exposureCompensation}")
+            appendLine("模${context.captureMode.name}")
         }
     }
 
     private fun buildCapabilitiesSection(): String {
         return buildString {
-            appendLine("【可用命令】")
-            appendLine("adjust_beauty: smoothing=0~100(磨皮), whitening=0~100(美白), slim_face=-50~50(瘦脸), big_eyes=0~100(大眼), lip_color=0~100(唇色), blush=0~100(腮红), eyebrow=0~100(眉毛)")
-            appendLine("switch_filter: filter=NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
-            appendLine("switch_style: style=NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
-            appendLine("switch_scene: scene=night|moon|none")
-            appendLine("switch_ratio: ratio=4:3|16:9|full")
-            appendLine("adjust_exposure: exposure=-2~2")
-            appendLine("adjust_zoom: zoom=0.5~10.0")
-            appendLine("flip_camera: 翻转前后摄像头")
-            appendLine("capture: 拍照")
-            appendLine("toggle_recording: 开始/停止录像")
-            appendLine("switch_mode: mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
-            appendLine("navigate_to: destination=camera|gallery|settings|debug (页面导航)")
-            appendLine("go_back: 返回上一页")
-            appendLine("text_reply: 普通聊天回复")
-            appendLine()
-            appendLine("【中文名称映射】")
-            appendLine("滤镜: 无→NONE, 徕卡经典→LEICA_CLASSIC, 徕卡鲜艳→LEICA_VIBRANT, 徕卡黑白→LEICA_BW")
-            appendLine("滤镜: 胶片金→FILM_GOLD, 胶片富士→FILM_FUJI, 复古→VINTAGE, 冷调→COOL, 暖调→WARM")
-            appendLine("风格: 无→NONE, 卡通→TOON, 素描→SKETCH, 色调分离→POSTERIZE, 浮雕→EMBOSS, 交叉线→CROSSHATCH")
-            appendLine("模式: 拍照→PHOTO, 录像→VIDEO, 人像→PORTRAIT, 专业→PRO, 文档→DOCUMENT")
-            appendLine("场景: 夜景→night, 月亮→moon, 关闭→none")
-            appendLine("比例: 4比3→4:3, 16比9→16:9, 全屏→full")
-            appendLine("页面: 相机→camera, 相册→gallery, 设置→settings, 调试→debug")
+            appendLine("命令:adjust_beauty(smoothing/whitening/slim_face/big_eyes/lip_color/blush/eyebrow)")
+            appendLine("switch_filter(NONE/LEICA_CLASSIC/LEICA_VIBRANT/LEICA_BW/FILM_GOLD/FILM_FUJI/VINTAGE/COOL/WARM)")
+            appendLine("switch_style(NONE/TOON/SKETCH/POSTERIZE/EMBOSS/CROSSHATCH)")
+            appendLine("switch_scene(night/moon/none) switch_ratio(4:3/16:9/full) adjust_exposure(-2~2) adjust_zoom(0.5~10)")
+            appendLine("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PORTRAIT/PRO/DOCUMENT)")
+            appendLine("navigate_to(camera/gallery/settings/debug) go_back text_reply")
+            appendLine("映射:无/NONE 徕卡经典/CLASSIC 鲜艳/VIBRANT 黑白/BW 胶片金/GOLD 富士/FUJI 复古/VINTAGE")
+            appendLine("卡通/TOON 素描/SKETCH 拍照/PHOTO 录像/VIDEO 人像/PORTRAIT 专业/PRO 文档/DOCUMENT")
+            appendLine("夜景/night 月亮/moon 4比3/4:3 16比9/16:9 全屏/full 相机/camera 相册/gallery 设置/settings")
+            appendLine("导航:去相册→{\"action\":\"navigate_to\",\"destination\":\"gallery\"} 去相机→camera 返回→go_back")
         }
     }
 }

@@ -143,6 +143,57 @@ class NavigationCapabilityTest {
     }
 
     @Test
+    fun `execute NavigateTo llm_model_manager triggers onNavigate with LLM_MODEL_MANAGER`() = runTest(testDispatcher) {
+        var receivedDest: NavigationCapability.Destination? = null
+        val capability = NavigationCapability(
+            onNavigate = { dest -> receivedDest = dest },
+            onBack = {}
+        )
+
+        val result = capability.execute(
+            AgentCommand.NavigateTo("llm_model_manager"),
+            defaultContext
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(NavigationCapability.Destination.LLM_MODEL_MANAGER, receivedDest)
+    }
+
+    @Test
+    fun `execute NavigateTo asr_model_manager triggers onNavigate with ASR_MODEL_MANAGER`() = runTest(testDispatcher) {
+        var receivedDest: NavigationCapability.Destination? = null
+        val capability = NavigationCapability(
+            onNavigate = { dest -> receivedDest = dest },
+            onBack = {}
+        )
+
+        val result = capability.execute(
+            AgentCommand.NavigateTo("asr_model_manager"),
+            defaultContext
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(NavigationCapability.Destination.ASR_MODEL_MANAGER, receivedDest)
+    }
+
+    @Test
+    fun `execute NavigateTo Chinese alias for model manager triggers correctly`() = runTest(testDispatcher) {
+        var receivedDest: NavigationCapability.Destination? = null
+        val capability = NavigationCapability(
+            onNavigate = { dest -> receivedDest = dest },
+            onBack = {}
+        )
+
+        val result = capability.execute(
+            AgentCommand.NavigateTo("模型管理"),
+            defaultContext
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(NavigationCapability.Destination.LLM_MODEL_MANAGER, receivedDest)
+    }
+
+    @Test
     fun `execute NavigateTo with Chinese alias triggers correctly`() = runTest(testDispatcher) {
         var receivedDest: NavigationCapability.Destination? = null
         val capability = NavigationCapability(
@@ -175,6 +226,8 @@ class NavigationCapabilityTest {
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Error)
         assertTrue((action as AgentAction.Error).message.contains("未知页面"))
+        assertTrue((action as AgentAction.Error).message.contains("llm_model_manager"))
+        assertTrue((action as AgentAction.Error).message.contains("asr_model_manager"))
     }
 
     // ------------------------------------------------------------------

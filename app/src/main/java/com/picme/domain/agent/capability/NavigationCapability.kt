@@ -39,7 +39,7 @@ class NavigationCapability(
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
-        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|debug)"
+        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|debug|llm_model_manager|asr_model_manager)"
         "go_back" -> "返回上一页，无参数"
         else -> "未知命令"
     }
@@ -61,7 +61,7 @@ class NavigationCapability(
                     Result.success(AgentAction.Success(command))
                 } else {
                     Result.success(
-                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug")
+                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug, llm_model_manager, asr_model_manager")
                     )
                 }
             }
@@ -86,6 +86,8 @@ class NavigationCapability(
             "gallery", "相册", "照片", "图库" -> Destination.GALLERY
             "settings", "设置", "配置" -> Destination.SETTINGS
             "debug", "调试" -> Destination.DEBUG
+            "llm_model_manager", "llm模型管理", "模型管理", "大模型管理" -> Destination.LLM_MODEL_MANAGER
+            "asr_model_manager", "asr模型管理", "语音模型管理" -> Destination.ASR_MODEL_MANAGER
             else -> null
         }
     }
@@ -94,9 +96,11 @@ class NavigationCapability(
      * 导航目标
      */
     enum class Destination {
-        CAMERA,     // 相机页
-        GALLERY,    // 相册页
-        SETTINGS,   // 设置页
-        DEBUG       // 调试页
+        CAMERA,             // 相机页
+        GALLERY,            // 相册页
+        SETTINGS,           // 设置页
+        DEBUG,              // 调试页
+        LLM_MODEL_MANAGER,  // LLM模型管理页
+        ASR_MODEL_MANAGER   // ASR模型管理页
     }
 }

@@ -132,7 +132,9 @@ class MainActivity : ComponentActivity() {
                                 // 场景管理：进入 Camera 页面
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.CAMERA)
-                                    onDispose { }
+                                    onDispose {
+                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                    }
                                 }
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
@@ -144,7 +146,9 @@ class MainActivity : ComponentActivity() {
                                 // 场景管理：进入 Gallery 页面
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
-                                    onDispose { }
+                                    onDispose {
+                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                    }
                                 }
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
@@ -157,7 +161,9 @@ class MainActivity : ComponentActivity() {
                                 // 场景管理：进入 Settings 页面
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
-                                    onDispose { }
+                                    onDispose {
+                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                    }
                                 }
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
@@ -170,7 +176,9 @@ class MainActivity : ComponentActivity() {
                                 // 场景管理：进入 Settings 子页面（复用 SETTINGS 场景）
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
-                                    onDispose { }
+                                    onDispose {
+                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                    }
                                 }
                                 LlmModelManagerScreen(
                                     viewModel = settingsViewModel,
@@ -181,7 +189,9 @@ class MainActivity : ComponentActivity() {
                                 // 场景管理：进入 Settings 子页面（复用 SETTINGS 场景）
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
-                                    onDispose { }
+                                    onDispose {
+                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                    }
                                 }
                                 AsrModelManagerScreen(
                                     viewModel = settingsViewModel,
@@ -192,7 +202,9 @@ class MainActivity : ComponentActivity() {
                                 // 场景管理：进入 Debug 页面
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.DEBUG)
-                                    onDispose { }
+                                    onDispose {
+                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                    }
                                 }
                                 DebugScreen(
                                     onNavigateBack = { navController.popBackStack() },

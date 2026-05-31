@@ -153,17 +153,26 @@ fun SettingsScreen(
                 "gallery" -> onNavigateBack()
                 "settings" -> { /* 已在设置页，无需导航 */ }
                 "debug" -> onNavigateBack() // 设置页无 debug 入口，返回相机页
+                "llm_model_manager" -> onNavigateToLlmModelManager()
+                "asr_model_manager" -> onNavigateToAsrModelManager()
                 else -> Logger.w("PicMe:Settings", "Unknown navigation destination: $destination")
             }
         },
         onNavigateBack = onNavigateBack
     )
 
-    // 注册 Settings Capability
-    agentIntegration.registerCapabilities(
-        viewModel = viewModel,
-        onNavigateToModelManager = onNavigateToLlmModelManager
-    )
+    // 在 DisposableEffect 中注册 Capability，确保生命周期绑定
+    DisposableEffect(Unit) {
+        Logger.i("PicMe:Settings", "Registering Settings capabilities")
+        agentIntegration.registerCapabilities(
+            viewModel = viewModel,
+            onNavigateToModelManager = onNavigateToLlmModelManager
+        )
+        onDispose {
+            Logger.i("PicMe:Settings", "Unregistering Settings capabilities")
+            agentIntegration.unregisterCapabilities()
+        }
+    }
 
     // 构建 PageContext
     val pageContext = agentIntegration.buildPageContext()
