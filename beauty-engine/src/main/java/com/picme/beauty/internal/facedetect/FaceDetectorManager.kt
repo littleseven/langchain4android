@@ -103,7 +103,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             when {
                 config.roiDetector == RoiDetectorType.MEDIAPIPE &&
                     config.landmarkDetector == LandmarkDetectorType.MEDIAPIPE -> {
-                    detectMediaPipe(bitmap, rotationDegrees, lensFacing, startTime)
+                    detectMediaPipeUnified(bitmap, rotationDegrees, lensFacing, startTime)
                 }
                 else -> {
                     detectPipeline(bitmap, lensFacing, config, startTime)
@@ -152,14 +152,18 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         }
     }
 
-    private fun detectMediaPipe(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int, startTime: Long): FaceDetectionResult? {
-        val detector = getMediaPipeDetector()
-        if (!detector.isReady()) {
-            Log.w(TAG, "MediaPipe detector not ready")
+    /**
+     * MediaPipe 统一检测路径
+     * 使用 pipeline 中已创建的 MediaPipeLandmarkDetector，避免重复创建 MediaPipeFaceDetector
+     */
+    private fun detectMediaPipeUnified(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int, startTime: Long): FaceDetectionResult? {
+        val detector = landmarkDetector as? MediaPipeLandmarkDetector
+        if (detector == null) {
+            Log.w(TAG, "MediaPipe landmark detector not available in pipeline")
             return null
         }
 
-        val mediaPipeResult = detector.detect(bitmap, rotationDegrees, lensFacing)
+        val mediaPipeResult = detector.detectLandmarks(bitmap, lensFacing, null)
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
 
         return if (mediaPipeResult != null) {
@@ -258,12 +262,12 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
         return when {
             config.landmarkDetector == LandmarkDetectorType.MEDIAPIPE -> {
-                val detector = getMediaPipeDetector()
-                if (!detector.isReady()) {
-                    Log.w(TAG, "MediaPipe detector not ready for photo")
+                val detector = landmarkDetector as? MediaPipeLandmarkDetector
+                if (detector == null) {
+                    Log.w(TAG, "MediaPipe landmark detector not available in pipeline for photo")
                     return null
                 }
-                val mediaPipeResult = detector.detectForPhoto(bitmap, lensFacing)
+                val mediaPipeResult = detector.detectLandmarks(bitmap, lensFacing, null)
                 lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
                 if (mediaPipeResult != null) {
                     lastDetectionSource = FaceDetectionSource.MEDIAPIPE

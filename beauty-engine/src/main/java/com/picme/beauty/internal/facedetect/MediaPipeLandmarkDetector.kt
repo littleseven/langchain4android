@@ -8,12 +8,12 @@ import android.util.Log
  * 基于 MediaPipe 的关键点检测器
  * 优势: 468 点高密度、实时性强
  */
-class MediaPipeLandmarkDetector(context: Context) : LandmarkDetector {
+class MediaPipeLandmarkDetector(
+    private val faceDetector: MediaPipeFaceDetector
+) : LandmarkDetector {
     companion object {
         private const val TAG = "PicMe:MediaPipeLandmark"
     }
-
-    private val faceDetector = MediaPipeFaceDetector(context)
 
     override fun detectLandmarks(
         bitmap: Bitmap,

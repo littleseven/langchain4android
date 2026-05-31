@@ -10,12 +10,12 @@ import com.google.mediapipe.framework.image.BitmapImageBuilder
  * 基于 MediaPipe 的 ROI 检测器
  * 优势: 快速、精确、支持多帧跟踪
  */
-class MediaPipeRoiDetector(context: Context) : RoiDetector {
+class MediaPipeRoiDetector(
+    private val faceDetector: MediaPipeFaceDetector
+) : RoiDetector {
     companion object {
         private const val TAG = "PicMe:MediaPipeRoi"
     }
-
-    private val faceDetector = MediaPipeFaceDetector(context)
 
     override fun detectRoi(bitmap: Bitmap): android.graphics.RectF? {
         val startTime = SystemClock.elapsedRealtime()
