@@ -8,6 +8,7 @@ import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.SceneManager
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -25,10 +26,10 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * 页面级 Agent 集成测试
+ * Page-level Agent integration tests
  *
- * 验证：页面进入/离开时场景切换和 Capability 注册/注销的正确性。
- * 这些测试如果之前存在，就能发现 Gallery 页面场景为 UNKNOWN 导致 Capability 不可用的 bug。
+ * Verifies: scene transitions on page enter/leave and Capability register/unregister correctness.
+ * These tests would have caught the bug where Gallery page scene was UNKNOWN causing Capability unavailability.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PageAgentIntegrationTest {
@@ -36,6 +37,10 @@ class PageAgentIntegrationTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var sceneManager: SceneManager
     private lateinit var registry: CapabilityRegistry
+
+    private lateinit var galleryCapability: GalleryCapability
+    private lateinit var navigationCapability: NavigationCapability
+    private lateinit var settingsCapability: SettingsCapability
 
     @Before
     fun setUp() {
@@ -46,10 +51,17 @@ class PageAgentIntegrationTest {
 
         registry = CapabilityRegistry.getInstance()
         resetRegistry()
+
+        galleryCapability = GalleryCapability.getInstance()
+        navigationCapability = NavigationCapability.getInstance()
+        settingsCapability = SettingsCapability.getInstance()
+
+        bindCapabilities()
     }
 
     @After
     fun tearDown() {
+        unbindCapabilities()
         resetRegistry()
         sceneManager.clearHistory()
         Dispatchers.resetMain()
@@ -62,8 +74,42 @@ class PageAgentIntegrationTest {
         map.clear()
     }
 
+    private fun bindCapabilities() {
+        galleryCapability.bindDelegate(FakeGalleryDelegate())
+        navigationCapability.bindNavController(mockk<androidx.navigation.NavController>(relaxed = true))
+        settingsCapability.bindDelegate(FakeSettingsDelegate())
+    }
+
+    private fun unbindCapabilities() {
+        galleryCapability.unbindDelegate()
+        navigationCapability.unbindNavController()
+        settingsCapability.unbindDelegate()
+    }
+
     // ------------------------------------------------------------------
-    // 1. 场景切换验证
+    // Fake delegates
+    // ------------------------------------------------------------------
+
+    private class FakeGalleryDelegate : GalleryCapability.Delegate {
+        override fun onViewMedia(mediaId: String?) {}
+        override fun onDeleteMedia(mediaIds: List<String>) {}
+        override fun onShareMedia(mediaIds: List<String>) {}
+        override fun onSelectMedia(mediaId: String, selected: Boolean) {}
+        override fun onSearch(query: String) {}
+        override fun onSwitchViewMode(mode: GalleryCapability.ViewMode) {}
+        override fun onFavoriteMedia(mediaId: String, favorite: Boolean) {}
+    }
+
+    private class FakeSettingsDelegate : SettingsCapability.Delegate {
+        override fun onChangeTheme(theme: com.picme.domain.model.ThemeMode) {}
+        override fun onChangeLanguage(language: com.picme.domain.model.AppLanguage) {}
+        override fun onDownloadModel(modelId: String) {}
+        override fun onSwitchFaceEngine(engine: com.picme.domain.model.FaceDetectionEngineMode) {}
+        override fun onToggleSetting(key: String, enabled: Boolean) {}
+    }
+
+    // ------------------------------------------------------------------
+    // 1. Scene transition verification
     // ------------------------------------------------------------------
 
     @Test
@@ -104,113 +150,108 @@ class PageAgentIntegrationTest {
     }
 
     // ------------------------------------------------------------------
-    // 2. Capability 注册后在对应场景可用
+    // 2. Capability registered and available in corresponding scene
     // ------------------------------------------------------------------
 
     @Test
     fun `GalleryCapability registered and available in GALLERY scene`() {
-        val galleryCap = GalleryCapability()
-        registry.register(galleryCap)
+        registry.register(galleryCapability)
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
         val capabilities = registry.getCapabilitiesForCurrentScene()
         val names = capabilities.map { it.name }
 
-        assertTrue("GalleryCapability 应在 GALLERY 场景可用", names.contains("gallery"))
+        assertTrue("GalleryCapability should be available in GALLERY scene", names.contains("gallery"))
     }
 
     @Test
     fun `GalleryCapability not available in CAMERA scene`() {
-        val galleryCap = GalleryCapability()
-        registry.register(galleryCap)
+        registry.register(galleryCapability)
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
 
         val capabilities = registry.getCapabilitiesForCurrentScene()
         val names = capabilities.map { it.name }
 
-        assertFalse("GalleryCapability 不应在 CAMERA 场景可用", names.contains("gallery"))
+        assertFalse("GalleryCapability should not be available in CAMERA scene", names.contains("gallery"))
     }
 
     @Test
     fun `SettingsCapability registered and available in SETTINGS scene`() {
-        val settingsCap = SettingsCapability()
-        registry.register(settingsCap)
+        registry.register(settingsCapability)
         sceneManager.transitionTo(SceneManager.Scene.SETTINGS)
 
         val capabilities = registry.getCapabilitiesForCurrentScene()
         val names = capabilities.map { it.name }
 
-        assertTrue("SettingsCapability 应在 SETTINGS 场景可用", names.contains("settings"))
+        assertTrue("SettingsCapability should be available in SETTINGS scene", names.contains("settings"))
     }
 
     @Test
     fun `NavigationCapability available in all scenes including UNKNOWN`() {
-        val navCap = NavigationCapability(onNavigate = {}, onBack = {})
-        registry.register(navCap)
+        registry.register(navigationCapability)
 
-        // 测试所有场景
+        // Test all scenes
         SceneManager.Scene.entries.forEach { scene ->
             sceneManager.transitionTo(scene, saveToHistory = false)
             val capabilities = registry.getCapabilitiesForCurrentScene()
             val names = capabilities.map { it.name }
             assertTrue(
-                "NavigationCapability 应在 $scene 场景可用",
+                "NavigationCapability should be available in $scene scene",
                 names.contains("navigation")
             )
         }
     }
 
     // ------------------------------------------------------------------
-    // 3. Capability 注册/注销生命周期
+    // 3. Capability register/unregister lifecycle
     // ------------------------------------------------------------------
 
     @Test
-    fun `unregister removes capability from registry`() {
-        val galleryCap = GalleryCapability()
-        registry.register(galleryCap)
+    fun `resetRegistry removes capability from registry`() {
+        registry.register(galleryCapability)
         assertNotNull(registry.get("gallery"))
 
-        registry.unregister("gallery")
+        resetRegistry()
         assertNull(registry.get("gallery"))
     }
 
     @Test
-    fun `unregistered capability not available in any scene`() {
-        val galleryCap = GalleryCapability()
-        registry.register(galleryCap)
+    fun `removed capability not available in any scene`() {
+        registry.register(galleryCapability)
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
-        // 先确认已注册
+        // Confirm registered
         var capabilities = registry.getCapabilitiesForCurrentScene()
         assertTrue(capabilities.any { it.name == "gallery" })
 
-        // 注销后确认不可用
-        registry.unregister("gallery")
+        // After reset, confirm unavailable
+        resetRegistry()
         capabilities = registry.getCapabilitiesForCurrentScene()
         assertFalse(capabilities.any { it.name == "gallery" })
     }
 
     @Test
-    fun `multiple capabilities can be registered and unregistered independently`() {
-        val galleryCap = GalleryCapability()
-        val navCap = NavigationCapability(onNavigate = {}, onBack = {})
-
-        registry.register(galleryCap)
-        registry.register(navCap)
+    fun `multiple capabilities can be registered and cleared independently`() {
+        registry.register(galleryCapability)
+        registry.register(navigationCapability)
 
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
         var capabilities = registry.getCapabilitiesForCurrentScene()
         assertEquals(2, capabilities.size)
 
-        // 只注销 gallery
-        registry.unregister("gallery")
+        // Clear only gallery by resetting registry (simulates full clear since unregister does not exist)
+        resetRegistry()
+        // Re-register only navigation
+        registry.register(navigationCapability)
+
+        sceneManager.transitionTo(SceneManager.Scene.GALLERY)
         capabilities = registry.getCapabilitiesForCurrentScene()
         assertEquals(1, capabilities.size)
         assertEquals("navigation", capabilities[0].name)
     }
 
     // ------------------------------------------------------------------
-    // 4. UNKNOWN 场景下的行为
+    // 4. Behavior in UNKNOWN scene
     // ------------------------------------------------------------------
 
     @Test
@@ -219,28 +260,23 @@ class PageAgentIntegrationTest {
 
         val capabilities = registry.getCapabilitiesForCurrentScene()
 
-        assertTrue("UNKNOWN 场景无注册 Capability 时应返回空列表", capabilities.isEmpty())
+        assertTrue("UNKNOWN scene with no registered capabilities should return empty list", capabilities.isEmpty())
     }
 
     @Test
     fun `UNKNOWN scene with NavigationCapability returns navigation`() {
-        val navCap = NavigationCapability(onNavigate = {}, onBack = {})
-        registry.register(navCap)
+        registry.register(navigationCapability)
         sceneManager.transitionTo(SceneManager.Scene.UNKNOWN)
 
         val capabilities = registry.getCapabilitiesForCurrentScene()
         val names = capabilities.map { it.name }
 
-        assertTrue("NavigationCapability 应在 UNKNOWN 场景可用", names.contains("navigation"))
+        assertTrue("NavigationCapability should be available in UNKNOWN scene", names.contains("navigation"))
     }
 
     @Test
     fun `dispatch NavigateTo in UNKNOWN scene with NavigationCapability succeeds`() = runTest(testDispatcher) {
-        val navCap = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
-        registry.register(navCap)
+        registry.register(navigationCapability)
         sceneManager.transitionTo(SceneManager.Scene.UNKNOWN)
 
         val context = AgentContext(scene = AgentScene.CAMERA)
@@ -249,13 +285,12 @@ class PageAgentIntegrationTest {
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("导航命令在 UNKNOWN 场景也应执行", action is AgentAction.Success)
+        assertTrue("Navigation command should execute in UNKNOWN scene", action is AgentAction.Success)
     }
 
     @Test
-    fun `dispatch non-navigation command in UNKNOWN scene returns error`() = runTest(testDispatcher) {
-        val galleryCap = GalleryCapability()
-        registry.register(galleryCap)
+    fun `dispatch non-navigation command in UNKNOWN scene queues and returns text reply`() = runTest(testDispatcher) {
+        registry.register(galleryCapability)
         sceneManager.transitionTo(SceneManager.Scene.UNKNOWN)
 
         val context = AgentContext(scene = AgentScene.CAMERA)
@@ -264,20 +299,21 @@ class PageAgentIntegrationTest {
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("非导航命令在 UNKNOWN 场景应返回错误", action is AgentAction.Error)
+        assertTrue("Non-navigation command in UNKNOWN scene should queue and return TextReply", action is AgentAction.TextReply)
+        assertTrue((action as AgentAction.TextReply).message.contains("切换"))
     }
 
     // ------------------------------------------------------------------
-    // 5. 跨页面导航场景切换
+    // 5. Cross-page navigation scene transitions
     // ------------------------------------------------------------------
 
     @Test
     fun `simulate camera to gallery transition updates scene`() {
-        // 模拟从 Camera 页面导航到 Gallery 页面
+        // Simulate navigating from Camera page to Gallery page
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
         assertEquals(SceneManager.Scene.CAMERA, sceneManager.currentScene.value)
 
-        // Camera 页面离开，Gallery 页面进入
+        // Camera page leaves, Gallery page enters
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
         assertEquals(SceneManager.Scene.GALLERY, sceneManager.currentScene.value)
     }
@@ -296,35 +332,30 @@ class PageAgentIntegrationTest {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
         sceneManager.transitionTo(SceneManager.Scene.SETTINGS)
 
-        // 返回上一页
+        // Navigate back
         val success = sceneManager.navigateBack()
         assertTrue(success)
         assertEquals(SceneManager.Scene.GALLERY, sceneManager.currentScene.value)
     }
 
     // ------------------------------------------------------------------
-    // 6. 端到端：注册 + 场景切换 + 命令分发
+    // 6. End-to-end: register + scene switch + command dispatch
     // ------------------------------------------------------------------
 
     @Test
     fun `end to end gallery page navigation command`() = runTest(testDispatcher) {
-        // 模拟 Gallery 页面进入时的完整流程
-        val galleryCap = GalleryCapability()
-        val navCap = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
-        registry.register(galleryCap)
-        registry.register(navCap)
+        // Simulate full flow when Gallery page enters
+        registry.register(galleryCapability)
+        registry.register(navigationCapability)
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
-        // 验证 Gallery 场景下可用的 Capability
+        // Verify available capabilities in Gallery scene
         val capabilities = registry.getCapabilitiesForCurrentScene()
         val names = capabilities.map { it.name }
         assertTrue(names.contains("gallery"))
         assertTrue(names.contains("navigation"))
 
-        // 验证导航命令可以执行
+        // Verify navigation command can execute
         val context = AgentContext(scene = AgentScene.GALLERY)
         val result = registry.dispatch(AgentCommand.NavigateTo("camera"), context)
         advanceUntilIdle()
@@ -335,13 +366,8 @@ class PageAgentIntegrationTest {
 
     @Test
     fun `end to end settings page navigation command`() = runTest(testDispatcher) {
-        val settingsCap = SettingsCapability()
-        val navCap = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
-        registry.register(settingsCap)
-        registry.register(navCap)
+        registry.register(settingsCapability)
+        registry.register(navigationCapability)
         sceneManager.transitionTo(SceneManager.Scene.SETTINGS)
 
         val capabilities = registry.getCapabilitiesForCurrentScene()

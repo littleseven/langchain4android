@@ -1,5 +1,6 @@
 package com.picme.domain.agent
 
+import androidx.navigation.NavController
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.NavigationCapability
@@ -9,6 +10,7 @@ import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -37,21 +39,82 @@ class CapabilityRegistryTest {
     private lateinit var sceneManager: SceneManager
     private val testDispatcher = StandardTestDispatcher()
 
+    private val cameraCapability = CameraCapability.getInstance()
+    private val galleryCapability = GalleryCapability.getInstance()
+    private val navigationCapability = NavigationCapability.getInstance()
+
+    private val mockNavController: NavController = mockk(relaxed = true)
+
+    /**
+     * Fake delegate for CameraCapability
+     */
+    private class FakeCameraDelegate(
+        var capturePhotoAction: () -> Unit = {}
+    ) : CameraCapability.Delegate {
+        override fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings) {}
+        override fun onSwitchFilter(filterType: com.picme.beauty.api.FilterType) {}
+        override fun onSwitchStyle(styleFilter: com.picme.beauty.api.StyleFilter) {}
+        override fun onSwitchScene(sceneName: String) {}
+        override fun onSwitchRatio(ratio: String) {}
+        override fun onAdjustExposure(exposure: Int) {}
+        override fun onAdjustZoom(zoomRatio: Float) {}
+        override fun onFlipCamera() {}
+        override fun onCapturePhoto() = capturePhotoAction()
+        override fun onToggleRecording() {}
+        override fun onSwitchMode(mode: com.picme.domain.model.MediaType) {}
+    }
+
+    /**
+     * Fake delegate for GalleryCapability
+     */
+    private class FakeGalleryDelegate(
+        var viewMediaAction: (String?) -> Unit = {}
+    ) : GalleryCapability.Delegate {
+        override fun onViewMedia(mediaId: String?) = viewMediaAction(mediaId)
+        override fun onDeleteMedia(mediaIds: List<String>) {}
+        override fun onShareMedia(mediaIds: List<String>) {}
+        override fun onSelectMedia(mediaId: String, selected: Boolean) {}
+        override fun onSearch(query: String) {}
+        override fun onSwitchViewMode(mode: GalleryCapability.ViewMode) {}
+        override fun onFavoriteMedia(mediaId: String, favorite: Boolean) {}
+    }
+
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        // 每个测试使用新的实例（通过反射重置单例）
         sceneManager = SceneManager.getInstance()
         registry = CapabilityRegistry.getInstance()
-        // 清理注册表
-        registry.getAll().forEach {
-            registry.unregister(it.name)
-        }
+
+        // Clear internal registry map via reflection
+        clearRegistry()
+
+        // Bind delegates for capabilities that need them
+        navigationCapability.bindNavController(mockNavController)
     }
 
     @After
     fun tearDown() {
+        // Unbind all delegates
+        cameraCapability.unbindDelegate()
+        galleryCapability.unbindDelegate()
+        navigationCapability.unbindNavController()
+
+        // Clear internal registry map via reflection
+        clearRegistry()
+
         Dispatchers.resetMain()
+    }
+
+    /**
+     * Clear the CapabilityRegistry internal map via reflection.
+     * This is acceptable for testing since there is no public unregister() API.
+     */
+    private fun clearRegistry() {
+        val registryField = CapabilityRegistry::class.java.getDeclaredField("registry")
+        registryField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val map = registryField.get(registry) as MutableMap<String, com.picme.domain.agent.capability.Capability>
+        map.clear()
     }
 
     // ------------------------------------------------------------------
@@ -63,9 +126,8 @@ class CapabilityRegistryTest {
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
 
         var callbackInvoked = false
-        val cameraCapability = CameraCapability(
-            onCapturePhoto = { callbackInvoked = true }
-        )
+        val fakeDelegate = FakeCameraDelegate(capturePhotoAction = { callbackInvoked = true })
+        cameraCapability.bindDelegate(fakeDelegate)
         registry.register(cameraCapability)
 
         val result = registry.dispatch(
@@ -81,12 +143,11 @@ class CapabilityRegistryTest {
     }
 
     @Test
-    fun `dispatch camera command in GALLERY scene returns error`() = runTest(testDispatcher) {
+    fun `dispatch camera command in GALLERY scene queues and returns text reply`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
-        val cameraCapability = CameraCapability(
-            onCapturePhoto = { }
-        )
+        val fakeDelegate = FakeCameraDelegate()
+        cameraCapability.bindDelegate(fakeDelegate)
         registry.register(cameraCapability)
 
         val result = registry.dispatch(
@@ -97,20 +158,15 @@ class CapabilityRegistryTest {
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("跨场景命令应返回 Error", action is AgentAction.Error)
-        assertTrue((action as AgentAction.Error).message.contains("无法执行"))
+        assertTrue("跨场景命令应返回 TextReply 并排队", action is AgentAction.TextReply)
+        assertTrue((action as AgentAction.TextReply).message.contains("切换"))
     }
 
     @Test
     fun `dispatch navigation command in any scene succeeds`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
-        var navigateInvoked = false
-        val navCapability = NavigationCapability(
-            onNavigate = { navigateInvoked = true },
-            onBack = { }
-        )
-        registry.register(navCapability)
+        registry.register(navigationCapability)
 
         val result = registry.dispatch(
             AgentCommand.NavigateTo("settings"),
@@ -121,7 +177,6 @@ class CapabilityRegistryTest {
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Success)
-        assertTrue(navigateInvoked)
     }
 
     // ------------------------------------------------------------------
@@ -150,11 +205,11 @@ class CapabilityRegistryTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `dispatch command with null callback returns error`() = runTest(testDispatcher) {
+    fun `dispatch command with unbound delegate queues and returns text reply`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
 
-        // 注册一个所有回调都为 null 的 CameraCapability
-        val cameraCapability = CameraCapability()
+        // Register CameraCapability without binding delegate
+        cameraCapability.unbindDelegate()
         registry.register(cameraCapability)
 
         val result = registry.dispatch(
@@ -165,15 +220,16 @@ class CapabilityRegistryTest {
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("空回调必须返回 Error，不允许静默失败", action is AgentAction.Error)
-        assertEquals("相机拍照未初始化", (action as AgentAction.Error).message)
+        assertTrue("未绑定 delegate 时应排队并返回 TextReply", action is AgentAction.TextReply)
+        assertTrue((action as AgentAction.TextReply).message.contains("切换"))
     }
 
     @Test
-    fun `dispatch gallery command with null callback returns error`() = runTest(testDispatcher) {
+    fun `dispatch gallery command with unbound delegate queues and returns text reply`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
-        val galleryCapability = GalleryCapability()
+        // Register GalleryCapability without binding delegate
+        galleryCapability.unbindDelegate()
         registry.register(galleryCapability)
 
         val result = registry.dispatch(
@@ -184,8 +240,8 @@ class CapabilityRegistryTest {
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue(action is AgentAction.Error)
-        assertEquals("相册查看功能未初始化", (action as AgentAction.Error).message)
+        assertTrue("未绑定 delegate 时应排队并返回 TextReply", action is AgentAction.TextReply)
+        assertTrue((action as AgentAction.TextReply).message.contains("切换"))
     }
 
     // ------------------------------------------------------------------
@@ -197,9 +253,8 @@ class CapabilityRegistryTest {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
         var receivedId: String? = null
-        val galleryCapability = GalleryCapability(
-            onViewMedia = { id -> receivedId = id }
-        )
+        val fakeDelegate = FakeGalleryDelegate(viewMediaAction = { id -> receivedId = id })
+        galleryCapability.bindDelegate(fakeDelegate)
         registry.register(galleryCapability)
 
         val galleryContext = PageContext.GalleryContext(

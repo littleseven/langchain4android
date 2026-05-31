@@ -9,9 +9,11 @@ import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.model.MediaType
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -20,6 +22,8 @@ import org.junit.Test
  * 验证：在 CAMERA 场景下所有相机命令均可正确执行，回调被触发。
  */
 class CameraCapabilityTest {
+
+    private lateinit var capability: CameraCapability
 
     private val defaultContext = AgentContext(
         scene = AgentScene.CAMERA,
@@ -32,13 +36,108 @@ class CameraCapabilityTest {
         isRecording = false
     )
 
+    @Before
+    fun setUp() {
+        capability = CameraCapability.getInstance()
+    }
+
+    @After
+    fun tearDown() {
+        capability.unbindDelegate()
+    }
+
+    // ------------------------------------------------------------------
+    // FakeDelegate: 捕获所有回调参数
+    // ------------------------------------------------------------------
+
+    inner class FakeDelegate : CameraCapability.Delegate {
+        var onAdjustBeautyCalled = false
+        var receivedBeautySettings: com.picme.beauty.api.BeautySettings? = null
+
+        var onSwitchFilterCalled = false
+        var receivedFilterType: FilterType? = null
+
+        var onSwitchStyleCalled = false
+        var receivedStyleFilter: StyleFilter? = null
+
+        var onSwitchSceneCalled = false
+        var receivedSceneName: String? = null
+
+        var onSwitchRatioCalled = false
+        var receivedRatio: String? = null
+
+        var onAdjustExposureCalled = false
+        var receivedExposure: Int? = null
+
+        var onAdjustZoomCalled = false
+        var receivedZoomRatio: Float? = null
+
+        var onFlipCameraCalled = false
+        var onCapturePhotoCalled = false
+        var onToggleRecordingCalled = false
+
+        var onSwitchModeCalled = false
+        var receivedMode: MediaType? = null
+
+        override fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings) {
+            onAdjustBeautyCalled = true
+            receivedBeautySettings = settings
+        }
+
+        override fun onSwitchFilter(filterType: FilterType) {
+            onSwitchFilterCalled = true
+            receivedFilterType = filterType
+        }
+
+        override fun onSwitchStyle(styleFilter: StyleFilter) {
+            onSwitchStyleCalled = true
+            receivedStyleFilter = styleFilter
+        }
+
+        override fun onSwitchScene(sceneName: String) {
+            onSwitchSceneCalled = true
+            receivedSceneName = sceneName
+        }
+
+        override fun onSwitchRatio(ratio: String) {
+            onSwitchRatioCalled = true
+            receivedRatio = ratio
+        }
+
+        override fun onAdjustExposure(exposure: Int) {
+            onAdjustExposureCalled = true
+            receivedExposure = exposure
+        }
+
+        override fun onAdjustZoom(zoomRatio: Float) {
+            onAdjustZoomCalled = true
+            receivedZoomRatio = zoomRatio
+        }
+
+        override fun onFlipCamera() {
+            onFlipCameraCalled = true
+        }
+
+        override fun onCapturePhoto() {
+            onCapturePhotoCalled = true
+        }
+
+        override fun onToggleRecording() {
+            onToggleRecordingCalled = true
+        }
+
+        override fun onSwitchMode(mode: MediaType) {
+            onSwitchModeCalled = true
+            receivedMode = mode
+        }
+    }
+
     // ------------------------------------------------------------------
     // 1. 场景绑定验证
     // ------------------------------------------------------------------
 
     @Test
     fun `activeScenes returns only CAMERA`() {
-        val capability = CameraCapability()
         val scenes = capability.activeScenes()
         assertEquals(1, scenes.size)
         assertEquals(com.picme.domain.agent.model.SceneManager.Scene.CAMERA, scenes[0])
@@ -46,7 +145,6 @@ class CameraCapabilityTest {
 
     @Test
     fun `supportedCommands contains all camera commands`() {
-        val capability = CameraCapability()
         val commands = capability.supportedCommands()
         assertEquals(11, commands.size)
         assertTrue(commands.contains("adjust_beauty"))
@@ -68,227 +166,158 @@ class CameraCapabilityTest {
 
     @Test
     fun `execute AdjustBeauty triggers onAdjustBeauty callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedSettings: BeautySettings? = null
-
-        val capability = CameraCapability(
-            onAdjustBeauty = { settings ->
-                callbackInvoked = true
-                receivedSettings = settings
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val settings = BeautySettings(smoothing = 0.8f)
         val command = AgentCommand.AdjustBeauty(settings)
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals(0.8f, receivedSettings?.smoothing)
+        assertTrue(fakeDelegate.onAdjustBeautyCalled)
+        assertEquals(0.8f, fakeDelegate.receivedBeautySettings?.smoothing)
     }
 
     @Test
     fun `execute SwitchFilter triggers onSwitchFilter callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedFilter: FilterType? = null
-
-        val capability = CameraCapability(
-            onSwitchFilter = { filter ->
-                callbackInvoked = true
-                receivedFilter = filter
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.SwitchFilter(FilterType.VINTAGE)
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals(FilterType.VINTAGE, receivedFilter)
+        assertTrue(fakeDelegate.onSwitchFilterCalled)
+        assertEquals(FilterType.VINTAGE, fakeDelegate.receivedFilterType)
     }
 
     @Test
     fun `execute SwitchStyle triggers onSwitchStyle callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedStyle: StyleFilter? = null
-
-        val capability = CameraCapability(
-            onSwitchStyle = { style ->
-                callbackInvoked = true
-                receivedStyle = style
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.SwitchStyle(StyleFilter.TOON)
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals(StyleFilter.TOON, receivedStyle)
+        assertTrue(fakeDelegate.onSwitchStyleCalled)
+        assertEquals(StyleFilter.TOON, fakeDelegate.receivedStyleFilter)
     }
 
     @Test
     fun `execute SwitchScene triggers onSwitchScene callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedScene: String? = null
-
-        val capability = CameraCapability(
-            onSwitchScene = { scene ->
-                callbackInvoked = true
-                receivedScene = scene
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.SwitchScene("night")
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals("night", receivedScene)
+        assertTrue(fakeDelegate.onSwitchSceneCalled)
+        assertEquals("night", fakeDelegate.receivedSceneName)
     }
 
     @Test
     fun `execute SwitchRatio triggers onSwitchRatio callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedRatio: String? = null
-
-        val capability = CameraCapability(
-            onSwitchRatio = { ratio ->
-                callbackInvoked = true
-                receivedRatio = ratio
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.SwitchRatio("16:9")
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals("16:9", receivedRatio)
+        assertTrue(fakeDelegate.onSwitchRatioCalled)
+        assertEquals("16:9", fakeDelegate.receivedRatio)
     }
 
     @Test
     fun `execute AdjustExposure triggers onAdjustExposure callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedExposure: Int? = null
-
-        val capability = CameraCapability(
-            onAdjustExposure = { exposure ->
-                callbackInvoked = true
-                receivedExposure = exposure
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.AdjustExposure(2)
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals(2, receivedExposure)
+        assertTrue(fakeDelegate.onAdjustExposureCalled)
+        assertEquals(2, fakeDelegate.receivedExposure)
     }
 
     @Test
     fun `execute AdjustZoom triggers onAdjustZoom callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedZoom: Float? = null
-
-        val capability = CameraCapability(
-            onAdjustZoom = { zoom ->
-                callbackInvoked = true
-                receivedZoom = zoom
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.AdjustZoom(2.5f)
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals(2.5f, receivedZoom)
+        assertTrue(fakeDelegate.onAdjustZoomCalled)
+        assertEquals(2.5f, fakeDelegate.receivedZoomRatio)
     }
 
     @Test
     fun `execute FlipCamera triggers onFlipCamera callback`() = runBlocking {
-        var callbackInvoked = false
-
-        val capability = CameraCapability(
-            onFlipCamera = { callbackInvoked = true }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val result = capability.execute(AgentCommand.FlipCamera, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
+        assertTrue(fakeDelegate.onFlipCameraCalled)
     }
 
     @Test
     fun `execute CapturePhoto triggers onCapturePhoto callback`() = runBlocking {
-        var callbackInvoked = false
-
-        val capability = CameraCapability(
-            onCapturePhoto = { callbackInvoked = true }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val result = capability.execute(AgentCommand.CapturePhoto, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
+        assertTrue(fakeDelegate.onCapturePhotoCalled)
     }
 
     @Test
     fun `execute ToggleRecording triggers onToggleRecording callback`() = runBlocking {
-        var callbackInvoked = false
-
-        val capability = CameraCapability(
-            onToggleRecording = { callbackInvoked = true }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val result = capability.execute(AgentCommand.ToggleRecording, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
+        assertTrue(fakeDelegate.onToggleRecordingCalled)
     }
 
     @Test
     fun `execute SwitchMode triggers onSwitchMode callback`() = runBlocking {
-        var callbackInvoked = false
-        var receivedMode: MediaType? = null
-
-        val capability = CameraCapability(
-            onSwitchMode = { mode ->
-                callbackInvoked = true
-                receivedMode = mode
-            }
-        )
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val command = AgentCommand.SwitchMode(MediaType.VIDEO)
         val result = capability.execute(command, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
-        assertEquals(MediaType.VIDEO, receivedMode)
+        assertTrue(fakeDelegate.onSwitchModeCalled)
+        assertEquals(MediaType.VIDEO, fakeDelegate.receivedMode)
     }
 
     // ------------------------------------------------------------------
-    // 3. 边界情况 — 回调未设置时必须返回 Error（不允许静默失败）
+    // 3. 边界情况 — delegate 未绑定时必须返回 Error（不允许静默失败）
     // ------------------------------------------------------------------
 
     @Test
-    fun `execute CapturePhoto without callback returns Error`() = runBlocking {
-        val capability = CameraCapability() // 所有回调为 null
-
+    fun `execute CapturePhoto without delegate returns Error`() = runBlocking {
         val result = capability.execute(AgentCommand.CapturePhoto, defaultContext)
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("回调为空时应返回 Error，而不是 Success", action is AgentAction.Error)
-        assertEquals("相机拍照未初始化", (action as AgentAction.Error).message)
+        assertTrue("delegate 为空时应返回 Error，而不是 Success", action is AgentAction.Error)
+        assertEquals("相机页面未激活，请先切换到相机页面", (action as AgentAction.Error).message)
     }
 
     @Test
-    fun `execute AdjustBeauty without callback returns Error`() = runBlocking {
-        val capability = CameraCapability()
-
+    fun `execute AdjustBeauty without delegate returns Error`() = runBlocking {
         val result = capability.execute(
             AgentCommand.AdjustBeauty(BeautySettings(smoothing = 0.8f)),
             defaultContext
@@ -297,19 +326,17 @@ class CameraCapabilityTest {
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Error)
-        assertEquals("相机美颜调节未初始化", (action as AgentAction.Error).message)
+        assertEquals("相机页面未激活，请先切换到相机页面", (action as AgentAction.Error).message)
     }
 
     @Test
-    fun `execute FlipCamera without callback returns Error`() = runBlocking {
-        val capability = CameraCapability()
-
+    fun `execute FlipCamera without delegate returns Error`() = runBlocking {
         val result = capability.execute(AgentCommand.FlipCamera, defaultContext)
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Error)
-        assertEquals("相机翻转未初始化", (action as AgentAction.Error).message)
+        assertEquals("相机页面未激活，请先切换到相机页面", (action as AgentAction.Error).message)
     }
 
     // ------------------------------------------------------------------
@@ -318,7 +345,8 @@ class CameraCapabilityTest {
 
     @Test
     fun `execute unsupported command returns Error action`() = runBlocking {
-        val capability = CameraCapability()
+        val fakeDelegate = FakeDelegate()
+        capability.bindDelegate(fakeDelegate)
 
         val result = capability.execute(AgentCommand.GoBack, defaultContext)
 
@@ -334,7 +362,6 @@ class CameraCapabilityTest {
 
     @Test
     fun `buildCapabilityDescription contains all commands`() {
-        val capability = CameraCapability()
         val description = capability.buildCapabilityDescription()
 
         assertTrue(description.contains("camera"))
