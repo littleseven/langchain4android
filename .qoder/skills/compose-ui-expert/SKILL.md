@@ -1,11 +1,19 @@
 ---
 name: compose-ui-expert
-description: PicMe Jetpack Compose UI 专家。诊断布局异常、状态管理问题、重组性能瓶颈，确保 HyperOS 视觉风格一致。
+description: |
+  PicMe Jetpack Compose UI 专家。诊断布局异常、状态管理问题、重组性能瓶颈，确保 HyperOS 视觉风格一致。
 version: 1.0.0
 created: 2026-05-25
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [compose, ui, jetpack, layout, state, performance, hyperos]
+tags:
+  - compose
+  - ui
+  - jetpack
+  - layout
+  - state
+  - performance
+  - hyperos
 ---
 
 # Compose UI 专家 (Compose UI Expert)
@@ -80,19 +88,14 @@ tags: [compose, ui, jetpack, layout, state, performance, hyperos]
 | **无限重组** | CPU 占用高、界面闪烁 | 检查 `State` 是否在 `Composable` 内创建 |
 | **LazyColumn 键缺失** | 滚动位置跳动、数据错乱 | 提供稳定的 `key` 参数 |
 
----
-
-## 相关 Skill
-
-- [error-healer](.qoder/skills/error-healer/SKILL.md) — 编译错误修复
-- [perf-optimizer](.qoder/skills/perf-optimizer/SKILL.md) — 重组性能分析
-- [i18n-validator](.qoder/skills/i18n-validator/SKILL.md) — UI 文案多语言验证
-- [intent-router](.qoder/skills/intent-router/SKILL.md) — UI 需求意图路由
-
 ## 相关文件
 
 - [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 交互规范与设计系统
 - [app/src/main/java/com/picme/core/designsystem/AGENTS.md](app/src/main/java/com/picme/core/designsystem/AGENTS.md) — 设计系统规范
+- [error-healer](.qoder/skills/error-healer/SKILL.md) — 编译错误修复
+- [perf-optimizer](.qoder/skills/perf-optimizer/SKILL.md) — 重组性能分析
+- [i18n-validator](.qoder/skills/i18n-validator/SKILL.md) — UI 文案多语言验证
+- [intent-router](.qoder/skills/intent-router/SKILL.md) — UI 需求意图路由
 
 ---
 

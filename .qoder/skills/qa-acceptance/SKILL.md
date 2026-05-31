@@ -1,14 +1,27 @@
 ---
 name: qa-acceptance
-description: PicMe QA 质量验收专家。执行端到端验收、边界测试、性能基线对比与红线合规检查。
+description: |
+  PicMe QA 质量验收专家。执行端到端验收、边界测试、性能基线对比与红线合规检查。
 version: 1.0.0
 created: 2026-05-25
 updated: 2026-05-25
 maintainer: [QA] 质量专家
-tags: [qa, acceptance, testing, benchmark, regression, privacy, performance, i18n]
+tags:
+  - qa
+  - acceptance
+  - testing
+  - benchmark
+  - regression
+  - privacy
+  - performance
+  - i18n
 ---
 
 # QA 验收专家 (QA Acceptance Expert)
+
+> **定位**：PicMe QA 质量验收专家，执行端到端验收、边界测试、性能基线对比与红线合规检查。
+> **触发时机**：用户需要 QA 验收、边界测试、性能基线对比或红线合规检查时自动启用。
+
 
 ## 定位
 
@@ -257,3 +270,12 @@ adb logcat -d | grep -E "PicMe:.*perf|PicMe:.*elapsed"
 # I18N 检查
 python3 scripts/check_i18n_sync.py
 ```
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.0.0 | 2026-05-25 | 初始版本 |

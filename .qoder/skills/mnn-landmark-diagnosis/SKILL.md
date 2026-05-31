@@ -1,14 +1,25 @@
 ---
 name: mnn-landmark-diagnosis
-description: 诊断和修复 MNN/ONNX 推理引擎在人脸关键点检测中的对齐问题。
+description: |
+  诊断和修复 MNN/ONNX 推理引擎在人脸关键点检测中的对齐问题。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [mnn, onnx, landmark, inference, alignment, nchw]
+tags:
+  - mnn
+  - onnx
+  - landmark
+  - inference
+  - alignment
+  - nchw
 ---
 
 # MNN Landmark 诊断与修复 Skill
+
+> **定位**：诊断和修复 MNN/ONNX 推理引擎在人脸关键点检测中的对齐问题。
+> **触发时机**：用户报告人脸关键点偏移、对齐错误或 MNN/ONNX 推理结果异常时自动启用。
+
 
 ## 触发条件
 
@@ -268,3 +279,12 @@ adb logcat -d | grep "MNN vs ONNX"
 ## 附加资源
 
 - 详细技术文档: [docs/03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md](docs/03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md)
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

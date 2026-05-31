@@ -1,14 +1,24 @@
 ---
 name: doc-sync-guardian
-description: 自动维护 PRODUCT.md → docs/01-PRODUCT/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。
+description: |
+  自动维护 PRODUCT.md → docs/01-PRODUCT/FEATURES.md → 模块 AGENTS.md 三层文档体系的一致性。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [CR] 规范守护者 + [CO] 协调者
-tags: [documentation, sync, audit, agents, product]
+tags:
+  - documentation
+  - sync
+  - audit
+  - agents
+  - product
 ---
 
 # PicMe 文档一致性守护者 (DocSync Guardian)
+
+> **定位**：自动维护 PRODUCT.md → FEATURES.md → 模块 AGENTS.md 文档体系的一致性。
+> **触发时机**：用户修改文档、检查文档同步或涉及文档一致性审计时自动启用。
+
 
 ## 📋 Skill 概述
 
@@ -487,3 +497,12 @@ grep -r "已废弃" docs/*.md
 **创建日期**: 2026-05-03  
 **维护者**: [CR] 规范守护者 + [CO] 协调者
 
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

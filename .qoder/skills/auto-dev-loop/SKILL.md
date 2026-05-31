@@ -1,14 +1,24 @@
 ---
 name: auto-dev-loop
-description: PicMe 开发自循环自动化。一键完成编译→安装→设备验证→质量检查→报告完整闭环。
+description: |
+  PicMe 开发自循环自动化。一键完成编译→安装→设备验证→质量检查→报告完整闭环。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [android, build, test, automation, ci]
+tags:
+  - android
+  - build
+  - test
+  - automation
+  - ci
 ---
 
 # Auto Dev Loop - 开发自循环自动化
+
+> **定位**：PicMe 开发自循环自动化，一键完成编译到报告完整闭环。
+> **触发时机**：用户需要快速验证改动、执行完整开发闭环或 CI 检查时自动启用。
+
 
 ## 设计目标
 
@@ -209,3 +219,9 @@ fi
 - `.qoder/skills/compose-ui-expert/SKILL.md` — UI 验证参考
 - `.qoder/skills/perf-optimizer/SKILL.md` — 性能基线对比
 - `.qoder/skills/i18n-validator/SKILL.md` — 多语言验证
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

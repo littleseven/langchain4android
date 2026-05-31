@@ -1,18 +1,23 @@
 ---
 name: rd-reflection
-description: RD 工程师自我进化系统。结构化复盘模板 + 累积经验资产 + 动态检查清单 + 跨 skill 联动更新。
+description: |
+  RD 工程师自我进化系统。结构化复盘模板 + 累积经验资产 + 动态检查清单 + 跨 skill 联动更新。
 version: 1.1.0
 created: 2026-05-10
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [reflection, checklist, evolution, experience, learning]
+tags:
+  - reflection
+  - checklist
+  - evolution
+  - experience
+  - learning
 ---
 
 # RD 自我进化系统 (Self-Evolving Reflection)
 
 > **定位**：不是静态文档，而是活的系统。每次任务后自动生长，下次类似任务自动预警。
-> 
-> **核心循环**：`任务执行 → 结构化复盘 → 经验沉淀 → 清单更新 → skill 联动 → 下次任务预警`
+> **触发时机**：任务完成后复盘、经验沉淀、检查清单更新或跨 Skill 联动时自动启用。
 
 ---
 
@@ -175,3 +180,12 @@ rd-reflection/
 ## 七、已有经验资产（截至 2026-05-10）
 
 见 `EXPERIENCE_LOG.md`
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-10 | 初始版本 |

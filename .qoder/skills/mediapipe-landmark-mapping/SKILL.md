@@ -1,14 +1,24 @@
 ---
 name: mediapipe-landmark-mapping
-description: MediaPipe 468 点与 106 点人脸关键点映射规范。
+description: |
+  MediaPipe 468 点与 106 点人脸关键点映射规范。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [mediapipe, landmark, mapping, face-detection, opengl]
+tags:
+  - mediapipe
+  - landmark
+  - mapping
+  - face-detection
+  - opengl
 ---
 
 # MediaPipe 关键点映射 Skill
+
+> **定位**：MediaPipe 468 点与 106 点人脸关键点映射规范。
+> **触发时机**：用户涉及 MediaPipe 关键点映射、468 点转 106 点或人脸关键点对齐时自动启用。
+
 
 ## 坐标系转换
 
@@ -112,3 +122,12 @@ val indices = intArrayOf(95, 96, 95) // 95 是下唇底部
 | 108 | 0 | 左脸轮廓起点 |
 | 109 | 32 | 右脸轮廓终点 |
 | 110 | 50 | 鼻尖附近 |
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

@@ -1,11 +1,17 @@
 ---
 name: egl-state-machine
-description: EGL 上下文状态机管理专家。预防 AI 在操作 EGL 上下文、离屏渲染、拍照 GPU 化时陷入线程与状态泥潭。
+description: |
+  EGL 上下文状态机管理专家。预防 AI 在操作 EGL 上下文、离屏渲染、拍照 GPU 化时陷入线程与状态泥潭。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [opengl, egl, gpu, rendering, threading]
+tags:
+  - opengl
+  - egl
+  - gpu
+  - rendering
+  - threading
 ---
 
 # EGL 状态机专家 (EGL State Machine Expert)
@@ -171,3 +177,12 @@ Log.d("PicMe:EGL", "[createContext] shareContext=$shareContext, newContext=$newC
     |
     +-- 仍无法解决 -> 上报并请求人工介入
 ```
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

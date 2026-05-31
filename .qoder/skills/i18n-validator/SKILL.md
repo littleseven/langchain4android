@@ -1,11 +1,17 @@
 ---
 name: i18n-validator
-description: PicMe 多语言同步验证专家。确保用户可见文案同步覆盖英文、简体中文、繁体中文，禁止硬编码字符串。
+description: |
+  PicMe 多语言同步验证专家。确保用户可见文案同步覆盖英文、简体中文、繁体中文，禁止硬编码字符串。
 version: 1.0.0
 created: 2026-05-25
 updated: 2026-05-25
 maintainer: [CR] 规范守护者
-tags: [i18n, internationalization, strings, localization, validation]
+tags:
+  - i18n
+  - internationalization
+  - strings
+  - localization
+  - validation
 ---
 
 # I18N 验证专家 (Internationalization Validator)
@@ -107,20 +113,13 @@ python3 scripts/check_i18n_sync.py
 python3 scripts/check_i18n_sync.py
 ```
 
----
-
-## 相关 Skill
-
-- [qa-acceptance](.qoder/skills/qa-acceptance/SKILL.md) — I18N 红线验收
-- [compose-ui-expert](.qoder/skills/compose-ui-expert/SKILL.md) — UI 文案硬编码检查
-- [doc-sync-guardian](.qoder/skills/doc-sync-guardian/SKILL.md) — 文档一致性同步
-
 ## 相关文件
 
 - [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 多语言词汇表（Section 4.1.1）
 - [PRODUCT.md](PRODUCT.md) — I18N 规范定义
-
----
+- [qa-acceptance](.qoder/skills/qa-acceptance/SKILL.md) — I18N 红线验收
+- [compose-ui-expert](.qoder/skills/compose-ui-expert/SKILL.md) — UI 文案硬编码检查
+- [doc-sync-guardian](.qoder/skills/doc-sync-guardian/SKILL.md) — 文档一致性同步
 
 ## 版本历史
 
