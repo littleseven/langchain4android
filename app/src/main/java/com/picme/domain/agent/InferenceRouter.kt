@@ -118,6 +118,17 @@ class InferenceRouter(
             appendLine("请只输出一行JSON，不要其他内容:")
         }
 
+        // 打印完整 prompt 用于调试
+        val totalPromptLength = systemPrompt.length + userPrompt.length
+        val estimatedTokens = totalPromptLength / 2  // 中文字符约 1-2 token，取保守估计
+        Logger.d(tag, "===== SYSTEM PROMPT ===== [len=${systemPrompt.length}, estTokens~${systemPrompt.length / 2}]")
+        systemPrompt.lineSequence().forEach { line ->
+            Logger.d(tag, line)
+        }
+        Logger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
+        Logger.d(tag, userPrompt)
+        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=512]")
+
         val result = localEngine.generateWithSystem(
             systemPrompt = systemPrompt,
             userPrompt = userPrompt,

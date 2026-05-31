@@ -9,9 +9,10 @@ import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.*
 import org.junit.After
@@ -141,7 +142,7 @@ class AgentOrchestratorCommandChainTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `full chain parse dispatch execute with callback`() = runBlocking {
+    fun `full chain parse dispatch execute with callback`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
         // 清理
         registry.getAll().forEach { registry.unregister(it.name) }
@@ -160,6 +161,7 @@ class AgentOrchestratorCommandChainTest {
 
         // 分发并执行
         val result = registry.dispatch(parsedCommand, context)
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         assertTrue(result.getOrNull() is AgentAction.Success)
@@ -167,7 +169,7 @@ class AgentOrchestratorCommandChainTest {
     }
 
     @Test
-    fun `full chain with null callback returns error not success`() = runBlocking {
+    fun `full chain with null callback returns error not success`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
         registry.getAll().forEach { registry.unregister(it.name) }
 
@@ -181,6 +183,7 @@ class AgentOrchestratorCommandChainTest {
         val parsedCommand = AgentCommandParser.parseLlmResponse("""{"action":"capture"}""", context)
 
         val result = registry.dispatch(parsedCommand, context)
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -189,7 +192,7 @@ class AgentOrchestratorCommandChainTest {
     }
 
     @Test
-    fun `navigation command works across scenes`() = runBlocking {
+    fun `navigation command works across scenes`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
         registry.getAll().forEach { registry.unregister(it.name) }
 
@@ -210,6 +213,7 @@ class AgentOrchestratorCommandChainTest {
         )
 
         val result = registry.dispatch(parsedCommand, context)
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         assertTrue(result.getOrNull() is AgentAction.Success)

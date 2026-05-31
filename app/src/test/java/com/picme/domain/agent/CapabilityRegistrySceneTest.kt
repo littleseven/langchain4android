@@ -61,7 +61,7 @@ class CapabilityRegistrySceneTest {
 
         // 注册所有 Capability
         registry.register(NavigationCapability(onNavigate = {}, onBack = {}))
-        registry.register(CameraCapability())
+        registry.register(CameraCapability(onCapturePhoto = {}))
         registry.register(GalleryCapability())
         registry.register(SettingsCapability())
     }

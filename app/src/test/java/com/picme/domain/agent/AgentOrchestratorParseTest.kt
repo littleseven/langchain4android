@@ -8,9 +8,17 @@ import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.model.MediaType
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -22,7 +30,20 @@ import org.junit.Test
  * 提取为独立 object 的原因：避免实例化 [AgentOrchestrator] 时触发
  * [LocalLlmEngine] -> [MnnLlmClient] 的 JNI 加载，导致纯 JVM 单元测试失败。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class AgentOrchestratorParseTest {
+
+    private val testDispatcher = StandardTestDispatcher()
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(testDispatcher)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
     private val defaultContext = AgentContext(
         scene = AgentScene.CAMERA,
@@ -130,6 +151,30 @@ class AgentOrchestratorParseTest {
             "真实 Qwen3 响应应正确提取 capture 指令",
             command is AgentCommand.CapturePhoto
         )
+    }
+
+    @Test
+    fun `parseLlmResponse extracts json inside think tag when no json outside`() {
+        // 模拟 Qwen3-0.6B 真实输出：JSON 藏在 think 标签内部，外部没有 JSON
+        val input = "<think>\n好的，用户说\"去相册\"，我需要按照规则处理。正确的做法是生成对应的 JSON 对象。\n\n{\"action\":\"navigate_to\",\"destination\":\"gallery\"}\n</think>"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "think 标签内部包含 JSON 时应正确提取",
+            command is AgentCommand.NavigateTo
+        )
+        assertEquals("gallery", (command as AgentCommand.NavigateTo).destination)
+    }
+
+    @Test
+    fun `parseLlmResponse think tag with only thinking no json falls back to keywords`() {
+        // think 标签内没有 JSON，外部也没有，但包含关键词
+        val input = "<think>\n用户说去相册，我应该导航到相册页面\n</think>"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "think 标签内无 JSON 时应走关键词兜底",
+            command is AgentCommand.NavigateTo
+        )
+        assertEquals("gallery", (command as AgentCommand.NavigateTo).destination)
     }
 
     // ------------------------------------------------------------------
@@ -250,10 +295,11 @@ class AgentOrchestratorParseTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `capabilityRegistry dispatch CapturePhoto without registered capability returns Error`() = runBlocking {
+    fun `capabilityRegistry dispatch CapturePhoto without registered capability returns Error`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.CapturePhoto
         val result = registry.dispatch(command, defaultContext)
+        advanceUntilIdle()
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         // CameraCapability 未注册时，findCapabilityForCommand 返回 null，dispatch 返回 Error
@@ -262,10 +308,11 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `capabilityRegistry dispatch TextReply returns TextReply action`() = runBlocking {
+    fun `capabilityRegistry dispatch TextReply returns TextReply action`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.TextReply("你好")
         val result = registry.dispatch(command, defaultContext)
+        advanceUntilIdle()
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         assertTrue(action is AgentAction.TextReply)
@@ -273,10 +320,11 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `capabilityRegistry dispatch FlipCamera without registered capability returns Error`() = runBlocking {
+    fun `capabilityRegistry dispatch FlipCamera without registered capability returns Error`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.FlipCamera
         val result = registry.dispatch(command, defaultContext)
+        advanceUntilIdle()
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         // CameraCapability 未注册时，findCapabilityForCommand 返回 null，dispatch 返回 Error

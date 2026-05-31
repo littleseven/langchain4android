@@ -58,6 +58,7 @@ class GalleryAgentIntegration(
      */
     fun onExitGallery() {
         Logger.i(TAG, "Exiting GALLERY scene")
+        sceneManager.transitionTo(SceneManager.Scene.UNKNOWN)
     }
 
     /**
@@ -115,6 +116,15 @@ class GalleryAgentIntegration(
         )
         orchestrator.registerCapability(navigationCapability)
         Logger.i(TAG, "NavigationCapability registered")
+    }
+
+    /**
+     * 注销 Gallery 相关的 Capability
+     */
+    fun unregisterCapabilities() {
+        orchestrator.unregisterCapability("gallery")
+        orchestrator.unregisterCapability("navigation")
+        Logger.i(TAG, "Gallery capabilities unregistered")
     }
 
     /**

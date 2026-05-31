@@ -169,6 +169,16 @@ class AiAgentUseCase(
                 }
                 // 本地推理（传入高质量自定义 system prompt）
                 val systemPrompt = buildSystemPrompt(currentState)
+
+                // 打印完整 prompt 用于调试
+                val promptLength = systemPrompt.length
+                val estimatedTokens = promptLength / 2  // 中文字符约 1-2 token，取保守估计
+                Logger.d(tag, "===== CAMERA SYSTEM PROMPT ===== [len=$promptLength, estTokens~$estimatedTokens]")
+                systemPrompt.lineSequence().forEach { line ->
+                    Logger.d(tag, line)
+                }
+                Logger.d(tag, "===== END CAMERA PROMPT ===== [totalLen=$promptLength, totalEstTokens~$estimatedTokens, maxTokens=256]")
+
                 val result = orchestrator.processUserInput(
                     input = userInput,
                     agentContext = agentContext,
@@ -363,59 +373,17 @@ class AiAgentUseCase(
 
     private fun buildSystemPrompt(state: CameraStateSnapshot): String {
         return buildString {
-            appendLine("你是PicMe相机的AI助手小觅。用户通过语音或文字与你交互。")
-            appendLine()
-            appendLine("【绝对规则 - 必须遵守】")
-            appendLine("1. 无论用户要求什么，你的回复永远只输出一行JSON，不要任何其他文字、解释、标点或换行")
-            appendLine("2. 控制相机格式: {\"action\":\"命令名\", 参数...}")
-            appendLine("3. 聊天回复格式: {\"action\":\"text_reply\",\"message\":\"用中文友好回复\"}")
-            appendLine("4. 绝对不要输出<think>标签或思考过程")
-            appendLine("5. 绝对不要输出markdown代码块```")
-            appendLine()
-            appendLine("【当前相机状态】")
-            appendLine("美颜=${if (state.beautySettings.enabled) "开" else "关"}, 磨皮=${state.beautySettings.smoothing.toInt()}, 美白=${state.beautySettings.whitening.toInt()}, 瘦脸=${state.beautySettings.slimFace.toInt()}, 大眼=${state.beautySettings.bigEyes.toInt()}, 唇色=${state.beautySettings.lipColor.toInt()}, 腮红=${state.beautySettings.blush.toInt()}, 眉毛=${state.beautySettings.eyebrow.toInt()}")
-            appendLine("滤镜=${state.filterType.name}, 风格=${state.styleFilter.name}, 变焦=${state.zoomRatio}x, 曝光=${state.exposureCompensation}, 模式=${state.captureMode.name}")
-            appendLine()
-            appendLine("【可用命令】")
-            appendLine("adjust_beauty: smoothing=0~100(磨皮), whitening=0~100(美白), slim_face=-50~50(瘦脸), big_eyes=0~100(大眼), lip_color=0~100(唇色), blush=0~100(腮红), eyebrow=0~100(眉毛)")
-            appendLine("switch_filter: filter=NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
-            appendLine("switch_style:  style=NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
-            appendLine("switch_scene:  scene=night|moon|none")
-            appendLine("switch_ratio:  ratio=4:3|16:9|full")
-            appendLine("adjust_exposure: exposure=-2~2")
-            appendLine("adjust_zoom:   zoom=0.5~10.0")
-            appendLine("flip_camera:   翻转前后摄像头")
-            appendLine("capture:       拍照")
-            appendLine("toggle_recording: 开始/停止录像")
-            appendLine("switch_mode:   mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
-            appendLine("navigate_to:   destination=camera|gallery|settings|debug (页面导航)")
-            appendLine("go_back:       返回上一页")
-            appendLine("text_reply:    普通聊天回复")
-            appendLine()
-            appendLine("【中文名称映射 - 用户说左边，你必须输出右边】")
-            appendLine("滤镜: 无→NONE, 徕卡经典→LEICA_CLASSIC, 徕卡鲜艳/徕卡生动→LEICA_VIBRANT, 徕卡黑白/黑白→LEICA_BW")
-            appendLine("滤镜: 胶片金→FILM_GOLD, 胶片富士→FILM_FUJI, 复古/怀旧→VINTAGE, 冷调→COOL, 暖调→WARM")
-            appendLine("风格: 无→NONE, 卡通/漫画→TOON, 素描→SKETCH, 色调分离/海报→POSTERIZE, 浮雕→EMBOSS, 交叉线→CROSSHATCH")
-            appendLine("模式: 拍照→PHOTO, 录像→VIDEO, 人像→PORTRAIT, 专业→PRO, 文档→DOCUMENT")
-            appendLine("场景: 夜景→night, 月亮→moon, 关闭→none")
-            appendLine("比例: 4比3→4:3, 16比9→16:9, 全屏→full")
-            appendLine("页面: 相机/拍照→camera, 相册/图库→gallery, 设置/配置→settings, 调试→debug")
-            appendLine()
-            appendLine("【示例 - 严格模仿】")
-            appendLine("用户: 拍张照片 → {\"action\":\"capture\"}")
-            appendLine("用户: 磨皮调到80 → {\"action\":\"adjust_beauty\",\"smoothing\":80}")
-            appendLine("用户: 切换徕卡黑白 → {\"action\":\"switch_filter\",\"filter\":\"LEICA_BW\"}")
-            appendLine("用户: 打开设置 → {\"action\":\"navigate_to\",\"destination\":\"settings\"}")
-            appendLine("用户: 去相册 → {\"action\":\"navigate_to\",\"destination\":\"gallery\"}")
-            appendLine("用户: 返回 → {\"action\":\"go_back\"}")
-            appendLine("用户: 你好 → {\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅！\"}")
-            appendLine("用户: 瘦脸开到20 → {\"action\":\"adjust_beauty\",\"slim_face\":20}")
-            appendLine()
-            appendLine("【额外规则】")
-            appendLine("- 相对调整: '高一点'='加一点' → 当前值+15左右; '低一点'='减一点' → 当前值-15左右")
-            appendLine("- 未提及的参数保持当前值不变")
-            appendLine("- 所有message字段必须使用中文")
-            appendLine("- 用户要求打开/前往/切换到某个页面时，必须使用 navigate_to 命令，不要用 text_reply")
+            append("你是PicMe助手小觅。只输出一行JSON。")
+            append("规则:1.控制{\"action\":\"命令\",参数...} 2.聊天{\"action\":\"text_reply\",\"message\":\"回复\"} 3.禁止think和markdown 4.导航用navigate_to/go_back。")
+            append("状态:美颜${if (state.beautySettings.enabled) "开" else "关"}磨${state.beautySettings.smoothing.toInt()}白${state.beautySettings.whitening.toInt()}瘦${state.beautySettings.slimFace.toInt()}眼${state.beautySettings.bigEyes.toInt()}唇${state.beautySettings.lipColor.toInt()}腮${state.beautySettings.blush.toInt()}眉${state.beautySettings.eyebrow.toInt()}滤${state.filterType.name}风${state.styleFilter.name}焦${state.zoomRatio}x曝${state.exposureCompensation}模${state.captureMode.name}。")
+            append("命令:adjust_beauty(smoothing/whitening/slim_face/big_eyes/lip_color/blush/eyebrow) ")
+            append("switch_filter(NONE/CLASSIC/VIBRANT/BW/GOLD/FUJI/VINTAGE/COOL/WARM) ")
+            append("switch_style(NONE/TOON/SKETCH/POSTERIZE/EMBOSS/CROSSHATCH) ")
+            append("switch_scene(night/moon/none) switch_ratio(4:3/16:9/full) adjust_exposure(-2~2) adjust_zoom(0.5~10) ")
+            append("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PORTRAIT/PRO/DOCUMENT) ")
+            append("navigate_to(camera/gallery/settings/debug/llm_model_manager/asr_model_manager) go_back text_reply。")
+            append("例:拍照片→{\"action\":\"capture\"} 磨皮80→{\"action\":\"adjust_beauty\",\"smoothing\":80} 徕卡黑白→{\"action\":\"switch_filter\",\"filter\":\"BW\"} 去相册→{\"action\":\"navigate_to\",\"destination\":\"gallery\"} 返回→{\"action\":\"go_back\"} 你好→{\"action\":\"text_reply\",\"message\":\"你好\"}。")
+            append("规则:相对调整±15 未提及参数不变 message用中文 导航必须用navigate_to/go_back")
         }
     }
 

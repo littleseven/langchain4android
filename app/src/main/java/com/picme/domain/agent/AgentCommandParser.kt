@@ -35,6 +35,13 @@ object AgentCommandParser {
                 val thinkStart = cleaned.indexOf(startTag)
                 val thinkEnd = cleaned.indexOf(endTag)
                 if (thinkStart >= 0 && thinkEnd > thinkStart) {
+                    // 先尝试从 think 标签内部提取 JSON（小模型常把 JSON 藏在思考过程里）
+                    val thinkContent = cleaned.substring(thinkStart + startTag.length, thinkEnd)
+                    val innerJson = tryExtractJsonFromRaw(thinkContent)
+                    if (innerJson != null) {
+                        cleaned = innerJson
+                        break
+                    }
                     cleaned = cleaned.removeRange(thinkStart, thinkEnd + endTag.length).trim()
                 } else {
                     break
@@ -71,7 +78,9 @@ object AgentCommandParser {
                 cleaned = fallbackJson
             } else {
                 // 兜底 2：关键词匹配（小模型不输出 JSON 时的最终防线）
+                // 先尝试清理后的内容，再尝试原始响应（think 标签内可能包含关键词）
                 val keywordCommand = tryParseByKeywords(cleaned)
+                    ?: tryParseByKeywords(response)
                 if (keywordCommand != null) {
                     Logger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
                     return keywordCommand
@@ -276,20 +285,27 @@ object AgentCommandParser {
             lower.contains("翻转") || lower.contains("切换摄像头") || lower.contains("前后") -> AgentCommand.FlipCamera
             // 录像
             lower.contains("录像") || lower.contains("录制") || lower.contains("拍视频") -> AgentCommand.ToggleRecording
-            // 导航相关
+            // 导航相关 - 去相册（最高优先级，多种说法）
             lower.contains("去相册") || lower.contains("打开相册") || lower.contains("看照片") ||
-                lower.contains("相册") || lower.contains("图库") ->
+                lower.contains("图库") || lower.contains("照片库") ||
+                (lower.contains("相册") && (lower.contains("去") || lower.contains("打开") || lower.contains("看"))) ->
                 AgentCommand.NavigateTo("gallery")
+            // 导航相关 - 去设置
             lower.contains("去设置") || lower.contains("打开设置") || lower.contains("设置页") ||
-                lower.contains("app设置") || lower.contains("应用设置") ->
+                lower.contains("app设置") || lower.contains("应用设置") ||
+                (lower.contains("设置") && (lower.contains("去") || lower.contains("打开"))) ->
                 AgentCommand.NavigateTo("settings")
+            // 导航相关 - 去相机
             lower.contains("去相机") || lower.contains("回相机") || lower.contains("打开相机") ||
-                lower.contains("回拍照") ->
+                lower.contains("回拍照") || lower.contains("去拍照") ||
+                (lower.contains("相机") && (lower.contains("去") || lower.contains("打开") || lower.contains("回"))) ->
                 AgentCommand.NavigateTo("camera")
+            // 导航相关 - 去调试
             lower.contains("去调试") || lower.contains("打开调试") || lower.contains("debug") ->
                 AgentCommand.NavigateTo("debug")
+            // 导航相关 - 返回
             lower.contains("返回") || lower.contains("回去") || lower.contains("上一页") ||
-                lower.contains("后退") ->
+                lower.contains("后退") || lower.contains("回退") ->
                 AgentCommand.GoBack
             // Gallery 相关
             lower.contains("删除") || lower.contains("删掉") ->

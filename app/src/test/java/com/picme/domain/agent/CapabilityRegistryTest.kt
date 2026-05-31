@@ -11,9 +11,10 @@ import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.*
 import org.junit.After
@@ -58,7 +59,7 @@ class CapabilityRegistryTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `dispatch camera command in CAMERA scene succeeds`() = runBlocking {
+    fun `dispatch camera command in CAMERA scene succeeds`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
 
         var callbackInvoked = false
@@ -71,6 +72,7 @@ class CapabilityRegistryTest {
             AgentCommand.CapturePhoto,
             AgentContext(scene = AgentScene.CAMERA)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -79,7 +81,7 @@ class CapabilityRegistryTest {
     }
 
     @Test
-    fun `dispatch camera command in GALLERY scene returns error`() = runBlocking {
+    fun `dispatch camera command in GALLERY scene returns error`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
         val cameraCapability = CameraCapability(
@@ -91,6 +93,7 @@ class CapabilityRegistryTest {
             AgentCommand.CapturePhoto,
             AgentContext(scene = AgentScene.GALLERY)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -99,7 +102,7 @@ class CapabilityRegistryTest {
     }
 
     @Test
-    fun `dispatch navigation command in any scene succeeds`() = runBlocking {
+    fun `dispatch navigation command in any scene succeeds`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
         var navigateInvoked = false
@@ -113,6 +116,7 @@ class CapabilityRegistryTest {
             AgentCommand.NavigateTo("settings"),
             AgentContext(scene = AgentScene.GALLERY)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -125,7 +129,7 @@ class CapabilityRegistryTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `dispatch unregistered command returns error`() = runBlocking {
+    fun `dispatch unregistered command returns error`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
         // 不注册任何 Capability
 
@@ -133,6 +137,7 @@ class CapabilityRegistryTest {
             AgentCommand.CapturePhoto,
             AgentContext(scene = AgentScene.CAMERA)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -145,7 +150,7 @@ class CapabilityRegistryTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `dispatch command with null callback returns error`() = runBlocking {
+    fun `dispatch command with null callback returns error`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.CAMERA)
 
         // 注册一个所有回调都为 null 的 CameraCapability
@@ -156,6 +161,7 @@ class CapabilityRegistryTest {
             AgentCommand.CapturePhoto,
             AgentContext(scene = AgentScene.CAMERA)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -164,7 +170,7 @@ class CapabilityRegistryTest {
     }
 
     @Test
-    fun `dispatch gallery command with null callback returns error`() = runBlocking {
+    fun `dispatch gallery command with null callback returns error`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
         val galleryCapability = GalleryCapability()
@@ -174,6 +180,7 @@ class CapabilityRegistryTest {
             AgentCommand.ViewMedia("123"),
             AgentContext(scene = AgentScene.GALLERY)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -186,7 +193,7 @@ class CapabilityRegistryTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `dispatch with GalleryContext uses page context`() = runBlocking {
+    fun `dispatch with GalleryContext uses page context`() = runTest(testDispatcher) {
         sceneManager.transitionTo(SceneManager.Scene.GALLERY)
 
         var receivedId: String? = null
@@ -211,6 +218,7 @@ class CapabilityRegistryTest {
             AgentContext(scene = AgentScene.GALLERY),
             galleryContext
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         assertEquals("42", receivedId)
@@ -221,11 +229,12 @@ class CapabilityRegistryTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `dispatch TextReply returns text directly`() = runBlocking {
+    fun `dispatch TextReply returns text directly`() = runTest(testDispatcher) {
         val result = registry.dispatch(
             AgentCommand.TextReply("你好"),
             AgentContext(scene = AgentScene.CAMERA)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
@@ -234,11 +243,12 @@ class CapabilityRegistryTest {
     }
 
     @Test
-    fun `dispatch Error command returns error directly`() = runBlocking {
+    fun `dispatch Error command returns error directly`() = runTest(testDispatcher) {
         val result = registry.dispatch(
             AgentCommand.Error("模型未加载"),
             AgentContext(scene = AgentScene.CAMERA)
         )
+        advanceUntilIdle()
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
