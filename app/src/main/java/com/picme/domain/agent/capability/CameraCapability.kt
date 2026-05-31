@@ -78,67 +78,89 @@ class CameraCapability(
         return when (command) {
             is AgentCommand.AdjustBeauty -> {
                 onAdjustBeauty?.invoke(command.settings)
-                    ?: Logger.w(tag, "onAdjustBeauty callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机美颜调节未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchFilter -> {
                 onSwitchFilter?.invoke(command.filterType)
-                    ?: Logger.w(tag, "onSwitchFilter callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机滤镜切换未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchStyle -> {
                 onSwitchStyle?.invoke(command.styleFilter)
-                    ?: Logger.w(tag, "onSwitchStyle callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机风格切换未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchScene -> {
                 onSwitchScene?.invoke(command.sceneName)
-                    ?: Logger.w(tag, "onSwitchScene callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机场景切换未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchRatio -> {
                 onSwitchRatio?.invoke(command.ratio)
-                    ?: Logger.w(tag, "onSwitchRatio callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机画幅切换未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.AdjustExposure -> {
                 onAdjustExposure?.invoke(command.exposure)
-                    ?: Logger.w(tag, "onAdjustExposure callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机曝光调节未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.AdjustZoom -> {
                 onAdjustZoom?.invoke(command.zoomRatio)
-                    ?: Logger.w(tag, "onAdjustZoom callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机变焦调节未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.FlipCamera -> {
                 onFlipCamera?.invoke()
-                    ?: Logger.w(tag, "onFlipCamera callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机翻转未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.CapturePhoto -> {
                 onCapturePhoto?.invoke()
-                    ?: Logger.w(tag, "onCapturePhoto callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机拍照未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.ToggleRecording -> {
                 onToggleRecording?.invoke()
-                    ?: Logger.w(tag, "onToggleRecording callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机录像未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchMode -> {
                 onSwitchMode?.invoke(command.mode)
-                    ?: Logger.w(tag, "onSwitchMode callback not set")
+                    ?: return Result.success(
+                        AgentAction.Error("相机模式切换未初始化")
+                    )
                 Result.success(AgentAction.Success(command))
             }
 

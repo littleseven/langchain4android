@@ -155,6 +155,7 @@ fun AgentChatPanel(
     agentScene: AgentScene,
     memorySessionId: String,
     voiceCoordinator: VoiceCommandCoordinator? = null,
+    onCommand: ((com.picme.domain.model.AiAgentCommand) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var isVisible by remember { mutableStateOf(false) }
@@ -210,6 +211,10 @@ fun AgentChatPanel(
                         val responseText = when (action) {
                             is AgentAction.Success -> {
                                 val commandName = action.command::class.simpleName ?: "操作"
+                                // 如果调用者需要感知命令，通过 onCommand 回传
+                                onCommand?.let { cmdCallback ->
+                                    mapAgentActionToAiAgentCommand(action)?.let { cmdCallback(it) }
+                                }
                                 "已执行: $commandName"
                             }
                             is AgentAction.TextReply -> action.message
@@ -225,11 +230,46 @@ fun AgentChatPanel(
                 )
             }
         },
-        onCommand = {
-            // 命令已通过 AgentOrchestrator 执行
+        onCommand = { cmd ->
+            onCommand?.invoke(cmd)
         },
         modifier = Modifier
     )
+}
+
+/**
+ * 将 AgentAction 映射为 AiAgentCommand（用于向旧版 UI 回调回传命令）
+ */
+private fun mapAgentActionToAiAgentCommand(action: AgentAction.Success): com.picme.domain.model.AiAgentCommand? {
+    return when (val cmd = action.command) {
+        is com.picme.domain.agent.model.AgentCommand.AdjustBeauty ->
+            com.picme.domain.model.AiAgentCommand.AdjustBeauty(cmd.settings)
+        is com.picme.domain.agent.model.AgentCommand.SwitchFilter ->
+            com.picme.domain.model.AiAgentCommand.SwitchFilter(cmd.filterType)
+        is com.picme.domain.agent.model.AgentCommand.SwitchStyle ->
+            com.picme.domain.model.AiAgentCommand.SwitchStyle(cmd.styleFilter)
+        is com.picme.domain.agent.model.AgentCommand.SwitchScene ->
+            com.picme.domain.model.AiAgentCommand.SwitchScene(cmd.sceneName)
+        is com.picme.domain.agent.model.AgentCommand.SwitchRatio ->
+            com.picme.domain.model.AiAgentCommand.SwitchRatio(cmd.ratio)
+        is com.picme.domain.agent.model.AgentCommand.AdjustExposure ->
+            com.picme.domain.model.AiAgentCommand.AdjustExposure(cmd.exposure)
+        is com.picme.domain.agent.model.AgentCommand.AdjustZoom ->
+            com.picme.domain.model.AiAgentCommand.AdjustZoom(cmd.zoomRatio)
+        is com.picme.domain.agent.model.AgentCommand.FlipCamera ->
+            com.picme.domain.model.AiAgentCommand.FlipCamera
+        is com.picme.domain.agent.model.AgentCommand.CapturePhoto ->
+            com.picme.domain.model.AiAgentCommand.CapturePhoto
+        is com.picme.domain.agent.model.AgentCommand.ToggleRecording ->
+            com.picme.domain.model.AiAgentCommand.ToggleRecording
+        is com.picme.domain.agent.model.AgentCommand.SwitchMode ->
+            com.picme.domain.model.AiAgentCommand.SwitchMode(cmd.mode)
+        is com.picme.domain.agent.model.AgentCommand.NavigateTo ->
+            com.picme.domain.model.AiAgentCommand.NavigateTo(cmd.destination)
+        is com.picme.domain.agent.model.AgentCommand.GoBack ->
+            com.picme.domain.model.AiAgentCommand.GoBack
+        else -> null
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -107,6 +107,13 @@ class AgentOrchestrator private constructor(private val context: Context) {
     }
 
     /**
+     * 注销 Capability
+     */
+    fun unregisterCapability(name: String) {
+        capabilityRegistry.unregister(name)
+    }
+
+    /**
      * 场景切换
      *
      * @param scene 目标场景

@@ -65,30 +65,51 @@ class GalleryCapability(
 
         return when (command) {
             is AgentCommand.ViewMedia -> {
+                if (onViewMedia == null) {
+                    return Result.success(AgentAction.Error("相册查看功能未初始化"))
+                }
                 handleViewMedia(command, galleryContext)
             }
 
             is AgentCommand.DeleteMedia -> {
+                if (onDeleteMedia == null) {
+                    return Result.success(AgentAction.Error("相册删除功能未初始化"))
+                }
                 handleDeleteMedia(command, galleryContext)
             }
 
             is AgentCommand.ShareMedia -> {
+                if (onShareMedia == null) {
+                    return Result.success(AgentAction.Error("相册分享功能未初始化"))
+                }
                 handleShareMedia(command, galleryContext)
             }
 
             is AgentCommand.SelectMedia -> {
+                if (onSelectMedia == null) {
+                    return Result.success(AgentAction.Error("相册选择功能未初始化"))
+                }
                 handleSelectMedia(command)
             }
 
             is AgentCommand.SearchMedia -> {
+                if (onSearch == null) {
+                    return Result.success(AgentAction.Error("相册搜索功能未初始化"))
+                }
                 handleSearchMedia(command)
             }
 
             is AgentCommand.SwitchViewMode -> {
+                if (onSwitchViewMode == null) {
+                    return Result.success(AgentAction.Error("相册视图切换未初始化"))
+                }
                 handleSwitchViewMode(command)
             }
 
             is AgentCommand.FavoriteMedia -> {
+                if (onFavoriteMedia == null) {
+                    return Result.success(AgentAction.Error("相册收藏功能未初始化"))
+                }
                 handleFavoriteMedia(command)
             }
 
