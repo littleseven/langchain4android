@@ -10,6 +10,8 @@ import com.picme.domain.model.ThemeMode
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -22,13 +24,26 @@ class SettingsCapabilityTest {
 
     private val defaultContext = AgentContext(scene = AgentScene.SETTINGS)
 
+    private lateinit var capability: SettingsCapability
+    private val fakeDelegate = FakeDelegate()
+
+    @Before
+    fun setUp() {
+        capability = SettingsCapability.getInstance()
+        capability.bindDelegate(fakeDelegate)
+    }
+
+    @After
+    fun tearDown() {
+        capability.unbindDelegate()
+    }
+
     // ------------------------------------------------------------------
     // 1. 场景绑定验证
     // ------------------------------------------------------------------
 
     @Test
     fun `activeScenes returns only SETTINGS`() {
-        val capability = SettingsCapability()
         val scenes = capability.activeScenes()
         assertEquals(1, scenes.size)
         assertEquals(com.picme.domain.agent.model.SceneManager.Scene.SETTINGS, scenes[0])
@@ -36,7 +51,6 @@ class SettingsCapabilityTest {
 
     @Test
     fun `supportedCommands contains all settings commands`() {
-        val capability = SettingsCapability()
         val commands = capability.supportedCommands()
         assertEquals(5, commands.size)
         assertTrue(commands.contains("change_theme"))
@@ -52,61 +66,39 @@ class SettingsCapabilityTest {
 
     @Test
     fun `execute ChangeTheme light maps to LIGHT`() = runBlocking {
-        var receivedTheme: ThemeMode? = null
-        val capability = SettingsCapability(
-            onChangeTheme = { theme -> receivedTheme = theme }
-        )
-
         val result = capability.execute(AgentCommand.ChangeTheme("light"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(ThemeMode.LIGHT, receivedTheme)
+        assertEquals(ThemeMode.LIGHT, fakeDelegate.lastTheme)
     }
 
     @Test
     fun `execute ChangeTheme dark maps to DARK`() = runBlocking {
-        var receivedTheme: ThemeMode? = null
-        val capability = SettingsCapability(
-            onChangeTheme = { theme -> receivedTheme = theme }
-        )
-
         val result = capability.execute(AgentCommand.ChangeTheme("dark"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(ThemeMode.DARK, receivedTheme)
+        assertEquals(ThemeMode.DARK, fakeDelegate.lastTheme)
     }
 
     @Test
     fun `execute ChangeTheme system maps to SYSTEM`() = runBlocking {
-        var receivedTheme: ThemeMode? = null
-        val capability = SettingsCapability(
-            onChangeTheme = { theme -> receivedTheme = theme }
-        )
-
         val result = capability.execute(AgentCommand.ChangeTheme("system"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(ThemeMode.SYSTEM, receivedTheme)
+        assertEquals(ThemeMode.SYSTEM, fakeDelegate.lastTheme)
     }
 
     @Test
     fun `execute ChangeTheme with Chinese alias maps correctly`() = runBlocking {
-        var receivedTheme: ThemeMode? = null
-        val capability = SettingsCapability(
-            onChangeTheme = { theme -> receivedTheme = theme }
-        )
-
         val result = capability.execute(AgentCommand.ChangeTheme("深色"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(ThemeMode.DARK, receivedTheme)
+        assertEquals(ThemeMode.DARK, fakeDelegate.lastTheme)
     }
 
     @Test
     fun `execute ChangeTheme unknown returns Error`() = runBlocking {
-        val capability = SettingsCapability(
-            onChangeTheme = { }
-        )
+        fakeDelegate.reset()
 
         val result = capability.execute(AgentCommand.ChangeTheme("purple"), defaultContext)
 
@@ -122,48 +114,31 @@ class SettingsCapabilityTest {
 
     @Test
     fun `execute ChangeLanguage zh maps to CHINESE`() = runBlocking {
-        var receivedLang: AppLanguage? = null
-        val capability = SettingsCapability(
-            onChangeLanguage = { lang -> receivedLang = lang }
-        )
-
         val result = capability.execute(AgentCommand.ChangeLanguage("zh"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(AppLanguage.CHINESE, receivedLang)
+        assertEquals(AppLanguage.CHINESE, fakeDelegate.lastLanguage)
     }
 
     @Test
     fun `execute ChangeLanguage en maps to ENGLISH`() = runBlocking {
-        var receivedLang: AppLanguage? = null
-        val capability = SettingsCapability(
-            onChangeLanguage = { lang -> receivedLang = lang }
-        )
-
         val result = capability.execute(AgentCommand.ChangeLanguage("en"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(AppLanguage.ENGLISH, receivedLang)
+        assertEquals(AppLanguage.ENGLISH, fakeDelegate.lastLanguage)
     }
 
     @Test
     fun `execute ChangeLanguage system maps to SYSTEM`() = runBlocking {
-        var receivedLang: AppLanguage? = null
-        val capability = SettingsCapability(
-            onChangeLanguage = { lang -> receivedLang = lang }
-        )
-
         val result = capability.execute(AgentCommand.ChangeLanguage("system"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(AppLanguage.SYSTEM, receivedLang)
+        assertEquals(AppLanguage.SYSTEM, fakeDelegate.lastLanguage)
     }
 
     @Test
     fun `execute ChangeLanguage unknown returns Error`() = runBlocking {
-        val capability = SettingsCapability(
-            onChangeLanguage = { }
-        )
+        fakeDelegate.reset()
 
         val result = capability.execute(AgentCommand.ChangeLanguage("fr"), defaultContext)
 
@@ -179,22 +154,15 @@ class SettingsCapabilityTest {
 
     @Test
     fun `execute DownloadModel with modelId triggers onDownloadModel`() = runBlocking {
-        var receivedId: String? = null
-        val capability = SettingsCapability(
-            onDownloadModel = { id -> receivedId = id }
-        )
-
         val result = capability.execute(AgentCommand.DownloadModel("qwen3-4b"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals("qwen3-4b", receivedId)
+        assertEquals("qwen3-4b", fakeDelegate.lastModelId)
     }
 
     @Test
     fun `execute DownloadModel with blank modelId returns Error`() = runBlocking {
-        val capability = SettingsCapability(
-            onDownloadModel = { }
-        )
+        fakeDelegate.reset()
 
         val result = capability.execute(AgentCommand.DownloadModel(""), defaultContext)
 
@@ -210,35 +178,23 @@ class SettingsCapabilityTest {
 
     @Test
     fun `execute SwitchFaceEngine mediapipe maps correctly`() = runBlocking {
-        var receivedEngine: FaceDetectionEngineMode? = null
-        val capability = SettingsCapability(
-            onSwitchFaceEngine = { engine -> receivedEngine = engine }
-        )
-
         val result = capability.execute(AgentCommand.SwitchFaceEngine("mediapipe"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(FaceDetectionEngineMode.MEDIAPIPE, receivedEngine)
+        assertEquals(FaceDetectionEngineMode.MEDIAPIPE, fakeDelegate.lastEngine)
     }
 
     @Test
     fun `execute SwitchFaceEngine ncnn maps correctly`() = runBlocking {
-        var receivedEngine: FaceDetectionEngineMode? = null
-        val capability = SettingsCapability(
-            onSwitchFaceEngine = { engine -> receivedEngine = engine }
-        )
-
         val result = capability.execute(AgentCommand.SwitchFaceEngine("ncnn"), defaultContext)
 
         assertTrue(result.isSuccess)
-        assertEquals(FaceDetectionEngineMode.NCNN, receivedEngine)
+        assertEquals(FaceDetectionEngineMode.NCNN, fakeDelegate.lastEngine)
     }
 
     @Test
     fun `execute SwitchFaceEngine unknown returns Error`() = runBlocking {
-        val capability = SettingsCapability(
-            onSwitchFaceEngine = { }
-        )
+        fakeDelegate.reset()
 
         val result = capability.execute(AgentCommand.SwitchFaceEngine("unknown"), defaultContext)
 
@@ -257,30 +213,19 @@ class SettingsCapabilityTest {
 
     @Test
     fun `execute ToggleSetting triggers onToggleSetting`() = runBlocking {
-        var receivedKey: String? = null
-        var receivedEnabled: Boolean? = null
-        val capability = SettingsCapability(
-            onToggleSetting = { key, enabled ->
-                receivedKey = key
-                receivedEnabled = enabled
-            }
-        )
-
         val result = capability.execute(
             AgentCommand.ToggleSetting("debug_mode", true),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals("debug_mode", receivedKey)
-        assertEquals(true, receivedEnabled)
+        assertEquals("debug_mode", fakeDelegate.lastToggleKey)
+        assertEquals(true, fakeDelegate.lastToggleEnabled)
     }
 
     @Test
     fun `execute ToggleSetting with blank key returns Error`() = runBlocking {
-        val capability = SettingsCapability(
-            onToggleSetting = { _, _ -> }
-        )
+        fakeDelegate.reset()
 
         val result = capability.execute(
             AgentCommand.ToggleSetting("", false),
@@ -294,24 +239,24 @@ class SettingsCapabilityTest {
     }
 
     // ------------------------------------------------------------------
-    // 7. 回调未设置时必须返回 Error（不允许静默失败）
+    // 7. Delegate 未绑定时必须返回 Error（不允许静默失败）
     // ------------------------------------------------------------------
 
     @Test
-    fun `execute ChangeTheme without callback returns Error`() = runBlocking {
-        val capability = SettingsCapability()
+    fun `execute ChangeTheme without delegate returns Error`() = runBlocking {
+        capability.unbindDelegate()
 
         val result = capability.execute(AgentCommand.ChangeTheme("dark"), defaultContext)
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("回调为空时应返回 Error", action is AgentAction.Error)
-        assertEquals("主题切换功能未初始化", (action as AgentAction.Error).message)
+        assertTrue("Delegate 为空时应返回 Error", action is AgentAction.Error)
+        assertEquals("设置页面未激活，请先切换到设置页面", (action as AgentAction.Error).message)
     }
 
     @Test
-    fun `execute ToggleSetting without callback returns Error`() = runBlocking {
-        val capability = SettingsCapability()
+    fun `execute ToggleSetting without delegate returns Error`() = runBlocking {
+        capability.unbindDelegate()
 
         val result = capability.execute(
             AgentCommand.ToggleSetting("debug_mode", true),
@@ -321,7 +266,7 @@ class SettingsCapabilityTest {
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Error)
-        assertEquals("设置项开关未初始化", (action as AgentAction.Error).message)
+        assertEquals("设置页面未激活，请先切换到设置页面", (action as AgentAction.Error).message)
     }
 
     // ------------------------------------------------------------------
@@ -330,8 +275,6 @@ class SettingsCapabilityTest {
 
     @Test
     fun `execute unsupported command returns Error`() = runBlocking {
-        val capability = SettingsCapability()
-
         val result = capability.execute(AgentCommand.CapturePhoto, defaultContext)
 
         assertTrue(result.isSuccess)
@@ -341,17 +284,59 @@ class SettingsCapabilityTest {
     }
 
     // ------------------------------------------------------------------
-    // 8. 自描述能力
+    // 9. 自描述能力
     // ------------------------------------------------------------------
 
     @Test
     fun `buildCapabilityDescription contains all commands`() {
-        val capability = SettingsCapability()
         val description = capability.buildCapabilityDescription()
 
         assertTrue(description.contains("settings"))
         assertTrue(description.contains("change_theme"))
         assertTrue(description.contains("change_language"))
         assertTrue(description.contains("switch_face_engine"))
+    }
+
+    // ------------------------------------------------------------------
+    // Fake Delegate
+    // ------------------------------------------------------------------
+
+    private class FakeDelegate : SettingsCapability.Delegate {
+        var lastTheme: ThemeMode? = null
+        var lastLanguage: AppLanguage? = null
+        var lastModelId: String? = null
+        var lastEngine: FaceDetectionEngineMode? = null
+        var lastToggleKey: String? = null
+        var lastToggleEnabled: Boolean? = null
+
+        override fun onChangeTheme(theme: ThemeMode) {
+            lastTheme = theme
+        }
+
+        override fun onChangeLanguage(language: AppLanguage) {
+            lastLanguage = language
+        }
+
+        override fun onDownloadModel(modelId: String) {
+            lastModelId = modelId
+        }
+
+        override fun onSwitchFaceEngine(engine: FaceDetectionEngineMode) {
+            lastEngine = engine
+        }
+
+        override fun onToggleSetting(key: String, enabled: Boolean) {
+            lastToggleKey = key
+            lastToggleEnabled = enabled
+        }
+
+        fun reset() {
+            lastTheme = null
+            lastLanguage = null
+            lastModelId = null
+            lastEngine = null
+            lastToggleKey = null
+            lastToggleEnabled = null
+        }
     }
 }

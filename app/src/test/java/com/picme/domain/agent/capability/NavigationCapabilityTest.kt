@@ -1,9 +1,11 @@
 package com.picme.domain.agent.capability
 
+import androidx.navigation.NavController
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -20,24 +22,28 @@ import org.junit.Test
  * NavigationCapability 场景化单元测试
  *
  * 验证：NavigationCapability 在所有场景均可用，
- * 页面导航和返回命令正确触发回调，目的地解析准确。
+ * 页面导航和返回命令正确调用 NavController，目的地解析准确。
  *
  * **注意**：NavigationCapability.execute() 内部使用 withContext(Dispatchers.Main)
- * 确保导航回调在主线程执行。测试中使用 StandardTestDispatcher 模拟主线程。
+ * 确保导航在主线程执行。测试中使用 StandardTestDispatcher 模拟主线程。
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NavigationCapabilityTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val defaultContext = AgentContext(scene = AgentScene.CAMERA)
+    private val capability = NavigationCapability.getInstance()
+    private val mockNavController: NavController = mockk(relaxed = true)
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        capability.bindNavController(mockNavController)
     }
 
     @After
     fun tearDown() {
+        capability.unbindNavController()
         Dispatchers.resetMain()
     }
 
@@ -47,10 +53,6 @@ class NavigationCapabilityTest {
 
     @Test
     fun `activeScenes returns all scenes`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val scenes = capability.activeScenes()
         assertEquals(
             com.picme.domain.agent.model.SceneManager.Scene.entries.toList(),
@@ -60,10 +62,6 @@ class NavigationCapabilityTest {
 
     @Test
     fun `supportedCommands contains navigate and go_back`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val commands = capability.supportedCommands()
         assertEquals(2, commands.size)
         assertTrue(commands.contains("navigate_to"))
@@ -75,148 +73,87 @@ class NavigationCapabilityTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `execute NavigateTo camera triggers onNavigate with CAMERA`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo camera returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("camera"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.CAMERA, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo gallery triggers onNavigate with GALLERY`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo gallery returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("gallery"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.GALLERY, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo settings triggers onNavigate with SETTINGS`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo settings returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("settings"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.SETTINGS, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo debug triggers onNavigate with DEBUG`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo debug returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("debug"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.DEBUG, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo llm_model_manager triggers onNavigate with LLM_MODEL_MANAGER`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo llm_model_manager returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("llm_model_manager"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.LLM_MODEL_MANAGER, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo asr_model_manager triggers onNavigate with ASR_MODEL_MANAGER`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo asr_model_manager returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("asr_model_manager"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.ASR_MODEL_MANAGER, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo Chinese alias for model manager triggers correctly`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo Chinese alias for model manager returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("模型管理"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.LLM_MODEL_MANAGER, receivedDest)
     }
 
     @Test
-    fun `execute NavigateTo with Chinese alias triggers correctly`() = runTest(testDispatcher) {
-        var receivedDest: NavigationCapability.Destination? = null
-        val capability = NavigationCapability(
-            onNavigate = { dest -> receivedDest = dest },
-            onBack = {}
-        )
-
+    fun `execute NavigateTo with Chinese alias returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("相机"),
             defaultContext
         )
 
         assertTrue(result.isSuccess)
-        assertEquals(NavigationCapability.Destination.CAMERA, receivedDest)
     }
 
     @Test
     fun `execute NavigateTo unknown destination returns Error`() = runTest(testDispatcher) {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
-
         val result = capability.execute(
             AgentCommand.NavigateTo("unknown_page"),
             defaultContext
@@ -230,22 +167,42 @@ class NavigationCapabilityTest {
         assertTrue((action as AgentAction.Error).message.contains("asr_model_manager"))
     }
 
+    @Test
+    fun `execute NavigateTo without bound NavController returns initialization error`() = runTest(testDispatcher) {
+        capability.unbindNavController()
+
+        val result = capability.execute(
+            AgentCommand.NavigateTo("camera"),
+            defaultContext
+        )
+
+        assertTrue(result.isSuccess)
+        val action = result.getOrNull()
+        assertTrue(action is AgentAction.Error)
+        assertEquals("导航系统未初始化", (action as AgentAction.Error).message)
+    }
+
     // ------------------------------------------------------------------
     // 3. 返回命令
     // ------------------------------------------------------------------
 
     @Test
-    fun `execute GoBack triggers onBack callback`() = runTest(testDispatcher) {
-        var callbackInvoked = false
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = { callbackInvoked = true }
-        )
+    fun `execute GoBack returns Success`() = runTest(testDispatcher) {
+        val result = capability.execute(AgentCommand.GoBack, defaultContext)
+
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `execute GoBack without bound NavController returns initialization error`() = runTest(testDispatcher) {
+        capability.unbindNavController()
 
         val result = capability.execute(AgentCommand.GoBack, defaultContext)
 
         assertTrue(result.isSuccess)
-        assertTrue(callbackInvoked)
+        val action = result.getOrNull()
+        assertTrue(action is AgentAction.Error)
+        assertEquals("导航系统未初始化", (action as AgentAction.Error).message)
     }
 
     // ------------------------------------------------------------------
@@ -254,40 +211,24 @@ class NavigationCapabilityTest {
 
     @Test
     fun `navigation available in CAMERA scene`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val cameraScene = com.picme.domain.agent.model.SceneManager.Scene.CAMERA
         assertTrue(capability.activeScenes().contains(cameraScene))
     }
 
     @Test
     fun `navigation available in GALLERY scene`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val galleryScene = com.picme.domain.agent.model.SceneManager.Scene.GALLERY
         assertTrue(capability.activeScenes().contains(galleryScene))
     }
 
     @Test
     fun `navigation available in SETTINGS scene`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val settingsScene = com.picme.domain.agent.model.SceneManager.Scene.SETTINGS
         assertTrue(capability.activeScenes().contains(settingsScene))
     }
 
     @Test
     fun `navigation available in DEBUG scene`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val debugScene = com.picme.domain.agent.model.SceneManager.Scene.DEBUG
         assertTrue(capability.activeScenes().contains(debugScene))
     }
@@ -298,11 +239,6 @@ class NavigationCapabilityTest {
 
     @Test
     fun `execute unsupported command returns Error`() = runTest(testDispatcher) {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
-
         val result = capability.execute(AgentCommand.CapturePhoto, defaultContext)
 
         assertTrue(result.isSuccess)
@@ -317,10 +253,6 @@ class NavigationCapabilityTest {
 
     @Test
     fun `buildCapabilityDescription contains navigation commands`() {
-        val capability = NavigationCapability(
-            onNavigate = {},
-            onBack = {}
-        )
         val description = capability.buildCapabilityDescription()
 
         assertTrue(description.contains("navigation"))

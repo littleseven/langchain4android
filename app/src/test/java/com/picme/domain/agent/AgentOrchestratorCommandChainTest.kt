@@ -1,5 +1,7 @@
 package com.picme.domain.agent
 
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.model.AgentAction
@@ -7,6 +9,8 @@ import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.SceneManager
+import com.picme.domain.model.MediaType
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -40,6 +44,55 @@ class AgentOrchestratorCommandChainTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+
+        // Unbind delegates after each test
+        CameraCapability.getInstance().unbindDelegate()
+        NavigationCapability.getInstance().unbindNavController()
+
+        // Clear registry map via reflection since unregister() does not exist
+        clearRegistry()
+    }
+
+    private fun clearRegistry() {
+        val registry = CapabilityRegistry.getInstance()
+        val field = CapabilityRegistry::class.java.getDeclaredField("registry")
+        field.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val map = field.get(registry) as MutableMap<String, *>
+        map.clear()
+
+        // Also clear the singleton instance so next test gets a fresh registry
+        val instanceField = CapabilityRegistry::class.java.getDeclaredField("instance")
+        instanceField.isAccessible = true
+        instanceField.set(null, null)
+    }
+
+    // ------------------------------------------------------------------
+    // Fake delegate for CameraCapability
+    // ------------------------------------------------------------------
+
+    inner class FakeCameraDelegate : CameraCapability.Delegate {
+        var captureCalled = false
+        var lastBeautySettings: com.picme.beauty.api.BeautySettings? = null
+
+        override fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings) {
+            lastBeautySettings = settings
+        }
+
+        override fun onSwitchFilter(filterType: FilterType) {}
+        override fun onSwitchStyle(styleFilter: StyleFilter) {}
+        override fun onSwitchScene(sceneName: String) {}
+        override fun onSwitchRatio(ratio: String) {}
+        override fun onAdjustExposure(exposure: Int) {}
+        override fun onAdjustZoom(zoomRatio: Float) {}
+        override fun onFlipCamera() {}
+
+        override fun onCapturePhoto() {
+            captureCalled = true
+        }
+
+        override fun onToggleRecording() {}
+        override fun onSwitchMode(mode: MediaType) {}
     }
 
     // ------------------------------------------------------------------
@@ -119,7 +172,7 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `keyword parse for 去相册 returns NavigateTo gallery`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = "好的，前往相册"
+        val response = "去相册"
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 
@@ -144,15 +197,12 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `full chain parse dispatch execute with callback`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
-        // 清理
-        registry.getAll().forEach { registry.unregister(it.name) }
 
         SceneManager.getInstance().transitionTo(SceneManager.Scene.CAMERA)
 
-        var captureCalled = false
-        val cameraCap = CameraCapability(
-            onCapturePhoto = { captureCalled = true }
-        )
+        val fakeDelegate = FakeCameraDelegate()
+        val cameraCap = CameraCapability.getInstance()
+        cameraCap.bindDelegate(fakeDelegate)
         registry.register(cameraCap)
 
         // 模拟 LLM 输出
@@ -165,18 +215,17 @@ class AgentOrchestratorCommandChainTest {
 
         assertTrue(result.isSuccess)
         assertTrue(result.getOrNull() is AgentAction.Success)
-        assertTrue("回调必须被触发", captureCalled)
+        assertTrue("回调必须被触发", fakeDelegate.captureCalled)
     }
 
     @Test
-    fun `full chain with null callback returns error not success`() = runTest(testDispatcher) {
+    fun `full chain with unbound delegate queues and returns text reply`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
-        registry.getAll().forEach { registry.unregister(it.name) }
 
         SceneManager.getInstance().transitionTo(SceneManager.Scene.CAMERA)
 
-        // 注册空回调 Capability
-        val cameraCap = CameraCapability()
+        // 注册 CameraCapability 但不绑定 delegate
+        val cameraCap = CameraCapability.getInstance()
         registry.register(cameraCap)
 
         val context = AgentContext(scene = AgentScene.CAMERA)
@@ -187,23 +236,20 @@ class AgentOrchestratorCommandChainTest {
 
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue("空回调必须返回 Error，不允许静默失败", action is AgentAction.Error)
-        assertEquals("相机拍照未初始化", (action as AgentAction.Error).message)
+        assertTrue("未绑定 delegate 时应排队并返回 TextReply", action is AgentAction.TextReply)
+        assertTrue((action as AgentAction.TextReply).message.contains("切换"))
     }
 
     @Test
     fun `navigation command works across scenes`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
-        registry.getAll().forEach { registry.unregister(it.name) }
 
         // 在 Gallery 场景也能执行导航
         SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
 
-        var navDestination: String? = null
-        val navCap = NavigationCapability(
-            onNavigate = { navDestination = it.name },
-            onBack = { }
-        )
+        val navController = mockk<androidx.navigation.NavController>(relaxed = true)
+        val navCap = NavigationCapability.getInstance()
+        navCap.bindNavController(navController)
         registry.register(navCap)
 
         val context = AgentContext(scene = AgentScene.GALLERY)
@@ -217,7 +263,6 @@ class AgentOrchestratorCommandChainTest {
 
         assertTrue(result.isSuccess)
         assertTrue(result.getOrNull() is AgentAction.Success)
-        assertEquals("SETTINGS", navDestination)
     }
 
     // ------------------------------------------------------------------

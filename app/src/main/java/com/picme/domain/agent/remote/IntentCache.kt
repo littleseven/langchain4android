@@ -1,6 +1,5 @@
 package com.picme.domain.agent.remote
 
-import android.util.LruCache
 import com.picme.domain.agent.model.AgentCommand
 
 /**
@@ -12,15 +11,26 @@ import com.picme.domain.agent.model.AgentCommand
  * 3. 模糊匹配（编辑距离）
  *
  * 本地/远程模式下都先查 L1，命中则直接返回，零延迟。
+ *
+ * 使用 LinkedHashMap 实现 LRU，兼容 JVM 单元测试（无需 Android 框架）。
  */
 class IntentCache(maxSize: Int = 100) {
 
-    private val cache = LruCache<String, AgentCommand>(maxSize)
+    private val maxCacheSize = maxSize
+
+    private val cache = object : LinkedHashMap<String, AgentCommand>(maxSize, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, AgentCommand>?): Boolean {
+            return size > maxCacheSize
+        }
+    }
 
     /**
      * 预置高频意图映射（启动时预热）
      */
     private val presetIntents: Map<String, AgentCommand> = buildPresetIntents()
+
+    private var hitCount = 0
+    private var missCount = 0
 
     /**
      * 尝试匹配用户输入到预定义命令
@@ -32,14 +42,24 @@ class IntentCache(maxSize: Int = 100) {
         if (trimmed.isEmpty()) return null
 
         // 1. 精确匹配预置意图
-        presetIntents[trimmed]?.let { return it }
+        presetIntents[trimmed]?.let {
+            hitCount++
+            return it
+        }
 
         // 2. LRU 缓存匹配
-        cache.get(trimmed)?.let { return it }
+        cache[trimmed]?.let {
+            hitCount++
+            return it
+        }
 
         // 3. 模糊匹配（编辑距离 <= 1）
-        fuzzyMatch(trimmed)?.let { return it }
+        fuzzyMatch(trimmed)?.let {
+            hitCount++
+            return it
+        }
 
+        missCount++
         return null
     }
 
@@ -47,24 +67,24 @@ class IntentCache(maxSize: Int = 100) {
      * 将解析结果加入缓存（用于学习）
      */
     fun put(input: String, command: AgentCommand) {
-        cache.put(input.trim(), command)
+        cache[input.trim()] = command
     }
 
     /**
      * 清空缓存（保留预置意图）
      */
     fun clear() {
-        cache.evictAll()
+        cache.clear()
     }
 
     /**
      * 获取当前缓存统计
      */
     fun stats(): CacheStats = CacheStats(
-        hitCount = cache.hitCount(),
-        missCount = cache.missCount(),
-        size = cache.size(),
-        maxSize = cache.maxSize()
+        hitCount = hitCount,
+        missCount = missCount,
+        size = cache.size,
+        maxSize = maxCacheSize
     )
 
     private fun fuzzyMatch(input: String): AgentCommand? {
@@ -73,11 +93,6 @@ class IntentCache(maxSize: Int = 100) {
             if (levenshteinDistance(input, preset) <= 1) {
                 return command
             }
-        }
-        // 再查缓存的模糊匹配
-        for (i in 0 until cache.size()) {
-            val key = cache.get(cache.snapshot().keys.elementAtOrNull(i) ?: continue) ?: continue
-            // 不遍历缓存做模糊匹配，避免性能问题
         }
         return null
     }
