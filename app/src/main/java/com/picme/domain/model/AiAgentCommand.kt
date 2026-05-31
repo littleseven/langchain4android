@@ -90,6 +90,18 @@ sealed class AiAgentCommand {
     ) : AiAgentCommand()
 
     /**
+     * 导航到指定页面
+     */
+    data class NavigateTo(
+        val destination: String
+    ) : AiAgentCommand()
+
+    /**
+     * 返回上一页
+     */
+    object GoBack : AiAgentCommand()
+
+    /**
      * 批量执行命令（远程模式 L2）
      *
      * 包含多个独立命令，按顺序依次执行。

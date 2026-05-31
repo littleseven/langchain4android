@@ -259,6 +259,8 @@ internal fun CameraPreviewContent(
                             is AiAgentCommand.CapturePhoto -> "已拍照"
                             is AiAgentCommand.ToggleRecording -> "已切换录像状态"
                             is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
+                            is AiAgentCommand.NavigateTo -> "正在跳转..."
+                            is AiAgentCommand.GoBack -> "返回"
                             is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
                         }
                         onAiAgentMessagesChange(aiAgentMessages + AgentMessage.UserText(content = input) + AgentMessage.AgentText(content = commandName))

@@ -148,9 +148,12 @@ fun SettingsScreen(
     val agentIntegration = rememberSettingsAgentIntegration(
         context = context,
         onNavigateTo = { destination ->
-            when (destination) {
+            when (destination.lowercase()) {
                 "camera" -> onNavigateBack()
                 "gallery" -> onNavigateBack()
+                "settings" -> { /* 已在设置页，无需导航 */ }
+                "debug" -> onNavigateBack() // 设置页无 debug 入口，返回相机页
+                else -> Logger.w("PicMe:Settings", "Unknown navigation destination: $destination")
             }
         },
         onNavigateBack = onNavigateBack

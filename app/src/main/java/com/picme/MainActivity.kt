@@ -149,6 +149,7 @@ class MainActivity : ComponentActivity() {
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
                                     onNavigateBack = { navController.popBackStack() },
+                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                                     onNavigateToDebug = { navController.navigate(Screen.Debug.route) }
                                 )
                             }

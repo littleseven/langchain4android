@@ -56,8 +56,8 @@ object AgentCommandParser {
             cleaned = cleaned.replace(endTag, "").trim()
         }
 
-        // 2. 移除 markdown 代码块标记
-        cleaned = cleaned.removePrefix("``json").removePrefix("```").removeSuffix("```").trim()
+        // 2. 移除 markdown 代码块标记 (```json ... ``` 或 ``` ... ```)
+        cleaned = cleaned.replace(Regex("^```\\w*\\n?"), "").replace(Regex("\\n?```\\s*$"), "").trim()
 
         Logger.i(TAG, "Cleaned response: '$cleaned'")
 
@@ -277,13 +277,19 @@ object AgentCommandParser {
             // 录像
             lower.contains("录像") || lower.contains("录制") || lower.contains("拍视频") -> AgentCommand.ToggleRecording
             // 导航相关
-            lower.contains("去相册") || lower.contains("打开相册") || lower.contains("看照片") ->
+            lower.contains("去相册") || lower.contains("打开相册") || lower.contains("看照片") ||
+                lower.contains("相册") || lower.contains("图库") ->
                 AgentCommand.NavigateTo("gallery")
-            lower.contains("去设置") || lower.contains("打开设置") || lower.contains("设置") ->
+            lower.contains("去设置") || lower.contains("打开设置") || lower.contains("设置页") ||
+                lower.contains("app设置") || lower.contains("应用设置") ->
                 AgentCommand.NavigateTo("settings")
-            lower.contains("去相机") || lower.contains("回相机") || lower.contains("打开相机") ->
+            lower.contains("去相机") || lower.contains("回相机") || lower.contains("打开相机") ||
+                lower.contains("回拍照") ->
                 AgentCommand.NavigateTo("camera")
-            lower.contains("返回") || lower.contains("回去") || lower.contains("上一页") ->
+            lower.contains("去调试") || lower.contains("打开调试") || lower.contains("debug") ->
+                AgentCommand.NavigateTo("debug")
+            lower.contains("返回") || lower.contains("回去") || lower.contains("上一页") ||
+                lower.contains("后退") ->
                 AgentCommand.GoBack
             // Gallery 相关
             lower.contains("删除") || lower.contains("删掉") ->

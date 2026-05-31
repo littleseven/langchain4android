@@ -315,6 +315,8 @@ class PromptBuilder(
             appendLine("capture: 拍照")
             appendLine("toggle_recording: 开始/停止录像")
             appendLine("switch_mode: mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
+            appendLine("navigate_to: destination=camera|gallery|settings|debug (页面导航)")
+            appendLine("go_back: 返回上一页")
             appendLine("text_reply: 普通聊天回复")
             appendLine()
             appendLine("【中文名称映射】")
@@ -324,6 +326,7 @@ class PromptBuilder(
             appendLine("模式: 拍照→PHOTO, 录像→VIDEO, 人像→PORTRAIT, 专业→PRO, 文档→DOCUMENT")
             appendLine("场景: 夜景→night, 月亮→moon, 关闭→none")
             appendLine("比例: 4比3→4:3, 16比9→16:9, 全屏→full")
+            appendLine("页面: 相机→camera, 相册→gallery, 设置→settings, 调试→debug")
         }
     }
 }

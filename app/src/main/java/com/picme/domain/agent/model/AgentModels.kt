@@ -81,3 +81,109 @@ sealed class AgentAction {
      */
     data class Error(val message: String) : AgentAction()
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 结构化可观测性事件（Agent First 原则：Structured Observability）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Agent 命令执行链路事件
+ *
+ * 用于全链路追踪：解析 → 路由 → 分发 → 执行 → 回调
+ * 可被 AI 直接消费，实现自我诊断。
+ */
+data class AgentCommandEvent(
+    val stage: CommandStage,
+    val commandType: String,
+    val commandAction: String? = null,
+    val scene: String? = null,
+    val success: Boolean,
+    val message: String? = null,
+    val errorType: String? = null,
+    val durationMs: Long? = null,
+    val timestamp: Long = System.currentTimeMillis()
+) {
+    enum class CommandStage {
+        PARSE,      // 命令解析
+        ROUTE,      // 路由决策
+        DISPATCH,   //  capability 分发
+        EXECUTE,    //  capability 执行
+        CALLBACK,   // 回调触发
+        FALLBACK    // 降级处理
+    }
+
+    companion object {
+        fun parseSuccess(commandType: String, action: String? = null): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.PARSE,
+                commandType = commandType,
+                commandAction = action,
+                success = true
+            )
+
+        fun parseFailure(rawInput: String, reason: String): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.PARSE,
+                commandType = "unknown",
+                success = false,
+                message = rawInput,
+                errorType = reason
+            )
+
+        fun dispatchSuccess(
+            commandType: String,
+            capability: String,
+            scene: String
+        ): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.DISPATCH,
+                commandType = commandType,
+                scene = scene,
+                success = true,
+                message = "dispatched to $capability"
+            )
+
+        fun dispatchFailure(
+            commandType: String,
+            scene: String,
+            reason: String
+        ): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.DISPATCH,
+                commandType = commandType,
+                scene = scene,
+                success = false,
+                errorType = reason
+            )
+
+        fun executeSuccess(commandType: String, capability: String): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.EXECUTE,
+                commandType = commandType,
+                success = true,
+                message = "executed by $capability"
+            )
+
+        fun executeFailure(
+            commandType: String,
+            capability: String,
+            reason: String
+        ): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.EXECUTE,
+                commandType = commandType,
+                success = false,
+                message = "failed in $capability",
+                errorType = reason
+            )
+
+        fun callbackMissing(commandType: String, callbackName: String): AgentCommandEvent =
+            AgentCommandEvent(
+                stage = CommandStage.CALLBACK,
+                commandType = commandType,
+                success = false,
+                errorType = "CALLBACK_NOT_SET",
+                message = "$callbackName callback is null"
+            )
+    }
+}

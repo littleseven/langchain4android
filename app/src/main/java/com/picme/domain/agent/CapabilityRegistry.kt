@@ -89,30 +89,54 @@ class CapabilityRegistry private constructor(
         context: AgentContext,
         pageContext: PageContext? = null
     ): Result<AgentAction> {
+        val commandType = command::class.simpleName ?: "Unknown"
+        val currentScene = sceneManager.currentScene.value
+
         return when (command) {
             is AgentCommand.TextReply -> {
                 Result.success(AgentAction.TextReply(command.message))
             }
             is AgentCommand.Unknown -> {
+                Logger.w(tag, "[$commandType] Unknown command at $currentScene")
                 Result.success(AgentAction.TextReply("收到你的消息了，但没理解具体意图，请再描述一下~"))
             }
             is AgentCommand.Error -> {
+                Logger.e(tag, "[$commandType] Command error: ${command.reason}")
                 Result.success(AgentAction.Error(command.reason))
             }
             else -> {
                 val capability = findCapabilityForCommand(command)
                 if (capability != null) {
                     // 检查 Capability 是否在当前场景可用
-                    val currentScene = sceneManager.currentScene.value
                     if (!capability.activeScenes().contains(currentScene)) {
-                        Logger.w(tag, "Capability ${capability.name} not available in scene $currentScene")
+                        Logger.w(tag, "[$commandType] Capability ${capability.name} not available in scene $currentScene")
                         return Result.success(
                             AgentAction.Error("在当前页面无法执行此操作，请先导航到对应页面")
                         )
                     }
-                    capability.execute(command, context, pageContext)
+                    Logger.i(tag, "[$commandType] Dispatching to ${capability.name} in scene $currentScene")
+                    val result = capability.execute(command, context, pageContext)
+                    result.fold(
+                        onSuccess = { action ->
+                            when (action) {
+                                is AgentAction.Success -> {
+                                    Logger.i(tag, "[$commandType] Executed successfully by ${capability.name}")
+                                }
+                                is AgentAction.Error -> {
+                                    Logger.w(tag, "[$commandType] Executed but returned error: ${action.message}")
+                                }
+                                is AgentAction.TextReply -> {
+                                    Logger.d(tag, "[$commandType] Text reply: ${action.message}")
+                                }
+                            }
+                        },
+                        onFailure = { error ->
+                            Logger.e(tag, "[$commandType] Execution failed in ${capability.name}", error)
+                        }
+                    )
+                    result
                 } else {
-                    Logger.w(tag, "No capability found for command: ${command::class.simpleName}")
+                    Logger.w(tag, "[$commandType] No capability found for command in scene $currentScene")
                     Result.success(AgentAction.Error("暂不支持此操作"))
                 }
             }

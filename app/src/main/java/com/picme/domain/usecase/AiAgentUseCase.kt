@@ -269,8 +269,26 @@ class AiAgentUseCase(
             is AgentCommand.BatchExecute -> AiAgentCommand.BatchExecute(
                 command.commands.map { mapAgentCommandToLegacy(it) }
             )
+            is AgentCommand.NavigateTo -> AiAgentCommand.NavigateTo(command.destination)
+            is AgentCommand.GoBack -> AiAgentCommand.GoBack
             is AgentCommand.ExecutePlan -> AiAgentCommand.TextReply("执行计划: ${command.plan.description}")
-            else -> AiAgentCommand.TextReply("操作已执行")
+            // Gallery 命令
+            is AgentCommand.ViewMedia -> AiAgentCommand.NavigateTo("gallery")
+            is AgentCommand.DeleteMedia -> AiAgentCommand.TextReply("请在相册中删除照片")
+            is AgentCommand.ShareMedia -> AiAgentCommand.TextReply("请在相册中分享照片")
+            is AgentCommand.SelectMedia -> AiAgentCommand.TextReply("请在相册中选择照片")
+            is AgentCommand.SearchMedia -> AiAgentCommand.TextReply("搜索照片: ${command.query}")
+            is AgentCommand.SwitchViewMode -> AiAgentCommand.TextReply("切换相册视图")
+            is AgentCommand.FavoriteMedia -> AiAgentCommand.TextReply("收藏照片")
+            // 设置命令
+            is AgentCommand.ChangeTheme -> AiAgentCommand.TextReply("切换主题: ${command.theme}")
+            is AgentCommand.ChangeLanguage -> AiAgentCommand.TextReply("切换语言: ${command.language}")
+            is AgentCommand.DownloadModel -> AiAgentCommand.TextReply("下载模型: ${command.modelId}")
+            is AgentCommand.SwitchFaceEngine -> AiAgentCommand.TextReply("切换人脸引擎: ${command.engine}")
+            is AgentCommand.ToggleSetting -> AiAgentCommand.TextReply("切换设置: ${command.settingKey}")
+            // 错误/未知命令 —— 明确报告，不允许掩盖
+            is AgentCommand.Error -> AiAgentCommand.TextReply("命令错误: ${command.reason}")
+            is AgentCommand.Unknown -> AiAgentCommand.TextReply("未知命令: ${command.raw}")
         }
     }
 
@@ -299,8 +317,30 @@ class AiAgentUseCase(
                     is AgentCommand.CapturePhoto -> AiAgentCommand.CapturePhoto
                     is AgentCommand.ToggleRecording -> AiAgentCommand.ToggleRecording
                     is AgentCommand.SwitchMode -> AiAgentCommand.SwitchMode(cmd.mode)
+                    is AgentCommand.NavigateTo -> AiAgentCommand.NavigateTo(cmd.destination)
+                    is AgentCommand.GoBack -> AiAgentCommand.GoBack
                     is AgentCommand.TextReply -> AiAgentCommand.TextReply(cmd.message)
-                    else -> AiAgentCommand.TextReply("操作已执行")
+                    is AgentCommand.BatchExecute -> AiAgentCommand.BatchExecute(
+                        cmd.commands.map { mapAgentCommandToLegacy(it) }
+                    )
+                    is AgentCommand.ExecutePlan -> AiAgentCommand.TextReply("执行计划: ${cmd.plan.description}")
+                    // Gallery 命令
+                    is AgentCommand.ViewMedia -> AiAgentCommand.NavigateTo("gallery")
+                    is AgentCommand.DeleteMedia -> AiAgentCommand.TextReply("请在相册中删除照片")
+                    is AgentCommand.ShareMedia -> AiAgentCommand.TextReply("请在相册中分享照片")
+                    is AgentCommand.SelectMedia -> AiAgentCommand.TextReply("请在相册中选择照片")
+                    is AgentCommand.SearchMedia -> AiAgentCommand.TextReply("搜索照片: ${cmd.query}")
+                    is AgentCommand.SwitchViewMode -> AiAgentCommand.TextReply("切换相册视图")
+                    is AgentCommand.FavoriteMedia -> AiAgentCommand.TextReply("收藏照片")
+                    // 设置命令
+                    is AgentCommand.ChangeTheme -> AiAgentCommand.TextReply("切换主题: ${cmd.theme}")
+                    is AgentCommand.ChangeLanguage -> AiAgentCommand.TextReply("切换语言: ${cmd.language}")
+                    is AgentCommand.DownloadModel -> AiAgentCommand.TextReply("下载模型: ${cmd.modelId}")
+                    is AgentCommand.SwitchFaceEngine -> AiAgentCommand.TextReply("切换人脸引擎: ${cmd.engine}")
+                    is AgentCommand.ToggleSetting -> AiAgentCommand.TextReply("切换设置: ${cmd.settingKey}")
+                    // 错误/未知 —— 明确报告，不允许掩盖
+                    is AgentCommand.Error -> AiAgentCommand.TextReply("命令错误: ${cmd.reason}")
+                    is AgentCommand.Unknown -> AiAgentCommand.TextReply("未知命令: ${cmd.raw}")
                 }
             }
             is AgentAction.TextReply -> AiAgentCommand.TextReply(action.message)
@@ -348,6 +388,8 @@ class AiAgentUseCase(
             appendLine("capture:       拍照")
             appendLine("toggle_recording: 开始/停止录像")
             appendLine("switch_mode:   mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
+            appendLine("navigate_to:   destination=camera|gallery|settings|debug (页面导航)")
+            appendLine("go_back:       返回上一页")
             appendLine("text_reply:    普通聊天回复")
             appendLine()
             appendLine("【中文名称映射 - 用户说左边，你必须输出右边】")
@@ -357,11 +399,15 @@ class AiAgentUseCase(
             appendLine("模式: 拍照→PHOTO, 录像→VIDEO, 人像→PORTRAIT, 专业→PRO, 文档→DOCUMENT")
             appendLine("场景: 夜景→night, 月亮→moon, 关闭→none")
             appendLine("比例: 4比3→4:3, 16比9→16:9, 全屏→full")
+            appendLine("页面: 相机/拍照→camera, 相册/图库→gallery, 设置/配置→settings, 调试→debug")
             appendLine()
             appendLine("【示例 - 严格模仿】")
             appendLine("用户: 拍张照片 → {\"action\":\"capture\"}")
             appendLine("用户: 磨皮调到80 → {\"action\":\"adjust_beauty\",\"smoothing\":80}")
             appendLine("用户: 切换徕卡黑白 → {\"action\":\"switch_filter\",\"filter\":\"LEICA_BW\"}")
+            appendLine("用户: 打开设置 → {\"action\":\"navigate_to\",\"destination\":\"settings\"}")
+            appendLine("用户: 去相册 → {\"action\":\"navigate_to\",\"destination\":\"gallery\"}")
+            appendLine("用户: 返回 → {\"action\":\"go_back\"}")
             appendLine("用户: 你好 → {\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅！\"}")
             appendLine("用户: 瘦脸开到20 → {\"action\":\"adjust_beauty\",\"slim_face\":20}")
             appendLine()
@@ -369,6 +415,7 @@ class AiAgentUseCase(
             appendLine("- 相对调整: '高一点'='加一点' → 当前值+15左右; '低一点'='减一点' → 当前值-15左右")
             appendLine("- 未提及的参数保持当前值不变")
             appendLine("- 所有message字段必须使用中文")
+            appendLine("- 用户要求打开/前往/切换到某个页面时，必须使用 navigate_to 命令，不要用 text_reply")
         }
     }
 
@@ -467,6 +514,11 @@ class AiAgentUseCase(
                     val mode = runCatching { MediaType.valueOf(modeName) }.getOrDefault(MediaType.PHOTO)
                     AiAgentCommand.SwitchMode(mode)
                 }
+                "navigate_to" -> {
+                    val destination = extractJsonField(json, "destination") ?: ""
+                    AiAgentCommand.NavigateTo(destination)
+                }
+                "go_back" -> AiAgentCommand.GoBack
                 else -> {
                     val message = extractJsonField(json, "message")
                         ?: cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }

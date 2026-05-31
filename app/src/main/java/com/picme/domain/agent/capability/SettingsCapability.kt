@@ -63,11 +63,36 @@ class SettingsCapability(
         Logger.i(TAG, "Executing command: $command")
 
         return when (command) {
-            is AgentCommand.ChangeTheme -> handleChangeTheme(command)
-            is AgentCommand.ChangeLanguage -> handleChangeLanguage(command)
-            is AgentCommand.DownloadModel -> handleDownloadModel(command)
-            is AgentCommand.SwitchFaceEngine -> handleSwitchFaceEngine(command)
-            is AgentCommand.ToggleSetting -> handleToggleSetting(command)
+            is AgentCommand.ChangeTheme -> {
+                if (onChangeTheme == null) {
+                    return Result.success(AgentAction.Error("主题切换功能未初始化"))
+                }
+                handleChangeTheme(command)
+            }
+            is AgentCommand.ChangeLanguage -> {
+                if (onChangeLanguage == null) {
+                    return Result.success(AgentAction.Error("语言切换功能未初始化"))
+                }
+                handleChangeLanguage(command)
+            }
+            is AgentCommand.DownloadModel -> {
+                if (onDownloadModel == null) {
+                    return Result.success(AgentAction.Error("模型下载功能未初始化"))
+                }
+                handleDownloadModel(command)
+            }
+            is AgentCommand.SwitchFaceEngine -> {
+                if (onSwitchFaceEngine == null) {
+                    return Result.success(AgentAction.Error("人脸引擎切换未初始化"))
+                }
+                handleSwitchFaceEngine(command)
+            }
+            is AgentCommand.ToggleSetting -> {
+                if (onToggleSetting == null) {
+                    return Result.success(AgentAction.Error("设置项开关未初始化"))
+                }
+                handleToggleSetting(command)
+            }
             else -> Result.success(AgentAction.Error("不支持的设置命令: $command"))
         }
     }

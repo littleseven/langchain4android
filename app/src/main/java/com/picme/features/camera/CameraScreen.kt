@@ -790,13 +790,10 @@ fun CameraContent(
         }
     }
 
-    // 注册 Camera Capability 并切换 Agent 场景到 CAMERA
+    // 切换 Agent 场景到 CAMERA
     DisposableEffect(aiAgentUseCase) {
         val orchestrator = AgentOrchestrator.getInstance(context)
         orchestrator.transitionToScene(SceneManager.Scene.CAMERA)
-        // 注册一个空回调的 CameraCapability，让 Orchestrator 能通过场景检查
-        // 实际命令执行由 onAiAgentCommand 回调在 UI 层完成
-        aiAgentUseCase.registerCameraCapability(CameraCapability())
         onDispose {
             orchestrator.transitionToScene(SceneManager.Scene.UNKNOWN)
         }
@@ -899,6 +896,8 @@ fun CameraContent(
                         is AiAgentCommand.CapturePhoto -> "已拍照"
                         is AiAgentCommand.ToggleRecording -> "已切换录像状态"
                         is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
+                        is AiAgentCommand.NavigateTo -> "正在跳转..."
+                        is AiAgentCommand.GoBack -> "返回"
                         is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
                     }
                     aiAgentMessages = aiAgentMessages + AgentMessage.AgentText(content = responseText)
@@ -1074,6 +1073,17 @@ fun CameraContent(
             is AiAgentCommand.SwitchMode -> {
                 captureMode = cmd.mode
             }
+            is AiAgentCommand.NavigateTo -> {
+                when (cmd.destination.lowercase()) {
+                    "settings" -> onNavigateToSettings()
+                    "gallery" -> onNavigateToGallery()
+                    else -> Logger.w("PicMe:Camera", "Unknown navigation destination: ${cmd.destination}")
+                }
+            }
+            is AiAgentCommand.GoBack -> {
+                // 相机页是根页面，返回无操作
+                Logger.d("PicMe:Camera", "GoBack ignored on camera screen (root)")
+            }
             is AiAgentCommand.TextReply -> {
                 // 文本回复已在面板中显示，无需额外操作
             }
@@ -1085,9 +1095,31 @@ fun CameraContent(
     }
 
     // 绑定命令处理器到语音协调器的回调引用
+    // 同时注册带有实际回调的 CameraCapability，确保 Chat 面板命令能正确执行
     DisposableEffect(agentCommandHandler) {
         onCommandRef.value = agentCommandHandler
-        onDispose { }
+
+        val orchestrator = AgentOrchestrator.getInstance(context)
+        val cameraCapability = CameraCapability(
+            onAdjustBeauty = { agentCommandHandler(AiAgentCommand.AdjustBeauty(it)) },
+            onSwitchFilter = { agentCommandHandler(AiAgentCommand.SwitchFilter(it)) },
+            onSwitchStyle = { agentCommandHandler(AiAgentCommand.SwitchStyle(it)) },
+            onSwitchScene = { agentCommandHandler(AiAgentCommand.SwitchScene(it)) },
+            onSwitchRatio = { agentCommandHandler(AiAgentCommand.SwitchRatio(it)) },
+            onAdjustExposure = { agentCommandHandler(AiAgentCommand.AdjustExposure(it)) },
+            onAdjustZoom = { agentCommandHandler(AiAgentCommand.AdjustZoom(it)) },
+            onFlipCamera = { agentCommandHandler(AiAgentCommand.FlipCamera) },
+            onCapturePhoto = { agentCommandHandler(AiAgentCommand.CapturePhoto) },
+            onToggleRecording = { agentCommandHandler(AiAgentCommand.ToggleRecording) },
+            onSwitchMode = { agentCommandHandler(AiAgentCommand.SwitchMode(it)) }
+        )
+        orchestrator.registerCapability(cameraCapability)
+        Logger.i("PicMe:Camera", "CameraCapability registered with live callbacks")
+
+        onDispose {
+            orchestrator.unregisterCapability("camera")
+            Logger.i("PicMe:Camera", "CameraCapability unregistered")
+        }
     }
 
     var facePoint by remember { mutableStateOf(Offset.Zero) }

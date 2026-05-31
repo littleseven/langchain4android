@@ -6,12 +6,17 @@ import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 导航 Capability
  *
  * 负责页面导航：切换页面、返回上一页
  * 在所有场景都可用
+ *
+ * **注意**：导航回调涉及 Compose NavController 操作，必须在主线程执行。
+ * execute() 内部会自动切换到 Main 线程。
  */
 class NavigationCapability(
     private val onNavigate: (Destination) -> Unit,
@@ -50,17 +55,21 @@ class NavigationCapability(
             is AgentCommand.NavigateTo -> {
                 val destination = parseDestination(command.destination)
                 if (destination != null) {
-                    onNavigate(destination)
+                    withContext(Dispatchers.Main) {
+                        onNavigate(destination)
+                    }
                     Result.success(AgentAction.Success(command))
                 } else {
                     Result.success(
-                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, editor")
+                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug")
                     )
                 }
             }
 
             is AgentCommand.GoBack -> {
-                onBack()
+                withContext(Dispatchers.Main) {
+                    onBack()
+                }
                 Result.success(AgentAction.Success(command))
             }
 
@@ -76,7 +85,6 @@ class NavigationCapability(
             "camera", "相机", "拍照", "拍摄" -> Destination.CAMERA
             "gallery", "相册", "照片", "图库" -> Destination.GALLERY
             "settings", "设置", "配置" -> Destination.SETTINGS
-            "editor", "编辑", "编辑器" -> Destination.EDITOR
             "debug", "调试" -> Destination.DEBUG
             else -> null
         }
@@ -89,7 +97,6 @@ class NavigationCapability(
         CAMERA,     // 相机页
         GALLERY,    // 相册页
         SETTINGS,   // 设置页
-        EDITOR,     // 编辑页
         DEBUG       // 调试页
     }
 }

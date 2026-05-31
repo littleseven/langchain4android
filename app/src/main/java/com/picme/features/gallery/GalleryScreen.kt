@@ -67,6 +67,7 @@ import com.picme.domain.agent.model.AgentScene
 fun GalleryScreen(
     viewModel: MediaViewModel,
     onNavigateBack: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
@@ -182,9 +183,11 @@ fun GalleryScreen(
     val agentIntegration = rememberGalleryAgentIntegration(
         context = context,
         onNavigateTo = { destination ->
-            when (destination) {
+            when (destination.lowercase()) {
                 "camera" -> onNavigateBack()
-                "settings" -> onNavigateToDebug()
+                "settings" -> onNavigateToSettings()
+                "debug" -> onNavigateToDebug()
+                else -> Logger.w("PicMe:Gallery", "Unknown navigation destination: $destination")
             }
         },
         onNavigateBack = onNavigateBack
