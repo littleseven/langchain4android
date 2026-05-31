@@ -138,7 +138,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **参数映射**：UI 参数 → ΔL (亮度提升) 和 ΔU/ΔV (色度调整)
 
 - **瘦脸 (Slim Face)**：
-  - **人脸检测**：当前主链路使用 `MediaPipeFaceDetector` 输出 468→106 点结果；`InsightFace2D106Detector` 作为异步备选
+  - **人脸检测**：`FaceDetectorManager` 按需初始化，主链路 `MediaPipeFaceDetector` 输出 468→106 点；`InsightFace2D106Detector` 作为异步备选（连续 3 次漏检 + 冷却时间后触发）
   - **变形算法**：基于 Delaunay 三角剖分的网格变形 (Mesh Warping)
   - **实现要点**：以下颌角为中心点，向内收缩 5%-30%
   - **安全约束**：变形幅度限制在 30% 以内，保持面部比例协调
@@ -334,6 +334,9 @@ if (fps < 25 || processingMs > 20) {
 - [ ] 身材调整是否保持身体比例？（避免变形）
 - [ ] 磨皮是否保留边缘细节？（双边滤波或表面模糊）
 - [ ] 美白是否避免全图过曝？（仅提升肤色区域亮度）
+- [ ] 人脸检测器是否按需初始化？（禁止启动时预加载）
+- [ ] MediaPipe 是否避免重复初始化？（`c67211ea` 修复）
+- [ ] InsightFace 是否仅在备选触发时初始化？（禁止每帧常驻）
 
 ### 4.6 拍照 GPU 化检查清单（2026-05 新增）
 - [ ] `PhotoProcessor` 接口是否已添加到 `api/` 包？

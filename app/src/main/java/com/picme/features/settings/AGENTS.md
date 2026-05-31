@@ -96,14 +96,52 @@
 - [ ] 是否支持深色模式？（使用 MaterialTheme.colorScheme）
 - [ ] 设置变更是否实时生效？（通过 Flow 自动通知订阅者）
 
+## 2.5 模型管理（2026-05 新增）
+
+**LLM 模型管理**
+- **入口**：`LlmModelManagerScreen`，从设置页"模型管理"进入
+- **功能**：
+  - 查看已下载模型列表（Qwen3-0.6B 等）
+  - 下载新模型（从远程仓库）
+  - 删除本地模型释放空间
+  - 切换当前使用模型
+- **存储路径**：应用私有目录 `/data/data/com.picme/files/models/`
+- **下载管理**：`LlmModelDownloadManager` 支持断点续传和进度回调
+
+**ASR 模型管理**
+- **入口**：`AsrModelManagerScreen`，从设置页"语音识别模型"进入
+- **功能**：
+  - 查看 Sherpa-MNN ASR 模型状态
+  - 下载/更新 ASR 模型
+  - 配置 VAD 参数（阈值、最小语音时长）
+
+**Agent 模式设置**
+- **本地模式**：仅使用本地 Qwen3-0.6B
+- **远程模式**：仅使用 Kimi API
+- **混合模式**：`InferenceRouter` 自适应选择（默认）
+- **隐私级别**：`SAFE` / `NORMAL` / `RESTRICTED`
+
+## 2.6 Agent 集成（2026-05 新增）
+
+**SettingsAgentIntegration**
+- 通过 `SettingsCapability` 绑定到 `CapabilityRegistry`
+- 支持命令：
+  - `navigate_to` — 跳转设置子页面
+  - `toggle_setting` — 切换开关设置
+  - `set_model` — 切换 LLM/ASR 模型
+- 使用 `AiChatScreen` 提供统一聊天界面
+
 ## 5. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
 - ✅ 零云端 → 所有设置本地存储，不申请网络权限
 - ✅ 多语言支持 → 英文、简体中文、繁体中文三语齐全
 - ✅ 权限透明 → 明确告知用途，提供降级方案
+- ✅ 模型管理 → LLM/ASR 模型下载、切换、删除
+- ✅ Agent 集成 → SettingsCapability 支持语音/文字命令
 
 **技术决策记录**：
 - 选择 DataStore 而非 SharedPreferences：类型安全、支持 Flow、无主线程阻塞
 - 使用 Sealed Class 表示设置项：编译器检查 exhaustive when，避免遗漏
 - Combine 多个 Flow：减少订阅次数，提升性能
+- 模型存储在应用私有目录：避免 Scoped Storage 限制，支持大文件

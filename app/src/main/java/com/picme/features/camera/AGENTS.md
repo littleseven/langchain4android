@@ -258,6 +258,41 @@ val screenY = adjustedY * previewHeight
 - [ ] 是否记录了沉浸式模式的启用和禁用日志？（便于调试）
 - [ ] UI元素是否正常显示？（不被系统栏遮挡，EdgeToEdge已在MainActivity配置）
 
+## 2.7 Agent 集成规范（2026-05 新增）
+
+**CameraAgentIntegration**
+- 通过 `CameraCapability` 绑定到 `CapabilityRegistry`
+- 在 `CameraScreen` 中通过 ` remember { CameraAgentIntegration(...) }` 创建
+- 生命周期绑定：`DisposableEffect` 中注册 delegate，退出时解绑
+- 支持命令：
+  - `take_photo` — 触发拍照
+  - `switch_camera` — 切换前后置
+  - `set_beauty_param` — 设置美颜参数（支持多参数同时调节）
+  - `set_filter` — 切换滤镜
+  - `set_style_effect` — 切换风格特效
+
+**AiAgentPanel → AiChatScreen 迁移**
+- 旧版：`Dialog` 设计的 `AiAgentPanel`（已废弃）
+- 新版：`ModalBottomSheet` 设计的 `AiChatScreen`，支持折叠/展开
+- 通过 `CameraAgentIntegration` 统一消息状态管理
+
+## 2.8 语音控制集成（2026-05 新增）
+
+**VoiceCommandCoordinator**
+- 在 `CameraScreen` 中通过 `remember { VoiceCommandCoordinator(...) }` 创建
+- 支持双模式切换：`PUSH_TO_TALK` / `WAKE_WORD`
+- 声控开关状态与对话历史同步（`UserPreferencesRepository`）
+
+**WakeWordEngine**
+- 仅在相机预览可见时运行，页面退出自动停止
+- VAD 阈值：30dB，最小语音时长：100ms
+- 检测到语音后自动触发 ASR → LLM 解析 → 命令执行
+
+**语音命令反馈**
+- 识别成功：AgentMessage.AgentText 显示识别结果
+- 命令执行：实时更新 Camera 状态
+- 识别失败：AgentMessage.AgentText 显示错误提示
+
 ## 5. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
