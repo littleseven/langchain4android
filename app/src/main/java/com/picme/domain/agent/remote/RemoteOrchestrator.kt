@@ -447,7 +447,7 @@ class RemoteOrchestrator(
                 AgentCommand.NavigateTo(destination)
             }
             "go_back" -> AgentCommand.GoBack
-            else -> AgentCommand.TextReply("未知命令: $action")
+            else -> AgentCommand.TextReply("收到，有什么其他需要帮忙的吗？")
         }
     }
 

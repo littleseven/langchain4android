@@ -77,13 +77,6 @@ class PromptBuilder(
 - 开启/关闭各种设置项
 """.trimIndent(),
 
-        SceneManager.Scene.EDITOR to """
-当前在照片编辑页面，可用操作：
-- 应用美颜效果
-- 撤销/重做编辑
-- 保存编辑结果
-""".trimIndent(),
-
         SceneManager.Scene.DEBUG to """
 当前在调试页面。
 """.trimIndent(),

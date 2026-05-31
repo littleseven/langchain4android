@@ -250,14 +250,15 @@ class AgentOrchestratorParseTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `capabilityRegistry dispatch CapturePhoto without registered capability returns Success`() = runBlocking {
+    fun `capabilityRegistry dispatch CapturePhoto without registered capability returns Error`() = runBlocking {
         val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.CapturePhoto
         val result = registry.dispatch(command, defaultContext)
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue(action is AgentAction.Success)
-        assertEquals(command, (action as AgentAction.Success).command)
+        // CameraCapability 未注册时，findCapabilityForCommand 返回 null，dispatch 返回 Error
+        assertTrue(action is AgentAction.Error)
+        assertEquals("暂不支持此操作", (action as AgentAction.Error).message)
     }
 
     @Test
@@ -272,13 +273,15 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `capabilityRegistry dispatch FlipCamera without registered capability returns Success`() = runBlocking {
+    fun `capabilityRegistry dispatch FlipCamera without registered capability returns Error`() = runBlocking {
         val registry = CapabilityRegistry.getInstance()
         val command = AgentCommand.FlipCamera
         val result = registry.dispatch(command, defaultContext)
         assertTrue(result.isSuccess)
         val action = result.getOrNull()
-        assertTrue(action is AgentAction.Success)
+        // CameraCapability 未注册时，findCapabilityForCommand 返回 null，dispatch 返回 Error
+        assertTrue(action is AgentAction.Error)
+        assertEquals("暂不支持此操作", (action as AgentAction.Error).message)
     }
 
     // ------------------------------------------------------------------

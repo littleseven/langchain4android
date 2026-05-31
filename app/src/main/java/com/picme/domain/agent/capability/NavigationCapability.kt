@@ -30,14 +30,12 @@ class NavigationCapability(
 
     override fun supportedCommands(): List<String> = listOf(
         "navigate_to",
-        "go_back",
-        "text_reply"
+        "go_back"
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
-        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|editor)"
+        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|debug)"
         "go_back" -> "返回上一页，无参数"
-        "text_reply" -> "文本回复"
         else -> "未知命令"
     }
 
@@ -64,10 +62,6 @@ class NavigationCapability(
             is AgentCommand.GoBack -> {
                 onBack()
                 Result.success(AgentAction.Success(command))
-            }
-
-            is AgentCommand.TextReply -> {
-                Result.success(AgentAction.TextReply(command.message))
             }
 
             else -> {

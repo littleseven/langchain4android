@@ -194,6 +194,7 @@ class BeautyParamsConverterTest {
     fun `toBeautyParams lipColorIndex out of range is coerced`() {
         val settings = BeautySettings(
             enabled = true,
+            lipColor = 50f, // 必须 > 0 才能使 hasAnyEffect() = true，进入主分支
             lipColorIndex = 20 // 超出 0-11
         )
         val params = settings.toBeautyParams()

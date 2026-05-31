@@ -32,7 +32,6 @@ class SceneManager private constructor() {
         CAMERA,      // 相机拍摄页
         GALLERY,     // 相册浏览页
         SETTINGS,    // 设置页
-        EDITOR,      // 照片编辑页
         DEBUG,       // 调试页
         UNKNOWN      // 未知/初始状态
     }
@@ -94,7 +93,7 @@ class SceneManager private constructor() {
         Scene.CAMERA -> listOf("camera", "navigation")
         Scene.GALLERY -> listOf("gallery", "navigation")
         Scene.SETTINGS -> listOf("settings", "navigation")
-        Scene.EDITOR -> listOf("edit", "navigation")
+        // Scene.EDITOR -> listOf("edit", "navigation") // 预留：照片编辑页暂未实现独立路由
         Scene.DEBUG -> listOf("navigation")
         Scene.UNKNOWN -> listOf("navigation")
     }
@@ -106,7 +105,7 @@ class SceneManager private constructor() {
         Scene.CAMERA -> "相机拍摄页面，可以拍照、录像、调节美颜参数"
         Scene.GALLERY -> "相册页面，可以查看、删除、分享照片"
         Scene.SETTINGS -> "设置页面，可以调整应用配置"
-        Scene.EDITOR -> "照片编辑页面，可以编辑照片"
+        // Scene.EDITOR -> "照片编辑页面，可以编辑照片" // 预留：照片编辑页暂未实现独立路由
         Scene.DEBUG -> "调试页面"
         Scene.UNKNOWN -> "未知页面"
     }

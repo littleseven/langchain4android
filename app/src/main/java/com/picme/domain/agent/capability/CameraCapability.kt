@@ -52,8 +52,7 @@ class CameraCapability(
         "flip_camera",
         "capture",
         "toggle_recording",
-        "switch_mode",
-        "text_reply"
+        "switch_mode"
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
@@ -68,7 +67,6 @@ class CameraCapability(
         "capture" -> "拍照"
         "toggle_recording" -> "开始/停止录像"
         "switch_mode" -> "切换拍摄模式，参数: mode (PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT)"
-        "text_reply" -> "文本回复"
         else -> "未知命令"
     }
 
@@ -142,18 +140,6 @@ class CameraCapability(
                 onSwitchMode?.invoke(command.mode)
                     ?: Logger.w(tag, "onSwitchMode callback not set")
                 Result.success(AgentAction.Success(command))
-            }
-
-            is AgentCommand.TextReply -> {
-                Result.success(AgentAction.TextReply(command.message))
-            }
-
-            is AgentCommand.Unknown -> {
-                Result.success(AgentAction.TextReply("收到你的消息了，但没理解具体意图，请再描述一下~"))
-            }
-
-            is AgentCommand.Error -> {
-                Result.success(AgentAction.Error(command.reason))
             }
 
             else -> {

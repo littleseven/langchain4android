@@ -152,28 +152,6 @@ sealed class AgentCommand {
 
     // ==================== 编辑命令 ====================
 
-    /**
-     * 应用编辑效果
-     */
-    data class ApplyEdit(val editType: String, val params: Map<String, Float> = emptyMap()) : AgentCommand()
-
-    /**
-     * 保存编辑
-     */
-    data object SaveEdit : AgentCommand()
-
-    /**
-     * 撤销编辑
-     */
-    data object UndoEdit : AgentCommand()
-
-    /**
-     * 重做编辑
-     */
-    data object RedoEdit : AgentCommand()
-
-    // ==================== 通用命令 ====================
-
     // ==================== 远程模式专用命令 ====================
 
     /**
@@ -237,10 +215,6 @@ sealed class AgentCommand {
             is ToggleSetting -> "toggle_setting"
             is NavigateTo -> "navigate_to"
             is GoBack -> "go_back"
-            is ApplyEdit -> "apply_edit"
-            is SaveEdit -> "save_edit"
-            is UndoEdit -> "undo_edit"
-            is RedoEdit -> "redo_edit"
             is BatchExecute -> "batch_execute"
             is ExecutePlan -> "execute_plan"
             is TextReply -> "text_reply"

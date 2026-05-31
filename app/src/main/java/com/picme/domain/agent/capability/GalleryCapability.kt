@@ -21,7 +21,6 @@ class GalleryCapability(
     private val onSearch: ((String) -> Unit)? = null,
     private val onSwitchViewMode: ((ViewMode) -> Unit)? = null,
     private val onFavoriteMedia: ((String, Boolean) -> Unit)? = null,
-    private val onClearSelection: (() -> Unit)? = null
 ) : BaseCapability() {
 
     private val tag = "PicMe:GalleryCapability"
@@ -41,8 +40,7 @@ class GalleryCapability(
         "select_media",
         "search_media",
         "switch_view_mode",
-        "favorite_media",
-        "text_reply"
+        "favorite_media"
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
@@ -53,7 +51,6 @@ class GalleryCapability(
         "search_media" -> "搜索照片，参数: query (搜索关键词如'昨天'、'上海'等)"
         "switch_view_mode" -> "切换视图模式，参数: mode (grid/list/timeline)"
         "favorite_media" -> "收藏/取消收藏，参数: media_id, favorite (true/false)"
-        "text_reply" -> "文本回复"
         else -> "未知命令"
     }
 
@@ -93,10 +90,6 @@ class GalleryCapability(
 
             is AgentCommand.FavoriteMedia -> {
                 handleFavoriteMedia(command)
-            }
-
-            is AgentCommand.TextReply -> {
-                Result.success(AgentAction.TextReply(command.message))
             }
 
             else -> {
