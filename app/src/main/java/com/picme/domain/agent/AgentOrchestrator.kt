@@ -53,6 +53,9 @@ class AgentOrchestrator private constructor(private val context: Context) {
     private val capabilityRegistry = CapabilityRegistry.getInstance()
     private val strategySelector = AdaptiveStrategySelector()
 
+    // L1 意图缓存（本地高频指令快速响应）
+    private val intentCache = com.picme.domain.agent.remote.IntentCache()
+
     // 推理路由器（懒加载，避免在不需要时初始化远程组件）
     private val inferenceRouter: InferenceRouter by lazy {
         val remoteOrchestrator = createRemoteOrchestrator()
@@ -200,6 +203,13 @@ class AgentOrchestrator private constructor(private val context: Context) {
     ): Result<AgentAction> = withContext(Dispatchers.IO) {
         Logger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}, mode=$agentMode")
 
+        // 0. L1 缓存查询（本地高频指令快速响应，零 LLM 开销）
+        intentCache.match(input)?.let { cachedCommand ->
+            Logger.i(tag, "L1 cache hit for input='$input' -> ${cachedCommand::class.simpleName}")
+            saveConversation(agentContext.memorySessionId, input, cachedCommand, "")
+            return@withContext capabilityRegistry.dispatch(cachedCommand, agentContext, pageContext)
+        }
+
         // 1. 获取当前场景的 Capability 列表
         val capabilities = capabilityRegistry.getCapabilitiesForCurrentScene()
         if (capabilities.isEmpty()) {
@@ -343,6 +353,12 @@ class AgentOrchestrator private constructor(private val context: Context) {
         // 解析命令
         val command = AgentCommandParser.parseLlmResponse(response, agentContext)
         Logger.i(tag, "Parsed command: ${command::class.simpleName}")
+
+        // L1 缓存学习：解析成功且非错误命令时写入缓存
+        if (command !is AgentCommand.Error && command !is AgentCommand.TextReply) {
+            intentCache.put(userInput, command)
+            Logger.d(tag, "L1 cache learned: '$userInput' -> ${command::class.simpleName}")
+        }
 
         // 保存对话历史
         saveConversation(memorySessionId, userInput, command, response)
