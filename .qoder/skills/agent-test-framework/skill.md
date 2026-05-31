@@ -1,14 +1,25 @@
 ---
 name: agent-test-framework
-description: PicMe Agent 化测试框架。支持声明式 DSL 定义测试用例、AI Agent 远程触发执行、自动截屏/日志收集、失败诊断与报告生成。
+description: |
+  PicMe Agent 化测试框架。支持声明式 DSL 定义测试用例、AI Agent 远程触发执行、自动截屏/日志收集、失败诊断与报告生成。
 version: 1.0.0
 created: 2026-05-26
 updated: 2026-05-26
 maintainer: [RD] 全栈工程师, [QA] 质量专家
-tags: [android, agent, testing, automation, dsl, device]
+tags:
+  - android
+  - agent
+  - testing
+  - automation
+  - dsl
+  - device
 ---
 
 # Agent 测试框架 (Agent Test Framework)
+
+> **定位**：PicMe Agent 化测试框架，支持声明式 DSL 定义测试用例和 AI Agent 远程触发执行。
+> **触发时机**：用户提及自动化测试、测试框架、DSL 或 Agent 测试时自动启用。
+
 
 ## 定位
 
@@ -247,3 +258,9 @@ fun CameraScreen(...) {
 - `app/src/main/java/com/picme/testing/agent/runner/` — 运行器
 - `app/src/main/java/com/picme/testing/agent/bridge/` — 广播桥接
 - `scripts/agent-test.sh` — AI Agent 侧入口脚本
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.0.0 | 2026-05-26 | 初始版本 |

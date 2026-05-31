@@ -1,14 +1,24 @@
 ---
 name: coordinate-system-standard
-description: 人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。
+description: |
+  人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师 + [CR] 规范守护者
-tags: [coordinate-system, landmark, opengl, rendering, standard]
+tags:
+  - coordinate-system
+  - landmark
+  - opengl
+  - rendering
+  - standard
 ---
 
 # Coordinate System Standard Skill
+
+> **定位**：人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。
+> **触发时机**：用户涉及坐标映射、关键点对齐、渲染坐标转换或 UI 标注规范时自动启用。
+
 
 **技能名称**: coordinate-system-standard
 **版本**: 1.0.0
@@ -430,3 +440,12 @@ Log.d(TAG, "Step4 [像素映射]: screen=($screenX,$screenY)")
 
 **Skill 维护者**: PicMe AI Team  
 **最后更新**: 2026-05-03
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

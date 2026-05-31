@@ -1,14 +1,25 @@
 ---
 name: av-gl-expert
-description: PicMe OpenGL/CameraX 专家。诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。
+description: |
+  PicMe OpenGL/CameraX 专家。诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师 + [CR] 规范守护者
-tags: [opengl, camerax, egl, shader, gpu, rendering]
+tags:
+  - opengl
+  - camerax
+  - egl
+  - shader
+  - gpu
+  - rendering
 ---
 
 # AV-GL Expert (PicMe)
+
+> **定位**：PicMe OpenGL/CameraX 专家，诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。
+> **触发时机**：用户报告黑屏、渲染异常、Shader 编译失败或 CameraX 相关问题时自动启用。
+
 
 ## 🚀 PicMe CLI 快速执行指南
 
@@ -409,3 +420,12 @@ MediaPipe 468 点 → 468→106 语义映射 → 旋转校正 → 归一化 → 
 **更新日期**: 2026-05-25  
 **维护者**: [RD] 全栈工程师 + [CR] 规范守护者  
 **适用范围**: PicMe 项目音视频与 OpenGL 相关开发
+
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

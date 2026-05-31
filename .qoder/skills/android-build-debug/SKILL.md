@@ -1,14 +1,24 @@
 ---
 name: android-build-debug
-description: Android 项目编译、安装、日志调试的标准化流程。
+description: |
+  Android 项目编译、安装、日志调试的标准化流程。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [android, gradle, build, debug, apk]
+tags:
+  - android
+  - gradle
+  - build
+  - debug
+  - apk
 ---
 
 # Android 编译调试 Skill
+
+> **定位**：Android 项目编译、安装、日志调试的标准化流程。
+> **触发时机**：用户需要编译 APK、安装应用、查看日志或排查构建问题时自动启用。
+
 
 ## 标准编译流程
 
@@ -105,8 +115,15 @@ adb shell am start -n com.picme/.MainActivity
 - Java/Kotlin 源码：`app/src/main/java/com/picme/`
 - 日志标签过滤：`adb logcat -s PicMe:* *:S`
 
-## 相关 Skill
+## 相关文件
 
 - [error-healer](.qoder/skills/error-healer/SKILL.md) — 编译错误自动分类与修复
 - [adb-bot](.qoder/skills/adb-bot/SKILL.md) — 设备控制与日志收集
 - [auto-dev-loop](.qoder/skills/auto-dev-loop/SKILL.md) — 一键开发自循环
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-31 | 统一格式规范，添加定位块 |
+| 1.0.0 | 2026-05-03 | 初始版本 |

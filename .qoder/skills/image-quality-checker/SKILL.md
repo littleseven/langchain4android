@@ -1,14 +1,25 @@
 ---
 name: image-quality-checker
-description: 通过 adb 截屏并分析图片质量，检测黑屏、人脸位置、调试信息是否正常。
+description: |
+  通过 adb 截屏并分析图片质量，检测黑屏、人脸位置、调试信息是否正常。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [adb, image, quality, debug, camera, testing]
+tags:
+  - adb
+  - image
+  - quality
+  - debug
+  - camera
+  - testing
 ---
 
 # 图片质量验证 Skill
+
+> **定位**：通过 adb 截屏并分析图片质量，检测黑屏、人脸位置、调试信息是否正常。
+> **触发时机**：用户需要截屏分析、检测黑屏、验证人脸位置或检查调试信息时自动启用。
+
 
 通过 adb 截屏并结合 Python 脚本自动分析画面质量，诊断渲染问题。
 
@@ -162,3 +173,9 @@ done
 - [scripts/auto_check_photo.sh](scripts/auto_check_photo.sh) - 自动化拍照质量检查脚本（推荐）
 - [scripts/analyze_image.py](scripts/analyze_image.py) - Python 分析脚本
 - [scripts/check_quality.sh](scripts/check_quality.sh) - 截屏验证流程
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-03 | 初始版本 |

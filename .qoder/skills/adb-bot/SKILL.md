@@ -1,14 +1,24 @@
 ---
 name: adb-bot
-description: 通过 adb 命令自动化控制 PicMe 相机应用并调试 Android 设备状态。支持拍照、切换摄像头、设置美颜参数等自动化操作，以及截屏、日志分析、性能监控等调试功能。
+description: |
+  通过 adb 命令自动化控制 PicMe 相机应用并调试 Android 设备状态。支持拍照、切换摄像头、设置美颜参数等自动化操作，以及截屏、日志分析、性能监控等调试功能。
 version: 1.1.0
 created: 2026-05-03
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [adb, android, debug, camera, testing]
+tags:
+  - adb
+  - android
+  - debug
+  - camera
+  - testing
 ---
 
 # PicMe ADB 自动化 Skill
+
+> **定位**：通过 adb 命令自动化控制 PicMe 相机应用并调试 Android 设备。
+> **触发时机**：用户需要 adb 自动化控制、截屏分析、日志过滤或性能监控时自动启用。
+
 
 综合 adb 控制与调试能力，支持 PicMe 相机应用的自动化测试和设备状态诊断。
 
@@ -365,6 +375,15 @@ adb logcat -d > /tmp/logcat.txt
 
 ---
 
-## 七、相关文件
+## 相关文件
 
 - [commands.md](commands.md) - 完整相机控制命令列表
+- [ui-automation-expert](.qoder/skills/ui-automation-expert/SKILL.md) — UI 自动化测试
+- [image-quality-checker](.qoder/skills/image-quality-checker/SKILL.md) — 截图质量分析
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 1.1.0 | 2026-05-31 | 统一格式规范，添加定位块 |
+| 1.0.0 | 2026-05-03 | 初始版本 |

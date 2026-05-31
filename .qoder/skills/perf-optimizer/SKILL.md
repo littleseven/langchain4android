@@ -1,11 +1,19 @@
 ---
 name: perf-optimizer
-description: PicMe 性能优化专家。诊断内存泄漏、卡顿、帧率下降，提供 Profiler 使用指南与性能基线对比。
+description: |
+  PicMe 性能优化专家。诊断内存泄漏、卡顿、帧率下降，提供 Profiler 使用指南与性能基线对比。
 version: 1.0.0
 created: 2026-05-25
 updated: 2026-05-25
 maintainer: [RD] 全栈工程师
-tags: [performance, profiler, memory, leak, jank, fps, optimization]
+tags:
+  - performance
+  - profiler
+  - memory
+  - leak
+  - jank
+  - fps
+  - optimization
 ---
 
 # 性能优化专家 (Performance Optimizer)
@@ -100,20 +108,13 @@ PhotoProcess: 245ms (目标: < 300ms) ✅
 MemoryPeak: 186MB (基线: 180MB) ⚠️
 ```
 
----
+## 相关文件
 
-## 相关 Skill
-
+- [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 性能指标定义
 - [av-gl-expert](.qoder/skills/av-gl-expert/SKILL.md) — GPU/Shader 性能诊断
 - [compose-ui-expert](.qoder/skills/compose-ui-expert/SKILL.md) — Compose 重组性能优化
 - [qa-acceptance](.qoder/skills/qa-acceptance/SKILL.md) — 性能验收标准
 - [error-healer](.qoder/skills/error-healer/SKILL.md) — 编译错误修复
-
-## 相关文件
-
-- [docs/01-PRODUCT/FEATURES.md](docs/01-PRODUCT/FEATURES.md) — 性能指标定义
-
----
 
 ## 版本历史
 

@@ -1,11 +1,20 @@
 ---
 name: mnn-integration
-description: MNN 推理引擎接入专家。预防 AI 在接入 MNN 模型（含 LLM）时重复犯已验证过的错误，涵盖模型加载、维度类型、JNI 桥接、LLM 推理与线程安全。
+description: |
+  MNN 推理引擎接入专家。预防 AI 在接入 MNN 模型（含 LLM）时重复犯已验证过的错误，涵盖模型加载、维度类型、JNI 桥接、LLM 推理与线程安全。
 version: 1.0.0
 created: 2026-05-26
 updated: 2026-05-26
 maintainer: [RD] 全栈工程师
-tags: [mnn, inference, model, android, jni, llm, vulkan, dimension-type]
+tags:
+  - mnn
+  - inference
+  - model
+  - android
+  - jni
+  - llm
+  - vulkan
+  - dimension-type
 ---
 
 # MNN 集成专家 (MNN Integration Expert)
@@ -325,6 +334,9 @@ strings model.mnn | grep -E "minusscalar|mulscalar"
 
 ---
 
+## 相关文件
+
+- [TEMPLATE.md](.qoder/skills/TEMPLATE.md) — Skill 编写模版
 ## 版本历史
 
 | 版本 | 日期 | 变更 |
