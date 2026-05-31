@@ -151,7 +151,6 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.common)
 
-    // ML Kit（仅保留 OCR，人脸检测已迁移至 MediaPipe / InsightFace / GPUPixel）
     implementation(libs.google.mlkit.text.recognition)
     implementation(libs.google.mlkit.text.recognition.chinese)
 
@@ -172,6 +171,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     // 美颜引擎模块
     implementation(project(":beauty-engine"))
+    // ONNX Runtime 依赖必须同时在 app 模块声明，确保 native .so 被打包进 APK
+    implementation(libs.onnxruntime.android)
     // GPUPixel 已移除，全部能力由自研引擎提供
 
     "ksp"(libs.androidx.room.compiler)
