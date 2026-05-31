@@ -13,6 +13,11 @@ import com.picme.domain.model.ThemeMode
 /**
  * 设置控制 Capability
  *
+ * 应用级单例，通过 delegate 模式与页面解耦：
+ * - 在 Application.onCreate() 中注册一次，永不注销
+ * - SettingsScreen 通过绑定 delegate 提供实际执行逻辑
+ * - 页面离开时解绑 delegate，Capability 仍然注册但返回不可用状态
+ *
  * 支持命令：
  * - change_theme: 切换主题（light/dark/system）
  * - change_language: 切换语言（zh/en）
@@ -20,20 +25,52 @@ import com.picme.domain.model.ThemeMode
  * - switch_face_engine: 切换人脸检测引擎
  * - toggle_setting: 开关设置项
  */
-class SettingsCapability(
-    private val onChangeTheme: ((ThemeMode) -> Unit)? = null,
-    private val onChangeLanguage: ((AppLanguage) -> Unit)? = null,
-    private val onDownloadModel: ((String) -> Unit)? = null,
-    private val onSwitchFaceEngine: ((FaceDetectionEngineMode) -> Unit)? = null,
-    private val onToggleSetting: ((String, Boolean) -> Unit)? = null
-) : BaseCapability() {
+class SettingsCapability : BaseCapability() {
 
     companion object {
         private const val TAG = "SettingsCapability"
+
+        @Volatile
+        private var instance: SettingsCapability? = null
+
+        fun getInstance(): SettingsCapability {
+            return instance ?: synchronized(this) {
+                instance ?: SettingsCapability().also { instance = it }
+            }
+        }
     }
 
     override val name = "settings"
     override val description = "应用设置控制：主题切换、语言切换、模型管理、调试选项"
+
+    /**
+     * 设置操作委托接口
+     */
+    interface Delegate {
+        fun onChangeTheme(theme: ThemeMode)
+        fun onChangeLanguage(language: AppLanguage)
+        fun onDownloadModel(modelId: String)
+        fun onSwitchFaceEngine(engine: FaceDetectionEngineMode)
+        fun onToggleSetting(key: String, enabled: Boolean)
+    }
+
+    @Volatile
+    var delegate: Delegate? = null
+        private set
+
+    fun bindDelegate(delegate: Delegate) {
+        this.delegate = delegate
+        Logger.i(TAG, "Delegate bound")
+    }
+
+    fun unbindDelegate() {
+        this.delegate = null
+        Logger.i(TAG, "Delegate unbound")
+    }
+
+    override fun isAvailable(): Boolean {
+        return delegate != null
+    }
 
     override fun activeScenes(): List<SceneManager.Scene> =
         listOf(SceneManager.Scene.SETTINGS)
@@ -62,42 +99,35 @@ class SettingsCapability(
     ): Result<AgentAction> {
         Logger.i(TAG, "Executing command: $command")
 
+        val d = delegate
+            ?: return Result.success(
+                AgentAction.Error("设置页面未激活，请先切换到设置页面")
+            )
+
         return when (command) {
             is AgentCommand.ChangeTheme -> {
-                if (onChangeTheme == null) {
-                    return Result.success(AgentAction.Error("主题切换功能未初始化"))
-                }
-                handleChangeTheme(command)
+                handleChangeTheme(command, d)
             }
             is AgentCommand.ChangeLanguage -> {
-                if (onChangeLanguage == null) {
-                    return Result.success(AgentAction.Error("语言切换功能未初始化"))
-                }
-                handleChangeLanguage(command)
+                handleChangeLanguage(command, d)
             }
             is AgentCommand.DownloadModel -> {
-                if (onDownloadModel == null) {
-                    return Result.success(AgentAction.Error("模型下载功能未初始化"))
-                }
-                handleDownloadModel(command)
+                handleDownloadModel(command, d)
             }
             is AgentCommand.SwitchFaceEngine -> {
-                if (onSwitchFaceEngine == null) {
-                    return Result.success(AgentAction.Error("人脸引擎切换未初始化"))
-                }
-                handleSwitchFaceEngine(command)
+                handleSwitchFaceEngine(command, d)
             }
             is AgentCommand.ToggleSetting -> {
-                if (onToggleSetting == null) {
-                    return Result.success(AgentAction.Error("设置项开关未初始化"))
-                }
-                handleToggleSetting(command)
+                handleToggleSetting(command, d)
             }
             else -> Result.success(AgentAction.Error("不支持的设置命令: $command"))
         }
     }
 
-    private fun handleChangeTheme(command: AgentCommand.ChangeTheme): Result<AgentAction> {
+    private fun handleChangeTheme(
+        command: AgentCommand.ChangeTheme,
+        d: Delegate
+    ): Result<AgentAction> {
         val themeMode = when (command.theme.lowercase()) {
             "light", "浅色", "亮色" -> ThemeMode.LIGHT
             "dark", "深色", "暗色" -> ThemeMode.DARK
@@ -109,13 +139,14 @@ class SettingsCapability(
             }
         }
 
-        onChangeTheme?.invoke(themeMode)
-        return Result.success(
-            AgentAction.Success(command = command)
-        )
+        d.onChangeTheme(themeMode)
+        return Result.success(AgentAction.Success(command = command))
     }
 
-    private fun handleChangeLanguage(command: AgentCommand.ChangeLanguage): Result<AgentAction> {
+    private fun handleChangeLanguage(
+        command: AgentCommand.ChangeLanguage,
+        d: Delegate
+    ): Result<AgentAction> {
         val language = when (command.language.lowercase()) {
             "zh", "中文", "简体中文", "cn" -> AppLanguage.CHINESE
             "en", "英文", "英语", "english" -> AppLanguage.ENGLISH
@@ -127,24 +158,26 @@ class SettingsCapability(
             }
         }
 
-        onChangeLanguage?.invoke(language)
-        return Result.success(
-            AgentAction.Success(command = command)
-        )
+        d.onChangeLanguage(language)
+        return Result.success(AgentAction.Success(command = command))
     }
 
-    private fun handleDownloadModel(command: AgentCommand.DownloadModel): Result<AgentAction> {
+    private fun handleDownloadModel(
+        command: AgentCommand.DownloadModel,
+        d: Delegate
+    ): Result<AgentAction> {
         if (command.modelId.isBlank()) {
             return Result.success(AgentAction.Error("请指定模型 ID"))
         }
 
-        onDownloadModel?.invoke(command.modelId)
-        return Result.success(
-            AgentAction.Success(command = command)
-        )
+        d.onDownloadModel(command.modelId)
+        return Result.success(AgentAction.Success(command = command))
     }
 
-    private fun handleSwitchFaceEngine(command: AgentCommand.SwitchFaceEngine): Result<AgentAction> {
+    private fun handleSwitchFaceEngine(
+        command: AgentCommand.SwitchFaceEngine,
+        d: Delegate
+    ): Result<AgentAction> {
         val engine = when (command.engine.lowercase()) {
             "mediapipe" -> FaceDetectionEngineMode.MEDIAPIPE
             "insightface" -> FaceDetectionEngineMode.INSIGHTFACE
@@ -158,21 +191,20 @@ class SettingsCapability(
             }
         }
 
-        onSwitchFaceEngine?.invoke(engine)
-        return Result.success(
-            AgentAction.Success(command = command)
-        )
+        d.onSwitchFaceEngine(engine)
+        return Result.success(AgentAction.Success(command = command))
     }
 
-    private fun handleToggleSetting(command: AgentCommand.ToggleSetting): Result<AgentAction> {
+    private fun handleToggleSetting(
+        command: AgentCommand.ToggleSetting,
+        d: Delegate
+    ): Result<AgentAction> {
         if (command.settingKey.isBlank()) {
             return Result.success(AgentAction.Error("请指定设置项 key"))
         }
 
-        onToggleSetting?.invoke(command.settingKey, command.enabled)
-        return Result.success(
-            AgentAction.Success(command = command)
-        )
+        d.onToggleSetting(command.settingKey, command.enabled)
+        return Result.success(AgentAction.Success(command = command))
     }
 
 

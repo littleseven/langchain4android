@@ -194,41 +194,50 @@ fun GalleryScreen(
         onNavigateBack = onNavigateBack
     )
 
-    // 在 DisposableEffect 中注册 Capability，确保生命周期绑定
-    DisposableEffect(allFlatMedia.size) {
-        Logger.i("PicMe:Gallery", "Registering Gallery capabilities, mediaCount=${allFlatMedia.size}")
-        agentIntegration.registerCapabilities(
-            viewModel = viewModel,
-            allMedia = allFlatMedia,
-            onViewMedia = { asset ->
-                selectedMediaIndex = allFlatMedia.indexOfFirst { it.id == asset.id }
-            },
-            onDeleteMedia = { assets ->
-                viewModel.deleteMediaByIds(assets.map { it.id })
-            },
-            onShareMedia = { assets ->
-                shareMediaAssets(context, assets)
-            },
-            onSelectMedia = { asset, selected ->
-                if (selected) {
-                    if (!selectedIds.contains(asset.id)) selectedIds.add(asset.id)
-                } else {
-                    selectedIds.remove(asset.id)
+    // 绑定 GalleryCapability 的 delegate，确保生命周期绑定
+    // 使用 Unit 作为 key，确保只在页面进入/离开时绑定/解绑
+    DisposableEffect(Unit) {
+        Logger.i("PicMe:Gallery", "Binding GalleryCapability delegate, mediaCount=${allFlatMedia.size}")
+
+        val galleryCapability = com.picme.domain.agent.capability.GalleryCapability.getInstance()
+        galleryCapability.bindDelegate(object : com.picme.domain.agent.capability.GalleryCapability.Delegate {
+            override fun onViewMedia(mediaId: String?) {
+                mediaId?.let { id ->
+                    val index = allFlatMedia.indexOfFirst { it.id.toString() == id }
+                    if (index >= 0) selectedMediaIndex = index
                 }
-            },
-            onSearchMedia = { query ->
-                Log.d("PicMe:GalleryAgent", "Search query: $query")
-            },
-            onSwitchViewMode = { mode ->
-                Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
-            },
-            onFavoriteMedia = { asset, favorite ->
-                Log.d("PicMe:GalleryAgent", "Favorite ${asset.id}: $favorite")
             }
-        )
+            override fun onDeleteMedia(mediaIds: List<String>) {
+                val ids = mediaIds.mapNotNull { it.toLongOrNull() }
+                viewModel.deleteMediaByIds(ids)
+            }
+            override fun onShareMedia(mediaIds: List<String>) {
+                val assets = allFlatMedia.filter { it.id.toString() in mediaIds }
+                shareMediaAssets(context, assets)
+            }
+            override fun onSelectMedia(mediaId: String, selected: Boolean) {
+                val id = mediaId.toLongOrNull() ?: return
+                if (selected) {
+                    if (!selectedIds.contains(id)) selectedIds.add(id)
+                } else {
+                    selectedIds.remove(id)
+                }
+            }
+            override fun onSearch(query: String) {
+                Log.d("PicMe:GalleryAgent", "Search query: $query")
+            }
+            override fun onSwitchViewMode(mode: com.picme.domain.agent.capability.GalleryCapability.ViewMode) {
+                Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
+            }
+            override fun onFavoriteMedia(mediaId: String, favorite: Boolean) {
+                Log.d("PicMe:GalleryAgent", "Favorite $mediaId: $favorite")
+            }
+        })
+        Logger.i("PicMe:Gallery", "GalleryCapability delegate bound")
+
         onDispose {
-            Logger.i("PicMe:Gallery", "Unregistering Gallery capabilities")
-            agentIntegration.unregisterCapabilities()
+            Logger.i("PicMe:Gallery", "Unbinding GalleryCapability delegate")
+            galleryCapability.unbindDelegate()
         }
     }
 

@@ -41,7 +41,13 @@ import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
 import com.picme.navigation.Screen
+import com.picme.core.common.Logger
 import com.picme.domain.agent.model.SceneManager
+import com.picme.domain.agent.AgentOrchestrator
+import com.picme.domain.agent.capability.NavigationCapability
+import com.picme.domain.agent.capability.CameraCapability
+import com.picme.domain.agent.capability.GalleryCapability
+import com.picme.domain.agent.capability.SettingsCapability
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -95,6 +101,14 @@ class MainActivity : ComponentActivity() {
             ) {
                 PicMeTheme(themeMode = themeMode) {
                     val navController = rememberNavController()
+
+                    // 绑定 NavigationCapability 的 NavController（应用级单例）
+                    LaunchedEffect(navController) {
+                        Logger.i("PicMe:MainActivity", "Binding NavController to NavigationCapability")
+                        NavigationCapability.getInstance().bindNavController(navController)
+                        Logger.i("PicMe:MainActivity", "NavController bound successfully")
+                    }
+
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -133,7 +147,7 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.CAMERA)
                                     onDispose {
-                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.CAMERA)
                                     }
                                 }
                                 CameraScreen(
@@ -147,7 +161,7 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
                                     onDispose {
-                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.GALLERY)
                                     }
                                 }
                                 GalleryScreen(
@@ -162,7 +176,7 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
                                     onDispose {
-                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.SETTINGS)
                                     }
                                 }
                                 SettingsScreen(
@@ -177,7 +191,7 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
                                     onDispose {
-                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.SETTINGS)
                                     }
                                 }
                                 LlmModelManagerScreen(
@@ -190,7 +204,7 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
                                     onDispose {
-                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.SETTINGS)
                                     }
                                 }
                                 AsrModelManagerScreen(
@@ -203,7 +217,7 @@ class MainActivity : ComponentActivity() {
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.DEBUG)
                                     onDispose {
-                                        SceneManager.getInstance().transitionTo(SceneManager.Scene.UNKNOWN)
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.DEBUG)
                                     }
                                 }
                                 DebugScreen(

@@ -40,69 +40,48 @@ class SettingsAgentIntegration(
     private val sceneManager = SceneManager.getInstance()
     private val registry = CapabilityRegistry.getInstance()
 
+    /**
+     * 进入 Settings 场景时调用
+     *
+     * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
+     */
     fun onEnterSettings() {
-        Logger.i(TAG, "Entering SETTINGS scene")
-        sceneManager.transitionTo(SceneManager.Scene.SETTINGS)
+        Logger.i(TAG, "Entering SETTINGS scene (scene managed by MainActivity)")
+        // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 
+    /**
+     * 离开 Settings 场景时调用
+     *
+     * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
+     */
     fun onExitSettings() {
-        Logger.i(TAG, "Exiting SETTINGS scene")
+        Logger.i(TAG, "Exiting SETTINGS scene (scene managed by MainActivity)")
+        // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 
+    /**
+     * 注册 Settings 相关的 Capability
+     *
+     * **已弃用**：Capability 现在由 PicMeApplication 统一注册，
+     * 页面只需通过 SettingsCapability.getInstance().bindDelegate() 绑定 delegate。
+     */
+    @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
     fun registerCapabilities(
         viewModel: SettingsViewModel,
         onNavigateToModelManager: () -> Unit
     ) {
-        // 注册 SettingsCapability
-        val settingsCapability = SettingsCapability(
-            onChangeTheme = { theme ->
-                viewModel.setThemeMode(theme)
-            },
-            onChangeLanguage = { language ->
-                viewModel.setAppLanguage(language)
-            },
-            onDownloadModel = { modelId ->
-                // 导航到模型管理页面
-                onNavigateToModelManager()
-            },
-            onSwitchFaceEngine = { engine ->
-                viewModel.setFaceDetectionEngineMode(engine)
-            },
-            onToggleSetting = { key, enabled ->
-                when (key) {
-                    "debug_ui" -> viewModel.setDebugUiEnabled(enabled)
-                    "camera_info" -> viewModel.setShowCameraInfoInPreview(enabled)
-                    "voice_command" -> viewModel.setVoiceCommandMode(
-                        if (enabled) com.picme.domain.model.VoiceCommandMode.WAKE_WORD else com.picme.domain.model.VoiceCommandMode.DISABLED
-                    )
-                    "agent_mode" -> viewModel.setAiAgentMode(
-                        if (enabled) com.picme.domain.model.AiAgentMode.LOCAL else com.picme.domain.model.AiAgentMode.OFF
-                    )
-                    else -> Logger.w(TAG, "Unknown setting key: $key")
-                }
-            }
-        )
-        registry.register(settingsCapability)
-        Logger.i(TAG, "SettingsCapability registered")
-
-        // 注册 NavigationCapability
-        val navigationCapability = NavigationCapability(
-            onNavigate = { destination ->
-                onNavigateTo(destination.name.lowercase())
-            },
-            onBack = onNavigateBack
-        )
-        registry.register(navigationCapability)
-        Logger.i(TAG, "NavigationCapability registered")
+        Logger.i(TAG, "registerCapabilities is deprecated, capabilities registered by PicMeApplication")
     }
 
     /**
      * 注销 Settings 相关的 Capability
+     *
+     * **已弃用**：Capability 不再注销，由 PicMeApplication 统一管理。
      */
+    @Deprecated("Capability 不再注销，由 PicMeApplication 统一管理")
     fun unregisterCapabilities() {
-        registry.unregister("settings")
-        registry.unregister("navigation")
-        Logger.i(TAG, "Settings capabilities unregistered")
+        Logger.i(TAG, "unregisterCapabilities is deprecated, capabilities managed by PicMeApplication")
     }
 
     fun buildPageContext(

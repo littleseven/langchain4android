@@ -10,23 +10,73 @@ import com.picme.domain.agent.model.SceneManager
 /**
  * Gallery 相册控制 Capability
  *
- * 负责相册相关操作：查看、删除、分享、搜索、选择照片
+ * 应用级单例，通过 delegate 模式与页面解耦：
+ * - 在 Application.onCreate() 中注册一次，永不注销
+ * - GalleryScreen 通过绑定 delegate 提供实际执行逻辑
+ * - 页面离开时解绑 delegate，Capability 仍然注册但返回不可用状态
+ * - 支持跨页面指令排队：当 Gallery 页面再次激活时自动执行待处理命令
+ *
  * 仅在 GALLERY 场景可用
  */
-class GalleryCapability(
-    private val onViewMedia: ((String?) -> Unit)? = null,
-    private val onDeleteMedia: ((List<String>) -> Unit)? = null,
-    private val onShareMedia: ((List<String>) -> Unit)? = null,
-    private val onSelectMedia: ((String, Boolean) -> Unit)? = null,
-    private val onSearch: ((String) -> Unit)? = null,
-    private val onSwitchViewMode: ((ViewMode) -> Unit)? = null,
-    private val onFavoriteMedia: ((String, Boolean) -> Unit)? = null,
-) : BaseCapability() {
+class GalleryCapability : BaseCapability() {
+
+    companion object {
+        @Volatile
+        private var instance: GalleryCapability? = null
+
+        fun getInstance(): GalleryCapability {
+            return instance ?: synchronized(this) {
+                instance ?: GalleryCapability().also { instance = it }
+            }
+        }
+    }
 
     private val tag = "PicMe:GalleryCapability"
 
     override val name: String = "gallery"
     override val description: String = "相册操作：查看、删除、分享、搜索、选择照片和视频"
+
+    /**
+     * 相册操作委托接口
+     *
+     * GalleryScreen 实现此接口并绑定到 Capability
+     */
+    interface Delegate {
+        fun onViewMedia(mediaId: String?)
+        fun onDeleteMedia(mediaIds: List<String>)
+        fun onShareMedia(mediaIds: List<String>)
+        fun onSelectMedia(mediaId: String, selected: Boolean)
+        fun onSearch(query: String)
+        fun onSwitchViewMode(mode: ViewMode)
+        fun onFavoriteMedia(mediaId: String, favorite: Boolean)
+    }
+
+    /**
+     * 当前绑定的委托，null 表示相册页面未激活
+     */
+    @Volatile
+    var delegate: Delegate? = null
+        private set
+
+    /**
+     * 绑定委托（由 GalleryScreen 调用）
+     */
+    fun bindDelegate(delegate: Delegate) {
+        this.delegate = delegate
+        Logger.i(tag, "Delegate bound")
+    }
+
+    /**
+     * 解绑委托（由 GalleryScreen onDispose 调用）
+     */
+    fun unbindDelegate() {
+        this.delegate = null
+        Logger.i(tag, "Delegate unbound")
+    }
+
+    override fun isAvailable(): Boolean {
+        return delegate != null
+    }
 
     override fun activeScenes(): List<SceneManager.Scene> {
         // Gallery 能力只在相册场景可用
@@ -61,56 +111,42 @@ class GalleryCapability(
     ): Result<AgentAction> {
         Logger.d(tag, "Executing command: ${command::class.simpleName}")
 
+        val d = delegate
+            ?: return Result.success(
+                AgentAction.Error("相册页面未激活，请先切换到相册页面")
+            )
+
         val galleryContext = pageContext as? PageContext.GalleryContext
 
         return when (command) {
             is AgentCommand.ViewMedia -> {
-                if (onViewMedia == null) {
-                    return Result.success(AgentAction.Error("相册查看功能未初始化"))
-                }
-                handleViewMedia(command, galleryContext)
+                handleViewMedia(command, galleryContext, d)
             }
 
             is AgentCommand.DeleteMedia -> {
-                if (onDeleteMedia == null) {
-                    return Result.success(AgentAction.Error("相册删除功能未初始化"))
-                }
-                handleDeleteMedia(command, galleryContext)
+                handleDeleteMedia(command, galleryContext, d)
             }
 
             is AgentCommand.ShareMedia -> {
-                if (onShareMedia == null) {
-                    return Result.success(AgentAction.Error("相册分享功能未初始化"))
-                }
-                handleShareMedia(command, galleryContext)
+                handleShareMedia(command, galleryContext, d)
             }
 
             is AgentCommand.SelectMedia -> {
-                if (onSelectMedia == null) {
-                    return Result.success(AgentAction.Error("相册选择功能未初始化"))
-                }
-                handleSelectMedia(command)
+                d.onSelectMedia(command.mediaId, command.selected)
+                Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SearchMedia -> {
-                if (onSearch == null) {
-                    return Result.success(AgentAction.Error("相册搜索功能未初始化"))
-                }
-                handleSearchMedia(command)
+                handleSearchMedia(command, d)
             }
 
             is AgentCommand.SwitchViewMode -> {
-                if (onSwitchViewMode == null) {
-                    return Result.success(AgentAction.Error("相册视图切换未初始化"))
-                }
-                handleSwitchViewMode(command)
+                handleSwitchViewMode(command, d)
             }
 
             is AgentCommand.FavoriteMedia -> {
-                if (onFavoriteMedia == null) {
-                    return Result.success(AgentAction.Error("相册收藏功能未初始化"))
-                }
-                handleFavoriteMedia(command)
+                d.onFavoriteMedia(command.mediaId, command.favorite)
+                Result.success(AgentAction.Success(command))
             }
 
             else -> {
@@ -122,21 +158,23 @@ class GalleryCapability(
 
     private fun handleViewMedia(
         command: AgentCommand.ViewMedia,
-        galleryContext: PageContext.GalleryContext?
+        galleryContext: PageContext.GalleryContext?,
+        d: Delegate
     ): Result<AgentAction> {
         val mediaId = command.mediaId ?: galleryContext?.currentMedia?.id?.toString()
 
-        if (mediaId != null) {
-            onViewMedia?.invoke(mediaId)
-            return Result.success(AgentAction.Success(command))
+        return if (mediaId != null) {
+            d.onViewMedia(mediaId)
+            Result.success(AgentAction.Success(command))
         } else {
-            return Result.success(AgentAction.Error("没有指定要查看的照片"))
+            Result.success(AgentAction.Error("没有指定要查看的照片"))
         }
     }
 
     private fun handleDeleteMedia(
         command: AgentCommand.DeleteMedia,
-        galleryContext: PageContext.GalleryContext?
+        galleryContext: PageContext.GalleryContext?,
+        d: Delegate
     ): Result<AgentAction> {
         val mediaIds = command.mediaIds.ifEmpty {
             // 如果没有指定 ID，使用当前选中的
@@ -144,7 +182,7 @@ class GalleryCapability(
         }
 
         return if (mediaIds.isNotEmpty()) {
-            onDeleteMedia?.invoke(mediaIds)
+            d.onDeleteMedia(mediaIds)
             Result.success(AgentAction.Success(command))
         } else {
             Result.success(AgentAction.Error("没有指定要删除的照片，请先选择"))
@@ -153,47 +191,44 @@ class GalleryCapability(
 
     private fun handleShareMedia(
         command: AgentCommand.ShareMedia,
-        galleryContext: PageContext.GalleryContext?
+        galleryContext: PageContext.GalleryContext?,
+        d: Delegate
     ): Result<AgentAction> {
         val mediaIds = command.mediaIds.ifEmpty {
             galleryContext?.selectedItems?.map { it.id.toString() } ?: emptyList()
         }
 
         return if (mediaIds.isNotEmpty()) {
-            onShareMedia?.invoke(mediaIds)
+            d.onShareMedia(mediaIds)
             Result.success(AgentAction.Success(command))
         } else {
             Result.success(AgentAction.Error("没有指定要分享的照片，请先选择"))
         }
     }
 
-    private fun handleSelectMedia(command: AgentCommand.SelectMedia): Result<AgentAction> {
-        onSelectMedia?.invoke(command.mediaId, command.selected)
-        return Result.success(AgentAction.Success(command))
-    }
-
-    private fun handleSearchMedia(command: AgentCommand.SearchMedia): Result<AgentAction> {
+    private fun handleSearchMedia(
+        command: AgentCommand.SearchMedia,
+        d: Delegate
+    ): Result<AgentAction> {
         return if (command.query.isNotBlank()) {
-            onSearch?.invoke(command.query)
+            d.onSearch(command.query)
             Result.success(AgentAction.Success(command))
         } else {
             Result.success(AgentAction.Error("搜索关键词不能为空"))
         }
     }
 
-    private fun handleSwitchViewMode(command: AgentCommand.SwitchViewMode): Result<AgentAction> {
+    private fun handleSwitchViewMode(
+        command: AgentCommand.SwitchViewMode,
+        d: Delegate
+    ): Result<AgentAction> {
         val mode = when (command.mode.lowercase()) {
             "grid", "网格" -> ViewMode.GRID
             "list", "列表" -> ViewMode.LIST
             "timeline", "时间线" -> ViewMode.TIMELINE
             else -> ViewMode.GRID
         }
-        onSwitchViewMode?.invoke(mode)
-        return Result.success(AgentAction.Success(command))
-    }
-
-    private fun handleFavoriteMedia(command: AgentCommand.FavoriteMedia): Result<AgentAction> {
-        onFavoriteMedia?.invoke(command.mediaId, command.favorite)
+        d.onSwitchViewMode(mode)
         return Result.success(AgentAction.Success(command))
     }
 

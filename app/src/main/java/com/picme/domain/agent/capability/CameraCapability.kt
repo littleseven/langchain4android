@@ -13,29 +13,78 @@ import com.picme.domain.model.MediaType
 /**
  * 相机控制 Capability
  *
- * 将 Agent 命令映射为相机操作回调。
- * 实际执行通过注入的回调函数完成，保持 Domain 层无 Android/UI 依赖。
+ * 应用级单例，通过 delegate 模式与页面解耦：
+ * - 在 Application.onCreate() 中注册一次，永不注销
+ * - CameraScreen 通过绑定 delegate 提供实际执行逻辑
+ * - 页面离开时解绑 delegate，Capability 仍然注册但返回不可用状态
+ * - 支持跨页面指令排队：当 Camera 页面再次激活时自动执行待处理命令
+ *
  * 仅在 CAMERA 场景可用。
  */
-class CameraCapability(
-    private val onAdjustBeauty: ((com.picme.beauty.api.BeautySettings) -> Unit)? = null,
-    private val onSwitchFilter: ((FilterType) -> Unit)? = null,
-    private val onSwitchStyle: ((StyleFilter) -> Unit)? = null,
-    private val onSwitchScene: ((String) -> Unit)? = null,
-    private val onSwitchRatio: ((String) -> Unit)? = null,
-    private val onAdjustExposure: ((Int) -> Unit)? = null,
-    private val onAdjustZoom: ((Float) -> Unit)? = null,
-    private val onFlipCamera: (() -> Unit)? = null,
-    private val onCapturePhoto: (() -> Unit)? = null,
-    private val onToggleRecording: (() -> Unit)? = null,
-    private val onSwitchMode: ((MediaType) -> Unit)? = null
-) : BaseCapability() {
+class CameraCapability : BaseCapability() {
+
+    companion object {
+        @Volatile
+        private var instance: CameraCapability? = null
+
+        fun getInstance(): CameraCapability {
+            return instance ?: synchronized(this) {
+                instance ?: CameraCapability().also { instance = it }
+            }
+        }
+    }
 
     private val tag = "PicMe:CameraCapability"
 
     override val name: String = "camera"
     override val description: String =
         "控制相机拍摄、美颜参数、滤镜、风格、变焦、曝光、画幅比例、场景模式和摄像头翻转"
+
+    /**
+     * 相机操作委托接口
+     *
+     * CameraScreen 实现此接口并绑定到 Capability
+     */
+    interface Delegate {
+        fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings)
+        fun onSwitchFilter(filterType: FilterType)
+        fun onSwitchStyle(styleFilter: StyleFilter)
+        fun onSwitchScene(sceneName: String)
+        fun onSwitchRatio(ratio: String)
+        fun onAdjustExposure(exposure: Int)
+        fun onAdjustZoom(zoomRatio: Float)
+        fun onFlipCamera()
+        fun onCapturePhoto()
+        fun onToggleRecording()
+        fun onSwitchMode(mode: MediaType)
+    }
+
+    /**
+     * 当前绑定的委托，null 表示相机页面未激活
+     */
+    @Volatile
+    var delegate: Delegate? = null
+        private set
+
+    /**
+     * 绑定委托（由 CameraScreen 调用）
+     */
+    fun bindDelegate(delegate: Delegate) {
+        this.delegate = delegate
+        Logger.i(tag, "Delegate bound")
+    }
+
+    /**
+     * 解绑委托（由 CameraScreen onDispose 调用）
+     */
+    fun unbindDelegate() {
+        this.delegate = null
+        Logger.i(tag, "Delegate unbound")
+    }
+
+    override fun isAvailable(): Boolean {
+        return delegate != null
+    }
 
     override fun activeScenes(): List<SceneManager.Scene> {
         return listOf(SceneManager.Scene.CAMERA)
@@ -75,92 +124,64 @@ class CameraCapability(
         context: AgentContext,
         pageContext: PageContext?
     ): Result<AgentAction> {
+        val d = delegate
+            ?: return Result.success(
+                AgentAction.Error("相机页面未激活，请先切换到相机页面")
+            )
+
         return when (command) {
             is AgentCommand.AdjustBeauty -> {
-                onAdjustBeauty?.invoke(command.settings)
-                    ?: return Result.success(
-                        AgentAction.Error("相机美颜调节未初始化")
-                    )
+                d.onAdjustBeauty(command.settings)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchFilter -> {
-                onSwitchFilter?.invoke(command.filterType)
-                    ?: return Result.success(
-                        AgentAction.Error("相机滤镜切换未初始化")
-                    )
+                d.onSwitchFilter(command.filterType)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchStyle -> {
-                onSwitchStyle?.invoke(command.styleFilter)
-                    ?: return Result.success(
-                        AgentAction.Error("相机风格切换未初始化")
-                    )
+                d.onSwitchStyle(command.styleFilter)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchScene -> {
-                onSwitchScene?.invoke(command.sceneName)
-                    ?: return Result.success(
-                        AgentAction.Error("相机场景切换未初始化")
-                    )
+                d.onSwitchScene(command.sceneName)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchRatio -> {
-                onSwitchRatio?.invoke(command.ratio)
-                    ?: return Result.success(
-                        AgentAction.Error("相机画幅切换未初始化")
-                    )
+                d.onSwitchRatio(command.ratio)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.AdjustExposure -> {
-                onAdjustExposure?.invoke(command.exposure)
-                    ?: return Result.success(
-                        AgentAction.Error("相机曝光调节未初始化")
-                    )
+                d.onAdjustExposure(command.exposure)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.AdjustZoom -> {
-                onAdjustZoom?.invoke(command.zoomRatio)
-                    ?: return Result.success(
-                        AgentAction.Error("相机变焦调节未初始化")
-                    )
+                d.onAdjustZoom(command.zoomRatio)
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.FlipCamera -> {
-                onFlipCamera?.invoke()
-                    ?: return Result.success(
-                        AgentAction.Error("相机翻转未初始化")
-                    )
+                d.onFlipCamera()
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.CapturePhoto -> {
-                onCapturePhoto?.invoke()
-                    ?: return Result.success(
-                        AgentAction.Error("相机拍照未初始化")
-                    )
+                d.onCapturePhoto()
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.ToggleRecording -> {
-                onToggleRecording?.invoke()
-                    ?: return Result.success(
-                        AgentAction.Error("相机录像未初始化")
-                    )
+                d.onToggleRecording()
                 Result.success(AgentAction.Success(command))
             }
 
             is AgentCommand.SwitchMode -> {
-                onSwitchMode?.invoke(command.mode)
-                    ?: return Result.success(
-                        AgentAction.Error("相机模式切换未初始化")
-                    )
+                d.onSwitchMode(command.mode)
                 Result.success(AgentAction.Success(command))
             }
 

@@ -88,9 +88,7 @@ import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.VoiceCommandMode
-import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
-import com.picme.domain.agent.model.SceneManager
 import com.picme.features.camera.voice.MnnAsrClient
 import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
@@ -1093,30 +1091,53 @@ fun CameraContent(
     }
 
     // 绑定命令处理器到语音协调器的回调引用
-    // 同时注册带有实际回调的 CameraCapability，确保 Chat 面板命令能正确执行
+    // 同时绑定 CameraCapability 的 delegate，确保 Chat 面板命令能正确执行
     DisposableEffect(agentCommandHandler) {
         onCommandRef.value = agentCommandHandler
 
-        val orchestrator = AgentOrchestrator.getInstance(context)
-        val cameraCapability = CameraCapability(
-            onAdjustBeauty = { agentCommandHandler(AiAgentCommand.AdjustBeauty(it)) },
-            onSwitchFilter = { agentCommandHandler(AiAgentCommand.SwitchFilter(it)) },
-            onSwitchStyle = { agentCommandHandler(AiAgentCommand.SwitchStyle(it)) },
-            onSwitchScene = { agentCommandHandler(AiAgentCommand.SwitchScene(it)) },
-            onSwitchRatio = { agentCommandHandler(AiAgentCommand.SwitchRatio(it)) },
-            onAdjustExposure = { agentCommandHandler(AiAgentCommand.AdjustExposure(it)) },
-            onAdjustZoom = { agentCommandHandler(AiAgentCommand.AdjustZoom(it)) },
-            onFlipCamera = { agentCommandHandler(AiAgentCommand.FlipCamera) },
-            onCapturePhoto = { agentCommandHandler(AiAgentCommand.CapturePhoto) },
-            onToggleRecording = { agentCommandHandler(AiAgentCommand.ToggleRecording) },
-            onSwitchMode = { agentCommandHandler(AiAgentCommand.SwitchMode(it)) }
-        )
-        orchestrator.registerCapability(cameraCapability)
-        Logger.i("PicMe:Camera", "CameraCapability registered with live callbacks")
+        // 获取应用级单例 Capability 并绑定 delegate（页面激活时绑定）
+        val cameraCapability = CameraCapability.getInstance()
+        cameraCapability.bindDelegate(object : CameraCapability.Delegate {
+            override fun onAdjustBeauty(settings: BeautySettings) {
+                agentCommandHandler(AiAgentCommand.AdjustBeauty(settings))
+            }
+            override fun onSwitchFilter(filterType: FilterType) {
+                agentCommandHandler(AiAgentCommand.SwitchFilter(filterType))
+            }
+            override fun onSwitchStyle(styleFilter: StyleFilter) {
+                agentCommandHandler(AiAgentCommand.SwitchStyle(styleFilter))
+            }
+            override fun onSwitchScene(sceneName: String) {
+                agentCommandHandler(AiAgentCommand.SwitchScene(sceneName))
+            }
+            override fun onSwitchRatio(ratio: String) {
+                agentCommandHandler(AiAgentCommand.SwitchRatio(ratio))
+            }
+            override fun onAdjustExposure(exposure: Int) {
+                agentCommandHandler(AiAgentCommand.AdjustExposure(exposure))
+            }
+            override fun onAdjustZoom(zoomRatio: Float) {
+                agentCommandHandler(AiAgentCommand.AdjustZoom(zoomRatio))
+            }
+            override fun onFlipCamera() {
+                agentCommandHandler(AiAgentCommand.FlipCamera)
+            }
+            override fun onCapturePhoto() {
+                agentCommandHandler(AiAgentCommand.CapturePhoto)
+            }
+            override fun onToggleRecording() {
+                agentCommandHandler(AiAgentCommand.ToggleRecording)
+            }
+            override fun onSwitchMode(mode: MediaType) {
+                agentCommandHandler(AiAgentCommand.SwitchMode(mode))
+            }
+        })
+        Logger.i("PicMe:Camera", "CameraCapability delegate bound")
 
         onDispose {
-            orchestrator.unregisterCapability("camera")
-            Logger.i("PicMe:Camera", "CameraCapability unregistered")
+            // 解绑 delegate（页面离开时解绑，Capability 仍然注册）
+            cameraCapability.unbindDelegate()
+            Logger.i("PicMe:Camera", "CameraCapability delegate unbound")
         }
     }
 
