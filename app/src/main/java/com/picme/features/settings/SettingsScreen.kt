@@ -161,16 +161,43 @@ fun SettingsScreen(
         onNavigateBack = onNavigateBack
     )
 
-    // 在 DisposableEffect 中注册 Capability，确保生命周期绑定
+    // 绑定 SettingsCapability 的 delegate，确保生命周期绑定
     DisposableEffect(Unit) {
-        Logger.i("PicMe:Settings", "Registering Settings capabilities")
-        agentIntegration.registerCapabilities(
-            viewModel = viewModel,
-            onNavigateToModelManager = onNavigateToLlmModelManager
-        )
+        Logger.i("PicMe:Settings", "Binding SettingsCapability delegate")
+
+        val settingsCapability = com.picme.domain.agent.capability.SettingsCapability.getInstance()
+        settingsCapability.bindDelegate(object : com.picme.domain.agent.capability.SettingsCapability.Delegate {
+            override fun onChangeTheme(theme: com.picme.domain.model.ThemeMode) {
+                viewModel.setThemeMode(theme)
+            }
+            override fun onChangeLanguage(language: com.picme.domain.model.AppLanguage) {
+                viewModel.setAppLanguage(language)
+            }
+            override fun onDownloadModel(modelId: String) {
+                onNavigateToLlmModelManager()
+            }
+            override fun onSwitchFaceEngine(engine: com.picme.domain.model.FaceDetectionEngineMode) {
+                viewModel.setFaceDetectionEngineMode(engine)
+            }
+            override fun onToggleSetting(key: String, enabled: Boolean) {
+                when (key) {
+                    "debug_ui" -> viewModel.setDebugUiEnabled(enabled)
+                    "camera_info" -> viewModel.setShowCameraInfoInPreview(enabled)
+                    "voice_command" -> viewModel.setVoiceCommandMode(
+                        if (enabled) com.picme.domain.model.VoiceCommandMode.WAKE_WORD else com.picme.domain.model.VoiceCommandMode.DISABLED
+                    )
+                    "agent_mode" -> viewModel.setAiAgentMode(
+                        if (enabled) com.picme.domain.model.AiAgentMode.LOCAL else com.picme.domain.model.AiAgentMode.OFF
+                    )
+                    else -> Logger.w("PicMe:Settings", "Unknown setting key: $key")
+                }
+            }
+        })
+        Logger.i("PicMe:Settings", "SettingsCapability delegate bound")
+
         onDispose {
-            Logger.i("PicMe:Settings", "Unregistering Settings capabilities")
-            agentIntegration.unregisterCapabilities()
+            Logger.i("PicMe:Settings", "Unbinding SettingsCapability delegate")
+            settingsCapability.unbindDelegate()
         }
     }
 

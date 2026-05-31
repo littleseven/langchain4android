@@ -12,21 +12,60 @@ import kotlinx.coroutines.withContext
 /**
  * 导航 Capability
  *
- * 负责页面导航：切换页面、返回上一页
+ * 应用级单例，负责页面导航：切换页面、返回上一页
  * 在所有场景都可用
+ *
+ * **架构设计**：
+ * - 在 Application.onCreate() 中注册一次，永不注销
+ * - 通过 bindNavController() 绑定导航控制器
+ * - 支持跨页面指令：导航命令可以在任何场景执行
  *
  * **注意**：导航回调涉及 Compose NavController 操作，必须在主线程执行。
  * execute() 内部会自动切换到 Main 线程。
  */
-class NavigationCapability(
-    private val onNavigate: (Destination) -> Unit,
-    private val onBack: () -> Unit
-) : BaseCapability() {
+class NavigationCapability : BaseCapability() {
+
+    companion object {
+        @Volatile
+        private var instance: NavigationCapability? = null
+
+        fun getInstance(): NavigationCapability {
+            return instance ?: synchronized(this) {
+                instance ?: NavigationCapability().also { instance = it }
+            }
+        }
+    }
 
     private val tag = "PicMe:NavigationCapability"
 
     override val name: String = "navigation"
     override val description: String = "页面导航：切换页面、返回上一页"
+
+    /**
+     * 导航控制器引用，由 MainActivity 绑定
+     */
+    private var navController: androidx.navigation.NavController? = null
+
+    /**
+     * 绑定 NavController（由 MainActivity 调用）
+     */
+    fun bindNavController(navController: androidx.navigation.NavController) {
+        this.navController = navController
+        Logger.i(tag, "NavController bound, isAvailable=${isAvailable()}")
+    }
+
+    /**
+     * 解绑 NavController（由 MainActivity onDispose 调用）
+     */
+    fun unbindNavController() {
+        this.navController = null
+        Logger.i(tag, "NavController unbound")
+    }
+
+    override fun isAvailable(): Boolean {
+        // NavigationCapability 只有在 NavController 绑定后才可用
+        return navController != null
+    }
 
     override fun activeScenes(): List<SceneManager.Scene> {
         // 导航能力在所有场景都可用
@@ -51,12 +90,17 @@ class NavigationCapability(
     ): Result<AgentAction> {
         Logger.d(tag, "Executing command: ${command::class.simpleName}")
 
+        val nav = navController
+            ?: return Result.success(
+                AgentAction.Error("导航系统未初始化")
+            )
+
         return when (command) {
             is AgentCommand.NavigateTo -> {
                 val destination = parseDestination(command.destination)
                 if (destination != null) {
                     withContext(Dispatchers.Main) {
-                        onNavigate(destination)
+                        navigateTo(nav, destination)
                     }
                     Result.success(AgentAction.Success(command))
                 } else {
@@ -68,7 +112,7 @@ class NavigationCapability(
 
             is AgentCommand.GoBack -> {
                 withContext(Dispatchers.Main) {
-                    onBack()
+                    nav.popBackStack()
                 }
                 Result.success(AgentAction.Success(command))
             }
@@ -77,6 +121,25 @@ class NavigationCapability(
                 Logger.w(tag, "Unsupported command: ${command::class.simpleName}")
                 Result.success(AgentAction.Error("导航 Capability 不支持此命令"))
             }
+        }
+    }
+
+    /**
+     * 执行页面导航
+     */
+    private fun navigateTo(nav: androidx.navigation.NavController, destination: Destination) {
+        val route = when (destination) {
+            Destination.CAMERA -> "camera"
+            Destination.GALLERY -> "gallery"
+            Destination.SETTINGS -> "settings"
+            Destination.DEBUG -> "debug"
+            Destination.LLM_MODEL_MANAGER -> "llm_model_manager"
+            Destination.ASR_MODEL_MANAGER -> "asr_model_manager"
+        }
+        try {
+            nav.navigate(route)
+        } catch (e: Exception) {
+            Logger.e(tag, "Navigation failed to $route", e)
         }
     }
 

@@ -49,6 +49,17 @@ class SceneManager private constructor() {
     private val sceneHistory = mutableListOf<Scene>()
 
     /**
+     * 活跃场景引用计数
+     *
+     * 解决 Compose 导航时旧页面 onDispose 与新页面 DisposableEffect 的时序竞争问题。
+     * 当导航发生时，旧页面的 onDispose 可能在新页面的 DisposableEffect 之前执行，
+     * 导致中间状态为 UNKNOWN。
+     *
+     * 使用引用计数：只有当一个场景的引用计数降为 0 时，才真正切换到 UNKNOWN。
+     */
+    private val activeSceneRefs = mutableMapOf<Scene, Int>()
+
+    /**
      * 切换到指定场景
      *
      * @param scene 目标场景
@@ -58,7 +69,26 @@ class SceneManager private constructor() {
         if (saveToHistory && _currentScene.value != Scene.UNKNOWN) {
             sceneHistory.add(_currentScene.value)
         }
+        // 增加目标场景的引用计数
+        activeSceneRefs[scene] = (activeSceneRefs[scene] ?: 0) + 1
         _currentScene.value = scene
+    }
+
+    /**
+     * 离开指定场景
+     *
+     * 使用引用计数：只有引用计数降为 0 时才切换到 UNKNOWN。
+     * 这避免了 Compose 导航时的时序竞争问题。
+     */
+    fun leaveScene(scene: Scene) {
+        val currentCount = activeSceneRefs[scene] ?: 0
+        if (currentCount > 0) {
+            activeSceneRefs[scene] = currentCount - 1
+        }
+        // 只有当该场景的引用计数降为 0，且当前场景就是它时，才切换到 UNKNOWN
+        if ((activeSceneRefs[scene] ?: 0) == 0 && _currentScene.value == scene) {
+            _currentScene.value = Scene.UNKNOWN
+        }
     }
 
     /**
@@ -81,6 +111,7 @@ class SceneManager private constructor() {
      */
     fun clearHistory() {
         sceneHistory.clear()
+        activeSceneRefs.clear()
     }
 
     /**

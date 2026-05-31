@@ -10,6 +10,7 @@ import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.NavigationCapability
 
 import com.picme.domain.agent.model.AgentContext
+import com.picme.core.common.Logger
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.agent.GlobalAgentPanel
@@ -27,7 +28,11 @@ class CameraAgentIntegration(
 ) {
     /**
      * 初始化 Camera 相关 Capability
+     *
+     * **已弃用**：Capability 现在由 PicMeApplication 统一注册，
+     * 页面只需通过 CameraCapability.getInstance().bindDelegate() 绑定 delegate。
      */
+    @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
     fun initializeCameraCapabilities(
         onAdjustBeauty: (com.picme.beauty.api.BeautySettings) -> Unit,
         onSwitchFilter: (com.picme.beauty.api.FilterType) -> Unit,
@@ -43,45 +48,28 @@ class CameraAgentIntegration(
         onNavigateTo: (String) -> Unit,
         onBack: () -> Unit
     ) {
-        // 注册 CameraCapability
-        val cameraCapability = CameraCapability(
-            onAdjustBeauty = onAdjustBeauty,
-            onSwitchFilter = onSwitchFilter,
-            onSwitchStyle = onSwitchStyle,
-            onSwitchScene = onSwitchScene,
-            onSwitchRatio = onSwitchRatio,
-            onAdjustExposure = onAdjustExposure,
-            onAdjustZoom = onAdjustZoom,
-            onFlipCamera = onFlipCamera,
-            onCapturePhoto = onCapturePhoto,
-            onToggleRecording = onToggleRecording,
-            onSwitchMode = onSwitchMode
-        )
-        orchestrator.registerCapability(cameraCapability)
-
-        // 注册 NavigationCapability（使用 String 类型的回调）
-        val navigationCapability = NavigationCapability(
-            onNavigate = { destination ->
-                // 将 Destination 转换为 String
-                onNavigateTo(destination.name.lowercase())
-            },
-            onBack = onBack
-        )
-        orchestrator.registerCapability(navigationCapability)
+        // 不再在此处注册 Capability，由 PicMeApplication 统一注册
+        Logger.i("PicMe:CameraAgent", "initializeCameraCapabilities is deprecated, capabilities registered by PicMeApplication")
     }
 
     /**
      * 进入 Camera 场景
+     *
+     * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
      */
     fun enterCameraScene() {
-        orchestrator.transitionToScene(SceneManager.Scene.CAMERA)
+        Logger.i("PicMe:CameraAgent", "Entering CAMERA scene (scene managed by MainActivity)")
+        // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 
     /**
      * 离开 Camera 场景
+     *
+     * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
      */
     fun leaveCameraScene() {
-        // 清理工作（如需要）
+        Logger.i("PicMe:CameraAgent", "Exiting CAMERA scene (scene managed by MainActivity)")
+        // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 }
 

@@ -47,23 +47,31 @@ class GalleryAgentIntegration(
 
     /**
      * 进入 Gallery 场景时调用
+     *
+     * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
      */
     fun onEnterGallery() {
-        Logger.i(TAG, "Entering GALLERY scene")
-        sceneManager.transitionTo(SceneManager.Scene.GALLERY)
+        Logger.i(TAG, "Entering GALLERY scene (scene managed by MainActivity)")
+        // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 
     /**
      * 离开 Gallery 场景时调用
+     *
+     * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
      */
     fun onExitGallery() {
-        Logger.i(TAG, "Exiting GALLERY scene")
-        sceneManager.transitionTo(SceneManager.Scene.UNKNOWN)
+        Logger.i(TAG, "Exiting GALLERY scene (scene managed by MainActivity)")
+        // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 
     /**
      * 注册 Gallery 相关的 Capability
+     *
+     * **已弃用**：Capability 现在由 PicMeApplication 统一注册，
+     * 页面只需通过 GalleryCapability.getInstance().bindDelegate() 绑定 delegate。
      */
+    @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
     fun registerCapabilities(
         viewModel: MediaViewModel,
         allMedia: List<MediaAsset>,
@@ -75,56 +83,17 @@ class GalleryAgentIntegration(
         onSwitchViewMode: (String) -> Unit,
         onFavoriteMedia: (MediaAsset, Boolean) -> Unit
     ) {
-        // 注册 GalleryCapability
-        val galleryCapability = GalleryCapability(
-            onViewMedia = { mediaId ->
-                mediaId?.let { id ->
-                    val asset = allMedia.find { it.id.toString() == id }
-                    asset?.let { onViewMedia(it) }
-                }
-            },
-            onDeleteMedia = { mediaIds ->
-                val assets = allMedia.filter { it.id.toString() in mediaIds }
-                onDeleteMedia(assets)
-            },
-            onShareMedia = { mediaIds ->
-                val assets = allMedia.filter { it.id.toString() in mediaIds }
-                onShareMedia(assets)
-            },
-            onSelectMedia = { mediaId, selected ->
-                val asset = allMedia.find { it.id.toString() == mediaId }
-                asset?.let { onSelectMedia(it, selected) }
-            },
-            onSearch = onSearchMedia,
-            onSwitchViewMode = { mode ->
-                onSwitchViewMode(mode.name.lowercase())
-            },
-            onFavoriteMedia = { mediaId, favorite ->
-                val asset = allMedia.find { it.id.toString() == mediaId }
-                asset?.let { onFavoriteMedia(it, favorite) }
-            }
-        )
-        orchestrator.registerCapability(galleryCapability)
-        Logger.i(TAG, "GalleryCapability registered")
-
-        // 注册 NavigationCapability
-        val navigationCapability = NavigationCapability(
-            onNavigate = { destination ->
-                onNavigateTo(destination.name.lowercase())
-            },
-            onBack = onNavigateBack
-        )
-        orchestrator.registerCapability(navigationCapability)
-        Logger.i(TAG, "NavigationCapability registered")
+        Logger.i(TAG, "registerCapabilities is deprecated, capabilities registered by PicMeApplication")
     }
 
     /**
      * 注销 Gallery 相关的 Capability
+     *
+     * **已弃用**：Capability 不再注销，由 PicMeApplication 统一管理。
      */
+    @Deprecated("Capability 不再注销，由 PicMeApplication 统一管理")
     fun unregisterCapabilities() {
-        orchestrator.unregisterCapability("gallery")
-        orchestrator.unregisterCapability("navigation")
-        Logger.i(TAG, "Gallery capabilities unregistered")
+        Logger.i(TAG, "unregisterCapabilities is deprecated, capabilities managed by PicMeApplication")
     }
 
     /**

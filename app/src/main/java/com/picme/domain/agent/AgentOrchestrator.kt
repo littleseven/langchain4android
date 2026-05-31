@@ -100,17 +100,17 @@ class AgentOrchestrator private constructor(private val context: Context) {
     val currentScene = sceneManager.currentScene
 
     /**
-     * 注册 Capability
+     * 注册 Capability（应用级，通常由 PicMeApplication 调用）
      */
     fun registerCapability(capability: Capability) {
         capabilityRegistry.register(capability)
     }
 
     /**
-     * 注销 Capability
+     * 获取 CapabilityRegistry
      */
-    fun unregisterCapability(name: String) {
-        capabilityRegistry.unregister(name)
+    fun getCapabilityRegistry(): CapabilityRegistry {
+        return capabilityRegistry
     }
 
     /**
