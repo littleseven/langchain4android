@@ -122,9 +122,18 @@ ModalBottomSheet(...) {
 
 所有模块都应使用此统一组件：
 
-- ✅ **Camera**: 已使用类似设计（AiAgentPanel）
-- ✅ **Gallery**: 已迁移到 AiChatScreen
-- ⏳ **Settings**: 待迁移（如有需要）
+- ✅ **Camera**: 已使用 AiChatScreen（通过 CameraAgentIntegration 绑定 CameraCapability）
+- ✅ **Gallery**: 已迁移到 AiChatScreen（通过 GalleryAgentIntegration 绑定 GalleryCapability）
+- ✅ **Settings**: 已迁移到 AiChatScreen（通过 SettingsAgentIntegration 绑定 SettingsCapability）
+
+## 语音输入集成
+
+`AiChatScreen` 支持语音输入模式切换：
+
+- **文字模式**：底部输入栏，支持键盘输入
+- **语音模式**：按住麦克风按钮说话（Push-to-Talk），或开启 WakeWord 自动监听
+
+语音输入通过 `VoiceCommandCoordinator` 处理，识别结果以 `AgentMessage.UserText` 形式进入消息列表。
 
 ## 维护说明
 
