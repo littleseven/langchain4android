@@ -1,285 +1,225 @@
-# PicMe 文档导航索引
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white" alt="Platform">
+  <img src="https://img.shields.io/badge/minSdk-24-3DDC84" alt="Min SDK">
+  <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
+  <img src="https://img.shields.io/badge/OpenGL-ES%203.0-5586A4?logo=opengl&logoColor=white" alt="OpenGL ES">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
+</p>
 
-> **维护者**: CO Agent  
-> **最后更新**: 2026-05-31  
-> **版本**: 1.1
+<h1 align="center">觅影相机 PicMe</h1>
+
+<p align="center">
+  <b>下一代端侧 AI 智能相机</b><br>
+  <i>自然语言驱动 · 全链路 GPU 渲染 · 100% 隐私安全</i>
+</p>
+
+<p align="center">
+  <a href="#核心特性">特性</a> ·
+  <a href="#技术架构">架构</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#文档">文档</a> ·
+  <a href="#agent-first-研发范式">Agent 范式</a>
+</p>
 
 ---
 
-## 📚 文档体系总览
+## 概览
 
-PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
+**觅影相机 PicMe** 是一款探索「端侧 AI Agent 驱动应用」的智能相机应用。用户可以通过**自然语言**与相机交互——说「调高美颜」「换个冷调滤镜」「拍一张」即可控制全部功能，无需手动调节复杂参数。
+
+项目同时是一个 **Agent First 工程试验场**，验证 Agent 作为研发流程第一公民的可行性，探索面向 Agent 的架构设计、协作机制与研发范式。
+
+> 美颜相机是试验载体，真正的研究对象是**端侧 Agent 运行时架构**与 **Agent First 工程范式**。
+
+---
+
+## 核心特性
+
+### 自然语言交互
+
+| 你说 | 觅影做 |
+|------|--------|
+| 「拍张照」 | 立即拍摄并保存 |
+| 「调高美颜」 | 平滑提升磨皮/美白强度 |
+| 「换个冷调滤镜」 | 切换冷色调风格滤镜 |
+| 「打开前置」 | 翻转至前置摄像头 |
+
+- **端侧运行 Qwen3-0.6B 大模型**，零网络依赖，隐私安全
+- **Capability 系统**支持热插拔扩展，新增能力无需修改 Agent 核心
+- **多轮对话上下文记忆**，交互体验连贯自然
+- **统一聊天界面**，Camera 与 Gallery 页面视觉一致，支持折叠/展开、语音输入
+
+### 自研实时美颜引擎
+
+- **全自研 OpenGL ES + EGL 渲染管线**（无第三方美颜 SDK）
+- 完整美颜链路：磨皮、美白、瘦脸、大眼、唇色、腮红、眉毛
+- **GPU 离屏拍照**：预览与输出使用同一套 Shader，效果一致性 99%+
+- **双引擎人脸检测**：InsightFace 2D106（主）+ MediaPipe 468→106（备）
+- **帧同步妆容系统**：解决检测帧率与渲染帧率不匹配导致的"妆容甩飞"问题
+
+### 100% 端侧隐私
+
+| 功能 | 运行位置 | 网络依赖 |
+|------|----------|----------|
+| LLM 推理 | 本地 MNN-LLM | 零网络 |
+| 人脸检测 | 本地 ONNX Runtime | 零网络 |
+| OCR 文字识别 | 本地 ML Kit | 零网络 |
+| 美颜渲染 | 本地 GPU | 零网络 |
+
+所有 AI 处理完全在设备本地完成，**无需网络权限**，用户隐私零泄露风险。
+
+### 统一聊天界面
+
+- **跨模块统一设计**：Camera 与 Gallery 页面共享同一套 Chat UI 组件
+- **ModalBottomSheet 设计**：底部弹出，半透明遮罩，系统自动处理键盘 insets
+- **智能折叠/展开**：节省屏幕空间，拖拽把手直观操作
+- **优雅动画过渡**：滑入滑出流畅自然，视觉体验一致
+- **多模态输入**：支持文字输入与语音切换，按住说话便捷高效
+- **丰富的消息类型**：用户消息、AI 回复、计划预览、执行进度、结果反馈
+- **Material Design 3**：完整主题适配，深色模式完美支持
+
+---
+
+## 技术架构
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 1: PRODUCT (产品层) - What & Why                         │
-│  ─────────────────────────────────────────────────────────────  │
-│  • FEATURES.md        - 功能交互规范                            │
-│  • NFR_SPEC.md        - 非功能性需求（性能/稳定性指标）          │
-└─────────────────────────────────────────────────────────────────┘
-                           ↓ 引用
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 2: ARCHITECTURE (架构层) - How (High-Level)             │
-│  ─────────────────────────────────────────────────────────────  │
-│  • AGENT_ARCHITECTURE.md   - Agent 运行时架构                   │
-│  • ADR/                    - 架构决策记录                       │
-└─────────────────────────────────────────────────────────────────┘
-                           ↓ 指导
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 3: TECHNICAL SPECS (技术规范层) - Implementation         │
-│  ─────────────────────────────────────────────────────────────  │
-│  • BEAUTY_ENGINE_TECH_SPEC.md   - 大美丽引擎技术规格            │
-│  • FRAME_SYNC_TECH_SPEC.md      - 帧同步美妆技术规格            │
-│  • CAMERA_PREVIEW_TECH_SPEC.md  - 相机预览技术规格              │
-│  • FACE_DETECTION_ENGINE_ARCHITECTURE.md - 人脸检测多引擎架构   │
-│  • MNN_LANDMARK_DIAGNOSIS.md    - MNN 人脸关键点诊断            │
-│  • INSIGHTFACE_106_MAPPING.md   - InsightFace 106 点映射        │
-│  • MEDIAPIPE_468_REFERENCE.md   - MediaPipe 468 点参考手册      │
-│  • MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md - 468→106 映射策略  │
-│  • VOLCANO_106_POINTS.md        - 火山引擎 106 点标准语义       │
-└─────────────────────────────────────────────────────────────────┘
-                           ↓ 实现
-┌─────────────────────────────────────────────────────────────────┐
-│  LAYER 4: CAPABILITIES (Agent 能力层) - Commands & Tools         │
-│  ─────────────────────────────────────────────────────────────  │
-│  • CAPABILITY_REGISTRY.md     - Capability 注册表               │
-│  • COMMAND_REFERENCE.md       - 命令参考手册                    │
-│  • CAPABILITY_IMPLEMENTATION_GUIDE.md - 能力实现指南            │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  User Interface (Jetpack Compose)                             │
+│  ├─ 相机预览 + Agent 对话面板                                  │
+│  ├─ 实时美颜调节面板                                          │
+│  └─ 相册浏览与静态图编辑                                       │
+├──────────────────────────────────────────────────────────────┤
+│  Agent Runtime (domain/agent/)                                │
+│  ├─ AgentOrchestrator      意图解析与任务编排                  │
+│  ├─ LocalLlmEngine         Qwen3-0.6B / MNN-LLM 推理         │
+│  ├─ CapabilityRegistry     设备能力路由（自描述元数据）        │
+│  ├─ MemoryManager          多轮对话上下文管理                  │
+│  └─ PrivacyGuard           隐私分级守卫                        │
+├──────────────────────────────────────────────────────────────┤
+│  Capability Layer（可插拔、自描述）                            │
+│  ├─ CameraCapability       相机控制（拍摄/切换/参数）          │
+│  ├─ BeautyCapability       美颜参数调节                        │
+│  ├─ GalleryCapability      相册管理                            │
+│  ├─ SettingsCapability     设置管理                            │
+│  └─ NavigationCapability   页面导航                            │
+├──────────────────────────────────────────────────────────────┤
+│  beauty-engine (独立模块 · OpenGL ES + EGL)                   │
+│  ├─ CameraPreviewRenderer  实时预览渲染                        │
+│  ├─ BeautyRenderer         美颜 Shader 多 Pass 管线            │
+│  ├─ PhotoProcessorImpl     GPU 离屏拍照处理                    │
+│  ├─ FrameSyncManager       帧同步妆容系统                      │
+│  └─ FaceDetectionEngine    InsightFace + MediaPipe 双引擎      │
+└──────────────────────────────────────────────────────────────┘
 ```
 
----
+### 架构亮点
 
-## 📖 文档分类详解
-
-### 1️⃣ 产品层 (PRODUCT)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`FEATURES.md`](FEATURES.md) | 用户交互流程、体验规则、参数范围 | PM/RD/QA |
-| [`NFR_SPEC.md`](../01-PRODUCT/NFR_SPEC.md) | 性能/稳定性/隐私量化指标 | QA/RD |
-
-**核心内容**：
-- Agent 交互模式（对话/快捷）
-- 美颜系统参数与交互
-- 滤镜/风格特效规范
-- 拍摄交互（快门反馈/人脸十字星）
-- 动态相册查看器
-- 性能红线（启动<500ms、快门<50ms、跟手<100ms）
+- **显式优于隐式**：构造函数即文档，依赖关系一目了然
+- **声明式状态空间**：Sealed Class 枚举所有合法状态，消除隐式组合
+- **自描述 Capability**：Capability 自包含元数据，Agent 可反射发现与调用
+- **结构化可观测性**：纯文本日志 → 结构化事件，Agent 可消费、可诊断
+- **文档即契约**：PRODUCT.md → FEATURES.md → AGENTS.md 三层文档体系驱动开发
 
 ---
 
-### 2️⃣ 架构层 (ARCHITECTURE)
+## 快速开始
 
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`AGENT_ARCHITECTURE.md`](AGENT_ARCHITECTURE.md) | Agent 运行时架构、Capability 模型 | RD/CO |
-| [`ADR/`](../02-ARCHITECTURE/ADR/) | 架构决策记录（历史决策背景与权衡） | RD/CR |
+```bash
+# 克隆仓库
+git clone https://github.com/littleseven/PicMe.git
+cd PicMe
 
-**核心内容**：
-- AgentOrchestrator 编排器设计
-- SceneManager 场景管理
-- Capability 接口与扩展机制
-- PromptBuilder 分层构建策略
-- LocalLlmEngine 推理引擎封装
+# 构建 Debug APK
+./gradlew :app:assembleDebug
 
-**ADR 清单**：
-- `ADR-001-beauty-engine.md` - 美颜引擎架构演进
-- `ADR-002-opengl-pipeline.md` - 离屏渲染统一管线
-- `ADR-003-coordinate-system.md` - 坐标系管理规范
+# 安装到设备
+adb install -r app/build/outputs/apk/debug/picme-debug.apk
 
----
-
-### 3️⃣ 技术规范层 (TECHNICAL SPECS)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`BEAUTY_ENGINE_TECH_SPEC.md`](BEAUTY_ENGINE_TECH_SPEC.md) | 大美丽引擎完整技术规格 | RD |
-| [`FRAME_SYNC_TECH_SPEC.md`](FRAME_SYNC_TECH_SPEC.md) | 帧同步美妆系统详细设计 | RD |
-| [`CAMERA_PREVIEW_TECH_SPEC.md`](CAMERA_PREVIEW_TECH_SPEC.md) | 相机预览管线技术约束 | RD |
-| [`MNN_LANDMARK_DIAGNOSIS.md`](MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
-| [`FACE_DETECTION_ENGINE_ARCHITECTURE.md`](FACE_DETECTION_ENGINE_ARCHITECTURE.md) | 多引擎 ROI + Landmark 设计 | RD |
-
-**核心内容**：
-- EGL 上下文管理、Shader 编译、资源释放
-- FrameId 体系、FrameSyncManager、预测补偿算法
-- InsightFace vs MediaPipe 引擎切换与 ROI 设计
-- ROC 关键点映射、MNN 维度类型修复
-- 火山引擎 106 点标准语义定义
-
----
-
-### 4️⃣ Agent 能力层 (CAPABILITIES)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`CAPABILITY_REGISTRY.md`](CAPABILITY_REGISTRY.md) | 所有 Capability 列表与命令映射 | RD/CO |
-| [`COMMAND_REFERENCE.md`](COMMAND_REFERENCE.md) | 命令语法、参数、示例 | RD/PM |
-| [`CAPABILITY_IMPLEMENTATION_GUIDE.md`](CAPABILITY_IMPLEMENTATION_GUIDE.md) | 新增 Capability 的实现步骤 | RD |
-
-**核心内容**：
-- CameraCapability（拍照/录像/美颜/滤镜）
-- GalleryCapability（查看/删除/分享/搜索）
-- SettingsCapability（主题/语言/模型管理）
-- NavigationCapability（页面切换/返回）
-- EditCapability（编辑/保存/撤销）
-
----
-
-### 5️⃣ 开发层 (DEVELOPMENT)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`DEVELOPMENT.md`](DEVELOPMENT.md) | 双螺旋工作流、反向链接规范、CI 规则 | RD/CO |
-| [`TASK_MARKUP_SPEC.md`](TASK_MARKUP_SPEC.md) | `[kimi-task]` 标记语法与解析规则 | PM/CO |
-| [`CODE_REVIEW_CHECKLIST.md`](CODE_REVIEW_CHECKLIST.md) | CR 检查项与一票否决项 | CR/RD |
-
-**核心内容**：
-- Spec ↔ Code 双向演进规则
-- 反向链接注释格式（`// Spec: ...`）
-- CI 文档同步检查脚本
-- `[kimi-task]` 解析为 Task JSON
-
----
-
-### 6️⃣ 质量层 (QA)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`QA_EXECUTION_CHECKLIST.md`](QA_EXECUTION_CHECKLIST.md) | 端到端验收测试清单 | QA |
-| [`NFR_SPEC.md`](../01-PRODUCT/NFR_SPEC.md) | 性能基线数据与对比方法 | QA/RD |
-
-**核心内容**：
-- 帧同步专项验收（快转头/人脸出画/录制）
-- 性能基线对比（启动时间/帧率/内存）
-- 崩溃率/ANR 率监控阈值
-
----
-
-### 7️⃣ 标准层 (STANDARDS)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`COORDINATE_SYSTEM.md`](COORDINATE_SYSTEM.md) | 人脸关键点坐标、渲染管线坐标系 | RD |
-| [`Glossary.md`](Glossary.md) | 统一术语定义与禁用别名 | RD/PM |
-
-**核心内容**：
-- MediaPipe 468 点 → 106 点映射表
-- OpenGL 归一化坐标系 vs UI 像素坐标系
-- 帧同步术语（Strict Missing/Prediction Compensation）
-
----
-
-### 8️⃣ 容灾层 (FALLBACK)
-
-| 文档 | 用途 | 读者 |
-|------|------|------|
-| [`BEAUTY_ENGINE_FALLBACK.md`](BEAUTY_ENGINE_FALLBACK.md) | 美颜引擎降级策略与恢复机制 | RD/QA |
-
-**核心内容**：
-- EGL 初始化失败降级到基础预览
-- 冷却恢复逻辑（30s 内不重复降级）
-- 拍照路径 CPU fallback 保障
-
----
-
-## 🔗 文档引用关系
-
-```mermaid
-graph TD
-    A[AGENTS.md 顶层治理] --> B[FEATURES.md 交互规范]
-    A --> C[NFR_SPEC.md 性能指标]
-    B --> D[AGENT_ARCHITECTURE.md Agent 架构]
-    C --> E[PERFORMANCE_BASELINE.md 基线]
-    D --> F[CAPABILITY_REGISTRY.md 能力注册表]
-    D --> G[COMMAND_REFERENCE.md 命令参考]
-    F --> H[CameraCapability]
-    F --> I[GalleryCapability]
-    F --> J[SettingsCapability]
-    G --> K[相机控制命令]
-    G --> L[相册管理命令]
-    G --> M[设置命令]
-    B --> N[BEAUTY_ENGINE_TECH_SPEC.md]
-    B --> O[FRAME_SYNC_TECH_SPEC.md]
-    N --> P[egl/ 实现]
-    O --> Q[framesync/ 实现]
-    P --> R[DEVELOPMENT.md 开发规范]
-    Q --> R
-    R --> S[CI 文档同步检查]
+# 一键开发闭环（编译 → 安装 → 截屏 → 日志 → 报告）
+./scripts/auto-dev-loop.sh
 ```
 
----
+### 常用命令
 
-## 🧭 快速导航
-
-### 我是 PM，我想...
-
-- **定义新功能需求** → `FEATURES.md` + `[kimi-task]` 标记
-- **梳理交互流程** → `FEATURES.md` 对应章节
-- **制定验收标准** → `NFR_SPEC.md` + `QA_EXECUTION_CHECKLIST.md`
-
-### 我是 RD，我想...
-
-- **理解 Agent 架构** → `AGENT_ARCHITECTURE.md`
-- **实现新 Capability** → `CAPABILITY_IMPLEMENTATION_GUIDE.md`
-- **查阅命令语法** → `COMMAND_REFERENCE.md`
-- **了解美颜引擎细节** → `BEAUTY_ENGINE_TECH_SPEC.md`
-- **调试帧同步问题** → `FRAME_SYNC_TECH_SPEC.md`
-- **编写代码注释** → `DEVELOPMENT.md` 反向链接规范
-
-### 我是 QA，我想...
-
-- **执行端到端测试** → `QA_EXECUTION_CHECKLIST.md`
-- **验证性能指标** → `NFR_SPEC.md` + `PERFORMANCE_BASELINE.md`
-- **回归测试帧同步** → `FRAME_SYNC_TECH_SPEC.md` 验收标准
-
-### 我是 CO，我想...
-
-- **路由任务到正确角色** → `AGENTS.md` 角色职责矩阵
-- **追踪任务进度** → `[kimi-task]` 解析 + Task JSON
-- **检查文档一致性** → `DEVELOPMENT.md` CI 检查规则
+| 命令 | 说明 |
+|------|------|
+| `./gradlew test` | 运行 JVM 单元测试 |
+| `./gradlew connectedAndroidTest` | 运行仪器测试（需设备） |
+| `./gradlew lint` | 静态代码检查 |
+| `./scripts/ai-gate.sh` | 代码质量门禁 |
+| `adb logcat -s "PicMe:*"` | 查看 PicMe 日志 |
 
 ---
 
-## 📝 文档维护规则
+## 文档
 
-### 更新顺序（严格遵循）
+觅影相机采用**文档驱动开发**，所有设计决策、技术规格、验收标准均以文档形式固化：
 
-1. **需求变更** → 先更新 `FEATURES.md` / `NFR_SPEC.md`
-2. **架构调整** → 再更新 `AGENT_ARCHITECTURE.md` + ADR
-3. **技术实现** → 最后更新 `*_TECH_SPEC.md` + 模块 `AGENTS.md`
-4. **代码同步** → 代码变更后必须同步更新对应 Spec 文档
-
-### 命名规范
-
-- **产品层**: `FEATURES.md`, `NFR_SPEC.md`
-- **架构层**: `AGENT_ARCHITECTURE.md`, `ADR-XXX-*.md`
-- **技术规范**: `<MODULE>_TECH_SPEC.md`, `<TOPIC>_TECH_SPEC.md`
-- **Agent 能力**: `CAPABILITY_*.md`, `COMMAND_*.md`
-- **开发规范**: `DEVELOPMENT.md`, `TASK_MARKUP_SPEC.md`
-- **质量标准**: `QA_*.md`, `PERFORMANCE_BASELINE.md`
-- **标准词典**: `COORDINATE_SYSTEM.md`, `GLOSSARY.md`
-
-### 版本记录
-
-所有文档头部必须包含：
-
-```markdown
-> **版本**: X.Y  
-> **状态**: 生效中 / 草稿 / 废弃  
-> **最后更新**: YYYY-MM-DD  
-> **维护者**: [角色]
-```
+| 层级 | 文档 | 读者 | 内容 |
+|------|------|------|------|
+| **导航** | `docs/00-INDEX.md` | 全部 | 完整文档导航索引 |
+| **产品层** | `PRODUCT.md` | PM/RD/QA | 产品定义、核心命题、验收标准 |
+| | `docs/01-PRODUCT/FEATURES.md` | PM/RD/QA | 交互流程与体验规则 |
+| | `docs/01-PRODUCT/NFR_SPEC.md` | QA/RD | 性能/稳定性/隐私量化指标 |
+| **架构层** | `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` | RD/CO | Agent 运行时架构、Capability 模型 |
+| | `docs/02-ARCHITECTURE/ADR/` | RD/CR | 架构决策记录 |
+| **技术规范** | `docs/03-TECHNICAL-SPECS/` | RD | 美颜引擎、帧同步、人脸检测、相机预览 |
+| **Agent 能力** | `docs/04-AGENT-CAPABILITIES/` | RD/PM | Capability 注册表、命令参考、实现指南 |
+| **开发规范** | `docs/05-DEVELOPMENT/` | RD/CO | 工作流、CR 检查清单、任务标记规范 |
+| **质量标准** | `docs/06-QA/` | QA | 验收测试清单 |
+| **标准词典** | `docs/07-STANDARDS/` | 全部 | 坐标系标准、统一术语词典 |
+| **容灾** | `docs/08-FALLBACK/` | RD/QA | 引擎降级策略与恢复机制 |
 
 ---
 
-## 🚀 下一步阅读建议
+## Agent First 研发范式
 
-1. **新人入门** → `FEATURES.md` → `AGENT_ARCHITECTURE.md` → `COMMAND_REFERENCE.md`
-2. **实现新功能** → `FEATURES.md` → `CAPABILITY_IMPLEMENTATION_GUIDE.md` → 模块 `AGENTS.md`
-3. **排查性能问题** → `NFR_SPEC.md` → `PERFORMANCE_BASELINE.md` → `BEAUTY_ENGINE_TECH_SPEC.md`
-4. **执行 QA 验收** → `QA_EXECUTION_CHECKLIST.md` → `FRAME_SYNC_TECH_SPEC.md` 验收标准
+觅影相机不仅是一款应用，更是对「Agent 能否主导软件研发全流程」的系统性验证。
+
+### 三重实验维度
+
+| 维度 | 目标 | 关键产出 |
+|------|------|----------|
+| **端侧 Agent 架构** | 验证 LLM 能否成为应用的中枢神经系统 | Agent Runtime、Capability 系统、对话式交互 |
+| **Agent First 客户端框架** | 让 Agent 高效理解、修改、扩展代码 | 显式边界、声明式状态、自描述能力 |
+| **Agent First 研发流程** | Agent 主导协作，基础设施原子化为 Tools | 角色化协作、Self-Heal、即时验证 |
+
+### 已验证的假设
+
+| 假设 | 结论 |
+|------|------|
+| 显式架构可被 Agent 高效理解 | 成立 — RD Agent 成功实现跨模块功能 |
+| 文档驱动开发减少沟通损耗 | 成立 — PRODUCT→FEATURES→AGENTS 链条有效 |
+| Tools 化支持 Self-Heal 闭环 | 成立 — 编译/安装/验证全自动化 |
+| Capability 系统支持热插拔 | 成立 — 新增能力零侵入 Agent 核心 |
+
+### 待探索的问题
+
+1. **规模上限**：Agent 能高效处理的代码库规模上限是多少？
+2. **复杂重构**：Agent 能否主导跨模块架构级重构？
+3. **跨项目迁移**：Learned patterns 能否泛化到其他项目？
+4. **人机协作边界**：哪些决策必须保留人工介入？
 
 ---
 
-> **提示**: 本文档由 CO Agent 自动维护，发现链接失效或内容过时请提 PR 修正。
+## 自动化工具链
+
+| 脚本 | 功能 | 触发者 |
+|------|------|--------|
+| `auto-dev-loop.sh` | 编译 → 安装 → 截屏 → 日志 → 报告 | RD |
+| `ai-gate.sh` | 代码质量门禁（lint + 编译 + 安装检查） | CI |
+| `impact-analyzer.sh` | 变更影响分析与文档同步提醒 | CO |
+| `doc-sync-guardian.sh` | 三层文档一致性检查 | CR |
+| `screenshot-diff.py` | UI 回归像素级对比 | QA |
+
+---
+
+## 许可
+
+MIT License — 研究、学习、二次开发均可自由使用。
+
+---
+
+<p align="center">
+  <i>觅影相机 PicMe — 让相机听懂你说的话</i>
+</p>
