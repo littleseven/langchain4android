@@ -34,6 +34,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".testing.agent.bridge.AgentTestActivity"
+            android:exported="true"
+            android:label="Agent Test"
+            android:theme="@style/Theme.PicMe" />
+
         <receiver
             android:name=".features.camera.test.CameraTestCommandReceiver"
             android:exported="true">
