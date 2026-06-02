@@ -23,10 +23,13 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -115,9 +118,8 @@ fun SettingsScreen(
     val landmarkStageConfig by viewModel.landmarkStageConfig.collectAsState()
     val aiAgentMode by viewModel.aiAgentMode.collectAsState()
     val aiAgentLocalModel by viewModel.aiAgentLocalModel.collectAsState()
-    val aiAgentCodingApiKey by viewModel.aiAgentCodingApiKey.collectAsState()
-    val aiAgentCodingModel by viewModel.aiAgentCodingModel.collectAsState()
-    val aiAgentCodingBaseUrl by viewModel.aiAgentCodingBaseUrl.collectAsState()
+    val aiAgentRemoteModelConfigs by viewModel.aiAgentRemoteModelConfigs.collectAsState()
+    val aiAgentSelectedRemoteModel by viewModel.aiAgentSelectedRemoteModel.collectAsState()
     val aiAgentForceRemote by viewModel.aiAgentForceRemote.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
@@ -245,12 +247,10 @@ fun SettingsScreen(
         onAiAgentModeChange = { mode -> viewModel.setAiAgentMode(mode) },
         aiAgentLocalModel = aiAgentLocalModel,
         onAiAgentLocalModelChange = { modelId -> viewModel.setAiAgentLocalModel(modelId) },
-        aiAgentCodingApiKey = aiAgentCodingApiKey,
-        onAiAgentCodingApiKeyChange = { key -> viewModel.setAiAgentCodingApiKey(key) },
-        aiAgentCodingModel = aiAgentCodingModel,
-        onAiAgentCodingModelChange = { model -> viewModel.setAiAgentCodingModel(model) },
-        aiAgentCodingBaseUrl = aiAgentCodingBaseUrl,
-        onAiAgentCodingBaseUrlChange = { url -> viewModel.setAiAgentCodingBaseUrl(url) },
+        aiAgentRemoteModelConfigs = aiAgentRemoteModelConfigs,
+        onAiAgentRemoteModelConfigsChange = { configs -> viewModel.setAiAgentRemoteModelConfigs(configs) },
+        aiAgentSelectedRemoteModel = aiAgentSelectedRemoteModel,
+        onAiAgentSelectedRemoteModelChange = { modelId -> viewModel.setAiAgentSelectedRemoteModel(modelId) },
         aiAgentForceRemote = aiAgentForceRemote,
         onAiAgentForceRemoteChange = { enabled -> viewModel.setAiAgentForceRemote(enabled) },
         voiceCommandMode = voiceCommandMode,
@@ -297,12 +297,10 @@ private fun settingsContent(
     onAiAgentModeChange: (AiAgentMode) -> Unit,
     aiAgentLocalModel: String,
     onAiAgentLocalModelChange: (String) -> Unit,
-    aiAgentCodingApiKey: String,
-    onAiAgentCodingApiKeyChange: (String) -> Unit,
-    aiAgentCodingModel: String,
-    onAiAgentCodingModelChange: (String) -> Unit,
-    aiAgentCodingBaseUrl: String,
-    onAiAgentCodingBaseUrlChange: (String) -> Unit,
+    aiAgentRemoteModelConfigs: String,
+    onAiAgentRemoteModelConfigsChange: (String) -> Unit,
+    aiAgentSelectedRemoteModel: String,
+    onAiAgentSelectedRemoteModelChange: (String) -> Unit,
     aiAgentForceRemote: Boolean,
     onAiAgentForceRemoteChange: (Boolean) -> Unit,
     voiceCommandMode: VoiceCommandMode,
@@ -426,13 +424,11 @@ private fun settingsContent(
                         )
                     }
                     AiAgentMode.REMOTE -> {
-                        AiAgentCodingApiKeyRow(
-                            apiKey = aiAgentCodingApiKey,
-                            onApiKeyChange = onAiAgentCodingApiKeyChange
-                        )
-                        AiAgentCodingBaseUrlRow(
-                            baseUrl = aiAgentCodingBaseUrl,
-                            onBaseUrlChange = onAiAgentCodingBaseUrlChange
+                        AiAgentRemoteModelsSection(
+                            configsJson = aiAgentRemoteModelConfigs,
+                            onConfigsChange = onAiAgentRemoteModelConfigsChange,
+                            selectedModelId = aiAgentSelectedRemoteModel,
+                            onSelectedModelChange = onAiAgentSelectedRemoteModelChange
                         )
                     }
                 }
@@ -894,12 +890,19 @@ private fun AiAgentModelManagerRow(
 }
 
 @Composable
-private fun AiAgentCodingApiKeyRow(
-    apiKey: String,
-    onApiKeyChange: (String) -> Unit
+private fun AiAgentRemoteModelsSection(
+    configsJson: String,
+    onConfigsChange: (String) -> Unit,
+    selectedModelId: String,
+    onSelectedModelChange: (String) -> Unit
 ) {
-    var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(apiKey) }
+    val configs = remember(configsJson) {
+        if (configsJson.isNotBlank()) {
+            com.picme.domain.model.RemoteModelConfigs.fromJson(configsJson)
+        } else {
+            com.picme.domain.model.RemoteModelConfigs()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -907,152 +910,167 @@ private fun AiAgentCodingApiKeyRow(
             .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
         Text(
-            text = stringResource(R.string.ai_agent_coding_api_key),
+            text = stringResource(R.string.remote_models),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        if (isEditing) {
-            androidx.compose.material3.OutlinedTextField(
-                value = editText,
-                onValueChange = { editText = it },
-                placeholder = { Text(stringResource(R.string.ai_agent_coding_api_key_hint)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    Row {
-                        TextButton(onClick = {
-                            onApiKeyChange(editText.trim())
-                            isEditing = false
-                        }) {
-                            Text(stringResource(R.string.save))
-                        }
-                        TextButton(onClick = {
-                            editText = apiKey
-                            isEditing = false
-                        }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
+        Spacer(modifier = Modifier.height(4.dp))
+
+        configs.configs.forEach { config ->
+            RemoteModelConfigCard(
+                config = config,
+                isSelected = config.modelId == selectedModelId,
+                onSelect = { onSelectedModelChange(config.modelId) },
+                onConfigChange = { updatedConfig ->
+                    val updated = configs.updateConfig(updatedConfig)
+                    onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
                 }
             )
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isEditing = true },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (apiKey.isNotBlank()) {
-                        stringResource(R.string.ai_agent_coding_api_key_set)
-                    } else {
-                        stringResource(R.string.ai_agent_coding_api_key_empty)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (apiKey.isNotBlank()) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Text(
-                    text = stringResource(R.string.edit),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun AiAgentCodingModelRow(
-    model: String,
-    onModelChange: (String) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.ai_agent_coding_model),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        androidx.compose.material3.OutlinedTextField(
-            value = model,
-            onValueChange = onModelChange,
-            placeholder = { Text("kimi-for-coding") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun AiAgentCodingBaseUrlRow(
-    baseUrl: String,
-    onBaseUrlChange: (String) -> Unit
+private fun RemoteModelConfigCard(
+    config: com.picme.domain.model.RemoteModelConfig,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    onConfigChange: (com.picme.domain.model.RemoteModelConfig) -> Unit
 ) {
     var isEditing by remember { mutableStateOf(false) }
-    var editText by remember { mutableStateOf(baseUrl) }
+    var editApiKey by remember { mutableStateOf(config.apiKey) }
+    var editBaseUrl by remember { mutableStateOf(config.baseUrl) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
+        ),
+        onClick = onSelect
     ) {
-        Text(
-            text = stringResource(R.string.ai_agent_coding_base_url),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        if (isEditing) {
-            androidx.compose.material3.OutlinedTextField(
-                value = editText,
-                onValueChange = { editText = it },
-                placeholder = { Text("https://api.kimi.com/coding/v1/") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    Row {
-                        TextButton(onClick = {
-                            onBaseUrlChange(editText.trim())
-                            isEditing = false
-                        }) {
-                            Text(stringResource(R.string.save))
-                        }
-                        TextButton(onClick = {
-                            editText = baseUrl
-                            isEditing = false
-                        }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
-                }
-            )
-        } else {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isEditing = true },
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = baseUrl.ifBlank { "https://api.kimi.com/coding/v1/" },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    RadioButton(
+                        selected = isSelected,
+                        onClick = onSelect
+                    )
+                    Text(
+                        text = config.modelId,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (config.isConfigured) {
+                    Text(
+                        text = stringResource(R.string.configured),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.not_configured),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (isEditing) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = editBaseUrl,
+                    onValueChange = { editBaseUrl = it },
+                    label = { Text(stringResource(R.string.base_url)) },
+                    placeholder = { Text(config.baseUrl) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
-                Text(
-                    text = stringResource(R.string.edit),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                Spacer(modifier = Modifier.height(4.dp))
+                androidx.compose.material3.OutlinedTextField(
+                    value = editApiKey,
+                    onValueChange = { editApiKey = it },
+                    label = { Text(stringResource(R.string.api_key)) },
+                    placeholder = { Text(stringResource(R.string.api_key_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        onConfigChange(
+                            config.copy(
+                                apiKey = editApiKey.trim(),
+                                baseUrl = editBaseUrl.trim()
+                            )
+                        )
+                        isEditing = false
+                    }) {
+                        Text(stringResource(R.string.save))
+                    }
+                    TextButton(onClick = {
+                        editApiKey = config.apiKey
+                        editBaseUrl = config.baseUrl
+                        isEditing = false
+                    }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { isEditing = true },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = config.baseUrl.ifBlank { stringResource(R.string.base_url_not_set) },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (config.apiKey.isNotBlank()) {
+                                stringResource(R.string.api_key_set)
+                            } else {
+                                stringResource(R.string.api_key_not_set)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (config.apiKey.isNotBlank()) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.edit),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -1500,12 +1518,10 @@ fun SettingsScreenPreview() {
             onAiAgentModeChange = {},
             aiAgentLocalModel = "",
             onAiAgentLocalModelChange = {},
-            aiAgentCodingApiKey = "",
-            onAiAgentCodingApiKeyChange = {},
-            aiAgentCodingModel = "kimi-for-coding",
-            onAiAgentCodingModelChange = {},
-            aiAgentCodingBaseUrl = "https://api.kimi.com/coding/v1/",
-            onAiAgentCodingBaseUrlChange = {},
+            aiAgentRemoteModelConfigs = "",
+            onAiAgentRemoteModelConfigsChange = {},
+            aiAgentSelectedRemoteModel = "kimi-for-coding",
+            onAiAgentSelectedRemoteModelChange = {},
             aiAgentForceRemote = false,
             onAiAgentForceRemoteChange = {},
             voiceCommandMode = VoiceCommandMode.DISABLED,

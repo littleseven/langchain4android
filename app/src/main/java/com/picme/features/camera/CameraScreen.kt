@@ -837,29 +837,37 @@ fun CameraContent(
     var aiAgentIsProcessing by remember { mutableStateOf(false) }
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
 
-    val aiAgentCodingApiKey by userPreferencesRepository.aiAgentCodingApiKeyFlow.collectAsState(initial = "")
-    val aiAgentCodingModel by userPreferencesRepository.aiAgentCodingModelFlow.collectAsState(initial = "kimi-for-coding")
-    val aiAgentCodingBaseUrl by userPreferencesRepository.aiAgentCodingBaseUrlFlow.collectAsState(initial = "")
+    val aiAgentRemoteModelConfigs by userPreferencesRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
+    val aiAgentSelectedRemoteModel by userPreferencesRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "kimi-for-coding")
     val aiAgentForceRemote by userPreferencesRepository.aiAgentForceRemoteFlow.collectAsState(initial = false)
     val aiAgentMode by userPreferencesRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
+
+    // 解析远程模型配置
+    val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
+        val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
+            com.picme.domain.model.RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
+        } else {
+            com.picme.domain.model.RemoteModelConfigs()
+        }
+        configs.getConfig(aiAgentSelectedRemoteModel)
+            ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
+    }
 
     // 当关键配置变化时重新创建 UseCase（mode/apiKey/forceRemote 等）
     val aiAgentUseCase = remember(
         context,
         aiAgentMode,
         aiAgentLocalModel,
-        aiAgentCodingApiKey,
-        aiAgentCodingModel,
-        aiAgentCodingBaseUrl,
+        remoteConfig,
         aiAgentForceRemote
     ) {
         AiAgentUseCase(
             context = context,
             agentMode = aiAgentMode,
             localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_1_7b",
-            codingApiKey = aiAgentCodingApiKey.takeIf { it.isNotBlank() },
-            codingModel = aiAgentCodingModel,
-            codingBaseUrl = aiAgentCodingBaseUrl.takeIf { it.isNotBlank() },
+            codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
+            codingModel = remoteConfig.modelId,
+            codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },
             forceRemote = aiAgentForceRemote
         )
     }
