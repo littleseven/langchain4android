@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
  * @param context Application Context
  * @param agentMode Agent 运行模式，默认 LOCAL
  * @param privacyLevel 隐私级别，默认 STRICT
- * @param localModelId 本地模型 ID，默认 qwen3_0_6b
+ * @param localModelId 本地模型 ID，默认 qwen3_1_7b
  * @param codingApiKey Kimi Coding API Key
  * @param codingModel Kimi Coding 模型 ID，默认 kimi-for-coding
  * @param codingBaseUrl Kimi Coding API Base URL
@@ -41,7 +41,7 @@ class AiAgentUseCase(
     context: Context,
     agentMode: AiAgentMode = AiAgentMode.LOCAL,
     privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
-    localModelId: String = "qwen3_0_6b",
+    localModelId: String = "qwen3_1_7b",
     codingApiKey: String? = null,
     codingModel: String = "kimi-for-coding",
     codingBaseUrl: String? = null,

@@ -17,15 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,11 +37,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.MediaType
-import com.picme.domain.model.StageConfig
 import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.domain.model.AiAgentCommand
+import com.picme.domain.model.MediaType
+import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
 import com.picme.features.camera.components.CameraLeftControls
@@ -57,10 +55,8 @@ import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.camera.voice.VoiceWakeIndicator
-import com.picme.domain.usecase.AiAgentUseCase
-import com.picme.domain.model.AiAgentCommand
-import com.picme.features.common.chat.AiChatScreen
 import com.picme.features.common.chat.AgentMessage
+import com.picme.features.common.chat.AiChatScreen
 import kotlinx.coroutines.launch
 
 // [常量定义] 调试文本颜色

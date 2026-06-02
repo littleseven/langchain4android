@@ -844,7 +844,7 @@ fun CameraContent(
         AiAgentUseCase(
             context = context,
             agentMode = aiAgentMode,
-            localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_0_6b",
+            localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_1_7b",
             codingApiKey = aiAgentCodingApiKey.takeIf { it.isNotBlank() },
             codingModel = aiAgentCodingModel,
             codingBaseUrl = aiAgentCodingBaseUrl.takeIf { it.isNotBlank() },
