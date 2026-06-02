@@ -126,25 +126,18 @@ class SettingsViewModel(
             initialValue = StageConfig.defaultLandmark()
         )
 
-    val aiAgentCodingApiKey: StateFlow<String> = repository.aiAgentCodingApiKeyFlow
+    val aiAgentRemoteModelConfigs: StateFlow<String> = repository.aiAgentRemoteModelConfigsFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = ""
         )
 
-    val aiAgentCodingModel: StateFlow<String> = repository.aiAgentCodingModelFlow
+    val aiAgentSelectedRemoteModel: StateFlow<String> = repository.aiAgentSelectedRemoteModelFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = "kimi-for-coding"
-        )
-
-    val aiAgentCodingBaseUrl: StateFlow<String> = repository.aiAgentCodingBaseUrlFlow
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "https://api.kimi.com/coding/v1/"
         )
 
     val aiAgentForceRemote: StateFlow<Boolean> = repository.aiAgentForceRemoteFlow
@@ -563,21 +556,15 @@ class SettingsViewModel(
         }
     }
 
-    fun setAiAgentCodingApiKey(apiKey: String) {
+    fun setAiAgentRemoteModelConfigs(configsJson: String) {
         viewModelScope.launch {
-            repository.updateAiAgentCodingApiKey(apiKey)
+            repository.updateAiAgentRemoteModelConfigs(configsJson)
         }
     }
 
-    fun setAiAgentCodingModel(model: String) {
+    fun setAiAgentSelectedRemoteModel(modelId: String) {
         viewModelScope.launch {
-            repository.updateAiAgentCodingModel(model)
-        }
-    }
-
-    fun setAiAgentCodingBaseUrl(baseUrl: String) {
-        viewModelScope.launch {
-            repository.updateAiAgentCodingBaseUrl(baseUrl)
+            repository.updateAiAgentSelectedRemoteModel(modelId)
         }
     }
 

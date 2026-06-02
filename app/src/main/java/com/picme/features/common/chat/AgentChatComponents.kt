@@ -323,12 +323,30 @@ fun rememberAgentChatConfig(
         createAsrEngine(context, localAsrModel, logTag)
     }
 
+    // 读取远程模型配置
+    val aiAgentRemoteModelConfigs by settingsRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
+    val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "kimi-for-coding")
+
+    // 解析远程模型配置
+    val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
+        val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
+            com.picme.domain.model.RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
+        } else {
+            com.picme.domain.model.RemoteModelConfigs()
+        }
+        configs.getConfig(aiAgentSelectedRemoteModel)
+            ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
+    }
+
     // AiAgentUseCase
-    val aiAgentUseCase = remember {
+    val aiAgentUseCase = remember(remoteConfig) {
         AiAgentUseCase(
             context = context,
             agentMode = AiAgentMode.LOCAL,
-            localModelId = "qwen3_1_7b"
+            localModelId = "qwen3_1_7b",
+            codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
+            codingModel = remoteConfig.modelId,
+            codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() }
         )
     }
 
