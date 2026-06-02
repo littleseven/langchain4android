@@ -2,9 +2,10 @@ package com.picme.domain.agent
 
 import android.content.Context
 import com.picme.beauty.api.llm.MnnLlmClient
-import com.picme.beauty.internal.model.ModelManager
 import com.picme.core.common.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -28,6 +29,7 @@ class LocalLlmEngine(private val context: Context) {
 
     private val tag = "PicMe:LocalLlmEngine"
     private val client = MnnLlmClient(context)
+    private val engineMutex = Mutex()
 
     /**
      * 当前加载的模型 ID
@@ -43,47 +45,49 @@ class LocalLlmEngine(private val context: Context) {
     /**
      * 加载指定模型
      *
-     * @param modelId 模型注册表中的 key，如 "qwen3_0_6b" 或 "qwen2_5_1_5b"
+     * @param modelId 模型注册表中的 key，如 "qwen3_1_7b" 或 "qwen3_0_6b"
      * @return 加载结果，失败时返回具体错误原因
      */
     suspend fun loadModel(modelId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        if (client.isLoaded && currentModelId == modelId) {
-            Logger.d(tag, "Model $modelId already loaded")
-            return@withContext Result.success(Unit)
-        }
+        engineMutex.withLock {
+            if (client.isLoaded && currentModelId == modelId) {
+                Logger.d(tag, "Model $modelId already loaded")
+                return@withLock Result.success(Unit)
+            }
 
-        if (client.isLoaded) {
-            Logger.d(tag, "Unloading previous model: $currentModelId")
-            client.unload()
-        }
+            if (client.isLoaded) {
+                Logger.d(tag, "Unloading previous model: $currentModelId")
+                client.unload()
+            }
 
-        try {
-            Logger.i(tag, "Loading LLM model: $modelId")
-            val success = client.load(modelId)
-            if (success) {
-                currentModelId = modelId
-                Logger.i(tag, "Model $modelId loaded successfully")
-                Result.success(Unit)
-            } else {
-                Logger.e(tag, "Failed to load model $modelId (native load returned false)")
+            try {
+                Logger.i(tag, "Loading LLM model: $modelId")
+                val success = client.load(modelId)
+                if (success) {
+                    currentModelId = modelId
+                    Logger.i(tag, "Model $modelId loaded successfully")
+                    Result.success(Unit)
+                } else {
+                    Logger.e(tag, "Failed to load model $modelId (native load returned false)")
+                    Result.failure(
+                        LlmModelNotFoundException(
+                            "模型加载失败，请确认模型已下载。设置 → AI 模型管理 → 下载 $modelId"
+                        )
+                    )
+                }
+            } catch (exception: IllegalStateException) {
+                // ModelManager 抛出的模型未找到异常
+                Logger.e(tag, "Model not found: $modelId", exception)
                 Result.failure(
                     LlmModelNotFoundException(
-                        "模型加载失败，请确认模型已下载。设置 → AI 模型管理 → 下载 $modelId"
+                        "模型未下载，请前往设置 → AI 模型管理下载模型",
+                        exception
                     )
                 )
+            } catch (exception: Exception) {
+                Logger.e(tag, "Exception loading model $modelId", exception)
+                Result.failure(exception)
             }
-        } catch (exception: IllegalStateException) {
-            // ModelManager 抛出的模型未找到异常
-            Logger.e(tag, "Model not found: $modelId", exception)
-            Result.failure(
-                LlmModelNotFoundException(
-                    "模型未下载，请前往设置 → AI 模型管理下载模型",
-                    exception
-                )
-            )
-        } catch (exception: Exception) {
-            Logger.e(tag, "Exception loading model $modelId", exception)
-            Result.failure(exception)
         }
     }
 
@@ -101,26 +105,28 @@ class LocalLlmEngine(private val context: Context) {
      * @param maxTokens 最大生成 token 数
      * @return 生成的文本
      */
-    suspend fun generate(prompt: String, maxTokens: Int = 512): Result<String> = withContext(Dispatchers.IO) {
-        if (!client.isLoaded) {
-            Logger.w(tag, "LLM not loaded, cannot generate")
-            return@withContext Result.failure(IllegalStateException("LLM model not loaded"))
-        }
-
-        try {
-            Logger.d(tag, "Generating response with maxTokens=$maxTokens, promptLength=${prompt.length}")
-            val response = client.generate(
-                prompt = prompt,
-                maxNewTokens = maxTokens
-            )
-            if (response.isNotBlank()) {
-                Result.success(response)
-            } else {
-                Result.failure(RuntimeException("Empty LLM response"))
+    suspend fun generate(prompt: String, maxTokens: Int = 128): Result<String> = withContext(Dispatchers.IO) {
+        engineMutex.withLock {
+            if (!client.isLoaded) {
+                Logger.w(tag, "LLM not loaded, cannot generate")
+                return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
             }
-        } catch (exception: Exception) {
-            Logger.e(tag, "Generation failed", exception)
-            Result.failure(exception)
+
+            try {
+                Logger.d(tag, "Generating response with maxTokens=$maxTokens, promptLength=${prompt.length}")
+                val response = client.generate(
+                    prompt = prompt,
+                    maxNewTokens = maxTokens
+                )
+                if (response.isNotBlank()) {
+                    Result.success(response)
+                } else {
+                    Result.failure(RuntimeException("Empty LLM response"))
+                }
+            } catch (exception: Exception) {
+                Logger.e(tag, "Generation failed", exception)
+                Result.failure(exception)
+            }
         }
     }
 
@@ -138,28 +144,30 @@ class LocalLlmEngine(private val context: Context) {
     suspend fun generateWithSystem(
         systemPrompt: String,
         userPrompt: String,
-        maxTokens: Int = 512
+        maxTokens: Int = 128
     ): Result<String> = withContext(Dispatchers.IO) {
-        if (!client.isLoaded) {
-            Logger.w(tag, "LLM not loaded, cannot generate")
-            return@withContext Result.failure(IllegalStateException("LLM model not loaded"))
-        }
-
-        try {
-            Logger.d(tag, "Generating response with maxTokens=$maxTokens")
-            val response = client.generateWithSystem(
-                systemPrompt = systemPrompt,
-                userPrompt = userPrompt,
-                maxNewTokens = maxTokens
-            )
-            if (response.isNotBlank()) {
-                Result.success(response)
-            } else {
-                Result.failure(RuntimeException("Empty LLM response"))
+        engineMutex.withLock {
+            if (!client.isLoaded) {
+                Logger.w(tag, "LLM not loaded, cannot generate")
+                return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
             }
-        } catch (exception: Exception) {
-            Logger.e(tag, "Generation with system prompt failed", exception)
-            Result.failure(exception)
+
+            try {
+                Logger.d(tag, "Generating response with maxTokens=$maxTokens")
+                val response = client.generateWithSystem(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    maxNewTokens = maxTokens
+                )
+                if (response.isNotBlank()) {
+                    Result.success(response)
+                } else {
+                    Result.failure(RuntimeException("Empty LLM response"))
+                }
+            } catch (exception: Exception) {
+                Logger.e(tag, "Generation with system prompt failed", exception)
+                Result.failure(exception)
+            }
         }
     }
 
@@ -172,28 +180,30 @@ class LocalLlmEngine(private val context: Context) {
      */
     suspend fun generateWithHistory(
         messages: List<com.picme.domain.agent.model.ChatMessage>,
-        maxTokens: Int = 512
+        maxTokens: Int = 128
     ): Result<String> = withContext(Dispatchers.IO) {
-        if (!client.isLoaded) {
-            Logger.w(tag, "LLM not loaded, cannot generate")
-            return@withContext Result.failure(IllegalStateException("LLM model not loaded"))
-        }
-
-        try {
-            val prompt = buildPromptFromMessages(messages)
-            Logger.d(tag, "Generating with history, messages=${messages.size}")
-            val response = client.generate(
-                prompt = prompt,
-                maxNewTokens = maxTokens
-            )
-            if (response.isNotBlank()) {
-                Result.success(response)
-            } else {
-                Result.failure(RuntimeException("Empty LLM response"))
+        engineMutex.withLock {
+            if (!client.isLoaded) {
+                Logger.w(tag, "LLM not loaded, cannot generate")
+                return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
             }
-        } catch (exception: Exception) {
-            Logger.e(tag, "Generation with history failed", exception)
-            Result.failure(exception)
+
+            try {
+                val prompt = buildPromptFromMessages(messages)
+                Logger.d(tag, "Generating with history, messages=${messages.size}")
+                val response = client.generate(
+                    prompt = prompt,
+                    maxNewTokens = maxTokens
+                )
+                if (response.isNotBlank()) {
+                    Result.success(response)
+                } else {
+                    Result.failure(RuntimeException("Empty LLM response"))
+                }
+            } catch (exception: Exception) {
+                Logger.e(tag, "Generation with history failed", exception)
+                Result.failure(exception)
+            }
         }
     }
 
@@ -201,10 +211,19 @@ class LocalLlmEngine(private val context: Context) {
      * 卸载当前模型，释放内存
      */
     fun unload() {
-        if (client.isLoaded) {
-            client.unload()
-            currentModelId = null
-            Logger.d(tag, "LLM unloaded")
+        if (!engineMutex.tryLock()) {
+            Logger.w(tag, "Skip unload: engine is busy")
+            return
+        }
+
+        try {
+            if (client.isLoaded) {
+                client.unload()
+                currentModelId = null
+                Logger.d(tag, "LLM unloaded")
+            }
+        } finally {
+            engineMutex.unlock()
         }
     }
 

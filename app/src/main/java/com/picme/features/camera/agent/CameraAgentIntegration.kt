@@ -116,7 +116,7 @@ fun rememberCameraAgentIntegration(
             // 加载配置
             configure(
                 mode = com.picme.domain.model.AiAgentMode.LOCAL,
-                modelId = "qwen3_0_6b",
+                modelId = "qwen3_1_7b",
                 privacyLevel = com.picme.domain.model.AiAgentPrivacyLevel.STRICT
             )
         }
