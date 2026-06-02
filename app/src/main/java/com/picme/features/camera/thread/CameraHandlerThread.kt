@@ -7,23 +7,19 @@ import android.os.Process
 import com.picme.core.common.Logger
 
 /**
- * [Day1 线程隔离] 相机拍照专用 HandlerThread
+ * [Day1 线程隔离] 相机 HandlerThread 基类
  *
  * 职责边界：
- * - 唯一拥有者：ImageCapture.takePicture() 的回调执行 + 拍照后处理（Bitmap 旋转/裁剪/美颜/保存）
+ * - PicMe-CameraCapture：ImageCapture.takePicture() 回调 + 拍照后处理
+ * - PicMe-CameraAnalysis：ImageAnalysis 帧分析（人脸检测等）
  * - 禁止：调用任何 CameraX API（bind/unbind）、GL API、Agent 状态机
  *
- * 线程名：PicMe-CameraCapture
  * 优先级：THREAD_PRIORITY_BACKGROUND + THREAD_PRIORITY_MORE_FAVORABLE
  */
-class CameraHandlerThread : HandlerThread(
-    THREAD_NAME,
+class CameraHandlerThread(name: String) : HandlerThread(
+    name,
     Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_MORE_FAVORABLE
 ) {
-
-    companion object {
-        private const val THREAD_NAME = "PicMe-CameraCapture"
-    }
 
     private var handler: Handler? = null
 
@@ -35,7 +31,7 @@ class CameraHandlerThread : HandlerThread(
         looper  // 阻塞等待 Looper 就绪
         handler = Handler(looper)
         isReady = true
-        Logger.i("PicMe:Thread", "CameraHandlerThread started: name=${Thread.currentThread().name}")
+        Logger.i("PicMe:Thread", "CameraHandlerThread started: name=$name")
     }
 
     fun post(runnable: Runnable) {
@@ -49,11 +45,11 @@ class CameraHandlerThread : HandlerThread(
     }
 
     /**
-     * 在当前线程（必须是 CameraHandlerThread）同步执行
+     * 在当前线程（必须是本 HandlerThread）同步执行
      */
     fun <T> executeSync(action: () -> T): T {
-        check(Thread.currentThread().name == THREAD_NAME) {
-            "executeSync must be called on $THREAD_NAME, current=${Thread.currentThread().name}"
+        check(Thread.currentThread().name == this.name) {
+            "executeSync must be called on ${this.name}, current=${Thread.currentThread().name}"
         }
         return action()
     }
@@ -62,7 +58,7 @@ class CameraHandlerThread : HandlerThread(
         isReady = false
         handler = null
         val result = super.quitSafely()
-        Logger.i("PicMe:Thread", "CameraHandlerThread quitSafely")
+        Logger.i("PicMe:Thread", "CameraHandlerThread quitSafely: name=${this.name}")
         return result
     }
 

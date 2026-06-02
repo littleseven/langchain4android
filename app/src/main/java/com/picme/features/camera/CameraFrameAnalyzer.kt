@@ -190,15 +190,13 @@ internal fun handleImageAnalysisFrameMediaPipe(
     beautyEnabled: Boolean = false
 ) {
     try {
-        // 美颜未启用时，跳过人脸检测，直接释放资源
+        // 美颜未启用时，跳过人脸检测
         if (!beautyEnabled) {
-            imageProxy.close()
             return
         }
 
         val mediaImage = imageProxy.image
         if (mediaImage == null) {
-            imageProxy.close()
             return
         }
 
@@ -249,8 +247,6 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 )
                 Logger.d("Camera", "[FrameSync] Stored skip-frame result for frameId=$frameId")
             }
-
-            imageProxy.close()
             return
         }
 
@@ -262,7 +258,6 @@ internal fun handleImageAnalysisFrameMediaPipe(
             val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
             val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
             if (bitmap == null) {
-                imageProxy.close()
                 return
             }
             Logger.d("Camera", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
@@ -335,10 +330,9 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 FaceWarpParams(requestedDetectionEngineMode = detectionEngineMode)
             )
         }
-
-        imageProxy.close()
     } catch (error: Exception) {
         Logger.e("Camera", "MediaPipe face detection error", error)
+    } finally {
         imageProxy.close()
     }
 }

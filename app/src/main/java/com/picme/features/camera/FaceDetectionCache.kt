@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 object FaceDetectionCache {
     private val cachedLandmarks106 = AtomicReference<FloatArray?>(null)
-    private var lastUpdateTimeMs: Long = 0
+    private val lastUpdateTimeMs = java.util.concurrent.atomic.AtomicLong(0L)
     private const val CACHE_VALIDITY_MS = 500L // 缓存有效期 500ms
 
     /**
@@ -18,7 +18,7 @@ object FaceDetectionCache {
      */
     fun updateLandmarks106(landmarks: FloatArray) {
         cachedLandmarks106.set(landmarks.copyOf())
-        lastUpdateTimeMs = System.currentTimeMillis()
+        lastUpdateTimeMs.set(System.currentTimeMillis())
     }
 
     /**
@@ -27,7 +27,7 @@ object FaceDetectionCache {
      */
     fun getCachedLandmarks106(): FloatArray? {
         val now = System.currentTimeMillis()
-        return if (now - lastUpdateTimeMs <= CACHE_VALIDITY_MS) {
+        return if (now - lastUpdateTimeMs.get() <= CACHE_VALIDITY_MS) {
             cachedLandmarks106.get()?.copyOf()
         } else {
             null
@@ -39,7 +39,7 @@ object FaceDetectionCache {
      */
     fun clear() {
         cachedLandmarks106.set(null)
-        lastUpdateTimeMs = 0
+        lastUpdateTimeMs.set(0L)
     }
 
     /**
@@ -47,7 +47,7 @@ object FaceDetectionCache {
      */
     fun isValid(): Boolean {
         val now = System.currentTimeMillis()
-        return now - lastUpdateTimeMs <= CACHE_VALIDITY_MS &&
+        return now - lastUpdateTimeMs.get() <= CACHE_VALIDITY_MS &&
                 cachedLandmarks106.get() != null
     }
 }

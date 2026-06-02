@@ -36,6 +36,7 @@ import com.picme.domain.repository.UserSettingsRepository
 
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
@@ -90,11 +91,12 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val userPreferencesRepository = app.container.userPreferencesRepository
     val faceDetectorManager = app.container.faceDetector
     val coroutineScope = rememberCoroutineScope()
-    // 用 getBeautyStrategyBlocking() 同步读取初始值，避免 DataStore flow 首帧异步延迟
-    // 导致先用 BIG_BEAUTY 初始化一次、再切换到真实策略的竞态（双引擎并存 → EGL_BAD_DISPLAY 黑屏）
-    val beautyStrategy by userPreferencesRepository.beautyStrategyFlow.collectAsState(
-        initial = userPreferencesRepository.getBeautyStrategyBlocking()
-    )
+    // [线程安全] 使用 LaunchedEffect 在后台线程读取 DataStore 初始值，
+    // 避免主线程阻塞，同时防止 DataStore flow 首帧异步延迟导致双引擎并存黑屏
+    var beautyStrategy by remember { mutableStateOf(BeautyStrategy.BIG_BEAUTY) }
+    LaunchedEffect(Unit) {
+        beautyStrategy = userPreferencesRepository.beautyStrategyFlow.first()
+    }
     val debugUiEnabled by userPreferencesRepository.debugUiEnabledFlow.collectAsState(initial = true)
     val showCameraInfoInPreview by userPreferencesRepository.showCameraInfoInPreviewFlow.collectAsState(initial = false)
     val showFaceDebugOverlay by userPreferencesRepository.showFaceDebugOverlayFlow.collectAsState(initial = false)
