@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Landscape
 import androidx.compose.material.icons.rounded.LineStyle
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Timeline
@@ -113,6 +114,7 @@ private const val PANEL_HEIGHT_RATIO = 0.5f
 @Composable
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
+    onResetCameraMemoryState: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -123,6 +125,8 @@ fun CameraLeftControls(
     ) {
         // 设置
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
+        // 立即重置相机状态到首次安装默认值
+        ControlButton(icon = Icons.Rounded.Refresh, onClick = onResetCameraMemoryState)
     }
 }
 

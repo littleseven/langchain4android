@@ -468,6 +468,7 @@ private fun BoxScope.CameraPreviewSideControls(
 ) {
     CameraLeftControls(
         onNavigateToSettings = actions.onNavigateToSettings,
+        onResetCameraMemoryState = actions.onResetCameraMemoryState,
         modifier = Modifier.align(Alignment.TopStart)
     )
 
