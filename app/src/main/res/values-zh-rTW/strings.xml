@@ -338,9 +338,5 @@
     <string name="cancel_download">取消下載</string>
     <string name="pause_download">暫停</string>
     <string name="resume_download">繼續</string>
-    <string name="model_download_notification_title">模型下載中</string>
-    <string name="model_download_notification_single">%1$s 下載中 %2$d%%</string>
-    <string name="model_download_notification_multi">%1$d 個任務下載中 %2$d%%</string>
-    <string name="model_download_notification_channel_desc">保持模型下載在背景持續運行</string>
 
 </resources>

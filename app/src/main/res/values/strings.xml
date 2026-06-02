@@ -349,9 +349,5 @@
     <string name="cancel_download">Cancel Download</string>
     <string name="pause_download">Pause</string>
     <string name="resume_download">Resume</string>
-    <string name="model_download_notification_title">Model downloading</string>
-    <string name="model_download_notification_single">%1$s downloading %2$d%%</string>
-    <string name="model_download_notification_multi">%1$d tasks downloading %2$d%%</string>
-    <string name="model_download_notification_channel_desc">Keep model downloads running in background</string>
 
 </resources>

@@ -69,7 +69,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
 
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL
-    private var currentModelId: String = "qwen3_0_6b"
+    private var currentModelId: String = "qwen3_1_7b"
 
     /**
      * 创建远程编排器
