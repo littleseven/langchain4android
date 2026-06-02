@@ -3,13 +3,13 @@ package com.picme.domain.agent
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.data.remote.kimi.KimiCodingApiClient
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.InferenceResult
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.agent.remote.RemoteOrchestrator
 import com.picme.domain.model.MediaType
+import com.picme.domain.model.RemoteModelConfig
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,14 +48,15 @@ class RemoteOrchestratorIntegrationTest {
             return@runBlocking
         }
 
-        val codingClient = KimiCodingApiClient(
+        val remoteConfig = RemoteModelConfig(
+            modelId = "kimi-for-coding",
             apiKey = apiKey,
-            enableLogging = true
+            baseUrl = "https://api.kimi.com/coding/v1/"
         )
         val sceneManager = SceneManager.getInstance()
         val promptBuilder = PromptBuilder(sceneManager)
         val remoteOrchestrator = RemoteOrchestrator(
-            codingClient = codingClient,
+            remoteConfig = remoteConfig,
             promptBuilder = promptBuilder
         )
 
@@ -81,14 +82,15 @@ class RemoteOrchestratorIntegrationTest {
             return@runBlocking
         }
 
-        val codingClient = KimiCodingApiClient(
+        val remoteConfig = RemoteModelConfig(
+            modelId = "kimi-for-coding",
             apiKey = apiKey,
-            enableLogging = true
+            baseUrl = "https://api.kimi.com/coding/v1/"
         )
         val sceneManager = SceneManager.getInstance()
         val promptBuilder = PromptBuilder(sceneManager)
         val remoteOrchestrator = RemoteOrchestrator(
-            codingClient = codingClient,
+            remoteConfig = remoteConfig,
             promptBuilder = promptBuilder
         )
 

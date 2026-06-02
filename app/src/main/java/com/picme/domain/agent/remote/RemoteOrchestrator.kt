@@ -3,14 +3,12 @@ package com.picme.domain.agent.remote
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
-import com.picme.data.remote.kimi.KimiCodingApiClient
-import com.picme.data.remote.kimi.KimiCodingMessage
-import com.picme.data.remote.kimi.KimiCodingRequest
 import com.picme.domain.agent.PromptBuilder
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.InferenceResult
 import com.picme.domain.model.MediaType
+import com.picme.domain.model.RemoteModelConfig
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -18,17 +16,17 @@ import org.json.JSONObject
  * 远程编排器
  *
  * 负责执行 L2 Batch FC、L3 Plan-and-Execute、L4 Chat 三种远程推理模式。
- * 统一使用 Kimi Coding API（Claude 格式），通过 [PromptBuilder] 构建分层 Prompt。
+ * 通过 [UnifiedRemoteClient] 自动适配 Claude/OpenAI 协议。
  *
- * @param codingClient Kimi Coding API 客户端
+ * @param remoteConfig 远程模型配置
  * @param promptBuilder Prompt 构建器
- * @param model 模型 ID，默认 kimi-for-coding
  */
 class RemoteOrchestrator(
-    private val codingClient: KimiCodingApiClient,
-    private val promptBuilder: PromptBuilder,
-    private val model: String = "kimi-for-coding"
+    private val remoteConfig: RemoteModelConfig,
+    private val promptBuilder: PromptBuilder
 ) {
+
+    private val unifiedClient = UnifiedRemoteClient(remoteConfig)
 
     private val tag = "PicMe:RemoteOrchestrator"
 
@@ -51,39 +49,23 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = promptBuilder.buildBatchPrompt(userInput, context)
-            val request = KimiCodingRequest(
-                model = model,
-                messages = listOf(
-                    KimiCodingMessage(role = "user", content = userInput)
-                ),
-                system = systemPrompt,
+
+            Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+
+            val result = unifiedClient.chat(
+                systemPrompt = systemPrompt,
+                userInput = userInput,
                 maxTokens = 2048,
-                temperature = 0.3,
-                stream = false
+                temperature = 0.3
             )
 
-            Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\"")
-
-            val response = codingClient.service.messages(request)
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string()
-                Logger.e(tag, "[L2-BATCH] ERR: HTTP ${response.code()}, body=$errorBody")
+            val content = result.getOrElse { error ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Batch(
-                    commands = listOf(
-                        AgentCommand.Error("Batch API error: ${response.code()}")
-                    )
+                    commands = listOf(AgentCommand.Error("Batch API error: ${error.message}"))
                 )
             }
-
-            val body = response.body()
-                ?: return InferenceResult.Batch(
-                    commands = listOf(AgentCommand.Error("Empty response body"))
-                )
-
-            val content = body.content.firstOrNull()?.text?.trim()
-                ?: return InferenceResult.Batch(
-                    commands = listOf(AgentCommand.Error("No content in response"))
-                )
 
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$content\"")
@@ -118,49 +100,27 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = promptBuilder.buildPlanPrompt(userInput, context)
-            val request = KimiCodingRequest(
-                model = model,
-                messages = listOf(
-                    KimiCodingMessage(role = "user", content = userInput)
-                ),
-                system = systemPrompt,
+
+            Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+
+            val result = unifiedClient.chat(
+                systemPrompt = systemPrompt,
+                userInput = userInput,
                 maxTokens = 2048,
-                temperature = 0.3,
-                stream = false
+                temperature = 0.3
             )
 
-            Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\"")
-
-            val response = codingClient.service.messages(request)
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string()
-                Logger.e(tag, "[L3-PLAN] ERR: HTTP ${response.code()}, body=$errorBody")
+            val content = result.getOrElse { error ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Plan(
                     plan = ExecutionPlan(
                         planId = "error_${System.currentTimeMillis()}",
                         steps = emptyList(),
-                        description = "Plan API error: ${response.code()}"
+                        description = "Plan API error: ${error.message}"
                     )
                 )
             }
-
-            val body = response.body()
-                ?: return InferenceResult.Plan(
-                    plan = ExecutionPlan(
-                        planId = "error_${System.currentTimeMillis()}",
-                        steps = emptyList(),
-                        description = "Empty response body"
-                    )
-                )
-
-            val content = body.content.firstOrNull()?.text?.trim()
-                ?: return InferenceResult.Plan(
-                    plan = ExecutionPlan(
-                        planId = "error_${System.currentTimeMillis()}",
-                        steps = emptyList(),
-                        description = "No content in response"
-                    )
-                )
 
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L3-PLAN] RSP: latency=${latencyMs}ms, content=\"$content\"")
@@ -199,37 +159,23 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = promptBuilder.buildChatPrompt(userInput, context)
-            val request = KimiCodingRequest(
-                model = model,
-                messages = listOf(
-                    KimiCodingMessage(role = "user", content = userInput)
-                ),
-                system = systemPrompt,
+
+            Logger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+
+            val result = unifiedClient.chat(
+                systemPrompt = systemPrompt,
+                userInput = userInput,
                 maxTokens = 2048,
-                temperature = 0.3,
-                stream = false
+                temperature = 0.3
             )
 
-            Logger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\"")
-
-            val response = codingClient.service.messages(request)
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string()
-                Logger.e(tag, "[L4-CHAT] ERR: HTTP ${response.code()}, body=$errorBody")
+            val content = result.getOrElse { error ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Logger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Chat(
-                    message = "抱歉，服务暂时不可用，请稍后再试。（错误码：${response.code()}）"
+                    message = "抱歉，服务暂时不可用，请稍后再试。（错误：${error.message}）"
                 )
             }
-
-            val body = response.body()
-                ?: return InferenceResult.Chat(
-                    message = "抱歉，收到了空响应，请再试一次。"
-                )
-
-            val content = body.content.firstOrNull()?.text?.trim()
-                ?: return InferenceResult.Chat(
-                    message = "抱歉，没有收到有效回复，请再试一次。"
-                )
 
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L4-CHAT] RSP: latency=${latencyMs}ms, content=\"$content\"")

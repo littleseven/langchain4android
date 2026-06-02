@@ -2,7 +2,6 @@ package com.picme.domain.agent
 
 import android.content.Context
 import com.picme.core.common.Logger
-import com.picme.data.remote.kimi.KimiCodingApiClient
 import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
@@ -76,12 +75,13 @@ class AgentOrchestrator private constructor(private val context: Context) {
      */
     private fun createRemoteOrchestrator(): RemoteOrchestrator {
         val apiKey = getApiKey()
-        val codingClient = KimiCodingApiClient(
+        val remoteConfig = com.picme.domain.model.RemoteModelConfig(
+            modelId = "kimi-for-coding",
             apiKey = apiKey,
-            enableLogging = false
+            baseUrl = "https://api.kimi.com/coding/v1/"
         )
         return RemoteOrchestrator(
-            codingClient = codingClient,
+            remoteConfig = remoteConfig,
             promptBuilder = promptBuilder
         )
     }

@@ -5,7 +5,6 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
-import com.picme.data.remote.kimi.KimiCodingApiClient
 import com.picme.domain.agent.AgentOrchestrator
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.model.AgentAction
@@ -58,19 +57,23 @@ class AiAgentUseCase(
     /**
      * Kimi Coding API 客户端（Claude 格式，唯一远程推理客户端）
      */
-    private val codingClient: KimiCodingApiClient? = codingApiKey?.takeIf { it.isNotBlank() }?.let {
-        KimiCodingApiClient(
-            apiKey = it,
-            baseUrl = codingBaseUrl ?: CODING_DEFAULT_BASE_URL,
-            enableLogging = true
-        )
-    }
+    /**
+     * 远程模型配置
+     */
+    private val remoteConfig: com.picme.domain.model.RemoteModelConfig? =
+        codingApiKey?.takeIf { it.isNotBlank() }?.let { apiKey ->
+            com.picme.domain.model.RemoteModelConfig(
+                modelId = codingModel,
+                apiKey = apiKey,
+                baseUrl = codingBaseUrl ?: CODING_DEFAULT_BASE_URL
+            )
+        }
 
     /**
      * 远程推理引擎（L2/L3/L4）
      */
-    private val remoteEngine: RemoteInferenceEngine? = codingClient?.let {
-        RemoteInferenceEngine(codingClient = it, model = codingModel)
+    private val remoteEngine: RemoteInferenceEngine? = remoteConfig?.let {
+        RemoteInferenceEngine(remoteConfig = it)
     }
 
     /**
@@ -207,7 +210,7 @@ class AiAgentUseCase(
         if (engine == null) {
             Logger.w(REMOTE_TAG, "Remote engine not available (no API key)")
             return Result.success(
-                AiAgentCommand.TextReply("请在设置中配置 Kimi Coding API Key 以启用远程推理。")
+                AiAgentCommand.TextReply("请在设置中配置远程模型 API Key 以启用远程推理。")
             )
         }
 
