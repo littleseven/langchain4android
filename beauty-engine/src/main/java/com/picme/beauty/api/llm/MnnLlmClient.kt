@@ -28,10 +28,10 @@ class MnnLlmClient(private val context: Context) {
     /**
      * 加载本地 LLM 模型
      *
-     * @param modelKey ModelManager 中注册的模型 key，默认 "qwen3_0_6b"
+     * @param modelKey ModelManager 中注册的模型 key，默认 "qwen3_1_7b"
      * @return 加载是否成功
      */
-    suspend fun load(modelKey: String = "qwen3_0_6b"): Boolean = withContext(Dispatchers.IO) {
+    suspend fun load(modelKey: String = "qwen3_1_7b"): Boolean = withContext(Dispatchers.IO) {
         if (isLoaded) {
             Log.d(tag, "Model already loaded")
             return@withContext true

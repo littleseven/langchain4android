@@ -159,9 +159,6 @@
     <string name="show_camera_info">Show Camera Info</string>
     <string name="show_face_debug">Show Face Debug</string>
     <string name="show_log_overlay">Show Log Overlay</string>
-    <string name="camera_memory">Camera State Memory</string>
-    <string name="camera_memory_desc">Remember the last camera parameters and toggles on next launch.</string>
-    <string name="reset_camera_to_default">Reset Camera to First-Install Defaults</string>
     <string name="aspect_ratio">Aspect Ratio</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>

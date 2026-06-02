@@ -238,7 +238,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
         }
         Logger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
         Logger.d(tag, userPrompt)
-        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=512]")
+        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
         // 3. 根据模式选择推理引擎
         val inferenceResult = when (agentMode) {
@@ -254,7 +254,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
                 val responseResult = localLlmEngine.generateWithSystem(
                     systemPrompt = systemPrompt,
                     userPrompt = userPrompt,
-                    maxTokens = 512
+                    maxTokens = 128
                 )
                 return@withContext responseResult.fold(
                     onSuccess = { rawResponse ->
@@ -285,7 +285,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
                     val fallbackResult = localLlmEngine.generateWithSystem(
                         systemPrompt = systemPrompt,
                         userPrompt = userPrompt,
-                        maxTokens = 512
+                        maxTokens = 128
                     )
                     return@withContext fallbackResult.fold(
                         onSuccess = { rawResponse ->
