@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 PicMe is a technology research project exploring two main tracks: **(1) AI Coding paradigm** — on-device Agent mechanisms and Agent-centric application architecture, and **(2) Audio/Video technology** — self-developed real-time beauty/filter/makeup engine ("BIG_BEAUTY") via OpenGL ES + EGL. The camera app serves as a concrete case study at the intersection of these two tracks. This project does not pursue commercialization; its core value lies in technical exploration and engineering practice.
 
 Key technological decisions:
-- **On-device Agent**: `domain/agent/` implements an Agent Runtime that maps natural language to device capabilities via Qwen3-0.6B running on MNN-LLM.
+- **On-device Agent**: `domain/agent/` implements an Agent Runtime that maps natural language to device capabilities via Qwen3-1.7B running on MNN-LLM.
 - **100% On-device**: All AI processing (LLM inference, face detection, OCR) runs locally — no cloud dependency.
 - **Self-developed Engine**: Full OpenGL ES + EGL pipeline (no third-party beauty SDKs); GPUPixel has been completely removed.
 
@@ -110,13 +110,13 @@ Solves makeup "flying off" caused by face detection (~10 fps) and rendering (30�
 User Input ("拍张照" / "换个冷调滤镜")
     → AiAgentUseCase (Facade)
     → AgentOrchestrator.processUserInput()
-    → LocalLlmEngine (Qwen3-0.6B via MNN-LLM, 100% on-device)
+    → LocalLlmEngine (Qwen3-1.7B via MNN-LLM, 100% on-device)
     → AgentCommandParser (LLM response → AgentCommand)
     → CapabilityRegistry (route to Capability)
     → CameraCapability (execute device operation)
 ```
 
-- **Model**: Qwen3-0.6B-MNN downloaded from ModelScope via `LlmModelDownloadManager` (resumable + SHA256).
+- **Model**: Qwen3-1.7B-MNN downloaded from ModelScope via `LlmModelDownloadManager` (resumable + SHA256).
 - **Capabilities**: `AdjustBeauty` (smooth/whiten/slim/eye/lip/blush/brow), `SwitchFilter`, `SwitchStyle`, `SwitchScene`, `SwitchRatio`, `AdjustExposure`, `AdjustZoom`, `FlipCamera`, `CapturePhoto`, `TextReply`.
 - **Privacy**: `PrivacyGuard` grades operations; all LLM inference runs 100% locally.
 - **Memory**: `MemoryManager` maintains conversation context for multi-turn dialogue.
