@@ -78,6 +78,7 @@ import com.picme.features.settings.agent.rememberSettingsAgentIntegration
 import com.picme.features.common.chat.rememberAgentChatConfig
 import com.picme.domain.agent.model.AgentScene
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
@@ -716,6 +717,43 @@ private fun AiAgentModeSelection(
     }
 }
 
+private fun ModelConfig.isAiAgentLlmCandidate(): Boolean {
+    val normalizedTags = tags.map { tag -> tag.lowercase(Locale.ROOT) }
+    val normalizedId = id.lowercase(Locale.ROOT)
+    val normalizedName = name.lowercase(Locale.ROOT)
+
+    val hasExcludedSignal = normalizedTags.any { tag ->
+        tag == "asr" ||
+            tag == "tts" ||
+            tag == "audio" ||
+            tag == "audiogen" ||
+            tag == "imagegen" ||
+            tag.contains("face")
+    } || normalizedId.contains("face") || normalizedId.contains("asr") || normalizedName.contains("face")
+
+    if (hasExcludedSignal) return false
+
+    val hasLlmTag = normalizedTags.any { tag ->
+        tag == "chat" ||
+            tag == "think" ||
+            tag == "reasoning" ||
+            tag == "llm" ||
+            tag == "language"
+    }
+    val hasLlmFile = files.any { file ->
+        val normalizedFile = file.lowercase(Locale.ROOT)
+        normalizedFile.contains("tokenizer") || normalizedFile.contains("llm")
+    }
+    val hasLlmId = normalizedId.contains("qwen") ||
+        normalizedId.contains("llm") ||
+        normalizedId.contains("chat") ||
+        normalizedId.contains("deepseek") ||
+        normalizedId.contains("mistral") ||
+        normalizedId.contains("gemma")
+
+    return hasLlmTag || hasLlmFile || hasLlmId
+}
+
 @Composable
 private fun AiAgentLocalModelSection(
     currentLocalModel: String,
@@ -725,10 +763,11 @@ private fun AiAgentLocalModelSection(
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
 
-    var downloadedModels by remember { mutableStateOf<List<com.picme.data.download.ModelConfig>>(emptyList()) }
+    var downloadedModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         downloadedModels = downloadManager.getDownloadedModels()
+            .filter { model -> model.isAiAgentLlmCandidate() }
     }
 
     // 当界面重新获得焦点时刷新已下载模型列表（从模型管理器返回后）
@@ -736,6 +775,14 @@ private fun AiAgentLocalModelSection(
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             downloadedModels = downloadManager.getDownloadedModels()
+                .filter { model -> model.isAiAgentLlmCandidate() }
+        }
+    }
+
+    LaunchedEffect(downloadedModels, currentLocalModel) {
+        val hasCurrentSelection = downloadedModels.any { model -> model.id == currentLocalModel }
+        if (!hasCurrentSelection && downloadedModels.isNotEmpty()) {
+            onLocalModelSelected(downloadedModels.first().id)
         }
     }
 
