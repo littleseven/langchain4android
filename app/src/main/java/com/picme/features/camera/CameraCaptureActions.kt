@@ -55,51 +55,66 @@ internal fun handleCaptureClick(
     coroutineScope: CoroutineScope? = null,
     cameraStateManager: CameraStateManager? = null
 ) {
-    // [状态机保护] 防止重复触发拍照导致状态机异常崩溃
-    cameraStateManager?.let { manager ->
-        if (!manager.canCapture()) {
-            Logger.w("PicMe:Camera", "Capture rejected: state=${manager.getState().name}")
-            return
-        }
-    }
-
     if (captureMode != MediaType.VIDEO) {
-        imageCapture?.let { capture ->
-            imageProcessor.takePhoto(
-                context = context,
-                imageCapture = capture,
-                viewModel = viewModel,
-                filter = selectedFilter,
-                beauty = beautySettings,
-                lensFacing = lensFacing,
-                mode = captureMode,
-                cachedFaces = cachedFaces,
-                beautyStrategy = beautyStrategy,
-                coroutineScope = coroutineScope,
-                onPhotoFinished = { success ->
-                    // [Day2 状态机] 拍照完成后转回 Previewing（或 Error）
-                    cameraStateManager?.let { manager ->
-                        try {
-                            if (success) {
-                                manager.transition(
-                                    CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
-                                )
-                            } else {
-                                manager.transition(
-                                    CameraStateMachine.Error("Photo processing failed", manager.getState())
-                                )
-                            }
-                        } catch (e: IllegalStateException) {
-                            // 状态转换失败，强制恢复
-                            Logger.w("PicMe:Camera", "State transition failed after photo: ${e.message}")
-                            manager.forceSetState(
-                                CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
-                            )
-                        }
+        cameraStateManager?.let { manager ->
+            val currentState = manager.getState()
+            when (currentState) {
+                is CameraStateMachine.Previewing -> {
+                    try {
+                        manager.transition(
+                            CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
+                        )
+                    } catch (e: IllegalStateException) {
+                        Logger.w("PicMe:Camera", "Failed to enter Capturing: ${e.message}")
+                        return
                     }
                 }
-            )
+                is CameraStateMachine.Capturing -> Unit
+                else -> {
+                    Logger.w("PicMe:Camera", "Capture rejected: state=${currentState.name}")
+                    return
+                }
+            }
         }
+
+        val capture = imageCapture
+        if (capture == null) {
+            Logger.w("PicMe:Camera", "Capture skipped: ImageCapture is null")
+            cameraStateManager?.forceSetState(
+                CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
+            )
+            return
+        }
+
+        imageProcessor.takePhoto(
+            context = context,
+            imageCapture = capture,
+            viewModel = viewModel,
+            filter = selectedFilter,
+            beauty = beautySettings,
+            lensFacing = lensFacing,
+            mode = captureMode,
+            cachedFaces = cachedFaces,
+            beautyStrategy = beautyStrategy,
+            coroutineScope = coroutineScope,
+            onPhotoFinished = { success ->
+                cameraStateManager?.let { manager ->
+                    if (!success) {
+                        Logger.w("PicMe:Camera", "Photo processing failed, recovering to Previewing")
+                    }
+                    try {
+                        manager.transition(
+                            CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
+                        )
+                    } catch (e: IllegalStateException) {
+                        Logger.w("PicMe:Camera", "State transition failed after photo: ${e.message}")
+                        manager.forceSetState(
+                            CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
+                        )
+                    }
+                }
+            }
+        )
         return
     }
 

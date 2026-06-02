@@ -27,8 +27,9 @@ class NcnnRoiDetector(
         private const val ENGINE_NAME = "NCNN-Vulkan"
 
         // [关键修复] 进程级全局锁：OpenMP 运行时初始化不是线程安全的，
-        // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程
-        private val NCNN_GLOBAL_LOCK = Any()
+        // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程。
+        // 注意：必须与 NcnnLandmarkDetector 使用同一个锁对象。
+        private val NCNN_GLOBAL_LOCK = NcnnRoiDetector::class.java
 
         // RetinaFace 9 个输出 blob 名称
         private val OUTPUT_NAMES = arrayOf(

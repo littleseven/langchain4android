@@ -445,7 +445,12 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         if (needMultiPass) {
             // [关键修复] 使用与预览完全一致的完整多 Pass 管线
             Log.d(TAG, "Photo needs multi-pass pipeline, using renderBeautyMultiPass")
-            renderer.renderBeautyMultiPass(width, height, skipCopyPass = true)
+            renderer.renderBeautyMultiPass(
+                width = width,
+                height = height,
+                outputFramebufferId = fboId,
+                skipCopyPass = true
+            )
         } else {
             // 无需多 Pass：直接主 Shader
             Log.d(TAG, "Photo does not need multi-pass, using MainShader directly")

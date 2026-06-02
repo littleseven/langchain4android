@@ -7,7 +7,6 @@ import android.graphics.RectF
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.picme.beauty.internal.facedetect.InsightFaceLandmarkDetector
 import com.picme.beauty.internal.facedetect.MnnLandmarkDetector
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,80 +21,6 @@ class LandmarkDetectorComparisonTest {
 
     companion object {
         private const val TAG = "PicMe:LandmarkCompare"
-    }
-
-    @Test
-    fun compareOnnxAndMnnLandmarks() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-
-        // 使用测试图片 (input_images/face.jpg)
-        val testImagePath = "face.jpg"
-        val bitmap = loadTestBitmap(context, testImagePath)
-            ?: throw IllegalStateException("Failed to load test image: $testImagePath")
-
-        println("========================================")
-        println("Landmark Detector Comparison Test")
-        println("Test image: ${bitmap.width}x${bitmap.height}")
-        println("========================================")
-
-        // 使用固定的 ROI 确保输入区域一致
-        val roi = RectF(200f, 150f, 600f, 750f)
-        println("Fixed ROI: $roi")
-
-        // 1. ONNX 路径测试
-        val onnxLandmarks = testOnnxLandmarks(context, bitmap, roi)
-
-        // 2. MNN 路径测试 (GPU)
-        val mnnGpuLandmarks = testMnnLandmarks(context, bitmap, roi, forceGpu = true)
-
-        // 3. MNN 路径测试 (CPU)
-        val mnnCpuLandmarks = testMnnLandmarks(context, bitmap, roi, forceGpu = false)
-
-        // 4. 对比结果
-        println("========================================")
-        println("Comparison Results:")
-        println("ONNX    points: ${onnxLandmarks?.size?.div(2) ?: 0}")
-        println("MNN-GPU points: ${mnnGpuLandmarks?.size?.div(2) ?: 0}")
-        println("MNN-CPU points: ${mnnCpuLandmarks?.size?.div(2) ?: 0}")
-
-        if (onnxLandmarks != null && mnnGpuLandmarks != null) {
-            val diff = calculatePointDiffs(onnxLandmarks, mnnGpuLandmarks, bitmap.width, bitmap.height)
-            println("ONNX vs MNN-GPU:")
-            printDiffSummary(diff)
-        }
-
-        if (onnxLandmarks != null && mnnCpuLandmarks != null) {
-            val diff = calculatePointDiffs(onnxLandmarks, mnnCpuLandmarks, bitmap.width, bitmap.height)
-            println("ONNX vs MNN-CPU:")
-            printDiffSummary(diff)
-        }
-
-        println("========================================")
-
-        bitmap.recycle()
-    }
-
-    private fun testOnnxLandmarks(context: Context, bitmap: Bitmap, roi: RectF): FloatArray? {
-        println("[ONNX] Initializing InsightFaceLandmarkDetector...")
-        val detector = InsightFaceLandmarkDetector(context)
-
-        println("[ONNX] Running detectLandmarks on ${bitmap.width}x${bitmap.height} bitmap...")
-        val landmarks = detector.detectLandmarks(bitmap, 1, roi)
-
-        if (landmarks != null) {
-            println("[ONNX] Detected ${landmarks.size / 2} points")
-            // 输出前 5 个点
-            for (i in 0 until minOf(5, landmarks.size / 2)) {
-                val px = landmarks[i * 2] * bitmap.width
-                val py = landmarks[i * 2 + 1] * bitmap.height
-                println("[ONNX] Point $i: ($px, $py)")
-            }
-        } else {
-            println("[ONNX] No landmarks detected")
-        }
-
-        detector.release()
-        return landmarks
     }
 
     private fun testMnnLandmarks(context: Context, bitmap: Bitmap, roi: RectF, forceGpu: Boolean): FloatArray? {
