@@ -49,6 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -622,6 +624,10 @@ fun CameraContent(
         }
     }
     val shutterSound = remember { MediaActionSound() }
+
+    // [三位一体反馈] 黑场动画状态
+    val shutterFlashAlpha = remember { Animatable(0f) }
+    var isShutterFlashing by remember { mutableStateOf(false) }
 
     var previewRebindSignal by remember { mutableIntStateOf(0) }
 
@@ -1676,6 +1682,14 @@ CameraPreviewContent(
                 }
             )
 
+            // [三位一体反馈] 黑场闪屏覆盖层
+            if (shutterFlashAlpha.value > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = shutterFlashAlpha.value))
+                )
+            }
         }
     },
     uiState = buildCameraPreviewUiState(
@@ -1764,7 +1778,9 @@ CameraPreviewContent(
             isRecording = isRecording
         )
     },
-            actions = buildCameraPreviewActions(
+            actions = run {
+                val currentView = LocalView.current
+                buildCameraPreviewActions(
                 onNavigateToSettings = onNavigateToSettings,
                 lensFacing = lensFacing,
 
@@ -1783,6 +1799,21 @@ CameraPreviewContent(
                 Logger.w("PicMe:Camera", "Capture click rejected: state=${cameraStateManager.getState().name}")
                 return@buildCameraPreviewActions
             }
+
+            // [三位一体反馈] 立即触发：触感 + 音效 + 黑场动画
+            currentView.performHapticFeedback(
+                android.view.HapticFeedbackConstants.LONG_PRESS,
+                android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+            )
+            shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+            coroutineScope.launch {
+                shutterFlashAlpha.snapTo(0.6f)
+                shutterFlashAlpha.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = 80)
+                )
+            }
+
             cameraStateManager.transition(
                 CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
             )
@@ -1829,6 +1860,7 @@ CameraPreviewContent(
         onToggleVoiceControl = onToggleVoiceControl,
         onToggleAiAgentPanel = { aiAgentChatVisible = !aiAgentChatVisible }
     )
+    }
 )
 
         if (debugUiEnabled && showLogOverlay) {
