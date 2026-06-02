@@ -2,7 +2,6 @@ package com.picme.domain.agent
 
 import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.SceneManager
 
 /**
@@ -25,27 +24,35 @@ class PromptBuilder(
     /**
      * 基础 Prompt 模板
      *
-     * 针对 Qwen3-0.6B 小模型优化：
-     * - 统一 JSON 输出（消除聊天/控制输出的矛盾）
-     * - Few-shot 示例
-     * - 参数范围明确
+     * 面向端侧小模型（Qwen3-1.7B）优化：
+     * - 输出约束显式化（只允许一行 JSON）
+     * - 导航语义强约束（避免 camera/gallery 混淆）
+     * - 字段名白名单（降低模型发明字段概率）
      */
     private val basePrompt = """
-你是PicMe助手小觅。只输出一行JSON。
-规则:1.控制格式{"action":"命令",参数...} 2.聊天{"action":"text_reply","message":"回复"} 3.禁止think标签和markdown 4.导航必须用navigate_to/go_back 5.无法理解{"action":"text_reply","message":"抱歉我没理解"}
+你是 PicMe 的本地 AI 助手小觅（端侧小模型）。
+任务：把用户输入转成一个 JSON 对象，只输出一行。
 
-命令:
+硬性规则：
+1) 只能输出 JSON 对象，不要解释、不要 markdown、不要 <think>、不要前后缀文本。
+2) 控制命令格式：{"action":"命令名", 参数...}
+3) 聊天或不确定：{"action":"text_reply","message":"中文简短回复"}
+4) 导航只能使用 navigate_to / go_back。
+5) destination 只能是：camera / gallery / settings / debug。
+6) 只允许这些参数键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message。
+7) 不要输出未定义字段；不需要的参数不要输出。
+8) 用户说“去相机/回相机/打开相机/去拍照”时，必须输出 destination="camera"。
 """.trimIndent()
 
     /**
      * 场景特定提示
      */
     private val scenePrompts = mapOf(
-        SceneManager.Scene.CAMERA to "当前相机页:拍照/录像/翻转/美颜/滤镜/风格/变焦/曝光/比例/模式/导航",
-        SceneManager.Scene.GALLERY to "当前相册页:查看/删除/分享/搜索/视图切换/选择/导航",
-        SceneManager.Scene.SETTINGS to "当前设置页:主题/语言/模型下载/人脸引擎/开关设置",
-        SceneManager.Scene.DEBUG to "当前调试页",
-        SceneManager.Scene.UNKNOWN to "当前页面未知，只能导航"
+        SceneManager.Scene.CAMERA to "当前相机页：优先相机控制。仅当用户明确说去相册/去设置/返回时再导航。",
+        SceneManager.Scene.GALLERY to "当前相册页：优先相册操作。用户说去相机/去拍照时必须导航到 camera。",
+        SceneManager.Scene.SETTINGS to "当前设置页：优先设置操作。用户说去相机/回相机/打开相机时必须导航到 camera，不可导航到 gallery。",
+        SceneManager.Scene.DEBUG to "当前调试页：优先调试相关；普通控制建议导航回 camera 或 settings。",
+        SceneManager.Scene.UNKNOWN to "当前页面未知：优先使用导航或 text_reply。"
     )
 
     /**
@@ -62,27 +69,22 @@ class PromptBuilder(
         val currentScene = sceneManager.currentScene.value
 
         return buildString {
-            // 1. 基础 Prompt
             appendLine(basePrompt)
-
-            // 2. 场景特定提示
             appendLine()
             appendLine("【当前页面】")
             appendLine(scenePrompts[currentScene] ?: scenePrompts[SceneManager.Scene.UNKNOWN])
-
-            // 3. Capability 详细说明（使用压缩版）
             appendLine()
-            appendLine("【命令】")
-            appendLine(buildCapabilitiesSection())
-
-            // 4. 当前状态
+            appendLine("【可用命令】")
+            appendLine(buildCapabilitiesSection(scene = currentScene))
             appendLine()
             appendLine("【当前状态】")
-            appendLine("场景: ${currentScene.name}")
-            appendLine("美颜: 磨皮=${context.beautySettings.smoothing}, 美白=${context.beautySettings.whitening}")
-            appendLine("滤镜: ${context.filterType.name}, 风格: ${context.styleFilter.name}")
-            appendLine("变焦: ${context.zoomRatio}x, 曝光: ${context.exposureCompensation}")
-            appendLine("模式: ${context.captureMode.name}")
+            appendLine(buildStateSection(context, currentScene))
+
+            if (capabilities.isNotEmpty()) {
+                appendLine()
+                appendLine("【已激活能力】")
+                appendLine(capabilities.joinToString(separator = ", ") { it.name })
+            }
         }
     }
 
@@ -99,7 +101,7 @@ class PromptBuilder(
             appendLine(systemPrompt)
             appendLine()
 
-            // 添加历史对话（简化版，避免超长）
+            // 历史压缩为最近 3 轮，避免本地模型上下文污染
             history.takeLast(3).forEach { (user, assistant) ->
                 appendLine("user:")
                 appendLine(user)
@@ -122,34 +124,31 @@ class PromptBuilder(
      * 构建 L2 Batch 模式 Prompt
      *
      * 输出格式为 JSON 数组，每个元素是一个命令对象。
-     *
-     * @param userInput 用户输入
-     * @param context 当前 Agent 上下文
-     * @return Batch 模式 system prompt
      */
     fun buildBatchPrompt(userInput: String, context: AgentContext): String {
         return buildString {
-            appendLine("你是 PicMe 相机的 AI 助手小觅。用户通过语音或文字与你交互。")
+            appendLine("你是 PicMe 的指令解析器。把用户输入解析为 JSON 数组。")
             appendLine()
-            appendLine("【绝对规则 - 必须遵守】")
-            appendLine("1. 无论用户要求什么，你的回复永远只输出一个 JSON 数组，不要任何其他文字、解释、标点或换行")
-            appendLine("2. 数组中每个元素是一个命令对象: {\"action\":\"命令名\", 参数...}")
-            appendLine("3. 命令按数组顺序依次执行")
-            appendLine("4. 如果用户只是聊天，输出: [{\"action\":\"text_reply\",\"message\":\"用中文友好回复\"}]")
-            appendLine("5. 绝对不要输出 <think> 标签或思考过程")
-            appendLine("6. 绝对不要输出 markdown 代码块 ```")
+            appendLine("输出硬规则：")
+            appendLine("1. 仅输出一个 JSON 数组，禁止任何解释、禁止 markdown、禁止 <think>。")
+            appendLine("2. 数组元素格式：{\"action\":\"命令\", 参数...}。")
+            appendLine("3. 用户是闲聊时，输出 [{\"action\":\"text_reply\",\"message\":\"...\"}]。")
+            appendLine("4. 导航只能是 navigate_to / go_back，destination 只能是 camera|gallery|settings|debug。")
+            appendLine("5. 字段名必须使用既定键，不要创造新字段。")
             appendLine()
-            appendLine(buildStateSection(context))
+            appendLine("【当前状态】")
+            appendLine(buildStateSection(context, sceneManager.currentScene.value))
             appendLine()
-            appendLine(buildCapabilitiesSection())
+            appendLine("【命令全集】")
+            appendLine(buildCapabilitiesSection(scene = null))
             appendLine()
-            appendLine("【示例 - 严格模仿】")
-            appendLine("用户: 磨皮开到60，美白30，然后拍一张")
-            appendLine("→ [{\"action\":\"adjust_beauty\",\"smoothing\":60},{\"action\":\"adjust_beauty\",\"whitening\":30},{\"action\":\"capture\"}]")
+            appendLine("【示例】")
+            appendLine("用户: 去相机")
+            appendLine("→ [{\"action\":\"navigate_to\",\"destination\":\"camera\"}]")
+            appendLine("用户: 磨皮60并拍一张")
+            appendLine("→ [{\"action\":\"adjust_beauty\",\"smoothing\":60},{\"action\":\"capture\"}]")
             appendLine("用户: 你好")
-            appendLine("→ [{\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅！\"}]")
-            appendLine("用户: 切徕卡黑白再拍照")
-            appendLine("→ [{\"action\":\"switch_filter\",\"filter\":\"LEICA_BW\"},{\"action\":\"capture\"}]")
+            appendLine("→ [{\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅\"}]")
         }
     }
 
@@ -157,46 +156,29 @@ class PromptBuilder(
      * 构建 L3 Plan 模式 Prompt
      *
      * 输出格式为 ExecutionPlan JSON。
-     *
-     * @param userInput 用户输入
-     * @param context 当前 Agent 上下文
-     * @return Plan 模式 system prompt
      */
     fun buildPlanPrompt(userInput: String, context: AgentContext): String {
         return buildString {
-            appendLine("你是 PicMe 相机的 AI 助手小觅。用户可能提出包含条件或复杂步骤的请求。")
+            appendLine("你是 PicMe 的任务编排器。把用户复杂请求转成 ExecutionPlan JSON。")
             appendLine()
-            appendLine("【输出格式 - 严格 JSON】")
-            appendLine("{")
-            appendLine("  \"plan_id\": \"plan_1\",")
-            appendLine("  \"description\": \"计划描述\",")
-            appendLine("  \"steps\": [")
-            appendLine("    {\"step\":1, \"condition\":\"条件表达式或null\", \"wait_condition\":null, \"repeat_count\":1, \"action\":{\"action\":\"命令名\",...}, \"description\":\"步骤描述\", \"delayMs\":500},")
-            appendLine("    {\"step\":2, \"condition\":null, \"wait_condition\":null, \"repeat_count\":1, \"action\":{\"action\":\"命令名\",...}, \"description\":\"步骤描述\", \"delayMs\":0}")
-            appendLine("  ]")
-            appendLine("}")
+            appendLine("输出硬规则：")
+            appendLine("1. 只能输出一个 JSON 对象，禁止解释、禁止 markdown、禁止 <think>。")
+            appendLine("2. 顶层字段固定：plan_id, description, steps。")
+            appendLine("3. steps 每项字段固定：step, action, condition, wait_condition, repeat_count, description, delayMs。")
+            appendLine("4. action 字段必须是命令对象：{\"action\":\"...\", ...}。")
+            appendLine("5. wait_condition 仅支持：duration(delay_ms), face_detected(timeout_ms), smile_detected(timeout_ms), user_confirm(prompt)。")
+            appendLine("6. repeat_count >= 1，delayMs >= 0。")
+            appendLine("7. 导航动作严格使用 navigate_to/go_back。")
             appendLine()
-            appendLine("【规则】")
-            appendLine("1. condition 字段：需要条件判断时填写描述性条件，无条件时填 null")
-            appendLine("2. wait_condition 字段：需要等待条件时填写， null 表示不等待。当前支持的等待类型：")
-            appendLine("   - {\"type\":\"duration\",\"delay_ms\":1000} 等待固定时长（毫秒）")
-            appendLine("   - {\"type\":\"face_detected\",\"timeout_ms\":10000} 等待检测到人脸")
-            appendLine("   - {\"type\":\"user_confirm\",\"prompt\":\"请确认\"} 等待用户确认（预留）")
-            appendLine("3. repeat_count 字段：同一动作重复执行次数，默认 1。如\"连拍3张\"则 repeat_count=3")
-            appendLine("4. delayMs 字段：给 UI 反应时间的延迟（毫秒），拍照建议 500ms，其他 0ms")
-            appendLine("5. 绝对不要输出任何其他文字")
+            appendLine("【当前状态】")
+            appendLine(buildStateSection(context, sceneManager.currentScene.value))
             appendLine()
-            appendLine(buildStateSection(context))
+            appendLine("【命令全集】")
+            appendLine(buildCapabilitiesSection(scene = null, forPlan = true))
             appendLine()
-            appendLine(buildCapabilitiesSection())
-            appendLine()
-            appendLine("【示例1：条件+连拍】")
-            appendLine("用户: 如果是后置摄像头就切前置，然后设置磨皮80美白60，最后拍一张")
-            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切换前置并拍摄人像\",\"steps\":[{\"step\":1,\"condition\":\"当前是后置摄像头\",\"wait_condition\":null,\"repeat_count\":1,\"action\":{\"action\":\"flip_camera\"},\"description\":\"切换到前置摄像头\",\"delayMs\":300},{\"step\":2,\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"action\":{\"action\":\"adjust_beauty\",\"smoothing\":80,\"whitening\":60},\"description\":\"设置人像美颜参数\",\"delayMs\":0},{\"step\":3,\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"action\":{\"action\":\"capture\"},\"description\":\"拍照\",\"delayMs\":500}]}")
-            appendLine()
-            appendLine("【示例2：等待+连拍】")
-            appendLine("用户: 打开美颜，然后脸再瘦一点，等1秒后连拍三张")
-            appendLine("→ {\"plan_id\":\"plan_2\",\"description\":\"开启美颜瘦脸后连拍\",\"steps\":[{\"step\":1,\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"action\":{\"action\":\"adjust_beauty\",\"smoothing\":50,\"whitening\":50,\"slim_face\":30,\"enabled\":true},\"description\":\"打开美颜\",\"delayMs\":0},{\"step\":2,\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"action\":{\"action\":\"adjust_beauty\",\"slim_face\":50},\"description\":\"瘦脸再加强\",\"delayMs\":0},{\"step\":3,\"condition\":null,\"wait_condition\":{\"type\":\"duration\",\"delay_ms\":1000},\"repeat_count\":1,\"action\":{\"action\":\"text_reply\",\"message\":\"准备连拍\"},\"description\":\"等待1秒\",\"delayMs\":0},{\"step\":4,\"condition\":null,\"wait_condition\":null,\"repeat_count\":3,\"action\":{\"action\":\"capture\"},\"description\":\"连拍3张\",\"delayMs\":500}]}")
+            appendLine("【示例】")
+            appendLine("用户: 去相机后等1秒连拍3张")
+            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切到相机后连拍\",\"steps\":[{\"step\":1,\"action\":{\"action\":\"navigate_to\",\"destination\":\"camera\"},\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"description\":\"切换到相机\",\"delayMs\":0},{\"step\":2,\"action\":{\"action\":\"text_reply\",\"message\":\"准备连拍\"},\"condition\":null,\"wait_condition\":{\"type\":\"duration\",\"delay_ms\":1000},\"repeat_count\":1,\"description\":\"等待1秒\",\"delayMs\":0},{\"step\":3,\"action\":{\"action\":\"capture\"},\"condition\":null,\"wait_condition\":null,\"repeat_count\":3,\"description\":\"连拍3张\",\"delayMs\":500}]}")
         }
     }
 
@@ -204,11 +186,6 @@ class PromptBuilder(
      * 构建 L4 Chat 模式 Prompt
      *
      * 纯文本对话，不输出 JSON。
-     *
-     * @param userInput 用户输入
-     * @param context 当前 Agent 上下文
-     * @param history 历史对话记录（可选）
-     * @return Chat 模式 system prompt
      */
     fun buildChatPrompt(
         userInput: String,
@@ -216,20 +193,21 @@ class PromptBuilder(
         history: List<String> = emptyList()
     ): String {
         return buildString {
-            appendLine("你是 PicMe 相机的 AI 助手小觅。用户的问题可能无法直接映射到相机命令，请友好回复。")
+            appendLine("你是 PicMe 的摄影助手小觅。当前是聊天模式。")
             appendLine()
-            appendLine("【规则】")
-            appendLine("1. 用中文友好、简洁地回复")
-            appendLine("2. 如果用户问你能做什么，列出你可以控制的相机功能")
-            appendLine("3. 如果用户的问题与相机无关，礼貌地引导回相机功能")
-            appendLine("4. 绝对不要输出 JSON 格式")
+            appendLine("回复规则：")
+            appendLine("1. 只输出中文自然语言，不要 JSON，不要 markdown。")
+            appendLine("2. 语气简洁友好，优先给出可执行建议。")
+            appendLine("3. 用户问能力范围时，聚焦相机/相册/设置可控能力。")
+            appendLine("4. 与产品无关的问题，礼貌引导回拍摄与编辑场景。")
             appendLine()
-            appendLine(buildStateSection(context))
+            appendLine("【当前状态】")
+            appendLine(buildStateSection(context, sceneManager.currentScene.value))
 
             if (history.isNotEmpty()) {
                 appendLine()
-                appendLine("【历史对话】")
-                history.forEachIndexed { index, message ->
+                appendLine("【最近对话】")
+                history.takeLast(5).forEachIndexed { index, message ->
                     appendLine("${index + 1}. $message")
                 }
             }
@@ -238,37 +216,82 @@ class PromptBuilder(
 
     // ── 内部辅助方法 ────────────────────────────────────────────
 
-    private fun buildStateSection(context: AgentContext): String {
+    private fun buildStateSection(
+        context: AgentContext,
+        currentScene: SceneManager.Scene? = null
+    ): String {
+        val sceneName = currentScene?.name ?: context.scene.name
         return buildString {
-            append("状态:")
-            append("美颜${if (context.beautySettings.enabled) "开" else "关"}")
-            append("磨${context.beautySettings.smoothing.toInt()}")
-            append("白${context.beautySettings.whitening.toInt()}")
-            append("瘦${context.beautySettings.slimFace.toInt()}")
-            append("眼${context.beautySettings.bigEyes.toInt()}")
-            append("唇${context.beautySettings.lipColor.toInt()}")
-            append("腮${context.beautySettings.blush.toInt()}")
-            append("眉${context.beautySettings.eyebrow.toInt()}")
-            append("滤${context.filterType.name}")
-            append("风${context.styleFilter.name}")
-            append("焦${context.zoomRatio}x")
-            append("曝${context.exposureCompensation}")
-            appendLine("模${context.captureMode.name}")
+            append("scene=")
+            append(sceneName)
+            append(", beauty=")
+            append(if (context.beautySettings.enabled) "on" else "off")
+            append(", smoothing=")
+            append(context.beautySettings.smoothing.toInt())
+            append(", whitening=")
+            append(context.beautySettings.whitening.toInt())
+            append(", slim_face=")
+            append(context.beautySettings.slimFace.toInt())
+            append(", big_eyes=")
+            append(context.beautySettings.bigEyes.toInt())
+            append(", lip_color=")
+            append(context.beautySettings.lipColor.toInt())
+            append(", blush=")
+            append(context.beautySettings.blush.toInt())
+            append(", eyebrow=")
+            append(context.beautySettings.eyebrow.toInt())
+            append(", filter=")
+            append(context.filterType.name)
+            append(", style=")
+            append(context.styleFilter.name)
+            append(", zoom=")
+            append(context.zoomRatio)
+            append(", exposure=")
+            append(context.exposureCompensation)
+            append(", mode=")
+            append(context.captureMode.name)
+            append(", recording=")
+            append(if (context.isRecording) "1" else "0")
         }
     }
 
-    private fun buildCapabilitiesSection(): String {
+    private fun buildCapabilitiesSection(
+        scene: SceneManager.Scene? = null,
+        forPlan: Boolean = false
+    ): String {
+        val includeCamera = scene == null || scene == SceneManager.Scene.CAMERA
+        val includeGallery = scene == null || scene == SceneManager.Scene.GALLERY
+        val includeSettings = scene == null || scene == SceneManager.Scene.SETTINGS
+
         return buildString {
-            appendLine("命令:adjust_beauty(smoothing/whitening/slim_face/big_eyes/lip_color/blush/eyebrow)")
-            appendLine("switch_filter(NONE/LEICA_CLASSIC/LEICA_VIBRANT/LEICA_BW/FILM_GOLD/FILM_FUJI/VINTAGE/COOL/WARM)")
-            appendLine("switch_style(NONE/TOON/SKETCH/POSTERIZE/EMBOSS/CROSSHATCH)")
-            appendLine("switch_scene(night/moon/none) switch_ratio(4:3/16:9/full) adjust_exposure(-2~2) adjust_zoom(0.5~10)")
-            appendLine("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PORTRAIT/PRO/DOCUMENT)")
-            appendLine("navigate_to(camera/gallery/settings/debug) go_back text_reply")
-            appendLine("映射:无/NONE 徕卡经典/CLASSIC 鲜艳/VIBRANT 黑白/BW 胶片金/GOLD 富士/FUJI 复古/VINTAGE")
-            appendLine("卡通/TOON 素描/SKETCH 拍照/PHOTO 录像/VIDEO 人像/PORTRAIT 专业/PRO 文档/DOCUMENT")
-            appendLine("夜景/night 月亮/moon 4比3/4:3 16比9/16:9 全屏/full 相机/camera 相册/gallery 设置/settings")
-            appendLine("导航:去相册→{\"action\":\"navigate_to\",\"destination\":\"gallery\"} 去相机→camera 返回→go_back")
+            appendLine("action 白名单（只能从下列 action 选择）：")
+
+            if (includeCamera) {
+                appendLine("- camera: capture, toggle_recording, flip_camera, switch_mode")
+                appendLine("- camera_adjust: adjust_beauty, adjust_exposure, adjust_zoom")
+                appendLine("- camera_style: switch_filter, switch_style, switch_scene, switch_ratio")
+            }
+
+            if (includeGallery) {
+                appendLine("- gallery: view_media, delete_media, share_media, select_media, search_media, switch_view_mode, favorite_media")
+            }
+
+            if (includeSettings) {
+                appendLine("- settings: change_theme, change_language, download_model, switch_face_engine, toggle_setting")
+            }
+
+            appendLine("- navigation: navigate_to(destination=camera|gallery|settings|debug), go_back")
+            appendLine("- fallback: text_reply(message)")
+            appendLine("参数约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
+            appendLine("滤镜: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
+            appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
+            appendLine("导航映射: 去相机/回相机/打开相机/去拍照->camera; 去相册/打开相册->gallery; 去设置/打开设置->settings; 返回/上一页/后退->go_back")
+            appendLine("导航示例: {\"action\":\"navigate_to\",\"destination\":\"camera\"}")
+
+            if (forPlan) {
+                appendLine("Plan 字段约束: step(Int), action(Object), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")
+                appendLine("wait_condition 示例: {\"type\":\"duration\",\"delay_ms\":1000}")
+            }
         }
     }
 }

@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -76,6 +77,10 @@ import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.CameraAspectRatioMode
+import com.picme.domain.model.CameraGridMode
+import com.picme.domain.model.CameraMemoryState
+import com.picme.domain.model.CameraSceneMode
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
@@ -110,6 +115,42 @@ enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
 enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
 enum class BeautyPreviewStatus { ACTIVE, SKIPPED }
+
+private fun CameraSceneMode.toScenePreset(): ScenePreset = when (this) {
+    CameraSceneMode.NONE -> ScenePreset.NONE
+    CameraSceneMode.NIGHT -> ScenePreset.NIGHT
+    CameraSceneMode.MOON -> ScenePreset.MOON
+}
+
+private fun ScenePreset.toCameraSceneMode(): CameraSceneMode = when (this) {
+    ScenePreset.NONE -> CameraSceneMode.NONE
+    ScenePreset.NIGHT -> CameraSceneMode.NIGHT
+    ScenePreset.MOON -> CameraSceneMode.MOON
+}
+
+private fun CameraGridMode.toGridType(): GridType = when (this) {
+    CameraGridMode.NONE -> GridType.NONE
+    CameraGridMode.THIRDS -> GridType.THIRDS
+    CameraGridMode.GOLDEN -> GridType.GOLDEN
+}
+
+private fun GridType.toCameraGridMode(): CameraGridMode = when (this) {
+    GridType.NONE -> CameraGridMode.NONE
+    GridType.THIRDS -> CameraGridMode.THIRDS
+    GridType.GOLDEN -> CameraGridMode.GOLDEN
+}
+
+private fun CameraAspectRatioMode.toAspectRatio(): Int = when (this) {
+    CameraAspectRatioMode.RATIO_4_3 -> AspectRatio.RATIO_4_3
+    CameraAspectRatioMode.RATIO_16_9 -> AspectRatio.RATIO_16_9
+    CameraAspectRatioMode.FULL -> AspectRatio.RATIO_FULL
+}
+
+private fun Int.toCameraAspectRatioMode(): CameraAspectRatioMode = when (this) {
+    AspectRatio.RATIO_4_3 -> CameraAspectRatioMode.RATIO_4_3
+    AspectRatio.RATIO_16_9 -> CameraAspectRatioMode.RATIO_16_9
+    else -> CameraAspectRatioMode.FULL
+}
 
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 
@@ -605,7 +646,7 @@ fun CameraContent(
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
 
     // [Day1 线程隔离] 初始化线程注册表（幂等，可安全多次调用）
-    remember {
+    LaunchedEffect(Unit) {
         CameraThreadRegistry.initialize()
     }
 
@@ -963,6 +1004,78 @@ fun CameraContent(
     var currentScene by remember { mutableStateOf(ScenePreset.NONE) }
     var currentGrid by remember { mutableStateOf(GridType.NONE) }
 
+    var cameraControl: CameraControl? by remember { mutableStateOf(null) }
+    var zoomRatio by remember { mutableFloatStateOf(1f) }
+    var minZoomRatio by remember { mutableFloatStateOf(1f) }
+    var maxZoomRatio by remember { mutableFloatStateOf(1f) }
+
+    val cameraMemoryState by userPreferencesRepository.cameraMemoryStateFlow.collectAsState(initial = null)
+    var isCameraMemoryHydrated by remember { mutableStateOf(false) }
+
+    LaunchedEffect(cameraMemoryState) {
+        val memoryState = cameraMemoryState ?: return@LaunchedEffect
+
+        lensFacing = if (memoryState.useFrontCamera) {
+            CameraSelector.LENS_FACING_FRONT
+        } else {
+            CameraSelector.LENS_FACING_BACK
+        }
+        captureMode = memoryState.captureMode
+        selectedFilter = memoryState.selectedFilter
+        beautySettings = resolveNextBeautySettings(
+            currentSettings = beautySettings,
+            updatedSettings = memoryState.beautySettings.copy(
+                colorFilter = memoryState.selectedFilter,
+                styleFilter = memoryState.selectedStyleFilter
+            )
+        )
+        aspectRatio = memoryState.aspectRatio.toAspectRatio()
+        zoomRatio = memoryState.zoomRatio
+        exposureCompensation = memoryState.exposureCompensation
+        whiteBalanceMode = memoryState.whiteBalanceMode
+        currentScene = memoryState.sceneMode.toScenePreset()
+        currentGrid = memoryState.gridMode.toGridType()
+
+        isCameraMemoryHydrated = true
+    }
+
+    LaunchedEffect(
+        isCameraMemoryHydrated,
+        lensFacing,
+        captureMode,
+        selectedFilter,
+        beautySettings,
+        aspectRatio,
+        zoomRatio,
+        exposureCompensation,
+        whiteBalanceMode,
+        currentScene,
+        currentGrid
+    ) {
+        if (!isCameraMemoryHydrated) {
+            return@LaunchedEffect
+        }
+
+        userPreferencesRepository.updateCameraMemoryState(
+            CameraMemoryState(
+                useFrontCamera = lensFacing == CameraSelector.LENS_FACING_FRONT,
+                captureMode = captureMode,
+                selectedFilter = selectedFilter,
+                selectedStyleFilter = beautySettings.styleFilter,
+                beautySettings = beautySettings.copy(
+                    colorFilter = selectedFilter,
+                    styleFilter = beautySettings.styleFilter
+                ),
+                aspectRatio = aspectRatio.toCameraAspectRatioMode(),
+                zoomRatio = zoomRatio,
+                exposureCompensation = exposureCompensation,
+                whiteBalanceMode = whiteBalanceMode,
+                sceneMode = currentScene.toCameraSceneMode(),
+                gridMode = currentGrid.toCameraGridMode()
+            )
+        )
+    }
+
     var isStable by remember { mutableStateOf(true) }
     val sensorManager = remember {
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -999,11 +1112,6 @@ fun CameraContent(
     var recording: Recording? by remember { mutableStateOf(null) }
 
     val beautyVideoRecorder = remember { BeautyVideoRecorder() }
-
-    var cameraControl: CameraControl? by remember { mutableStateOf(null) }
-    var zoomRatio by remember { mutableFloatStateOf(1f) }
-    var minZoomRatio by remember { mutableFloatStateOf(1f) }
-    var maxZoomRatio by remember { mutableFloatStateOf(1f) }
 
     // Agent 命令处理器：提取到顶层确保语音命令无需打开面板即可执行
     val agentCommandHandler: (AiAgentCommand) -> Unit = agentCommandHandler@{ cmd ->
@@ -1220,7 +1328,12 @@ fun CameraContent(
             }
         }
         val filter = IntentFilter(CameraTestCommandReceiver.ACTION_TEST_COMMAND)
-        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
         Logger.i("PicMe:CameraTest", "Test command receiver registered dynamically")
 
         onDispose {
@@ -1505,6 +1618,24 @@ fun CameraContent(
     }
 
     // 第二阶段瘦身后：实时预览在 runRealtimeBeautyPreviewLoop 中统一处理。
+
+    LaunchedEffect(cameraControl, minZoomRatio, maxZoomRatio, isCameraMemoryHydrated) {
+        val control = cameraControl ?: return@LaunchedEffect
+        if (!isCameraMemoryHydrated) {
+            return@LaunchedEffect
+        }
+
+        val clampedZoom = zoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
+        if (clampedZoom != zoomRatio) {
+            zoomRatio = clampedZoom
+        }
+        runCatching {
+            control.setZoomRatio(clampedZoom)
+            control.setExposureCompensationIndex(exposureCompensation.coerceIn(-2, 2))
+        }.onFailure { error ->
+            Logger.w("Camera", "Failed to apply persisted camera control values", error)
+        }
+    }
 
     LaunchedEffect(cameraControl, previewView.width, previewView.height, lensFacing) {
         val control = cameraControl ?: return@LaunchedEffect

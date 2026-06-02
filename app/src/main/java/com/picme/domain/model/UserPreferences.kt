@@ -1,5 +1,9 @@
 package com.picme.domain.model
 
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
+
 /**
  * 主题模式（领域模型，与 Android 平台无关）
  */
@@ -154,6 +158,38 @@ enum class AiAgentPrivacyLevel {
     STRICT,      // 绝对本地，禁止任何远程调用
     PERMISSIVE   // 允许远程（需用户显式确认）
 }
+
+enum class CameraSceneMode {
+    NONE,
+    NIGHT,
+    MOON
+}
+
+enum class CameraGridMode {
+    NONE,
+    THIRDS,
+    GOLDEN
+}
+
+enum class CameraAspectRatioMode {
+    RATIO_4_3,
+    RATIO_16_9,
+    FULL
+}
+
+data class CameraMemoryState(
+    val useFrontCamera: Boolean = false,
+    val captureMode: MediaType = MediaType.PHOTO,
+    val selectedFilter: FilterType = FilterType.NONE,
+    val selectedStyleFilter: StyleFilter = StyleFilter.NONE,
+    val beautySettings: BeautySettings = BeautySettings(enabled = false),
+    val aspectRatio: CameraAspectRatioMode = CameraAspectRatioMode.FULL,
+    val zoomRatio: Float = 1f,
+    val exposureCompensation: Int = 0,
+    val whiteBalanceMode: Int = 0,
+    val sceneMode: CameraSceneMode = CameraSceneMode.NONE,
+    val gridMode: CameraGridMode = CameraGridMode.NONE
+)
 
 /**
  * 模型分类标签（基于 MNN model_market.json 的 tagTranslations）

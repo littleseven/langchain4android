@@ -601,6 +601,11 @@ class SettingsViewModel(
         }
     }
 
+    fun resetCameraMemoryState() {
+        viewModelScope.launch {
+            repository.resetCameraMemoryState()
+        }
+    }
 }
 
 class SettingsViewModelFactory(

@@ -167,4 +167,16 @@
 <string name="landmark_compatibility">GPUPixel</string>
 <string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
 <string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
+<string name="face_detection_advanced">人脸检测高级配置</string>
+<string name="settings_face_detection_advanced_desc">控制人脸关键点和动态检测节奏，平衡性能与精度。</string>
+    <string name="asr_model_manager">ASR 模型管理</string>
+    <string name="asr_model_manager_desc">下载和管理端侧语音识别模型。</string>
+    <string name="model_download_notification_title">模型下载进行中</string>
+    <string name="model_download_notification_single">正在下载 %1$s（%2$d%%）</string>
+    <string name="model_download_notification_multi">正在下载 %1$d 个模型（%2$d%%）</string>
+    <string name="model_download_notification_channel_desc">用于在后台持续执行模型下载</string>
+
+<string name="camera_memory">相机状态记忆</string>
+<string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
+<string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
 </resources>

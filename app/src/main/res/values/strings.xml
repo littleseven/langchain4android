@@ -159,6 +159,9 @@
     <string name="show_camera_info">Show Camera Info</string>
     <string name="show_face_debug">Show Face Debug</string>
     <string name="show_log_overlay">Show Log Overlay</string>
+    <string name="camera_memory">Camera State Memory</string>
+    <string name="camera_memory_desc">Remember the last camera parameters and toggles on next launch.</string>
+    <string name="reset_camera_to_default">Reset Camera to First-Install Defaults</string>
     <string name="aspect_ratio">Aspect Ratio</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>
@@ -328,6 +331,10 @@
     <string name="local_asr_model_fallback">No local ASR model downloaded. Tap below to download.</string>
     <string name="asr_model_manager">ASR Model Manager</string>
     <string name="asr_model_manager_desc">Download and manage on-device speech recognition models.</string>
+    <string name="model_download_notification_title">Model download in progress</string>
+    <string name="model_download_notification_single">Downloading %1$s (%2$d%%)</string>
+    <string name="model_download_notification_multi">Downloading %1$d models (%2$d%%)</string>
+    <string name="model_download_notification_channel_desc">Keeps model downloads running in background</string>
 
     <!-- Model Manager -->
     <string name="model_type_asr">ASR</string>
