@@ -55,6 +55,14 @@ internal fun handleCaptureClick(
     coroutineScope: CoroutineScope? = null,
     cameraStateManager: CameraStateManager? = null
 ) {
+    // [状态机保护] 防止重复触发拍照导致状态机异常崩溃
+    cameraStateManager?.let { manager ->
+        if (!manager.canCapture()) {
+            Logger.w("PicMe:Camera", "Capture rejected: state=${manager.getState().name}")
+            return
+        }
+    }
+
     if (captureMode != MediaType.VIDEO) {
         imageCapture?.let { capture ->
             imageProcessor.takePhoto(
