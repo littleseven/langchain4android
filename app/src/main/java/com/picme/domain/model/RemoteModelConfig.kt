@@ -1,13 +1,22 @@
 package com.picme.domain.model
 
 /**
+ * 远程 API 协议类型
+ */
+enum class RemoteProtocol {
+    CLAUDE,
+    OPENAI
+}
+
+/**
  * 远程模型配置数据类
  *
- * 封装单个远程模型的完整配置信息，包括模型ID、API Key和基础URL。
+ * 封装单个远程模型的完整配置信息，包括模型ID、协议类型、API Key和基础URL。
  * 用于在设置页以模型为纬度管理远程推理配置。
  */
 data class RemoteModelConfig(
     val modelId: String,
+    val protocol: RemoteProtocol = RemoteProtocol.OPENAI,
     val apiKey: String = "",
     val baseUrl: String = ""
 ) {
@@ -21,14 +30,17 @@ data class RemoteModelConfig(
         val PREDEFINED_MODELS = listOf(
             RemoteModelConfig(
                 modelId = "kimi-for-coding",
+                protocol = RemoteProtocol.CLAUDE,
                 baseUrl = "https://api.kimi.com/coding/v1/"
             ),
             RemoteModelConfig(
                 modelId = "kimi-k2.6",
+                protocol = RemoteProtocol.OPENAI,
                 baseUrl = "https://tokenhub.tencentmaas.com/v1/"
             ),
             RemoteModelConfig(
                 modelId = "deepseek-v4-flash",
+                protocol = RemoteProtocol.OPENAI,
                 baseUrl = "https://tokenhub.tencentmaas.com/v1/"
             )
         )
@@ -59,11 +71,38 @@ data class RemoteModelConfigs(
     }
 
     /**
-     * 更新指定模型的配置
+     * 更新指定模型的配置（通过 modelId 匹配）
      */
     fun updateConfig(config: RemoteModelConfig): RemoteModelConfigs {
         val updated = configs.map {
             if (it.modelId == config.modelId) config else it
+        }
+        return copy(configs = updated)
+    }
+
+    /**
+     * 添加新模型配置
+     */
+    fun addConfig(config: RemoteModelConfig): RemoteModelConfigs {
+        if (configs.any { it.modelId == config.modelId }) {
+            return this
+        }
+        return copy(configs = configs + config)
+    }
+
+    /**
+     * 删除模型配置
+     */
+    fun removeConfig(modelId: String): RemoteModelConfigs {
+        return copy(configs = configs.filter { it.modelId != modelId })
+    }
+
+    /**
+     * 更新指定模型的配置（通过原始 modelId 匹配，支持修改 modelId）
+     */
+    fun updateConfig(originalModelId: String, config: RemoteModelConfig): RemoteModelConfigs {
+        val updated = configs.map {
+            if (it.modelId == originalModelId) config else it
         }
         return copy(configs = updated)
     }
@@ -85,9 +124,13 @@ data class RemoteModelConfigs(
                 regex.findAll(json).forEach { match ->
                     val obj = match.groupValues[1]
                     val modelId = extractField(obj, "modelId") ?: return@forEach
+                    val protocolStr = extractField(obj, "protocol")
+                    val protocol = protocolStr?.let {
+                        runCatching { RemoteProtocol.valueOf(it) }.getOrNull()
+                    }
                     val apiKey = extractField(obj, "apiKey") ?: ""
                     val baseUrl = extractField(obj, "baseUrl") ?: ""
-                    configs.add(RemoteModelConfig(modelId, apiKey, baseUrl))
+                    configs.add(RemoteModelConfig(modelId, protocol ?: RemoteProtocol.OPENAI, apiKey, baseUrl))
                 }
                 if (configs.isEmpty()) {
                     RemoteModelConfigs()
@@ -95,7 +138,10 @@ data class RemoteModelConfigs(
                     val merged = RemoteModelConfig.PREDEFINED_MODELS.map { predefined ->
                         val saved = configs.find { it.modelId == predefined.modelId }
                         if (saved != null) {
-                            saved.copy(baseUrl = saved.baseUrl.ifBlank { predefined.baseUrl })
+                            saved.copy(
+                                baseUrl = saved.baseUrl.ifBlank { predefined.baseUrl },
+                                protocol = saved.protocol
+                            )
                         } else {
                             predefined.copy()
                         }
@@ -114,7 +160,7 @@ data class RemoteModelConfigs(
             val sb = StringBuilder("[")
             configs.configs.forEachIndexed { index, config ->
                 if (index > 0) sb.append(",")
-                sb.append("{\"modelId\":\"${config.modelId}\",\"apiKey\":\"${config.apiKey}\",\"baseUrl\":\"${config.baseUrl}\"}")
+                sb.append("{\"modelId\":\"${config.modelId}\",\"protocol\":\"${config.protocol.name}\",\"apiKey\":\"${config.apiKey}\",\"baseUrl\":\"${config.baseUrl}\"}")
             }
             sb.append("]")
             return sb.toString()
