@@ -1232,6 +1232,16 @@ fun CameraContent(
             Logger.i("PicMe:CameraTest", "Executing command: ${CameraTestCommandDispatcher.describeCommand(command)}")
             when (command) {
                 is CameraTestCommand.Capture -> {
+                    if (!cameraStateManager.canCapture()) {
+                        Logger.w("PicMe:CameraTest", "Capture command rejected: state=${cameraStateManager.getState().name}")
+                        CameraTestCommandDispatcher.emitResult(
+                            CameraTestResult.Error(command, "Camera busy, state=${cameraStateManager.getState().name}")
+                        )
+                        return@collect
+                    }
+                    cameraStateManager.transition(
+                        CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
+                    )
                     handleCaptureClick(
                         context = context,
                         captureMode = captureMode,
@@ -1250,7 +1260,8 @@ fun CameraContent(
                         beautyVideoRecorder = beautyVideoRecorder,
                         onRecordingChanged = { updated -> recording = updated },
                         onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
-                        coroutineScope = coroutineScope
+                        coroutineScope = coroutineScope,
+                        cameraStateManager = cameraStateManager
                     )
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Capture triggered")
