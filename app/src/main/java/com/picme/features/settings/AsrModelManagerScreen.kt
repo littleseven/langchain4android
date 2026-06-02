@@ -30,19 +30,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.picme.R
 import com.picme.data.download.DownloadStatus
-import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
 import kotlinx.coroutines.launch
-
 /**
  * ASR 模型管理器 —— 独立于 LLM 模型管理器，只展示 Audio/ASR 分类的模型
  */
@@ -52,11 +49,8 @@ fun AsrModelManagerScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val downloadManager = remember { LlmModelDownloadManager(context) }
-
     val allModels by viewModel.allModels.collectAsState()
-    val downloadStates by downloadManager.downloadStates.collectAsState()
+    val downloadStates by viewModel.downloadStates.collectAsState()
     val tagTranslations by viewModel.tagTranslations.collectAsState()
 
     // 过滤出 ASR/Audio 相关模型
@@ -73,7 +67,6 @@ fun AsrModelManagerScreen(
 
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
     var modelToShowProperties by remember { mutableStateOf<ModelConfig?>(null) }
-
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
@@ -109,20 +102,16 @@ fun AsrModelManagerScreen(
                             tagTranslations = tagTranslations,
                             onDownload = {
                                 if (isPaused) {
-                                    coroutineScope.launch {
-                                        downloadManager.resumeDownload(model.id, model).collect { }
-                                    }
+                                    viewModel.resumeModelDownload(model.id, model)
                                 } else {
-                                    coroutineScope.launch {
-                                        downloadManager.downloadModel(model.id, model).collect { }
-                                    }
+                                    viewModel.downloadModel(model.id, model)
                                 }
                             },
                             onCancel = {
-                                downloadManager.cancelDownload(model.id)
+                                viewModel.cancelModelDownload(model.id)
                             },
                             onPause = {
-                                downloadManager.pauseDownload(model.id)
+                                viewModel.pauseModelDownload(model.id)
                             },
                             onDelete = { modelToDelete = model },
                             onShowProperties = { modelToShowProperties = model }
@@ -142,12 +131,12 @@ fun AsrModelManagerScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val deletingModel = modelToDelete ?: return@TextButton
+                        modelToDelete = null
                         coroutineScope.launch {
-                            modelToDelete?.let { model ->
-                                downloadManager.deleteModel(model.id)
-                                viewModel.refreshModels()
-                            }
-                            modelToDelete = null
+                            viewModel.cancelModelDownload(deletingModel.id)
+                            viewModel.deleteDownloadedModel(deletingModel.id)
+                            viewModel.refreshModels()
                         }
                     }
                 ) {

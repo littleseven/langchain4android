@@ -69,8 +69,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,7 +78,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,12 +85,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.picme.R
 import com.picme.data.download.DownloadStatus
-import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
 import com.picme.domain.model.ModelCategory
 import androidx.compose.ui.text.font.FontWeight
-import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /**
  * 根据标签获取对应的图标
@@ -116,21 +114,14 @@ fun LlmModelManagerScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    val downloadManager = remember { LlmModelDownloadManager(context) }
-
     val groupedModels by viewModel.groupedModels.collectAsState()
     val currentTab by viewModel.currentTab.collectAsState()
     val modelTypeLabels = viewModel.getModelTypeLabels()
-    val downloadStates by downloadManager.downloadStates.collectAsState()
+    val downloadStates by viewModel.downloadStates.collectAsState()
     val tagTranslations by viewModel.tagTranslations.collectAsState()
-    val categories by viewModel.categories.collectAsState()
-
     var modelToDelete by remember { mutableStateOf<ModelConfig?>(null) }
     var modelToShowProperties by remember { mutableStateOf<ModelConfig?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-
-    // 收集下载进度用的协程作用域
     val coroutineScope = rememberCoroutineScope()
 
     // 同步 Tab 索引
@@ -185,24 +176,16 @@ fun LlmModelManagerScreen(
                             tagTranslations = tagTranslations,
                             onDownload = {
                                 if (isPaused) {
-                                    coroutineScope.launch {
-                                        downloadManager.resumeDownload(model.id, model).collect { progress ->
-                                            // 进度通过 downloadStates 自动收集
-                                        }
-                                    }
+                                    viewModel.resumeModelDownload(model.id, model)
                                 } else {
-                                    coroutineScope.launch {
-                                        downloadManager.downloadModel(model.id, model).collect { progress ->
-                                            // 进度通过 downloadStates 自动收集
-                                        }
-                                    }
+                                    viewModel.downloadModel(model.id, model)
                                 }
                             },
                             onCancel = {
-                                downloadManager.cancelDownload(model.id)
+                                viewModel.cancelModelDownload(model.id)
                             },
                             onPause = {
-                                downloadManager.pauseDownload(model.id)
+                                viewModel.pauseModelDownload(model.id)
                             },
                             onDelete = { modelToDelete = model },
                             onShowProperties = { modelToShowProperties = model }
@@ -222,12 +205,12 @@ fun LlmModelManagerScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val deletingModel = modelToDelete ?: return@TextButton
+                        modelToDelete = null
                         coroutineScope.launch {
-                            modelToDelete?.let { model ->
-                                downloadManager.deleteModel(model.id)
-                                viewModel.refreshModels()
-                            }
-                            modelToDelete = null
+                            viewModel.cancelModelDownload(deletingModel.id)
+                            viewModel.deleteDownloadedModel(deletingModel.id)
+                            viewModel.refreshModels()
                         }
                     }
                 ) {

@@ -1,20 +1,25 @@
 package com.picme.data.download
 
 import android.content.Context
-
-
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.ModelCategory
 import com.picme.domain.model.TagTranslations
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONArray
@@ -30,7 +35,10 @@ import java.util.concurrent.TimeUnit
  * 从 MNN 官方模型市场获取模型列表，支持从 ModelScope（魔搭）下载 MNN-LLM 模型。
  * 参考 MNN Chat 官方实现：使用 https://meta.alicdn.com/data/mnn/apis/model_market.json 获取模型配置。
  */
-class LlmModelDownloadManager(private val context: Context) {
+class LlmModelDownloadManager(context: Context) {
+
+    private val appContext = context.applicationContext
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -41,17 +49,22 @@ class LlmModelDownloadManager(private val context: Context) {
         .build()
 
     private val downloadDir: File
-        get() = File(context.filesDir, "llm_models").also { it.mkdirs() }
+        get() = File(appContext.filesDir, "llm_models").also { it.mkdirs() }
 
     private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
     val downloadStates = _downloadStates.asStateFlow()
 
-    private val activeDownloads = mutableMapOf<String, okhttp3.Call>()
+    private val activeDownloads = ConcurrentHashMap<String, okhttp3.Call>()
 
     /**
      * 暂停的下载任务：记录已下载的字节数，用于断点续传
      */
-    private val pausedDownloads = mutableMapOf<String, Long>()
+    private val pausedDownloads = ConcurrentHashMap<String, Long>()
+
+    /**
+     * 由 Manager 统一托管的下载 Job，生命周期独立于页面。
+     */
+    private val activeJobs = ConcurrentHashMap<String, Job>()
 
 
 
@@ -251,7 +264,7 @@ class LlmModelDownloadManager(private val context: Context) {
      * 本地缓存文件路径
      */
     private val cacheFile: File
-        get() = File(context.cacheDir, "model_market_cache.json")
+        get() = File(appContext.cacheDir, "model_market_cache.json")
 
     /**
      * 从本地缓存加载市场数据
@@ -308,7 +321,7 @@ class LlmModelDownloadManager(private val context: Context) {
      */
     private fun loadLocalModels(): List<ModelConfig> {
         return try {
-            val json = context.resources.openRawResource(R.raw.llm_models).bufferedReader().use { it.readText() }
+            val json = appContext.resources.openRawResource(R.raw.llm_models).bufferedReader().use { it.readText() }
             val array = JSONArray(json)
             (0 until array.length()).map { index ->
                 val obj = array.getJSONObject(index)
@@ -458,11 +471,107 @@ class LlmModelDownloadManager(private val context: Context) {
      * 取消正在进行的下载
      */
     fun cancelDownload(modelId: String) {
+        pausedDownloads.remove(modelId)
         activeDownloads[modelId]?.cancel()
         activeDownloads.remove(modelId)
-        pausedDownloads.remove(modelId)
+        activeJobs.remove(modelId)?.cancel()
         _downloadStates.update { current ->
             current + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, 0))
+        }
+        updateServiceState()
+    }
+
+    /**
+     * 启动下载任务（由 Manager 托管，页面退出后仍继续）。
+     */
+    fun enqueueDownload(modelId: String, modelConfig: ModelConfig? = null) {
+        val existingJob = activeJobs[modelId]
+        if (existingJob?.isActive == true) {
+            Logger.d("PicMe:Download", "Download already running: $modelId")
+            return
+        }
+
+        val job = managerScope.launch {
+            try {
+                downloadModel(modelId, modelConfig).collect { progress ->
+                    if (progress.status == DownloadStatus.COMPLETED ||
+                        progress.status == DownloadStatus.FAILED ||
+                        progress.status == DownloadStatus.CANCELLED
+                    ) {
+                        activeJobs.remove(modelId)
+                        activeDownloads.remove(modelId)
+                        updateServiceState()
+                    }
+                }
+            } finally {
+                activeJobs.remove(modelId)
+                activeDownloads.remove(modelId)
+                updateServiceState()
+            }
+        }
+
+        activeJobs[modelId] = job
+        updateServiceState()
+    }
+
+    /**
+     * 恢复下载任务（由 Manager 托管，页面退出后仍继续）。
+     */
+    fun enqueueResume(modelId: String, modelConfig: ModelConfig? = null) {
+        val existingJob = activeJobs[modelId]
+        if (existingJob?.isActive == true) {
+            Logger.d("PicMe:Download", "Resume ignored, download already running: $modelId")
+            return
+        }
+
+        val job = managerScope.launch {
+            try {
+                resumeDownload(modelId, modelConfig).collect { progress ->
+                    if (progress.status == DownloadStatus.COMPLETED ||
+                        progress.status == DownloadStatus.FAILED ||
+                        progress.status == DownloadStatus.CANCELLED
+                    ) {
+                        activeJobs.remove(modelId)
+                        activeDownloads.remove(modelId)
+                        updateServiceState()
+                    }
+                }
+            } finally {
+                activeJobs.remove(modelId)
+                activeDownloads.remove(modelId)
+                updateServiceState()
+            }
+        }
+
+        activeJobs[modelId] = job
+        updateServiceState()
+    }
+
+    /**
+     * 供前台 Service 查询当前下载中的模型状态。
+     */
+    fun snapshotDownloadingStates(): List<DownloadState> {
+        return _downloadStates.value.values
+            .filter { state -> state.status == DownloadStatus.DOWNLOADING }
+            .sortedBy { state -> state.modelId }
+    }
+
+    private fun hasAnyRunningTask(): Boolean {
+        return activeJobs.values.any { job -> job.isActive }
+    }
+
+    private fun updateServiceState() {
+        val intent = Intent(appContext, ModelDownloadForegroundService::class.java)
+        runCatching {
+            if (hasAnyRunningTask()) {
+                intent.action = ModelDownloadForegroundService.ACTION_START_OR_UPDATE
+                ContextCompat.startForegroundService(appContext, intent)
+            } else {
+                intent.action = ModelDownloadForegroundService.ACTION_STOP
+                appContext.startService(intent)
+            }
+        }.onFailure { throwable ->
+            Logger.w("PicMe:Download", "Failed to sync foreground service state", throwable)
         }
     }
 
@@ -473,13 +582,15 @@ class LlmModelDownloadManager(private val context: Context) {
         val call = activeDownloads[modelId] ?: return
         val currentState = _downloadStates.value[modelId]
         val downloadedBytes = currentState?.downloadedBytes ?: 0
+        pausedDownloads[modelId] = downloadedBytes
         call.cancel()
         activeDownloads.remove(modelId)
-        pausedDownloads[modelId] = downloadedBytes
+        activeJobs.remove(modelId)?.cancel()
         _downloadStates.update { current ->
             current + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, downloadedBytes, currentState?.totalBytes ?: 0))
         }
         Logger.i("PicMe:Download", "Download paused: $modelId at ${downloadedBytes} bytes")
+        updateServiceState()
     }
 
     /**
@@ -492,6 +603,7 @@ class LlmModelDownloadManager(private val context: Context) {
         val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
         val resumeFromBytes = pausedDownloads[modelId] ?: 0L
         _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, resumeFromBytes, config.size)) }
+        updateServiceState()
 
         try {
             val repoPath = config.sources["ModelScope"]
@@ -586,6 +698,7 @@ class LlmModelDownloadManager(private val context: Context) {
                                 val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
                                 if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
                                     _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, config.size)) }
+                                    updateServiceState()
                                     emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                                     lastEmitTime = now
                                     lastEmitBytes = totalDownloaded
@@ -601,18 +714,30 @@ class LlmModelDownloadManager(private val context: Context) {
 
             pausedDownloads.remove(modelId)
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
+            updateServiceState()
             emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
             Logger.i("PicMe:Download", "Model download completed: $modelId")
 
         } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
-                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
-                emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                val pausedBytes = pausedDownloads[modelId]
+                if (pausedBytes != null) {
+                    _downloadStates.update {
+                        it + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, pausedBytes, config.size))
+                    }
+                    updateServiceState()
+                    emit(DownloadProgress(modelId, pausedBytes, config.size, DownloadStatus.PAUSED))
+                } else {
+                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                    updateServiceState()
+                    emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                }
                 return@flow
             }
             val errorMsg = e.message ?: e.javaClass.simpleName
             Logger.e("PicMe:Download", "Download failed for $modelId: $errorMsg")
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
+            updateServiceState()
             emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
         }
     }.flowOn(Dispatchers.IO)
@@ -631,6 +756,7 @@ class LlmModelDownloadManager(private val context: Context) {
 
         val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
         _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, config.size)) }
+        updateServiceState()
 
         try {
             // 仅使用 ModelScope 源
@@ -780,6 +906,7 @@ class LlmModelDownloadManager(private val context: Context) {
                                 val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
                                 if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
                                     _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, config.size)) }
+                                    updateServiceState()
                                     emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                                     lastEmitTime = now
                                     lastEmitBytes = totalDownloaded
@@ -833,13 +960,24 @@ class LlmModelDownloadManager(private val context: Context) {
 
         } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
-                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
-                emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                val pausedBytes = pausedDownloads[modelId]
+                if (pausedBytes != null) {
+                    _downloadStates.update {
+                        it + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, pausedBytes, config.size))
+                    }
+                    updateServiceState()
+                    emit(DownloadProgress(modelId, pausedBytes, config.size, DownloadStatus.PAUSED))
+                } else {
+                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                    updateServiceState()
+                    emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                }
                 return@flow
             }
             val errorMsg = e.message ?: e.javaClass.simpleName
             Logger.e("PicMe:Download", "Download failed for $modelId: $errorMsg")
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
+            updateServiceState()
             emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
         }
     }.flowOn(Dispatchers.IO)

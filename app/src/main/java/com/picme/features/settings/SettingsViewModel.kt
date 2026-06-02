@@ -18,8 +18,8 @@ import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.ModelCategory
-import com.picme.domain.model.TagTranslations
 import com.picme.domain.model.StageConfig
+import com.picme.domain.model.TagTranslations
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.repository.UserSettingsRepository
@@ -219,7 +219,14 @@ class SettingsViewModel(
         "picme-face-landmark-ncnn" to DetectionModelType.FACE_2D106_NCNN
     )
 
+    /**
+     * 仅在状态从非 COMPLETED 过渡到 COMPLETED 时触发自动切换，
+     * 避免下载状态频繁更新导致重复切换（表现为 UI 选项来回跳动）。
+     */
+    private val lastDownloadStatuses = mutableMapOf<String, DownloadStatus>()
+
     init {
+        lastDownloadStatuses.putAll(downloadStates.value.mapValues { entry -> entry.value.status })
         loadModels()
         observeDownloadCompletion()
     }
@@ -230,8 +237,14 @@ class SettingsViewModel(
     private fun observeDownloadCompletion() {
         viewModelScope.launch {
             downloadStates.collect { states ->
+                lastDownloadStatuses.keys.retainAll(states.keys)
+
                 states.forEach { (modelId, state) ->
-                    if (state.status == DownloadStatus.COMPLETED) {
+                    val previousStatus = lastDownloadStatuses[modelId]
+                    val justCompleted = state.status == DownloadStatus.COMPLETED &&
+                        previousStatus != DownloadStatus.COMPLETED
+
+                    if (justCompleted) {
                         val modelType = modelIdToDetectionType[modelId]
                         if (modelType != null) {
                             when {
@@ -246,6 +259,8 @@ class SettingsViewModel(
                             }
                         }
                     }
+
+                    lastDownloadStatuses[modelId] = state.status
                 }
             }
         }
@@ -282,9 +297,23 @@ class SettingsViewModel(
      * 触发模型下载
      */
     fun downloadModel(modelId: String, modelConfig: ModelConfig) {
-        viewModelScope.launch {
-            modelDownloadManager.downloadModel(modelId, modelConfig).collect { }
-        }
+        modelDownloadManager.enqueueDownload(modelId, modelConfig)
+    }
+
+    fun resumeModelDownload(modelId: String, modelConfig: ModelConfig) {
+        modelDownloadManager.enqueueResume(modelId, modelConfig)
+    }
+
+    fun pauseModelDownload(modelId: String) {
+        modelDownloadManager.pauseDownload(modelId)
+    }
+
+    fun cancelModelDownload(modelId: String) {
+        modelDownloadManager.cancelDownload(modelId)
+    }
+
+    suspend fun deleteDownloadedModel(modelId: String): Boolean {
+        return modelDownloadManager.deleteModel(modelId)
     }
 
     private fun loadModels() {

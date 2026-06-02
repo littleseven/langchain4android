@@ -27,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -37,12 +36,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.picme.R
 import com.picme.data.download.DownloadStatus
-import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
 import kotlinx.coroutines.launch
 
@@ -142,17 +139,16 @@ fun FaceDetectionModelManagerScreen(
                             tagTranslations = tagTranslations,
                             onDownload = {
                                 if (isPaused) {
-                                    viewModel.downloadModel(model.id, model)
+                                    viewModel.resumeModelDownload(model.id, model)
                                 } else {
                                     viewModel.downloadModel(model.id, model)
                                 }
                             },
                             onCancel = {
-                                // cancel/pause/delete 需通过 ViewModel 暴露，当前先保持原样
-                                // TODO: 将 cancel/pause/delete 也移到 ViewModel
+                                viewModel.cancelModelDownload(model.id)
                             },
                             onPause = {
-                                // TODO: 将 pause 移到 ViewModel
+                                viewModel.pauseModelDownload(model.id)
                             },
                             onDelete = { modelToDelete = model },
                             onShowProperties = { modelToShowProperties = model }
@@ -172,12 +168,12 @@ fun FaceDetectionModelManagerScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        val deletingModel = modelToDelete ?: return@TextButton
+                        modelToDelete = null
                         coroutineScope.launch {
-                            modelToDelete?.let { model ->
-                                // TODO: 将 delete 移到 ViewModel
-                                viewModel.refreshModels()
-                            }
-                            modelToDelete = null
+                            viewModel.cancelModelDownload(deletingModel.id)
+                            viewModel.deleteDownloadedModel(deletingModel.id)
+                            viewModel.refreshModels()
                         }
                     }
                 ) {
