@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
+@OptIn(coil.annotation.ExperimentalCoilApi::class)
 class MediaRepositoryImpl(
     private val mediaDao: MediaDao,
     context: Context
@@ -154,16 +155,22 @@ class MediaRepositoryImpl(
         // 2. 执行物理文件删除
         val successfullyDeletedIds = mutableListOf<Long>()
         var needsUserAuth = false
-        assetsToDelete.forEach { asset ->
+        for (asset in assetsToDelete) {
+            if (needsUserAuth) {
+                // 一旦检测到需要用户授权，停止处理后续资产
+                // 避免后续资产删除成功但 DB 未清理导致数据不一致
+                Log.d("PicMe:Gallery", "Skipping remaining deletions, waiting for user auth")
+                break
+            }
+
             Log.d("PicMe:Gallery", "Attempting to delete file: ${asset.uri}")
             val deleted = deleteSystemMedia(asset.uri)
 
             if (deleted) {
                 successfullyDeletedIds.add(asset.id)
             } else if (pendingRecoverableIntentSender != null) {
-                // Android 10 (API 29): 需要逐条授权，先处理第一条
+                // Android 10 (API 29): 需要逐条授权，停止处理后续资产
                 needsUserAuth = true
-                return@forEach
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 // Android 11+: 收集所有需要授权的 URI
                 pendingDeleteUris.add(asset.uri.toUri())
@@ -180,6 +187,14 @@ class MediaRepositoryImpl(
                 Log.d("PicMe:Gallery", "Deleting local DB records: $localIds")
                 mediaDao.deleteMediaByIds(localIds)
             }
+            // 清理 Coil 图片缓存，避免已删除文件的缩略图残留
+            val imageLoader = coil.Coil.imageLoader(appContext)
+            assetsToDelete
+                .filter { asset -> asset.id in successfullyDeletedIds }
+                .forEach { asset ->
+                    imageLoader.diskCache?.remove(asset.uri)
+                    imageLoader.memoryCache?.remove(coil.memory.MemoryCache.Key(asset.uri))
+                }
             refreshMediaLibrary()
         }
 
