@@ -4,6 +4,7 @@ import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.CameraMemoryState
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.StageConfig
@@ -106,6 +107,11 @@ interface UserSettingsRepository {
 
     val localAsrModelFlow: Flow<String>
     suspend fun updateLocalAsrModel(modelId: String)
+
+    // ── 相机参数记忆 ──────────────────────────────────────────
+    val cameraMemoryStateFlow: Flow<CameraMemoryState>
+    suspend fun updateCameraMemoryState(state: CameraMemoryState)
+    suspend fun resetCameraMemoryState()
 }
 
 

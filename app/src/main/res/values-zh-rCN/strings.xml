@@ -42,6 +42,8 @@
     <string name="face_detection_engine_mode_mnn">MNN</string>
     <string name="face_detection_engine_mode_ncnn">NCNN</string>
     <string name="face_detection_engine_mode_custom">自定义</string>
+    <string name="face_detection_advanced">人脸检测高级配置</string>
+    <string name="settings_face_detection_advanced_desc">控制人脸关键点和动态检测节奏，平衡性能与精度。</string>
     <string name="inference_engine">推理引擎</string>
     <string name="settings_inference_engine_desc">选择人脸检测和关键点处理的底层推理框架。</string>
     <string name="inference_engine_tflite">TFLite (MediaPipe 默认)</string>
@@ -154,6 +156,9 @@
     <string name="show_camera_info">显示相机信息</string>
     <string name="show_face_debug">显示人脸调试</string>
     <string name="show_log_overlay">显示日志浮层</string>
+    <string name="camera_memory">相机状态记忆</string>
+    <string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
+    <string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
     <string name="aspect_ratio">画面比例</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>
@@ -317,6 +322,13 @@
     <string name="voice_command_mode_wake_word">唤醒词</string>
     <string name="local_asr_model">本地语音识别模型</string>
     <string name="local_asr_model_fallback">未下载本地 ASR 模型，将自动回退到系统语音识别。</string>
+<string name="asr_model_manager">ASR 模型管理</string>
+<string name="asr_model_manager_desc">下载和管理端侧语音识别模型。</string>
+<string name="model_download_notification_title">模型下载进行中</string>
+<string name="model_download_notification_single">正在下载 %1$s（%2$d%%）</string>
+<string name="model_download_notification_multi">正在下载 %1$d 个模型（%2$d%%）</string>
+<string name="model_download_notification_channel_desc">用于在后台持续执行模型下载</string>
+
     <string name="local_face_detection_model">本地人脸检测模型</string>
     <string name="local_face_detection_model_fallback">未下载本地人脸检测模型，点击下方前往下载。</string>
     <string name="face_detection_model_manager">人脸检测模型管理</string>

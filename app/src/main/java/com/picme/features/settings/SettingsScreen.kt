@@ -265,6 +265,7 @@ fun SettingsScreen(
         downloadModel = viewModel::downloadModel,
         downloadStates = downloadStates,
         allModels = allModels,
+        onResetCameraMemoryState = viewModel::resetCameraMemoryState,
         onNavigateBack = onNavigateBack
     )
 
@@ -330,6 +331,7 @@ private fun settingsContent(
     downloadModel: (String, ModelConfig) -> Unit,
     downloadStates: Map<String, com.picme.data.download.DownloadState>,
     allModels: List<ModelConfig>,
+    onResetCameraMemoryState: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -570,6 +572,24 @@ private fun settingsContent(
                     currentLanguage = appLanguage,
                     onLanguageSelected = onAppLanguageSelected
                 )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.camera_memory),
+                description = stringResource(R.string.camera_memory_desc)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onResetCameraMemoryState) {
+                        Text(stringResource(R.string.reset_camera_to_default))
+                    }
+                }
             }
         }
     }
@@ -1500,6 +1520,7 @@ fun SettingsScreenPreview() {
             downloadModel = { _, _ -> },
             downloadStates = emptyMap(),
             allModels = emptyList(),
+            onResetCameraMemoryState = {},
             onNavigateBack = {}
         )
     }

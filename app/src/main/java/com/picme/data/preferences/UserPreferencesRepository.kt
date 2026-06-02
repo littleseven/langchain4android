@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -13,13 +14,21 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.CameraAspectRatioMode
+import com.picme.domain.model.CameraGridMode
+import com.picme.domain.model.CameraMemoryState
+import com.picme.domain.model.CameraSceneMode
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.MediaType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
@@ -66,6 +75,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_MODE = stringPreferencesKey("ai_agent_mode")
         val AI_AGENT_PRIVACY_LEVEL = stringPreferencesKey("ai_agent_privacy_level")
         val AI_AGENT_LOCAL_MODEL = stringPreferencesKey("ai_agent_local_model")
+
         // Kimi Coding API 配置
         val AI_AGENT_CODING_API_KEY = stringPreferencesKey("ai_agent_coding_api_key")
         val AI_AGENT_CODING_MODEL = stringPreferencesKey("ai_agent_coding_model")
@@ -77,6 +87,71 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         // 语音控制
         val VOICE_COMMAND_MODE = stringPreferencesKey("voice_command_mode")
         val LOCAL_ASR_MODEL = stringPreferencesKey("local_asr_model")
+
+        // 相机参数记忆
+        val CAMERA_MEMORY_USE_FRONT_CAMERA = booleanPreferencesKey("camera_memory_use_front_camera")
+        val CAMERA_MEMORY_CAPTURE_MODE = stringPreferencesKey("camera_memory_capture_mode")
+        val CAMERA_MEMORY_SELECTED_FILTER = stringPreferencesKey("camera_memory_selected_filter")
+        val CAMERA_MEMORY_SELECTED_STYLE_FILTER = stringPreferencesKey("camera_memory_selected_style_filter")
+
+        val CAMERA_MEMORY_BEAUTY_ENABLED = booleanPreferencesKey("camera_memory_beauty_enabled")
+        val CAMERA_MEMORY_BEAUTY_SMOOTHING = floatPreferencesKey("camera_memory_beauty_smoothing")
+        val CAMERA_MEMORY_BEAUTY_WHITENING = floatPreferencesKey("camera_memory_beauty_whitening")
+        val CAMERA_MEMORY_BEAUTY_SLIM_FACE = floatPreferencesKey("camera_memory_beauty_slim_face")
+        val CAMERA_MEMORY_BEAUTY_BIG_EYES = floatPreferencesKey("camera_memory_beauty_big_eyes")
+        val CAMERA_MEMORY_BEAUTY_LIP_COLOR = floatPreferencesKey("camera_memory_beauty_lip_color")
+        val CAMERA_MEMORY_BEAUTY_LIP_COLOR_INDEX = intPreferencesKey("camera_memory_beauty_lip_color_index")
+        val CAMERA_MEMORY_BEAUTY_BLUSH = floatPreferencesKey("camera_memory_beauty_blush")
+        val CAMERA_MEMORY_BEAUTY_BLUSH_COLOR_FAMILY = intPreferencesKey("camera_memory_beauty_blush_color_family")
+        val CAMERA_MEMORY_BEAUTY_EYEBROW = floatPreferencesKey("camera_memory_beauty_eyebrow")
+        val CAMERA_MEMORY_BEAUTY_BODY_ENHANCEMENT = floatPreferencesKey("camera_memory_beauty_body_enhancement")
+        val CAMERA_MEMORY_BEAUTY_LEG_EXTENSION = floatPreferencesKey("camera_memory_beauty_leg_extension")
+        val CAMERA_MEMORY_BEAUTY_EXPOSURE = floatPreferencesKey("camera_memory_beauty_exposure")
+        val CAMERA_MEMORY_BEAUTY_CONTRAST = floatPreferencesKey("camera_memory_beauty_contrast")
+        val CAMERA_MEMORY_BEAUTY_SATURATION = floatPreferencesKey("camera_memory_beauty_saturation")
+        val CAMERA_MEMORY_BEAUTY_TEMPERATURE = floatPreferencesKey("camera_memory_beauty_temperature")
+        val CAMERA_MEMORY_BEAUTY_TINT = floatPreferencesKey("camera_memory_beauty_tint")
+        val CAMERA_MEMORY_BEAUTY_BRIGHTNESS = floatPreferencesKey("camera_memory_beauty_brightness")
+        val CAMERA_MEMORY_BEAUTY_RED_ADJUSTMENT = floatPreferencesKey("camera_memory_beauty_red_adjustment")
+        val CAMERA_MEMORY_BEAUTY_GREEN_ADJUSTMENT = floatPreferencesKey("camera_memory_beauty_green_adjustment")
+        val CAMERA_MEMORY_BEAUTY_BLUE_ADJUSTMENT = floatPreferencesKey("camera_memory_beauty_blue_adjustment")
+
+        val CAMERA_MEMORY_ASPECT_RATIO = stringPreferencesKey("camera_memory_aspect_ratio")
+        val CAMERA_MEMORY_ZOOM_RATIO = floatPreferencesKey("camera_memory_zoom_ratio")
+        val CAMERA_MEMORY_EXPOSURE_COMPENSATION = intPreferencesKey("camera_memory_exposure_compensation")
+        val CAMERA_MEMORY_WHITE_BALANCE_MODE = intPreferencesKey("camera_memory_white_balance_mode")
+        val CAMERA_MEMORY_SCENE_MODE = stringPreferencesKey("camera_memory_scene_mode")
+        val CAMERA_MEMORY_GRID_MODE = stringPreferencesKey("camera_memory_grid_mode")
+    }
+
+    private fun parseMediaType(value: String?): MediaType {
+        return runCatching { value?.let { MediaType.valueOf(it) } }
+            .getOrNull() ?: MediaType.PHOTO
+    }
+
+    private fun parseFilterType(value: String?): FilterType {
+        return runCatching { value?.let { FilterType.valueOf(it) } }
+            .getOrNull() ?: FilterType.NONE
+    }
+
+    private fun parseStyleFilter(value: String?): StyleFilter {
+        return runCatching { value?.let { StyleFilter.valueOf(it) } }
+            .getOrNull() ?: StyleFilter.NONE
+    }
+
+    private fun parseCameraAspectRatioMode(value: String?): CameraAspectRatioMode {
+        return runCatching { value?.let { CameraAspectRatioMode.valueOf(it) } }
+            .getOrNull() ?: CameraAspectRatioMode.FULL
+    }
+
+    private fun parseCameraSceneMode(value: String?): CameraSceneMode {
+        return runCatching { value?.let { CameraSceneMode.valueOf(it) } }
+            .getOrNull() ?: CameraSceneMode.NONE
+    }
+
+    private fun parseCameraGridMode(value: String?): CameraGridMode {
+        return runCatching { value?.let { CameraGridMode.valueOf(it) } }
+            .getOrNull() ?: CameraGridMode.NONE
     }
 
     override val themeModeFlow: Flow<ThemeMode> = context.dataStore.data
@@ -614,4 +689,102 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
     }
 
+    override val cameraMemoryStateFlow: Flow<CameraMemoryState> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val selectedFilter = parseFilterType(preferences[PreferencesKeys.CAMERA_MEMORY_SELECTED_FILTER])
+            val selectedStyleFilter = parseStyleFilter(preferences[PreferencesKeys.CAMERA_MEMORY_SELECTED_STYLE_FILTER])
+            val beautySettings = BeautySettings(
+                enabled = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_ENABLED] ?: false,
+                smoothing = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_SMOOTHING] ?: 0f,
+                whitening = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_WHITENING] ?: 0f,
+                slimFace = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_SLIM_FACE] ?: 0f,
+                bigEyes = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BIG_EYES] ?: 0f,
+                lipColor = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_LIP_COLOR] ?: BeautySettings.DEFAULT_LIP_COLOR,
+                lipColorIndex = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_LIP_COLOR_INDEX] ?: 0,
+                blush = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BLUSH] ?: BeautySettings.DEFAULT_BLUSH,
+                blushColorFamily = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BLUSH_COLOR_FAMILY] ?: 0,
+                eyebrow = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_EYEBROW] ?: BeautySettings.DEFAULT_EYEBROW,
+                bodyEnhancement = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BODY_ENHANCEMENT] ?: 0f,
+                legExtension = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_LEG_EXTENSION] ?: 0f,
+                exposure = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_EXPOSURE] ?: 0f,
+                contrast = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_CONTRAST] ?: 50f,
+                saturation = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_SATURATION] ?: 100f,
+                temperature = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_TEMPERATURE] ?: 5000f,
+                tint = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_TINT] ?: 0f,
+                brightness = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BRIGHTNESS] ?: 0f,
+                redAdjustment = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_RED_ADJUSTMENT] ?: 100f,
+                greenAdjustment = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_GREEN_ADJUSTMENT] ?: 100f,
+                blueAdjustment = preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BLUE_ADJUSTMENT] ?: 100f,
+                colorFilter = selectedFilter,
+                styleFilter = selectedStyleFilter
+            )
+
+            CameraMemoryState(
+                useFrontCamera = preferences[PreferencesKeys.CAMERA_MEMORY_USE_FRONT_CAMERA] ?: false,
+                captureMode = parseMediaType(preferences[PreferencesKeys.CAMERA_MEMORY_CAPTURE_MODE]),
+                selectedFilter = selectedFilter,
+                selectedStyleFilter = selectedStyleFilter,
+                beautySettings = beautySettings,
+                aspectRatio = parseCameraAspectRatioMode(preferences[PreferencesKeys.CAMERA_MEMORY_ASPECT_RATIO]),
+                zoomRatio = preferences[PreferencesKeys.CAMERA_MEMORY_ZOOM_RATIO] ?: 1f,
+                exposureCompensation = preferences[PreferencesKeys.CAMERA_MEMORY_EXPOSURE_COMPENSATION] ?: 0,
+                whiteBalanceMode = preferences[PreferencesKeys.CAMERA_MEMORY_WHITE_BALANCE_MODE] ?: 0,
+                sceneMode = parseCameraSceneMode(preferences[PreferencesKeys.CAMERA_MEMORY_SCENE_MODE]),
+                gridMode = parseCameraGridMode(preferences[PreferencesKeys.CAMERA_MEMORY_GRID_MODE])
+            )
+        }
+
+    override suspend fun updateCameraMemoryState(state: CameraMemoryState) {
+        val resolvedBeautySettings = state.beautySettings.copy(
+            colorFilter = state.selectedFilter,
+            styleFilter = state.selectedStyleFilter
+        )
+
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CAMERA_MEMORY_USE_FRONT_CAMERA] = state.useFrontCamera
+            preferences[PreferencesKeys.CAMERA_MEMORY_CAPTURE_MODE] = state.captureMode.name
+            preferences[PreferencesKeys.CAMERA_MEMORY_SELECTED_FILTER] = state.selectedFilter.name
+            preferences[PreferencesKeys.CAMERA_MEMORY_SELECTED_STYLE_FILTER] = state.selectedStyleFilter.name
+
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_ENABLED] = resolvedBeautySettings.enabled
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_SMOOTHING] = resolvedBeautySettings.smoothing
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_WHITENING] = resolvedBeautySettings.whitening
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_SLIM_FACE] = resolvedBeautySettings.slimFace
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BIG_EYES] = resolvedBeautySettings.bigEyes
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_LIP_COLOR] = resolvedBeautySettings.lipColor
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_LIP_COLOR_INDEX] = resolvedBeautySettings.lipColorIndex
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BLUSH] = resolvedBeautySettings.blush
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BLUSH_COLOR_FAMILY] = resolvedBeautySettings.blushColorFamily
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_EYEBROW] = resolvedBeautySettings.eyebrow
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BODY_ENHANCEMENT] = resolvedBeautySettings.bodyEnhancement
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_LEG_EXTENSION] = resolvedBeautySettings.legExtension
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_EXPOSURE] = resolvedBeautySettings.exposure
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_CONTRAST] = resolvedBeautySettings.contrast
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_SATURATION] = resolvedBeautySettings.saturation
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_TEMPERATURE] = resolvedBeautySettings.temperature
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_TINT] = resolvedBeautySettings.tint
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BRIGHTNESS] = resolvedBeautySettings.brightness
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_RED_ADJUSTMENT] = resolvedBeautySettings.redAdjustment
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_GREEN_ADJUSTMENT] = resolvedBeautySettings.greenAdjustment
+            preferences[PreferencesKeys.CAMERA_MEMORY_BEAUTY_BLUE_ADJUSTMENT] = resolvedBeautySettings.blueAdjustment
+
+            preferences[PreferencesKeys.CAMERA_MEMORY_ASPECT_RATIO] = state.aspectRatio.name
+            preferences[PreferencesKeys.CAMERA_MEMORY_ZOOM_RATIO] = state.zoomRatio
+            preferences[PreferencesKeys.CAMERA_MEMORY_EXPOSURE_COMPENSATION] = state.exposureCompensation
+            preferences[PreferencesKeys.CAMERA_MEMORY_WHITE_BALANCE_MODE] = state.whiteBalanceMode
+            preferences[PreferencesKeys.CAMERA_MEMORY_SCENE_MODE] = state.sceneMode.name
+            preferences[PreferencesKeys.CAMERA_MEMORY_GRID_MODE] = state.gridMode.name
+        }
+    }
+
+    override suspend fun resetCameraMemoryState() {
+        updateCameraMemoryState(CameraMemoryState())
+    }
 }
