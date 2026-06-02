@@ -14,11 +14,16 @@ import com.picme.data.model.MediaEntity
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.domain.repository.MediaRepository
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(coil.annotation.ExperimentalCoilApi::class)
@@ -29,6 +34,8 @@ class MediaRepositoryImpl(
 
     private val appContext = context.applicationContext
     private val refreshVersion = MutableStateFlow(0)
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val staleCleanupInProgress = AtomicBoolean(false)
 
     // 存储待删除的 URI 列表，用于权限请求后重试
     private val pendingDeleteUris = mutableListOf<Uri>()
@@ -172,9 +179,20 @@ class MediaRepositoryImpl(
                 // Android 10 (API 29): 需要逐条授权，停止处理后续资产
                 needsUserAuth = true
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11+: 收集所有需要授权的 URI
-                pendingDeleteUris.add(asset.uri.toUri())
-                needsUserAuth = true
+                // Android 11+: 一旦需要授权，收集当前及剩余所有 content:// URI，保证批量删除覆盖完整选择集。
+                val pendingAuthUris = assetsToDelete
+                    .dropWhile { pendingAsset -> pendingAsset.id != asset.id }
+                    .map { pendingAsset -> pendingAsset.uri.toUri() }
+                    .filter { pendingUri -> pendingUri.scheme == "content" }
+                    .distinct()
+
+                if (pendingAuthUris.isNotEmpty()) {
+                    pendingDeleteUris.addAll(pendingAuthUris)
+                    needsUserAuth = true
+                    break
+                } else {
+                    Log.w("PicMe:Gallery", "Skip delete request for non-content URI: ${asset.uri}")
+                }
             }
         }
 
@@ -337,17 +355,65 @@ class MediaRepositoryImpl(
         }
 
         val localOnlyMedia = dbMedia.filterNot { asset -> asset.uri in systemUris }
-        return (mergedSystemMedia + localOnlyMedia).sortedByDescending { asset -> asset.captureDate }
+        val (validLocalMedia, staleLocalMedia) = localOnlyMedia.partition { asset ->
+            isAssetUriStillValid(asset.uri)
+        }
+
+        // 列表自愈：清理 DB 中残留的失效条目，避免相册出现空白占位。
+        if (staleLocalMedia.isNotEmpty()) {
+            scheduleStaleAssetCleanup(staleLocalMedia)
+        }
+
+        return (mergedSystemMedia + validLocalMedia).sortedByDescending { asset -> asset.captureDate }
     }
 
     /**
      * 尝试删除系统媒体文件
      * @return true 如果删除成功，false 如果需要用户授权
      */
+    private fun scheduleStaleAssetCleanup(staleAssets: List<MediaAsset>) {
+        val staleIds = staleAssets.mapNotNull { asset -> asset.id.takeIf { id -> id > 0L } }
+        if (staleIds.isEmpty()) {
+            return
+        }
+        if (!staleCleanupInProgress.compareAndSet(false, true)) {
+            return
+        }
+
+        repositoryScope.launch {
+            runCatching {
+                Log.w("PicMe:Gallery", "Self-heal stale records: $staleIds")
+                mediaDao.deleteMediaByIds(staleIds)
+                val imageLoader = coil.Coil.imageLoader(appContext)
+                staleAssets.forEach { asset ->
+                    imageLoader.diskCache?.remove(asset.uri)
+                    imageLoader.memoryCache?.remove(coil.memory.MemoryCache.Key(asset.uri))
+                }
+                refreshVersion.value = refreshVersion.value + 1
+            }.onFailure { error ->
+                Log.e("PicMe:Gallery", "Failed to self-heal stale records", error)
+            }
+            staleCleanupInProgress.set(false)
+        }
+    }
+
+    private fun isAssetUriStillValid(uriString: String): Boolean {
+        val uri = uriString.toUri()
+        return when (uri.scheme) {
+            "content" -> contentUriStillExists(uri)
+            "file" -> uri.path?.let { path -> File(path).exists() } ?: false
+            null -> uriString.startsWith("/") && File(uriString).exists()
+            else -> true
+        }
+    }
+
     private fun deleteSystemMedia(uriString: String): Boolean {
         val uri = uriString.toUri()
+        if (uri.scheme == "file" || uri.scheme == null) {
+            return deleteLocalFile(uriString, uri)
+        }
         if (uri.scheme != "content") {
-            Log.w("PicMe:Gallery", "Cannot delete non-content URI: $uriString")
+            Log.w("PicMe:Gallery", "Cannot delete unsupported URI: $uriString")
             return false
         }
 
@@ -357,8 +423,14 @@ class MediaRepositoryImpl(
                 Log.d("PicMe:Gallery", "Successfully deleted media: $uriString")
                 true
             } else {
-                Log.w("PicMe:Gallery", "Delete returned 0 rows for: $uriString")
-                false
+                val uriStillExists = contentUriStillExists(uri)
+                if (!uriStillExists) {
+                    Log.d("PicMe:Gallery", "Media already missing, treat as deleted: $uriString")
+                    true
+                } else {
+                    Log.w("PicMe:Gallery", "Delete returned 0 rows for existing URI: $uriString")
+                    false
+                }
             }
         } catch (e: SecurityException) {
             // Android 10+ 需要用户授权才能删除非应用创建的文件
@@ -380,6 +452,48 @@ class MediaRepositoryImpl(
             Log.e("PicMe:Gallery", "Failed to delete media: $uriString", e)
             false
         }
+    }
+
+    private fun deleteLocalFile(uriString: String, uri: Uri): Boolean {
+        val path = if (uri.scheme == "file") {
+            uri.path
+        } else {
+            uriString.takeIf { raw -> raw.startsWith("/") }
+        }
+        if (path.isNullOrBlank()) {
+            Log.w("PicMe:Gallery", "Cannot resolve local file path for URI: $uriString")
+            return false
+        }
+
+        val targetFile = File(path)
+        if (!targetFile.exists()) {
+            Log.d("PicMe:Gallery", "Local file already missing, treat as deleted: $path")
+            return true
+        }
+
+        val deleted = runCatching { targetFile.delete() }.getOrDefault(false)
+        if (deleted) {
+            Log.d("PicMe:Gallery", "Deleted local file: $path")
+        } else {
+            Log.w("PicMe:Gallery", "Failed to delete local file: $path")
+        }
+        return deleted
+    }
+
+    private fun contentUriStillExists(uri: Uri): Boolean {
+        return runCatching {
+            appContext.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.MediaColumns._ID),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                cursor.moveToFirst()
+            } ?: false
+        }.onFailure { error ->
+            Log.w("PicMe:Gallery", "Failed to query URI existence: $uri", error)
+        }.getOrDefault(true)
     }
 
     private fun hasImageReadPermission(): Boolean {
