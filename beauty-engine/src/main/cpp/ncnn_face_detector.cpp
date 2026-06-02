@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <chrono>
+#include <cpu.h>
 
 #define LOG_TAG "PicMe:NcnnFaceDetect"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
@@ -17,9 +18,16 @@
 namespace picme {
 
 NcnnFaceDetector::NcnnFaceDetector()
-    : inputSize_(0), useGpu_(false), loaded_(false) {
-    // [修复 OpenMP 崩溃] 禁用线程亲和性，避免 SIGABRT
-    setenv("KMP_AFFINITY", "disabled", 1);
+    : inputSize_(0), useGpu_(false), loaded_(false), hasBuiltInNormalization_(false) {
+    // [修复 OpenMP 崩溃] 在 detector 实例化时再次收敛 OpenMP 配置（双保险）
+    setenv("KMP_AFFINITY", "none", 1);
+    setenv("OMP_PROC_BIND", "false", 1);
+    setenv("OMP_NUM_THREADS", "1", 1);
+#if NCNN_AVAILABLE
+    ncnn::set_omp_num_threads(1);
+    ncnn::set_omp_dynamic(0);
+    ncnn::set_kmp_blocktime(0);
+#endif
 }
 
 NcnnFaceDetector::~NcnnFaceDetector() {
@@ -40,16 +48,17 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
     outputNames_ = outputNames;
 
     // 配置 NCNN 选项
-    // [修复 OpenMP 崩溃] 禁用线程亲和性，避免 SIGABRT
-    // [对齐 MNN] 启用标准优化选项，确保推理精度与 MNN 一致
-    net_.opt.num_threads = 4;
-    net_.opt.use_packing_layout = true;
+    // [修复 OpenMP 崩溃] OpenMP 线程数强制为 1，规避 KMP 亲和性初始化崩溃
+    // [对齐 MNN] 其余优化保持不变
+    net_.opt.num_threads = 1;
+    // [稳定性优先] 关闭易触发 OpenMP 并行路径的 packing/fp16/int8 优化，先保证不崩溃
+    net_.opt.use_packing_layout = false;
     net_.opt.use_sgemm_convolution = true;
     net_.opt.use_winograd_convolution = true;
-    net_.opt.use_fp16_packed = true;
-    net_.opt.use_fp16_storage = true;
-    net_.opt.use_fp16_arithmetic = true;
-    net_.opt.use_int8_inference = true;
+    net_.opt.use_fp16_packed = false;
+    net_.opt.use_fp16_storage = false;
+    net_.opt.use_fp16_arithmetic = false;
+    net_.opt.use_int8_inference = false;
 
     if (useGpu_) {
         net_.opt.use_vulkan_compute = true;

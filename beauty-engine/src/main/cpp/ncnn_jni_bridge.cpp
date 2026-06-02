@@ -6,21 +6,32 @@
 
 #if NCNN_AVAILABLE
 #include "ncnn_face_detector.h"
+#include <cpu.h>
 #endif
 
 #define LOG_TAG "PicMe:NcnnJNI"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// [修复 OpenMP 崩溃] 在 JNI_OnLoad 中提前禁用 OpenMP 线程亲和性
-// 必须在任何 OpenMP 操作之前调用
+// [修复 OpenMP 崩溃] 在 JNI_OnLoad 中提前收敛 OpenMP 运行时配置
+// 必须在任何 NCNN/OpenMP 操作之前调用
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
     (void)vm;
     (void)reserved;
-    // 禁用 OpenMP 线程亲和性，避免 __kmp_affinity_initialize 断言失败
-    setenv("KMP_AFFINITY", "disabled", 1);
+    // 关闭线程亲和性与绑定，避免 __kmp_affinity_initialize 断言失败
+    setenv("KMP_AFFINITY", "none", 1);
     setenv("OMP_PROC_BIND", "false", 1);
-    LOGD("JNI_OnLoad: KMP_AFFINITY=disabled, OMP_PROC_BIND=false");
+    setenv("OMP_NUM_THREADS", "1", 1);
+    setenv("KMP_WARNINGS", "0", 1);
+
+#if NCNN_AVAILABLE
+    // 通过 NCNN API 强制单线程 OpenMP，避免在部分机型上触发 KMP 并发初始化崩溃
+    ncnn::set_omp_num_threads(1);
+    ncnn::set_omp_dynamic(0);
+    ncnn::set_kmp_blocktime(0);
+#endif
+
+    LOGD("JNI_OnLoad: KMP_AFFINITY=none, OMP_PROC_BIND=false, OMP_NUM_THREADS=1");
     return JNI_VERSION_1_6;
 }
 
