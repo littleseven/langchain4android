@@ -36,6 +36,7 @@ import com.picme.features.debug.DebugScreen
 import com.picme.features.gallery.GalleryScreen
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.settings.AsrModelManagerScreen
+import com.picme.features.settings.FaceDetectionModelManagerScreen
 import com.picme.features.settings.LlmModelManagerScreen
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
@@ -183,7 +184,8 @@ class MainActivity : ComponentActivity() {
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToLlmModelManager = { navController.navigate(Screen.LlmModelManager.route) },
-                                    onNavigateToAsrModelManager = { navController.navigate(Screen.AsrModelManager.route) }
+                                    onNavigateToAsrModelManager = { navController.navigate(Screen.AsrModelManager.route) },
+                                    onNavigateToFaceDetectionModelManager = { navController.navigate(Screen.FaceDetectionModelManager.route) }
                                 )
                             }
                             composable(Screen.LlmModelManager.route) {
@@ -208,6 +210,19 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                                 AsrModelManagerScreen(
+                                    viewModel = settingsViewModel,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+                            composable(Screen.FaceDetectionModelManager.route) {
+                                // 场景管理：进入 Settings 子页面（复用 SETTINGS 场景）
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
+                                    onDispose {
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.SETTINGS)
+                                    }
+                                }
+                                FaceDetectionModelManagerScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() }
                                 )

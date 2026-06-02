@@ -52,7 +52,6 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.mediapipe.face.landmarker)
-    implementation(libs.onnxruntime.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

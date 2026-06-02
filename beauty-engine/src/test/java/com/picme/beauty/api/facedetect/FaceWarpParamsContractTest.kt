@@ -116,8 +116,8 @@ class FaceWarpParamsContractTest {
         val original = FaceWarpParams()
 
         assertEquals(true, original.copy(hasFace = true).hasFace)
-        assertEquals(FaceDetectionSource.INSIGHTFACE, original.copy(detectionSource = FaceDetectionSource.INSIGHTFACE).detectionSource)
-        assertEquals(EngineType.INSIGHTFACE, original.copy(requestedDetectionEngineMode = EngineType.INSIGHTFACE).requestedDetectionEngineMode)
+        assertEquals(FaceDetectionSource.MNN, original.copy(detectionSource = FaceDetectionSource.MNN).detectionSource)
+        assertEquals(EngineType.MNN, original.copy(requestedDetectionEngineMode = EngineType.MNN).requestedDetectionEngineMode)
     }
 
     @Test
@@ -171,7 +171,7 @@ class FaceWarpParamsContractTest {
     @Test
     fun equality_differentEnums_areNotEqual() {
         val a = FaceWarpParams(requestedDetectionEngineMode = EngineType.MEDIAPIPE)
-        val b = FaceWarpParams(requestedDetectionEngineMode = EngineType.INSIGHTFACE)
+        val b = FaceWarpParams(requestedDetectionEngineMode = EngineType.MNN)
         assertNotEquals(a, b)
     }
 

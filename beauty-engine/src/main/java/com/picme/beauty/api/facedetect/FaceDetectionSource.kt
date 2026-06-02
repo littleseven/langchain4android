@@ -6,7 +6,6 @@ package com.picme.beauty.api.facedetect
 enum class FaceDetectionSource {
     NONE,
     MEDIAPIPE,
-    INSIGHTFACE,
     MNN,       // [性能优化] MNN Vulkan GPU 检测器
     NCNN       // [性能优化] NCNN 轻量级检测器
 }

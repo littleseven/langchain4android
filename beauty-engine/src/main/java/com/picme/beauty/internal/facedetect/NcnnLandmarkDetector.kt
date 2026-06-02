@@ -27,8 +27,10 @@ class NcnnLandmarkDetector(
         private const val POINT_COUNT = 106
         private const val ENGINE_NAME = "NCNN-Vulkan"
 
-        // [全局锁] NCNN Net::load_model 非线程安全，所有 NCNN 初始化共享此锁
-        private val NCNN_INIT_LOCK = Any()
+        // [关键修复] 进程级全局锁：OpenMP 运行时初始化不是线程安全的，
+        // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程。
+        // 注意：必须与 NcnnRoiDetector 使用同一个锁对象。
+        private val NCNN_GLOBAL_LOCK = NcnnRoiDetector::class.java
     }
 
     private val appContext = context.applicationContext
@@ -58,8 +60,8 @@ class NcnnLandmarkDetector(
     }
 
     private fun initialize() {
-        // [修复崩溃] NCNN Net::load_model 非线程安全，必须全局同步
-        synchronized(NCNN_INIT_LOCK) {
+        // [修复崩溃] OpenMP 运行时初始化不是线程安全的，必须全局同步
+        synchronized(NCNN_GLOBAL_LOCK) {
             try {
                 val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
@@ -104,40 +106,48 @@ class NcnnLandmarkDetector(
             return null
         }
 
-        return try {
-            val prepStart = SystemClock.elapsedRealtime()
-            val cropResult = prepareInputBitmap(bitmap, roi)
-            val prepElapsed = SystemClock.elapsedRealtime() - prepStart
-
-            Log.d(TAG, "[Perf] NcnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
-
-            val inferStart = SystemClock.elapsedRealtime()
-            val result = det.detect(cropResult.bitmap)
-            val inferElapsed = SystemClock.elapsedRealtime() - inferStart
-
-            if (result != null && result.isNotEmpty()) {
-                val sb = StringBuilder("[Diag] NCNN raw output first 10 points: ")
-                for (i in 0 until minOf(10, result.size / 2)) {
-                    sb.append("(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
-                }
-                Log.d(TAG, sb.toString())
+        // [关键修复] OpenMP 线程亲和性初始化不是线程安全的，
+        // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程
+        return synchronized(NCNN_GLOBAL_LOCK) {
+            try {
+                detectLandmarksLocked(bitmap, lensFacing, roi, det, totalStart)
+            } catch (e: Exception) {
+                Log.e(TAG, "NcnnLandmark detection failed", e)
+                null
             }
-
-            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
-
-            if (result == null || result.isEmpty()) {
-                Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
-                return null
-            }
-
-            val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
-
-            Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
-            landmarks
-        } catch (e: Exception) {
-            Log.e(TAG, "NcnnLandmark detection failed", e)
-            null
         }
+    }
+
+    private fun detectLandmarksLocked(bitmap: Bitmap, lensFacing: Int, roi: RectF?, det: NcnnFaceDetector, totalStart: Long): FloatArray? {
+        val prepStart = SystemClock.elapsedRealtime()
+        val cropResult = prepareInputBitmap(bitmap, roi)
+        val prepElapsed = SystemClock.elapsedRealtime() - prepStart
+
+        Log.d(TAG, "[Perf] NcnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
+
+        val inferStart = SystemClock.elapsedRealtime()
+        val result = det.detect(cropResult.bitmap)
+        val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+
+        if (result != null && result.isNotEmpty()) {
+            val sb = StringBuilder("[Diag] NCNN raw output first 10 points: ")
+            for (i in 0 until minOf(10, result.size / 2)) {
+                sb.append("(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
+            }
+            Log.d(TAG, sb.toString())
+        }
+
+        val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+
+        if (result == null || result.isEmpty()) {
+            Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
+            return null
+        }
+
+        val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
+
+        Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
+        return landmarks
     }
 
     /**

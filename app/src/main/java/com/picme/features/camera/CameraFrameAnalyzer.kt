@@ -186,7 +186,6 @@ internal fun handleImageAnalysisFrameMediaPipe(
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit,
-    isDualMode: Boolean = false,
     existingWarpParams: FaceWarpParams? = null,
     beautyEnabled: Boolean = false
 ) {
@@ -209,16 +208,12 @@ internal fun handleImageAnalysisFrameMediaPipe(
             ?: imageProxy.height.toFloat()
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-        // [方案1优化] InsightFace 性能优化: 智能帧跳过 + 运动检测
-        val isInsightFaceMode = detectionEngineMode == EngineType.INSIGHTFACE
-
         // 获取上次的人脸中心点用于运动检测
         val lastFaceCenter = existingWarpParams?.let {
             Offset(it.faceCenterX, it.faceCenterY)
         }
 
-        val shouldSkipDetection = isInsightFaceMode &&
-                                   !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) &&
+        val shouldSkipDetection = !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) &&
                                    existingWarpParams?.hasFace == true
 
         // [帧同步 CR-P0-3] 使用 ImageProxy 时间戳精确查询对应的 FrameId。
@@ -312,7 +307,11 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 detectionSource = detectionResult.detectionSource
             ).copy(
                 requestedDetectionEngineMode = detectionEngineMode,
-                roiRect = detectionResult.roiRect
+                roiRect = detectionResult.roiRect,
+                roiDetectorName = detectionResult.roiDetectorName,
+                useGpuForRoi = detectionResult.useGpuForRoi,
+                landmarkDetectorName = detectionResult.landmarkDetectorName,
+                useGpuForLandmark = detectionResult.useGpuForLandmark
             )
             val convertElapsed = SystemClock.elapsedRealtime() - convertStart
             Logger.d("Camera", "[Perf] Face106ToWarpParams.convert: ${convertElapsed}ms")
@@ -329,18 +328,12 @@ internal fun handleImageAnalysisFrameMediaPipe(
             onFacePointChanged(screenPoint)
             onShowFocusIndicatorChanged(true)
 
-            if (isDualMode) {
-                onFaceWarpParamsChanged(faceWarpParams)
-            } else {
-                onFaceWarpParamsChanged(faceWarpParams)
-            }
+            onFaceWarpParamsChanged(faceWarpParams)
         } else {
-            if (!isDualMode) {
-                onShowFocusIndicatorChanged(false)
-                onFaceWarpParamsChanged(
-                    FaceWarpParams(requestedDetectionEngineMode = detectionEngineMode)
-                )
-            }
+            onShowFocusIndicatorChanged(false)
+            onFaceWarpParamsChanged(
+                FaceWarpParams(requestedDetectionEngineMode = detectionEngineMode)
+            )
         }
 
         imageProxy.close()

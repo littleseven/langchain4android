@@ -142,6 +142,11 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
     /**
      * 初始化 EGL 环境（Pbuffer Surface）
+     *
+     * [关键修复] Pbuffer Surface 尺寸必须足够大以支持离屏 FBO 渲染。
+     * 某些 GPU 驱动（Mali/Adreno）要求 Pbuffer 尺寸至少与最大的 FBO 一致，
+     * 否则渲染到 FBO 时会报 GL_INVALID_FRAMEBUFFER_OPERATION (1286)。
+     * 使用 4096x4096 确保覆盖所有可能的拍照分辨率。
      */
     private fun ensureEglInitialized() {
         if (isEglInitialized) {
@@ -160,8 +165,11 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             throw PhotoProcessException("EGL context creation failed")
         }
 
-        // 创建 Pbuffer Surface（离屏渲染）
-        eglSurface = eglCore.createSurface(null, 1, 1)
+        // [关键修复] Pbuffer Surface 尺寸必须 >= 最大 FBO 尺寸，
+        // 否则某些 GPU 驱动会拒绝渲染到 FBO
+        val pbWidth = 4096
+        val pbHeight = 4096
+        eglSurface = eglCore.createSurface(null, pbWidth, pbHeight)
         if (eglSurface == EGL14.EGL_NO_SURFACE) {
             throw PhotoProcessException("EGL Pbuffer surface creation failed")
         }
@@ -178,7 +186,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         }
 
         isEglInitialized = true
-        Log.d(TAG, "EGL initialized successfully for photo processing")
+        Log.d(TAG, "EGL initialized successfully for photo processing (Pbuffer=${pbWidth}x${pbHeight})")
     }
 
     /**

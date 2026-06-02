@@ -38,5 +38,9 @@ data class FaceWarpParams(
     val bigBeautyLandmarks: GpuPixelLandmarks = GpuPixelLandmarks(),
     val detectionSource: FaceDetectionSource = FaceDetectionSource.NONE,
     val requestedDetectionEngineMode: EngineType = EngineType.MEDIAPIPE,
-    val roiRect: RectF? = null
+    val roiRect: RectF? = null,
+    val roiDetectorName: String = "Unknown",
+    val useGpuForRoi: Boolean = false,
+    val landmarkDetectorName: String = "Unknown",
+    val useGpuForLandmark: Boolean = false
 )

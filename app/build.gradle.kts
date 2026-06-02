@@ -7,7 +7,7 @@ plugins {
 }
 
 // Release signing config from environment variables (secure)
-val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: "keystore/picme-release.jks"
+val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: "$projectDir/keystore/picme-release.jks"
 val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD") ?: ""
 val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: "picme"
 val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: ""
@@ -47,6 +47,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     androidResources {
@@ -75,8 +79,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = false // 禁用资源压缩，避免大模型文件导致 AAPT2 失败
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -171,8 +175,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     // 美颜引擎模块
     implementation(project(":beauty-engine"))
-    // ONNX Runtime 依赖必须同时在 app 模块声明，确保 native .so 被打包进 APK
-    implementation(libs.onnxruntime.android)
     // GPUPixel 已移除，全部能力由自研引擎提供
 
     "ksp"(libs.androidx.room.compiler)

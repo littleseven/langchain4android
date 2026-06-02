@@ -59,20 +59,18 @@ object ModelManager {
 
     // ── 模型注册表 ───────────────────────────────────────────
 
-    private val MODEL_REGISTRY = mapOf(
-        // ONNX 模型
-        "det10g_onnx" to ModelInfo(
-            assetPath = "models/onnx/det_10g.onnx",
-            cacheName = "det_10g.onnx",
-            version = "1.0"
-        ),
-        "2d106_onnx" to ModelInfo(
-            assetPath = "models/onnx/2d106det.onnx",
-            cacheName = "2d106det.onnx",
-            version = "1.0"
-        ),
+    /**
+     * 人脸检测模型下载配置（映射到 llm_models/<modelId>/ 目录）
+     */
+    private val FACE_DETECTION_DOWNLOAD_KEYS = mapOf(
+        "det10g_mnn" to "picme-face-det-mnn",
+        "2d106_mnn" to "picme-face-landmark-mnn",
+        "det10g_ncnn" to "picme-face-det-ncnn",
+        "2d106_ncnn" to "picme-face-landmark-ncnn"
+    )
 
-        // MNN 模型
+    private val MODEL_REGISTRY = mapOf(
+        // MNN 模型（已从 assets 移除，优先从下载目录加载）
         "det10g_mnn" to ModelInfo(
             assetPath = "models/mnn/det_10g.mnn",
             cacheName = "det_10g.mnn",
@@ -118,34 +116,64 @@ object ModelManager {
     // ── 公共 API ─────────────────────────────────────────────
 
     /**
-     * 准备单个模型文件（assets → filesDir）
+     * 准备单个模型文件
+     *
+     * 策略：优先从下载目录 (llm_models/) 加载，其次从 assets 复制。
      *
      * @param key 模型注册表中的 key
      * @param context Context
-     * @return 复制后的文件
+     * @return 模型文件
      * @throws IllegalArgumentException 如果 key 不存在
-     * @throws RuntimeException 如果复制失败
+     * @throws RuntimeException 如果复制失败且下载目录无可用文件
      */
     fun prepareModel(key: String, context: Context): File {
         val info = MODEL_REGISTRY[key]
             ?: throw IllegalArgumentException("Unknown model key: $key")
 
+        // 1. 优先检查下载目录
+        val downloadKey = FACE_DETECTION_DOWNLOAD_KEYS[key]
+        if (downloadKey != null) {
+            val downloadFile = File(context.filesDir, "llm_models/$downloadKey/${info.cacheName}")
+            if (downloadFile.exists() && downloadFile.length() > 0) {
+                Log.d(TAG, "Using downloaded model: ${downloadFile.absolutePath}")
+                return downloadFile
+            }
+        }
+
+        // 2. 回退到 assets 复制
         return copyAssetToCache(info.assetPath, info.cacheName, context)
     }
 
     /**
      * 准备 NCNN 模型文件对（.param + .bin）
      *
+     * 策略：优先从下载目录 (llm_models/) 加载，其次从 assets 复制。
+     *
      * @param key NCNN 模型注册表中的 key
      * @param context Context
      * @return Pair<paramFile, binFile>
      * @throws IllegalArgumentException 如果 key 不存在
-     * @throws RuntimeException 如果复制失败
+     * @throws RuntimeException 如果复制失败且下载目录无可用文件
      */
     fun prepareNcnnModel(key: String, context: Context): Pair<File, File> {
         val info = NCNN_MODEL_REGISTRY[key]
             ?: throw IllegalArgumentException("Unknown NCNN model key: $key")
 
+        // 1. 优先检查下载目录
+        val downloadKey = FACE_DETECTION_DOWNLOAD_KEYS[key]
+        if (downloadKey != null) {
+            val downloadDir = File(context.filesDir, "llm_models/$downloadKey")
+            val paramFile = File(downloadDir, info.paramCacheName)
+            val binFile = File(downloadDir, info.binCacheName)
+            if (paramFile.exists() && paramFile.length() > 0 &&
+                binFile.exists() && binFile.length() > 0
+            ) {
+                Log.d(TAG, "Using downloaded NCNN model: param=${paramFile.absolutePath}, bin=${binFile.absolutePath}")
+                return Pair(paramFile, binFile)
+            }
+        }
+
+        // 2. 回退到 assets 复制
         val paramFile = copyAssetToCache(info.paramAssetPath, info.paramCacheName, context)
         val binFile = copyAssetToCache(info.binAssetPath, info.binCacheName, context)
 
@@ -153,19 +181,45 @@ object ModelManager {
     }
 
     /**
-     * 检查模型是否已缓存（无需复制）
+     * 检查模型是否已缓存（下载目录或 assets 缓存）
      */
     fun isModelCached(key: String, context: Context): Boolean {
         val info = MODEL_REGISTRY[key] ?: return false
+
+        // 1. 检查下载目录
+        val downloadKey = FACE_DETECTION_DOWNLOAD_KEYS[key]
+        if (downloadKey != null) {
+            val downloadFile = File(context.filesDir, "llm_models/$downloadKey/${info.cacheName}")
+            if (downloadFile.exists() && downloadFile.length() > 0) {
+                return true
+            }
+        }
+
+        // 2. 检查传统缓存
         val file = File(context.filesDir, info.cacheName)
         return file.exists() && file.length() > 0L
     }
 
     /**
-     * 检查 NCNN 模型是否已缓存
+     * 检查 NCNN 模型是否已缓存（下载目录或 assets 缓存）
      */
     fun isNcnnModelCached(key: String, context: Context): Boolean {
         val info = NCNN_MODEL_REGISTRY[key] ?: return false
+
+        // 1. 检查下载目录
+        val downloadKey = FACE_DETECTION_DOWNLOAD_KEYS[key]
+        if (downloadKey != null) {
+            val downloadDir = File(context.filesDir, "llm_models/$downloadKey")
+            val paramFile = File(downloadDir, info.paramCacheName)
+            val binFile = File(downloadDir, info.binCacheName)
+            if (paramFile.exists() && paramFile.length() > 0L &&
+                binFile.exists() && binFile.length() > 0L
+            ) {
+                return true
+            }
+        }
+
+        // 2. 检查传统缓存
         val paramFile = File(context.filesDir, info.paramCacheName)
         val binFile = File(context.filesDir, info.binCacheName)
         return paramFile.exists() && paramFile.length() > 0L &&

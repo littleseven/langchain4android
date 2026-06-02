@@ -285,8 +285,13 @@ class BeautyPreviewView @JvmOverloads constructor(
         // 而 BeautyPreviewView.cameraSurface 与 GlBeautyPreviewProvider.previewSurface 引用同一个对象。
         // Surface.isValid() 在 release() 后不能 100% 可靠地返回 false，导致缓存命中返回已废弃的 Surface，
         // CameraX 配置相机会话时抛出 "Surface was abandoned"。
-        cameraSurface?.release()
+        // [修复2] 不再主动 release 旧 Surface，让 GC 自然回收，避免 CameraX 正在使用时被释放
+        val oldSurface = cameraSurface
         cameraSurface = renderer.getSurfaceForCamera()
+        oldSurface?.let {
+            // 延迟释放旧 Surface，确保 CameraX 已完成使用
+            postDelayed({ if (it.isValid) it.release() }, 500)
+        }
         Log.d(TAG, "Created camera input surface: ${cameraSurface?.hashCode()}")
         return cameraSurface
     }

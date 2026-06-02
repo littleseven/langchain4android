@@ -59,15 +59,16 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.core.designsystem.PicMeTheme
+import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
+import com.picme.data.download.ModelConfig
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
-import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
-import com.picme.domain.model.InferenceEngineType
+
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
@@ -76,13 +77,15 @@ import com.picme.features.settings.agent.SettingsAgentPanel
 import com.picme.features.settings.agent.rememberSettingsAgentIntegration
 import com.picme.features.common.chat.rememberAgentChatConfig
 import com.picme.domain.agent.model.AgentScene
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToLlmModelManager: () -> Unit = {},
-    onNavigateToAsrModelManager: () -> Unit = {}
+    onNavigateToAsrModelManager: () -> Unit = {},
+    onNavigateToFaceDetectionModelManager: () -> Unit = {},
 ) {
     // 沉浸式模式
     val view = LocalView.current
@@ -110,7 +113,6 @@ fun SettingsScreen(
     val showCameraInfoInPreview by viewModel.showCameraInfoInPreview.collectAsState()
     val showFaceDebugOverlay by viewModel.showFaceDebugOverlay.collectAsState()
     val showLogOverlay by viewModel.showLogOverlay.collectAsState()
-    val faceDetectionEngineMode by viewModel.faceDetectionEngineMode.collectAsState()
     val faceDetectionLandmarkModeEnabled by viewModel.faceDetectionLandmarkModeEnabled.collectAsState()
     val adaptiveFaceDetectionIntervalEnabled by viewModel.adaptiveFaceDetectionIntervalEnabled.collectAsState()
     val faceDetectIntervalProfile by viewModel.faceDetectIntervalProfile.collectAsState()
@@ -125,6 +127,12 @@ fun SettingsScreen(
     val aiAgentForceRemote by viewModel.aiAgentForceRemote.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
+
+    // 模型下载状态（从 ViewModel 获取，确保共享）
+    val downloadStates by viewModel.downloadStates.collectAsState()
+
+    // 模型配置列表（用于设置页自动下载）
+    val allModels by viewModel.allModels.collectAsState()
 
     // ===== Agent Chat 配置（使用公共组件）=====
     val agentChatConfig = rememberAgentChatConfig(
@@ -155,6 +163,7 @@ fun SettingsScreen(
                 "debug" -> onNavigateBack() // 设置页无 debug 入口，返回相机页
                 "llm_model_manager" -> onNavigateToLlmModelManager()
                 "asr_model_manager" -> onNavigateToAsrModelManager()
+
                 else -> Logger.w("PicMe:Settings", "Unknown navigation destination: $destination")
             }
         },
@@ -212,7 +221,6 @@ fun SettingsScreen(
         showCameraInfoInPreview = showCameraInfoInPreview,
         showFaceDebugOverlay = showFaceDebugOverlay,
         showLogOverlay = showLogOverlay,
-        faceDetectionEngineMode = faceDetectionEngineMode,
         faceDetectionLandmarkModeEnabled = faceDetectionLandmarkModeEnabled,
         adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile = faceDetectIntervalProfile,
@@ -225,9 +233,6 @@ fun SettingsScreen(
         onShowCameraInfoInPreviewChange = { show -> viewModel.setShowCameraInfoInPreview(show) },
         onShowFaceDebugOverlayChange = { show -> viewModel.setShowFaceDebugOverlay(show) },
         onShowLogOverlayChange = { show -> viewModel.setShowLogOverlay(show) },
-        onFaceDetectionEngineModeSelected = { mode ->
-            viewModel.setFaceDetectionEngineMode(mode)
-        },
         onFaceDetectionLandmarkModeEnabledChange = { enabled ->
             viewModel.setFaceDetectionLandmarkModeEnabled(enabled)
         },
@@ -239,10 +244,8 @@ fun SettingsScreen(
         },
         onDebugShaderModeSelected = { mode -> viewModel.setDebugShaderMode(mode) },
         onRoiModelTypeSelected = { type -> viewModel.setRoiModelType(type) },
-        onRoiEngineTypeSelected = { type -> viewModel.setRoiEngineType(type) },
         onRoiDevicePreferenceSelected = { preference -> viewModel.setRoiDevicePreference(preference) },
         onLandmarkModelTypeSelected = { type -> viewModel.setLandmarkModelType(type) },
-        onLandmarkEngineTypeSelected = { type -> viewModel.setLandmarkEngineType(type) },
         onLandmarkDevicePreferenceSelected = { preference -> viewModel.setLandmarkDevicePreference(preference) },
         aiAgentMode = aiAgentMode,
         onAiAgentModeChange = { mode -> viewModel.setAiAgentMode(mode) },
@@ -262,6 +265,12 @@ fun SettingsScreen(
         onLocalAsrModelChange = { modelId -> viewModel.setLocalAsrModel(modelId) },
         onNavigateToLlmModelManager = onNavigateToLlmModelManager,
         onNavigateToAsrModelManager = onNavigateToAsrModelManager,
+        onNavigateToFaceDetectionModelManager = onNavigateToFaceDetectionModelManager,
+        isModelDownloaded = viewModel::isModelDownloaded,
+        getModelId = viewModel::getModelId,
+        downloadModel = viewModel::downloadModel,
+        downloadStates = downloadStates,
+        allModels = allModels,
         onNavigateBack = onNavigateBack
     )
 
@@ -283,7 +292,6 @@ private fun settingsContent(
     showCameraInfoInPreview: Boolean,
     showFaceDebugOverlay: Boolean,
     showLogOverlay: Boolean,
-    faceDetectionEngineMode: FaceDetectionEngineMode,
     faceDetectionLandmarkModeEnabled: Boolean,
     adaptiveFaceDetectionIntervalEnabled: Boolean,
     faceDetectIntervalProfile: FaceDetectIntervalProfile,
@@ -312,19 +320,22 @@ private fun settingsContent(
     onShowCameraInfoInPreviewChange: (Boolean) -> Unit,
     onShowFaceDebugOverlayChange: (Boolean) -> Unit,
     onShowLogOverlayChange: (Boolean) -> Unit,
-    onFaceDetectionEngineModeSelected: (FaceDetectionEngineMode) -> Unit,
     onFaceDetectionLandmarkModeEnabledChange: (Boolean) -> Unit,
     onAdaptiveFaceDetectionIntervalEnabledChange: (Boolean) -> Unit,
     onFaceDetectIntervalProfileSelected: (FaceDetectIntervalProfile) -> Unit,
     onDebugShaderModeSelected: (Int) -> Unit,
     onRoiModelTypeSelected: (DetectionModelType) -> Unit,
-    onRoiEngineTypeSelected: (InferenceEngineType) -> Unit,
     onRoiDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
-    onLandmarkEngineTypeSelected: (InferenceEngineType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onNavigateToLlmModelManager: () -> Unit,
     onNavigateToAsrModelManager: () -> Unit,
+    onNavigateToFaceDetectionModelManager: () -> Unit,
+    isModelDownloaded: (DetectionModelType) -> Boolean,
+    getModelId: (DetectionModelType, DetectionStage) -> String?,
+    downloadModel: (String, ModelConfig) -> Unit,
+    downloadStates: Map<String, com.picme.data.download.DownloadState>,
+    allModels: List<ModelConfig>,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -454,26 +465,18 @@ private fun settingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 人脸检测算法模式选择
-            SettingsSection(
-                title = stringResource(R.string.face_detection),
-                description = stringResource(R.string.face_detection_desc)
-            ) {
-                FaceDetectionEngineSelection(
-                    currentMode = faceDetectionEngineMode,
-                    onModeSelected = onFaceDetectionEngineModeSelected
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
             // ROI 阶段配置
             StageConfigSection(
                 stage = DetectionStage.ROI,
                 config = roiStageConfig,
                 onModelTypeSelected = onRoiModelTypeSelected,
-                onEngineTypeSelected = onRoiEngineTypeSelected,
-                onDevicePreferenceSelected = onRoiDevicePreferenceSelected
+                onDevicePreferenceSelected = onRoiDevicePreferenceSelected,
+                onNavigateToModelManager = onNavigateToFaceDetectionModelManager,
+                isModelDownloaded = isModelDownloaded,
+                getModelId = getModelId,
+                downloadModel = downloadModel,
+                downloadStates = downloadStates,
+                allModels = allModels
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -483,8 +486,13 @@ private fun settingsContent(
                 stage = DetectionStage.LANDMARK,
                 config = landmarkStageConfig,
                 onModelTypeSelected = onLandmarkModelTypeSelected,
-                onEngineTypeSelected = onLandmarkEngineTypeSelected,
-                onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected
+                onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected,
+                onNavigateToModelManager = onNavigateToFaceDetectionModelManager,
+                isModelDownloaded = isModelDownloaded,
+                getModelId = getModelId,
+                downloadModel = downloadModel,
+                downloadStates = downloadStates,
+                allModels = allModels
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -676,6 +684,8 @@ private fun LocalAsrModelSelection(
         }
     }
 }
+
+
 
 @Composable
 private fun AiAgentModeSelection(
@@ -1059,32 +1069,6 @@ private fun languageSelection(
 
 
 @Composable
-private fun FaceDetectionEngineSelection(
-    currentMode: FaceDetectionEngineMode,
-    onModeSelected: (FaceDetectionEngineMode) -> Unit
-) {
-    val options = listOf(
-        FaceDetectionEngineMode.MEDIAPIPE to stringResource(R.string.face_detection_engine_mode_mediapipe),
-        FaceDetectionEngineMode.INSIGHTFACE to stringResource(R.string.face_detection_engine_mode_insightface),
-        FaceDetectionEngineMode.CUSTOM to stringResource(R.string.face_detection_engine_mode_custom)
-    )
-
-    Text(
-        text = stringResource(R.string.face_detection_engine_title),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 0.dp)
-    )
-
-    CompactOptionChips(
-        options = options,
-        currentValue = currentMode,
-        maxLines = 2,
-        onSelected = onModeSelected
-    )
-}
-
-@Composable
 private fun FaceDetectProfileSelection(
     currentProfile: FaceDetectIntervalProfile,
     onProfileSelected: (FaceDetectIntervalProfile) -> Unit
@@ -1144,9 +1128,15 @@ private fun StageConfigSection(
     stage: DetectionStage,
     config: StageConfig,
     onModelTypeSelected: (DetectionModelType) -> Unit,
-    onEngineTypeSelected: (InferenceEngineType) -> Unit,
-    onDevicePreferenceSelected: (InferenceDevicePreference) -> Unit
+    onDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
+    onNavigateToModelManager: () -> Unit,
+    isModelDownloaded: (DetectionModelType) -> Boolean,
+    getModelId: (DetectionModelType, DetectionStage) -> String?,
+    downloadModel: (String, ModelConfig) -> Unit,
+    downloadStates: Map<String, com.picme.data.download.DownloadState>,
+    allModels: List<ModelConfig>
 ) {
+    val context = LocalContext.current
     val title = when (stage) {
         DetectionStage.ROI -> stringResource(R.string.stage_roi_title)
         DetectionStage.LANDMARK -> stringResource(R.string.stage_landmark_title)
@@ -1170,21 +1160,12 @@ private fun StageConfigSection(
         modelTypeSelection(
             currentType = config.modelType,
             stage = stage,
-            onTypeSelected = onModelTypeSelected
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 推理引擎选择
-        Text(
-            text = stringResource(R.string.inference_engine),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 2.dp)
-        )
-        inferenceEngineSelection(
-            currentType = config.engineType,
-            onTypeSelected = onEngineTypeSelected
+            onTypeSelected = onModelTypeSelected,
+            isModelDownloaded = isModelDownloaded,
+            getModelId = getModelId,
+            downloadModel = downloadModel,
+            downloadStates = downloadStates,
+            allModels = allModels
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -1200,6 +1181,38 @@ private fun StageConfigSection(
             currentPreference = config.devicePreference,
             onPreferenceSelected = onDevicePreferenceSelected
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 模型管理入口
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onNavigateToModelManager)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = stringResource(R.string.face_detection_model_manager),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = stringResource(R.string.face_detection_model_manager_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.CloudDownload,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(22.dp)
+                    .padding(start = 4.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
@@ -1207,45 +1220,108 @@ private fun StageConfigSection(
 private fun modelTypeSelection(
     currentType: DetectionModelType,
     stage: DetectionStage,
-    onTypeSelected: (DetectionModelType) -> Unit
+    onTypeSelected: (DetectionModelType) -> Unit,
+    isModelDownloaded: (DetectionModelType) -> Boolean,
+    getModelId: (DetectionModelType, DetectionStage) -> String?,
+    downloadModel: (String, ModelConfig) -> Unit,
+    downloadStates: Map<String, com.picme.data.download.DownloadState>,
+    allModels: List<ModelConfig>
 ) {
+    val context = LocalContext.current
+
     val options = when (stage) {
         DetectionStage.ROI -> listOf(
             DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe),
-            DetectionModelType.INSIGHTFACE_DET10G to stringResource(R.string.model_insightface_det10g)
+            DetectionModelType.DET10G_MNN to stringResource(R.string.model_det10g_mnn),
+            DetectionModelType.DET10G_NCNN to stringResource(R.string.model_det10g_ncnn)
         )
         DetectionStage.LANDMARK -> listOf(
             DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe),
-            DetectionModelType.INSIGHTFACE_2D106 to stringResource(R.string.model_insightface_2d106)
+            DetectionModelType.FACE_2D106_MNN to stringResource(R.string.model_2d106_mnn),
+            DetectionModelType.FACE_2D106_NCNN to stringResource(R.string.model_2d106_ncnn)
         )
     }
 
-    CompactOptionChips(
-        options = options,
-        currentValue = currentType,
-        maxLines = 1,
-        onSelected = onTypeSelected
-    )
-}
+    @OptIn(ExperimentalLayoutApi::class)
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        maxLines = 2
+    ) {
+        options.forEach { (modelType, label) ->
+            val downloaded = isModelDownloaded(modelType)
+            val isMediaPipe = modelType == DetectionModelType.MEDIAPIPE
+            val modelId = getModelId(modelType, stage)
+            val downloadState = modelId?.let { downloadStates[it] }
+            val isDownloading = downloadState?.status == com.picme.data.download.DownloadStatus.DOWNLOADING
+            val downloadProgress = if (isDownloading && downloadState.totalBytes > 0) {
+                (downloadState.downloadedBytes.toFloat() / downloadState.totalBytes * 100).toInt()
+            } else 0
 
-@Composable
-private fun inferenceEngineSelection(
-    currentType: InferenceEngineType,
-    onTypeSelected: (InferenceEngineType) -> Unit
-) {
-    val options = listOf(
-        InferenceEngineType.ONNX to stringResource(R.string.inference_engine_onnx),
-        InferenceEngineType.MNN to stringResource(R.string.inference_engine_mnn),
-        InferenceEngineType.NCNN to stringResource(R.string.inference_engine_ncnn),
-        InferenceEngineType.TFLITE to stringResource(R.string.inference_engine_tflite)
-    )
-
-    CompactOptionChips(
-        options = options,
-        currentValue = currentType,
-        maxLines = 2,
-        onSelected = onTypeSelected
-    )
+            FilterChip(
+                selected = modelType == currentType,
+                onClick = {
+                    if (downloaded || isMediaPipe) {
+                        onTypeSelected(modelType)
+                    } else if (!isDownloading) {
+                        val mId = modelId
+                        val modelConfig = mId?.let { id -> allModels.find { it.id == id } }
+                        if (modelConfig != null && mId != null) {
+                            downloadModel(mId, modelConfig)
+                            android.widget.Toast.makeText(
+                                context,
+                                "开始下载 ${modelConfig.name}，下载完成后自动生效",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "模型配置未找到，请先进入模型管理页面下载",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                },
+                label = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        when {
+                            isDownloading -> {
+                                Text(
+                                    text = "${downloadProgress}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            !downloaded && !isMediaPipe -> {
+                                Icon(
+                                    imageVector = Icons.Outlined.CloudDownload,
+                                    contentDescription = "未下载",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                enabled = !isDownloading
+            )
+        }
+    }
 }
 
 @Composable
@@ -1339,7 +1415,6 @@ fun SettingsScreenPreview() {
             showCameraInfoInPreview = false,
             showFaceDebugOverlay = false,
         showLogOverlay = false,
-        faceDetectionEngineMode = FaceDetectionEngineMode.INSIGHTFACE,
         faceDetectionLandmarkModeEnabled = true,
 
             adaptiveFaceDetectionIntervalEnabled = true,
@@ -1353,16 +1428,13 @@ fun SettingsScreenPreview() {
             onShowCameraInfoInPreviewChange = {},
             onShowFaceDebugOverlayChange = {},
             onShowLogOverlayChange = {},
-            onFaceDetectionEngineModeSelected = {},
             onFaceDetectionLandmarkModeEnabledChange = {},
             onAdaptiveFaceDetectionIntervalEnabledChange = {},
             onFaceDetectIntervalProfileSelected = {},
             onDebugShaderModeSelected = {},
             onRoiModelTypeSelected = {},
-            onRoiEngineTypeSelected = {},
             onRoiDevicePreferenceSelected = {},
             onLandmarkModelTypeSelected = {},
-            onLandmarkEngineTypeSelected = {},
             onLandmarkDevicePreferenceSelected = {},
             aiAgentMode = AiAgentMode.LOCAL,
             onAiAgentModeChange = {},
@@ -1382,6 +1454,12 @@ fun SettingsScreenPreview() {
             onLocalAsrModelChange = {},
             onNavigateToLlmModelManager = {},
             onNavigateToAsrModelManager = {},
+            onNavigateToFaceDetectionModelManager = {},
+            isModelDownloaded = { true },
+            getModelId = { _, _ -> null },
+            downloadModel = { _, _ -> },
+            downloadStates = emptyMap(),
+            allModels = emptyList(),
             onNavigateBack = {}
         )
     }
