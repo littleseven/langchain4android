@@ -6,6 +6,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.Sensor
@@ -15,6 +16,7 @@ import android.hardware.SensorManager
 import android.view.SoundEffectConstants
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
@@ -153,6 +155,12 @@ private fun Int.toCameraAspectRatioMode(): CameraAspectRatioMode = when (this) {
 }
 
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
+
+private tailrec fun Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 object AspectRatio {
     const val RATIO_4_3 = 0
@@ -573,7 +581,10 @@ fun CameraScreen(
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
+        val activity = context.findActivity() ?: return@DisposableEffect onDispose {}
+        val window = activity.window
+        val previousSoftInputMode = window.attributes.softInputMode
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
         val insetsController = WindowCompat.getInsetsController(window, view)
 
         // 隐藏状态栏和导航栏
@@ -584,6 +595,7 @@ fun CameraScreen(
         Logger.d("Camera", "Immersive mode enabled")
 
         onDispose {
+            window.setSoftInputMode(previousSoftInputMode)
             // 恢复系统栏显示
             insetsController.show(WindowInsetsCompat.Type.systemBars())
             Logger.d("Camera", "Immersive mode disabled")
