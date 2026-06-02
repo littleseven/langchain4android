@@ -156,6 +156,9 @@
     <string name="show_camera_info">显示相机信息</string>
     <string name="show_face_debug">显示人脸调试</string>
     <string name="show_log_overlay">显示日志浮层</string>
+    <string name="camera_memory">相机状态记忆</string>
+    <string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
+    <string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
     <string name="aspect_ratio">画面比例</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>
