@@ -78,6 +78,20 @@ interface ImageProcessor {
         onPhotoFinished: (success: Boolean) -> Unit = {}
     )
 
+    fun takePhoto(
+        context: Context,
+        imageCapture: ImageCapture,
+        viewModel: MediaViewModel,
+        filter: FilterType,
+        beauty: BeautySettings,
+        lensFacing: Int,
+        mode: MediaType,
+        cachedFaces: List<Face>,
+        beautyStrategy: BeautyStrategy,
+        executor: java.util.concurrent.Executor,
+        onPhotoFinished: (success: Boolean) -> Unit = {}
+    )
+
     fun startVideoRecording(
         context: Context,
         videoCapture: VideoCapture<Recorder>,
@@ -502,23 +516,47 @@ class ImageProcessorImpl(
         coroutineScope: CoroutineScope?,
         onPhotoFinished: (success: Boolean) -> Unit
     ) {
+        takePhoto(
+            context = context,
+            imageCapture = imageCapture,
+            viewModel = viewModel,
+            filter = filter,
+            beauty = beauty,
+            lensFacing = lensFacing,
+            mode = mode,
+            cachedFaces = cachedFaces,
+            beautyStrategy = beautyStrategy,
+            executor = try {
+                java.util.concurrent.Executor {
+                    CameraThreadRegistry.getCameraHandler().post(it)
+                }
+            } catch (e: IllegalStateException) {
+                Logger.w("ImageProcessor", "CameraThreadRegistry not initialized, falling back to MainExecutor")
+                ContextCompat.getMainExecutor(context)
+            },
+            onPhotoFinished = onPhotoFinished
+        )
+    }
+
+    override fun takePhoto(
+        context: Context,
+        imageCapture: ImageCapture,
+        viewModel: MediaViewModel,
+        filter: FilterType,
+        beauty: BeautySettings,
+        lensFacing: Int,
+        mode: MediaType,
+        cachedFaces: List<Face>,
+        beautyStrategy: BeautyStrategy,
+        executor: java.util.concurrent.Executor,
+        onPhotoFinished: (success: Boolean) -> Unit
+    ) {
         Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")
 
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
 
-        // [Day1 线程隔离] 拍照回调 + 后处理全部投递到 CameraHandlerThread
-        // 避免在主线程执行 Bitmap 操作导致 ANR / 黑屏
-        val cameraExecutor: java.util.concurrent.Executor = try {
-            java.util.concurrent.Executor {
-                CameraThreadRegistry.getCameraHandler().post(it)
-            }
-        } catch (e: IllegalStateException) {
-            Logger.w("ImageProcessor", "CameraThreadRegistry not initialized, falling back to MainExecutor")
-            ContextCompat.getMainExecutor(context)
-        }
-
         imageCapture.takePicture(
-            cameraExecutor,
+            executor,
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     // [线程断言] 确保回调在 CameraHandlerThread 执行

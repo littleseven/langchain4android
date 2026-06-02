@@ -610,9 +610,13 @@ fun CameraContent(
         CameraThreadRegistry.initialize()
     }
 
-    // [Day1 线程隔离] cameraExecutor 改为 CameraHandlerThread 的 Executor
-    // 旧：Executors.newSingleThreadExecutor() → 新：CameraThreadRegistry.getCameraHandler() 包装为 Executor
-    val cameraExecutor = remember {
+    // [Day1 线程隔离] 分析线程与拍照线程分离，避免人脸检测阻塞拍照回调
+    val analysisExecutor = remember {
+        java.util.concurrent.Executor {
+            CameraThreadRegistry.getAnalysisHandler().post(it)
+        }
+    }
+    val captureExecutor = remember {
         java.util.concurrent.Executor {
             CameraThreadRegistry.getCameraHandler().post(it)
         }
@@ -1469,7 +1473,7 @@ fun CameraContent(
             aspectRatio = aspectRatio,
             previewView = previewView,
             bindPreviewSurfaceProvider = bindPreviewSurfaceProvider,
-            cameraExecutor = cameraExecutor,
+            cameraExecutor = analysisExecutor,
             isBeautyEnabled = { beautySettings.enabled },
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode.toEngineType(),

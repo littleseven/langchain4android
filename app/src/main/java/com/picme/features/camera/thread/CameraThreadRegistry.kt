@@ -20,6 +20,7 @@ import com.picme.core.common.Logger
 object CameraThreadRegistry {
 
     private var cameraHandlerThread: CameraHandlerThread? = null
+    private var analysisHandlerThread: CameraHandlerThread? = null
     private var agentHandlerThread: AgentHandlerThread? = null
 
     @Volatile
@@ -35,7 +36,8 @@ object CameraThreadRegistry {
             return
         }
 
-        cameraHandlerThread = CameraHandlerThread()
+        cameraHandlerThread = CameraHandlerThread("PicMe-CameraCapture")
+        analysisHandlerThread = CameraHandlerThread("PicMe-CameraAnalysis")
         agentHandlerThread = AgentHandlerThread()
         isInitialized = true
 
@@ -43,6 +45,7 @@ object CameraThreadRegistry {
             "PicMe:Thread",
             "ThreadRegistry initialized. " +
                 "CameraThread=${cameraHandlerThread?.isThreadReady()}, " +
+                "AnalysisThread=${analysisHandlerThread?.isThreadReady()}, " +
                 "AgentThread=${agentHandlerThread?.isThreadReady()}"
         )
     }
@@ -63,6 +66,12 @@ object CameraThreadRegistry {
             ?: throw IllegalStateException("CameraHandlerThread handler is null")
     }
 
+    fun getAnalysisHandler(): Handler {
+        checkInitialized()
+        return analysisHandlerThread!!.getHandler()
+            ?: throw IllegalStateException("AnalysisHandlerThread handler is null")
+    }
+
     fun getAgentHandler(): Handler {
         checkInitialized()
         return agentHandlerThread!!.getHandler()
@@ -77,6 +86,7 @@ object CameraThreadRegistry {
         return when {
             name == "main" || Looper.myLooper() == Looper.getMainLooper() -> ThreadRole.MAIN
             name == "PicMe-CameraCapture" -> ThreadRole.CAMERA_CAPTURE
+            name == "PicMe-CameraAnalysis" -> ThreadRole.ANALYSIS
             name == "PicMe-AgentState" -> ThreadRole.AGENT_STATE
             name.startsWith("CameraPreviewRender") -> ThreadRole.GL_RENDER
             else -> ThreadRole.UNKNOWN
@@ -113,8 +123,10 @@ object CameraThreadRegistry {
     fun release() {
         Logger.i("PicMe:Thread", "Releasing CameraThreadRegistry...")
         cameraHandlerThread?.quitSafely()
+        analysisHandlerThread?.quitSafely()
         agentHandlerThread?.quitSafely()
         cameraHandlerThread = null
+        analysisHandlerThread = null
         agentHandlerThread = null
         isInitialized = false
     }
@@ -128,6 +140,7 @@ object CameraThreadRegistry {
     enum class ThreadRole {
         MAIN,           // UI 主线程
         CAMERA_CAPTURE, // 拍照专用线程
+        ANALYSIS,       // 图像分析专用线程
         AGENT_STATE,    // Agent 状态机线程
         GL_RENDER,      // GL 渲染线程
         UNKNOWN         // 其他线程
