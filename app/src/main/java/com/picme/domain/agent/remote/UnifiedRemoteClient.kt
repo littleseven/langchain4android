@@ -10,14 +10,15 @@ import com.picme.data.remote.openai.OpenAiChatRequest
 import com.picme.data.remote.openai.OpenAiChatResponse
 import com.picme.data.remote.openai.OpenAiMessage
 import com.picme.domain.model.RemoteModelConfig
+import com.picme.domain.model.RemoteProtocol
 import retrofit2.Response
 
 /**
  * 统一远程 API 客户端
  *
- * 根据 [RemoteModelConfig] 自动选择协议：
- * - kimi-for-coding → Claude 格式（KimiCodingApiClient）
- * - kimi-k2.6 / deepseek-v4-flash → OpenAI 格式（OpenAiApiClient）
+ * 根据 [RemoteModelConfig.protocol] 自动选择协议：
+ * - CLAUDE → Kimi Coding 格式（x-api-key + /messages）
+ * - OPENAI → OpenAI 兼容格式（Bearer + /chat/completions）
  *
  * 对外暴露统一接口，隐藏协议差异。
  */
@@ -28,7 +29,7 @@ class UnifiedRemoteClient(
     private val tag = "PicMe:UnifiedRemote"
 
     private val kimiClient: KimiCodingApiClient? by lazy {
-        if (config.modelId == "kimi-for-coding") {
+        if (config.protocol == RemoteProtocol.CLAUDE) {
             KimiCodingApiClient(
                 apiKey = config.apiKey,
                 baseUrl = config.baseUrl,
@@ -38,7 +39,7 @@ class UnifiedRemoteClient(
     }
 
     private val openAiClient: OpenAiApiClient? by lazy {
-        if (config.modelId != "kimi-for-coding") {
+        if (config.protocol == RemoteProtocol.OPENAI) {
             OpenAiApiClient(
                 apiKey = config.apiKey,
                 baseUrl = config.baseUrl,
@@ -145,7 +146,7 @@ class UnifiedRemoteClient(
 
     companion object {
         /**
-         * 根据模型 ID 判断协议类型
+         * 根据模型 ID 推断默认协议类型（向后兼容）
          */
         fun protocolFor(modelId: String): RemoteProtocol {
             return when (modelId) {
@@ -154,12 +155,4 @@ class UnifiedRemoteClient(
             }
         }
     }
-}
-
-/**
- * 远程 API 协议类型
- */
-enum class RemoteProtocol {
-    CLAUDE,
-    OPENAI
 }

@@ -282,6 +282,11 @@
     <string name="remote_models">遠端模型</string>
     <string name="configured">已設定</string>
     <string name="not_configured">未設定</string>
+    <string name="protocol">協議</string>
+    <string name="model_id">模型 ID</string>
+    <string name="add_model">添加模型</string>
+    <string name="add_custom_model">添加自定義模型</string>
+    <string name="add">添加</string>
     <string name="base_url">基礎 URL</string>
     <string name="base_url_not_set">未設定</string>
     <string name="api_key">API Key</string>

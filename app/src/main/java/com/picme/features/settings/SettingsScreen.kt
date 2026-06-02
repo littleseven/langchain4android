@@ -903,17 +903,27 @@ private fun AiAgentRemoteModelsSection(
             com.picme.domain.model.RemoteModelConfigs()
         }
     }
+    var showAddDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
     ) {
-        Text(
-            text = stringResource(R.string.remote_models),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.remote_models),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(onClick = { showAddDialog = true }) {
+                Text("+ ${stringResource(R.string.add_model)}")
+            }
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -922,13 +932,41 @@ private fun AiAgentRemoteModelsSection(
                 config = config,
                 isSelected = config.modelId == selectedModelId,
                 onSelect = { onSelectedModelChange(config.modelId) },
-                onConfigChange = { updatedConfig ->
-                    val updated = configs.updateConfig(updatedConfig)
+                onConfigChange = { originalId, updatedConfig ->
+                    val updated = configs.updateConfig(originalId, updatedConfig)
                     onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
-                }
+                    // 如果修改了当前选中模型的ID，同步更新选中状态
+                    if (originalId == selectedModelId && originalId != updatedConfig.modelId) {
+                        onSelectedModelChange(updatedConfig.modelId)
+                    }
+                },
+                onDelete = { modelId ->
+                    val updated = configs.removeConfig(modelId)
+                    onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
+                    // 如果删除的是当前选中的模型，重置为第一个预置模型
+                    if (modelId == selectedModelId) {
+                        val firstPredefined = com.picme.domain.model.RemoteModelConfig.PREDEFINED_MODELS.firstOrNull()?.modelId
+                        if (firstPredefined != null) {
+                            onSelectedModelChange(firstPredefined)
+                        }
+                    }
+                },
+                isPredefined = com.picme.domain.model.RemoteModelConfig.PREDEFINED_MODELS.any { it.modelId == config.modelId }
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
+    }
+
+    // 添加自定义模型对话框
+    if (showAddDialog) {
+        AddCustomModelDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { newConfig ->
+                val updated = configs.addConfig(newConfig)
+                onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
+                showAddDialog = false
+            }
+        )
     }
 }
 
@@ -937,11 +975,15 @@ private fun RemoteModelConfigCard(
     config: com.picme.domain.model.RemoteModelConfig,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onConfigChange: (com.picme.domain.model.RemoteModelConfig) -> Unit
+    onConfigChange: (String, com.picme.domain.model.RemoteModelConfig) -> Unit,
+    onDelete: (String) -> Unit,
+    isPredefined: Boolean
 ) {
     var isEditing by remember { mutableStateOf(false) }
+    var editModelId by remember { mutableStateOf(config.modelId) }
     var editApiKey by remember { mutableStateOf(config.apiKey) }
     var editBaseUrl by remember { mutableStateOf(config.baseUrl) }
+    var editProtocol by remember { mutableStateOf(config.protocol) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -978,24 +1020,73 @@ private fun RemoteModelConfigCard(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                if (config.isConfigured) {
-                    Text(
-                        text = stringResource(R.string.configured),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.not_configured),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (config.isConfigured) {
+                        Text(
+                            text = stringResource(R.string.configured),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    } else {
+                        Text(
+                            text = stringResource(R.string.not_configured),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (!isPredefined) {
+                        TextButton(
+                            onClick = { onDelete(config.modelId) },
+                            modifier = Modifier.padding(0.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.delete),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             if (isEditing) {
+                // Model ID (editable for custom models)
+                if (!isPredefined) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = editModelId,
+                        onValueChange = { editModelId = it },
+                        label = { Text(stringResource(R.string.model_id)) },
+                        placeholder = { Text("e.g. gpt-4o") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                // Protocol selection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.protocol),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    com.picme.domain.model.RemoteProtocol.entries.forEach { protocol ->
+                        FilterChip(
+                            selected = editProtocol == protocol,
+                            onClick = { editProtocol = protocol },
+                            label = { Text(protocol.name) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
                 androidx.compose.material3.OutlinedTextField(
                     value = editBaseUrl,
                     onValueChange = { editBaseUrl = it },
@@ -1020,9 +1111,12 @@ private fun RemoteModelConfigCard(
                 ) {
                     TextButton(onClick = {
                         onConfigChange(
+                            config.modelId,
                             config.copy(
+                                modelId = editModelId.trim(),
                                 apiKey = editApiKey.trim(),
-                                baseUrl = editBaseUrl.trim()
+                                baseUrl = editBaseUrl.trim(),
+                                protocol = editProtocol
                             )
                         )
                         isEditing = false
@@ -1030,8 +1124,10 @@ private fun RemoteModelConfigCard(
                         Text(stringResource(R.string.save))
                     }
                     TextButton(onClick = {
+                        editModelId = config.modelId
                         editApiKey = config.apiKey
                         editBaseUrl = config.baseUrl
+                        editProtocol = config.protocol
                         isEditing = false
                     }) {
                         Text(stringResource(R.string.cancel))
@@ -1047,7 +1143,7 @@ private fun RemoteModelConfigCard(
                 ) {
                     Column {
                         Text(
-                            text = config.baseUrl.ifBlank { stringResource(R.string.base_url_not_set) },
+                            text = "${config.protocol.name} · ${config.baseUrl.ifBlank { stringResource(R.string.base_url_not_set) }}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1074,6 +1170,94 @@ private fun RemoteModelConfigCard(
             }
         }
     }
+}
+
+@Composable
+private fun AddCustomModelDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (com.picme.domain.model.RemoteModelConfig) -> Unit
+) {
+    var modelId by remember { mutableStateOf("") }
+    var baseUrl by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var protocol by remember { mutableStateOf(com.picme.domain.model.RemoteProtocol.OPENAI) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_custom_model)) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = modelId,
+                    onValueChange = { modelId = it },
+                    label = { Text(stringResource(R.string.model_id)) },
+                    placeholder = { Text("e.g. gpt-4o, claude-3-5-sonnet") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.protocol),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    com.picme.domain.model.RemoteProtocol.entries.forEach { p ->
+                        FilterChip(
+                            selected = protocol == p,
+                            onClick = { protocol = p },
+                            label = { Text(p.name) }
+                        )
+                    }
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = baseUrl,
+                    onValueChange = { baseUrl = it },
+                    label = { Text(stringResource(R.string.base_url)) },
+                    placeholder = { Text("https://api.example.com/v1/") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text(stringResource(R.string.api_key)) },
+                    placeholder = { Text(stringResource(R.string.api_key_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (modelId.isNotBlank()) {
+                        onConfirm(
+                            com.picme.domain.model.RemoteModelConfig(
+                                modelId = modelId.trim(),
+                                protocol = protocol,
+                                baseUrl = baseUrl.trim(),
+                                apiKey = apiKey.trim()
+                            )
+                        )
+                    }
+                },
+                enabled = modelId.isNotBlank()
+            ) {
+                Text(stringResource(R.string.add))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
 }
 
 @Composable
