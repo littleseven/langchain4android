@@ -29,9 +29,8 @@ enum class BeautyStrategy {
  */
 enum class FaceDetectionEngineMode {
     MEDIAPIPE,  // MediaPipe 算法系列 (TFLite)
-    INSIGHTFACE, // InsightFace 算法系列 (ONNX)
-    MNN,        // MNN GPU 加速
-    NCNN,       // NCNN 轻量级 GPU
+    MNN,        // MNN 算法系列 (GPU/CPU)
+    NCNN,       // NCNN 算法系列 (轻量级)
     CUSTOM      // 使用 StageConfig 独立配置
 }
 
@@ -55,11 +54,39 @@ enum class DetectionStage {
 /**
  * 检测模型类型（领域模型）
  * 用于 ROI 和 Landmark 阶段的模型选择
+ * 模型与推理引擎绑定，选择模型即确定引擎
  */
 enum class DetectionModelType {
-    MEDIAPIPE,          // MediaPipe 系列模型
-    INSIGHTFACE_DET10G, // InsightFace Det10G (ROI)
-    INSIGHTFACE_2D106   // InsightFace 2D106 (Landmark)
+    MEDIAPIPE,          // MediaPipe 系列模型 (TFLite)
+    DET10G_MNN,         // InsightFace Det10G (MNN)
+    DET10G_NCNN,        // InsightFace Det10G (NCNN)
+    FACE_2D106_MNN,     // InsightFace 2D106 (MNN)
+    FACE_2D106_NCNN;    // InsightFace 2D106 (NCNN)
+
+    /**
+     * 获取模型对应的推理引擎类型
+     */
+    fun toEngineType(): InferenceEngineType = when (this) {
+        MEDIAPIPE -> InferenceEngineType.TFLITE
+        DET10G_MNN, FACE_2D106_MNN -> InferenceEngineType.MNN
+        DET10G_NCNN, FACE_2D106_NCNN -> InferenceEngineType.NCNN
+    }
+
+    /**
+     * 判断是否为 ROI 阶段可用的模型
+     */
+    fun isRoiModel(): Boolean = when (this) {
+        MEDIAPIPE, DET10G_MNN, DET10G_NCNN -> true
+        FACE_2D106_MNN, FACE_2D106_NCNN -> false
+    }
+
+    /**
+     * 判断是否为 Landmark 阶段可用的模型
+     */
+    fun isLandmarkModel(): Boolean = when (this) {
+        MEDIAPIPE, FACE_2D106_MNN, FACE_2D106_NCNN -> true
+        DET10G_MNN, DET10G_NCNN -> false
+    }
 }
 
 /**
@@ -67,7 +94,6 @@ enum class DetectionModelType {
  * 用于控制人脸检测和关键点检测的底层推理框架
  */
 enum class InferenceEngineType {
-    ONNX,               // ONNX Runtime (CPU/NNAPI)
     MNN,                // MNN (支持 CPU/GPU)
     NCNN,               // NCNN (轻量级)
     TFLITE              // TensorFlow Lite (MediaPipe 默认)
@@ -97,14 +123,14 @@ data class StageConfig(
         fun defaultRoi(): StageConfig = StageConfig(
             stage = DetectionStage.ROI,
             modelType = DetectionModelType.MEDIAPIPE,
-            engineType = InferenceEngineType.TFLITE,
+            engineType = DetectionModelType.MEDIAPIPE.toEngineType(),
             devicePreference = InferenceDevicePreference.AUTO
         )
 
         fun defaultLandmark(): StageConfig = StageConfig(
             stage = DetectionStage.LANDMARK,
-            modelType = DetectionModelType.INSIGHTFACE_2D106,
-            engineType = InferenceEngineType.TFLITE,
+            modelType = DetectionModelType.MEDIAPIPE,
+            engineType = DetectionModelType.MEDIAPIPE.toEngineType(),
             devicePreference = InferenceDevicePreference.AUTO
         )
     }

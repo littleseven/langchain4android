@@ -202,7 +202,7 @@ class SettingsCapabilityTest {
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Error)
         assertEquals(
-            "未知的人脸检测引擎: unknown，支持 mediapipe/insightface/mnn/ncnn/custom",
+            "未知的人脸检测引擎: unknown，支持 mediapipe/mnn/ncnn/custom",
             (action as AgentAction.Error).message
         )
     }

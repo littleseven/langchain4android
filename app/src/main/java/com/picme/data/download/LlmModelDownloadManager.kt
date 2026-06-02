@@ -67,37 +67,73 @@ class LlmModelDownloadManager(private val context: Context) {
 
     /**
      * 加载模型市场数据（包含标签翻译）
+     *
+     * 策略：从网络获取 MNN 官方模型，并与本地 llm_models.json 合并。
+     * 本地模型（如人脸检测模型）可能不在 MNN 官方市场中，需要合并确保完整。
      */
     suspend fun loadMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
-        // 1. 尝试从网络获取 MNN 官方模型市场（优先网络）
+        // 1. 加载本地模型（作为基础，确保人脸检测等模型始终存在）
+        val localModels = loadLocalModels()
+        val localModelIds = localModels.map { it.id }.toSet()
+
+        // 2. 尝试从网络获取 MNN 官方模型市场
         val remoteData = fetchMarketData()
         if (remoteData.models.isNotEmpty()) {
-            // 保存到本地缓存
-            saveCachedMarketData(remoteData)
-            return@withContext remoteData
+            // 合并：远程模型 + 本地独有的模型（如人脸检测）
+            val mergedModels = remoteData.models.toMutableList()
+            val remoteIds = remoteData.models.map { it.id }.toSet()
+            for (localModel in localModels) {
+                if (localModel.id !in remoteIds) {
+                    mergedModels.add(localModel)
+                }
+            }
+
+            val mergedData = ModelMarketData(
+                mergedModels,
+                remoteData.tagTranslations + DEFAULT_TAG_TRANSLATIONS
+            )
+            saveCachedMarketData(mergedData)
+            return@withContext mergedData
         }
 
-        // 2. 网络失败，尝试从本地缓存读取
+        // 3. 网络失败，尝试从本地缓存读取
         val cachedData = loadCachedMarketData()
         if (cachedData != null && cachedData.models.isNotEmpty()) {
             Logger.i("PicMe:Download", "Using cached market data with ${cachedData.models.size} models")
             return@withContext cachedData
         }
 
-        // 3. 回退到本地 raw 资源
-        return@withContext ModelMarketData(loadLocalModels(), DEFAULT_TAG_TRANSLATIONS)
+        // 4. 回退到本地 raw 资源
+        return@withContext ModelMarketData(localModels, DEFAULT_TAG_TRANSLATIONS)
     }
 
     /**
      * 刷新模型市场数据（强制从网络获取并更新缓存）
+     *
+     * 与 loadMarketData() 相同，会合并本地模型确保人脸检测等模型始终存在。
      */
     suspend fun refreshMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
+        val localModels = loadLocalModels()
         val remoteData = fetchMarketData()
         if (remoteData.models.isNotEmpty()) {
-            saveCachedMarketData(remoteData)
-            Logger.i("PicMe:Download", "Market data refreshed: ${remoteData.models.size} models")
+            // 合并：远程模型 + 本地独有的模型
+            val mergedModels = remoteData.models.toMutableList()
+            val remoteIds = remoteData.models.map { it.id }.toSet()
+            for (localModel in localModels) {
+                if (localModel.id !in remoteIds) {
+                    mergedModels.add(localModel)
+                }
+            }
+            val mergedData = ModelMarketData(
+                mergedModels,
+                remoteData.tagTranslations + DEFAULT_TAG_TRANSLATIONS
+            )
+            saveCachedMarketData(mergedData)
+            Logger.i("PicMe:Download", "Market data refreshed: ${mergedModels.size} models")
+            return@withContext mergedData
         }
-        remoteData
+        // 网络失败回退到本地
+        ModelMarketData(localModels, DEFAULT_TAG_TRANSLATIONS)
     }
 
     /**
@@ -354,6 +390,11 @@ class LlmModelDownloadManager(private val context: Context) {
         return when {
             modelId.contains("zipformer", ignoreCase = true) -> ASR_MODEL_FILES
             modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
+            modelId == "picme-face-det-mnn" -> FACE_DETECTION_ROI_MNN_FILES
+            modelId == "picme-face-landmark-mnn" -> FACE_DETECTION_LANDMARK_MNN_FILES
+            modelId == "picme-face-det-ncnn" -> FACE_DETECTION_ROI_NCNN_FILES
+            modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
+            modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }
     }
@@ -365,8 +406,14 @@ class LlmModelDownloadManager(private val context: Context) {
         return when {
             tags.any { it.equals("ASR", ignoreCase = true) } -> ASR_MODEL_FILES
             tags.any { it.equals("TTS", ignoreCase = true) } -> TTS_MODEL_FILES
+            tags.any { it.equals("FACE_DETECTION", ignoreCase = true) } -> FACE_DETECTION_ROI_MNN_FILES
             modelId.contains("zipformer", ignoreCase = true) -> ASR_MODEL_FILES
             modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
+            modelId == "picme-face-det-mnn" -> FACE_DETECTION_ROI_MNN_FILES
+            modelId == "picme-face-landmark-mnn" -> FACE_DETECTION_LANDMARK_MNN_FILES
+            modelId == "picme-face-det-ncnn" -> FACE_DETECTION_ROI_NCNN_FILES
+            modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
+            modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }
     }
@@ -966,6 +1013,26 @@ class LlmModelDownloadManager(private val context: Context) {
             "tts.mnn",
             "vocab.txt"
         )
+
+        /**
+         * 人脸检测 ROI MNN 模型文件列表
+         */
+        private val FACE_DETECTION_ROI_MNN_FILES = listOf("det_10g.mnn")
+
+        /**
+         * 人脸检测 Landmark MNN 模型文件列表
+         */
+        private val FACE_DETECTION_LANDMARK_MNN_FILES = listOf("2d106det.mnn")
+
+        /**
+         * 人脸检测 ROI NCNN 模型文件列表
+         */
+        private val FACE_DETECTION_ROI_NCNN_FILES = listOf("det_10g.param", "det_10g.bin")
+
+        /**
+         * 人脸检测 Landmark NCNN 模型文件列表
+         */
+        private val FACE_DETECTION_LANDMARK_NCNN_FILES = listOf("2d106det.param", "2d106det.bin")
 
         /**
          * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）

@@ -144,7 +144,6 @@ fun MediaPager(
     var showLandmarkOverlay by remember { mutableStateOf(false) }
     var show468Points by remember { mutableStateOf(false) }
     var showBigBeauty106 by remember { mutableStateOf(false) }
-    var showInsightFace106 by remember { mutableStateOf(false) }
     var currentPageZoomed by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
     var editSettings by remember { mutableStateOf(BeautySettings()) }
@@ -500,17 +499,14 @@ fun MediaPager(
             FaceLandmarkCanvasOverlay(
                 state = landmarkState,
                 show468Points = show468Points,
-                showBigBeauty106 = showBigBeauty106,
-                showInsightFace106 = showInsightFace106
+                showBigBeauty106 = showBigBeauty106
             )
             FaceLandmarkControlBar(
                 state = landmarkState,
                 show468Points = show468Points,
                 showBigBeauty106 = showBigBeauty106,
-                showInsightFace106 = showInsightFace106,
                 onToggle468Points = { show468Points = !show468Points },
                 onToggleBigBeauty106 = { showBigBeauty106 = !showBigBeauty106 },
-                onToggleInsightFace106 = { showInsightFace106 = !showInsightFace106 },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }

@@ -22,7 +22,10 @@ import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.beauty.api.FilterType
+import com.picme.features.camera.state.CameraStateMachine
+import com.picme.features.camera.state.CameraStateManager
 import com.picme.features.gallery.MediaViewModel
+import kotlinx.coroutines.CoroutineScope
 import java.io.File
 
 // [常量定义] 视频录制分辨率
@@ -48,7 +51,9 @@ internal fun handleCaptureClick(
     glPreviewProvider: BeautyPreviewEngine?,
     beautyVideoRecorder: BeautyVideoRecorder?,
     onRecordingChanged: (Recording?) -> Unit,
-    onIsRecordingChanged: (Boolean) -> Unit
+    onIsRecordingChanged: (Boolean) -> Unit,
+    coroutineScope: CoroutineScope? = null,
+    cameraStateManager: CameraStateManager? = null
 ) {
     if (captureMode != MediaType.VIDEO) {
         imageCapture?.let { capture ->
@@ -61,7 +66,30 @@ internal fun handleCaptureClick(
                 lensFacing = lensFacing,
                 mode = captureMode,
                 cachedFaces = cachedFaces,
-                beautyStrategy = beautyStrategy
+                beautyStrategy = beautyStrategy,
+                coroutineScope = coroutineScope,
+                onPhotoFinished = { success ->
+                    // [Day2 状态机] 拍照完成后转回 Previewing（或 Error）
+                    cameraStateManager?.let { manager ->
+                        try {
+                            if (success) {
+                                manager.transition(
+                                    CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
+                                )
+                            } else {
+                                manager.transition(
+                                    CameraStateMachine.Error("Photo processing failed", manager.getState())
+                                )
+                            }
+                        } catch (e: IllegalStateException) {
+                            // 状态转换失败，强制恢复
+                            Logger.w("PicMe:Camera", "State transition failed after photo: ${e.message}")
+                            manager.forceSetState(
+                                CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
+                            )
+                        }
+                    }
+                }
             )
         }
         return

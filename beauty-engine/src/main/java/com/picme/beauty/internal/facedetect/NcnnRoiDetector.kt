@@ -26,8 +26,9 @@ class NcnnRoiDetector(
         private const val ROI_EXPAND_RATIO = 1.2f
         private const val ENGINE_NAME = "NCNN-Vulkan"
 
-        // [全局锁] NCNN Net::load_model 非线程安全，所有 NCNN 初始化共享此锁
-        private val NCNN_INIT_LOCK = Any()
+        // [关键修复] 进程级全局锁：OpenMP 运行时初始化不是线程安全的，
+        // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程
+        private val NCNN_GLOBAL_LOCK = Any()
 
         // RetinaFace 9 个输出 blob 名称
         private val OUTPUT_NAMES = arrayOf(
@@ -64,8 +65,8 @@ class NcnnRoiDetector(
     }
 
     private fun initialize() {
-        // [修复崩溃] NCNN Net::load_model 非线程安全，必须全局同步
-        synchronized(NCNN_INIT_LOCK) {
+        // [修复崩溃] OpenMP 运行时初始化不是线程安全的，必须全局同步
+        synchronized(NCNN_GLOBAL_LOCK) {
             try {
                 val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
@@ -118,8 +119,9 @@ class NcnnRoiDetector(
             return null
         }
 
-        // [修复崩溃] NCNN extractor 非线程安全，必须同步
-        return synchronized(this) {
+        // [关键修复] OpenMP 线程亲和性初始化不是线程安全的，
+        // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程
+        return synchronized(NCNN_GLOBAL_LOCK) {
             try {
                 detectRoiLocked(bitmap, det, totalStart)
             } catch (e: Exception) {

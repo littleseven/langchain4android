@@ -252,8 +252,8 @@ class Face106ToWarpParamsTest {
         val mpResult = Face106ToWarpParams.convert(landmarks, FaceDetectionSource.MEDIAPIPE)
         assertEquals(FaceDetectionSource.MEDIAPIPE, mpResult.detectionSource)
 
-        val ifResult = Face106ToWarpParams.convert(landmarks, FaceDetectionSource.INSIGHTFACE)
-        assertEquals(FaceDetectionSource.INSIGHTFACE, ifResult.detectionSource)
+        val mnnResult = Face106ToWarpParams.convert(landmarks, FaceDetectionSource.MNN)
+        assertEquals(FaceDetectionSource.MNN, mnnResult.detectionSource)
     }
 
     @Test

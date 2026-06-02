@@ -68,6 +68,7 @@ import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import com.picme.domain.model.StageConfig
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.beauty.recorder.BeautyVideoRecorder
@@ -94,6 +95,9 @@ import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.camera.voice.VoiceCommandCoordinator
+import com.picme.features.camera.state.CameraStateMachine
+import com.picme.features.camera.state.CameraStateManager
+import com.picme.features.camera.thread.CameraThreadRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -250,7 +254,9 @@ internal data class CameraPreviewUiState(
     val exposureRange: IntRange,
     val whiteBalanceMode: Int,
     val beautyStrategy: BeautyStrategy,
-    val isVoiceControlEnabled: Boolean
+    val isVoiceControlEnabled: Boolean,
+    val roiStageConfig: StageConfig,
+    val landmarkStageConfig: StageConfig
 )
 
 internal data class CameraPreviewActions(
@@ -290,10 +296,9 @@ internal data class CameraPreviewActions(
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
     FaceDetectionEngineMode.MEDIAPIPE -> EngineType.MEDIAPIPE
-    FaceDetectionEngineMode.INSIGHTFACE -> EngineType.INSIGHTFACE
     FaceDetectionEngineMode.MNN -> EngineType.MNN
     FaceDetectionEngineMode.NCNN -> EngineType.NCNN
-    FaceDetectionEngineMode.CUSTOM -> EngineType.INSIGHTFACE // CUSTOM 模式由 StageConfig 决定
+    FaceDetectionEngineMode.CUSTOM -> EngineType.MEDIAPIPE // CUSTOM 模式由 StageConfig 决定
 }
 
 private fun buildCameraPreviewUiState(
@@ -324,7 +329,9 @@ private fun buildCameraPreviewUiState(
     exposureRange: IntRange,
     whiteBalanceMode: Int,
     beautyStrategy: BeautyStrategy,
-    isVoiceControlEnabled: Boolean
+    isVoiceControlEnabled: Boolean,
+    roiStageConfig: StageConfig,
+    landmarkStageConfig: StageConfig
 ): CameraPreviewUiState {
     return CameraPreviewUiState(
         selectedFilter = selectedFilter,
@@ -362,7 +369,9 @@ private fun buildCameraPreviewUiState(
         exposureRange = exposureRange,
         whiteBalanceMode = whiteBalanceMode,
         beautyStrategy = beautyStrategy,
-        isVoiceControlEnabled = isVoiceControlEnabled
+        isVoiceControlEnabled = isVoiceControlEnabled,
+        roiStageConfig = roiStageConfig,
+        landmarkStageConfig = landmarkStageConfig
     )
 }
 
@@ -595,10 +604,25 @@ fun CameraContent(
         }
     }
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    // [Day1 线程隔离] 初始化线程注册表（幂等，可安全多次调用）
+    remember {
+        CameraThreadRegistry.initialize()
+    }
+
+    // [Day1 线程隔离] cameraExecutor 改为 CameraHandlerThread 的 Executor
+    // 旧：Executors.newSingleThreadExecutor() → 新：CameraThreadRegistry.getCameraHandler() 包装为 Executor
+    val cameraExecutor = remember {
+        java.util.concurrent.Executor {
+            CameraThreadRegistry.getCameraHandler().post(it)
+        }
+    }
     val shutterSound = remember { MediaActionSound() }
 
     var previewRebindSignal by remember { mutableIntStateOf(0) }
+
+    // [Day2 状态机硬编码] 统一管理相机状态，替换分散的 isRecording/captureMode 等布尔标志
+    val cameraStateManager = remember { CameraStateManager() }
 
     var lensFacing by remember { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     var captureMode by remember { mutableStateOf(MediaType.PHOTO) }
@@ -978,7 +1002,7 @@ fun CameraContent(
     var maxZoomRatio by remember { mutableFloatStateOf(1f) }
 
     // Agent 命令处理器：提取到顶层确保语音命令无需打开面板即可执行
-    val agentCommandHandler: (AiAgentCommand) -> Unit = { cmd ->
+    val agentCommandHandler: (AiAgentCommand) -> Unit = agentCommandHandler@{ cmd ->
         Logger.i("PicMe:Camera", "agentCommandHandler executing: ${cmd.javaClass.simpleName}")
         when (cmd) {
             is AiAgentCommand.AdjustBeauty -> {
@@ -1003,6 +1027,11 @@ fun CameraContent(
                 currentScene = scene
             }
             is AiAgentCommand.SwitchRatio -> {
+                // [状态机保护] 忙碌时不允许切换比例
+                if (!cameraStateManager.canRebind()) {
+                    Logger.w("PicMe:Camera", "Ratio switch rejected: state=${cameraStateManager.getState().name}")
+                        return@agentCommandHandler
+                }
                 val ratio = when (cmd.ratio) {
                     "4:3" -> AspectRatio.RATIO_4_3
                     "16:9" -> AspectRatio.RATIO_16_9
@@ -1020,11 +1049,24 @@ fun CameraContent(
                 cameraControl?.setZoomRatio(clampedZoom)
             }
             is AiAgentCommand.FlipCamera -> {
+                // [状态机保护] 忙碌时不允许切换镜头
+                if (!cameraStateManager.canRebind()) {
+                    Logger.w("PicMe:Camera", "Flip rejected: state=${cameraStateManager.getState().name}")
+                        return@agentCommandHandler
+                }
                 val nextLens = nextLensFacing(lensFacing)
                 lensFacing = nextLens
             }
             is AiAgentCommand.CapturePhoto -> {
                 Logger.i("PicMe:Camera", "Executing CapturePhoto command")
+                // [状态机保护] 仅在 Previewing 状态允许拍照
+                if (!cameraStateManager.canCapture()) {
+                    Logger.w("PicMe:Camera", "Capture rejected: state=${cameraStateManager.getState().name}")
+                        return@agentCommandHandler
+                }
+                cameraStateManager.transition(
+                    CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
+                )
                 handleCaptureClick(
                     context = context,
                     captureMode = captureMode,
@@ -1042,7 +1084,8 @@ fun CameraContent(
                     glPreviewProvider = glPreviewProvider,
                     beautyVideoRecorder = beautyVideoRecorder,
                     onRecordingChanged = { updated -> recording = updated },
-                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
+                    coroutineScope = coroutineScope
                 )
             }
             is AiAgentCommand.ToggleRecording -> {
@@ -1063,7 +1106,8 @@ fun CameraContent(
                     glPreviewProvider = glPreviewProvider,
                     beautyVideoRecorder = beautyVideoRecorder,
                     onRecordingChanged = { updated -> recording = updated },
-                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
+                    coroutineScope = coroutineScope
                 )
             }
             is AiAgentCommand.SwitchMode -> {
@@ -1205,7 +1249,8 @@ fun CameraContent(
                         glPreviewProvider = glPreviewProvider,
                         beautyVideoRecorder = beautyVideoRecorder,
                         onRecordingChanged = { updated -> recording = updated },
-                        onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                        onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
+                        coroutineScope = coroutineScope
                     )
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Capture triggered")
@@ -1420,7 +1465,16 @@ fun CameraContent(
             videoCapture = videoCapture,
             faceDetector = runtimeContext.faceDetectorManager,
             onImageCaptureChanged = { capture -> imageCapture = capture },
-            onCameraControlChanged = { control -> cameraControl = control },
+            onCameraControlChanged = { control ->
+                cameraControl = control
+                // [Day2 状态机] 相机绑定成功，进入 Previewing 状态
+                if (cameraStateManager.getState() is CameraStateMachine.Idle ||
+                    cameraStateManager.getState() is CameraStateMachine.Rebinding) {
+                    cameraStateManager.transition(
+                        CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
+                    )
+                }
+            },
             onZoomRatioChanged = { ratio -> zoomRatio = ratio },
             onZoomRangeChanged = { minZoom, maxZoom ->
                 minZoomRatio = minZoom
@@ -1540,7 +1594,8 @@ fun CameraContent(
 
     DisposableEffect(Unit) {
         onDispose {
-            cameraExecutor.shutdown()
+            // [Day1 线程隔离] 释放专用线程
+            CameraThreadRegistry.release()
         }
     }
 
@@ -1650,7 +1705,9 @@ CameraPreviewContent(
         exposureRange = -2..2,
         whiteBalanceMode = whiteBalanceMode,
         beautyStrategy = beautyStrategy,
-        isVoiceControlEnabled = voiceCommandMode != VoiceCommandMode.DISABLED
+        isVoiceControlEnabled = voiceCommandMode != VoiceCommandMode.DISABLED,
+        roiStageConfig = runtimeContext.roiStageConfig,
+        landmarkStageConfig = runtimeContext.landmarkStageConfig
     ),
     aiAgentUseCase = aiAgentUseCase,
     aiAgentChatVisible = aiAgentChatVisible,
@@ -1706,6 +1763,14 @@ CameraPreviewContent(
         onCurrentGridChanged = { grid -> currentGrid = grid },
         onNavigateToGallery = onNavigateToGallery,
         onCaptureClick = {
+            // [状态机保护] 仅在 Previewing 状态允许拍照
+            if (!cameraStateManager.canCapture()) {
+                Logger.w("PicMe:Camera", "Capture click rejected: state=${cameraStateManager.getState().name}")
+                return@buildCameraPreviewActions
+            }
+            cameraStateManager.transition(
+                CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
+            )
             handleCaptureClick(
                 context = context,
                 captureMode = captureMode,
@@ -1723,7 +1788,9 @@ CameraPreviewContent(
                 glPreviewProvider = glPreviewProvider,
                 beautyVideoRecorder = beautyVideoRecorder,
                 onRecordingChanged = { updated -> recording = updated },
-                onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag }
+                onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
+                coroutineScope = coroutineScope,
+                cameraStateManager = cameraStateManager
             )
         },
         onCaptureModeChanged = { mode -> captureMode = mode },

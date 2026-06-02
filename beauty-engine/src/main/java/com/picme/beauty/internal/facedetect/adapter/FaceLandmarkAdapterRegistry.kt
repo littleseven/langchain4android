@@ -77,7 +77,6 @@ object FaceLandmarkAdapterRegistry {
         }
 
         register(FaceDetectionSource.MEDIAPIPE, MediaPipe468Adapter())
-        register(FaceDetectionSource.INSIGHTFACE, InsightFaceAdapter())
         register(FaceDetectionSource.MNN, MnnLandmarkAdapter())  // [性能优化] MNN GPU 检测器
         register(FaceDetectionSource.NCNN, NcnnLandmarkAdapter()) // [性能优化] NCNN 轻量级检测器
 

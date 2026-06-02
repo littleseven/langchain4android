@@ -67,5 +67,63 @@
       "tokenizer.txt"
     ],
     "tags": ["chat", "reasoning", "multilingual"]
+  },
+  {
+    "id": "picme-face-det-mnn",
+    "name": "RetinaFace Det10G",
+    "description": "RetinaFace 人脸检测模型 (MNN 格式)，用于 ROI 区域检测，GPU 加速",
+    "type": "FACE_DETECTION",
+    "size": 16925304,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-Det10G-MNN"
+    },
+    "files": [
+      "det_10g.mnn"
+    ],
+    "tags": ["face", "detection", "mnn"]
+  },
+  {
+    "id": "picme-face-landmark-mnn",
+    "name": "2D106 Landmark",
+    "description": "2D106 人脸关键点模型 (MNN 格式)，用于 106 点面部关键点检测，GPU 加速",
+    "type": "FACE_DETECTION",
+    "size": 4976096,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-2D106Det-MNN"
+    },
+    "files": [
+      "2d106det.mnn"
+    ],
+    "tags": ["face", "landmark", "mnn"]
+  },
+  {
+    "id": "picme-face-det-ncnn",
+    "name": "RetinaFace Det10G",
+    "description": "RetinaFace 人脸检测模型 (NCNN 格式)，用于 ROI 区域检测，轻量高效",
+    "type": "FACE_DETECTION",
+    "size": 16914878,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-Det10G-NCNN"
+    },
+    "files": [
+      "det_10g.param",
+      "det_10g.bin"
+    ],
+    "tags": ["face", "detection", "ncnn"]
+  },
+  {
+    "id": "picme-face-landmark-ncnn",
+    "name": "2D106 Landmark",
+    "description": "2D106 人脸关键点模型 (NCNN 格式)，用于 106 点面部关键点检测，轻量高效",
+    "type": "FACE_DETECTION",
+    "size": 5019727,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-2D106Det-NCNN"
+    },
+    "files": [
+      "2d106det.param",
+      "2d106det.bin"
+    ],
+    "tags": ["face", "landmark", "ncnn"]
   }
 ]

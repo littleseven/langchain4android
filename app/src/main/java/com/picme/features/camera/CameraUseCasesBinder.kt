@@ -20,7 +20,7 @@ import com.picme.domain.model.MediaType
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import java.nio.ByteBuffer
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executor
 
 @ExperimentalGetImage
 internal fun bindCameraUseCases(
@@ -32,7 +32,7 @@ internal fun bindCameraUseCases(
     aspectRatio: Int,
     previewView: PreviewView,
     bindPreviewSurfaceProvider: (Preview) -> Unit,
-    cameraExecutor: ExecutorService,
+    cameraExecutor: Executor,
     isBeautyEnabled: () -> Boolean,
     beautyStrategy: BeautyStrategy,
     detectionEngineMode: EngineType,
@@ -126,7 +126,6 @@ internal fun bindCameraUseCases(
             onFacePointChanged = onFacePointChanged,
             onFaceWarpParamsChanged = onFaceWarpParamsChanged,
             onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
-            isDualMode = false,
             beautyEnabled = isBeautyEnabled()
         )
     }

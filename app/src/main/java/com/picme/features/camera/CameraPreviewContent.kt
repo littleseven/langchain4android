@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.MediaType
+import com.picme.domain.model.StageConfig
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
@@ -356,21 +357,22 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
         "FX ${activeEffects.joinToString("/")}"
     }
     val perfCompact = "FPS ${"%.1f".format(uiState.beautyDebugState.fps)} | ${uiState.beautyDebugState.processingMs}ms/${uiState.beautyDebugState.delayMs}ms | D${uiState.beautyDebugState.nullFrames}"
-    val requestedEngineLabel = when (uiState.faceDetectionEngineMode) {
-        FaceDetectionEngineMode.MEDIAPIPE -> "MEDIAPIPE"
-        FaceDetectionEngineMode.INSIGHTFACE -> "INSIGHTFACE"
-        FaceDetectionEngineMode.MNN -> "MNN"
-        FaceDetectionEngineMode.NCNN -> "NCNN"
-        FaceDetectionEngineMode.CUSTOM -> "CUSTOM"
-    }
+    val roiEngineLabel = uiState.roiStageConfig.engineType.name
+    val landmarkEngineLabel = uiState.landmarkStageConfig.engineType.name
     val activeSourceLabel = when (uiState.faceWarpParams.detectionSource) {
         FaceDetectionSource.NONE -> "NONE"
         FaceDetectionSource.MEDIAPIPE -> "MEDIAPIPE"
-        FaceDetectionSource.INSIGHTFACE -> "INSIGHTFACE"
         FaceDetectionSource.MNN -> "MNN GPU"
         FaceDetectionSource.NCNN -> "NCNN GPU"
     }
-    val detectionCompact = "Detect ${requestedEngineLabel} -> ${activeSourceLabel}"
+    val detectionCompact = buildString {
+        append("Detect ")
+        append("ROI=${uiState.faceWarpParams.roiDetectorName}")
+        append(if (uiState.faceWarpParams.useGpuForRoi) "[GPU] " else "[CPU] ")
+        append("LMK=${uiState.faceWarpParams.landmarkDetectorName}")
+        append(if (uiState.faceWarpParams.useGpuForLandmark) "[GPU] " else "[CPU] ")
+        append("-> ${activeSourceLabel}")
+    }
     val rendererErrorCompact = if (uiState.beautyDebugState.rendererErrorCategory.isNotBlank()) {
         "RendererErr ${uiState.beautyDebugState.rendererErrorCategory}: ${uiState.beautyDebugState.rendererErrorReason.ifBlank { "unknown" }}"
     } else {
@@ -422,7 +424,6 @@ private fun BoxScope.CameraPreviewDebugStatus(uiState: CameraPreviewUiState) {
                 Text(
                     text = detectionCompact,
                     color = when (uiState.faceWarpParams.detectionSource) {
-                        FaceDetectionSource.INSIGHTFACE -> INSIGHTFACE_DEBUG_TEXT_COLOR
                         FaceDetectionSource.MEDIAPIPE -> MEDIAPIPE_DEBUG_TEXT_COLOR
                         FaceDetectionSource.MNN -> MNN_DEBUG_TEXT_COLOR  // [性能优化] MNN GPU
                         FaceDetectionSource.NCNN -> NCNN_DEBUG_TEXT_COLOR  // [性能优化] NCNN 轻量级检测器

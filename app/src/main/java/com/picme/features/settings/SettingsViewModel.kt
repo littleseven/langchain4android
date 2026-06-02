@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.picme.core.common.Logger
+import com.picme.data.download.DownloadState
+import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
 import com.picme.domain.model.AiAgentMode
@@ -60,7 +62,7 @@ class SettingsViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = FaceDetectionEngineMode.INSIGHTFACE
+            initialValue = FaceDetectionEngineMode.MEDIAPIPE
         )
 
     val faceDetectionLandmarkModeEnabled: StateFlow<Boolean> = repository.faceDetectionLandmarkModeFlow
@@ -206,8 +208,83 @@ class SettingsViewModel(
     private val _currentTab = MutableStateFlow(ModelCategory.ALL)
     val currentTab: StateFlow<ModelCategory> = _currentTab.asStateFlow()
 
+    // ── 模型下载状态（共享给 UI 层实时监听）───────────────────
+    val downloadStates: StateFlow<Map<String, DownloadState>> = modelDownloadManager.downloadStates
+
+    // 模型 ID 到 DetectionModelType 的映射
+    private val modelIdToDetectionType = mapOf(
+        "picme-face-det-mnn" to DetectionModelType.DET10G_MNN,
+        "picme-face-det-ncnn" to DetectionModelType.DET10G_NCNN,
+        "picme-face-landmark-mnn" to DetectionModelType.FACE_2D106_MNN,
+        "picme-face-landmark-ncnn" to DetectionModelType.FACE_2D106_NCNN
+    )
+
     init {
         loadModels()
+        observeDownloadCompletion()
+    }
+
+    /**
+     * 监听下载完成事件，自动切换对应阶段的模型
+     */
+    private fun observeDownloadCompletion() {
+        viewModelScope.launch {
+            downloadStates.collect { states ->
+                states.forEach { (modelId, state) ->
+                    if (state.status == DownloadStatus.COMPLETED) {
+                        val modelType = modelIdToDetectionType[modelId]
+                        if (modelType != null) {
+                            when {
+                                modelType.isRoiModel() && roiStageConfig.value.modelType != modelType -> {
+                                    Logger.i("PicMe:Settings", "Auto-switching ROI model to $modelType after download")
+                                    setRoiModelType(modelType)
+                                }
+                                modelType.isLandmarkModel() && landmarkStageConfig.value.modelType != modelType -> {
+                                    Logger.i("PicMe:Settings", "Auto-switching Landmark model to $modelType after download")
+                                    setLandmarkModelType(modelType)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 检查模型是否已下载（MediaPipe 视为始终已下载）
+     */
+    fun isModelDownloaded(modelType: DetectionModelType): Boolean {
+        if (modelType == DetectionModelType.MEDIAPIPE) return true
+        val modelId = modelIdToDetectionType.entries.find { it.value == modelType }?.key ?: return false
+        return modelDownloadManager.isModelDownloaded(modelId)
+    }
+
+    /**
+     * 根据 stage 获取对应的模型 ID
+     */
+    fun getModelId(modelType: DetectionModelType, stage: DetectionStage): String? {
+        return when (stage) {
+            DetectionStage.ROI -> when (modelType) {
+                DetectionModelType.DET10G_MNN -> "picme-face-det-mnn"
+                DetectionModelType.DET10G_NCNN -> "picme-face-det-ncnn"
+                else -> null
+            }
+            DetectionStage.LANDMARK -> when (modelType) {
+                DetectionModelType.FACE_2D106_MNN -> "picme-face-landmark-mnn"
+                DetectionModelType.FACE_2D106_NCNN -> "picme-face-landmark-ncnn"
+                else -> null
+            }
+        }
+    }
+
+    /**
+     * 触发模型下载
+     */
+    fun downloadModel(modelId: String, modelConfig: ModelConfig) {
+        viewModelScope.launch {
+            modelDownloadManager.downloadModel(modelId, modelConfig).collect { }
+        }
     }
 
     private fun loadModels() {
@@ -335,17 +412,13 @@ class SettingsViewModel(
             StageConfig(DetectionStage.ROI, DetectionModelType.MEDIAPIPE, InferenceEngineType.TFLITE, InferenceDevicePreference.AUTO),
             StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.TFLITE, InferenceDevicePreference.AUTO)
         )
-        FaceDetectionEngineMode.INSIGHTFACE -> Pair(
-            StageConfig(DetectionStage.ROI, DetectionModelType.INSIGHTFACE_DET10G, InferenceEngineType.ONNX, InferenceDevicePreference.AUTO),
-            StageConfig(DetectionStage.LANDMARK, DetectionModelType.INSIGHTFACE_2D106, InferenceEngineType.ONNX, InferenceDevicePreference.AUTO)
-        )
         FaceDetectionEngineMode.MNN -> Pair(
-            StageConfig(DetectionStage.ROI, DetectionModelType.INSIGHTFACE_DET10G, InferenceEngineType.MNN, InferenceDevicePreference.AUTO),
-            StageConfig(DetectionStage.LANDMARK, DetectionModelType.INSIGHTFACE_2D106, InferenceEngineType.MNN, InferenceDevicePreference.AUTO)
+            StageConfig(DetectionStage.ROI, DetectionModelType.MEDIAPIPE, InferenceEngineType.MNN, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.MNN, InferenceDevicePreference.AUTO)
         )
         FaceDetectionEngineMode.NCNN -> Pair(
-            StageConfig(DetectionStage.ROI, DetectionModelType.INSIGHTFACE_DET10G, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO),
-            StageConfig(DetectionStage.LANDMARK, DetectionModelType.INSIGHTFACE_2D106, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO)
+            StageConfig(DetectionStage.ROI, DetectionModelType.MEDIAPIPE, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO)
         )
         FaceDetectionEngineMode.CUSTOM -> Pair(
             StageConfig.defaultRoi(),
@@ -401,17 +474,12 @@ class SettingsViewModel(
     fun setRoiModelType(modelType: DetectionModelType) {
         viewModelScope.launch {
             val current = roiStageConfig.value
-            val updated = current.copy(modelType = modelType)
-            Logger.d("UX", "ROI model type changed: ${modelType.name}")
-            repository.updateRoiStageConfig(updated)
-        }
-    }
-
-    fun setRoiEngineType(engineType: InferenceEngineType) {
-        viewModelScope.launch {
-            val current = roiStageConfig.value
-            val updated = current.copy(engineType = engineType)
-            Logger.d("UX", "ROI engine type changed: ${engineType.name}")
+            // 模型与引擎绑定，切换模型时自动同步引擎
+            val updated = current.copy(
+                modelType = modelType,
+                engineType = modelType.toEngineType()
+            )
+            Logger.d("UX", "ROI model type changed: ${modelType.name}, engine auto-synced to ${modelType.toEngineType().name}")
             repository.updateRoiStageConfig(updated)
         }
     }
@@ -428,17 +496,12 @@ class SettingsViewModel(
     fun setLandmarkModelType(modelType: DetectionModelType) {
         viewModelScope.launch {
             val current = landmarkStageConfig.value
-            val updated = current.copy(modelType = modelType)
-            Logger.d("UX", "Landmark model type changed: ${modelType.name}")
-            repository.updateLandmarkStageConfig(updated)
-        }
-    }
-
-    fun setLandmarkEngineType(engineType: InferenceEngineType) {
-        viewModelScope.launch {
-            val current = landmarkStageConfig.value
-            val updated = current.copy(engineType = engineType)
-            Logger.d("UX", "Landmark engine type changed: ${engineType.name}")
+            // 模型与引擎绑定，切换模型时自动同步引擎
+            val updated = current.copy(
+                modelType = modelType,
+                engineType = modelType.toEngineType()
+            )
+            Logger.d("UX", "Landmark model type changed: ${modelType.name}, engine auto-synced to ${modelType.toEngineType().name}")
             repository.updateLandmarkStageConfig(updated)
         }
     }

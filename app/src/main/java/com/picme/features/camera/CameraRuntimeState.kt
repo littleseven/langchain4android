@@ -43,18 +43,17 @@ private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
 // 领域模型 → 推理引擎层模型转换
 private fun DetectionModelType.toRoiDetectorType(): RoiDetectorType = when (this) {
     DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
-    DetectionModelType.INSIGHTFACE_DET10G -> RoiDetectorType.DET10G
-    DetectionModelType.INSIGHTFACE_2D106 -> error("2D106 is not a valid ROI detector model")
+    DetectionModelType.DET10G_MNN, DetectionModelType.DET10G_NCNN -> RoiDetectorType.DET10G
+    else -> RoiDetectorType.MEDIAPIPE
 }
 
 private fun DetectionModelType.toLandmarkDetectorType(): LandmarkDetectorType = when (this) {
     DetectionModelType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
-    DetectionModelType.INSIGHTFACE_2D106 -> LandmarkDetectorType.INSIGHTFACE_2D106
-    DetectionModelType.INSIGHTFACE_DET10G -> error("DET10G is not a valid Landmark detector model")
+    DetectionModelType.FACE_2D106_MNN, DetectionModelType.FACE_2D106_NCNN -> LandmarkDetectorType.INSIGHTFACE_2D106
+    else -> LandmarkDetectorType.MEDIAPIPE
 }
 
 private fun InferenceEngineType.toInferenceBackendType(): InferenceBackendType = when (this) {
-    InferenceEngineType.ONNX -> InferenceBackendType.ONNX
     InferenceEngineType.MNN -> InferenceBackendType.MNN
     InferenceEngineType.NCNN -> InferenceBackendType.NCNN
     InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
@@ -101,7 +100,7 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     val showFaceDebugOverlay by userPreferencesRepository.showFaceDebugOverlayFlow.collectAsState(initial = false)
     val showLogOverlay by userPreferencesRepository.showLogOverlayFlow.collectAsState(initial = false)
     val faceDetectionEngineMode by userPreferencesRepository.faceDetectionEngineModeFlow.collectAsState(
-        initial = FaceDetectionEngineMode.INSIGHTFACE
+        initial = FaceDetectionEngineMode.MEDIAPIPE
     )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)

@@ -54,9 +54,6 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.R
 import com.picme.core.common.Logger
-import com.picme.beauty.internal.facedetect.InsightFace2D106Detector
-import com.picme.beauty.api.facedetect.FaceDetector
-import com.picme.beauty.internal.facedetect.adapter.InsightFaceAdapter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -68,9 +65,7 @@ private const val TAG = "PicMe:GalleryLandmark"
 private class LandmarkDetectionSnapshot(
     val mediaPipe468Points: List<Pair<Float, Float>>?,
     val bigBeauty106Points: FloatArray?,
-    val insightFace106Points: FloatArray?,
-    val mpDetectTime: Float,
-    val insightDetectTime: Float
+    val mpDetectTime: Float
 )
 
 // 与 FaceMakeupPass 中的腮红三角网格保持一致，便于对齐静态图左右脸区域。
@@ -96,9 +91,7 @@ class FaceLandmarkDetectionState(
     val imageHeight: Int,
     val mediaPipe468Points: List<Pair<Float, Float>>?,
     val bigBeauty106Points: FloatArray?,
-    val insightFace106Points: FloatArray?,
     val mpDetectTime: Float,
-    val insightDetectTime: Float,
     val isLoading: Boolean,
     val errorMessage: String?
 )
@@ -113,15 +106,12 @@ fun rememberFaceLandmarkDetection(
     var imageHeight by remember(imageUri) { mutableIntStateOf(0) }
     var mediaPipe468Points by remember(imageUri) { mutableStateOf<List<Pair<Float, Float>>?>(null) }
     var bigBeauty106Points by remember(imageUri) { mutableStateOf<FloatArray?>(null) }
-    var insightFace106Points by remember(imageUri) { mutableStateOf<FloatArray?>(null) }
     var isLoading by remember(imageUri) { mutableStateOf(false) }
     var errorMessage by remember(imageUri) { mutableStateOf<String?>(null) }
     var mpDetectTime by remember(imageUri) { mutableFloatStateOf(0f) }
-    var insightDetectTime by remember(imageUri) { mutableFloatStateOf(0f) }
     var detectionRequestId by remember { mutableIntStateOf(0) }
 
     var mediaPipeLandmarker by remember { mutableStateOf<FaceLandmarker?>(null) }
-    var insightFaceDetector by remember { mutableStateOf<InsightFace2D106Detector?>(null) }
 
     DisposableEffect(Unit) {
         mediaPipeLandmarker = runCatching {
@@ -136,20 +126,12 @@ fun rememberFaceLandmarkDetection(
             }
         }
 
-        insightFaceDetector = runCatching {
-            InsightFace2D106Detector(context)
-        }.getOrElse { error ->
-            Logger.e(TAG, "Failed to init InsightFace detector", error)
-            null
-        }
-
         onDispose {
             mediaPipeLandmarker?.close()
-            insightFaceDetector?.release()
         }
     }
 
-    LaunchedEffect(imageUri, enabled, mediaPipeLandmarker, insightFaceDetector) {
+    LaunchedEffect(imageUri, enabled, mediaPipeLandmarker) {
         detectionRequestId += 1
         val requestId = detectionRequestId
         if (!enabled) {
@@ -161,9 +143,7 @@ fun rememberFaceLandmarkDetection(
         errorMessage = null
         mediaPipe468Points = null
         bigBeauty106Points = null
-        insightFace106Points = null
         mpDetectTime = 0f
-        insightDetectTime = 0f
 
         try {
             val bitmap = withContext(Dispatchers.IO) {
@@ -177,9 +157,7 @@ fun rememberFaceLandmarkDetection(
                 withContext(Dispatchers.Default) {
                     var detectedMediaPipe468: List<Pair<Float, Float>>? = null
                     var detectedBigBeauty106: FloatArray? = null
-                    var detectedInsight106: FloatArray? = null
                     var detectedMpTime = 0f
-                    var detectedInsightTime = 0f
 
                     mediaPipeLandmarker?.let { landmarker ->
                         val mpStart = System.currentTimeMillis()
@@ -189,45 +167,10 @@ fun rememberFaceLandmarkDetection(
                         detectedBigBeauty106 = mpResult?.points106
                     }
 
-                    insightFaceDetector?.let { detector ->
-                        val insightStart = System.currentTimeMillis()
-                        // 第一阶段：用 MediaPipe 获取人脸框，与实时预览链路保持一致
-                        var faceBounds: android.graphics.RectF? = null
-                        if (detectedMediaPipe468 != null) {
-                            // 复用已检测的 MediaPipe 结果计算人脸框
-                            val landmarks = detectedMediaPipe468!!
-                            var minX = 1f
-                            var maxX = 0f
-                            var minY = 1f
-                            var maxY = 0f
-                            landmarks.forEach { point ->
-                                val x = point.first
-                                val y = point.second
-                                if (x < minX) minX = x
-                                if (x > maxX) maxX = x
-                                if (y < minY) minY = y
-                                if (y > maxY) maxY = y
-                            }
-                            faceBounds = android.graphics.RectF(
-                                minX * bitmap.width.toFloat(),
-                                minY * bitmap.height.toFloat(),
-                                maxX * bitmap.width.toFloat(),
-                                maxY * bitmap.height.toFloat()
-                            )
-                            Log.d(TAG, "Static image MediaPipe faceBounds=$faceBounds")
-                        }
-
-                        // 第二阶段：使用 MediaPipe 提供的人脸框进行 InsightFace 检测
-                        detectedInsight106 = detectInsightFace106(bitmap, detector, faceBounds)
-                        detectedInsightTime = (System.currentTimeMillis() - insightStart).toFloat()
-                    }
-
                     LandmarkDetectionSnapshot(
                         mediaPipe468Points = detectedMediaPipe468,
                         bigBeauty106Points = detectedBigBeauty106,
-                        insightFace106Points = detectedInsight106,
-                        mpDetectTime = detectedMpTime,
-                        insightDetectTime = detectedInsightTime
+                        mpDetectTime = detectedMpTime
                     )
                 }
             } finally {
@@ -240,14 +183,9 @@ fun rememberFaceLandmarkDetection(
 
             mediaPipe468Points = snapshot.mediaPipe468Points
             bigBeauty106Points = snapshot.bigBeauty106Points
-            insightFace106Points = snapshot.insightFace106Points
             mpDetectTime = snapshot.mpDetectTime
-            insightDetectTime = snapshot.insightDetectTime
 
-            if (
-                snapshot.mediaPipe468Points == null &&
-                snapshot.insightFace106Points == null
-            ) {
+            if (snapshot.mediaPipe468Points == null) {
                 errorMessage = context.getString(R.string.landmark_no_face_detected)
             }
         } catch (error: CancellationException) {
@@ -269,9 +207,7 @@ fun rememberFaceLandmarkDetection(
         imageHeight = imageHeight,
         mediaPipe468Points = mediaPipe468Points,
         bigBeauty106Points = bigBeauty106Points,
-        insightFace106Points = insightFace106Points,
         mpDetectTime = mpDetectTime,
-        insightDetectTime = insightDetectTime,
         isLoading = isLoading,
         errorMessage = errorMessage
     )
@@ -282,7 +218,6 @@ fun FaceLandmarkCanvasOverlay(
     state: FaceLandmarkDetectionState,
     show468Points: Boolean,
     showBigBeauty106: Boolean,
-    showInsightFace106: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (state.imageWidth <= 0 || state.imageHeight <= 0) {
@@ -422,31 +357,6 @@ fun FaceLandmarkCanvasOverlay(
             }
         }
 
-        if (showInsightFace106 && state.insightFace106Points != null) {
-            val amberColor = Color(0xFFFFC107)
-            drawBlushTriangleMesh(state.insightFace106Points, amberColor)
-            for (index in 0 until state.insightFace106Points.size / 2) {
-                val x = state.insightFace106Points[index * 2]
-                val y = state.insightFace106Points[index * 2 + 1]
-                val canvasPoint = toCanvasPoint(x, y)
-                drawCircle(color = amberColor, radius = 7f, center = canvasPoint)
-                drawIntoCanvas { canvas ->
-                    val paint = android.graphics.Paint().apply {
-                        color = "#FFC107".toColorInt()
-                        textSize = 18f
-                        textAlign = android.graphics.Paint.Align.CENTER
-                        isFakeBoldText = true
-                    }
-                    canvas.nativeCanvas.drawText(
-                        index.toString(),
-                        canvasPoint.x,
-                        canvasPoint.y - 9f,
-                        paint
-                    )
-                }
-            }
-        }
-
 
     }
 }
@@ -456,10 +366,8 @@ fun FaceLandmarkControlBar(
     state: FaceLandmarkDetectionState,
     show468Points: Boolean,
     showBigBeauty106: Boolean,
-    showInsightFace106: Boolean,
     onToggle468Points: () -> Unit,
     onToggleBigBeauty106: () -> Unit,
-    onToggleInsightFace106: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -488,13 +396,6 @@ fun FaceLandmarkControlBar(
                 subLabel = "106",
                 enabled = showBigBeauty106,
                 onClick = onToggleBigBeauty106
-            )
-            LandmarkToggle(
-                color = Color(0xFFFFC107),
-                label = stringResource(R.string.face_detection_engine_mode_insightface),
-                subLabel = "${state.insightDetectTime.toInt()}ms",
-                enabled = showInsightFace106,
-                onClick = onToggleInsightFace106
             )
         }
     }
@@ -746,17 +647,5 @@ private fun convert468To106ForDebug(
     return result
 }
 
-private fun detectInsightFace106(bitmap: Bitmap, detector: InsightFace2D106Detector, faceBounds: android.graphics.RectF?): FloatArray? {
-    // 第二阶段：使用 MediaPipe 提供的人脸框进行 InsightFace 检测
-    val rawLandmarks = detector.detect(
-        bitmap,
-        androidx.camera.core.CameraSelector.LENS_FACING_BACK,
-        faceBounds = faceBounds
-    ) ?: return null
-    // 将 InsightFace 原始 106 点映射为统一 106 标准
-    val adapter = InsightFaceAdapter()
-    val result = adapter.adapt(rawLandmarks, androidx.camera.core.CameraSelector.LENS_FACING_BACK)
-    return result.getOrNull()
-}
 
 
