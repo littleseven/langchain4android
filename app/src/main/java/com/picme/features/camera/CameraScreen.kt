@@ -301,6 +301,7 @@ internal data class CameraPreviewUiState(
 
 internal data class CameraPreviewActions(
     val onNavigateToSettings: () -> Unit,
+    val onResetCameraMemoryState: () -> Unit,
     val onNavigateToDebug: () -> Unit,
     val onFlipCamera: () -> Unit,
     val onToggleBeauty: () -> Unit,
@@ -417,6 +418,7 @@ private fun buildCameraPreviewUiState(
 
 private fun buildCameraPreviewActions(
     onNavigateToSettings: () -> Unit,
+    onResetCameraMemoryState: () -> Unit,
     lensFacing: Int,
     onLensFacingChanged: (Int) -> Unit,
     onActualLensFacingChanged: (Int) -> Unit,
@@ -437,6 +439,7 @@ private fun buildCameraPreviewActions(
     onToggleAiAgentPanel: () -> Unit
 ): CameraPreviewActions {
     return CameraPreviewActions(
+        onResetCameraMemoryState = onResetCameraMemoryState,
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToDebug = {}, // 已废弃,保留空实现以兼容
         onFlipCamera = {
@@ -1903,6 +1906,35 @@ CameraPreviewContent(
                 val currentView = LocalView.current
                 buildCameraPreviewActions(
                 onNavigateToSettings = onNavigateToSettings,
+                onResetCameraMemoryState = {
+                    val defaultState = CameraMemoryState()
+                    lensFacing = if (defaultState.useFrontCamera) {
+                        CameraSelector.LENS_FACING_FRONT
+                    } else {
+                        CameraSelector.LENS_FACING_BACK
+                    }
+                    captureMode = defaultState.captureMode
+                    selectedFilter = defaultState.selectedFilter
+                    beautySettings = resolveNextBeautySettings(
+                        currentSettings = beautySettings,
+                        updatedSettings = defaultState.beautySettings.copy(
+                            colorFilter = defaultState.selectedFilter,
+                            styleFilter = defaultState.selectedStyleFilter
+                        )
+                    )
+                    aspectRatio = defaultState.aspectRatio.toAspectRatio()
+                    zoomRatio = defaultState.zoomRatio
+                    exposureCompensation = defaultState.exposureCompensation
+                    whiteBalanceMode = defaultState.whiteBalanceMode
+                    currentScene = defaultState.sceneMode.toScenePreset()
+                    currentGrid = defaultState.gridMode.toGridType()
+                    panelState.closeAllPanels()
+                    isCameraMemoryHydrated = true
+
+                    logOverlayScope.launch {
+                        userPreferencesRepository.resetCameraMemoryState()
+                    }
+                },
                 lensFacing = lensFacing,
 
         onLensFacingChanged = { updatedLensFacing -> lensFacing = updatedLensFacing },
