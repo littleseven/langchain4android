@@ -32,7 +32,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 │  • FRAME_SYNC_TECH_SPEC.md    - 帧同步美妆技术规格              │
 │  • CAMERA_PREVIEW_TECH_SPEC.md - 相机预览技术规格               │
 │  • MNN_LANDMARK_DIAGNOSIS.md  - MNN 人脸关键点诊断               │
-│  • NCNN_ONNX_VALIDATION.md    - NCNN/ONNX 推理验证               │
+│  • FACE_DETECTION_ENGINE_ARCHITECTURE.md - 人脸检测引擎架构      │
 └─────────────────────────────────────────────────────────────────┘
                            ↓ 实现
 ┌─────────────────────────────────────────────────────────────────┐
@@ -80,9 +80,9 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 - LocalLlmEngine 推理引擎封装
 
 **ADR 清单**：
-- `ADR-001-beauty-engine.md` - 美颜引擎架构演进
-- `ADR-002-opengl-pipeline.md` - 离屏渲染统一管线
-- `ADR-003-coordinate-system.md` - 坐标系管理规范
+- `ADR-001-beauty-engine-architecture.md` - 美颜引擎架构演进
+- `ADR-002-opengl-offscreen-unified-pipeline.md` - 离屏渲染统一管线
+- `ADR-003-coordinate-system-management.md` - 坐标系管理规范
 
 ---
 
@@ -116,7 +116,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 - GalleryCapability（查看/删除/分享/搜索）
 - SettingsCapability（主题/语言/模型管理）
 - NavigationCapability（页面切换/返回）
-- EditCapability（编辑/保存/撤销）
+- 编辑能力预留（待独立 Capability 落地）
 
 ---
 
@@ -141,7 +141,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | 文档 | 用途 | 读者 |
 |------|------|------|
 | [`QA_EXECUTION_CHECKLIST.md`](./06-QA/QA_EXECUTION_CHECKLIST.md) | 端到端验收测试清单 | QA |
-| [`PERFORMANCE_BASELINE.md`](../01-PRODUCT/NFR_SPEC.md#3-性能基线验证) | 性能基线数据与对比方法（参考 NFR） | QA/RD |
+| [`NFR_SPEC.md`](./01-PRODUCT/NFR_SPEC.md) | 性能基线数据与量化指标 | QA/RD |
 
 **核心内容**：
 - 帧同步专项验收（快转头/人脸出画/录制）
@@ -184,7 +184,7 @@ graph TD
     A[AGENTS.md 顶层治理] --> B[FEATURES.md 交互规范]
     A --> C[NFR_SPEC.md 性能指标]
     B --> D[AGENT_ARCHITECTURE.md Agent 架构]
-    C --> E[PERFORMANCE_BASELINE.md 基线]
+    C --> E[NFR_SPEC.md 基线指标]
     D --> F[CAPABILITY_REGISTRY.md 能力注册表]
     D --> G[COMMAND_REFERENCE.md 命令参考]
     F --> H[CameraCapability]
@@ -224,7 +224,7 @@ graph TD
 ### 我是 QA，我想...
 
 - **执行端到端测试** → `QA_EXECUTION_CHECKLIST.md`
-- **验证性能指标** → `NFR_SPEC.md` + `PERFORMANCE_BASELINE.md`
+- **验证性能指标** → `NFR_SPEC.md`
 - **回归测试帧同步** → `FRAME_SYNC_TECH_SPEC.md` 验收标准
 
 ### 我是 CO，我想...

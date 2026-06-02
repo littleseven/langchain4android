@@ -74,7 +74,7 @@ PicMe 的实验目标是探索**右侧范式的工程可行性**。
 | **Agent 响应** | < 800ms（本地 Qwen3-1.7B LLM 推理） | 日志埋点 |
 | **交互反馈** | < 100ms（UI 响应） | 人工感知测试 |
 | **快门延迟** | < 50ms | 高速摄像 |
-| **隐私绝对** | 零网络权限，100% 端侧 | 权限清单审查 |
+| **隐私绝对** | 敏感数据强制本地推理，100% 端侧 | 权限清单审查 |
 
 ---
 
@@ -98,14 +98,15 @@ PicMe 的实验目标是探索**右侧范式的工程可行性**。
 User Input (Voice/Text)
     ↓
 AgentOrchestrator (domain/agent/)
-    ├─ LocalLlmEngine (Qwen3-0.6B-MNN)
+    ├─ LocalLlmEngine (Qwen3-1.7B-MNN)
     ├─ MemoryManager (对话上下文)
     ├─ PrivacyGuard (隐私分级)
     └─ CapabilityRegistry (能力路由)
         ↓
     CameraCapability (features/camera/)
-    BeautyCapability (beauty-engine/api/)
-    SystemCapability (framework/)
+    GalleryCapability (features/gallery/)
+    SettingsCapability (features/settings/)
+    NavigationCapability (global)
         ↓
     UI Feedback (Compose)
 ```
@@ -123,10 +124,10 @@ AgentOrchestrator (domain/agent/)
 
 ### 4.3 端侧优先
 
-- LLM：Qwen3-0.6B 通过 MNN-LLM 本地运行
+- LLM：Qwen3-1.7B 通过 MNN-LLM 本地运行
 - 人脸检测：InsightFace/MediaPipe 端侧模型
 - OCR：ML Kit 端侧识别
-- **零网络权限**是硬性约束
+- **隐私敏感数据强制本地处理**是硬性约束
 
 ---
 
@@ -137,7 +138,7 @@ AgentOrchestrator (domain/agent/)
 | 能力 | 状态 | 备注 |
 |------|------|------|
 | Agent 基础架构 | ✅ | Orchestrator + LLM Engine + Capability Registry |
-| 自然语言→命令 | ✅ | Qwen3-0.6B 解析意图，映射到设备操作 |
+| 自然语言→命令 | ✅ | Qwen3-1.7B 解析意图，映射到设备操作 |
 | 实时美颜 | ✅ | OpenGL ES 管线，支持磨皮/美白/瘦脸/大眼/唇色/腮红 |
 | GPU 拍照 | ✅ | 离屏渲染，预览/输出一致性 |
 | 多引擎人脸检测 | ✅ | InsightFace(ONNX) 为主，MediaPipe 备选 |

@@ -42,12 +42,12 @@ Agent 通过 LLM 将用户自然语言输入解析为结构化命令：
 ```kotlin
 sealed class AgentCommand {
     // 相机命令
-    data class CapturePhoto : AgentCommand()
-    data class AdjustBeauty(val type: BeautyType, val value: Int) : AgentCommand()
-    
+    data object CapturePhoto : AgentCommand()
+    data class AdjustBeauty(val settings: BeautySettings) : AgentCommand()
+
     // Gallery 命令
     data class ViewMedia(val mediaId: String?) : AgentCommand()
-    
+
     // ... 其他命令
 }
 ```
@@ -106,7 +106,7 @@ Agent: ✅ 已切换到后置摄像头
 | "拉近一点" | `AdjustZoom(1.5f)` | 1.5 倍变焦 |
 | "缩小" | `AdjustZoom(0.8f)` | 缩小到 0.8 倍 |
 
-**参数范围**: 1.0x ~ 10.0x
+**参数范围**: 0.5x ~ 10.0x
 
 ### 2.5 曝光调节
 
@@ -116,7 +116,7 @@ Agent: ✅ 已切换到后置摄像头
 | "调暗一些" | `AdjustExposure(-2)` | 降低曝光 |
 | "恢复曝光" | `AdjustExposure(0)` | 重置曝光 |
 
-**参数范围**: -5 ~ +5
+**参数范围**: -2 ~ +2
 
 ### 2.6 拍摄模式
 
@@ -182,7 +182,7 @@ Agent: ✅ 已切换到后置摄像头
 | 自然语言 | 解析命令 | 说明 |
 |---------|---------|------|
 | "分享这张" | `ShareMedia([mediaId])` | 分享当前照片 |
-| "发给小王" | `ShareMedia([mediaId], contact="小王")` | 分享给指定联系人 |
+| "分享这张给别人" | `ShareMedia([mediaId])` | 调起系统分享面板 |
 
 ### 3.4 收藏照片
 
@@ -203,7 +203,7 @@ Agent: ✅ 已切换到后置摄像头
 
 | 自然语言 | 解析命令 | 说明 |
 |---------|---------|------|
-| "多选" | `SelectMedia(multiple=true)` | 进入多选模式 |
+| "选这张" | `SelectMedia(mediaId, selected=true)` | 选择当前媒体 |
 | "选这张" | `SelectMedia(mediaId, selected=true)` | 选择单张 |
 | "取消选择" | `SelectMedia(mediaId, selected=false)` | 取消选择 |
 

@@ -265,7 +265,7 @@ val screenY = adjustedY * previewHeight
 - 在 `CameraScreen` 中通过 ` remember { CameraAgentIntegration(...) }` 创建
 - 生命周期绑定：`DisposableEffect` 中注册 delegate，退出时解绑
 - 支持命令：
-  - `take_photo` — 触发拍照
+  - `capture` — 触发拍照
   - `switch_camera` — 切换前后置
   - `set_beauty_param` — 设置美颜参数（支持多参数同时调节）
   - `set_filter` — 切换滤镜

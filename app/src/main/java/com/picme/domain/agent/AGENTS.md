@@ -16,10 +16,10 @@
 
 ## 1. 核心产品逻辑 (Core Product Logic)
 
-- **[PRIVACY] 隐私分级路由**：`PrivacyGuard` 将用户输入分为 `SAFE`/`NORMAL`/`RESTRICTED` 三级，`RESTRICTED` 强制本地推理
+- **[PRIVACY] 隐私分级路由**：`PrivacyGuard` 将用户输入分为 `PUBLIC`/`SENSITIVE`/`RESTRICTED` 三级，`RESTRICTED` 强制本地推理
 - **[PERF] 推理延迟 < 800ms**：本地 Qwen3-1.7B 首 token 延迟目标 < 600ms（骁龙 8 Gen2 基准）
 - **[PERF] 端到端命令执行 < 1.5s**：意图解析 → 命令生成 → Capability 执行全流程
-- **[HYBRID] 本地+远程混合编排**：`InferenceRouter` 根据策略自动选择本地 LLM 或远程 Kimi API
+- **[HYBRID] 本地+远程混合编排**：`InferenceRouter` 根据模式与策略自动选择本地 LLM 或远程 Kimi API
 - **[EXTENSIBLE] 能力热插拔**：新增 Capability 只需实现接口 + 注册到 `CapabilityRegistry`，无需修改 Agent 核心
 - **[MEMORY] 多轮对话记忆**：`MemoryManager` 维护最近 N 轮对话上下文，支持隐式引用（"再亮一点"）
 - **[VOICE] 语音交互支持**：`VoiceCommandCoordinator` 统一管理 Push-to-Talk 和 WakeWord 两种语音模式
@@ -105,10 +105,10 @@ interface Capability {
 
 | Capability | 场景 | 命令示例 |
 |-----------|------|----------|
-| `CameraCapability` | CAMERA | `take_photo`, `switch_camera`, `set_beauty_param`, `set_filter` |
-| `GalleryCapability` | GALLERY | `navigate_to`, `delete_photo`, `share_photo`, `start_edit` |
-| `SettingsCapability` | SETTINGS | `navigate_to`, `toggle_setting`, `set_model` |
-| `NavigationCapability` | ALL | `navigate_to_page` |
+| `CameraCapability` | CAMERA | `capture`, `flip_camera`, `adjust_beauty`, `switch_filter` |
+| `GalleryCapability` | GALLERY | `view_media`, `delete_media`, `share_media`, `search_media` |
+| `SettingsCapability` | SETTINGS | `change_theme`, `change_language`, `download_model`, `toggle_setting` |
+| `NavigationCapability` | ALL | `navigate_to`, `go_back` |
 
 ### 3.2 AgentOrchestrator（应用级单例）
 
@@ -123,7 +123,7 @@ class AgentOrchestrator private constructor(context: Context) {
 **关键约束**：
 - 使用 `applicationContext` 避免内存泄漏
 - `InferenceRouter` 懒加载，避免不需要时初始化远程组件
-- 支持运行时切换 `agentMode`（LOCAL / REMOTE / HYBRID）
+- 支持运行时切换 `agentMode`（LOCAL / REMOTE / OFF）
 
 ### 3.3 CapabilityRegistry（应用级单例）
 
@@ -141,7 +141,7 @@ data class QueuedCommand(
 **行为**：
 - 命令目标场景与当前场景不匹配时，自动入队
 - 页面切换时检查队列，自动执行目标场景匹配的命令
-- 最大重试次数 3 次，超限丢弃并记录错误
+- 队列项包含 `retryCount` 字段，当前实现以场景/可用性轮询执行为主，重试上限需以后续实现为准
 
 ### 3.4 InferenceRouter 路由逻辑
 
@@ -168,10 +168,10 @@ data class QueuedCommand(
 ```kotlin
 sealed class ExecutionState {
     data object Idle : ExecutionState()
-    data class Running(val currentStep: Int, val totalSteps: Int) : ExecutionState()
-    data class Paused(val atStep: Int) : ExecutionState()
-    data class Completed(val results: List<StepResult>) : ExecutionState()
-    data class Failed(val step: Int, val error: String, val fallbackResult: StepResult?) : ExecutionState()
+    data class Running(val totalSteps: Int, val completedSteps: Int) : ExecutionState()
+    data object Paused : ExecutionState()
+    data object Cancelled : ExecutionState()
+    data class Completed(val result: Result<Unit>) : ExecutionState()
 }
 ```
 
@@ -217,9 +217,9 @@ AudioRecorder → VADDetector → ASREngine → AiAgentUseCase → AgentOrchestr
 
 | 级别 | 判定条件 | 处理方式 |
 |------|----------|----------|
-| `SAFE` | 纯设备操作命令 | 可路由到远程 |
-| `NORMAL` | 一般对话，无敏感信息 | 可路由到远程 |
-| `RESTRICTED` | 包含人脸数据、位置、个人身份信息 | 强制本地推理 |
+| `PUBLIC` | 普通设备控制指令，无隐私风险 | 可按模式路由到本地或远程 |
+| `SENSITIVE` | 包含照片/人脸相关描述 | 建议本地优先，是否远程取决于隐私配置 |
+| `RESTRICTED` | 包含坐标、关键点、人脸数据等精确隐私信息 | 强制本地推理 |
 
 ### 4.4 测试要求
 

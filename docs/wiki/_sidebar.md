@@ -1,7 +1,7 @@
-- [Home](Home.md)
-- [产品定义](../../PRODUCT.md)
-- [顶层治理](../../AGENTS.md)
+- [首页](index.md)
+- [项目 README](../../README.md)
 - [产品定义与路线图](../../PRODUCT.md)
+- [顶层治理](../../AGENTS.md)
 
 ## 🎨 核心功能
 - [功能交互规范](FEATURES.md)
