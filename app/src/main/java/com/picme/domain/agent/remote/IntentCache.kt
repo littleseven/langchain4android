@@ -228,8 +228,14 @@ class IntentCache(maxSize: Int = 100) {
 
             // 导航
             put("去相册", AgentCommand.NavigateTo("gallery"))
+            put("打开相册", AgentCommand.NavigateTo("gallery"))
             put("去设置", AgentCommand.NavigateTo("settings"))
+            put("打开设置", AgentCommand.NavigateTo("settings"))
+            put("去相机", AgentCommand.NavigateTo("camera"))
             put("回相机", AgentCommand.NavigateTo("camera"))
+            put("打开相机", AgentCommand.NavigateTo("camera"))
+            put("去拍照", AgentCommand.NavigateTo("camera"))
+            put("回拍照", AgentCommand.NavigateTo("camera"))
             put("返回", AgentCommand.GoBack)
             put("上一页", AgentCommand.GoBack)
 
