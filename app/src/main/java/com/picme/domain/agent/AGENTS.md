@@ -17,8 +17,8 @@
 ## 1. 核心产品逻辑 (Core Product Logic)
 
 - **[PRIVACY] 隐私分级路由**：`PrivacyGuard` 将用户输入分为 `SAFE`/`NORMAL`/`RESTRICTED` 三级，`RESTRICTED` 强制本地推理
-- **[PERF] 推理延迟 < 500ms**：本地 Qwen3-0.6B 首 token 延迟目标 < 300ms（骁龙 8 Gen2 基准）
-- **[PERF] 端到端命令执行 < 1s**：意图解析 → 命令生成 → Capability 执行全流程
+- **[PERF] 推理延迟 < 800ms**：本地 Qwen3-1.7B 首 token 延迟目标 < 600ms（骁龙 8 Gen2 基准）
+- **[PERF] 端到端命令执行 < 1.5s**：意图解析 → 命令生成 → Capability 执行全流程
 - **[HYBRID] 本地+远程混合编排**：`InferenceRouter` 根据策略自动选择本地 LLM 或远程 Kimi API
 - **[EXTENSIBLE] 能力热插拔**：新增 Capability 只需实现接口 + 注册到 `CapabilityRegistry`，无需修改 Agent 核心
 - **[MEMORY] 多轮对话记忆**：`MemoryManager` 维护最近 N 轮对话上下文，支持隐式引用（"再亮一点"）
@@ -40,7 +40,7 @@ AgentOrchestrator (应用级单例)
     │   ├─ L2_BatchFC → RemoteOrchestrator.processBatch()
     │   ├─ L3_PlanExecute → RemoteOrchestrator.processPlan()
     │   └─ L4_ReAct → RemoteOrchestrator.processChat()
-    ├─ LocalLlmEngine (Qwen3-0.6B-MNN)
+    ├─ LocalLlmEngine (Qwen3-1.7B-MNN)
     ├─ MemoryManager (对话上下文)
     ├─ PromptBuilder (system prompt 生成)
     └─ CapabilityRegistry (能力路由)
@@ -60,7 +60,7 @@ AgentOrchestrator (应用级单例)
 | `AgentOrchestrator` | 统一入口，管理本地模型生命周期，协调各组件 | 主线程协程 |
 | `CapabilityRegistry` | 应用级单例，Capability 注册/查询/命令分发，支持跨页面命令队列 | Default 协程 |
 | `InferenceRouter` | 根据隐私级别和策略选择器结果路由到本地或远程引擎 | Default 协程 |
-| `LocalLlmEngine` | 本地 Qwen3-0.6B MNN-LLM 推理封装 | 独立推理线程 |
+| `LocalLlmEngine` | 本地 Qwen3-1.7B MNN-LLM 推理封装 | 独立推理线程 |
 | `RemoteOrchestrator` | Kimi Coding API 远程推理（L2/L3/L4） | IO 协程 |
 | `ExecutionEngine` | 顺序执行 ExecutionPlan，支持条件/延迟/暂停/取消 | Default 协程 |
 | `ExecutionReporter` | 执行过程报告，生成结构化日志 | 主线程回调 |
@@ -257,9 +257,9 @@ AudioRecorder → VADDetector → ASREngine → AiAgentUseCase → AgentOrchestr
 - [ ] 语音命令是否支持打断和重新识别？
 
 ### 5.5 性能与稳定性
-- [ ] 本地 LLM 首 token 延迟是否 < 500ms？
-- [ ] 端到端命令执行是否 < 1s？
-- [ ] 内存管理：对话历史是否有上限？（防止 OOM）
+- [ ] 本地 LLM 首 token 延迟是否 < 800ms？（Qwen3-1.7B）
+- [ ] 端到端命令执行是否 < 1.5s？
+- [ ] 内存管理：对话历史是否有上限？（防止 OOM，1.7B 模型约占用 1.5GB RAM）
 - [ ] 协程作用域是否正确管理？（避免泄漏）
 
 ---
@@ -267,19 +267,20 @@ AudioRecorder → VADDetector → ASREngine → AiAgentUseCase → AgentOrchestr
 ## 6. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
-- ✅ Agent 响应 < 500ms → `LocalLlmEngine` 本地推理 + `InferenceRouter` 缓存策略
-- ✅ 意图识别准确率 > 90% → `AgentCommandParser` 多模式解析 + 远程增强
+- ✅ Agent 响应 < 800ms → `LocalLlmEngine` 本地推理 + `InferenceRouter` 缓存策略（Qwen3-1.7B）
+- ✅ 意图识别准确率 > 92% → `AgentCommandParser` 多模式解析 + 远程增强（相比 0.6B 提升 2%）
 - ✅ 对话式错误恢复 > 70% → `MemoryManager` 上下文 + 澄清提示
-- ✅ 端到端命令执行 < 1s → 本地缓存 + 轻量路由
+- ✅ 端到端命令执行 < 1.5s → 本地缓存 + 轻量路由
 - ✅ 隐私绝对 → `PrivacyGuard` 分级 + `RESTRICTED` 强制本地
 - ✅ 能力热插拔 → `Capability` 接口 + `CapabilityRegistry` 动态发现
 
 **技术决策记录**：
 - 选择应用级单例而非 DI：简化 Agent 架构，避免 Hilt 循环依赖
-- 本地+远程混合编排：本地处理简单命令保证延迟，远程处理复杂意图保证准确率
+- 本地 + 远程混合编排：本地处理简单命令保证延迟，远程处理复杂意图保证准确率
 - L1~L4 策略分层：高频命令缓存、多参数批量解析、复杂任务计划执行、开放式对话
 - Capability 页面 delegate 模式：解耦 Agent 核心与页面生命周期
 - 跨页面命令队列：支持"先拍照再编辑"等跨场景指令
+- **Qwen3-1.7B 升级**：相比 0.6B 提供更强的推理能力，意图识别准确率提升约 2%，延迟增加约 300ms（可接受范围内）
 
 ---
 

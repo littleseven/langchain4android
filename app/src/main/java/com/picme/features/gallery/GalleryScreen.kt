@@ -57,10 +57,11 @@ import com.picme.features.gallery.components.MediaPager
 import com.picme.features.gallery.components.galleryReadPermissions
 import com.picme.features.gallery.components.hasGalleryPermission
 import androidx.core.net.toUri
-import androidx.core.content.ContextCompat
 import com.picme.features.gallery.components.shareMediaAssets
 import com.picme.features.gallery.agent.GalleryAgentPanel
+import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.rememberAgentChatConfig
+import com.picme.domain.agent.model.AgentScene
 
 @Composable
 fun GalleryScreen(
@@ -135,23 +136,13 @@ fun GalleryScreen(
                     )
                 }
                 is MediaViewModel.DeleteAuthRequest.Api30 -> {
-                    val contentUris = request.uris.filter { uri -> uri.scheme == "content" }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && contentUris.isNotEmpty()) {
-                        runCatching {
-                            val intent = MediaStore.createDeleteRequest(
-                                context.contentResolver,
-                                contentUris
-                            )
-                            deletePermissionLauncher?.launch(
-                                IntentSenderRequest.Builder(intent).build()
-                            )
-                        }.onFailure { error ->
-                            Log.e("PicMe:Gallery", "Failed to launch delete auth request", error)
-                            viewModel.clearPendingDeleteUris()
-                        }
-                    } else {
-                        Log.w("PicMe:Gallery", "Skip delete auth request: no content URIs")
-                    }
+                    val intent = MediaStore.createDeleteRequest(
+                        context.contentResolver,
+                        request.uris
+                    )
+                    deletePermissionLauncher?.launch(
+                        IntentSenderRequest.Builder(intent).build()
+                    )
                 }
             }
             viewModel.consumeDeleteAuthRequest()
@@ -272,12 +263,7 @@ fun GalleryScreen(
             }
         }
         val filter = IntentFilter(CameraTestCommandReceiver.ACTION_TEST_COMMAND)
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
+        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         Logger.i("PicMe:GalleryTest", "Test command receiver registered dynamically")
 
         onDispose {
