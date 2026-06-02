@@ -328,7 +328,7 @@ fun rememberAgentChatConfig(
         AiAgentUseCase(
             context = context,
             agentMode = AiAgentMode.LOCAL,
-            localModelId = "qwen3_0_6b"
+            localModelId = "qwen3_1_7b"
         )
     }
 
