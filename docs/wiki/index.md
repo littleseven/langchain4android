@@ -44,7 +44,7 @@
 | 「换个冷调滤镜」 | 切换冷色调风格滤镜 |
 | 「打开前置」 | 翻转至前置摄像头 |
 
-- **端侧运行 Qwen3-0.6B 大模型**，零网络依赖，隐私安全
+- **端侧运行 Qwen3-1.7B 大模型**，支持更强的端侧推理能力，隐私敏感数据优先本地处理
 - **Capability 系统**支持热插拔扩展，新增能力无需修改 Agent 核心
 - **多轮对话上下文记忆**，交互体验连贯自然
 - **统一聊天界面**，Camera 与 Gallery 页面视觉一致，支持折叠/展开、语音输入
@@ -61,12 +61,12 @@
 
 | 功能 | 运行位置 | 网络依赖 |
 |------|----------|----------|
-| LLM 推理 | 本地 MNN-LLM | 零网络 |
-| 人脸检测 | 本地 ONNX Runtime | 零网络 |
-| OCR 文字识别 | 本地 ML Kit | 零网络 |
-| 美颜渲染 | 本地 GPU | 零网络 |
+| LLM 推理 | 本地 MNN-LLM | 隐私敏感数据强制本地 |
+| 人脸检测 | 本地 ONNX Runtime | 隐私敏感数据强制本地 |
+| OCR 文字识别 | 本地 ML Kit | 隐私敏感数据强制本地 |
+| 美颜渲染 | 本地 GPU | 隐私敏感数据强制本地 |
 
-所有 AI 处理完全在设备本地完成，**无需网络权限**，用户隐私零泄露风险。
+核心 AI 处理支持设备本地完成，隐私敏感数据强制本地推理；在远程模式下仅非敏感指令可走网络编排。
 
 ### 统一聊天界面
 
@@ -91,14 +91,14 @@
 ├──────────────────────────────────────────────────────────────┤
 │  Agent Runtime (domain/agent/)                                │
 │  ├─ AgentOrchestrator      意图解析与任务编排                  │
-│  ├─ LocalLlmEngine         Qwen3-0.6B / MNN-LLM 推理         │
+│  ├─ LocalLlmEngine         Qwen3-1.7B / MNN-LLM 推理         │
 │  ├─ CapabilityRegistry     设备能力路由（自描述元数据）        │
 │  ├─ MemoryManager          多轮对话上下文管理                  │
 │  └─ PrivacyGuard           隐私分级守卫                        │
 ├──────────────────────────────────────────────────────────────┤
 │  Capability Layer（可插拔、自描述）                            │
 │  ├─ CameraCapability       相机控制（拍摄/切换/参数）          │
-│  ├─ BeautyCapability       美颜参数调节                        │
+│  ├─ CameraCapability       美颜/滤镜/拍摄等相机能力             │
 │  ├─ GalleryCapability      相册管理                            │
 │  ├─ SettingsCapability     设置管理                            │
 │  └─ NavigationCapability   页面导航                            │

@@ -17,7 +17,7 @@
 - **[ATOMICITY] 事务原子性**：涉及多个表（如媒体 + 标签）的更新必须使用 `@Transaction`。
 - **[IDEMPOTENCE] 幂等性**：重复扫描同一文件不应产生多条记录，必须根据文件路径或 Hash 进行 `OnConflictStrategy.REPLACE`。
 - **[LAZY_LOAD] 延迟加载**：严禁在 Repository 的 `allMedia` Flow 中加载大图字节数组，仅加载 URI 和元数据。
-- **[PRIVACY] 本地存储**：所有数据必须 100% 本地化，严禁申请网络权限。
+- **[PRIVACY] 本地存储**：本模块管理的数据必须 100% 本地化，禁止引入云端同步依赖。
 
 ## 2. 技术实现规范 (Technical Implementation)
 
@@ -55,7 +55,7 @@
 ## 5. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
-- ✅ 零云端 → 所有数据本地存储，不申请网络权限
+- ✅ 零云端存储 → 所有数据本地存储，不依赖云端同步
 - ✅ 120fps 滚动 → Repository 仅加载元数据，不加载大图
 - ✅ 隐私安全 → 用户数据 100% 本地化，无云端同步
 

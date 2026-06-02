@@ -8,7 +8,7 @@ PicMe is a technology research project exploring two main tracks: **(1) AI Codin
 
 Key technological decisions:
 - **On-device Agent**: `domain/agent/` implements an Agent Runtime that maps natural language to device capabilities via Qwen3-1.7B running on MNN-LLM.
-- **100% On-device**: All AI processing (LLM inference, face detection, OCR) runs locally — no cloud dependency.
+- **Privacy-first**: All sensitive AI processing (LLM inference, face detection, OCR) runs locally; non-sensitive commands may use remote orchestration in REMOTE mode.
 - **Self-developed Engine**: Full OpenGL ES + EGL pipeline (no third-party beauty SDKs); GPUPixel has been completely removed.
 
 ## Common Commands

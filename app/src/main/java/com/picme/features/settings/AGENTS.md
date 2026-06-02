@@ -14,7 +14,7 @@
 
 ## 1. 核心产品逻辑 (Core Product Logic)
 
-- **[LOCAL] 零云端存储**：所有设置本地化，不申请网络权限
+- **[LOCAL] 本地优先存储**：设置数据本地化存储，隐私敏感 Agent 数据优先本地处理
 - **[I18N] 多语言支持**：英文、简体中文、繁体中文三语齐全
 - **[PRIVACY] 权限透明**：明确告知用途，提供降级方案
 - **[TYPE_SAFE] 类型安全**：使用 DataStore 和 Sealed Class 确保编译期检查
@@ -101,11 +101,11 @@
 **LLM 模型管理**
 - **入口**：`LlmModelManagerScreen`，从设置页"模型管理"进入
 - **功能**：
-  - 查看已下载模型列表（Qwen3-0.6B 等）
+  - 查看已下载模型列表（Qwen3-1.7B、Qwen3-0.6B 等）
   - 下载新模型（从远程仓库）
   - 删除本地模型释放空间
   - 切换当前使用模型
-- **存储路径**：应用私有目录 `/data/data/com.picme/files/models/`
+- **存储路径**：应用私有目录 `files/llm_models/`
 - **下载管理**：`LlmModelDownloadManager` 支持断点续传和进度回调
 
 **ASR 模型管理**
@@ -116,10 +116,10 @@
   - 配置 VAD 参数（阈值、最小语音时长）
 
 **Agent 模式设置**
-- **本地模式**：仅使用本地 Qwen3-0.6B
+- **本地模式**：仅使用本地模型（默认 Qwen3-1.7B）
 - **远程模式**：仅使用 Kimi API
-- **混合模式**：`InferenceRouter` 自适应选择（默认）
-- **隐私级别**：`SAFE` / `NORMAL` / `RESTRICTED`
+- **关闭模式**：禁用 Agent
+- **隐私级别**：`STRICT` / `PERMISSIVE`；运行时输入分级为 `PUBLIC` / `SENSITIVE` / `RESTRICTED`
 
 ## 2.6 Agent 集成（2026-05 新增）
 
@@ -128,13 +128,13 @@
 - 支持命令：
   - `navigate_to` — 跳转设置子页面
   - `toggle_setting` — 切换开关设置
-  - `set_model` — 切换 LLM/ASR 模型
+  - `download_model` — 下载 LLM 模型
 - 使用 `AiChatScreen` 提供统一聊天界面
 
 ## 5. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
-- ✅ 零云端 → 所有设置本地存储，不申请网络权限
+- ✅ 零云端存储 → 设置数据本地存储，不依赖云端同步
 - ✅ 多语言支持 → 英文、简体中文、繁体中文三语齐全
 - ✅ 权限透明 → 明确告知用途，提供降级方案
 - ✅ 模型管理 → LLM/ASR 模型下载、切换、删除

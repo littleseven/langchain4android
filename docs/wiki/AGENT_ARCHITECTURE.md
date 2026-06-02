@@ -33,8 +33,8 @@
 
 | 约束 | 定义 | 验证方式 |
 |------|------|----------|
-| **[PRIVACY]** | 100% 本地推理，人脸/对话数据严禁上云 | PrivacyGuard 拦截数据流 |
-| **[PERF]** | 交互反馈 < 100ms，LLM 推理后台完成 | 端侧 Qwen3.5-2B 单次推理 < 200ms |
+| **[PRIVACY]** | 敏感数据强制本地推理，人脸/对话数据严禁上云 | PrivacyGuard 拦截数据流 |
+| **[PERF]** | 交互反馈 < 100ms，LLM 推理后台完成 | 端侧 Qwen3-1.7B 首 token 目标 < 600ms |
 | **[I18N]** | System Prompt 及用户可见回复禁止硬编码中文 | 接入 string 资源 |
 | **[OFFLINE]** | 本地模型未下载时提供明确引导 | 非静默失败 |
 | **[TYPE_SAFE]** | AgentCommand / AgentAction 必须使用 Sealed Class | 禁止字符串魔法值 |
@@ -56,7 +56,7 @@
 | `MemoryManager` | DataStore 持久化对话历史，按 session 隔离 | ✅ 已落地 |
 | `CapabilityRegistry` | Capability 注册与命令分发 | ✅ 已落地 |
 | `Capability` | 领域能力抽象（相机控制、相册管理等） | 🔄 部分实现 |
-| `PrivacyGuard` | 隐私策略检查（预留接口） | ⏳ 规划中 |
+| `PrivacyGuard` | 输入内容隐私分级与本地优先约束 | ✅ 已落地 |
 
 ---
 
@@ -84,7 +84,7 @@
 │                           Agent Runtime Layer                                │
 │                                                                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    AgentOrchestratorV2 (编排器)                       │   │
+│  │                    AgentOrchestrator (编排器)                         │   │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │   │
 │  │  │SceneManager │  │PromptBuilder│  │MemoryManager│  │PrivacyGuard │ │   │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │   │
@@ -102,9 +102,9 @@
 │  │   └──────────────┘  └──────────────┘  └──────────────┘              │   │
 │  │                                                                      │   │
 │  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
-│  │   │NavigationCapability │  │  EditCapability   │  │  (可扩展)        │  │   │
-│  │   │ • 页面切换         │  │ • 编辑操作        │  │                  │  │   │
-│  │   │ • 返回/退出        │  │ • 保存/撤销       │  │                  │  │   │
+│  │   │NavigationCapability │  │  (预留扩展)        │  │                  │  │   │
+│  │   │ • 页面切换         │  │                  │  │                  │  │   │
+│  │   │ • 返回/退出        │  │                  │  │                  │  │   │
 │  │   └──────────────┘  └──────────────┘  └──────────────┘              │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                       │                                     │
@@ -397,7 +397,7 @@ class NavigationCapability(
 | **决策深度** | 单步指令 | 多步骤规划、条件判断、错误恢复 |
 | **延迟** | 低（单次推理） | 高（多轮 RTT） |
 
-### 4.2 端侧推理模式选型（Qwen3.5-2B）
+### 4.2 端侧推理模式选型（Qwen3-1.7B）
 
 **不推荐完整 ReAct**，原因：
 - 2B 模型 COT（链式思考）能力弱，Thought 质量不稳定
@@ -435,7 +435,7 @@ Phase 4: 轻量 ReAct（限 2-3 步，仅复杂场景）
 - 2s 超时降级到本地规则或文本提示
 - 常见意图响应缓存（LruCache）
 
-### 4.4 Qwen3.5-2B Prompt 工程建议
+### 4.4 Qwen3-1.7B Prompt 工程建议
 
 - 使用模型原生 `tools` 参数定义相机控制函数，替代手写 JSON format prompt
 - System Prompt 精简：只传关键状态，大模型理解力强无需冗长描述
@@ -527,9 +527,9 @@ sealed class AgentCommand {
 | | 开关调试模式 | `ToggleSetting` | SettingsCapability | P2 |
 | **导航** | 切换页面 | `NavigateTo` | NavigationCapability | P0 |
 | | 返回上一页 | `GoBack` | NavigationCapability | P0 |
-| **编辑** | 进入编辑 | `ApplyEdit` | EditCapability | P1 |
-| | 保存编辑 | `SaveEdit` | EditCapability | P1 |
-| | 撤销/重做 | `UndoEdit`/`RedoEdit` | EditCapability | P2 |
+| **编辑** | 进入编辑 | 预留 | 待后续独立 Capability 落地 | P2 |
+| | 保存编辑 | 预留 | 待后续独立 Capability 落地 | P2 |
+| | 撤销/重做 | 预留 | 待后续独立 Capability 落地 | P2 |
 
 ---
 

@@ -28,11 +28,11 @@
 
 | Capability | 活跃场景 | 命令数 | 状态 |
 |------------|----------|--------|------|
-| **CameraCapability** | CAMERA | 15 | ✅ 已落地 |
-| **GalleryCapability** | GALLERY | 7 | 🔄 部分实现 |
-| **SettingsCapability** | SETTINGS | 5 | ⏳ 规划中 |
+| **CameraCapability** | CAMERA | 11 | ✅ 已落地 |
+| **GalleryCapability** | GALLERY | 7 | ✅ 已落地 |
+| **SettingsCapability** | SETTINGS | 5 | ✅ 已落地 |
 | **NavigationCapability** | ALL | 2 | ✅ 已落地 |
-| **EditCapability** | EDITOR | 3 | ⏳ 规划中 |
+| **EditCapability** | EDITOR | 0 | ⏳ 预留 |
 
 ### 1.1 场景 - 能力映射
 
@@ -41,7 +41,7 @@
 | `CAMERA` | CameraCapability, NavigationCapability |
 | `GALLERY` | GalleryCapability, NavigationCapability |
 | `SETTINGS` | SettingsCapability, NavigationCapability |
-| `EDITOR` | EditCapability, NavigationCapability |
+| `EDITOR` | NavigationCapability（编辑独立路由预留） |
 | `DEBUG` | NavigationCapability |
 
 ---
@@ -56,7 +56,7 @@
 
 | 命令 | 参数 | 描述 | 示例 |
 |------|------|------|------|
-| `capture_photo` | - | 拍照 | "拍照" |
+| `capture` | - | 拍照 | "拍照" |
 | `toggle_recording` | - | 开始/停止录像 | "开始录像"/"停止录像" |
 | `flip_camera` | - | 翻转摄像头 | "翻转镜头" |
 | `adjust_zoom` | `factor: Float` | 变焦调节 | "放大两倍" → 2.0x |
@@ -243,7 +243,7 @@ class NavigationCapability(
 
 ---
 
-## 6. EditCapability
+## 6. EditCapability（预留）
 
 **职责**: 图片编辑、保存、撤销/重做  
 **活跃场景**: `EDITOR`  
@@ -292,7 +292,7 @@ class NewCapability : Capability {
 ### 步骤 2: 注册到 CapabilityRegistry
 
 ```kotlin
-val registry = CapabilityRegistry().apply {
+val registry = CapabilityRegistry.getInstance().apply {
     register(NewCapability())
 }
 ```
