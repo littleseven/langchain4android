@@ -127,12 +127,12 @@ class InferenceRouter(
         }
         Logger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
         Logger.d(tag, userPrompt)
-        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=512]")
+        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
         val result = localEngine.generateWithSystem(
             systemPrompt = systemPrompt,
             userPrompt = userPrompt,
-            maxTokens = 512
+            maxTokens = 128
         )
 
         return result.fold(

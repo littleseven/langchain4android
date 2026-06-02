@@ -176,7 +176,4 @@
     <string name="model_download_notification_multi">正在下载 %1$d 个模型（%2$d%%）</string>
     <string name="model_download_notification_channel_desc">用于在后台持续执行模型下载</string>
 
-<string name="camera_memory">相机状态记忆</string>
-<string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
-<string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
 </resources>
