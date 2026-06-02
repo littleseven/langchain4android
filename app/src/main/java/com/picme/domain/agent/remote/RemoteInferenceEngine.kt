@@ -1,11 +1,9 @@
 package com.picme.domain.agent.remote
 
 import com.picme.core.common.Logger
-import com.picme.data.remote.kimi.KimiCodingApiClient
-import com.picme.data.remote.kimi.KimiCodingMessage
-import com.picme.data.remote.kimi.KimiCodingRequest
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.model.RemoteModelConfig
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.delay
 
@@ -13,15 +11,15 @@ import kotlinx.coroutines.delay
  * 远程推理引擎
  *
  * 负责执行 L2 Batch FC、L3 Plan-and-Execute、L4 ReAct 三种远程推理模式。
- * 统一使用 Kimi Coding API（Claude 格式）。
+ * 通过 [UnifiedRemoteClient] 自动适配 Claude/OpenAI 协议。
  *
- * @param codingClient Kimi Coding API 客户端
- * @param model 模型 ID，默认 kimi-for-coding
+ * @param remoteConfig 远程模型配置
  */
 class RemoteInferenceEngine(
-    private val codingClient: KimiCodingApiClient,
-    private val model: String = "kimi-for-coding"
+    private val remoteConfig: RemoteModelConfig
 ) {
+
+    private val unifiedClient = UnifiedRemoteClient(remoteConfig)
 
     private val tag = REMOTE_TAG
 
@@ -45,31 +43,21 @@ class RemoteInferenceEngine(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = buildBatchSystemPrompt(stateSnapshot)
-            val request = KimiCodingRequest(
-                model = model,
-                messages = listOf(
-                    KimiCodingMessage(role = "user", content = userInput)
-                ),
-                system = systemPrompt,
+
+            Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+
+            val result = unifiedClient.chat(
+                systemPrompt = systemPrompt,
+                userInput = userInput,
                 maxTokens = 1024,
-                temperature = 0.3,
-                stream = false
+                temperature = 0.3
             )
 
-            Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\"")
-
-            val response = codingClient.service.messages(request)
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string()
-                Logger.e(tag, "[L2-BATCH] ERR: HTTP ${response.code()}, body=$errorBody")
-                return Result.failure(RuntimeException("Batch API error: ${response.code()}"))
+            val content = result.getOrElse { error ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
+                return Result.failure(error)
             }
-
-            val body = response.body()
-                ?: return Result.failure(RuntimeException("Empty response body"))
-
-            val content = body.content.firstOrNull()?.text?.trim()
-                ?: return Result.failure(RuntimeException("No content in response"))
 
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$content\"")
@@ -105,31 +93,21 @@ class RemoteInferenceEngine(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = buildPlanSystemPrompt(stateSnapshot)
-            val request = KimiCodingRequest(
-                model = model,
-                messages = listOf(
-                    KimiCodingMessage(role = "user", content = userInput)
-                ),
-                system = systemPrompt,
+
+            Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+
+            val result = unifiedClient.chat(
+                systemPrompt = systemPrompt,
+                userInput = userInput,
                 maxTokens = 2048,
-                temperature = 0.3,
-                stream = false
+                temperature = 0.3
             )
 
-            Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\"")
-
-            val response = codingClient.service.messages(request)
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string()
-                Logger.e(tag, "[L3-PLAN] ERR: HTTP ${response.code()}, body=$errorBody")
-                return Result.failure(RuntimeException("Plan API error: ${response.code()}"))
+            val content = result.getOrElse { error ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
+                return Result.failure(error)
             }
-
-            val body = response.body()
-                ?: return Result.failure(RuntimeException("Empty response body"))
-
-            val content = body.content.firstOrNull()?.text?.trim()
-                ?: return Result.failure(RuntimeException("No content in response"))
 
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L3-PLAN] RSP: latency=${latencyMs}ms, content=\"$content\"")
@@ -162,31 +140,21 @@ class RemoteInferenceEngine(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = buildReActSystemPrompt(stateSnapshot)
-            val request = KimiCodingRequest(
-                model = model,
-                messages = listOf(
-                    KimiCodingMessage(role = "user", content = userInput)
-                ),
-                system = systemPrompt,
+
+            Logger.d(tag, "[L4-REACT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+
+            val result = unifiedClient.chat(
+                systemPrompt = systemPrompt,
+                userInput = userInput,
                 maxTokens = 1024,
-                temperature = 0.5,
-                stream = false
+                temperature = 0.5
             )
 
-            Logger.d(tag, "[L4-REACT] REQ: input=\"$userInput\"")
-
-            val response = codingClient.service.messages(request)
-            if (!response.isSuccessful) {
-                val errorBody = response.errorBody()?.string()
-                Logger.e(tag, "[L4-REACT] ERR: HTTP ${response.code()}, body=$errorBody")
-                return Result.failure(RuntimeException("ReAct API error: ${response.code()}"))
+            val content = result.getOrElse { error ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Logger.e(tag, "[L4-REACT] ERR: latency=${latencyMs}ms, ${error.message}", error)
+                return Result.failure(error)
             }
-
-            val body = response.body()
-                ?: return Result.failure(RuntimeException("Empty response body"))
-
-            val content = body.content.firstOrNull()?.text?.trim()
-                ?: return Result.failure(RuntimeException("No content in response"))
 
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L4-REACT] RSP: latency=${latencyMs}ms, content=\"$content\"")

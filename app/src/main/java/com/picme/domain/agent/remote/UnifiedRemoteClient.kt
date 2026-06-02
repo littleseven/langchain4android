@@ -1,0 +1,165 @@
+package com.picme.domain.agent.remote
+
+import com.picme.core.common.Logger
+import com.picme.data.remote.kimi.KimiCodingApiClient
+import com.picme.data.remote.kimi.KimiCodingMessage
+import com.picme.data.remote.kimi.KimiCodingRequest
+import com.picme.data.remote.kimi.KimiCodingResponse
+import com.picme.data.remote.openai.OpenAiApiClient
+import com.picme.data.remote.openai.OpenAiChatRequest
+import com.picme.data.remote.openai.OpenAiChatResponse
+import com.picme.data.remote.openai.OpenAiMessage
+import com.picme.domain.model.RemoteModelConfig
+import retrofit2.Response
+
+/**
+ * 统一远程 API 客户端
+ *
+ * 根据 [RemoteModelConfig] 自动选择协议：
+ * - kimi-for-coding → Claude 格式（KimiCodingApiClient）
+ * - kimi-k2.6 / deepseek-v4-flash → OpenAI 格式（OpenAiApiClient）
+ *
+ * 对外暴露统一接口，隐藏协议差异。
+ */
+class UnifiedRemoteClient(
+    private val config: RemoteModelConfig
+) {
+
+    private val tag = "PicMe:UnifiedRemote"
+
+    private val kimiClient: KimiCodingApiClient? by lazy {
+        if (config.modelId == "kimi-for-coding") {
+            KimiCodingApiClient(
+                apiKey = config.apiKey,
+                baseUrl = config.baseUrl,
+                enableLogging = true
+            )
+        } else null
+    }
+
+    private val openAiClient: OpenAiApiClient? by lazy {
+        if (config.modelId != "kimi-for-coding") {
+            OpenAiApiClient(
+                apiKey = config.apiKey,
+                baseUrl = config.baseUrl,
+                enableLogging = true
+            )
+        } else null
+    }
+
+    /**
+     * 发送聊天请求，返回统一格式的文本内容
+     *
+     * @param systemPrompt 系统提示词
+     * @param userInput 用户输入
+     * @param maxTokens 最大 token 数
+     * @param temperature 温度
+     * @return 生成的文本内容，失败时返回 null
+     */
+    suspend fun chat(
+        systemPrompt: String?,
+        userInput: String,
+        maxTokens: Int = 1024,
+        temperature: Double = 0.3
+    ): Result<String> {
+        return try {
+            when {
+                kimiClient != null -> chatKimi(systemPrompt, userInput, maxTokens, temperature)
+                openAiClient != null -> chatOpenAi(systemPrompt, userInput, maxTokens, temperature)
+                else -> Result.failure(IllegalStateException("No client available for model ${config.modelId}"))
+            }
+        } catch (e: Exception) {
+            Logger.e(tag, "Chat failed for model=${config.modelId}", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun chatKimi(
+        systemPrompt: String?,
+        userInput: String,
+        maxTokens: Int,
+        temperature: Double
+    ): Result<String> {
+        val client = kimiClient ?: return Result.failure(IllegalStateException("Kimi client not initialized"))
+        val request = KimiCodingRequest(
+            model = config.modelId,
+            messages = listOf(KimiCodingMessage(role = "user", content = userInput)),
+            system = systemPrompt,
+            maxTokens = maxTokens,
+            temperature = temperature,
+            stream = false
+        )
+
+        val response: Response<KimiCodingResponse> = client.service.messages(request)
+        return parseResponse(response) { body ->
+            body.content.firstOrNull()?.text?.trim()
+        }
+    }
+
+    private suspend fun chatOpenAi(
+        systemPrompt: String?,
+        userInput: String,
+        maxTokens: Int,
+        temperature: Double
+    ): Result<String> {
+        val client = openAiClient ?: return Result.failure(IllegalStateException("OpenAI client not initialized"))
+
+        val messages = mutableListOf<OpenAiMessage>()
+        if (!systemPrompt.isNullOrBlank()) {
+            messages.add(OpenAiMessage(role = "system", content = systemPrompt))
+        }
+        messages.add(OpenAiMessage(role = "user", content = userInput))
+
+        val request = OpenAiChatRequest(
+            model = config.modelId,
+            messages = messages,
+            maxTokens = maxTokens,
+            temperature = temperature,
+            stream = false
+        )
+
+        val response: Response<OpenAiChatResponse> = client.service.chatCompletions(request)
+        return parseResponse(response) { body ->
+            body.choices.firstOrNull()?.message?.content?.trim()
+        }
+    }
+
+    private fun <T> parseResponse(
+        response: Response<T>,
+        extractContent: (T) -> String?
+    ): Result<String> {
+        if (!response.isSuccessful) {
+            val errorBody = response.errorBody()?.string()
+            Logger.e(tag, "HTTP ${response.code()}, body=$errorBody")
+            return Result.failure(RuntimeException("API error: ${response.code()}"))
+        }
+
+        val body = response.body()
+            ?: return Result.failure(RuntimeException("Empty response body"))
+
+        val content = extractContent(body)
+            ?: return Result.failure(RuntimeException("No content in response"))
+
+        return Result.success(content)
+    }
+
+    companion object {
+        /**
+         * 根据模型 ID 判断协议类型
+         */
+        fun protocolFor(modelId: String): RemoteProtocol {
+            return when (modelId) {
+                "kimi-for-coding" -> RemoteProtocol.CLAUDE
+                else -> RemoteProtocol.OPENAI
+            }
+        }
+    }
+}
+
+/**
+ * 远程 API 协议类型
+ */
+enum class RemoteProtocol {
+    CLAUDE,
+    OPENAI
+}
