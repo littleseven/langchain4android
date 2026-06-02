@@ -1,6 +1,9 @@
 package com.picme.features.common.chat
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -18,12 +21,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,24 +64,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 
+private tailrec fun Context.findActivityForWindow(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is ContextWrapper -> baseContext.findActivityForWindow()
+    else -> null
+}
+
 /**
  * AI Chat Screen - 统一聊天界面组件
  * 
  * 功能特性：
- * 1. ModalBottomSheet 设计，系统自动处理键盘 insets
+ * 1. 非模态浮层设计，不遮挡页面预览和底层交互
  * 2. 折叠/展开功能，节省屏幕空间
  * 3. 文字 + 语音输入切换
  * 4. 支持多种消息类型（UserText、AgentText、PlanPreview、PlanProgress、PlanResult）
@@ -104,28 +114,55 @@ fun AiChatScreen(
     onVisibleChange: (Boolean) -> Unit,
     onSendMessage: (String) -> Unit,
     onCommand: (AiAgentCommand) -> Unit,
+    modifier: Modifier = Modifier,
+    consumedBottomInset: Dp = 0.dp,
     autoExecutePlans: Boolean = true,
     onPlanConfirm: () -> Unit = {},
     onPlanCancel: () -> Unit = {},
-    modifier: Modifier = Modifier,
     voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
-    if (visible) {
-        Dialog(
-            onDismissRequest = { onVisibleChange(false) },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false
-            )
+    val context = LocalContext.current
+
+    DisposableEffect(visible, context) {
+        if (!visible) {
+            return@DisposableEffect onDispose {}
+        }
+        val activity = context.findActivityForWindow() ?: return@DisposableEffect onDispose {}
+        val window = activity.window
+        val previousSoftInputMode = window.attributes.softInputMode
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+
+        onDispose {
+            window.setSoftInputMode(previousSoftInputMode)
+        }
+    }
+
+    BackHandler(enabled = visible) {
+        onVisibleChange(false)
+    }
+
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val imeBottomDp = with(density) { imeBottomPx.toDp() }
+    val navBottomDp = with(density) { WindowInsets.navigationBars.getBottom(density).toDp() }
+    val hiddenPanelBottomPadding = (navBottomDp - consumedBottomInset).coerceAtLeast(0.dp)
+    val panelBottomPadding = if (imeBottomPx > 0) imeBottomDp else hiddenPanelBottomPadding
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = slideInVertically(initialOffsetY = { offsetY -> offsetY }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { offsetY -> offsetY }) + fadeOut()
         ) {
             Box(
-                modifier = modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 80.dp),
-                contentAlignment = Alignment.BottomCenter
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = panelBottomPadding)
             ) {
                 AiChatScreenContent(
                     messages = messages,
