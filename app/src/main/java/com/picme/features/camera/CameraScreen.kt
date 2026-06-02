@@ -11,7 +11,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.media.MediaActionSound
+import android.view.SoundEffectConstants
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -623,8 +623,6 @@ fun CameraContent(
             CameraThreadRegistry.getCameraHandler().post(it)
         }
     }
-    val shutterSound = remember { MediaActionSound() }
-
     // [三位一体反馈] 黑场动画状态
     val shutterFlashAlpha = remember { Animatable(0f) }
     var isShutterFlashing by remember { mutableStateOf(false) }
@@ -992,7 +990,6 @@ fun CameraContent(
         sensorManager.registerListener(listener, accelerometer, SensorManager.SENSOR_DELAY_UI)
         onDispose {
             sensorManager.unregisterListener(listener)
-            shutterSound.release()
         }
     }
 
@@ -1074,9 +1071,6 @@ fun CameraContent(
                     Logger.w("PicMe:Camera", "Capture rejected: state=${cameraStateManager.getState().name}")
                         return@agentCommandHandler
                 }
-                cameraStateManager.transition(
-                    CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
-                )
                 handleCaptureClick(
                     context = context,
                     captureMode = captureMode,
@@ -1095,7 +1089,8 @@ fun CameraContent(
                     beautyVideoRecorder = beautyVideoRecorder,
                     onRecordingChanged = { updated -> recording = updated },
                     onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
-                    coroutineScope = coroutineScope
+                    coroutineScope = coroutineScope,
+                    cameraStateManager = cameraStateManager
                 )
             }
             is AiAgentCommand.ToggleRecording -> {
@@ -1117,7 +1112,8 @@ fun CameraContent(
                     beautyVideoRecorder = beautyVideoRecorder,
                     onRecordingChanged = { updated -> recording = updated },
                     onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
-                    coroutineScope = coroutineScope
+                    coroutineScope = coroutineScope,
+                    cameraStateManager = cameraStateManager
                 )
             }
             is AiAgentCommand.SwitchMode -> {
@@ -1249,9 +1245,6 @@ fun CameraContent(
                         )
                         return@collect
                     }
-                    cameraStateManager.transition(
-                        CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
-                    )
                     handleCaptureClick(
                         context = context,
                         captureMode = captureMode,
@@ -1805,7 +1798,7 @@ CameraPreviewContent(
                 android.view.HapticFeedbackConstants.LONG_PRESS,
                 android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
             )
-            shutterSound.play(MediaActionSound.SHUTTER_CLICK)
+            currentView.playSoundEffect(SoundEffectConstants.CLICK)
             coroutineScope.launch {
                 shutterFlashAlpha.snapTo(0.6f)
                 shutterFlashAlpha.animateTo(
@@ -1814,9 +1807,6 @@ CameraPreviewContent(
                 )
             }
 
-            cameraStateManager.transition(
-                CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
-            )
             handleCaptureClick(
                 context = context,
                 captureMode = captureMode,
