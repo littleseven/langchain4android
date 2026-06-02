@@ -7,7 +7,6 @@ import android.os.SystemClock
 import android.util.Log
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
-import java.io.File
 
 /**
  * 基于 NCNN 的 ROI 检测器
