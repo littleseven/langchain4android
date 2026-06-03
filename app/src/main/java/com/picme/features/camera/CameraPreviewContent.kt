@@ -560,7 +560,7 @@ private fun CameraFloatingActionButtons(
 ) {
     Column(
         modifier = modifier
-            .padding(end = 16.dp, bottom = 100.dp)
+            .padding(end = 16.dp, bottom = 180.dp)
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.End
