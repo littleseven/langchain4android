@@ -282,7 +282,25 @@ object AgentCommandParser {
             lower.contains("拍照") || lower.contains("拍张") || lower.contains("拍照片") ||
                 lower.contains("拍一下") || lower.contains("快门") -> AgentCommand.CapturePhoto
             // 翻转摄像头
-            lower.contains("翻转") || lower.contains("切换摄像头") || lower.contains("前后") -> AgentCommand.FlipCamera
+            lower.contains("翻转") || lower.contains("切换摄像头") || lower.contains("前后") ||
+                lower.contains("前置") || lower.contains("后置") || lower.contains("前摄") -> AgentCommand.FlipCamera
+            // 美颜相关
+            lower.contains("调高美颜") || lower.contains("增强美颜") || lower.contains("提亮美颜") ->
+                AgentCommand.AdjustBeauty(
+                    com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)
+                )
+            lower.contains("美颜") && (lower.contains("关") || lower.contains("关闭")) ->
+                AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = false))
+            lower.contains("美颜") || lower.contains("开美颜") ->
+                AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true))
+            // 冷调滤镜
+            lower.contains("冷调") || lower.contains("冷色") || lower.contains("冷滤镜") ||
+                (lower.contains("冷") && lower.contains("滤镜")) ->
+                AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL)
+            // 暖调滤镜
+            lower.contains("暖调") || lower.contains("暖色") || lower.contains("暖滤镜") ||
+                (lower.contains("暖") && lower.contains("滤镜")) ->
+                AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.WARM)
             // 录像
             lower.contains("录像") || lower.contains("录制") || lower.contains("拍视频") -> AgentCommand.ToggleRecording
             // 导航相关 - 去相册（最高优先级，多种说法）
