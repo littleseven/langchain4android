@@ -216,9 +216,8 @@ class SettingsViewModel(
     val downloadStates: StateFlow<Map<String, DownloadState>> = modelDownloadManager.downloadStates
 
     // 模型 ID 到 DetectionModelType 的映射
+    // 注意：每个 DetectionModelType 只能对应一个 modelId，否则 entries.find 会返回错误的结果
     private val modelIdToDetectionType = mapOf(
-        "picme-face-det-mnn" to DetectionModelType.DET_500M_MNN,
-        "picme-face-det-ncnn" to DetectionModelType.DET_500M_NCNN,
         "picme-face-det-500m-mnn" to DetectionModelType.DET_500M_MNN,
         "picme-face-det-500m-ncnn" to DetectionModelType.DET_500M_NCNN,
         "picme-face-landmark-mnn" to DetectionModelType.FACE_2D106_MNN,
