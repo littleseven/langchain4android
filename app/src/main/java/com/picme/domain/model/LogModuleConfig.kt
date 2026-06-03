@@ -117,7 +117,8 @@ data class LogModuleConfig(
                 LogModule.AGENT,
                 LogModule.ORCHESTRATOR,
                 LogModule.DOWNLOAD,
-                LogModule.SETTINGS
+                LogModule.SETTINGS,
+                LogModule.FACE_DETECTION
             )
         )
 

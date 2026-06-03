@@ -406,11 +406,16 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
 
     std::vector<FaceBox> allFaces;
 
-    // 尺度 1: stride=8, featureSize=40 (320/8)
+    // 使用动态输出名称（从 outputNames_ 获取）
+    // outputNames_[0-2]: stride 8, 16, 32 scores
+    // outputNames_[3-5]: stride 8, 16, 32 bboxes
+    // outputNames_[6-8]: stride 8, 16, 32 landmarks
+
+    // 尺度 1: stride=8
     {
-        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "448");
-        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "451");
-        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "454");
+        MNN::Tensor *scoreOut = outputNames_.size() > 0 ? interpreter_->getSessionOutput(session_, outputNames_[0].c_str()) : nullptr;
+        MNN::Tensor *bboxOut = outputNames_.size() > 3 ? interpreter_->getSessionOutput(session_, outputNames_[3].c_str()) : nullptr;
+        MNN::Tensor *landmarkOut = outputNames_.size() > 6 ? interpreter_->getSessionOutput(session_, outputNames_[6].c_str()) : nullptr;
         if (!scoreOut || !bboxOut || !landmarkOut) {
             LOGE("Failed to get scale 1 outputs");
         } else {
@@ -487,11 +492,11 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
         }
     }
 
-    // 尺度 2: stride=16, featureSize=20 (320/16)
+    // 尺度 2: stride=16
     {
-        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "471");
-        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "474");
-        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "477");
+        MNN::Tensor *scoreOut = outputNames_.size() > 1 ? interpreter_->getSessionOutput(session_, outputNames_[1].c_str()) : nullptr;
+        MNN::Tensor *bboxOut = outputNames_.size() > 4 ? interpreter_->getSessionOutput(session_, outputNames_[4].c_str()) : nullptr;
+        MNN::Tensor *landmarkOut = outputNames_.size() > 7 ? interpreter_->getSessionOutput(session_, outputNames_[7].c_str()) : nullptr;
         if (!scoreOut || !bboxOut || !landmarkOut) {
             LOGE("Failed to get scale 2 outputs");
         } else {
@@ -562,11 +567,11 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
         }
     }
 
-    // 尺度 3: stride=32, featureSize=10 (320/32)
+    // 尺度 3: stride=32
     {
-        MNN::Tensor *scoreOut = interpreter_->getSessionOutput(session_, "494");
-        MNN::Tensor *bboxOut = interpreter_->getSessionOutput(session_, "497");
-        MNN::Tensor *landmarkOut = interpreter_->getSessionOutput(session_, "500");
+        MNN::Tensor *scoreOut = outputNames_.size() > 2 ? interpreter_->getSessionOutput(session_, outputNames_[2].c_str()) : nullptr;
+        MNN::Tensor *bboxOut = outputNames_.size() > 5 ? interpreter_->getSessionOutput(session_, outputNames_[5].c_str()) : nullptr;
+        MNN::Tensor *landmarkOut = outputNames_.size() > 8 ? interpreter_->getSessionOutput(session_, outputNames_[8].c_str()) : nullptr;
         if (!scoreOut || !bboxOut || !landmarkOut) {
             LOGE("Failed to get scale 3 outputs");
         } else {

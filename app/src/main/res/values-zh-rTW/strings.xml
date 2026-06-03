@@ -60,8 +60,8 @@
     <string name="stage_landmark_desc">配置關鍵點檢測的模型、推理引擎和設備。</string>
     <string name="model_type">模型</string>
     <string name="model_mediapipe">MediaPipe</string>
-    <string name="model_det10g_mnn">Det10G-MNN</string>
-    <string name="model_det10g_ncnn">Det10G-NCNN</string>
+    <string name="model_det10g_mnn">RetinaFace-MNN</string>
+    <string name="model_det10g_ncnn">RetinaFace-NCNN</string>
     <string name="model_2d106_mnn">2D106-MNN</string>
     <string name="model_2d106_ncnn">2D106-NCNN</string>
     <string name="model_mnn">MNN</string>

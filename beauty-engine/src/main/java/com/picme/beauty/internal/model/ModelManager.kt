@@ -66,7 +66,9 @@ object ModelManager {
         "det10g_mnn" to "picme-face-det-mnn",
         "2d106_mnn" to "picme-face-landmark-mnn",
         "det10g_ncnn" to "picme-face-det-ncnn",
-        "2d106_ncnn" to "picme-face-landmark-ncnn"
+        "2d106_ncnn" to "picme-face-landmark-ncnn",
+        "det_500m_mnn" to "picme-face-det-500m-mnn",
+        "det_500m_ncnn" to "picme-face-det-500m-ncnn"
     )
 
     private val MODEL_REGISTRY = mapOf(
@@ -79,6 +81,11 @@ object ModelManager {
         "2d106_mnn" to ModelInfo(
             assetPath = "models/mnn/2d106det.mnn",
             cacheName = "2d106det.mnn",
+            version = "1.0"
+        ),
+        "det_500m_mnn" to ModelInfo(
+            assetPath = "models/mnn/det_500m.mnn",
+            cacheName = "det_500m.mnn",
             version = "1.0"
         )
     )
@@ -96,6 +103,13 @@ object ModelManager {
             binAssetPath = "models/ncnn/2d106det.bin",
             paramCacheName = "2d106det.param",
             binCacheName = "2d106det.bin",
+            version = "1.0"
+        ),
+        "det_500m_ncnn" to NcnnModelInfo(
+            paramAssetPath = "models/ncnn/det_500m.param",
+            binAssetPath = "models/ncnn/det_500m.bin",
+            paramCacheName = "det_500m.param",
+            binCacheName = "det_500m.bin",
             version = "1.0"
         )
     )
