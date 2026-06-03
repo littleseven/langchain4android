@@ -21,9 +21,10 @@ import com.picme.features.camera.facedetect.ImageUtils
  */
 private object FaceDetectionFrameCounter {
     private var counter = 0
-    // [GPU 检测优化] YUV→Bitmap 零 JPEG 后，InsightFace 检测耗时降低约 40%，
-    // 检测间隔从 3 帧（10fps）提升到 2 帧（15fps），妆容跟随更平滑。
-    private const val DETECTION_INTERVAL = 2
+    // [GPU 检测优化] YUV→Bitmap 零 JPEG 后，检测耗时降低约 40%，
+    // 但 MNN/NCNN native 推理每帧内部分配 20-50MB 临时张量，
+    // 减少检测频率以缓解 GC 压力和发热。
+    private const val DETECTION_INTERVAL = 3
 
     // 运动检测: 记录上次人脸中心点
     private var lastFaceCenterX: Float = -1f
@@ -252,7 +253,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         val detectionStartMs = System.currentTimeMillis()
 
-        // MediaPipe 需要 RGBA_8888 Bitmap，不能直接传入 YUV Image
+        // [GPU 检测优化] YUV→Bitmap 零 JPEG 路径
         val detectionResult = run {
             val yuvStart = SystemClock.elapsedRealtime()
             val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
@@ -261,8 +262,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 return
             }
             Logger.d("Camera", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
+            // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
             val result = faceDetector.detect(bitmap, 0, lensFacing)
-            bitmap.recycle()
             result
         }
 

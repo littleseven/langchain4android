@@ -127,34 +127,38 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDestroy(
 #endif
 }
 
-JNIEXPORT jfloatArray JNICALL
+JNIEXPORT jint JNICALL
 Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetect(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
-        jbyteArray imageData,
+        jobject imageData,      // DirectByteBuffer
         jint width,
         jint height,
-        jint channels) {
+        jint channels,
+        jfloatArray outResult) {  // 预分配结果缓冲区
 #if NCNN_AVAILABLE
     auto *detector = reinterpret_cast<picme::NcnnFaceDetector *>(handle);
     if (!detector) {
-        return nullptr;
+        return 0;
     }
 
-    jbyte *data = env->GetByteArrayElements(imageData, nullptr);
-    std::vector<float> result = detector->detect(
-            reinterpret_cast<const unsigned char *>(data),
-            width, height, channels);
-    env->ReleaseByteArrayElements(imageData, data, JNI_ABORT);
+    unsigned char *data = static_cast<unsigned char *>(env->GetDirectBufferAddress(imageData));
+    if (!data) {
+        LOGE("nativeDetect: GetDirectBufferAddress returned null");
+        return 0;
+    }
+
+    std::vector<float> result = detector->detect(data, width, height, channels);
 
     if (result.empty()) {
-        return nullptr;
+        return 0;
     }
 
-    jfloatArray output = env->NewFloatArray(result.size());
-    env->SetFloatArrayRegion(output, 0, result.size(), result.data());
-    return output;
+    jsize maxSize = env->GetArrayLength(outResult);
+    jsize copySize = static_cast<jsize>(std::min(result.size(), static_cast<size_t>(maxSize)));
+    env->SetFloatArrayRegion(outResult, 0, copySize, result.data());
+    return copySize;
 #else
     (void)env;
     (void)clazz;
@@ -163,39 +167,44 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetect(
     (void)width;
     (void)height;
     (void)channels;
-    return nullptr;
+    (void)outResult;
+    return 0;
 #endif
 }
 
-JNIEXPORT jfloatArray JNICALL
+JNIEXPORT jboolean JNICALL
 Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFace(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
-        jbyteArray imageData,
+        jobject imageData,      // DirectByteBuffer
         jint width,
         jint height,
         jint channels,
         jfloat confidenceThreshold,
-        jfloat nmsThreshold) {
+        jfloat nmsThreshold,
+        jfloatArray outResult) {  // 预分配结果缓冲区 [15 floats]
 #if NCNN_AVAILABLE
     auto *detector = reinterpret_cast<picme::NcnnFaceDetector *>(handle);
     if (!detector) {
-        return nullptr;
+        return JNI_FALSE;
     }
 
-    jbyte *data = env->GetByteArrayElements(imageData, nullptr);
+    unsigned char *data = static_cast<unsigned char *>(env->GetDirectBufferAddress(imageData));
+    if (!data) {
+        LOGE("nativeDetectRetinaFace: GetDirectBufferAddress returned null");
+        return JNI_FALSE;
+    }
+
     std::vector<picme::FaceBox> faces = detector->detectRetinaFace(
-            reinterpret_cast<const unsigned char *>(data),
-            width, height, channels,
+            data, width, height, channels,
             confidenceThreshold, nmsThreshold);
-    env->ReleaseByteArrayElements(imageData, data, JNI_ABORT);
 
     if (faces.empty()) {
-        return nullptr;
+        return JNI_FALSE;
     }
 
-    // [对齐 ONNX/MNN] 选择置信度 * 面积最大的人脸
+    // 选择置信度 * 面积最大的人脸
     const picme::FaceBox *selectedFace = &faces[0];
     float maxScore = faces[0].confidence * faces[0].area();
     for (size_t i = 1; i < faces.size(); i++) {
@@ -206,9 +215,8 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
         }
     }
 
-    // 取置信度最高的人脸，返回 [x1, y1, x2, y2, score, landmarks(10)]
-    const int OUTPUT_SIZE = 15; // 4 bbox + 1 score + 10 landmarks
-    float output[OUTPUT_SIZE];
+    // 写入预分配的 outResult: [x1, y1, x2, y2, score, landmarks(10)]
+    jfloat output[15];
     output[0] = selectedFace->x1;
     output[1] = selectedFace->y1;
     output[2] = selectedFace->x2;
@@ -218,9 +226,8 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
         output[5 + i] = selectedFace->landmarks[i];
     }
 
-    jfloatArray result = env->NewFloatArray(OUTPUT_SIZE);
-    env->SetFloatArrayRegion(result, 0, OUTPUT_SIZE, output);
-    return result;
+    env->SetFloatArrayRegion(outResult, 0, 15, output);
+    return JNI_TRUE;
 #else
     (void)env;
     (void)clazz;
@@ -231,7 +238,8 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
     (void)channels;
     (void)confidenceThreshold;
     (void)nmsThreshold;
-    return nullptr;
+    (void)outResult;
+    return JNI_FALSE;
 #endif
 }
 

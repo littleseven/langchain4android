@@ -82,12 +82,13 @@ class FrameSyncManager private constructor(
      * 记录帧绑定时间戳，用于后续计算检测-渲染延迟。
      */
     fun bindFrameId(frameId: FrameId, timestampNs: Long) {
-        frameBindTimestamps[frameId] = SystemClock.elapsedRealtime()
-        // 清理过旧的绑定记录（保留最近 120 帧）
-        while (frameBindTimestamps.size > 120) {
-            val oldest = frameBindTimestamps.keys.minByOrNull { it.value } ?: break
+        // [GC 优化] 预检查：达到上限时先移除最旧的，再插入新值
+        // 避免 put 后再 remove 导致的临时 size 膨胀和二次 hash 操作
+        if (frameBindTimestamps.size >= 120) {
+            val oldest = frameBindTimestamps.keys.minByOrNull { it.value } ?: return
             frameBindTimestamps.remove(oldest)
         }
+        frameBindTimestamps[frameId] = SystemClock.elapsedRealtime()
     }
 
     /**
@@ -209,6 +210,9 @@ class FrameSyncManager private constructor(
     fun getLastQueryResult(): FrameSyncResult = lastQueryResult
 
     private fun findNearestHistoricalResult(currentFrameId: FrameId): DetectionResult? {
+        // [GC 优化] 无结果时快速返回，避免 toTypedArray() 的空数组分配
+        if (frameHistory.isEmpty()) return null
+
         // [性能优化] 反向遍历 frameHistory，通常最近的历史帧在队列尾部，
         // 这样可以更快找到最优结果，减少遍历次数。
         var nearestId: FrameId? = null

@@ -119,17 +119,22 @@ internal fun bindCameraUseCases(
             lastFrameLogMs = nowMs
         }
 
-        handleImageAnalysisFrameMediaPipe(
-            imageProxy = imageProxy,
-            previewView = previewView,
-            faceDetector = faceDetector,
-            lensFacing = lensFacing,
-            detectionEngineMode = detectionEngineMode,
-            onFacePointChanged = onFacePointChanged,
-            onFaceWarpParamsChanged = onFaceWarpParamsChanged,
-            onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
-            beautyEnabled = isBeautyEnabled()
-        )
+        // [GC 优化] 美颜关闭时直接关闭 imageProxy，避免函数调用和 try/finally 开销
+        if (!isBeautyEnabled()) {
+            imageProxy.close()
+        } else {
+            handleImageAnalysisFrameMediaPipe(
+                imageProxy = imageProxy,
+                previewView = previewView,
+                faceDetector = faceDetector,
+                lensFacing = lensFacing,
+                detectionEngineMode = detectionEngineMode,
+                onFacePointChanged = onFacePointChanged,
+                onFaceWarpParamsChanged = onFaceWarpParamsChanged,
+                onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
+                beautyEnabled = true
+            )
+        }
     }
 
     try {

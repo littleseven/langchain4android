@@ -238,12 +238,12 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
             setPoint(16 + i, Pair(x, y))
         }
 
-        // 日志输出轮廓点坐标，用于调试对齐
-        val sb = StringBuilder("Contour33: ")
-        for (i in 0 until 33) {
-            sb.append("M$i=(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
-        }
-        Logger.d(TAG, sb.toString())
+        // [GC 优化] 调试日志已注释：每帧 66 次 String.format() + StringBuilder 高额分配
+        // val sb = StringBuilder("Contour33: ")
+        // for (i in 0 until 33) {
+        //     sb.append("M$i=(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
+        // }
+        // Logger.d(TAG, sb.toString())
 
         // === 生成非轮廓区域点（33-105）===
         for (i in 0 until NON_CONTOUR_POINT_COUNT) {

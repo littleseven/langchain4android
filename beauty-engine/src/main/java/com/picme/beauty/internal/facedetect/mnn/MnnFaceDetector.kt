@@ -2,6 +2,7 @@ package com.picme.beauty.internal.facedetect.mnn
 
 import android.graphics.Bitmap
 import com.picme.beauty.api.Logger
+import java.nio.ByteBuffer
 
 /**
  * MNN 人脸检测器 JNI 桥接类
@@ -16,9 +17,14 @@ class MnnFaceDetector private constructor(
     companion object {
         private const val TAG = "MnnFaceDetector"
 
-        // [性能优化] 复用像素缓冲区和 RGB 数据缓冲区，避免每帧 new IntArray/ByteArray
+        // [性能优化] 复用像素缓冲区
         private var reusablePixels: IntArray? = null
-        private var reusableRgbData: ByteArray? = null
+        // [性能优化] DirectByteBuffer 零拷贝输入
+        private var reusableRgbBuffer: ByteBuffer? = null
+        // [性能优化] 复用结果缓冲区，避免 JNI NewFloatArray 每帧分配
+        private var reusableDetectResult: FloatArray? = null
+        private var reusableRetinaResult: FloatArray? = null
+        private const val RETINA_RESULT_SIZE = 15
 
         init {
             try {
@@ -41,11 +47,30 @@ class MnnFaceDetector private constructor(
             return buffer
         }
 
-        private fun getRgbDataBuffer(size: Int): ByteArray {
-            var buffer = reusableRgbData
+        private fun getRgbBuffer(size: Int): ByteBuffer {
+            var buffer = reusableRgbBuffer
+            if (buffer == null || buffer.capacity() < size) {
+                buffer = ByteBuffer.allocateDirect(size)
+                reusableRgbBuffer = buffer
+            }
+            buffer.clear()
+            return buffer
+        }
+
+        private fun getDetectResult(size: Int): FloatArray {
+            var buffer = reusableDetectResult
             if (buffer == null || buffer.size < size) {
-                buffer = ByteArray(size)
-                reusableRgbData = buffer
+                buffer = FloatArray(size)
+                reusableDetectResult = buffer
+            }
+            return buffer
+        }
+
+        private fun getRetinaResult(): FloatArray {
+            var buffer = reusableRetinaResult
+            if (buffer == null) {
+                buffer = FloatArray(RETINA_RESULT_SIZE)
+                reusableRetinaResult = buffer
             }
             return buffer
         }
@@ -102,22 +127,24 @@ class MnnFaceDetector private constructor(
         @JvmStatic
         private external fun nativeDetect(
             handle: Long,
-            imageData: ByteArray,
+            imageData: ByteBuffer,
             width: Int,
             height: Int,
-            channels: Int
-        ): FloatArray?
+            channels: Int,
+            outResult: FloatArray
+        ): Int
 
         @JvmStatic
         private external fun nativeDetectRetinaFace(
             handle: Long,
-            imageData: ByteArray,
+            imageData: ByteBuffer,
             width: Int,
             height: Int,
             channels: Int,
             confidenceThreshold: Float,
-            nmsThreshold: Float
-        ): FloatArray?
+            nmsThreshold: Float,
+            outResult: FloatArray
+        ): Boolean
     }
 
     /**
@@ -138,16 +165,18 @@ class MnnFaceDetector private constructor(
         val pixels = getPixelsBuffer(pixelCount)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        // 将 ARGB IntArray 转为 RGB ByteArray
-        val rgbData = getRgbDataBuffer(pixelCount * 3)
+        // 将 ARGB IntArray 写入 DirectByteBuffer（零拷贝 JNI 传输）
+        val rgbBuffer = getRgbBuffer(pixelCount * 3)
         for (i in 0 until pixelCount) {
             val pixel = pixels[i]
-            rgbData[i * 3] = (pixel shr 16 and 0xFF).toByte()     // R
-            rgbData[i * 3 + 1] = (pixel shr 8 and 0xFF).toByte()  // G
-            rgbData[i * 3 + 2] = (pixel and 0xFF).toByte()        // B
+            rgbBuffer.put(i * 3, (pixel shr 16 and 0xFF).toByte())     // R
+            rgbBuffer.put(i * 3 + 1, (pixel shr 8 and 0xFF).toByte())  // G
+            rgbBuffer.put(i * 3 + 2, (pixel and 0xFF).toByte())        // B
         }
 
-        return nativeDetect(nativeHandle, rgbData, width, height, 3)
+        val outResult = getDetectResult(pixelCount * 2)  // 最大 212 个 float (106 点 × 2)
+        val written = nativeDetect(nativeHandle, rgbBuffer, width, height, 3, outResult)
+        return if (written > 0) outResult.copyOf(written) else null
     }
 
     /**
@@ -166,15 +195,17 @@ class MnnFaceDetector private constructor(
         val pixels = getPixelsBuffer(pixelCount)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        val rgbData = getRgbDataBuffer(pixelCount * 3)
+        val rgbBuffer = getRgbBuffer(pixelCount * 3)
         for (i in 0 until pixelCount) {
             val pixel = pixels[i]
-            rgbData[i * 3] = (pixel shr 16 and 0xFF).toByte()
-            rgbData[i * 3 + 1] = (pixel shr 8 and 0xFF).toByte()
-            rgbData[i * 3 + 2] = (pixel and 0xFF).toByte()
+            rgbBuffer.put(i * 3, (pixel shr 16 and 0xFF).toByte())
+            rgbBuffer.put(i * 3 + 1, (pixel shr 8 and 0xFF).toByte())
+            rgbBuffer.put(i * 3 + 2, (pixel and 0xFF).toByte())
         }
 
-        return nativeDetectRetinaFace(nativeHandle, rgbData, width, height, 3, confidenceThreshold, nmsThreshold)
+        val outResult = getRetinaResult()
+        val detected = nativeDetectRetinaFace(nativeHandle, rgbBuffer, width, height, 3, confidenceThreshold, nmsThreshold, outResult)
+        return if (detected) outResult.copyOf() else null
     }
 
     fun release() {
