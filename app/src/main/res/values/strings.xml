@@ -59,8 +59,8 @@
     <string name="stage_landmark_desc">Configure landmark detection model, engine and device.</string>
     <string name="model_type">Model</string>
     <string name="model_mediapipe">MediaPipe</string>
-    <string name="model_det10g_mnn">Det10G-MNN</string>
-    <string name="model_det10g_ncnn">Det10G-NCNN</string>
+    <string name="model_det10g_mnn">RetinaFace-MNN</string>
+    <string name="model_det10g_ncnn">RetinaFace-NCNN</string>
     <string name="model_2d106_mnn">2D106-MNN</string>
     <string name="model_2d106_ncnn">2D106-NCNN</string>
     <string name="model_mnn">MNN</string>

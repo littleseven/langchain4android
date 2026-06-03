@@ -275,6 +275,8 @@ class SettingsViewModel(
      */
     fun isModelDownloaded(modelType: DetectionModelType): Boolean {
         if (modelType == DetectionModelType.MEDIAPIPE) return true
+        // MNN/NCNN ROI 模型已通过 Assets 部署，不需要下载即可使用
+        if (modelType == DetectionModelType.DET10G_MNN || modelType == DetectionModelType.DET10G_NCNN) return true
         val modelId = modelIdToDetectionType.entries.find { it.value == modelType }?.key ?: return false
         return modelDownloadManager.isModelDownloaded(modelId)
     }

@@ -22,17 +22,18 @@ class MnnRoiDetector(
 
     companion object {
         private const val TAG = "MnnRoi"
-        private const val MODEL_KEY = "det10g_mnn"
-        private const val INPUT_SIZE = 640  // [对齐 ONNX] 使用与 ONNX 相同的输入尺寸，确保检测结果一致
+        private const val MODEL_KEY = "det_500m_mnn"
+        private const val INPUT_SIZE = 320  // [RetinaFace-MobileNet0.25] 320×320 输入，75% 像素减少
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f  // [对齐 ONNX] ROI 扩展比例，与 InsightFaceDet10G 一致
         private const val ENGINE_NAME = "MNN-Vulkan"
 
-        // RetinaFace 9 个输出层名称（与 MNNConvert 输出一致）
+        // [det_500m] RetinaFace-MobileNet0.25 9 个输出层名称（与 MNNConvert 输出一致）
+        // 尺度分组: stride 8/16/32，每个 3 输出 (score/bbox/landmark)
         private val OUTPUT_NAMES = arrayOf(
-            "448", "471", "494",   // scale 1: score, bbox, landmark
-            "451", "474", "497",   // scale 2: score, bbox, landmark
-            "454", "477", "500"    // scale 3: score, bbox, landmark
+            "443", "468", "493",   // score: stride 8/16/32
+            "446", "471", "496",   // bbox: stride 8/16/32
+            "449", "474", "499"    // landmark: stride 8/16/32
         )
     }
 

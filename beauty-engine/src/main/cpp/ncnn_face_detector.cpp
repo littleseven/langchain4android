@@ -359,61 +359,36 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
 
     t1 = std::chrono::high_resolution_clock::now();
 
-    // 尝试使用常见的 NCNN RetinaFace 输出名
-    // 如果 outputNames_ 已提供，使用提供的名称；否则使用默认名
-    struct ScaleConfig {
-        const char *scoreName;
-        const char *bboxName;
-        const char *landmarkName;
-        int stride;
-    };
-
-    ScaleConfig scales[] = {
-        {"448", "451", "454", 8},
-        {"471", "474", "477", 16},
-        {"494", "497", "500", 32}
-    };
+    // 使用动态输出名称（从 outputNames_ 获取）
+    // outputNames_[0-2]: stride 8, 16, 32 scores （NCNN: out0/out1/out2）
+    // outputNames_[3-5]: stride 8, 16, 32 bboxes （NCNN: out3/out4/out5）
+    // outputNames_[6-8]: stride 8, 16, 32 landmarks （NCNN: out6/out7/out8）
+    int strides[] = {8, 16, 32};
 
     for (int s = 0; s < 3; s++) {
         ncnn::Mat scoreOut, bboxOut, landmarkOut;
+        int stride = strides[s];
 
-        int retScore = ex.extract(scales[s].scoreName, scoreOut);
-        int retBBox = ex.extract(scales[s].bboxName, bboxOut);
-        int retLandmark = ex.extract(scales[s].landmarkName, landmarkOut);
-
-        if (retScore != 0 || retBBox != 0 || retLandmark != 0) {
-            // 尝试使用数字索引作为输出名（NCNN 默认输出名）
-            char defaultName[32];
-            snprintf(defaultName, sizeof(defaultName), "output_%d", s * 3);
-            if (retScore != 0) {
-                retScore = ex.extract(defaultName, scoreOut);
-            }
-            if (retBBox != 0) {
-                snprintf(defaultName, sizeof(defaultName), "output_%d", s * 3 + 1);
-                retBBox = ex.extract(defaultName, bboxOut);
-            }
-            if (retLandmark != 0) {
-                snprintf(defaultName, sizeof(defaultName), "output_%d", s * 3 + 2);
-                retLandmark = ex.extract(defaultName, landmarkOut);
-            }
-        }
+        int retScore = ex.extract(outputNames_[s].c_str(), scoreOut);
+        int retBBox = ex.extract(outputNames_[s + 3].c_str(), bboxOut);
+        int retLandmark = ex.extract(outputNames_[s + 6].c_str(), landmarkOut);
 
         if (retScore != 0 || retBBox != 0 || retLandmark != 0) {
-            LOGE("Failed to get scale %d outputs (stride=%d)", s + 1, scales[s].stride);
+            LOGE("Failed to get scale %d outputs (stride=%d)", s + 1, stride);
             continue;
         }
 
         // 计算 featureSize
-        int featureSize = inputSize_ / scales[s].stride;
-        // [关键修复] 根据实际输出维度确定 scoreChannels
-        // NCNN 输出格式: [w=totalAnchors, h=channels, c=1]
-        // 如果 h=1，表示只有 face score (scoreChannels=1)
-        // 如果 h=2，表示 bg+face (scoreChannels=2)
-        int scoreChannels = scoreOut.h > 1 ? scoreOut.h : 1;
-        LOGD("  scoreChannels detected: %d (h=%d, c=%d)", scoreChannels, scoreOut.h, scoreOut.c);
+        int featureSize = inputSize_ / stride;
+        // [关键修复] PNNX 转换后的 NCNN 输出已通过 Permute+Reshape 展平为
+        // 2D Mat [w=channelsPerAnchor, h=totalAnchors]，数据是 anchor-major 顺序，
+        // 与 processRetinaFaceOutput 期望的格式完全一致。
+        // scoreChannels = scoreOut.w (w=1表示仅face score, w=2表示bg+face)
+        int scoreChannels = (scoreOut.dims == 1) ? 1 : scoreOut.w;
+        LOGD("  scoreChannels detected: %d (w=%d, h=%d, dims=%d)", scoreChannels, scoreOut.w, scoreOut.h, scoreOut.dims);
 
         LOGD("Scale %d (stride=%d): featureSize=%d, score=[w=%d,h=%d,c=%d,dims=%d], bbox=[w=%d,h=%d,c=%d,dims=%d], landmark=[w=%d,h=%d,c=%d,dims=%d]",
-             s + 1, scales[s].stride, featureSize,
+             s + 1, stride, featureSize,
              scoreOut.w, scoreOut.h, scoreOut.c, scoreOut.dims,
              bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.dims,
              landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.dims);
@@ -426,94 +401,43 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
         std::vector<float> bboxData(totalAnchors * 4);
         std::vector<float> landmarkData(totalAnchors * 10);
 
-        // [关键修复] 根据 NCNN 输出格式读取数据
-        // NCNN Mat 数据布局：
-        // - 1D Mat: [w=N] - 线性扁平化数据
-        // - 2D Mat: [w=N, h=C] - N=anchors, C=channels
-        // - 3D Mat: [w=featureSize, h=featureSize, c=C] - 空间特征图
-        //
-        // onnx2ncnn 转换后的 RetinaFace 输出通常是 1D 或 2D Mat：
-        // - score: [w=totalAnchors*scoreChannels, h=1, c=1] (1D) 或 [w=totalAnchors, h=scoreChannels, c=1] (2D)
-        // - bbox: [w=totalAnchors*4, h=1, c=1] (1D) 或 [w=totalAnchors, h=4, c=1] (2D)
-        // - landmark: [w=totalAnchors*10, h=1, c=1] (1D) 或 [w=totalAnchors, h=10, c=1] (2D)
-
         // [调试] 打印输出维度信息
         LOGD("  Score output: dims=%d, w=%d, h=%d, c=%d, total=%zu", scoreOut.dims, scoreOut.w, scoreOut.h, scoreOut.c, scoreOut.total());
         LOGD("  BBox output: dims=%d, w=%d, h=%d, c=%d, total=%zu", bboxOut.dims, bboxOut.w, bboxOut.h, bboxOut.c, bboxOut.total());
         LOGD("  Landmark output: dims=%d, w=%d, h=%d, c=%d, total=%zu", landmarkOut.dims, landmarkOut.w, landmarkOut.h, landmarkOut.c, landmarkOut.total());
 
-        // [关键修复] NCNN onnx2ncnn 转换后的 Permute + Reshape 产生的数据布局
-        // 与 ONNX Transpose + Reshape 不同，需要重新排列数据。
-        //
-        // ONNX 布局 (期望):  for y: for x: for anchor -> index = y*F*2 + x*2 + a
-        // NCNN 实际布局:     for y: for anchor: for x -> index = y*F*2 + a*F + x
-        // 其中 F = featureSize
-        //
-        // 修复: 读取 NCNN 输出后，按正确顺序重新排列到 scoreData/bboxData/landmarkData
-
-        auto reorderNcnnData = [&](const ncnn::Mat &mat, float *dst, int channelsPerAnchor) {
-            // [关键修复] NCNN Permute(order=[0,2,1]) 对 [C,H,W] 输出 [C,W,H]
-            // 然后 Reshape 成 2D Mat [w=spatial*channelsPerRow, h=numRows]
-            // 其中 spatial = featureSize*featureSize, 每行包含 channelsPerRow 个 channel
-            //
-            // 原始内存顺序: for row: for channelInRow: for spatial
-            //   spatial = x * featureSize + y (先遍历 y，再遍历 x)
-            // 期望顺序 (ONNX): (y, x, a, c)
+        // [关键修复] PNNX 转换后输出已是 anchor-major 扁平数据:
+        // 2D Mat [w=channelsPerAnchor, h=totalAnchors]:
+        //   row(anchorIdx)[0..channelsPerAnchor-1] = 该 anchor 的全部通道数据
+        // 直接复制即可，无需空间重排。
+        auto copyFlatData = [&](const ncnn::Mat &mat, float *dst, int channelsPerAnchor) {
             int totalElements = mat.total();
             int expectedElements = totalAnchors * channelsPerAnchor;
             if (totalElements < expectedElements) {
-                LOGD("  Reorder: insufficient data, expected %d, got %d", expectedElements, totalElements);
+                LOGD("  Copy: insufficient data, expected %d, got %d", expectedElements, totalElements);
                 return;
             }
 
-            int spatialSize = featureSize * featureSize;
-
             if (mat.dims == 1) {
-                // 1D Mat: 线性排列, 顺序为 (a, spatial) 即 globalChannel 先变, spatial 后变
-                // NCNN Permute+Reshape 后的 spatial 顺序: (y, x) — 先遍历 x，再遍历 y
-                for (int i = 0; i < totalElements; i++) {
-                    int spatial = i % spatialSize;
-                    int globalChannel = i / spatialSize;
-                    int y = spatial / featureSize;
-                    int x = spatial % featureSize;
-                    int a = globalChannel / channelsPerAnchor;
-                    int c = globalChannel % channelsPerAnchor;
-                    int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + c;
-                    dst[dstIdx] = mat[i];
-                }
+                // 1D Mat [w=N]: 线性扁平数据
+                memcpy(dst, mat, totalElements * sizeof(float));
             } else if (mat.dims == 2) {
-                // 2D Mat [w=N, h=C]: 每行包含 channelsPerRow 个 channel
-                // NCNN Permute+Reshape 后的 spatial 顺序: (y, x) — 先遍历 x，再遍历 y
-                int channelsPerRow = mat.w / spatialSize;
-                for (int row = 0; row < mat.h; row++) {
-                    for (int col = 0; col < mat.w; col++) {
-                        int spatial = col % spatialSize;
-                        int channelInRow = col / spatialSize;
-                        int globalChannel = row * channelsPerRow + channelInRow;
-                        int y = spatial / featureSize;
-                        int x = spatial % featureSize;
-                        int a = globalChannel / channelsPerAnchor;
-                        int c = globalChannel % channelsPerAnchor;
-                        int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + c;
-                        dst[dstIdx] = mat.row(row)[col];
+                // 2D Mat [w=channelsPerAnchor, h=totalAnchors]: anchor-major
+                // mat.row(anchorIdx)[0..C-1] = anchor anchorIdx 的 C 个通道
+                for (int anchorIdx = 0; anchorIdx < mat.h; anchorIdx++) {
+                    const float *row = mat.row(anchorIdx);
+                    for (int c = 0; c < mat.w; c++) {
+                        dst[anchorIdx * mat.w + c] = row[c];
                     }
                 }
             } else {
-                // 3D Mat [w, h, c]: channel-major
-                // spatial 顺序: (y, x) — 先遍历 x，再遍历 y
+                // 3D Mat: 展平复制
                 int idx = 0;
                 for (int c = 0; c < mat.c; c++) {
                     for (int h = 0; h < mat.h; h++) {
                         for (int w = 0; w < mat.w; w++) {
-                            int spatial = w * mat.h + h;
-                            int globalChannel = c;
-                            int y = spatial / featureSize;
-                            int x = spatial % featureSize;
-                            int a = globalChannel / channelsPerAnchor;
-                            int cc = globalChannel % channelsPerAnchor;
-                            int dstIdx = ((y * featureSize + x) * 2 + a) * channelsPerAnchor + cc;
-                            if (dstIdx < expectedElements) {
-                                dst[dstIdx] = mat.channel(c).row(h)[w];
+                            if (idx < expectedElements) {
+                                dst[idx] = mat.channel(c).row(h)[w];
                             }
                             idx++;
                         }
@@ -522,21 +446,10 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
             }
         };
 
-        // Score 数据重新排列
-        if (scoreChannels == 1) {
-            // 只有 face score，每个 anchor 1 个值
-            reorderNcnnData(scoreOut, scoreData.data(), 1);
-        } else {
-            // bg + face score，每个 anchor 2 个值
-            // NCNN 输出可能是 [totalAnchors, 2] 或扁平化的 [totalAnchors*2]
-            reorderNcnnData(scoreOut, scoreData.data(), scoreChannels);
-        }
-
-        // BBox 数据重新排列: 每个 anchor 4 个值
-        reorderNcnnData(bboxOut, bboxData.data(), 4);
-
-        // Landmark 数据重新排列: 每个 anchor 10 个值
-        reorderNcnnData(landmarkOut, landmarkData.data(), 10);
+        // 直接复制各输出数据（已修正为 anchor-major 顺序）
+        copyFlatData(scoreOut, scoreData.data(), scoreChannels);
+        copyFlatData(bboxOut, bboxData.data(), 4);
+        copyFlatData(landmarkOut, landmarkData.data(), 10);
 
         // [调试] 打印该 scale 的最高 score
         float maxScore = 0.0f;
@@ -556,14 +469,14 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
             int y = maxScoreIdx / (featureSize * 2);
             int x = (maxScoreIdx % (featureSize * 2)) / 2;
             int a = maxScoreIdx % 2;
-            float cx = (x + 0.5f) * scales[s].stride;
-            float cy = (y + 0.5f) * scales[s].stride;
+            float cx = (x + 0.5f) * stride;
+            float cy = (y + 0.5f) * stride;
             LOGD("  Scale %d max score: idx=%d, score=%.4f, cx=%.1f, cy=%.1f, dx=%.3f, dy=%.3f, dw=%.3f, dh=%.3f",
                  s+1, maxScoreIdx, maxScore, cx, cy, dx, dy, dw, dh);
         }
 
         processRetinaFaceOutput(scoreData.data(), bboxData.data(), landmarkData.data(),
-                                featureSize, scales[s].stride, scoreChannels,
+                                featureSize, stride, scoreChannels,
                                 allFaces, confidenceThreshold);
     }
 

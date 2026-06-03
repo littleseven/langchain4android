@@ -19,8 +19,8 @@ class NcnnRoiDetector(
 
     companion object {
         private const val TAG = "NcnnRoi"
-        private const val MODEL_KEY = "det10g_ncnn"
-        private const val INPUT_SIZE = 640
+        private const val MODEL_KEY = "det_500m_ncnn"
+        private const val INPUT_SIZE = 320  // [RetinaFace-MobileNet0.25] 320×320 输入
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f
         private const val ENGINE_NAME = "NCNN-Vulkan"
@@ -30,11 +30,15 @@ class NcnnRoiDetector(
         // 注意：必须与 NcnnLandmarkDetector 使用同一个锁对象。
         private val NCNN_GLOBAL_LOCK = NcnnRoiDetector::class.java
 
-        // RetinaFace 9 个输出 blob 名称
+        // [det_500m] RetinaFace-MobileNet0.25 NCNN 9 个输出 blob 名称（PNNX→NCNN 转换后）
+        // 尺度分组: stride 8/16/32，每个 3 输出 (score/bbox/landmark)
+        // NCNN 输出: out0=score8, out1=score16, out2=score32,
+        //            out3=bbox8, out4=bbox16, out5=bbox32,
+        //            out6=landmark8, out7=landmark16, out8=landmark32
         private val OUTPUT_NAMES = arrayOf(
-            "448", "471", "494",
-            "451", "474", "497",
-            "454", "477", "500"
+            "out0", "out1", "out2",  // score: stride 8/16/32
+            "out3", "out4", "out5",  // bbox: stride 8/16/32
+            "out6", "out7", "out8"   // landmark: stride 8/16/32
         )
     }
 
@@ -87,7 +91,7 @@ class NcnnRoiDetector(
                     binPath = binFile.absolutePath,
                     inputSize = INPUT_SIZE,
                     useGpu = requireGpu,
-                    inputName = "input.1",
+                    inputName = "in0",
                     outputNames = OUTPUT_NAMES
                 )
                 val initElapsed = SystemClock.elapsedRealtime() - initStart
