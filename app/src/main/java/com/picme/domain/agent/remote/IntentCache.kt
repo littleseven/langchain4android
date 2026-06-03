@@ -127,6 +127,7 @@ class IntentCache(maxSize: Int = 100) {
             // 拍照
             put("拍照", AgentCommand.CapturePhoto)
             put("拍一张", AgentCommand.CapturePhoto)
+            put("拍张照", AgentCommand.CapturePhoto)
             put("拍照片", AgentCommand.CapturePhoto)
             put("拍个照", AgentCommand.CapturePhoto)
             put("咔嚓", AgentCommand.CapturePhoto)
@@ -147,6 +148,8 @@ class IntentCache(maxSize: Int = 100) {
             put("切后置", AgentCommand.FlipCamera)
             put("换摄像头", AgentCommand.FlipCamera)
             put("前后切换", AgentCommand.FlipCamera)
+            put("打开前置", AgentCommand.FlipCamera)
+            put("打开后置", AgentCommand.FlipCamera)
             put("flip camera", AgentCommand.FlipCamera)
             put("switch camera", AgentCommand.FlipCamera)
 
@@ -155,6 +158,8 @@ class IntentCache(maxSize: Int = 100) {
             put("关美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = false)))
             put("打开美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true)))
             put("关闭美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = false)))
+            put("调高美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)))
+            put("增强美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)))
 
             // 滤镜重置
             put("原图", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.NONE))
@@ -212,6 +217,9 @@ class IntentCache(maxSize: Int = 100) {
             put("复古", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.VINTAGE))
             put("冷调", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
             put("暖调", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.WARM))
+            put("冷滤镜", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
+            put("换个冷调滤镜", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
+            put("换冷调", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
 
             // 常用风格特效
             put("卡通", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.TOON))

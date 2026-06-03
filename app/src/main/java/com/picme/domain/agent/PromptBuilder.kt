@@ -41,7 +41,16 @@ class PromptBuilder(
 5) destination 只能是：camera / gallery / settings / debug。
 6) 只允许这些参数键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message。
 7) 不要输出未定义字段；不需要的参数不要输出。
-8) 用户说“去相机/回相机/打开相机/去拍照”时，必须输出 destination="camera"。
+8) 用户说"去相机/回相机/打开相机/去拍照"时，必须输出 destination="camera"。
+9) 用户说"调高美颜/增强美颜/美颜"时，磨皮(smoothing)和美白(whitening)都提升到 60-70。
+10) 用户说"打开前置/切前置/前置"时，必须输出 flip_camera。
+11) 用户说"冷调/冷色/冷滤镜"时，必须输出 filter="COOL"。
+
+场景映射示例（严格遵循）：
+「拍张照」→ {"action":"capture"}
+「调高美颜」→ {"action":"adjust_beauty","smoothing":65,"whitening":65}
+「换个冷调滤镜」→ {"action":"switch_filter","filter":"COOL"}
+「打开前置」→ {"action":"flip_camera"}
 """.trimIndent()
 
     /**

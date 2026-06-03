@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
@@ -122,6 +123,68 @@ class AgentOrchestratorParseTest {
         val input = "<think>用户说拍照，需要触发相机快门</think>\n```json\n{\"action\":\"capture\"}\n```"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
+    }
+
+    // ------------------------------------------------------------------
+    // README 示例场景覆盖测试：确保 4 个核心场景 keyword 兜底能命中
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `readme scenario paiZhangZhao maps to CapturePhoto via keyword`() {
+        val input = "拍张照"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "「拍张照」应解析为 CapturePhoto",
+            command is AgentCommand.CapturePhoto
+        )
+    }
+
+    @Test
+    fun `readme scenario diaoGaoMeiYan maps to AdjustBeauty via keyword`() {
+        val input = "调高美颜"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "「调高美颜」应解析为 AdjustBeauty",
+            command is AgentCommand.AdjustBeauty
+        )
+        val beauty = command as AgentCommand.AdjustBeauty
+        assertTrue("调高美颜后磨皮应 > 0", beauty.settings.smoothing > 0)
+        assertTrue("调高美颜后美白应 > 0", beauty.settings.whitening > 0)
+        assertTrue("调高美颜后美颜应启用", beauty.settings.enabled)
+    }
+
+    @Test
+    fun `readme scenario huanLengDiaoLvJing maps to SwitchFilter COOL via keyword`() {
+        val input = "换个冷调滤镜"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "「换个冷调滤镜」应解析为 SwitchFilter",
+            command is AgentCommand.SwitchFilter
+        )
+        assertEquals(
+            FilterType.COOL,
+            (command as AgentCommand.SwitchFilter).filterType
+        )
+    }
+
+    @Test
+    fun `readme scenario daKaiQianZhi maps to FlipCamera via keyword`() {
+        val input = "打开前置"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "「打开前置」应解析为 FlipCamera",
+            command is AgentCommand.FlipCamera
+        )
+    }
+
+    @Test
+    fun `readme scenario huanLengDiao maps to SwitchFilter COOL via IntentCache`() {
+        val input = "换冷调"
+        val cache = com.picme.domain.agent.remote.IntentCache()
+        val result = cache.match(input)
+        assertNotNull("「换冷调」应在 L1 Cache 中", result)
+        assertTrue(result is AgentCommand.SwitchFilter)
+        assertEquals(FilterType.COOL, (result as AgentCommand.SwitchFilter).filterType)
     }
 
     @Test
