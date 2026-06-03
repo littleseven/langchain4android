@@ -25,7 +25,7 @@ class WakeWordEngine(
     private val scope: CoroutineScope
 ) {
 
-    private val tag = "PicMe:WakeWord"
+    private val tag = "WakeWord"
     private val audioRecorder = AudioRecorder()
     // 降低阈值和最小语音时长以提高灵敏度，与 Chat 按住说话的敏感度接近
     // thresholdDb: 40f → 30f（降低 10dB，捕获更轻声细语）

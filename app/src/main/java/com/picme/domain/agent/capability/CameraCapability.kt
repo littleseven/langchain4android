@@ -34,7 +34,7 @@ class CameraCapability : BaseCapability() {
         }
     }
 
-    private val tag = "PicMe:CameraCapability"
+    private val tag = "CameraCapability"
 
     override val name: String = "camera"
     override val description: String =

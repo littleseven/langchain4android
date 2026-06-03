@@ -3,7 +3,7 @@ package com.picme.beauty.internal.facedetect
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 
 /**
@@ -14,13 +14,13 @@ class MediaPipeRoiDetector(
     private val faceDetector: MediaPipeFaceDetector
 ) : RoiDetector {
     companion object {
-        private const val TAG = "PicMe:MediaPipeRoi"
+        private const val TAG = "MediaPipeRoi"
     }
 
     override fun detectRoi(bitmap: Bitmap): android.graphics.RectF? {
         val startTime = SystemClock.elapsedRealtime()
         return try {
-            Log.d(TAG, "[Perf] MediaPipe ROI START: bitmap=${bitmap.width}x${bitmap.height}")
+            Logger.d(TAG, "[Perf] MediaPipe ROI START: bitmap=${bitmap.width}x${bitmap.height}")
 
             val mpImage = BitmapImageBuilder(bitmap).build()
             val inferenceStart = SystemClock.elapsedRealtime()
@@ -53,15 +53,15 @@ class MediaPipeRoiDetector(
                 )
 
                 val totalTime = SystemClock.elapsedRealtime() - startTime
-                Log.d(TAG, "[Perf] MediaPipe ROI DONE: total=${totalTime}ms, inference=${inferenceTime}ms, roi=$roi")
+                Logger.d(TAG, "[Perf] MediaPipe ROI DONE: total=${totalTime}ms, inference=${inferenceTime}ms, roi=$roi")
                 roi
             } ?: run {
                 val totalTime = SystemClock.elapsedRealtime() - startTime
-                Log.w(TAG, "[Perf] MediaPipe ROI DONE: total=${totalTime}ms, no face detected")
+                Logger.w(TAG, "[Perf] MediaPipe ROI DONE: total=${totalTime}ms, no face detected")
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "MediaPipe ROI detection failed", e)
+            Logger.e(TAG, "MediaPipe ROI detection failed", e)
             null
         }
     }

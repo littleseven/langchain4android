@@ -10,7 +10,7 @@
 #endif
 
 #define LOG_TAG "PicMe:NcnnJNI"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) do { if (picme::NcnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while(0)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // [修复 OpenMP 崩溃] 在 JNI_OnLoad 中提前收敛 OpenMP 运行时配置
@@ -36,6 +36,21 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
 }
 
 extern "C" {
+
+JNIEXPORT void JNICALL
+Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeSetLogEnabled(
+        JNIEnv *env,
+        jclass clazz,
+        jboolean enabled) {
+#if NCNN_AVAILABLE
+    picme::NcnnFaceDetector::setLogEnabled(enabled);
+    LOGD("Native log enabled set to: %d", enabled);
+#else
+    (void)env;
+    (void)clazz;
+    (void)enabled;
+#endif
+}
 
 JNIEXPORT jlong JNICALL
 Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeCreate(

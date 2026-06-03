@@ -20,7 +20,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 object AgentTestFramework {
 
-    private const val TAG = "PicMe:AgentTest"
+    private const val TAG = "AgentTest"
 
     private val _eventFlow = MutableSharedFlow<AgentTestEvent>(
         extraBufferCapacity = 256

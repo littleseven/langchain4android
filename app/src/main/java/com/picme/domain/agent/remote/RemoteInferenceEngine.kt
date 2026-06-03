@@ -492,6 +492,6 @@ class RemoteInferenceEngine(
     }
 
     companion object {
-        private const val REMOTE_TAG = "PicMe:RemoteInference"
+        private const val REMOTE_TAG = "RemoteInference"
     }
 }

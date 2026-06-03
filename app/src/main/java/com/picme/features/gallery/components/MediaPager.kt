@@ -122,6 +122,9 @@ import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 
+private const val TAG = "Gallery"
+private const val TAG_TEST = "GalleryTest"
+
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
 fun MediaPager(
@@ -160,7 +163,7 @@ fun MediaPager(
     val startPhotoEdit = {
         val asset = currentAsset
         if (asset != null && asset.type == MediaType.PHOTO) {
-            Log.d("PicMe:UX", "Start photo editing mode")
+            Log.d(TAG, "Start photo editing mode")
             isEditing = true
             editSettings = BeautySettings(enabled = true)
             processedBitmap = null
@@ -178,14 +181,14 @@ fun MediaPager(
                             onPrepareEdit(bitmap)
                         }
                     } else {
-                        Logger.e("PicMe:Gallery", "Failed to decode bitmap for editing")
+                        Logger.e(TAG, "Failed to decode bitmap for editing")
                     }
                 } catch (e: java.io.IOException) {
-                    Logger.e("PicMe:Gallery", "IO error when loading bitmap: ${e.message}")
+                    Logger.e(TAG, "IO error when loading bitmap: ${e.message}")
                 } catch (e: OutOfMemoryError) {
-                    Logger.e("PicMe:Gallery", "OOM when loading bitmap: ${e.message}")
+                    Logger.e(TAG, "OOM when loading bitmap: ${e.message}")
                 } catch (e: IllegalArgumentException) {
-                    Logger.e("PicMe:Gallery", "Invalid image data: ${e.message}")
+                    Logger.e(TAG, "Invalid image data: ${e.message}")
                 }
             }
         }
@@ -234,7 +237,7 @@ fun MediaPager(
         CameraTestCommandDispatcher.commandFlow.collect { command ->
             when (command) {
                 is CameraTestCommand.EnterGallery -> {
-                    Logger.i("PicMe:GalleryTest", "Already in gallery mode")
+                    Logger.i(TAG_TEST, "Already in gallery mode")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Already in gallery mode")
                     )
@@ -242,7 +245,7 @@ fun MediaPager(
                 is CameraTestCommand.OpenPhoto -> {
                     val targetIndex = command.index.coerceIn(0, assets.size - 1)
                     pagerState.scrollToPage(targetIndex)
-                    Logger.i("PicMe:GalleryTest", "OpenPhoto scrolled to index $targetIndex")
+                    Logger.i(TAG_TEST, "OpenPhoto scrolled to index $targetIndex")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Scrolled to photo index $targetIndex")
                     )
@@ -251,7 +254,7 @@ fun MediaPager(
                 is CameraTestCommand.StartEdit -> {
                     if (!isEditing && currentAsset?.type == MediaType.PHOTO) {
                         startPhotoEdit()
-                        Logger.i("PicMe:GalleryTest", "Photo edit started")
+                        Logger.i(TAG_TEST, "Photo edit started")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Photo edit started")
                         )
@@ -269,7 +272,7 @@ fun MediaPager(
                             editSettings = BeautySettings()
                             processedBitmap = null
                             onClearEditState()
-                            Logger.i("PicMe:GalleryTest", "Edit saved")
+                            Logger.i(TAG_TEST, "Edit saved")
                             CameraTestCommandDispatcher.emitResult(
                                 CameraTestResult.Success(command, "Edit saved")
                             )
@@ -286,7 +289,7 @@ fun MediaPager(
                         editSettings = BeautySettings()
                         processedBitmap = null
                         onClearEditState()
-                        Logger.i("PicMe:GalleryTest", "Edit cancelled")
+                        Logger.i(TAG_TEST, "Edit cancelled")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Edit cancelled")
                         )
@@ -299,7 +302,7 @@ fun MediaPager(
                 is CameraTestCommand.SetSmooth -> {
                     if (isEditing) {
                         editSettings = editSettings.copy(smoothing = command.value / 100f)
-                        Logger.i("PicMe:GalleryTest", "Smooth set to ${command.value}")
+                        Logger.i(TAG_TEST, "Smooth set to ${command.value}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Smooth set to ${command.value}")
                         )
@@ -312,7 +315,7 @@ fun MediaPager(
                 is CameraTestCommand.SetWhiten -> {
                     if (isEditing) {
                         editSettings = editSettings.copy(whitening = command.value / 100f)
-                        Logger.i("PicMe:GalleryTest", "Whiten set to ${command.value}")
+                        Logger.i(TAG_TEST, "Whiten set to ${command.value}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Whiten set to ${command.value}")
                         )
@@ -326,7 +329,7 @@ fun MediaPager(
                     if (isEditing) {
                         val filter = CameraTestCommandConverters.parseFilterType(command.filter)
                         editSettings = editSettings.copy(colorFilter = filter)
-                        Logger.i("PicMe:GalleryTest", "Filter set to ${command.filter}")
+                        Logger.i(TAG_TEST, "Filter set to ${command.filter}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Filter set to ${command.filter}")
                         )
@@ -339,7 +342,7 @@ fun MediaPager(
                 is CameraTestCommand.StartOcr -> {
                     currentAsset?.let { asset ->
                         onStartOcr(asset.uri)
-                        Logger.i("PicMe:GalleryTest", "OCR started for ${asset.id}")
+                        Logger.i(TAG_TEST, "OCR started for ${asset.id}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "OCR started")
                         )
@@ -349,21 +352,21 @@ fun MediaPager(
                 }
                 is CameraTestCommand.DismissOcr -> {
                     onDismissOcr()
-                    Logger.i("PicMe:GalleryTest", "OCR dismissed")
+                    Logger.i(TAG_TEST, "OCR dismissed")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "OCR dismissed")
                     )
                 }
                 is CameraTestCommand.ToggleLandmark -> {
                     showLandmarkOverlay = !showLandmarkOverlay
-                    Logger.i("PicMe:GalleryTest", "Landmark overlay toggled to $showLandmarkOverlay")
+                    Logger.i(TAG_TEST, "Landmark overlay toggled to $showLandmarkOverlay")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Landmark overlay: $showLandmarkOverlay")
                     )
                 }
                 is CameraTestCommand.ToggleInfo -> {
                     showInfo = !showInfo
-                    Logger.i("PicMe:GalleryTest", "Info toggled to $showInfo")
+                    Logger.i(TAG_TEST, "Info toggled to $showInfo")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Info visibility: $showInfo")
                     )
@@ -371,7 +374,7 @@ fun MediaPager(
                 is CameraTestCommand.DeletePhoto -> {
                     currentAsset?.let { asset ->
                         onDelete(asset)
-                        Logger.i("PicMe:GalleryTest", "Delete requested for ${asset.id}")
+                        Logger.i(TAG_TEST, "Delete requested for ${asset.id}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Delete requested")
                         )
@@ -387,7 +390,7 @@ fun MediaPager(
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
                         context.startActivity(Intent.createChooser(shareIntent, null))
-                        Logger.i("PicMe:GalleryTest", "Share requested for ${asset.id}")
+                        Logger.i(TAG_TEST, "Share requested for ${asset.id}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Share requested")
                         )
@@ -426,13 +429,13 @@ fun MediaPager(
                         uri = asset.uri,
                         onClick = {
                             if (!isEditing) {
-                                Log.d("PicMe:UX", "Toggle info visibility via click")
+                                Log.d(TAG, "Toggle info visibility via click")
                                 showInfo = !showInfo
                             }
                         },
                         onLongClick = {
                             if (!isEditing) {
-                                Log.d("PicMe:UX", "Trigger photo edit via long press")
+                                Log.d("Gallery", "Trigger photo edit via long press")
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 startPhotoEdit()
                             }
@@ -466,7 +469,7 @@ fun MediaPager(
             showLandmarkOverlay = showLandmarkOverlay,
             isEditing = isEditing,
             onToggleInfo = {
-                Log.d("PicMe:UX", "Toggle info visibility via button")
+                Log.d("Gallery", "Toggle info visibility via button")
                 showInfo = !showInfo
             },
             onToggleLandmarks = {
@@ -475,12 +478,12 @@ fun MediaPager(
             onStartEdit = startPhotoEdit,
             onDelete = {
                 val selectedAsset = assets[pagerState.currentPage]
-                Log.d("PicMe:UX", "Request delete media: ${selectedAsset.id}")
+                Log.d("Gallery", "Request delete media: ${selectedAsset.id}")
                 onDelete(selectedAsset)
             },
             onShare = {
                 val selectedAsset = assets[pagerState.currentPage]
-                Log.d("PicMe:UX", "Share media from pager: ${selectedAsset.id}")
+                Log.d("Gallery", "Share media from pager: ${selectedAsset.id}")
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     putExtra(Intent.EXTRA_STREAM, selectedAsset.uri.toUri())
                     type = if (selectedAsset.type == MediaType.VIDEO) "video/*" else "image/*"
@@ -490,7 +493,7 @@ fun MediaPager(
             },
             onStartOcr = {
                 val selectedAsset = assets[pagerState.currentPage]
-                Log.d("PicMe:UX", "Trigger OCR via toolbar button for asset: ${selectedAsset.id}")
+                Log.d("Gallery", "Trigger OCR via toolbar button for asset: ${selectedAsset.id}")
                 onStartOcr(selectedAsset.uri)
             }
         )
@@ -521,7 +524,7 @@ fun MediaPager(
         OcrResultOverlay(
             ocrState = ocrState,
             onDismiss = {
-                Log.d("PicMe:UX", "Dismiss OCR result overlay")
+                Log.d("Gallery", "Dismiss OCR result overlay")
                 onDismissOcr()
             }
         )
@@ -731,7 +734,7 @@ private fun OcrResultOverlay(
                             )
                         }
                         is MediaViewModel.OcrResult.Success -> {
-                            Log.d("PicMe:UX", "OCR Result Displayed")
+                            Log.d("Gallery", "OCR Result Displayed")
                             // Header with title, close button and actions
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -798,7 +801,7 @@ private fun OcrResultOverlay(
                             ) {
                                 OutlinedButton(
                                     onClick = {
-                                        Log.d("PicMe:UX", "OCR Copy text action")
+                                        Log.d("Gallery", "OCR Copy text action")
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         clipboardManager.setText(AnnotatedString(ocrResult.text))
                                         Toast.makeText(context, context.getString(R.string.ocr_copy_success), Toast.LENGTH_SHORT).show()
@@ -821,7 +824,7 @@ private fun OcrResultOverlay(
                                 }
                                 Button(
                                     onClick = {
-                                        Log.d("PicMe:UX", "OCR Share text action")
+                                        Log.d("Gallery", "OCR Share text action")
                                         val sendIntent: Intent = Intent().apply {
                                             action = Intent.ACTION_SEND
                                             putExtra(Intent.EXTRA_TEXT, ocrResult.text)
@@ -849,7 +852,7 @@ private fun OcrResultOverlay(
                             }
                         }
                         is MediaViewModel.OcrResult.Error -> {
-                            Log.e("PicMe:UX", "OCR Result Error: ${ocrResult.message}")
+                            Log.e("Gallery", "OCR Result Error: ${ocrResult.message}")
                             Icon(
                                 imageVector = Icons.Rounded.Error,
                                 contentDescription = null,
@@ -893,7 +896,7 @@ private fun mediaPagerTopControls(
     ) {
         IconButton(
             onClick = {
-                Log.d("PicMe:UX", if (isEditing) "Cancel editing mode" else "Close MediaPager")
+                Log.d("Gallery", if (isEditing) "Cancel editing mode" else "Close MediaPager")
                 onClose()
             },
             colors = IconButtonDefaults.iconButtonColors(

@@ -22,6 +22,8 @@ import com.picme.beauty.api.facedetect.FaceWarpParams
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 
+private const val TAG = "Camera"
+
 @ExperimentalGetImage
 internal fun bindCameraUseCases(
     context: Context,
@@ -47,7 +49,7 @@ internal fun bindCameraUseCases(
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit
 ) {
-    android.util.Log.d("PicMe:Camera", "bindCameraUseCases START: aspectRatio=$aspectRatio, captureMode=$captureMode")
+    android.util.Log.d(TAG, "bindCameraUseCases START: aspectRatio=$aspectRatio, captureMode=$captureMode")
     val cameraProvider = cameraProviderFuture.get()
     Logger.d("Camera", "Binding camera with aspectRatio=$aspectRatio")
 
@@ -168,7 +170,7 @@ internal fun bindCameraUseCases(
         }
         onActualLensFacingChanged(camera.cameraInfo.lensFacing)
         Logger.d(
-            "PicMe:Camera",
+            TAG,
             "Camera bound: lensFacing=${camera.cameraInfo.lensFacing}, selector=$lensFacing, " +
                 "useCaseGroup=${useCaseGroup != null}, aspectRatio=$aspectRatio"
         )

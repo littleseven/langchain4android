@@ -1,7 +1,7 @@
 package com.picme.beauty.render
 
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * Framebuffer 对象池
@@ -11,7 +11,7 @@ import android.util.Log
  */
 class FramebufferPool {
     companion object {
-        private const val TAG = "PicMe:FramebufferPool"
+        private const val TAG = "FramebufferPool"
     }
 
     private val pool = mutableMapOf<String, Framebuffer>()
@@ -37,9 +37,9 @@ class FramebufferPool {
         val fbo = Framebuffer(width, height)
         if (fbo.initialize()) {
             pool[name] = fbo
-            Log.d(TAG, "Created FBO '$name': ${width}x${height}")
+            Logger.d(TAG, "Created FBO '$name': ${width}x${height}")
         } else {
-            Log.e(TAG, "Failed to create FBO '$name'")
+            Logger.e(TAG, "Failed to create FBO '$name'")
         }
         return fbo
     }
@@ -55,7 +55,7 @@ class FramebufferPool {
     fun releaseAll() {
         pool.values.forEach { it.release() }
         pool.clear()
-        Log.d(TAG, "All FBOs released")
+        Logger.d(TAG, "All FBOs released")
     }
 
     /**

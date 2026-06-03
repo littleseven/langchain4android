@@ -5,10 +5,19 @@
 #include "mnn_face_detector.h"
 
 #define LOG_TAG "PicMe:MnnJNI"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) do { if (picme::MnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while(0)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 extern "C" {
+
+JNIEXPORT void JNICALL
+Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeSetLogEnabled(
+        JNIEnv *env,
+        jclass clazz,
+        jboolean enabled) {
+    picme::MnnFaceDetector::setLogEnabled(enabled);
+    LOGD("Native log enabled set to: %d", enabled);
+}
 
 JNIEXPORT jlong JNICALL
 Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeCreate(

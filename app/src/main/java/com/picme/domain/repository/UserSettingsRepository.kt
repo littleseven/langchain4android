@@ -109,6 +109,10 @@ interface UserSettingsRepository {
     val cameraMemoryStateFlow: Flow<CameraMemoryState>
     suspend fun updateCameraMemoryState(state: CameraMemoryState)
     suspend fun resetCameraMemoryState()
+
+    // ── 日志模块配置 ──────────────────────────────────────────
+    val logModuleConfigFlow: Flow<com.picme.domain.model.LogModuleConfig>
+    suspend fun updateLogModuleConfig(config: com.picme.domain.model.LogModuleConfig)
 }
 
 

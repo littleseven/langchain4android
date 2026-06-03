@@ -76,6 +76,8 @@ import com.picme.features.settings.agent.SettingsAgentPanel
 import com.picme.features.settings.agent.rememberSettingsAgentIntegration
 import java.util.Locale
 
+private const val TAG = "Settings"
+
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
@@ -123,6 +125,7 @@ fun SettingsScreen(
     val aiAgentForceRemote by viewModel.aiAgentForceRemote.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
+    val logModuleConfig by viewModel.logModuleConfig.collectAsState()
 
     // 模型下载状态（从 ViewModel 获取，确保共享）
     val downloadStates by viewModel.downloadStates.collectAsState()
@@ -133,12 +136,12 @@ fun SettingsScreen(
     // ===== Agent Chat 配置（使用公共组件）=====
     val agentChatConfig = rememberAgentChatConfig(
         context = context,
-        logTag = "PicMe:Settings",
+        logTag = TAG,
         onCommand = { command ->
-            Logger.i("PicMe:Settings", "Voice command: ${command.javaClass.simpleName}")
+            Logger.i(TAG, "Voice command: ${command.javaClass.simpleName}")
         },
         onTranscript = { transcript ->
-            Logger.d("PicMe:Settings", "Voice transcript: $transcript")
+            Logger.d(TAG, "Voice transcript: $transcript")
         }
     )
     val voiceCoordinator = agentChatConfig.voiceCoordinator
@@ -160,7 +163,7 @@ fun SettingsScreen(
                 "llm_model_manager" -> onNavigateToLlmModelManager()
                 "asr_model_manager" -> onNavigateToAsrModelManager()
 
-                else -> Logger.w("PicMe:Settings", "Unknown navigation destination: $destination")
+                else -> Logger.w(TAG, "Unknown navigation destination: $destination")
             }
         },
         onNavigateBack = onNavigateBack
@@ -168,7 +171,7 @@ fun SettingsScreen(
 
     // 绑定 SettingsCapability 的 delegate，确保生命周期绑定
     DisposableEffect(Unit) {
-        Logger.i("PicMe:Settings", "Binding SettingsCapability delegate")
+        Logger.i(TAG, "Binding SettingsCapability delegate")
 
         val settingsCapability = com.picme.domain.agent.capability.SettingsCapability.getInstance()
         settingsCapability.bindDelegate(object : com.picme.domain.agent.capability.SettingsCapability.Delegate {
@@ -194,14 +197,14 @@ fun SettingsScreen(
                     "agent_mode" -> viewModel.setAiAgentMode(
                         if (enabled) com.picme.domain.model.AiAgentMode.LOCAL else com.picme.domain.model.AiAgentMode.OFF
                     )
-                    else -> Logger.w("PicMe:Settings", "Unknown setting key: $key")
+                    else -> Logger.w(TAG, "Unknown setting key: $key")
                 }
             }
         })
-        Logger.i("PicMe:Settings", "SettingsCapability delegate bound")
+        Logger.i(TAG, "SettingsCapability delegate bound")
 
         onDispose {
-            Logger.i("PicMe:Settings", "Unbinding SettingsCapability delegate")
+            Logger.i(TAG, "Unbinding SettingsCapability delegate")
             settingsCapability.unbindDelegate()
         }
     }
@@ -266,6 +269,8 @@ fun SettingsScreen(
         downloadStates = downloadStates,
         allModels = allModels,
         onResetCameraMemoryState = viewModel::resetCameraMemoryState,
+        logModuleConfig = logModuleConfig,
+        onLogModuleConfigChange = viewModel::setLogModuleConfig,
         onNavigateBack = onNavigateBack
     )
 
@@ -330,6 +335,8 @@ private fun settingsContent(
     downloadStates: Map<String, com.picme.data.download.DownloadState>,
     allModels: List<ModelConfig>,
     onResetCameraMemoryState: () -> Unit,
+    logModuleConfig: com.picme.domain.model.LogModuleConfig,
+    onLogModuleConfigChange: (com.picme.domain.model.LogModuleConfig) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -586,6 +593,52 @@ private fun settingsContent(
                         Text(stringResource(R.string.reset_camera_to_default))
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 日志模块管理
+            SettingsSection(
+                title = stringResource(R.string.log_management),
+                description = stringResource(R.string.log_management_desc)
+            ) {
+                LogModuleConfigSection(
+                    config = logModuleConfig,
+                    onConfigChange = onLogModuleConfigChange
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LogModuleConfigSection(
+    config: com.picme.domain.model.LogModuleConfig,
+    onConfigChange: (com.picme.domain.model.LogModuleConfig) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        com.picme.domain.model.LogModule.entries.forEach { module ->
+            val enabled = config.isEnabled(module)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = module.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { onConfigChange(config.toggle(module, it)) }
+                )
             }
         }
     }
@@ -1721,6 +1774,8 @@ fun SettingsScreenPreview() {
             downloadStates = emptyMap(),
             allModels = emptyList(),
             onResetCameraMemoryState = {},
+            logModuleConfig = com.picme.domain.model.LogModuleConfig.default(),
+            onLogModuleConfigChange = {},
             onNavigateBack = {}
         )
     }

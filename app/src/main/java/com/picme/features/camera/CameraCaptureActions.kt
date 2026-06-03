@@ -4,7 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
-import android.util.Log
+
 import androidx.camera.core.ImageCapture
 import androidx.camera.video.MediaStoreOutputOptions
 import androidx.camera.video.Recorder
@@ -32,6 +32,8 @@ import java.io.File
 private const val TARGET_RECORDING_WIDTH = 1920
 private const val TARGET_RECORDING_HEIGHT = 1920
 private const val MIN_RECORDING_DIMENSION = 720
+private const val TAG = "Camera"
+private const val TAG_CAPTURE = "CameraCapture"
 
 @SuppressLint("MissingPermission")
 internal fun handleCaptureClick(
@@ -65,13 +67,13 @@ internal fun handleCaptureClick(
                             CameraStateMachine.Capturing(lensFacing, captureMode.ordinal)
                         )
                     } catch (e: IllegalStateException) {
-                        Logger.w("PicMe:Camera", "Failed to enter Capturing: ${e.message}")
+                        Logger.w(TAG, "Failed to enter Capturing: ${e.message}")
                         return
                     }
                 }
                 is CameraStateMachine.Capturing -> Unit
                 else -> {
-                    Logger.w("PicMe:Camera", "Capture rejected: state=${currentState.name}")
+                    Logger.w(TAG, "Capture rejected: state=${currentState.name}")
                     return
                 }
             }
@@ -79,7 +81,7 @@ internal fun handleCaptureClick(
 
         val capture = imageCapture
         if (capture == null) {
-            Logger.w("PicMe:Camera", "Capture skipped: ImageCapture is null")
+            Logger.w(TAG, "Capture skipped: ImageCapture is null")
             cameraStateManager?.forceSetState(
                 CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
             )
@@ -100,14 +102,14 @@ internal fun handleCaptureClick(
             onPhotoFinished = { success ->
                 cameraStateManager?.let { manager ->
                     if (!success) {
-                        Logger.w("PicMe:Camera", "Photo processing failed, recovering to Previewing")
+                        Logger.w(TAG, "Photo processing failed, recovering to Previewing")
                     }
                     try {
                         manager.transition(
                             CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
                         )
                     } catch (e: IllegalStateException) {
-                        Logger.w("PicMe:Camera", "State transition failed after photo: ${e.message}")
+                        Logger.w(TAG, "State transition failed after photo: ${e.message}")
                         manager.forceSetState(
                             CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
                         )
@@ -164,7 +166,7 @@ internal fun handleCaptureClick(
             Pair(targetWidth, targetHeight - (targetHeight % 2))
         }
 
-        Log.i("PicMe:CameraCapture", "Recording resolution: ${recordingWidth}x${recordingHeight} (preview: ${previewWidth}x${previewHeight})")
+        Logger.i(TAG_CAPTURE, "Recording resolution: ${recordingWidth}x${recordingHeight} (preview: ${previewWidth}x${previewHeight})")
 
         onIsRecordingChanged(true)
         beautyVideoRecorder.start(
@@ -264,16 +266,16 @@ private fun insertVideoToMediaStore(context: Context, file: File, displayName: S
         }
         uri
     } catch (e: SecurityException) {
-        Logger.e("PicMe:Camera", "Permission denied when saving video: ${e.message}")
+        Logger.e(TAG, "Permission denied when saving video: ${e.message}")
         null
     } catch (e: java.io.IOException) {
-        Logger.e("PicMe:Camera", "IO error when saving video: ${e.message}")
+        Logger.e(TAG, "IO error when saving video: ${e.message}")
         null
     } catch (e: IllegalArgumentException) {
-        Logger.e("PicMe:Camera", "Invalid arguments when saving video: ${e.message}")
+        Logger.e(TAG, "Invalid arguments when saving video: ${e.message}")
         null
     } catch (e: IllegalStateException) {
-        Logger.e("PicMe:Camera", "Activity state error: ${e.message}")
+        Logger.e(TAG, "Activity state error: ${e.message}")
         null
     }
 }

@@ -39,7 +39,7 @@ class SherpaMnnAsrEngine(
     private val modelDir: String
 ) : AsrEngine {
 
-    private val tag = "PicMe:SherpaMnnAsr"
+    private val tag = "SherpaMnnAsr"
     private var recognizer: OnlineRecognizer? = null
     private val initLock = Object()
 
@@ -50,6 +50,7 @@ class SherpaMnnAsrEngine(
     private var streamingScope: CoroutineScope? = null
 
     companion object {
+        private const val TAG = "SherpaMnnAsr"
         /**
          * 使用 dlopen(RTLD_GLOBAL) 加载 libMNN_Express.so 和 libsherpa-mnn-jni.so。
          *
@@ -65,7 +66,7 @@ class SherpaMnnAsrEngine(
             System.loadLibrary("sherpa-mnn-jni")
             true
         } catch (e: UnsatisfiedLinkError) {
-            android.util.Log.e("PicMe:SherpaMnnAsr", "JNI load failed: ${e.message}")
+            android.util.Log.e(TAG, "JNI load failed: ${e.message}")
             false
         }
     }

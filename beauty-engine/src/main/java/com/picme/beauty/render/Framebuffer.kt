@@ -1,7 +1,7 @@
 package com.picme.beauty.render
 
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * 离屏 Framebuffer 封装
@@ -11,7 +11,7 @@ import android.util.Log
  */
 class Framebuffer(private val width: Int, private val height: Int) {
     companion object {
-        private const val TAG = "PicMe:Framebuffer"
+        private const val TAG = "Framebuffer"
     }
 
     private var framebufferId: Int = -1
@@ -22,7 +22,7 @@ class Framebuffer(private val width: Int, private val height: Int) {
     fun initialize(): Boolean {
         if (isInitialized) return true
         if (width <= 0 || height <= 0) {
-            Log.e(TAG, "Invalid size: ${width}x${height}")
+            Logger.e(TAG, "Invalid size: ${width}x${height}")
             return false
         }
 
@@ -31,7 +31,7 @@ class Framebuffer(private val width: Int, private val height: Int) {
         GLES20.glGenTextures(1, textures, 0)
         textureId = textures[0]
         if (textureId == 0) {
-            Log.e(TAG, "Failed to create texture")
+            Logger.e(TAG, "Failed to create texture")
             return false
         }
 
@@ -74,7 +74,7 @@ class Framebuffer(private val width: Int, private val height: Int) {
         GLES20.glGenFramebuffers(1, framebuffers, 0)
         framebufferId = framebuffers[0]
         if (framebufferId == 0) {
-            Log.e(TAG, "Failed to create framebuffer")
+            Logger.e(TAG, "Failed to create framebuffer")
             GLES20.glDeleteTextures(1, textures, 0)
             textureId = 0
             return false
@@ -93,13 +93,13 @@ class Framebuffer(private val width: Int, private val height: Int) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
 
         if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
-            Log.e(TAG, "Framebuffer incomplete: status=$status")
+            Logger.e(TAG, "Framebuffer incomplete: status=$status")
             release()
             return false
         }
 
         isInitialized = true
-        Log.d(TAG, "Framebuffer initialized: ${width}x${height}, fbo=$framebufferId, tex=$textureId")
+        Logger.d(TAG, "Framebuffer initialized: ${width}x${height}, fbo=$framebufferId, tex=$textureId")
         return true
     }
 
@@ -129,6 +129,6 @@ class Framebuffer(private val width: Int, private val height: Int) {
             textureId = 0
         }
         isInitialized = false
-        Log.d(TAG, "Framebuffer released")
+        Logger.d(TAG, "Framebuffer released")
     }
 }

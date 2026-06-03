@@ -31,7 +31,7 @@ class InferenceRouter(
     private val privacyGuard: PrivacyGuard = PrivacyGuard()
 ) {
 
-    private val tag = "PicMe:InferenceRouter"
+    private val tag = "InferenceRouter"
 
     /**
      * 处理用户输入

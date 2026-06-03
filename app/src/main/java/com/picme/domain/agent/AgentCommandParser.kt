@@ -16,7 +16,7 @@ import com.picme.domain.model.MediaType
  */
 object AgentCommandParser {
 
-    private const val TAG = "PicMe:AgentCommandParser"
+    private const val TAG = "AgentCommandParser"
 
     /**
      * 解析 LLM 响应为 AgentCommand

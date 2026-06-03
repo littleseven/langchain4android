@@ -26,7 +26,7 @@ class UnifiedRemoteClient(
     private val config: RemoteModelConfig
 ) {
 
-    private val tag = "PicMe:UnifiedRemote"
+    private val tag = "UnifiedRemote"
 
     private val kimiClient: KimiCodingApiClient? by lazy {
         if (config.protocol == RemoteProtocol.CLAUDE) {

@@ -2,7 +2,7 @@ package com.picme.beauty.render
 
 import android.content.Context
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import android.view.Surface
 import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.api.BeautyPerfStats
@@ -22,7 +22,7 @@ class GlBeautyPreviewProvider(
 ) : BeautyPreviewEngine {
 
     companion object {
-        private const val TAG = "PicMe:GlBeautyProvider"
+        private const val TAG = "GlBeautyProvider"
     }
 
     private val appContext: Context = context.applicationContext
@@ -42,7 +42,7 @@ class GlBeautyPreviewProvider(
         }
         applyParams(lastParams)
         isInitialized = true
-        Log.i(TAG, "GlBeautyPreviewProvider initialized")
+        Logger.i(TAG, "GlBeautyPreviewProvider initialized")
     }
 
     override fun createPreviewSurface(): Surface {
@@ -56,7 +56,7 @@ class GlBeautyPreviewProvider(
         repeat(120) { attemptIndex ->
             val surface = view.getSurfaceForCamera()
             if (surface != null && surface.isValid) {
-                Log.i(TAG, "GL beauty preview surface ready on attempt=${attemptIndex + 1}")
+                Logger.i(TAG, "GL beauty preview surface ready on attempt=${attemptIndex + 1}")
                 return surface
             }
             SystemClock.sleep(30)
@@ -138,7 +138,7 @@ class GlBeautyPreviewProvider(
         beautyPreviewView?.release()
         beautyPreviewView = null
         isInitialized = false
-        Log.i(TAG, "GlBeautyPreviewProvider released")
+        Logger.i(TAG, "GlBeautyPreviewProvider released")
     }
 
     override fun isReady(): Boolean {

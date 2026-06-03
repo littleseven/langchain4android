@@ -42,7 +42,7 @@ class CapabilityRegistry private constructor(
         }
     }
 
-    private val tag = "PicMe:CapabilityRegistry"
+    private val tag = "CapabilityRegistry"
     private val registry = mutableMapOf<String, Capability>()
 
     // 跨页面命令队列

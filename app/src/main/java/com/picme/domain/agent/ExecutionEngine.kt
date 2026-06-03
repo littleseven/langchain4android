@@ -67,7 +67,7 @@ class ExecutionEngine(
         reporter = reporter
     )
 
-    private val tag = "PicMe:ExecutionEngine"
+    private val tag = "ExecutionEngine"
 
     private val _stateFlow = MutableStateFlow<ExecutionState>(ExecutionState.Idle)
     val stateFlow: StateFlow<ExecutionState> = _stateFlow.asStateFlow()

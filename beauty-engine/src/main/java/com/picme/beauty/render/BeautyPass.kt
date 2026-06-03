@@ -2,7 +2,7 @@ package com.picme.beauty.render
 
 import android.content.Context
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -15,7 +15,7 @@ import java.nio.FloatBuffer
  */
 class BeautyPass(private val context: Context) {
     companion object {
-        private const val TAG = "PicMe:BeautyPass"
+        private const val TAG = "BeautyPass"
 
         // 全屏 quad 顶点数据
         private val VERTICES = floatArrayOf(
@@ -71,9 +71,9 @@ class BeautyPass(private val context: Context) {
             aTextureCoordLocation = shaderProgram.getAttribLocation("aTextureCoord")
             uInputTextureLocation = shaderProgram.getUniformLocation("uInputTexture")
             isCompiled = true
-            Log.d(TAG, "Shader compiled successfully")
+            Logger.d(TAG, "Shader compiled successfully")
         } else {
-            Log.e(TAG, "Failed to compile shader")
+            Logger.e(TAG, "Failed to compile shader")
         }
         return success
     }
@@ -87,7 +87,7 @@ class BeautyPass(private val context: Context) {
             val fragmentSource = context.assets.open(fragmentPath).bufferedReader().use { it.readText() }
             compile(vertexSource, fragmentSource)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load shader from assets: ${e.message}")
+            Logger.e(TAG, "Failed to load shader from assets: ${e.message}")
             false
         }
     }
@@ -108,7 +108,7 @@ class BeautyPass(private val context: Context) {
         setupUniforms: (ShaderProgram.() -> Unit)? = null
     ) {
         if (!isCompiled) {
-            Log.w(TAG, "Shader not compiled, skipping render")
+            Logger.w(TAG, "Shader not compiled, skipping render")
             return
         }
 

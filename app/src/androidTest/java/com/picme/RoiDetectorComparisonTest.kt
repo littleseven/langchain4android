@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 class RoiDetectorComparisonTest {
 
     companion object {
-        private const val TAG = "PicMe:RoiCompare"
+        private const val TAG = "RoiCompare"
     }
 
     @Test

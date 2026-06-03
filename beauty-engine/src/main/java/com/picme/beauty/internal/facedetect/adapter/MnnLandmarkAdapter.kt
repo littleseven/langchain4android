@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.facedetect.adapter
 
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 // CameraSelector.LENS_FACING_FRONT = 0, LENS_FACING_BACK = 1
@@ -96,7 +96,7 @@ class MnnLandmarkAdapter : FaceLandmarkAdapter {
         }
 
         val elapsed = SystemClock.elapsedRealtime() - startTime
-        Log.d("PicMe:MnnLandmarkAdapter", "[Perf] adapt DONE: ${elapsed}ms (InsightFace remap)")
+        Logger.d("MnnLandmarkAdapter", "[Perf] adapt DONE: ${elapsed}ms (InsightFace remap)")
 
         return Result.success(unified)
     }

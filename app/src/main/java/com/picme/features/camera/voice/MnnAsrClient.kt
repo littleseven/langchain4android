@@ -16,7 +16,7 @@ class MnnAsrClient(
     private val modelId: String = ""
 ) : AsrEngine {
 
-    private val tag = "PicMe:MnnAsrClient"
+    private val tag = "MnnAsrClient"
     private var nativeHandle: Long = 0L
 
     override fun isAvailable(): Boolean {
@@ -83,11 +83,12 @@ class MnnAsrClient(
     private external fun nativeTranscribe(handle: Long, audioData: ByteArray): String
 
     companion object {
+        private const val TAG = "MnnAsrClient"
         init {
             try {
                 System.loadLibrary("picme_native")
             } catch (linkError: UnsatisfiedLinkError) {
-                Logger.d("PicMe:MnnAsrClient", "Native library not available: ${linkError.message}")
+                Logger.d(TAG, "Native library not available: ${linkError.message}")
             }
         }
     }

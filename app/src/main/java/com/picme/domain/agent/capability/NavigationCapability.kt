@@ -36,7 +36,7 @@ class NavigationCapability : BaseCapability() {
         }
     }
 
-    private val tag = "PicMe:NavigationCapability"
+    private val tag = "NavigationCapability"
 
     override val name: String = "navigation"
     override val description: String = "页面导航：切换页面、返回上一页"

@@ -16,6 +16,8 @@ import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.agent.GlobalAgentPanel
 import com.picme.features.agent.rememberGlobalAgentPanelState
 
+private const val TAG = "CameraAgent"
+
 /**
  * CameraScreen 的 Agent 集成
  *
@@ -49,7 +51,7 @@ class CameraAgentIntegration(
         onBack: () -> Unit
     ) {
         // 不再在此处注册 Capability，由 PicMeApplication 统一注册
-        Logger.i("PicMe:CameraAgent", "initializeCameraCapabilities is deprecated, capabilities registered by PicMeApplication")
+        Logger.i(TAG, "initializeCameraCapabilities is deprecated, capabilities registered by PicMeApplication")
     }
 
     /**
@@ -58,7 +60,7 @@ class CameraAgentIntegration(
      * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
      */
     fun enterCameraScene() {
-        Logger.i("PicMe:CameraAgent", "Entering CAMERA scene (scene managed by MainActivity)")
+        Logger.i(TAG, "Entering CAMERA scene (scene managed by MainActivity)")
         // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 
@@ -68,7 +70,7 @@ class CameraAgentIntegration(
      * 注意：Scene 切换由 MainActivity 统一管理，此处不再重复设置
      */
     fun leaveCameraScene() {
-        Logger.i("PicMe:CameraAgent", "Exiting CAMERA scene (scene managed by MainActivity)")
+        Logger.i(TAG, "Exiting CAMERA scene (scene managed by MainActivity)")
         // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
     }
 }

@@ -40,7 +40,7 @@ class VoiceCommandCoordinator(
     private val onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null
 ) {
 
-    private val tag = "PicMe:VoiceCommand"
+    private val tag = "VoiceCommand"
 
     private val pushToTalkEngine = PushToTalkEngine(asrEngine, scope)
     private val wakeWordEngine = WakeWordEngine(asrEngine, scope)

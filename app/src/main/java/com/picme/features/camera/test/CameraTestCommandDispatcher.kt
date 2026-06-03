@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  */
 object CameraTestCommandDispatcher {
 
-    private const val TAG = "PicMe:CameraTest"
+    private const val TAG = "CameraTest"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 

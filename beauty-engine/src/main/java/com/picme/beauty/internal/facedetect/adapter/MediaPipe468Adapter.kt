@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.facedetect.adapter
 
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 // CameraSelector.LENS_FACING_FRONT = 0, LENS_FACING_BACK = 1
@@ -28,7 +28,7 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
     override val detectionSource: FaceDetectionSource = FaceDetectionSource.MEDIAPIPE
 
     companion object {
-        private const val TAG = "PicMe:MediaPipeAdapter"
+        private const val TAG = "MediaPipeAdapter"
 
         const val POINT_COUNT = 106
         const val CONTOUR_POINT_COUNT = 33
@@ -243,7 +243,7 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
         for (i in 0 until 33) {
             sb.append("M$i=(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
         }
-        Log.d(TAG, sb.toString())
+        Logger.d(TAG, sb.toString())
 
         // === 生成非轮廓区域点（33-105）===
         for (i in 0 until NON_CONTOUR_POINT_COUNT) {

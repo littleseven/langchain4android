@@ -2,7 +2,7 @@ package com.picme.beauty.render
 
 import android.opengl.GLES20
 import android.opengl.Matrix
-import android.util.Log
+import com.picme.beauty.api.Logger
 import java.nio.FloatBuffer
 
 /**
@@ -16,7 +16,7 @@ import java.nio.FloatBuffer
  */
 abstract class GLRenderer {
     companion object {
-        private const val TAG = "PicMe:GLRenderer"
+        private const val TAG = "GLRenderer"
     }
 
     protected var vertexBuffer: FloatBuffer? = null
@@ -40,12 +40,12 @@ abstract class GLRenderer {
         protected set
 
     open fun onInit() {
-        Log.d(TAG, "Initializing GLRenderer")
+        Logger.d(TAG, "Initializing GLRenderer")
         initBuffers()
         Matrix.setIdentityM(textureMatrix, 0)
 
         if (!onCompileShader()) {
-            Log.e(TAG, "Failed to compile shader")
+            Logger.e(TAG, "Failed to compile shader")
             isInitialized = false
             return
         }
@@ -56,7 +56,7 @@ abstract class GLRenderer {
         uTextureTransformLocation = shaderProgram.getUniformLocation("uTextureTransform")
 
         isInitialized = true
-        Log.d(TAG, "GLRenderer initialized")
+        Logger.d(TAG, "GLRenderer initialized")
     }
 
     protected open fun initBuffers() {
@@ -83,7 +83,7 @@ abstract class GLRenderer {
             .asFloatBuffer()
         textureBuffer?.put(textureCoords)?.position(0)
 
-        Log.d(TAG, "Buffers initialized")
+        Logger.d(TAG, "Buffers initialized")
     }
 
     protected abstract fun onCompileShader(): Boolean
@@ -95,7 +95,7 @@ abstract class GLRenderer {
 
     open fun onRender() {
         if (!isInitialized) {
-            Log.w(TAG, "Renderer not initialized")
+            Logger.w(TAG, "Renderer not initialized")
             return
         }
 
@@ -125,7 +125,7 @@ abstract class GLRenderer {
     protected open fun onAfterRender() {}
 
     open fun release() {
-        Log.d(TAG, "Releasing GLRenderer")
+        Logger.d(TAG, "Releasing GLRenderer")
         shaderProgram.release()
         vertexBuffer = null
         textureBuffer = null

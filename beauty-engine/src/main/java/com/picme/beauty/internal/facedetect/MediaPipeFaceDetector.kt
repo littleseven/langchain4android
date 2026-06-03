@@ -3,7 +3,6 @@ package com.picme.beauty.internal.facedetect
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
-import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.MediaImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -13,6 +12,7 @@ import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.beauty.internal.facedetect.adapter.MediaPipe468Adapter
 import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.beauty.api.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,7 +30,7 @@ import kotlinx.coroutines.withContext
 class MediaPipeFaceDetector(context: Context) {
 
     companion object {
-        private const val TAG = "PicMe:MediaPipeDetector"
+        private const val TAG = "MediaPipeDetector"
         private const val MODEL_PATH = "mediapipe/face_landmarker.task"
     }
 
@@ -53,9 +53,9 @@ class MediaPipeFaceDetector(context: Context) {
             try {
                 initialize()
             } catch (linkError: UnsatisfiedLinkError) {
-                Log.w(TAG, "MediaPipe native library not found (x86_64 simulator?), disabling MediaPipe detection")
+                Logger.w("MediaPipeDetector", "MediaPipe native library not found (x86_64 simulator?), disabling MediaPipe detection")
             } catch (error: Exception) {
-                Log.e(TAG, "Unexpected error initializing MediaPipe", error)
+                Logger.e("MediaPipeDetector", "Unexpected error initializing MediaPipe", error)
             }
         }
     }
@@ -63,7 +63,7 @@ class MediaPipeFaceDetector(context: Context) {
     fun isReady(): Boolean {
         // [ANR 修复] 如果正在初始化中，返回 false，等待异步初始化完成
         if (isInitializing) {
-            Log.d(TAG, "MediaPipe still initializing, not ready yet")
+            Logger.d("MediaPipeDetector", "MediaPipe still initializing, not ready yet")
             return false
         }
         return videoLandmarker != null || imageLandmarker != null
@@ -89,7 +89,7 @@ class MediaPipeFaceDetector(context: Context) {
 
             adapter.adapt(result.faceLandmarks()[0], lensFacing, rotationDegrees).getOrNull()
         } catch (e: Exception) {
-            Log.e(TAG, "MediaPipe preview detection failed", e)
+            Logger.e("MediaPipeDetector", "MediaPipe preview detection failed", e)
             // 如果检测过程中发生崩溃（通常是 GPU 驱动问题），尝试释放并标记不可用
             if (e is RuntimeException && e.message?.contains("native") == true) {
                 handleNativeCrash()
@@ -118,13 +118,13 @@ class MediaPipeFaceDetector(context: Context) {
 
             adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()
         } catch (e: Exception) {
-            Log.e(TAG, "MediaPipe photo detection failed", e)
+            Logger.e("MediaPipeDetector", "MediaPipe photo detection failed", e)
             null
         }
     }
 
     private fun handleNativeCrash() {
-        Log.e(TAG, "MediaPipe native layer error detected, disabling GPU acceleration")
+        Logger.e("MediaPipeDetector", "MediaPipe native layer error detected, disabling GPU acceleration")
         release()
         // 可以在此处标记下一次启动不使用 GPU
     }
@@ -137,18 +137,18 @@ class MediaPipeFaceDetector(context: Context) {
             try {
                 videoLandmarker?.close()
             } catch (e: Exception) {
-                Log.w(TAG, "Error closing video landmarker", e)
+                Logger.w("MediaPipeDetector", "Error closing video landmarker", e)
             }
             videoLandmarker = null
             
             try {
                 imageLandmarker?.close()
             } catch (e: Exception) {
-                Log.w(TAG, "Error closing image landmarker", e)
+                Logger.w("MediaPipeDetector", "Error closing image landmarker", e)
             }
             imageLandmarker = null
         }
-        Log.i(TAG, "MediaPipeFaceDetector released")
+        Logger.i("MediaPipeDetector", "MediaPipeFaceDetector released")
     }
 
     private fun initialize() {
@@ -162,7 +162,7 @@ class MediaPipeFaceDetector(context: Context) {
         initializeImageLandmarker()
 
         val elapsed = SystemClock.elapsedRealtime() - startTime
-        Log.i(TAG, "MediaPipe initialization completed in ${elapsed}ms")
+        Logger.i("MediaPipeDetector", "MediaPipe initialization completed in ${elapsed}ms")
         isInitializing = false
     }
 
@@ -187,14 +187,14 @@ class MediaPipeFaceDetector(context: Context) {
                     .build()
 
                 videoLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-                Log.i(TAG, "MediaPipe FaceLandmarker initialized (${delegate.name}, VIDEO mode)")
+                Logger.i("MediaPipeDetector", "MediaPipe FaceLandmarker initialized (${delegate.name}, VIDEO mode)")
                 return
             } catch (e: Exception) {
                 val isLast = delegate == delegateOrder.last()
                 if (isLast) {
-                    Log.e(TAG, "Failed to initialize video landmarker with all delegates", e)
+                    Logger.e("MediaPipeDetector", "Failed to initialize video landmarker with all delegates", e)
                 } else {
-                    Log.w(TAG, "GPU delegate failed for video landmarker, falling back to CPU", e)
+                    Logger.w("MediaPipeDetector", "GPU delegate failed for video landmarker, falling back to CPU", e)
                 }
             }
         }
@@ -218,14 +218,14 @@ class MediaPipeFaceDetector(context: Context) {
                     .setRunningMode(RunningMode.IMAGE)
                     .build()
                 imageLandmarker = FaceLandmarker.createFromOptions(appContext, options)
-                Log.i(TAG, "MediaPipe FaceLandmarker initialized (${delegate.name}, IMAGE mode)")
+                Logger.i("MediaPipeDetector", "MediaPipe FaceLandmarker initialized (${delegate.name}, IMAGE mode)")
                 return
             } catch (e: Exception) {
                 val isLast = delegate == delegateOrder.last()
                 if (isLast) {
-                    Log.e(TAG, "Failed to initialize image landmarker with all delegates", e)
+                    Logger.e("MediaPipeDetector", "Failed to initialize image landmarker with all delegates", e)
                 } else {
-                    Log.w(TAG, "GPU delegate failed for image landmarker, falling back to CPU", e)
+                    Logger.w("MediaPipeDetector", "GPU delegate failed for image landmarker, falling back to CPU", e)
                 }
             }
         }

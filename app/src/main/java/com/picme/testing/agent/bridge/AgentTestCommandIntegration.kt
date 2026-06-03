@@ -21,19 +21,21 @@ import com.picme.core.common.Logger
  * }
  * ```
  */
+private const val TAG = "AgentTest"
+
 @Composable
 fun AgentTestCommandIntegration() {
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
-        Logger.i("PicMe:AgentTest", "Registering AgentTestBroadcastReceiver")
+        Logger.i(TAG, "Registering AgentTestBroadcastReceiver")
 
         val receiver = AgentTestBroadcastReceiver()
         val filter = IntentFilter(AgentTestBroadcastReceiver.ACTION_AGENT_TEST)
         context.registerReceiver(receiver, filter)
 
         onDispose {
-            Logger.i("PicMe:AgentTest", "Unregistering AgentTestBroadcastReceiver")
+            Logger.i(TAG, "Unregistering AgentTestBroadcastReceiver")
             context.unregisterReceiver(receiver)
         }
     }

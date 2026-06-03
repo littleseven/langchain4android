@@ -287,6 +287,8 @@
     <string name="add_model">添加模型</string>
     <string name="add_custom_model">添加自定义模型</string>
     <string name="add">添加</string>
+    <string name="log_management">日志管理</string>
+    <string name="log_management_desc">按模块控制日志输出</string>
     <string name="base_url">基础 URL</string>
     <string name="base_url_not_set">未设置</string>
     <string name="api_key">API Key</string>

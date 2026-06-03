@@ -1,6 +1,6 @@
 package com.k2fsa.sherpa.mnn
 
-import android.util.Log
+import com.picme.core.common.Logger
 import org.json.JSONObject
 import java.io.File
 
@@ -31,15 +31,15 @@ object AsrConfigManager {
     fun getModelConfigFromDirectory(modelDir: String): OnlineModelConfig? {
         return try {
             val configFile = File(modelDir, CONFIG_FILE_NAME)
-            Log.d(TAG, "Looking for config file at: ${configFile.absolutePath}")
+            Logger.d(TAG, "Looking for config file at: ${configFile.absolutePath}")
 
             if (!configFile.exists()) {
-                Log.w(TAG, "Config file not found at ${configFile.absolutePath}, using fallback")
+                Logger.w(TAG, "Config file not found at ${configFile.absolutePath}, using fallback")
                 return getFallbackConfig(modelDir)
             }
 
             val configContent = configFile.readText()
-            Log.d(TAG, "Read config file content: ${configContent.take(200)}...")
+            Logger.d(TAG, "Read config file content: ${configContent.take(200)}...")
             val configJson = JSONObject(configContent)
 
             val transducerJson = configJson.getJSONObject("transducer")
@@ -68,7 +68,7 @@ object AsrConfigManager {
 
             convertToOnlineModelConfig(modelDir, asrConfig)
         } catch (e: Exception) {
-            Log.e(TAG, "Error reading config from $modelDir", e)
+            Logger.e(TAG, "Error reading config from $modelDir", e)
             getFallbackConfig(modelDir)
         }
     }
@@ -86,13 +86,13 @@ object AsrConfigManager {
     }
 
     private fun getFallbackConfig(modelDir: String): OnlineModelConfig? {
-        Log.w(TAG, "Using fallback configuration for modelDir: $modelDir")
+        Logger.w(TAG, "Using fallback configuration for modelDir: $modelDir")
 
         val dirName = File(modelDir).name.lowercase()
 
         return when {
             dirName.contains("bilingual") || dirName.contains("zh") -> {
-                Log.d(TAG, "Using bilingual/Chinese fallback config")
+                Logger.d(TAG, "Using bilingual/Chinese fallback config")
                 OnlineModelConfig(
                     transducer = OnlineTransducerModelConfig(
                         encoder = "$modelDir/encoder-epoch-99-avg-1.int8.mnn",
@@ -104,7 +104,7 @@ object AsrConfigManager {
                 )
             }
             dirName.contains("en") -> {
-                Log.d(TAG, "Using English fallback config")
+                Logger.d(TAG, "Using English fallback config")
                 OnlineModelConfig(
                     transducer = OnlineTransducerModelConfig(
                         encoder = "$modelDir/encoder-epoch-99-avg-1.mnn",
@@ -116,7 +116,7 @@ object AsrConfigManager {
                 )
             }
             else -> {
-                Log.d(TAG, "Using default fallback config")
+                Logger.d(TAG, "Using default fallback config")
                 OnlineModelConfig(
                     transducer = OnlineTransducerModelConfig(
                         encoder = "$modelDir/encoder-epoch-99-avg-1.int8.mnn",
@@ -135,7 +135,7 @@ object AsrConfigManager {
             val configFile = File(modelDir, CONFIG_FILE_NAME)
 
             if (!configFile.exists()) {
-                Log.w(TAG, "Config file not found, using default LM config")
+                Logger.w(TAG, "Config file not found, using default LM config")
                 return getDefaultLmConfig(modelDir)
             }
 
@@ -145,17 +145,17 @@ object AsrConfigManager {
             if (configJson.has("lm")) {
                 val lmJson = configJson.getJSONObject("lm")
                 val fullModelPath = File(modelDir, lmJson.getString("model")).absolutePath
-                Log.i(TAG, "Using LM config from JSON: ${lmJson.getString("model")} with scale ${lmJson.getDouble("scale")}")
+                Logger.i(TAG, "Using LM config from JSON: ${lmJson.getString("model")} with scale ${lmJson.getDouble("scale")}")
                 OnlineLMConfig(
                     model = fullModelPath,
                     scale = lmJson.getDouble("scale").toFloat()
                 )
             } else {
-                Log.d(TAG, "No LM config found in configuration, using default")
+                Logger.d(TAG, "No LM config found in configuration, using default")
                 getDefaultLmConfig(modelDir)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error reading LM config from $modelDir", e)
+            Logger.e(TAG, "Error reading LM config from $modelDir", e)
             getDefaultLmConfig(modelDir)
         }
     }
@@ -167,17 +167,17 @@ object AsrConfigManager {
         return if (shouldUseLm) {
             val lmPath = "$modelDir/with-state-epoch-99-avg-1.int8.onnx"
             if (File(lmPath).exists()) {
-                Log.d(TAG, "Using default LM config with model: $lmPath")
+                Logger.d(TAG, "Using default LM config with model: $lmPath")
                 OnlineLMConfig(
                     model = lmPath,
                     scale = 0.5f
                 )
             } else {
-                Log.d(TAG, "LM file not found at $lmPath, using empty LM config")
+                Logger.d(TAG, "LM file not found at $lmPath, using empty LM config")
                 OnlineLMConfig()
             }
         } else {
-            Log.d(TAG, "No LM needed for model: $dirName")
+            Logger.d(TAG, "No LM needed for model: $dirName")
             OnlineLMConfig()
         }
     }

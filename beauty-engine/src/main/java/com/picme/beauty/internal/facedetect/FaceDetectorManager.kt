@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PointF
 import android.os.SystemClock
-import android.util.Log
 import com.picme.beauty.api.facedetect.DetectionPipelineConfig
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetectionResult
@@ -14,6 +13,7 @@ import com.picme.beauty.api.facedetect.InferenceBackendType
 import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
+import com.picme.beauty.api.Logger
 
 /**
  * 人脸检测管理器
@@ -26,7 +26,7 @@ import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 class FaceDetectorManager(context: Context) : FaceDetector {
 
     companion object {
-        private const val TAG = "PicMe:FaceDetector"
+        private const val TAG = "FaceDetector"
 
         const val POINT_COUNT = 106
         const val CONTOUR_POINT_COUNT = 33
@@ -58,11 +58,11 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
     @Deprecated("设置页为唯一配置来源，使用 updatePipelineConfig() 替代")
     override fun setEngineMode(mode: EngineType) {
-        Log.w(TAG, "setEngineMode() is deprecated, use updatePipelineConfig() instead")
+        Logger.w(TAG, "setEngineMode() is deprecated, use updatePipelineConfig() instead")
     }
 
     override fun updatePipelineConfig(newConfig: DetectionPipelineConfig) {
-        Log.i(TAG, "updatePipelineConfig: roi=${newConfig.roiDetector}/${newConfig.roiEngine}, landmark=${newConfig.landmarkDetector}/${newConfig.landmarkEngine}")
+        Logger.i(TAG, "updatePipelineConfig: roi=${newConfig.roiDetector}/${newConfig.roiEngine}, landmark=${newConfig.landmarkDetector}/${newConfig.landmarkEngine}")
 
         synchronized(lock) {
             val current = pipelineConfig
@@ -75,7 +75,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 current.landmarkDevice == newConfig.landmarkDevice &&
                 current.useLooseCrop == newConfig.useLooseCrop
             ) {
-                Log.w(TAG, "Config unchanged, skipping update")
+                Logger.w(TAG, "Config unchanged, skipping update")
                 return
             }
 
@@ -97,14 +97,14 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         landmarkDetector = newLandmarkDetector
         isPipelineInitialized = true
 
-        Log.i(TAG, "Pipeline initialized: ROI=${newRoiDetector.javaClass.simpleName}, Landmark=${newLandmarkDetector.javaClass.simpleName}")
+        Logger.i(TAG, "Pipeline initialized: ROI=${newRoiDetector.javaClass.simpleName}, Landmark=${newLandmarkDetector.javaClass.simpleName}")
     }
 
     override fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
         // [核心原则] 未收到设置页配置时不做任何预创建/默认初始化
         // 设置页是配置的唯一来源，通过 updatePipelineConfig() 下发
         if (!isPipelineInitialized) {
-            Log.w(TAG, "Pipeline not initialized, no config from settings yet. Skipping detection.")
+            Logger.w(TAG, "Pipeline not initialized, no config from settings yet. Skipping detection.")
             return null
         }
 
@@ -126,12 +126,12 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             }
         } catch (e: Exception) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Log.e(TAG, "Face detection failed", e)
+            Logger.e(TAG, "Face detection failed", e)
             null
         } catch (e: Error) {
             // [NCNN 保护] 捕获 native 崩溃（如 OpenMP 线程亲和性错误）
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Log.e(TAG, "Face detection native error (NCNN/OpenMP?)", e)
+            Logger.e(TAG, "Face detection native error (NCNN/OpenMP?)", e)
             null
         }
     }
@@ -173,7 +173,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     private fun detectMediaPipeUnified(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int, startTime: Long): FaceDetectionResult? {
         val detector = landmarkDetector as? MediaPipeLandmarkDetector
         if (detector == null) {
-            Log.w(TAG, "MediaPipe landmark detector not available in pipeline")
+            Logger.w(TAG, "MediaPipe landmark detector not available in pipeline")
             return null
         }
 
@@ -210,7 +210,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
         if (roiResult == null) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Log.d(TAG, "No face detected by ROI (${lastProcessTimeMs}ms)")
+            Logger.d(TAG, "No face detected by ROI (${lastProcessTimeMs}ms)")
             return null
         }
 
@@ -220,7 +220,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
 
-        Log.d(TAG, "[Perf] Detection breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
+        Logger.d(TAG, "[Perf] Detection breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
 
         return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
             val detectionSource = when (config.landmarkEngine) {
@@ -257,7 +257,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 useGpuForLandmark = useGpuForLandmark
             )
         } else {
-            Log.w(TAG, "Landmark result invalid: size=${landmarkResult?.size}")
+            Logger.w(TAG, "Landmark result invalid: size=${landmarkResult?.size}")
             null
         }
     }
@@ -265,7 +265,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     override fun detectPhoto(bitmap: Bitmap, lensFacing: Int): FaceDetectionResult? {
         // [核心原则] 未收到设置页配置时不做任何预创建/默认初始化
         if (!isPipelineInitialized) {
-            Log.w(TAG, "Photo detection skipped: no config from settings yet")
+            Logger.w(TAG, "Photo detection skipped: no config from settings yet")
             return null
         }
 
@@ -278,7 +278,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                     config.landmarkDetector == LandmarkDetectorType.MEDIAPIPE -> {
                         val detector = landmarkDetector as? MediaPipeLandmarkDetector
                         if (detector == null) {
-                            Log.w(TAG, "MediaPipe landmark detector not available in pipeline for photo")
+                            Logger.w(TAG, "MediaPipe landmark detector not available in pipeline for photo")
                             return null
                         }
                         val mediaPipeResult = detector.detectLandmarks(bitmap, lensFacing, null)
@@ -296,11 +296,11 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Photo detection failed", e)
+            Logger.e(TAG, "Photo detection failed", e)
             null
         } catch (e: Error) {
             // [NCNN 保护] 捕获 native 崩溃
-            Log.e(TAG, "Photo detection native error (NCNN/OpenMP?)", e)
+            Logger.e(TAG, "Photo detection native error (NCNN/OpenMP?)", e)
             null
         }
     }
@@ -335,6 +335,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             isPipelineInitialized = false
             lastDetectionSource = FaceDetectionSource.NONE
         }
-        Log.i(TAG, "FaceDetectorManager released")
+        Logger.i(TAG, "FaceDetectorManager released")
     }
 }

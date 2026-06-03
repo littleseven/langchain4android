@@ -262,7 +262,7 @@ sealed class CameraTestCommand {
     data class Unknown(val rawAction: String) : CameraTestCommand()
 
     companion object {
-        private const val TAG = "PicMe:CameraTestCommand"
+        private const val TAG = "CameraTestCommand"
 
         /**
          * 从 Intent extras 解析命令

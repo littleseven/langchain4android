@@ -94,7 +94,7 @@ sealed class CameraStateMachine {
 class CameraStateManager {
 
     companion object {
-        private const val TAG = "PicMe:CameraState"
+        private const val TAG = "CameraState"
     }
 
     private val stateRef = AtomicReference<CameraStateMachine>(CameraStateMachine.Idle)

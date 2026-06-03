@@ -23,6 +23,14 @@ class OpenAiApiClient(
     private val enableLogging: Boolean = false
 ) {
 
+    companion object {
+        private const val TAG = "OpenAi"
+        private const val DEFAULT_BASE_URL = "https://tokenhub.tencentmaas.com/v1/"
+        private const val CONNECT_TIMEOUT_SECONDS = 15L
+        private const val READ_TIMEOUT_SECONDS = 60L
+        private const val WRITE_TIMEOUT_SECONDS = 30L
+    }
+
     val service: OpenAiApiService by lazy { createService() }
 
     private fun createService(): OpenAiApiService {
@@ -40,7 +48,7 @@ class OpenAiApiClient(
 
         if (enableLogging) {
             val loggingInterceptor = HttpLoggingInterceptor { message ->
-                Logger.d("PicMe:OpenAi", message)
+                Logger.d(TAG, message)
             }.apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
@@ -53,14 +61,9 @@ class OpenAiApiClient(
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
 
-        Logger.i("PicMe:OpenAi", "OpenAiApiClient initialized, baseUrl=$baseUrl")
+        Logger.i(TAG, "OpenAiApiClient initialized, baseUrl=$baseUrl")
         return retrofit.create(OpenAiApiService::class.java)
     }
 
-    companion object {
-        private const val DEFAULT_BASE_URL = "https://tokenhub.tencentmaas.com/v1/"
-        private const val CONNECT_TIMEOUT_SECONDS = 15L
-        private const val READ_TIMEOUT_SECONDS = 60L
-        private const val WRITE_TIMEOUT_SECONDS = 30L
-    }
+
 }

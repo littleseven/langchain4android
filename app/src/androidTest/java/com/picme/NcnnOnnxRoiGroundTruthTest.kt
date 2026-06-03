@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 class NcnnOnnxRoiGroundTruthTest {
 
     companion object {
-        private const val TAG = "PicMe:GroundTruth"
+        private const val TAG = "GroundTruth"
     }
 
     @Test

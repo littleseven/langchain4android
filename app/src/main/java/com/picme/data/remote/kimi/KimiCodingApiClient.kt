@@ -23,6 +23,15 @@ class KimiCodingApiClient(
     private val enableLogging: Boolean = false
 ) {
 
+    companion object {
+        private const val TAG = "KimiCoding"
+        private const val DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1/"
+        private const val ANTHROPIC_VERSION = "2023-06-01"
+        private const val CONNECT_TIMEOUT_SECONDS = 15L
+        private const val READ_TIMEOUT_SECONDS = 60L
+        private const val WRITE_TIMEOUT_SECONDS = 30L
+    }
+
     val service: KimiCodingApiService by lazy { createService() }
 
     private fun createService(): KimiCodingApiService {
@@ -41,7 +50,7 @@ class KimiCodingApiClient(
 
         if (enableLogging) {
             val loggingInterceptor = HttpLoggingInterceptor { message ->
-                Logger.d("PicMe:KimiCoding", message)
+                Logger.d(TAG, message)
             }.apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
@@ -54,15 +63,9 @@ class KimiCodingApiClient(
             .addConverterFactory(MoshiConverterFactory.create())
             .build()
 
-        Logger.i("PicMe:KimiCoding", "KimiCodingApiClient initialized, baseUrl=$baseUrl")
+        Logger.i(TAG, "KimiCodingApiClient initialized, baseUrl=$baseUrl")
         return retrofit.create(KimiCodingApiService::class.java)
     }
 
-    companion object {
-        private const val DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1/"
-        private const val ANTHROPIC_VERSION = "2023-06-01"
-        private const val CONNECT_TIMEOUT_SECONDS = 15L
-        private const val READ_TIMEOUT_SECONDS = 60L
-        private const val WRITE_TIMEOUT_SECONDS = 30L
-    }
+
 }

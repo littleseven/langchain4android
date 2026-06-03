@@ -154,6 +154,9 @@ private fun Int.toCameraAspectRatioMode(): CameraAspectRatioMode = when (this) {
     else -> CameraAspectRatioMode.FULL
 }
 
+private const val TAG = "Camera"
+private const val TAG_AI_AGENT = "AiAgent"
+private const val TAG_CAMERA_TEST = "CameraTest"
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 
 private tailrec fun Context.findActivity(): android.app.Activity? = when (this) {
@@ -198,7 +201,7 @@ internal fun transformFaceCoordinate(
     val normY = faceY / rotatedHeight
 
     Logger.d(
-        "PicMe:Camera",
+        TAG,
         "Step1 [归一化]: face=($faceX,$faceY), rotatedSize=${rotatedWidth}x${rotatedHeight}, " +
             "norm=($normX,$normY)"
     )
@@ -212,7 +215,7 @@ internal fun transformFaceCoordinate(
     }
 
     Logger.d(
-        "PicMe:Camera",
+        TAG,
         "Step2 [镜像]: lens=${if (lensFacing == CameraSelector.LENS_FACING_FRONT) "前" else "后"}, " +
             "norm=($normX,$normY), mirrored=($mirroredX,$normY)"
     )
@@ -228,7 +231,7 @@ internal fun transformFaceCoordinate(
     }
 
     Logger.d(
-        "PicMe:Camera",
+        TAG,
         "Step3 [旋转补偿]: rot=$rotationDegrees, mirrored=($mirroredX,$normY), " +
             "adjusted=($adjustedX,$adjustedY)"
     )
@@ -242,7 +245,7 @@ internal fun transformFaceCoordinate(
     val screenY = adjustedY * previewHeight
 
     Logger.d(
-        "PicMe:Camera",
+        TAG,
         "Step4 [像素转换]: adj=($adjustedX,$adjustedY), previewSize=${previewWidth.toInt()}x${previewHeight.toInt()}, " +
             "screen=($screenX,$screenY)"
     )
@@ -875,9 +878,9 @@ fun CameraContent(
     // 当设置中的模型 ID 变化时，重新配置并加载模型
     LaunchedEffect(aiAgentLocalModel) {
         if (aiAgentLocalModel.isNotBlank() && !aiAgentUseCase.isLocalModelLoaded) {
-            Logger.i("PicMe:AiAgent", "Loading local MNN-LLM model: $aiAgentLocalModel")
+            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model: $aiAgentLocalModel")
             val result = aiAgentUseCase.loadLocalModel(aiAgentLocalModel)
-            Logger.i("PicMe:AiAgent", "Local MNN-LLM model load result: $result")
+            Logger.i(TAG_AI_AGENT, "Local MNN-LLM model load result: $result")
         }
     }
 
@@ -903,7 +906,7 @@ fun CameraContent(
             }
             coroutineScope.launch {
                 userPreferencesRepository.updateVoiceCommandMode(nextMode)
-                Logger.i("PicMe:Camera", "Voice control toggled to: $nextMode")
+                Logger.i(TAG, "Voice control toggled to: $nextMode")
             }
             Unit
         }
@@ -928,33 +931,33 @@ fun CameraContent(
             }
 
             if (!isModelReady) {
-                Logger.w("PicMe:Camera", "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
+                Logger.w(TAG, "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
                 SystemAsrEngine(context)
             } else {
                 // 1. 尝试 Sherpa-MNN ASR（zipformer 模型）
                 if (localAsrModel.contains("zipformer", ignoreCase = true)) {
                     val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
                     if (sherpaAsr.isAvailable()) {
-                        Logger.i("PicMe:Camera", "Using Sherpa-MNN ASR engine with model: $localAsrModel")
+                        Logger.i(TAG, "Using Sherpa-MNN ASR engine with model: $localAsrModel")
                         sherpaAsr
                     } else {
-                        Logger.w("PicMe:Camera", "Sherpa-MNN ASR init failed, falling back to system ASR")
+                        Logger.w(TAG, "Sherpa-MNN ASR init failed, falling back to system ASR")
                         SystemAsrEngine(context)
                     }
                 } else {
                     // 2. 尝试旧版 MnnAsrClient（whisper 模型）
                     val mnnAsr = MnnAsrClient(context, localAsrModel)
                     if (mnnAsr.isAvailable()) {
-                        Logger.i("PicMe:Camera", "Using MNN ASR engine with model: $localAsrModel")
+                        Logger.i(TAG, "Using MNN ASR engine with model: $localAsrModel")
                         mnnAsr
                     } else {
-                        Logger.w("PicMe:Camera", "MNN ASR not available, falling back to system ASR")
+                        Logger.w(TAG, "MNN ASR not available, falling back to system ASR")
                         SystemAsrEngine(context)
                     }
                 }
             }
         } else {
-            Logger.d("PicMe:Camera", "No local ASR model configured, using system ASR")
+            Logger.d(TAG, "No local ASR model configured, using system ASR")
             SystemAsrEngine(context)
         }
     }
@@ -1138,7 +1141,7 @@ fun CameraContent(
 
     // Agent 命令处理器：提取到顶层确保语音命令无需打开面板即可执行
     val agentCommandHandler: (AiAgentCommand) -> Unit = agentCommandHandler@{ cmd ->
-        Logger.i("PicMe:Camera", "agentCommandHandler executing: ${cmd.javaClass.simpleName}")
+        Logger.i(TAG, "agentCommandHandler executing: ${cmd.javaClass.simpleName}")
         when (cmd) {
             is AiAgentCommand.AdjustBeauty -> {
                 beautySettings = resolveNextBeautySettings(
@@ -1164,7 +1167,7 @@ fun CameraContent(
             is AiAgentCommand.SwitchRatio -> {
                 // [状态机保护] 忙碌时不允许切换比例
                 if (!cameraStateManager.canRebind()) {
-                    Logger.w("PicMe:Camera", "Ratio switch rejected: state=${cameraStateManager.getState().name}")
+                    Logger.w(TAG, "Ratio switch rejected: state=${cameraStateManager.getState().name}")
                         return@agentCommandHandler
                 }
                 val ratio = when (cmd.ratio) {
@@ -1186,17 +1189,17 @@ fun CameraContent(
             is AiAgentCommand.FlipCamera -> {
                 // [状态机保护] 忙碌时不允许切换镜头
                 if (!cameraStateManager.canRebind()) {
-                    Logger.w("PicMe:Camera", "Flip rejected: state=${cameraStateManager.getState().name}")
+                    Logger.w(TAG, "Flip rejected: state=${cameraStateManager.getState().name}")
                         return@agentCommandHandler
                 }
                 val nextLens = nextLensFacing(lensFacing)
                 lensFacing = nextLens
             }
             is AiAgentCommand.CapturePhoto -> {
-                Logger.i("PicMe:Camera", "Executing CapturePhoto command")
+                Logger.i(TAG, "Executing CapturePhoto command")
                 // [状态机保护] 仅在 Previewing 状态允许拍照
                 if (!cameraStateManager.canCapture()) {
-                    Logger.w("PicMe:Camera", "Capture rejected: state=${cameraStateManager.getState().name}")
+                    Logger.w(TAG, "Capture rejected: state=${cameraStateManager.getState().name}")
                         return@agentCommandHandler
                 }
                 handleCaptureClick(
@@ -1251,19 +1254,19 @@ fun CameraContent(
                 when (cmd.destination.lowercase()) {
                     "settings" -> onNavigateToSettings()
                     "gallery" -> onNavigateToGallery()
-                    else -> Logger.w("PicMe:Camera", "Unknown navigation destination: ${cmd.destination}")
+                    else -> Logger.w(TAG, "Unknown navigation destination: ${cmd.destination}")
                 }
             }
             is AiAgentCommand.GoBack -> {
                 // 相机页是根页面，返回无操作
-                Logger.d("PicMe:Camera", "GoBack ignored on camera screen (root)")
+                Logger.d(TAG, "GoBack ignored on camera screen (root)")
             }
             is AiAgentCommand.TextReply -> {
                 // 文本回复已在面板中显示，无需额外操作
             }
             is AiAgentCommand.BatchExecute -> {
                 // 批量命令在顶层处理，不在 handler 内部递归
-                Logger.w("PicMe:Camera", "BatchExecute should be handled at top level, not in agentCommandHandler")
+                Logger.w(TAG, "BatchExecute should be handled at top level, not in agentCommandHandler")
             }
         }
     }
@@ -1310,12 +1313,12 @@ fun CameraContent(
                 agentCommandHandler(AiAgentCommand.SwitchMode(mode))
             }
         })
-        Logger.i("PicMe:Camera", "CameraCapability delegate bound")
+        Logger.i(TAG, "CameraCapability delegate bound")
 
         onDispose {
             // 解绑 delegate（页面离开时解绑，Capability 仍然注册）
             cameraCapability.unbindDelegate()
-            Logger.i("PicMe:Camera", "CameraCapability delegate unbound")
+            Logger.i(TAG, "CameraCapability delegate unbound")
         }
     }
 
@@ -1345,7 +1348,7 @@ fun CameraContent(
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == CameraTestCommandReceiver.ACTION_TEST_COMMAND) {
-                    Logger.i("PicMe:CameraTest", "Broadcast received: ${intent.getStringExtra("action")}")
+                    Logger.i(TAG_CAMERA_TEST, "Broadcast received: ${intent.getStringExtra("action")}")
                     CameraTestCommandDispatcher.dispatchFromIntent(intent)
                 }
             }
@@ -1357,22 +1360,22 @@ fun CameraContent(
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
-        Logger.i("PicMe:CameraTest", "Test command receiver registered dynamically")
+        Logger.i(TAG_CAMERA_TEST, "Test command receiver registered dynamically")
 
         onDispose {
             context.unregisterReceiver(receiver)
-            Logger.i("PicMe:CameraTest", "Test command receiver unregistered")
+            Logger.i(TAG_CAMERA_TEST, "Test command receiver unregistered")
         }
     }
 
     // RD 测试命令收集器：接收 adb 广播命令并执行对应操作
     LaunchedEffect(Unit) {
         CameraTestCommandDispatcher.commandFlow.collect { command ->
-            Logger.i("PicMe:CameraTest", "Executing command: ${CameraTestCommandDispatcher.describeCommand(command)}")
+            Logger.i(TAG_CAMERA_TEST, "Executing command: ${CameraTestCommandDispatcher.describeCommand(command)}")
             when (command) {
                 is CameraTestCommand.Capture -> {
                     if (!cameraStateManager.canCapture()) {
-                        Logger.w("PicMe:CameraTest", "Capture command rejected: state=${cameraStateManager.getState().name}")
+                        Logger.w(TAG_CAMERA_TEST, "Capture command rejected: state=${cameraStateManager.getState().name}")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Error(command, "Camera busy, state=${cameraStateManager.getState().name}")
                         )
@@ -1499,7 +1502,7 @@ fun CameraContent(
                 }
                 is CameraTestCommand.EnterGallery -> {
                     onNavigateToGallery()
-                    Logger.i("PicMe:CameraTest", "Navigate to gallery requested")
+                    Logger.i(TAG_CAMERA_TEST, "Navigate to gallery requested")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Navigated to gallery")
                     )
@@ -1772,7 +1775,7 @@ CameraPreviewContent(
         ) {
             AndroidView(
                 factory = { context ->
-                    android.util.Log.d("PicMe:Camera", "AndroidView factory creating FrameLayout")
+                    android.util.Log.d(TAG, "AndroidView factory creating FrameLayout")
                     FrameLayout(context)
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -1792,7 +1795,7 @@ CameraPreviewContent(
                     )
 
                     android.util.Log.d(
-                        "PicMe:Camera",
+                        TAG,
                         "AndroidView update: useProviderRenderView=$useProviderRenderView, strategy=${activePreviewStrategy.strategy}, " +
                             "targetView=${targetDecision.targetView}"
                     )
@@ -1810,7 +1813,7 @@ CameraPreviewContent(
                     val targetView = targetDecision.targetView
 
                     if (targetView.parent !== container) {
-                        android.util.Log.d("PicMe:Camera", "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
+                        android.util.Log.d(TAG, "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
                         (targetView.parent as? ViewGroup)?.removeView(targetView)
                         container.removeAllViews()
                         container.addView(
@@ -1821,7 +1824,7 @@ CameraPreviewContent(
                             )
                         )
                     } else {
-                        android.util.Log.d("PicMe:Camera", "AndroidView update: targetView already in container, skip adding")
+                        android.util.Log.d(TAG, "AndroidView update: targetView already in container, skip adding")
                     }
                 }
             )
@@ -1892,20 +1895,20 @@ CameraPreviewContent(
     voiceCoordinator = voiceCoordinator,
     isWakeWordActive = voiceCommandMode == VoiceCommandMode.WAKE_WORD,
     onAiAgentCommand = { command ->
-        Logger.i("PicMe:Camera", "onAiAgentCommand received: ${command.javaClass.simpleName}")
+        Logger.i(TAG, "onAiAgentCommand received: ${command.javaClass.simpleName}")
         onCommandRef.value = agentCommandHandler
         // BatchExecute 在协程中串行执行子命令
         if (command is AiAgentCommand.BatchExecute) {
-            Logger.i("PicMe:Camera", "BatchExecute: ${command.commands.size} commands, launching sequentially")
+            Logger.i(TAG, "BatchExecute: ${command.commands.size} commands, launching sequentially")
             logOverlayScope.launch {
                 command.commands.forEachIndexed { index, subCmd ->
-                    Logger.i("PicMe:Camera", "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
+                    Logger.i(TAG, "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
                     agentCommandHandler(subCmd)
                     if (index < command.commands.size - 1) {
                         kotlinx.coroutines.delay(200)
                     }
                 }
-                Logger.i("PicMe:Camera", "BatchExecute: all commands completed")
+                Logger.i(TAG, "BatchExecute: all commands completed")
             }
         } else {
             agentCommandHandler(command)
@@ -1969,7 +1972,7 @@ CameraPreviewContent(
         onCaptureClick = {
             // [状态机保护] 仅在 Previewing 状态允许拍照
             if (!cameraStateManager.canCapture()) {
-                Logger.w("PicMe:Camera", "Capture click rejected: state=${cameraStateManager.getState().name}")
+                Logger.w(TAG, "Capture click rejected: state=${cameraStateManager.getState().name}")
                 return@buildCameraPreviewActions
             }
 

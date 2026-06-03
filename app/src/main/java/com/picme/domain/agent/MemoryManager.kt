@@ -26,7 +26,7 @@ private val Context.agentMemoryDataStore: DataStore<Preferences> by preferencesD
  */
 class MemoryManager(private val context: Context) {
 
-    private val tag = "PicMe:MemoryManager"
+    private val tag = "MemoryManager"
     private val dataStore = context.agentMemoryDataStore
 
     /**

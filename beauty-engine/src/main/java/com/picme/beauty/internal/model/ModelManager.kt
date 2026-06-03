@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.model
 
 import android.content.Context
-import android.util.Log
+import com.picme.beauty.api.Logger
 import java.io.File
 
 /**
@@ -12,7 +12,7 @@ import java.io.File
  */
 object ModelManager {
 
-    private const val TAG = "PicMe:ModelManager"
+    private const val TAG = "ModelManager"
 
     /**
      * 模型文件元数据
@@ -145,7 +145,7 @@ object ModelManager {
         if (downloadKey != null) {
             val downloadFile = File(context.filesDir, "llm_models/$downloadKey/${info.cacheName}")
             if (downloadFile.exists() && downloadFile.length() > 0) {
-                Log.d(TAG, "Using downloaded model: ${downloadFile.absolutePath}")
+                Logger.d(TAG, "Using downloaded model: ${downloadFile.absolutePath}")
                 return downloadFile
             }
         }
@@ -178,7 +178,7 @@ object ModelManager {
             if (paramFile.exists() && paramFile.length() > 0 &&
                 binFile.exists() && binFile.length() > 0
             ) {
-                Log.d(TAG, "Using downloaded NCNN model: param=${paramFile.absolutePath}, bin=${binFile.absolutePath}")
+                Logger.d(TAG, "Using downloaded NCNN model: param=${paramFile.absolutePath}, bin=${binFile.absolutePath}")
                 return Pair(paramFile, binFile)
             }
         }
@@ -258,14 +258,14 @@ object ModelManager {
             // 1. 优先检查下载目录 (llm_models/)
             val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
             if (downloadDir.exists() && isLlmModelComplete(downloadDir)) {
-                Log.d(TAG, "LLM model found in download dir: ${downloadDir.absolutePath}")
+                Logger.d(TAG, "LLM model found in download dir: ${downloadDir.absolutePath}")
                 return downloadDir.absolutePath
             }
 
             // 2. 检查传统缓存目录
             val destDir = File(context.filesDir, info.cacheDirName)
             if (destDir.exists() && isLlmModelComplete(destDir)) {
-                Log.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
+                Logger.d(TAG, "LLM model already cached: ${destDir.absolutePath}")
                 return destDir.absolutePath
             }
         }
@@ -273,7 +273,7 @@ object ModelManager {
         // 4. 动态发现：直接在 llm_models/<key>/ 查找（支持任意下载的模型）
         val dynamicDir = File(context.filesDir, "llm_models/$key")
         if (dynamicDir.exists() && isLlmModelComplete(dynamicDir)) {
-            Log.d(TAG, "LLM model found dynamically: ${dynamicDir.absolutePath}")
+            Logger.d(TAG, "LLM model found dynamically: ${dynamicDir.absolutePath}")
             return dynamicDir.absolutePath
         }
 
@@ -282,7 +282,7 @@ object ModelManager {
         for (normalizedKey in normalizedKeys) {
             val normalizedDir = File(context.filesDir, "llm_models/$normalizedKey")
             if (normalizedDir.exists() && isLlmModelComplete(normalizedDir)) {
-                Log.d(TAG, "LLM model found with normalized key '$normalizedKey': ${normalizedDir.absolutePath}")
+                Logger.d(TAG, "LLM model found with normalized key '$normalizedKey': ${normalizedDir.absolutePath}")
                 return normalizedDir.absolutePath
             }
         }
@@ -300,14 +300,14 @@ object ModelManager {
             // 检查下载目录
             val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
             if (downloadDir.exists() && isLlmModelComplete(downloadDir)) {
-                Log.d(TAG, "Model found in download dir: ${downloadDir.absolutePath}")
+                Logger.d(TAG, "Model found in download dir: ${downloadDir.absolutePath}")
                 return true
             }
 
             // 检查传统缓存目录
             val destDir = File(context.filesDir, info.cacheDirName)
             if (destDir.exists() && isLlmModelComplete(destDir)) {
-                Log.d(TAG, "Model found in cache dir: ${destDir.absolutePath}")
+                Logger.d(TAG, "Model found in cache dir: ${destDir.absolutePath}")
                 return true
             }
         }
@@ -315,7 +315,7 @@ object ModelManager {
         // 动态发现
         val dynamicDir = File(context.filesDir, "llm_models/$key")
         if (dynamicDir.exists() && isLlmModelComplete(dynamicDir)) {
-            Log.d(TAG, "Model found dynamically: ${dynamicDir.absolutePath}")
+            Logger.d(TAG, "Model found dynamically: ${dynamicDir.absolutePath}")
             return true
         }
 
@@ -324,12 +324,12 @@ object ModelManager {
         for (normalizedKey in normalizedKeys) {
             val normalizedDir = File(context.filesDir, "llm_models/$normalizedKey")
             if (normalizedDir.exists() && isLlmModelComplete(normalizedDir)) {
-                Log.d(TAG, "Model found with normalized key: ${normalizedDir.absolutePath}")
+                Logger.d(TAG, "Model found with normalized key: ${normalizedDir.absolutePath}")
                 return true
             }
         }
 
-        Log.w(TAG, "Model not available: $key")
+        Logger.w(TAG, "Model not available: $key")
         return false
     }
 
@@ -367,9 +367,9 @@ object ModelManager {
                     input.copyTo(output)
                 }
             }
-            Log.d(TAG, "Model copied: $assetPath -> ${file.absolutePath}")
+            Logger.d(TAG, "Model copied: $assetPath -> ${file.absolutePath}")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to copy model: $assetPath", e)
+            Logger.e(TAG, "Failed to copy model: $assetPath", e)
             throw RuntimeException("Failed to copy model from assets: $assetPath", e)
         }
 

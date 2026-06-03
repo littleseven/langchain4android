@@ -23,6 +23,7 @@ class AgentHandlerThread : HandlerThread(
 
     companion object {
         private const val THREAD_NAME = "PicMe-AgentState"
+        private const val TAG = "Thread"
     }
 
     private var handler: Handler? = null
@@ -35,7 +36,7 @@ class AgentHandlerThread : HandlerThread(
         looper  // 阻塞等待 Looper 就绪
         handler = Handler(looper)
         isReady = true
-        Logger.i("PicMe:Thread", "AgentHandlerThread started: name=${Thread.currentThread().name}")
+        Logger.i(TAG, "AgentHandlerThread started: name=${Thread.currentThread().name}")
     }
 
     fun post(runnable: Runnable) {
@@ -52,7 +53,7 @@ class AgentHandlerThread : HandlerThread(
         isReady = false
         handler = null
         val result = super.quitSafely()
-        Logger.i("PicMe:Thread", "AgentHandlerThread quitSafely")
+        Logger.i(TAG, "AgentHandlerThread quitSafely")
         return result
     }
 

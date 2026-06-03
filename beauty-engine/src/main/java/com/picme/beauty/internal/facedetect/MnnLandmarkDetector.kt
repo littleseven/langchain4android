@@ -7,7 +7,7 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 import java.io.File
@@ -24,7 +24,7 @@ class MnnLandmarkDetector(
 ) : LandmarkDetector {
 
     companion object {
-        private const val TAG = "PicMe:MnnLandmark"
+        private const val TAG = "MnnLandmark"
         private const val MODEL_KEY = "2d106_mnn"
         private const val INPUT_SIZE = 192  // [对齐 ONNX] 与 InsightFace2D106Detector 保持一致
         private const val POINT_COUNT = 106
@@ -55,14 +55,14 @@ class MnnLandmarkDetector(
 
     init {
         // [优化] 不立即初始化，改为懒加载
-        Log.d(TAG, "MnnLandmarkDetector created (lazy initialization, requireGpu=$requireGpu)")
+        Logger.d(TAG, "MnnLandmarkDetector created (lazy initialization, requireGpu=$requireGpu)")
     }
 
     private fun initialize() {
         try {
             val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
-            Log.i(TAG, "Initializing MNN landmark detector with Vulkan GPU (requireGpu=$requireGpu)...")
+            Logger.i(TAG, "Initializing MNN landmark detector with Vulkan GPU (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
             detector = MnnFaceDetector.create(
                 modelPath = modelFile.absolutePath,
@@ -75,19 +75,19 @@ class MnnLandmarkDetector(
 
             if (detector != null) {
                 isGpuEnabled = true
-                Log.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with Vulkan GPU")
+                Logger.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with Vulkan GPU")
             } else {
                 // [关键策略] 要求 GPU 时初始化失败，直接放弃，不降级到 CPU
                 isGpuEnabled = false
                 if (requireGpu) {
-                    Log.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
+                    Logger.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
                 } else {
-                    Log.w(TAG, "MNN GPU initialization failed, attempting CPU fallback...")
+                    Logger.w(TAG, "MNN GPU initialization failed, attempting CPU fallback...")
                     // TODO: 实现 CPU 降级逻辑（如果需要）
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MnnLandmarkDetector (requireGpu=$requireGpu)", e)
+            Logger.e(TAG, "Failed to initialize MnnLandmarkDetector (requireGpu=$requireGpu)", e)
             detector = null
         }
     }
@@ -100,7 +100,7 @@ class MnnLandmarkDetector(
         val det = detector
 
         if (det == null) {
-            Log.w(TAG, "[Perf] MnnLandmarkDetector not initialized after lazy init, skipping")
+            Logger.w(TAG, "[Perf] MnnLandmarkDetector not initialized after lazy init, skipping")
             return null
         }
 
@@ -109,7 +109,7 @@ class MnnLandmarkDetector(
             val cropResult = prepareInputBitmap(bitmap, roi)
             val prepElapsed = SystemClock.elapsedRealtime() - prepStart
 
-            Log.d(TAG, "[Perf] MnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
+            Logger.d(TAG, "[Perf] MnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
 
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detect(cropResult.bitmap)
@@ -121,23 +121,23 @@ class MnnLandmarkDetector(
                 for (i in 0 until minOf(10, result.size / 2)) {
                     sb.append("(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
                 }
-                Log.d(TAG, sb.toString())
+                Logger.d(TAG, sb.toString())
             }
 
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.isEmpty()) {
-                Log.d(TAG, "[Perf] MnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
+                Logger.d(TAG, "[Perf] MnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
                 return null
             }
 
             // 使用逆变换矩阵将模型输出坐标映射回原始图像
             val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
 
-            Log.d(TAG, "[Perf] MnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
+            Logger.d(TAG, "[Perf] MnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
             landmarks
         } catch (e: Exception) {
-            Log.e(TAG, "MnnLandmark detection failed", e)
+            Logger.e(TAG, "MnnLandmark detection failed", e)
             null
         }
     }
@@ -295,7 +295,7 @@ class MnnLandmarkDetector(
         detector = null
         reusableScaledBitmap?.recycle()
         reusableScaledBitmap = null
-        Log.i(TAG, "MnnLandmarkDetector released")
+        Logger.i(TAG, "MnnLandmarkDetector released")
     }
 
 }
