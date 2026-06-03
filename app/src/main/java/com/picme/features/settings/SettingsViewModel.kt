@@ -217,8 +217,10 @@ class SettingsViewModel(
 
     // 模型 ID 到 DetectionModelType 的映射
     private val modelIdToDetectionType = mapOf(
-        "picme-face-det-mnn" to DetectionModelType.DET10G_MNN,
-        "picme-face-det-ncnn" to DetectionModelType.DET10G_NCNN,
+        "picme-face-det-mnn" to DetectionModelType.DET_500M_MNN,
+        "picme-face-det-ncnn" to DetectionModelType.DET_500M_NCNN,
+        "picme-face-det-500m-mnn" to DetectionModelType.DET_500M_MNN,
+        "picme-face-det-500m-ncnn" to DetectionModelType.DET_500M_NCNN,
         "picme-face-landmark-mnn" to DetectionModelType.FACE_2D106_MNN,
         "picme-face-landmark-ncnn" to DetectionModelType.FACE_2D106_NCNN
     )
@@ -275,8 +277,6 @@ class SettingsViewModel(
      */
     fun isModelDownloaded(modelType: DetectionModelType): Boolean {
         if (modelType == DetectionModelType.MEDIAPIPE) return true
-        // MNN/NCNN ROI 模型已通过 Assets 部署，不需要下载即可使用
-        if (modelType == DetectionModelType.DET10G_MNN || modelType == DetectionModelType.DET10G_NCNN) return true
         val modelId = modelIdToDetectionType.entries.find { it.value == modelType }?.key ?: return false
         return modelDownloadManager.isModelDownloaded(modelId)
     }
@@ -287,8 +287,8 @@ class SettingsViewModel(
     fun getModelId(modelType: DetectionModelType, stage: DetectionStage): String? {
         return when (stage) {
             DetectionStage.ROI -> when (modelType) {
-                DetectionModelType.DET10G_MNN -> "picme-face-det-mnn"
-                DetectionModelType.DET10G_NCNN -> "picme-face-det-ncnn"
+                DetectionModelType.DET_500M_MNN -> "picme-face-det-500m-mnn"
+                DetectionModelType.DET_500M_NCNN -> "picme-face-det-500m-ncnn"
                 else -> null
             }
             DetectionStage.LANDMARK -> when (modelType) {

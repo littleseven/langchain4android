@@ -60,6 +60,14 @@ object ModelManager {
     // ── 模型注册表 ───────────────────────────────────────────
 
     /**
+     * 需要远程下载的模型 key 集合（对应模型文件已从 assets 移除）
+     */
+    private val DOWNLOAD_ONLY_KEYS = setOf(
+        "det_500m_mnn",
+        "det_500m_ncnn"
+    )
+
+    /**
      * 人脸检测模型下载配置（映射到 llm_models/<modelId>/ 目录）
      */
     private val FACE_DETECTION_DOWNLOAD_KEYS = mapOf(
@@ -165,7 +173,16 @@ object ModelManager {
         }
 
         // 2. 回退到 assets 复制
-        return copyAssetToCache(info.assetPath, info.cacheName, context)
+        if (key !in DOWNLOAD_ONLY_KEYS) {
+            return copyAssetToCache(info.assetPath, info.cacheName, context)
+        }
+
+        // 3. 下载-only 模型且未下载：抛出明确错误
+        val downloadKeyName = FACE_DETECTION_DOWNLOAD_KEYS[key] ?: key
+        throw IllegalStateException(
+            "Model [$key] not found in download directory. " +
+            "Please download it from ModelScope (model ID: $downloadKeyName) via Settings."
+        )
     }
 
     /**
@@ -198,10 +215,18 @@ object ModelManager {
         }
 
         // 2. 回退到 assets 复制
-        val paramFile = copyAssetToCache(info.paramAssetPath, info.paramCacheName, context)
-        val binFile = copyAssetToCache(info.binAssetPath, info.binCacheName, context)
+        if (key !in DOWNLOAD_ONLY_KEYS) {
+            val paramFile = copyAssetToCache(info.paramAssetPath, info.paramCacheName, context)
+            val binFile = copyAssetToCache(info.binAssetPath, info.binCacheName, context)
+            return Pair(paramFile, binFile)
+        }
 
-        return Pair(paramFile, binFile)
+        // 3. 下载-only 模型且未下载：抛出明确错误
+        val downloadKeyName = FACE_DETECTION_DOWNLOAD_KEYS[key] ?: key
+        throw IllegalStateException(
+            "NCNN model [$key] not found in download directory. " +
+            "Please download it from ModelScope (model ID: $downloadKeyName) via Settings."
+        )
     }
 
     /**

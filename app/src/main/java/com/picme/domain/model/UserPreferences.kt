@@ -62,8 +62,8 @@ enum class DetectionStage {
  */
 enum class DetectionModelType {
     MEDIAPIPE,          // MediaPipe 系列模型 (TFLite)
-    DET10G_MNN,         // InsightFace Det10G (MNN)
-    DET10G_NCNN,        // InsightFace Det10G (NCNN)
+    DET_500M_MNN,         // InsightFace RetinaFace-MobileNet0.25 (MNN)
+    DET_500M_NCNN,        // InsightFace RetinaFace-MobileNet0.25 (NCNN)
     FACE_2D106_MNN,     // InsightFace 2D106 (MNN)
     FACE_2D106_NCNN;    // InsightFace 2D106 (NCNN)
 
@@ -72,15 +72,15 @@ enum class DetectionModelType {
      */
     fun toEngineType(): InferenceEngineType = when (this) {
         MEDIAPIPE -> InferenceEngineType.TFLITE
-        DET10G_MNN, FACE_2D106_MNN -> InferenceEngineType.MNN
-        DET10G_NCNN, FACE_2D106_NCNN -> InferenceEngineType.NCNN
+        DET_500M_MNN, FACE_2D106_MNN -> InferenceEngineType.MNN
+        DET_500M_NCNN, FACE_2D106_NCNN -> InferenceEngineType.NCNN
     }
 
     /**
      * 判断是否为 ROI 阶段可用的模型
      */
     fun isRoiModel(): Boolean = when (this) {
-        MEDIAPIPE, DET10G_MNN, DET10G_NCNN -> true
+        MEDIAPIPE, DET_500M_MNN, DET_500M_NCNN -> true
         FACE_2D106_MNN, FACE_2D106_NCNN -> false
     }
 
@@ -89,7 +89,7 @@ enum class DetectionModelType {
      */
     fun isLandmarkModel(): Boolean = when (this) {
         MEDIAPIPE, FACE_2D106_MNN, FACE_2D106_NCNN -> true
-        DET10G_MNN, DET10G_NCNN -> false
+        DET_500M_MNN, DET_500M_NCNN -> false
     }
 }
 

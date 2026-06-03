@@ -44,7 +44,7 @@ private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
 // 领域模型 → 推理引擎层模型转换
 private fun DetectionModelType.toRoiDetectorType(): RoiDetectorType = when (this) {
     DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
-    DetectionModelType.DET10G_MNN, DetectionModelType.DET10G_NCNN -> RoiDetectorType.DET10G
+    DetectionModelType.DET_500M_MNN, DetectionModelType.DET_500M_NCNN -> RoiDetectorType.DET10G
     else -> RoiDetectorType.MEDIAPIPE
 }
 

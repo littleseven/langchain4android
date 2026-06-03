@@ -1526,8 +1526,8 @@ private fun modelTypeSelection(
     val options = when (stage) {
         DetectionStage.ROI -> listOf(
             DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe),
-            DetectionModelType.DET10G_MNN to stringResource(R.string.model_det10g_mnn),
-            DetectionModelType.DET10G_NCNN to stringResource(R.string.model_det10g_ncnn)
+            DetectionModelType.DET_500M_MNN to stringResource(R.string.model_det10g_mnn),
+            DetectionModelType.DET_500M_NCNN to stringResource(R.string.model_det10g_ncnn)
         )
         DetectionStage.LANDMARK -> listOf(
             DetectionModelType.MEDIAPIPE to stringResource(R.string.model_mediapipe),

@@ -143,5 +143,34 @@
       "2d106det.bin"
     ],
     "tags": ["face", "landmark", "ncnn"]
+  },
+  {
+    "id": "picme-face-det-500m-mnn",
+    "name": "RetinaFace Det500M",
+    "description": "RetinaFace-MobileNet0.25 人脸检测模型 (MNN 格式)，用于 ROI 区域检测，GPU 加速",
+    "type": "FACE_DETECTION",
+    "size": 1263560,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-Det500M-MNN"
+    },
+    "files": [
+      "det_500m.mnn"
+    ],
+    "tags": ["face", "detection", "mnn"]
+  },
+  {
+    "id": "picme-face-det-500m-ncnn",
+    "name": "RetinaFace Det500M",
+    "description": "RetinaFace-MobileNet0.25 人脸检测模型 (NCNN 格式)，用于 ROI 区域检测，轻量高效",
+    "type": "FACE_DETECTION",
+    "size": 1270514,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-Det500M-NCNN"
+    },
+    "files": [
+      "det_500m.param",
+      "det_500m.bin"
+    ],
+    "tags": ["face", "detection", "ncnn"]
   }
 ]
