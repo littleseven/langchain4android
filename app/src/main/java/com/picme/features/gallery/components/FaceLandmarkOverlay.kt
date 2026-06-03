@@ -60,7 +60,7 @@ import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import kotlin.math.max
 
-private const val TAG = "PicMe:GalleryLandmark"
+private const val TAG = "GalleryLandmark"
 
 private class LandmarkDetectionSnapshot(
     val mediaPipe468Points: List<Pair<Float, Float>>?,

@@ -14,10 +14,17 @@ import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.SettingsCapability
 import com.picme.domain.repository.MediaRepository
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
+import com.picme.beauty.log.BeautyLogProxy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class PicMeApplication : Application(), ImageLoaderFactory {
+
+    companion object {
+        private const val TAG = "Application"
+    }
 
     val applicationScope = CoroutineScope(SupervisorJob())
 
@@ -33,6 +40,15 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 初始化人脸关键点适配器注册表
         FaceLandmarkAdapterRegistry.initDefaults()
+
+        // 绑定 Beauty Engine 日志代理，使 beauty-engine 模块的日志受 Logger 模块开关控制
+        BeautyLogProxy.bindLogger(Logger)
+
+        // 从 DataStore 加载日志模块配置并同步到 Logger
+        applicationScope.launch {
+            val config = container.userPreferencesRepository.logModuleConfigFlow.first()
+            Logger.setModuleConfig(config)
+        }
 
         // 注册应用级 Capability（只注册一次，永不注销）
         initializeCapabilities()
@@ -50,21 +66,21 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 注册导航 Capability（全局可用）- 使用单例实例
         registry.register(NavigationCapability.getInstance())
-        Logger.i("PicMe:Application", "NavigationCapability registered")
+        Logger.i(TAG, "NavigationCapability registered")
 
         // 注册相机 Capability（仅在 CAMERA 场景可用，需绑定 delegate）- 使用单例实例
         registry.register(CameraCapability.getInstance())
-        Logger.i("PicMe:Application", "CameraCapability registered")
+        Logger.i(TAG, "CameraCapability registered")
 
         // 注册相册 Capability（仅在 GALLERY 场景可用，需绑定 delegate）- 使用单例实例
         registry.register(GalleryCapability.getInstance())
-        Logger.i("PicMe:Application", "GalleryCapability registered")
+        Logger.i(TAG, "GalleryCapability registered")
 
         // 注册设置 Capability（仅在 SETTINGS 场景可用，需绑定 delegate）- 使用单例实例
         registry.register(SettingsCapability.getInstance())
-        Logger.i("PicMe:Application", "SettingsCapability registered")
+        Logger.i(TAG, "SettingsCapability registered")
 
-        Logger.i("PicMe:Application", "All capabilities initialized")
+        Logger.i(TAG, "All capabilities initialized")
     }
 
     override fun newImageLoader(): ImageLoader {

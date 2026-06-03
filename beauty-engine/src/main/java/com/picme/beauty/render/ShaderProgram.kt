@@ -1,7 +1,7 @@
 package com.picme.beauty.render
 
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * R 计划 - Shader 程序管理类
@@ -14,7 +14,7 @@ import android.util.Log
  */
 class ShaderProgram {
     companion object {
-        private const val TAG = "PicMe:ShaderProgram"
+        private const val TAG = "ShaderProgram"
     }
 
     private var programId: Int = -1
@@ -25,17 +25,17 @@ class ShaderProgram {
         private set
 
     fun compile(vertexSource: String, fragmentSource: String): Boolean {
-        Log.d(TAG, "Compiling shader program")
+        Logger.d(TAG, "Compiling shader program")
         try {
             val vertexShader = compileShader(GLES20.GL_VERTEX_SHADER, vertexSource)
             if (vertexShader == 0) {
-                Log.e(TAG, "Failed to compile vertex shader")
+                Logger.e(TAG, "Failed to compile vertex shader")
                 return false
             }
 
             val fragmentShader = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource)
             if (fragmentShader == 0) {
-                Log.e(TAG, "Failed to compile fragment shader")
+                Logger.e(TAG, "Failed to compile fragment shader")
                 GLES20.glDeleteShader(vertexShader)
                 return false
             }
@@ -49,7 +49,7 @@ class ShaderProgram {
             GLES20.glGetProgramiv(programId, GLES20.GL_LINK_STATUS, linkStatus, 0)
             if (linkStatus[0] != GLES20.GL_TRUE) {
                 val error = GLES20.glGetProgramInfoLog(programId)
-                Log.e(TAG, "Failed to link program: $error")
+                Logger.e(TAG, "Failed to link program: $error")
                 GLES20.glDeleteProgram(programId)
                 GLES20.glDeleteShader(vertexShader)
                 GLES20.glDeleteShader(fragmentShader)
@@ -63,10 +63,10 @@ class ShaderProgram {
             GLES20.glDeleteShader(fragmentShader)
 
             isCompiled = true
-            Log.d(TAG, "Shader program compiled successfully: $programId")
+            Logger.d(TAG, "Shader program compiled successfully: $programId")
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "Shader compile error: ${e.message}", e)
+            Logger.e(TAG, "Shader compile error: ${e.message}", e)
             if (programId != -1) {
                 GLES20.glDeleteProgram(programId)
                 programId = -1
@@ -85,18 +85,18 @@ class ShaderProgram {
         GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compiled, 0)
         if (compiled[0] != GLES20.GL_TRUE) {
             val error = GLES20.glGetShaderInfoLog(shader)
-            Log.e(TAG, "Shader compile error: $error")
+            Logger.e(TAG, "Shader compile error: $error")
             // 输出完整 Shader 源码以便诊断（按行号）
             val typeName = if (type == GLES20.GL_VERTEX_SHADER) "VERTEX" else "FRAGMENT"
-            Log.e(TAG, "=== $typeName SHADER SOURCE ===")
+            Logger.e(TAG, "=== $typeName SHADER SOURCE ===")
             source.lines().forEachIndexed { index, line ->
-                Log.e(TAG, "${index + 1}: $line")
+                Logger.e(TAG, "${index + 1}: $line")
             }
-            Log.e(TAG, "=== END SHADER SOURCE ===")
+            Logger.e(TAG, "=== END SHADER SOURCE ===")
             GLES20.glDeleteShader(shader)
             return 0
         }
-        Log.v(TAG, "Shader compiled: type=$type, id=$shader")
+        Logger.d(TAG, "Shader compiled: type=$type, id=$shader")
         return shader
     }
 
@@ -111,7 +111,7 @@ class ShaderProgram {
         val location = GLES20.glGetUniformLocation(programId, name)
         uniformLocations[name] = location
         if (location == -1) {
-            Log.w(TAG, "Uniform not found: $name")
+            Logger.w(TAG, "Uniform not found: $name")
         }
         return location
     }
@@ -121,7 +121,7 @@ class ShaderProgram {
         val location = GLES20.glGetAttribLocation(programId, name)
         attribLocations[name] = location
         if (location == -1) {
-            Log.w(TAG, "Attribute not found: $name")
+            Logger.w(TAG, "Attribute not found: $name")
         }
         return location
     }
@@ -165,7 +165,7 @@ class ShaderProgram {
             uniformLocations.clear()
             attribLocations.clear()
             isCompiled = false
-            Log.d(TAG, "Shader program released")
+            Logger.d(TAG, "Shader program released")
         }
     }
 

@@ -1,6 +1,6 @@
 package com.picme.beauty.internal.facedetect.adapter
 
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 
 /**
@@ -14,7 +14,7 @@ import com.picme.beauty.api.facedetect.FaceDetectionSource
  */
 object FaceLandmarkAdapterRegistry {
 
-    private const val TAG = "PicMe:LandmarkAdapter"
+    private const val TAG = "LandmarkAdapter"
 
     private val adapters = mutableMapOf<FaceDetectionSource, FaceLandmarkAdapter>()
 
@@ -27,9 +27,9 @@ object FaceLandmarkAdapterRegistry {
     fun register(source: FaceDetectionSource, adapter: FaceLandmarkAdapter) {
         val existing = adapters.put(source, adapter)
         if (existing != null) {
-            Log.w(TAG, "Adapter for $source was overwritten")
+            Logger.w(TAG, "Adapter for $source was overwritten")
         } else {
-            Log.d(TAG, "Adapter registered: ${adapter::class.simpleName} for $source")
+            Logger.d(TAG, "Adapter registered: ${adapter::class.simpleName} for $source")
         }
     }
 
@@ -62,7 +62,7 @@ object FaceLandmarkAdapterRegistry {
      */
     fun clear() {
         adapters.clear()
-        Log.d(TAG, "All adapters cleared")
+        Logger.d(TAG, "All adapters cleared")
     }
 
     /**
@@ -72,7 +72,7 @@ object FaceLandmarkAdapterRegistry {
      */
     fun initDefaults() {
         if (adapters.isNotEmpty()) {
-            Log.d(TAG, "Default adapters already initialized, skipping")
+            Logger.d(TAG, "Default adapters already initialized, skipping")
             return
         }
 
@@ -80,6 +80,6 @@ object FaceLandmarkAdapterRegistry {
         register(FaceDetectionSource.MNN, MnnLandmarkAdapter())  // [性能优化] MNN GPU 检测器
         register(FaceDetectionSource.NCNN, NcnnLandmarkAdapter()) // [性能优化] NCNN 轻量级检测器
 
-        Log.i(TAG, "Default adapters initialized: ${adapters.size} registered")
+        Logger.i(TAG, "Default adapters initialized: ${adapters.size} registered")
     }
 }

@@ -11,11 +11,13 @@
 #include <cpu.h>
 
 #define LOG_TAG "PicMe:NcnnFaceDetect"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) do { if (picme::NcnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while(0)
+#define LOGI(...) do { if (picme::NcnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); } while(0)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace picme {
+
+bool NcnnFaceDetector::logEnabled_ = true;
 
 NcnnFaceDetector::NcnnFaceDetector()
     : inputSize_(0), useGpu_(false), loaded_(false), hasBuiltInNormalization_(false) {

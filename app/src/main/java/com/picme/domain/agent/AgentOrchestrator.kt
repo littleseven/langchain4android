@@ -41,7 +41,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
         }
     }
 
-    private val tag = "PicMe:AgentOrchestrator"
+    private val tag = "AgentOrchestrator"
 
     // 核心组件
     private val localLlmEngine = LocalLlmEngine(context)

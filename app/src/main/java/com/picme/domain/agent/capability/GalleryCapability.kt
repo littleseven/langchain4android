@@ -31,7 +31,7 @@ class GalleryCapability : BaseCapability() {
         }
     }
 
-    private val tag = "PicMe:GalleryCapability"
+    private val tag = "GalleryCapability"
 
     override val name: String = "gallery"
     override val description: String = "相册操作：查看、删除、分享、搜索、选择照片和视频"

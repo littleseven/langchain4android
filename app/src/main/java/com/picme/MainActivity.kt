@@ -53,6 +53,10 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        private const val TAG = "MainActivity"
+    }
+
     private var currentLanguage: AppLanguage? = null
 
     override fun attachBaseContext(newBase: Context) {
@@ -105,9 +109,9 @@ class MainActivity : ComponentActivity() {
 
                     // 绑定 NavigationCapability 的 NavController（应用级单例）
                     LaunchedEffect(navController) {
-                        Logger.i("PicMe:MainActivity", "Binding NavController to NavigationCapability")
+                        Logger.i(TAG, "Binding NavController to NavigationCapability")
                         NavigationCapability.getInstance().bindNavController(navController)
-                        Logger.i("PicMe:MainActivity", "NavController bound successfully")
+                        Logger.i(TAG, "NavController bound successfully")
                     }
 
                     Scaffold(

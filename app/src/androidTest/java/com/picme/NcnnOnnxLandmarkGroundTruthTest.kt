@@ -23,7 +23,7 @@ import org.junit.runner.RunWith
 class NcnnOnnxLandmarkGroundTruthTest {
 
     companion object {
-        private const val TAG = "PicMe:LandmarkGT"
+        private const val TAG = "LandmarkGT"
     }
 
     @Test

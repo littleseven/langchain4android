@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.opengl.GLES20
 import android.opengl.GLUtils
-import android.util.Log
+import com.picme.beauty.api.Logger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -25,7 +25,7 @@ import java.util.EnumMap
 class FaceMakeupPass(private val context: Context) {
 
     companion object {
-        private const val TAG = "PicMe:FaceMakeupPass"
+        private const val TAG = "FaceMakeupPass"
         private const val TEXTURE_SIZE = 1280f
 
         const val VERTEX_COUNT = 106
@@ -272,7 +272,7 @@ class FaceMakeupPass(private val context: Context) {
         baseInputTextureLocation = baseCopyProgram.getUniformLocation("uInputTexture")
 
         isCompiled = true
-        Log.d(TAG, "FaceMakeupPass compiled")
+        Logger.d(TAG, "FaceMakeupPass compiled")
         return true
     }
 
@@ -290,7 +290,7 @@ class FaceMakeupPass(private val context: Context) {
 
         val textureId = loadTextureFromAssets(assetPath)
         loadedTextures[type] = LoadedTexture(assetPath = assetPath, textureId = textureId, bounds = bounds)
-        Log.d(TAG, "Makeup texture loaded: type=$type, asset=$assetPath, id=$textureId, bounds=$bounds")
+        Logger.d(TAG, "Makeup texture loaded: type=$type, asset=$assetPath, id=$textureId, bounds=$bounds")
     }
 
     private fun loadTextureFromAssets(assetPath: String): Int {
@@ -298,7 +298,7 @@ class FaceMakeupPass(private val context: Context) {
             val bitmap = context.assets.open(assetPath).use { stream ->
                 BitmapFactory.decodeStream(stream)
             } ?: run {
-                Log.w(TAG, "Failed to decode bitmap: $assetPath")
+                Logger.w(TAG, "Failed to decode bitmap: $assetPath")
                 return 0
             }
 
@@ -308,7 +308,7 @@ class FaceMakeupPass(private val context: Context) {
             GLES20.glGenTextures(1, textures, 0)
             val textureId = textures[0]
             if (textureId == 0) {
-                Log.e(TAG, "Failed to generate texture for $assetPath")
+                Logger.e(TAG, "Failed to generate texture for $assetPath")
                 bitmap.recycle()
                 return 0
             }
@@ -322,17 +322,17 @@ class FaceMakeupPass(private val context: Context) {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
             bitmap.recycle()
 
-            Log.d(TAG, "Texture loaded: $assetPath = $textureId (${width}x${height})")
+            Logger.d(TAG, "Texture loaded: $assetPath = $textureId (${width}x${height})")
             textureId
         } catch (error: Exception) {
-            Log.w(TAG, "Failed to load texture: $assetPath - ${error.message}")
+            Logger.w(TAG, "Failed to load texture: $assetPath - ${error.message}")
             0
         }
     }
 
     fun updateFaceLandmarks(landmarks: FloatArray) {
         if (landmarks.size < VERTEX_COUNT * 2) {
-            Log.w(TAG, "Invalid landmarks size: ${landmarks.size}, expected >= ${VERTEX_COUNT * 2}")
+            Logger.w(TAG, "Invalid landmarks size: ${landmarks.size}, expected >= ${VERTEX_COUNT * 2}")
             return
         }
 
@@ -362,7 +362,7 @@ class FaceMakeupPass(private val context: Context) {
      */
     fun updateFaceLandmarksSynced(uvLandmarks: FloatArray) {
         if (uvLandmarks.size < VERTEX_COUNT * 2) {
-            Log.w(TAG, "Invalid synced landmarks size: ${uvLandmarks.size}, expected >= ${VERTEX_COUNT * 2}")
+            Logger.w(TAG, "Invalid synced landmarks size: ${uvLandmarks.size}, expected >= ${VERTEX_COUNT * 2}")
             return
         }
 
@@ -495,7 +495,7 @@ class FaceMakeupPass(private val context: Context) {
     ): Boolean {
         val loadedTexture = loadedTextures[makeupType]
         if (!isCompiled || loadedTexture == null || loadedTexture.textureId == 0) {
-            Log.w(
+            Logger.w(
                 TAG,
                 "FaceMakeupPass not ready: compiled=$isCompiled, type=$makeupType, texture=${loadedTexture?.textureId ?: 0}"
             )

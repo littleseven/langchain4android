@@ -3,7 +3,7 @@ package com.picme.beauty.render
 import android.content.Context
 import android.graphics.SurfaceTexture
 import android.util.AttributeSet
-import android.util.Log
+import com.picme.beauty.api.Logger
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -22,7 +22,7 @@ class BeautyPreviewView @JvmOverloads constructor(
 ) : FrameLayout(context, attrs) {
 
     companion object {
-        private const val TAG = "PicMe:BeautyPreviewView"
+        private const val TAG = "BeautyPreviewView"
     }
 
     private val renderer: CameraPreviewRenderer = CameraPreviewRenderer(context)
@@ -225,7 +225,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 val surface = holder.surface
-                Log.d(TAG, "Display SurfaceView ready: ${surfaceView.width}x${surfaceView.height}")
+                Logger.d(TAG, "Display SurfaceView ready: ${surfaceView.width}x${surfaceView.height}")
                 surfaceCheckRunnable?.let { removeCallbacks(it) }
                 surfaceCheckRunnable = null
                 ensureRendererInitialized()
@@ -233,18 +233,18 @@ class BeautyPreviewView @JvmOverloads constructor(
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                Log.d(TAG, "Display SurfaceView changed: ${width}x${height}")
+                Logger.d(TAG, "Display SurfaceView changed: ${width}x${height}")
                 bindDisplaySurface(holder.surface)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                Log.d(TAG, "Display SurfaceView destroyed")
+                Logger.d(TAG, "Display SurfaceView destroyed")
                 displaySurface = null
                 renderer.clearRenderSurface(holder.surface)
             }
         })
 
-        Log.d(TAG, "BeautyPreviewView created")
+        Logger.d(TAG, "BeautyPreviewView created")
     }
 
     fun ensureOffscreenReady() {
@@ -262,7 +262,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         updateColorGradeInternal()
         updateStyleEffectInternal()
         renderer.updateColorMatrix(colorMatrix)
-        Log.d(TAG, "Renderer initialized")
+        Logger.d(TAG, "Renderer initialized")
     }
 
     private fun bindDisplaySurface(surface: Surface) {
@@ -292,7 +292,7 @@ class BeautyPreviewView @JvmOverloads constructor(
             // 延迟释放旧 Surface，确保 CameraX 已完成使用
             postDelayed({ if (it.isValid) it.release() }, 500)
         }
-        Log.d(TAG, "Created camera input surface: ${cameraSurface?.hashCode()}")
+        Logger.d(TAG, "Created camera input surface: ${cameraSurface?.hashCode()}")
         return cameraSurface
     }
 
@@ -436,7 +436,7 @@ class BeautyPreviewView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        Log.d(TAG, "BeautyPreviewView attached to window")
+        Logger.d(TAG, "BeautyPreviewView attached to window")
         post {
             tryBindSurfaceFromHolder()
         }
@@ -446,11 +446,11 @@ class BeautyPreviewView @JvmOverloads constructor(
         val holder = surfaceView.holder
         val surface = holder.surface
         if (surface != null && surface.isValid) {
-            Log.d(TAG, "Surface valid in onAttachedToWindow post, binding directly")
+            Logger.d(TAG, "Surface valid in onAttachedToWindow post, binding directly")
             ensureRendererInitialized()
             bindDisplaySurface(surface)
         } else {
-            Log.w(TAG, "Surface not yet valid, waiting for surfaceCreated callback")
+            Logger.w(TAG, "Surface not yet valid, waiting for surfaceCreated callback")
             // SurfaceView 在动态添加时 surfaceCreated 可能延迟，启动轮询兜底
             postDelayedSurfaceCheck()
         }
@@ -467,7 +467,7 @@ class BeautyPreviewView @JvmOverloads constructor(
                 val holder = surfaceView.holder
                 val surface = holder.surface
                 if (surface != null && surface.isValid) {
-                    Log.d(TAG, "Delayed surface check succeeded at attempt=$attemptCount")
+                    Logger.d(TAG, "Delayed surface check succeeded at attempt=$attemptCount")
                     ensureRendererInitialized()
                     bindDisplaySurface(surface)
                     surfaceCheckRunnable = null
@@ -476,7 +476,7 @@ class BeautyPreviewView @JvmOverloads constructor(
                 if (attemptCount < 30) {
                     postDelayed(this, 50)
                 } else {
-                    Log.e(TAG, "Delayed surface check failed after 30 attempts (~1.5s)")
+                    Logger.e(TAG, "Delayed surface check failed after 30 attempts (~1.5s)")
                     surfaceCheckRunnable = null
                 }
             }
@@ -487,14 +487,14 @@ class BeautyPreviewView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        Log.d(TAG, "BeautyPreviewView detached from window")
+        Logger.d(TAG, "BeautyPreviewView detached from window")
         displaySurface = null
         renderer.clearRenderSurface()
     }
 
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
-        Log.d(TAG, "Visibility changed: $visibility")
+        Logger.d(TAG, "Visibility changed: $visibility")
     }
 
     fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {

@@ -27,7 +27,7 @@ class LlmModelNotFoundException(
  */
 class LocalLlmEngine(private val context: Context) {
 
-    private val tag = "PicMe:LocalLlmEngine"
+    private val tag = "LocalLlmEngine"
     private val client = MnnLlmClient(context)
     private val engineMutex = Mutex()
 

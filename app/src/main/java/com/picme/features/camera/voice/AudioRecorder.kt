@@ -23,7 +23,7 @@ class AudioRecorder {
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
-        private const val TAG = "PicMe:AudioRecorder"
+        private const val TAG = "AudioRecorder"
     }
 
     private var audioRecord: AudioRecord? = null

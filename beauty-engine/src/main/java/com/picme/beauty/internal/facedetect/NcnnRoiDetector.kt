@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 
@@ -18,7 +18,7 @@ class NcnnRoiDetector(
 ) : RoiDetector {
 
     companion object {
-        private const val TAG = "PicMe:NcnnRoi"
+        private const val TAG = "NcnnRoi"
         private const val MODEL_KEY = "det10g_ncnn"
         private const val INPUT_SIZE = 640
         private const val CONFIDENCE_THRESHOLD = 0.5f
@@ -61,7 +61,7 @@ class NcnnRoiDetector(
     }
 
     init {
-        Log.d(TAG, "NcnnRoiDetector created (lazy initialization, requireGpu=$requireGpu)")
+        Logger.d(TAG, "NcnnRoiDetector created (lazy initialization, requireGpu=$requireGpu)")
     }
 
     private fun initialize() {
@@ -70,15 +70,15 @@ class NcnnRoiDetector(
             try {
                 val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
-                Log.i(TAG, "Initializing NCNN RetinaFace detector (requireGpu=$requireGpu)...")
-                Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
+                Logger.i(TAG, "Initializing NCNN RetinaFace detector (requireGpu=$requireGpu)...")
+                Logger.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
 
                 // [诊断] 验证文件可读性
                 if (!paramFile.canRead()) {
-                    Log.e(TAG, "Param file not readable: ${paramFile.absolutePath}")
+                    Logger.e(TAG, "Param file not readable: ${paramFile.absolutePath}")
                 }
                 if (!binFile.canRead()) {
-                    Log.e(TAG, "Bin file not readable: ${binFile.absolutePath}")
+                    Logger.e(TAG, "Bin file not readable: ${binFile.absolutePath}")
                 }
 
                 val initStart = SystemClock.elapsedRealtime()
@@ -94,15 +94,15 @@ class NcnnRoiDetector(
 
                 if (detector != null) {
                     isGpuEnabled = true
-                    Log.i(TAG, "NcnnRoiDetector initialized in ${initElapsed}ms")
+                    Logger.i(TAG, "NcnnRoiDetector initialized in ${initElapsed}ms")
                     return
                 }
 
                 // [CO指令] 不启用 fallback，直接报告失败
                 isGpuEnabled = false
-                Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
+                Logger.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize NcnnRoiDetector (requireGpu=$requireGpu)", e)
+                Logger.e(TAG, "Failed to initialize NcnnRoiDetector (requireGpu=$requireGpu)", e)
                 detector = null
             }
         }
@@ -115,7 +115,7 @@ class NcnnRoiDetector(
         val det = detector
 
         if (det == null) {
-            Log.w(TAG, "[Perf] NcnnRoiDetector not initialized after lazy init, skipping")
+            Logger.w(TAG, "[Perf] NcnnRoiDetector not initialized after lazy init, skipping")
             return null
         }
 
@@ -125,7 +125,7 @@ class NcnnRoiDetector(
             try {
                 detectRoiLocked(bitmap, det, totalStart)
             } catch (e: Exception) {
-                Log.e(TAG, "NcnnRoi detection failed", e)
+                Logger.e(TAG, "NcnnRoi detection failed", e)
                 null
             }
         }
@@ -136,7 +136,7 @@ class NcnnRoiDetector(
         val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
         val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
-        Log.d(TAG, "[Perf] NcnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+        Logger.d(TAG, "[Perf] NcnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
 
         val inferStart = SystemClock.elapsedRealtime()
         val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.3f)
@@ -145,7 +145,7 @@ class NcnnRoiDetector(
         val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
         if (result == null || result.size < 5) {
-            Log.d(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
+            Logger.d(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
             return null
         }
 
@@ -157,8 +157,8 @@ class NcnnRoiDetector(
         val padLeft = (INPUT_SIZE - scaledW) / 2f
         val padTop = (INPUT_SIZE - scaledH) / 2f
 
-        Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
-        Log.d(TAG, "[Diag] Raw NCNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
+        Logger.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
+        Logger.d(TAG, "[Diag] Raw NCNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
 
         var mappedX1 = ((result[0] - padLeft) / scale)
         var mappedY1 = ((result[1] - padTop) / scale)
@@ -179,8 +179,8 @@ class NcnnRoiDetector(
 
         val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
 
-        Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
-        Log.i(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
+        Logger.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
+        Logger.i(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
         return roi
     }
 
@@ -216,7 +216,7 @@ class NcnnRoiDetector(
         detector = null
         reusableScaledBitmap?.recycle()
         reusableScaledBitmap = null
-        Log.i(TAG, "NcnnRoiDetector released")
+        Logger.i(TAG, "NcnnRoiDetector released")
     }
 
 }

@@ -19,7 +19,7 @@ import kotlin.coroutines.resume
  */
 class SystemAsrEngine(private val context: Context) : AsrEngine {
 
-    private val tag = "PicMe:SystemAsrEngine"
+    private val tag = "SystemAsrEngine"
 
     override fun isAvailable(): Boolean {
         return SpeechRecognizer.isRecognitionAvailable(context)

@@ -2,7 +2,7 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * 基于 MediaPipe 的关键点检测器
@@ -12,7 +12,7 @@ class MediaPipeLandmarkDetector(
     private val faceDetector: MediaPipeFaceDetector
 ) : LandmarkDetector {
     companion object {
-        private const val TAG = "PicMe:MediaPipeLandmark"
+        private const val TAG = "MediaPipeLandmark"
     }
 
     override fun detectLandmarks(
@@ -25,12 +25,12 @@ class MediaPipeLandmarkDetector(
             val result = faceDetector.detectForPhoto(bitmap, lensFacing)
 
             if (result != null) {
-                Log.d(TAG, "MediaPipe landmarks detected: ${result.size / 2} points")
+                Logger.d(TAG, "MediaPipe landmarks detected: ${result.size / 2} points")
             }
 
             result
         } catch (e: Exception) {
-            Log.e(TAG, "MediaPipe landmark detection failed", e)
+            Logger.e(TAG, "MediaPipe landmark detection failed", e)
             null
         }
     }

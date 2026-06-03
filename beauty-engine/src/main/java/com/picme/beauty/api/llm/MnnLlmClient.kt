@@ -1,7 +1,7 @@
 package com.picme.beauty.api.llm
 
 import android.content.Context
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.model.ModelManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 class MnnLlmClient(private val context: Context) {
 
     private var nativeHandle: Long = 0L
-    private val tag = "PicMe:MnnLlmClient"
+    private val tag = "MnnLlmClient"
 
     /**
      * 模型加载状态
@@ -33,7 +33,7 @@ class MnnLlmClient(private val context: Context) {
      */
     suspend fun load(modelKey: String = "qwen3_1_7b"): Boolean = withContext(Dispatchers.IO) {
         if (isLoaded) {
-            Log.d(tag, "Model already loaded")
+            Logger.d(tag, "Model already loaded")
             return@withContext true
         }
 
@@ -44,7 +44,7 @@ class MnnLlmClient(private val context: Context) {
             // 验证 config.json 存在且有效
             val configFile = java.io.File(configPath)
             if (!configFile.exists() || configFile.length() == 0L) {
-                Log.e(tag, "LLM config not found or empty: $configPath")
+                Logger.e(tag, "LLM config not found or empty: $configPath")
                 return@withContext false
             }
 
@@ -52,7 +52,7 @@ class MnnLlmClient(private val context: Context) {
             val modelFile = java.io.File(modelDir, "llm.mnn")
             val weightFile = java.io.File(modelDir, "llm.mnn.weight")
             if (!modelFile.exists() && !weightFile.exists()) {
-                Log.e(tag, "LLM model files not found in: $modelDir")
+                Logger.e(tag, "LLM model files not found in: $modelDir")
                 return@withContext false
             }
 
@@ -61,24 +61,24 @@ class MnnLlmClient(private val context: Context) {
                 modelFile.bufferedReader().use { reader ->
                     val firstLine = reader.readLine() ?: ""
                     if (firstLine.contains("git-lfs")) {
-                        Log.e(tag, "LLM model file is a Git LFS pointer, not actual model: ${modelFile.absolutePath}")
+                        Logger.e(tag, "LLM model file is a Git LFS pointer, not actual model: ${modelFile.absolutePath}")
                         return@withContext false
                     }
                 }
             }
 
-            Log.i(tag, "Loading LLM model from: $configPath")
+            Logger.i(tag, "Loading LLM model from: $configPath")
             nativeHandle = nativeCreate(configPath)
 
             if (nativeHandle == 0L) {
-                Log.e(tag, "Failed to create LLM native instance")
+                Logger.e(tag, "Failed to create LLM native instance")
                 return@withContext false
             }
 
-            Log.i(tag, "LLM model loaded successfully")
+            Logger.i(tag, "LLM model loaded successfully")
             true
         } catch (exception: Exception) {
-            Log.e(tag, "Failed to load LLM model: ${exception.message}", exception)
+            Logger.e(tag, "Failed to load LLM model: ${exception.message}", exception)
             false
         }
     }
@@ -92,14 +92,14 @@ class MnnLlmClient(private val context: Context) {
      */
     suspend fun generate(prompt: String, maxNewTokens: Int = 128): String = withContext(Dispatchers.IO) {
         if (!isLoaded) {
-            Log.w(tag, "LLM not loaded, cannot generate")
+            Logger.w(tag, "LLM not loaded, cannot generate")
             return@withContext ""
         }
 
         try {
             nativeGenerate(nativeHandle, prompt, maxNewTokens)
         } catch (exception: Exception) {
-            Log.e(tag, "Generation failed", exception)
+            Logger.e(tag, "Generation failed", exception)
             ""
         }
     }
@@ -118,14 +118,14 @@ class MnnLlmClient(private val context: Context) {
         maxNewTokens: Int = 128
     ): String = withContext(Dispatchers.IO) {
         if (!isLoaded) {
-            Log.w(tag, "LLM not loaded, cannot generate")
+            Logger.w(tag, "LLM not loaded, cannot generate")
             return@withContext ""
         }
 
         try {
             nativeGenerateWithSystem(nativeHandle, systemPrompt, userPrompt, maxNewTokens)
         } catch (exception: Exception) {
-            Log.e(tag, "Generation with system prompt failed", exception)
+            Logger.e(tag, "Generation with system prompt failed", exception)
             ""
         }
     }
@@ -137,7 +137,7 @@ class MnnLlmClient(private val context: Context) {
         if (nativeHandle != 0L) {
             nativeDestroy(nativeHandle)
             nativeHandle = 0L
-            Log.d(tag, "LLM unloaded")
+            Logger.d(tag, "LLM unloaded")
         }
     }
 

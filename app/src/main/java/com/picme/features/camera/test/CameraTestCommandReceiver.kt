@@ -79,7 +79,7 @@ import com.picme.core.common.Logger
 class CameraTestCommandReceiver : BroadcastReceiver() {
 
     companion object {
-        private const val TAG = "PicMe:CameraTestReceiver"
+        private const val TAG = "CameraTestReceiver"
 
         /** 广播 Action 名称 */
         const val ACTION_TEST_COMMAND = "com.picme.TEST_COMMAND"

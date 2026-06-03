@@ -6,7 +6,7 @@ import android.opengl.EGLContext
 import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
 import android.opengl.EGLExt
-import android.util.Log
+import com.picme.beauty.api.Logger
 import android.view.Surface
 
 /**
@@ -20,7 +20,7 @@ import android.view.Surface
  */
 class EGLCore {
     companion object {
-        private const val TAG = "PicMe:EGLCore"
+        private const val TAG = "EGLCore"
         private const val EGL_RECORDABLE_ANDROID = 0x3142
     }
 
@@ -32,24 +32,24 @@ class EGLCore {
 
     fun init(): Boolean {
         if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
-            Log.w(TAG, "EGL already initialized")
+            Logger.w(TAG, "EGL already initialized")
             return true
         }
 
         eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
         if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
-            Log.e(TAG, "Unable to get EGL14 display")
+            Logger.e(TAG, "Unable to get EGL14 display")
             return false
         }
 
         val version = IntArray(2)
         if (!EGL14.eglInitialize(eglDisplay, version, 0, version, 1)) {
-            Log.e(TAG, "Unable to initialize EGL14")
+            Logger.e(TAG, "Unable to initialize EGL14")
             eglDisplay = EGL14.EGL_NO_DISPLAY
             return false
         }
 
-        Log.d(TAG, "EGL version: ${version[0]}.${version[1]}")
+        Logger.d(TAG, "EGL version: ${version[0]}.${version[1]}")
 
         val configAttribs = intArrayOf(
             EGL14.EGL_RED_SIZE, 8,
@@ -71,13 +71,13 @@ class EGLCore {
                 numConfigs, 0
             )
         ) {
-            Log.e(TAG, "Unable to find RGB888+recordable ES2 EGL config")
+            Logger.e(TAG, "Unable to find RGB888+recordable ES2 EGL config")
             return false
         }
 
         val num = numConfigs[0]
         if (num <= 0) {
-            Log.e(TAG, "No matching EGL config found")
+            Logger.e(TAG, "No matching EGL config found")
             return false
         }
 
@@ -91,16 +91,16 @@ class EGLCore {
             EGL14.eglGetConfigAttrib(eglDisplay, config, EGL_RECORDABLE_ANDROID, recordable, 0)
             val redSize = IntArray(1)
             EGL14.eglGetConfigAttrib(eglDisplay, config, EGL14.EGL_RED_SIZE, redSize, 0)
-            Log.d(TAG, "Config[$i]: surfaceType=${surfaceType[0]}, recordable=${recordable[0]}, redSize=${redSize[0]}")
+            Logger.d(TAG, "Config[$i]: surfaceType=${surfaceType[0]}, recordable=${recordable[0]}, redSize=${redSize[0]}")
             if (surfaceType[0] and EGL14.EGL_WINDOW_BIT != 0 && recordable[0] == 1) {
                 selectedConfig = config
-                Log.i(TAG, "Selected config[$i] for recording")
+                Logger.i(TAG, "Selected config[$i] for recording")
                 break
             }
         }
 
         eglConfig = selectedConfig ?: configs[0]
-        Log.d(TAG, "EGL initialized successfully, selected config recordable=${eglConfig != null}")
+        Logger.d(TAG, "EGL initialized successfully, selected config recordable=${eglConfig != null}")
         return true
     }
 
@@ -126,7 +126,7 @@ class EGLCore {
             sharedContext = context
         }
 
-        Log.d(TAG, "EGL context created: ${context.hashCode()}")
+        Logger.d(TAG, "EGL context created: ${context.hashCode()}")
         return context
     }
 
@@ -151,17 +151,17 @@ class EGLCore {
             throw RuntimeException("Failed to create EGL surface")
         }
 
-        Log.d(TAG, "EGL surface created: ${eglSurface.hashCode()}")
+        Logger.d(TAG, "EGL surface created: ${eglSurface.hashCode()}")
         return eglSurface
     }
 
     fun makeCurrent(surface: EGLSurface, context: EGLContext): Boolean {
         if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
-            Log.e(TAG, "EGL not initialized")
+            Logger.e(TAG, "EGL not initialized")
             return false
         }
         if (!EGL14.eglMakeCurrent(eglDisplay, surface, surface, context)) {
-            Log.e(TAG, "eglMakeCurrent failed")
+            Logger.e(TAG, "eglMakeCurrent failed")
             return false
         }
         return true
@@ -169,7 +169,7 @@ class EGLCore {
 
     fun clearCurrent(): Boolean {
         if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
-            Log.e(TAG, "EGL not initialized")
+            Logger.e(TAG, "EGL not initialized")
             return false
         }
         return EGL14.eglMakeCurrent(
@@ -182,7 +182,7 @@ class EGLCore {
 
     fun swapBuffers(surface: EGLSurface): Boolean {
         if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
-            Log.e(TAG, "EGL not initialized")
+            Logger.e(TAG, "EGL not initialized")
             return false
         }
         return EGL14.eglSwapBuffers(eglDisplay, surface)
@@ -190,12 +190,12 @@ class EGLCore {
 
     fun setPresentationTime(surface: EGLSurface, nsecs: Long): Boolean {
         if (eglDisplay == EGL14.EGL_NO_DISPLAY) {
-            Log.e(TAG, "EGL not initialized")
+            Logger.e(TAG, "EGL not initialized")
             return false
         }
         val result = EGLExt.eglPresentationTimeANDROID(eglDisplay, surface, nsecs)
         if (!result) {
-            Log.e(TAG, "eglPresentationTimeANDROID failed, error=${EGL14.eglGetError()}")
+            Logger.e(TAG, "eglPresentationTimeANDROID failed, error=${EGL14.eglGetError()}")
         }
         return result
     }
@@ -216,7 +216,7 @@ class EGLCore {
 
             EGL14.eglTerminate(eglDisplay)
             eglDisplay = EGL14.EGL_NO_DISPLAY
-            Log.d(TAG, "EGL released")
+            Logger.d(TAG, "EGL released")
         }
     }
 }

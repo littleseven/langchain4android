@@ -20,7 +20,7 @@ import kotlin.math.abs
 class LandmarkDetectorComparisonTest {
 
     companion object {
-        private const val TAG = "PicMe:LandmarkCompare"
+        private const val TAG = "LandmarkCompare"
     }
 
     private fun testMnnLandmarks(context: Context, bitmap: Bitmap, roi: RectF, forceGpu: Boolean): FloatArray? {

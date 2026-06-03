@@ -19,7 +19,7 @@ class PushToTalkEngine(
     private val scope: CoroutineScope
 ) {
 
-    private val tag = "PicMe:PushToTalk"
+    private val tag = "PushToTalk"
     private val audioRecorder = AudioRecorder()
     private var isRecording = false
 

@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.framesync
 
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.FrameId
 import com.picme.beauty.api.FrameSyncConfig
 import com.picme.beauty.api.FrameSyncResult
@@ -19,7 +19,7 @@ class FrameSyncManager private constructor(
     initialConfig: FrameSyncConfig = FrameSyncConfig.DEFAULT
 ) {
     companion object {
-        private const val TAG = "PicMe:FrameSync"
+        private const val TAG = "FrameSync"
 
         @Volatile
         private var instance: FrameSyncManager? = null
@@ -264,6 +264,6 @@ class FrameSyncManager private constructor(
 
     fun updateConfig(newConfig: FrameSyncConfig) {
         config = newConfig
-        Log.d(TAG, "Config updated: $newConfig")
+        Logger.d(TAG, "Config updated: $newConfig")
     }
 }

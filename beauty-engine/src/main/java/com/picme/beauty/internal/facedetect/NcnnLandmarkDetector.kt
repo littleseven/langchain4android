@@ -6,7 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.RectF
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 import java.io.File
@@ -21,7 +21,7 @@ class NcnnLandmarkDetector(
 ) : LandmarkDetector {
 
     companion object {
-        private const val TAG = "PicMe:NcnnLandmark"
+        private const val TAG = "NcnnLandmark"
         private const val MODEL_KEY = "2d106_ncnn"
         private const val INPUT_SIZE = 192
         private const val POINT_COUNT = 106
@@ -56,7 +56,7 @@ class NcnnLandmarkDetector(
     }
 
     init {
-        Log.d(TAG, "NcnnLandmarkDetector created (lazy initialization, requireGpu=$requireGpu)")
+        Logger.d(TAG, "NcnnLandmarkDetector created (lazy initialization, requireGpu=$requireGpu)")
     }
 
     private fun initialize() {
@@ -65,8 +65,8 @@ class NcnnLandmarkDetector(
             try {
                 val (paramFile, binFile) = ModelManager.prepareNcnnModel(MODEL_KEY, appContext)
 
-                Log.i(TAG, "Initializing NCNN landmark detector (requireGpu=$requireGpu)...")
-                Log.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
+                Logger.i(TAG, "Initializing NCNN landmark detector (requireGpu=$requireGpu)...")
+                Logger.d(TAG, "Model files: param=${paramFile.absolutePath} (${paramFile.length()} bytes), bin=${binFile.absolutePath} (${binFile.length()} bytes)")
 
                 val initStart = SystemClock.elapsedRealtime()
                 detector = NcnnFaceDetector.create(
@@ -81,15 +81,15 @@ class NcnnLandmarkDetector(
 
                 if (detector != null) {
                     isGpuEnabled = true
-                    Log.i(TAG, "NcnnLandmarkDetector initialized in ${initElapsed}ms")
+                    Logger.i(TAG, "NcnnLandmarkDetector initialized in ${initElapsed}ms")
                     return
                 }
 
                 // [CO指令] 不启用 fallback，直接报告失败
                 isGpuEnabled = false
-                Log.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
+                Logger.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize NcnnLandmarkDetector (requireGpu=$requireGpu)", e)
+                Logger.e(TAG, "Failed to initialize NcnnLandmarkDetector (requireGpu=$requireGpu)", e)
                 detector = null
             }
         }
@@ -102,7 +102,7 @@ class NcnnLandmarkDetector(
         val det = detector
 
         if (det == null) {
-            Log.w(TAG, "[Perf] NcnnLandmarkDetector not initialized after lazy init, skipping")
+            Logger.w(TAG, "[Perf] NcnnLandmarkDetector not initialized after lazy init, skipping")
             return null
         }
 
@@ -112,7 +112,7 @@ class NcnnLandmarkDetector(
             try {
                 detectLandmarksLocked(bitmap, lensFacing, roi, det, totalStart)
             } catch (e: Exception) {
-                Log.e(TAG, "NcnnLandmark detection failed", e)
+                Logger.e(TAG, "NcnnLandmark detection failed", e)
                 null
             }
         }
@@ -123,7 +123,7 @@ class NcnnLandmarkDetector(
         val cropResult = prepareInputBitmap(bitmap, roi)
         val prepElapsed = SystemClock.elapsedRealtime() - prepStart
 
-        Log.d(TAG, "[Perf] NcnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
+        Logger.d(TAG, "[Perf] NcnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
 
         val inferStart = SystemClock.elapsedRealtime()
         val result = det.detect(cropResult.bitmap)
@@ -134,19 +134,19 @@ class NcnnLandmarkDetector(
             for (i in 0 until minOf(10, result.size / 2)) {
                 sb.append("(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
             }
-            Log.d(TAG, sb.toString())
+            Logger.d(TAG, sb.toString())
         }
 
         val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
         if (result == null || result.isEmpty()) {
-            Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
+            Logger.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
             return null
         }
 
         val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
 
-        Log.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
+        Logger.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
         return landmarks
     }
 
@@ -287,7 +287,7 @@ class NcnnLandmarkDetector(
         detector = null
         reusableScaledBitmap?.recycle()
         reusableScaledBitmap = null
-        Log.i(TAG, "NcnnLandmarkDetector released")
+        Logger.i(TAG, "NcnnLandmarkDetector released")
     }
 
 }

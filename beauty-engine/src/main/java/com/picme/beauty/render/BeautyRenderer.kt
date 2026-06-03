@@ -3,7 +3,7 @@ package com.picme.beauty.render
 import android.content.Context
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * 大美丽 - 美颜渲染器
@@ -15,7 +15,7 @@ import android.util.Log
  */
 class BeautyRenderer(private val context: Context) : GLRenderer() {
     companion object {
-        private const val TAG = "PicMe:BeautyRenderer"
+        private const val TAG = "BeautyRenderer"
 
         const val MODE_DEBUG_RED = 0
         const val MODE_DEBUG_TEXTURE_R = 1
@@ -183,7 +183,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     fun setRenderMode(mode: Int) {
         if (renderMode != mode) {
-            Log.d(TAG, "Render mode changed: $renderMode -> $mode")
+            Logger.d(TAG, "Render mode changed: $renderMode -> $mode")
             renderMode = mode
             isInitialized = false
             shaderProgram.release()
@@ -220,7 +220,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         this.lipColorIndex = lipColorIndex.coerceIn(0, 11)
         blushStrength = blush.coerceIn(0f, 1f)
         this.blushColorFamily = blushColorFamily.coerceIn(0, 2)
-        Log.d(
+        Logger.d(
             TAG,
             "Beauty params updated: smoothing=$smoothingStrength, whitening=$whiteningStrength, " +
                 "sharpen=$sharpenStrength, bigEyes=$bigEyesStrength, slimFace=$slimFaceStrength, " +
@@ -459,7 +459,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     override fun onCompileShader(): Boolean {
         val vertexShader = BeautyShaders.VERTEX_SHADER
         val fragmentShader = ShaderModuleLoader.loadFullFragmentShader(context)
-        Log.d(TAG, "Compiling shader (modular): mode=$renderMode")
+        Logger.d(TAG, "Compiling shader (modular): mode=$renderMode")
         return shaderProgram.compile(vertexShader, fragmentShader)
     }
 
@@ -497,7 +497,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             intermediateFbo?.release()
             val newFbo = Framebuffer(width, height)
             if (!newFbo.initialize()) {
-                Log.e(TAG, "Failed to initialize framebuffer: ${width}x${height}")
+                Logger.e(TAG, "Failed to initialize framebuffer: ${width}x${height}")
                 intermediateFbo = null
                 fboWidth = 0
                 fboHeight = 0
@@ -507,7 +507,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             fboWidth = width
             fboHeight = height
             styleEffectShader.setRenderSize(width, height)
-            Log.d(TAG, "Framebuffer updated: ${width}x${height}")
+            Logger.d(TAG, "Framebuffer updated: ${width}x${height}")
         }
     }
 
@@ -548,9 +548,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val outputHeight = viewportArray[3]
 
         // 步骤1: 执行磨皮/美白 Pass
-        Log.d(TAG, "renderBeautyMultiPass: calling executeBeautyPasses")
+        Logger.d(TAG, "renderBeautyMultiPass: calling executeBeautyPasses")
         val beautyPassSuccess = executeBeautyPasses()
-        Log.d(TAG, "renderBeautyMultiPass: executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
+        Logger.d(TAG, "renderBeautyMultiPass: executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId")
 
         // [关键修复] 如果 executeBeautyPasses 返回 false（无需 FBO 管线），使用外部纹理 ID
         val finalInputTextureId = if (beautyPassSuccess) {
@@ -558,18 +558,18 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         } else {
             externalTextureId
         }
-        Log.d(TAG, "Final input texture for MainShader: $finalInputTextureId")
+        Logger.d(TAG, "Final input texture for MainShader: $finalInputTextureId")
 
         if (!beautyPassSuccess) {
-            Log.d(TAG, "Skipping FBO pipeline, using external texture directly")
+            Logger.d(TAG, "Skipping FBO pipeline, using external texture directly")
         }
 
         // 步骤2: FaceMakeupPass 妆容渲染（三角网格 + 纹理贴图）
-        Log.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
+        Logger.d(TAG, "FaceMakeupPass check: enabled=$faceMakeupEnabled, hasFace=$hasFace, lipColor=$lipColorStrength, blush=$blushStrength")
         if (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)) {
             val ping = fboPing
             val pong = fboPong
-            Log.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
+            Logger.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
             if (ping != null && pong != null && ping.isInitialized && pong.isInitialized) {
                 beautyPassOutputTextureId = renderFaceMakeupPass(beautyPassOutputTextureId, ping, pong)
             }
@@ -637,7 +637,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         lastErrorReason = lastErrorReason.ifBlank {
             error.message.orEmpty().ifBlank { error::class.java.simpleName }
         }
-        Log.e(
+        Logger.e(
             TAG,
             "Render failure [$category]: ${lastErrorReason.ifBlank { "unknown" }}",
             error
@@ -655,7 +655,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val vertexSource = context.assets.open(ShaderModuleLoader.VERTEX_SHADER_2D_PATH).bufferedReader().use { it.readText() }
         val fragmentSource = ShaderModuleLoader.loadFullFragmentShader2D(context)
         shaderProgram2DCompiled = shaderProgram2D.compile(vertexSource, fragmentSource)
-        Log.d(TAG, "ShaderProgram2D compiled: $shaderProgram2DCompiled")
+        Logger.d(TAG, "ShaderProgram2D compiled: $shaderProgram2DCompiled")
         return shaderProgram2DCompiled
     }
 
@@ -798,7 +798,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             if (aspectH > 0) {
                 val aspect = aspectW.toFloat() / aspectH.toFloat()
                 GLES20.glUniform1f(uAspectLoc, aspect)
-                Log.d(TAG, "MainShader2D uAspectRatio: $aspect (${aspectW}x${aspectH})")
+                Logger.d(TAG, "MainShader2D uAspectRatio: $aspect (${aspectW}x${aspectH})")
             }
         }
         val uUseWarpLoc = shaderProgram2D.getUniformLocation("uUseGpupixelWarp")
@@ -840,7 +840,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             outputFbo.unbind()
         }
 
-        Log.d(TAG, "MainShader2D rendered from FBO texture: $inputTextureId")
+        Logger.d(TAG, "MainShader2D rendered from FBO texture: $inputTextureId")
     }
 
     /**
@@ -867,12 +867,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // [调试] 检查 Shader 程序是否有效
         val programId = shaderProgram2D.getProgramId()
-        Log.d(TAG, "renderMainShaderFromFbo2D: using shader program $programId")
+        Logger.d(TAG, "renderMainShaderFromFbo2D: using shader program $programId")
 
         // [调试] 检查当前绑定的 FBO
         val boundFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, boundFbo, 0)
-        Log.d(TAG, "renderMainShaderFromFbo2D: bound FBO=${boundFbo[0]}")
+        Logger.d(TAG, "renderMainShaderFromFbo2D: bound FBO=${boundFbo[0]}")
 
         // 绑定 2D 输入纹理到 TEXTURE0
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -978,7 +978,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // 设置顶点数据（标准全屏四边形）
         val vb = vertexBuffer
         val tb = textureBuffer
-        Log.d(TAG, "renderMainShaderFromFbo2D: vertexBuffer=${vb != null}, textureBuffer=${tb != null}")
+        Logger.d(TAG, "renderMainShaderFromFbo2D: vertexBuffer=${vb != null}, textureBuffer=${tb != null}")
         if (vb != null && tb != null) {
             val aPosLoc = shaderProgram2D.getAttribLocation("aPosition")
             val aTexLoc = shaderProgram2D.getAttribLocation("aTextureCoord")
@@ -1000,7 +1000,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // [调试] 检查绘制后的 GL 错误
         val drawError = GLES20.glGetError()
         if (drawError != GLES20.GL_NO_ERROR) {
-            Log.e(TAG, "GL error after glDrawArrays in renderMainShaderFromFbo2D: $drawError")
+            Logger.e(TAG, "GL error after glDrawArrays in renderMainShaderFromFbo2D: $drawError")
         }
 
         // 清理
@@ -1014,7 +1014,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         }
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
 
-        Log.d(TAG, "Photo renderMainShaderFromFbo2D DONE: input=$inputTextureId, ${width}x${height}")
+        Logger.d(TAG, "Photo renderMainShaderFromFbo2D DONE: input=$inputTextureId, ${width}x${height}")
     }
 
     /**
@@ -1036,12 +1036,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val needMakeupPass =
             faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)
         val needFboPipeline = needBeautyPass || needGeometryPass || needMakeupPass
-        Log.d(
+        Logger.d(
             TAG,
             "executeBeautyPasses: START, needFboPipeline=$needFboPipeline, smooth=$smoothingStrength, white=$whiteningStrength"
         )
         if (!needFboPipeline) {
-            Log.d(TAG, "Multi-pass: no FBO pipeline effect needed")
+            Logger.d(TAG, "Multi-pass: no FBO pipeline effect needed")
             return false
         }
 
@@ -1049,33 +1049,33 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
         val outputWidth = viewportArray[2]
         val outputHeight = viewportArray[3]
-        Log.d(TAG, "executeBeautyPasses: viewport=${outputWidth}x${outputHeight}")
+        Logger.d(TAG, "executeBeautyPasses: viewport=${outputWidth}x${outputHeight}")
 
         if (outputWidth <= 0 || outputHeight <= 0) {
-            Log.w(TAG, "executeBeautyPasses: invalid viewport size")
+            Logger.w(TAG, "executeBeautyPasses: invalid viewport size")
             lastErrorCategory = "surface_output"
             lastErrorReason = "Invalid viewport size ${outputWidth}x${outputHeight}"
             return false
         }
 
-        Log.d(TAG, "executeBeautyPasses: viewport check passed")
+        Logger.d(TAG, "executeBeautyPasses: viewport check passed")
 
         // 编译独立 Pass Shader（延迟编译）
-        Log.d(TAG, "executeBeautyPasses: compiling shaders...")
+        Logger.d(TAG, "executeBeautyPasses: compiling shaders...")
         if (!copyPassCompiled) {
             try {
                 copyPassCompiled = copyPass.compileFromAssets(
                     "shaders/pass_vertex.glsl", "shaders/pass_copy.glsl"
                 )
-                Log.d(TAG, "CopyPass compiled: $copyPassCompiled")
+                Logger.d(TAG, "CopyPass compiled: $copyPassCompiled")
                 if (!copyPassCompiled) {
-                    Log.e(TAG, "CopyPass compilation failed, aborting multi-pass")
+                    Logger.e(TAG, "CopyPass compilation failed, aborting multi-pass")
                     lastErrorCategory = "shader_compile"
                     lastErrorReason = "CopyPass compilation failed"
                     return false
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "CopyPass compilation exception: ${e.message}", e)
+                Logger.e(TAG, "CopyPass compilation exception: ${e.message}", e)
                 lastErrorCategory = "shader_compile"
                 lastErrorReason = e.message.orEmpty().ifBlank { "CopyPass compilation exception" }
                 return false
@@ -1085,7 +1085,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             beautyUnitPassCompiled = beautyUnitPass.compileFromAssets(
                 "shaders/pass_vertex.glsl", "shaders/pass_smoothing.glsl"
             )
-            Log.d(TAG, "BeautyUnitPass compiled: $beautyUnitPassCompiled")
+            Logger.d(TAG, "BeautyUnitPass compiled: $beautyUnitPassCompiled")
             if (!beautyUnitPassCompiled && needBeautyPass) {
                 lastErrorCategory = "shader_compile"
                 lastErrorReason = "BeautyUnitPass compilation failed"
@@ -1096,7 +1096,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // 加载 LUT 纹理
         if (!lutTextureLoader.isAllLoaded()) {
             val lutLoaded = lutTextureLoader.loadAllFallback()
-            Log.d(TAG, "LUT textures loaded: $lutLoaded")
+            Logger.d(TAG, "LUT textures loaded: $lutLoaded")
             if (!lutLoaded && needBeautyPass) {
                 lastErrorCategory = "texture_input"
                 lastErrorReason = "LUT textures failed to load"
@@ -1109,9 +1109,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val acquiredPong = fboPool.acquire("pong", outputWidth, outputHeight)
         fboPing = acquiredPing
         fboPong = acquiredPong
-        Log.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${acquiredPing.isInitialized}, pong=${acquiredPong.isInitialized}")
+        Logger.d(TAG, "executeBeautyPasses: FBOs initialized: ping=${acquiredPing.isInitialized}, pong=${acquiredPong.isInitialized}")
         if (!acquiredPing.isInitialized || !acquiredPong.isInitialized) {
-            Log.w(TAG, "FBO pool not ready")
+            Logger.w(TAG, "FBO pool not ready")
             lastErrorCategory = "fbo_pipeline"
             lastErrorReason = "FBO pool not ready"
             return false
@@ -1119,14 +1119,14 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         // 获取外部纹理 ID
         val cameraTextureId = getBoundExternalTextureId()
-        Log.d(TAG, "executeBeautyPasses: cameraTextureId=$cameraTextureId")
+        Logger.d(TAG, "executeBeautyPasses: cameraTextureId=$cameraTextureId")
         if (cameraTextureId == 0) {
-            Log.w(TAG, "Camera texture ID is 0, cannot execute multi-pass pipeline")
+            Logger.w(TAG, "Camera texture ID is 0, cannot execute multi-pass pipeline")
             lastErrorCategory = "texture_input"
             lastErrorReason = "Camera texture ID is 0"
             return false
         }
-        Log.d(TAG, "Multi-pass: cameraTex=$cameraTextureId, smooth=$smoothingStrength, white=$whiteningStrength")
+        Logger.d(TAG, "Multi-pass: cameraTex=$cameraTextureId, smooth=$smoothingStrength, white=$whiteningStrength")
 
         var currentInputTexture = cameraTextureId
         var currentOutputFbo = acquiredPing
@@ -1135,7 +1135,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // [关键修复] 当输入已是 2D 纹理（拍照路径）时，跳过 CopyPass
         if (!skipCopyPass && copyPassCompiled) {
             val copyProgram = copyPass.getShaderProgram()
-            Log.d(TAG, "Pass0 CopyPass: input=$currentInputTexture, outputFbo=${currentOutputFbo.getTextureId()}")
+            Logger.d(TAG, "Pass0 CopyPass: input=$currentInputTexture, outputFbo=${currentOutputFbo.getTextureId()}")
             copyPass.render(
                 inputTextureId = currentInputTexture,
                 outputFbo = currentOutputFbo,
@@ -1153,7 +1153,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             )
             currentInputTexture = currentOutputFbo.getTextureId()
             currentOutputFbo = acquiredPong
-            Log.d(TAG, "Pass0 done: outputTex=$currentInputTexture")
+            Logger.d(TAG, "Pass0 done: outputTex=$currentInputTexture")
         }
 
         val originalTexture = currentInputTexture  // 保存原图纹理ID
@@ -1161,7 +1161,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         // 确保 Pass 的输入和输出不使用同一个 FBO
         if (currentOutputFbo.getTextureId() == originalTexture) {
             currentOutputFbo = if (currentOutputFbo === acquiredPing) acquiredPong else acquiredPing
-            Log.d(TAG, "Switched outputFbo to avoid read-write conflict: ${currentOutputFbo.getTextureId()}")
+            Logger.d(TAG, "Switched outputFbo to avoid read-write conflict: ${currentOutputFbo.getTextureId()}")
         }
 
         // Pass 1: BeautyPass -> 磨皮+美白+LUT（合并Pass，无需BoxBlur/BoxHighPass）
@@ -1205,11 +1205,11 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 }
             )
             currentInputTexture = currentOutputFbo.getTextureId()
-            Log.d(TAG, "BeautyUnitPass executed: smoothing=$smoothingStrength, whitening=$whiteningStrength")
+            Logger.d(TAG, "BeautyUnitPass executed: smoothing=$smoothingStrength, whitening=$whiteningStrength")
         } else if (needBeautyPass) {
             lastErrorCategory = "render_pipeline"
             lastErrorReason = "BeautyUnitPass skipped while beauty pass is required"
-            Log.w(TAG, "BeautyUnitPass skipped: compiled=$beautyUnitPassCompiled, lutLoaded=${lutTextureLoader.isAllLoaded()}")
+            Logger.w(TAG, "BeautyUnitPass skipped: compiled=$beautyUnitPassCompiled, lutLoaded=${lutTextureLoader.isAllLoaded()}")
             return false
         }
 
@@ -1217,7 +1217,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         beautyPassOutputTextureId = currentInputTexture
         val pingTex = fboPing?.getTextureId() ?: 0
         val pongTex = fboPong?.getTextureId() ?: 0
-        Log.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=$pingTex, fboPong=$pongTex")
+        Logger.d(TAG, "executeBeautyPasses DONE: outputTextureId=$beautyPassOutputTextureId, fboPing=$pingTex, fboPong=$pongTex")
         return true
     }
 
@@ -1273,7 +1273,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         initUniformLocations()
 
         if (renderFrameCount % 60 == 0L) {
-            Log.d(
+            Logger.d(
                 TAG,
                 "onBeforeRender: hasFace=$hasFace, slimFace=$slimFaceStrength, " +
                     "bigEyes=$bigEyesStrength, center=($faceCenterX, $faceCenterY)"
@@ -1488,7 +1488,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         fboPing: Framebuffer,
         fboPong: Framebuffer
     ): Int {
-        Log.d(TAG, "renderFaceMakeupPass START: input=$inputTextureId, ping=${fboPing.getTextureId()}, pong=${fboPong.getTextureId()}")
+        Logger.d(TAG, "renderFaceMakeupPass START: input=$inputTextureId, ping=${fboPing.getTextureId()}, pong=${fboPong.getTextureId()}")
 
         val lipBounds = FrameBounds(502.5f, 710f, 262.5f, 167.5f)
         val blushBounds = FrameBounds(395f, 520f, 489f, 209f)
@@ -1498,7 +1498,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 "shaders/makeup_vertex.glsl",
                 "shaders/makeup_fragment.glsl"
             )
-            Log.d(TAG, "FaceMakeupPass compiled: $faceMakeupPassCompiled")
+            Logger.d(TAG, "FaceMakeupPass compiled: $faceMakeupPassCompiled")
             if (!faceMakeupPassCompiled) {
                 throw IllegalStateException("face_makeup: failed to compile FaceMakeupPass")
             }
@@ -1532,7 +1532,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         var nextOutputFbo = if (fboPing.getTextureId() == currentTextureId) fboPong else fboPing
 
         if (lipColorStrength > 0.001f) {
-            Log.d(TAG, "FaceMakeupPass rendering LIP: intensity=$lipColorStrength, colorIndex=$lipColorIndex")
+            Logger.d(TAG, "FaceMakeupPass rendering LIP: intensity=$lipColorStrength, colorIndex=$lipColorIndex")
             faceMakeupPass.setIntensity(lipColorStrength)
             faceMakeupPass.setBlendMode(FaceMakeupPass.BLEND_MODE_MULTIPLY)
             faceMakeupPass.setTintColor(lipTintColorByIndex(lipColorIndex))
@@ -1549,7 +1549,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         }
 
         if (blushStrength > 0.001f) {
-            Log.d(TAG, "FaceMakeupPass rendering BLUSH: intensity=$blushStrength, family=$blushColorFamily")
+            Logger.d(TAG, "FaceMakeupPass rendering BLUSH: intensity=$blushStrength, family=$blushColorFamily")
             faceMakeupPass.setIntensity(blushStrength)
             faceMakeupPass.setBlendMode(FaceMakeupPass.BLEND_MODE_OVERLAY)
             faceMakeupPass.setTintColor(blushTintColorByFamily(blushColorFamily))
@@ -1564,13 +1564,13 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             currentTextureId = nextOutputFbo.getTextureId()
         }
 
-        Log.d(TAG, "renderFaceMakeupPass END: output=$currentTextureId")
+        Logger.d(TAG, "renderFaceMakeupPass END: output=$currentTextureId")
         return currentTextureId
     }
 
     fun setFaceMakeupEnabled(enabled: Boolean) {
         faceMakeupEnabled = enabled
-        Log.d(TAG, "FaceMakeupPass enabled: $enabled")
+        Logger.d(TAG, "FaceMakeupPass enabled: $enabled")
     }
 
     /**
@@ -1592,15 +1592,15 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         skipCopyPass: Boolean = false
     ) {
         val targetFboId = if (outputFramebufferId > 0) outputFramebufferId else 0
-        Log.d(TAG, "renderBeautyMultiPass ENTRY: outputFbo=$targetFboId")
+        Logger.d(TAG, "renderBeautyMultiPass ENTRY: outputFbo=$targetFboId")
 
         GLES20.glViewport(0, 0, width, height)
         clearLastRenderError()
         val activeStyle = styleEffectShader.getActiveStyle()
 
-        Log.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
+        Logger.d(TAG, "renderBeautyMultiPass(offscreen): calling executeBeautyPasses")
         val beautyPassSuccess = executeBeautyPasses(skipCopyPass)
-        Log.d(
+        Logger.d(
             TAG,
             "renderBeautyMultiPass(offscreen): executeBeautyPasses returned $beautyPassSuccess, beautyPassOutputTextureId=$beautyPassOutputTextureId"
         )
@@ -1610,13 +1610,13 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         } else {
             externalTextureId
         }
-        Log.d(TAG, "Final input texture for MainShader: $finalInputTextureId")
+        Logger.d(TAG, "Final input texture for MainShader: $finalInputTextureId")
 
         var currentTextureId = finalInputTextureId
         if (faceMakeupEnabled && hasFace > 0.5f && (lipColorStrength > 0.001f || blushStrength > 0.001f)) {
             val ping = fboPing
             val pong = fboPong
-            Log.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
+            Logger.d(TAG, "FaceMakeupPass FBO check: ping=${ping?.isInitialized}, pong=${pong?.isInitialized}")
             if (ping != null && pong != null && ping.isInitialized && pong.isInitialized) {
                 currentTextureId = renderFaceMakeupPass(finalInputTextureId, ping, pong)
             }
@@ -1624,7 +1624,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, targetFboId)
         GLES20.glViewport(0, 0, width, height)
-        Log.d(TAG, "renderBeautyMultiPass: explicit target FBO bound=$targetFboId")
+        Logger.d(TAG, "renderBeautyMultiPass: explicit target FBO bound=$targetFboId")
 
         if (activeStyle != StyleEffect.NONE) {
             // 先渲染主 Shader 到中间 FBO，再把风格特效输出到显式目标 FBO
@@ -1638,9 +1638,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 GLES20.glDisableVertexAttribArray(aPositionLocation)
                 GLES20.glDisableVertexAttribArray(aTextureCoordLocation)
                 styleEffectShader.render(fbo.getTextureId(), width, height)
-                Log.d(TAG, "Style effect applied: $activeStyle")
+                Logger.d(TAG, "Style effect applied: $activeStyle")
             } else {
-                Log.e(TAG, "Style effect FBO not ready, fallback to MainShader2D")
+                Logger.e(TAG, "Style effect FBO not ready, fallback to MainShader2D")
                 renderMainShaderFromFbo2D(
                     currentTextureId,
                     width,
@@ -1659,7 +1659,7 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     }
 
     override fun release() {
-        Log.d(TAG, "Releasing BeautyRenderer")
+        Logger.d(TAG, "Releasing BeautyRenderer")
         intermediateFbo?.release()
         intermediateFbo = null
         fboPing = null

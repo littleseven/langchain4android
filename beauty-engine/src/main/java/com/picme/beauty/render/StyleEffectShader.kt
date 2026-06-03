@@ -2,7 +2,7 @@ package com.picme.beauty.render
 
 import android.content.Context
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * 风格特效 Shader 管理
@@ -13,7 +13,7 @@ import android.util.Log
  */
 class StyleEffectShader(private val context: Context) {
     companion object {
-        private const val TAG = "PicMe:StyleEffectShader"
+        private const val TAG = "StyleEffectShader"
         private const val STYLE_SHADER_DIR = "shaders/style"
 
         // 顶点 Shader 文件映射
@@ -130,7 +130,7 @@ class StyleEffectShader(private val context: Context) {
 
         val program = shaderPrograms[style] ?: return
         if (!program.isCompiled) {
-            Log.w(TAG, "Shader not compiled for style: $style")
+            Logger.w(TAG, "Shader not compiled for style: $style")
             return
         }
 
@@ -179,7 +179,7 @@ class StyleEffectShader(private val context: Context) {
         val tb = textureBuffers[style]
 
         if (vb == null || tb == null) {
-            Log.e(TAG, "Vertex/texture buffer not ready for style: $style")
+            Logger.e(TAG, "Vertex/texture buffer not ready for style: $style")
             return
         }
 
@@ -229,19 +229,19 @@ class StyleEffectShader(private val context: Context) {
         val fragmentShader = ShaderModuleLoader.loadShaderFile(context, "$STYLE_SHADER_DIR/$fragmentFile")
 
         if (vertexShader.isEmpty() || fragmentShader.isEmpty()) {
-            Log.e(TAG, "Failed to load shader files for style: $style")
+            Logger.e(TAG, "Failed to load shader files for style: $style")
             return
         }
 
         val program = ShaderProgram()
         if (!program.compile(vertexShader, fragmentShader)) {
-            Log.e(TAG, "Failed to compile shader for style: $style")
+            Logger.e(TAG, "Failed to compile shader for style: $style")
             return
         }
 
         shaderPrograms[style] = program
         initBuffers(style)
-        Log.d(TAG, "Shader compiled for style: $style")
+        Logger.d(TAG, "Shader compiled for style: $style")
     }
 
     private fun initBuffers(style: StyleEffect) {
@@ -277,6 +277,6 @@ class StyleEffectShader(private val context: Context) {
         vertexBuffers.clear()
         textureBuffers.clear()
         activeStyle = StyleEffect.NONE
-        Log.d(TAG, "StyleEffectShader released")
+        Logger.d(TAG, "StyleEffectShader released")
     }
 }

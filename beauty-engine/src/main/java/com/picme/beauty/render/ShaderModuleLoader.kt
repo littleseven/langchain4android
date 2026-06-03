@@ -1,7 +1,7 @@
 package com.picme.beauty.render
 
 import android.content.Context
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * 大美丽 - Shader 模块加载器
@@ -12,7 +12,7 @@ import android.util.Log
  * 3. 支持模块化维护与独立测试
  */
 object ShaderModuleLoader {
-    private const val TAG = "PicMe:ShaderLoader"
+    private const val TAG = "ShaderLoader"
     private const val SHADER_DIR = "shaders"
 
     private val MODULE_ORDER = listOf(
@@ -54,7 +54,7 @@ object ShaderModuleLoader {
                     val content = context.assets.open("$SHADER_DIR/$moduleName").bufferedReader().use { it.readText() }
                     appendLine(content)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to load shader module: $moduleName", e)
+                    Logger.e(TAG, "Failed to load shader module: $moduleName", e)
                 }
             }
         }
@@ -70,7 +70,7 @@ object ShaderModuleLoader {
                     val content = context.assets.open("$SHADER_DIR/$moduleName").bufferedReader().use { it.readText() }
                     appendLine(content)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to load shader module: $moduleName", e)
+                    Logger.e(TAG, "Failed to load shader module: $moduleName", e)
                 }
             }
         }
@@ -86,7 +86,7 @@ object ShaderModuleLoader {
         return try {
             context.assets.open(path).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load shader file: $path", e)
+            Logger.e(TAG, "Failed to load shader file: $path", e)
             ""
         }
     }

@@ -68,7 +68,14 @@ public:
 
     bool isLoaded() const { return loaded_; }
 
+    /**
+     * 设置日志开关状态（从 Kotlin 层传递）
+     */
+    static void setLogEnabled(bool enabled) { logEnabled_ = enabled; }
+    static bool isLogEnabled() { return logEnabled_; }
+
 private:
+    static bool logEnabled_;
 #if NCNN_AVAILABLE
     ncnn::Net net_;
 #endif

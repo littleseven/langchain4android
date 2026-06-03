@@ -6,7 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.provider.MediaStore
-import android.util.Log
+
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -64,6 +64,10 @@ import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.rememberAgentChatConfig
 import com.picme.domain.agent.model.AgentScene
 
+private const val TAG = "Gallery"
+private const val TAG_AGENT = "GalleryAgent"
+private const val TAG_TEST = "GalleryTest"
+
 @Composable
 fun GalleryScreen(
     viewModel: MediaViewModel,
@@ -99,10 +103,10 @@ fun GalleryScreen(
             contract = ActivityResultContracts.StartIntentSenderForResult()
         ) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
-                Log.d("PicMe:Gallery", "User granted API 29 delete permission")
+                Logger.d(TAG, "User granted API 29 delete permission")
                 viewModel.executePendingDeletes()
             } else {
-                Log.w("PicMe:Gallery", "User denied API 29 delete permission")
+                Logger.w(TAG, "User denied API 29 delete permission")
                 viewModel.clearPendingRecoverable()
                 viewModel.clearPendingDeleteUris()
             }
@@ -117,10 +121,10 @@ fun GalleryScreen(
             contract = ActivityResultContracts.StartIntentSenderForResult()
         ) { result ->
             if (result.resultCode == android.app.Activity.RESULT_OK) {
-                Log.d("PicMe:Gallery", "User granted delete permission")
+                Logger.d(TAG, "User granted delete permission")
                 viewModel.executePendingDeletes()
             } else {
-                Log.w("PicMe:Gallery", "User denied delete permission")
+                Logger.w(TAG, "User denied delete permission")
                 viewModel.clearPendingDeleteUris()
             }
         }
@@ -165,12 +169,12 @@ fun GalleryScreen(
     // ===== Agent Chat 配置（使用公共组件）=====
     val agentChatConfig = rememberAgentChatConfig(
         context = context,
-        logTag = "PicMe:Gallery",
+        logTag = TAG,
         onCommand = { command ->
-            Logger.i("PicMe:Gallery", "Voice command: ${command.javaClass.simpleName}")
+            Logger.i(TAG, "Voice command: ${command.javaClass.simpleName}")
         },
         onTranscript = { transcript ->
-            Logger.d("PicMe:Gallery", "Voice transcript: $transcript")
+            Logger.d(TAG, "Voice transcript: $transcript")
         }
     )
     val voiceCoordinator = agentChatConfig.voiceCoordinator
@@ -189,7 +193,7 @@ fun GalleryScreen(
                 "settings" -> onNavigateToSettings()
                 "debug" -> onNavigateToDebug()
                 "llm_model_manager", "asr_model_manager" -> onNavigateToSettings() // 从相册到模型管理页需先进入设置
-                else -> Logger.w("PicMe:Gallery", "Unknown navigation destination: $destination")
+                else -> Logger.w(TAG, "Unknown navigation destination: $destination")
             }
         },
         onNavigateBack = onNavigateBack
@@ -198,7 +202,7 @@ fun GalleryScreen(
     // 绑定 GalleryCapability 的 delegate，确保生命周期绑定
     // 使用 Unit 作为 key，确保只在页面进入/离开时绑定/解绑
     DisposableEffect(Unit) {
-        Logger.i("PicMe:Gallery", "Binding GalleryCapability delegate, mediaCount=${allFlatMedia.size}")
+        Logger.i(TAG, "Binding GalleryCapability delegate, mediaCount=${allFlatMedia.size}")
 
         val galleryCapability = com.picme.domain.agent.capability.GalleryCapability.getInstance()
         galleryCapability.bindDelegate(object : com.picme.domain.agent.capability.GalleryCapability.Delegate {
@@ -225,19 +229,19 @@ fun GalleryScreen(
                 }
             }
             override fun onSearch(query: String) {
-                Log.d("PicMe:GalleryAgent", "Search query: $query")
+                Logger.d(TAG_AGENT, "Search query: $query")
             }
             override fun onSwitchViewMode(mode: com.picme.domain.agent.capability.GalleryCapability.ViewMode) {
-                Log.d("PicMe:GalleryAgent", "Switch to view mode: $mode")
+                Logger.d(TAG_AGENT, "Switch to view mode: $mode")
             }
             override fun onFavoriteMedia(mediaId: String, favorite: Boolean) {
-                Log.d("PicMe:GalleryAgent", "Favorite $mediaId: $favorite")
+                Logger.d(TAG_AGENT, "Favorite $mediaId: $favorite")
             }
         })
-        Logger.i("PicMe:Gallery", "GalleryCapability delegate bound")
+        Logger.i(TAG, "GalleryCapability delegate bound")
 
         onDispose {
-            Logger.i("PicMe:Gallery", "Unbinding GalleryCapability delegate")
+            Logger.i(TAG, "Unbinding GalleryCapability delegate")
             galleryCapability.unbindDelegate()
         }
     }
@@ -258,18 +262,18 @@ fun GalleryScreen(
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == CameraTestCommandReceiver.ACTION_TEST_COMMAND) {
-                    Logger.i("PicMe:GalleryTest", "Broadcast received: ${intent.getStringExtra("action")}")
+                    Logger.i(TAG_TEST, "Broadcast received: ${intent.getStringExtra("action")}")
                     CameraTestCommandDispatcher.dispatchFromIntent(intent)
                 }
             }
         }
         val filter = IntentFilter(CameraTestCommandReceiver.ACTION_TEST_COMMAND)
         context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        Logger.i("PicMe:GalleryTest", "Test command receiver registered dynamically")
+        Logger.i(TAG_TEST, "Test command receiver registered dynamically")
 
         onDispose {
             context.unregisterReceiver(receiver)
-            Logger.i("PicMe:GalleryTest", "Test command receiver unregistered")
+            Logger.i(TAG_TEST, "Test command receiver unregistered")
         }
     }
 
@@ -278,7 +282,7 @@ fun GalleryScreen(
         CameraTestCommandDispatcher.commandFlow.collect { command ->
             when (command) {
                 is CameraTestCommand.EnterGallery -> {
-                    Logger.i("PicMe:GalleryTest", "Already in gallery screen")
+                    Logger.i(TAG_TEST, "Already in gallery screen")
                     CameraTestCommandDispatcher.emitResult(
                         CameraTestResult.Success(command, "Already in gallery screen")
                     )
@@ -289,7 +293,7 @@ fun GalleryScreen(
                     val targetIndex = command.index.coerceIn(0, maxIndex)
                     if (currentMedia.isNotEmpty()) {
                         selectedMediaIndex = targetIndex
-                        Logger.i("PicMe:GalleryTest", "OpenPhoto set index to $targetIndex")
+                        Logger.i(TAG_TEST, "OpenPhoto set index to $targetIndex")
                         CameraTestCommandDispatcher.emitResult(
                             CameraTestResult.Success(command, "Opened photo at index $targetIndex")
                         )
@@ -510,7 +514,7 @@ fun GalleryScreen(
                             }
                         },
                         onStartOcr = { uriString ->
-                            Log.d("PicMe:UX", "Triggering OCR from Pager")
+                            Logger.d(TAG, "Triggering OCR from Pager")
                             viewModel.recognizeTextFromCurrentImage(context, uriString.toUri())
                         },
                         onDismissOcr = {

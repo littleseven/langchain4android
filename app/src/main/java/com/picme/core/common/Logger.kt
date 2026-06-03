@@ -66,6 +66,24 @@ object Logger {
     /** 限流表：key -> 上次打印时间戳(ms) */
     private val throttleMap = ConcurrentHashMap<String, Long>(64)
 
+    /** 日志模块开关配置 */
+    private var moduleConfig: com.picme.domain.model.LogModuleConfig =
+        com.picme.domain.model.LogModuleConfig.default()
+
+    /**
+     * 更新日志模块配置
+     */
+    fun setModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
+        moduleConfig = config
+    }
+
+    /**
+     * 检查指定标签的日志是否允许输出
+     */
+    fun isLogEnabled(tag: String): Boolean {
+        return moduleConfig.isTagEnabled(tag)
+    }
+
     /**
      * 检测是否在真实的 Android 运行时环境中。
      *
@@ -75,7 +93,7 @@ object Logger {
      */
     private val isAndroidRuntime: Boolean by lazy {
         try {
-            Log.i("PicMe:Logger", "Runtime check")
+            Log.i(TAG_PREFIX + "Logger", "Runtime check")
             true
         } catch (exception: RuntimeException) {
             false
@@ -92,6 +110,7 @@ object Logger {
      * @param intervalMs 最短打印间隔，默认 1000ms
      */
     fun dThrottled(tag: String, key: String, message: String, intervalMs: Long = 1_000L) {
+        if (!isLogEnabled(tag)) return
         val now = System.currentTimeMillis()
         val last = throttleMap[key] ?: 0L
         if (now - last >= intervalMs) {
@@ -107,6 +126,7 @@ object Logger {
      * @param message 日志内容
      */
     fun d(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
         logToMemory(LogLevel.DEBUG, tag, message)
         if (isAndroidRuntime) {
             Log.d("$TAG_PREFIX$tag", message)
@@ -122,6 +142,7 @@ object Logger {
      * @param message 日志内容
      */
     fun i(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
         logToMemory(LogLevel.INFO, tag, message)
         if (isAndroidRuntime) {
             Log.i("$TAG_PREFIX$tag", message)
@@ -137,6 +158,7 @@ object Logger {
      * @param message 日志内容
      */
     fun w(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
         logToMemory(LogLevel.WARN, tag, message)
         if (isAndroidRuntime) {
             Log.w("$TAG_PREFIX$tag", message)
@@ -153,6 +175,7 @@ object Logger {
      * @param throwable 异常对象
      */
     fun w(tag: String, message: String, throwable: Throwable) {
+        if (!isLogEnabled(tag)) return
         val fullMessage = "$message: ${throwable.localizedMessage}"
         logToMemory(LogLevel.WARN, tag, fullMessage)
         if (isAndroidRuntime) {
@@ -171,6 +194,7 @@ object Logger {
      * @param throwable 异常对象（可选）
      */
     fun e(tag: String, message: String, throwable: Throwable? = null) {
+        // Error 级别日志始终输出，不受模块开关限制
         val fullMessage = if (throwable != null) {
             "$message: ${throwable.localizedMessage}"
         } else {

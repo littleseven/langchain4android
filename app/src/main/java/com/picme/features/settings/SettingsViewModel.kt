@@ -35,6 +35,10 @@ class SettingsViewModel(
     private val modelDownloadManager: LlmModelDownloadManager
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "Settings"
+    }
+
     val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
         .stateIn(
             scope = viewModelScope,
@@ -182,6 +186,13 @@ class SettingsViewModel(
             initialValue = ""
         )
 
+    val logModuleConfig: StateFlow<com.picme.domain.model.LogModuleConfig> = repository.logModuleConfigFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = com.picme.domain.model.LogModuleConfig.default()
+        )
+
     // 模型管理相关 Flow
     private val _allModels = MutableStateFlow<List<ModelConfig>>(emptyList())
     val allModels: StateFlow<List<ModelConfig>> = _allModels.asStateFlow()
@@ -242,11 +253,11 @@ class SettingsViewModel(
                         if (modelType != null) {
                             when {
                                 modelType.isRoiModel() && roiStageConfig.value.modelType != modelType -> {
-                                    Logger.i("PicMe:Settings", "Auto-switching ROI model to $modelType after download")
+                                    Logger.i("Settings", "Auto-switching ROI model to $modelType after download")
                                     setRoiModelType(modelType)
                                 }
                                 modelType.isLandmarkModel() && landmarkStageConfig.value.modelType != modelType -> {
-                                    Logger.i("PicMe:Settings", "Auto-switching Landmark model to $modelType after download")
+                                    Logger.i("Settings", "Auto-switching Landmark model to $modelType after download")
                                     setLandmarkModelType(modelType)
                                 }
                             }
@@ -328,10 +339,10 @@ class SettingsViewModel(
                 val downloaded = modelDownloadManager.getDownloadedModels()
                 _downloadedModels.value = downloaded
 
-                Logger.i("PicMe:Settings", "Loaded ${marketData.models.size} models, " +
+                Logger.i("Settings", "Loaded ${marketData.models.size} models, " +
                     "categories: ${grouped.keys.map { it.tag }}")
             } catch (e: Exception) {
-                Logger.e("PicMe:Settings", "Failed to load models", e)
+                Logger.e("Settings", "Failed to load models", e)
             }
         }
     }
@@ -382,9 +393,9 @@ class SettingsViewModel(
                 val downloaded = modelDownloadManager.getDownloadedModels()
                 _downloadedModels.value = downloaded
 
-                Logger.i("PicMe:Settings", "Refreshed ${marketData.models.size} models")
+                Logger.i("Settings", "Refreshed ${marketData.models.size} models")
             } catch (e: Exception) {
-                Logger.e("PicMe:Settings", "Failed to refresh models", e)
+                Logger.e("Settings", "Failed to refresh models", e)
             }
         }
     }
@@ -591,6 +602,14 @@ class SettingsViewModel(
     fun resetCameraMemoryState() {
         viewModelScope.launch {
             repository.resetCameraMemoryState()
+        }
+    }
+
+    fun setLogModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
+        // 同步更新内存中的 Logger 配置，使开关立即生效
+        Logger.setModuleConfig(config)
+        viewModelScope.launch {
+            repository.updateLogModuleConfig(config)
         }
     }
 }

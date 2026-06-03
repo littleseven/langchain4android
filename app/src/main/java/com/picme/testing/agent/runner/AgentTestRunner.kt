@@ -34,7 +34,7 @@ import org.json.JSONObject
 class AgentTestRunner(context: Context) {
 
     companion object {
-        private const val TAG = "PicMe:AgentTestRunner"
+        private const val TAG = "AgentTestRunner"
         private const val REPORT_DIR = "/sdcard/PicMe_Agent_Test/reports"
     }
 

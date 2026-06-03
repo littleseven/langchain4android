@@ -28,7 +28,7 @@ class RemoteOrchestrator(
 
     private val unifiedClient = UnifiedRemoteClient(remoteConfig)
 
-    private val tag = "PicMe:RemoteOrchestrator"
+    private val tag = "RemoteOrchestrator"
 
     // ── L2: Batch Function Calling ─────────────────────────────
 

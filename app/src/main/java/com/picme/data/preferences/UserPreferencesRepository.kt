@@ -121,6 +121,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val CAMERA_MEMORY_WHITE_BALANCE_MODE = intPreferencesKey("camera_memory_white_balance_mode")
         val CAMERA_MEMORY_SCENE_MODE = stringPreferencesKey("camera_memory_scene_mode")
         val CAMERA_MEMORY_GRID_MODE = stringPreferencesKey("camera_memory_grid_mode")
+
+        // 日志模块配置
+        val LOG_MODULE_CONFIG = stringPreferencesKey("log_module_config")
     }
 
     private fun parseMediaType(value: String?): MediaType {
@@ -767,5 +770,28 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
 
     override suspend fun resetCameraMemoryState() {
         updateCameraMemoryState(CameraMemoryState())
+    }
+
+    override val logModuleConfigFlow: Flow<com.picme.domain.model.LogModuleConfig> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            val configJson = preferences[PreferencesKeys.LOG_MODULE_CONFIG]
+            if (configJson != null) {
+                com.picme.domain.model.LogModuleConfig.fromJson(configJson)
+            } else {
+                com.picme.domain.model.LogModuleConfig.default()
+            }
+        }
+
+    override suspend fun updateLogModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOG_MODULE_CONFIG] = config.toJson()
+        }
     }
 }

@@ -1,7 +1,8 @@
 package com.picme.beauty.internal
 
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.log.logD
+import com.picme.beauty.log.logE
 import com.picme.beauty.render.BeautyRenderer
 
 /**
@@ -25,7 +26,7 @@ class BeautyRendererAsShaderChain(
 ) : BeautyShaderChain {
 
     companion object {
-        private const val TAG = "PicMe:BeautyRendererAdapter"
+        private const val TAG = "BeautyRendererAdapter"
     }
 
     /**
@@ -49,7 +50,7 @@ class BeautyRendererAsShaderChain(
         width: Int,
         height: Int
     ): Boolean {
-        Log.d(TAG, "render: inputTex=$inputTextureId, outputTex=$outputTextureId, size=${width}x${height}")
+        logD(TAG, "render: inputTex=$inputTextureId, outputTex=$outputTextureId, size=${width}x${height}")
 
         try {
             // 1. 设置外部纹理 ID（让 BeautyRenderer 从该纹理采样）
@@ -72,18 +73,18 @@ class BeautyRendererAsShaderChain(
             // 5. 检查 GL 错误
             val glError = GLES20.glGetError()
             if (glError != GLES20.GL_NO_ERROR) {
-                Log.e(TAG, "GL error after render: $glError")
+                logE(TAG, "GL error after render: $glError")
                 return false
             }
 
             // 6. 解绑 FBO
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
 
-            Log.d(TAG, "render: completed successfully")
+            logD(TAG, "render: completed successfully")
             return true
 
         } catch (e: Exception) {
-            Log.e(TAG, "render: exception", e)
+            logE(TAG, "render: exception", e)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
             return false
         }
@@ -113,7 +114,7 @@ class BeautyRendererAsShaderChain(
             blushColorFamily = 0
         )
 
-        Log.d(TAG, "setBeautyParams: smooth=$smoothingStrength, white=$whiteningStrength, slim=$slimFaceStrength, bigEye=$bigEyeStrength")
+        logD(TAG, "setBeautyParams: smooth=$smoothingStrength, white=$whiteningStrength, slim=$slimFaceStrength, bigEye=$bigEyeStrength")
     }
 
     /**
@@ -127,7 +128,7 @@ class BeautyRendererAsShaderChain(
             beautyRenderer.updateFacePoints106(landmarks106)
         }
 
-        Log.d(TAG, "setFaceLandmarks: hasFace=$hasFace, points=${landmarks106?.size ?: 0}")
+        logD(TAG, "setFaceLandmarks: hasFace=$hasFace, points=${landmarks106?.size ?: 0}")
     }
 
     /**
@@ -135,14 +136,14 @@ class BeautyRendererAsShaderChain(
      */
     override fun setFilterType(filterType: String) {
         // TODO: 根据 filterType 映射到 BeautyRenderer 的风格特效
-        Log.d(TAG, "setFilterType: $filterType (TODO: implement style effect mapping)")
+        logD(TAG, "setFilterType: $filterType (TODO: implement style effect mapping)")
     }
 
     /**
      * 释放资源
      */
     override fun release() {
-        Log.d(TAG, "release")
+        logD(TAG, "release")
         // BeautyRenderer 由外部管理生命周期，这里不释放
     }
 }

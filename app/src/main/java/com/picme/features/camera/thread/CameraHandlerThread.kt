@@ -21,6 +21,10 @@ class CameraHandlerThread(name: String) : HandlerThread(
     Process.THREAD_PRIORITY_BACKGROUND + Process.THREAD_PRIORITY_MORE_FAVORABLE
 ) {
 
+    companion object {
+        private const val TAG = "Thread"
+    }
+
     private var handler: Handler? = null
 
     @Volatile
@@ -31,7 +35,7 @@ class CameraHandlerThread(name: String) : HandlerThread(
         looper  // 阻塞等待 Looper 就绪
         handler = Handler(looper)
         isReady = true
-        Logger.i("PicMe:Thread", "CameraHandlerThread started: name=$name")
+        Logger.i(TAG, "CameraHandlerThread started: name=$name")
     }
 
     fun post(runnable: Runnable) {
@@ -58,7 +62,7 @@ class CameraHandlerThread(name: String) : HandlerThread(
         isReady = false
         handler = null
         val result = super.quitSafely()
-        Logger.i("PicMe:Thread", "CameraHandlerThread quitSafely: name=${this.name}")
+        Logger.i(TAG, "CameraHandlerThread quitSafely: name=${this.name}")
         return result
     }
 

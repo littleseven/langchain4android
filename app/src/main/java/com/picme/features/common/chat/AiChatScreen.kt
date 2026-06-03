@@ -77,6 +77,8 @@ import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 
+private const val TAG = "Voice"
+
 private tailrec fun Context.findActivityForWindow(): android.app.Activity? = when (this) {
     is android.app.Activity -> this
     is ContextWrapper -> baseContext.findActivityForWindow()
@@ -687,15 +689,15 @@ private fun VoiceInputMode(
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            Logger.d("PicMe:Voice", "Pointer event: ${event.type}, changes=${event.changes.size}")
+                            Logger.d(TAG, "Pointer event: ${event.type}, changes=${event.changes.size}")
                             event.changes.forEach { change ->
-                                Logger.d("PicMe:Voice", "Change: pressed=${change.pressed}, consumed=${change.isConsumed}, pos=${change.position}")
+                                Logger.d(TAG, "Change: pressed=${change.pressed}, consumed=${change.isConsumed}, pos=${change.position}")
                                 when {
                                     // 手指按下
                                     change.pressed && !change.isConsumed && !isListening -> {
-                                        Logger.d("PicMe:Voice", "Finger DOWN detected -> voiceCoordinator=${voiceCoordinator != null}, isVoiceAvailable=$isVoiceAvailable")
+                                        Logger.d(TAG, "Finger DOWN detected -> voiceCoordinator=${voiceCoordinator != null}, isVoiceAvailable=$isVoiceAvailable")
                                         if (!isVoiceAvailable) {
-                                            Logger.w("PicMe:Voice", "Voice coordinator not available")
+                                            Logger.w(TAG, "Voice coordinator not available")
                                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                                 android.widget.Toast.makeText(
                                                     context,
@@ -707,9 +709,9 @@ private fun VoiceInputMode(
                                         }
                                         isListening = true
                                         isCancelRecord = false
-                                        Logger.d("PicMe:Voice", "Using VoiceCommandCoordinator for push-to-talk")
+                                        Logger.d(TAG, "Using VoiceCommandCoordinator for push-to-talk")
                                         voiceCoordinator?.startPushToTalk { result ->
-                                            Logger.i("PicMe:Voice", "VoiceCoordinator result: '$result'")
+                                            Logger.i(TAG, "VoiceCoordinator result: '$result'")
                                             isListening = false
                                             isCancelRecord = false
                                             if (result.isNotBlank()) {
@@ -719,7 +721,7 @@ private fun VoiceInputMode(
                                     }
                                     // 手指抬起
                                     !change.pressed -> {
-                                        Logger.d("PicMe:Voice", "Finger UP detected -> isListening=$isListening")
+                                        Logger.d(TAG, "Finger UP detected -> isListening=$isListening")
                                         if (isListening) {
                                             isListening = false
                                             voiceCoordinator?.stopPushToTalk()
@@ -734,7 +736,7 @@ private fun VoiceInputMode(
                                     val y = change.position.y
                                     val newCancel = x < 0 || x > bounds.width || y < 0 || y > bounds.height
                                     if (newCancel != isCancelRecord) {
-                                        Logger.d("PicMe:Voice", "Cancel state changed: $isCancelRecord -> $newCancel")
+                                        Logger.d(TAG, "Cancel state changed: $isCancelRecord -> $newCancel")
                                         isCancelRecord = newCancel
                                     }
                                 }

@@ -3,7 +3,7 @@ package com.picme.beauty.render
 import android.opengl.EGL14
 import android.opengl.EGLContext
 import android.opengl.EGLSurface
-import android.util.Log
+import com.picme.beauty.api.Logger
 import android.view.Surface
 
 /**
@@ -19,7 +19,7 @@ class WindowSurface(
     private val eglCore: EGLCore
 ) {
     companion object {
-        private const val TAG = "PicMe:WindowSurface"
+        private const val TAG = "WindowSurface"
     }
 
     private var eglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
@@ -31,26 +31,26 @@ class WindowSurface(
         }
 
         if (eglSurface != EGL14.EGL_NO_SURFACE) {
-            Log.w(TAG, "EGL surface already created, releasing old one")
+            Logger.w(TAG, "EGL surface already created, releasing old one")
             release()
         }
 
         try {
             eglSurface = eglCore.createSurface(surface)
-            Log.d(TAG, "WindowSurface created: ${eglSurface.hashCode()}")
+            Logger.d(TAG, "WindowSurface created: ${eglSurface.hashCode()}")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to create WindowSurface: ${e.message}", e)
+            Logger.e(TAG, "Failed to create WindowSurface: ${e.message}", e)
             throw e
         }
     }
 
     fun makeCurrent(context: EGLContext): Boolean {
         if (eglSurface == EGL14.EGL_NO_SURFACE) {
-            Log.e(TAG, "EGL surface not created")
+            Logger.e(TAG, "EGL surface not created")
             return false
         }
         if (isReleased) {
-            Log.e(TAG, "WindowSurface already released")
+            Logger.e(TAG, "WindowSurface already released")
             return false
         }
         return eglCore.makeCurrent(eglSurface, context)
@@ -58,11 +58,11 @@ class WindowSurface(
 
     fun swapBuffers(): Boolean {
         if (eglSurface == EGL14.EGL_NO_SURFACE) {
-            Log.e(TAG, "EGL surface not created")
+            Logger.e(TAG, "EGL surface not created")
             return false
         }
         if (isReleased) {
-            Log.e(TAG, "WindowSurface already released")
+            Logger.e(TAG, "WindowSurface already released")
             return false
         }
         return eglCore.swapBuffers(eglSurface)
@@ -78,11 +78,11 @@ class WindowSurface(
 
     fun release() {
         if (!isReleased) {
-            Log.d(TAG, "Releasing WindowSurface")
+            Logger.d(TAG, "Releasing WindowSurface")
             if (eglSurface != EGL14.EGL_NO_SURFACE) {
                 EGL14.eglDestroySurface(eglCore.eglDisplay, eglSurface)
                 eglSurface = EGL14.EGL_NO_SURFACE
-                Log.d(TAG, "EGL surface destroyed")
+                Logger.d(TAG, "EGL surface destroyed")
             }
             isReleased = true
         }

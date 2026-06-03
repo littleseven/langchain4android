@@ -33,7 +33,7 @@ import kotlin.math.sqrt
 class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
 
     companion object {
-        private const val TAG = "PicMe:ImageProc"
+        private const val TAG = "ImageProc"
     }
 
     override suspend fun applySmoothing(bitmap: Bitmap, strength: Float, faces: List<Face>): Bitmap {

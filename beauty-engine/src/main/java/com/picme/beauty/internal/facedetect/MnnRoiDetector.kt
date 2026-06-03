@@ -4,7 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 import java.io.File
@@ -21,7 +21,7 @@ class MnnRoiDetector(
 ) : RoiDetector {
 
     companion object {
-        private const val TAG = "PicMe:MnnRoi"
+        private const val TAG = "MnnRoi"
         private const val MODEL_KEY = "det10g_mnn"
         private const val INPUT_SIZE = 640  // [对齐 ONNX] 使用与 ONNX 相同的输入尺寸，确保检测结果一致
         private const val CONFIDENCE_THRESHOLD = 0.5f
@@ -60,14 +60,14 @@ class MnnRoiDetector(
 
     init {
         // [优化] 不立即初始化，改为懒加载
-        Log.d(TAG, "MnnRoiDetector created (lazy initialization, requireGpu=$requireGpu)")
+        Logger.d(TAG, "MnnRoiDetector created (lazy initialization, requireGpu=$requireGpu)")
     }
 
     private fun initialize() {
         try {
             val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
-            Log.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU (requireGpu=$requireGpu)...")
+            Logger.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
             detector = MnnFaceDetector.create(
                 modelPath = modelFile.absolutePath,
@@ -80,19 +80,19 @@ class MnnRoiDetector(
 
             if (detector != null) {
                 isGpuEnabled = true
-                Log.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with Vulkan GPU")
+                Logger.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with Vulkan GPU")
             } else {
                 // [关键策略] 要求 GPU 时初始化失败，直接放弃，不降级到 CPU
                 isGpuEnabled = false
                 if (requireGpu) {
-                    Log.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
+                    Logger.e(TAG, "MNN GPU initialization failed and requireGpu=true, detector will remain null (no CPU fallback)")
                 } else {
-                    Log.w(TAG, "MNN GPU initialization failed, attempting CPU fallback...")
+                    Logger.w(TAG, "MNN GPU initialization failed, attempting CPU fallback...")
                     // TODO: 实现 CPU 降级逻辑（如果需要）
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MnnRoiDetector (requireGpu=$requireGpu)", e)
+            Logger.e(TAG, "Failed to initialize MnnRoiDetector (requireGpu=$requireGpu)", e)
             detector = null
         }
     }
@@ -105,7 +105,7 @@ class MnnRoiDetector(
         val det = detector
 
         if (det == null) {
-            Log.w(TAG, "[Perf] MnnRoiDetector not initialized after lazy init, skipping")
+            Logger.w(TAG, "[Perf] MnnRoiDetector not initialized after lazy init, skipping")
             return null
         }
 
@@ -114,7 +114,7 @@ class MnnRoiDetector(
             val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
             val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
-            Log.d(TAG, "[Perf] MnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+            Logger.d(TAG, "[Perf] MnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
 
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
@@ -123,7 +123,7 @@ class MnnRoiDetector(
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.size < 5) {
-                Log.d(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
+                Logger.d(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
                 return null
             }
 
@@ -138,8 +138,8 @@ class MnnRoiDetector(
             val padLeft = (INPUT_SIZE - scaledW) / 2f
             val padTop = (INPUT_SIZE - scaledH) / 2f
 
-            Log.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
-            Log.d(TAG, "[Diag] Raw MNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
+            Logger.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
+            Logger.d(TAG, "[Diag] Raw MNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
 
             // [对齐 ONNX] 1. 减去 letterbox padding，再除以缩放比例，映射回原图
             var mappedX1 = ((result[0] - padLeft) / scale)
@@ -162,12 +162,12 @@ class MnnRoiDetector(
 
             val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
 
-            Log.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
+            Logger.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
 
-            Log.i(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
+            Logger.i(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
             roi
         } catch (e: Exception) {
-            Log.e(TAG, "MnnRoi detection failed", e)
+            Logger.e(TAG, "MnnRoi detection failed", e)
             null
         }
     }
@@ -204,7 +204,7 @@ class MnnRoiDetector(
         detector = null
         reusableScaledBitmap?.recycle()
         reusableScaledBitmap = null
-        Log.i(TAG, "MnnRoiDetector released")
+        Logger.i(TAG, "MnnRoiDetector released")
     }
 
 }

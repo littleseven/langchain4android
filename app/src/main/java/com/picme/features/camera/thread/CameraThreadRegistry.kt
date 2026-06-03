@@ -19,6 +19,8 @@ import com.picme.core.common.Logger
  */
 object CameraThreadRegistry {
 
+    private const val TAG = "Thread"
+
     private var cameraHandlerThread: CameraHandlerThread? = null
     private var analysisHandlerThread: CameraHandlerThread? = null
     private var agentHandlerThread: AgentHandlerThread? = null
@@ -32,7 +34,7 @@ object CameraThreadRegistry {
     @Synchronized
     fun initialize() {
         if (isInitialized) {
-            Logger.w("PicMe:Thread", "CameraThreadRegistry already initialized")
+            Logger.w(TAG, "CameraThreadRegistry already initialized")
             return
         }
 
@@ -42,7 +44,7 @@ object CameraThreadRegistry {
         isInitialized = true
 
         Logger.i(
-            "PicMe:Thread",
+            TAG,
             "ThreadRegistry initialized. " +
                 "CameraThread=${cameraHandlerThread?.isThreadReady()}, " +
                 "AnalysisThread=${analysisHandlerThread?.isThreadReady()}, " +
@@ -121,7 +123,7 @@ object CameraThreadRegistry {
 
     @Synchronized
     fun release() {
-        Logger.i("PicMe:Thread", "Releasing CameraThreadRegistry...")
+        Logger.i(TAG, "Releasing CameraThreadRegistry...")
         cameraHandlerThread?.quitSafely()
         analysisHandlerThread?.quitSafely()
         agentHandlerThread?.quitSafely()

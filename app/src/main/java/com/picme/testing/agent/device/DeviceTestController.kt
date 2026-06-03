@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.seconds
 class DeviceTestController(private val context: Context) {
 
     companion object {
-        private const val TAG = "PicMe:AgentDeviceController"
+        private const val TAG = "AgentDeviceController"
         private const val SCREENSHOT_DIR = "/sdcard/PicMe_Agent_Test"
     }
 

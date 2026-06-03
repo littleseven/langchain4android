@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import android.util.Log
+import com.picme.core.common.Logger
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.picme.data.local.MediaDao
@@ -26,6 +26,10 @@ class MediaRepositoryImpl(
     private val mediaDao: MediaDao,
     context: Context
 ) : MediaRepository {
+
+    companion object {
+        private const val TAG = "Gallery"
+    }
 
     private val appContext = context.applicationContext
     private val refreshVersion = MutableStateFlow(0)
@@ -78,7 +82,7 @@ class MediaRepositoryImpl(
         if (pendingRecoverableIntentSender != null && Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
             clearPendingRecoverable()
             if (savedIds != null) {
-                Log.d("PicMe:Gallery", "Retrying deletion for API 29 after user authorization")
+                Logger.d(TAG, "Retrying deletion for API 29 after user authorization")
                 deleteMediaByIds(savedIds)
             } else {
                 refreshMediaLibrary()
@@ -89,7 +93,7 @@ class MediaRepositoryImpl(
         if (pendingDeleteUris.isEmpty()) return
 
         val urisToDelete = pendingDeleteUris.toList()
-        Log.d("PicMe:Gallery", "Executing pending deletes for ${urisToDelete.size} items")
+        Logger.d(TAG, "Executing pending deletes for ${urisToDelete.size} items")
 
         // 清除待删除列表（系统已通过 createDeleteRequest 处理删除）
         clearPendingDeleteUris()
@@ -102,7 +106,7 @@ class MediaRepositoryImpl(
                 .mapNotNull { asset -> if (asset.id > 0L) asset.id else null }
 
             if (localIds.isNotEmpty()) {
-                Log.d("PicMe:Gallery", "Cleaning up local DB records: $localIds")
+                Logger.d(TAG, "Cleaning up local DB records: $localIds")
                 mediaDao.deleteMediaByIds(localIds)
             }
 
@@ -110,7 +114,7 @@ class MediaRepositoryImpl(
             refreshMediaLibrary()
         }
 
-        Log.d("PicMe:Gallery", "Pending deletes execution completed")
+        Logger.d(TAG, "Pending deletes execution completed")
     }
 
     override suspend fun insertMedia(mediaAsset: MediaAsset): Long {
@@ -127,12 +131,12 @@ class MediaRepositoryImpl(
         }
 
         val idSet = ids.toSet()
-        Log.d("PicMe:Gallery", "Starting deletion for IDs: $idSet")
+        Logger.d(TAG, "Starting deletion for IDs: $idSet")
 
         // 重要：在开始新的删除操作前，清空之前的待处理列表
         // 避免多次删除操作导致 URI 累积
         if (pendingDeleteUris.isNotEmpty()) {
-            Log.w("PicMe:Gallery", "Clearing ${pendingDeleteUris.size} pending URIs from previous operation")
+            Logger.w(TAG, "Clearing ${pendingDeleteUris.size} pending URIs from previous operation")
             clearPendingDeleteUris()
         }
         clearPendingRecoverable()
@@ -159,11 +163,11 @@ class MediaRepositoryImpl(
             if (needsUserAuth) {
                 // 一旦检测到需要用户授权，停止处理后续资产
                 // 避免后续资产删除成功但 DB 未清理导致数据不一致
-                Log.d("PicMe:Gallery", "Skipping remaining deletions, waiting for user auth")
+                Logger.d(TAG, "Skipping remaining deletions, waiting for user auth")
                 break
             }
 
-            Log.d("PicMe:Gallery", "Attempting to delete file: ${asset.uri}")
+            Logger.d(TAG, "Attempting to delete file: ${asset.uri}")
             val deleted = deleteSystemMedia(asset.uri)
 
             if (deleted) {
@@ -184,7 +188,7 @@ class MediaRepositoryImpl(
             pendingDeleteIds = null
             val localIds = successfullyDeletedIds.filter { id -> id > 0L }
             if (localIds.isNotEmpty()) {
-                Log.d("PicMe:Gallery", "Deleting local DB records: $localIds")
+                Logger.d(TAG, "Deleting local DB records: $localIds")
                 mediaDao.deleteMediaByIds(localIds)
             }
             // 清理 Coil 图片缓存，避免已删除文件的缩略图残留
@@ -198,7 +202,7 @@ class MediaRepositoryImpl(
             refreshMediaLibrary()
         }
 
-        Log.d("PicMe:Gallery", "Deletion process completed. Pending auth: ${pendingDeleteUris.size}, Recoverable: ${pendingRecoverableIntentSender != null}")
+        Logger.d(TAG, "Deletion process completed. Pending auth: ${pendingDeleteUris.size}, Recoverable: ${pendingRecoverableIntentSender != null}")
     }
 
     override suspend fun getMediaById(id: Long): MediaAsset? {
@@ -265,7 +269,7 @@ class MediaRepositoryImpl(
                 }
             } ?: emptyList()
         }.onFailure { error ->
-            Log.e("PicMe:Gallery", "Failed to query system images", error)
+            Logger.e(TAG, "Failed to query system images", error)
         }.getOrDefault(emptyList())
     }
 
@@ -314,7 +318,7 @@ class MediaRepositoryImpl(
                 }
             } ?: emptyList()
         }.onFailure { error ->
-            Log.e("PicMe:Gallery", "Failed to query system videos", error)
+            Logger.e(TAG, "Failed to query system videos", error)
         }.getOrDefault(emptyList())
     }
 
@@ -347,17 +351,17 @@ class MediaRepositoryImpl(
     private fun deleteSystemMedia(uriString: String): Boolean {
         val uri = uriString.toUri()
         if (uri.scheme != "content") {
-            Log.w("PicMe:Gallery", "Cannot delete non-content URI: $uriString")
+            Logger.w(TAG, "Cannot delete non-content URI: $uriString")
             return false
         }
 
         return try {
             val deletedRows = appContext.contentResolver.delete(uri, null, null)
             if (deletedRows > 0) {
-                Log.d("PicMe:Gallery", "Successfully deleted media: $uriString")
+                Logger.d(TAG, "Successfully deleted media: $uriString")
                 true
             } else {
-                Log.w("PicMe:Gallery", "Delete returned 0 rows for: $uriString")
+                Logger.w(TAG, "Delete returned 0 rows for: $uriString")
                 false
             }
         } catch (e: SecurityException) {
@@ -367,17 +371,17 @@ class MediaRepositoryImpl(
                 if (recoverable != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                     // Android 10 (API 29): 保存恢复性授权 IntentSender
                     pendingRecoverableIntentSender = recoverable.userAction.actionIntent.intentSender
-                    Log.w("PicMe:Gallery", "Recoverable security exception saved for API 29: $uriString")
+                    Logger.w(TAG, "Recoverable security exception saved for API 29: $uriString")
                 } else {
-                    Log.w("PicMe:Gallery", "Security exception, user authorization required for: $uriString")
+                    Logger.w(TAG, "Security exception, user authorization required for: $uriString")
                 }
                 false
             } else {
-                Log.e("PicMe:Gallery", "Failed to delete media: $uriString", e)
+                Logger.e(TAG, "Failed to delete media: $uriString", e)
                 false
             }
         } catch (e: Exception) {
-            Log.e("PicMe:Gallery", "Failed to delete media: $uriString", e)
+            Logger.e(TAG, "Failed to delete media: $uriString", e)
             false
         }
     }

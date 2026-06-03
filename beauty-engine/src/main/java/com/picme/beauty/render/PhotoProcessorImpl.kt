@@ -7,7 +7,7 @@ import android.opengl.EGLContext
 import android.opengl.EGLSurface
 import android.opengl.GLES20
 import android.opengl.GLUtils
-import android.util.Log
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.api.FaceData
 import com.picme.beauty.api.PhotoProcessException
@@ -30,7 +30,7 @@ import java.nio.ByteOrder
 class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
     companion object {
-        private const val TAG = "PicMe:PhotoProcessor"
+        private const val TAG = "PhotoProcessor"
     }
 
     // EGL 资源
@@ -84,7 +84,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
     override fun process(bitmap: Bitmap, params: BeautyParams, faceData: FaceData?): Bitmap {
         val startTime = System.currentTimeMillis()
-        Log.d(TAG, "process START: bitmap=${bitmap.width}x${bitmap.height}, enabled=${params.enabled}")
+        Logger.d(TAG, "process START: bitmap=${bitmap.width}x${bitmap.height}, enabled=${params.enabled}")
 
         try {
             // 1. 初始化 EGL 环境（如果未初始化）并绑定到当前线程
@@ -92,7 +92,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
             // 确保 EGL 上下文在当前线程激活（关键修复：线程池可能导致线程切换）
             if (!eglCore.makeCurrent(eglSurface, eglContext)) {
-                Log.w(TAG, "Failed to rebind EGL context, reinitializing...")
+                Logger.w(TAG, "Failed to rebind EGL context, reinitializing...")
                 // 重置状态并重新初始化
                 isEglInitialized = false
                 ensureEglInitialized()
@@ -100,7 +100,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
             // 2. 检查纹理尺寸限制（必须在 EGL 上下文绑定后调用）
             val maxTextureSize = getMaxTextureSize()
-            Log.d(TAG, "Max texture size: $maxTextureSize (thread: ${Thread.currentThread().name})")
+            Logger.d(TAG, "Max texture size: $maxTextureSize (thread: ${Thread.currentThread().name})")
             if (maxTextureSize <= 0) {
                 throw PhotoProcessException("Failed to query GL_MAX_TEXTURE_SIZE (returned $maxTextureSize)")
             }
@@ -129,13 +129,13 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             val result = readPixelsToBitmap(bitmap.width, bitmap.height, outputTexture)
 
             val elapsed = System.currentTimeMillis() - startTime
-            Log.d(TAG, "process DONE: elapsed=${elapsed}ms")
+            Logger.d(TAG, "process DONE: elapsed=${elapsed}ms")
 
             return result
         } catch (e: PhotoProcessException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "GPU photo processing failed", e)
+            Logger.e(TAG, "GPU photo processing failed", e)
             throw PhotoProcessException(e.message ?: "Unknown error", e)
         }
     }
@@ -150,11 +150,11 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
      */
     private fun ensureEglInitialized() {
         if (isEglInitialized) {
-            Log.d(TAG, "EGL already initialized, reusing context")
+            Logger.d(TAG, "EGL already initialized, reusing context")
             return
         }
 
-        Log.d(TAG, "Initializing EGL for photo processing")
+        Logger.d(TAG, "Initializing EGL for photo processing")
 
         if (!eglCore.init()) {
             throw PhotoProcessException("EGL initialization failed")
@@ -186,7 +186,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         }
 
         isEglInitialized = true
-        Log.d(TAG, "EGL initialized successfully for photo processing (Pbuffer=${pbWidth}x${pbHeight})")
+        Logger.d(TAG, "EGL initialized successfully for photo processing (Pbuffer=${pbWidth}x${pbHeight})")
     }
 
     /**
@@ -242,7 +242,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         // PBO 初始化（当前禁用，需要 OpenGL ES 3.0）
         // if (usePbo) { initPbo(width, height) }
 
-        Log.d(TAG, "FBO created: ${width}x${height}, texture=$fboTextureId")
+        Logger.d(TAG, "FBO created: ${width}x${height}, texture=$fboTextureId")
     }
 
     // PBO 相关方法已移除（需要 OpenGL ES 3.0）
@@ -269,7 +269,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
 
-        Log.d(TAG, "Bitmap uploaded to texture: $inputTextureId")
+        Logger.d(TAG, "Bitmap uploaded to texture: $inputTextureId")
     }
 
     /**
@@ -281,7 +281,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             renderer = BeautyRenderer(context)
             renderer.onInit()
             beautyRenderer = renderer
-            Log.d(TAG, "BeautyRenderer initialized for photo processing")
+            Logger.d(TAG, "BeautyRenderer initialized for photo processing")
         }
         return renderer
     }
@@ -342,7 +342,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         // [DEBUG] 如需调试可视化，可临时设置为 5（GPUPixel warp 可视化）
         // renderer.setDebugMode(5)
-        // Log.d(TAG, "[DEBUG] Debug mode 5 enabled (GPUPixel warp visualization)")
+        // Logger.d(TAG, "[DEBUG] Debug mode 5 enabled (GPUPixel warp visualization)")
 
         // 人脸数据
         if (faceData != null && faceData.hasFace) {
@@ -381,10 +381,10 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             if (faceData.landmarks106 != null) {
                 renderer.updateFacePoints106(faceData.landmarks106)
                 renderer.setUseGpupixelWarp(true)
-                Log.d(TAG, "PhotoProcessor: using GPUPixel warp (landmarks106 available)")
+                Logger.d(TAG, "PhotoProcessor: using GPUPixel warp (landmarks106 available)")
             } else {
                 renderer.setUseGpupixelWarp(false)
-                Log.d(TAG, "PhotoProcessor: falling back to traditional warp (no landmarks106)")
+                Logger.d(TAG, "PhotoProcessor: falling back to traditional warp (no landmarks106)")
             }
         } else {
             // 无人脸：重置人脸状态（默认值已基于 UV 坐标系，无需翻转）
@@ -417,7 +417,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         // [关键修复] 调用完整的渲染管线，确保与预览一致
         // 这会执行：BeautyUnitPass → FaceMakeupPass → MainShader
-        Log.d(TAG, "Before renderBeautyMultiPass: inputTex=$inputTextureId, fbo=$fboId")
+        Logger.d(TAG, "Before renderBeautyMultiPass: inputTex=$inputTextureId, fbo=$fboId")
 
         // 设置输入纹理 ID（让 BeautyRenderer 从该纹理采样）
         renderer.setExternalTextureId(inputTextureId)
@@ -427,7 +427,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         // [调试] 检查 FBO 状态
         val fboStatus = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
-        Log.d(TAG, "FBO status before renderBeautyMultiPass: $fboStatus")
+        Logger.d(TAG, "FBO status before renderBeautyMultiPass: $fboStatus")
 
         // 清屏
         GLES20.glClearColor(0f, 0f, 0f, 1f)
@@ -444,7 +444,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         if (needMultiPass) {
             // [关键修复] 使用与预览完全一致的完整多 Pass 管线
-            Log.d(TAG, "Photo needs multi-pass pipeline, using renderBeautyMultiPass")
+            Logger.d(TAG, "Photo needs multi-pass pipeline, using renderBeautyMultiPass")
             renderer.renderBeautyMultiPass(
                 width = width,
                 height = height,
@@ -453,14 +453,14 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             )
         } else {
             // 无需多 Pass：直接主 Shader
-            Log.d(TAG, "Photo does not need multi-pass, using MainShader directly")
+            Logger.d(TAG, "Photo does not need multi-pass, using MainShader directly")
             renderer.renderMainShaderFromFbo2D(inputTextureId, width, height)
         }
 
         // 检查 GL 错误
         val glError = GLES20.glGetError()
         if (glError != GLES20.GL_NO_ERROR) {
-            Log.e(TAG, "GL error after renderBeautyMultiPass: $glError")
+            Logger.e(TAG, "GL error after renderBeautyMultiPass: $glError")
         }
 
         // 解绑 FBO
@@ -491,7 +491,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         // 检查 GL 错误
         val glError = GLES20.glGetError()
         if (glError != GLES20.GL_NO_ERROR) {
-            Log.e(TAG, "GL error in glReadPixels: $glError")
+            Logger.e(TAG, "GL error in glReadPixels: $glError")
         }
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -531,7 +531,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
     }
 
     override fun release() {
-        Log.d(TAG, "Releasing PhotoProcessorImpl")
+        Logger.d(TAG, "Releasing PhotoProcessorImpl")
 
         // 释放 BeautyRenderer
         beautyRenderer?.release()
@@ -561,6 +561,6 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             isEglInitialized = false
         }
 
-        Log.d(TAG, "PhotoProcessorImpl released")
+        Logger.d(TAG, "PhotoProcessorImpl released")
     }
 }

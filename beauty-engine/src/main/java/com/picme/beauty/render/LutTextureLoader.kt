@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.opengl.GLES20
 import android.opengl.GLUtils
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * LUT 纹理加载器
@@ -15,7 +15,7 @@ import android.util.Log
  */
 class LutTextureLoader(private val context: Context) {
     companion object {
-        private const val TAG = "PicMe:LutTextureLoader"
+        private const val TAG = "LutTextureLoader"
 
         // LUT 资源路径（在 gpupixel 模块的 assets 中）
         private const val LUT_GRAY = "lookup_gray.png"
@@ -51,16 +51,16 @@ class LutTextureLoader(private val context: Context) {
             lightTextureId = loadTextureFromAssets(gpupixelContext, LUT_LIGHT)
 
             if (grayTextureId == 0 || originTextureId == 0 || skinTextureId == 0 || lightTextureId == 0) {
-                Log.e(TAG, "Failed to load some LUT textures")
+                Logger.e(TAG, "Failed to load some LUT textures")
                 release()
                 return false
             }
 
             isLoaded = true
-            Log.d(TAG, "All LUT textures loaded successfully")
+            Logger.d(TAG, "All LUT textures loaded successfully")
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load LUT textures: ${e.message}")
+            Logger.e(TAG, "Failed to load LUT textures: ${e.message}")
             release()
             return false
         }
@@ -81,7 +81,7 @@ class LutTextureLoader(private val context: Context) {
         val allLoaded = grayTextureId != 0 && originTextureId != 0 && skinTextureId != 0 && lightTextureId != 0
         if (allLoaded) {
             isLoaded = true
-            Log.d(TAG, "All LUT textures loaded from fallback")
+            Logger.d(TAG, "All LUT textures loaded from fallback")
             return true
         }
 
@@ -96,15 +96,15 @@ class LutTextureLoader(private val context: Context) {
                 BitmapFactory.decodeStream(stream)
             }
             if (bitmap == null) {
-                Log.w(TAG, "Failed to decode bitmap: $assetPath")
+                Logger.w(TAG, "Failed to decode bitmap: $assetPath")
                 return 0
             }
             val textureId = createTextureFromBitmap(bitmap)
             bitmap.recycle()
-            Log.d(TAG, "Loaded LUT texture: $assetPath = $textureId (${bitmap.width}x${bitmap.height})")
+            Logger.d(TAG, "Loaded LUT texture: $assetPath = $textureId (${bitmap.width}x${bitmap.height})")
             textureId
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to load LUT: $assetPath - ${e.message}")
+            Logger.w(TAG, "Failed to load LUT: $assetPath - ${e.message}")
             0
         }
     }
@@ -114,7 +114,7 @@ class LutTextureLoader(private val context: Context) {
         GLES20.glGenTextures(1, textures, 0)
         val textureId = textures[0]
         if (textureId == 0) {
-            Log.e(TAG, "Failed to generate texture")
+            Logger.e(TAG, "Failed to generate texture")
             return 0
         }
 
@@ -148,6 +148,6 @@ class LutTextureLoader(private val context: Context) {
         skinTextureId = 0
         lightTextureId = 0
         isLoaded = false
-        Log.d(TAG, "LUT textures released")
+        Logger.d(TAG, "LUT textures released")
     }
 }

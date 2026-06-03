@@ -5,7 +5,7 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.Matrix
-import android.util.Log
+import com.picme.beauty.api.Logger
 import android.view.View
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.FrameId
@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 class CameraPreviewRenderer(private val context: Context) {
     companion object {
-        private const val TAG = "PicMe:CameraPreview"
+        private const val TAG = "CameraPreview"
 
         const val DEFAULT_WIDTH = 1280
         const val DEFAULT_HEIGHT = 720
@@ -99,6 +99,9 @@ class CameraPreviewRenderer(private val context: Context) {
         Matrix.setIdentityM(this, 0)
     }
 
+    // [性能优化] 复用纹理变换矩阵缓冲区，避免每帧 new FloatArray(16)
+    private val transformMatrixBuffer = FloatArray(16)
+
     @Volatile
     private var latestPerfStats: BeautyPerfStats = BeautyPerfStats()
 
@@ -130,7 +133,7 @@ class CameraPreviewRenderer(private val context: Context) {
     }
 
     fun init(view: View) {
-        Log.d(TAG, "Initializing CameraPreviewRenderer")
+        Logger.d(TAG, "Initializing CameraPreviewRenderer")
         this.renderView = view
 
         if (!eglCore.init()) {
@@ -161,7 +164,7 @@ class CameraPreviewRenderer(private val context: Context) {
         eglCore.clearCurrent()
 
         textureListener?.onTextureAvailable(surfaceTexture!!, DEFAULT_WIDTH, DEFAULT_HEIGHT)
-        Log.d(TAG, "CameraPreviewRenderer fully initialized")
+        Logger.d(TAG, "CameraPreviewRenderer fully initialized")
     }
 
     private fun createExternalTexture() {
@@ -197,15 +200,15 @@ class CameraPreviewRenderer(private val context: Context) {
             GLES20.GL_TEXTURE_WRAP_T,
             GLES20.GL_CLAMP_TO_EDGE
         )
-        Log.d(TAG, "External texture created: $textureId")
+        Logger.d(TAG, "External texture created: $textureId")
     }
 
     fun setRenderSurface(surface: android.view.Surface) {
         if (!surface.isValid) {
-            Log.w(TAG, "Ignore invalid render surface")
+            Logger.w(TAG, "Ignore invalid render surface")
             return
         }
-        Log.d(TAG, "Setting render surface: hash=${surface.hashCode()}")
+        Logger.d(TAG, "Setting render surface: hash=${surface.hashCode()}")
         windowSurface?.release()
         windowSurface = WindowSurface(surface, eglCore).apply { create() }
         startRendering()
@@ -232,7 +235,7 @@ class CameraPreviewRenderer(private val context: Context) {
             isRecordingVideo = true
             recordingStartTimeNs = System.nanoTime()
             recordedFrameCount = 0
-            Log.d(TAG, "Recording started on GL thread: ${width}x${height}, surface=${encoderSurface.hashCode()}")
+            Logger.d(TAG, "Recording started on GL thread: ${width}x${height}, surface=${encoderSurface.hashCode()}")
         }
     }
 
@@ -241,20 +244,20 @@ class CameraPreviewRenderer(private val context: Context) {
             isRecordingVideo = false
             recordingWindowSurface?.release()
             recordingWindowSurface = null
-            Log.d(TAG, "Recording stopped on GL thread, totalFrames=$recordedFrameCount")
+            Logger.d(TAG, "Recording stopped on GL thread, totalFrames=$recordedFrameCount")
         }
     }
 
     private fun startRendering() {
         if (renderThread?.isAlive == true) {
-            Log.d(TAG, "Render thread already running")
+            Logger.d(TAG, "Render thread already running")
             return
         }
 
         isRendering = true
 
         renderThread = Thread {
-            Log.d(TAG, "Render thread started")
+            Logger.d(TAG, "Render thread started")
 
             var frameCount = 0
             var framesReceived = 0
@@ -283,7 +286,7 @@ class CameraPreviewRenderer(private val context: Context) {
 
                         if (!eglCore.makeCurrent(ws.getEglSurface(), context)) {
                             statsNullFrames++
-                            Log.w(TAG, "eglMakeCurrent failed, waiting for next valid surface")
+                            Logger.w(TAG, "eglMakeCurrent failed, waiting for next valid surface")
                             if (windowSurface === ws) {
                                 ws.release()
                                 windowSurface = null
@@ -304,7 +307,7 @@ class CameraPreviewRenderer(private val context: Context) {
 
                         val syncResult = frameSyncManager.query(currentFrameId)
                         if (frameCount % 60 == 0) {
-                            Log.d(TAG, "[FrameSync] Query frameId=$currentFrameId, status=${syncResult.syncStatus}, " +
+                            Logger.d(TAG, "[FrameSync] Query frameId=$currentFrameId, status=${syncResult.syncStatus}, " +
                                 "stored=${frameSyncManager.getStoredResultCount()}")
                         }
                         applySyncResultToRenderer(syncResult)
@@ -314,16 +317,15 @@ class CameraPreviewRenderer(private val context: Context) {
                         if (currentTime - lastFpsLogMs >= 1_000L) {
                             val elapsed = currentTime - lastFrameTime
                             val fps = if (elapsed > 0) framesReceived * 1000 / elapsed else 0
-                            Log.d(TAG, "Received $framesReceived frames (~${fps}fps)")
+                            Logger.d(TAG, "Received $framesReceived frames (~${fps}fps)")
                             lastFpsLogMs = currentTime
                             lastFrameTime = currentTime
                             framesReceived = 0
                         }
 
-                        val transformMatrix = FloatArray(16)
-                        surfaceTexture?.getTransformMatrix(transformMatrix)
+                        surfaceTexture?.getTransformMatrix(transformMatrixBuffer)
                         synchronized(textureMatrixLock) {
-                            System.arraycopy(transformMatrix, 0, latestTextureTransformMatrix, 0, 16)
+                            System.arraycopy(transformMatrixBuffer, 0, latestTextureTransformMatrix, 0, 16)
                         }
 
                         // 大美丽引擎渲染路径
@@ -334,7 +336,7 @@ class CameraPreviewRenderer(private val context: Context) {
                         )
 
                         beautyRenderer.setExternalTextureId(textureId)
-                        beautyRenderer.setTextureTransform(transformMatrix)
+                        beautyRenderer.setTextureTransform(transformMatrixBuffer)
                         beautyRenderer.setIsFrontCamera(isFrontCamera)
 
                         val outputWidth =
@@ -351,7 +353,7 @@ class CameraPreviewRenderer(private val context: Context) {
                             try {
                                 event()
                             } catch (e: Exception) {
-                                Log.e(TAG, "GL event error: ${e.message}", e)
+                                Logger.e(TAG, "GL event error: ${e.message}", e)
                             }
                             event = glEventQueue.poll()
                         }
@@ -383,21 +385,21 @@ class CameraPreviewRenderer(private val context: Context) {
 
                                         val glErrorAfterRender = GLES20.glGetError()
                                         if (glErrorAfterRender != GLES20.GL_NO_ERROR) {
-                                            Log.w(TAG, "GL error after beauty render to recording surface: $glErrorAfterRender")
+                                            Logger.w(TAG, "GL error after beauty render to recording surface: $glErrorAfterRender")
                                         }
 
                                         val swapOk = rs.swapBuffers()
                                         if (recordedFrameCount <= 5L || recordedFrameCount % 30L == 0L) {
-                                            Log.d(TAG, "Recording frame submitted: pts=${presentationTimeNs}ns, count=$recordedFrameCount, ptsOk=$ptsOk, swapBuffers=$swapOk")
+                                            Logger.d(TAG, "Recording frame submitted: pts=${presentationTimeNs}ns, count=$recordedFrameCount, ptsOk=$ptsOk, swapBuffers=$swapOk")
                                         }
 
                                         // 切回预览 Surface
                                         val restoreOk = eglCore.makeCurrent(ws.getEglSurface(), recContext)
                                         if (!restoreOk) {
-                                            Log.e(TAG, "Failed to restore preview surface")
+                                            Logger.e(TAG, "Failed to restore preview surface")
                                         }
                                     } else {
-                                        Log.e(TAG, "Failed to make recording surface current")
+                                        Logger.e(TAG, "Failed to make recording surface current")
                                     }
                                 }
                             }
@@ -406,7 +408,7 @@ class CameraPreviewRenderer(private val context: Context) {
                         // 交换缓冲区
                         if (!ws.swapBuffers()) {
                             statsNullFrames++
-                            Log.w(TAG, "swapBuffers failed, waiting for next valid surface")
+                            Logger.w(TAG, "swapBuffers failed, waiting for next valid surface")
                             if (windowSurface === ws) {
                                 ws.release()
                                 windowSurface = null
@@ -459,7 +461,7 @@ class CameraPreviewRenderer(private val context: Context) {
                                 errorCategory = errorCategory,
                                 errorReason = errorReason
                             )
-                            Log.e(
+                            Logger.e(
                                 TAG,
                                 "Render error at frame $frameCount [category=$errorCategory]: $errorReason",
                                 e
@@ -467,7 +469,7 @@ class CameraPreviewRenderer(private val context: Context) {
                         } else {
                             frameAvailable = false
                             if (frameCount == 0 || frameCount % 60 == 0) {
-                                Log.w(TAG, "SurfaceTexture not ready yet: ${e.message}")
+                                Logger.w(TAG, "SurfaceTexture not ready yet: ${e.message}")
                             }
                         }
                         if (!safeSleep(16)) break
@@ -480,7 +482,7 @@ class CameraPreviewRenderer(private val context: Context) {
                             errorCategory = errorCategory,
                             errorReason = errorReason
                         )
-                        Log.e(
+                        Logger.e(
                             TAG,
                             "Render error at frame $frameCount [category=$errorCategory]: $errorReason",
                             e
@@ -491,7 +493,7 @@ class CameraPreviewRenderer(private val context: Context) {
             } finally {
                 isRendering = false
                 renderThread = null
-                Log.d(TAG, "Render thread stopped after $frameCount frames")
+                Logger.d(TAG, "Render thread stopped after $frameCount frames")
             }
         }.apply {
             name = "CameraPreviewRender"
@@ -728,7 +730,7 @@ class CameraPreviewRenderer(private val context: Context) {
         if (outerArea <= 0.000001f) return innerPoints
         val areaRatio = innerArea / outerArea
         return if (areaRatio > 0.55f) {
-            Log.w(TAG, "Lip inner contour area too large (ratio=$areaRatio), fallback")
+            Logger.w(TAG, "Lip inner contour area too large (ratio=$areaRatio), fallback")
             emptyList()
         } else {
             innerPoints
@@ -847,12 +849,12 @@ class CameraPreviewRenderer(private val context: Context) {
                     beautyRenderer.updateSyncedFacePoints106(syncMappedBuffer)
                     beautyRenderer.setHasFace(true)
                     if (frameSyncStartupFrames % 60 == 0) {
-                        Log.d(TAG, "[FrameSync] Applied ${syncResult.syncStatus}, frameId=${syncResult.frameId}, " +
+                        Logger.d(TAG, "[FrameSync] Applied ${syncResult.syncStatus}, frameId=${syncResult.frameId}, " +
                             "stored=${frameSyncManager.getStoredResultCount()}, startup=$isStartupGracePeriod")
                     }
                 } else {
                     beautyRenderer.setHasFace(false)
-                    Log.w(TAG, "[FrameSync] ${syncResult.syncStatus} but landmarks empty")
+                    Logger.w(TAG, "[FrameSync] ${syncResult.syncStatus} but landmarks empty")
                 }
             }
             FrameSyncResult.SyncStatus.MISSING -> {
@@ -861,7 +863,7 @@ class CameraPreviewRenderer(private val context: Context) {
                     beautyRenderer.setHasFace(false)
                 }
                 if (frameSyncStartupFrames % 60 == 0) {
-                    Log.d(TAG, "[FrameSync] MISSING, stored=${frameSyncManager.getStoredResultCount()}, " +
+                    Logger.d(TAG, "[FrameSync] MISSING, stored=${frameSyncManager.getStoredResultCount()}, " +
                         "startup=$isStartupGracePeriod, startupFrames=$frameSyncStartupFrames")
                 }
             }
@@ -875,14 +877,14 @@ class CameraPreviewRenderer(private val context: Context) {
     }
 
     fun release() {
-        Log.d(TAG, "Releasing CameraPreviewRenderer")
+        Logger.d(TAG, "Releasing CameraPreviewRenderer")
         isRendering = false
         frameAvailable = false
         val activeThread = renderThread
         if (activeThread != null && activeThread !== Thread.currentThread()) {
             activeThread.interrupt()
             runCatching { activeThread.join(300) }
-                .onFailure { error -> Log.w(TAG, "Render thread join failed: ${error.message}") }
+                .onFailure { error -> Logger.w(TAG, "Render thread join failed: ${error.message}") }
         }
         renderThread = null
         windowSurface?.release()
@@ -905,7 +907,7 @@ class CameraPreviewRenderer(private val context: Context) {
         // [帧同步] 重置启动期计数器，下次启动时重新进入 grace period
         frameSyncStartupFrames = 0
         textureListener?.onTextureDestroyed()
-        Log.d(TAG, "Released")
+        Logger.d(TAG, "Released")
     }
 }
 

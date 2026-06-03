@@ -7,11 +7,13 @@
 #include <fstream>
 
 #define LOG_TAG "PicMe:MnnFaceDetect"
-#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) do { if (picme::MnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while(0)
+#define LOGI(...) do { if (picme::MnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); } while(0)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace picme {
+
+bool MnnFaceDetector::logEnabled_ = true;
 
 MnnFaceDetector::MnnFaceDetector()
     : session_(nullptr), inputTensor_(nullptr), inputSize_(0), useGpu_(false), loaded_(false), hasBuiltInNormalization_(false) {

@@ -47,7 +47,7 @@ class AiAgentUseCase(
     forceRemote: Boolean = false
 ) {
 
-    private val tag = "PicMe:AiAgent"
+    private val tag = "AiAgent"
 
     /**
      * Agent Runtime 编排器（单例）
@@ -553,7 +553,7 @@ class AiAgentUseCase(
     }
 
     companion object {
-        private const val REMOTE_TAG = "PicMe:RemoteInference"
+        private const val REMOTE_TAG = "RemoteInference"
         private const val CODING_DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1/"
     }
 }

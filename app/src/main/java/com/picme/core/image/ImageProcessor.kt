@@ -55,6 +55,8 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
 
+private const val TAG = "ImageProcessor"
+
 interface ImageProcessor {
     fun processPhoto(
         source: Bitmap,
@@ -105,6 +107,10 @@ class ImageProcessorImpl(
     private val photoProcessor: PhotoProcessor? = null,
     private val faceDetectorManager: FaceDetector? = null
 ) : ImageProcessor {
+
+    companion object {
+        private const val TAG = "ImageProcessor"
+    }
 
     private fun createFaceMaskBitmap(
         width: Int,
@@ -162,7 +168,7 @@ class ImageProcessorImpl(
         }
 
         return if (regionCount == 0) {
-            Logger.d("ImageProcessor", "$logPrefix skipped: no face regions")
+            Logger.d(TAG, "$logPrefix skipped: no face regions")
             maskBitmap.recycle()
             null
         } else {
@@ -459,7 +465,7 @@ class ImageProcessorImpl(
         lensFacing: Int
     ): Bitmap {
         // [DEBUG] 记录传入的参数
-        Logger.d("ImageProcessor", "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
+        Logger.d(TAG, "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
 
         // [线程安全修复] 移除嵌套 newSingleThreadExecutor().submit { }.get() 阻塞模式
         // 由调用方（takePhoto）保证在后台线程执行，避免多层线程嵌套导致死锁
@@ -471,24 +477,24 @@ class ImageProcessorImpl(
         // [修复] 人脸重检测不再限制于 slimFace/bigEyes，因为 Shader 中磨皮/美白/唇色/腮红
         // 全都依赖 uHasFace uniform。必须确保拍照路径始终有有效的人脸数据。
         if (detector != null) {
-            Logger.d("ImageProcessor", "Re-detecting face on photo bitmap for makeup/skin effects")
+            Logger.d(TAG, "Re-detecting face on photo bitmap for makeup/skin effects")
             val detectionResult = detector.detectPhoto(source, lensFacing)
             if (detectionResult != null) {
-                Logger.d("ImageProcessor", "Photo face detection success: ${detectionResult.detectionSource}")
+                Logger.d(TAG, "Photo face detection success: ${detectionResult.detectionSource}")
                 photoFaceData = detectionResult.landmarks106.toFaceDataFromLandmarks106(source.width, source.height)
             } else {
-                Logger.w("ImageProcessor", "Photo face detection failed, falling back to cached faces")
+                Logger.w(TAG, "Photo face detection failed, falling back to cached faces")
             }
         }
 
         // [GPU路径] 大美丽模式下优先使用 GPU 离屏渲染，确保预览/拍照效果一致
         val gpuProcessor = photoProcessor
         if (gpuProcessor != null) {
-            Logger.d("ImageProcessor", "Trying GPU photo processing path")
+            Logger.d(TAG, "Trying GPU photo processing path")
             val params = beauty.toBeautyParams()
             val faceData = photoFaceData ?: faces.toFaceData(source.width, source.height)
             val gpuResult = gpuProcessor.process(source, params, faceData)
-            Logger.d("ImageProcessor", "GPU photo processing succeeded")
+            Logger.d(TAG, "GPU photo processing succeeded")
 
             // GPU 路径已包含滤镜（colorMatrix/styleEffect 在 Shader 中处理），
             // 但 App 层的 FilterType ColorMatrix 滤镜需要额外应用
@@ -531,7 +537,7 @@ class ImageProcessorImpl(
                     CameraThreadRegistry.getCameraHandler().post(it)
                 }
             } catch (e: IllegalStateException) {
-                Logger.w("ImageProcessor", "CameraThreadRegistry not initialized, falling back to MainExecutor")
+                Logger.w(TAG, "CameraThreadRegistry not initialized, falling back to MainExecutor")
                 ContextCompat.getMainExecutor(context)
             },
             onPhotoFinished = onPhotoFinished
@@ -551,7 +557,7 @@ class ImageProcessorImpl(
         executor: java.util.concurrent.Executor,
         onPhotoFinished: (success: Boolean) -> Unit
     ) {
-        Logger.d("ImageProcessor", "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")
+        Logger.d(TAG, "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")
 
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
 
@@ -560,17 +566,17 @@ class ImageProcessorImpl(
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     // [线程断言] 确保回调在 CameraHandlerThread 执行
-                    Logger.d("ImageProcessor", "[ThreadCheck] onCaptureSuccess running on: ${Thread.currentThread().name}")
+                    Logger.d(TAG, "[ThreadCheck] onCaptureSuccess running on: ${Thread.currentThread().name}")
 
                     val rotationDegrees = image.imageInfo.rotationDegrees
                     val cropRect = image.cropRect
-                    Logger.d("ImageProcessor", "ImageProxy cropRect: $cropRect, imageSize: ${image.width}x${image.height}")
+                    Logger.d(TAG, "ImageProxy cropRect: $cropRect, imageSize: ${image.width}x${image.height}")
 
                     val originalBitmap = image.toBitmap()
                     image.close()
 
                     val croppedBitmap = if (cropRect.width() != originalBitmap.width || cropRect.height() != originalBitmap.height) {
-                        Logger.d("ImageProcessor", "Applying crop: ${cropRect.width()}x${cropRect.height()}")
+                        Logger.d(TAG, "Applying crop: ${cropRect.width()}x${cropRect.height()}")
                         Bitmap.createBitmap(
                             originalBitmap,
                             cropRect.left,
@@ -592,7 +598,7 @@ class ImageProcessorImpl(
                         croppedBitmap, 0, 0, croppedBitmap.width, croppedBitmap.height, matrix, true
                     )
 
-                    Logger.d("ImageProcessor", "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
+                    Logger.d(TAG, "Final bitmap size: ${rotatedBitmap.width}x${rotatedBitmap.height}")
 
                     // [Day1 线程隔离] 拍照后处理直接在 CameraHandlerThread 同步执行
                     // 不再切到协程/其他线程，避免线程切换导致 EGL 上下文丢失或 Surface 竞争
@@ -601,13 +607,13 @@ class ImageProcessorImpl(
                         val useCachedFaces = cachedFaces.isNotEmpty() && !needMakeup
 
                         val finalBitmap = if (useCachedFaces) {
-                            Logger.d("ImageProcessor", "Using cached faces from preview: ${cachedFaces.size} faces")
+                            Logger.d(TAG, "Using cached faces from preview: ${cachedFaces.size} faces")
                             processPhoto(rotatedBitmap, filter, beauty, cachedFaces, lensFacing)
                         } else {
                             if (cachedFaces.isNotEmpty()) {
-                                Logger.d("ImageProcessor", "Makeup required, performing detection on captured photo")
+                                Logger.d(TAG, "Makeup required, performing detection on captured photo")
                             } else {
-                                Logger.d("ImageProcessor", "No cached faces, processing photo directly with FaceDetectorManager")
+                                Logger.d(TAG, "No cached faces, processing photo directly with FaceDetectorManager")
                             }
                             processPhoto(rotatedBitmap, filter, beauty, emptyList(), lensFacing)
                         }
@@ -624,7 +630,7 @@ class ImageProcessorImpl(
                             onPhotoFinished(true)
                         }
                     } catch (e: Exception) {
-                        Logger.e("ImageProcessor", "Photo processing failed: ${e.message}", e)
+                        Logger.e(TAG, "Photo processing failed: ${e.message}", e)
                         android.os.Handler(android.os.Looper.getMainLooper()).post {
                             saveBitmapToMediaStore(
                                 context, rotatedBitmap, name, viewModel, false, null, mode
@@ -636,7 +642,7 @@ class ImageProcessorImpl(
                 }
 
                 override fun onError(exc: ImageCaptureException) {
-                    Logger.e("ImageProcessor", "Photo capture failed", exc)
+                    Logger.e(TAG, "Photo capture failed", exc)
                     // [Day2 状态机] 通知拍照失败
                     onPhotoFinished(false)
                 }
@@ -902,9 +908,9 @@ private fun List<Face>.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? 
     // [关键修复] 从 FaceDetectionCache 获取预览时缓存的 106 点数据
     val landmarks106 = FaceDetectionCache.getCachedLandmarks106()
     if (landmarks106 != null) {
-        Logger.d("ImageProcessor", "Using cached landmarks106 from FaceDetectionCache")
+        Logger.d(TAG, "Using cached landmarks106 from FaceDetectionCache")
     } else {
-        Logger.w("ImageProcessor", "No cached landmarks106 available, fallback to bitmap processing")
+        Logger.w(TAG, "No cached landmarks106 available, fallback to bitmap processing")
     }
 
     return FaceData(

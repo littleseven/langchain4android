@@ -37,6 +37,88 @@ import java.util.concurrent.TimeUnit
  */
 class LlmModelDownloadManager(context: Context) {
 
+    companion object {
+        private const val TAG = "Download"
+        private const val DEFAULT_BUFFER_SIZE = 8192
+        private const val MODEL_MARKET_URL = "https://meta.alicdn.com/data/mnn/apis/model_market.json"
+
+        /**
+         * MNN-LLM 模型固定文件列表
+         */
+        private val LLM_MODEL_FILES = listOf(
+            "config.json",
+            "llm.mnn",
+            "llm.mnn.weight",
+            "tokenizer.txt"
+        )
+
+        /**
+         * ASR 模型固定文件列表
+         */
+        private val ASR_MODEL_FILES = listOf(
+            "encoder-epoch-99-avg-1.int8.mnn",
+            "decoder-epoch-99-avg-1.int8.mnn",
+            "joiner-epoch-99-avg-1.int8.mnn",
+            "tokens.txt"
+        )
+
+        /**
+         * TTS 模型固定文件列表
+         */
+        private val TTS_MODEL_FILES = listOf(
+            "config.json",
+            "tts.mnn",
+            "vocab.txt"
+        )
+
+        /**
+         * 人脸检测 ROI MNN 模型文件列表
+         */
+        private val FACE_DETECTION_ROI_MNN_FILES = listOf("det_10g.mnn")
+
+        /**
+         * 人脸检测 Landmark MNN 模型文件列表
+         */
+        private val FACE_DETECTION_LANDMARK_MNN_FILES = listOf("2d106det.mnn")
+
+        /**
+         * 人脸检测 ROI NCNN 模型文件列表
+         */
+        private val FACE_DETECTION_ROI_NCNN_FILES = listOf("det_10g.param", "det_10g.bin")
+
+        /**
+         * 人脸检测 Landmark NCNN 模型文件列表
+         */
+        private val FACE_DETECTION_LANDMARK_NCNN_FILES = listOf("2d106det.param", "2d106det.bin")
+
+        /**
+         * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
+         */
+        private val LLM_MODEL_OPTIONAL_FILES = listOf(
+            "configuration.json",
+            "llm_config.json",
+            "README.md",
+            "embeddings_bf16.bin"
+        )
+
+        /**
+         * 默认标签翻译（MNN 官方 tagTranslations 的本地回退）
+         */
+        val DEFAULT_TAG_TRANSLATIONS = mapOf(
+            "Vision" to "图像理解",
+            "Video" to "视频理解",
+            "Audio" to "音频理解",
+            "Code" to "代码",
+            "Math" to "数学",
+            "ImageGen" to "文生图",
+            "AudioGen" to "音频生成",
+            "Think" to "深度思考",
+            "Chat" to "对话",
+            "Safety" to "安全",
+            "NPU" to "NPU加速"
+        )
+    }
+
     private val appContext = context.applicationContext
     private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -112,7 +194,7 @@ class LlmModelDownloadManager(context: Context) {
         // 3. 网络失败，尝试从本地缓存读取
         val cachedData = loadCachedMarketData()
         if (cachedData != null && cachedData.models.isNotEmpty()) {
-            Logger.i("PicMe:Download", "Using cached market data with ${cachedData.models.size} models")
+            Logger.i(TAG, "Using cached market data with ${cachedData.models.size} models")
             return@withContext cachedData
         }
 
@@ -142,7 +224,7 @@ class LlmModelDownloadManager(context: Context) {
                 remoteData.tagTranslations + DEFAULT_TAG_TRANSLATIONS
             )
             saveCachedMarketData(mergedData)
-            Logger.i("PicMe:Download", "Market data refreshed: ${mergedModels.size} models")
+            Logger.i(TAG, "Market data refreshed: ${mergedModels.size} models")
             return@withContext mergedData
         }
         // 网络失败回退到本地
@@ -161,7 +243,7 @@ class LlmModelDownloadManager(context: Context) {
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Logger.w("PicMe:Download", "Model market fetch failed: HTTP ${response.code}")
+                    Logger.w(TAG, "Model market fetch failed: HTTP ${response.code}")
                     return ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
                 }
 
@@ -169,7 +251,7 @@ class LlmModelDownloadManager(context: Context) {
                 parseMarketJson(body)
             }
         } catch (e: Exception) {
-            Logger.w("PicMe:Download", "Failed to fetch model market, fallback to local", e)
+            Logger.w(TAG, "Failed to fetch model market, fallback to local", e)
             ModelMarketData(emptyList(), DEFAULT_TAG_TRANSLATIONS)
         }
     }
@@ -215,7 +297,7 @@ class LlmModelDownloadManager(context: Context) {
             }
         }
 
-        Logger.i("PicMe:Download", "Parsed ${result.size} models from MNN market")
+        Logger.i(TAG, "Parsed ${result.size} models from MNN market")
         return ModelMarketData(result, tagTranslations)
     }
 
@@ -277,14 +359,14 @@ class LlmModelDownloadManager(context: Context) {
             // 检查缓存是否过期（7天）
             val maxAgeMs = 7L * 24 * 60 * 60 * 1000
             if (System.currentTimeMillis() - file.lastModified() > maxAgeMs) {
-                Logger.d("PicMe:Download", "Market cache expired")
+                Logger.d(TAG, "Market cache expired")
                 return null
             }
 
             val jsonBody = file.readText()
             parseMarketJson(jsonBody)
         } catch (e: Exception) {
-            Logger.w("PicMe:Download", "Failed to load cached market data", e)
+            Logger.w(TAG, "Failed to load cached market data", e)
             null
         }
     }
@@ -310,9 +392,9 @@ class LlmModelDownloadManager(context: Context) {
                 put("models", modelsArray)
             }
             cacheFile.writeText(json.toString())
-            Logger.d("PicMe:Download", "Market data cached: ${data.models.size} models")
+            Logger.d(TAG, "Market data cached: ${data.models.size} models")
         } catch (e: Exception) {
-            Logger.w("PicMe:Download", "Failed to cache market data", e)
+            Logger.w(TAG, "Failed to cache market data", e)
         }
     }
 
@@ -354,7 +436,7 @@ class LlmModelDownloadManager(context: Context) {
                 )
             }
         } catch (e: Exception) {
-            Logger.e("PicMe:Download", "Failed to load local model config", e)
+            Logger.e(TAG, "Failed to load local model config", e)
             emptyList()
         }
     }
@@ -459,10 +541,10 @@ class LlmModelDownloadManager(context: Context) {
                 modelDir.deleteRecursively()
             }
             _downloadStates.update { it - modelId }
-            Logger.i("PicMe:Download", "Model deleted: $modelId")
+            Logger.i(TAG, "Model deleted: $modelId")
             true
         } catch (e: Exception) {
-            Logger.e("PicMe:Download", "Failed to delete model: $modelId", e)
+            Logger.e(TAG, "Failed to delete model: $modelId", e)
             false
         }
     }
@@ -487,7 +569,7 @@ class LlmModelDownloadManager(context: Context) {
     fun enqueueDownload(modelId: String, modelConfig: ModelConfig? = null) {
         val existingJob = activeJobs[modelId]
         if (existingJob?.isActive == true) {
-            Logger.d("PicMe:Download", "Download already running: $modelId")
+            Logger.d(TAG, "Download already running: $modelId")
             return
         }
 
@@ -520,7 +602,7 @@ class LlmModelDownloadManager(context: Context) {
     fun enqueueResume(modelId: String, modelConfig: ModelConfig? = null) {
         val existingJob = activeJobs[modelId]
         if (existingJob?.isActive == true) {
-            Logger.d("PicMe:Download", "Resume ignored, download already running: $modelId")
+            Logger.d(TAG, "Resume ignored, download already running: $modelId")
             return
         }
 
@@ -571,7 +653,7 @@ class LlmModelDownloadManager(context: Context) {
                 appContext.startService(intent)
             }
         }.onFailure { throwable ->
-            Logger.w("PicMe:Download", "Failed to sync foreground service state", throwable)
+            Logger.w(TAG, "Failed to sync foreground service state", throwable)
         }
     }
 
@@ -589,7 +671,7 @@ class LlmModelDownloadManager(context: Context) {
         _downloadStates.update { current ->
             current + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, downloadedBytes, currentState?.totalBytes ?: 0))
         }
-        Logger.i("PicMe:Download", "Download paused: $modelId at ${downloadedBytes} bytes")
+        Logger.i(TAG, "Download paused: $modelId at ${downloadedBytes} bytes")
         updateServiceState()
     }
 
@@ -610,7 +692,7 @@ class LlmModelDownloadManager(context: Context) {
                 ?: config.sources["modelscope"]
                 ?: throw IOException("ModelScope source not available for $modelId")
 
-            Logger.i("PicMe:Download", "Resuming model $modelId from $resumeFromBytes bytes")
+            Logger.i(TAG, "Resuming model $modelId from $resumeFromBytes bytes")
 
             var totalDownloaded = resumeFromBytes
 
@@ -658,14 +740,14 @@ class LlmModelDownloadManager(context: Context) {
 
                 if (fileIndex == resumeFileIndex && resumeFileOffset > 0 && destFile.exists()) {
                     requestBuilder.header("Range", "bytes=$resumeFileOffset-")
-                    Logger.d("PicMe:Download", "Resuming $fileName from byte $resumeFileOffset")
+                    Logger.d(TAG, "Resuming $fileName from byte $resumeFileOffset")
                 }
 
                 val call = client.newCall(requestBuilder.build())
                 activeDownloads[modelId] = call
 
                 call.execute().use { response ->
-                    Logger.d("PicMe:Download", "Response: HTTP ${response.code} for $fileName")
+                    Logger.d(TAG, "Response: HTTP ${response.code} for $fileName")
                     if (!response.isSuccessful && response.code != 206) {
                         val errorBody = response.body?.string()?.take(200) ?: ""
                         throw IOException("HTTP ${response.code} for $fileName, url=$url, body=$errorBody")
@@ -716,7 +798,7 @@ class LlmModelDownloadManager(context: Context) {
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
             updateServiceState()
             emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
-            Logger.i("PicMe:Download", "Model download completed: $modelId")
+            Logger.i(TAG, "Model download completed: $modelId")
 
         } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
@@ -735,7 +817,7 @@ class LlmModelDownloadManager(context: Context) {
                 return@flow
             }
             val errorMsg = e.message ?: e.javaClass.simpleName
-            Logger.e("PicMe:Download", "Download failed for $modelId: $errorMsg")
+            Logger.e(TAG, "Download failed for $modelId: $errorMsg")
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
             updateServiceState()
             emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
@@ -764,7 +846,7 @@ class LlmModelDownloadManager(context: Context) {
                 ?: config.sources["modelscope"]
                 ?: throw IOException("ModelScope source not available for $modelId")
 
-            Logger.i("PicMe:Download", "Downloading model $modelId from ModelScope: $repoPath")
+            Logger.i(TAG, "Downloading model $modelId from ModelScope: $repoPath")
 
             var totalDownloaded = 0L
 
@@ -774,19 +856,19 @@ class LlmModelDownloadManager(context: Context) {
                 // 1. 首先尝试从 ModelScope API 获取（最准确，包含所有文件和元数据）
                 val apiFileInfos = fetchModelFileInfosFromModelScope(repoPath)
                 if (apiFileInfos.isNotEmpty()) {
-                    Logger.i("PicMe:Download", "Using ${apiFileInfos.size} files from ModelScope API")
+                    Logger.i(TAG, "Using ${apiFileInfos.size} files from ModelScope API")
                     return@run apiFileInfos
                 }
 
                 // 2. API 失败，尝试使用配置文件中的文件列表
                 if (config.files.isNotEmpty()) {
-                    Logger.w("PicMe:Download", "API failed, using files from config: ${config.files}")
+                    Logger.w(TAG, "API failed, using files from config: ${config.files}")
                     return@run config.files.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
                 }
 
                 // 3. 最后回退到默认文件列表
                 val defaultFiles = getModelFiles(modelId)
-                Logger.w("PicMe:Download", "API and config failed, using default files: $defaultFiles")
+                Logger.w(TAG, "API and config failed, using default files: $defaultFiles")
                 return@run defaultFiles.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
             }
 
@@ -803,7 +885,7 @@ class LlmModelDownloadManager(context: Context) {
                 throw IOException("No files to download for model: $modelId")
             }
 
-            Logger.i("PicMe:Download", "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
+            Logger.i(TAG, "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
 
             for (fileInfo in allFileInfos) {
                 val fileName = fileInfo.name
@@ -827,35 +909,35 @@ class LlmModelDownloadManager(context: Context) {
                         // 大小匹配，进一步校验 SHA256（如果提供了）
                         if (!expectedSha256.isNullOrEmpty()) {
                             if (verifyFileSha256(destFile, expectedSha256)) {
-                                Logger.d("PicMe:Download", "File verified (size + SHA256): $fileName ($actualSize bytes)")
+                                Logger.d(TAG, "File verified (size + SHA256): $fileName ($actualSize bytes)")
                                 totalDownloaded += actualSize
                                 emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                                 continue
                             } else {
-                                Logger.w("PicMe:Download", "SHA256 mismatch for $fileName, re-downloading")
+                                Logger.w(TAG, "SHA256 mismatch for $fileName, re-downloading")
                                 destFile.delete()
                             }
                         } else {
                             // 没有 SHA256，仅大小校验通过
-                            Logger.d("PicMe:Download", "File size matches: $fileName ($actualSize bytes)")
+                            Logger.d(TAG, "File size matches: $fileName ($actualSize bytes)")
                             totalDownloaded += actualSize
                             emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                             continue
                         }
                     } else if (expectedSize > 0 && actualSize != expectedSize) {
                         // 大小不匹配，删除重新下载
-                        Logger.w("PicMe:Download", "File size mismatch for $fileName: expected=$expectedSize, actual=$actualSize, re-downloading")
+                        Logger.w(TAG, "File size mismatch for $fileName: expected=$expectedSize, actual=$actualSize, re-downloading")
                         destFile.delete()
                     } else if (expectedSize == 0L) {
                         // API 没有返回大小信息，尝试 SHA256 校验
                         if (!expectedSha256.isNullOrEmpty() && verifyFileSha256(destFile, expectedSha256)) {
-                            Logger.d("PicMe:Download", "File verified (SHA256 only): $fileName ($actualSize bytes)")
+                            Logger.d(TAG, "File verified (SHA256 only): $fileName ($actualSize bytes)")
                             totalDownloaded += actualSize
                             emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                             continue
                         } else {
                             // 无法校验，假设文件完整
-                            Logger.d("PicMe:Download", "File exists (unknown size): $fileName ($actualSize bytes)")
+                            Logger.d(TAG, "File exists (unknown size): $fileName ($actualSize bytes)")
                             totalDownloaded += actualSize
                             emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
                             continue
@@ -863,7 +945,7 @@ class LlmModelDownloadManager(context: Context) {
                     }
                 }
 
-                Logger.d("PicMe:Download", "Downloading $fileName from $url (expected: $expectedSize bytes)")
+                Logger.d(TAG, "Downloading $fileName from $url (expected: $expectedSize bytes)")
 
                 val request = Request.Builder()
                     .url(url)
@@ -873,11 +955,11 @@ class LlmModelDownloadManager(context: Context) {
                 activeDownloads[modelId] = call
 
                 call.execute().use { response ->
-                    Logger.d("PicMe:Download", "Response: HTTP ${response.code} for $fileName")
+                    Logger.d(TAG, "Response: HTTP ${response.code} for $fileName")
                     if (!response.isSuccessful) {
                         // 可选文件404时跳过，不报错
                         if (isOptional && response.code == 404) {
-                            Logger.d("PicMe:Download", "Optional file not found (404), skipping: $fileName")
+                            Logger.d(TAG, "Optional file not found (404), skipping: $fileName")
                             return@use
                         }
                         val errorBody = response.body?.string()?.take(200) ?: ""
@@ -956,7 +1038,7 @@ class LlmModelDownloadManager(context: Context) {
 
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
             emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
-            Logger.i("PicMe:Download", "Model download completed and verified: $modelId")
+            Logger.i(TAG, "Model download completed and verified: $modelId")
 
         } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
@@ -975,7 +1057,7 @@ class LlmModelDownloadManager(context: Context) {
                 return@flow
             }
             val errorMsg = e.message ?: e.javaClass.simpleName
-            Logger.e("PicMe:Download", "Download failed for $modelId: $errorMsg")
+            Logger.e(TAG, "Download failed for $modelId: $errorMsg")
             _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
             updateServiceState()
             emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
@@ -1004,7 +1086,7 @@ class LlmModelDownloadManager(context: Context) {
             }
             digest.digest().joinToString("") { "%02x".format(it) }
         } catch (e: Exception) {
-            Logger.e("PicMe:Download", "Failed to calculate SHA256 for ${file.name}", e)
+            Logger.e(TAG, "Failed to calculate SHA256 for ${file.name}", e)
             null
         }
     }
@@ -1024,15 +1106,15 @@ class LlmModelDownloadManager(context: Context) {
 
         val actualSha256 = calculateFileSha256(file)
         if (actualSha256 == null) {
-            Logger.w("PicMe:Download", "Failed to calculate SHA256 for ${file.name}, skipping verification")
+            Logger.w(TAG, "Failed to calculate SHA256 for ${file.name}, skipping verification")
             return false
         }
 
         val match = actualSha256.equals(expectedSha256, ignoreCase = true)
         if (match) {
-            Logger.d("PicMe:Download", "SHA256 verified for ${file.name}: $actualSha256")
+            Logger.d(TAG, "SHA256 verified for ${file.name}: $actualSha256")
         } else {
-            Logger.e("PicMe:Download", "SHA256 mismatch for ${file.name}: expected=$expectedSha256, actual=$actualSha256")
+            Logger.e(TAG, "SHA256 mismatch for ${file.name}: expected=$expectedSha256, actual=$actualSha256")
         }
         return match
     }
@@ -1049,7 +1131,7 @@ class LlmModelDownloadManager(context: Context) {
     private suspend fun fetchModelFileInfosFromModelScope(repoPath: String): List<ModelFileInfo> = withContext(Dispatchers.IO) {
         try {
             val apiUrl = "https://modelscope.cn/api/v1/models/$repoPath/repo/files?Revision=master"
-            Logger.i("PicMe:Download", "Fetching file list from ModelScope API: $apiUrl")
+            Logger.i(TAG, "Fetching file list from ModelScope API: $apiUrl")
 
             val request = Request.Builder()
                 .url(apiUrl)
@@ -1059,13 +1141,13 @@ class LlmModelDownloadManager(context: Context) {
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    Logger.w("PicMe:Download", "ModelScope API returned ${response.code}, falling back to default files")
+                    Logger.w(TAG, "ModelScope API returned ${response.code}, falling back to default files")
                     return@withContext emptyList<ModelFileInfo>()
                 }
 
                 val responseBody = response.body?.string()
                 if (responseBody.isNullOrEmpty()) {
-                    Logger.w("PicMe:Download", "ModelScope API returned empty body")
+                    Logger.w(TAG, "ModelScope API returned empty body")
                     return@withContext emptyList<ModelFileInfo>()
                 }
 
@@ -1074,19 +1156,19 @@ class LlmModelDownloadManager(context: Context) {
                 // 检查 API 返回状态码
                 val code = json.optInt("Code", -1)
                 if (code != 200) {
-                    Logger.w("PicMe:Download", "ModelScope API returned Code=$code, Message=${json.optString("Message", "")}")
+                    Logger.w(TAG, "ModelScope API returned Code=$code, Message=${json.optString("Message", "")}")
                     return@withContext emptyList<ModelFileInfo>()
                 }
 
                 val data = json.optJSONObject("Data")
                 if (data == null) {
-                    Logger.w("PicMe:Download", "ModelScope API response missing Data field")
+                    Logger.w(TAG, "ModelScope API response missing Data field")
                     return@withContext emptyList<ModelFileInfo>()
                 }
 
                 val files = data.optJSONArray("Files")
                 if (files == null) {
-                    Logger.w("PicMe:Download", "ModelScope API response missing Files field")
+                    Logger.w(TAG, "ModelScope API response missing Files field")
                     return@withContext emptyList<ModelFileInfo>()
                 }
 
@@ -1110,95 +1192,15 @@ class LlmModelDownloadManager(context: Context) {
                     }
                 }
 
-                Logger.i("PicMe:Download", "ModelScope API returned ${fileList.size} files with metadata")
+                Logger.i(TAG, "ModelScope API returned ${fileList.size} files with metadata")
                 return@withContext fileList
             }
         } catch (e: Exception) {
-            Logger.e("PicMe:Download", "Failed to fetch file list from ModelScope API", e)
+            Logger.e(TAG, "Failed to fetch file list from ModelScope API", e)
             return@withContext emptyList<ModelFileInfo>()
         }
     }
 
-    companion object {
-        private const val DEFAULT_BUFFER_SIZE = 8192
-        private const val MODEL_MARKET_URL = "https://meta.alicdn.com/data/mnn/apis/model_market.json"
-
-        /**
-         * MNN-LLM 模型固定文件列表
-         */
-        private val LLM_MODEL_FILES = listOf(
-            "config.json",
-            "llm.mnn",
-            "llm.mnn.weight",
-            "tokenizer.txt"
-        )
-
-        /**
-         * ASR 模型固定文件列表
-         */
-        private val ASR_MODEL_FILES = listOf(
-            "encoder-epoch-99-avg-1.int8.mnn",
-            "decoder-epoch-99-avg-1.int8.mnn",
-            "joiner-epoch-99-avg-1.int8.mnn",
-            "tokens.txt"
-        )
-
-        /**
-         * TTS 模型固定文件列表
-         */
-        private val TTS_MODEL_FILES = listOf(
-            "config.json",
-            "tts.mnn",
-            "vocab.txt"
-        )
-
-        /**
-         * 人脸检测 ROI MNN 模型文件列表
-         */
-        private val FACE_DETECTION_ROI_MNN_FILES = listOf("det_10g.mnn")
-
-        /**
-         * 人脸检测 Landmark MNN 模型文件列表
-         */
-        private val FACE_DETECTION_LANDMARK_MNN_FILES = listOf("2d106det.mnn")
-
-        /**
-         * 人脸检测 ROI NCNN 模型文件列表
-         */
-        private val FACE_DETECTION_ROI_NCNN_FILES = listOf("det_10g.param", "det_10g.bin")
-
-        /**
-         * 人脸检测 Landmark NCNN 模型文件列表
-         */
-        private val FACE_DETECTION_LANDMARK_NCNN_FILES = listOf("2d106det.param", "2d106det.bin")
-
-        /**
-         * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
-         */
-        private val LLM_MODEL_OPTIONAL_FILES = listOf(
-            "configuration.json",
-            "llm_config.json",
-            "README.md",
-            "embeddings_bf16.bin"
-        )
-
-        /**
-         * 默认标签翻译（MNN 官方 tagTranslations 的本地回退）
-         */
-        val DEFAULT_TAG_TRANSLATIONS = mapOf(
-            "Vision" to "图像理解",
-            "Video" to "视频理解",
-            "Audio" to "音频理解",
-            "Code" to "代码",
-            "Math" to "数学",
-            "ImageGen" to "文生图",
-            "AudioGen" to "音频生成",
-            "Think" to "深度思考",
-            "Chat" to "对话",
-            "Safety" to "安全",
-            "NPU" to "NPU加速"
-        )
-    }
 }
 
 /**

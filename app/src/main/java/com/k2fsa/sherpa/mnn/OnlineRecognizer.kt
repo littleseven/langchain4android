@@ -1,7 +1,7 @@
 package com.k2fsa.sherpa.mnn
 
 import android.content.res.AssetManager
-import android.util.Log
+import com.picme.core.common.Logger
 
 data class EndpointRule(
     var mustContainNonSilence: Boolean,
@@ -153,8 +153,10 @@ class OnlineRecognizer(
 
 private var ASR_MODEL_DIR = "/data/local/tmp/asr_models"
 
+private const val TAG = "OnlineRecognizer"
+
 fun setAsrModelDir(modelDir: String) {
-    Log.d("OnlineRecognizer", "Setting ASR model directory to: $modelDir")
+    Logger.d(TAG, "Setting ASR model directory to: $modelDir")
     ASR_MODEL_DIR = modelDir
 }
 

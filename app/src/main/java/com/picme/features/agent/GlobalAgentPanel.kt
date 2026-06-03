@@ -391,7 +391,7 @@ private suspend fun sendMessage(
     agentContext: AgentContext,
     pageContext: PageContext?
 ) {
-    val tag = "PicMe:GlobalAgentPanel"
+    val tag = "GlobalAgentPanel"
 
     // 添加用户消息
     state.addMessage(AgentMessage(content = text, isFromUser = true))

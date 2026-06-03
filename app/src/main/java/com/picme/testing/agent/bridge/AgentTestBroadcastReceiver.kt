@@ -57,7 +57,7 @@ import org.json.JSONObject
 class AgentTestBroadcastReceiver : BroadcastReceiver() {
 
     companion object {
-        private const val TAG = "PicMe:AgentTestReceiver"
+        private const val TAG = "AgentTestReceiver"
         const val ACTION_AGENT_TEST = "com.picme.AGENT_TEST"
 
         // 命令字段

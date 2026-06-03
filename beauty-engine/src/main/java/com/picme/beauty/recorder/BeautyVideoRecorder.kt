@@ -10,7 +10,7 @@ import android.opengl.EGLContext
 import android.opengl.EGLDisplay
 import android.opengl.EGLSurface
 import android.opengl.GLES20
-import android.util.Log
+import com.picme.beauty.api.Logger
 import android.view.Surface
 import java.io.File
 import java.nio.ByteBuffer
@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class BeautyVideoRecorder {
 
     companion object {
-        private const val TAG = "PicMe:BeautyRecorder"
+        private const val TAG = "BeautyRecorder"
         private const val MIME_TYPE = "video/avc"
         private const val FRAME_RATE = 30
         private const val IFRAME_INTERVAL = 1 // 1秒一个I帧
@@ -66,7 +66,7 @@ class BeautyVideoRecorder {
      */
     fun start(outputFile: File, width: Int, height: Int, callback: Callback) {
         if (isRecording.get()) {
-            Log.w(TAG, "Already recording, ignore start request")
+            Logger.w(TAG, "Already recording, ignore start request")
             return
         }
 
@@ -98,7 +98,7 @@ class BeautyVideoRecorder {
                 try {
                     drainEncoder()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Drain thread error", e)
+                    Logger.e(TAG, "Drain thread error", e)
                     callback.onError(e)
                 }
             }.apply {
@@ -107,9 +107,9 @@ class BeautyVideoRecorder {
             }
 
             callback.onStarted()
-            Log.i(TAG, "Recording started: ${outputFile.absolutePath}, ${width}x${height}")
+            Logger.i(TAG, "Recording started: ${outputFile.absolutePath}, ${width}x${height}")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start recording", e)
+            Logger.e(TAG, "Failed to start recording", e)
             release()
             callback.onError(e)
         }
@@ -131,12 +131,12 @@ class BeautyVideoRecorder {
      */
     fun stop() {
         if (!isRecording.get() || isStopping.get()) {
-            Log.w(TAG, "Not recording or already stopping, ignore stop request")
+            Logger.w(TAG, "Not recording or already stopping, ignore stop request")
             return
         }
 
         isStopping.set(true)
-        Log.i(TAG, "Stopping recording...")
+        Logger.i(TAG, "Stopping recording...")
 
         // 在编码器线程发送 EOS
         mediaCodec?.signalEndOfInputStream()
@@ -161,11 +161,11 @@ class BeautyVideoRecorder {
                     if (isStopping.get()) {
                         tryAgainCount++
                         if (tryAgainCount > maxTryAgainCount) {
-                            Log.w(TAG, "Drain timeout after EOS, forcing stop. muxerStarted=$muxerStarted, outputFrames=$outputFrameCount, configFrames=$configFrameCount")
+                            Logger.w(TAG, "Drain timeout after EOS, forcing stop. muxerStarted=$muxerStarted, outputFrames=$outputFrameCount, configFrames=$configFrameCount")
                             break
                         }
                         if (tryAgainCount % 100 == 0) {
-                            Log.d(TAG, "Drain waiting... tryAgainCount=$tryAgainCount, muxerStarted=$muxerStarted")
+                            Logger.d(TAG, "Drain waiting... tryAgainCount=$tryAgainCount, muxerStarted=$muxerStarted")
                         }
                         continue
                     }
@@ -173,12 +173,12 @@ class BeautyVideoRecorder {
 
                 outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     val newFormat = codec.outputFormat
-                    Log.d(TAG, "Encoder output format changed: $newFormat")
+                    Logger.d(TAG, "Encoder output format changed: $newFormat")
                     if (!muxerStarted) {
                         videoTrackIndex = muxer.addTrack(newFormat)
                         muxer.start()
                         muxerStarted = true
-                        Log.i(TAG, "Muxer started, videoTrackIndex=$videoTrackIndex")
+                        Logger.i(TAG, "Muxer started, videoTrackIndex=$videoTrackIndex")
                     }
                 }
 
@@ -192,24 +192,24 @@ class BeautyVideoRecorder {
                         val isConfig = bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                         if (isConfig) {
                             configFrameCount++
-                            Log.d(TAG, "Codec config frame received, size=${bufferInfo.size}, dropping for muxer")
+                            Logger.d(TAG, "Codec config frame received, size=${bufferInfo.size}, dropping for muxer")
                         } else if (muxerStarted) {
                             muxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
                             outputFrameCount++
                             if (outputFrameCount <= 5 || outputFrameCount % 30 == 0) {
-                                Log.d(TAG, "Encoded frame written: count=$outputFrameCount, pts=${bufferInfo.presentationTimeUs}us, size=${bufferInfo.size}")
+                                Logger.d(TAG, "Encoded frame written: count=$outputFrameCount, pts=${bufferInfo.presentationTimeUs}us, size=${bufferInfo.size}")
                             }
                         } else {
-                            Log.w(TAG, "Muxer not started yet, dropping encoded frame. size=${bufferInfo.size}, flags=${bufferInfo.flags}")
+                            Logger.w(TAG, "Muxer not started yet, dropping encoded frame. size=${bufferInfo.size}, flags=${bufferInfo.flags}")
                         }
                     } else {
-                        Log.d(TAG, "Empty output buffer, size=${bufferInfo.size}, flags=${bufferInfo.flags}")
+                        Logger.d(TAG, "Empty output buffer, size=${bufferInfo.size}, flags=${bufferInfo.flags}")
                     }
 
                     codec.releaseOutputBuffer(outputBufferId, false)
 
                     if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
-                        Log.i(TAG, "Encoder EOS reached, totalOutputFrames=$outputFrameCount, configFrames=$configFrameCount")
+                        Logger.i(TAG, "Encoder EOS reached, totalOutputFrames=$outputFrameCount, configFrames=$configFrameCount")
                         eosReached = true
                         break
                     }
@@ -220,11 +220,11 @@ class BeautyVideoRecorder {
         // [关键修复] 确保 Muxer 正确停止，写入 MP4 文件尾
         if (muxerStarted) {
             try {
-                Log.i(TAG, "Stopping muxer...")
+                Logger.i(TAG, "Stopping muxer...")
                 muxer.stop()
-                Log.i(TAG, "Muxer stopped successfully")
+                Logger.i(TAG, "Muxer stopped successfully")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to stop muxer", e)
+                Logger.e(TAG, "Failed to stop muxer", e)
             }
         }
 
@@ -267,7 +267,7 @@ class BeautyVideoRecorder {
         muxerStarted = false
         videoTrackIndex = -1
 
-        Log.i(TAG, "Recorder released")
+        Logger.i(TAG, "Recorder released")
     }
 
     private fun calculateBitrate(width: Int, height: Int): Int {

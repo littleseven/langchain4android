@@ -5,7 +5,7 @@ import android.content.IntentSender
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.MediaStore
-import android.util.Log
+import com.picme.core.common.Logger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.picme.beauty.api.PhotoProcessor
@@ -39,6 +39,10 @@ class MediaViewModel(
     private val faceDetector: FaceDetector
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "Gallery"
+    }
+
     private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
     val groupingMode = _groupingMode.asStateFlow()
 
@@ -66,31 +70,31 @@ class MediaViewModel(
     }
 
     fun clearOcrResult() {
-        Log.d("PicMe:Gallery", "Clearing OCR result")
+        Logger.d(TAG, "Clearing OCR result")
         _ocrState.value = null
     }
 
     override fun onCleared() {
         super.onCleared()
-        Log.d("PicMe:Gallery", "MediaViewModel cleared, releasing OCR resources")
+        Logger.d(TAG, "MediaViewModel cleared, releasing OCR resources")
         ocrUseCase.close()
     }
 
     fun recognizeTextFromCurrentImage(context: Context, uri: Uri) {
         viewModelScope.launch {
-            Log.d("PicMe:Gallery", "Starting OCR for URI: $uri")
+            Logger.d(TAG, "Starting OCR for URI: $uri")
             _ocrState.value = OcrResult.Loading
             try {
                 val result = ocrUseCase.recognizeFromUri(context, uri)
                 _ocrState.value = if (result != null) {
-                    Log.d("PicMe:Gallery", "OCR Success: ${result.take(20)}...")
+                    Logger.d(TAG, "OCR Success: ${result.take(20)}...")
                     OcrResult.Success(result)
                 } else {
-                    Log.w("PicMe:Gallery", "OCR Failed or no text found")
+                    Logger.w(TAG, "OCR Failed or no text found")
                     OcrResult.Error("未找到文字")
                 }
             } catch (e: Exception) {
-                Log.e("PicMe:Gallery", "OCR Exception: ${e.message}", e)
+                Logger.e(TAG, "OCR Exception: ${e.message}", e)
                 _ocrState.value = OcrResult.Error("识别失败：${e.message}")
             }
         }
@@ -118,7 +122,7 @@ class MediaViewModel(
         )
 
     fun setGroupingMode(mode: GroupingMode) {
-        Log.d("PicMe:Gallery", "Setting grouping mode to: $mode")
+        Logger.d(TAG, "Setting grouping mode to: $mode")
         _groupingMode.value = mode
     }
 
@@ -131,14 +135,14 @@ class MediaViewModel(
 
     fun refreshMediaLibrary() {
         viewModelScope.launch {
-            Log.d("PicMe:Gallery", "Refreshing media library")
+            Logger.d(TAG, "Refreshing media library")
             repository.refreshMediaLibrary()
         }
     }
 
     fun deleteMediaByIds(ids: List<Long>) {
         viewModelScope.launch {
-            Log.d("PicMe:Gallery", "Deleting media items: $ids")
+            Logger.d(TAG, "Deleting media items: $ids")
             repository.deleteMediaByIds(ids)
 
             // 协程完成后检查是否需要用户授权，避免 GalleryScreen 同步调用导致竞态条件
@@ -188,7 +192,7 @@ class MediaViewModel(
      */
     fun executePendingDeletes() {
         viewModelScope.launch {
-            Log.d("PicMe:Gallery", "Executing pending deletes after user authorization")
+            Logger.d(TAG, "Executing pending deletes after user authorization")
             repository.executePendingDeletes()
         }
     }
@@ -202,13 +206,13 @@ class MediaViewModel(
 
     private fun scanForDuplicates() {
         viewModelScope.launch {
-            Log.d("PicMe:Gallery", "Scanning for duplicates")
+            Logger.d(TAG, "Scanning for duplicates")
             _isScanningDuplicates.value = true
             try {
                 _duplicateGroups.value = findDuplicateMediaUseCase()
-                Log.d("PicMe:Gallery", "Found ${_duplicateGroups.value.size} duplicate groups")
+                Logger.d(TAG, "Found ${_duplicateGroups.value.size} duplicate groups")
             } catch (e: Exception) {
-                Log.e("PicMe:Gallery", "Error scanning for duplicates", e)
+                Logger.e(TAG, "Error scanning for duplicates", e)
                 _duplicateGroups.value = emptyList()
             } finally {
                 _isScanningDuplicates.value = false
@@ -237,7 +241,7 @@ class MediaViewModel(
 
     fun deleteAllDuplicatesExceptOne() {
         viewModelScope.launch {
-            Log.d("PicMe:Gallery", "Deleting all duplicates except one per group")
+            Logger.d(TAG, "Deleting all duplicates except one per group")
             val allIdsToDelete = mutableListOf<Long>()
 
             _duplicateGroups.value.forEach { group ->
@@ -283,14 +287,14 @@ class MediaViewModel(
                 cachedEditFaceData = faceData
 
                 if (faceData != null) {
-                    Log.d("PicMe:Gallery", "Face detected for editing, landmarks=${detectionResult.landmarks106.size}")
+                    Logger.d(TAG, "Face detected for editing, landmarks=${detectionResult.landmarks106.size}")
                 } else {
-                    Log.w("PicMe:Gallery", "No face detected for editing")
+                    Logger.w(TAG, "No face detected for editing")
                 }
 
                 _photoEditState.value = PhotoEditState.Ready(bitmap, faceData)
             } catch (e: Exception) {
-                Log.e("PicMe:Gallery", "Face detection failed: ${e.message}", e)
+                Logger.e(TAG, "Face detection failed: ${e.message}", e)
                 _photoEditState.value = PhotoEditState.Error("人脸检测失败：${e.message}")
             }
         }
@@ -308,7 +312,7 @@ class MediaViewModel(
         viewModelScope.launch(Dispatchers.Default) {
             _photoEditState.value = PhotoEditState.Processing
             try {
-                Log.d("PicMe:Gallery", "Processing photo: smoothing=${settings.smoothing}, filter=${settings.colorFilter}, style=${settings.styleFilter}")
+                Logger.d(TAG, "Processing photo: smoothing=${settings.smoothing}, filter=${settings.colorFilter}, style=${settings.styleFilter}")
 
                 val faceData = cachedEditFaceData ?: run {
                     val detectionResult = faceDetector.detectPhoto(bitmap, lensFacing)
@@ -318,10 +322,10 @@ class MediaViewModel(
                 val params = settings.toBeautyParams()
                 val processedBitmap = photoProcessor.process(bitmap, params, faceData)
 
-                Log.d("PicMe:Gallery", "Photo processing completed")
+                Logger.d(TAG, "Photo processing completed")
                 _photoEditState.value = PhotoEditState.Ready(processedBitmap, faceData)
             } catch (e: Exception) {
-                Log.e("PicMe:Gallery", "Photo processing failed: ${e.message}", e)
+                Logger.e(TAG, "Photo processing failed: ${e.message}", e)
                 _photoEditState.value = PhotoEditState.Error("处理失败：${e.message}")
             }
         }
@@ -346,12 +350,12 @@ class MediaViewModel(
                     context.contentResolver.openOutputStream(imageUri)?.use { outputStream ->
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)
                     }
-                    Log.d("PicMe:Gallery", "Saved edited photo to $imageUri")
+                    Logger.d(TAG, "Saved edited photo to $imageUri")
                     // 刷新媒体库
                     repository.refreshMediaLibrary()
                 }
             } catch (e: Exception) {
-                Log.e("PicMe:Gallery", "Failed to save edited photo: ${e.message}", e)
+                Logger.e(TAG, "Failed to save edited photo: ${e.message}", e)
             }
         }
     }

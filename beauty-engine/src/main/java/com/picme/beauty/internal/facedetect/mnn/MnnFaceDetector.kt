@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.facedetect.mnn
 
 import android.graphics.Bitmap
-import android.util.Log
+import com.picme.beauty.api.Logger
 
 /**
  * MNN 人脸检测器 JNI 桥接类
@@ -14,16 +14,52 @@ class MnnFaceDetector private constructor(
     private val inputSize: Int
 ) {
     companion object {
-        private const val TAG = "PicMe:MnnFaceDetector"
+        private const val TAG = "MnnFaceDetector"
+
+        // [性能优化] 复用像素缓冲区和 RGB 数据缓冲区，避免每帧 new IntArray/ByteArray
+        private var reusablePixels: IntArray? = null
+        private var reusableRgbData: ByteArray? = null
 
         init {
             try {
                 System.loadLibrary("picme_native")
-                Log.i(TAG, "Native library loaded successfully")
+                // 同步 native 层日志开关状态
+                val logEnabled = Logger.isLogEnabled(TAG)
+                nativeSetLogEnabled(logEnabled)
+                Logger.i(TAG, "Native library loaded successfully, nativeLogEnabled=$logEnabled")
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Failed to load native library", e)
+                Logger.e(TAG, "Failed to load native library", e)
             }
         }
+
+        private fun getPixelsBuffer(size: Int): IntArray {
+            var buffer = reusablePixels
+            if (buffer == null || buffer.size < size) {
+                buffer = IntArray(size)
+                reusablePixels = buffer
+            }
+            return buffer
+        }
+
+        private fun getRgbDataBuffer(size: Int): ByteArray {
+            var buffer = reusableRgbData
+            if (buffer == null || buffer.size < size) {
+                buffer = ByteArray(size)
+                reusableRgbData = buffer
+            }
+            return buffer
+        }
+
+        /**
+         * 设置 native 层日志开关。
+         * 根据 Logger 的模块开关状态同步控制 native 层日志输出。
+         */
+        fun setNativeLogEnabled(enabled: Boolean) {
+            nativeSetLogEnabled(enabled)
+        }
+
+        @JvmStatic
+        private external fun nativeSetLogEnabled(enabled: Boolean)
 
         /**
          * 创建检测器实例
@@ -46,7 +82,7 @@ class MnnFaceDetector private constructor(
             return if (handle != 0L) {
                 MnnFaceDetector(handle, inputSize)
             } else {
-                Log.e(TAG, "Failed to create native MNN detector")
+                Logger.e(TAG, "Failed to create native MNN detector")
                 null
             }
         }
@@ -92,18 +128,19 @@ class MnnFaceDetector private constructor(
      */
     fun detect(bitmap: Bitmap): FloatArray? {
         if (nativeHandle == 0L) {
-            Log.w(TAG, "Detector not initialized")
+            Logger.w(TAG, "Detector not initialized")
             return null
         }
 
         val width = bitmap.width
         val height = bitmap.height
-        val pixels = IntArray(width * height)
+        val pixelCount = width * height
+        val pixels = getPixelsBuffer(pixelCount)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
         // 将 ARGB IntArray 转为 RGB ByteArray
-        val rgbData = ByteArray(width * height * 3)
-        for (i in pixels.indices) {
+        val rgbData = getRgbDataBuffer(pixelCount * 3)
+        for (i in 0 until pixelCount) {
             val pixel = pixels[i]
             rgbData[i * 3] = (pixel shr 16 and 0xFF).toByte()     // R
             rgbData[i * 3 + 1] = (pixel shr 8 and 0xFF).toByte()  // G
@@ -119,17 +156,18 @@ class MnnFaceDetector private constructor(
      */
     fun detectRetinaFace(bitmap: Bitmap, confidenceThreshold: Float = 0.5f, nmsThreshold: Float = 0.4f): FloatArray? {
         if (nativeHandle == 0L) {
-            Log.w(TAG, "Detector not initialized")
+            Logger.w(TAG, "Detector not initialized")
             return null
         }
 
         val width = bitmap.width
         val height = bitmap.height
-        val pixels = IntArray(width * height)
+        val pixelCount = width * height
+        val pixels = getPixelsBuffer(pixelCount)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        val rgbData = ByteArray(width * height * 3)
-        for (i in pixels.indices) {
+        val rgbData = getRgbDataBuffer(pixelCount * 3)
+        for (i in 0 until pixelCount) {
             val pixel = pixels[i]
             rgbData[i * 3] = (pixel shr 16 and 0xFF).toByte()
             rgbData[i * 3 + 1] = (pixel shr 8 and 0xFF).toByte()
