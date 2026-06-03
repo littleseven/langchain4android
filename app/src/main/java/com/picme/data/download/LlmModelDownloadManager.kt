@@ -163,81 +163,31 @@ class LlmModelDownloadManager(context: Context) {
     /**
      * 加载可用模型配置
      *
-     * 优先从 MNN 官方模型市场获取，失败时回退到本地配置。
+     * 从本地 llm_models.json 加载模型列表，仅展示用户需要的模型。
      * 注意：此函数包含网络请求，必须在 IO 线程调用。
      */
     suspend fun loadAvailableModels(): List<ModelConfig> = withContext(Dispatchers.IO) {
-        loadMarketData().models
+        loadLocalModels()
     }
 
     /**
      * 加载模型市场数据（包含标签翻译）
      *
-     * 策略：从网络获取 MNN 官方模型，并与本地 llm_models.json 合并。
-     * 本地模型（如人脸检测模型）可能不在 MNN 官方市场中，需要合并确保完整。
+     * 仅从本地 llm_models.json 加载模型，不再从 MNN 官方市场获取。
+     * 用户模型统一托管在 ModelScope PicMe 合集中。
      */
     suspend fun loadMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
-        // 1. 加载本地模型（作为基础，确保人脸检测等模型始终存在）
         val localModels = loadLocalModels()
-        val localModelIds = localModels.map { it.id }.toSet()
-
-        // 2. 尝试从网络获取 MNN 官方模型市场
-        val remoteData = fetchMarketData()
-        if (remoteData.models.isNotEmpty()) {
-            // 合并：远程模型 + 本地独有的模型（如人脸检测）
-            val mergedModels = remoteData.models.toMutableList()
-            val remoteIds = remoteData.models.map { it.id }.toSet()
-            for (localModel in localModels) {
-                if (localModel.id !in remoteIds) {
-                    mergedModels.add(localModel)
-                }
-            }
-
-            val mergedData = ModelMarketData(
-                mergedModels,
-                remoteData.tagTranslations + DEFAULT_TAG_TRANSLATIONS
-            )
-            saveCachedMarketData(mergedData)
-            return@withContext mergedData
-        }
-
-        // 3. 网络失败，尝试从本地缓存读取
-        val cachedData = loadCachedMarketData()
-        if (cachedData != null && cachedData.models.isNotEmpty()) {
-            Logger.i(TAG, "Using cached market data with ${cachedData.models.size} models")
-            return@withContext cachedData
-        }
-
-        // 4. 回退到本地 raw 资源
         return@withContext ModelMarketData(localModels, DEFAULT_TAG_TRANSLATIONS)
     }
 
     /**
-     * 刷新模型市场数据（强制从网络获取并更新缓存）
+     * 刷新模型市场数据
      *
-     * 与 loadMarketData() 相同，会合并本地模型确保人脸检测等模型始终存在。
+     * 仅从本地 llm_models.json 加载，与 loadMarketData() 一致。
      */
     suspend fun refreshMarketData(): ModelMarketData = withContext(Dispatchers.IO) {
         val localModels = loadLocalModels()
-        val remoteData = fetchMarketData()
-        if (remoteData.models.isNotEmpty()) {
-            // 合并：远程模型 + 本地独有的模型
-            val mergedModels = remoteData.models.toMutableList()
-            val remoteIds = remoteData.models.map { it.id }.toSet()
-            for (localModel in localModels) {
-                if (localModel.id !in remoteIds) {
-                    mergedModels.add(localModel)
-                }
-            }
-            val mergedData = ModelMarketData(
-                mergedModels,
-                remoteData.tagTranslations + DEFAULT_TAG_TRANSLATIONS
-            )
-            saveCachedMarketData(mergedData)
-            Logger.i(TAG, "Market data refreshed: ${mergedModels.size} models")
-            return@withContext mergedData
-        }
-        // 网络失败回退到本地
         ModelMarketData(localModels, DEFAULT_TAG_TRANSLATIONS)
     }
 
