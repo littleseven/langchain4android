@@ -181,4 +181,11 @@
 <string name="camera_memory">相机状态记忆</string>
 <string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
 <string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
+
+    <!-- Essential Models Download (WiFi) -->
+    <string name="essential_models_download_title">下载必要模型</string>
+    <string name="essential_models_download_message">检测到部分必需模型（LLM 和语音识别）尚未下载。是否立即下载？</string>
+    <string name="essential_models_download_button">一键下载</string>
+    <string name="essential_models_download_later">稍后</string>
+    <string name="essential_models_download_progress">正在下载…</string>
 </resources>

@@ -1,5 +1,10 @@
 package com.picme.features.settings
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -27,16 +32,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val repository: UserSettingsRepository,
-    private val modelDownloadManager: LlmModelDownloadManager
+    private val modelDownloadManager: LlmModelDownloadManager,
+    private val appContext: Context
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "Settings"
+
+        // 必要模型（LLM + ASR），检测到缺少时提示一键下载
+        private val ESSENTIAL_MODEL_IDS = listOf(
+            "qwen3-1.7b",
+            "qwen3.5-0.8b",
+            "qwen3.5-2b",
+            "sherpa-mnn-zipformer-zh-en"
+        )
     }
 
     val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
@@ -233,10 +248,113 @@ class SettingsViewModel(
      */
     private val lastDownloadStatuses = mutableMapOf<String, DownloadStatus>()
 
+    // ── 必要模型一键下载 ────────────────────────────
+    private val _showEssentialModelsPrompt = MutableStateFlow(false)
+    val showEssentialModelsPrompt: StateFlow<Boolean> = _showEssentialModelsPrompt.asStateFlow()
+
+    private val _isBatchDownloading = MutableStateFlow(false)
+    val isBatchDownloading: StateFlow<Boolean> = _isBatchDownloading.asStateFlow()
+
+    /**
+     * WiFi 已连接时检查必要模型，若缺失则提示一键下载。
+     */
+    fun checkEssentialModelsOnWifi() {
+        if (_isBatchDownloading.value || _showEssentialModelsPrompt.value) return
+        viewModelScope.launch {
+            val missingAny = ESSENTIAL_MODEL_IDS.any { id ->
+                !modelDownloadManager.isModelDownloaded(id)
+            }
+            if (missingAny) {
+                Logger.i(TAG, "Essential models missing, showing download prompt")
+                _showEssentialModelsPrompt.value = true
+            }
+        }
+    }
+
+    /**
+     * 一键下载：按顺序先下载所有 LLM 模型，再下载 ASR 模型。
+     */
+    fun startBatchDownload() {
+        if (_isBatchDownloading.value) return
+        _isBatchDownloading.value = true
+        _showEssentialModelsPrompt.value = false
+        viewModelScope.launch {
+            try {
+                // Step 1: 下载所有未下载的 LLM 模型
+                val llmIds = ESSENTIAL_MODEL_IDS.filter { it != "sherpa-mnn-zipformer-zh-en" }
+                for (modelId in llmIds) {
+                    if (!modelDownloadManager.isModelDownloaded(modelId)) {
+                        val config = _allModels.value.find { it.id == modelId }
+                        if (config != null) {
+                            Logger.i(TAG, "Batch: downloading LLM model $modelId")
+                            modelDownloadManager.enqueueDownload(modelId, config)
+                            // 等待下载完成
+                            modelDownloadManager.downloadStates.first { states ->
+                                states[modelId]?.status == DownloadStatus.COMPLETED ||
+                                    states[modelId]?.status == DownloadStatus.FAILED
+                            }
+                        }
+                    }
+                }
+
+                // Step 2: 下载 ASR 模型
+                val asrId = "sherpa-mnn-zipformer-zh-en"
+                if (!modelDownloadManager.isModelDownloaded(asrId)) {
+                    val config = _allModels.value.find { it.id == asrId }
+                    if (config != null) {
+                        Logger.i(TAG, "Batch: downloading ASR model $asrId")
+                        modelDownloadManager.enqueueDownload(asrId, config)
+                        modelDownloadManager.downloadStates.first { states ->
+                            states[asrId]?.status == DownloadStatus.COMPLETED ||
+                                states[asrId]?.status == DownloadStatus.FAILED
+                        }
+                    }
+                }
+
+                Logger.i(TAG, "Batch download complete")
+            } catch (e: Exception) {
+                Logger.e(TAG, "Batch download failed", e)
+            } finally {
+                _isBatchDownloading.value = false
+            }
+        }
+    }
+
+    /**
+     * 关闭下载提示弹窗
+     */
+    fun dismissDownloadPrompt() {
+        _showEssentialModelsPrompt.value = false
+    }
+
     init {
         lastDownloadStatuses.putAll(downloadStates.value.mapValues { entry -> entry.value.status })
         loadModels()
         observeDownloadCompletion()
+
+        // 注册 WiFi 网络回调，连接时检查必要模型
+        registerWifiCallback()
+    }
+
+    /**
+     * 监听 WiFi 连接状态，连接时检查必要模型是否缺失。
+     */
+    private fun registerWifiCallback() {
+        val connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                val caps = connectivityManager.getNetworkCapabilities(network)
+                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
+                    Logger.i(TAG, "WiFi connected, checking essential models")
+                    checkEssentialModelsOnWifi()
+                }
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        connectivityManager.registerNetworkCallback(request, callback)
     }
 
     /**
@@ -644,13 +762,14 @@ class SettingsViewModel(
 
 class SettingsViewModelFactory(
     private val repository: UserSettingsRepository,
-    private val modelDownloadManager: LlmModelDownloadManager
+    private val modelDownloadManager: LlmModelDownloadManager,
+    private val appContext: Context
 ) : ViewModelProvider.Factory {
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return SettingsViewModel(repository, modelDownloadManager) as T
+            return SettingsViewModel(repository, modelDownloadManager, appContext) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

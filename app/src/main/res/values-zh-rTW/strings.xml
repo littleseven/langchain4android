@@ -363,4 +363,11 @@
     <string name="pause_download">暫停</string>
     <string name="resume_download">繼續</string>
 
+    <!-- Essential Models Download (WiFi) -->
+    <string name="essential_models_download_title">下載必要模型</string>
+    <string name="essential_models_download_message">偵測到部分必要模型（LLM 和語音辨識）尚未下載。是否立即下載？</string>
+    <string name="essential_models_download_button">一鍵下載</string>
+    <string name="essential_models_download_later">稍後</string>
+    <string name="essential_models_download_progress">正在下載…</string>
+
 </resources>

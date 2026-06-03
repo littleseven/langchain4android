@@ -15,8 +15,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -83,7 +91,8 @@ class MainActivity : ComponentActivity() {
             val settingsViewModel: SettingsViewModel = viewModel(
                 factory = SettingsViewModelFactory(
                     app.container.userPreferencesRepository,
-                    app.container.llmModelDownloadManager
+                    app.container.llmModelDownloadManager,
+                    context
                 )
             )
 
@@ -217,8 +226,57 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+
+                // WiFi 必要模型一键下载提示
+                EssentialModelsDownloadDialog(
+                    showPrompt = settingsViewModel.showEssentialModelsPrompt.collectAsState().value,
+                    isDownloading = settingsViewModel.isBatchDownloading.collectAsState().value,
+                    onDownload = { settingsViewModel.startBatchDownload() },
+                    onDismiss = { settingsViewModel.dismissDownloadPrompt() }
+                )
             }
         }
+    }
+
+    @Composable
+    private fun EssentialModelsDownloadDialog(
+        showPrompt: Boolean,
+        isDownloading: Boolean,
+        onDownload: () -> Unit,
+        onDismiss: () -> Unit
+    ) {
+        if (!showPrompt) return
+        AlertDialog(
+            onDismissRequest = { if (!isDownloading) onDismiss() },
+            title = {
+                Text(text = stringResource(R.string.essential_models_download_title))
+            },
+            text = {
+                Text(text = stringResource(R.string.essential_models_download_message))
+            },
+            confirmButton = {
+                Button(
+                    onClick = onDownload,
+                    enabled = !isDownloading
+                ) {
+                    Text(
+                        text = if (isDownloading) {
+                            stringResource(R.string.essential_models_download_progress)
+                        } else {
+                            stringResource(R.string.essential_models_download_button)
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isDownloading
+                ) {
+                    Text(text = stringResource(R.string.essential_models_download_later))
+                }
+            }
+        )
     }
 
     private fun getLocaleFromLanguage(language: AppLanguage): Locale {
