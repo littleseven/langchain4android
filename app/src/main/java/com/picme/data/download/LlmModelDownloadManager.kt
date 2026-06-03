@@ -92,6 +92,16 @@ class LlmModelDownloadManager(context: Context) {
         private val FACE_DETECTION_LANDMARK_NCNN_FILES = listOf("2d106det.param", "2d106det.bin")
 
         /**
+         * 人脸检测 ROI Det500M MNN 模型文件列表
+         */
+        private val FACE_DETECTION_ROI_500M_MNN_FILES = listOf("det_500m.mnn")
+
+        /**
+         * 人脸检测 ROI Det500M NCNN 模型文件列表
+         */
+        private val FACE_DETECTION_ROI_500M_NCNN_FILES = listOf("det_500m.param", "det_500m.bin")
+
+        /**
          * MNN-LLM 模型可选文件列表（存在则下载，404则跳过）
          */
         private val LLM_MODEL_OPTIONAL_FILES = listOf(
@@ -488,6 +498,8 @@ class LlmModelDownloadManager(context: Context) {
             modelId == "picme-face-det-mnn" -> FACE_DETECTION_ROI_MNN_FILES
             modelId == "picme-face-landmark-mnn" -> FACE_DETECTION_LANDMARK_MNN_FILES
             modelId == "picme-face-det-ncnn" -> FACE_DETECTION_ROI_NCNN_FILES
+            modelId == "picme-face-det-500m-mnn" -> FACE_DETECTION_ROI_500M_MNN_FILES
+            modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
@@ -507,6 +519,8 @@ class LlmModelDownloadManager(context: Context) {
             modelId == "picme-face-det-mnn" -> FACE_DETECTION_ROI_MNN_FILES
             modelId == "picme-face-landmark-mnn" -> FACE_DETECTION_LANDMARK_MNN_FILES
             modelId == "picme-face-det-ncnn" -> FACE_DETECTION_ROI_NCNN_FILES
+            modelId == "picme-face-det-500m-mnn" -> FACE_DETECTION_ROI_500M_MNN_FILES
+            modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
