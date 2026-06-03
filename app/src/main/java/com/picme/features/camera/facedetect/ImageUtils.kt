@@ -80,7 +80,7 @@ object ImageUtils {
      * Det10G 模型输入为 640×640，2D106 为 192×192。
      * YUV→Bitmap 时直接缩放到此尺寸，避免全分辨率（720×1280）转换的巨额开销。
      */
-    internal const val TARGET_MAX_SIZE = 640
+    internal const val TARGET_MAX_SIZE = 320
 
     /**
      * 统一的 ImageProxy → Bitmap 转换（零 JPEG 路径 + 直接缩放）
@@ -90,8 +90,8 @@ object ImageUtils {
      * - 省去 Bitmap 旋转的额外内存分配
      * - 直接生成 MediaPipe BitmapImageBuilder 所需的 ARGB_8888 格式
      *
-     * [性能优化 v2] YUV 转换时直接缩放到目标尺寸，像素处理量从 92 万降至约 40 万（640×640），
-     * 预期耗时从 ~100ms 降至 ~20ms。
+     * [发热优化] YUV→Bitmap 时直接缩放到此尺寸，像素处理量从 40 万降至约 10 万（320×320），
+     * 预期耗时从 ~20ms 降至 ~5ms。
      */
     @ExperimentalGetImage
     fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
