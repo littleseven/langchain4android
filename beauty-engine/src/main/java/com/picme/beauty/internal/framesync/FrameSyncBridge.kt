@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.framesync
 
 import com.picme.beauty.api.FrameId
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
@@ -28,7 +28,10 @@ object FrameSyncBridge {
      * 检测线程根据 ImageProxy.imageInfo.timestamp 查询对应的 FrameId。
      * 由于两路流来自同一相机硬件，时间戳在同一基准上。
      */
-    private val timestampToFrameIdMap = ConcurrentHashMap<Long, FrameId>()
+    // [GC 优化] 使用 ConcurrentSkipListMap 代替 ConcurrentHashMap，
+    // getFrameIdByTimestamp 的最近邻查找复杂度从 O(n) 降为 O(log n)，
+    // 消除每帧遍历 120 条 Map.Entry 产生的 Entry/Boxing 对象分配。
+    private val timestampToFrameIdMap = ConcurrentSkipListMap<Long, FrameId>()
     private const val MAX_TIMESTAMP_MAP_SIZE = 120
 
     /**
@@ -69,22 +72,27 @@ object FrameSyncBridge {
         // 精确匹配
         timestampToFrameIdMap[timestampNs]?.let { return it }
 
-        // 最近邻匹配（在容差范围内找最接近的）
-        var nearestId: FrameId = FrameId.INVALID
-        var minDiff = Long.MAX_VALUE
-        for ((ts, frameId) in timestampToFrameIdMap) {
-            val diff = kotlin.math.abs(ts - timestampNs)
-            if (diff < minDiff && diff <= toleranceNs) {
-                minDiff = diff
-                nearestId = frameId
-            }
+        // [GC 优化] ConcurrentSkipListMap.floorEntry/ceilingEntry 实现 O(log n) 最近邻查找，
+        // 替代原 O(n) 全表遍历，消除每帧 120 次迭代的 Entry/Boxing 对象分配。
+        val floorEntry = timestampToFrameIdMap.floorEntry(timestampNs)
+        val ceilingEntry = timestampToFrameIdMap.ceilingEntry(timestampNs)
+
+        val floorDiff = floorEntry?.let { kotlin.math.abs(it.key - timestampNs) }
+            ?: Long.MAX_VALUE
+        val ceilingDiff = ceilingEntry?.let { kotlin.math.abs(it.key - timestampNs) }
+            ?: Long.MAX_VALUE
+
+        return when {
+            floorDiff <= toleranceNs && floorDiff <= ceilingDiff -> floorEntry!!.value
+            ceilingDiff <= toleranceNs -> ceilingEntry!!.value
+            else -> FrameId.INVALID
         }
-        return nearestId
     }
 
     private fun trimTimestampMap() {
         while (timestampToFrameIdMap.size > MAX_TIMESTAMP_MAP_SIZE) {
-            val oldestKey = timestampToFrameIdMap.keys.minOrNull() ?: break
+            // ConcurrentSkipListMap.firstKey() 是 O(1) 操作
+            val oldestKey = timestampToFrameIdMap.firstKey()
             timestampToFrameIdMap.remove(oldestKey)
         }
     }
