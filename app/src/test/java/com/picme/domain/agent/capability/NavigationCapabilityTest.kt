@@ -113,6 +113,16 @@ class NavigationCapabilityTest {
     }
 
     @Test
+    fun `execute NavigateTo model_center returns Success`() = runTest(testDispatcher) {
+        val result = capability.execute(
+            AgentCommand.NavigateTo("model_center"),
+            defaultContext
+        )
+
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
     fun `execute NavigateTo llm_model_manager returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
             AgentCommand.NavigateTo("llm_model_manager"),
@@ -133,9 +143,9 @@ class NavigationCapabilityTest {
     }
 
     @Test
-    fun `execute NavigateTo Chinese alias for model manager returns Success`() = runTest(testDispatcher) {
+    fun `execute NavigateTo Chinese alias for model center returns Success`() = runTest(testDispatcher) {
         val result = capability.execute(
-            AgentCommand.NavigateTo("模型管理"),
+            AgentCommand.NavigateTo("模型中心"),
             defaultContext
         )
 
@@ -163,8 +173,7 @@ class NavigationCapabilityTest {
         val action = result.getOrNull()
         assertTrue(action is AgentAction.Error)
         assertTrue((action as AgentAction.Error).message.contains("未知页面"))
-        assertTrue((action as AgentAction.Error).message.contains("llm_model_manager"))
-        assertTrue((action as AgentAction.Error).message.contains("asr_model_manager"))
+        assertTrue((action as AgentAction.Error).message.contains("model_center"))
     }
 
     @Test

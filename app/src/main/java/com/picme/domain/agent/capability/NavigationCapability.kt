@@ -78,7 +78,7 @@ class NavigationCapability : BaseCapability() {
     )
 
     override fun getCommandDescription(command: String): String = when (command) {
-        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|debug|llm_model_manager|asr_model_manager)"
+        "navigate_to" -> "导航到指定页面，参数: destination (camera|gallery|settings|debug|model_center)"
         "go_back" -> "返回上一页，无参数"
         else -> "未知命令"
     }
@@ -105,7 +105,7 @@ class NavigationCapability : BaseCapability() {
                     Result.success(AgentAction.Success(command))
                 } else {
                     Result.success(
-                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug, llm_model_manager, asr_model_manager")
+                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug, model_center")
                     )
                 }
             }
@@ -133,8 +133,9 @@ class NavigationCapability : BaseCapability() {
             Destination.GALLERY -> "gallery"
             Destination.SETTINGS -> "settings"
             Destination.DEBUG -> "debug"
-            Destination.LLM_MODEL_MANAGER -> "llm_model_manager"
-            Destination.ASR_MODEL_MANAGER -> "asr_model_manager"
+            Destination.MODEL_CENTER -> "model_center"
+            Destination.LLM_MODEL_MANAGER -> "model_center"
+            Destination.ASR_MODEL_MANAGER -> "model_center"
         }
         try {
             nav.navigate(route)
@@ -149,7 +150,8 @@ class NavigationCapability : BaseCapability() {
             "gallery", "相册", "照片", "图库" -> Destination.GALLERY
             "settings", "设置", "配置" -> Destination.SETTINGS
             "debug", "调试" -> Destination.DEBUG
-            "llm_model_manager", "llm模型管理", "模型管理", "大模型管理" -> Destination.LLM_MODEL_MANAGER
+            "model_center", "模型中心", "模型管理" -> Destination.MODEL_CENTER
+            "llm_model_manager", "llm模型管理", "大模型管理" -> Destination.LLM_MODEL_MANAGER
             "asr_model_manager", "asr模型管理", "语音模型管理" -> Destination.ASR_MODEL_MANAGER
             else -> null
         }
@@ -163,7 +165,8 @@ class NavigationCapability : BaseCapability() {
         GALLERY,            // 相册页
         SETTINGS,           // 设置页
         DEBUG,              // 调试页
-        LLM_MODEL_MANAGER,  // LLM模型管理页
-        ASR_MODEL_MANAGER   // ASR模型管理页
+        MODEL_CENTER,       // 模型中心
+        LLM_MODEL_MANAGER,  // 旧：LLM模型管理页（已废弃，路由到模型中心）
+        ASR_MODEL_MANAGER   // 旧：ASR模型管理页（已废弃，路由到模型中心）
     }
 }

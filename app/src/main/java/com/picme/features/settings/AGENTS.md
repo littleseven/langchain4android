@@ -98,22 +98,19 @@
 
 ## 2.5 模型管理（2026-05 新增）
 
-**LLM 模型管理**
-- **入口**：`LlmModelManagerScreen`，从设置页"模型管理"进入
-- **功能**：
-  - 查看已下载模型列表（Qwen3-1.7B、Qwen3-0.6B 等）
-  - 下载新模型（从远程仓库）
-  - 删除本地模型释放空间
-  - 切换当前使用模型
-- **存储路径**：应用私有目录 `files/llm_models/`
-- **下载管理**：`LlmModelDownloadManager` 支持断点续传和进度回调
+*## 2.5 模型管理（2026-05 新增，2026-06 统一）
 
-**ASR 模型管理**
-- **入口**：`AsrModelManagerScreen`，从设置页"语音识别模型"进入
+**统一模型中心**
+- **入口**：`ModelCenterScreen`，从设置页统一入口进入
 - **功能**：
-  - 查看 Sherpa-MNN ASR 模型状态
-  - 下载/更新 ASR 模型
-  - 配置 VAD 参数（阈值、最小语音时长）
+  - 统一管理所有本地模型（LLM、ASR、人脸检测等）
+  - 查看模型列表（按分类 Tab 切换）
+  - 下载新模型（从 ModelScope 远程仓库）
+  - 删除本地模型释放空间
+  - 查看模型属性（JSON 格式，支持复制）
+- **存储路径**：应用私有目录 `files/llm_models/{modelId}/`
+- **下载管理**：`LlmModelDownloadManager` 支持断点续传和进度回调
+- **模型配置**：`res/raw/llm_models.json` 定义所有可用模型的元数据
 
 **Agent 模式设置**
 - **本地模式**：仅使用本地模型（默认 Qwen3-1.7B）

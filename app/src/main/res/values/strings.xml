@@ -308,6 +308,8 @@
     <string name="ai_agent_input_hint">Ask AI Agent...</string>
     <string name="ai_model_manager">AI Model Manager</string>
     <string name="ai_model_manager_desc">Manage on-device AI models.</string>
+    <string name="model_center">Model Center</string>
+    <string name="model_center_desc">Download and manage all on-device models.</string>
     <string name="downloaded_models">Downloaded Models</string>
     <string name="available_models">Available Models</string>
     <string name="all_models_downloaded">All models are downloaded.</string>

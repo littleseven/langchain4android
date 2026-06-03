@@ -82,9 +82,7 @@ private const val TAG = "Settings"
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToLlmModelManager: () -> Unit = {},
-    onNavigateToAsrModelManager: () -> Unit = {},
-    onNavigateToFaceDetectionModelManager: () -> Unit = {},
+    onNavigateToModelCenter: () -> Unit = {},
 ) {
     // 沉浸式模式
     val view = LocalView.current
@@ -160,8 +158,9 @@ fun SettingsScreen(
                 "gallery" -> onNavigateBack()
                 "settings" -> { /* 已在设置页，无需导航 */ }
                 "debug" -> onNavigateBack() // 设置页无 debug 入口，返回相机页
-                "llm_model_manager" -> onNavigateToLlmModelManager()
-                "asr_model_manager" -> onNavigateToAsrModelManager()
+                "llm_model_manager" -> onNavigateToModelCenter()
+                "asr_model_manager" -> onNavigateToModelCenter()
+                "face_detection_model_manager" -> onNavigateToModelCenter()
 
                 else -> Logger.w(TAG, "Unknown navigation destination: $destination")
             }
@@ -182,7 +181,7 @@ fun SettingsScreen(
                 viewModel.setAppLanguage(language)
             }
             override fun onDownloadModel(modelId: String) {
-                onNavigateToLlmModelManager()
+                onNavigateToModelCenter()
             }
             override fun onSwitchFaceEngine(engine: com.picme.domain.model.FaceDetectionEngineMode) {
                 viewModel.setFaceDetectionEngineMode(engine)
@@ -260,9 +259,7 @@ fun SettingsScreen(
         onVoiceCommandModeChange = { mode -> viewModel.setVoiceCommandMode(mode) },
         localAsrModel = localAsrModel,
         onLocalAsrModelChange = { modelId -> viewModel.setLocalAsrModel(modelId) },
-        onNavigateToLlmModelManager = onNavigateToLlmModelManager,
-        onNavigateToAsrModelManager = onNavigateToAsrModelManager,
-        onNavigateToFaceDetectionModelManager = onNavigateToFaceDetectionModelManager,
+        onNavigateToModelCenter = onNavigateToModelCenter,
         isModelDownloaded = viewModel::isModelDownloaded,
         getModelId = viewModel::getModelId,
         downloadModel = viewModel::downloadModel,
@@ -325,9 +322,7 @@ private fun settingsContent(
     onRoiDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
-    onNavigateToLlmModelManager: () -> Unit,
-    onNavigateToAsrModelManager: () -> Unit,
-    onNavigateToFaceDetectionModelManager: () -> Unit,
+    onNavigateToModelCenter: () -> Unit,
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
@@ -425,7 +420,7 @@ private fun settingsContent(
                         AiAgentLocalModelSection(
                             currentLocalModel = aiAgentLocalModel,
                             onLocalModelSelected = onAiAgentLocalModelChange,
-                            onNavigateToModelManager = onNavigateToLlmModelManager
+                            onNavigateToModelManager = onNavigateToModelCenter
                         )
                     }
                     AiAgentMode.REMOTE -> {
@@ -455,7 +450,7 @@ private fun settingsContent(
                     LocalAsrModelSelection(
                         currentModel = localAsrModel,
                         onModelSelected = onLocalAsrModelChange,
-                        onNavigateToAsrModelManager = onNavigateToAsrModelManager
+                        onNavigateToModelCenter = onNavigateToModelCenter
                     )
                 }
             }
@@ -468,7 +463,7 @@ private fun settingsContent(
                 config = roiStageConfig,
                 onModelTypeSelected = onRoiModelTypeSelected,
                 onDevicePreferenceSelected = onRoiDevicePreferenceSelected,
-                onNavigateToModelManager = onNavigateToFaceDetectionModelManager,
+                onNavigateToModelManager = onNavigateToModelCenter,
                 isModelDownloaded = isModelDownloaded,
                 getModelId = getModelId,
                 downloadModel = downloadModel,
@@ -484,7 +479,7 @@ private fun settingsContent(
                 config = landmarkStageConfig,
                 onModelTypeSelected = onLandmarkModelTypeSelected,
                 onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected,
-                onNavigateToModelManager = onNavigateToFaceDetectionModelManager,
+                onNavigateToModelManager = onNavigateToModelCenter,
                 isModelDownloaded = isModelDownloaded,
                 getModelId = getModelId,
                 downloadModel = downloadModel,
@@ -657,7 +652,7 @@ private fun VoiceCommandModeSelection(
 private fun LocalAsrModelSelection(
     currentModel: String,
     onModelSelected: (String) -> Unit,
-    onNavigateToAsrModelManager: () -> Unit
+    onNavigateToModelCenter: () -> Unit
 ) {
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
@@ -689,13 +684,13 @@ private fun LocalAsrModelSelection(
             // ASR 模型管理入口（紧凑图标按钮）
             Row(
                 modifier = Modifier
-                    .clickable(onClick = onNavigateToAsrModelManager)
+                    .clickable(onClick = onNavigateToModelCenter)
                     .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = stringResource(R.string.asr_model_manager),
+                    text = stringResource(R.string.model_center),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -867,11 +862,11 @@ private fun AiAgentLocalModelSection(
         ) {
             Column {
                 Text(
-                    text = stringResource(R.string.ai_model_manager),
+                    text = stringResource(R.string.model_center),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = stringResource(R.string.ai_model_manager_desc),
+                    text = stringResource(R.string.model_center_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -902,11 +897,11 @@ private fun AiAgentModelManagerRow(
     ) {
         Column {
             Text(
-                text = stringResource(R.string.ai_model_manager),
+                text = stringResource(R.string.model_center),
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                text = stringResource(R.string.ai_model_manager_desc),
+                text = stringResource(R.string.model_center_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1489,11 +1484,11 @@ private fun StageConfigSection(
         ) {
             Column {
                 Text(
-                    text = stringResource(R.string.face_detection_model_manager),
+                    text = stringResource(R.string.model_center),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = stringResource(R.string.face_detection_model_manager_desc),
+                    text = stringResource(R.string.model_center_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1744,9 +1739,7 @@ fun SettingsScreenPreview() {
             onVoiceCommandModeChange = {},
             localAsrModel = "",
             onLocalAsrModelChange = {},
-            onNavigateToLlmModelManager = {},
-            onNavigateToAsrModelManager = {},
-            onNavigateToFaceDetectionModelManager = {},
+            onNavigateToModelCenter = {},
             isModelDownloaded = { true },
             getModelId = { _, _ -> null },
             downloadModel = { _, _ -> },

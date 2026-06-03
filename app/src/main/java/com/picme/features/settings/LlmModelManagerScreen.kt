@@ -110,7 +110,7 @@ internal fun getCategoryIcon(tag: String): androidx.compose.ui.graphics.vector.I
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LlmModelManagerScreen(
+fun ModelCenterScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit
 ) {
@@ -133,7 +133,7 @@ fun LlmModelManagerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.ai_model_manager)) },
+                title = { Text(stringResource(R.string.model_center)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
