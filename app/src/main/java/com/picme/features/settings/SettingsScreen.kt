@@ -268,7 +268,6 @@ fun SettingsScreen(
         downloadModel = viewModel::downloadModel,
         downloadStates = downloadStates,
         allModels = allModels,
-        onResetCameraMemoryState = viewModel::resetCameraMemoryState,
         logModuleConfig = logModuleConfig,
         onLogModuleConfigChange = viewModel::setLogModuleConfig,
         onNavigateBack = onNavigateBack
@@ -334,7 +333,6 @@ private fun settingsContent(
     downloadModel: (String, ModelConfig) -> Unit,
     downloadStates: Map<String, com.picme.data.download.DownloadState>,
     allModels: List<ModelConfig>,
-    onResetCameraMemoryState: () -> Unit,
     logModuleConfig: com.picme.domain.model.LogModuleConfig,
     onLogModuleConfigChange: (com.picme.domain.model.LogModuleConfig) -> Unit,
     onNavigateBack: () -> Unit
@@ -577,25 +575,6 @@ private fun settingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            SettingsSection(
-                title = stringResource(R.string.camera_memory),
-                description = stringResource(R.string.camera_memory_desc)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onResetCameraMemoryState) {
-                        Text(stringResource(R.string.reset_camera_to_default))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
 
             // 日志模块管理
             SettingsSection(
@@ -611,35 +590,35 @@ private fun settingsContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LogModuleConfigSection(
     config: com.picme.domain.model.LogModuleConfig,
     onConfigChange: (com.picme.domain.model.LogModuleConfig) -> Unit
 ) {
-    Column(
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         com.picme.domain.model.LogModule.entries.forEach { module ->
             val enabled = config.isEnabled(module)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = module.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            FilterChip(
+                selected = enabled,
+                onClick = { onConfigChange(config.toggle(module, !enabled)) },
+                label = {
+                    Text(
+                        text = module.displayName,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { onConfigChange(config.toggle(module, it)) }
-                )
-            }
+            )
         }
     }
 }
@@ -1773,7 +1752,6 @@ fun SettingsScreenPreview() {
             downloadModel = { _, _ -> },
             downloadStates = emptyMap(),
             allModels = emptyList(),
-            onResetCameraMemoryState = {},
             logModuleConfig = com.picme.domain.model.LogModuleConfig.default(),
             onLogModuleConfigChange = {},
             onNavigateBack = {}
