@@ -17,40 +17,6 @@
     "tags": ["ASR", "speech", "chinese", "english"]
   },
   {
-    "id": "whisper-tiny-zh",
-    "name": "Whisper Tiny 中文",
-    "description": "轻量级语音识别模型，支持中文普通话，用于声控拍摄功能",
-    "type": "ASR",
-    "size": 75000000,
-    "sources": {
-      "ModelScope": "picme/whisper-tiny-zh"
-    },
-    "files": [
-      "whisper.mnn",
-      "vocab.json"
-    ],
-    "tags": ["ASR", "speech", "chinese"]
-  },
-  {
-    "id": "qwen3-0.6b",
-    "name": "Qwen3-0.6B-MNN",
-    "description": "阿里通义千问 3 0.6B 超轻量版，适合低端设备快速推理",
-    "type": "LLM",
-    "size": 454473462,
-    "sources": {
-      "HuggingFace": "taobao-mnn/Qwen3-0.6B-MNN",
-      "ModelScope": "MNN/Qwen3-0.6B-MNN",
-      "Modelers": "MNN/Qwen3-0.6B-MNN"
-    },
-    "files": [
-      "config.json",
-      "llm.mnn",
-      "llm.mnn.weight",
-      "tokenizer.txt"
-    ],
-    "tags": ["chat", "lightweight", "multilingual"]
-  },
-  {
     "id": "qwen3-1.7b",
     "name": "Qwen3-1.7B-MNN",
     "description": "阿里通义千问 3 1.7B 平衡版，更强的推理能力，适合中端设备本地运行",
@@ -67,6 +33,27 @@
       "tokenizer.txt"
     ],
     "tags": ["chat", "reasoning", "multilingual"]
+  },
+  {
+    "id": "qwen3.5-0.8b",
+    "name": "Qwen3.5-0.8B-MNN",
+    "description": "阿里通义千问 3.5 0.8B 轻量多模态版，支持图片理解，适合中端设备本地运行",
+    "type": "LLM",
+    "size": 547000000,
+    "sources": {
+      "ModelScope": "MNN/Qwen3.5-0.8B-MNN"
+    },
+    "files": [
+      "config.json",
+      "llm_config.json",
+      "llm.mnn",
+      "llm.mnn.json",
+      "llm.mnn.weight",
+      "tokenizer.txt",
+      "visual.mnn",
+      "visual.mnn.weight"
+    ],
+    "tags": ["chat", "vision", "multilingual", "lightweight"]
   },
   {
     "id": "qwen3.5-2b",

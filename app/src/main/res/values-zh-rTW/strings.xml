@@ -301,6 +301,8 @@
     <string name="ai_agent_input_hint">向 AI 助手提問...</string>
     <string name="ai_model_manager">AI 模型管理</string>
     <string name="ai_model_manager_desc">管理本地 AI 模型。</string>
+    <string name="model_center">模型中心</string>
+    <string name="model_center_desc">統一下載和管理所有本地模型。</string>
     <string name="downloaded_models">已下載模型</string>
     <string name="available_models">可下載模型</string>
     <string name="all_models_downloaded">所有模型已下載。</string>
