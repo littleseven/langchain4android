@@ -179,6 +179,18 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
     private var uAspectRatioLocation: Int = -1
     private var uUseGpupixelWarpLocation: Int = -1
 
+    // [GC 优化] 预分配 Viewport 数组，避免每帧 new IntArray(4)
+    private val viewportArray = IntArray(4)
+    private val singleIntBuffer = IntArray(1)
+
+    // [GC 优化] 预分配 Staging 缓冲区，替代 toStandardUvFacePoints() 的 clone()
+    private val stagingUvFacePoints = FloatArray(106 * 2)
+    // [GC 优化] 预分配 Staging 缓冲区，替代轮廓点 buffer 的 clone()
+    private val stagingLipOuter = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private val stagingLipInner = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private val stagingLeftCheek = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+    private val stagingRightCheek = FloatArray(MAX_LIP_CONTOUR_POINTS * 2)
+
     private var debugMode: Int = 0  // 0=正常渲染
 
     fun setRenderMode(mode: Int) {
@@ -378,7 +390,9 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      */
     private fun toStandardUvFacePoints(): FloatArray {
         synchronized(faceSyncLock) {
-            return facePointsBuffer.clone()
+            // [GC 优化] 使用预分配 staging 缓冲区，避免每帧 clone() 分配
+            System.arraycopy(facePointsBuffer, 0, stagingUvFacePoints, 0, facePointsBuffer.size)
+            return stagingUvFacePoints
         }
     }
 
@@ -542,7 +556,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
      * 多Pass美颜 + 风格特效渲染
      */
     private fun renderBeautyMultiPass(activeStyle: StyleEffect) {
-        val viewportArray = IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
         val outputWidth = viewportArray[2]
         val outputHeight = viewportArray[3]
@@ -717,24 +730,25 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         shaderProgram2D.setVec2("uUpperLipCenter", invUpperLip.first, invUpperLip.second)
         shaderProgram2D.setVec2("uLowerLipCenter", invLowerLip.first, invLowerLip.second)
         // 轮廓点也需要逆变换
-        val invLipOuter = lipOuterContourBuffer.clone()
-        val invLipInner = lipInnerContourBuffer.clone()
-        val invLeftCheek = leftCheekContourBuffer.clone()
-        val invRightCheek = rightCheekContourBuffer.clone()
-        inverseTransformContour(invLipOuter, lipOuterContourCount)
-        inverseTransformContour(invLipInner, lipInnerContourCount)
-        inverseTransformContour(invLeftCheek, leftCheekContourCount)
-        inverseTransformContour(invRightCheek, rightCheekContourCount)
+        // [GC 优化] 使用预分配 staging 缓冲区，替代每帧 clone() 分配
+        System.arraycopy(lipOuterContourBuffer, 0, stagingLipOuter, 0, lipOuterContourBuffer.size)
+        System.arraycopy(lipInnerContourBuffer, 0, stagingLipInner, 0, lipInnerContourBuffer.size)
+        System.arraycopy(leftCheekContourBuffer, 0, stagingLeftCheek, 0, leftCheekContourBuffer.size)
+        System.arraycopy(rightCheekContourBuffer, 0, stagingRightCheek, 0, rightCheekContourBuffer.size)
+        inverseTransformContour(stagingLipOuter, lipOuterContourCount)
+        inverseTransformContour(stagingLipInner, lipInnerContourCount)
+        inverseTransformContour(stagingLeftCheek, leftCheekContourCount)
+        inverseTransformContour(stagingRightCheek, rightCheekContourCount)
         shaderProgram2D.setFloat("uLipOuterContourCount", lipOuterContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uLipOuterContourPoints", invLipOuter, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uLipOuterContourPoints", stagingLipOuter, MAX_LIP_CONTOUR_POINTS)
         shaderProgram2D.setFloat("uLipInnerContourCount", lipInnerContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uLipInnerContourPoints", invLipInner, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uLipInnerContourPoints", stagingLipInner, MAX_LIP_CONTOUR_POINTS)
         shaderProgram2D.setVec2("uLeftEye", invLeftEye.first, invLeftEye.second)
         shaderProgram2D.setVec2("uRightEye", invRightEye.first, invRightEye.second)
         shaderProgram2D.setFloat("uLeftCheekContourCount", leftCheekContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uLeftCheekContourPoints", invLeftCheek, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uLeftCheekContourPoints", stagingLeftCheek, MAX_LIP_CONTOUR_POINTS)
         shaderProgram2D.setFloat("uRightCheekContourCount", rightCheekContourCount.toFloat())
-        shaderProgram2D.setVec2Array("uRightCheekContourPoints", invRightCheek, MAX_LIP_CONTOUR_POINTS)
+        shaderProgram2D.setVec2Array("uRightCheekContourPoints", stagingRightCheek, MAX_LIP_CONTOUR_POINTS)
 
         if (renderMode == MODE_ADVANCED) {
             shaderProgram2D.setFloat("uWarmth", warmthStrength)
@@ -785,15 +799,12 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         val uAspectLoc = shaderProgram2D.getUniformLocation("uAspectRatio")
         if (uAspectLoc >= 0) {
             // 使用传入的 viewport 尺寸计算 aspect ratio（避免 FBO bind 后 viewport 被修改）
-            val aspectW = if (viewportWidth > 0) viewportWidth else {
-                val viewportArray = IntArray(4)
+            var aspectW = viewportWidth
+            var aspectH = viewportHeight
+            if (aspectW <= 0 || aspectH <= 0) {
                 GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
-                viewportArray[2]
-            }
-            val aspectH = if (viewportHeight > 0) viewportHeight else {
-                val viewportArray = IntArray(4)
-                GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
-                viewportArray[3]
+                aspectW = viewportArray[2]
+                aspectH = viewportArray[3]
             }
             if (aspectH > 0) {
                 val aspect = aspectW.toFloat() / aspectH.toFloat()
@@ -870,9 +881,8 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
         Logger.d(TAG, "renderMainShaderFromFbo2D: using shader program $programId")
 
         // [调试] 检查当前绑定的 FBO
-        val boundFbo = IntArray(1)
-        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, boundFbo, 0)
-        Logger.d(TAG, "renderMainShaderFromFbo2D: bound FBO=${boundFbo[0]}")
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, singleIntBuffer, 0)
+        Logger.d(TAG, "renderMainShaderFromFbo2D: bound FBO=${singleIntBuffer[0]}")
 
         // 绑定 2D 输入纹理到 TEXTURE0
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -1045,7 +1055,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
             return false
         }
 
-        val viewportArray = IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
         val outputWidth = viewportArray[2]
         val outputHeight = viewportArray[3]
@@ -1237,7 +1246,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
 
     private fun renderStyleEffectPass() {
         // 获取当前 viewport 尺寸
-        val viewportArray = IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
         val outputWidth = viewportArray[2]
         val outputHeight = viewportArray[3]
@@ -1367,7 +1375,6 @@ class BeautyRenderer(private val context: Context) : GLRenderer() {
                 }
                 if (uAspectRatioLocation >= 0) {
                     // 使用当前实际 viewport 尺寸计算 aspect ratio（与 GPUPixel 原始实现一致）
-                    val viewportArray = IntArray(4)
                     GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewportArray, 0)
                     val vpW = viewportArray[2]
                     val vpH = viewportArray[3]

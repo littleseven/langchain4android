@@ -276,17 +276,17 @@ std::vector<float> MnnFaceDetector::detect(const unsigned char *imageData,
     MNN::Tensor tmpOutput(output, outputDimType);
     output->copyToHostTensor(&tmpOutput);
 
-    // 转为 vector
+    // 转为 vector 使用成员缓冲区复用
     int elementSize = tmpOutput.elementSize();
-    std::vector<float> result;
-    result.reserve(elementSize);
+    resultBuffer_.clear();
+    resultBuffer_.reserve(elementSize);
     const float *data = tmpOutput.host<float>();
 
     for (int i = 0; i < elementSize; i++) {
-        result.push_back(data[i]);
+        resultBuffer_.push_back(data[i]);
     }
 
-    return result;
+    return resultBuffer_;
 }
 
 std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imageData,

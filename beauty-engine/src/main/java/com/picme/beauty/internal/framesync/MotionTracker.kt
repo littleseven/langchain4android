@@ -18,15 +18,24 @@ class MotionTracker {
     private val history = ArrayDeque<FrameState>(3)
     private val historyLock = Any()
 
-    // 预分配可重用缓冲区，避免每帧 GC（CR-P1-1）
-    private val predictedBuffer = FloatArray(VERTEX_COUNT * 2)
+    companion object {
+        private const val VERTEX_COUNT = 106
+        private const val FLOAT_COUNT = VERTEX_COUNT * 2
+    }
+
+    // [GC 优化] 双缓冲预测输出，消除每帧 clone() 分配
+    // 渲染线程持有 bufferA 引用，下一帧预测写入 bufferB，交替使用
+    private val predictedBufferA = FloatArray(FLOAT_COUNT)
+    private val predictedBufferB = FloatArray(FLOAT_COUNT)
+    private var useBufferA = true
 
     fun update(frameId: FrameId, landmarks106: FloatArray) {
         synchronized(historyLock) {
+            // [GC 优化] 调用方已 clone（CameraFrameAnalyzer 传入前已复制），此处直接引用避免重复分配
             history.addLast(
                 FrameState(
                     frameId = frameId,
-                    landmarks106 = landmarks106.clone(),
+                    landmarks106 = landmarks106,
                     timestampMs = SystemClock.elapsedRealtime()
                 )
             )
@@ -36,18 +45,14 @@ class MotionTracker {
         }
     }
 
-    companion object {
-        private const val VERTEX_COUNT = 106
-    }
-
     /**
      * 预测目标帧的人脸关键点位置
-     * @return 预测后的 FloatArray（内部缓冲区 clone），如果无法预测则返回历史结果的 clone
+     * @return 预测后的 FloatArray（双缓冲，非 clone），如果无法预测则返回历史结果的 clone
      */
     fun predict(fromFrameId: FrameId, toFrameId: FrameId, maxRatio: Float): FloatArray {
         synchronized(historyLock) {
             if (history.size < 2) {
-                return history.lastOrNull()?.landmarks106?.clone() ?: FloatArray(VERTEX_COUNT * 2)
+                return history.lastOrNull()?.landmarks106?.clone() ?: FloatArray(FLOAT_COUNT)
             }
 
             val latest = history.last()
@@ -56,23 +61,22 @@ class MotionTracker {
             val frameDiff = (latest.frameId.value - previous.frameId.value).coerceAtLeast(1L)
             val targetDiff = (toFrameId.value - fromFrameId.value).coerceAtLeast(0L)
 
-            // 时间因子：基于实际经过的时间计算更准确的预测
-            val timeFactor = targetDiff.toFloat() / frameDiff.toFloat()
+            // 轮流使用 bufferA/bufferB，避免每帧 clone（CR-P1-1）
+            val buffer = if (useBufferA) predictedBufferA else predictedBufferB
+            useBufferA = !useBufferA
 
-            // 复用预分配缓冲区，避免每帧 new FloatArray（CR-P1-1）
             for (i in latest.landmarks106.indices) {
                 val velocity = (latest.landmarks106[i] - previous.landmarks106[i]) / frameDiff
                 val rawPredicted = latest.landmarks106[i] + velocity * targetDiff
 
                 val actualDiff = rawPredicted - latest.landmarks106[i]
-                // 放宽限制：允许更大的预测位移以跟上快速移动
                 val maxDiff = abs(velocity * frameDiff * maxRatio * 2.0f)
                 val clampedDiff = actualDiff.coerceIn(-maxDiff, maxDiff)
 
-                predictedBuffer[i] = latest.landmarks106[i] + clampedDiff
+                buffer[i] = latest.landmarks106[i] + clampedDiff
             }
 
-            return predictedBuffer.clone()
+            return buffer
         }
     }
 

@@ -56,6 +56,12 @@ public:
                               int channels);
 
     /**
+     * [性能优化] 获取最后一次 detect() 的结果缓冲区引用
+     * 避免 std::vector 返回值拷贝，在 JNI 层直接读取
+     */
+    const std::vector<float>& getLastDetectResult() const { return resultBuffer_; }
+
+    /**
      * RetinaFace 多输出检测（score + bbox + landmark）
      */
     std::vector<FaceBox> detectRetinaFace(const unsigned char *imageData,
@@ -91,6 +97,10 @@ private:
 
     // 预处理配置
     std::unique_ptr<MNN::CV::ImageProcess> pretreat_;
+
+    // [性能优化] 复用结果缓冲区，避免每帧 std::vector 分配
+    std::vector<float> resultBuffer_;
+    std::vector<float> retinaResultBuffer_;  // RetinaFace 单个人脸结果 [15 floats]
 
     // RetinaFace 后处理
     void processRetinaFaceOutput(const float *score,

@@ -38,10 +38,20 @@ object ImageUtils {
     private var reusableArgbBuffer: IntArray? = null
     private var reusableArgbBufferSize: Int = 0
 
+    // [GC 优化] 复用 Y/U/V 平面 ByteArray 缓冲区，消除每像素 ByteBuffer.get() JNI 调用
+    private var reusableYPlane: ByteArray? = null
+    private var reusableUPlane: ByteArray? = null
+    private var reusableVPlane: ByteArray? = null
+
     // [性能优化] 复用 Bitmap 池，避免每帧 Bitmap.createBitmap
     private var reusableBitmap: Bitmap? = null
     private var reusableBitmapWidth: Int = 0
     private var reusableBitmapHeight: Int = 0
+
+    private fun getYuvPlaneBuffer(existing: ByteArray?, size: Int): ByteArray {
+        if (existing != null && existing.size >= size) return existing
+        return ByteArray(size)
+    }
 
     private fun getArgbBuffer(size: Int): IntArray {
         var buffer = reusableArgbBuffer
@@ -112,6 +122,27 @@ object ImageUtils {
 
             val argb = getArgbBuffer(pixelCount)
 
+            // [GC 优化] 批量读取 Y/U/V 平面到 ByteArray，消除每像素 3 次 ByteBuffer.get() JNI 调用
+            // 使用 buffer.remaining() 而非 rowStride*height，因为 CameraX 实际 buffer 大小可能小于 stride*height
+            val yPlaneSize = yBuffer.remaining()
+            reusableYPlane = getYuvPlaneBuffer(reusableYPlane, yPlaneSize)
+            yBuffer.position(0)
+            yBuffer.get(reusableYPlane!!, 0, yPlaneSize)
+
+            val uPlaneSize = uBuffer.remaining()
+            reusableUPlane = getYuvPlaneBuffer(reusableUPlane, uPlaneSize)
+            uBuffer.position(0)
+            uBuffer.get(reusableUPlane!!, 0, uPlaneSize)
+
+            val vPlaneSize = vBuffer.remaining()
+            reusableVPlane = getYuvPlaneBuffer(reusableVPlane, vPlaneSize)
+            vBuffer.position(0)
+            vBuffer.get(reusableVPlane!!, 0, vPlaneSize)
+
+            val yBytes = reusableYPlane!!
+            val uBytes = reusableUPlane!!
+            val vBytes = reusableVPlane!!
+
             // YUV → ARGB 转换（ITU-R BT.601 标准），直接采样到目标尺寸
             // [性能优化] 使用乘法替代每像素除法
             for (outY in 0 until outHeight) {
@@ -128,14 +159,14 @@ object ImageUtils {
                         else -> Pair(srcX, srcY)
                     }
 
-                    val y = (yBuffer.get(origRow * yRowStride + origCol).toInt() and BYTE_MASK)
+                    val y = yBytes[origRow * yRowStride + origCol].toInt() and BYTE_MASK
 
                     val uvRow = origRow shr UV_CHANNEL_SHIFT
                     val uvCol = origCol shr UV_CHANNEL_SHIFT
                     val uvIndex = uvRow * uvRowStride + uvCol * uvPixelStride
 
-                    val v = ((vBuffer.get(uvIndex).toInt() and BYTE_MASK) - UV_OFFSET)
-                    val u = ((uBuffer.get(uvIndex).toInt() and BYTE_MASK) - UV_OFFSET)
+                    val v = (vBytes[uvIndex].toInt() and BYTE_MASK) - UV_OFFSET
+                    val u = (uBytes[uvIndex].toInt() and BYTE_MASK) - UV_OFFSET
 
                     val r = ((y + Y_TO_R_COEFF * v).toInt().coerceIn(COLOR_MIN, COLOR_MAX))
                     val g = ((y - Y_TO_G_U_COEFF * u - Y_TO_G_V_COEFF * v).toInt().coerceIn(COLOR_MIN, COLOR_MAX))
@@ -162,5 +193,8 @@ object ImageUtils {
         reusableArgbBufferSize = 0
         reusableBitmapWidth = 0
         reusableBitmapHeight = 0
+        reusableYPlane = null
+        reusableUPlane = null
+        reusableVPlane = null
     }
 }
