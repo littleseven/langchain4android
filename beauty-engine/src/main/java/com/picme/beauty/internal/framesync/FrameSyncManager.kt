@@ -210,23 +210,19 @@ class FrameSyncManager private constructor(
     fun getLastQueryResult(): FrameSyncResult = lastQueryResult
 
     private fun findNearestHistoricalResult(currentFrameId: FrameId): DetectionResult? {
-        // [GC 优化] 无结果时快速返回，避免 toTypedArray() 的空数组分配
+        // [GC 优化] 使用 iterator() 代替 toTypedArray()，避免每帧数组分配
+        // ConcurrentLinkedQueue.iterator() 是弱一致性且线程安全的。
+        // 由于 FrameId 单调递增（front→back: 最旧→最新），正向遍历完整队列
+        // 并追踪最近的 <= currentFrameId 等价于原反向遍历语义。
         if (frameHistory.isEmpty()) return null
 
-        // [性能优化] 反向遍历 frameHistory，通常最近的历史帧在队列尾部，
-        // 这样可以更快找到最优结果，减少遍历次数。
         var nearestId: FrameId? = null
-        val historySnapshot = frameHistory.toTypedArray()
-        for (index in historySnapshot.size - 1 downTo 0) {
-            val frameId = historySnapshot[index]
+        val iterator = frameHistory.iterator()
+        while (iterator.hasNext()) {
+            val frameId = iterator.next()
             if (frameId <= currentFrameId && resultStore.containsKey(frameId)) {
                 if (nearestId == null || frameId.value > nearestId.value) {
                     nearestId = frameId
-                    // 由于是从后向前遍历，如果已经找到等于 currentFrameId-1 的帧，
-                    // 这就是最优结果，可以直接返回
-                    if (frameId.value >= currentFrameId.value - 1) {
-                        break
-                    }
                 }
             }
         }

@@ -262,6 +262,6 @@ class Face106ToWarpParamsTest {
         val result = Face106ToWarpParams.convert(landmarks)
 
         assertTrue("bigBeautyLandmarks should have face", result.bigBeautyLandmarks.hasFace)
-        assertEquals("bigBeautyLandmarks should have 106 points", 106, result.bigBeautyLandmarks.points.size)
+        assertEquals("bigBeautyLandmarks should have 106 points", 106, result.bigBeautyLandmarks.rawPoints.size / 2)
     }
 }

@@ -23,6 +23,7 @@ class GpuPixelLandmarksTest {
         val defaults = GpuPixelLandmarks()
         assertFalse("Default hasFace should be false", defaults.hasFace)
         assertEquals("Default points should be empty", 0, defaults.points.size)
+        assertEquals("Default rawPoints should be empty", 0, defaults.rawPoints.size)
     }
 
     @Test
@@ -35,13 +36,13 @@ class GpuPixelLandmarksTest {
         val result = GpuPixelLandmarks.fromFloatArray(floats)
 
         assertTrue("hasFace should be true", result.hasFace)
-        assertEquals("Should extract exactly 106 points", 106, result.points.size)
+        assertEquals("Should extract exactly 106 points", 106, result.rawPoints.size / 2)
 
         // 验证前几个点的坐标
-        assertEquals("Point 0 x", 0f / 106f, result.points[0].x, 0.0001f)
-        assertEquals("Point 0 y", 0f / 106f, result.points[0].y, 0.0001f)
-        assertEquals("Point 1 x", 1f / 106f, result.points[1].x, 0.0001f)
-        assertEquals("Point 1 y", 1f / 106f, result.points[1].y, 0.0001f)
+        assertEquals("Point 0 x", 0f / 106f, result.rawPoints[0], 0.0001f)
+        assertEquals("Point 0 y", 0f / 106f, result.rawPoints[1], 0.0001f)
+        assertEquals("Point 1 x", 1f / 106f, result.rawPoints[2], 0.0001f)
+        assertEquals("Point 1 y", 1f / 106f, result.rawPoints[3], 0.0001f)
     }
 
     @Test
@@ -54,7 +55,7 @@ class GpuPixelLandmarksTest {
         val result = GpuPixelLandmarks.fromFloatArray(floats)
 
         assertTrue("hasFace should be true", result.hasFace)
-        assertEquals("Should extract only 106 points", 106, result.points.size)
+        assertEquals("Should extract only 106 points", 106, result.rawPoints.size / 2)
     }
 
     @Test
@@ -82,7 +83,7 @@ class GpuPixelLandmarksTest {
         val result = GpuPixelLandmarks.fromFloatArray(floats)
 
         assertTrue("hasFace should be true", result.hasFace)
-        assertEquals("Should extract 50 available points", 50, result.points.size)
+        assertEquals("Should extract 50 available points", 50, result.rawPoints.size / 2)
     }
 
     @Test
@@ -93,7 +94,7 @@ class GpuPixelLandmarksTest {
         val result = GpuPixelLandmarks.fromFloatArray(floats)
 
         assertTrue("hasFace should be true", result.hasFace)
-        assertEquals("Should extract 106 complete points", 106, result.points.size)
+        assertEquals("Should extract 106 complete points", 106, result.rawPoints.size / 2)
     }
 
     @Test
@@ -109,9 +110,9 @@ class GpuPixelLandmarksTest {
         val result = GpuPixelLandmarks.fromFloatArray(floats)
 
         assertTrue("hasFace should be true", result.hasFace)
-        assertEquals("Should have 1 point", 1, result.points.size)
-        assertEquals("Point x", 0.5f, result.points[0].x, 0.0001f)
-        assertEquals("Point y", 0.6f, result.points[0].y, 0.0001f)
+        assertEquals("Should have 1 point", 1, result.rawPoints.size / 2)
+        assertEquals("Point x", 0.5f, result.rawPoints[0], 0.0001f)
+        assertEquals("Point y", 0.6f, result.rawPoints[1], 0.0001f)
     }
 
     @Test
@@ -126,8 +127,8 @@ class GpuPixelLandmarksTest {
         val result = GpuPixelLandmarks.fromFloatArray(floats)
 
         for (i in 0 until 106) {
-            assertEquals("Point $i x", i * 0.001f, result.points[i].x, 0.0001f)
-            assertEquals("Point $i y", i * 0.002f, result.points[i].y, 0.0001f)
+            assertEquals("Point $i x", i * 0.001f, result.rawPoints[i * 2], 0.0001f)
+            assertEquals("Point $i y", i * 0.002f, result.rawPoints[i * 2 + 1], 0.0001f)
         }
     }
 
@@ -138,8 +139,8 @@ class GpuPixelLandmarksTest {
 
         assertTrue("hasFace should be true", result.hasFace)
         for (i in 0 until 106) {
-            assertEquals("Point $i x should be 0", 0f, result.points[i].x, 0.0001f)
-            assertEquals("Point $i y should be 0", 0f, result.points[i].y, 0.0001f)
+            assertEquals("Point $i x should be 0", 0f, result.rawPoints[i * 2], 0.0001f)
+            assertEquals("Point $i y should be 0", 0f, result.rawPoints[i * 2 + 1], 0.0001f)
         }
     }
 }

@@ -230,7 +230,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         if (shouldSkipDetection) {
             // 跳过检测,复用上一帧的结果
-            Logger.d("Camera", "[Perf] Skip frame")
+            Logger.dThrottled("Camera", "skip_frame", "[Perf] Skip frame")
             onFaceWarpParamsChanged(existingWarpParams)
 
             // [帧同步关键修复] 跳帧时也必须向 FrameSyncManager 存储结果，
@@ -246,7 +246,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                         detectionLatencyMs = 0L
                     )
                 )
-                Logger.d("Camera", "[FrameSync] Stored skip-frame result for frameId=$frameId")
+                Logger.dThrottled("Camera", "stored_skip", "[FrameSync] Stored skip-frame result for frameId=$frameId")
             }
             return
         }
@@ -261,7 +261,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
             if (bitmap == null) {
                 return
             }
-            Logger.d("Camera", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
+            Logger.dThrottled("Camera", "yuv_bitmap", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
             // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
             val result = faceDetector.detect(bitmap, 0, lensFacing)
             result
@@ -295,7 +295,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                     detectionLatencyMs = detectionLatencyMs
                 )
             )
-            Logger.d("Camera", "[FrameSync] Stored result for frameId=$frameId, landmarks=${landmarks106.size}")
+            Logger.dThrottled("Camera", "stored_result", "[FrameSync] Stored result for frameId=$frameId, landmarks=${landmarks106.size}")
 
             val convertStart = SystemClock.elapsedRealtime()
             val faceWarpParams = Face106ToWarpParams.convert(
@@ -310,7 +310,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 useGpuForLandmark = detectionResult.useGpuForLandmark
             )
             val convertElapsed = SystemClock.elapsedRealtime() - convertStart
-            Logger.d("Camera", "[Perf] Face106ToWarpParams.convert: ${convertElapsed}ms")
+            Logger.dThrottled("Camera", "convert_time", "[Perf] Face106ToWarpParams.convert: ${convertElapsed}ms")
 
             FaceDetectionFrameCounter.updateLastFaceCenter(
                 faceWarpParams.faceCenterX,
