@@ -856,13 +856,17 @@ fun CameraContent(
             ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
-    // 当关键配置变化时重新创建 UseCase（mode/apiKey/forceRemote 等）
+    // 读取腾讯云 SCF Gateway Token（从 DataStore 或 BuildConfig）
+    val cloudflareGatewayToken by userPreferencesRepository.cloudflareGatewayTokenFlow.collectAsState(initial = "")
+
+    // 当关键配置变化时重新创建 UseCase（mode/apiKey/forceRemote/gatewayToken 等）
     val aiAgentUseCase = remember(
         context,
         aiAgentMode,
         aiAgentLocalModel,
         remoteConfig,
-        aiAgentForceRemote
+        aiAgentForceRemote,
+        cloudflareGatewayToken
     ) {
         AiAgentUseCase(
             context = context,
@@ -871,7 +875,8 @@ fun CameraContent(
             codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
             codingModel = remoteConfig.modelId,
             codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },
-            forceRemote = aiAgentForceRemote
+            forceRemote = aiAgentForceRemote,
+            gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
         )
     }
 

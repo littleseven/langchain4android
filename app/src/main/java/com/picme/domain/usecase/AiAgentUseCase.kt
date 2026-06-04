@@ -44,7 +44,8 @@ class AiAgentUseCase(
     codingApiKey: String? = null,
     codingModel: String = "kimi-for-coding",
     codingBaseUrl: String? = null,
-    forceRemote: Boolean = false
+    forceRemote: Boolean = false,
+    gatewayToken: String? = null
 ) {
 
     private val tag = "AiAgent"
@@ -55,12 +56,9 @@ class AiAgentUseCase(
     private val orchestrator = AgentOrchestrator.getInstance(context)
 
     /**
-     * Kimi Coding API 客户端（Claude 格式，唯一远程推理客户端）
+     * 用户自定义远程模型配置（高优先级：用户自己的 API Key）
      */
-    /**
-     * 远程模型配置
-     */
-    private val remoteConfig: com.picme.domain.model.RemoteModelConfig? =
+    private val userRemoteConfig: com.picme.domain.model.RemoteModelConfig? =
         codingApiKey?.takeIf { it.isNotBlank() }?.let { apiKey ->
             com.picme.domain.model.RemoteModelConfig(
                 modelId = codingModel,
@@ -70,11 +68,27 @@ class AiAgentUseCase(
         }
 
     /**
-     * 远程推理引擎（L2/L3/L4）
+     * 兜底远程模型配置（腾讯云 SCF Gateway，无需用户配置）
+     * 使用 BuildConfig 中内嵌的默认 Token
      */
-    private val remoteEngine: RemoteInferenceEngine? = remoteConfig?.let {
-        RemoteInferenceEngine(remoteConfig = it)
-    }
+    private val fallbackRemoteConfig: com.picme.domain.model.RemoteModelConfig =
+        com.picme.domain.model.RemoteModelConfig.TENCENT_SCF_DEFAULT.copy(
+            gatewayToken = gatewayToken?.takeIf { it.isNotBlank() }
+                ?: com.picme.BuildConfig.TENCENT_SCF_APP_TOKEN
+        )
+
+    /**
+     * 远程推理引擎（L2/L3/L4）
+     * 优先使用用户自定义配置，未配置时使用兜底 SCF Gateway
+     */
+    private val remoteEngine: RemoteInferenceEngine = RemoteInferenceEngine(
+        remoteConfig = userRemoteConfig ?: fallbackRemoteConfig
+    )
+
+    /**
+     * 是否使用兜底 Gateway（用于限频检测）
+     */
+    private val isUsingFallbackGateway: Boolean = userRemoteConfig == null
 
     /**
      * 自适应策略选择器（L1 缓存 + 输入特征分析）
@@ -206,30 +220,19 @@ class AiAgentUseCase(
         agentContext: AgentContext,
         currentState: CameraStateSnapshot
     ): Result<AiAgentCommand> {
-        val engine = remoteEngine
-        if (engine == null) {
-            Logger.w(REMOTE_TAG, "Remote engine not available (no API key)")
-            return Result.success(
-                AiAgentCommand.TextReply("请在设置中配置远程模型 API Key 以启用远程推理。")
-            )
-        }
-
         // 1. 选择推理策略
         val strategy = strategySelector.selectStrategy(userInput, agentContext)
         Logger.d(REMOTE_TAG, "[STRATEGY] selected=${strategy::class.simpleName}, input=\"$userInput\"")
 
-        return when (strategy) {
+        val result = when (strategy) {
             is InferenceStrategy.L1_Cached -> {
-                // L1: 缓存命中，零延迟返回
                 val command = mapAgentCommandToLegacy(strategy.command)
                 Logger.d(REMOTE_TAG, "[L1] cache hit → ${strategy.command::class.simpleName}")
                 Result.success(command)
             }
 
             is InferenceStrategy.L2_BatchFC -> {
-                // L2: Batch Function Calling（默认模式）
-                val result = engine.processBatch(userInput, agentContext, currentState)
-                result.map { commands ->
+                remoteEngine.processBatch(userInput, agentContext, currentState).map { commands ->
                     when {
                         commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
                         commands.size == 1 -> mapAgentCommandToLegacy(commands.first())
@@ -239,11 +242,8 @@ class AiAgentUseCase(
             }
 
             is InferenceStrategy.L3_PlanExecute -> {
-                // L3: Plan-and-Execute
-                // 降级到 L2（计划执行需要 UI 层配合，当前版本先走 Batch 格式）
                 Logger.d(REMOTE_TAG, "[L3] plan mode → fallback to L2 batch")
-                val result = engine.processBatch(userInput, agentContext, currentState)
-                result.map { commands ->
+                remoteEngine.processBatch(userInput, agentContext, currentState).map { commands ->
                     when {
                         commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
                         commands.size == 1 -> mapAgentCommandToLegacy(commands.first())
@@ -253,13 +253,28 @@ class AiAgentUseCase(
             }
 
             is InferenceStrategy.L4_ReAct -> {
-                // L4: ReAct 兜底
-                val result = engine.react(userInput, currentState)
-                result.map { message ->
+                remoteEngine.react(userInput, currentState).map { message ->
                     AiAgentCommand.TextReply(message)
                 }
             }
         }
+
+        // 兜底 Gateway 限频检测：如果返回 429，提示用户配置自己的 API Key
+        return result.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { error ->
+                if (isUsingFallbackGateway && error.message?.contains("429") == true) {
+                    Logger.w(REMOTE_TAG, "Fallback gateway rate limited")
+                    Result.success(
+                        AiAgentCommand.TextReply(
+                            "免费额度已用完，请在设置中配置自己的远程模型 API Key 解锁无限次使用。"
+                        )
+                    )
+                } else {
+                    Result.failure(error)
+                }
+            }
+        )
     }
 
     /**

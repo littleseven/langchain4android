@@ -83,6 +83,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         // 强制使用远程模型（绕过本地模型检查）
         val AI_AGENT_FORCE_REMOTE = booleanPreferencesKey("ai_agent_force_remote")
 
+        // Cloudflare AI Gateway Token
+        val CLOUDFLARE_GATEWAY_TOKEN = stringPreferencesKey("cloudflare_gateway_token")
+
         // 语音控制
         val VOICE_COMMAND_MODE = stringPreferencesKey("voice_command_mode")
         val LOCAL_ASR_MODEL = stringPreferencesKey("local_asr_model")
@@ -631,6 +634,26 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentForceRemote(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_FORCE_REMOTE] = enabled
+        }
+    }
+
+    // ── Cloudflare AI Gateway Token ─────────────────────────
+
+    override val cloudflareGatewayTokenFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.CLOUDFLARE_GATEWAY_TOKEN] ?: ""
+        }
+
+    override suspend fun updateCloudflareGatewayToken(token: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CLOUDFLARE_GATEWAY_TOKEN] = token
         }
     }
 

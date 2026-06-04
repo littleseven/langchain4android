@@ -18,12 +18,28 @@ data class RemoteModelConfig(
     val modelId: String,
     val protocol: RemoteProtocol = RemoteProtocol.OPENAI,
     val apiKey: String = "",
-    val baseUrl: String = ""
+    val baseUrl: String = "",
+    val gatewayToken: String = ""
 ) {
+    /**
+     * 是否已配置（用于用户自定义模型）
+     * 腾讯云 SCF Gateway 默认模型无需 apiKey，有 baseUrl + gatewayToken 即视为可用
+     */
     val isConfigured: Boolean
-        get() = apiKey.isNotBlank() && baseUrl.isNotBlank()
+        get() = baseUrl.isNotBlank() && (apiKey.isNotBlank() || gatewayToken.isNotBlank())
 
     companion object {
+        /**
+         * 腾讯云 SCF AI Gateway 默认配置
+         * 作为用户未配置远程 LLM Key 时的默认远程推理方式
+         * 注意：gatewayToken 需要端侧配置，这里只定义基础结构
+         */
+        val TENCENT_SCF_DEFAULT = RemoteModelConfig(
+            modelId = "deepseek-chat",
+            protocol = RemoteProtocol.OPENAI,
+            baseUrl = "https://1412656811-m5kw2dftdi.ap-beijing.tencentscf.com/"
+        )
+        
         /**
          * 预定义的远程模型列表
          */
@@ -130,7 +146,8 @@ data class RemoteModelConfigs(
                     }
                     val apiKey = extractField(obj, "apiKey") ?: ""
                     val baseUrl = extractField(obj, "baseUrl") ?: ""
-                    configs.add(RemoteModelConfig(modelId, protocol ?: RemoteProtocol.OPENAI, apiKey, baseUrl))
+                    val gatewayToken = extractField(obj, "gatewayToken") ?: ""
+                    configs.add(RemoteModelConfig(modelId, protocol ?: RemoteProtocol.OPENAI, apiKey, baseUrl, gatewayToken))
                 }
                 if (configs.isEmpty()) {
                     RemoteModelConfigs()
@@ -160,7 +177,7 @@ data class RemoteModelConfigs(
             val sb = StringBuilder("[")
             configs.configs.forEachIndexed { index, config ->
                 if (index > 0) sb.append(",")
-                sb.append("{\"modelId\":\"${config.modelId}\",\"protocol\":\"${config.protocol.name}\",\"apiKey\":\"${config.apiKey}\",\"baseUrl\":\"${config.baseUrl}\"}")
+                sb.append("{\"modelId\":\"${config.modelId}\",\"protocol\":\"${config.protocol.name}\",\"apiKey\":\"${config.apiKey}\",\"baseUrl\":\"${config.baseUrl}\",\"gatewayToken\":\"${config.gatewayToken}\"}")
             }
             sb.append("]")
             return sb.toString()

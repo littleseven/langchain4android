@@ -338,15 +338,19 @@ fun rememberAgentChatConfig(
             ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
+    // 读取腾讯云 SCF Gateway Token
+    val cloudflareGatewayToken by settingsRepository.cloudflareGatewayTokenFlow.collectAsState(initial = "")
+
     // AiAgentUseCase
-    val aiAgentUseCase = remember(remoteConfig) {
+    val aiAgentUseCase = remember(remoteConfig, cloudflareGatewayToken) {
         AiAgentUseCase(
             context = context,
             agentMode = AiAgentMode.LOCAL,
             localModelId = "qwen3_1_7b",
             codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
             codingModel = remoteConfig.modelId,
-            codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() }
+            codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },
+            gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
         )
     }
 

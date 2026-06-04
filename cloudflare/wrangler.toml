@@ -1,0 +1,16 @@
+name = "picme"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+[vars]
+MODEL = "deepseek/deepseek-chat"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+
+[env.development.vars]
+ENVIRONMENT = "development"
+
+# Secrets 需要在部署后通过以下命令设置：
+# wrangler secret put DEEPSEEK_API_KEY
+# wrangler secret put CLOUDFLARE_AIG_TOKEN

@@ -18,9 +18,10 @@ import java.util.concurrent.TimeUnit
  * @param enableLogging 是否启用 HTTP 请求日志
  */
 class OpenAiApiClient(
-    private val apiKey: String,
+    private val apiKey: String = "",
     private val baseUrl: String = DEFAULT_BASE_URL,
-    private val enableLogging: Boolean = false
+    private val enableLogging: Boolean = false,
+    private val gatewayToken: String? = null
 ) {
 
     companion object {
@@ -39,11 +40,20 @@ class OpenAiApiClient(
             .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
-                    .addHeader("Authorization", "Bearer $apiKey")
+                val requestBuilder = chain.request().newBuilder()
                     .addHeader("Content-Type", "application/json")
-                    .build()
-                chain.proceed(request)
+
+                // 用户自定义 API Key（如直接调用 OpenAI/Kimi 等）
+                if (apiKey.isNotBlank()) {
+                    requestBuilder.addHeader("Authorization", "Bearer $apiKey")
+                }
+
+                // 腾讯云 SCF / Cloudflare AI Gateway 认证头
+                gatewayToken?.takeIf { it.isNotBlank() }?.let { token ->
+                    requestBuilder.addHeader("X-App-Token", token)
+                }
+
+                chain.proceed(requestBuilder.build())
             }
 
         if (enableLogging) {
