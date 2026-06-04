@@ -167,6 +167,17 @@ class MediaRepositoryImpl(
                 break
             }
 
+            // 跳过已不存在的文件（可能已被其他应用删除）
+            val uri = asset.uri.toUri()
+            val exists = runCatching {
+                appContext.contentResolver.query(uri, null, null, null, null)?.use { it.moveToFirst() } ?: false
+            }.getOrDefault(false)
+            if (!exists) {
+                Logger.w(TAG, "File no longer exists, skipping: ${asset.uri}")
+                successfullyDeletedIds.add(asset.id)
+                continue
+            }
+
             Logger.d(TAG, "Attempting to delete file: ${asset.uri}")
             val deleted = deleteSystemMedia(asset.uri)
 
