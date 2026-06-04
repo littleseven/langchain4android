@@ -7,10 +7,15 @@ plugins {
 }
 
 // Release signing config from environment variables (secure)
-val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: "$projectDir/keystore/picme-release.jks"
-val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD") ?: "picme123"
-val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: "picme"
-val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: "picme123"
+// 本地构建时请在 ~/.gradle/gradle.properties 中配置：
+//   PICME_RELEASE_STORE_FILE=/path/to/keystore
+//   PICME_RELEASE_STORE_PASSWORD=your_password
+//   PICME_RELEASE_KEY_ALIAS=your_alias
+//   PICME_RELEASE_KEY_PASSWORD=your_password
+val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: ""
+val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD") ?: ""
+val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: ""
+val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: ""
 
 detekt {
     buildUponDefaultConfig = true
@@ -70,10 +75,12 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(releaseStoreFile)
-            storePassword = releaseStorePassword
-            keyAlias = releaseKeyAlias
-            keyPassword = releaseKeyPassword
+            if (releaseStoreFile.isNotBlank()) {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
         }
     }
 
@@ -85,7 +92,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (releaseStoreFile.isNotBlank()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isDebuggable = true
