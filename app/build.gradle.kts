@@ -7,10 +7,10 @@ plugins {
 }
 
 // Release signing config from environment variables (secure)
-val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: "${System.getProperty("user.home")}/.android/debug.keystore"
-val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD") ?: "android"
-val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: "androiddebugkey"
-val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: "android"
+val releaseStoreFile: String = System.getenv("PICME_RELEASE_STORE_FILE") ?: "$projectDir/keystore/picme-release.jks"
+val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD") ?: "picme123"
+val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: "picme"
+val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: "picme123"
 
 detekt {
     buildUponDefaultConfig = true
