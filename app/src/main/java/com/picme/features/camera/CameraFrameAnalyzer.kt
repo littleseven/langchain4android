@@ -14,6 +14,7 @@ import com.picme.beauty.internal.facedetect.Face106ToWarpParams
 import com.picme.beauty.internal.framesync.FrameSyncBridge
 import com.picme.beauty.internal.framesync.FrameSyncManager
 import com.picme.features.camera.facedetect.ImageUtils
+import androidx.camera.core.ImageProxy
 
 /**
  * InsightFace 性能优化: 智能帧跳过管理器
@@ -178,7 +179,7 @@ internal fun stopFaceDetectionWorker() {
  */
 @ExperimentalGetImage
 internal fun handleImageAnalysisFrameMediaPipe(
-    imageProxy: androidx.camera.core.ImageProxy,
+    imageProxy: ImageProxy,
     previewView: PreviewView,
     faceDetector: FaceDetector,
     lensFacing: Int,

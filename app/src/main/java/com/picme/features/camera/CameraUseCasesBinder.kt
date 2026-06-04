@@ -21,13 +21,19 @@ import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
+import android.util.Log
+import android.util.Rational
+import android.view.Surface
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.ViewPort
+import androidx.lifecycle.LifecycleOwner
 
 private const val TAG = "Camera"
 
 @ExperimentalGetImage
 internal fun bindCameraUseCases(
     context: Context,
-    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    lifecycleOwner: LifecycleOwner,
     cameraProviderFuture: ListenableFuture<ProcessCameraProvider>,
     lensFacing: Int,
     captureMode: MediaType,
@@ -49,7 +55,7 @@ internal fun bindCameraUseCases(
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
     onShowFocusIndicatorChanged: (Boolean) -> Unit
 ) {
-    android.util.Log.d(TAG, "bindCameraUseCases START: aspectRatio=$aspectRatio, captureMode=$captureMode")
+    Log.d(TAG, "bindCameraUseCases START: aspectRatio=$aspectRatio, captureMode=$captureMode")
     val cameraProvider = cameraProviderFuture.get()
     Logger.d("Camera", "Binding camera with aspectRatio=$aspectRatio")
 
@@ -68,7 +74,7 @@ internal fun bindCameraUseCases(
     onImageCaptureChanged(imageCapture)
 
     val useCaseGroup = if (aspectRatio == AspectRatio.RATIO_FULL) {
-        val rotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
+        val rotation = previewView.display?.rotation ?: Surface.ROTATION_0
         val preview = Preview.Builder()
             .setTargetAspectRatio(androidx.camera.core.AspectRatio.RATIO_16_9)
             .setTargetRotation(rotation)
@@ -78,12 +84,12 @@ internal fun bindCameraUseCases(
         imageCapture.targetRotation = rotation
 
         val displayMetrics = context.resources.displayMetrics
-        val viewport = androidx.camera.core.ViewPort.Builder(
-            android.util.Rational(displayMetrics.widthPixels, displayMetrics.heightPixels),
+        val viewport = ViewPort.Builder(
+            Rational(displayMetrics.widthPixels, displayMetrics.heightPixels),
             rotation
         ).build()
 
-        val builder = androidx.camera.core.UseCaseGroup.Builder()
+        val builder = UseCaseGroup.Builder()
             .addUseCase(preview)
             .addUseCase(imageAnalysis)
             .setViewPort(viewport)

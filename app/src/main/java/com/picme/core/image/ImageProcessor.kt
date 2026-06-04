@@ -54,6 +54,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.sqrt
+import android.os.Handler
+import android.os.Looper
+import java.util.concurrent.Executor
 
 private const val TAG = "ImageProcessor"
 
@@ -90,7 +93,7 @@ interface ImageProcessor {
         mode: MediaType,
         cachedFaces: List<Face>,
         beautyStrategy: BeautyStrategy,
-        executor: java.util.concurrent.Executor,
+        executor: Executor,
         onPhotoFinished: (success: Boolean) -> Unit = {}
     )
 
@@ -533,7 +536,7 @@ class ImageProcessorImpl(
             cachedFaces = cachedFaces,
             beautyStrategy = beautyStrategy,
             executor = try {
-                java.util.concurrent.Executor {
+                Executor {
                     CameraThreadRegistry.getCameraHandler().post(it)
                 }
             } catch (e: IllegalStateException) {
@@ -554,7 +557,7 @@ class ImageProcessorImpl(
         mode: MediaType,
         cachedFaces: List<Face>,
         beautyStrategy: BeautyStrategy,
-        executor: java.util.concurrent.Executor,
+        executor: Executor,
         onPhotoFinished: (success: Boolean) -> Unit
     ) {
         Logger.d(TAG, "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")
@@ -622,7 +625,7 @@ class ImageProcessorImpl(
                         val faceId = if (cachedFaces.isNotEmpty()) "person_${cachedFaces.size}" else null
 
                         // 回主线程保存（MediaStore 操作需要主线程 Handler）
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        Handler(Looper.getMainLooper()).post {
                             saveBitmapToMediaStore(
                                 context, finalBitmap, name, viewModel, hasFace, faceId, mode
                             )
@@ -631,7 +634,7 @@ class ImageProcessorImpl(
                         }
                     } catch (e: Exception) {
                         Logger.e(TAG, "Photo processing failed: ${e.message}", e)
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        Handler(Looper.getMainLooper()).post {
                             saveBitmapToMediaStore(
                                 context, rotatedBitmap, name, viewModel, false, null, mode
                             )

@@ -24,6 +24,10 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import androidx.navigation.NavController
+import com.picme.domain.model.AppLanguage
+import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.ThemeMode
 
 /**
  * Page-level Agent integration tests
@@ -76,7 +80,7 @@ class PageAgentIntegrationTest {
 
     private fun bindCapabilities() {
         galleryCapability.bindDelegate(FakeGalleryDelegate())
-        navigationCapability.bindNavController(mockk<androidx.navigation.NavController>(relaxed = true))
+        navigationCapability.bindNavController(mockk<NavController>(relaxed = true))
         settingsCapability.bindDelegate(FakeSettingsDelegate())
     }
 
@@ -101,10 +105,10 @@ class PageAgentIntegrationTest {
     }
 
     private class FakeSettingsDelegate : SettingsCapability.Delegate {
-        override fun onChangeTheme(theme: com.picme.domain.model.ThemeMode) {}
-        override fun onChangeLanguage(language: com.picme.domain.model.AppLanguage) {}
+        override fun onChangeTheme(theme: ThemeMode) {}
+        override fun onChangeLanguage(language: AppLanguage) {}
         override fun onDownloadModel(modelId: String) {}
-        override fun onSwitchFaceEngine(engine: com.picme.domain.model.FaceDetectionEngineMode) {}
+        override fun onSwitchFaceEngine(engine: FaceDetectionEngineMode) {}
         override fun onToggleSetting(key: String, enabled: Boolean) {}
     }
 

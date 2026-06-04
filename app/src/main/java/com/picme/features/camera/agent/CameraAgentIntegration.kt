@@ -15,6 +15,12 @@ import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.agent.GlobalAgentPanel
 import com.picme.features.agent.rememberGlobalAgentPanelState
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
+import com.picme.domain.model.AiAgentMode
+import com.picme.domain.model.AiAgentPrivacyLevel
+import com.picme.domain.model.MediaType
 
 private const val TAG = "CameraAgent"
 
@@ -36,9 +42,9 @@ class CameraAgentIntegration(
      */
     @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
     fun initializeCameraCapabilities(
-        onAdjustBeauty: (com.picme.beauty.api.BeautySettings) -> Unit,
-        onSwitchFilter: (com.picme.beauty.api.FilterType) -> Unit,
-        onSwitchStyle: (com.picme.beauty.api.StyleFilter) -> Unit,
+        onAdjustBeauty: (BeautySettings) -> Unit,
+        onSwitchFilter: (FilterType) -> Unit,
+        onSwitchStyle: (StyleFilter) -> Unit,
         onSwitchScene: (String) -> Unit,
         onSwitchRatio: (String) -> Unit,
         onAdjustExposure: (Int) -> Unit,
@@ -46,7 +52,7 @@ class CameraAgentIntegration(
         onFlipCamera: () -> Unit,
         onCapturePhoto: () -> Unit,
         onToggleRecording: () -> Unit,
-        onSwitchMode: (com.picme.domain.model.MediaType) -> Unit,
+        onSwitchMode: (MediaType) -> Unit,
         onNavigateTo: (String) -> Unit,
         onBack: () -> Unit
     ) {
@@ -117,9 +123,9 @@ fun rememberCameraAgentIntegration(
         AgentOrchestrator.getInstance(context).apply {
             // 加载配置
             configure(
-                mode = com.picme.domain.model.AiAgentMode.LOCAL,
+                mode = AiAgentMode.LOCAL,
                 modelId = "qwen3_1_7b",
-                privacyLevel = com.picme.domain.model.AiAgentPrivacyLevel.STRICT
+                privacyLevel = AiAgentPrivacyLevel.STRICT
             )
         }
     }

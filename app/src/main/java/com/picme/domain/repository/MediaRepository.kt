@@ -3,6 +3,7 @@ package com.picme.domain.repository
 import android.net.Uri
 import com.picme.domain.model.MediaAsset
 import kotlinx.coroutines.flow.Flow
+import android.content.IntentSender
 
 interface MediaRepository {
     val allMedia: Flow<List<MediaAsset>>
@@ -30,7 +31,7 @@ interface MediaRepository {
     /**
      * 获取 Android 10 (API 29) 的单条恢复性删除 IntentSender
      */
-    fun getPendingRecoverableIntentSender(): android.content.IntentSender?
+    fun getPendingRecoverableIntentSender(): IntentSender?
 
     /**
      * 清除 Android 10 的恢复性删除状态

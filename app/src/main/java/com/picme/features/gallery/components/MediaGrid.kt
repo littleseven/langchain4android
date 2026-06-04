@@ -45,6 +45,7 @@ import coil.request.ImageRequest
 import com.picme.domain.model.GroupedMedia
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
+import androidx.compose.foundation.layout.PaddingValues
 
 @Composable
 fun MediaGrid(
@@ -104,7 +105,7 @@ fun MediaGrid(
                 }
             },
         columns = GridCells.Adaptive(110.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(2.dp),
+        contentPadding = PaddingValues(2.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {

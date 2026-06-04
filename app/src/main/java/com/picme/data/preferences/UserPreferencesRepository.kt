@@ -40,6 +40,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
+import com.picme.domain.model.LogModuleConfig
+import com.picme.domain.model.ProviderConfig
+import com.picme.domain.model.ProviderConfigs
+import com.picme.domain.model.RemoteModelConfigs
 
 // 枚举已迁移至 domain.model.UserPreferences，调用方请从 com.picme.domain.model 导入
 
@@ -609,16 +613,16 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     /**
      * 从旧版 RemoteModelConfigs 迁移到新版 ProviderConfigs
      */
-    private fun migrateOldRemoteConfigs(preferences: androidx.datastore.preferences.core.Preferences): String? {
+    private fun migrateOldRemoteConfigs(preferences: Preferences): String? {
         val oldJson = preferences[stringPreferencesKey("ai_agent_remote_model_configs")] ?: return null
         return try {
-            val oldConfigs = com.picme.domain.model.RemoteModelConfigs.fromJson(oldJson)
-            val newConfigs = com.picme.domain.model.ProviderConfigs(
+            val oldConfigs = RemoteModelConfigs.fromJson(oldJson)
+            val newConfigs = ProviderConfigs(
                 configs = oldConfigs.configs.map { old ->
-                    com.picme.domain.model.ProviderConfig.fromRemoteModelConfig(old)
+                    ProviderConfig.fromRemoteModelConfig(old)
                 }
             )
-            com.picme.domain.model.ProviderConfigs.toJson(newConfigs)
+            ProviderConfigs.toJson(newConfigs)
         } catch (_: Exception) {
             null
         }
@@ -818,7 +822,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         updateCameraMemoryState(CameraMemoryState())
     }
 
-    override val logModuleConfigFlow: Flow<com.picme.domain.model.LogModuleConfig> = context.dataStore.data
+    override val logModuleConfigFlow: Flow<LogModuleConfig> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -829,13 +833,13 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         .map { preferences ->
             val configJson = preferences[PreferencesKeys.LOG_MODULE_CONFIG]
             if (configJson != null) {
-                com.picme.domain.model.LogModuleConfig.fromJson(configJson)
+                LogModuleConfig.fromJson(configJson)
             } else {
-                com.picme.domain.model.LogModuleConfig.default()
+                LogModuleConfig.default()
             }
         }
 
-    override suspend fun updateLogModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
+    override suspend fun updateLogModuleConfig(config: LogModuleConfig) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LOG_MODULE_CONFIG] = config.toJson()
         }

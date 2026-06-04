@@ -1,6 +1,8 @@
 package com.picme.beauty.log
 
 import android.util.Log
+import java.lang.reflect.Method
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Beauty Engine 日志代理
@@ -29,13 +31,13 @@ object BeautyLogProxy : BeautyLog {
     private var loggerInstance: Any? = null
 
     /** 反射缓存的方法 */
-    private var methodD: java.lang.reflect.Method? = null
-    private var methodI: java.lang.reflect.Method? = null
-    private var methodW: java.lang.reflect.Method? = null
-    private var methodWThrowable: java.lang.reflect.Method? = null
-    private var methodE: java.lang.reflect.Method? = null
-    private var methodEThrowable: java.lang.reflect.Method? = null
-    private var methodIsLogEnabled: java.lang.reflect.Method? = null
+    private var methodD: Method? = null
+    private var methodI: Method? = null
+    private var methodW: Method? = null
+    private var methodWThrowable: Method? = null
+    private var methodE: Method? = null
+    private var methodEThrowable: Method? = null
+    private var methodIsLogEnabled: Method? = null
 
     /** 是否已成功绑定 */
     private val isBound: Boolean
@@ -91,9 +93,9 @@ object BeautyLogProxy : BeautyLog {
     }
 
     /** 限流表：key -> 上次打印时间戳(ms) */
-    private val throttleMap = java.util.concurrent.ConcurrentHashMap<String, Long>(64)
+    private val throttleMap = ConcurrentHashMap<String, Long>(64)
 
-    private inline fun invoke(method: java.lang.reflect.Method?, vararg args: Any?) {
+    private inline fun invoke(method: Method?, vararg args: Any?) {
         if (method == null || loggerInstance == null) return
         try {
             method.invoke(loggerInstance, *args)

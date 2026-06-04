@@ -33,6 +33,7 @@ import com.picme.domain.model.GroupingMode.NONE
 import com.picme.domain.model.GroupingMode.PERSON
 import com.picme.domain.model.GroupingMode.SEXY
 import com.picme.domain.model.GroupingMode.SWIMWEAR
+import androidx.compose.foundation.layout.Box
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,7 +128,7 @@ private fun GroupingMenu(
     onModeSelected: (GroupingMode) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    androidx.compose.foundation.layout.Box {
+    Box {
         IconButton(onClick = { showMenu = true }) {
             Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null)
         }

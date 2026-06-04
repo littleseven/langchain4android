@@ -15,6 +15,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.picme.domain.agent.model.SceneManager
 
 /**
  * CameraCapability 场景化单元测试
@@ -52,7 +53,7 @@ class CameraCapabilityTest {
 
     inner class FakeDelegate : CameraCapability.Delegate {
         var onAdjustBeautyCalled = false
-        var receivedBeautySettings: com.picme.beauty.api.BeautySettings? = null
+        var receivedBeautySettings: BeautySettings? = null
 
         var onSwitchFilterCalled = false
         var receivedFilterType: FilterType? = null
@@ -79,7 +80,7 @@ class CameraCapabilityTest {
         var onSwitchModeCalled = false
         var receivedMode: MediaType? = null
 
-        override fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings) {
+        override fun onAdjustBeauty(settings: BeautySettings) {
             onAdjustBeautyCalled = true
             receivedBeautySettings = settings
         }
@@ -140,7 +141,7 @@ class CameraCapabilityTest {
     fun `activeScenes returns only CAMERA`() {
         val scenes = capability.activeScenes()
         assertEquals(1, scenes.size)
-        assertEquals(com.picme.domain.agent.model.SceneManager.Scene.CAMERA, scenes[0])
+        assertEquals(SceneManager.Scene.CAMERA, scenes[0])
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.picme.domain.agent
 
+import androidx.navigation.NavController
+import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.domain.agent.capability.CameraCapability
@@ -73,9 +75,9 @@ class AgentOrchestratorCommandChainTest {
 
     inner class FakeCameraDelegate : CameraCapability.Delegate {
         var captureCalled = false
-        var lastBeautySettings: com.picme.beauty.api.BeautySettings? = null
+        var lastBeautySettings: BeautySettings? = null
 
-        override fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings) {
+        override fun onAdjustBeauty(settings: BeautySettings) {
             lastBeautySettings = settings
         }
 
@@ -247,7 +249,7 @@ class AgentOrchestratorCommandChainTest {
         // 在 Gallery 场景也能执行导航
         SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
 
-        val navController = mockk<androidx.navigation.NavController>(relaxed = true)
+        val navController = mockk<NavController>(relaxed = true)
         val navCap = NavigationCapability.getInstance()
         navCap.bindNavController(navController)
         registry.register(navCap)

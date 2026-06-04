@@ -5,6 +5,7 @@ import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.model.ModelManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * MNN-LLM 本地模型客户端
@@ -42,15 +43,15 @@ class MnnLlmClient(private val context: Context) {
             val configPath = "$modelDir/config.json"
 
             // 验证 config.json 存在且有效
-            val configFile = java.io.File(configPath)
+            val configFile = File(configPath)
             if (!configFile.exists() || configFile.length() == 0L) {
                 Logger.e(tag, "LLM config not found or empty: $configPath")
                 return@withContext false
             }
 
             // 验证模型文件存在（llm.mnn 或 llm.mnn.weight 至少有一个）
-            val modelFile = java.io.File(modelDir, "llm.mnn")
-            val weightFile = java.io.File(modelDir, "llm.mnn.weight")
+            val modelFile = File(modelDir, "llm.mnn")
+            val weightFile = File(modelDir, "llm.mnn.weight")
             if (!modelFile.exists() && !weightFile.exists()) {
                 Logger.e(tag, "LLM model files not found in: $modelDir")
                 return@withContext false

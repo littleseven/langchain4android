@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.SystemClock
 import com.picme.beauty.api.Logger
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import android.graphics.RectF
 
 /**
  * 基于 MediaPipe 的 ROI 检测器
@@ -17,7 +18,7 @@ class MediaPipeRoiDetector(
         private const val TAG = "MediaPipeRoi"
     }
 
-    override fun detectRoi(bitmap: Bitmap): android.graphics.RectF? {
+    override fun detectRoi(bitmap: Bitmap): RectF? {
         val startTime = SystemClock.elapsedRealtime()
         return try {
             Logger.d(TAG, "[Perf] MediaPipe ROI START: bitmap=${bitmap.width}x${bitmap.height}")
@@ -26,7 +27,7 @@ class MediaPipeRoiDetector(
             val inferenceStart = SystemClock.elapsedRealtime()
             val result = faceDetector.videoLandmarker?.detectForVideo(
                 mpImage,
-                android.os.SystemClock.uptimeMillis()
+                SystemClock.uptimeMillis()
             )
             val inferenceTime = SystemClock.elapsedRealtime() - inferenceStart
 
@@ -45,7 +46,7 @@ class MediaPipeRoiDetector(
                     if (y > maxY) maxY = y
                 }
 
-                val roi = android.graphics.RectF(
+                val roi = RectF(
                     minX * bitmap.width.toFloat(),
                     minY * bitmap.height.toFloat(),
                     maxX * bitmap.width.toFloat(),

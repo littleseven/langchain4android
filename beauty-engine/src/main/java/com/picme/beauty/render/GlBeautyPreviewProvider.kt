@@ -170,7 +170,7 @@ class GlBeautyPreviewProvider(
 
     override fun getPerfStats(): BeautyPerfStats = beautyPreviewView?.getPerfStats() ?: BeautyPerfStats.EMPTY
 
-    override fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {
+    override fun startRecording(encoderSurface: Surface, width: Int, height: Int) {
         beautyPreviewView?.startRecording(encoderSurface, width, height)
     }
 

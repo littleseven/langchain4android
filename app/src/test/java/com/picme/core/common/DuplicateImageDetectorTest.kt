@@ -2,6 +2,7 @@ package com.picme.core.common
 
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
 
 /**
  * [QA] DuplicateImageDetector 单元测试
@@ -47,7 +48,7 @@ class DuplicateImageDetectorTest {
 
     @Test
     fun `calculateMD5 with nonexistent file returns null`() {
-        val nonexistentFile = java.io.File("/nonexistent/path/file.txt")
+        val nonexistentFile = File("/nonexistent/path/file.txt")
 
         val hash = DuplicateImageDetector.calculateMD5(nonexistentFile)
 
@@ -145,8 +146,8 @@ class DuplicateImageDetectorTest {
     @Test
     fun `DuplicateGroup creation with exact duplicate`() {
         val files = listOf(
-            java.io.File("/path/to/file1.jpg"),
-            java.io.File("/path/to/file2.jpg")
+            File("/path/to/file1.jpg"),
+            File("/path/to/file2.jpg")
         )
         val group = DuplicateImageDetector.DuplicateGroup(
             hash = "abc123",
@@ -162,8 +163,8 @@ class DuplicateImageDetectorTest {
     @Test
     fun `DuplicateGroup creation with similar images`() {
         val files = listOf(
-            java.io.File("/path/to/file1.jpg"),
-            java.io.File("/path/to/file2.jpg")
+            File("/path/to/file1.jpg"),
+            File("/path/to/file2.jpg")
         )
         val group = DuplicateImageDetector.DuplicateGroup(
             hash = "def456",
@@ -178,8 +179,8 @@ class DuplicateImageDetectorTest {
 
     // ==================== 辅助方法 ====================
 
-    private fun createTempFileWithContent(content: String): java.io.File {
-        val tempFile = java.io.File.createTempFile("test", ".txt")
+    private fun createTempFileWithContent(content: String): File {
+        val tempFile = File.createTempFile("test", ".txt")
         tempFile.writeText(content)
         return tempFile
     }

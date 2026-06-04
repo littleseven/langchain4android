@@ -19,6 +19,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 
 /**
  * 文档检测框 - 显示长方形区域引导用户拍摄文档
@@ -44,64 +46,64 @@ fun DocumentDetectionOverlay(
                     // 左上角
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.left, bounds.top + cornerLength),
-                        end = androidx.compose.ui.geometry.Offset(bounds.left, bounds.top),
+                        start = Offset(bounds.left, bounds.top + cornerLength),
+                        end = Offset(bounds.left, bounds.top),
                         strokeWidth = strokeWidth
                     )
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.left, bounds.top),
-                        end = androidx.compose.ui.geometry.Offset(bounds.left + cornerLength, bounds.top),
+                        start = Offset(bounds.left, bounds.top),
+                        end = Offset(bounds.left + cornerLength, bounds.top),
                         strokeWidth = strokeWidth
                     )
 
                     // 右上角
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.right - cornerLength, bounds.top),
-                        end = androidx.compose.ui.geometry.Offset(bounds.right, bounds.top),
+                        start = Offset(bounds.right - cornerLength, bounds.top),
+                        end = Offset(bounds.right, bounds.top),
                         strokeWidth = strokeWidth
                     )
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.right, bounds.top),
-                        end = androidx.compose.ui.geometry.Offset(bounds.right, bounds.top + cornerLength),
+                        start = Offset(bounds.right, bounds.top),
+                        end = Offset(bounds.right, bounds.top + cornerLength),
                         strokeWidth = strokeWidth
                     )
 
                     // 右下角
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.right, bounds.bottom - cornerLength),
-                        end = androidx.compose.ui.geometry.Offset(bounds.right, bounds.bottom),
+                        start = Offset(bounds.right, bounds.bottom - cornerLength),
+                        end = Offset(bounds.right, bounds.bottom),
                         strokeWidth = strokeWidth
                     )
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.right, bounds.bottom),
-                        end = androidx.compose.ui.geometry.Offset(bounds.right - cornerLength, bounds.bottom),
+                        start = Offset(bounds.right, bounds.bottom),
+                        end = Offset(bounds.right - cornerLength, bounds.bottom),
                         strokeWidth = strokeWidth
                     )
 
                     // 左下角
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.left + cornerLength, bounds.bottom),
-                        end = androidx.compose.ui.geometry.Offset(bounds.left, bounds.bottom),
+                        start = Offset(bounds.left + cornerLength, bounds.bottom),
+                        end = Offset(bounds.left, bounds.bottom),
                         strokeWidth = strokeWidth
                     )
                     drawLine(
                         color = Color.Unspecified,
-                        start = androidx.compose.ui.geometry.Offset(bounds.left, bounds.bottom),
-                        end = androidx.compose.ui.geometry.Offset(bounds.left, bounds.bottom - cornerLength),
+                        start = Offset(bounds.left, bounds.bottom),
+                        end = Offset(bounds.left, bounds.bottom - cornerLength),
                         strokeWidth = strokeWidth
                     )
 
                     // 半透明遮罩
                     drawRect(
                         brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.1f))),
-                        topLeft = androidx.compose.ui.geometry.Offset(bounds.left, bounds.top),
-                        size = androidx.compose.ui.geometry.Size(bounds.width, bounds.height),
+                        topLeft = Offset(bounds.left, bounds.top),
+                        size = Size(bounds.width, bounds.height),
                         style = Stroke(width = 2f)
                     )
                 }

@@ -17,6 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import com.picme.domain.agent.model.SceneManager
 
 /**
  * NavigationCapability 场景化单元测试
@@ -55,7 +56,7 @@ class NavigationCapabilityTest {
     fun `activeScenes returns all scenes`() {
         val scenes = capability.activeScenes()
         assertEquals(
-            com.picme.domain.agent.model.SceneManager.Scene.entries.toList(),
+            SceneManager.Scene.entries.toList(),
             scenes
         )
     }
@@ -220,25 +221,25 @@ class NavigationCapabilityTest {
 
     @Test
     fun `navigation available in CAMERA scene`() {
-        val cameraScene = com.picme.domain.agent.model.SceneManager.Scene.CAMERA
+        val cameraScene = SceneManager.Scene.CAMERA
         assertTrue(capability.activeScenes().contains(cameraScene))
     }
 
     @Test
     fun `navigation available in GALLERY scene`() {
-        val galleryScene = com.picme.domain.agent.model.SceneManager.Scene.GALLERY
+        val galleryScene = SceneManager.Scene.GALLERY
         assertTrue(capability.activeScenes().contains(galleryScene))
     }
 
     @Test
     fun `navigation available in SETTINGS scene`() {
-        val settingsScene = com.picme.domain.agent.model.SceneManager.Scene.SETTINGS
+        val settingsScene = SceneManager.Scene.SETTINGS
         assertTrue(capability.activeScenes().contains(settingsScene))
     }
 
     @Test
     fun `navigation available in DEBUG scene`() {
-        val debugScene = com.picme.domain.agent.model.SceneManager.Scene.DEBUG
+        val debugScene = SceneManager.Scene.DEBUG
         assertTrue(capability.activeScenes().contains(debugScene))
     }
 

@@ -44,6 +44,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.picme.core.common.LogEntry
 import com.picme.core.common.LogLevel
 import com.picme.core.common.Logger
+import androidx.compose.foundation.BorderStroke
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +75,7 @@ fun LogOverlay(
                 .fillMaxHeight(0.7f),
             shape = RoundedCornerShape(16.dp),
             color = Color.Black.copy(alpha = 0.85f),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 LogOverlayHeader(onClear = { Logger.clear() }, onDismiss = onDismiss)

@@ -59,6 +59,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
 import kotlin.math.max
+import android.graphics.Paint
+import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
 
 private const val TAG = "GalleryLandmark"
 
@@ -316,10 +318,10 @@ fun FaceLandmarkCanvasOverlay(
 
                 if (allFeatureIndices.contains(index)) {
                     drawIntoCanvas { canvas ->
-                        val paint = android.graphics.Paint().apply {
+                        val paint = Paint().apply {
                             color = "#00FF00".toColorInt()
                             textSize = 16f
-                            textAlign = android.graphics.Paint.Align.CENTER
+                            textAlign = Paint.Align.CENTER
                             isFakeBoldText = true
                         }
                         canvas.nativeCanvas.drawText(
@@ -342,10 +344,10 @@ fun FaceLandmarkCanvasOverlay(
                 val canvasPoint = toCanvasPoint(x, y)
                 drawCircle(color = blueColor, radius = 6f, center = canvasPoint)
                 drawIntoCanvas { canvas ->
-                    val paint = android.graphics.Paint().apply {
+                    val paint = Paint().apply {
                         color = "#4488FF".toColorInt()
                         textSize = 18f
-                        textAlign = android.graphics.Paint.Align.CENTER
+                        textAlign = Paint.Align.CENTER
                     }
                     canvas.nativeCanvas.drawText(
                         index.toString(),
@@ -564,7 +566,7 @@ private fun detectMediaPipe468(bitmap: Bitmap, landmarker: FaceLandmarker): Medi
 }
 
 private fun convert468To106ForDebug(
-    landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>
+    landmarks: List<NormalizedLandmark>
 ): FloatArray {
     val result = FloatArray(FaceDetectionConstants.POINT_COUNT * 2)
 

@@ -15,6 +15,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.picme.domain.agent.model.AgentScene
+import com.picme.domain.agent.remote.WaitCondition
+import com.picme.features.camera.FaceDetectionCache
 
 /**
  * 命令分发器接口
@@ -194,7 +197,7 @@ class ExecutionEngine(
                 val dispatchResult = dispatcher.dispatch(
                     command = planStep.action,
                     context = AgentContext(
-                        scene = com.picme.domain.agent.model.AgentScene.CAMERA
+                        scene = AgentScene.CAMERA
                     )
                 )
                 lastResult = if (dispatchResult.isSuccess) {
@@ -235,20 +238,20 @@ class ExecutionEngine(
      * @param waitCondition 等待条件
      * @return null 表示条件已满足，非 null 表示等待失败的原因
      */
-    private suspend fun evaluateWaitCondition(waitCondition: com.picme.domain.agent.remote.WaitCondition?): String? {
+    private suspend fun evaluateWaitCondition(waitCondition: WaitCondition?): String? {
         if (waitCondition == null) return null
 
         return when (waitCondition) {
-            is com.picme.domain.agent.remote.WaitCondition.SmileDetected -> {
+            is WaitCondition.SmileDetected -> {
                 // 微笑检测预留，暂未实现具体逻辑
                 Logger.w(tag, "Smile detection not implemented yet, skipping wait")
                 "微笑检测暂未实现"
             }
-            is com.picme.domain.agent.remote.WaitCondition.FaceDetected -> {
+            is WaitCondition.FaceDetected -> {
                 Logger.d(tag, "Waiting for face detection, timeout=${waitCondition.timeoutMs}ms")
                 val startTime = System.currentTimeMillis()
                 while (System.currentTimeMillis() - startTime < waitCondition.timeoutMs) {
-                    if (com.picme.features.camera.FaceDetectionCache.isValid()) {
+                    if (FaceDetectionCache.isValid()) {
                         Logger.d(tag, "Face detected")
                         return null
                     }
@@ -256,12 +259,12 @@ class ExecutionEngine(
                 }
                 "等待人脸检测超时"
             }
-            is com.picme.domain.agent.remote.WaitCondition.Duration -> {
+            is WaitCondition.Duration -> {
                 Logger.d(tag, "Waiting for duration: ${waitCondition.delayMs}ms")
                 delay(waitCondition.delayMs)
                 null
             }
-            is com.picme.domain.agent.remote.WaitCondition.UserConfirm -> {
+            is WaitCondition.UserConfirm -> {
                 // 用户确认需要 UI 交互，暂不支持自动等待
                 Logger.w(tag, "User confirm wait not supported in auto mode")
                 "用户确认需手动操作"
@@ -280,7 +283,7 @@ class ExecutionEngine(
                 val fallbackResult = dispatcher.dispatch(
                     command = fallbackAction,
                     context = AgentContext(
-                        scene = com.picme.domain.agent.model.AgentScene.CAMERA
+                        scene = AgentScene.CAMERA
                     )
                 )
                 if (fallbackResult.isSuccess) {

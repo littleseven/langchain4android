@@ -21,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import com.picme.domain.agent.remote.IntentCache
 
 /**
  * AgentCommandParser 响应解析逻辑单元测试
@@ -180,7 +181,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `readme scenario huanLengDiao maps to SwitchFilter COOL via IntentCache`() {
         val input = "换冷调"
-        val cache = com.picme.domain.agent.remote.IntentCache()
+        val cache = IntentCache()
         val result = cache.match(input)
         assertNotNull("「换冷调」应在 L1 Cache 中", result)
         assertTrue(result is AgentCommand.SwitchFilter)

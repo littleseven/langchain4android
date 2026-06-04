@@ -15,6 +15,8 @@ import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AiAgentPrivacyLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.picme.domain.agent.remote.IntentCache
+import com.picme.domain.model.RemoteModelConfig
 
 /**
  * Agent 编排器（统一入口）
@@ -53,7 +55,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
     private val strategySelector = AdaptiveStrategySelector()
 
     // L1 意图缓存（本地高频指令快速响应）
-    private val intentCache = com.picme.domain.agent.remote.IntentCache()
+    private val intentCache = IntentCache()
 
     // 推理路由器（懒加载，避免在不需要时初始化远程组件）
     private val inferenceRouter: InferenceRouter by lazy {
@@ -75,7 +77,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
      */
     private fun createRemoteOrchestrator(): RemoteOrchestrator {
         val apiKey = getApiKey()
-        val remoteConfig = com.picme.domain.model.RemoteModelConfig(
+        val remoteConfig = RemoteModelConfig(
             modelId = "kimi-for-coding",
             apiKey = apiKey,
             baseUrl = "https://api.kimi.com/coding/v1/"

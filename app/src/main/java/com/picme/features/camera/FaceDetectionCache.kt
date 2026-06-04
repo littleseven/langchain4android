@@ -1,6 +1,7 @@
 package com.picme.features.camera
 
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 人脸检测结果缓存
@@ -10,7 +11,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 object FaceDetectionCache {
     private val cachedLandmarks106 = AtomicReference<FloatArray?>(null)
-    private val lastUpdateTimeMs = java.util.concurrent.atomic.AtomicLong(0L)
+    private val lastUpdateTimeMs = AtomicLong(0L)
     private const val CACHE_VALIDITY_MS = 500L // 缓存有效期 500ms
 
     /**

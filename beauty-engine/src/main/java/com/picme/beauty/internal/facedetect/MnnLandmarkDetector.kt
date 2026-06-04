@@ -11,6 +11,7 @@ import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 import java.io.File
+import android.graphics.Color
 
 /**
  * 基于 MNN + Vulkan GPU 的 106 点关键点检测器
@@ -160,7 +161,7 @@ class MnnLandmarkDetector(
     private fun prepareInputBitmap(source: Bitmap, roi: RectF?): CropResult {
         // 计算有效的人脸边界框（与 ONNX 版本的 rectBounds 对应）
         val faceBounds = if (roi != null) {
-            android.graphics.Rect(
+            Rect(
                 roi.left.toInt().coerceIn(0, source.width),
                 roi.top.toInt().coerceIn(0, source.height),
                 roi.right.toInt().coerceIn(0, source.width),
@@ -168,7 +169,7 @@ class MnnLandmarkDetector(
             )
         } else {
             // 无 ROI 时使用全图
-            android.graphics.Rect(0, 0, source.width, source.height)
+            Rect(0, 0, source.width, source.height)
         }
 
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
@@ -206,7 +207,7 @@ class MnnLandmarkDetector(
         }
 
         val canvas = Canvas(scaled)
-        canvas.drawColor(android.graphics.Color.BLACK)
+        canvas.drawColor(Color.BLACK)
         canvas.drawBitmap(source, transformMatrix, null)
 
         return CropResult(scaled, inverseMatrix)
@@ -244,7 +245,7 @@ class MnnLandmarkDetector(
         }
 
         val canvas = Canvas(scaled)
-        canvas.drawColor(android.graphics.Color.BLACK)
+        canvas.drawColor(Color.BLACK)
         canvas.drawBitmap(source, transformMatrix, null)
 
         return CropResult(scaled, inverseMatrix)

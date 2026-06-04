@@ -6,6 +6,9 @@ import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.model.RemoteModelConfig
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.delay
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
+import com.picme.domain.model.MediaType
 
 /**
  * 远程推理引擎
@@ -408,8 +411,8 @@ class RemoteInferenceEngine(
             "toggle_recording" -> AgentCommand.ToggleRecording
             "switch_mode" -> {
                 val modeName = extractJsonField(json, "mode") ?: "PHOTO"
-                val mode = runCatching { com.picme.domain.model.MediaType.valueOf(modeName) }
-                    .getOrDefault(com.picme.domain.model.MediaType.PHOTO)
+                val mode = runCatching { MediaType.valueOf(modeName) }
+                    .getOrDefault(MediaType.PHOTO)
                 AgentCommand.SwitchMode(mode)
             }
             "text_reply" -> {
@@ -462,32 +465,32 @@ class RemoteInferenceEngine(
         return regex.find(json)?.groupValues?.get(1)?.toLongOrNull()
     }
 
-    private fun resolveFilterType(name: String): com.picme.beauty.api.FilterType {
+    private fun resolveFilterType(name: String): FilterType {
         val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
         return when (normalized) {
-            "NONE" -> com.picme.beauty.api.FilterType.NONE
-            "LEICA_CLASSIC" -> com.picme.beauty.api.FilterType.LEICA_CLASSIC
-            "LEICA_VIBRANT", "VIBRANT", "LEICA_VIVID", "VIVID" -> com.picme.beauty.api.FilterType.LEICA_VIBRANT
-            "LEICA_BW", "BW", "BLACK_WHITE", "LEICA_MONOCHROME", "MONOCHROME" -> com.picme.beauty.api.FilterType.LEICA_BW
-            "FILM_GOLD" -> com.picme.beauty.api.FilterType.FILM_GOLD
-            "FILM_FUJI" -> com.picme.beauty.api.FilterType.FILM_FUJI
-            "VINTAGE", "RETRO", "OLD" -> com.picme.beauty.api.FilterType.VINTAGE
-            "COOL", "COLD" -> com.picme.beauty.api.FilterType.COOL
-            "WARM" -> com.picme.beauty.api.FilterType.WARM
-            else -> runCatching { com.picme.beauty.api.FilterType.valueOf(normalized) }.getOrDefault(com.picme.beauty.api.FilterType.NONE)
+            "NONE" -> FilterType.NONE
+            "LEICA_CLASSIC" -> FilterType.LEICA_CLASSIC
+            "LEICA_VIBRANT", "VIBRANT", "LEICA_VIVID", "VIVID" -> FilterType.LEICA_VIBRANT
+            "LEICA_BW", "BW", "BLACK_WHITE", "LEICA_MONOCHROME", "MONOCHROME" -> FilterType.LEICA_BW
+            "FILM_GOLD" -> FilterType.FILM_GOLD
+            "FILM_FUJI" -> FilterType.FILM_FUJI
+            "VINTAGE", "RETRO", "OLD" -> FilterType.VINTAGE
+            "COOL", "COLD" -> FilterType.COOL
+            "WARM" -> FilterType.WARM
+            else -> runCatching { FilterType.valueOf(normalized) }.getOrDefault(FilterType.NONE)
         }
     }
 
-    private fun resolveStyleFilter(name: String): com.picme.beauty.api.StyleFilter {
+    private fun resolveStyleFilter(name: String): StyleFilter {
         val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
         return when (normalized) {
-            "NONE" -> com.picme.beauty.api.StyleFilter.NONE
-            "TOON", "CARTOON", "COMIC" -> com.picme.beauty.api.StyleFilter.TOON
-            "SKETCH" -> com.picme.beauty.api.StyleFilter.SKETCH
-            "POSTERIZE", "POSTER" -> com.picme.beauty.api.StyleFilter.POSTERIZE
-            "EMBOSS" -> com.picme.beauty.api.StyleFilter.EMBOSS
-            "CROSSHATCH", "CROSS_HATCH" -> com.picme.beauty.api.StyleFilter.CROSSHATCH
-            else -> runCatching { com.picme.beauty.api.StyleFilter.valueOf(normalized) }.getOrDefault(com.picme.beauty.api.StyleFilter.NONE)
+            "NONE" -> StyleFilter.NONE
+            "TOON", "CARTOON", "COMIC" -> StyleFilter.TOON
+            "SKETCH" -> StyleFilter.SKETCH
+            "POSTERIZE", "POSTER" -> StyleFilter.POSTERIZE
+            "EMBOSS" -> StyleFilter.EMBOSS
+            "CROSSHATCH", "CROSS_HATCH" -> StyleFilter.CROSSHATCH
+            else -> runCatching { StyleFilter.valueOf(normalized) }.getOrDefault(StyleFilter.NONE)
         }
     }
 

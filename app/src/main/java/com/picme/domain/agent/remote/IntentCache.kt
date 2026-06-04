@@ -1,6 +1,9 @@
 package com.picme.domain.agent.remote
 
 import com.picme.domain.agent.model.AgentCommand
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 
 /**
  * L1 本地意图缓存
@@ -154,85 +157,85 @@ class IntentCache(maxSize: Int = 100) {
             put("switch camera", AgentCommand.FlipCamera)
 
             // 美颜开关
-            put("开美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true)))
-            put("关美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = false)))
-            put("打开美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true)))
-            put("关闭美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = false)))
-            put("调高美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)))
-            put("增强美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)))
+            put("开美颜", AgentCommand.AdjustBeauty(BeautySettings(enabled = true)))
+            put("关美颜", AgentCommand.AdjustBeauty(BeautySettings(enabled = false)))
+            put("打开美颜", AgentCommand.AdjustBeauty(BeautySettings(enabled = true)))
+            put("关闭美颜", AgentCommand.AdjustBeauty(BeautySettings(enabled = false)))
+            put("调高美颜", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)))
+            put("增强美颜", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)))
 
             // 滤镜重置
-            put("原图", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.NONE))
-            put("无滤镜", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.NONE))
-            put("重置滤镜", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.NONE))
+            put("原图", AgentCommand.SwitchFilter(FilterType.NONE))
+            put("无滤镜", AgentCommand.SwitchFilter(FilterType.NONE))
+            put("重置滤镜", AgentCommand.SwitchFilter(FilterType.NONE))
 
             // 磨皮调节
-            put("磨皮", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 50f)))
-            put("磨皮50", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 50f)))
-            put("磨皮高一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 60f)))
-            put("磨皮低一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, smoothing = 30f)))
-            put("关磨皮", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(smoothing = 0f)))
+            put("磨皮", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, smoothing = 50f)))
+            put("磨皮50", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, smoothing = 50f)))
+            put("磨皮高一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, smoothing = 60f)))
+            put("磨皮低一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, smoothing = 30f)))
+            put("关磨皮", AgentCommand.AdjustBeauty(BeautySettings(smoothing = 0f)))
 
             // 美白调节
-            put("美白", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, whitening = 40f)))
-            put("美白50", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, whitening = 50f)))
-            put("美白高一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, whitening = 55f)))
-            put("美白低一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, whitening = 20f)))
-            put("关美白", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(whitening = 0f)))
+            put("美白", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, whitening = 40f)))
+            put("美白50", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, whitening = 50f)))
+            put("美白高一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, whitening = 55f)))
+            put("美白低一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, whitening = 20f)))
+            put("关美白", AgentCommand.AdjustBeauty(BeautySettings(whitening = 0f)))
 
             // 瘦脸调节
-            put("瘦脸", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, slimFace = 20f)))
-            put("瘦脸30", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, slimFace = 30f)))
-            put("瘦脸高一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, slimFace = 30f)))
-            put("瘦脸低一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, slimFace = 10f)))
-            put("关瘦脸", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(slimFace = 0f)))
+            put("瘦脸", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, slimFace = 20f)))
+            put("瘦脸30", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, slimFace = 30f)))
+            put("瘦脸高一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, slimFace = 30f)))
+            put("瘦脸低一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, slimFace = 10f)))
+            put("关瘦脸", AgentCommand.AdjustBeauty(BeautySettings(slimFace = 0f)))
 
             // 大眼调节
-            put("大眼", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, bigEyes = 30f)))
-            put("大眼50", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, bigEyes = 50f)))
-            put("大眼高一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, bigEyes = 40f)))
-            put("大眼低一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, bigEyes = 15f)))
-            put("关大眼", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(bigEyes = 0f)))
+            put("大眼", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, bigEyes = 30f)))
+            put("大眼50", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, bigEyes = 50f)))
+            put("大眼高一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, bigEyes = 40f)))
+            put("大眼低一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, bigEyes = 15f)))
+            put("关大眼", AgentCommand.AdjustBeauty(BeautySettings(bigEyes = 0f)))
 
             // 唇色调节
-            put("唇色", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, lipColor = 40f)))
-            put("唇色40", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, lipColor = 40f)))
-            put("唇色高一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, lipColor = 55f)))
-            put("唇色低一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, lipColor = 25f)))
-            put("关唇色", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(lipColor = 0f)))
+            put("唇色", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, lipColor = 40f)))
+            put("唇色40", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, lipColor = 40f)))
+            put("唇色高一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, lipColor = 55f)))
+            put("唇色低一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, lipColor = 25f)))
+            put("关唇色", AgentCommand.AdjustBeauty(BeautySettings(lipColor = 0f)))
 
             // 腮红调节
-            put("腮红", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, blush = 30f)))
-            put("腮红20", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, blush = 20f)))
-            put("腮红高一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, blush = 40f)))
-            put("腮红低一点", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(enabled = true, blush = 15f)))
-            put("关腮红", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings(blush = 0f)))
+            put("腮红", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, blush = 30f)))
+            put("腮红20", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, blush = 20f)))
+            put("腮红高一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, blush = 40f)))
+            put("腮红低一点", AgentCommand.AdjustBeauty(BeautySettings(enabled = true, blush = 15f)))
+            put("关腮红", AgentCommand.AdjustBeauty(BeautySettings(blush = 0f)))
 
             // 常用滤镜
-            put("徕卡经典", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.LEICA_CLASSIC))
-            put("徕卡鲜艳", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.LEICA_VIBRANT))
-            put("徕卡黑白", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.LEICA_BW))
-            put("胶片金", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.FILM_GOLD))
-            put("胶片富士", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.FILM_FUJI))
-            put("复古", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.VINTAGE))
-            put("冷调", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
-            put("暖调", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.WARM))
-            put("冷滤镜", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
-            put("换个冷调滤镜", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
-            put("换冷调", AgentCommand.SwitchFilter(com.picme.beauty.api.FilterType.COOL))
+            put("徕卡经典", AgentCommand.SwitchFilter(FilterType.LEICA_CLASSIC))
+            put("徕卡鲜艳", AgentCommand.SwitchFilter(FilterType.LEICA_VIBRANT))
+            put("徕卡黑白", AgentCommand.SwitchFilter(FilterType.LEICA_BW))
+            put("胶片金", AgentCommand.SwitchFilter(FilterType.FILM_GOLD))
+            put("胶片富士", AgentCommand.SwitchFilter(FilterType.FILM_FUJI))
+            put("复古", AgentCommand.SwitchFilter(FilterType.VINTAGE))
+            put("冷调", AgentCommand.SwitchFilter(FilterType.COOL))
+            put("暖调", AgentCommand.SwitchFilter(FilterType.WARM))
+            put("冷滤镜", AgentCommand.SwitchFilter(FilterType.COOL))
+            put("换个冷调滤镜", AgentCommand.SwitchFilter(FilterType.COOL))
+            put("换冷调", AgentCommand.SwitchFilter(FilterType.COOL))
 
             // 常用风格特效
-            put("卡通", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.TOON))
-            put("素描", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.SKETCH))
-            put("海报", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.POSTERIZE))
-            put("浮雕", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.EMBOSS))
-            put("交叉线", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.CROSSHATCH))
-            put("关风格", AgentCommand.SwitchStyle(com.picme.beauty.api.StyleFilter.NONE))
+            put("卡通", AgentCommand.SwitchStyle(StyleFilter.TOON))
+            put("素描", AgentCommand.SwitchStyle(StyleFilter.SKETCH))
+            put("海报", AgentCommand.SwitchStyle(StyleFilter.POSTERIZE))
+            put("浮雕", AgentCommand.SwitchStyle(StyleFilter.EMBOSS))
+            put("交叉线", AgentCommand.SwitchStyle(StyleFilter.CROSSHATCH))
+            put("关风格", AgentCommand.SwitchStyle(StyleFilter.NONE))
 
             // 恢复默认
-            put("恢复默认", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings()))
-            put("重置美颜", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings()))
-            put("默认参数", AgentCommand.AdjustBeauty(com.picme.beauty.api.BeautySettings()))
+            put("恢复默认", AgentCommand.AdjustBeauty(BeautySettings()))
+            put("重置美颜", AgentCommand.AdjustBeauty(BeautySettings()))
+            put("默认参数", AgentCommand.AdjustBeauty(BeautySettings()))
 
             // 导航
             put("去相册", AgentCommand.NavigateTo("gallery"))

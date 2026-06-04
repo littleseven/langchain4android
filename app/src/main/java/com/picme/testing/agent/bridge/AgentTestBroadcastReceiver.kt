@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import com.picme.testing.agent.core.AgentTestCase
+import com.picme.testing.agent.core.AgentTestResult
 
 /**
  * Agent 测试广播接收器
@@ -148,7 +150,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
             if (case != null) {
                 runner.runCase(case) { result ->
                     val json = when (result) {
-                        is com.picme.testing.agent.core.AgentTestResult.Success -> {
+                        is AgentTestResult.Success -> {
                             JSONObject().apply {
                                 put("type", "test_result")
                                 put("caseId", caseId)
@@ -156,7 +158,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
                                 put("context", result.context.toString())
                             }.toString()
                         }
-                        is com.picme.testing.agent.core.AgentTestResult.Failure -> {
+                        is AgentTestResult.Failure -> {
                             JSONObject().apply {
                                 put("type", "test_result")
                                 put("caseId", caseId)
@@ -207,8 +209,8 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun findCaseById(caseId: String, controller: DeviceTestController): com.picme.testing.agent.core.AgentTestCase<*>? {
-        val allCases = mutableListOf<com.picme.testing.agent.core.AgentTestCase<*>>()
+    private fun findCaseById(caseId: String, controller: DeviceTestController): AgentTestCase<*>? {
+        val allCases = mutableListOf<AgentTestCase<*>>()
         allCases.addAll(CameraAgentTestCases.allCases(controller))
         allCases.addAll(BeautyAgentTestCases.allCases(controller))
         return allCases.find { it.id == caseId }

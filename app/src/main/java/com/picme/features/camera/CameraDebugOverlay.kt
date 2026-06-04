@@ -39,6 +39,10 @@ import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.api.facedetect.GpuPixelLandmarks
 import kotlin.math.sqrt
+import android.graphics.Path
+import android.graphics.RectF
+import androidx.compose.ui.geometry.Size
+import kotlin.math.PI
 
 // [常量定义] 调试颜色
 private val MEDIAPIPE_DEBUG_COLOR = Color(0xFF4DB6AC)
@@ -184,7 +188,7 @@ private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
 private fun FaceDebugOverlayBigBeauty(
     bigBeautyLandmarks: GpuPixelLandmarks,
     aspectRatio: Int = AspectRatio.RATIO_FULL,
-    roiRect: android.graphics.RectF? = null
+    roiRect: RectF? = null
 ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val contentOffsetX: Float
@@ -235,7 +239,7 @@ private fun FaceDebugOverlayBigBeauty(
             drawRect(
                 color = Color(0xFFFF6D00).copy(alpha = 0.8f),
                 topLeft = Offset(roiLeft, roiTop),
-                size = androidx.compose.ui.geometry.Size(roiRight - roiLeft, roiBottom - roiTop),
+                size = Size(roiRight - roiLeft, roiBottom - roiTop),
                 style = Stroke(width = 3.dp.toPx())
             )
 
@@ -873,7 +877,7 @@ private fun DrawScope.drawBlushEllipse(
     val ellipsePoints = mutableListOf<Offset>()
 
     for (i in 0..segments) {
-        val angle = 2f * kotlin.math.PI * i / segments
+        val angle = 2f * PI * i / segments
         // 椭圆在局部坐标系中的点
         val localX = kotlin.math.cos(angle) * radiusX
         val localY = kotlin.math.sin(angle) * radiusY
@@ -891,7 +895,7 @@ private fun DrawScope.drawBlushEllipse(
 
     // 绘制填充（使用多边形近似）
     if (ellipsePoints.size >= 3) {
-        val path = android.graphics.Path().apply {
+        val path = Path().apply {
             moveTo(ellipsePoints.first().x, ellipsePoints.first().y)
             for (i in 1 until ellipsePoints.size) {
                 lineTo(ellipsePoints[i].x, ellipsePoints[i].y)
@@ -1105,7 +1109,7 @@ private fun DrawScope.drawAllContours(
     drawRect(
         color = Color.Black.copy(alpha = 0.5f),
         topLeft = Offset(10f, 10f),
-        size = androidx.compose.ui.geometry.Size(200f, 120f)
+        size = Size(200f, 120f)
     )
 }
 

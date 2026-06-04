@@ -3,6 +3,9 @@ package com.picme.beauty.render
 import android.content.Context
 import android.opengl.GLES20
 import com.picme.beauty.api.Logger
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 
 /**
  * 风格特效 Shader 管理
@@ -36,8 +39,8 @@ class StyleEffectShader(private val context: Context) {
     }
 
     private val shaderPrograms = mutableMapOf<StyleEffect, ShaderProgram>()
-    private val vertexBuffers = mutableMapOf<StyleEffect, java.nio.FloatBuffer>()
-    private val textureBuffers = mutableMapOf<StyleEffect, java.nio.FloatBuffer>()
+    private val vertexBuffers = mutableMapOf<StyleEffect, FloatBuffer>()
+    private val textureBuffers = mutableMapOf<StyleEffect, FloatBuffer>()
 
     // 当前激活的风格
     private var activeStyle: StyleEffect = StyleEffect.NONE
@@ -258,14 +261,14 @@ class StyleEffectShader(private val context: Context) {
             1f, 1f
         )
 
-        val vb = java.nio.ByteBuffer.allocateDirect(vertices.size * 4)
-            .order(java.nio.ByteOrder.nativeOrder())
+        val vb = ByteBuffer.allocateDirect(vertices.size * 4)
+            .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
         vb.put(vertices).position(0)
         vertexBuffers[style] = vb
 
-        val tb = java.nio.ByteBuffer.allocateDirect(textureCoords.size * 4)
-            .order(java.nio.ByteOrder.nativeOrder())
+        val tb = ByteBuffer.allocateDirect(textureCoords.size * 4)
+            .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
         tb.put(textureCoords).position(0)
         textureBuffers[style] = tb

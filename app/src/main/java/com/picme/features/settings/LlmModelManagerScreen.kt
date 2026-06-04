@@ -90,12 +90,17 @@ import com.picme.domain.model.ModelCategory
 import androidx.compose.ui.text.font.FontWeight
 import java.util.Locale
 import kotlinx.coroutines.launch
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
+import com.picme.data.download.DownloadState
 
 /**
  * 根据标签获取对应的图标
  */
 @Composable
-internal fun getCategoryIcon(tag: String): androidx.compose.ui.graphics.vector.ImageVector {
+internal fun getCategoryIcon(tag: String): ImageVector {
     return when (tag) {
         "Vision" -> Icons.Outlined.Visibility
         "Think" -> Icons.Outlined.SmartToy
@@ -326,14 +331,14 @@ internal fun EmptyModelList() {
  * 根据标签获取对应的颜色
  */
 @Composable
-internal fun getTagColor(tag: String): androidx.compose.ui.graphics.Color {
+internal fun getTagColor(tag: String): Color {
     return when (tag) {
         "Think" -> MaterialTheme.colorScheme.primary
         "Vision" -> MaterialTheme.colorScheme.tertiary
         "Audio", "AudioGen" -> MaterialTheme.colorScheme.secondary
-        "ImageGen" -> androidx.compose.ui.graphics.Color(0xFF9C27B0)
-        "Code" -> androidx.compose.ui.graphics.Color(0xFF2196F3)
-        "Math" -> androidx.compose.ui.graphics.Color(0xFFFF9800)
+        "ImageGen" -> Color(0xFF9C27B0)
+        "Code" -> Color(0xFF2196F3)
+        "Math" -> Color(0xFFFF9800)
         "Chat" -> MaterialTheme.colorScheme.primary
         else -> MaterialTheme.colorScheme.outline
     }
@@ -342,7 +347,7 @@ internal fun getTagColor(tag: String): androidx.compose.ui.graphics.Color {
 @Composable
 internal fun ModelCardWithBadge(
     model: ModelConfig,
-    downloadState: com.picme.data.download.DownloadState?,
+    downloadState: DownloadState?,
     tagTranslations: Map<String, String>,
     onDownload: () -> Unit,
     onCancel: () -> Unit,
@@ -483,7 +488,7 @@ internal fun ModelCardWithBadge(
  * 紧凑的标签徽章
  */
 @Composable
-internal fun TagBadge(label: String, color: androidx.compose.ui.graphics.Color) {
+internal fun TagBadge(label: String, color: Color) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
@@ -528,7 +533,7 @@ internal fun LightweightBadge() {
  */
 @Composable
 internal fun ModelActionButton(
-    downloadState: com.picme.data.download.DownloadState?,
+    downloadState: DownloadState?,
     isDownloading: Boolean,
     isPaused: Boolean,
     onDownload: () -> Unit,
@@ -700,9 +705,9 @@ internal fun ModelPropertiesDialog(
                         .fillMaxWidth()
                         .heightIn(min = 200.dp, max = 400.dp),
                     textStyle = MaterialTheme.typography.bodySmall.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        fontFamily = FontFamily.Monospace
                     ),
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    colors = OutlinedTextFieldDefaults.colors(
                         disabledTextColor = MaterialTheme.colorScheme.onSurface,
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                     ),
