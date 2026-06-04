@@ -133,7 +133,7 @@ class AiAgentUseCaseParseTest {
             appendLine("8. 翻转摄像头: {\"action\":\"flip_camera\"}")
             appendLine("9. 拍照: {\"action\":\"capture\"}")
             appendLine("10. 切换录像: {\"action\":\"toggle_recording\"}")
-            appendLine("11. 切换模式: {\"action\":\"switch_mode\",\"mode\":\"PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT\"}")
+            appendLine("11. 切换模式: {\"action\":\"switch_mode\",\"mode\":\"PHOTO|VIDEO|DOCUMENT\"}")
             appendLine("12. 文本回复: {\"action\":\"text_reply\",\"message\":\"回复内容\"}")
             appendLine()
             appendLine("重要规则:")

@@ -116,7 +116,7 @@ class CameraCapability : BaseCapability() {
         "flip_camera" -> "翻转前后摄像头"
         "capture" -> "拍照"
         "toggle_recording" -> "开始/停止录像"
-        "switch_mode" -> "切换拍摄模式，参数: mode (PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT)"
+        "switch_mode" -> "切换拍摄模式，参数: mode (PHOTO|VIDEO|PRO|DOCUMENT)"
         else -> "未知命令"
     }
 

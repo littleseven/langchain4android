@@ -62,6 +62,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
@@ -142,12 +143,14 @@ fun CameraRightControls(
     onToggleRatio: () -> Unit,
     onToggleScene: () -> Unit,
     onToggleGrid: () -> Unit,
+    onToggleProPanel: () -> Unit,
     onToggleBeautyEnabled: () -> Unit,
     isBeautySelected: Boolean,
     isFilterSelected: Boolean,
     isRatioSelected: Boolean,
     isSceneActive: Boolean,
     isGridActive: Boolean,
+    isProPanelOpen: Boolean,
     isBeautyEnabled: Boolean,
     currentRatio: Int,
     modifier: Modifier = Modifier
@@ -198,6 +201,15 @@ fun CameraRightControls(
             icon = Icons.Rounded.FilterBAndW,
             onClick = onToggleFilter,
             isActive = isFilterSelected
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 专业模式入口：展开/收起 ProPanel
+        ControlButton(
+            icon = Icons.Filled.Tune,
+            onClick = onToggleProPanel,
+            isActive = isProPanelOpen
         )
 
     }

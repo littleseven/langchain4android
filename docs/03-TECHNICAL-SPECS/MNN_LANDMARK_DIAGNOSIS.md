@@ -1,7 +1,7 @@
 # MNN Landmark 检测路径系统性诊断与修复指南
 
-> 本文档基于 PicMe 项目 MNN Landmark 检测路径（2d106det）从"不稳定/漂移"到"与 ONNX 输出高度一致"的完整排查过程总结。
-> 适用场景：MNN/ONNX 双引擎推理结果不一致、关键点抖动/漂移、新引擎接入时的对齐验证。
+> **历史文档**：本文档记录 MNN Landmark 检测路径（2d106det）的对齐排查过程。ONNX Runtime 已于 2026-05 完全移除，当前 InsightFace 2D106 仅通过 MNN 后端运行。
+> 适用场景：MNN 引擎关键点抖动/漂移诊断、新引擎接入时的对齐验证方法论参考。
 
 ---
 
@@ -9,10 +9,10 @@
 
 | 路径 | 表现 |
 |------|------|
-| ONNX (基准) | 106 点关键点稳定、位置准确、帧间一致 |
+| 基准引擎 | 106 点关键点稳定、位置准确、帧间一致 |
 | MNN (问题) | 关键点完全错误、位置漂移、输出不稳定 |
 
-**初步判断**：非模型本身问题（同一模型转换而来），而是推理链路中某层处理逻辑与 ONNX 不一致。
+**初步判断**：非模型本身问题，而是推理链路中某层处理逻辑与基准引擎不一致。
 
 ---
 
@@ -36,14 +36,14 @@ Layer 1: 输入预处理层  → mnn_face_detector.cpp (detect, 归一化/布局
 
 ### Step 1: 建立对比测试（并行输出）
 
-在 `FaceDetectorManager` 中同时调用 MNN 和 ONNX 路径，输出每点坐标差异：
+在 `FaceDetectorManager` 中同时调用 MNN 和基准引擎路径，输出每点坐标差异：
 
 ```kotlin
 // 伪代码：对比测试框架
-fun compareMnnVsOnnx(bitmap, roi): DiffReport {
+fun compareMnnVsBaseline(bitmap, roi): DiffReport {
     val mnn = mnnLandmarkDetector.detect(bitmap, roi)
-    val onnx = insightFaceDetector.detect(bitmap, roi)
-    return calculateDiff(mnn, onnx) // 逐点计算 |mnn - onnx|
+    val baseline = baselineDetector.detect(bitmap, roi)
+    return calculateDiff(mnn, baseline) // 逐点计算 |mnn - baseline|
 }
 ```
 
@@ -68,8 +68,8 @@ fun compareMnnVsOnnx(bitmap, roi): DiffReport {
 
 #### 3.1 输入预处理一致性
 
-| 维度 | ONNX (基准) | MNN (修复前) | MNN (修复后) |
-|------|-------------|--------------|--------------|
+| 维度 | 基准引擎 | MNN (修复前) | MNN (修复后) |
+|------|----------|--------------|--------------|
 | INPUT_SIZE | 192 | 128 | **192** |
 | 归一化方式 | mean=0, std=1 (内置归一化) | pixel/255.0 | **mean=0, std=1** |
 | 数据布局 | CHW | CHW (硬编码) | **动态适配** |
@@ -99,7 +99,7 @@ if (inputDimType == CAFFE) {
 
 #### 3.3 坐标变换矩阵
 
-ONNX 和 MNN 的 Kotlin 层变换矩阵构造完全一致：
+基准引擎和 MNN 的 Kotlin 层变换矩阵构造完全一致：
 
 ```kotlin
 val inputScale = INPUT_SIZE / looseSize
@@ -146,10 +146,10 @@ init {
 ### 问题 2: INPUT_SIZE 不一致
 
 **文件**: `MnnLandmarkDetector.kt`
-**现象**: MNN 用 128，ONNX 用 192
+**现象**: MNN 用 128，基准引擎用 192
 **修复**:
 ```kotlin
-private const val INPUT_SIZE = 192  // 对齐 ONNX
+private const val INPUT_SIZE = 192  // 对齐基准引擎
 ```
 
 ### 问题 3: C++ 层重复预处理
@@ -166,7 +166,7 @@ if (width == inputSize_ && height == inputSize_) {
 ### 问题 4: 归一化方式不匹配
 
 **文件**: `mnn_face_detector.cpp`
-**现象**: ONNX 检测到内置归一化节点 (mean=0, std=1)，MNN 做 pixel/255.0
+**现象**: 基准引擎检测到内置归一化节点 (mean=0, std=1)，MNN 做 pixel/255.0
 **修复**: 检测模型是否包含内置归一化节点：
 ```cpp
 std::ifstream modelCheck(modelPath.c_str(), std::ios::binary);
@@ -211,7 +211,7 @@ output->copyToHostTensor(&tmpOutput);
 
 # 2. 启动应用并收集日志
 adb logcat -c && adb shell am start -n com.picme/.MainActivity
-sleep 10 && adb logcat -d | grep "MNN vs ONNX"
+sleep 10 && adb logcat -d | grep "MNN vs Baseline"
 
 # 3. 使用 auto-dev-loop 一键验证
 ./scripts/auto-dev-loop.sh
@@ -240,7 +240,7 @@ sleep 10 && adb logcat -d | grep "MNN vs ONNX"
 - [ ] 坐标变换矩阵与基准一致
 - [ ] 坐标解析逻辑（[-1,1] → 像素 → 归一化）与基准一致
 - [ ] 点序映射表正确（如需 remap）
-- [ ] 建立 MNN vs ONNX 并行对比测试
+- [ ] 建立 MNN vs 基准引擎 并行对比测试
 - [ ] 验证单点像素误差 < 3px
 - [ ] 验证帧间稳定性
 - [ ] 验证 GPU/CPU 双模式
@@ -248,7 +248,7 @@ sleep 10 && adb logcat -d | grep "MNN vs ONNX"
 
 ### 6.2 关键教训
 
-1. **维度类型是隐形杀手**：MNN 从 ONNX 转换后，维度类型可能从 NCHW 变为 NHWC，硬编码 CAFFE 会导致数据完全错位。
+1. **维度类型是隐形杀手**：模型转换后维度类型可能从 NCHW 变为 NHWC，硬编码 CAFFE 会导致数据完全错位。
 2. **内置归一化需显式检测**：不能假设所有模型都需要外部归一化，需检测 `_minusscalar0` / `_mulscalar0` 节点。
 3. **分层对比是最高效的方法**：先确认输入数据一致，再确认输出数据一致，最后确认坐标变换一致，可快速定位问题层级。
 4. **并行对比测试是验证金标准**：同时运行两条路径，逐点对比差异，量化修复效果。
@@ -262,7 +262,7 @@ sleep 10 && adb logcat -d | grep "MNN vs ONNX"
 | `beauty-engine/src/main/cpp/mnn_face_detector.cpp` | MNN C++ 推理核心（修复主文件） |
 | `beauty-engine/src/main/java/.../MnnLandmarkDetector.kt` | MNN Kotlin 层（INPUT_SIZE 修复） |
 | `beauty-engine/src/main/java/.../FaceDetectorManager.kt` | 检测器管理（初始化修复） |
-| `beauty-engine/src/main/java/.../InsightFace2D106Detector.kt` | ONNX 基准实现 |
+| `beauty-engine/src/main/java/.../InsightFace2D106Detector.kt` | 基准实现（历史 ONNX，已移除） |
 | `beauty-engine/src/main/java/.../MnnLandmarkAdapter.kt` | 点序映射层 |
 
 ---

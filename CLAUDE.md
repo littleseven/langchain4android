@@ -90,9 +90,9 @@ beauty-engine:internal/     ← Face detection adapters, frame-sync system
 ### Face Detection Architecture
 
 Dual-engine detection unified to 106 landmarks:
-- **InsightFace 2D106** (default): Local ONNX Runtime inference with NNAPI GPU/NPU acceleration. Two-stage pipeline: Det10G ROI → 2D106 landmarks.
-- **MediaPipe Face Mesh 468→106** (fallback): Async analysis stream with precise 468→106 semantic mapping.
-- Auto mode: prefers InsightFace; falls back to MediaPipe on miss or init failure.
+- **MediaPipe Face Mesh 468→106** (default): TFLite GPU delegate inference with precise 468→106 semantic mapping.
+- **InsightFace 2D106** (fallback): Local MNN inference with Vulkan/CPU backend. Two-stage pipeline: RetinaFace ROI → 2D106 landmarks.
+- Auto mode: prefers MediaPipe; falls back to InsightFace on miss or init failure.
 
 All detection implementations live in `beauty-engine/internal/facedetect/`. App layer consumes only `beauty-engine:api/facedetect/` contracts.
 

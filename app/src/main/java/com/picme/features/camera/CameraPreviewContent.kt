@@ -89,7 +89,7 @@ internal fun CameraPreviewContent(
     val isAnyPanelOpen = uiState.showFilterSelector || uiState.showRatioSelector ||
         uiState.showSceneSelector || uiState.showGridSelector
     val isBeautyPanelOpen = uiState.showBeautySelector
-    val isProPanelOpen = uiState.captureMode == MediaType.PRO
+    val isProPanelOpen = uiState.showProPanel
 
     Box(
         modifier = Modifier
@@ -100,7 +100,7 @@ internal fun CameraPreviewContent(
                 enabled = isAnyPanelOpen || isBeautyPanelOpen || isProPanelOpen,
                 onClick = {
                     if (isProPanelOpen) {
-                        actions.onModeChange(MediaType.PHOTO)
+                        actions.onToggleProPanel()
                     } else {
                         actions.onDismissPanels()
                     }
@@ -174,7 +174,7 @@ internal fun CameraPreviewContent(
                 onExposureChange = actions.onExposureChange,
                 whiteBalance = uiState.whiteBalanceMode,
                 onWhiteBalanceChange = actions.onWhiteBalanceChange,
-                onClose = { actions.onModeChange(MediaType.PHOTO) },
+                onClose = { actions.onToggleProPanel() },
                 beautySettings = uiState.beautySettings,
                 onBeautySettingsChanged = actions.onBeautySettingsChanged,
             )
@@ -463,6 +463,7 @@ private fun BoxScope.CameraPreviewSideControls(
         onToggleRatio = actions.onToggleRatio,
         onToggleScene = actions.onToggleScene,
         onToggleGrid = actions.onToggleGrid,
+        onToggleProPanel = actions.onToggleProPanel,
         onToggleBeautyEnabled = {
             actions.onBeautySettingsChanged(
                 uiState.beautySettings.copy(enabled = !uiState.beautySettings.enabled)
@@ -473,6 +474,7 @@ private fun BoxScope.CameraPreviewSideControls(
         isRatioSelected = uiState.showRatioSelector,
         isSceneActive = uiState.currentScene != ScenePreset.NONE,
         isGridActive = uiState.showGridSelector,
+        isProPanelOpen = uiState.showProPanel,
         isBeautyEnabled = uiState.beautySettings.enabled,
         currentRatio = uiState.aspectRatio,
         modifier = Modifier.align(Alignment.TopEnd)

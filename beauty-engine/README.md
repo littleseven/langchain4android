@@ -8,7 +8,7 @@
 
 - **能力层**：对外暴露稳定的 `api/` 接口（`BeautyPreviewEngine`、`BeautyParams`、`BeautySettings`、`FilterType`、`StyleFilter`、`Face`、`PhotoProcessor`、`FaceDetector` 等）。
 - **渲染实现层**：内部封装 OpenGL ES + EGL 多 Pass 渲染管线（`render/` 包），禁止外部直接引用。
-- **人脸检测层**：多引擎 ROI + Landmark 双阶段检测（`internal/facedetect/`），支持 MediaPipe / NCNN / MNN / ONNX 四引擎独立配置。
+- **人脸检测层**：多引擎 ROI + Landmark 双阶段检测（`internal/facedetect/`），支持 MediaPipe / NCNN / MNN 三引擎独立配置。
 - **帧同步系统**：独立的时序对齐机制（`internal/framesync/`），解决妆容甩飞问题，预览与录制链路共用同一套同步逻辑。
 - **录制系统**：GPU 离屏渲染视频录制（`recorder/`），复用预览渲染管线。
 - **性能目标**：零拷贝 GPU 数据流，单帧处理 ≤ 16ms（60fps），参数响应延迟 < 100ms，人脸检测 < 100ms（高端机）。
@@ -21,7 +21,7 @@
 | 子系统 | 包路径 | 技术栈 | 状态 |
 |---|---|---|---|
 | 大美丽渲染（BIG_BEAUTY） | `render/` | 自研 OpenGL ES + EGL | ✅ 稳定 |
-| 人脸检测（FACE_DETECT） | `internal/facedetect/` | MediaPipe / NCNN / MNN / ONNX | ✅ 多引擎 |
+| 人脸检测（FACE_DETECT） | `internal/facedetect/` | MediaPipe / NCNN / MNN | ✅ 多引擎 |
 | 帧同步（FRAME_SYNC） | `internal/framesync/` | 速度外推 + 时序对齐 | ✅ 稳定 |
 | 视频录制（RECORDER） | `recorder/` | GPU 离屏渲染 + MediaCodec | ✅ 稳定 |
 
@@ -88,8 +88,8 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   │   ├── MediaPipeFaceDetector.kt   # MediaPipe 检测器
 │   │   ├── MediaPipeRoiDetector.kt    # MediaPipe ROI 检测器
 │   │   ├── MediaPipeLandmarkDetector.kt # MediaPipe Landmark 检测器
-│   │   ├── InsightFaceDet10GDetector.kt # InsightFace ROI (ONNX)
-│   │   ├── InsightFace2D106Detector.kt  # InsightFace Landmark (ONNX)
+│   │   ├── InsightFaceDet10GDetector.kt # InsightFace ROI (MNN)
+│   │   ├── InsightFace2D106Detector.kt  # InsightFace Landmark (MNN)
 │   │   ├── InsightFaceLandmarkDetector.kt # InsightFace 适配器
 │   │   ├── MnnRoiDetector.kt          # MNN ROI 检测器
 │   │   ├── MnnLandmarkDetector.kt     # MNN Landmark 检测器
@@ -258,7 +258,7 @@ override fun onCleared() {
 | 版本 | 日期 | 关键交付 |
 |------|------|----------|
 | **M1** | 2026-04 | 大美丽渲染基础：磨皮/美白/瘦脸/大眼/唇色/腮红/滤镜 |
-| **M2** | 2026-05 | 人脸检测重构：MediaPipe / NCNN / MNN / ONNX 四引擎独立配置；帧同步系统；GPU 拍照；视频录制 |
+| **M2** | 2026-05 | 人脸检测重构：MediaPipe / NCNN / MNN 三引擎独立配置；帧同步系统；GPU 拍照；视频录制 |
 | **M3** | 2026-06 (计划) | 独立 AAR 发布；性能基线自动化；低端机自动降级策略 |
 
 ### M2 已完成项
@@ -266,7 +266,7 @@ override fun onCleared() {
 - ✅ 多引擎 ROI + Landmark 双阶段检测（引擎类型独立配置）
 - ✅ NCNN Vulkan GPU 推理（RetinaFace + 2D106）
 - ✅ MNN Vulkan GPU 推理（RetinaFace + 2D106）
-- ✅ ONNX Runtime CPU/GPU 推理（InsightFace 原始模型）
+- ✅ MNN GPU/CPU 推理（InsightFace 2D106 模型）
 - ✅ MediaPipe TFLite GPU 推理（FaceLandmarker）
 - ✅ 帧同步系统（FrameSyncManager + MotionTracker）
 - ✅ GPU 离屏渲染拍照（PhotoProcessorImpl）
@@ -302,7 +302,7 @@ override fun onCleared() {
 | 交叉线 | Crosshatch Shader（基于亮度绘制交叉线） | ✅ |
 | 色调滤镜 | ColorMatrix（OpenGL Shader） | ✅ |
 | 人脸关键点 | MediaPipe 468→106 / InsightFace 2D106 | ✅ |
-| **多引擎人脸检测** | MediaPipe / NCNN / MNN / ONNX 四引擎独立配置 | ✅ |
+| **多引擎人脸检测** | MediaPipe / NCNN / MNN 三引擎独立配置 | ✅ |
 | **帧同步系统** | FrameSyncManager + MotionTracker 速度外推 | ✅ |
 | **GPU 拍照** | PhotoProcessorImpl（离屏渲染复用预览管线） | ✅ |
 | **视频录制美颜** | BeautyVideoRecorder 复用预览渲染管线 | ✅ |
@@ -329,7 +329,7 @@ override fun onCleared() {
 | **NCNN + NCNN** | **~45ms** | **~4ms** | **~50ms** | ⭐⭐⭐⭐⭐ |
 | MNN + NCNN | ~37ms | ~35ms | ~70ms | ⭐⭐⭐⭐ |
 | MediaPipe + MediaPipe | ~25ms | ~5ms | ~30ms | ⭐⭐⭐⭐ (精度不同) |
-| ONNX + ONNX | ~340ms | ~13ms | ~350ms | ⭐⭐ (太慢) |
+| MNN + MNN | ~340ms | ~13ms | ~350ms | ⭐⭐ (太慢) |
 
 #### 中端机 (Adreno 620)
 
@@ -338,15 +338,15 @@ override fun onCleared() {
 | **MediaPipe + MediaPipe** | **~30ms** | **~5ms** | **~35ms** | ⭐⭐⭐⭐⭐ |
 | MNN + MNN | ~550ms | - | ~550ms | ⭐⭐ (ROI 太慢) |
 | NCNN + NCNN | ~900ms | ~35ms | ~935ms | ⭐ (ROI 极慢) |
-| ONNX + ONNX | ~500ms+ | - | ~500ms+ | ⭐⭐ (CPU 执行) |
+| MNN + MNN | ~500ms+ | - | ~500ms+ | ⭐⭐ (CPU 执行) |
 
 ### 关键结论
 
 1. **NCNN 是高端机最佳方案**：速度接近 MediaPipe，但保持 InsightFace 106 点精度
 2. **MediaPipe 是中端机最佳方案**：TFLite GPU delegate 优化好，跨设备性能稳定
-3. **ONNX Runtime 移动端性能差**：NNAPI/GPU delegate 对 RetinaFace 支持不佳，实际 fallback 到 CPU
-4. **MNN ROI 性能一般**：Vulkan 后端对 640x640 RetinaFace 优化不足
-5. **GPU 算力是主要瓶颈**：同一模型同一框架，Adreno 740+ 比 Adreno 620 快 10-20 倍
+3. **MNN ROI 性能一般**：Vulkan 后端对 640x640 RetinaFace 优化不足，中端机 CPU  fallback 耗时较长
+
+4. **GPU 算力是主要瓶颈**：同一模型同一框架，Adreno 740+ 比 Adreno 620 快 10-20 倍
 
 ### 已知问题与修复
 

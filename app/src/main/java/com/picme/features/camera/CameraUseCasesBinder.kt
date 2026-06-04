@@ -152,7 +152,7 @@ internal fun bindCameraUseCases(
             }
             else -> {
                 when (captureMode) {
-                    MediaType.PHOTO, MediaType.PORTRAIT, MediaType.PRO, MediaType.DOCUMENT -> {
+                    MediaType.PHOTO, MediaType.DOCUMENT -> {
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             cameraSelector,

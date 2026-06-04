@@ -60,11 +60,9 @@ class MediaAssetTest {
     fun `MediaType has all expected values`() {
         val types = MediaType.values()
 
-        assertEquals(5, types.size)
+        assertEquals(3, types.size)
         assertTrue(types.contains(MediaType.PHOTO))
         assertTrue(types.contains(MediaType.VIDEO))
-        assertTrue(types.contains(MediaType.PORTRAIT))
-        assertTrue(types.contains(MediaType.PRO))
         assertTrue(types.contains(MediaType.DOCUMENT))
     }
 
@@ -78,18 +76,6 @@ class MediaAssetTest {
     fun `MediaType VIDEO properties`() {
         val type = MediaType.VIDEO
         assertEquals("VIDEO", type.name)
-    }
-
-    @Test
-    fun `MediaType PORTRAIT properties`() {
-        val type = MediaType.PORTRAIT
-        assertEquals("PORTRAIT", type.name)
-    }
-
-    @Test
-    fun `MediaType PRO properties`() {
-        val type = MediaType.PRO
-        assertEquals("PRO", type.name)
     }
 
     @Test
@@ -226,7 +212,7 @@ class MediaAssetTest {
         val asset = MediaAsset(
             id = 1L,
             uri = "file:///portrait.jpg",
-            type = MediaType.PORTRAIT,
+            type = MediaType.PHOTO,
             captureDate = 1000L,
             fileName = "portrait.jpg",
             hasFace = true,

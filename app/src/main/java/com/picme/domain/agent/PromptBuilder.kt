@@ -291,7 +291,7 @@ class PromptBuilder(
 
             appendLine("- navigation: navigate_to(destination=camera|gallery|settings|debug), go_back")
             appendLine("- fallback: text_reply(message)")
-            appendLine("参数约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PORTRAIT|PRO|DOCUMENT")
+            appendLine("参数约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
             appendLine("滤镜: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
             appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
             appendLine("导航映射: 去相机/回相机/打开相机/去拍照->camera; 去相册/打开相册->gallery; 去设置/打开设置->settings; 返回/上一页/后退->go_back")
