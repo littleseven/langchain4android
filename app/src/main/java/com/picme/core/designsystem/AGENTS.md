@@ -104,7 +104,7 @@ Box(
 | 次级背景 | `surfaceVariant` | 区分层级的背景 |
 | 半透明背景 | `surfaceVariant.copy(alpha = 0.3f)` | 悬浮面板等 |
 
-## 5. 与产品文档对照 (Product Alignment)
+## 6. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**:
 - ✅ **HyperOS 视觉风格** → 大圆角设计（24dp+）、毛玻璃效果、流体动效

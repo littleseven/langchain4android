@@ -26,43 +26,43 @@
 - **Flow 暴露数据**：通过 `userPreferences.data.map{}`将偏好设置转换为 Flow 流
 - **Repository 封装**：所有读写操作必须经过 Repository 层，ViewModel 不直接调用 DataStore
 
-### 1.2 设置项数据模型
+### 2.2 设置项数据模型
 **使用 Sealed Class 区分三种设置类型**：
 - **SwitchSetting**：开关型设置（如水印开关），包含标题、描述、默认值
 - **SliderSetting**：滑块型设置（如美颜程度），包含最小值、最大值、默认值、步长
 - **SelectorSetting**：选择器型设置（如滤镜风格），包含选项列表、默认索引
 
-### 2.2 设置 UI 组件实现
+### 2.3 设置 UI 组件实现
 
-### 2.1 通用设置项布局
+#### 2.3.1 通用设置项布局
 **使用 when 表达式根据类型渲染不同组件**：
 - SwitchSetting → 调用 SwitchSettingItem，显示标题和开关
 - SliderSetting → 调用 SliderSettingItem，显示滑块和数值
 - SelectorSetting → 调用 SelectorSettingItem，显示下拉选择器
 
-### 2.2 实时预览支持
+#### 2.3.2 实时预览支持
 **设置变更立即生效机制**：
 1. ViewModel 使用 `combine`操作符合并多个 Flow（美颜程度、水印开关、滤镜强度）
 2. 通过 `stateIn`将合并后的 Flow 转换为 StateFlow，自动通知 UI 更新
 3. 用户修改设置时调用 Repository 的 suspend 函数，无需手动刷新 UI
 
-### 2.3 权限管理实现
+### 2.4 权限管理实现
 
-### 3.1 Android 13+ 权限适配
+#### 2.4.1 Android 13+ 权限适配
 **动态申请策略**：
 - **Android 13+ (API 33+)**：使用 `READ_MEDIA_IMAGES`替代废弃的`READ_EXTERNAL_STORAGE`
 - **Android 12 及以下**：继续使用 `READ_EXTERNAL_STORAGE`和`WRITE_EXTERNAL_STORAGE`
 - **相机权限**：所有版本统一使用 `CAMERA` 权限
 
-### 3.2 权限降级策略
+#### 2.4.2 权限降级策略
 **根据权限拒绝情况提供不同降级方案**：
 - **相机权限被拒**：显示说明对话框，引导用户前往系统设置开启
 - **存储权限被拒**：进入受限模式，允许拍照但不允许保存（或保存到应用私有目录）
 - **部分权限被拒**：仅启用已授权功能，未授权功能隐藏或禁用
 
-### 2.4 I18N 多语言支持
+### 2.5 I18N 多语言支持
 
-### 4.1 字符串资源组织规范
+#### 2.5.1 字符串资源组织规范
 **文件结构**：
 - `res/values/strings.xml` - 英文（默认）
 - `res/values-zh-rCN/strings.xml` - 简体中文
@@ -72,7 +72,7 @@
 
 **更新流程**：新增功能时必须同步更新三个语言文件，确保文案对齐
 
-### 4.2 动态语言切换（可选功能）
+#### 2.5.2 动态语言切换（可选功能）
 **实现方式**：通过 `Context.createConfigurationContext()` 创建带特定 Locale 的 Context，支持应用内独立于系统设置的语言切换
 
 ## 3. Agent 执行规约 (Execution Rules)
@@ -96,9 +96,7 @@
 - [ ] 是否支持深色模式？（使用 MaterialTheme.colorScheme）
 - [ ] 设置变更是否实时生效？（通过 Flow 自动通知订阅者）
 
-## 2.5 模型管理（2026-05 新增）
-
-*## 2.5 模型管理（2026-05 新增，2026-06 统一）
+### 2.6 模型管理（2026-05 新增，2026-06 统一）
 
 **统一模型中心**
 - **入口**：`ModelCenterScreen`，从设置页统一入口进入
@@ -118,7 +116,7 @@
 - **关闭模式**：禁用 Agent
 - **隐私级别**：`STRICT` / `PERMISSIVE`；运行时输入分级为 `PUBLIC` / `SENSITIVE` / `RESTRICTED`
 
-## 2.6 Agent 集成（2026-05 新增）
+### 2.7 Agent 集成（2026-05 新增）
 
 **SettingsAgentIntegration**
 - 通过 `SettingsCapability` 绑定到 `CapabilityRegistry`
@@ -128,7 +126,7 @@
   - `download_model` — 下载 LLM 模型
 - 使用 `AiChatScreen` 提供统一聊天界面
 
-## 5. 与产品文档对照 (Product Alignment)
+## 6. 与产品文档对照 (Product Alignment)
 
 **必须满足的产品指标**：
 - ✅ 零云端存储 → 设置数据本地存储，不依赖云端同步

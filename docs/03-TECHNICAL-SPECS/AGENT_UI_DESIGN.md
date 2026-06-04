@@ -4,7 +4,7 @@
 > **作者**: Claude  
 > **日期**: 2026-05-29  
 > **关联文档**:
-> - [`docs/superpowers/specs/2026-05-29-remote-llm-orchestration-design.md`](./2026-05-29-remote-llm-orchestration-design.md)
+> - [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](./REMOTE_LLM_ORCHESTRATION_DESIGN.md)
 > - [`docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](../../02-ARCHITECTURE/AGENT_ARCHITECTURE.md)
 
 ---

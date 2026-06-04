@@ -31,6 +31,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 │  • BEAUTY_ENGINE_TECH_SPEC.md - 大美丽引擎技术规格              │
 │  • FRAME_SYNC_TECH_SPEC.md    - 帧同步美妆技术规格              │
 │  • CAMERA_PREVIEW_TECH_SPEC.md - 相机预览技术规格               │
+│  • CHAT_UI_UNIFICATION.md     - Chat UI 统一化改造              │
 │  • MNN_LANDMARK_DIAGNOSIS.md  - MNN 人脸关键点诊断               │
 │  • FACE_DETECTION_ENGINE_ARCHITECTURE.md - 人脸检测引擎架构      │
 └─────────────────────────────────────────────────────────────────┘
@@ -72,6 +73,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) | Agent 运行时架构、Capability 模型 | RD/CO |
 | [`ADR/`](./02-ARCHITECTURE/ADR/) | 架构决策记录（历史决策背景与权衡） | RD/CR |
 
+> 注：原 `02-TECH/` 目录已合并至 `03-TECHNICAL-SPECS/`，技术规范统一收口。 |
+
 **核心内容**：
 - AgentOrchestrator 编排器设计
 - SceneManager 场景管理
@@ -93,6 +96,9 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`BEAUTY_ENGINE_TECH_SPEC.md`](./03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) | 大美丽引擎完整技术规格 | RD |
 | [`FRAME_SYNC_TECH_SPEC.md`](./03-TECHNICAL-SPECS/FRAME_SYNC_TECH_SPEC.md) | 帧同步美妆系统详细设计 | RD |
 | [`CAMERA_PREVIEW_TECH_SPEC.md`](./03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) | 相机预览管线技术约束 | RD |
+| [`CHAT_UI_UNIFICATION.md`](./03-TECHNICAL-SPECS/CHAT_UI_UNIFICATION.md) | Chat UI 统一化改造 | RD |
+| [`AGENT_UI_DESIGN.md`](./03-TECHNICAL-SPECS/AGENT_UI_DESIGN.md) | Agent UI 层设计（Plan 消息气泡） | RD |
+| [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](./03-TECHNICAL-SPECS/REMOTE_LLM_ORCHESTRATION_DESIGN.md) | 远程 LLM 混合编排架构设计 | RD |
 | [`MNN_LANDMARK_DIAGNOSIS.md`](./03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
 
 **核心内容**：
@@ -127,6 +133,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`DEVELOPMENT.md`](./05-DEVELOPMENT/DEVELOPMENT.md) | 双螺旋工作流、反向链接规范、CI 规则 | RD/CO |
 | [`TASK_MARKUP_SPEC.md`](./05-DEVELOPMENT/TASK_MARKUP_SPEC.md) | `[kimi-task]` 标记语法与解析规则 | PM/CO |
 | [`CODE_REVIEW_CHECKLIST.md`](./05-DEVELOPMENT/CODE_REVIEW_CHECKLIST.md) | CR 检查项与一票否决项 | CR/RD |
+| [`PLAN-AGENT-UI.md`](./05-DEVELOPMENT/PLAN-AGENT-UI.md) | Agent UI 层实现计划（含 Plan 消息气泡） | RD |
+| [`PLAN-REMOTE-LLM-ORCHESTRATION.md`](./05-DEVELOPMENT/PLAN-REMOTE-LLM-ORCHESTRATION.md) | 远程 LLM 混合编排架构实现计划 | RD |
 
 **核心内容**：
 - Spec ↔ Code 双向演进规则
