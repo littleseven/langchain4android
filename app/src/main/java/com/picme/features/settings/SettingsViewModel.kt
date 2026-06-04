@@ -156,7 +156,7 @@ class SettingsViewModel(
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = "kimi-for-coding"
+            initialValue = "deepseek-v4-flash"
         )
 
     val aiAgentForceRemote: StateFlow<Boolean> = repository.aiAgentForceRemoteFlow

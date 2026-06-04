@@ -841,7 +841,7 @@ fun CameraContent(
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
 
     val aiAgentRemoteModelConfigs by userPreferencesRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
-    val aiAgentSelectedRemoteModel by userPreferencesRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "kimi-for-coding")
+    val aiAgentSelectedRemoteModel by userPreferencesRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
     val aiAgentForceRemote by userPreferencesRepository.aiAgentForceRemoteFlow.collectAsState(initial = false)
     val aiAgentMode by userPreferencesRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
 
@@ -852,7 +852,7 @@ fun CameraContent(
         } else {
             com.picme.domain.model.RemoteModelConfigs()
         }
-        configs.getConfig(aiAgentSelectedRemoteModel)
+        configs.getConfigByModelId(aiAgentSelectedRemoteModel)
             ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 

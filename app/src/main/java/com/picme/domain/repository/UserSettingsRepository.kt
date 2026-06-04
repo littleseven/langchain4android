@@ -87,7 +87,7 @@ interface UserSettingsRepository {
     val aiAgentLocalModelFlow: Flow<String>
     suspend fun updateAiAgentLocalModel(modelId: String)
 
-    // ── 远程模型配置（多模型） ────────────────────────────────
+    // ── 远程模型配置（供应商维度） ────────────────────────────────
     val aiAgentRemoteModelConfigsFlow: Flow<String>
     suspend fun updateAiAgentRemoteModelConfigs(configsJson: String)
 
