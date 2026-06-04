@@ -259,15 +259,18 @@ class AiAgentUseCase(
             }
         }
 
-        // 兜底 Gateway 限频检测：如果返回 429，提示用户配置自己的 API Key
+        // 兜底 Gateway 限频检测：如果返回 429/433，提示用户配置自己的 API Key
         return result.fold(
             onSuccess = { Result.success(it) },
             onFailure = { error ->
-                if (isUsingFallbackGateway && error.message?.contains("429") == true) {
+                val isRateLimited = error.message?.let { msg ->
+                    msg.contains("429") || msg.contains("433")
+                } == true
+                if (isUsingFallbackGateway && isRateLimited) {
                     Logger.w(REMOTE_TAG, "Fallback gateway rate limited")
                     Result.success(
                         AiAgentCommand.TextReply(
-                            "免费额度已用完，请在设置中配置自己的远程模型 API Key 解锁无限次使用。"
+                            "请求太频繁了，请稍后再试。免费额度每分钟有限制次数，如需无限次使用请在设置中配置自己的远程模型 API Key。"
                         )
                     )
                 } else {
