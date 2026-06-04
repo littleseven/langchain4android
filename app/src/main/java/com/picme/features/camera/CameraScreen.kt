@@ -1259,6 +1259,8 @@ fun CameraContent(
                 when (cmd.destination.lowercase()) {
                     "settings" -> onNavigateToSettings()
                     "gallery" -> onNavigateToGallery()
+                    "debug" -> { /* 相机页无 debug 入口，忽略 */ }
+                    "model_center" -> onNavigateToSettings() // 从相机到模型中心需先进入设置
                     else -> Logger.w(TAG, "Unknown navigation destination: ${cmd.destination}")
                 }
             }
