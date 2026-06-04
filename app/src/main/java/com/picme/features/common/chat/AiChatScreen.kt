@@ -54,9 +54,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,8 +76,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.R
 import com.picme.core.common.Logger
+import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AiAgentCommand
 import com.picme.features.camera.voice.VoiceCommandCoordinator
+import kotlinx.coroutines.launch
 
 private const val TAG = "Voice"
 
@@ -516,7 +520,14 @@ private fun ChatInputBar(
     var text by remember { mutableStateOf("") }
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
-    var inputMode by remember { mutableStateOf(InputMode.VOICE) }
+    val scope = rememberCoroutineScope()
+    val settingsRepository = remember { UserPreferencesRepository(context) }
+    val savedInputMode by settingsRepository.chatInputModeFlow.collectAsState(initial = "voice")
+    var inputMode by remember(savedInputMode) {
+        mutableStateOf(
+            if (savedInputMode == "text") InputMode.TEXT else InputMode.VOICE
+        )
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -537,12 +548,18 @@ private fun ChatInputBar(
                 onSwitchToVoice = {
                     inputMode = InputMode.VOICE
                     keyboardController?.hide()
+                    scope.launch {
+                        settingsRepository.updateChatInputMode("voice")
+                    }
                 }
             )
             InputMode.VOICE -> VoiceInputMode(
                 onSwitchToText = {
                     inputMode = InputMode.TEXT
                     keyboardController?.show()
+                    scope.launch {
+                        settingsRepository.updateChatInputMode("text")
+                    }
                 },
                 onVoiceResult = { result ->
                     if (result.isNotBlank()) {

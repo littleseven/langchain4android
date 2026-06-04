@@ -127,6 +127,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
 
         // 日志模块配置
         val LOG_MODULE_CONFIG = stringPreferencesKey("log_module_config")
+
+        // Chat 输入模式记忆（文字/语音）
+        val CHAT_INPUT_MODE = stringPreferencesKey("chat_input_mode")
     }
 
     private fun parseMediaType(value: String?): MediaType {
@@ -815,6 +818,25 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateLogModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LOG_MODULE_CONFIG] = config.toJson()
+        }
+    }
+
+    // ── Chat 输入模式记忆 ────────────────────────────────────
+    override val chatInputModeFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.CHAT_INPUT_MODE] ?: "voice"
+        }
+
+    override suspend fun updateChatInputMode(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CHAT_INPUT_MODE] = mode
         }
     }
 }

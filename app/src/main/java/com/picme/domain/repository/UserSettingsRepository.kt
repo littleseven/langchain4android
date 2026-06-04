@@ -117,6 +117,10 @@ interface UserSettingsRepository {
     // ── 日志模块配置 ──────────────────────────────────────────
     val logModuleConfigFlow: Flow<com.picme.domain.model.LogModuleConfig>
     suspend fun updateLogModuleConfig(config: com.picme.domain.model.LogModuleConfig)
+
+    // ── Chat 输入模式记忆 ────────────────────────────────────
+    val chatInputModeFlow: Flow<String>
+    suspend fun updateChatInputMode(mode: String)
 }
 
 
