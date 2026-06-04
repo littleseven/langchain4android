@@ -10,6 +10,8 @@ import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 import java.io.File
+import android.graphics.Color
+import android.graphics.Rect
 
 /**
  * 基于 NCNN 的 106 点关键点检测器
@@ -163,14 +165,14 @@ class NcnnLandmarkDetector(
      */
     private fun prepareInputBitmap(source: Bitmap, roi: RectF?): CropResult {
         val faceBounds = if (roi != null) {
-            android.graphics.Rect(
+            Rect(
                 roi.left.toInt().coerceIn(0, source.width),
                 roi.top.toInt().coerceIn(0, source.height),
                 roi.right.toInt().coerceIn(0, source.width),
                 roi.bottom.toInt().coerceIn(0, source.height)
             )
         } else {
-            android.graphics.Rect(0, 0, source.width, source.height)
+            Rect(0, 0, source.width, source.height)
         }
 
         val faceWidth = faceBounds.width().toFloat().coerceAtLeast(1f)
@@ -204,7 +206,7 @@ class NcnnLandmarkDetector(
         }
 
         val canvas = Canvas(scaled)
-        canvas.drawColor(android.graphics.Color.BLACK)
+        canvas.drawColor(Color.BLACK)
         canvas.drawBitmap(source, transformMatrix, null)
 
         return CropResult(scaled, inverseMatrix)
@@ -242,7 +244,7 @@ class NcnnLandmarkDetector(
         }
 
         val canvas = Canvas(scaled)
-        canvas.drawColor(android.graphics.Color.BLACK)
+        canvas.drawColor(Color.BLACK)
         canvas.drawBitmap(source, transformMatrix, null)
 
         return CropResult(scaled, inverseMatrix)

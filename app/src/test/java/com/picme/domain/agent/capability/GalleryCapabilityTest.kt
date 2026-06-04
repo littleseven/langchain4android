@@ -13,6 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.picme.domain.agent.model.SceneManager
 
 /**
  * GalleryCapability 场景化单元测试
@@ -97,7 +98,7 @@ class GalleryCapabilityTest {
     fun `activeScenes returns only GALLERY`() {
         val scenes = capability.activeScenes()
         assertEquals(1, scenes.size)
-        assertEquals(com.picme.domain.agent.model.SceneManager.Scene.GALLERY, scenes[0])
+        assertEquals(SceneManager.Scene.GALLERY, scenes[0])
     }
 
     @Test

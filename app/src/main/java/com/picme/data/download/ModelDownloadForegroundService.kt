@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.picme.PicMeApplication
 import com.picme.R
+import android.app.NotificationManager
 
 class ModelDownloadForegroundService : Service() {
 
@@ -92,11 +93,11 @@ class ModelDownloadForegroundService : Service() {
             return
         }
 
-        val manager = getSystemService(android.app.NotificationManager::class.java)
+        val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
-            android.app.NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_LOW
         ).apply {
             setShowBadge(false)
             description = getString(R.string.model_download_notification_channel_desc)

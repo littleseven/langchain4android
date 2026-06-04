@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import android.app.RecoverableSecurityException
+import android.content.IntentSender
 
 @OptIn(coil.annotation.ExperimentalCoilApi::class)
 class MediaRepositoryImpl(
@@ -36,7 +38,7 @@ class MediaRepositoryImpl(
 
     // 存储待删除的 URI 列表，用于权限请求后重试
     private val pendingDeleteUris = mutableListOf<Uri>()
-    private var pendingRecoverableIntentSender: android.content.IntentSender? = null
+    private var pendingRecoverableIntentSender: IntentSender? = null
     private var pendingDeleteIds: List<Long>? = null
 
     override val allMedia: Flow<List<MediaAsset>> = combine(
@@ -61,7 +63,7 @@ class MediaRepositoryImpl(
         pendingDeleteUris.clear()
     }
 
-    override fun getPendingRecoverableIntentSender(): android.content.IntentSender? =
+    override fun getPendingRecoverableIntentSender(): IntentSender? =
         pendingRecoverableIntentSender
 
     override fun clearPendingRecoverable() {
@@ -372,7 +374,7 @@ class MediaRepositoryImpl(
         } catch (e: SecurityException) {
             // Android 10+ 需要用户授权才能删除非应用创建的文件
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val recoverable = e as? android.app.RecoverableSecurityException
+                val recoverable = e as? RecoverableSecurityException
                 if (recoverable != null && Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                     // Android 10 (API 29): 保存恢复性授权 IntentSender
                     pendingRecoverableIntentSender = recoverable.userAction.actionIntent.intentSender

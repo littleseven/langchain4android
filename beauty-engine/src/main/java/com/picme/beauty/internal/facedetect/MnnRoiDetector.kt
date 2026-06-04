@@ -8,6 +8,9 @@ import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
 import java.io.File
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
 
 /**
  * 基于 MNN + Vulkan GPU 的 ROI 检测器
@@ -186,9 +189,9 @@ class MnnRoiDetector(
             bmp = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
             reusableScaledBitmap = bmp
         }
-        val canvas = android.graphics.Canvas(bmp)
-        canvas.drawColor(android.graphics.Color.BLACK)
-        val matrix = android.graphics.Matrix()
+        val canvas = Canvas(bmp)
+        canvas.drawColor(Color.BLACK)
+        val matrix = Matrix()
         val scale = targetSize.toFloat() / maxOf(source.width, source.height)
         val scaledW = (source.width * scale).toInt()
         val scaledH = (source.height * scale).toInt()

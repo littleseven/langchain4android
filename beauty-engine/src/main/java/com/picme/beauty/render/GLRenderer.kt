@@ -4,6 +4,8 @@ import android.opengl.GLES20
 import android.opengl.Matrix
 import com.picme.beauty.api.Logger
 import java.nio.FloatBuffer
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * R 计划 - OpenGL ES 渲染器基类
@@ -73,13 +75,13 @@ abstract class GLRenderer {
             1f, 1f
         )
 
-        vertexBuffer = java.nio.ByteBuffer.allocateDirect(vertices.size * 4)
-            .order(java.nio.ByteOrder.nativeOrder())
+        vertexBuffer = ByteBuffer.allocateDirect(vertices.size * 4)
+            .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
         vertexBuffer?.put(vertices)?.position(0)
 
-        textureBuffer = java.nio.ByteBuffer.allocateDirect(textureCoords.size * 4)
-            .order(java.nio.ByteOrder.nativeOrder())
+        textureBuffer = ByteBuffer.allocateDirect(textureCoords.size * 4)
+            .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
         textureBuffer?.put(textureCoords)?.position(0)
 

@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.camera.core.CameraSelector
 
 /**
  * [QA] 相机算法纯函数单元测试
@@ -260,21 +261,21 @@ class CameraAlgorithmTest {
 
     @Test
     fun `nextLensFacing - from back returns front`() {
-        val result = nextLensFacing(androidx.camera.core.CameraSelector.LENS_FACING_BACK)
+        val result = nextLensFacing(CameraSelector.LENS_FACING_BACK)
         assertEquals("From BACK should return FRONT",
-            androidx.camera.core.CameraSelector.LENS_FACING_FRONT, result)
+            CameraSelector.LENS_FACING_FRONT, result)
     }
 
     @Test
     fun `nextLensFacing - from front returns back`() {
-        val result = nextLensFacing(androidx.camera.core.CameraSelector.LENS_FACING_FRONT)
+        val result = nextLensFacing(CameraSelector.LENS_FACING_FRONT)
         assertEquals("From FRONT should return BACK",
-            androidx.camera.core.CameraSelector.LENS_FACING_BACK, result)
+            CameraSelector.LENS_FACING_BACK, result)
     }
 
     @Test
     fun `nextLensFacing - toggled twice returns original`() {
-        val original = androidx.camera.core.CameraSelector.LENS_FACING_BACK
+        val original = CameraSelector.LENS_FACING_BACK
         assertEquals("Double toggle should return original", original, nextLensFacing(nextLensFacing(original)))
     }
 
@@ -284,22 +285,22 @@ class CameraAlgorithmTest {
 
     @Test
     fun `toCameraAspectRatio - RATIO_4_3 maps to CameraX RATIO_4_3`() {
-        assertEquals(androidx.camera.core.AspectRatio.RATIO_4_3, toCameraAspectRatio(AspectRatio.RATIO_4_3))
+        assertEquals(AspectRatio.RATIO_4_3, toCameraAspectRatio(AspectRatio.RATIO_4_3))
     }
 
     @Test
     fun `toCameraAspectRatio - RATIO_16_9 maps to CameraX RATIO_16_9`() {
-        assertEquals(androidx.camera.core.AspectRatio.RATIO_16_9, toCameraAspectRatio(AspectRatio.RATIO_16_9))
+        assertEquals(AspectRatio.RATIO_16_9, toCameraAspectRatio(AspectRatio.RATIO_16_9))
     }
 
     @Test
     fun `toCameraAspectRatio - RATIO_FULL maps to CameraX RATIO_16_9`() {
-        assertEquals(androidx.camera.core.AspectRatio.RATIO_16_9, toCameraAspectRatio(AspectRatio.RATIO_FULL))
+        assertEquals(AspectRatio.RATIO_16_9, toCameraAspectRatio(AspectRatio.RATIO_FULL))
     }
 
     @Test
     fun `toCameraAspectRatio - unknown ratio falls back to RATIO_4_3`() {
-        assertEquals(androidx.camera.core.AspectRatio.RATIO_4_3, toCameraAspectRatio(999))
+        assertEquals(AspectRatio.RATIO_4_3, toCameraAspectRatio(999))
     }
 
     // ================================================================

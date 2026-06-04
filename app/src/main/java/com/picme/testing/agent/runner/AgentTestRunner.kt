@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import com.picme.testing.agent.cases.BeautyAgentTestCases
+import com.picme.testing.agent.cases.CameraAgentTestCases
+import java.io.File
 
 /**
  * Agent 测试运行器
@@ -116,7 +119,7 @@ class AgentTestRunner(context: Context) {
      * 运行相机模块全部测试
      */
     fun runCameraTests(onComplete: ((SuiteReport) -> Unit)? = null) {
-        val cases = com.picme.testing.agent.cases.CameraAgentTestCases.allCases(controller)
+        val cases = CameraAgentTestCases.allCases(controller)
         runSuite("Camera", cases, onComplete = onComplete)
     }
 
@@ -124,7 +127,7 @@ class AgentTestRunner(context: Context) {
      * 运行美颜模块全部测试
      */
     fun runBeautyTests(onComplete: ((SuiteReport) -> Unit)? = null) {
-        val cases = com.picme.testing.agent.cases.BeautyAgentTestCases.allCases(controller)
+        val cases = BeautyAgentTestCases.allCases(controller)
         runSuite("Beauty", cases, onComplete = onComplete)
     }
 
@@ -133,8 +136,8 @@ class AgentTestRunner(context: Context) {
      */
     fun runP0Regression(onComplete: ((SuiteReport) -> Unit)? = null) {
         val allCases = mutableListOf<AgentTestCase<*>>()
-        allCases.addAll(com.picme.testing.agent.cases.CameraAgentTestCases.allCases(controller))
-        allCases.addAll(com.picme.testing.agent.cases.BeautyAgentTestCases.allCases(controller))
+        allCases.addAll(CameraAgentTestCases.allCases(controller))
+        allCases.addAll(BeautyAgentTestCases.allCases(controller))
 
         runSuite(
             "P0-Regression",
@@ -159,8 +162,8 @@ class AgentTestRunner(context: Context) {
         val path = "$REPORT_DIR/$filename"
 
         try {
-            java.io.File(REPORT_DIR).mkdirs()
-            java.io.File(path).writeText(json.toString(2))
+            File(REPORT_DIR).mkdirs()
+            File(path).writeText(json.toString(2))
             Logger.i(TAG, "Report exported: $path")
             return path
         } catch (e: Exception) {

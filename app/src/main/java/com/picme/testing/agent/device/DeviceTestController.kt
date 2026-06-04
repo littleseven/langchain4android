@@ -22,6 +22,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import android.app.ActivityManager
+import com.picme.testing.agent.core.LogLevel
 
 /**
  * 设备端测试控制器
@@ -67,9 +69,9 @@ class DeviceTestController(private val context: Context) {
      * 检查应用是否在前台运行
      */
     fun isAppForeground(): Boolean {
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val runningApps = activityManager.runningAppProcesses
-        return runningApps?.any { it.processName == "com.picme" && it.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND } == true
+        return runningApps?.any { it.processName == "com.picme" && it.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND } == true
     }
 
     // ============================================
@@ -282,10 +284,10 @@ class DeviceTestController(private val context: Context) {
 
             output.lines().take(lines).forEach { line ->
                 val level = when {
-                    line.contains(" E ") -> com.picme.testing.agent.core.LogLevel.ERROR
-                    line.contains(" W ") -> com.picme.testing.agent.core.LogLevel.WARN
-                    line.contains(" D ") -> com.picme.testing.agent.core.LogLevel.DEBUG
-                    else -> com.picme.testing.agent.core.LogLevel.INFO
+                    line.contains(" E ") -> LogLevel.ERROR
+                    line.contains(" W ") -> LogLevel.WARN
+                    line.contains(" D ") -> LogLevel.DEBUG
+                    else -> LogLevel.INFO
                 }
                 ctx.addLog("PicMe", line, level)
             }

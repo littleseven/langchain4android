@@ -14,6 +14,7 @@ import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.beauty.api.Logger
+import android.graphics.RectF
 
 /**
  * 人脸检测管理器
@@ -197,7 +198,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     }
 
     private fun detectPipeline(bitmap: Bitmap, lensFacing: Int, config: DetectionPipelineConfig, startTime: Long): FaceDetectionResult? {
-        var roiResult: android.graphics.RectF? = null
+        var roiResult: RectF? = null
         var landmarkResult: FloatArray? = null
 
         val roiStartTime = SystemClock.elapsedRealtime()
@@ -235,7 +236,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
                 ?: return null
 
-            val normalizedRoi = android.graphics.RectF(
+            val normalizedRoi = RectF(
                 roiResult.left / bitmap.width.toFloat(),
                 roiResult.top / bitmap.height.toFloat(),
                 roiResult.right / bitmap.width.toFloat(),

@@ -3,6 +3,7 @@ package com.picme.beauty.internal.facedetect
 import android.content.Context
 import android.graphics.Bitmap
 import com.picme.beauty.api.Logger
+import android.graphics.RectF
 
 /**
  * 基于 MediaPipe 的关键点检测器
@@ -18,7 +19,7 @@ class MediaPipeLandmarkDetector(
     override fun detectLandmarks(
         bitmap: Bitmap,
         lensFacing: Int,
-        roi: android.graphics.RectF?
+        roi: RectF?
     ): FloatArray? {
         return try {
             // MediaPipe 不需要 ROI,直接检测全图

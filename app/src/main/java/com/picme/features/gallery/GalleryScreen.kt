@@ -63,6 +63,8 @@ import com.picme.features.gallery.agent.GalleryAgentPanel
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.rememberAgentChatConfig
 import com.picme.domain.agent.model.AgentScene
+import android.app.Activity
+import com.picme.domain.agent.capability.GalleryCapability
 
 private const val TAG = "Gallery"
 private const val TAG_AGENT = "GalleryAgent"
@@ -102,7 +104,7 @@ fun GalleryScreen(
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartIntentSenderForResult()
         ) { result ->
-            if (result.resultCode == android.app.Activity.RESULT_OK) {
+            if (result.resultCode == Activity.RESULT_OK) {
                 Logger.d(TAG, "User granted API 29 delete permission")
                 viewModel.executePendingDeletes()
             } else {
@@ -120,7 +122,7 @@ fun GalleryScreen(
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.StartIntentSenderForResult()
         ) { result ->
-            if (result.resultCode == android.app.Activity.RESULT_OK) {
+            if (result.resultCode == Activity.RESULT_OK) {
                 Logger.d(TAG, "User granted delete permission")
                 viewModel.executePendingDeletes()
             } else {
@@ -206,8 +208,8 @@ fun GalleryScreen(
     DisposableEffect(Unit) {
         Logger.i(TAG, "Binding GalleryCapability delegate, mediaCount=${allFlatMedia.size}")
 
-        val galleryCapability = com.picme.domain.agent.capability.GalleryCapability.getInstance()
-        galleryCapability.bindDelegate(object : com.picme.domain.agent.capability.GalleryCapability.Delegate {
+        val galleryCapability = GalleryCapability.getInstance()
+        galleryCapability.bindDelegate(object : GalleryCapability.Delegate {
             override fun onViewMedia(mediaId: String?) {
                 mediaId?.let { id ->
                     val index = allFlatMedia.indexOfFirst { it.id.toString() == id }
@@ -233,7 +235,7 @@ fun GalleryScreen(
             override fun onSearch(query: String) {
                 Logger.d(TAG_AGENT, "Search query: $query")
             }
-            override fun onSwitchViewMode(mode: com.picme.domain.agent.capability.GalleryCapability.ViewMode) {
+            override fun onSwitchViewMode(mode: GalleryCapability.ViewMode) {
                 Logger.d(TAG_AGENT, "Switch to view mode: $mode")
             }
             override fun onFavoriteMedia(mediaId: String, favorite: Boolean) {
@@ -249,7 +251,7 @@ fun GalleryScreen(
     }
 
     DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
+        val window = (context as? Activity)?.window ?: return@DisposableEffect onDispose {}
         val insetsController = WindowCompat.getInsetsController(window, view)
         insetsController.hide(WindowInsetsCompat.Type.systemBars())
         insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

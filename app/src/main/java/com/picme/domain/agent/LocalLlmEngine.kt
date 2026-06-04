@@ -7,6 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import com.picme.beauty.internal.model.ModelManager
+import com.picme.domain.agent.model.ChatMessage
+import com.picme.domain.agent.model.ChatRole
 
 /**
  * LLM 模型未找到异常
@@ -95,7 +98,7 @@ class LocalLlmEngine(private val context: Context) {
      * 检查指定模型是否已下载可用
      */
     fun isModelAvailable(modelId: String, context: Context): Boolean {
-        return com.picme.beauty.internal.model.ModelManager.isLlmModelCached(modelId, context)
+        return ModelManager.isLlmModelCached(modelId, context)
     }
 
     /**
@@ -179,7 +182,7 @@ class LocalLlmEngine(private val context: Context) {
      * @return 生成的文本
      */
     suspend fun generateWithHistory(
-        messages: List<com.picme.domain.agent.model.ChatMessage>,
+        messages: List<ChatMessage>,
         maxTokens: Int = 128
     ): Result<String> = withContext(Dispatchers.IO) {
         engineMutex.withLock {
@@ -234,22 +237,22 @@ class LocalLlmEngine(private val context: Context) {
      * 先拼接为文本格式。后续可升级使用原生 ChatMessages API。
      */
     private fun buildPromptFromMessages(
-        messages: List<com.picme.domain.agent.model.ChatMessage>
+        messages: List<ChatMessage>
     ): String {
         return buildString {
             messages.forEach { message ->
                 when (message.role) {
-                    com.picme.domain.agent.model.ChatRole.SYSTEM -> {
+                    ChatRole.SYSTEM -> {
                         appendLine("<|im_start|>system")
                         appendLine(message.content)
                         appendLine("<|im_end|>")
                     }
-                    com.picme.domain.agent.model.ChatRole.USER -> {
+                    ChatRole.USER -> {
                         appendLine("<|im_start|>user")
                         appendLine(message.content)
                         appendLine("<|im_end|>")
                     }
-                    com.picme.domain.agent.model.ChatRole.ASSISTANT -> {
+                    ChatRole.ASSISTANT -> {
                         appendLine("<|im_start|>assistant")
                         appendLine(message.content)
                         appendLine("<|im_end|>")

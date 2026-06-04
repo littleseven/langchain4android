@@ -11,6 +11,7 @@ import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
 import kotlinx.coroutines.flow.Flow
+import com.picme.domain.model.LogModuleConfig
 
 /**
  * 用户偏好设置仓储接口（Domain 层契约）
@@ -115,8 +116,8 @@ interface UserSettingsRepository {
     suspend fun resetCameraMemoryState()
 
     // ── 日志模块配置 ──────────────────────────────────────────
-    val logModuleConfigFlow: Flow<com.picme.domain.model.LogModuleConfig>
-    suspend fun updateLogModuleConfig(config: com.picme.domain.model.LogModuleConfig)
+    val logModuleConfigFlow: Flow<LogModuleConfig>
+    suspend fun updateLogModuleConfig(config: LogModuleConfig)
 
     // ── Chat 输入模式记忆 ────────────────────────────────────
     val chatInputModeFlow: Flow<String>

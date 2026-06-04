@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.picme.domain.model.LogModuleConfig
 
 class SettingsViewModel(
     private val repository: UserSettingsRepository,
@@ -127,7 +128,7 @@ class SettingsViewModel(
         )
 
     // Shader debug mode (not persisted, defaults to 0)
-    private val _debugShaderMode = kotlinx.coroutines.flow.MutableStateFlow(0)
+    private val _debugShaderMode = MutableStateFlow(0)
     val debugShaderMode: StateFlow<Int> = _debugShaderMode
 
     // ── 阶段独立配置（ROI / Landmark）────────────────────────
@@ -201,11 +202,11 @@ class SettingsViewModel(
             initialValue = ""
         )
 
-    val logModuleConfig: StateFlow<com.picme.domain.model.LogModuleConfig> = repository.logModuleConfigFlow
+    val logModuleConfig: StateFlow<LogModuleConfig> = repository.logModuleConfigFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = com.picme.domain.model.LogModuleConfig.default()
+            initialValue = LogModuleConfig.default()
         )
 
     // 模型管理相关 Flow
@@ -751,7 +752,7 @@ class SettingsViewModel(
         }
     }
 
-    fun setLogModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
+    fun setLogModuleConfig(config: LogModuleConfig) {
         // 同步更新内存中的 Logger 配置，使开关立即生效
         Logger.setModuleConfig(config)
         viewModelScope.launch {

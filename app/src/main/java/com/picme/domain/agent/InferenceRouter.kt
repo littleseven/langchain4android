@@ -7,6 +7,8 @@ import com.picme.domain.agent.model.InferenceResult
 import com.picme.domain.agent.remote.AdaptiveStrategySelector
 import com.picme.domain.agent.remote.InferenceStrategy
 import com.picme.domain.agent.remote.RemoteOrchestrator
+import com.picme.domain.agent.CapabilityRegistry
+import com.picme.domain.agent.model.SceneManager
 
 /**
  * 推理路由器
@@ -107,8 +109,8 @@ class InferenceRouter(
         userInput: String,
         context: AgentContext
     ): InferenceResult {
-        val promptBuilder = PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
-        val capabilities = com.picme.domain.agent.CapabilityRegistry.getInstance()
+        val promptBuilder = PromptBuilder(SceneManager.getInstance())
+        val capabilities = CapabilityRegistry.getInstance()
             .getCapabilitiesForCurrentScene()
 
         val systemPrompt = promptBuilder.buildSystemPrompt(capabilities, context)

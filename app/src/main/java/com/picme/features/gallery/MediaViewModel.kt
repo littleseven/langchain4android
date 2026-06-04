@@ -29,6 +29,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import android.content.ContentValues
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FaceData
 
 class MediaViewModel(
     private val repository: MediaRepository,
@@ -266,14 +269,14 @@ class MediaViewModel(
         object Idle : PhotoEditState()
         object Analyzing : PhotoEditState()
         object Processing : PhotoEditState()
-        data class Ready(val bitmap: Bitmap, val faceData: com.picme.beauty.api.FaceData?) : PhotoEditState()
+        data class Ready(val bitmap: Bitmap, val faceData: FaceData?) : PhotoEditState()
         data class Error(val message: String) : PhotoEditState()
     }
 
     private val _photoEditState = MutableStateFlow<PhotoEditState>(PhotoEditState.Idle)
     val photoEditState: StateFlow<PhotoEditState> = _photoEditState.asStateFlow()
 
-    private var cachedEditFaceData: com.picme.beauty.api.FaceData? = null
+    private var cachedEditFaceData: FaceData? = null
 
     /**
      * 进入编辑模式时预处理：加载图片并执行一次人脸检测，缓存 FaceData 供后续复用
@@ -308,7 +311,7 @@ class MediaViewModel(
      * @param settings 美颜设置
      * @param lensFacing 镜头方向（影响人脸检测镜像）
      */
-    fun processPhoto(bitmap: Bitmap, settings: com.picme.beauty.api.BeautySettings, lensFacing: Int = 1) {
+    fun processPhoto(bitmap: Bitmap, settings: BeautySettings, lensFacing: Int = 1) {
         viewModelScope.launch(Dispatchers.Default) {
             _photoEditState.value = PhotoEditState.Processing
             try {
@@ -337,7 +340,7 @@ class MediaViewModel(
     fun saveProcessedPhoto(context: Context, bitmap: Bitmap) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val contentValues = android.content.ContentValues().apply {
+                val contentValues = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, "EDITED_${System.currentTimeMillis()}.jpg")
                     put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
                     put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
@@ -368,10 +371,10 @@ class MediaViewModel(
     /**
      * 106 点 landmarks → FaceData 转换（用于静态图编辑路径）
      */
-    private fun FloatArray.toFaceData(imageWidth: Int, imageHeight: Int): com.picme.beauty.api.FaceData? {
+    private fun FloatArray.toFaceData(imageWidth: Int, imageHeight: Int): FaceData? {
         if (this.size < 212) return null
         val warpParams = Face106ToWarpParams.convert(this, FaceDetectionSource.MEDIAPIPE)
-        return com.picme.beauty.api.FaceData(
+        return FaceData(
             faceCenterX = warpParams.faceCenterX,
             faceCenterY = warpParams.faceCenterY,
             leftEyeX = warpParams.leftEyeX,

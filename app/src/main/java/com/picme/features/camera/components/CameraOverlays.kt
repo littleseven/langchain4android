@@ -309,7 +309,7 @@ fun CompositionGrid(gridType: GridType) {
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawThirdsGrid(
+private fun DrawScope.drawThirdsGrid(
     color: Color,
     strokeWidth: Float,
     pathEffect: PathEffect
@@ -344,7 +344,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawThirdsGrid(
     )
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawGoldenGrid(
+private fun DrawScope.drawGoldenGrid(
     color: Color,
     strokeWidth: Float,
     pathEffect: PathEffect
@@ -603,7 +603,7 @@ fun FaceFocusIndicator(offset: Offset, alpha: Float) {
     FaceFocusCrosshair(offset = offset, alpha = alpha, isActive = true)
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCorners(
+private fun DrawScope.drawCorners(
     color: Color,
     strokeWidth: Float,
     bracketLen: Float

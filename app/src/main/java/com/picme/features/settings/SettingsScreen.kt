@@ -78,6 +78,20 @@ import com.picme.features.common.chat.rememberAgentChatConfig
 import com.picme.features.settings.agent.SettingsAgentPanel
 import com.picme.features.settings.agent.rememberSettingsAgentIntegration
 import java.util.Locale
+import android.app.Activity
+import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import com.picme.data.download.DownloadState
+import com.picme.data.download.DownloadStatus
+import com.picme.domain.agent.capability.SettingsCapability
+import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.LogModule
+import com.picme.domain.model.LogModuleConfig
+import com.picme.domain.model.RemoteModelConfig
+import com.picme.domain.model.RemoteModelConfigs
+import com.picme.domain.model.RemoteModelProvider
+import com.picme.domain.model.RemoteProtocol
 
 private const val TAG = "Settings"
 
@@ -92,7 +106,7 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     DisposableEffect(Unit) {
-        val window = (context as? android.app.Activity)?.window ?: return@DisposableEffect onDispose {}
+        val window = (context as? Activity)?.window ?: return@DisposableEffect onDispose {}
         val insetsController = WindowCompat.getInsetsController(window, view)
 
         // 隐藏状态栏和导航栏
@@ -176,18 +190,18 @@ fun SettingsScreen(
     DisposableEffect(Unit) {
         Logger.i(TAG, "Binding SettingsCapability delegate")
 
-        val settingsCapability = com.picme.domain.agent.capability.SettingsCapability.getInstance()
-        settingsCapability.bindDelegate(object : com.picme.domain.agent.capability.SettingsCapability.Delegate {
-            override fun onChangeTheme(theme: com.picme.domain.model.ThemeMode) {
+        val settingsCapability = SettingsCapability.getInstance()
+        settingsCapability.bindDelegate(object : SettingsCapability.Delegate {
+            override fun onChangeTheme(theme: ThemeMode) {
                 viewModel.setThemeMode(theme)
             }
-            override fun onChangeLanguage(language: com.picme.domain.model.AppLanguage) {
+            override fun onChangeLanguage(language: AppLanguage) {
                 viewModel.setAppLanguage(language)
             }
             override fun onDownloadModel(modelId: String) {
                 onNavigateToModelCenter()
             }
-            override fun onSwitchFaceEngine(engine: com.picme.domain.model.FaceDetectionEngineMode) {
+            override fun onSwitchFaceEngine(engine: FaceDetectionEngineMode) {
                 viewModel.setFaceDetectionEngineMode(engine)
             }
             override fun onToggleSetting(key: String, enabled: Boolean) {
@@ -195,10 +209,10 @@ fun SettingsScreen(
                     "debug_ui" -> viewModel.setDebugUiEnabled(enabled)
                     "camera_info" -> viewModel.setShowCameraInfoInPreview(enabled)
                     "voice_command" -> viewModel.setVoiceCommandMode(
-                        if (enabled) com.picme.domain.model.VoiceCommandMode.WAKE_WORD else com.picme.domain.model.VoiceCommandMode.DISABLED
+                        if (enabled) VoiceCommandMode.WAKE_WORD else VoiceCommandMode.DISABLED
                     )
                     "agent_mode" -> viewModel.setAiAgentMode(
-                        if (enabled) com.picme.domain.model.AiAgentMode.LOCAL else com.picme.domain.model.AiAgentMode.OFF
+                        if (enabled) AiAgentMode.LOCAL else AiAgentMode.OFF
                     )
                     else -> Logger.w(TAG, "Unknown setting key: $key")
                 }
@@ -330,10 +344,10 @@ private fun settingsContent(
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
-    downloadStates: Map<String, com.picme.data.download.DownloadState>,
+    downloadStates: Map<String, DownloadState>,
     allModels: List<ModelConfig>,
-    logModuleConfig: com.picme.domain.model.LogModuleConfig,
-    onLogModuleConfigChange: (com.picme.domain.model.LogModuleConfig) -> Unit,
+    logModuleConfig: LogModuleConfig,
+    onLogModuleConfigChange: (LogModuleConfig) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -592,8 +606,8 @@ private fun settingsContent(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LogModuleConfigSection(
-    config: com.picme.domain.model.LogModuleConfig,
-    onConfigChange: (com.picme.domain.model.LogModuleConfig) -> Unit
+    config: LogModuleConfig,
+    onConfigChange: (LogModuleConfig) -> Unit
 ) {
     FlowRow(
         modifier = Modifier
@@ -602,7 +616,7 @@ private fun LogModuleConfigSection(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        com.picme.domain.model.LogModule.entries.forEach { module ->
+        LogModule.entries.forEach { module ->
             val enabled = config.isEnabled(module)
             FilterChip(
                 selected = enabled,
@@ -660,7 +674,7 @@ private fun LocalAsrModelSelection(
 ) {
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
-    var downloadedModels by remember { mutableStateOf<List<com.picme.data.download.ModelConfig>>(emptyList()) }
+    var downloadedModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
 
     LaunchedEffect(Unit) {
         downloadedModels = downloadManager.getDownloadedModels()
@@ -929,9 +943,9 @@ fun AiAgentRemoteModelsSection(
 ) {
     val configs = remember(configsJson) {
         if (configsJson.isNotBlank()) {
-            com.picme.domain.model.RemoteModelConfigs.fromJson(configsJson)
+            RemoteModelConfigs.fromJson(configsJson)
         } else {
-            com.picme.domain.model.RemoteModelConfigs()
+            RemoteModelConfigs()
         }
     }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -974,7 +988,7 @@ fun AiAgentRemoteModelsSection(
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        val selectedProvider = com.picme.domain.model.RemoteModelConfig.getProvider(selectedConfig.providerId)
+                        val selectedProvider = RemoteModelConfig.getProvider(selectedConfig.providerId)
                         Text(
                             text = selectedProvider?.displayName ?: selectedConfig.providerId,
                             style = MaterialTheme.typography.bodySmall,
@@ -1037,20 +1051,20 @@ fun AiAgentRemoteModelsSection(
                     onSelect = { onSelectedModelChange(config.uniqueKey) },
                     onConfigChange = { originalId, updatedConfig ->
                         val updated = configs.updateConfig(originalId, updatedConfig)
-                        onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
+                        onConfigsChange(RemoteModelConfigs.toJson(updated))
                         if (originalId == selectedModelId && originalId != updatedConfig.uniqueKey) {
                             onSelectedModelChange(updatedConfig.uniqueKey)
                         }
                     },
                     onDelete = { modelId ->
                         val updated = configs.removeConfig(modelId)
-                        onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
+                        onConfigsChange(RemoteModelConfigs.toJson(updated))
                         if (modelId == selectedModelId) {
                             val nextModel = updated.configs.find { it.isConfigured }?.uniqueKey
                             onSelectedModelChange(nextModel ?: "")
                         }
                     },
-                    isPredefined = com.picme.domain.model.RemoteModelConfig.PREDEFINED_MODELS.any { it.modelId == config.modelId }
+                    isPredefined = RemoteModelConfig.PREDEFINED_MODELS.any { it.modelId == config.modelId }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -1062,7 +1076,7 @@ fun AiAgentRemoteModelsSection(
             onDismiss = { showAddDialog = false },
             onConfirm = { newConfig ->
                 val updated = configs.addConfig(newConfig)
-                onConfigsChange(com.picme.domain.model.RemoteModelConfigs.toJson(updated))
+                onConfigsChange(RemoteModelConfigs.toJson(updated))
                 onSelectedModelChange(newConfig.uniqueKey)
                 showAddDialog = false
             }
@@ -1072,10 +1086,10 @@ fun AiAgentRemoteModelsSection(
 
 @Composable
 private fun RemoteModelConfigCard(
-    config: com.picme.domain.model.RemoteModelConfig,
+    config: RemoteModelConfig,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onConfigChange: (String, com.picme.domain.model.RemoteModelConfig) -> Unit,
+    onConfigChange: (String, RemoteModelConfig) -> Unit,
     onDelete: (String) -> Unit,
     isPredefined: Boolean
 ) {
@@ -1085,7 +1099,7 @@ private fun RemoteModelConfigCard(
     var editBaseUrl by remember { mutableStateOf(config.baseUrl) }
     var editProtocol by remember { mutableStateOf(config.protocol) }
 
-    val provider = com.picme.domain.model.RemoteModelConfig.getProvider(config.providerId)
+    val provider = RemoteModelConfig.getProvider(config.providerId)
     val providerName = provider?.displayName ?: "自定义"
 
     Card(
@@ -1107,7 +1121,7 @@ private fun RemoteModelConfigCard(
             if (isEditing) {
                 if (isPredefined) {
                     // 预设模型：仅编辑 API Key
-                    androidx.compose.material3.OutlinedTextField(
+                    OutlinedTextField(
                         value = editApiKey,
                         onValueChange = { editApiKey = it },
                         label = { Text(stringResource(R.string.api_key)) },
@@ -1138,7 +1152,7 @@ private fun RemoteModelConfigCard(
                     }
                 } else {
                     // 自定义模型：完整编辑
-                    androidx.compose.material3.OutlinedTextField(
+                    OutlinedTextField(
                         value = editModelId,
                         onValueChange = { editModelId = it },
                         label = { Text(stringResource(R.string.model_id)) },
@@ -1157,7 +1171,7 @@ private fun RemoteModelConfigCard(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        com.picme.domain.model.RemoteProtocol.entries.forEach { protocol ->
+                        RemoteProtocol.entries.forEach { protocol ->
                             FilterChip(
                                 selected = editProtocol == protocol,
                                 onClick = { editProtocol = protocol },
@@ -1166,7 +1180,7 @@ private fun RemoteModelConfigCard(
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    androidx.compose.material3.OutlinedTextField(
+                    OutlinedTextField(
                         value = editBaseUrl,
                         onValueChange = { editBaseUrl = it },
                         label = { Text(stringResource(R.string.base_url)) },
@@ -1175,7 +1189,7 @@ private fun RemoteModelConfigCard(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    androidx.compose.material3.OutlinedTextField(
+                    OutlinedTextField(
                         value = editApiKey,
                         onValueChange = { editApiKey = it },
                         label = { Text(stringResource(R.string.api_key)) },
@@ -1277,16 +1291,16 @@ private fun RemoteModelConfigCard(
 @OptIn(ExperimentalLayoutApi::class)
 private fun AddProviderModelDialog(
     onDismiss: () -> Unit,
-    onConfirm: (com.picme.domain.model.RemoteModelConfig) -> Unit
+    onConfirm: (RemoteModelConfig) -> Unit
 ) {
-    var selectedProvider by remember { mutableStateOf<com.picme.domain.model.RemoteModelProvider?>(null) }
+    var selectedProvider by remember { mutableStateOf<RemoteModelProvider?>(null) }
     var selectedModel by remember { mutableStateOf("") }
     var apiKey by remember { mutableStateOf("") }
 
-    val providers = com.picme.domain.model.RemoteModelConfig.PROVIDERS.filter { it.isVisible }
+    val providers = RemoteModelConfig.PROVIDERS.filter { it.isVisible }
     val availableModels = selectedProvider?.models ?: emptyList()
 
-    androidx.compose.material3.AlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("添加远程模型") },
         text = {
@@ -1339,7 +1353,7 @@ private fun AddProviderModelDialog(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = apiKey,
                     onValueChange = { apiKey = it },
                     label = { Text(stringResource(R.string.api_key)) },
@@ -1355,7 +1369,7 @@ private fun AddProviderModelDialog(
                     selectedProvider?.let { provider ->
                         if (selectedModel.isNotBlank()) {
                             onConfirm(
-                                com.picme.domain.model.RemoteModelConfig(
+                                RemoteModelConfig(
                                     modelId = selectedModel,
                                     providerId = provider.providerId,
                                     protocol = provider.protocol,
@@ -1514,7 +1528,7 @@ private fun StageConfigSection(
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
-    downloadStates: Map<String, com.picme.data.download.DownloadState>,
+    downloadStates: Map<String, DownloadState>,
     allModels: List<ModelConfig>
 ) {
     val context = LocalContext.current
@@ -1605,7 +1619,7 @@ private fun modelTypeSelection(
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
-    downloadStates: Map<String, com.picme.data.download.DownloadState>,
+    downloadStates: Map<String, DownloadState>,
     allModels: List<ModelConfig>
 ) {
     val context = LocalContext.current
@@ -1638,7 +1652,7 @@ private fun modelTypeSelection(
             val isMediaPipe = modelType == DetectionModelType.MEDIAPIPE
             val modelId = getModelId(modelType, stage)
             val downloadState = modelId?.let { downloadStates[it] }
-            val isDownloading = downloadState?.status == com.picme.data.download.DownloadStatus.DOWNLOADING
+            val isDownloading = downloadState?.status == DownloadStatus.DOWNLOADING
             val downloadProgress = if (isDownloading && downloadState.totalBytes > 0) {
                 (downloadState.downloadedBytes.toFloat() / downloadState.totalBytes * 100).toInt()
             } else 0
@@ -1653,16 +1667,16 @@ private fun modelTypeSelection(
                         val modelConfig = mId?.let { id -> allModels.find { it.id == id } }
                         if (modelConfig != null && mId != null) {
                             downloadModel(mId, modelConfig)
-                            android.widget.Toast.makeText(
+                            Toast.makeText(
                                 context,
                                 "开始下载 ${modelConfig.name}，下载完成后自动生效",
-                                android.widget.Toast.LENGTH_SHORT
+                                Toast.LENGTH_SHORT
                             ).show()
                         } else {
-                            android.widget.Toast.makeText(
+                            Toast.makeText(
                                 context,
                                 "模型配置未找到，请先进入模型管理页面下载",
-                                android.widget.Toast.LENGTH_SHORT
+                                Toast.LENGTH_SHORT
                             ).show()
                         }
                     }
@@ -1837,7 +1851,7 @@ fun SettingsScreenPreview() {
             downloadModel = { _, _ -> },
             downloadStates = emptyMap(),
             allModels = emptyList(),
-            logModuleConfig = com.picme.domain.model.LogModuleConfig.default(),
+            logModuleConfig = LogModuleConfig.default(),
             onLogModuleConfigChange = {},
             onNavigateBack = {}
         )

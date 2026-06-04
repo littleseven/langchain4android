@@ -21,6 +21,7 @@ import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
 import com.picme.domain.usecase.OcrProcessor
 import com.picme.features.gallery.MediaViewModel
+import androidx.lifecycle.ViewModel
 
 data class MediaViewModelDependencies(
     val repository: MediaRepository,
@@ -35,7 +36,7 @@ class MediaViewModelFactory(
     private val dependencies: MediaViewModelDependencies
 ) : ViewModelProvider.Factory {
 
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MediaViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
             return MediaViewModel(

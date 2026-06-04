@@ -107,6 +107,11 @@ import com.picme.features.camera.MakeupEntry
 import com.picme.features.camera.ScenePreset
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 
 /** Panel height ratio relative to screen height */
 private const val PANEL_HEIGHT_RATIO = 0.5f
@@ -500,12 +505,12 @@ private fun FilterItem(
     label: String,
     isSelected: Boolean,
     assetPath: String,
-    itemWidth: androidx.compose.ui.unit.Dp,
+    itemWidth: Dp,
     onClick: () -> Unit
 ) {
     val scale by animateFloatAsState(if (isSelected) 1.08f else 1.0f, label = "scale")
     val imageSize = itemWidth * 0.72f
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -540,18 +545,18 @@ private fun FilterItem(
             val bitmap = remember(assetPath) {
                 try {
                     context.assets.open(assetPath).use { stream ->
-                        android.graphics.BitmapFactory.decodeStream(stream)
+                        BitmapFactory.decodeStream(stream)
                     }
                 } catch (e: Exception) {
                     null
                 }
             }
             if (bitmap != null) {
-                androidx.compose.foundation.Image(
+                Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = label,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    contentScale = ContentScale.Crop
                 )
             } else {
                 // 加载失败时显示渐变色占位

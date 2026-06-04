@@ -20,6 +20,7 @@ import com.picme.domain.model.AiAgentPrivacyLevel
 import com.picme.domain.model.MediaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.picme.domain.model.RemoteModelConfig
 
 /**
  * AI Agent 核心用例（Facade）
@@ -58,9 +59,9 @@ class AiAgentUseCase(
     /**
      * 用户自定义远程模型配置（高优先级：用户自己的 API Key）
      */
-    private val userRemoteConfig: com.picme.domain.model.RemoteModelConfig? =
+    private val userRemoteConfig: RemoteModelConfig? =
         codingApiKey?.takeIf { it.isNotBlank() }?.let { apiKey ->
-            com.picme.domain.model.RemoteModelConfig(
+            RemoteModelConfig(
                 modelId = codingModel,
                 apiKey = apiKey,
                 baseUrl = codingBaseUrl ?: CODING_DEFAULT_BASE_URL
@@ -71,8 +72,8 @@ class AiAgentUseCase(
      * 兜底远程模型配置（腾讯云 SCF Gateway，无需用户配置）
      * 使用 BuildConfig 中内嵌的默认 Token
      */
-    private val fallbackRemoteConfig: com.picme.domain.model.RemoteModelConfig =
-        com.picme.domain.model.RemoteModelConfig.TENCENT_SCF_DEFAULT.copy(
+    private val fallbackRemoteConfig: RemoteModelConfig =
+        RemoteModelConfig.TENCENT_SCF_DEFAULT.copy(
             gatewayToken = gatewayToken?.takeIf { it.isNotBlank() }
                 ?: com.picme.BuildConfig.TENCENT_SCF_APP_TOKEN
         )

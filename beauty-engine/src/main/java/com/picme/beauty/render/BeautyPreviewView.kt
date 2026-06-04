@@ -497,7 +497,7 @@ class BeautyPreviewView @JvmOverloads constructor(
         Logger.d(TAG, "Visibility changed: $visibility")
     }
 
-    fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {
+    fun startRecording(encoderSurface: Surface, width: Int, height: Int) {
         if (!isRendererInitialized) return
         renderer.startRecording(encoderSurface, width, height)
     }

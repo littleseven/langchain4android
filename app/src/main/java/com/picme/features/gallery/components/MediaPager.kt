@@ -121,6 +121,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
+import androidx.compose.material3.ButtonDefaults
+import java.io.IOException
 
 private const val TAG = "Gallery"
 private const val TAG_TEST = "GalleryTest"
@@ -183,7 +185,7 @@ fun MediaPager(
                     } else {
                         Logger.e(TAG, "Failed to decode bitmap for editing")
                     }
-                } catch (e: java.io.IOException) {
+                } catch (e: IOException) {
                     Logger.e(TAG, "IO error when loading bitmap: ${e.message}")
                 } catch (e: OutOfMemoryError) {
                     Logger.e(TAG, "OOM when loading bitmap: ${e.message}")
@@ -1095,7 +1097,7 @@ private fun photoEditPanel(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color.White
                         )
                     ) {

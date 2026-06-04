@@ -14,6 +14,8 @@ import com.picme.beauty.api.FrameSyncResult
 import com.picme.beauty.internal.framesync.FrameSyncBridge
 import com.picme.beauty.internal.framesync.FrameSyncManager
 import java.util.concurrent.ConcurrentLinkedQueue
+import android.opengl.EGLContext
+import android.view.Surface
 
 /**
  * 大美丽 - 相机预览渲染器
@@ -33,7 +35,7 @@ class CameraPreviewRenderer(private val context: Context) {
     }
 
     private val eglCore = EGLCore()
-    private var eglContext: android.opengl.EGLContext? = null
+    private var eglContext: EGLContext? = null
     private var windowSurface: WindowSurface? = null
     private var recordingWindowSurface: WindowSurface? = null
     private lateinit var beautyRenderer: BeautyRenderer
@@ -203,7 +205,7 @@ class CameraPreviewRenderer(private val context: Context) {
         Logger.d(TAG, "External texture created: $textureId")
     }
 
-    fun setRenderSurface(surface: android.view.Surface) {
+    fun setRenderSurface(surface: Surface) {
         if (!surface.isValid) {
             Logger.w(TAG, "Ignore invalid render surface")
             return
@@ -214,7 +216,7 @@ class CameraPreviewRenderer(private val context: Context) {
         startRendering()
     }
 
-    fun clearRenderSurface(surface: android.view.Surface? = null) {
+    fun clearRenderSurface(surface: Surface? = null) {
         val currentWindowSurface = windowSurface ?: return
         val shouldClear = surface == null || !surface.isValid
         if (!shouldClear) {
@@ -226,7 +228,7 @@ class CameraPreviewRenderer(private val context: Context) {
         }
     }
 
-    fun startRecording(encoderSurface: android.view.Surface, width: Int, height: Int) {
+    fun startRecording(encoderSurface: Surface, width: Int, height: Int) {
         glEventQueue.offer {
             recordingWindowSurface?.release()
             recordingWindowSurface = WindowSurface(encoderSurface, eglCore).apply { create() }
@@ -872,8 +874,8 @@ class CameraPreviewRenderer(private val context: Context) {
 
     fun getSurfaceTexture(): SurfaceTexture? = surfaceTexture
 
-    fun getSurfaceForCamera(): android.view.Surface? {
-        return surfaceTexture?.let { android.view.Surface(it) }
+    fun getSurfaceForCamera(): Surface? {
+        return surfaceTexture?.let { Surface(it) }
     }
 
     fun release() {

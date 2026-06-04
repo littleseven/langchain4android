@@ -9,6 +9,7 @@ import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.MediaType
+import com.picme.beauty.api.BeautySettings
 
 /**
  * 相机控制 Capability
@@ -46,7 +47,7 @@ class CameraCapability : BaseCapability() {
      * CameraScreen 实现此接口并绑定到 Capability
      */
     interface Delegate {
-        fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings)
+        fun onAdjustBeauty(settings: BeautySettings)
         fun onSwitchFilter(filterType: FilterType)
         fun onSwitchStyle(styleFilter: StyleFilter)
         fun onSwitchScene(sceneName: String)

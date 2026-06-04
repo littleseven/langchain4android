@@ -39,6 +39,7 @@ import coil.request.ImageRequest
 import com.picme.R
 import com.picme.domain.model.DuplicateGroup
 import java.io.File
+import androidx.compose.foundation.layout.Spacer
 
 @Composable
 fun DuplicateManagerScreen(
@@ -188,7 +189,7 @@ private fun DuplicatePreviewDialog(
         text = {
             Column {
                 Text(stringResource(R.string.will_keep_first_file))
-                androidx.compose.foundation.layout.Spacer(modifier = Modifier.padding(4.dp))
+                Spacer(modifier = Modifier.padding(4.dp))
                 fileUris.forEachIndexed { index, uri ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),

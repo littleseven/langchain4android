@@ -8,6 +8,7 @@ import com.picme.testing.agent.core.TestPriority
 import com.picme.testing.agent.core.agentTestCase
 import com.picme.testing.agent.device.DeviceTestController
 import kotlin.time.Duration.Companion.seconds
+import com.picme.testing.agent.core.AssertionResult
 
 /**
  * 相机模块 Agent 测试用例
@@ -175,14 +176,14 @@ object CameraAgentTestCases {
                             log.message.contains("process DONE", ignoreCase = true)
                     }
                     if (log == null) {
-                        com.picme.testing.agent.core.AssertionResult.Failure("未找到 GPU 处理完成日志")
+                        AssertionResult.Failure("未找到 GPU 处理完成日志")
                     } else {
                         val timeMs = log.message.replace(Regex("[^0-9]"), "").toLongOrNull() ?: 0
                         if (timeMs <= 1000) {
                             ctx.setMetadata("gpuProcessTimeMs", timeMs.toString())
-                            com.picme.testing.agent.core.AssertionResult.Success
+                            AssertionResult.Success
                         } else {
-                            com.picme.testing.agent.core.AssertionResult.Failure("GPU 处理耗时 ${timeMs}ms，超过 1000ms")
+                            AssertionResult.Failure("GPU 处理耗时 ${timeMs}ms，超过 1000ms")
                         }
                     }
                 }

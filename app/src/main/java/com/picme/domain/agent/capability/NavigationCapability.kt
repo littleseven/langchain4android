@@ -8,6 +8,7 @@ import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.navigation.NavController
 
 /**
  * 导航 Capability
@@ -44,12 +45,12 @@ class NavigationCapability : BaseCapability() {
     /**
      * 导航控制器引用，由 MainActivity 绑定
      */
-    private var navController: androidx.navigation.NavController? = null
+    private var navController: NavController? = null
 
     /**
      * 绑定 NavController（由 MainActivity 调用）
      */
-    fun bindNavController(navController: androidx.navigation.NavController) {
+    fun bindNavController(navController: NavController) {
         this.navController = navController
         Logger.i(tag, "NavController bound, isAvailable=${isAvailable()}")
     }
@@ -127,7 +128,7 @@ class NavigationCapability : BaseCapability() {
     /**
      * 执行页面导航
      */
-    private fun navigateTo(nav: androidx.navigation.NavController, destination: Destination) {
+    private fun navigateTo(nav: NavController, destination: Destination) {
         val route = when (destination) {
             Destination.CAMERA -> "camera"
             Destination.GALLERY -> "gallery"

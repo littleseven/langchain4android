@@ -7,6 +7,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import com.picme.domain.model.LogModuleConfig
 
 /**
  * 日志条目数据模型
@@ -67,13 +68,13 @@ object Logger {
     private val throttleMap = ConcurrentHashMap<String, Long>(64)
 
     /** 日志模块开关配置 */
-    private var moduleConfig: com.picme.domain.model.LogModuleConfig =
-        com.picme.domain.model.LogModuleConfig.default()
+    private var moduleConfig: LogModuleConfig =
+        LogModuleConfig.default()
 
     /**
      * 更新日志模块配置
      */
-    fun setModuleConfig(config: com.picme.domain.model.LogModuleConfig) {
+    fun setModuleConfig(config: LogModuleConfig) {
         moduleConfig = config
     }
 

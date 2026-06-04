@@ -27,6 +27,9 @@ import com.picme.features.camera.state.CameraStateManager
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.CoroutineScope
 import java.io.File
+import android.content.ContentValues
+import android.net.Uri
+import java.io.IOException
 
 // [常量定义] 视频录制分辨率
 private const val TARGET_RECORDING_WIDTH = 1920
@@ -209,7 +212,7 @@ internal fun handleCaptureClick(
     }
 
     //  fallback 路径：CameraX 原生 Recorder（无美颜）
-    val contentValues = android.content.ContentValues().apply {
+    val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, name)
         put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
         put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/PicMe")
@@ -247,9 +250,9 @@ internal fun handleCaptureClick(
     onRecordingChanged(newRecording)
 }
 
-private fun insertVideoToMediaStore(context: Context, file: File, displayName: String): android.net.Uri? {
+private fun insertVideoToMediaStore(context: Context, file: File, displayName: String): Uri? {
     return try {
-        val values = android.content.ContentValues().apply {
+        val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -268,7 +271,7 @@ private fun insertVideoToMediaStore(context: Context, file: File, displayName: S
     } catch (e: SecurityException) {
         Logger.e(TAG, "Permission denied when saving video: ${e.message}")
         null
-    } catch (e: java.io.IOException) {
+    } catch (e: IOException) {
         Logger.e(TAG, "IO error when saving video: ${e.message}")
         null
     } catch (e: IllegalArgumentException) {

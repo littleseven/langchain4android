@@ -80,11 +80,16 @@ import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AiAgentCommand
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.launch
+import android.app.Activity
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
+import androidx.compose.ui.text.TextStyle
 
 private const val TAG = "Voice"
 
-private tailrec fun Context.findActivityForWindow(): android.app.Activity? = when (this) {
-    is android.app.Activity -> this
+private tailrec fun Context.findActivityForWindow(): Activity? = when (this) {
+    is Activity -> this
     is ContextWrapper -> baseContext.findActivityForWindow()
     else -> null
 }
@@ -677,7 +682,7 @@ private fun TextInputMode(
             keyboardActions = KeyboardActions(
                 onSend = { onSend() }
             ),
-            textStyle = androidx.compose.ui.text.TextStyle(
+            textStyle = TextStyle(
                 color = Color.White,
                 fontSize = 13.sp
             ),
@@ -777,11 +782,11 @@ private fun VoiceInputMode(
                                         Logger.d(TAG, "Finger DOWN detected -> voiceCoordinator=${voiceCoordinator != null}, isVoiceAvailable=$isVoiceAvailable")
                                         if (!isVoiceAvailable) {
                                             Logger.w(TAG, "Voice coordinator not available")
-                                            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                                android.widget.Toast.makeText(
+                                            Handler(Looper.getMainLooper()).post {
+                                                Toast.makeText(
                                                     context,
                                                     "语音识别未初始化，请检查配置",
-                                                    android.widget.Toast.LENGTH_SHORT
+                                                    Toast.LENGTH_SHORT
                                                 ).show()
                                             }
                                             return@forEach

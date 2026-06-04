@@ -6,6 +6,7 @@ import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import com.picme.core.common.Logger
+import java.io.ByteArrayOutputStream
 
 /**
  * 音频录制工具类
@@ -144,7 +145,7 @@ class AudioRecorder {
         if (!isRecording) return ByteArray(0)
 
         val maxBytes = (SAMPLE_RATE * 2 * maxDurationMs / 1000)
-        val output = java.io.ByteArrayOutputStream(maxBytes)
+        val output = ByteArrayOutputStream(maxBytes)
         val vadDetector = VadDetector(thresholdDb = 40f, minSpeechMs = 100)
 
         val startTime = System.currentTimeMillis()

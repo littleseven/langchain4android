@@ -4,6 +4,7 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.domain.model.MediaType
+import com.picme.domain.agent.remote.ExecutionPlan
 
 /**
  * Agent 命令 V2
@@ -166,7 +167,7 @@ sealed class AgentCommand {
      *
      * 仅远程模式支持，包含条件判断和多步骤编排。
      */
-    data class ExecutePlan(val plan: com.picme.domain.agent.remote.ExecutionPlan) : AgentCommand()
+    data class ExecutePlan(val plan: ExecutionPlan) : AgentCommand()
 
     // ==================== 通用命令 ====================
 

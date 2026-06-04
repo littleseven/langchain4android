@@ -13,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import com.picme.domain.agent.model.SceneManager
 
 /**
  * SettingsCapability 场景化单元测试
@@ -46,7 +47,7 @@ class SettingsCapabilityTest {
     fun `activeScenes returns only SETTINGS`() {
         val scenes = capability.activeScenes()
         assertEquals(1, scenes.size)
-        assertEquals(com.picme.domain.agent.model.SceneManager.Scene.SETTINGS, scenes[0])
+        assertEquals(SceneManager.Scene.SETTINGS, scenes[0])
     }
 
     @Test

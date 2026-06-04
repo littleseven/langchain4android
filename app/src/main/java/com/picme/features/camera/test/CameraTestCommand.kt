@@ -3,6 +3,7 @@ package com.picme.features.camera.test
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
+import android.os.Bundle
 
 /**
  * 相机测试命令 Sealed Class
@@ -267,7 +268,7 @@ sealed class CameraTestCommand {
         /**
          * 从 Intent extras 解析命令
          */
-        fun fromExtras(extras: android.os.Bundle?): CameraTestCommand {
+        fun fromExtras(extras: Bundle?): CameraTestCommand {
             if (extras == null) return Unknown("null_extras")
 
             val action = extras.getString("action") ?: return Unknown("missing_action")

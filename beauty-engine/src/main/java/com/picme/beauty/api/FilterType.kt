@@ -2,6 +2,7 @@ package com.picme.beauty.api
 
 import androidx.annotation.StringRes
 import com.picme.beauty.R
+import android.graphics.ColorMatrix
 
 /**
  * 色调滤镜枚举
@@ -25,10 +26,10 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
     /**
      * 返回 Android 原生的 ColorMatrix（用于预览和拍照后处理）
      */
-    fun toAndroidColorMatrix(): android.graphics.ColorMatrix {
+    fun toAndroidColorMatrix(): ColorMatrix {
         return when (this) {
-            NONE -> android.graphics.ColorMatrix()
-            LEICA_CLASSIC -> android.graphics.ColorMatrix(
+            NONE -> ColorMatrix()
+            LEICA_CLASSIC -> ColorMatrix(
                 floatArrayOf(
                     0.95f, 0f, 0f, 0f, 0f,
                     0f, 0.9f, 0f, 0f, 0f,
@@ -37,15 +38,15 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
                 )
             )
 
-            LEICA_VIBRANT -> android.graphics.ColorMatrix().apply {
+            LEICA_VIBRANT -> ColorMatrix().apply {
                 setSaturation(1.3f)
             }
 
-            LEICA_BW -> android.graphics.ColorMatrix().apply {
+            LEICA_BW -> ColorMatrix().apply {
                 setSaturation(0f)
             }
 
-            FILM_GOLD -> android.graphics.ColorMatrix(
+            FILM_GOLD -> ColorMatrix(
                 floatArrayOf(
                     1.1f, 0.1f, 0f, 0f, 0f,
                     0.1f, 1.0f, 0f, 0f, 0f,
@@ -54,7 +55,7 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
                 )
             )
 
-            FILM_FUJI -> android.graphics.ColorMatrix(
+            FILM_FUJI -> ColorMatrix(
                 floatArrayOf(
                     0.9f, 0f, 0.1f, 0f, 0f,
                     0f, 1.1f, 0f, 0f, 0f,
@@ -63,7 +64,7 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
                 )
             )
 
-            VINTAGE -> android.graphics.ColorMatrix(
+            VINTAGE -> ColorMatrix(
                 floatArrayOf(
                     0.9f, 0f, 0f, 0f, 0f,
                     0f, 0.8f, 0f, 0f, 0f,
@@ -72,7 +73,7 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
                 )
             )
 
-            COOL -> android.graphics.ColorMatrix(
+            COOL -> ColorMatrix(
                 floatArrayOf(
                     0.8f, 0f, 0f, 0f, 0f,
                     0f, 0.9f, 0f, 0f, 0f,
@@ -81,7 +82,7 @@ enum class FilterType(@StringRes val displayNameRes: Int) {
                 )
             )
 
-            WARM -> android.graphics.ColorMatrix(
+            WARM -> ColorMatrix(
                 floatArrayOf(
                     1.2f, 0f, 0f, 0f, 0f,
                     0f, 1.0f, 0f, 0f, 0f,

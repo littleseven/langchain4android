@@ -1,7 +1,11 @@
 package com.picme.domain.agent
 
 import androidx.navigation.NavController
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
 import com.picme.domain.agent.capability.CameraCapability
+import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.model.AgentAction
@@ -10,6 +14,8 @@ import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
+import com.picme.domain.model.MediaAsset
+import com.picme.domain.model.MediaType
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -51,9 +57,9 @@ class CapabilityRegistryTest {
     private class FakeCameraDelegate(
         var capturePhotoAction: () -> Unit = {}
     ) : CameraCapability.Delegate {
-        override fun onAdjustBeauty(settings: com.picme.beauty.api.BeautySettings) {}
-        override fun onSwitchFilter(filterType: com.picme.beauty.api.FilterType) {}
-        override fun onSwitchStyle(styleFilter: com.picme.beauty.api.StyleFilter) {}
+        override fun onAdjustBeauty(settings: BeautySettings) {}
+        override fun onSwitchFilter(filterType: FilterType) {}
+        override fun onSwitchStyle(styleFilter: StyleFilter) {}
         override fun onSwitchScene(sceneName: String) {}
         override fun onSwitchRatio(ratio: String) {}
         override fun onAdjustExposure(exposure: Int) {}
@@ -61,7 +67,7 @@ class CapabilityRegistryTest {
         override fun onFlipCamera() {}
         override fun onCapturePhoto() = capturePhotoAction()
         override fun onToggleRecording() {}
-        override fun onSwitchMode(mode: com.picme.domain.model.MediaType) {}
+        override fun onSwitchMode(mode: MediaType) {}
     }
 
     /**
@@ -113,7 +119,7 @@ class CapabilityRegistryTest {
         val registryField = CapabilityRegistry::class.java.getDeclaredField("registry")
         registryField.isAccessible = true
         @Suppress("UNCHECKED_CAST")
-        val map = registryField.get(registry) as MutableMap<String, com.picme.domain.agent.capability.Capability>
+        val map = registryField.get(registry) as MutableMap<String, Capability>
         map.clear()
     }
 
@@ -258,10 +264,10 @@ class CapabilityRegistryTest {
         registry.register(galleryCapability)
 
         val galleryContext = PageContext.GalleryContext(
-            currentMedia = com.picme.domain.model.MediaAsset(
+            currentMedia = MediaAsset(
                 id = 42L,
                 uri = "content://fake/42",
-                type = com.picme.domain.model.MediaType.PHOTO,
+                type = MediaType.PHOTO,
                 captureDate = System.currentTimeMillis(),
                 fileName = "IMG_42.jpg"
             ),

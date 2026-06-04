@@ -5,6 +5,7 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import android.util.Log
 
 /**
  * OpenGL 离屏渲染器
@@ -309,7 +310,7 @@ class OffscreenRenderer(
     private fun checkGLError(operation: String) {
         val error = GLES20.glGetError()
         if (error != GLES20.GL_NO_ERROR) {
-            android.util.Log.e("OffscreenRenderer", "GL Error after $operation: $error")
+            Log.e("OffscreenRenderer", "GL Error after $operation: $error")
         }
     }
 

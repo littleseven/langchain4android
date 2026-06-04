@@ -17,6 +17,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
+import android.util.Log
 
 /**
  * Sherpa-MNN ASR 引擎实现
@@ -66,7 +67,7 @@ class SherpaMnnAsrEngine(
             System.loadLibrary("sherpa-mnn-jni")
             true
         } catch (e: UnsatisfiedLinkError) {
-            android.util.Log.e(TAG, "JNI load failed: ${e.message}")
+            Log.e(TAG, "JNI load failed: ${e.message}")
             false
         }
     }

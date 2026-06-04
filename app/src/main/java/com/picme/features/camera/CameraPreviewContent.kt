@@ -58,6 +58,7 @@ import com.picme.features.camera.voice.VoiceWakeIndicator
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.common.chat.AiChatScreen
 import kotlinx.coroutines.launch
+import androidx.compose.ui.geometry.Rect
 
 // [常量定义] 调试文本颜色
 private val INSIGHTFACE_DEBUG_TEXT_COLOR = Color(0xFFFFAB91)
@@ -195,7 +196,7 @@ internal fun CameraPreviewContent(
 
         if (uiState.captureMode == MediaType.DOCUMENT && !isAnyPanelOpen) {
             DocumentDetectionOverlay(
-                documentBounds = androidx.compose.ui.geometry.Rect.Zero,
+                documentBounds = Rect.Zero,
                 modifier = Modifier.fillMaxSize()
             )
         }

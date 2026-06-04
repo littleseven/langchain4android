@@ -18,6 +18,11 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
+import android.graphics.BlurMaskFilter
+import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.RectF
 
 /**
  * 拍照后 CPU 路径的美颜效果实现（静态位图处理）
@@ -81,13 +86,13 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 val alpha = (120 + ratio * 135).toInt().coerceIn(0, 255) // 120-255
                 val blendPaint = Paint().apply {
                     this.alpha = alpha
-                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_OVER)
+                    xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_OVER)
                 }
 
                 // 使用蒙版只覆盖人脸区域
                 val maskedCanvas = Canvas(blurLayer)
                 val maskPaint = Paint().apply {
-                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
+                    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
                 }
                 maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskPaint)
 
@@ -123,7 +128,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             isAntiAlias = true
             style = Paint.Style.FILL
             color = 0xFFFFFFFF.toInt()
-            maskFilter = android.graphics.BlurMaskFilter(featherRadius, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            maskFilter = BlurMaskFilter(featherRadius, BlurMaskFilter.Blur.NORMAL)
         }
 
         var regionCount = 0
@@ -131,7 +136,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
             val contourPoints = face.getContour(FaceContour.FACE)?.points
             if (contourPoints != null && contourPoints.size >= 3) {
                 // 使用脸部轮廓
-                val facePath = android.graphics.Path()
+                val facePath = Path()
                 facePath.moveTo(contourPoints[0].x, contourPoints[0].y)
                 for (pointIndex in 1 until contourPoints.size) {
                     val point = contourPoints[pointIndex]
@@ -147,7 +152,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     val insetX = bounds.width() * 0.16f
                     val insetTop = bounds.height() * 0.10f
                     val insetBottom = bounds.height() * 0.16f
-                    val ovalRect = android.graphics.RectF(
+                    val ovalRect = RectF(
                         (bounds.left + insetX).coerceIn(0f, width.toFloat()),
                         (bounds.top + insetTop).coerceIn(0f, height.toFloat()),
                         (bounds.right - insetX).coerceIn(0f, width.toFloat()),
@@ -222,13 +227,13 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                 val alpha = (130 + ratio * 100f).toInt().coerceIn(0, 255) // 130-230
                 val blendPaint = Paint().apply {
                     this.alpha = alpha
-                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_OVER)
+                    xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_OVER)
                 }
 
                 // 使用蒙版只覆盖人脸区域
                 val maskedCanvas = Canvas(whitenedBitmap)
                 val maskPaint = Paint().apply {
-                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
+                    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
                 }
                 maskedCanvas.drawBitmap(maskBitmap, 0f, 0f, maskPaint)
 
@@ -794,7 +799,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     isAntiAlias = true
                 }
 
-                val canvas = android.graphics.Canvas(mutableBitmap)
+                val canvas = Canvas(mutableBitmap)
                 canvas.drawBitmap(bitmap, 0f, 0f, paint)
 
                 mutableBitmap
@@ -827,7 +832,7 @@ class GpuBeautyProcessor(private val context: Context) : BeautyProcessor {
                     isAntiAlias = true
                 }
 
-                val canvas = android.graphics.Canvas(mutableBitmap)
+                val canvas = Canvas(mutableBitmap)
                 canvas.drawBitmap(bitmap, 0f, 0f, paint)
 
                 mutableBitmap

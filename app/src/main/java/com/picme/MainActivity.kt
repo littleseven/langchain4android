@@ -56,6 +56,8 @@ import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.SettingsCapability
 import java.util.Locale
+import androidx.camera.core.ExperimentalGetImage
+import androidx.compose.ui.platform.LocalConfiguration
 
 class MainActivity : ComponentActivity() {
 
@@ -74,7 +76,7 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(context)
     }
 
-    @androidx.camera.core.ExperimentalGetImage
+    @ExperimentalGetImage
     @Suppress("OPT_IN_USAGE_ERROR")
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,7 +109,7 @@ class MainActivity : ComponentActivity() {
             }
 
             CompositionLocalProvider(
-                androidx.compose.ui.platform.LocalConfiguration provides Configuration(context.resources.configuration).apply {
+                LocalConfiguration provides Configuration(context.resources.configuration).apply {
                     setLocale(getLocaleFromLanguage(appLanguage))
                 }
             ) {
