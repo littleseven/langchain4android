@@ -98,6 +98,7 @@ import com.picme.features.camera.test.CameraTestCommandReceiver
 import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.camera.test.CameraTestStateSnapshot
 import com.picme.features.camera.thread.CameraThreadRegistry
+import com.picme.features.camera.voice.AsrEngine
 import com.picme.features.camera.voice.MnnAsrClient
 import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
@@ -105,13 +106,21 @@ import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
+import android.app.Activity
+import android.util.Log
+import android.view.HapticFeedbackConstants
+import com.picme.domain.model.RemoteModelConfig
+import com.picme.domain.model.RemoteModelConfigs
+import java.util.concurrent.Executor
 
 enum class ScenePreset { NONE, NIGHT, MOON }
 enum class GridType { NONE, THIRDS, GOLDEN }
@@ -237,8 +246,8 @@ private fun getCommandDetail(command: AiAgentCommand): String = when (command) {
     else -> ""
 }
 
-private tailrec fun Context.findActivity(): android.app.Activity? = when (this) {
-    is android.app.Activity -> this
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
 }
@@ -584,11 +593,11 @@ private fun buildCameraPreviewActions(
         onExposureChange = { exposure ->
             onExposureCompensationChanged(exposure)
             cameraControl?.setExposureCompensationIndex(exposure)
-            android.util.Log.d("ProMode", "Local state updated: exposure=$exposure")
+            Log.d("ProMode", "Local state updated: exposure=$exposure")
         },
         onWhiteBalanceChange = { wb ->
             onWhiteBalanceModeChanged(wb)
-            android.util.Log.d("ProMode", "White balance updated: $wb")
+            Log.d("ProMode", "White balance updated: $wb")
         },
         onSceneSelected = { scene ->
             onCurrentSceneChanged(scene)
@@ -748,12 +757,12 @@ fun CameraContent(
 
     // [Day1 线程隔离] 分析线程与拍照线程分离，避免人脸检测阻塞拍照回调
     val analysisExecutor = remember {
-        java.util.concurrent.Executor {
+        Executor {
             CameraThreadRegistry.getAnalysisHandler().post(it)
         }
     }
     val captureExecutor = remember {
-        java.util.concurrent.Executor {
+        Executor {
             CameraThreadRegistry.getCameraHandler().post(it)
         }
     }
@@ -926,12 +935,12 @@ fun CameraContent(
     // 解析远程模型配置
     val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
         val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
-            com.picme.domain.model.RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
+            RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
         } else {
-            com.picme.domain.model.RemoteModelConfigs()
+            RemoteModelConfigs()
         }
         configs.getConfigByModelId(aiAgentSelectedRemoteModel)
-            ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
+            ?: RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
     // 读取腾讯云 SCF Gateway Token（从 DataStore 或 BuildConfig）
@@ -995,54 +1004,60 @@ fun CameraContent(
         }
     }
     // ASR 引擎选择：优先使用 Sherpa-MNN ASR（如果模型已下载），否则回退到系统 ASR
-    // 参考 VoiceModelsChecker: 检查模型文件是否真实存在，避免初始化失败
+    // 异步初始化避免主线程阻塞（先降级为系统ASR，后台加载本地模型）
     val localAsrModel by userPreferencesRepository.localAsrModelFlow.collectAsState(initial = "")
-    val asrEngine = remember(context, localAsrModel) {
-        if (localAsrModel.isNotBlank()) {
-            val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
-            val modelDirPath = modelDir.absolutePath
+    var asrEngine by remember(context, localAsrModel) {
+        mutableStateOf<AsrEngine>(SystemAsrEngine(context))
+    }
+    LaunchedEffect(context, localAsrModel) {
+        val engine = withContext(Dispatchers.IO) {
+            if (localAsrModel.isNotBlank()) {
+                val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
+                val modelDirPath = modelDir.absolutePath
 
-            // 参考 VoiceModelsChecker: 先检查模型目录和文件是否存在
-            val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                // Sherpa-MNN Zipformer 模型：检查 .mnn 文件和 tokens.txt
-                modelDir.exists() && modelDir.isDirectory &&
-                    modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
-                    File(modelDir, "tokens.txt").exists()
-            } else {
-                // 其他模型：检查目录存在
-                modelDir.exists() && modelDir.isDirectory
-            }
-
-            if (!isModelReady) {
-                Logger.w(TAG, "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
-                SystemAsrEngine(context)
-            } else {
-                // 1. 尝试 Sherpa-MNN ASR（zipformer 模型）
-                if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                    val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
-                    if (sherpaAsr.isAvailable()) {
-                        Logger.i(TAG, "Using Sherpa-MNN ASR engine with model: $localAsrModel")
-                        sherpaAsr
-                    } else {
-                        Logger.w(TAG, "Sherpa-MNN ASR init failed, falling back to system ASR")
-                        SystemAsrEngine(context)
-                    }
+                // 参考 VoiceModelsChecker: 先检查模型目录和文件是否存在
+                val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                    // Sherpa-MNN Zipformer 模型：检查 .mnn 文件和 tokens.txt
+                    modelDir.exists() && modelDir.isDirectory &&
+                        modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
+                        File(modelDir, "tokens.txt").exists()
                 } else {
-                    // 2. 尝试旧版 MnnAsrClient（whisper 模型）
-                    val mnnAsr = MnnAsrClient(context, localAsrModel)
-                    if (mnnAsr.isAvailable()) {
-                        Logger.i(TAG, "Using MNN ASR engine with model: $localAsrModel")
-                        mnnAsr
+                    // 其他模型：检查目录存在
+                    modelDir.exists() && modelDir.isDirectory
+                }
+
+                if (!isModelReady) {
+                    Logger.w(TAG, "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
+                    SystemAsrEngine(context)
+                } else {
+                    // 1. 尝试 Sherpa-MNN ASR（zipformer 模型）
+                    if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+                        val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
+                        if (sherpaAsr.isAvailable()) {
+                            Logger.i(TAG, "Using Sherpa-MNN ASR engine with model: $localAsrModel")
+                            sherpaAsr
+                        } else {
+                            Logger.w(TAG, "Sherpa-MNN ASR init failed, falling back to system ASR")
+                            SystemAsrEngine(context)
+                        }
                     } else {
-                        Logger.w(TAG, "MNN ASR not available, falling back to system ASR")
-                        SystemAsrEngine(context)
+                        // 2. 尝试旧版 MnnAsrClient（whisper 模型）
+                        val mnnAsr = MnnAsrClient(context, localAsrModel)
+                        if (mnnAsr.isAvailable()) {
+                            Logger.i(TAG, "Using MNN ASR engine with model: $localAsrModel")
+                            mnnAsr
+                        } else {
+                            Logger.w(TAG, "MNN ASR not available, falling back to system ASR")
+                            SystemAsrEngine(context)
+                        }
                     }
                 }
+            } else {
+                Logger.d(TAG, "No local ASR model configured, using system ASR")
+                SystemAsrEngine(context)
             }
-        } else {
-            Logger.d(TAG, "No local ASR model configured, using system ASR")
-            SystemAsrEngine(context)
         }
+        asrEngine = engine
     }
     val onCommandRef = remember { mutableStateOf<(AiAgentCommand) -> Unit>({}) }
     val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
@@ -1081,8 +1096,8 @@ fun CameraContent(
         }
     }
 
-    // 页面退出时释放语音资源
-    DisposableEffect(Unit) {
+    // voiceCoordinator 变化或页面退出时释放语音资源
+    DisposableEffect(voiceCoordinator) {
         onDispose {
             voiceCoordinator.release()
         }
@@ -1662,7 +1677,7 @@ fun CameraContent(
     }
 
     LaunchedEffect(lensFacing) {
-        glPreviewProvider?.setIsFrontCamera(lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT)
+        glPreviewProvider?.setIsFrontCamera(lensFacing == CameraSelector.LENS_FACING_FRONT)
         Logger.d("Camera", "Switched to lensFacing=$lensFacing, isFront=${lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT}")
     }
 
@@ -1844,7 +1859,7 @@ CameraPreviewContent(
         ) {
             AndroidView(
                 factory = { context ->
-                    android.util.Log.d(TAG, "AndroidView factory creating FrameLayout")
+                    Log.d(TAG, "AndroidView factory creating FrameLayout")
                     FrameLayout(context)
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -1863,7 +1878,7 @@ CameraPreviewContent(
                         previewView = previewView
                     )
 
-                    android.util.Log.d(
+                    Log.d(
                         TAG,
                         "AndroidView update: useProviderRenderView=$useProviderRenderView, strategy=${activePreviewStrategy.strategy}, " +
                             "targetView=${targetDecision.targetView}"
@@ -1882,7 +1897,7 @@ CameraPreviewContent(
                     val targetView = targetDecision.targetView
 
                     if (targetView.parent !== container) {
-                        android.util.Log.d(TAG, "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
+                        Log.d(TAG, "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
                         (targetView.parent as? ViewGroup)?.removeView(targetView)
                         container.removeAllViews()
                         container.addView(
@@ -1893,7 +1908,7 @@ CameraPreviewContent(
                             )
                         )
                     } else {
-                        android.util.Log.d(TAG, "AndroidView update: targetView already in container, skip adding")
+                        Log.d(TAG, "AndroidView update: targetView already in container, skip adding")
                     }
                 }
             )
@@ -2058,8 +2073,8 @@ CameraPreviewContent(
 
             // [三位一体反馈] 立即触发：触感 + 音效 + 黑场动画
             currentView.performHapticFeedback(
-                android.view.HapticFeedbackConstants.LONG_PRESS,
-                android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+                HapticFeedbackConstants.LONG_PRESS,
+                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
             )
             currentView.playSoundEffect(SoundEffectConstants.CLICK)
             coroutineScope.launch {

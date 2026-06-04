@@ -11,6 +11,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,7 +38,13 @@ import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.picme.domain.agent.model.AgentCommand
+import com.picme.domain.model.RemoteModelConfig
+import com.picme.domain.model.RemoteModelConfigs
+import java.io.File
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. ASR 引擎初始化（公共逻辑）
@@ -67,7 +74,7 @@ fun createAsrEngine(
     val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
         modelDir.exists() && modelDir.isDirectory &&
             modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
-            java.io.File(modelDir, "tokens.txt").exists()
+            File(modelDir, "tokens.txt").exists()
     } else {
         modelDir.exists() && modelDir.isDirectory
     }
@@ -155,7 +162,7 @@ fun AgentChatPanel(
     agentScene: AgentScene,
     memorySessionId: String,
     voiceCoordinator: VoiceCommandCoordinator? = null,
-    onCommand: ((com.picme.domain.model.AiAgentCommand) -> Unit)? = null,
+    onCommand: ((AiAgentCommand) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var isVisible by remember { mutableStateOf(false) }
@@ -245,34 +252,34 @@ fun AgentChatPanel(
 /**
  * 将 AgentAction 映射为 AiAgentCommand（用于向旧版 UI 回调回传命令）
  */
-private fun mapAgentActionToAiAgentCommand(action: AgentAction.Success): com.picme.domain.model.AiAgentCommand? {
+private fun mapAgentActionToAiAgentCommand(action: AgentAction.Success): AiAgentCommand? {
     return when (val cmd = action.command) {
-        is com.picme.domain.agent.model.AgentCommand.AdjustBeauty ->
-            com.picme.domain.model.AiAgentCommand.AdjustBeauty(cmd.settings)
-        is com.picme.domain.agent.model.AgentCommand.SwitchFilter ->
-            com.picme.domain.model.AiAgentCommand.SwitchFilter(cmd.filterType)
-        is com.picme.domain.agent.model.AgentCommand.SwitchStyle ->
-            com.picme.domain.model.AiAgentCommand.SwitchStyle(cmd.styleFilter)
-        is com.picme.domain.agent.model.AgentCommand.SwitchScene ->
-            com.picme.domain.model.AiAgentCommand.SwitchScene(cmd.sceneName)
-        is com.picme.domain.agent.model.AgentCommand.SwitchRatio ->
-            com.picme.domain.model.AiAgentCommand.SwitchRatio(cmd.ratio)
-        is com.picme.domain.agent.model.AgentCommand.AdjustExposure ->
-            com.picme.domain.model.AiAgentCommand.AdjustExposure(cmd.exposure)
-        is com.picme.domain.agent.model.AgentCommand.AdjustZoom ->
-            com.picme.domain.model.AiAgentCommand.AdjustZoom(cmd.zoomRatio)
-        is com.picme.domain.agent.model.AgentCommand.FlipCamera ->
-            com.picme.domain.model.AiAgentCommand.FlipCamera
-        is com.picme.domain.agent.model.AgentCommand.CapturePhoto ->
-            com.picme.domain.model.AiAgentCommand.CapturePhoto
-        is com.picme.domain.agent.model.AgentCommand.ToggleRecording ->
-            com.picme.domain.model.AiAgentCommand.ToggleRecording
-        is com.picme.domain.agent.model.AgentCommand.SwitchMode ->
-            com.picme.domain.model.AiAgentCommand.SwitchMode(cmd.mode)
-        is com.picme.domain.agent.model.AgentCommand.NavigateTo ->
-            com.picme.domain.model.AiAgentCommand.NavigateTo(cmd.destination)
-        is com.picme.domain.agent.model.AgentCommand.GoBack ->
-            com.picme.domain.model.AiAgentCommand.GoBack
+        is AgentCommand.AdjustBeauty ->
+            AiAgentCommand.AdjustBeauty(cmd.settings)
+        is AgentCommand.SwitchFilter ->
+            AiAgentCommand.SwitchFilter(cmd.filterType)
+        is AgentCommand.SwitchStyle ->
+            AiAgentCommand.SwitchStyle(cmd.styleFilter)
+        is AgentCommand.SwitchScene ->
+            AiAgentCommand.SwitchScene(cmd.sceneName)
+        is AgentCommand.SwitchRatio ->
+            AiAgentCommand.SwitchRatio(cmd.ratio)
+        is AgentCommand.AdjustExposure ->
+            AiAgentCommand.AdjustExposure(cmd.exposure)
+        is AgentCommand.AdjustZoom ->
+            AiAgentCommand.AdjustZoom(cmd.zoomRatio)
+        is AgentCommand.FlipCamera ->
+            AiAgentCommand.FlipCamera
+        is AgentCommand.CapturePhoto ->
+            AiAgentCommand.CapturePhoto
+        is AgentCommand.ToggleRecording ->
+            AiAgentCommand.ToggleRecording
+        is AgentCommand.SwitchMode ->
+            AiAgentCommand.SwitchMode(cmd.mode)
+        is AgentCommand.NavigateTo ->
+            AiAgentCommand.NavigateTo(cmd.destination)
+        is AgentCommand.GoBack ->
+            AiAgentCommand.GoBack
         else -> null
     }
 }
@@ -289,7 +296,7 @@ private fun mapAgentActionToAiAgentCommand(action: AgentAction.Success): com.pic
 private fun agentActionToExecutionMessages(action: AgentAction.Success): List<AgentMessage> {
     val cmd = action.command
     return when (cmd) {
-        is com.picme.domain.agent.model.AgentCommand.BatchExecute -> {
+        is AgentCommand.BatchExecute -> {
             val total = cmd.commands.size
             cmd.commands.mapIndexed { index, subCmd ->
                 AgentMessage.CommandExecution(
@@ -313,43 +320,43 @@ private fun agentActionToExecutionMessages(action: AgentAction.Success): List<Ag
     }
 }
 
-private fun getAgentCommandDisplayName(command: com.picme.domain.agent.model.AgentCommand): String =
+private fun getAgentCommandDisplayName(command: AgentCommand): String =
     when (command) {
-        is com.picme.domain.agent.model.AgentCommand.AdjustBeauty -> "调整美颜"
-        is com.picme.domain.agent.model.AgentCommand.SwitchFilter -> "切换滤镜"
-        is com.picme.domain.agent.model.AgentCommand.SwitchStyle -> "切换风格"
-        is com.picme.domain.agent.model.AgentCommand.SwitchScene -> "切换场景"
-        is com.picme.domain.agent.model.AgentCommand.SwitchRatio -> "切换画幅"
-        is com.picme.domain.agent.model.AgentCommand.AdjustExposure -> "调整曝光"
-        is com.picme.domain.agent.model.AgentCommand.AdjustZoom -> "调整变焦"
-        is com.picme.domain.agent.model.AgentCommand.FlipCamera -> "翻转摄像头"
-        is com.picme.domain.agent.model.AgentCommand.CapturePhoto -> "拍照"
-        is com.picme.domain.agent.model.AgentCommand.ToggleRecording -> "切换录像"
-        is com.picme.domain.agent.model.AgentCommand.SwitchMode -> "切换模式"
-        is com.picme.domain.agent.model.AgentCommand.NavigateTo -> "页面跳转"
-        is com.picme.domain.agent.model.AgentCommand.GoBack -> "返回"
-        is com.picme.domain.agent.model.AgentCommand.BatchExecute -> "批量执行"
-        is com.picme.domain.agent.model.AgentCommand.TextReply -> "文本回复"
-        is com.picme.domain.agent.model.AgentCommand.ExecutePlan -> "执行计划"
-        is com.picme.domain.agent.model.AgentCommand.ChangeTheme -> "切换主题"
-        is com.picme.domain.agent.model.AgentCommand.ChangeLanguage -> "切换语言"
-        is com.picme.domain.agent.model.AgentCommand.DownloadModel -> "下载模型"
-        is com.picme.domain.agent.model.AgentCommand.SwitchFaceEngine -> "切换引擎"
-        is com.picme.domain.agent.model.AgentCommand.ToggleSetting -> "切换设置"
-        is com.picme.domain.agent.model.AgentCommand.ViewMedia -> "查看照片"
-        is com.picme.domain.agent.model.AgentCommand.DeleteMedia -> "删除照片"
-        is com.picme.domain.agent.model.AgentCommand.ShareMedia -> "分享照片"
-        is com.picme.domain.agent.model.AgentCommand.SelectMedia -> "选择照片"
-        is com.picme.domain.agent.model.AgentCommand.SearchMedia -> "搜索照片"
-        is com.picme.domain.agent.model.AgentCommand.SwitchViewMode -> "切换视图"
-        is com.picme.domain.agent.model.AgentCommand.FavoriteMedia -> "收藏照片"
-        is com.picme.domain.agent.model.AgentCommand.Unknown -> "未知命令"
-        is com.picme.domain.agent.model.AgentCommand.Error -> "执行错误"
+        is AgentCommand.AdjustBeauty -> "调整美颜"
+        is AgentCommand.SwitchFilter -> "切换滤镜"
+        is AgentCommand.SwitchStyle -> "切换风格"
+        is AgentCommand.SwitchScene -> "切换场景"
+        is AgentCommand.SwitchRatio -> "切换画幅"
+        is AgentCommand.AdjustExposure -> "调整曝光"
+        is AgentCommand.AdjustZoom -> "调整变焦"
+        is AgentCommand.FlipCamera -> "翻转摄像头"
+        is AgentCommand.CapturePhoto -> "拍照"
+        is AgentCommand.ToggleRecording -> "切换录像"
+        is AgentCommand.SwitchMode -> "切换模式"
+        is AgentCommand.NavigateTo -> "页面跳转"
+        is AgentCommand.GoBack -> "返回"
+        is AgentCommand.BatchExecute -> "批量执行"
+        is AgentCommand.TextReply -> "文本回复"
+        is AgentCommand.ExecutePlan -> "执行计划"
+        is AgentCommand.ChangeTheme -> "切换主题"
+        is AgentCommand.ChangeLanguage -> "切换语言"
+        is AgentCommand.DownloadModel -> "下载模型"
+        is AgentCommand.SwitchFaceEngine -> "切换引擎"
+        is AgentCommand.ToggleSetting -> "切换设置"
+        is AgentCommand.ViewMedia -> "查看照片"
+        is AgentCommand.DeleteMedia -> "删除照片"
+        is AgentCommand.ShareMedia -> "分享照片"
+        is AgentCommand.SelectMedia -> "选择照片"
+        is AgentCommand.SearchMedia -> "搜索照片"
+        is AgentCommand.SwitchViewMode -> "切换视图"
+        is AgentCommand.FavoriteMedia -> "收藏照片"
+        is AgentCommand.Unknown -> "未知命令"
+        is AgentCommand.Error -> "执行错误"
     }
 
-private fun getAgentCommandDetail(command: com.picme.domain.agent.model.AgentCommand): String =
+private fun getAgentCommandDetail(command: AgentCommand): String =
     when (command) {
-        is com.picme.domain.agent.model.AgentCommand.AdjustBeauty -> buildString {
+        is AgentCommand.AdjustBeauty -> buildString {
             val s = command.settings
             val parts = mutableListOf<String>()
             if (s.smoothing > 0) parts.add("磨皮 ${s.smoothing.toInt()}%")
@@ -358,20 +365,20 @@ private fun getAgentCommandDetail(command: com.picme.domain.agent.model.AgentCom
             if (s.bigEyes > 0) parts.add("大眼 ${s.bigEyes.toInt()}%")
             if (parts.isEmpty()) append("默认参数") else append(parts.joinToString(", "))
         }
-        is com.picme.domain.agent.model.AgentCommand.SwitchFilter -> "滤镜: ${command.filterType.name}"
-        is com.picme.domain.agent.model.AgentCommand.SwitchStyle -> "风格: ${command.styleFilter.name}"
-        is com.picme.domain.agent.model.AgentCommand.SwitchScene -> "场景: ${command.sceneName}"
-        is com.picme.domain.agent.model.AgentCommand.SwitchRatio -> "比例: ${command.ratio}"
-        is com.picme.domain.agent.model.AgentCommand.AdjustExposure -> "曝光: ${command.exposure}"
-        is com.picme.domain.agent.model.AgentCommand.AdjustZoom -> "变焦: ${command.zoomRatio}x"
-        is com.picme.domain.agent.model.AgentCommand.NavigateTo -> "目标: ${command.destination}"
-        is com.picme.domain.agent.model.AgentCommand.ChangeTheme -> "主题: ${command.theme}"
-        is com.picme.domain.agent.model.AgentCommand.ChangeLanguage -> "语言: ${command.language}"
-        is com.picme.domain.agent.model.AgentCommand.DownloadModel -> "模型: ${command.modelId}"
-        is com.picme.domain.agent.model.AgentCommand.SwitchFaceEngine -> "引擎: ${command.engine}"
-        is com.picme.domain.agent.model.AgentCommand.ToggleSetting -> "${command.settingKey}: ${if (command.enabled) "开启" else "关闭"}"
-        is com.picme.domain.agent.model.AgentCommand.SearchMedia -> "关键词: ${command.query}"
-        is com.picme.domain.agent.model.AgentCommand.ExecutePlan -> "计划: ${command.plan.description}"
+        is AgentCommand.SwitchFilter -> "滤镜: ${command.filterType.name}"
+        is AgentCommand.SwitchStyle -> "风格: ${command.styleFilter.name}"
+        is AgentCommand.SwitchScene -> "场景: ${command.sceneName}"
+        is AgentCommand.SwitchRatio -> "比例: ${command.ratio}"
+        is AgentCommand.AdjustExposure -> "曝光: ${command.exposure}"
+        is AgentCommand.AdjustZoom -> "变焦: ${command.zoomRatio}x"
+        is AgentCommand.NavigateTo -> "目标: ${command.destination}"
+        is AgentCommand.ChangeTheme -> "主题: ${command.theme}"
+        is AgentCommand.ChangeLanguage -> "语言: ${command.language}"
+        is AgentCommand.DownloadModel -> "模型: ${command.modelId}"
+        is AgentCommand.SwitchFaceEngine -> "引擎: ${command.engine}"
+        is AgentCommand.ToggleSetting -> "${command.settingKey}: ${if (command.enabled) "开启" else "关闭"}"
+        is AgentCommand.SearchMedia -> "关键词: ${command.query}"
+        is AgentCommand.ExecutePlan -> "计划: ${command.plan.description}"
         else -> ""
     }
 
@@ -421,9 +428,15 @@ fun rememberAgentChatConfig(
     val settingsRepository = remember { UserPreferencesRepository(context) }
     val localAsrModel by settingsRepository.localAsrModelFlow.collectAsState(initial = "")
 
-    // ASR 引擎
-    val asrEngine = remember(context, localAsrModel) {
-        createAsrEngine(context, localAsrModel, logTag)
+    // ASR 引擎 - 异步初始化避免主线程阻塞（先降级为系统ASR，后台加载本地模型）
+    var asrEngine by remember(context, localAsrModel) {
+        mutableStateOf<AsrEngine>(SystemAsrEngine(context))
+    }
+    LaunchedEffect(context, localAsrModel) {
+        val engine = withContext(Dispatchers.IO) {
+            createAsrEngine(context, localAsrModel, logTag)
+        }
+        asrEngine = engine
     }
 
     // 读取远程模型配置
@@ -433,12 +446,12 @@ fun rememberAgentChatConfig(
     // 解析远程模型配置
     val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
         val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
-            com.picme.domain.model.RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
+            RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
         } else {
-            com.picme.domain.model.RemoteModelConfigs()
+            RemoteModelConfigs()
         }
         configs.getConfigByModelId(aiAgentSelectedRemoteModel)
-            ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
+            ?: RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
     // 读取腾讯云 SCF Gateway Token
@@ -457,7 +470,7 @@ fun rememberAgentChatConfig(
         )
     }
 
-    // VoiceCommandCoordinator
+    // VoiceCommandCoordinator - asrEngine 变化时自动重建
     val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
         createVoiceCommandCoordinator(
             asrEngine = asrEngine,
@@ -467,6 +480,9 @@ fun rememberAgentChatConfig(
             onTranscript = onTranscript,
             onAgentResponse = onAgentResponse
         )
+    }
+    DisposableEffect(voiceCoordinator) {
+        onDispose { voiceCoordinator.release() }
     }
 
     return AgentChatConfig(
