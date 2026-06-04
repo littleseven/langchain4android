@@ -157,7 +157,8 @@ fun SettingsScreen(
                 "camera" -> onNavigateBack()
                 "gallery" -> onNavigateBack()
                 "settings" -> { /* 已在设置页，无需导航 */ }
-                "debug" -> onNavigateBack() // 设置页无 debug 入口，返回相机页
+                "debug" -> onNavigateBack()
+                "model_center" -> onNavigateToModelCenter()
                 "llm_model_manager" -> onNavigateToModelCenter()
                 "asr_model_manager" -> onNavigateToModelCenter()
                 "face_detection_model_manager" -> onNavigateToModelCenter()

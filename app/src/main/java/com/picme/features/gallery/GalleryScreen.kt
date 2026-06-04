@@ -190,9 +190,11 @@ fun GalleryScreen(
         onNavigateTo = { destination ->
             when (destination.lowercase()) {
                 "camera" -> onNavigateBack()
+                "gallery" -> { /* 已在相册页，无需导航 */ }
                 "settings" -> onNavigateToSettings()
                 "debug" -> onNavigateToDebug()
-                "llm_model_manager", "asr_model_manager" -> onNavigateToSettings() // 从相册到模型管理页需先进入设置
+                "model_center" -> onNavigateToSettings() // 从相册到模型中心需先进入设置
+                "llm_model_manager", "asr_model_manager" -> onNavigateToSettings()
                 else -> Logger.w(TAG, "Unknown navigation destination: $destination")
             }
         },
