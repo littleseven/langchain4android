@@ -325,7 +325,7 @@ fun rememberAgentChatConfig(
 
     // 读取远程模型配置
     val aiAgentRemoteModelConfigs by settingsRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
-    val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "kimi-for-coding")
+    val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
 
     // 解析远程模型配置
     val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
@@ -334,7 +334,7 @@ fun rememberAgentChatConfig(
         } else {
             com.picme.domain.model.RemoteModelConfigs()
         }
-        configs.getConfig(aiAgentSelectedRemoteModel)
+        configs.getConfigByModelId(aiAgentSelectedRemoteModel)
             ?: com.picme.domain.model.RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 

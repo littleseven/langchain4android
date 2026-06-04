@@ -76,8 +76,8 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_PRIVACY_LEVEL = stringPreferencesKey("ai_agent_privacy_level")
         val AI_AGENT_LOCAL_MODEL = stringPreferencesKey("ai_agent_local_model")
 
-        // 远程模型配置（多模型 JSON + 当前选中模型）
-        val AI_AGENT_REMOTE_MODEL_CONFIGS = stringPreferencesKey("ai_agent_remote_model_configs")
+        // 远程模型配置（供应商维度 JSON + 当前选中模型ID）
+        val AI_AGENT_REMOTE_MODEL_CONFIGS = stringPreferencesKey("ai_agent_remote_model_configs_v2")
         val AI_AGENT_SELECTED_REMOTE_MODEL = stringPreferencesKey("ai_agent_selected_remote_model")
 
         // 强制使用远程模型（绕过本地模型检查）
@@ -595,12 +595,32 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            preferences[PreferencesKeys.AI_AGENT_REMOTE_MODEL_CONFIGS] ?: ""
+            preferences[PreferencesKeys.AI_AGENT_REMOTE_MODEL_CONFIGS]
+                ?: migrateOldRemoteConfigs(preferences)
+                ?: ""
         }
 
     override suspend fun updateAiAgentRemoteModelConfigs(configsJson: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_REMOTE_MODEL_CONFIGS] = configsJson
+        }
+    }
+
+    /**
+     * 从旧版 RemoteModelConfigs 迁移到新版 ProviderConfigs
+     */
+    private fun migrateOldRemoteConfigs(preferences: androidx.datastore.preferences.core.Preferences): String? {
+        val oldJson = preferences[stringPreferencesKey("ai_agent_remote_model_configs")] ?: return null
+        return try {
+            val oldConfigs = com.picme.domain.model.RemoteModelConfigs.fromJson(oldJson)
+            val newConfigs = com.picme.domain.model.ProviderConfigs(
+                configs = oldConfigs.configs.map { old ->
+                    com.picme.domain.model.ProviderConfig.fromRemoteModelConfig(old)
+                }
+            )
+            com.picme.domain.model.ProviderConfigs.toJson(newConfigs)
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -613,7 +633,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            preferences[PreferencesKeys.AI_AGENT_SELECTED_REMOTE_MODEL] ?: "kimi-for-coding"
+            preferences[PreferencesKeys.AI_AGENT_SELECTED_REMOTE_MODEL] ?: "deepseek-v4-flash"
         }
 
     override suspend fun updateAiAgentSelectedRemoteModel(modelId: String) {
