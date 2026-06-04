@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 enum class MediaType {
-    PHOTO, VIDEO, PORTRAIT, PRO
+    PHOTO, VIDEO
 }
 
 @Entity(tableName = "media_assets")

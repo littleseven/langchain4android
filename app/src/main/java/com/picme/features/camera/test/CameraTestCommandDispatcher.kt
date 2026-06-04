@@ -197,7 +197,6 @@ object CameraTestCommandConverters {
         return when (mode.lowercase()) {
             "photo" -> MediaType.PHOTO
             "video" -> MediaType.VIDEO
-            "pro" -> MediaType.PRO
             else -> MediaType.PHOTO
         }
     }
@@ -251,7 +250,6 @@ object CameraTestCommandConverters {
         return when (mode) {
             MediaType.PHOTO -> "photo"
             MediaType.VIDEO -> "video"
-            MediaType.PRO -> "pro"
             else -> "photo"
         }
     }

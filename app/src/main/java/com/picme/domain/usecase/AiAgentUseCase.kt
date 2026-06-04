@@ -402,7 +402,7 @@ class AiAgentUseCase(
             append("switch_filter(NONE/CLASSIC/VIBRANT/BW/GOLD/FUJI/VINTAGE/COOL/WARM) ")
             append("switch_style(NONE/TOON/SKETCH/POSTERIZE/EMBOSS/CROSSHATCH) ")
             append("switch_scene(night/moon/none) switch_ratio(4:3/16:9/full) adjust_exposure(-2~2) adjust_zoom(0.5~10) ")
-            append("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PORTRAIT/PRO/DOCUMENT) ")
+            append("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PRO/DOCUMENT) ")
             append("navigate_to(camera/gallery/settings/debug/model_center) go_back text_reply。")
             append("例:拍照片→{\"action\":\"capture\"} 磨皮80→{\"action\":\"adjust_beauty\",\"smoothing\":80} 徕卡黑白→{\"action\":\"switch_filter\",\"filter\":\"BW\"} 去相册→{\"action\":\"navigate_to\",\"destination\":\"gallery\"} 返回→{\"action\":\"go_back\"} 你好→{\"action\":\"text_reply\",\"message\":\"你好\"}。")
             append("规则:相对调整±15 未提及参数不变 message用中文 导航必须用navigate_to/go_back")

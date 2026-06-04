@@ -127,7 +127,7 @@ Landmark 检测器：
 ### 6.2 当前有以下降级行为
 
 - MediaPipe 初始化：GPU delegate 失败会 fallback 到 CPU delegate
-- ONNX（Det10G/2D106）：尝试 `NNAPI`，不可用时 fallback CPU
+- MNN（RetinaFace/2D106）：Vulkan GPU 优先，不可用时 fallback CPU
 - 若当帧检测失败，调用方使用“无人脸”参数继续渲染，不阻塞主流程
 
 ## 7. 性能相关实现点

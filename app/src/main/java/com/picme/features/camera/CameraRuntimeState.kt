@@ -186,6 +186,7 @@ internal class CameraPanelState {
     var showMakeupAdjustment by mutableStateOf(false)
     var activeMakeupEntry by mutableStateOf(MakeupEntry.LIP_COLOR)
     var showBodyManagement by mutableStateOf(false)
+    var showProPanel by mutableStateOf(false)
 
     fun closePrimaryPanels() {
         showFilterSelector = false

@@ -461,7 +461,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值，唯一值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
-- **人脸检测**：默认使用 InsightFace `2d106det` 输出 106 点构建 `FaceWarpParams`（ONNX Runtime + NNAPI 加速），MediaPipe Face Mesh 468→106 作为 fallback 备选，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
+- **人脸检测**：默认使用 MediaPipe Face Mesh 468→106 输出构建 `FaceWarpParams`，InsightFace 2D106（MNN 后端）作为备选，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
 
 ### 4.3 下一步技术项（RD，优先级排序）

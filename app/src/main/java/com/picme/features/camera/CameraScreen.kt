@@ -394,7 +394,8 @@ internal data class CameraPreviewUiState(
     val beautyStrategy: BeautyStrategy,
     val isVoiceControlEnabled: Boolean,
     val roiStageConfig: StageConfig,
-    val landmarkStageConfig: StageConfig
+    val landmarkStageConfig: StageConfig,
+    val showProPanel: Boolean
 )
 
 internal data class CameraPreviewActions(
@@ -430,7 +431,8 @@ internal data class CameraPreviewActions(
     val onRatioSelected: (Int) -> Unit,
     val onDismissPanels: () -> Unit,
     val onToggleVoiceControl: () -> Unit,
-    val onToggleAiAgentPanel: () -> Unit
+    val onToggleAiAgentPanel: () -> Unit,
+    val onToggleProPanel: () -> Unit
 )
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
@@ -510,7 +512,8 @@ private fun buildCameraPreviewUiState(
         beautyStrategy = beautyStrategy,
         isVoiceControlEnabled = isVoiceControlEnabled,
         roiStageConfig = roiStageConfig,
-        landmarkStageConfig = landmarkStageConfig
+        landmarkStageConfig = landmarkStageConfig,
+        showProPanel = panelState.showProPanel
     )
 }
 
@@ -619,7 +622,10 @@ private fun buildCameraPreviewActions(
         },
         onDismissPanels = panelState::closeAllPanels,
         onToggleVoiceControl = onToggleVoiceControl,
-        onToggleAiAgentPanel = onToggleAiAgentPanel
+        onToggleAiAgentPanel = onToggleAiAgentPanel,
+        onToggleProPanel = {
+            panelState.showProPanel = !panelState.showProPanel
+        }
     )
 }
 
