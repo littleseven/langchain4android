@@ -477,24 +477,28 @@ fun MediaPager(
             },
             onStartEdit = startPhotoEdit,
             onDelete = {
-                val selectedAsset = assets[pagerState.currentPage]
-                Log.d("Gallery", "Request delete media: ${selectedAsset.id}")
-                onDelete(selectedAsset)
+                val selectedAsset = assets.getOrNull(pagerState.currentPage)
+                if (selectedAsset != null) {
+                    Log.d("Gallery", "Request delete media: ${selectedAsset.id}")
+                    onDelete(selectedAsset)
+                }
             },
             onShare = {
-                val selectedAsset = assets[pagerState.currentPage]
-                Log.d("Gallery", "Share media from pager: ${selectedAsset.id}")
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    putExtra(Intent.EXTRA_STREAM, selectedAsset.uri.toUri())
-                    type = if (selectedAsset.type == MediaType.VIDEO) "video/*" else "image/*"
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                val selectedAsset = assets.getOrNull(pagerState.currentPage)
+                Log.d("Gallery", "Share media from pager: ${selectedAsset?.id}")
+                selectedAsset?.let { asset ->
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        putExtra(Intent.EXTRA_STREAM, asset.uri.toUri())
+                        type = if (asset.type == MediaType.VIDEO) "video/*" else "image/*"
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, null))
                 }
-                context.startActivity(Intent.createChooser(shareIntent, null))
             },
             onStartOcr = {
-                val selectedAsset = assets[pagerState.currentPage]
-                Log.d("Gallery", "Trigger OCR via toolbar button for asset: ${selectedAsset.id}")
-                onStartOcr(selectedAsset.uri)
+                val selectedAsset = assets.getOrNull(pagerState.currentPage)
+                Log.d("Gallery", "Trigger OCR via toolbar button for asset: ${selectedAsset?.id}")
+                selectedAsset?.let { onStartOcr(it.uri) }
             }
         )
 
