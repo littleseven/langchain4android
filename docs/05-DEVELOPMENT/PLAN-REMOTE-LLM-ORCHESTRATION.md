@@ -1,6 +1,6 @@
 # 远程 LLM 混合编排架构实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **执行方式**: 按任务清单逐步实施，使用复选框 (`- [ ]`) 跟踪进度。
 
 **Goal:** 实现 PicMe 远程 LLM（kimi-for-coding）混合编排架构，支持 L2 Batch/L3 Plan/L4 Chat 三种远程推理模式，具备任务编排、条件执行、状态反馈能力。
 
@@ -1184,7 +1184,7 @@ git commit --allow-empty -m "chore(agent): 远程LLM编排架构实现完成
 
 ---
 
-**Plan complete and saved to `docs/superpowers/plans/2026-05-29-remote-llm-orchestration.md`.**
+**计划文档已归档至 `docs/05-DEVELOPMENT/PLAN-REMOTE-LLM-ORCHESTRATION.md`。**
 
 **Two execution options:**
 

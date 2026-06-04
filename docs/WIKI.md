@@ -8,7 +8,7 @@
 - [AGENTS.md](../../AGENTS.md) - Agent First 研发范式治理文档
 
 ### 技术专题
-- [Chat UI 统一化](./02-TECH/CHAT_UI_UNIFICATION.md) - 统一聊天界面组件设计与实现
+- [Chat UI 统一化](./03-TECHNICAL-SPECS/CHAT_UI_UNIFICATION.md) - 统一聊天界面组件设计与实现
 - [美颜引擎架构](./03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 自研 OpenGL ES 渲染管线
 - [Agent 运行时架构](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md) - Agent 编排与 Capability 系统
 - [人脸检测方案](./03-TECHNICAL-SPECS/FACE_DETECTION_ENGINE_ARCHITECTURE.md) - InsightFace + MediaPipe 双引擎
@@ -40,7 +40,7 @@
 **相关文件**:
 - [`AiChatScreen.kt`](../app/src/main/java/com/picme/features/common/chat/AiChatScreen.kt) - 主组件
 - [`AgentMessage.kt`](../app/src/main/java/com/picme/features/common/chat/AgentMessage.kt) - 消息类型定义
-- [`CHAT_UI_UNIFICATION.md`](./02-TECH/CHAT_UI_UNIFICATION.md) - 详细技术文档
+- [`CHAT_UI_UNIFICATION.md`](./03-TECHNICAL-SPECS/CHAT_UI_UNIFICATION.md) - 详细技术文档
 - [`README.md`](../README.md) - 构建与使用入口文档
 
 **对比效果**:
@@ -77,7 +77,7 @@ fun MyFeatureScreen() {
 }
 ```
 
-**完整文档**: 详见 [Chat UI 统一化技术文档](./02-TECH/CHAT_UI_UNIFICATION.md)；Wiki 镜像入口见 `docs/wiki/index.md`
+**完整文档**: 详见 [Chat UI 统一化技术文档](./03-TECHNICAL-SPECS/CHAT_UI_UNIFICATION.md)；Wiki 镜像入口见 `docs/wiki/index.md`
 
 ---
 

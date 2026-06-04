@@ -1,6 +1,6 @@
 # Agent UI 层实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **执行方式**: 按任务清单逐步实施，使用复选框 (`- [ ]`) 跟踪进度。
 
 **Goal:** 为 PicMe 远程 LLM 编排架构实现 Compose UI 层，包括 PlanPreview/PlanProgress/PlanResult 消息气泡和自动执行设置。
 
@@ -838,7 +838,7 @@ git commit --allow-empty -m "feat(agent-ui): 远程LLM编排UI层实现完成
 
 ---
 
-**Plan complete and saved to `docs/superpowers/plans/2026-05-29-agent-ui.md`.**
+**计划文档已归档至 `docs/05-DEVELOPMENT/PLAN-AGENT-UI.md`。**
 
 **Two execution options:**
 
