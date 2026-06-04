@@ -1973,7 +1973,18 @@ CameraPreviewContent(
                 command.commands.forEachIndexed { index, subCmd ->
                     Logger.i(TAG, "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
                     agentCommandHandler(subCmd)
-                    if (index < command.commands.size - 1) {
+                    // 如果当前命令是拍照，等待状态回到 Previewing 再执行下一个
+                    if (subCmd is AiAgentCommand.CapturePhoto && index < command.commands.size - 1) {
+                        Logger.i(TAG, "BatchExecute: waiting for capture to complete...")
+                        var waitCount = 0
+                        while (cameraStateManager.isBusy() && waitCount < 50) {
+                            kotlinx.coroutines.delay(100)
+                            waitCount++
+                        }
+                        val finalState = cameraStateManager.getState()
+                        Logger.i(TAG, "BatchExecute: capture completed, state=${finalState.name}")
+                    } else if (index < command.commands.size - 1) {
+                        // 非拍照命令之间短暂延迟，确保 UI 更新
                         kotlinx.coroutines.delay(200)
                     }
                 }
