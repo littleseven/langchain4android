@@ -146,10 +146,15 @@ class UnifiedRemoteClient(
     }
 
     /**
-     * 检查是否为限频错误（429）
+     * 检查是否为限频/配额错误（429 或 433）
+     *
+     * 433 是 Cloudflare AI Gateway 或上游返回的非标准状态码，
+     * 通常表示配额耗尽或请求频率超限。
      */
     fun isRateLimitError(error: Throwable): Boolean {
-        return error.message?.contains("429") == true
+        return error.message?.let { msg ->
+            msg.contains("429") || msg.contains("433")
+        } == true
     }
 
     companion object {
