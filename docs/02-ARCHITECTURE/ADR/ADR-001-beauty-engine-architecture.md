@@ -2,7 +2,7 @@
 
 **状态**: 已接受 (Accepted)  
 **日期**: 2026-04-17
-**最后同步**: 2026-05-24（`impl/` 包已重构为 `render/`，与代码结构对齐）  
+**最后同步**: 2026-06-04（与 `beauty-engine/src/main/java/com/picme/beauty/` 代码结构对齐）  
 **决策**: RD  
 **PM Review**: 已完成
 
@@ -35,16 +35,21 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
                      │
 ┌────────────────────▼──────────────────────────────────┐
 │  Domain Layer: beauty-engine:api                        │
-│  ├─ BeautyEngine (Interface)                          │
-│  ├─ FilterType / BeautyParams                         │
-│  └─ BeautyCallback                                    │
+│  ├─ BeautyPreviewProvider (Interface)                 │
+│  ├─ BeautyPreviewEngine (Interface)                   │
+│  ├─ PhotoProcessor (Interface)                        │
+│  ├─ BeautyParams / FaceData / FilterType              │
+│  └─ BeautyPerfStats / FrameSyncResult                 │
 └────────────────────┬──────────────────────────────────┘
                      │
 ┌────────────────────▼──────────────────────────────────┐
 │  Data Layer: beauty-engine:render                       │
-│  ├─ GlBeautyPreviewProvider                           │
+│  ├─ GlBeautyPreviewProvider (Provider 实现)           │
 │  ├─ CameraPreviewRenderer (自研 OpenGL ES 管线)      │
-│  └─ EGLCore                                           │
+│  ├─ BeautyRenderer (美颜 Shader 渲染器)              │
+│  ├─ PhotoProcessorImpl (拍照 GPU 离屏渲染)           │
+│  ├─ FaceMakeupPass (唇色/腮红三角网格 Pass)          │
+│  └─ EGLCore / WindowSurface                           │
 └────────────────────┬──────────────────────────────────┘
                      │
 ┌────────────────────▼──────────────────────────────────┐
@@ -60,9 +65,9 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
 |--------|------|
 | **分层策略** | Domain(api) / Data(render) / External 三层分离 |
 | **依赖方向** | App → api → render → 底层 GPU 驱动 (单向) |
-| **接口定义** | `BeautyPreviewProvider` 接口类，对外唯一出口 |
-| **引擎封装** | 自研引擎统一走 `render/` 包，OpenGL ES 调用集中在 `CameraPreviewRenderer` |
-| **线程模型** | 独立渲染线程，EGLCore 管理共享 EGLContext |
+| **接口定义** | `BeautyPreviewProvider` / `BeautyPreviewEngine` / `PhotoProcessor` 接口类，对外唯一出口 |
+| **引擎封装** | 自研引擎统一走 `render/` 包，OpenGL ES 调用集中在 `CameraPreviewRenderer` / `BeautyRenderer` |
+| **线程模型** | 独立渲染线程（`CameraPreviewRenderer`），`EGLCore` 管理 EGLContext；`PhotoProcessorImpl` 独立 EGL 上下文 |
 
 ---
 
@@ -70,16 +75,33 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
 
 ### 4.1 模块结构
 ```
-beauty-engine/
+beauty-engine/src/main/java/com/picme/beauty/
 ├── api/                    # Domain Layer - 公开接口
-│   ├── BeautyPreviewProvider.kt  # 预览 Provider 接口
-│   ├── BeautyParams.kt           # Shader 参数
-│   └── PhotoProcessor.kt         # 拍照后处理接口
+│   ├── BeautyPreviewProvider.kt   # 预览 Provider 接口
+│   ├── BeautyPreviewEngine.kt     # 组合接口（Provider + Capability）
+│   ├── BeautyPreviewCapability.kt # GL 能力扩展（FaceWarp/LipMask）
+│   ├── PhotoProcessor.kt          # 拍照后处理接口
+│   ├── BeautyParams.kt            # Shader 参数
+│   ├── FaceData.kt                # 人脸数据（拍照后处理用）
+│   ├── FilterType.kt              # 色调滤镜枚举
+│   ├── StyleFilter.kt             # 风格特效枚举
+│   ├── BeautyPerfStats.kt         # 性能统计
+│   ├── FrameId.kt                 # 帧同步标识
+│   ├── FrameSyncConfig.kt         # 帧同步配置
+│   └── FrameSyncResult.kt         # 帧同步结果
 └── render/                 # Data Layer - 自研引擎 GL 渲染实现
-    ├── GlBeautyPreviewProvider.kt  # Provider 接口实现
-    ├── CameraPreviewRenderer.kt    # 渲染管线核心
-    ├── BeautyRenderer.kt           # 美颜 Shader 渲染器
-    └── EGLCore.kt                  # EGL 上下文管理
+    ├── GlBeautyPreviewProvider.kt   # Provider 接口实现
+    ├── CameraPreviewRenderer.kt     # 渲染管线核心
+    ├── BeautyRenderer.kt            # 美颜 Shader 渲染器
+    ├── BeautyPass.kt                # 通用渲染 Pass 基类
+    ├── FaceMakeupPass.kt            # 唇色/腮红三角网格 Pass
+    ├── StyleEffectShader.kt         # 风格特效 Shader
+    ├── PhotoProcessorImpl.kt        # 拍照 GPU 离屏渲染实现
+    ├── EGLCore.kt                   # EGL 上下文管理
+    ├── WindowSurface.kt             # EGL Window Surface 封装
+    ├── Framebuffer.kt               # FBO 封装
+    ├── FramebufferPool.kt           # FBO 对象池
+    └── ShaderProgram.kt             # Shader 编译与链接
 ```
 
 ### 4.2 依赖规则 (Gradle)
