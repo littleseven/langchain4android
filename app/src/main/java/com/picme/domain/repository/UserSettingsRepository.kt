@@ -98,6 +98,10 @@ interface UserSettingsRepository {
     val aiAgentForceRemoteFlow: Flow<Boolean>
     suspend fun updateAiAgentForceRemote(enabled: Boolean)
 
+    // ── Cloudflare AI Gateway Token ─────────────────────────
+    val cloudflareGatewayTokenFlow: Flow<String>
+    suspend fun updateCloudflareGatewayToken(token: String)
+
     // ── 语音控制 ────────────────────────────────────────────
     val voiceCommandModeFlow: Flow<VoiceCommandMode>
     suspend fun updateVoiceCommandMode(mode: VoiceCommandMode)

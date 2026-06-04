@@ -43,7 +43,8 @@ class UnifiedRemoteClient(
             OpenAiApiClient(
                 apiKey = config.apiKey,
                 baseUrl = config.baseUrl,
-                enableLogging = true
+                enableLogging = true,
+                gatewayToken = config.gatewayToken
             )
         } else null
     }
@@ -142,6 +143,13 @@ class UnifiedRemoteClient(
             ?: return Result.failure(RuntimeException("No content in response"))
 
         return Result.success(content)
+    }
+
+    /**
+     * 检查是否为限频错误（429）
+     */
+    fun isRateLimitError(error: Throwable): Boolean {
+        return error.message?.contains("429") == true
     }
 
     companion object {

@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# 腾讯云 SCF Web 函数启动文件
+# 运行环境：Node.js 18.15
+# 官方文档：https://cloud.tencent.com/document/product/583/56126
+
+export PORT=9000
+
+/var/lang/node18/bin/node index.js

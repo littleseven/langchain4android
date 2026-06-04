@@ -1,6 +1,5 @@
 // 配置区（需修改）
 const GATEWAY_URL = 'https://gateway.ai.cloudflare.com/v1/a7656feec717409a19fa5217f0f7b2f9/picme/compat/chat/completions'; // 替换为你的 AI Gateway 地址
-
 const MODEL = 'deepseek/deepseek-chat'; // 模型名
 
 export default {
@@ -13,7 +12,7 @@ export default {
     // 2. 可选：简单鉴权（Demo 可删，生产建议留）
     const authToken = request.headers.get('X-App-Token');
     if (authToken !== 'demo_app_token_2025') {
-      return new Response('Unauthorized', { status: 401 });
+      //return new Response('Unauthorized', { status: 401 });
     }
 
     // 3. 构建转发到 AI Gateway 的请求
