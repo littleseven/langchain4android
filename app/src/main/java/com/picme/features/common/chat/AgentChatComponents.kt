@@ -208,19 +208,24 @@ fun AgentChatPanel(
                 isProcessing = false
                 result.fold(
                     onSuccess = { action ->
-                        val responseText = when (action) {
+                        when (action) {
                             is AgentAction.Success -> {
-                                val commandName = action.command::class.simpleName ?: "操作"
                                 // 如果调用者需要感知命令，通过 onCommand 回传
                                 onCommand?.let { cmdCallback ->
                                     mapAgentActionToAiAgentCommand(action)?.let { cmdCallback(it) }
                                 }
-                                "已执行: $commandName"
+                                val executionMessages = agentActionToExecutionMessages(action)
+                                messages.value = messages.value + executionMessages
                             }
-                            is AgentAction.TextReply -> action.message
-                            is AgentAction.Error -> "抱歉，${action.message}"
+                            is AgentAction.TextReply -> {
+                                messages.value = messages.value + AgentMessage.AgentText(content = action.message)
+                            }
+                            is AgentAction.Error -> {
+                                messages.value = messages.value + AgentMessage.AgentText(
+                                    content = "抱歉，${action.message}"
+                                )
+                            }
                         }
-                        messages.value = messages.value + AgentMessage.AgentText(content = responseText)
                     },
                     onFailure = { error ->
                         messages.value = messages.value + AgentMessage.AgentText(
@@ -271,6 +276,104 @@ private fun mapAgentActionToAiAgentCommand(action: AgentAction.Success): com.pic
         else -> null
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AgentAction → CommandExecution 消息转换
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 将 AgentAction.Success 转换为 CommandExecution 消息列表
+ *
+ * 支持 BatchExecute 展开为多条消息，单命令转换为单条消息。
+ */
+private fun agentActionToExecutionMessages(action: AgentAction.Success): List<AgentMessage> {
+    val cmd = action.command
+    return when (cmd) {
+        is com.picme.domain.agent.model.AgentCommand.BatchExecute -> {
+            val total = cmd.commands.size
+            cmd.commands.mapIndexed { index, subCmd ->
+                AgentMessage.CommandExecution(
+                    commandName = getAgentCommandDisplayName(subCmd),
+                    status = AgentMessage.CommandExecution.Status.SUCCESS,
+                    detail = getAgentCommandDetail(subCmd),
+                    index = index + 1,
+                    total = total
+                )
+            }
+        }
+        else -> listOf(
+            AgentMessage.CommandExecution(
+                commandName = getAgentCommandDisplayName(cmd),
+                status = AgentMessage.CommandExecution.Status.SUCCESS,
+                detail = getAgentCommandDetail(cmd),
+                index = 0,
+                total = 1
+            )
+        )
+    }
+}
+
+private fun getAgentCommandDisplayName(command: com.picme.domain.agent.model.AgentCommand): String =
+    when (command) {
+        is com.picme.domain.agent.model.AgentCommand.AdjustBeauty -> "调整美颜"
+        is com.picme.domain.agent.model.AgentCommand.SwitchFilter -> "切换滤镜"
+        is com.picme.domain.agent.model.AgentCommand.SwitchStyle -> "切换风格"
+        is com.picme.domain.agent.model.AgentCommand.SwitchScene -> "切换场景"
+        is com.picme.domain.agent.model.AgentCommand.SwitchRatio -> "切换画幅"
+        is com.picme.domain.agent.model.AgentCommand.AdjustExposure -> "调整曝光"
+        is com.picme.domain.agent.model.AgentCommand.AdjustZoom -> "调整变焦"
+        is com.picme.domain.agent.model.AgentCommand.FlipCamera -> "翻转摄像头"
+        is com.picme.domain.agent.model.AgentCommand.CapturePhoto -> "拍照"
+        is com.picme.domain.agent.model.AgentCommand.ToggleRecording -> "切换录像"
+        is com.picme.domain.agent.model.AgentCommand.SwitchMode -> "切换模式"
+        is com.picme.domain.agent.model.AgentCommand.NavigateTo -> "页面跳转"
+        is com.picme.domain.agent.model.AgentCommand.GoBack -> "返回"
+        is com.picme.domain.agent.model.AgentCommand.BatchExecute -> "批量执行"
+        is com.picme.domain.agent.model.AgentCommand.TextReply -> "文本回复"
+        is com.picme.domain.agent.model.AgentCommand.ExecutePlan -> "执行计划"
+        is com.picme.domain.agent.model.AgentCommand.ChangeTheme -> "切换主题"
+        is com.picme.domain.agent.model.AgentCommand.ChangeLanguage -> "切换语言"
+        is com.picme.domain.agent.model.AgentCommand.DownloadModel -> "下载模型"
+        is com.picme.domain.agent.model.AgentCommand.SwitchFaceEngine -> "切换引擎"
+        is com.picme.domain.agent.model.AgentCommand.ToggleSetting -> "切换设置"
+        is com.picme.domain.agent.model.AgentCommand.ViewMedia -> "查看照片"
+        is com.picme.domain.agent.model.AgentCommand.DeleteMedia -> "删除照片"
+        is com.picme.domain.agent.model.AgentCommand.ShareMedia -> "分享照片"
+        is com.picme.domain.agent.model.AgentCommand.SelectMedia -> "选择照片"
+        is com.picme.domain.agent.model.AgentCommand.SearchMedia -> "搜索照片"
+        is com.picme.domain.agent.model.AgentCommand.SwitchViewMode -> "切换视图"
+        is com.picme.domain.agent.model.AgentCommand.FavoriteMedia -> "收藏照片"
+        is com.picme.domain.agent.model.AgentCommand.Unknown -> "未知命令"
+        is com.picme.domain.agent.model.AgentCommand.Error -> "执行错误"
+    }
+
+private fun getAgentCommandDetail(command: com.picme.domain.agent.model.AgentCommand): String =
+    when (command) {
+        is com.picme.domain.agent.model.AgentCommand.AdjustBeauty -> buildString {
+            val s = command.settings
+            val parts = mutableListOf<String>()
+            if (s.smoothing > 0) parts.add("磨皮 ${s.smoothing.toInt()}%")
+            if (s.whitening > 0) parts.add("美白 ${s.whitening.toInt()}%")
+            if (s.slimFace != 0f) parts.add("瘦脸 ${s.slimFace.toInt()}%")
+            if (s.bigEyes > 0) parts.add("大眼 ${s.bigEyes.toInt()}%")
+            if (parts.isEmpty()) append("默认参数") else append(parts.joinToString(", "))
+        }
+        is com.picme.domain.agent.model.AgentCommand.SwitchFilter -> "滤镜: ${command.filterType.name}"
+        is com.picme.domain.agent.model.AgentCommand.SwitchStyle -> "风格: ${command.styleFilter.name}"
+        is com.picme.domain.agent.model.AgentCommand.SwitchScene -> "场景: ${command.sceneName}"
+        is com.picme.domain.agent.model.AgentCommand.SwitchRatio -> "比例: ${command.ratio}"
+        is com.picme.domain.agent.model.AgentCommand.AdjustExposure -> "曝光: ${command.exposure}"
+        is com.picme.domain.agent.model.AgentCommand.AdjustZoom -> "变焦: ${command.zoomRatio}x"
+        is com.picme.domain.agent.model.AgentCommand.NavigateTo -> "目标: ${command.destination}"
+        is com.picme.domain.agent.model.AgentCommand.ChangeTheme -> "主题: ${command.theme}"
+        is com.picme.domain.agent.model.AgentCommand.ChangeLanguage -> "语言: ${command.language}"
+        is com.picme.domain.agent.model.AgentCommand.DownloadModel -> "模型: ${command.modelId}"
+        is com.picme.domain.agent.model.AgentCommand.SwitchFaceEngine -> "引擎: ${command.engine}"
+        is com.picme.domain.agent.model.AgentCommand.ToggleSetting -> "${command.settingKey}: ${if (command.enabled) "开启" else "关闭"}"
+        is com.picme.domain.agent.model.AgentCommand.SearchMedia -> "关键词: ${command.query}"
+        is com.picme.domain.agent.model.AgentCommand.ExecutePlan -> "计划: ${command.plan.description}"
+        else -> ""
+    }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4. 页面级初始化辅助（ASR + VoiceCoordinator 一站式配置）

@@ -159,6 +159,84 @@ private const val TAG_AI_AGENT = "AiAgent"
 private const val TAG_CAMERA_TEST = "CameraTest"
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 命令执行消息转换辅助函数（文件级，供 CameraScreen 内多处使用）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 将 AiAgentCommand 转换为 CommandExecution 消息列表
+ *
+ * 单命令 → 一条 CommandExecution
+ * BatchExecute → 多条 CommandExecution（展开显示每个子命令）
+ * TextReply → AgentText（纯文本回复）
+ */
+private fun commandToExecutionMessages(command: AiAgentCommand): List<AgentMessage> {
+    return when (command) {
+        is AiAgentCommand.BatchExecute -> {
+            val total = command.commands.size
+            command.commands.mapIndexed { index, subCmd ->
+                AgentMessage.CommandExecution(
+                    commandName = getCommandDisplayName(subCmd),
+                    status = AgentMessage.CommandExecution.Status.SUCCESS,
+                    detail = getCommandDetail(subCmd),
+                    index = index + 1,
+                    total = total
+                )
+            }
+        }
+        is AiAgentCommand.TextReply -> listOf(
+            AgentMessage.AgentText(content = command.message)
+        )
+        else -> listOf(
+            AgentMessage.CommandExecution(
+                commandName = getCommandDisplayName(command),
+                status = AgentMessage.CommandExecution.Status.SUCCESS,
+                detail = getCommandDetail(command),
+                index = 0,
+                total = 1
+            )
+        )
+    }
+}
+
+private fun getCommandDisplayName(command: AiAgentCommand): String = when (command) {
+    is AiAgentCommand.AdjustBeauty -> "调整美颜"
+    is AiAgentCommand.SwitchFilter -> "切换滤镜"
+    is AiAgentCommand.SwitchStyle -> "切换风格"
+    is AiAgentCommand.SwitchScene -> "切换场景"
+    is AiAgentCommand.SwitchRatio -> "切换画幅"
+    is AiAgentCommand.AdjustExposure -> "调整曝光"
+    is AiAgentCommand.AdjustZoom -> "调整变焦"
+    is AiAgentCommand.FlipCamera -> "翻转摄像头"
+    is AiAgentCommand.CapturePhoto -> "拍照"
+    is AiAgentCommand.ToggleRecording -> "切换录像"
+    is AiAgentCommand.SwitchMode -> "切换模式"
+    is AiAgentCommand.NavigateTo -> "页面跳转"
+    is AiAgentCommand.GoBack -> "返回"
+    is AiAgentCommand.BatchExecute -> "批量执行"
+    is AiAgentCommand.TextReply -> "文本回复"
+}
+
+private fun getCommandDetail(command: AiAgentCommand): String = when (command) {
+    is AiAgentCommand.AdjustBeauty -> buildString {
+        val s = command.settings
+        val parts = mutableListOf<String>()
+        if (s.smoothing > 0) parts.add("磨皮 ${s.smoothing.toInt()}%")
+        if (s.whitening > 0) parts.add("美白 ${s.whitening.toInt()}%")
+        if (s.slimFace != 0f) parts.add("瘦脸 ${s.slimFace.toInt()}%")
+        if (s.bigEyes > 0) parts.add("大眼 ${s.bigEyes.toInt()}%")
+        if (parts.isEmpty()) append("默认参数") else append(parts.joinToString(", "))
+    }
+    is AiAgentCommand.SwitchFilter -> "滤镜: ${command.filterType.name}"
+    is AiAgentCommand.SwitchStyle -> "风格: ${command.styleFilter.name}"
+    is AiAgentCommand.SwitchScene -> "场景: ${command.sceneName}"
+    is AiAgentCommand.SwitchRatio -> "比例: ${command.ratio}"
+    is AiAgentCommand.AdjustExposure -> "曝光: ${command.exposure}"
+    is AiAgentCommand.AdjustZoom -> "变焦: ${command.zoomRatio}x"
+    is AiAgentCommand.NavigateTo -> "目标: ${command.destination}"
+    else -> ""
+}
+
 private tailrec fun Context.findActivity(): android.app.Activity? = when (this) {
     is android.app.Activity -> this
     is ContextWrapper -> baseContext.findActivity()
@@ -980,24 +1058,8 @@ fun CameraContent(
             },
             onAgentResponse = { result ->
                 result.onSuccess { command ->
-                    val responseText = when (command) {
-                        is AiAgentCommand.TextReply -> command.message
-                        is AiAgentCommand.AdjustBeauty -> "已调整美颜参数"
-                        is AiAgentCommand.SwitchFilter -> "已切换滤镜"
-                        is AiAgentCommand.SwitchStyle -> "已切换风格"
-                        is AiAgentCommand.SwitchScene -> "已切换场景"
-                        is AiAgentCommand.SwitchRatio -> "已切换画幅比例"
-                        is AiAgentCommand.AdjustExposure -> "已调整曝光"
-                        is AiAgentCommand.AdjustZoom -> "已调整变焦"
-                        is AiAgentCommand.FlipCamera -> "已翻转摄像头"
-                        is AiAgentCommand.CapturePhoto -> "已拍照"
-                        is AiAgentCommand.ToggleRecording -> "已切换录像状态"
-                        is AiAgentCommand.SwitchMode -> "已切换拍摄模式"
-                        is AiAgentCommand.NavigateTo -> "正在跳转..."
-                        is AiAgentCommand.GoBack -> "返回"
-                        is AiAgentCommand.BatchExecute -> "批量执行 ${command.commands.size} 个命令"
-                    }
-                    aiAgentMessages = aiAgentMessages + AgentMessage.AgentText(content = responseText)
+                    val newMessages = aiAgentMessages + commandToExecutionMessages(command)
+                    aiAgentMessages = newMessages
                 }.onFailure { error ->
                     aiAgentMessages = aiAgentMessages + AgentMessage.AgentText(
                         content = "处理出错了：${error.message ?: "未知错误"}"

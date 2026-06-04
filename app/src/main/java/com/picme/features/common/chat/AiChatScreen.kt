@@ -333,6 +333,7 @@ private fun ChatBubble(
     when (message) {
         is AgentMessage.UserText -> UserTextBubble(message, modifier)
         is AgentMessage.AgentText -> AgentTextBubble(message, modifier)
+        is AgentMessage.CommandExecution -> CommandExecutionBubble(message, modifier)
         is AgentMessage.PlanPreview -> PlanPreviewBubble(message, modifier, onConfirm, onCancel)
         is AgentMessage.PlanProgress -> PlanProgressBubble(message, modifier)
         is AgentMessage.PlanResult -> PlanResultBubble(message, modifier)
@@ -498,6 +499,67 @@ private fun PlanResultBubble(
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         )
+    }
+}
+
+@Composable
+private fun CommandExecutionBubble(
+    message: AgentMessage.CommandExecution,
+    modifier: Modifier = Modifier
+) {
+    val statusColor = when (message.status) {
+        AgentMessage.CommandExecution.Status.PENDING -> Color.Gray
+        AgentMessage.CommandExecution.Status.RUNNING -> MaterialTheme.colorScheme.primary
+        AgentMessage.CommandExecution.Status.SUCCESS -> Color(0xFF4CAF50)
+        AgentMessage.CommandExecution.Status.FAILED -> Color(0xFFE53935)
+    }
+
+    val statusIcon = when (message.status) {
+        AgentMessage.CommandExecution.Status.PENDING -> "○"
+        AgentMessage.CommandExecution.Status.RUNNING -> "◐"
+        AgentMessage.CommandExecution.Status.SUCCESS -> "✓"
+        AgentMessage.CommandExecution.Status.FAILED -> "✗"
+    }
+
+    val indexText = if (message.total > 1) {
+        "[${message.index}/${message.total}] "
+    } else {
+        ""
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color.DarkGray.copy(alpha = 0.6f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = statusIcon,
+                color = statusColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Column {
+                Text(
+                    text = "$indexText${message.commandName}",
+                    color = Color.White,
+                    fontSize = 13.sp
+                )
+                if (message.detail.isNotBlank()) {
+                    Text(
+                        text = message.detail,
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
     }
 }
 
