@@ -160,13 +160,6 @@ class MediaRepositoryImpl(
         val successfullyDeletedIds = mutableListOf<Long>()
         var needsUserAuth = false
         for (asset in assetsToDelete) {
-            if (needsUserAuth) {
-                // 一旦检测到需要用户授权，停止处理后续资产
-                // 避免后续资产删除成功但 DB 未清理导致数据不一致
-                Logger.d(TAG, "Skipping remaining deletions, waiting for user auth")
-                break
-            }
-
             // 跳过已不存在的文件（可能已被其他应用删除）
             val uri = asset.uri.toUri()
             val exists = runCatching {
@@ -186,8 +179,9 @@ class MediaRepositoryImpl(
             } else if (pendingRecoverableIntentSender != null) {
                 // Android 10 (API 29): 需要逐条授权，停止处理后续资产
                 needsUserAuth = true
+                break
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11+: 收集所有需要授权的 URI
+                // Android 11+: 收集所有需要授权的 URI，继续处理后续资产
                 pendingDeleteUris.add(asset.uri.toUri())
                 needsUserAuth = true
             }
