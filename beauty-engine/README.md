@@ -80,7 +80,7 @@ beauty-engine/src/main/java/com/picme/beauty/
 │   ├── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现
 │   └── StyleEffect.kt                 # 风格特效数据类
 ├── internal/                          # 内部工具、帧同步与人脸检测
-│   ├── BeautyShaderChain.kt           # Shader 链路辅助
+│   ├── BeautyShaderChain.kt           # Shader 链路辅助（已废弃，实际由 BeautyRenderer 统一管线替代）
 │   ├── facedetect/                    # 人脸检测实现（多引擎）
 │   │   ├── FaceDetectorManager.kt     # 检测管理器（双阶段流水线）
 │   │   ├── DetectionPipelineFactory.kt # 流水线工厂
@@ -120,7 +120,7 @@ beauty-engine/src/main/java/com/picme/beauty/
 
 ## Gradle 依赖
 
-```kotlin
+```
 dependencies {
     implementation(project(":beauty-engine"))
 }

@@ -2,6 +2,7 @@
 
 **文档编号**: ADR-003  
 **创建日期**: 2026-05-03  
+**最后同步**: 2026-06-04（修正：坐标转换函数与 `EyePosition` 枚举为规范示例，未在代码中实际落地；实际坐标处理由 `BeautyRenderer` / `FaceMakeupPass` 内部管理）  
 **状态**: 已采纳  
 **影响范围**: 全项目（人脸检测、渲染引擎、UI 展示）
 
@@ -219,6 +220,10 @@ fun processFace() {
 
 #### 要求 3: 跨坐标系转换必须有明确函数
 
+> **规范要求**：跨坐标系转换应通过明确的转换函数完成，禁止隐式转换。
+>
+> **实际状态**：当前代码中坐标转换逻辑内嵌在渲染管线和检测适配层中，未提取为独立的公共 API。以下接口设计可作为未来重构的参考：
+
 ```kotlin
 /**
  * [坐标转换] 将人脸坐标系转换为图像坐标系
@@ -267,26 +272,7 @@ fun convertImageToUserCoordinates(
 | `image_` | 图像坐标系（观察者视角） | `imageLeftEye`, `imageRightEyebrow` |
 | `user_` 或 `face_` | 人脸坐标系（被拍摄者视角） | `userLeftEye`, `faceRightCheek` |
 
-**枚举定义示例**：
-
-```kotlin
-/**
- * 眼睛位置枚举（明确标注坐标系）
- */
-enum class EyePosition {
-    /** [图像坐标系] 图像左侧的眼睛（x 坐标较小） */
-    IMAGE_LEFT,
-    
-    /** [图像坐标系] 图像右侧的眼睛（x 坐标较大） */
-    IMAGE_RIGHT,
-    
-    /** [人脸坐标系] 被拍摄者左眼（前置时对应 IMAGE_RIGHT） */
-    USER_LEFT,
-    
-    /** [人脸坐标系] 被拍摄者右眼（前置时对应 IMAGE_LEFT） */
-    USER_RIGHT
-}
-```
+> **注意**：以下 `EyePosition` 枚举和 `convertUserToImageCoordinates` / `convertImageToUserCoordinates` 函数为规范示例，展示了理想的坐标系转换接口设计。实际代码中，坐标转换逻辑内嵌在 `BeautyRenderer` / `FaceMakeupPass` 的渲染管线中，未提取为独立的公共转换函数。若后续需要跨模块复用坐标转换，可参考以下接口设计进行提取。
 
 ### 3.3 文档描述规范
 
@@ -687,16 +673,7 @@ scripts/check-doc-coordinate-annotation.sh # ✅ 通过
 
 #### Q4: 如何处理第三方 SDK 的坐标系？
 
-**A**: 在适配层统一转换：
-```kotlin
-class MLKitAdapter {
-    fun adapt(mlKitFace: Face): List<Point> {
-        // ML Kit 返回的是语义坐标，转换为图像坐标
-        val semanticLandmarks = extractLandmarks(mlKitFace)
-        return convertSemanticToImageCoordinates(semanticLandmarks)
-    }
-}
-```
+**A**: 在适配层统一转换。当前代码中，MediaPipe / InsightFace 的坐标转换逻辑内嵌在检测适配层（如 `FaceDetectionManager` 及相关检测器实现）中，未提取为独立的 `MLKitAdapter` 类。以下示例展示了理想的适配层设计：
 
 #### Q5: Code Review 时如何快速发现混用问题？
 
@@ -710,6 +687,7 @@ class MLKitAdapter {
 | 日期 | 版本 | 变更内容 | 作者 |
 |------|------|---------|------|
 | 2026-05-03 | v1.0 | 初始版本，确立"允许两种坐标系但严禁混用"原则 | Lingma |
+| 2026-06-04 | v1.1 | 修正：明确 `EyePosition` 枚举和坐标转换函数为规范示例，未在代码中实际落地；补充实际代码中的坐标处理现状说明 | RD |
 
 ### 8.3 参考资料
 
