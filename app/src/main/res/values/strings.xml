@@ -347,6 +347,7 @@
     <string name="model_download_notification_single">Downloading %1$s (%2$d%%)</string>
     <string name="model_download_notification_multi">Downloading %1$d models (%2$d%%)</string>
     <string name="model_download_notification_channel_desc">Keeps model downloads running in background</string>
+    <string name="model_download_preparing">Preparing download…</string>
 
     <!-- Model Manager -->
     <string name="model_type_asr">ASR</string>

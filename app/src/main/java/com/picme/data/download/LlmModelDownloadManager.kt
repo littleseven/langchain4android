@@ -623,15 +623,23 @@ class LlmModelDownloadManager(context: Context) {
 
     /**
      * 暂停正在进行的下载
+     *
+     * 即使当前没有活跃的 HTTP Call（如在文件校验阶段），
+     * 也会取消对应的 Job 并更新状态为 PAUSED，确保状态一致性。
      */
     fun pauseDownload(modelId: String) {
-        val call = activeDownloads[modelId] ?: return
+        val call = activeDownloads[modelId]
         val currentState = _downloadStates.value[modelId]
         val downloadedBytes = currentState?.downloadedBytes ?: 0
         pausedDownloads[modelId] = downloadedBytes
-        call.cancel()
+
+        // 取消活跃的 HTTP Call（如果存在）
+        call?.cancel()
         activeDownloads.remove(modelId)
+
+        // 取消对应的 Job，确保即使在校验阶段也能停止
         activeJobs.remove(modelId)?.cancel()
+
         _downloadStates.update { current ->
             current + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, downloadedBytes, currentState?.totalBytes ?: 0))
         }
@@ -648,19 +656,29 @@ class LlmModelDownloadManager(context: Context) {
 
         val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
         val resumeFromBytes = pausedDownloads[modelId] ?: 0L
-        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, resumeFromBytes, config.size)) }
+
+        // 获取实际文件列表并计算总大小
+        val repoPath = config.sources["ModelScope"]
+            ?: config.sources["modelscope"]
+            ?: throw IOException("ModelScope source not available for $modelId")
+        val fileInfos = fetchModelFileInfosFromModelScope(repoPath)
+        val allFileInfos = if (fileInfos.isNotEmpty()) {
+            fileInfos.filter { !it.name.startsWith(".") }
+        } else {
+            (config.files.takeIf { it.isNotEmpty() } ?: getModelFiles(modelId))
+                .map { ModelFileInfo(name = it, size = 0, sha256 = null) }
+        }
+        val actualTotalBytes = allFileInfos.sumOf { it.size }.coerceAtLeast(config.size)
+
+        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, resumeFromBytes, actualTotalBytes)) }
         updateServiceState()
 
         try {
-            val repoPath = config.sources["ModelScope"]
-                ?: config.sources["modelscope"]
-                ?: throw IOException("ModelScope source not available for $modelId")
-
             Logger.i(TAG, "Resuming model $modelId from $resumeFromBytes bytes")
 
             var totalDownloaded = resumeFromBytes
 
-            val expectedFiles = config.files.takeIf { it.isNotEmpty() } ?: getModelFiles(modelId)
+            val expectedFiles = allFileInfos.map { it.name }
 
             // 计算已完成的文件和当前文件中的偏移量
             var bytesToSkip = resumeFromBytes
@@ -693,7 +711,7 @@ class LlmModelDownloadManager(context: Context) {
                 // 文件已完整下载
                 if (destFile.exists() && fileIndex > resumeFileIndex) {
                     totalDownloaded += destFile.length()
-                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                    emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                     continue
                 }
 
@@ -743,9 +761,9 @@ class LlmModelDownloadManager(context: Context) {
                                 val now = System.currentTimeMillis()
                                 val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
                                 if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
-                                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, config.size)) }
+                                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, actualTotalBytes)) }
                                     updateServiceState()
-                                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                                    emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                                     lastEmitTime = now
                                     lastEmitBytes = totalDownloaded
                                 }
@@ -759,9 +777,9 @@ class LlmModelDownloadManager(context: Context) {
             }
 
             pausedDownloads.remove(modelId)
-            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, actualTotalBytes, actualTotalBytes)) }
             updateServiceState()
-            emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
+            emit(DownloadProgress(modelId, actualTotalBytes, actualTotalBytes, DownloadStatus.COMPLETED))
             Logger.i(TAG, "Model download completed: $modelId")
 
         } catch (e: Exception) {
@@ -769,22 +787,22 @@ class LlmModelDownloadManager(context: Context) {
                 val pausedBytes = pausedDownloads[modelId]
                 if (pausedBytes != null) {
                     _downloadStates.update {
-                        it + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, pausedBytes, config.size))
+                        it + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, pausedBytes, actualTotalBytes))
                     }
                     updateServiceState()
-                    emit(DownloadProgress(modelId, pausedBytes, config.size, DownloadStatus.PAUSED))
+                    emit(DownloadProgress(modelId, pausedBytes, actualTotalBytes, DownloadStatus.PAUSED))
                 } else {
-                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, actualTotalBytes)) }
                     updateServiceState()
-                    emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                    emit(DownloadProgress(modelId, 0, actualTotalBytes, DownloadStatus.CANCELLED))
                 }
                 return@flow
             }
             val errorMsg = e.message ?: e.javaClass.simpleName
             Logger.e(TAG, "Download failed for $modelId: $errorMsg")
-            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, actualTotalBytes)) }
             updateServiceState()
-            emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
+            emit(DownloadProgress(modelId, 0, actualTotalBytes, DownloadStatus.FAILED))
         }
     }.flowOn(Dispatchers.IO)
 
@@ -801,22 +819,15 @@ class LlmModelDownloadManager(context: Context) {
             ?: throw IllegalArgumentException("Unknown model: $modelId")
 
         val modelDir = File(downloadDir, modelId).also { it.mkdirs() }
-        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, config.size)) }
-        updateServiceState()
 
-        try {
-            // 仅使用 ModelScope 源
-            val repoPath = config.sources["ModelScope"]
-                ?: config.sources["modelscope"]
-                ?: throw IOException("ModelScope source not available for $modelId")
+        // 仅使用 ModelScope 源
+        val repoPath = config.sources["ModelScope"]
+            ?: config.sources["modelscope"]
+            ?: throw IOException("ModelScope source not available for $modelId")
 
-            Logger.i(TAG, "Downloading model $modelId from ModelScope: $repoPath")
-
-            var totalDownloaded = 0L
-
-            // 优先从 ModelScope API 动态获取文件列表（包含完整文件信息和SHA256校验值）
-            // 如果 API 失败，则回退到模型配置中的文件列表或默认列表
-            val fileInfos = run {
+        // 优先从 ModelScope API 动态获取文件列表（包含完整文件信息和SHA256校验值）
+        // 如果 API 失败，则回退到模型配置中的文件列表或默认列表
+        val fileInfos = run {
                 // 1. 首先尝试从 ModelScope API 获取（最准确，包含所有文件和元数据）
                 val apiFileInfos = fetchModelFileInfosFromModelScope(repoPath)
                 if (apiFileInfos.isNotEmpty()) {
@@ -849,9 +860,23 @@ class LlmModelDownloadManager(context: Context) {
                 throw IOException("No files to download for model: $modelId")
             }
 
-            Logger.i(TAG, "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
+            // 计算实际总大小（基于 API 返回的文件大小，而非 config.size）
+            val actualTotalBytes = allFileInfos.sumOf { it.size }.coerceAtLeast(config.size)
+            if (actualTotalBytes != config.size) {
+                Logger.d(TAG, "Total size adjusted: config=${config.size}, actual=$actualTotalBytes")
+            }
 
-            for (fileInfo in allFileInfos) {
+            // 更新状态使用实际总大小
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, actualTotalBytes)) }
+            updateServiceState()
+
+            var totalDownloaded = 0L
+
+            try {
+                Logger.i(TAG, "Downloading model $modelId from ModelScope: $repoPath")
+                Logger.i(TAG, "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
+
+                for (fileInfo in allFileInfos) {
                 val fileName = fileInfo.name
                 val expectedSize = fileInfo.size
                 val expectedSha256 = fileInfo.sha256
@@ -875,7 +900,7 @@ class LlmModelDownloadManager(context: Context) {
                             if (verifyFileSha256(destFile, expectedSha256)) {
                                 Logger.d(TAG, "File verified (size + SHA256): $fileName ($actualSize bytes)")
                                 totalDownloaded += actualSize
-                                emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                                emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                                 continue
                             } else {
                                 Logger.w(TAG, "SHA256 mismatch for $fileName, re-downloading")
@@ -885,7 +910,7 @@ class LlmModelDownloadManager(context: Context) {
                             // 没有 SHA256，仅大小校验通过
                             Logger.d(TAG, "File size matches: $fileName ($actualSize bytes)")
                             totalDownloaded += actualSize
-                            emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                            emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                             continue
                         }
                     } else if (expectedSize > 0 && actualSize != expectedSize) {
@@ -897,13 +922,13 @@ class LlmModelDownloadManager(context: Context) {
                         if (!expectedSha256.isNullOrEmpty() && verifyFileSha256(destFile, expectedSha256)) {
                             Logger.d(TAG, "File verified (SHA256 only): $fileName ($actualSize bytes)")
                             totalDownloaded += actualSize
-                            emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                            emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                             continue
                         } else {
                             // 无法校验，假设文件完整
                             Logger.d(TAG, "File exists (unknown size): $fileName ($actualSize bytes)")
                             totalDownloaded += actualSize
-                            emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                            emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                             continue
                         }
                     }
@@ -951,9 +976,9 @@ class LlmModelDownloadManager(context: Context) {
                                 val now = System.currentTimeMillis()
                                 val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
                                 if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
-                                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, config.size)) }
+                                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, totalDownloaded, actualTotalBytes)) }
                                     updateServiceState()
-                                    emit(DownloadProgress(modelId, totalDownloaded, config.size, DownloadStatus.DOWNLOADING))
+                                    emit(DownloadProgress(modelId, totalDownloaded, actualTotalBytes, DownloadStatus.DOWNLOADING))
                                     lastEmitTime = now
                                     lastEmitBytes = totalDownloaded
                                 }
@@ -1000,32 +1025,33 @@ class LlmModelDownloadManager(context: Context) {
                 throw IOException("File integrity check failed: $failedFiles")
             }
 
-            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, config.size, config.size)) }
-            emit(DownloadProgress(modelId, config.size, config.size, DownloadStatus.COMPLETED))
-            Logger.i(TAG, "Model download completed and verified: $modelId")
+                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, actualTotalBytes, actualTotalBytes)) }
+                emit(DownloadProgress(modelId, actualTotalBytes, actualTotalBytes, DownloadStatus.COMPLETED))
+                Logger.i(TAG, "Model download completed and verified: $modelId")
 
-        } catch (e: Exception) {
+            } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
                 val pausedBytes = pausedDownloads[modelId]
                 if (pausedBytes != null) {
                     _downloadStates.update {
-                        it + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, pausedBytes, config.size))
+                        it + (modelId to DownloadState(modelId, DownloadStatus.PAUSED, pausedBytes, actualTotalBytes))
                     }
                     updateServiceState()
-                    emit(DownloadProgress(modelId, pausedBytes, config.size, DownloadStatus.PAUSED))
+                    emit(DownloadProgress(modelId, pausedBytes, actualTotalBytes, DownloadStatus.PAUSED))
                 } else {
-                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, config.size)) }
+                    _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.CANCELLED, 0, actualTotalBytes)) }
                     updateServiceState()
-                    emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.CANCELLED))
+                    emit(DownloadProgress(modelId, 0, actualTotalBytes, DownloadStatus.CANCELLED))
                 }
                 return@flow
             }
-            val errorMsg = e.message ?: e.javaClass.simpleName
-            Logger.e(TAG, "Download failed for $modelId: $errorMsg")
-            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, config.size)) }
-            updateServiceState()
-            emit(DownloadProgress(modelId, 0, config.size, DownloadStatus.FAILED))
-        }
+                val errorMsg = e.message ?: e.javaClass.simpleName
+                Logger.e(TAG, "Download failed for $modelId: $errorMsg")
+                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, actualTotalBytes)) }
+                updateServiceState()
+                emit(DownloadProgress(modelId, 0, actualTotalBytes, DownloadStatus.FAILED))
+            }
+
     }.flowOn(Dispatchers.IO)
 
     private fun buildModelScopeUrl(repoPath: String, fileName: String): String {

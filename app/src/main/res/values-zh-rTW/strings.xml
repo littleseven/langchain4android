@@ -340,6 +340,7 @@
 <string name="model_download_notification_single">正在下載 %1$s（%2$d%%）</string>
 <string name="model_download_notification_multi">正在下載 %1$d 個模型（%2$d%%）</string>
 <string name="model_download_notification_channel_desc">用於在背景持續執行模型下載</string>
+<string name="model_download_preparing">準備下載中…</string>
 
     <string name="local_face_detection_model">本地人臉檢測模型</string>
     <string name="local_face_detection_model_fallback">未下載本地人臉檢測模型，點擊下方前往下載。</string>

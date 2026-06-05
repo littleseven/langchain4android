@@ -39,19 +39,27 @@ class ModelDownloadForegroundService : Service() {
             }
 
             ACTION_START_OR_UPDATE -> {
+                // Android 要求 startForegroundService() 后必须在 5 秒内调用 startForeground()
+                // 因此无论是否有下载任务，都先立即启动前台通知，避免 ForegroundServiceDidNotStartInTimeException
                 val states = manager.snapshotDownloadingStates()
+                val notification = if (states.isEmpty()) {
+                    buildEmptyNotification()
+                } else {
+                    buildNotification(states)
+                }
+                startForeground(NOTIFICATION_ID, notification)
+
+                // 如果没有下载任务，立即停止服务
                 if (states.isEmpty()) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
                 }
-
-                val notification = buildNotification(states)
-                startForeground(NOTIFICATION_ID, notification)
             }
 
             else -> {
-                // no-op
+                // 默认情况下也立即调用 startForeground()，防止崩溃
+                startForeground(NOTIFICATION_ID, buildEmptyNotification())
             }
         }
 
@@ -85,6 +93,18 @@ class ModelDownloadForegroundService : Service() {
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setProgress(100, progressPercent, false)
+            .build()
+    }
+
+    private fun buildEmptyNotification(): Notification {
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(getString(R.string.model_download_notification_title))
+            .setContentText(getString(R.string.model_download_preparing))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
