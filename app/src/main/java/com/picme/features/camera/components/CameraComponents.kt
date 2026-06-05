@@ -63,6 +63,7 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.SelfImprovement
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Timeline
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.Button
@@ -121,6 +122,9 @@ private const val PANEL_HEIGHT_RATIO = 0.5f
 fun CameraLeftControls(
     onNavigateToSettings: () -> Unit,
     onResetCameraMemoryState: () -> Unit,
+    onToggleLogOverlay: () -> Unit,
+    debugUiEnabled: Boolean,
+    showLogOverlay: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -133,6 +137,14 @@ fun CameraLeftControls(
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
         // 立即重置相机状态到首次安装默认值
         ControlButton(icon = Icons.Rounded.Refresh, onClick = onResetCameraMemoryState)
+        // 日志浮层入口：仅在 Debug 模式下显示
+        if (debugUiEnabled) {
+            ControlButton(
+                icon = Icons.Rounded.Terminal,
+                onClick = onToggleLogOverlay,
+                isActive = showLogOverlay
+            )
+        }
     }
 }
 

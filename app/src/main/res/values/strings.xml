@@ -371,9 +371,9 @@
 
     <!-- Essential Models Download (WiFi) -->
     <string name="essential_models_download_title">Download Required Models</string>
-    <string name="essential_models_download_message">Some required models (LLM and speech recognition) are missing. Download them now?</string>
+    <string name="essential_models_download_message">AI inference models are not downloaded. Without them, local inference and voice interaction will be unavailable. Download now?</string>
     <string name="essential_models_download_button">Download All</string>
-    <string name="essential_models_download_later">Later</string>
+    <string name="essential_models_download_later">Not Now</string>
     <string name="essential_models_download_progress">Downloading…</string>
 
 </resources>

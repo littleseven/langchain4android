@@ -1,10 +1,6 @@
 package com.picme.features.settings
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -257,9 +253,10 @@ class SettingsViewModel(
     val isBatchDownloading: StateFlow<Boolean> = _isBatchDownloading.asStateFlow()
 
     /**
-     * WiFi 已连接时检查必要模型，若缺失则提示一键下载。
+     * 检查必要模型是否缺失，若缺失则提示一键下载。
+     * 由 CameraScreen 在进入相机 3 秒后调用，避免应用启动时立即打扰用户。
      */
-    fun checkEssentialModelsOnWifi() {
+    fun checkEssentialModels() {
         if (_isBatchDownloading.value || _showEssentialModelsPrompt.value) return
         viewModelScope.launch {
             val missingAny = ESSENTIAL_MODEL_IDS.any { id ->
@@ -332,30 +329,6 @@ class SettingsViewModel(
         lastDownloadStatuses.putAll(downloadStates.value.mapValues { entry -> entry.value.status })
         loadModels()
         observeDownloadCompletion()
-
-        // 注册 WiFi 网络回调，连接时检查必要模型
-        registerWifiCallback()
-    }
-
-    /**
-     * 监听 WiFi 连接状态，连接时检查必要模型是否缺失。
-     */
-    private fun registerWifiCallback() {
-        val connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                val caps = connectivityManager.getNetworkCapabilities(network)
-                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
-                    Logger.i(TAG, "WiFi connected, checking essential models")
-                    checkEssentialModelsOnWifi()
-                }
-            }
-        }
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .build()
-        connectivityManager.registerNetworkCallback(request, callback)
     }
 
     /**

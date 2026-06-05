@@ -47,6 +47,7 @@ import com.picme.features.settings.ModelCenterScreen
 import com.picme.features.settings.SettingsScreen
 import com.picme.features.settings.SettingsViewModel
 import com.picme.features.settings.SettingsViewModelFactory
+import com.picme.features.debug.LogOverlay
 import com.picme.navigation.Screen
 import com.picme.core.common.Logger
 import com.picme.domain.agent.model.SceneManager
@@ -167,7 +168,8 @@ class MainActivity : ComponentActivity() {
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                                    viewModel = mediaViewModel
+                                    viewModel = mediaViewModel,
+                                    settingsViewModel = settingsViewModel
                                 )
                             }
                             composable(Screen.Gallery.route) {
@@ -229,7 +231,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // WiFi 必要模型一键下载提示
+                // 全局日志浮层：跨越页面生命周期
+                val showLogOverlay by settingsViewModel.showLogOverlay.collectAsState()
+                if (showLogOverlay) {
+                    LogOverlay(onDismiss = { settingsViewModel.setShowLogOverlay(false) })
+                }
+
+                // 必要模型一键下载提示（由 CameraScreen 在进入相机 3 秒后触发）
                 EssentialModelsDownloadDialog(
                     showPrompt = settingsViewModel.showEssentialModelsPrompt.collectAsState().value,
                     isDownloading = settingsViewModel.isBatchDownloading.collectAsState().value,

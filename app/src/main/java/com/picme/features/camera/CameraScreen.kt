@@ -104,7 +104,6 @@ import com.picme.features.camera.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.AgentMessage
-import com.picme.features.debug.LogOverlay
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -395,7 +394,8 @@ internal data class CameraPreviewUiState(
     val isVoiceControlEnabled: Boolean,
     val roiStageConfig: StageConfig,
     val landmarkStageConfig: StageConfig,
-    val showProPanel: Boolean
+    val showProPanel: Boolean,
+    val showLogOverlay: Boolean
 )
 
 internal data class CameraPreviewActions(
@@ -472,7 +472,8 @@ private fun buildCameraPreviewUiState(
     beautyStrategy: BeautyStrategy,
     isVoiceControlEnabled: Boolean,
     roiStageConfig: StageConfig,
-    landmarkStageConfig: StageConfig
+    landmarkStageConfig: StageConfig,
+    showLogOverlay: Boolean
 ): CameraPreviewUiState {
     return CameraPreviewUiState(
         selectedFilter = selectedFilter,
@@ -513,7 +514,8 @@ private fun buildCameraPreviewUiState(
         isVoiceControlEnabled = isVoiceControlEnabled,
         roiStageConfig = roiStageConfig,
         landmarkStageConfig = landmarkStageConfig,
-        showProPanel = panelState.showProPanel
+        showProPanel = panelState.showProPanel,
+        showLogOverlay = showLogOverlay
     )
 }
 
@@ -537,7 +539,8 @@ private fun buildCameraPreviewActions(
     onExposureCompensationChanged: (Int) -> Unit,
     onWhiteBalanceModeChanged: (Int) -> Unit,
     onToggleVoiceControl: () -> Unit,
-    onToggleAiAgentPanel: () -> Unit
+    onToggleAiAgentPanel: () -> Unit,
+    onToggleLogs: () -> Unit
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onResetCameraMemoryState = onResetCameraMemoryState,
@@ -584,7 +587,7 @@ private fun buildCameraPreviewActions(
                 onPanelVisibilityChanged = { isVisible -> panelState.showGridSelector = isVisible }
             )
         },
-        onToggleLogs = {}, // 已废弃,由设置页控制
+        onToggleLogs = onToggleLogs,
         onToggleFaceDebugOverlay = {}, // 已废弃,由设置页控制
         onToggleFacialRefinement = panelState::toggleFacialRefinement,
         onToggleMakeupAdjustment = panelState::toggleMakeupAdjustment,
@@ -670,7 +673,8 @@ private fun resolvePreviewTargetView(
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    viewModel: MediaViewModel
+    viewModel: MediaViewModel,
+    settingsViewModel: com.picme.features.settings.SettingsViewModel? = null
 ) {
     // RD 沉浸式模式：隐藏系统栏
     val view = LocalView.current
@@ -709,7 +713,8 @@ fun CameraScreen(
         CameraContent(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
-            onNavigateToSettings = onNavigateToSettings
+            onNavigateToSettings = onNavigateToSettings,
+            settingsViewModel = settingsViewModel
         )
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -727,13 +732,15 @@ fun CameraScreen(
 fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    settingsViewModel: com.picme.features.settings.SettingsViewModel? = null
 ) {
     val context = LocalContext.current
     val runtimeContext = rememberCameraRuntimeContext(context)
     val imageProcessor = runtimeContext.imageProcessor
     val userPreferencesRepository = runtimeContext.userPreferencesRepository
     val coroutineScope = runtimeContext.coroutineScope
+    val scope = rememberCoroutineScope()
     val beautyStrategy = runtimeContext.beautyStrategy
     val debugUiEnabled = runtimeContext.debugUiEnabled
     val showCameraInfoInPreview = runtimeContext.showCameraInfoInPreview
@@ -759,6 +766,12 @@ fun CameraContent(
     // [Day1 线程隔离] 初始化线程注册表（幂等，可安全多次调用）
     LaunchedEffect(Unit) {
         CameraThreadRegistry.initialize()
+    }
+
+    // 进入相机 3 秒后检查必要模型，避免应用启动时立即打扰用户
+    LaunchedEffect(Unit) {
+        delay(3000)
+        settingsViewModel?.checkEssentialModels()
     }
 
     // [Day1 线程隔离] 分析线程与拍照线程分离，避免人脸检测阻塞拍照回调
@@ -1109,7 +1122,6 @@ fun CameraContent(
         }
     }
 
-    val logOverlayScope = rememberCoroutineScope()
     // 移除本地 state,改用设置页配置
     // var showCameraInfo by remember { mutableStateOf(false) }
     // var showLogOverlay by remember { mutableStateOf(false) }
@@ -1973,7 +1985,8 @@ CameraPreviewContent(
         beautyStrategy = beautyStrategy,
         isVoiceControlEnabled = voiceCommandMode != VoiceCommandMode.DISABLED,
         roiStageConfig = runtimeContext.roiStageConfig,
-        landmarkStageConfig = runtimeContext.landmarkStageConfig
+        landmarkStageConfig = runtimeContext.landmarkStageConfig,
+        showLogOverlay = showLogOverlay
     ),
     aiAgentUseCase = aiAgentUseCase,
     aiAgentChatVisible = aiAgentChatVisible,
@@ -1990,7 +2003,7 @@ CameraPreviewContent(
         // BatchExecute 在协程中串行执行子命令
         if (command is AiAgentCommand.BatchExecute) {
             Logger.i(TAG, "BatchExecute: ${command.commands.size} commands, launching sequentially")
-            logOverlayScope.launch {
+            coroutineScope.launch {
                 command.commands.forEachIndexed { index, subCmd ->
                     Logger.i(TAG, "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
                     agentCommandHandler(subCmd)
@@ -2055,7 +2068,7 @@ CameraPreviewContent(
                     panelState.closeAllPanels()
                     isCameraMemoryHydrated = true
 
-                    logOverlayScope.launch {
+                    coroutineScope.launch {
                         userPreferencesRepository.resetCameraMemoryState()
                     }
                 },
@@ -2132,17 +2145,14 @@ CameraPreviewContent(
         onExposureCompensationChanged = { exposure -> exposureCompensation = exposure },
         onWhiteBalanceModeChanged = { wb -> whiteBalanceMode = wb },
         onToggleVoiceControl = onToggleVoiceControl,
-        onToggleAiAgentPanel = { aiAgentChatVisible = !aiAgentChatVisible }
+        onToggleAiAgentPanel = { aiAgentChatVisible = !aiAgentChatVisible },
+        onToggleLogs = {
+            coroutineScope.launch {
+                userPreferencesRepository.updateShowLogOverlay(!showLogOverlay)
+            }
+        }
     )
     }
 )
-
-        if (debugUiEnabled && showLogOverlay) {
-            LogOverlay(onDismiss = {
-                logOverlayScope.launch {
-                    userPreferencesRepository.updateShowLogOverlay(false)
-                }
-            })
-        }
 
 }

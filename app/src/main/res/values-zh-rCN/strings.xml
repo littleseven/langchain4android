@@ -365,9 +365,9 @@
 
     <!-- Essential Models Download (WiFi) -->
     <string name="essential_models_download_title">下载必要模型</string>
-    <string name="essential_models_download_message">检测到部分必需模型（LLM 和语音识别）尚未下载。是否立即下载？</string>
+    <string name="essential_models_download_message">检测到 AI 推理所需模型尚未下载。不下载将无法使用本地推理和语音交互功能。是否立即下载？</string>
     <string name="essential_models_download_button">一键下载</string>
-    <string name="essential_models_download_later">稍后</string>
+    <string name="essential_models_download_later">暂不下载</string>
     <string name="essential_models_download_progress">正在下载…</string>
 
 </resources>
