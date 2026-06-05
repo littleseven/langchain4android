@@ -33,9 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AppLanguage
@@ -198,10 +200,20 @@ class MainActivity : ComponentActivity() {
                                 SettingsScreen(
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToModelCenter = { navController.navigate(Screen.ModelCenter.route) }
+                                    onNavigateToModelCenter = { categoryTag ->
+                                        navController.navigate(Screen.ModelCenter.createRoute(categoryTag))
+                                    }
                                 )
                             }
-                            composable(Screen.ModelCenter.route) {
+                            composable(
+                                route = Screen.ModelCenter.route,
+                                arguments = listOf(
+                                    navArgument("categoryTag") {
+                                        type = NavType.StringType
+                                        defaultValue = ""
+                                    }
+                                )
+                            ) { backStackEntry ->
                                 // 场景管理：进入 Settings 子页面（复用 SETTINGS 场景）
                                 DisposableEffect(Unit) {
                                     SceneManager.getInstance().transitionTo(SceneManager.Scene.SETTINGS)
@@ -209,8 +221,10 @@ class MainActivity : ComponentActivity() {
                                         SceneManager.getInstance().leaveScene(SceneManager.Scene.SETTINGS)
                                     }
                                 }
+                                val categoryTag = backStackEntry.arguments?.getString("categoryTag") ?: ""
                                 ModelCenterScreen(
                                     viewModel = settingsViewModel,
+                                    initialCategoryTag = categoryTag,
                                     onNavigateBack = { navController.popBackStack() }
                                 )
                             }

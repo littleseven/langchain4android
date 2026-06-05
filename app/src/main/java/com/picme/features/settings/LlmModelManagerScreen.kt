@@ -117,6 +117,7 @@ internal fun getCategoryIcon(tag: String): ImageVector {
 @Composable
 fun ModelCenterScreen(
     viewModel: SettingsViewModel,
+    initialCategoryTag: String = "",
     onNavigateBack: () -> Unit
 ) {
     val groupedModels by viewModel.groupedModels.collectAsState()
@@ -128,6 +129,21 @@ fun ModelCenterScreen(
     var modelToShowProperties by remember { mutableStateOf<ModelConfig?>(null) }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     val coroutineScope = rememberCoroutineScope()
+
+    // 根据传入的初始标签设置当前 Tab（三个入口写死映射）
+    LaunchedEffect(initialCategoryTag, modelTypeLabels) {
+        if (initialCategoryTag.isNotBlank() && modelTypeLabels.isNotEmpty()) {
+            val targetCategory = when (initialCategoryTag) {
+                "Chat" -> modelTypeLabels.keys.find { it.tag.equals("chat", ignoreCase = true) || it.tag.equals("Chat", ignoreCase = true) }
+                "Audio" -> modelTypeLabels.keys.find { it.tag.equals("ASR", ignoreCase = true) || it.tag.equals("Audio", ignoreCase = true) }
+                "Vision" -> modelTypeLabels.keys.find { it.tag.equals("face", ignoreCase = true) || it.tag.equals("Vision", ignoreCase = true) }
+                else -> modelTypeLabels.keys.find { it.tag.equals(initialCategoryTag, ignoreCase = true) }
+            }
+            if (targetCategory != null) {
+                viewModel.switchTab(targetCategory)
+            }
+        }
+    }
 
     // 同步 Tab 索引
     LaunchedEffect(currentTab, modelTypeLabels) {

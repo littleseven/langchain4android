@@ -99,7 +99,7 @@ private const val TAG = "Settings"
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
-    onNavigateToModelCenter: () -> Unit = {},
+    onNavigateToModelCenter: (String) -> Unit = {},
 ) {
     // 沉浸式模式
     val view = LocalView.current
@@ -175,10 +175,10 @@ fun SettingsScreen(
                 "gallery" -> onNavigateBack()
                 "settings" -> { /* 已在设置页，无需导航 */ }
                 "debug" -> onNavigateBack()
-                "model_center" -> onNavigateToModelCenter()
-                "llm_model_manager" -> onNavigateToModelCenter()
-                "asr_model_manager" -> onNavigateToModelCenter()
-                "face_detection_model_manager" -> onNavigateToModelCenter()
+                "model_center" -> onNavigateToModelCenter("")
+                "llm_model_manager" -> onNavigateToModelCenter("Chat")
+                "asr_model_manager" -> onNavigateToModelCenter("Audio")
+                "face_detection_model_manager" -> onNavigateToModelCenter("Vision")
 
                 else -> Logger.w(TAG, "Unknown navigation destination: $destination")
             }
@@ -199,7 +199,7 @@ fun SettingsScreen(
                 viewModel.setAppLanguage(language)
             }
             override fun onDownloadModel(modelId: String) {
-                onNavigateToModelCenter()
+                onNavigateToModelCenter("")
             }
             override fun onSwitchFaceEngine(engine: FaceDetectionEngineMode) {
                 viewModel.setFaceDetectionEngineMode(engine)
@@ -340,7 +340,7 @@ private fun settingsContent(
     onRoiDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
     onLandmarkModelTypeSelected: (DetectionModelType) -> Unit,
     onLandmarkDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
-    onNavigateToModelCenter: () -> Unit,
+    onNavigateToModelCenter: (String) -> Unit,
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
@@ -670,7 +670,7 @@ private fun VoiceCommandModeSelection(
 private fun LocalAsrModelSelection(
     currentModel: String,
     onModelSelected: (String) -> Unit,
-    onNavigateToModelCenter: () -> Unit
+    onNavigateToModelCenter: (String) -> Unit
 ) {
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
@@ -699,10 +699,10 @@ private fun LocalAsrModelSelection(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            // ASR 模型管理入口（紧凑图标按钮）
+            // ASR 模型管理入口（紧凑图标按钮）→ Audio 标签
             Row(
                 modifier = Modifier
-                    .clickable(onClick = onNavigateToModelCenter)
+                    .clickable(onClick = { onNavigateToModelCenter("Audio") })
                     .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -812,7 +812,7 @@ private fun ModelConfig.isAiAgentLlmCandidate(): Boolean {
 private fun AiAgentLocalModelSection(
     currentLocalModel: String,
     onLocalModelSelected: (String) -> Unit,
-    onNavigateToModelManager: () -> Unit
+    onNavigateToModelManager: (String) -> Unit
 ) {
     val context = LocalContext.current
     val downloadManager = remember { LlmModelDownloadManager(context) }
@@ -869,11 +869,11 @@ private fun AiAgentLocalModelSection(
             )
         }
 
-        // 跳转到模型管理器
+        // 跳转到模型管理器（LLM 模型 → Chat 标签）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onNavigateToModelManager)
+                .clickable(onClick = { onNavigateToModelManager("Chat") })
                 .padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -1524,7 +1524,7 @@ private fun StageConfigSection(
     config: StageConfig,
     onModelTypeSelected: (DetectionModelType) -> Unit,
     onDevicePreferenceSelected: (InferenceDevicePreference) -> Unit,
-    onNavigateToModelManager: () -> Unit,
+    onNavigateToModelManager: (String) -> Unit,
     isModelDownloaded: (DetectionModelType) -> Boolean,
     getModelId: (DetectionModelType, DetectionStage) -> String?,
     downloadModel: (String, ModelConfig) -> Unit,
@@ -1579,11 +1579,11 @@ private fun StageConfigSection(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 模型管理入口
+        // 模型管理入口（人脸检测模型 → Vision 标签）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onNavigateToModelManager)
+                .clickable(onClick = { onNavigateToModelManager("Vision") })
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
