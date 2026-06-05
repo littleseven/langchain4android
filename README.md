@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License">
 </p>
 
-<h1 align="center">PicMe</h1>
+<h1 align="center">觅影相机-PicMe</h1>
 
 <p align="center">
   <b>下一代端侧 AI 智能相机</b><br>
