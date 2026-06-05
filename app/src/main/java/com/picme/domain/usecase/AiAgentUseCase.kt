@@ -399,7 +399,7 @@ class AiAgentUseCase(
     private fun buildSystemPrompt(state: CameraStateSnapshot): String {
         return buildString {
             append("你是PicMe助手小觅。只输出一行JSON。")
-            append("规则:1.控制{\"action\":\"命令\",参数...} 2.聊天{\"action\":\"text_reply\",\"message\":\"回复\"} 3.禁止think和markdown 4.导航用navigate_to/go_back。")
+            append("规则:1.控制{\"method\":\"命令\",\"params\":{参数...}} 2.聊天{\"method\":\"text_reply\",\"params\":{\"message\":\"回复\"}} 3.禁止think和markdown 4.导航用navigate_to/go_back。")
             append("状态:美颜${if (state.beautySettings.enabled) "开" else "关"}磨${state.beautySettings.smoothing.toInt()}白${state.beautySettings.whitening.toInt()}瘦${state.beautySettings.slimFace.toInt()}眼${state.beautySettings.bigEyes.toInt()}唇${state.beautySettings.lipColor.toInt()}腮${state.beautySettings.blush.toInt()}眉${state.beautySettings.eyebrow.toInt()}滤${state.filterType.name}风${state.styleFilter.name}焦${state.zoomRatio}x曝${state.exposureCompensation}模${state.captureMode.name}。")
             append("命令:adjust_beauty(smoothing/whitening/slim_face/big_eyes/lip_color/blush/eyebrow) ")
             append("switch_filter(NONE/CLASSIC/VIBRANT/BW/GOLD/FUJI/VINTAGE/COOL/WARM) ")
@@ -407,7 +407,7 @@ class AiAgentUseCase(
             append("switch_scene(night/moon/none) switch_ratio(4:3/16:9/full) adjust_exposure(-2~2) adjust_zoom(0.5~10) ")
             append("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PRO/DOCUMENT) ")
             append("navigate_to(camera/gallery/settings/debug/model_center) go_back text_reply。")
-            append("例:拍照片→{\"action\":\"capture\"} 磨皮80→{\"action\":\"adjust_beauty\",\"smoothing\":80} 徕卡黑白→{\"action\":\"switch_filter\",\"filter\":\"BW\"} 去相册→{\"action\":\"navigate_to\",\"destination\":\"gallery\"} 返回→{\"action\":\"go_back\"} 你好→{\"action\":\"text_reply\",\"message\":\"你好\"}。")
+            append("例:拍照片→{\"method\":\"capture\",\"params\":{}} 磨皮80→{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":80}} 徕卡黑白→{\"method\":\"switch_filter\",\"params\":{\"filter\":\"BW\"}} 去相册→{\"method\":\"navigate_to\",\"params\":{\"destination\":\"gallery\"}} 返回→{\"method\":\"go_back\",\"params\":{}} 你好→{\"method\":\"text_reply\",\"params\":{\"message\":\"你好\"}}。")
             append("规则:相对调整±15 未提及参数不变 message用中文 导航必须用navigate_to/go_back")
         }
     }
@@ -434,9 +434,9 @@ class AiAgentUseCase(
 
         Logger.d(tag, "Cleaned response: '$cleaned'")
 
-        val hasJsonAction = cleaned.contains("\"action\"")
-        if (!hasJsonAction) {
-            Logger.d(tag, "No JSON action found, treating as free chat")
+        val hasJsonMethod = cleaned.contains("\"method\"")
+        if (!hasJsonMethod) {
+            Logger.d(tag, "No JSON method found, treating as free chat")
             return AiAgentCommand.TextReply(cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
         }
 
@@ -449,8 +449,8 @@ class AiAgentUseCase(
         }
 
         return try {
-            val action = extractJsonField(json, "action") ?: "text_reply"
-            when (action) {
+            val method = extractJsonField(json, "method") ?: "text_reply"
+            when (method) {
                 "adjust_beauty" -> {
                     val smoothing = extractJsonFloat(json, "smoothing") ?: state.beautySettings.smoothing
                     val whitening = extractJsonFloat(json, "whitening") ?: state.beautySettings.whitening

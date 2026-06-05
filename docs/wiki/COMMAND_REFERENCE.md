@@ -364,8 +364,8 @@ Agent: 你想调高哪个参数？磨皮、美白还是其他？
 用户输入："磨皮 50，换个冷调"
 
 LLM 输出：[
-  {"action": "adjust_beauty", "param": {"type": "smooth", "value": 50}},
-  {"action": "switch_filter", "param": {"type": "cold_tone"}}
+  {"method": "adjust_beauty", "params": {"smoothing": 50}},
+  {"method": "switch_filter", "params": {"filter": "COOL"}}
 ]
 ```
 

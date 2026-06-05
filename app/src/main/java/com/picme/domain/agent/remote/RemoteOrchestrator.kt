@@ -256,11 +256,24 @@ class RemoteOrchestrator(
                     // 解析等待条件
                     val waitCondition = parseWaitCondition(stepObject.optJSONObject("wait_condition"))
 
-                    val actionObject = stepObject.optJSONObject("action")
-                    val action = if (actionObject != null) {
-                        parseAgentCommand(actionObject, context)
+                    // 解析命令：method 字符串 + params 对象合并为统一格式
+                    val methodName = stepObject.optString("method", "")
+                    val paramsObject = stepObject.optJSONObject("params")
+                    val commandJson = if (paramsObject != null) {
+                        // 将 params 合并到以 method 为顶层的对象中
+                        val merged = JSONObject()
+                        merged.put("method", methodName)
+                        paramsObject.keys().forEach { key ->
+                            merged.put(key, paramsObject.get(key))
+                        }
+                        merged
                     } else {
-                        AgentCommand.TextReply(message = "步骤解析失败：缺少 action 字段")
+                        JSONObject().apply { put("method", methodName) }
+                    }
+                    val action = if (methodName.isNotBlank()) {
+                        parseAgentCommand(commandJson, context)
+                    } else {
+                        AgentCommand.TextReply(message = "步骤解析失败：缺少 method 字段")
                     }
 
                     steps.add(
@@ -327,9 +340,9 @@ class RemoteOrchestrator(
         jsonObject: JSONObject,
         context: AgentContext
     ): AgentCommand {
-        val action = jsonObject.optString("action", "")
+        val method = jsonObject.optString("method", "")
 
-        return when (action) {
+        return when (method) {
             "adjust_beauty" -> {
                 val smoothing = jsonObject.optDouble("smoothing", context.beautySettings.smoothing.toDouble()).toFloat()
                 val whitening = jsonObject.optDouble("whitening", context.beautySettings.whitening.toDouble()).toFloat()

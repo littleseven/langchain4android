@@ -91,7 +91,7 @@ object AgentCommandParser {
                     Logger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
                     return keywordCommand
                 }
-                Logger.d(TAG, "No JSON method/action found, treating as free chat")
+                Logger.d(TAG, "No JSON method found, treating as free chat")
                 return AgentCommand.TextReply(message = cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
             }
         }
@@ -121,7 +121,7 @@ object AgentCommandParser {
                 json
             }
 
-            parseCommandByAction(effectiveAction, mergedJson, context, cleaned, commandId)
+            parseCommandByMethod(effectiveAction, mergedJson, context, cleaned, commandId)
         } catch (exception: Exception) {
             Logger.w(TAG, "Failed to parse LLM response, fallback to text: $json", exception)
             AgentCommand.TextReply(message = cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
@@ -129,23 +129,23 @@ object AgentCommandParser {
     }
 
     /**
-     * 根据 action/method 字段解析为具体命令
+     * 根据 method 字段解析为具体命令
      *
-     * @param action action/method 字段值
+     * @param method method 字段值
      * @param json 原始 JSON 字符串（已合并 params）
      * @param context 当前 Agent 上下文
      * @param fallbackText 解析失败时的回退文本
      * @param commandId 命令唯一标识（32位自增整型）
      * @return 解析后的命令
      */
-    fun parseCommandByAction(
-        action: String,
+    fun parseCommandByMethod(
+        method: String,
         json: String,
         context: AgentContext,
         fallbackText: String,
         commandId: Int = AgentIdGenerator.nextId()
     ): AgentCommand {
-        return when (action) {
+        return when (method) {
             "adjust_beauty" -> {
                 val smoothing = extractJsonFloat(json, "smoothing") ?: context.beautySettings.smoothing
                 val whitening = extractJsonFloat(json, "whitening") ?: context.beautySettings.whitening

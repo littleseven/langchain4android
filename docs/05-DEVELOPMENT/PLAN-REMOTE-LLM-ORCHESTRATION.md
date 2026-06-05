@@ -544,7 +544,8 @@ class PromptBuilder {
             appendLine("- interactionMode: AUTO(自动执行) / PREVIEW(先预览) / STEP_BY_STEP(逐步确认)")
             appendLine("- steps: 步骤数组")
             appendLine("  - step: 步骤序号")
-            appendLine("  - action: 命令对象 {type, parameters}")
+            appendLine("  - method: 命令名（如 capture, adjust_beauty）
+  - params: 命令参数对象")
             appendLine("  - condition: 执行条件（可选），支持变量: currentCamera, currentFilter")
             appendLine("  - description: 步骤描述（给用户看）")
             appendLine("  - delayMs: 执行后延迟（毫秒）")

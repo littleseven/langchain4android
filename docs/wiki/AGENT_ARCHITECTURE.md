@@ -187,7 +187,7 @@ class PromptBuilder(private val sceneManager: SceneManager) {
         
         输出规则：
         1. 控制设备时只输出 JSON，不要任何解释
-        2. 格式：{"action": "action_name", "param": "value"}
+        2. 格式：{"method": "<命令名>", "params": {...}}
         3. 闲聊时用 text_reply action
         4. 不要输出 <think> 标签
     """.trimIndent()

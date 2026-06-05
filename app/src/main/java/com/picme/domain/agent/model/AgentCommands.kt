@@ -288,9 +288,9 @@ sealed class AgentCommand {
 
     companion object {
         /**
-         * 获取命令的 action 名称（用于 JSON 序列化）
+         * 获取命令的 method 名称（用于 JSON 序列化）
          */
-        fun getActionName(command: AgentCommand): String = when (command) {
+        fun getMethodName(command: AgentCommand): String = when (command) {
             is AdjustBeauty -> "adjust_beauty"
             is SwitchFilter -> "switch_filter"
             is SwitchStyle -> "switch_style"

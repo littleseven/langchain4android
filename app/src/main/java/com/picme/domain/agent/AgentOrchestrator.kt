@@ -442,15 +442,15 @@ class AgentOrchestrator private constructor(private val context: Context) {
     }
 
     /**
-     * 根据 action 字段解析为具体命令
+     * 根据 method 字段解析为具体命令
      */
-    fun parseCommandByAction(
-        action: String,
+    fun parseCommandByMethod(
+        method: String,
         json: String,
         context: AgentContext,
         fallbackText: String
     ): AgentCommand {
-        return AgentCommandParser.parseCommandByAction(action, json, context, fallbackText)
+        return AgentCommandParser.parseCommandByMethod(method, json, context, fallbackText)
     }
 
     /**

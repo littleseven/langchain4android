@@ -178,9 +178,9 @@ class RemoteInferenceEngine(
             appendLine()
             appendLine("【绝对规则 - 必须遵守】")
             appendLine("1. 无论用户要求什么，你的回复永远只输出一个JSON数组，不要任何其他文字、解释、标点或换行")
-            appendLine("2. 数组中每个元素是一个命令对象: {\"action\":\"命令名\", 参数...}")
+            appendLine("2. 数组中每个元素是一个命令对象: {\"method\":\"命令名\", \"params\":{参数...}}")
             appendLine("3. 命令按数组顺序依次执行")
-            appendLine("4. 如果用户只是聊天，输出: [{\"action\":\"text_reply\",\"message\":\"用中文友好回复\"}]")
+            appendLine("4. 如果用户只是聊天，输出: [{\"method\":\"text_reply\",\"params\":{\"message\":\"用中文友好回复\"}}]")
             appendLine("5. 绝对不要输出<think>标签或思考过程")
             appendLine("6. 绝对不要输出markdown代码块```")
             appendLine()
@@ -190,11 +190,11 @@ class RemoteInferenceEngine(
             appendLine()
             appendLine("【示例 - 严格模仿】")
             appendLine("用户: 磨皮开到60，美白30，然后拍一张")
-            appendLine("→ [{\"action\":\"adjust_beauty\",\"smoothing\":60},{\"action\":\"adjust_beauty\",\"whitening\":30},{\"action\":\"capture\"}]")
+            appendLine("→ [{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60}},{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":30}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("用户: 你好")
-            appendLine("→ [{\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅！\"}]")
+            appendLine("→ [{\"method\":\"text_reply\",\"params\":{\"message\":\"你好呀，我是小觅！\"}}]")
             appendLine("用户: 切徕卡黑白再拍照")
-            appendLine("→ [{\"action\":\"switch_filter\",\"filter\":\"LEICA_BW\"},{\"action\":\"capture\"}]")
+            appendLine("→ [{\"method\":\"switch_filter\",\"params\":{\"filter\":\"LEICA_BW\"}},{\"method\":\"capture\",\"params\":{}}]")
         }
     }
 
@@ -207,8 +207,8 @@ class RemoteInferenceEngine(
             appendLine("  \"plan_id\": \"plan_1\",")
             appendLine("  \"description\": \"计划描述\",")
             appendLine("  \"steps\": [")
-            appendLine("    {\"step\":1, \"condition\":\"条件表达式或null\", \"action\":{\"action\":\"命令名\",...}, \"description\":\"步骤描述\", \"delayMs\":500},")
-            appendLine("    {\"step\":2, \"condition\":null, \"action\":{\"action\":\"命令名\",...}, \"description\":\"步骤描述\", \"delayMs\":0}")
+            appendLine("    {\"step\":1, \"condition\":\"条件表达式或null\", \"method\":\"命令名\", \"params\":{...}, \"description\":\"步骤描述\", \"delayMs\":500},")
+            appendLine("    {\"step\":2, \"condition\":null, \"method\":\"命令名\", \"params\":{...}, \"description\":\"步骤描述\", \"delayMs\":0}")
             appendLine("  ]")
             appendLine("}")
             appendLine()
@@ -223,7 +223,7 @@ class RemoteInferenceEngine(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 如果是后置摄像头就切前置，然后设置磨皮80美白60，最后拍一张")
-            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切换前置并拍摄人像\",\"steps\":[{\"step\":1,\"condition\":\"当前是后置摄像头\",\"action\":{\"action\":\"flip_camera\"},\"description\":\"切换到前置摄像头\",\"delayMs\":300},{\"step\":2,\"condition\":null,\"action\":{\"action\":\"adjust_beauty\",\"smoothing\":80,\"whitening\":60},\"description\":\"设置人像美颜参数\",\"delayMs\":0},{\"step\":3,\"condition\":null,\"action\":{\"action\":\"capture\"},\"description\":\"拍照\",\"delayMs\":500}]}")
+            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切换前置并拍摄人像\",\"steps\":[{\"step\":1,\"condition\":\"当前是后置摄像头\",\"method\":\"flip_camera\",\"params\":{},\"description\":\"切换到前置摄像头\",\"delayMs\":300},{\"step\":2,\"condition\":null,\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":80,\"whitening\":60},\"description\":\"设置人像美颜参数\",\"delayMs\":0},{\"step\":3,\"condition\":null,\"method\":\"capture\",\"params\":{},\"description\":\"拍照\",\"delayMs\":500}]}")
         }
     }
 
@@ -327,12 +327,17 @@ class RemoteInferenceEngine(
                 val desc = extractJsonField(stepObj, "description") ?: ""
                 val delayMs = extractJsonLong(stepObj, "delayMs") ?: 0L
 
-                // 提取 action 对象
-                val actionMatch = Regex("\"action\"\\s*:\\s*\\{([^}]*)\\}", RegexOption.DOT_MATCHES_ALL)
-                    .find(stepObj)
-                val actionStr = actionMatch?.groupValues?.get(1)?.let { "{$it}" } ?: "{\"action\":\"text_reply\",\"message\":\"步骤解析失败\"}"
-
-                val action = parseSingleJsonCommand(actionStr, AiAgentUseCase.CameraStateSnapshot())
+                // 提取 method 和 params
+                val methodMatch = Regex(""""method"\s*:\"([^\"]+)\"""").find(stepObj)
+                val methodName = methodMatch?.groupValues?.get(1) ?: "text_reply"
+                
+                // 提取 params 对象内容
+                val paramsMatch = Regex("\"params\"\\s*:\\s*\\{([^}]*)\\}", RegexOption.DOT_MATCHES_ALL).find(stepObj)
+                val paramsStr = paramsMatch?.groupValues?.get(1)?.let { "{$it}" } ?: "{}"
+                
+                // 合并为统一格式解析
+                val mergedJson = "{\"method\":\"$methodName\",$paramsStr}"
+                val action = parseSingleJsonCommand(mergedJson, AiAgentUseCase.CameraStateSnapshot())
                     ?: AgentCommand.TextReply(message = "步骤解析失败")
 
                 steps.add(PlanStep(
@@ -359,8 +364,8 @@ class RemoteInferenceEngine(
     }
 
     private fun parseSingleJsonCommand(json: String, state: AiAgentUseCase.CameraStateSnapshot): AgentCommand? {
-        val action = extractJsonField(json, "action") ?: return null
-        return when (action) {
+        val method = extractJsonField(json, "method") ?: return null
+        return when (method) {
             "adjust_beauty" -> {
                 val smoothing = extractJsonFloat(json, "smoothing") ?: state.beautySettings.smoothing
                 val whitening = extractJsonFloat(json, "whitening") ?: state.beautySettings.whitening
@@ -419,7 +424,7 @@ class RemoteInferenceEngine(
                 val message = extractJsonField(json, "message") ?: "收到"
                 AgentCommand.TextReply(message = message)
             }
-            else -> AgentCommand.TextReply(message = "未知命令: $action")
+            else -> AgentCommand.TextReply(message = "未知命令: $method")
         }
     }
 

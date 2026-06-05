@@ -29,6 +29,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -58,6 +62,8 @@ import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.capability.GalleryCapability
 import com.picme.domain.agent.capability.SettingsCapability
+import com.picme.testing.agent.bridge.TestEntryPoint
+import kotlinx.coroutines.delay
 import java.util.Locale
 import androidx.camera.core.ExperimentalGetImage
 import androidx.compose.ui.platform.LocalConfiguration
@@ -69,6 +75,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private var currentLanguage: AppLanguage? = null
+    private var testEntryPoint: TestEntryPoint? = null
 
     override fun attachBaseContext(newBase: Context) {
         val repository = UserPreferencesRepository(newBase)
@@ -86,6 +93,9 @@ class MainActivity : ComponentActivity() {
 
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // 初始化测试入口点（如果通过测试脚本启动）
+        testEntryPoint = TestEntryPoint.fromIntent(this, savedInstanceState)
 
         setContent {
             val app = application as PicMeApplication
@@ -124,6 +134,9 @@ class MainActivity : ComponentActivity() {
                         Logger.i(TAG, "Binding NavController to NavigationCapability")
                         NavigationCapability.getInstance().bindNavController(navController)
                         Logger.i(TAG, "NavController bound successfully")
+
+                        // 通知测试入口点应用已就绪
+                        testEntryPoint?.onAppReady()
                     }
 
                     Scaffold(
@@ -260,6 +273,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        testEntryPoint?.saveState(outState)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        testEntryPoint?.release()
     }
 
     @Composable

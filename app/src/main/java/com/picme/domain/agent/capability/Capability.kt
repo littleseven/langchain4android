@@ -81,7 +81,7 @@ interface Capability {
      * 检查该 Capability 是否支持指定命令
      */
     fun supportsCommand(command: AgentCommand): Boolean {
-        return supportedCommands().contains(AgentCommand.getActionName(command))
+        return supportedCommands().contains(AgentCommand.getMethodName(command))
     }
 
     /**

@@ -451,7 +451,7 @@ class CapabilityRegistry private constructor(
                             continue
                         }
 
-                        Logger.d(tag, "Checking queued command: ${AgentCommand.getActionName(queued.command)}, " +
+                        Logger.d(tag, "Checking queued command: ${AgentCommand.getMethodName(queued.command)}, " +
                             "capability=${capability?.name}, sceneMatch=$sceneMatch, available=$available, age=${ageMs}ms")
 
                         if (capability != null && sceneMatch && available) {
@@ -522,7 +522,7 @@ class CapabilityRegistry private constructor(
      * 如果找不到，在所有已注册的 Capability 中查找（用于跨页面指令）
      */
     private fun findCapabilityForCommand(command: AgentCommand): Capability? {
-        val commandName = AgentCommand.getActionName(command)
+        val commandName = AgentCommand.getMethodName(command)
 
         // 首先在当前场景的可用 Capability 中查找
         val currentSceneCapabilities = getCapabilitiesForCurrentScene()

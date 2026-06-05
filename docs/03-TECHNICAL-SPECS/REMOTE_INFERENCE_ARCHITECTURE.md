@@ -148,15 +148,15 @@ class IntentCache {
 
 【输出格式 - 严格 JSON 数组】
 [
-  {"action":"adjust_beauty","smoothing":60},
-  {"action":"adjust_beauty","whitening":30},
-  {"action":"capture"}
+  {"method":"adjust_beauty","params":{"smoothing":60}},
+  {"method":"adjust_beauty","params":{"whitening":30}},
+  {"method":"capture","params":{}}
 ]
 
 【规则】
 1. 每个数组元素是一个独立命令
 2. 命令按数组顺序依次执行
-3. 如果用户输入包含聊天内容，最后一个元素可以是 {"action":"text_reply","message":"..."}
+3. 如果用户输入包含聊天内容，最后一个元素可以是 {"method":"text_reply","params":{"message":"..."}}
 4. 绝对不要输出任何其他文字
 
 【当前相机状态】
@@ -214,9 +214,9 @@ L2 Batch FC
     ▼
 LLM 输出:
 [
-  {"action":"adjust_beauty","smoothing":60},
-  {"action":"adjust_beauty","whitening":30},
-  {"action":"capture"}
+  {"method":"adjust_beauty","params":{"smoothing":60}},
+  {"method":"adjust_beauty","params":{"whitening":30}},
+  {"method":"capture","params":{}}
 ]
     │
     ▼
@@ -258,17 +258,17 @@ UI 反馈: "已调整磨皮 60、美白 30，拍照完成"
     {
       "step": 1,
       "condition": "currentCamera == BACK",
-      "action": {"action":"flip_camera"},
+      "action": {"method":"flip_camera","params":{}},
       "description": "切换到前置摄像头"
     },
     {
       "step": 2,
-      "action": {"action":"adjust_beauty","smoothing":80,"whitening":60},
+      "action": {"method":"adjust_beauty","params":{"smoothing":80,"whitening":60}},
       "description": "设置人像美颜参数"
     },
     {
       "step": 3,
-      "action": {"action":"capture"},
+      "action": {"method":"capture","params":{}},
       "description": "拍照"
     }
   ]
