@@ -377,6 +377,9 @@ class AiAgentUseCase(
             }
             is AgentAction.TextReply -> AiAgentCommand.TextReply(action.message)
             is AgentAction.Error -> AiAgentCommand.TextReply("处理出错了：${action.message}")
+            is AgentAction.BatchResult -> {
+                AiAgentCommand.BatchExecute(action.results.map { mapAgentActionToLegacyCommand(it) })
+            }
         }
     }
 

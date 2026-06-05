@@ -28,6 +28,7 @@ class PromptBuilder(
      * - 输出约束显式化（只允许一行 JSON）
      * - 导航语义强约束（避免 camera/gallery 混淆）
      * - 字段名白名单（降低模型发明字段概率）
+     * - 精简 JSON 风格：method + params 结构
      */
     private val basePrompt = """
 你是 PicMe 的本地 AI 助手小觅（端侧小模型）。
@@ -35,22 +36,22 @@ class PromptBuilder(
 
 硬性规则：
 1) 只能输出 JSON 对象，不要解释、不要 markdown、不要 <think>、不要前后缀文本。
-2) 控制命令格式：{"action":"命令名", 参数...}
-3) 聊天或不确定：{"action":"text_reply","message":"中文简短回复"}
+2) 控制命令格式：{"method":"<命令名>","params":{...}}
+3) 聊天或不确定：{"method":"text_reply","params":{"message":"中文简短回复"}}
 4) 导航只能使用 navigate_to / go_back。
 5) destination 只能是：camera / gallery / settings / debug。
-6) 只允许这些参数键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message。
+6) params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message。
 7) 不要输出未定义字段；不需要的参数不要输出。
-8) 用户说"去相机/回相机/打开相机/去拍照"时，必须输出 destination="camera"。
+8) 用户说"去相机/回相机/打开相机/去拍照"时，必须输出 params.destination="camera"。
 9) 用户说"调高美颜/增强美颜/美颜"时，磨皮(smoothing)和美白(whitening)都提升到 60-70。
-10) 用户说"打开前置/切前置/前置"时，必须输出 flip_camera。
-11) 用户说"冷调/冷色/冷滤镜"时，必须输出 filter="COOL"。
+10) 用户说"打开前置/切前置/前置"时，必须输出 method="flip_camera"。
+11) 用户说"冷调/冷色/冷滤镜"时，必须输出 params.filter="COOL"。
 
 场景映射示例（严格遵循）：
-「拍张照」→ {"action":"capture"}
-「调高美颜」→ {"action":"adjust_beauty","smoothing":65,"whitening":65}
-「换个冷调滤镜」→ {"action":"switch_filter","filter":"COOL"}
-「打开前置」→ {"action":"flip_camera"}
+「拍张照」→ {"method":"capture","params":{}}
+「调高美颜」→ {"method":"adjust_beauty","params":{"smoothing":65,"whitening":65}}
+「换个冷调滤镜」→ {"method":"switch_filter","params":{"filter":"COOL"}}
+「打开前置」→ {"method":"flip_camera","params":{}}
 """.trimIndent()
 
     /**
@@ -132,18 +133,18 @@ class PromptBuilder(
     /**
      * 构建 L2 Batch 模式 Prompt
      *
-     * 输出格式为 JSON 数组，每个元素是一个命令对象。
+     * 输出格式为 JSON 数组，每个元素是精简命令对象（method + params）。
      */
     fun buildBatchPrompt(userInput: String, context: AgentContext): String {
         return buildString {
-            appendLine("你是 PicMe 的指令解析器。把用户输入解析为 JSON 数组。")
+            appendLine("你是 PicMe 的指令解析器。把用户输入解析为精简 JSON 命令数组。")
             appendLine()
             appendLine("输出硬规则：")
             appendLine("1. 仅输出一个 JSON 数组，禁止任何解释、禁止 markdown、禁止 <think>。")
-            appendLine("2. 数组元素格式：{\"action\":\"命令\", 参数...}。")
-            appendLine("3. 用户是闲聊时，输出 [{\"action\":\"text_reply\",\"message\":\"...\"}]。")
-            appendLine("4. 导航只能是 navigate_to / go_back，destination 只能是 camera|gallery|settings|debug。")
-            appendLine("5. 字段名必须使用既定键，不要创造新字段。")
+            appendLine("2. 数组元素格式：{\"method\":\"<命令>\",\"params\":{...}}。")
+            appendLine("3. 用户是闲聊时，输出 [{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]。")
+            appendLine("4. 导航只能是 navigate_to / go_back，params.destination 只能是 camera|gallery|settings|debug。")
+            appendLine("5. params 中字段名必须使用既定键，不要创造新字段。")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, sceneManager.currentScene.value))
@@ -153,18 +154,18 @@ class PromptBuilder(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 去相机")
-            appendLine("→ [{\"action\":\"navigate_to\",\"destination\":\"camera\"}]")
+            appendLine("→ [{\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}]")
             appendLine("用户: 磨皮60并拍一张")
-            appendLine("→ [{\"action\":\"adjust_beauty\",\"smoothing\":60},{\"action\":\"capture\"}]")
+            appendLine("→ [{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("用户: 你好")
-            appendLine("→ [{\"action\":\"text_reply\",\"message\":\"你好呀，我是小觅\"}]")
+            appendLine("→ [{\"method\":\"text_reply\",\"params\":{\"message\":\"你好呀，我是小觅\"}}]")
         }
     }
 
     /**
      * 构建 L3 Plan 模式 Prompt
      *
-     * 输出格式为 ExecutionPlan JSON。
+     * 输出格式为 ExecutionPlan JSON，steps 中的命令使用精简 JSON 风格（method + params）。
      */
     fun buildPlanPrompt(userInput: String, context: AgentContext): String {
         return buildString {
@@ -173,8 +174,8 @@ class PromptBuilder(
             appendLine("输出硬规则：")
             appendLine("1. 只能输出一个 JSON 对象，禁止解释、禁止 markdown、禁止 <think>。")
             appendLine("2. 顶层字段固定：plan_id, description, steps。")
-            appendLine("3. steps 每项字段固定：step, action, condition, wait_condition, repeat_count, description, delayMs。")
-            appendLine("4. action 字段必须是命令对象：{\"action\":\"...\", ...}。")
+            appendLine("3. steps 每项字段固定：step, method, params, condition, wait_condition, repeat_count, description, delayMs。")
+            appendLine("4. method 字段是命令名，params 是命令参数对象。")
             appendLine("5. wait_condition 仅支持：duration(delay_ms), face_detected(timeout_ms), smile_detected(timeout_ms), user_confirm(prompt)。")
             appendLine("6. repeat_count >= 1，delayMs >= 0。")
             appendLine("7. 导航动作严格使用 navigate_to/go_back。")
@@ -187,7 +188,7 @@ class PromptBuilder(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 去相机后等1秒连拍3张")
-            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切到相机后连拍\",\"steps\":[{\"step\":1,\"action\":{\"action\":\"navigate_to\",\"destination\":\"camera\"},\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"description\":\"切换到相机\",\"delayMs\":0},{\"step\":2,\"action\":{\"action\":\"text_reply\",\"message\":\"准备连拍\"},\"condition\":null,\"wait_condition\":{\"type\":\"duration\",\"delay_ms\":1000},\"repeat_count\":1,\"description\":\"等待1秒\",\"delayMs\":0},{\"step\":3,\"action\":{\"action\":\"capture\"},\"condition\":null,\"wait_condition\":null,\"repeat_count\":3,\"description\":\"连拍3张\",\"delayMs\":500}]}")
+            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切到相机后连拍\",\"steps\":[{\"step\":1,\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"},\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"description\":\"切换到相机\",\"delayMs\":0},{\"step\":2,\"method\":\"text_reply\",\"params\":{\"message\":\"准备连拍\"},\"condition\":null,\"wait_condition\":{\"type\":\"duration\",\"delay_ms\":1000},\"repeat_count\":1,\"description\":\"等待1秒\",\"delayMs\":0},{\"step\":3,\"method\":\"capture\",\"params\":{},\"condition\":null,\"wait_condition\":null,\"repeat_count\":3,\"description\":\"连拍3张\",\"delayMs\":500}]}")
         }
     }
 
@@ -273,7 +274,7 @@ class PromptBuilder(
         val includeSettings = scene == null || scene == SceneManager.Scene.SETTINGS
 
         return buildString {
-            appendLine("action 白名单（只能从下列 action 选择）：")
+            appendLine("method 白名单（只能从下列 method 选择，参数放在 params 对象中）：")
 
             if (includeCamera) {
                 appendLine("- camera: capture, toggle_recording, flip_camera, switch_mode")
@@ -289,16 +290,16 @@ class PromptBuilder(
                 appendLine("- settings: change_theme, change_language, download_model, switch_face_engine, toggle_setting")
             }
 
-            appendLine("- navigation: navigate_to(destination=camera|gallery|settings|debug), go_back")
-            appendLine("- fallback: text_reply(message)")
-            appendLine("参数约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
+            appendLine("- navigation: navigate_to(params.destination=camera|gallery|settings|debug), go_back")
+            appendLine("- fallback: text_reply(params.message)")
+            appendLine("params 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
             appendLine("滤镜: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
             appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
-            appendLine("导航映射: 去相机/回相机/打开相机/去拍照->camera; 去相册/打开相册->gallery; 去设置/打开设置->settings; 返回/上一页/后退->go_back")
-            appendLine("导航示例: {\"action\":\"navigate_to\",\"destination\":\"camera\"}")
+            appendLine("导航映射: 去相机/回相机/打开相机/去拍照->params.destination=camera; 去相册/打开相册->params.destination=gallery; 去设置/打开设置->params.destination=settings; 返回/上一页/后退->go_back")
+            appendLine("导航示例: {\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}")
 
             if (forPlan) {
-                appendLine("Plan 字段约束: step(Int), action(Object), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")
+                appendLine("Plan 字段约束: step(Int), method(String), params(Object), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")
                 appendLine("wait_condition 示例: {\"type\":\"duration\",\"delay_ms\":1000}")
             }
         }

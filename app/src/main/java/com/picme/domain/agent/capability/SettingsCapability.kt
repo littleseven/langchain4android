@@ -4,6 +4,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.AppLanguage
@@ -101,7 +102,11 @@ class SettingsCapability : BaseCapability() {
 
         val d = delegate
             ?: return Result.success(
-                AgentAction.Error("设置页面未激活，请先切换到设置页面")
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.CAPABILITY_UNAVAILABLE,
+                    message = "设置页面未激活，请先切换到设置页面"
+                )
             )
 
         return when (command) {
@@ -120,7 +125,13 @@ class SettingsCapability : BaseCapability() {
             is AgentCommand.ToggleSetting -> {
                 handleToggleSetting(command, d)
             }
-            else -> Result.success(AgentAction.Error("不支持的设置命令: $command"))
+            else -> Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.METHOD_NOT_FOUND,
+                    message = "不支持的设置命令: $command"
+                )
+            )
         }
     }
 
@@ -134,13 +145,17 @@ class SettingsCapability : BaseCapability() {
             "system", "系统", "跟随系统" -> ThemeMode.SYSTEM
             else -> {
                 return Result.success(
-                    AgentAction.Error("未知的主题模式: ${command.theme}，支持 light/dark/system")
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.INVALID_PARAMS,
+                        message = "未知的主题模式: ${command.theme}，支持 light/dark/system"
+                    )
                 )
             }
         }
 
         d.onChangeTheme(themeMode)
-        return Result.success(AgentAction.Success(command = command))
+        return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
     }
 
     private fun handleChangeLanguage(
@@ -153,13 +168,17 @@ class SettingsCapability : BaseCapability() {
             "system", "系统默认" -> AppLanguage.SYSTEM
             else -> {
                 return Result.success(
-                    AgentAction.Error("不支持的语言: ${command.language}，支持 zh/en/system")
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.INVALID_PARAMS,
+                        message = "不支持的语言: ${command.language}，支持 zh/en/system"
+                    )
                 )
             }
         }
 
         d.onChangeLanguage(language)
-        return Result.success(AgentAction.Success(command = command))
+        return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
     }
 
     private fun handleDownloadModel(
@@ -167,11 +186,17 @@ class SettingsCapability : BaseCapability() {
         d: Delegate
     ): Result<AgentAction> {
         if (command.modelId.isBlank()) {
-            return Result.success(AgentAction.Error("请指定模型 ID"))
+            return Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "请指定模型 ID"
+                )
+            )
         }
 
         d.onDownloadModel(command.modelId)
-        return Result.success(AgentAction.Success(command = command))
+        return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
     }
 
     private fun handleSwitchFaceEngine(
@@ -185,13 +210,17 @@ class SettingsCapability : BaseCapability() {
             "custom" -> FaceDetectionEngineMode.CUSTOM
             else -> {
                 return Result.success(
-                    AgentAction.Error("未知的人脸检测引擎: ${command.engine}，支持 mediapipe/mnn/ncnn/custom")
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.INVALID_PARAMS,
+                        message = "未知的人脸检测引擎: ${command.engine}，支持 mediapipe/mnn/ncnn/custom"
+                    )
                 )
             }
         }
 
         d.onSwitchFaceEngine(engine)
-        return Result.success(AgentAction.Success(command = command))
+        return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
     }
 
     private fun handleToggleSetting(
@@ -199,11 +228,17 @@ class SettingsCapability : BaseCapability() {
         d: Delegate
     ): Result<AgentAction> {
         if (command.settingKey.isBlank()) {
-            return Result.success(AgentAction.Error("请指定设置项 key"))
+            return Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "请指定设置项 key"
+                )
+            )
         }
 
         d.onToggleSetting(command.settingKey, command.enabled)
-        return Result.success(AgentAction.Success(command = command))
+        return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
     }
 
 

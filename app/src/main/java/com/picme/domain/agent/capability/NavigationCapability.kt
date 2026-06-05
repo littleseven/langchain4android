@@ -4,6 +4,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.Dispatchers
@@ -93,7 +94,11 @@ class NavigationCapability : BaseCapability() {
 
         val nav = navController
             ?: return Result.success(
-                AgentAction.Error("导航系统未初始化")
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.CAPABILITY_UNAVAILABLE,
+                    message = "导航系统未初始化"
+                )
             )
 
         return when (command) {
@@ -103,10 +108,14 @@ class NavigationCapability : BaseCapability() {
                     withContext(Dispatchers.Main) {
                         navigateTo(nav, destination)
                     }
-                    Result.success(AgentAction.Success(command))
+                    Result.success(AgentAction.Success(commandId = command.commandId, command = command))
                 } else {
                     Result.success(
-                        AgentAction.Error("未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug, model_center")
+                        AgentAction.Error(
+                            commandId = command.commandId,
+                            errorCode = AgentErrorCode.INVALID_PARAMS,
+                            message = "未知页面: ${command.destination}，可用页面: camera, gallery, settings, debug, model_center"
+                        )
                     )
                 }
             }
@@ -115,12 +124,18 @@ class NavigationCapability : BaseCapability() {
                 withContext(Dispatchers.Main) {
                     nav.popBackStack()
                 }
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             else -> {
                 Logger.w(tag, "Unsupported command: ${command::class.simpleName}")
-                Result.success(AgentAction.Error("导航 Capability 不支持此命令"))
+                Result.success(
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.METHOD_NOT_FOUND,
+                        message = "导航 Capability 不支持此命令"
+                    )
+                )
             }
         }
     }

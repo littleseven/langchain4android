@@ -4,6 +4,7 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.domain.model.MediaType
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Agent 运行上下文
@@ -62,24 +63,114 @@ enum class ChatRole {
 }
 
 /**
+ * 32位自增 ID 生成器
+ *
+ * 线程安全，使用 AtomicInteger 实现，循环使用（到达 Int.MAX_VALUE 后回到 1）。
+ * ID 0 保留给系统/无效状态。
+ */
+object AgentIdGenerator {
+    private val counter = AtomicInteger(1)
+
+    fun nextId(): Int = counter.getAndUpdate { current ->
+        if (current >= Int.MAX_VALUE - 1) 1 else current + 1
+    }
+}
+
+/**
+ * 结构化错误码定义
+ *
+ * 建立结构化的错误分类体系，借鉴标准 JSON-RPC 错误码范围。
+ */
+object AgentErrorCode {
+    const val PARSE_ERROR = -32700
+    const val INVALID_REQUEST = -32600
+    const val METHOD_NOT_FOUND = -32601
+    const val INVALID_PARAMS = -32602
+    const val INTERNAL_ERROR = -32603
+    const val SCENE_MISMATCH = -32000
+    const val CAPABILITY_UNAVAILABLE = -32001
+    const val EXECUTION_TIMEOUT = -32002
+    const val QUEUE_FULL = -32003
+    const val QUEUE_EXPIRED = -32004
+}
+
+/**
  * Agent 执行结果（Sealed Class）
+ *
+ * 每个结果携带 commandId 用于请求-响应关联。
  */
 sealed class AgentAction {
 
     /**
      * 命令执行成功
+     *
+     * @property commandId 关联的请求命令 ID（32位自增整型）
+     * @property command 被执行的命令（用于追踪）
      */
-    data class Success(val command: AgentCommand) : AgentAction()
+    data class Success(
+        val commandId: Int,
+        val command: AgentCommand
+    ) : AgentAction()
 
     /**
      * 文本回复（聊天模式）
+     *
+     * @property commandId 关联的请求命令 ID（32位自增整型）
+     * @property message 回复文本
      */
-    data class TextReply(val message: String) : AgentAction()
+    data class TextReply(
+        val commandId: Int,
+        val message: String
+    ) : AgentAction()
 
     /**
      * 执行失败
+     *
+     * @property commandId 关联的请求命令 ID（32位自增整型）
+     * @property errorCode 结构化错误码
+     * @property message 错误描述
+     * @property detail 错误详情（可选）
      */
-    data class Error(val message: String) : AgentAction()
+    data class Error(
+        val commandId: Int,
+        val errorCode: Int,
+        val message: String,
+        val detail: String? = null
+    ) : AgentAction()
+
+    /**
+     * 批量执行结果
+     *
+     * @property commandId 关联的 BatchExecute 命令 ID（32位自增整型）
+     * @property results 各子命令的执行结果（每个都带独立 commandId）
+     */
+    data class BatchResult(
+        val commandId: Int,
+        val results: List<AgentAction>
+    ) : AgentAction()
+
+    /**
+     * 是否执行成功
+     */
+    val isSuccess: Boolean
+        get() = when (this) {
+            is Success -> true
+            is TextReply -> true
+            is Error -> false
+            is BatchResult -> results.all { it.isSuccess }
+        }
+
+    companion object {
+        /**
+         * 获取 AgentAction 的 commandId
+         */
+        fun getCommandId(action: AgentAction): Int = when (action) {
+            is Success -> action.commandId
+            is TextReply -> action.commandId
+            is Error -> action.commandId
+            is BatchResult -> action.commandId
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

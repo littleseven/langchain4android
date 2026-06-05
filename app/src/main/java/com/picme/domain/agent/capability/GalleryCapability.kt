@@ -4,6 +4,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 
@@ -113,7 +114,11 @@ class GalleryCapability : BaseCapability() {
 
         val d = delegate
             ?: return Result.success(
-                AgentAction.Error("相册页面未激活，请先切换到相册页面")
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.CAPABILITY_UNAVAILABLE,
+                    message = "相册页面未激活，请先切换到相册页面"
+                )
             )
 
         val galleryContext = pageContext as? PageContext.GalleryContext
@@ -133,7 +138,7 @@ class GalleryCapability : BaseCapability() {
 
             is AgentCommand.SelectMedia -> {
                 d.onSelectMedia(command.mediaId, command.selected)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SearchMedia -> {
@@ -146,12 +151,18 @@ class GalleryCapability : BaseCapability() {
 
             is AgentCommand.FavoriteMedia -> {
                 d.onFavoriteMedia(command.mediaId, command.favorite)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             else -> {
                 Logger.w(tag, "Unsupported command: ${command::class.simpleName}")
-                Result.success(AgentAction.Error("Gallery 不支持此命令"))
+                Result.success(
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.METHOD_NOT_FOUND,
+                        message = "Gallery 不支持此命令"
+                    )
+                )
             }
         }
     }
@@ -165,9 +176,15 @@ class GalleryCapability : BaseCapability() {
 
         return if (mediaId != null) {
             d.onViewMedia(mediaId)
-            Result.success(AgentAction.Success(command))
+            Result.success(AgentAction.Success(commandId = command.commandId, command = command))
         } else {
-            Result.success(AgentAction.Error("没有指定要查看的照片"))
+            Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "没有指定要查看的照片"
+                )
+            )
         }
     }
 
@@ -183,9 +200,15 @@ class GalleryCapability : BaseCapability() {
 
         return if (mediaIds.isNotEmpty()) {
             d.onDeleteMedia(mediaIds)
-            Result.success(AgentAction.Success(command))
+            Result.success(AgentAction.Success(commandId = command.commandId, command = command))
         } else {
-            Result.success(AgentAction.Error("没有指定要删除的照片，请先选择"))
+            Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "没有指定要删除的照片，请先选择"
+                )
+            )
         }
     }
 
@@ -200,9 +223,15 @@ class GalleryCapability : BaseCapability() {
 
         return if (mediaIds.isNotEmpty()) {
             d.onShareMedia(mediaIds)
-            Result.success(AgentAction.Success(command))
+            Result.success(AgentAction.Success(commandId = command.commandId, command = command))
         } else {
-            Result.success(AgentAction.Error("没有指定要分享的照片，请先选择"))
+            Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "没有指定要分享的照片，请先选择"
+                )
+            )
         }
     }
 
@@ -212,9 +241,15 @@ class GalleryCapability : BaseCapability() {
     ): Result<AgentAction> {
         return if (command.query.isNotBlank()) {
             d.onSearch(command.query)
-            Result.success(AgentAction.Success(command))
+            Result.success(AgentAction.Success(commandId = command.commandId, command = command))
         } else {
-            Result.success(AgentAction.Error("搜索关键词不能为空"))
+            Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "搜索关键词不能为空"
+                )
+            )
         }
     }
 
@@ -229,7 +264,7 @@ class GalleryCapability : BaseCapability() {
             else -> ViewMode.GRID
         }
         d.onSwitchViewMode(mode)
-        return Result.success(AgentAction.Success(command))
+        return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
     }
 
     /**

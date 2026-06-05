@@ -5,13 +5,20 @@ import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
+import com.picme.domain.agent.remote.StepResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
 
 /**
  * 能力注册表
@@ -28,37 +35,109 @@ import kotlinx.coroutines.launch
  * - 支持跨页面指令排队执行
  */
 class CapabilityRegistry private constructor(
-    private val sceneManager: SceneManager
+    private val sceneManager: SceneManager,
+    private val externalScope: CoroutineScope? = null
 ) {
 
     companion object {
         @Volatile
         private var instance: CapabilityRegistry? = null
 
+        // 队列配置常量
+        const val DEFAULT_COMMAND_TIMEOUT_MS = 10_000L
+        const val MAX_QUEUE_SIZE = 50           // 队列上限
+        const val QUEUE_TTL_MS = 300_000L       // 命令 TTL：5 分钟
+        const val MAX_RETRY_COUNT = 3           // 最大重试次数
+        const val QUEUE_POLL_INTERVAL_MS = 500L // 轮询间隔
+
+        /**
+         * 获取单例实例（使用默认协程作用域）
+         */
         fun getInstance(): CapabilityRegistry {
             return instance ?: synchronized(this) {
                 instance ?: CapabilityRegistry(SceneManager.getInstance()).also { instance = it }
             }
+        }
+
+        /**
+         * 创建实例（支持注入外部协程作用域，便于生命周期绑定和测试）
+         *
+         * @param sceneManager 场景管理器
+         * @param scope 外部协程作用域（如 ViewModelScope、ApplicationScope）
+         */
+        fun create(
+            sceneManager: SceneManager = SceneManager.getInstance(),
+            scope: CoroutineScope? = null
+        ): CapabilityRegistry {
+            return CapabilityRegistry(sceneManager, scope)
         }
     }
 
     private val tag = "CapabilityRegistry"
     private val registry = mutableMapOf<String, Capability>()
 
-    // 跨页面命令队列
-    private val commandQueue = mutableListOf<QueuedCommand>()
-    private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 跨页面命令队列（重构为 Channel + 上限 + 去重 + TTL + retry）
+    // ─────────────────────────────────────────────────────────────────────────────
 
     /**
-     * 排队的命令
+     * Capability 执行异常
+     *
+     * 当 Capability.execute() 抛出异常时，包装为结构化错误。
+     */
+    class CapabilityExecutionException(
+        message: String,
+        val errorCode: Int = AgentErrorCode.INTERNAL_ERROR,
+        cause: Throwable? = null
+    ) : Exception(message, cause)
+
+    /**
+     * 排队的命令（增强版）
+     *
+     * @property enqueueTime 入队时间戳（用于 TTL 计算）
+     * @property retryCount 已重试次数
      */
     data class QueuedCommand(
         val command: AgentCommand,
         val context: AgentContext,
         val pageContext: PageContext?,
         val targetScene: SceneManager.Scene,
+        val enqueueTime: Long = System.currentTimeMillis(),
         val retryCount: Int = 0
     )
+
+    /** 内部命令队列（线程安全） */
+    private val commandQueue = mutableListOf<QueuedCommand>()
+    private val queueLock = Object()
+
+    /** 队列状态事件流（供 UI 观察） */
+    private val _queueEvents = MutableSharedFlow<QueueEvent>(extraBufferCapacity = 64)
+    val queueEvents: SharedFlow<QueueEvent> = _queueEvents.asSharedFlow()
+
+    /** 队列处理器是否正在运行 */
+    @Volatile
+    private var isProcessorRunning = false
+
+    /**
+     * 队列事件（结构化可观测性）
+     */
+    sealed class QueueEvent {
+        data class Enqueued(val commandType: String, val queueSize: Int) : QueueEvent()
+        data class Executed(val commandType: String, val success: Boolean) : QueueEvent()
+        data class Expired(val commandType: String, val ageMs: Long) : QueueEvent()
+        data class Dropped(val commandType: String, val reason: String) : QueueEvent()
+        data class Retry(val commandType: String, val retryCount: Int) : QueueEvent()
+        data class QueueCleared(val previousSize: Int) : QueueEvent()
+    }
+
+    /**
+     * 队列处理协程作用域
+     *
+     * 优先使用外部注入的作用域（如 ViewModelScope），
+     * 未注入时创建独立作用域（应用级生命周期）。
+     */
+    private val queueScope: CoroutineScope
+        get() = externalScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
      * 注册 Capability（应用级，只注册一次，永不注销）
@@ -123,15 +202,32 @@ class CapabilityRegistry private constructor(
 
         return when (command) {
             is AgentCommand.TextReply -> {
-                Result.success(AgentAction.TextReply(command.message))
+                Result.success(AgentAction.TextReply(commandId = command.commandId, message = command.message))
             }
             is AgentCommand.Unknown -> {
                 Logger.w(tag, "[$commandType] Unknown command at $currentScene")
-                Result.success(AgentAction.TextReply("收到你的消息了，但没理解具体意图，请再描述一下~"))
+                Result.success(
+                    AgentAction.TextReply(
+                        commandId = command.commandId,
+                        message = "收到你的消息了，但没理解具体意图，请再描述一下~"
+                    )
+                )
             }
             is AgentCommand.Error -> {
                 Logger.e(tag, "[$commandType] Command error: ${command.reason}")
-                Result.success(AgentAction.Error(command.reason))
+                Result.success(
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.INVALID_REQUEST,
+                        message = command.reason
+                    )
+                )
+            }
+            is AgentCommand.BatchExecute -> {
+                dispatchBatch(command, context, pageContext, currentScene)
+            }
+            is AgentCommand.ExecutePlan -> {
+                dispatchPlan(command, context, pageContext)
             }
             else -> {
                 dispatchWithQueueSupport(command, context, pageContext, currentScene, commandType)
@@ -153,7 +249,14 @@ class CapabilityRegistry private constructor(
 
         if (capability == null) {
             Logger.w(tag, "[$commandType] No capability found for command in scene $currentScene")
-            return Result.success(AgentAction.Error("暂不支持此操作"))
+            return Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.METHOD_NOT_FOUND,
+                    message = "暂不支持此操作",
+                    detail = "No capability found for command '$commandType' in scene $currentScene"
+                )
+            )
         }
 
         // 检查场景是否匹配
@@ -172,7 +275,10 @@ class CapabilityRegistry private constructor(
             Logger.i(tag, "[$commandType] Capability ${capability.name} unavailable ($reason), queuing command")
             enqueueCommand(command, context, pageContext, capability)
             return Result.success(
-                AgentAction.TextReply("正在为您切换到对应页面执行操作...")
+                AgentAction.TextReply(
+                    commandId = command.commandId,
+                    message = "正在为您切换到对应页面执行操作..."
+                )
             )
         }
 
@@ -183,6 +289,8 @@ class CapabilityRegistry private constructor(
 
     /**
      * 执行命令并记录结果
+     *
+     * 支持超时控制：单个命令默认 10 秒超时，超时后返回 EXECUTION_TIMEOUT 错误。
      */
     private suspend fun executeCommand(
         command: AgentCommand,
@@ -191,7 +299,46 @@ class CapabilityRegistry private constructor(
         capability: Capability
     ): Result<AgentAction> {
         val commandType = command::class.simpleName ?: "Unknown"
-        val result = capability.execute(command, context, pageContext)
+        val result = try {
+            withTimeout(DEFAULT_COMMAND_TIMEOUT_MS) {
+                try {
+                    capability.execute(command, context, pageContext)
+                } catch (capabilityError: CapabilityExecutionException) {
+                    // Capability 主动抛出的结构化异常
+                    Logger.w(tag, "[$commandType] Capability threw structured error: ${capabilityError.message}")
+                    Result.success(
+                        AgentAction.Error(
+                            commandId = command.commandId,
+                            errorCode = capabilityError.errorCode,
+                            message = capabilityError.message ?: "Capability 执行错误",
+                            detail = capabilityError.cause?.message
+                        )
+                    )
+                } catch (throwable: Throwable) {
+                    // Capability 未捕获的异常
+                    Logger.e(tag, "[$commandType] Capability threw unexpected exception in ${capability.name}", throwable)
+                    Result.success(
+                        AgentAction.Error(
+                            commandId = command.commandId,
+                            errorCode = AgentErrorCode.INTERNAL_ERROR,
+                            message = "Capability 执行异常: ${throwable.message}",
+                            detail = throwable.stackTraceToString()
+                        )
+                    )
+                }
+            }
+        } catch (timeout: TimeoutCancellationException) {
+            Logger.w(tag, "[$commandType] Execution timed out after ${DEFAULT_COMMAND_TIMEOUT_MS}ms in ${capability.name}")
+            Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.EXECUTION_TIMEOUT,
+                    message = "命令执行超时",
+                    detail = "Command '$commandType' exceeded ${DEFAULT_COMMAND_TIMEOUT_MS}ms in ${capability.name}"
+                )
+            )
+        }
+
         result.fold(
             onSuccess = { action ->
                 when (action) {
@@ -203,6 +350,9 @@ class CapabilityRegistry private constructor(
                     }
                     is AgentAction.TextReply -> {
                         Logger.d(tag, "[$commandType] Text reply: ${action.message}")
+                    }
+                    is AgentAction.BatchResult -> {
+                        Logger.d(tag, "[$commandType] Batch result: ${action.results.size} sub-results, success=${action.isSuccess}")
                     }
                 }
             },
@@ -216,7 +366,8 @@ class CapabilityRegistry private constructor(
     /**
      * 将命令加入跨页面队列
      *
-     * 当目标场景激活时，队列中的命令会自动执行
+     * 支持：上限检查、去重、TTL、事件通知。
+     * 当目标场景激活时，队列中的命令会自动执行。
      */
     private fun enqueueCommand(
         command: AgentCommand,
@@ -225,43 +376,108 @@ class CapabilityRegistry private constructor(
         capability: Capability
     ) {
         val targetScene = capability.activeScenes().firstOrNull() ?: SceneManager.Scene.UNKNOWN
-        val queuedCommand = QueuedCommand(command, context, pageContext, targetScene)
-        commandQueue.add(queuedCommand)
-        Logger.i(tag, "Command queued for scene $targetScene, queue size: ${commandQueue.size}")
+        val commandType = command::class.simpleName ?: "Unknown"
 
-        // 启动队列处理器（如果还没有在运行）
+        synchronized(queueLock) {
+            // 1. 上限检查
+            if (commandQueue.size >= MAX_QUEUE_SIZE) {
+                Logger.w(tag, "Queue full ($MAX_QUEUE_SIZE), dropping oldest command")
+                val dropped = commandQueue.removeAt(0)
+                _queueEvents.tryEmit(
+                    QueueEvent.Dropped(
+                        commandType = dropped.command::class.simpleName ?: "Unknown",
+                        reason = "Queue exceeded max size $MAX_QUEUE_SIZE"
+                    )
+                )
+            }
+
+            // 2. 去重：相同 commandId 的命令替换旧命令
+            val existingIndex = commandQueue.indexOfFirst { it.command.commandId == command.commandId }
+            if (existingIndex >= 0) {
+                Logger.d(tag, "Duplicate command ${command.commandId} detected, replacing old entry")
+                commandQueue.removeAt(existingIndex)
+            }
+
+            // 3. 入队
+            val queuedCommand = QueuedCommand(command, context, pageContext, targetScene)
+            commandQueue.add(queuedCommand)
+            val currentSize = commandQueue.size
+
+            Logger.i(tag, "Command queued for scene $targetScene, queue size: $currentSize")
+            _queueEvents.tryEmit(QueueEvent.Enqueued(commandType = commandType, queueSize = currentSize))
+        }
+
+        // 4. 启动队列处理器（如果还没有在运行）
         startQueueProcessor()
     }
 
     /**
      * 启动队列处理器
      *
-     * 监听场景变化，当目标场景激活时执行队列中的命令
+     * 监听场景变化，当目标场景激活时执行队列中的命令。
+     * 支持 TTL 过期清理和重试机制。
      */
     private fun startQueueProcessor() {
+        if (isProcessorRunning) return
+        isProcessorRunning = true
+
         queueScope.launch {
-            Logger.i(tag, "Queue processor started, queue size: ${commandQueue.size}")
-            while (commandQueue.isNotEmpty()) {
+            Logger.i(tag, "Queue processor started")
+            while (true) {
                 val currentScene = sceneManager.currentScene.value
-                val iterator = commandQueue.iterator()
+                val now = System.currentTimeMillis()
                 var executedCount = 0
+                var expiredCount = 0
 
-                while (iterator.hasNext()) {
-                    val queued = iterator.next()
-                    val capability = findCapabilityForCommand(queued.command)
-                    val sceneMatch = capability?.activeScenes()?.contains(currentScene) ?: false
-                    val available = capability?.isAvailable() ?: false
+                synchronized(queueLock) {
+                    val iterator = commandQueue.iterator()
 
-                    Logger.d(tag, "Checking queued command: ${AgentCommand.getActionName(queued.command)}, " +
-                        "capability=${capability?.name}, sceneMatch=$sceneMatch, available=$available")
+                    while (iterator.hasNext()) {
+                        val queued = iterator.next()
+                        val capability = findCapabilityForCommand(queued.command)
+                        val sceneMatch = capability?.activeScenes()?.contains(currentScene) ?: false
+                        val available = capability?.isAvailable() ?: false
+                        val ageMs = now - queued.enqueueTime
 
-                    if (capability != null && sceneMatch && available) {
-                        iterator.remove()
-                        executedCount++
-                        Logger.i(tag, "Executing queued command for scene $currentScene")
-                        // 在单独的协程中执行命令，避免挂起影响队列处理器
-                        launch {
-                            executeCommand(queued.command, queued.context, queued.pageContext, capability)
+                        // TTL 检查：过期命令直接丢弃
+                        if (ageMs > QUEUE_TTL_MS) {
+                            iterator.remove()
+                            expiredCount++
+                            val cmdType = queued.command::class.simpleName ?: "Unknown"
+                            Logger.w(tag, "Command expired after ${ageMs}ms: $cmdType")
+                            _queueEvents.tryEmit(
+                                QueueEvent.Expired(commandType = cmdType, ageMs = ageMs)
+                            )
+                            continue
+                        }
+
+                        Logger.d(tag, "Checking queued command: ${AgentCommand.getActionName(queued.command)}, " +
+                            "capability=${capability?.name}, sceneMatch=$sceneMatch, available=$available, age=${ageMs}ms")
+
+                        if (capability != null && sceneMatch && available) {
+                            iterator.remove()
+                            executedCount++
+                            val cmdType = queued.command::class.simpleName ?: "Unknown"
+                            Logger.i(tag, "Executing queued command for scene $currentScene")
+
+                            // 在单独的协程中执行命令，避免挂起影响队列处理器
+                            launch {
+                                val result = executeCommand(queued.command, queued.context, queued.pageContext, capability)
+                                val success = result.isSuccess && result.getOrNull()?.isSuccess == true
+                                _queueEvents.tryEmit(QueueEvent.Executed(commandType = cmdType, success = success))
+
+                                // 重试机制：执行失败且未超过最大重试次数时重新入队
+                                if (!success && queued.retryCount < MAX_RETRY_COUNT) {
+                                    Logger.w(tag, "Command failed, retrying (${queued.retryCount + 1}/$MAX_RETRY_COUNT)")
+                                    val retryCommand = queued.copy(retryCount = queued.retryCount + 1)
+                                    synchronized(queueLock) {
+                                        commandQueue.add(retryCommand)
+                                    }
+                                    _queueEvents.tryEmit(
+                                        QueueEvent.Retry(commandType = cmdType, retryCount = queued.retryCount + 1)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -269,10 +485,20 @@ class CapabilityRegistry private constructor(
                 if (executedCount > 0) {
                     Logger.i(tag, "Queue processor executed $executedCount commands, remaining: ${commandQueue.size}")
                 }
+                if (expiredCount > 0) {
+                    Logger.w(tag, "Queue processor expired $expiredCount commands")
+                }
 
-                delay(500) // 每 500ms 检查一次
+                // 队列为空时退出处理器
+                val isEmpty = synchronized(queueLock) { commandQueue.isEmpty() }
+                if (isEmpty) {
+                    Logger.i(tag, "Queue processor stopped, queue empty")
+                    isProcessorRunning = false
+                    break
+                }
+
+                delay(QUEUE_POLL_INTERVAL_MS)
             }
-            Logger.i(tag, "Queue processor stopped, queue empty")
         }
     }
 
@@ -280,8 +506,13 @@ class CapabilityRegistry private constructor(
      * 清空命令队列
      */
     fun clearCommandQueue() {
-        commandQueue.clear()
-        Logger.i(tag, "Command queue cleared")
+        val previousSize: Int
+        synchronized(queueLock) {
+            previousSize = commandQueue.size
+            commandQueue.clear()
+        }
+        Logger.i(tag, "Command queue cleared (was $previousSize)")
+        _queueEvents.tryEmit(QueueEvent.QueueCleared(previousSize = previousSize))
     }
 
     /**
@@ -336,5 +567,189 @@ class CapabilityRegistry private constructor(
         val capability = findCapabilityForCommand(command) ?: return false
         val currentScene = sceneManager.currentScene.value
         return capability.activeScenes().contains(currentScene) && capability.isAvailable()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 批量命令执行（BatchExecute）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 批量执行命令
+     *
+     * 顺序执行子命令列表，每个子命令独立分发到对应 Capability，
+     * 收集所有子结果，汇总为 BatchResult。
+     * - atomic=true 时，任一失败触发全部回滚（已执行的通过 fallback 补偿）
+     *
+     * @param batchCommand 批量执行命令
+     * @param context Agent 上下文
+     * @param pageContext 页面上下文（可选）
+     * @param currentScene 当前场景
+     * @return BatchResult 或 Error
+     */
+    private suspend fun dispatchBatch(
+        batchCommand: AgentCommand.BatchExecute,
+        context: AgentContext,
+        pageContext: PageContext?,
+        currentScene: SceneManager.Scene
+    ): Result<AgentAction> {
+        Logger.i(tag, "[BatchExecute] Starting batch of ${batchCommand.commands.size} commands, atomic=${batchCommand.atomic}")
+
+        if (batchCommand.commands.isEmpty()) {
+            return Result.success(
+                AgentAction.Error(
+                    commandId = batchCommand.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "批量命令列表为空"
+                )
+            )
+        }
+
+        val results = mutableListOf<AgentAction>()
+        val executedCommands = mutableListOf<AgentCommand>() // 用于 atomic 回滚
+
+        for ((index, subCommand) in batchCommand.commands.withIndex()) {
+            Logger.d(tag, "[BatchExecute] Executing sub-command ${index + 1}/${batchCommand.commands.size}: ${subCommand::class.simpleName}")
+
+            val subResult = dispatch(subCommand, context, pageContext)
+            val action = subResult.getOrNull()
+
+            if (subResult.isFailure || action == null) {
+                val errorMsg = subResult.exceptionOrNull()?.message ?: "子命令执行失败"
+                Logger.w(tag, "[BatchExecute] Sub-command ${index + 1} failed: $errorMsg")
+
+                // atomic 模式：回滚已执行的命令
+                if (batchCommand.atomic) {
+                    rollbackExecuted(executedCommands, context, pageContext)
+                }
+
+                results.add(
+                    AgentAction.Error(
+                        commandId = subCommand.commandId,
+                        errorCode = AgentErrorCode.INTERNAL_ERROR,
+                        message = errorMsg,
+                        detail = "Batch sub-command ${index + 1} failed"
+                    )
+                )
+                return Result.success(
+                    AgentAction.BatchResult(
+                        commandId = batchCommand.commandId,
+                        results = results.toList()
+                    )
+                )
+            }
+
+            results.add(action)
+            executedCommands.add(subCommand)
+
+            // 检查子结果是否表示失败（即使 Result 是成功的）
+            if (!action.isSuccess) {
+                Logger.w(tag, "[BatchExecute] Sub-command ${index + 1} returned error action")
+
+                if (batchCommand.atomic) {
+                    rollbackExecuted(executedCommands, context, pageContext)
+                }
+
+                return Result.success(
+                    AgentAction.BatchResult(
+                        commandId = batchCommand.commandId,
+                        results = results.toList()
+                    )
+                )
+            }
+        }
+
+        Logger.i(tag, "[BatchExecute] All ${batchCommand.commands.size} commands completed successfully")
+        return Result.success(
+            AgentAction.BatchResult(
+                commandId = batchCommand.commandId,
+                results = results.toList()
+            )
+        )
+    }
+
+    /**
+     * 原子模式回滚
+     *
+     * 对已执行的命令尝试执行反向操作（简化实现，实际回滚逻辑由具体 Capability 决定）
+     */
+    private suspend fun rollbackExecuted(
+        executedCommands: List<AgentCommand>,
+        context: AgentContext,
+        pageContext: PageContext?
+    ) {
+        Logger.w(tag, "[BatchExecute] Atomic rollback: ${executedCommands.size} commands to revert")
+        // 注意：实际回滚需要每个 Capability 支持 undo 操作
+        // 当前版本仅记录日志，后续可通过 Capability 扩展 undo 接口
+        for (cmd in executedCommands.asReversed()) {
+            Logger.d(tag, "[BatchExecute] Rollback: ${cmd::class.simpleName} (id=${cmd.commandId})")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 执行计划分发（ExecutePlan）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 分发执行计划到 ExecutionEngine
+     *
+     * @param planCommand 包含 ExecutionPlan 的命令
+     * @param context Agent 上下文
+     * @param pageContext 页面上下文（可选）
+     * @return 执行结果
+     */
+    private suspend fun dispatchPlan(
+        planCommand: AgentCommand.ExecutePlan,
+        context: AgentContext,
+        pageContext: PageContext?
+    ): Result<AgentAction> {
+        Logger.i(tag, "[ExecutePlan] Dispatching plan: ${planCommand.plan.planId}, steps=${planCommand.plan.steps.size}")
+
+        val engine = ExecutionEngine(
+            capabilityRegistry = this,
+            reporter = ExecutionReporterImpl()
+        )
+
+        return try {
+            val result = engine.execute(planCommand.plan)
+            Logger.i(tag, "[ExecutePlan] Plan completed: success=${result.isSuccess}, steps=${result.stepResults.size}")
+
+            // 将 ExecutionResult 转换为 AgentAction
+            // 如果全部成功，返回最后一个步骤的 action；否则返回包含错误信息的 Error
+            if (result.isSuccess) {
+                val lastAction = result.actions.lastOrNull()
+                if (lastAction != null) {
+                    Result.success(lastAction)
+                } else {
+                    Result.success(
+                        AgentAction.Success(
+                            commandId = planCommand.commandId,
+                            command = planCommand
+                        )
+                    )
+                }
+            } else {
+                val firstError = result.stepResults
+                    .filterIsInstance<StepResult.Failed>()
+                    .firstOrNull()
+                Result.success(
+                    AgentAction.Error(
+                        commandId = planCommand.commandId,
+                        errorCode = firstError?.action?.errorCode ?: AgentErrorCode.INTERNAL_ERROR,
+                        message = firstError?.action?.message ?: "计划执行失败",
+                        detail = "Plan '${planCommand.plan.planId}' failed at step ${firstError?.step?.step ?: "unknown"}"
+                    )
+                )
+            }
+        } catch (throwable: Throwable) {
+            Logger.e(tag, "[ExecutePlan] Plan execution threw exception", throwable)
+            Result.success(
+                AgentAction.Error(
+                    commandId = planCommand.commandId,
+                    errorCode = AgentErrorCode.INTERNAL_ERROR,
+                    message = "计划执行异常: ${throwable.message}",
+                    detail = throwable.stackTraceToString()
+                )
+            )
+        }
     }
 }

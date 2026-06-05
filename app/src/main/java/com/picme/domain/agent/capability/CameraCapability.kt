@@ -6,6 +6,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.MediaType
@@ -127,68 +128,78 @@ class CameraCapability : BaseCapability() {
     ): Result<AgentAction> {
         val d = delegate
             ?: return Result.success(
-                AgentAction.Error("相机页面未激活，请先切换到相机页面")
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.CAPABILITY_UNAVAILABLE,
+                    message = "相机页面未激活，请先切换到相机页面"
+                )
             )
 
         return when (command) {
             is AgentCommand.AdjustBeauty -> {
                 d.onAdjustBeauty(command.settings)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchFilter -> {
                 d.onSwitchFilter(command.filterType)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchStyle -> {
                 d.onSwitchStyle(command.styleFilter)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchScene -> {
                 d.onSwitchScene(command.sceneName)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchRatio -> {
                 d.onSwitchRatio(command.ratio)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.AdjustExposure -> {
                 d.onAdjustExposure(command.exposure)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.AdjustZoom -> {
                 d.onAdjustZoom(command.zoomRatio)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.FlipCamera -> {
                 d.onFlipCamera()
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.CapturePhoto -> {
                 d.onCapturePhoto()
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.ToggleRecording -> {
                 d.onToggleRecording()
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchMode -> {
                 d.onSwitchMode(command.mode)
-                Result.success(AgentAction.Success(command))
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             else -> {
                 Logger.w(tag, "Command not supported by CameraCapability: ${command::class.simpleName}")
-                Result.success(AgentAction.Error("相机页面不支持此命令"))
+                Result.success(
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.METHOD_NOT_FOUND,
+                        message = "相机页面不支持此命令"
+                    )
+                )
             }
         }
     }

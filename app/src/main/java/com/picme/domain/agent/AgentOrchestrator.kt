@@ -6,6 +6,8 @@ import com.picme.domain.agent.capability.Capability
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
+import com.picme.domain.agent.model.AgentIdGenerator
 import com.picme.domain.agent.model.InferenceResult
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
@@ -217,7 +219,11 @@ class AgentOrchestrator private constructor(private val context: Context) {
         if (capabilities.isEmpty()) {
             Logger.w(tag, "No capabilities available for current scene")
             return@withContext Result.success(
-                AgentAction.Error("当前页面暂不支持 AI 控制")
+                AgentAction.Error(
+                    commandId = AgentIdGenerator.nextId(),
+                    errorCode = AgentErrorCode.SCENE_MISMATCH,
+                    message = "当前页面暂不支持 AI 控制"
+                )
             )
         }
 
@@ -265,7 +271,11 @@ class AgentOrchestrator private constructor(private val context: Context) {
                     onFailure = { error ->
                         Logger.e(tag, "LLM inference failed (mode=$agentMode)", error)
                         Result.success(
-                            AgentAction.Error("推理失败：${error.message ?: "未知错误"}")
+                            AgentAction.Error(
+                                commandId = AgentIdGenerator.nextId(),
+                                errorCode = AgentErrorCode.INTERNAL_ERROR,
+                                message = "推理失败：${error.message ?: "未知错误"}"
+                            )
                         )
                     }
                 )
@@ -296,7 +306,11 @@ class AgentOrchestrator private constructor(private val context: Context) {
                         onFailure = { error ->
                             Logger.e(tag, "Fallback local inference also failed", error)
                             Result.success(
-                                AgentAction.Error("推理失败：${error.message ?: "未知错误"}")
+                                AgentAction.Error(
+                                    commandId = AgentIdGenerator.nextId(),
+                                    errorCode = AgentErrorCode.INTERNAL_ERROR,
+                                    message = "推理失败：${error.message ?: "未知错误"}"
+                                )
                             )
                         }
                     )
@@ -305,7 +319,11 @@ class AgentOrchestrator private constructor(private val context: Context) {
             AiAgentMode.OFF -> {
                 Logger.w(tag, "Agent is OFF")
                 return@withContext Result.success(
-                    AgentAction.Error("AI Agent 已关闭")
+                    AgentAction.Error(
+                        commandId = AgentIdGenerator.nextId(),
+                        errorCode = AgentErrorCode.INVALID_REQUEST,
+                        message = "AI Agent 已关闭"
+                    )
                 )
             }
         }
@@ -335,7 +353,13 @@ class AgentOrchestrator private constructor(private val context: Context) {
         } else {
             "模型加载失败：${error?.message ?: "未知错误"}"
         }
-        return Result.success(AgentAction.Error(message))
+        return Result.success(
+            AgentAction.Error(
+                commandId = AgentIdGenerator.nextId(),
+                errorCode = AgentErrorCode.INTERNAL_ERROR,
+                message = message
+            )
+        )
     }
 
     /**
@@ -457,7 +481,13 @@ class AgentOrchestrator private constructor(private val context: Context) {
             is InferenceResult.Batch -> {
                 Logger.d(tag, "Handling Batch result: ${inferenceResult.commands.size} commands")
                 if (inferenceResult.commands.isEmpty()) {
-                    Result.success(AgentAction.Error("未解析到任何命令"))
+                    Result.success(
+                        AgentAction.Error(
+                            commandId = AgentIdGenerator.nextId(),
+                            errorCode = AgentErrorCode.INVALID_REQUEST,
+                            message = "未解析到任何命令"
+                        )
+                    )
                 } else {
                     // 批量执行：将第一个命令作为主结果，其余通过 BatchExecute 包装
                     val firstCommand = inferenceResult.commands.first()
@@ -483,7 +513,12 @@ class AgentOrchestrator private constructor(private val context: Context) {
                 Logger.d(tag, "Handling Chat result: ${inferenceResult.message}")
                 val textCommand = AgentCommand.TextReply(message = inferenceResult.message)
                 saveConversation(memorySessionId, userInput, textCommand, inferenceResult.message)
-                Result.success(AgentAction.TextReply(message = inferenceResult.message))
+                Result.success(
+                    AgentAction.TextReply(
+                        commandId = AgentIdGenerator.nextId(),
+                        message = inferenceResult.message
+                    )
+                )
             }
         }
     }

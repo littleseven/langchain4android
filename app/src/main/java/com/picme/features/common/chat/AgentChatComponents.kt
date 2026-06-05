@@ -232,6 +232,11 @@ fun AgentChatPanel(
                                     content = "抱歉，${action.message}"
                                 )
                             }
+                            is AgentAction.BatchResult -> {
+                                messages.value = messages.value + AgentMessage.AgentText(
+                                    content = "已执行批量操作 (${action.results.size} 个)"
+                                )
+                            }
                         }
                     },
                     onFailure = { error ->

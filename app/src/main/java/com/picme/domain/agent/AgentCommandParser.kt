@@ -5,6 +5,7 @@ import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentIdGenerator
 import com.picme.domain.model.MediaType
 import com.picme.beauty.api.BeautySettings
 
@@ -12,6 +13,7 @@ import com.picme.beauty.api.BeautySettings
  * Agent 命令解析器
  *
  * 将 LLM 文本响应解析为结构化 [AgentCommand]。
+ * 只支持精简 JSON 格式（method + params），不兼容旧格式。
  * 提取为独立 object 以便在纯 JVM 单元测试中直接调用，
  * 避免实例化 [AgentOrchestrator] 时触发 JNI/MNN 加载。
  */
@@ -21,6 +23,9 @@ object AgentCommandParser {
 
     /**
      * 解析 LLM 响应为 AgentCommand
+     *
+     * 支持精简 JSON 格式：{"method":"...","params":{...}}
+     * 不兼容旧格式（不再支持 {"action":"..."}）。
      *
      * @param response LLM 原始文本输出
      * @param context 当前 Agent 上下文
@@ -54,7 +59,7 @@ object AgentCommandParser {
                 val afterTag = cleaned.substring(orphanStart + startTag.length).trim()
                 val beforeTag = cleaned.substring(0, orphanStart).trim()
                 // 优先使用标签后的内容（通常 JSON 在 think 标签后）
-                cleaned = if (afterTag.contains("\"action\"")) {
+                cleaned = if (afterTag.contains("method")) {
                     afterTag
                 } else {
                     beforeTag
@@ -69,9 +74,9 @@ object AgentCommandParser {
 
         Logger.i(TAG, "Cleaned response: '$cleaned'")
 
-        // 3. 检查是否包含 JSON action 字段
-        val hasJsonAction = cleaned.contains("\"action\"")
-        if (!hasJsonAction) {
+        // 3. 检查是否包含 JSON method 字段
+        val hasJsonMethod = cleaned.contains("method")
+        if (!hasJsonMethod) {
             // 兜底 1：尝试从原始响应中直接提取 JSON（绕过 think 标签截断问题）
             val fallbackJson = tryExtractJsonFromRaw(response)
             if (fallbackJson != null) {
@@ -86,8 +91,8 @@ object AgentCommandParser {
                     Logger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
                     return keywordCommand
                 }
-                Logger.d(TAG, "No JSON action found, treating as free chat")
-                return AgentCommand.TextReply(cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
+                Logger.d(TAG, "No JSON method/action found, treating as free chat")
+                return AgentCommand.TextReply(message = cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
             }
         }
 
@@ -101,28 +106,44 @@ object AgentCommandParser {
         }
 
         return try {
-            val action = extractJsonField(json, "action") ?: "text_reply"
-            parseCommandByAction(action, json, context, cleaned)
+            // 只支持 method + params 格式
+            val method = extractJsonField(json, "method")
+            val commandId = extractJsonInt(json, "id") ?: AgentIdGenerator.nextId()
+
+            val effectiveAction = method ?: "text_reply"
+
+            // 如果有 params 对象，将 params 中的字段合并到 json 中用于解析
+            val paramsJson = extractJsonObject(json, "params")
+            val mergedJson = if (paramsJson != null) {
+                // 将 params 内容扁平化合并到顶层，便于现有解析逻辑处理
+                mergeParamsIntoJson(json, paramsJson)
+            } else {
+                json
+            }
+
+            parseCommandByAction(effectiveAction, mergedJson, context, cleaned, commandId)
         } catch (exception: Exception) {
             Logger.w(TAG, "Failed to parse LLM response, fallback to text: $json", exception)
-            AgentCommand.TextReply(cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
+            AgentCommand.TextReply(message = cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
         }
     }
 
     /**
-     * 根据 action 字段解析为具体命令
+     * 根据 action/method 字段解析为具体命令
      *
-     * @param action action 字段值
-     * @param json 原始 JSON 字符串
+     * @param action action/method 字段值
+     * @param json 原始 JSON 字符串（已合并 params）
      * @param context 当前 Agent 上下文
      * @param fallbackText 解析失败时的回退文本
+     * @param commandId 命令唯一标识（32位自增整型）
      * @return 解析后的命令
      */
     fun parseCommandByAction(
         action: String,
         json: String,
         context: AgentContext,
-        fallbackText: String
+        fallbackText: String,
+        commandId: Int = AgentIdGenerator.nextId()
     ): AgentCommand {
         return when (action) {
             "adjust_beauty" -> {
@@ -134,7 +155,8 @@ object AgentCommandParser {
                 val blush = extractJsonFloat(json, "blush") ?: context.beautySettings.blush
                 val eyebrow = extractJsonFloat(json, "eyebrow") ?: context.beautySettings.eyebrow
                 AgentCommand.AdjustBeauty(
-                    context.beautySettings.copy(
+                    commandId = commandId,
+                    settings = context.beautySettings.copy(
                         enabled = true,
                         smoothing = smoothing,
                         whitening = whitening,
@@ -149,105 +171,105 @@ object AgentCommandParser {
             "switch_filter" -> {
                 val filterName = extractJsonField(json, "filter") ?: "NONE"
                 val filterType = resolveFilterType(filterName)
-                AgentCommand.SwitchFilter(filterType)
+                AgentCommand.SwitchFilter(commandId = commandId, filterType = filterType)
             }
             "switch_style" -> {
                 val styleName = extractJsonField(json, "style") ?: "NONE"
                 val styleFilter = resolveStyleFilter(styleName)
-                AgentCommand.SwitchStyle(styleFilter)
+                AgentCommand.SwitchStyle(commandId = commandId, styleFilter = styleFilter)
             }
             "switch_scene" -> {
                 val scene = extractJsonField(json, "scene") ?: "none"
-                AgentCommand.SwitchScene(scene)
+                AgentCommand.SwitchScene(commandId = commandId, sceneName = scene)
             }
             "switch_ratio" -> {
                 val ratio = extractJsonField(json, "ratio") ?: "full"
-                AgentCommand.SwitchRatio(ratio)
+                AgentCommand.SwitchRatio(commandId = commandId, ratio = ratio)
             }
             "adjust_exposure" -> {
                 val exposure = extractJsonInt(json, "exposure") ?: 0
-                AgentCommand.AdjustExposure(exposure.coerceIn(-2, 2))
+                AgentCommand.AdjustExposure(commandId = commandId, exposure = exposure.coerceIn(-2, 2))
             }
             "adjust_zoom" -> {
                 val zoom = extractJsonFloat(json, "zoom") ?: 1f
-                AgentCommand.AdjustZoom(zoom.coerceAtLeast(0.5f))
+                AgentCommand.AdjustZoom(commandId = commandId, zoomRatio = zoom.coerceAtLeast(0.5f))
             }
-            "flip_camera" -> AgentCommand.FlipCamera
-            "capture", "photo" -> AgentCommand.CapturePhoto
-            "toggle_recording" -> AgentCommand.ToggleRecording
+            "flip_camera" -> AgentCommand.FlipCamera(commandId = commandId)
+            "capture", "photo" -> AgentCommand.CapturePhoto(commandId = commandId)
+            "toggle_recording" -> AgentCommand.ToggleRecording(commandId = commandId)
             "switch_mode" -> {
                 val modeName = extractJsonField(json, "mode") ?: "PHOTO"
                 val mode = runCatching { MediaType.valueOf(modeName) }.getOrDefault(MediaType.PHOTO)
-                AgentCommand.SwitchMode(mode)
+                AgentCommand.SwitchMode(commandId = commandId, mode = mode)
             }
 
             // ===== Gallery 命令 =====
             "view_media" -> {
                 val mediaId = extractJsonField(json, "media_id")
-                AgentCommand.ViewMedia(mediaId)
+                AgentCommand.ViewMedia(commandId = commandId, mediaId = mediaId)
             }
             "delete_media" -> {
                 val mediaIds = extractJsonStringList(json, "media_ids")
-                AgentCommand.DeleteMedia(mediaIds)
+                AgentCommand.DeleteMedia(commandId = commandId, mediaIds = mediaIds)
             }
             "share_media" -> {
                 val mediaIds = extractJsonStringList(json, "media_ids")
-                AgentCommand.ShareMedia(mediaIds)
+                AgentCommand.ShareMedia(commandId = commandId, mediaIds = mediaIds)
             }
             "select_media" -> {
                 val mediaId = extractJsonField(json, "media_id") ?: ""
                 val selected = extractJsonBoolean(json, "selected") ?: true
-                AgentCommand.SelectMedia(mediaId, selected)
+                AgentCommand.SelectMedia(commandId = commandId, mediaId = mediaId, selected = selected)
             }
             "search_media" -> {
                 val query = extractJsonField(json, "query") ?: ""
-                AgentCommand.SearchMedia(query)
+                AgentCommand.SearchMedia(commandId = commandId, query = query)
             }
             "switch_view_mode" -> {
                 val mode = extractJsonField(json, "mode") ?: "grid"
-                AgentCommand.SwitchViewMode(mode)
+                AgentCommand.SwitchViewMode(commandId = commandId, mode = mode)
             }
             "favorite_media" -> {
                 val mediaId = extractJsonField(json, "media_id") ?: ""
                 val favorite = extractJsonBoolean(json, "favorite") ?: true
-                AgentCommand.FavoriteMedia(mediaId, favorite)
+                AgentCommand.FavoriteMedia(commandId = commandId, mediaId = mediaId, favorite = favorite)
             }
 
             // ===== 导航命令 =====
             "navigate_to" -> {
                 val destination = extractJsonField(json, "destination") ?: ""
-                AgentCommand.NavigateTo(destination)
+                AgentCommand.NavigateTo(commandId = commandId, destination = destination)
             }
-            "go_back" -> AgentCommand.GoBack
+            "go_back" -> AgentCommand.GoBack(commandId = commandId)
 
             // ===== 设置命令 =====
             "change_theme" -> {
                 val theme = extractJsonField(json, "theme") ?: "system"
-                AgentCommand.ChangeTheme(theme)
+                AgentCommand.ChangeTheme(commandId = commandId, theme = theme)
             }
             "change_language" -> {
                 val language = extractJsonField(json, "language") ?: "zh"
-                AgentCommand.ChangeLanguage(language)
+                AgentCommand.ChangeLanguage(commandId = commandId, language = language)
             }
             "download_model" -> {
                 val modelId = extractJsonField(json, "model_id") ?: ""
-                AgentCommand.DownloadModel(modelId)
+                AgentCommand.DownloadModel(commandId = commandId, modelId = modelId)
             }
             "switch_face_engine" -> {
                 val engine = extractJsonField(json, "engine") ?: "mlkit"
-                AgentCommand.SwitchFaceEngine(engine)
+                AgentCommand.SwitchFaceEngine(commandId = commandId, engine = engine)
             }
             "toggle_setting" -> {
                 val key = extractJsonField(json, "key") ?: ""
                 val enabled = extractJsonBoolean(json, "enabled") ?: true
-                AgentCommand.ToggleSetting(key, enabled)
+                AgentCommand.ToggleSetting(commandId = commandId, settingKey = key, enabled = enabled)
             }
 
             // ===== 默认文本回复 =====
             else -> {
                 val message = extractJsonField(json, "message")
                     ?: fallbackText.ifBlank { "收到，有什么其他需要帮忙的吗？" }
-                AgentCommand.TextReply(message)
+                AgentCommand.TextReply(commandId = commandId, message = message)
             }
         }
     }
@@ -256,19 +278,84 @@ object AgentCommandParser {
      * 兜底提取：从原始响应中直接提取 JSON 对象。
      *
      * 当 think 标签清理导致内容丢失时使用。
-     * 扫描原始文本中第一个 `{...}` 结构，忽略 think 标签内容。
+     * 扫描原始文本中第一个 `{...}` 结构，且中间包含 "method"。
      */
     private fun tryExtractJsonFromRaw(raw: String): String? {
-        // 策略：找到第一个 `{` 和最后一个 `}`，且中间包含 "action"
+        // 策略：找到第一个 `{` 和最后一个 `}`，且中间包含 "method"
         val jsonStart = raw.indexOf('{')
         val jsonEnd = raw.lastIndexOf('}')
         if (jsonStart >= 0 && jsonEnd > jsonStart) {
             val candidate = raw.substring(jsonStart, jsonEnd + 1)
-            if (candidate.contains("\"action\"")) {
+            if (candidate.contains("\"method\"")) {
                 return candidate
             }
         }
         return null
+    }
+
+    /**
+     * 从 JSON 字符串中提取指定 key 的对象值
+     *
+     * 用于提取 params 对象。
+     */
+    private fun extractJsonObject(json: String, key: String): String? {
+        val keyIndex = json.indexOf("\"$key\"")
+        if (keyIndex == -1) return null
+
+        val colonIndex = json.indexOf(':', keyIndex)
+        if (colonIndex == -1) return null
+
+        var braceStart = colonIndex + 1
+        while (braceStart < json.length && json[braceStart].isWhitespace()) braceStart++
+
+        if (braceStart >= json.length || json[braceStart] != '{') return null
+
+        var depth = 1
+        var pos = braceStart + 1
+        while (pos < json.length && depth > 0) {
+            when (json[pos]) {
+                '{' -> depth++
+                '}' -> depth--
+                '"' -> {
+                    // 跳过字符串
+                    pos++
+                    while (pos < json.length && json[pos] != '"') {
+                        if (json[pos] == '\\' && pos + 1 < json.length) pos++
+                        pos++
+                    }
+                }
+            }
+            pos++
+        }
+
+        return if (depth == 0) json.substring(braceStart, pos) else null
+    }
+
+    /**
+     * 将 params 对象的内容合并到顶层 JSON 中
+     *
+     * 参数在 params 对象内，但现有解析逻辑期望扁平字段。
+     * 此方法将 params 的键值对提升到顶层。
+     */
+    private fun mergeParamsIntoJson(originalJson: String, paramsJson: String): String {
+        // 简单策略：将 originalJson 中 "params":{...} 替换为空，
+        // 然后将 paramsJson 的内容（去掉外层 {}）追加到顶层
+        val paramsContent = paramsJson.removePrefix("{").removeSuffix("}")
+        if (paramsContent.isBlank()) return originalJson
+
+        // 移除 originalJson 中的 params 字段
+        val paramsPattern = """"params"\s*:\s*\{[^{}]*\}""".toRegex()
+        val withoutParams = originalJson.replace(paramsPattern, "").trim()
+
+        // 在最后一个 } 前插入 params 内容
+        val lastBrace = withoutParams.lastIndexOf('}')
+        return if (lastBrace > 0) {
+            val prefix = withoutParams.substring(0, lastBrace).trimEnd()
+            val separator = if (prefix.endsWith(',')) "" else ","
+            "$prefix$separator$paramsContent}"
+        } else {
+            originalJson
+        }
     }
 
     /**
@@ -281,56 +368,56 @@ object AgentCommandParser {
         return when {
             // 拍照相关
             lower.contains("拍照") || lower.contains("拍张") || lower.contains("拍照片") ||
-                lower.contains("拍一下") || lower.contains("快门") -> AgentCommand.CapturePhoto
+                lower.contains("拍一下") || lower.contains("快门") -> AgentCommand.CapturePhoto()
             // 翻转摄像头
             lower.contains("翻转") || lower.contains("切换摄像头") || lower.contains("前后") ||
-                lower.contains("前置") || lower.contains("后置") || lower.contains("前摄") -> AgentCommand.FlipCamera
+                lower.contains("前置") || lower.contains("后置") || lower.contains("前摄") -> AgentCommand.FlipCamera()
             // 美颜相关
             lower.contains("调高美颜") || lower.contains("增强美颜") || lower.contains("提亮美颜") ->
                 AgentCommand.AdjustBeauty(
-                    BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)
+                    settings = BeautySettings(enabled = true, smoothing = 65f, whitening = 65f)
                 )
             lower.contains("美颜") && (lower.contains("关") || lower.contains("关闭")) ->
-                AgentCommand.AdjustBeauty(BeautySettings(enabled = false))
+                AgentCommand.AdjustBeauty(settings = BeautySettings(enabled = false))
             lower.contains("美颜") || lower.contains("开美颜") ->
-                AgentCommand.AdjustBeauty(BeautySettings(enabled = true))
+                AgentCommand.AdjustBeauty(settings = BeautySettings(enabled = true))
             // 冷调滤镜
             lower.contains("冷调") || lower.contains("冷色") || lower.contains("冷滤镜") ||
                 (lower.contains("冷") && lower.contains("滤镜")) ->
-                AgentCommand.SwitchFilter(FilterType.COOL)
+                AgentCommand.SwitchFilter(filterType = FilterType.COOL)
             // 暖调滤镜
             lower.contains("暖调") || lower.contains("暖色") || lower.contains("暖滤镜") ||
                 (lower.contains("暖") && lower.contains("滤镜")) ->
-                AgentCommand.SwitchFilter(FilterType.WARM)
+                AgentCommand.SwitchFilter(filterType = FilterType.WARM)
             // 录像
-            lower.contains("录像") || lower.contains("录制") || lower.contains("拍视频") -> AgentCommand.ToggleRecording
+            lower.contains("录像") || lower.contains("录制") || lower.contains("拍视频") -> AgentCommand.ToggleRecording()
             // 导航相关 - 去相册（最高优先级，多种说法）
             lower.contains("去相册") || lower.contains("打开相册") || lower.contains("看照片") ||
                 lower.contains("图库") || lower.contains("照片库") ||
                 (lower.contains("相册") && (lower.contains("去") || lower.contains("打开") || lower.contains("看"))) ->
-                AgentCommand.NavigateTo("gallery")
+                AgentCommand.NavigateTo(destination = "gallery")
             // 导航相关 - 去设置
             lower.contains("去设置") || lower.contains("打开设置") || lower.contains("设置页") ||
                 lower.contains("app设置") || lower.contains("应用设置") ||
                 (lower.contains("设置") && (lower.contains("去") || lower.contains("打开"))) ->
-                AgentCommand.NavigateTo("settings")
+                AgentCommand.NavigateTo(destination = "settings")
             // 导航相关 - 去相机
             lower.contains("去相机") || lower.contains("回相机") || lower.contains("打开相机") ||
                 lower.contains("回拍照") || lower.contains("去拍照") ||
                 (lower.contains("相机") && (lower.contains("去") || lower.contains("打开") || lower.contains("回"))) ->
-                AgentCommand.NavigateTo("camera")
+                AgentCommand.NavigateTo(destination = "camera")
             // 导航相关 - 去调试
             lower.contains("去调试") || lower.contains("打开调试") || lower.contains("debug") ->
-                AgentCommand.NavigateTo("debug")
+                AgentCommand.NavigateTo(destination = "debug")
             // 导航相关 - 返回
             lower.contains("返回") || lower.contains("回去") || lower.contains("上一页") ||
                 lower.contains("后退") || lower.contains("回退") ->
-                AgentCommand.GoBack
+                AgentCommand.GoBack()
             // Gallery 相关
             lower.contains("删除") || lower.contains("删掉") ->
-                AgentCommand.DeleteMedia(emptyList())
+                AgentCommand.DeleteMedia(mediaIds = emptyList())
             lower.contains("分享") ->
-                AgentCommand.ShareMedia(emptyList())
+                AgentCommand.ShareMedia(mediaIds = emptyList())
             else -> null
         }
     }

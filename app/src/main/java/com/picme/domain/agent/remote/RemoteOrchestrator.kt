@@ -63,7 +63,7 @@ class RemoteOrchestrator(
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Batch(
-                    commands = listOf(AgentCommand.Error("Batch API error: ${error.message}"))
+                    commands = listOf(AgentCommand.Error(reason = "Batch API error: ${error.message}"))
                 )
             }
 
@@ -77,7 +77,7 @@ class RemoteOrchestrator(
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
             return InferenceResult.Batch(
-                commands = listOf(AgentCommand.Error("Batch parsing error: ${exception.message}"))
+                commands = listOf(AgentCommand.Error(reason = "Batch parsing error: ${exception.message}"))
             )
         }
     }
@@ -218,12 +218,12 @@ class RemoteOrchestrator(
                     listOf(parseAgentCommand(jsonObject, context))
                 }
                 else -> {
-                    listOf(AgentCommand.TextReply(cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
+                    listOf(AgentCommand.TextReply(message = cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
                 }
             }
         } catch (exception: Exception) {
             Logger.e(tag, "Failed to parse command array: $cleaned", exception)
-            listOf(AgentCommand.TextReply(cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
+            listOf(AgentCommand.TextReply(message = cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
         }
     }
 
@@ -260,7 +260,7 @@ class RemoteOrchestrator(
                     val action = if (actionObject != null) {
                         parseAgentCommand(actionObject, context)
                     } else {
-                        AgentCommand.TextReply("步骤解析失败：缺少 action 字段")
+                        AgentCommand.TextReply(message = "步骤解析失败：缺少 action 字段")
                     }
 
                     steps.add(
@@ -339,7 +339,7 @@ class RemoteOrchestrator(
                 val blush = jsonObject.optDouble("blush", context.beautySettings.blush.toDouble()).toFloat()
                 val eyebrow = jsonObject.optDouble("eyebrow", context.beautySettings.eyebrow.toDouble()).toFloat()
                 AgentCommand.AdjustBeauty(
-                    context.beautySettings.copy(
+                    settings = context.beautySettings.copy(
                         enabled = true,
                         smoothing = smoothing,
                         whitening = whitening,
@@ -353,47 +353,47 @@ class RemoteOrchestrator(
             }
             "switch_filter" -> {
                 val filterName = jsonObject.optString("filter", "NONE")
-                AgentCommand.SwitchFilter(resolveFilterType(filterName))
+                AgentCommand.SwitchFilter(filterType = resolveFilterType(filterName))
             }
             "switch_style" -> {
                 val styleName = jsonObject.optString("style", "NONE")
-                AgentCommand.SwitchStyle(resolveStyleFilter(styleName))
+                AgentCommand.SwitchStyle(styleFilter = resolveStyleFilter(styleName))
             }
             "switch_scene" -> {
                 val scene = jsonObject.optString("scene", "none")
-                AgentCommand.SwitchScene(scene)
+                AgentCommand.SwitchScene(sceneName = scene)
             }
             "switch_ratio" -> {
                 val ratio = jsonObject.optString("ratio", "full")
-                AgentCommand.SwitchRatio(ratio)
+                AgentCommand.SwitchRatio(ratio = ratio)
             }
             "adjust_exposure" -> {
                 val exposure = jsonObject.optInt("exposure", 0)
-                AgentCommand.AdjustExposure(exposure.coerceIn(-2, 2))
+                AgentCommand.AdjustExposure(exposure = exposure.coerceIn(-2, 2))
             }
             "adjust_zoom" -> {
                 val zoom = jsonObject.optDouble("zoom", 1.0).toFloat()
-                AgentCommand.AdjustZoom(zoom.coerceAtLeast(0.5f))
+                AgentCommand.AdjustZoom(zoomRatio = zoom.coerceAtLeast(0.5f))
             }
-            "flip_camera" -> AgentCommand.FlipCamera
-            "capture", "photo" -> AgentCommand.CapturePhoto
-            "toggle_recording" -> AgentCommand.ToggleRecording
+            "flip_camera" -> AgentCommand.FlipCamera()
+            "capture", "photo" -> AgentCommand.CapturePhoto()
+            "toggle_recording" -> AgentCommand.ToggleRecording()
             "switch_mode" -> {
                 val modeName = jsonObject.optString("mode", "PHOTO")
                 val mode = runCatching { MediaType.valueOf(modeName) }
                     .getOrDefault(MediaType.PHOTO)
-                AgentCommand.SwitchMode(mode)
+                AgentCommand.SwitchMode(mode = mode)
             }
             "text_reply" -> {
                 val message = jsonObject.optString("message", "收到")
-                AgentCommand.TextReply(message)
+                AgentCommand.TextReply(message = message)
             }
             "navigate_to" -> {
                 val destination = jsonObject.optString("destination", "")
-                AgentCommand.NavigateTo(destination)
+                AgentCommand.NavigateTo(destination = destination)
             }
-            "go_back" -> AgentCommand.GoBack
-            else -> AgentCommand.TextReply("收到，有什么其他需要帮忙的吗？")
+            "go_back" -> AgentCommand.GoBack()
+            else -> AgentCommand.TextReply(message = "收到，有什么其他需要帮忙的吗？")
         }
     }
 

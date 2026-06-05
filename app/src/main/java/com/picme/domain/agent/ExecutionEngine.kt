@@ -4,6 +4,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.ExecutionState
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.remote.ExecutionPlan
@@ -166,7 +167,8 @@ class ExecutionEngine(
     /**
      * 执行单个步骤
      *
-     * 支持：条件评估、等待条件、循环重复、失败回退
+     * 支持：条件评估、等待条件、循环重复、失败回退。
+     * 保留 AgentAction 用于追踪每步的实际执行结果。
      */
     private suspend fun executeStep(planStep: PlanStep): StepResult {
         // 条件评估
@@ -189,7 +191,8 @@ class ExecutionEngine(
 
         return try {
             // 循环重复执行
-            var lastResult: Result<Unit> = Result.success(Unit)
+            var lastAction: AgentAction? = null
+            var hasFailure = false
             repeat(planStep.repeatCount.coerceAtLeast(1)) { index ->
                 if (index > 0) {
                     Logger.d(tag, "Step ${planStep.step} repeat ${index + 1}/${planStep.repeatCount}")
@@ -200,35 +203,36 @@ class ExecutionEngine(
                         scene = AgentScene.CAMERA
                     )
                 )
-                lastResult = if (dispatchResult.isSuccess) {
-                    Result.success(Unit)
-                } else {
-                    Result.failure(
-                        dispatchResult.exceptionOrNull()
-                            ?: RuntimeException("Step ${planStep.step} failed without exception")
-                    )
-                }
-                // 如果某次执行失败，中断循环
-                if (lastResult.isFailure) {
+                lastAction = dispatchResult.getOrNull()
+                if (dispatchResult.isFailure || lastAction?.isSuccess == false) {
+                    hasFailure = true
                     return@repeat
                 }
             }
 
-            if (lastResult.isSuccess) {
+            if (!hasFailure && lastAction != null) {
                 Logger.d(tag, "Step ${planStep.step} executed successfully (x${planStep.repeatCount})")
-                StepResult.Executed(step = planStep, result = Result.success(Unit))
+                StepResult.Executed(step = planStep, action = lastAction!!)
             } else {
-                val error = lastResult.exceptionOrNull()
-                    ?: RuntimeException("Step ${planStep.step} failed without exception")
-                Logger.e(tag, "Step ${planStep.step} failed: ${error.message}", error)
-                tryFallback(planStep, error)
+                val errorMessage = lastAction?.let {
+                    when (it) {
+                        is AgentAction.Error -> it.message
+                        else -> "Step ${planStep.step} failed"
+                    }
+                } ?: "Step ${planStep.step} failed without action"
+                Logger.e(tag, "Step ${planStep.step} failed: $errorMessage")
+                tryFallback(planStep, errorMessage, planStep.action.commandId)
             }
         } catch (throwable: Throwable) {
             if (throwable is CancellationException) {
                 throw throwable
             }
             Logger.e(tag, "Step ${planStep.step} threw exception: ${throwable.message}", throwable)
-            tryFallback(planStep, throwable)
+            tryFallback(
+                planStep,
+                throwable.message ?: "Step ${planStep.step} threw exception",
+                planStep.action.commandId
+            )
         }
     }
 
@@ -275,7 +279,11 @@ class ExecutionEngine(
     /**
      * 尝试执行 fallback 动作
      */
-    private suspend fun tryFallback(planStep: PlanStep, originalError: Throwable): StepResult {
+    private suspend fun tryFallback(
+        planStep: PlanStep,
+        errorMessage: String,
+        commandId: Int
+    ): StepResult {
         val fallbackAction = planStep.fallbackAction
         return if (fallbackAction != null) {
             Logger.d(tag, "Trying fallback for step ${planStep.step}")
@@ -286,24 +294,48 @@ class ExecutionEngine(
                         scene = AgentScene.CAMERA
                     )
                 )
-                if (fallbackResult.isSuccess) {
+                val fallbackAction = fallbackResult.getOrNull()
+                if (fallbackResult.isSuccess && fallbackAction?.isSuccess == true) {
                     Logger.d(tag, "Fallback for step ${planStep.step} succeeded")
-                    StepResult.Executed(step = planStep, result = Result.success(Unit))
+                    StepResult.Executed(step = planStep, action = fallbackAction)
                 } else {
-                    val fallbackError = fallbackResult.exceptionOrNull()
-                        ?: RuntimeException("Fallback failed without exception")
-                    Logger.e(tag, "Fallback for step ${planStep.step} failed", fallbackError)
-                    StepResult.Failed(step = planStep, error = originalError)
+                    val fallbackErrorMsg = (fallbackAction as? AgentAction.Error)?.message
+                        ?: "Fallback failed"
+                    Logger.e(tag, "Fallback for step ${planStep.step} failed: $fallbackErrorMsg")
+                    StepResult.Failed(
+                        step = planStep,
+                        action = AgentAction.Error(
+                            commandId = commandId,
+                            errorCode = AgentErrorCode.INTERNAL_ERROR,
+                            message = errorMessage,
+                            detail = "Fallback also failed: $fallbackErrorMsg"
+                        )
+                    )
                 }
             } catch (throwable: Throwable) {
                 if (throwable is CancellationException) {
                     throw throwable
                 }
                 Logger.e(tag, "Fallback for step ${planStep.step} threw exception", throwable)
-                StepResult.Failed(step = planStep, error = originalError)
+                StepResult.Failed(
+                    step = planStep,
+                    action = AgentAction.Error(
+                        commandId = commandId,
+                        errorCode = AgentErrorCode.INTERNAL_ERROR,
+                        message = errorMessage,
+                        detail = "Fallback threw: ${throwable.message}"
+                    )
+                )
             }
         } else {
-            StepResult.Failed(step = planStep, error = originalError)
+            StepResult.Failed(
+                step = planStep,
+                action = AgentAction.Error(
+                    commandId = commandId,
+                    errorCode = AgentErrorCode.INTERNAL_ERROR,
+                    message = errorMessage
+                )
+            )
         }
     }
 

@@ -7,8 +7,9 @@ import com.picme.domain.model.MediaType
 import com.picme.domain.agent.remote.ExecutionPlan
 
 /**
- * Agent 命令 V2
+ * Agent 命令 V2 —— 精简 JSON 风格
  *
+ * 每个命令携带唯一 commandId（32位自增整型），支持请求-响应关联。
  * 扩展版本，支持：
  * - 相机控制（原有）
  * - Gallery 操作（新增）
@@ -18,138 +19,218 @@ import com.picme.domain.agent.remote.ExecutionPlan
  */
 sealed class AgentCommand {
 
+    /**
+     * 命令唯一标识（32位自增整型）
+     * 用于请求-响应关联和全链路追踪。
+     */
+    abstract val commandId: Int
+
     // ==================== 相机命令 ====================
 
     /**
      * 调整美颜参数
      */
-    data class AdjustBeauty(val settings: BeautySettings) : AgentCommand()
+    data class AdjustBeauty(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val settings: BeautySettings
+    ) : AgentCommand()
 
     /**
      * 切换滤镜
      */
-    data class SwitchFilter(val filterType: FilterType) : AgentCommand()
+    data class SwitchFilter(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val filterType: FilterType
+    ) : AgentCommand()
 
     /**
      * 切换风格特效
      */
-    data class SwitchStyle(val styleFilter: StyleFilter) : AgentCommand()
+    data class SwitchStyle(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val styleFilter: StyleFilter
+    ) : AgentCommand()
 
     /**
      * 切换场景模式
      */
-    data class SwitchScene(val sceneName: String) : AgentCommand()
+    data class SwitchScene(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val sceneName: String
+    ) : AgentCommand()
 
     /**
      * 切换画幅比例
      */
-    data class SwitchRatio(val ratio: String) : AgentCommand()
+    data class SwitchRatio(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val ratio: String
+    ) : AgentCommand()
 
     /**
      * 调整曝光
      */
-    data class AdjustExposure(val exposure: Int) : AgentCommand()
+    data class AdjustExposure(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val exposure: Int
+    ) : AgentCommand()
 
     /**
      * 调整变焦
      */
-    data class AdjustZoom(val zoomRatio: Float) : AgentCommand()
+    data class AdjustZoom(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val zoomRatio: Float
+    ) : AgentCommand()
 
     /**
      * 翻转摄像头
      */
-    data object FlipCamera : AgentCommand()
+    data class FlipCamera(
+        override val commandId: Int = AgentIdGenerator.nextId()
+    ) : AgentCommand()
 
     /**
      * 拍摄照片
      */
-    data object CapturePhoto : AgentCommand()
+    data class CapturePhoto(
+        override val commandId: Int = AgentIdGenerator.nextId()
+    ) : AgentCommand()
 
     /**
      * 开始/停止录像
      */
-    data object ToggleRecording : AgentCommand()
+    data class ToggleRecording(
+        override val commandId: Int = AgentIdGenerator.nextId()
+    ) : AgentCommand()
 
     /**
      * 切换拍摄模式
      */
-    data class SwitchMode(val mode: MediaType) : AgentCommand()
+    data class SwitchMode(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mode: MediaType
+    ) : AgentCommand()
 
     // ==================== Gallery 命令 ====================
 
     /**
      * 查看指定媒体
      */
-    data class ViewMedia(val mediaId: String? = null) : AgentCommand()
+    data class ViewMedia(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mediaId: String? = null
+    ) : AgentCommand()
 
     /**
      * 删除媒体（可指定 ID 列表，空列表表示删除当前选中）
      */
-    data class DeleteMedia(val mediaIds: List<String> = emptyList()) : AgentCommand()
+    data class DeleteMedia(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mediaIds: List<String> = emptyList()
+    ) : AgentCommand()
 
     /**
      * 分享媒体
      */
-    data class ShareMedia(val mediaIds: List<String> = emptyList()) : AgentCommand()
+    data class ShareMedia(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mediaIds: List<String> = emptyList()
+    ) : AgentCommand()
 
     /**
      * 选择/取消选择媒体
      */
-    data class SelectMedia(val mediaId: String, val selected: Boolean) : AgentCommand()
+    data class SelectMedia(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mediaId: String,
+        val selected: Boolean
+    ) : AgentCommand()
 
     /**
      * 搜索媒体
      */
-    data class SearchMedia(val query: String) : AgentCommand()
+    data class SearchMedia(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val query: String
+    ) : AgentCommand()
 
     /**
      * 切换视图模式
      */
-    data class SwitchViewMode(val mode: String) : AgentCommand()
+    data class SwitchViewMode(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mode: String
+    ) : AgentCommand()
 
     /**
      * 收藏/取消收藏
      */
-    data class FavoriteMedia(val mediaId: String, val favorite: Boolean) : AgentCommand()
+    data class FavoriteMedia(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val mediaId: String,
+        val favorite: Boolean
+    ) : AgentCommand()
 
     // ==================== 设置命令 ====================
 
     /**
      * 切换主题
      */
-    data class ChangeTheme(val theme: String) : AgentCommand()
+    data class ChangeTheme(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val theme: String
+    ) : AgentCommand()
 
     /**
      * 切换语言
      */
-    data class ChangeLanguage(val language: String) : AgentCommand()
+    data class ChangeLanguage(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val language: String
+    ) : AgentCommand()
 
     /**
      * 下载模型
      */
-    data class DownloadModel(val modelId: String) : AgentCommand()
+    data class DownloadModel(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val modelId: String
+    ) : AgentCommand()
 
     /**
      * 切换人脸检测引擎
      */
-    data class SwitchFaceEngine(val engine: String) : AgentCommand()
+    data class SwitchFaceEngine(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val engine: String
+    ) : AgentCommand()
 
     /**
      * 切换开关设置
      */
-    data class ToggleSetting(val settingKey: String, val enabled: Boolean) : AgentCommand()
+    data class ToggleSetting(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val settingKey: String,
+        val enabled: Boolean
+    ) : AgentCommand()
 
     // ==================== 导航命令 ====================
 
     /**
      * 导航到指定页面
      */
-    data class NavigateTo(val destination: String) : AgentCommand()
+    data class NavigateTo(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val destination: String
+    ) : AgentCommand()
 
     /**
      * 返回上一页
      */
-    data object GoBack : AgentCommand()
+    data class GoBack(
+        override val commandId: Int = AgentIdGenerator.nextId()
+    ) : AgentCommand()
 
     // ==================== 编辑命令 ====================
 
@@ -158,33 +239,52 @@ sealed class AgentCommand {
     /**
      * 批量执行命令（L2 Batch Function Calling）
      *
-     * 仅远程模式支持，将多个命令打包为一个批量执行单元。
+     * 数组中的命令按顺序执行，每个子命令独立返回响应，最终汇总为响应数组。
+     *
+     * @property commands 子命令列表
+     * @property atomic 是否原子模式（true 时任一失败触发全部回滚）
      */
-    data class BatchExecute(val commands: List<AgentCommand>) : AgentCommand()
+    data class BatchExecute(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val commands: List<AgentCommand>,
+        val atomic: Boolean = false
+    ) : AgentCommand()
 
     /**
      * 执行计划（L3 Plan-and-Execute）
      *
      * 仅远程模式支持，包含条件判断和多步骤编排。
      */
-    data class ExecutePlan(val plan: ExecutionPlan) : AgentCommand()
+    data class ExecutePlan(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val plan: ExecutionPlan
+    ) : AgentCommand()
 
     // ==================== 通用命令 ====================
 
     /**
      * 文本回复（聊天模式）
      */
-    data class TextReply(val message: String) : AgentCommand()
+    data class TextReply(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val message: String
+    ) : AgentCommand()
 
     /**
      * 未知命令（LLM 输出无法解析时）
      */
-    data class Unknown(val raw: String) : AgentCommand()
+    data class Unknown(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val raw: String
+    ) : AgentCommand()
 
     /**
      * 执行错误
      */
-    data class Error(val reason: String) : AgentCommand()
+    data class Error(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val reason: String
+    ) : AgentCommand()
 
     companion object {
         /**
@@ -222,5 +322,10 @@ sealed class AgentCommand {
             is Unknown -> "unknown"
             is Error -> "error"
         }
+
+        /**
+         * 获取命令的 commandId
+         */
+        fun getCommandId(command: AgentCommand): Int = command.commandId
     }
 }

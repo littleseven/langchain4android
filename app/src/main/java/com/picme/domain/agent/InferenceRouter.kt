@@ -145,7 +145,7 @@ class InferenceRouter(
             onFailure = { error ->
                 Logger.e(tag, "Local engine failed", error)
                 InferenceResult.Local(
-                    command = AgentCommand.Error("本地推理失败：${error.message ?: "未知错误"}")
+                    command = AgentCommand.Error(reason = "本地推理失败：${error.message ?: "未知错误"}")
                 )
             }
         )

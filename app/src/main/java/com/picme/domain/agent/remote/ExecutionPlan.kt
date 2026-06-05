@@ -1,5 +1,6 @@
 package com.picme.domain.agent.remote
 
+import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.SceneContext
 
@@ -95,12 +96,17 @@ data class PlanStep(
 
 /**
  * 步骤执行结果
+ *
+ * 保留 AgentAction 用于追踪每步的实际执行结果。
  */
 sealed class StepResult {
     /**
      * 步骤已执行
+     *
+     * @property step 计划步骤
+     * @property action 执行后返回的 AgentAction（含 commandId、成功/失败状态）
      */
-    data class Executed(val step: PlanStep, val result: Result<Unit>) : StepResult()
+    data class Executed(val step: PlanStep, val action: AgentAction) : StepResult()
 
     /**
      * 步骤被跳过（条件不满足）
@@ -109,8 +115,11 @@ sealed class StepResult {
 
     /**
      * 步骤执行失败
+     *
+     * @property step 计划步骤
+     * @property action 失败时返回的 AgentAction.Error（含结构化 errorCode）
      */
-    data class Failed(val step: PlanStep, val error: Throwable) : StepResult()
+    data class Failed(val step: PlanStep, val action: AgentAction.Error) : StepResult()
 }
 
 /**
@@ -118,24 +127,43 @@ sealed class StepResult {
  *
  * @property planId 计划 ID
  * @property stepResults 各步骤执行结果
+ * @property actions 各步骤实际返回的 AgentAction 列表（便于快速访问）
  */
 data class ExecutionResult(
     val planId: String,
     val stepResults: List<StepResult>
 ) {
     /**
+     * 所有步骤实际返回的 AgentAction 列表
+     */
+    val actions: List<AgentAction>
+        get() = stepResults.mapNotNull {
+            when (it) {
+                is StepResult.Executed -> it.action
+                is StepResult.Failed -> it.action
+                is StepResult.Skipped -> null
+            }
+        }
+
+    /**
      * 是否全部成功（Executed 成功 或 Skipped）
      */
     val isSuccess: Boolean
         get() = stepResults.all {
-            (it is StepResult.Executed && it.result.isSuccess) || it is StepResult.Skipped
+            when (it) {
+                is StepResult.Executed -> it.action.isSuccess
+                is StepResult.Skipped -> true
+                is StepResult.Failed -> false
+            }
         }
 
     /**
      * 执行成功的步骤数
      */
     val successCount: Int
-        get() = stepResults.count { it is StepResult.Executed && it.result.isSuccess }
+        get() = stepResults.count {
+            it is StepResult.Executed && it.action.isSuccess
+        }
 
     /**
      * 被跳过的步骤数
@@ -147,6 +175,7 @@ data class ExecutionResult(
      * 失败的步骤数
      */
     val failedCount: Int
-        get() = stepResults.count { it is StepResult.Failed ||
-            (it is StepResult.Executed && it.result.isFailure) }
+        get() = stepResults.count {
+            it is StepResult.Failed || (it is StepResult.Executed && !it.action.isSuccess)
+        }
 }

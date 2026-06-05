@@ -298,7 +298,7 @@ class RemoteInferenceEngine(
         }
 
         // 兜底：作为文本回复
-        return listOf(AgentCommand.TextReply(cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
+        return listOf(AgentCommand.TextReply(message = cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
     }
 
     /**
@@ -333,7 +333,7 @@ class RemoteInferenceEngine(
                 val actionStr = actionMatch?.groupValues?.get(1)?.let { "{$it}" } ?: "{\"action\":\"text_reply\",\"message\":\"步骤解析失败\"}"
 
                 val action = parseSingleJsonCommand(actionStr, AiAgentUseCase.CameraStateSnapshot())
-                    ?: AgentCommand.TextReply("步骤解析失败")
+                    ?: AgentCommand.TextReply(message = "步骤解析失败")
 
                 steps.add(PlanStep(
                     step = stepNum,
@@ -370,7 +370,7 @@ class RemoteInferenceEngine(
                 val blush = extractJsonFloat(json, "blush") ?: state.beautySettings.blush
                 val eyebrow = extractJsonFloat(json, "eyebrow") ?: state.beautySettings.eyebrow
                 AgentCommand.AdjustBeauty(
-                    state.beautySettings.copy(
+                    settings = state.beautySettings.copy(
                         enabled = true,
                         smoothing = smoothing,
                         whitening = whitening,
@@ -384,42 +384,42 @@ class RemoteInferenceEngine(
             }
             "switch_filter" -> {
                 val filterName = extractJsonField(json, "filter") ?: "NONE"
-                AgentCommand.SwitchFilter(resolveFilterType(filterName))
+                AgentCommand.SwitchFilter(filterType = resolveFilterType(filterName))
             }
             "switch_style" -> {
                 val styleName = extractJsonField(json, "style") ?: "NONE"
-                AgentCommand.SwitchStyle(resolveStyleFilter(styleName))
+                AgentCommand.SwitchStyle(styleFilter = resolveStyleFilter(styleName))
             }
             "switch_scene" -> {
                 val scene = extractJsonField(json, "scene") ?: "none"
-                AgentCommand.SwitchScene(scene)
+                AgentCommand.SwitchScene(sceneName = scene)
             }
             "switch_ratio" -> {
                 val ratio = extractJsonField(json, "ratio") ?: "full"
-                AgentCommand.SwitchRatio(ratio)
+                AgentCommand.SwitchRatio(ratio = ratio)
             }
             "adjust_exposure" -> {
                 val exposure = extractJsonInt(json, "exposure") ?: 0
-                AgentCommand.AdjustExposure(exposure.coerceIn(-2, 2))
+                AgentCommand.AdjustExposure(exposure = exposure.coerceIn(-2, 2))
             }
             "adjust_zoom" -> {
                 val zoom = extractJsonFloat(json, "zoom") ?: 1f
-                AgentCommand.AdjustZoom(zoom.coerceAtLeast(0.5f))
+                AgentCommand.AdjustZoom(zoomRatio = zoom.coerceAtLeast(0.5f))
             }
-            "flip_camera" -> AgentCommand.FlipCamera
-            "capture", "photo" -> AgentCommand.CapturePhoto
-            "toggle_recording" -> AgentCommand.ToggleRecording
+            "flip_camera" -> AgentCommand.FlipCamera()
+            "capture", "photo" -> AgentCommand.CapturePhoto()
+            "toggle_recording" -> AgentCommand.ToggleRecording()
             "switch_mode" -> {
                 val modeName = extractJsonField(json, "mode") ?: "PHOTO"
                 val mode = runCatching { MediaType.valueOf(modeName) }
                     .getOrDefault(MediaType.PHOTO)
-                AgentCommand.SwitchMode(mode)
+                AgentCommand.SwitchMode(mode = mode)
             }
             "text_reply" -> {
                 val message = extractJsonField(json, "message") ?: "收到"
-                AgentCommand.TextReply(message)
+                AgentCommand.TextReply(message = message)
             }
-            else -> AgentCommand.TextReply("未知命令: $action")
+            else -> AgentCommand.TextReply(message = "未知命令: $action")
         }
     }
 

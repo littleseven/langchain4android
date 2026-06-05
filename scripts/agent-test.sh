@@ -7,6 +7,7 @@
 # Commands:
 #   suite <name>       运行测试套件 (camera/beauty/p0)
 #   case <id>          运行单个测试用例 (如 TC-CAMERA-01)
+#   data <path>        运行数据驱动测试 (JSON 用例路径)
 #   status             获取当前测试状态
 #   report             导出测试报告
 #   interactive        交互模式（自动检测并执行 P0 回归）
@@ -16,6 +17,7 @@
 #   --output <dir>     报告输出目录 (默认 scripts/auto_test_output/agent_<timestamp>)
 #   --json             输出 JSON 格式报告
 #   --markdown         输出 Markdown 格式报告
+#   --mode <mode>      测试模式: broadcast|data (默认 broadcast)
 
 set -e
 
@@ -36,11 +38,12 @@ ARG=""
 WAIT_TIMEOUT=300
 OUTPUT_DIR=""
 FORMAT="json"
+MODE="broadcast"
 
 # 解析参数
 while [[ $# -gt 0 ]]; do
     case $1 in
-        suite|case|status|report|interactive)
+        suite|case|data|status|report|interactive)
             COMMAND="$1"
             shift
             if [[ $# -gt 0 && ! "$1" =~ ^-- ]]; then
@@ -63,6 +66,10 @@ while [[ $# -gt 0 ]]; do
         --markdown)
             FORMAT="markdown"
             shift
+            ;;
+        --mode)
+            MODE="$2"
+            shift 2
             ;;
         *)
             echo "未知参数: $1"
@@ -183,6 +190,11 @@ cmd_case() {
     local case_id="${1:-TC-CAMERA-01}"
     log_info "运行测试用例: $case_id"
 
+    if [ "$MODE" = "data" ]; then
+        cmd_data "$case_id"
+        return
+    fi
+
     send_command "" "case" "$case_id"
     local response=$(wait_for_response)
 
@@ -197,6 +209,94 @@ cmd_case() {
             echo "$response" | grep -o '"reason":"[^"]*"' | cut -d'"' -f4
         fi
     fi
+}
+
+# 数据驱动测试命令（新模式）
+cmd_data() {
+    local test_path="${1:-tests/camera}"
+    log_info "运行数据驱动测试: $test_path (mode: $MODE)"
+
+    # 1. 推送 JSON 测试文件到手机外部存储
+    local device_test_dir="/sdcard/Android/data/com.picme/files/PicMe_Agent_Test/tests"
+    adb shell "mkdir -p $device_test_dir" > /dev/null 2>&1
+
+    # 判断是单个文件还是目录
+    # 支持两种路径格式: "camera" 或 "tests/settings/xxx.json"
+    local local_path
+    if [[ "$test_path" == tests/* ]]; then
+        local_path="$PROJECT_ROOT/scripts/$test_path"
+    else
+        local_path="$PROJECT_ROOT/scripts/tests/$test_path"
+    fi
+
+    if [[ "$test_path" == *.json ]]; then
+        # 单个用例文件
+        if [ ! -f "$local_path" ]; then
+            log_fail "测试文件不存在: $local_path"
+            exit 1
+        fi
+        local suite_dir=$(dirname "$test_path")
+        adb shell "mkdir -p $device_test_dir/$suite_dir" > /dev/null 2>&1
+        adb push "$local_path" "$device_test_dir/$test_path" > /dev/null 2>&1
+        log_info "已推送测试文件: $test_path"
+    else
+        # 套件目录
+        if [ ! -d "$local_path" ]; then
+            log_fail "测试目录不存在: $local_path"
+            exit 1
+        fi
+        # 清空旧测试文件并推送新文件
+        adb shell "rm -rf $device_test_dir/$test_path" > /dev/null 2>&1
+        adb push "$local_path" "$device_test_dir/$test_path" > /dev/null 2>&1
+        log_info "已推送测试套件: $test_path"
+    fi
+
+    # 2. 启动 MainActivity 触发测试
+    adb shell am force-stop com.picme > /dev/null 2>&1 || true
+    sleep 1
+    adb logcat -c > /dev/null 2>&1 || true
+    adb shell am start -n com.picme/.MainActivity \
+        --es "test_path" "$test_path" \
+        --es "test_mode" "data" \
+        > /dev/null 2>&1
+
+    log_info "测试已触发，等待执行完成..."
+
+    # 等待测试完成日志
+    local elapsed=0
+    while [ $elapsed -lt $WAIT_TIMEOUT ]; do
+        local result=$(adb logcat -d | grep "DataDrivenTestRunner:" | sed 's/.*DataDrivenTestRunner: //' | tail -5)
+        if [ -n "$result" ]; then
+            echo "$result"
+        fi
+
+        # 检查是否完成（支持套件和单用例两种结束标志）
+        if adb logcat -d | grep -q "DataDrivenTestRunner: SuiteCompleted"; then
+            log_ok "测试套件执行完成"
+            break
+        fi
+        if adb logcat -d | grep -q "DataDrivenTestRunner: Case passed:"; then
+            log_ok "单用例执行完成"
+            break
+        fi
+        if adb logcat -d | grep -q "DataDrivenTestRunner: Case failed:"; then
+            log_fail "单用例执行失败"
+            break
+        fi
+
+        sleep 2
+        elapsed=$((elapsed + 2))
+        echo -n "."
+    done
+
+    echo ""
+
+    # 拉取报告
+    adb shell ls /sdcard/PicMe_Agent_Test/reports/ 2>/dev/null | while read -r file; do
+        if [ -n "$file" ]; then
+            adb pull "/sdcard/PicMe_Agent_Test/reports/$file" "$OUTPUT_DIR/" > /dev/null 2>&1 || true
+        fi
+    done
 }
 
 cmd_status() {
@@ -266,12 +366,21 @@ case "$COMMAND" in
     suite)
         check_device
         ensure_app_installed
-        cmd_suite "$ARG"
+        if [ "$MODE" = "data" ]; then
+            cmd_data "$ARG"
+        else
+            cmd_suite "$ARG"
+        fi
         ;;
     case)
         check_device
         ensure_app_installed
         cmd_case "$ARG"
+        ;;
+    data)
+        check_device
+        ensure_app_installed
+        cmd_data "$ARG"
         ;;
     status)
         check_device
@@ -292,6 +401,7 @@ case "$COMMAND" in
         echo "Commands:"
         echo "  suite <name>     运行测试套件 (camera/beauty/p0)"
         echo "  case <id>        运行单个测试用例"
+        echo "  data <path>      运行数据驱动测试 (JSON 用例)"
         echo "  status           获取当前测试状态"
         echo "  report           导出测试报告"
         echo "  interactive      交互模式（完整 P0 回归）"
@@ -301,10 +411,12 @@ case "$COMMAND" in
         echo "  --output <dir>   报告输出目录"
         echo "  --json           JSON 格式输出"
         echo "  --markdown       Markdown 格式输出"
+        echo "  --mode <mode>    测试模式: broadcast|data (默认 broadcast)"
         echo ""
         echo "示例:"
         echo "  ./scripts/agent-test.sh suite camera"
         echo "  ./scripts/agent-test.sh case TC-CAMERA-01"
+        echo "  ./scripts/agent-test.sh data tests/camera --mode data"
         echo "  ./scripts/agent-test.sh interactive --wait 600"
         exit 0
         ;;
