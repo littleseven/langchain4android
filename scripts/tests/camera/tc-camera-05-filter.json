@@ -1,0 +1,28 @@
+{
+  "caseId": "TC-CAMERA-05",
+  "name": "滤镜切换验证",
+  "category": "CAMERA",
+  "priority": "P1",
+  "steps": [
+    {
+      "description": "等待相机页面就绪",
+      "wait": {"condition": "scene == 'CAMERA'", "timeout": 5000},
+      "assert": {"scene": "CAMERA"}
+    },
+    {
+      "description": "应用徕卡经典滤镜",
+      "action": {"method": "switch_filter", "params": {"filter": "leica_classic"}},
+      "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "应用徕卡鲜艳滤镜",
+      "action": {"method": "switch_filter", "params": {"filter": "leica_vibrant"}},
+      "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "重置为无滤镜",
+      "action": {"method": "switch_filter", "params": {"filter": "none"}},
+      "assert": {"commandResult": "success"}
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "caseId": "TC-CAMERA-02",
+  "name": "前后摄像头切换验证",
+  "category": "CAMERA",
+  "priority": "P0",
+  "steps": [
+    {
+      "description": "等待相机页面就绪",
+      "wait": {"condition": "scene == 'CAMERA'", "timeout": 5000},
+      "assert": {"scene": "CAMERA"}
+    },
+    {
+      "description": "验证可以拍照",
+      "assert": {"canCapture": "true"}
+    },
+    {
+      "description": "切换摄像头",
+      "action": {"method": "flip_camera", "params": {}},
+      "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "再次切换摄像头",
+      "action": {"method": "flip_camera", "params": {}},
+      "assert": {"commandResult": "success"}
+    }
+  ]
+}

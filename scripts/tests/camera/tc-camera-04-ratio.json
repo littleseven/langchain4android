@@ -1,0 +1,28 @@
+{
+  "caseId": "TC-CAMERA-04",
+  "name": "画幅比例切换验证",
+  "category": "CAMERA",
+  "priority": "P1",
+  "steps": [
+    {
+      "description": "等待相机页面就绪",
+      "wait": {"condition": "scene == 'CAMERA'", "timeout": 5000},
+      "assert": {"scene": "CAMERA"}
+    },
+    {
+      "description": "切换到 4:3 比例",
+      "action": {"method": "switch_ratio", "params": {"ratio": "4_3"}},
+      "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "切换到 16:9 比例",
+      "action": {"method": "switch_ratio", "params": {"ratio": "16_9"}},
+      "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "切换到全屏比例",
+      "action": {"method": "switch_ratio", "params": {"ratio": "full"}},
+      "assert": {"commandResult": "success"}
+    }
+  ]
+}
