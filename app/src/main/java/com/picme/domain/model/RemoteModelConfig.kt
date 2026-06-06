@@ -55,7 +55,7 @@ data class RemoteModelConfig(
          * 注意：gatewayToken 需要端侧配置，这里只定义基础结构
          */
         val TENCENT_SCF_DEFAULT = RemoteModelConfig(
-            modelId = "deepseek-v4-flash-202605",
+            modelId = "deepseek-v4-flash",
             protocol = RemoteProtocol.OPENAI,
             baseUrl = "https://1412656811-m5kw2dftdi.ap-beijing.tencentscf.com/"
         )

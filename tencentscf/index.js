@@ -31,12 +31,15 @@ const CLOUDFLARE_MODEL = 'deepseek/deepseek-chat';
 // 腾讯 TokenHub 配置
 const TOKENHUB_URL = 'https://tokenhub.tencentmaas.com/v1/chat/completions';
 const TOKENHUB_MODELS = {
-    'deepseek-v4-flash-202605': 'deepseek-v4-flash-202605',
+    'deepseek-v4-flash': 'deepseek-v4-flash',
+    'deepseek-v4-flash-202605': 'deepseek-v4-flash',
     'kimi-k2.6': 'kimi-k2.6'
 };
 
-// 统一入口路径
+// 统一入口路径（兼容已发布客户端的旧路径 /chat/completions）
 const API_PATH = '/v1/chat/completions';
+const LEGACY_PATH = '/chat/completions';
+const SUPPORTED_PATHS = [API_PATH, LEGACY_PATH];
 
 // 模型 -> 后端路由映射（客户端无感知）
 // 支持客户端已发布的 modelId（含别名）
@@ -54,7 +57,7 @@ const MODEL_ROUTES = {
 // 客户端 modelId -> 上游真实 modelId 映射
 const MODEL_ALIASES = {
     'deepseek-chat': 'deepseek/deepseek-chat',
-    'deepseek-v4-flash': 'deepseek-v4-flash-202605'
+    'deepseek-v4-flash': 'deepseek-v4-flash'
 };
 
 // FORCE_PROVIDER 环境变量：强制所有请求走指定后端（cloudflare|tokenhub）
@@ -205,9 +208,9 @@ async function handleRequest(req, res) {
         return;
     }
 
-    // 6. 统一入口校验
-    if (req.url !== API_PATH) {
-        sendJson(res, 404, { error: 'Not Found. Only ' + API_PATH + ' is supported.' });
+    // 6. 统一入口校验（兼容旧路径）
+    if (!SUPPORTED_PATHS.includes(req.url)) {
+        sendJson(res, 404, { error: 'Not Found. Supported paths: ' + SUPPORTED_PATHS.join(', ') });
         return;
     }
 
@@ -345,6 +348,7 @@ async function forwardToTokenHub(req, res, body, clientIp) {
     const response = await sendHttpsRequest(TOKENHUB_URL, payload, requestHeaders);
 
     console.log('[Web] TokenHub response status=' + response.statusCode +
+                ', body=' + response.body +
                 ', ip=' + clientIp);
 
     res.writeHead(response.statusCode, {
