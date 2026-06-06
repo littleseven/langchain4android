@@ -1,12 +1,17 @@
 /**
- * 腾讯云 SCF Web 函数 - DeepSeek AI Gateway 代理（分层防御版）
+ * 腾讯云 SCF Web 函数 - AI Gateway 代理（分层防御版）
  *
  * 运行环境：Node.js 18.15（Web 函数类型）
  * 启动方式：scf_bootstrap 启动文件 → 监听 0.0.0.0:9000
  *
+ * 统一入口：/v1/chat/completions
+ * 路由策略（服务端透明）：
+ * - 默认按 model 字段自动路由
+ * - FORCE_PROVIDER 环境变量可强制指定后端（cloudflare|tokenhub）
+ *
  * 安全设计：
  * - Cloudflare AI Gateway 代理：DeepSeek API Key 由 Cloudflare 网关维护
- * - 仅需 CLOUDFLARE_AIG_TOKEN 认证网关访问
+ * - 腾讯 TokenHub：API Token 由环境变量维护
  * - 第一层防护（腾讯云）：速率限制、请求大小限制、IP 日志
  * - 第二层防护（Cloudflare）：网关级配额管理、上游密钥保护
  */
@@ -17,14 +22,48 @@ const url = require('url');
 
 // 配置区
 const PORT = process.env.PORT || 9000;
-const GATEWAY_URL = 'https://gateway.ai.cloudflare.com/v1/a7656feec717409a19fa5217f0f7b2f9/picme/compat/chat/completions';
-const MODEL = 'deepseek/deepseek-chat';
 const APP_TOKEN = process.env.APP_TOKEN || 'com-picme'; // 客户端鉴权 Token（环境变量可覆盖）
+
+// Cloudflare AI Gateway 配置
+const CLOUDFLARE_URL = 'https://gateway.ai.cloudflare.com/v1/a7656feec717409a19fa5217f0f7b2f9/picme/compat/chat/completions';
+const CLOUDFLARE_MODEL = 'deepseek/deepseek-chat';
+
+// 腾讯 TokenHub 配置
+const TOKENHUB_URL = 'https://tokenhub.tencentmaas.com/v1/chat/completions';
+const TOKENHUB_MODELS = {
+    'deepseek-v4-flash-202605': 'deepseek-v4-flash-202605',
+    'kimi-k2.6': 'kimi-k2.6'
+};
+
+// 统一入口路径
+const API_PATH = '/v1/chat/completions';
+
+// 模型 -> 后端路由映射（客户端无感知）
+// 支持客户端已发布的 modelId（含别名）
+const MODEL_ROUTES = {
+    // Cloudflare 路由
+    'deepseek/deepseek-chat': 'cloudflare',
+    'deepseek-chat': 'cloudflare',
+
+    // TokenHub 路由
+    'deepseek-v4-flash-202605': 'tokenhub',
+    'deepseek-v4-flash': 'tokenhub',
+    'kimi-k2.6': 'tokenhub'
+};
+
+// 客户端 modelId -> 上游真实 modelId 映射
+const MODEL_ALIASES = {
+    'deepseek-chat': 'deepseek/deepseek-chat',
+    'deepseek-v4-flash': 'deepseek-v4-flash-202605'
+};
+
+// FORCE_PROVIDER 环境变量：强制所有请求走指定后端（cloudflare|tokenhub）
+const FORCE_PROVIDER = process.env.FORCE_PROVIDER || null;
 
 // 速率限制配置
 const RATE_LIMIT = {
     windowMs: 60 * 1000, // 1分钟窗口
-    maxRequests: 10,      // 单 IP 每分钟最多 10 次
+    maxRequests: 20,      // 单 IP 每分钟最多 10 次
     maxTokens: 4096      // 单次请求最大 token 数
 };
 
@@ -166,18 +205,70 @@ async function handleRequest(req, res) {
         return;
     }
 
-    // 6. 构建转发请求体
+    // 6. 统一入口校验
+    if (req.url !== API_PATH) {
+        sendJson(res, 404, { error: 'Not Found. Only ' + API_PATH + ' is supported.' });
+        return;
+    }
+
+    // 7. 路由决策（服务端透明）
+    const provider = resolveProvider(body.model);
+    if (!provider) {
+        sendJson(res, 400, {
+            error: 'Unsupported model: ' + body.model +
+                   '. Supported models: ' + Object.keys(MODEL_ROUTES).join(', ')
+        });
+        return;
+    }
+
+    console.log('[Web] Route resolved, model=' + (body.model || 'default') +
+                ', provider=' + provider + ', ip=' + clientIp);
+
+    try {
+        if (provider === 'cloudflare') {
+            await forwardToCloudflare(req, res, body, clientIp);
+        } else if (provider === 'tokenhub') {
+            await forwardToTokenHub(req, res, body, clientIp);
+        }
+    } catch (error) {
+        console.error('[Web] Request failed, ip=' + clientIp +
+                      ', error=' + error.message);
+        sendJson(res, 500, { error: error.message });
+    }
+}
+
+/**
+ * 根据模型 ID 解析后端提供商
+ * 优先级：FORCE_PROVIDER 环境变量 > 模型映射表
+ */
+function resolveProvider(modelId) {
+    if (FORCE_PROVIDER) {
+        return FORCE_PROVIDER;
+    }
+    return MODEL_ROUTES[modelId] || null;
+}
+
+/**
+ * 将客户端 modelId 解析为上游真实 modelId
+ */
+function resolveUpstreamModel(modelId, defaultModel) {
+    const normalized = modelId || defaultModel;
+    return MODEL_ALIASES[normalized] || normalized;
+}
+
+/**
+ * 转发请求到 Cloudflare AI Gateway
+ */
+async function forwardToCloudflare(req, res, body, clientIp) {
     const payload = {
-        model: MODEL,
+        model: resolveUpstreamModel(body.model, CLOUDFLARE_MODEL),
         messages: body.messages || [],
         temperature: body.temperature || 0.7,
         max_tokens: body.max_tokens || 2048,
         stream: false
     };
 
-    // 7. 从环境变量读取 Cloudflare AIG Token（网关认证）
     const cloudflareAigToken = process.env.CLOUDFLARE_AIG_TOKEN;
-
     if (!cloudflareAigToken) {
         console.error('[Web] CLOUDFLARE_AIG_TOKEN not configured');
         sendJson(res, 500, {
@@ -186,69 +277,121 @@ async function handleRequest(req, res) {
         return;
     }
 
-    try {
-        console.log('[Web] Forwarding to AI Gateway, model=' + MODEL +
-                    ', ip=' + clientIp);
+    console.log('[Web] Forwarding to Cloudflare AI Gateway, model=' + CLOUDFLARE_MODEL +
+                ', ip=' + clientIp);
 
-        // 8. 发送请求到 Cloudflare AI Gateway
-        // DeepSeek API Key 由 Cloudflare 网关维护，无需在腾讯云函数中配置
-        const requestHeaders = {
-            'Content-Type': 'application/json',
-            'cf-aig-authorization': 'Bearer ' + cloudflareAigToken
+    const requestHeaders = {
+        'Content-Type': 'application/json',
+        'cf-aig-authorization': 'Bearer ' + cloudflareAigToken
+    };
+
+    const response = await sendHttpsRequest(CLOUDFLARE_URL, payload, requestHeaders);
+
+    console.log('[Web] Cloudflare response status=' + response.statusCode +
+                ', ip=' + clientIp);
+
+    res.writeHead(response.statusCode, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,X-App-Token'
+    });
+    res.end(response.body);
+}
+
+/**
+ * 转发请求到腾讯 TokenHub
+ */
+async function forwardToTokenHub(req, res, body, clientIp) {
+    const requestedModel = body.model || 'deepseek-v4-flash-202605';
+
+    // 兼容客户端旧 modelId：先解析别名再校验
+    const upstreamModel = resolveUpstreamModel(requestedModel, 'deepseek-v4-flash-202605');
+
+    // 校验模型是否支持
+    if (!TOKENHUB_MODELS[upstreamModel]) {
+        sendJson(res, 400, {
+            error: 'Unsupported model: ' + requestedModel +
+                   '. Supported models: ' + Object.keys(TOKENHUB_MODELS).join(', ')
+        });
+        return;
+    }
+
+    const payload = {
+        model: TOKENHUB_MODELS[upstreamModel],
+        messages: body.messages || [],
+        temperature: body.temperature || 0.7,
+        max_tokens: body.max_tokens || 2048,
+        stream: false
+    };
+
+    const tokenHubApiToken = process.env.TOKENHUB_API_TOKEN;
+    if (!tokenHubApiToken) {
+        console.error('[Web] TOKENHUB_API_TOKEN not configured');
+        sendJson(res, 500, {
+            error: 'Server configuration error: TOKENHUB_API_TOKEN missing'
+        });
+        return;
+    }
+
+    console.log('[Web] Forwarding to TokenHub, model=' + payload.model +
+                ', ip=' + clientIp);
+
+    const requestHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + tokenHubApiToken
+    };
+
+    const response = await sendHttpsRequest(TOKENHUB_URL, payload, requestHeaders);
+
+    console.log('[Web] TokenHub response status=' + response.statusCode +
+                ', ip=' + clientIp);
+
+    res.writeHead(response.statusCode, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type,X-App-Token'
+    });
+    res.end(response.body);
+}
+
+/**
+ * 通用 HTTPS 请求发送
+ */
+function sendHttpsRequest(targetUrl, payload, requestHeaders) {
+    return new Promise(function(resolve, reject) {
+        const parsedUrl = url.parse(targetUrl);
+        const postData = JSON.stringify(payload);
+
+        const options = {
+            hostname: parsedUrl.hostname,
+            path: parsedUrl.path,
+            method: 'POST',
+            headers: Object.assign({
+                'Content-Length': Buffer.byteLength(postData)
+            }, requestHeaders)
         };
 
-        const response = await new Promise(function(resolve, reject) {
-            const parsedUrl = url.parse(GATEWAY_URL);
-            const postData = JSON.stringify(payload);
-
-            const options = {
-                hostname: parsedUrl.hostname,
-                path: parsedUrl.path,
-                method: 'POST',
-                headers: {
-                    'Content-Type': requestHeaders['Content-Type'],
-                    'cf-aig-authorization': requestHeaders['cf-aig-authorization'],
-                    'Content-Length': Buffer.byteLength(postData)
-                }
-            };
-
-            const apiReq = https.request(options, function(apiRes) {
-                let data = '';
-                apiRes.on('data', function(chunk) { data += chunk; });
-                apiRes.on('end', function() {
-                    resolve({
-                        statusCode: apiRes.statusCode,
-                        headers: apiRes.headers,
-                        body: data
-                    });
+        const apiReq = https.request(options, function(apiRes) {
+            let data = '';
+            apiRes.on('data', function(chunk) { data += chunk; });
+            apiRes.on('end', function() {
+                resolve({
+                    statusCode: apiRes.statusCode,
+                    headers: apiRes.headers,
+                    body: data
                 });
             });
-
-            apiReq.on('error', function(err) {
-                reject(err);
-            });
-
-            apiReq.write(postData);
-            apiReq.end();
         });
 
-        console.log('[Web] Gateway response status=' + response.statusCode +
-                    ', ip=' + clientIp);
-
-        // 9. 返回响应给客户端
-        res.writeHead(response.statusCode, {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type,X-App-Token'
+        apiReq.on('error', function(err) {
+            reject(err);
         });
-        res.end(response.body);
 
-    } catch (error) {
-        console.error('[Web] Request failed, ip=' + clientIp +
-                      ', error=' + error.message);
-        sendJson(res, 500, { error: error.message });
-    }
+        apiReq.write(postData);
+        apiReq.end();
+    });
 }
 
 // 创建 HTTP Server
