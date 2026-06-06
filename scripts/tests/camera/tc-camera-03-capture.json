@@ -21,7 +21,13 @@
     {
       "description": "触发拍照",
       "action": {"method": "capture", "params": {}},
-      "assert": {"commandResult": "success"}
+      "assert": {"commandResult": "success"},
+      "delay": 2000
+    },
+    {
+      "description": "截屏记录拍照后状态",
+      "screenshot": "after_capture",
+      "collect": ["memory"]
     }
   ]
 }

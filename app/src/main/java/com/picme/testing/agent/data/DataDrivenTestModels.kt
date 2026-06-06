@@ -47,7 +47,16 @@ data class TestStepJson(
     val wait: WaitJson? = null,
 
     @Json(name = "assert")
-    val assertions: Map<String, String>? = null
+    val assertions: Map<String, String>? = null,
+
+    @Json(name = "screenshot")
+    val screenshot: String? = null,
+
+    @Json(name = "collect")
+    val collect: List<String>? = null,
+
+    @Json(name = "delay")
+    val delayMs: Long? = null
 ) {
     /**
      * 获取所有动作（兼容单 action 和 then 数组）
@@ -113,6 +122,15 @@ data class WaitJson(
 )
 
 /**
+ * 性能指标快照
+ */
+data class PerformanceSnapshot(
+    val timestamp: Long,
+    val fps: Map<String, Any>? = null,
+    val memory: Map<String, Any>? = null
+)
+
+/**
  * 数据驱动测试结果
  */
 sealed class DataDrivenTestResult {
@@ -141,7 +159,9 @@ data class TestExecutionContext(
     val currentStep: Int = -1,
     val logs: List<TestLogEntry> = emptyList(),
     val stateSnapshots: List<TestStateSnapshot> = emptyList(),
-    val metadata: Map<String, String> = emptyMap()
+    val metadata: Map<String, String> = emptyMap(),
+    val screenshots: List<ScreenshotRecord> = emptyList(),
+    val performanceSnapshots: List<PerformanceSnapshot> = emptyList()
 ) {
     fun addLog(tag: String, message: String): TestExecutionContext {
         return copy(
@@ -158,7 +178,20 @@ data class TestExecutionContext(
     fun setMetadata(key: String, value: String): TestExecutionContext {
         return copy(metadata = metadata + (key to value))
     }
+
+    fun addScreenshot(name: String, path: String): TestExecutionContext {
+        return copy(
+            screenshots = screenshots + ScreenshotRecord(name, path, System.currentTimeMillis())
+        )
+    }
+
+    fun addPerformanceSnapshot(snapshot: PerformanceSnapshot): TestExecutionContext {
+        return copy(
+            performanceSnapshots = performanceSnapshots + snapshot
+        )
+    }
 }
 
 data class TestLogEntry(val tag: String, val message: String, val timestamp: Long)
 data class TestStateSnapshot(val timestamp: Long, val state: Map<String, Any?>)
+data class ScreenshotRecord(val name: String, val path: String, val timestamp: Long)

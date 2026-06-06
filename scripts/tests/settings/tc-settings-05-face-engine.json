@@ -28,6 +28,16 @@
       "description": "切换到 NCNN 引擎",
       "action": {"method": "switch_face_engine", "params": {"engine": "ncnn"}},
       "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "返回相机页",
+      "action": {"method": "navigate_to", "params": {"destination": "camera"}},
+      "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "等待相机场景就绪",
+      "wait": {"condition": "scene == 'CAMERA'", "timeout": 5000},
+      "assert": {"scene": "CAMERA"}
     }
   ]
 }

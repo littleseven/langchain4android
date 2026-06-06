@@ -12,6 +12,11 @@
     {
       "description": "验证相机预览已启动",
       "assert": {"canCapture": "true"}
+    },
+    {
+      "description": "截屏记录启动画面",
+      "screenshot": "camera_startup",
+      "collect": ["fps", "memory"]
     }
   ]
 }

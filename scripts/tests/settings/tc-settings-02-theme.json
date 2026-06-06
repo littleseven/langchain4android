@@ -28,6 +28,15 @@
       "description": "切换到系统主题",
       "action": {"method": "change_theme", "params": {"theme": "system"}},
       "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "截屏记录系统主题",
+      "screenshot": "theme_system"
+    },
+    {
+      "description": "返回相机页",
+      "action": {"method": "navigate_to", "params": {"destination": "camera"}},
+      "assert": {"commandResult": "success"}
     }
   ]
 }

@@ -12,17 +12,32 @@
     {
       "description": "切换到 4:3 比例",
       "action": {"method": "switch_ratio", "params": {"ratio": "4_3"}},
-      "assert": {"commandResult": "success"}
+      "assert": {"commandResult": "success"},
+      "delay": 500
+    },
+    {
+      "description": "截屏记录 4:3 比例",
+      "screenshot": "ratio_4_3"
     },
     {
       "description": "切换到 16:9 比例",
       "action": {"method": "switch_ratio", "params": {"ratio": "16_9"}},
-      "assert": {"commandResult": "success"}
+      "assert": {"commandResult": "success"},
+      "delay": 500
+    },
+    {
+      "description": "截屏记录 16:9 比例",
+      "screenshot": "ratio_16_9"
     },
     {
       "description": "切换到全屏比例",
       "action": {"method": "switch_ratio", "params": {"ratio": "full"}},
-      "assert": {"commandResult": "success"}
+      "assert": {"commandResult": "success"},
+      "delay": 500
+    },
+    {
+      "description": "截屏记录全屏比例",
+      "screenshot": "ratio_full"
     }
   ]
 }

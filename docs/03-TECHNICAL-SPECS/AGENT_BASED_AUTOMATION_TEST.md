@@ -255,7 +255,7 @@ class AgentStateProbe(private val registry: CapabilityRegistry) {
 执行方式：
 ```bash
 # 动态加载 JSON 测试用例执行
-./scripts/agent-test.sh --mode data --case tests/camera/tc-camera-03.json
+./scripts/agent-tester case scripts/tests/camera/tc-camera-03.json
 ```
 
 #### 模式 A: 自然语言指令（探索性测试）

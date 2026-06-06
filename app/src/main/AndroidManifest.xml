@@ -52,6 +52,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".testing.agent.bridge.AgentTestBroadcastReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.picme.AGENT_TEST" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".data.download.ModelDownloadForegroundService"
             android:enabled="true"

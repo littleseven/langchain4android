@@ -23,6 +23,15 @@
       "description": "切换回中文",
       "action": {"method": "change_language", "params": {"language": "zh"}},
       "assert": {"commandResult": "success"}
+    },
+    {
+      "description": "截屏记录中文界面",
+      "screenshot": "language_zh"
+    },
+    {
+      "description": "返回相机页",
+      "action": {"method": "navigate_to", "params": {"destination": "camera"}},
+      "assert": {"commandResult": "success"}
     }
   ]
 }

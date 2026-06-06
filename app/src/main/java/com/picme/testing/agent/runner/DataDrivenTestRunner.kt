@@ -38,7 +38,7 @@ class DataDrivenTestRunner(private val context: Context) {
 
     private val registry = CapabilityRegistry.getInstance()
     private val probe = AgentStateProbe(registry)
-    private val engine = AgentTestEngine(registry, probe)
+    private val engine = AgentTestEngine(registry, probe, context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val _state = MutableStateFlow<RunnerState>(RunnerState.Idle)

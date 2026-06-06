@@ -14,14 +14,24 @@
       "assert": {"canCapture": "true"}
     },
     {
-      "description": "切换摄像头",
+      "description": "切换到前置摄像头",
       "action": {"method": "flip_camera", "params": {}},
-      "assert": {"commandResult": "success"}
+      "assert": {"commandResult": "success"},
+      "delay": 1500
     },
     {
-      "description": "再次切换摄像头",
+      "description": "截屏记录前置预览",
+      "screenshot": "camera_front"
+    },
+    {
+      "description": "切换回后置摄像头",
       "action": {"method": "flip_camera", "params": {}},
-      "assert": {"commandResult": "success"}
+      "assert": {"commandResult": "success"},
+      "delay": 1500
+    },
+    {
+      "description": "截屏记录后置预览",
+      "screenshot": "camera_back"
     }
   ]
 }

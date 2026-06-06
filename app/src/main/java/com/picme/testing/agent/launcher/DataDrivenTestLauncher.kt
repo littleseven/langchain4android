@@ -85,28 +85,13 @@ class DataDrivenTestLauncher(private val context: Context) {
     }
 
     /**
-     * 保存测试报告到外部存储
+     * 报告已生成（由PC端脚本负责保存）
+     *
+     * 应用端仅输出结构化日志，PC端通过 adb logcat 捕获并生成报告。
      */
     private fun saveReport(report: DataDrivenTestRunner.SuiteReport) {
-        try {
-            val dir = File(context.getExternalFilesDir(null), REPORT_DIR)
-            dir.mkdirs()
-            val file = File(dir, "${report.suiteName}_report_${System.currentTimeMillis()}.json")
-            val json = buildString {
-                appendLine("{")
-                appendLine("    \"suiteName\": \"${report.suiteName}\",")
-                appendLine("    \"totalCases\": ${report.totalCases},")
-                appendLine("    \"passedCount\": ${report.passedCount},")
-                appendLine("    \"failedCount\": ${report.failedCount},")
-                appendLine("    \"passRate\": ${report.passRate},")
-                appendLine("    \"timestamp\": ${System.currentTimeMillis()}")
-                appendLine("}")
-            }
-            file.writeText(json)
-            Logger.i("DataDrivenTestRunner", "Report saved: ${file.absolutePath}")
-        } catch (e: Exception) {
-            Logger.e("DataDrivenTestRunner", "Failed to save report", e)
-        }
+        // 报告保存已移至PC端，此处仅保留日志输出
+        Logger.i("DataDrivenTestRunner", "Report generated: ${report.suiteName} - ${report.passedCount}/${report.totalCases} passed")
     }
 
     /**

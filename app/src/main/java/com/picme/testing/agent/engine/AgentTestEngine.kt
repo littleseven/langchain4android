@@ -1,5 +1,6 @@
 package com.picme.testing.agent.engine
 
+import android.content.Context
 import com.picme.beauty.api.BeautySettings
 import com.picme.core.common.Logger
 import com.picme.domain.agent.CapabilityRegistry
@@ -13,7 +14,9 @@ import com.picme.testing.agent.data.DataDrivenTestCase
 import com.picme.testing.agent.data.DataDrivenTestResult
 import com.picme.testing.agent.data.TestExecutionContext
 import com.picme.testing.agent.data.TestStepJson
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -25,15 +28,34 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 class AgentTestEngine(
     private val registry: CapabilityRegistry,
-    private val probe: AgentStateProbe
+    private val probe: AgentStateProbe,
+    private val context: Context? = null
 ) {
 
     companion object {
         private const val TAG = "AgentTestEngine"
+
+        /**
+         * 步骤间默认观察停顿（毫秒）
+         * 设置为 800ms，既不会太慢，也足够人类看清界面变化
+         */
+        private const val DEFAULT_STEP_PAUSE_MS = 800L
+
+        /**
+         * 关键操作后的额外停顿（毫秒）
+         * 用于拍照、切换摄像头等需要明显反馈的操作
+         */
+        private const val KEY_ACTION_PAUSE_MS = 1200L
     }
 
     /**
      * 执行数据驱动测试用例
+     *
+     * 执行流程带可观测性设计：
+     * - 每个步骤开始/结束都有 INFO 级日志
+     * - 关键操作后有固定停顿，方便人工观察
+     * - 断言结果实时输出
+     * - 截屏/性能采集结果可见
      */
     suspend fun execute(
         case: DataDrivenTestCase,
@@ -42,79 +64,104 @@ class AgentTestEngine(
         val startTime = System.currentTimeMillis()
         var context = TestExecutionContext(caseId = case.caseId, caseName = case.name)
 
-        Logger.i(TAG, "[START] ${case.caseId}: ${case.name}")
+        Logger.i(TAG, "╔════════════════════════════════════════════════════════════╗")
+        Logger.i(TAG, "║  [TEST START] ${case.caseId}: ${case.name}")
+        Logger.i(TAG, "║  优先级: ${case.priority}  分类: ${case.category}")
+        Logger.i(TAG, "║  步骤数: ${case.steps.size}")
+        Logger.i(TAG, "╚════════════════════════════════════════════════════════════╝")
 
         case.steps.forEachIndexed { index, step ->
             context = context.copy(currentStep = index)
-            Logger.d(TAG, "  Step $index: ${step.description}")
+            val stepStart = System.currentTimeMillis()
 
-            // 1. 条件判断
+            Logger.i(TAG, "")
+            Logger.i(TAG, "▶ Step ${index + 1}/${case.steps.size}: ${step.description}")
+
+            // ── 1. 条件判断 ──
             if (step.condition != null) {
+                Logger.i(TAG, "  ├─ Condition: ${step.condition}")
                 val conditionMet = evaluateCondition(step.condition, probe)
                 context = context.addLog("Test", "Condition '${step.condition}' = $conditionMet")
                 if (!conditionMet) {
-                    Logger.d(TAG, "  Step $index skipped: condition not met")
+                    Logger.i(TAG, "  └─ SKIP (condition not met)")
                     return@forEachIndexed
                 }
+                Logger.i(TAG, "  └─ Condition PASSED")
             }
 
-            // 2. 执行命令序列
+            // ── 2. 执行命令序列 ──
             val actions = step.allActions()
-            actions.forEach { action ->
-                val command = parseToAgentCommand(action)
-                Logger.d(TAG, "  Executing: ${action.method}")
+            if (actions.isNotEmpty()) {
+                Logger.i(TAG, "  ├─ Actions (${actions.size}):")
+                actions.forEach { action ->
+                    Logger.i(TAG, "  │  → ${action.method} ${action.params?.let { "(params=$it)" } ?: ""}")
 
-                val result = registry.dispatch(command, agentContext)
-                context = context.addLog(
-                    "Test",
-                    "Command ${action.method} result: ${result.isSuccess}"
-                )
+                    val command = parseToAgentCommand(action)
+                    val result = registry.dispatch(command, agentContext)
+                    context = context.addLog(
+                        "Test",
+                        "Command ${action.method} result: ${result.isSuccess}"
+                    )
 
-                // 记录 AgentAction 反馈
-                result.getOrNull()?.let { actionResult ->
-                    when (actionResult) {
-                        is AgentAction.Success -> {
-                            context = context.addLog("Test", "Action: Success")
-                        }
-                        is AgentAction.Error -> {
-                            context = context.addLog(
-                                "Test",
-                                "Action: Error - ${actionResult.message}"
-                            )
-                        }
-                        is AgentAction.TextReply -> {
-                            context = context.addLog(
-                                "Test",
-                                "Action: TextReply - ${actionResult.message}"
-                            )
-                        }
-                        is AgentAction.BatchResult -> {
-                            context = context.addLog(
-                                "Test",
-                                "Action: BatchResult - ${actionResult.results.size} sub-results, success=${actionResult.isSuccess}"
-                            )
+                    // 记录 AgentAction 反馈
+                    result.getOrNull()?.let { actionResult ->
+                        when (actionResult) {
+                            is AgentAction.Success -> {
+                                Logger.i(TAG, "  │    ✓ Success")
+                                context = context.addLog("Test", "Action: Success")
+                            }
+                            is AgentAction.Error -> {
+                                Logger.i(TAG, "  │    ✗ Error: ${actionResult.message}")
+                                context = context.addLog(
+                                    "Test",
+                                    "Action: Error - ${actionResult.message}"
+                                )
+                            }
+                            is AgentAction.TextReply -> {
+                                Logger.i(TAG, "  │    ℹ TextReply: ${actionResult.message}")
+                                context = context.addLog(
+                                    "Test",
+                                    "Action: TextReply - ${actionResult.message}"
+                                )
+                            }
+                            is AgentAction.BatchResult -> {
+                                Logger.i(TAG, "  │    ℹ BatchResult: ${actionResult.results.size} sub-results")
+                                context = context.addLog(
+                                    "Test",
+                                    "Action: BatchResult - ${actionResult.results.size} sub-results, success=${actionResult.isSuccess}"
+                                )
+                            }
                         }
                     }
-                }
 
-                result.exceptionOrNull()?.let { error ->
-                    Logger.e(TAG, "Command ${action.method} failed", error)
-                    context = context.addLog("Test", "Exception: ${error.message}")
+                    result.exceptionOrNull()?.let { error ->
+                        Logger.e(TAG, "  │    ✗ Exception: ${error.message}", error)
+                        context = context.addLog("Test", "Exception: ${error.message}")
+                    }
+
+                    // 关键操作后额外停顿，方便观察
+                    if (isKeyAction(action.method)) {
+                        Logger.i(TAG, "  │  ⏸ Pause ${KEY_ACTION_PAUSE_MS}ms (key action)")
+                        delay(KEY_ACTION_PAUSE_MS)
+                    }
                 }
             }
 
-            // 3. 等待条件
+            // ── 3. 等待条件 ──
             step.wait?.let { wait ->
-                Logger.d(TAG, "  Waiting: ${wait.condition} (timeout: ${wait.timeout}ms)")
+                Logger.i(TAG, "  ├─ Wait: ${wait.condition} (timeout: ${wait.timeout}ms)")
+                val waitStart = System.currentTimeMillis()
                 val completed = withTimeoutOrNull(wait.timeout.milliseconds) {
                     while (!evaluateCondition(wait.condition, probe)) {
                         delay(200)
                     }
                     true
                 } ?: false
+                val waitElapsed = System.currentTimeMillis() - waitStart
 
                 context = context.addLog("Test", "Wait completed: $completed")
                 if (!completed) {
+                    Logger.e(TAG, "  └─ ✗ TIMEOUT after ${waitElapsed}ms")
                     val failure = DataDrivenTestResult.Failure(
                         caseId = case.caseId,
                         failedStep = index,
@@ -122,16 +169,23 @@ class AgentTestEngine(
                         reason = "Wait timeout: ${wait.condition}",
                         context = context
                     )
-                    Logger.e(TAG, "[FAIL] ${case.caseId}: Wait timeout at step $index")
+                    Logger.i(TAG, "")
+                    Logger.i(TAG, "╔════════════════════════════════════════════════════════════╗")
+                    Logger.i(TAG, "║  [TEST FAIL] ${case.caseId} at Step ${index + 1}")
+                    Logger.i(TAG, "║  Reason: Wait timeout: ${wait.condition}")
+                    Logger.i(TAG, "╚════════════════════════════════════════════════════════════╝")
                     return failure
                 }
+                Logger.i(TAG, "  └─ ✓ Met in ${waitElapsed}ms")
             }
 
-            // 4. 断言验证
+            // ── 4. 断言验证 ──
             step.assertions?.forEach { (key, expected) ->
+                Logger.i(TAG, "  ├─ Assert: $key == '$expected'")
                 val passed = evaluateAssertion(key, expected, probe, context)
                 context = context.addLog("Test", "Assertion '$key' = '$expected': $passed")
                 if (!passed) {
+                    Logger.e(TAG, "  └─ ✗ FAILED (actual != '$expected')")
                     val failure = DataDrivenTestResult.Failure(
                         caseId = case.caseId,
                         failedStep = index,
@@ -139,17 +193,58 @@ class AgentTestEngine(
                         reason = "Assertion failed: $key expected '$expected'",
                         context = context
                     )
-                    Logger.e(TAG, "[FAIL] ${case.caseId}: Assertion failed at step $index")
+                    Logger.i(TAG, "")
+                    Logger.i(TAG, "╔════════════════════════════════════════════════════════════╗")
+                    Logger.i(TAG, "║  [TEST FAIL] ${case.caseId} at Step ${index + 1}")
+                    Logger.i(TAG, "║  Reason: Assertion failed: $key expected '$expected'")
+                    Logger.i(TAG, "╚════════════════════════════════════════════════════════════╝")
                     return failure
                 }
+                Logger.i(TAG, "  └─ ✓ PASSED")
             }
 
-            // 5. 记录状态快照
-            context = context.addStateSnapshot(captureCurrentState(probe))
+            // ── 5. 截屏标记（由PC端adb执行实际截屏） ──
+            step.screenshot?.let { screenshotName ->
+                Logger.i(TAG, "  ├─ Screenshot marker: $screenshotName")
+                Logger.i(TAG, "  └─ ℹ PC端请执行: adb shell screencap -p /sdcard/${screenshotName}.png")
+            }
+
+            // ── 6. 性能采集标记（由PC端adb执行实际采集） ──
+            step.collect?.let { collectList ->
+                Logger.i(TAG, "  ├─ Collect marker: $collectList")
+                Logger.i(TAG, "  └─ ℹ PC端请执行: adb shell dumpsys gfxinfo|meminfo com.picme")
+            }
+
+            // ── 7. 延迟（如果配置了） ──
+            step.delayMs?.let { delayMs ->
+                Logger.i(TAG, "  ├─ Delay: ${delayMs}ms")
+                delay(delayMs)
+                Logger.i(TAG, "  └─ ✓ Done")
+            }
+
+            // ── 8. 记录状态快照 ──
+            val stateSnapshot = captureCurrentState(probe)
+            context = context.addStateSnapshot(stateSnapshot)
+            val scene = stateSnapshot["scene"] ?: "unknown"
+            Logger.i(TAG, "  ├─ State snapshot: scene=$scene")
+
+            // ── 步骤结束 ──
+            val stepElapsed = System.currentTimeMillis() - stepStart
+            Logger.i(TAG, "  └─ Step completed in ${stepElapsed}ms")
+
+            // ── 步骤间默认停顿（方便人工观察） ──
+            if (index < case.steps.size - 1) {
+                Logger.i(TAG, "  ⏸ Pause ${DEFAULT_STEP_PAUSE_MS}ms (observation)")
+                delay(DEFAULT_STEP_PAUSE_MS)
+            }
         }
 
         val duration = System.currentTimeMillis() - startTime
-        Logger.i(TAG, "[PASS] ${case.caseId} in ${duration}ms")
+        Logger.i(TAG, "")
+        Logger.i(TAG, "╔════════════════════════════════════════════════════════════╗")
+        Logger.i(TAG, "║  [TEST PASS] ${case.caseId} in ${duration}ms")
+        Logger.i(TAG, "║  Steps: ${case.steps.size} | Screenshots: ${context.screenshots.size} | Perf: ${context.performanceSnapshots.size}")
+        Logger.i(TAG, "╚════════════════════════════════════════════════════════════╝")
         return DataDrivenTestResult.Success(case.caseId, duration)
     }
 
@@ -376,7 +471,23 @@ class AgentTestEngine(
         }
     }
 
-    // 辅助解析函数
+    // ============================================
+    // 辅助函数
+    // ============================================
+
+    /**
+     * 判断是否为需要额外观察停顿的关键操作
+     */
+    private fun isKeyAction(method: String): Boolean {
+        return method.lowercase() in setOf(
+            "capture", "flip_camera", "toggle_recording",
+            "navigate_to", "go_back", "switch_scene",
+            "switch_ratio", "switch_filter", "switch_style",
+            "adjust_beauty", "change_theme", "change_language",
+            "toggle_setting", "switch_face_engine"
+        )
+    }
+
     private fun parseFilterType(filter: String) = com.picme.beauty.api.FilterType.valueOf(
         filter.uppercase().replace("LEICA_CLASSIC", "LEICA_CLASSIC")
             .replace("LEICA_VIBRANT", "LEICA_VIBRANT")

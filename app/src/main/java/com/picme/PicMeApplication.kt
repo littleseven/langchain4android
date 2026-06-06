@@ -1,6 +1,8 @@
 package com.picme
 
+import android.app.Activity
 import android.app.Application
+import android.os.Bundle
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.picme.core.common.Logger
@@ -34,6 +36,15 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     val repository: MediaRepository
         get() = container.repository
 
+    /**
+     * 当前活跃的 Activity（用于测试截屏等场景）
+     *
+     * 通过 ActivityLifecycleCallbacks 自动跟踪，无需手动设置。
+     */
+    @Volatile
+    var currentActivity: Activity? = null
+        private set
+
     override fun onCreate() {
         super.onCreate()
         container = AppContainerImpl(this)
@@ -52,6 +63,31 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 注册应用级 Capability（只注册一次，永不注销）
         initializeCapabilities()
+
+        // 注册 Activity 生命周期回调，跟踪当前活跃 Activity
+        registerActivityLifecycleCallbacks(ActivityTracker())
+    }
+
+    /**
+     * Activity 生命周期跟踪器
+     *
+     * 用于测试框架获取当前前台 Activity 进行截屏等操作。
+     */
+    private inner class ActivityTracker : ActivityLifecycleCallbacks {
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+        override fun onActivityStarted(activity: Activity) {}
+        override fun onActivityResumed(activity: Activity) {
+            currentActivity = activity
+            Logger.d(TAG, "Activity resumed: ${activity.javaClass.simpleName}")
+        }
+        override fun onActivityPaused(activity: Activity) {
+            if (currentActivity == activity) {
+                currentActivity = null
+            }
+        }
+        override fun onActivityStopped(activity: Activity) {}
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+        override fun onActivityDestroyed(activity: Activity) {}
     }
 
     /**
