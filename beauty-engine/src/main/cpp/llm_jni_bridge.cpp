@@ -17,6 +17,32 @@ extern "C" {
 static std::mutex g_llm_mutex;
 
 /**
+ * 恢复 Android 预编译 MNN 库的 stepping 状态。
+ *
+ * 背景：Android 预编译的 libMNN.so 在每次 generate() 后可能将 context->status
+ * 设置为 MAX_TOKENS_FINISHED 或 NORMAL_FINISHED。如果不重置为 RUNNING，
+ * 下次调用 response()/generate() 会失败。
+ *
+ * 参考：官方 MnnLlmChat demo 的 llm_session.cpp restoreAndroidSteppingStatusIfNeeded()
+ */
+static void restoreLlmStatusIfNeeded(MNN::Transformer::Llm* llm) {
+    if (llm == nullptr) {
+        return;
+    }
+    const auto* context = llm->getContext();
+    if (context == nullptr) {
+        return;
+    }
+    if (context->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED ||
+        context->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED) {
+        // 安全地重置状态为 RUNNING，允许继续生成
+        auto* mutableContext = const_cast<MNN::Transformer::LlmContext*>(context);
+        mutableContext->status = MNN::Transformer::LlmStatus::RUNNING;
+        LOGD("LLM status restored to RUNNING (was FINISHED)");
+    }
+}
+
+/**
  * 自定义 streambuf，用于收集 generate() 输出的 token
  * 参考官方 MnnLlmChat 实现
  */
@@ -84,6 +110,19 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeDestroy(
     }
 }
 
+JNIEXPORT void JNICALL
+Java_com_picme_beauty_api_llm_MnnLlmClient_nativeReset(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle) {
+
+    auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
+    if (llm != nullptr) {
+        llm->reset();
+        LOGD("LLM reset (history cleared)");
+    }
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerate(
         JNIEnv *env,
@@ -107,6 +146,7 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerate(
     std::ostringstream oss;
     {
         std::lock_guard<std::mutex> lock(g_llm_mutex);
+        restoreLlmStatusIfNeeded(llm);
         llm->response(promptStr, &oss, nullptr, maxNewTokens);
     }
 
@@ -149,6 +189,7 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeGenerateWithSystem(
     std::ostringstream oss;
     {
         std::lock_guard<std::mutex> lock(g_llm_mutex);
+        restoreLlmStatusIfNeeded(llm);
         llm->response(messages, &oss, nullptr, maxNewTokens);
     }
 
@@ -165,19 +206,10 @@ Java_com_picme_beauty_api_llm_MnnLlmClient_nativeIsLoaded(
         jlong handle) {
 
     auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
-    if (llm == nullptr) {
-        return JNI_FALSE;
-    }
-
-    const MNN::Transformer::LlmContext *ctx = llm->getContext();
-    if (ctx == nullptr) {
-        return JNI_FALSE;
-    }
-
-    return (ctx->status == MNN::Transformer::LlmStatus::RUNNING ||
-            ctx->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED ||
-            ctx->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED)
-           ? JNI_TRUE : JNI_FALSE;
+    // nativeHandle 有效即表示模型已加载
+    // reset() 会重置 ctx->status 为 NOT_LOADED，但不销毁模型
+    // 因此不能依赖 ctx->status 判断加载状态
+    return (llm != nullptr) ? JNI_TRUE : JNI_FALSE;
 }
 
 /**

@@ -17,7 +17,7 @@
     "tags": ["ASR", "speech", "chinese", "english"]
   },
   {
-    "id": "qwen3-1.7b",
+    "id": "qwen3_1_7b",
     "name": "Qwen3-1.7B-MNN",
     "description": "阿里通义千问 3 1.7B 平衡版，更强的推理能力，适合中端设备本地运行",
     "type": "LLM",
@@ -35,7 +35,7 @@
     "tags": ["chat", "reasoning", "multilingual"]
   },
   {
-    "id": "qwen3.5-0.8b",
+    "id": "qwen3_5_0_8b",
     "name": "Qwen3.5-0.8B-MNN",
     "description": "阿里通义千问 3.5 0.8B 轻量多模态版，支持图片理解，适合中端设备本地运行",
     "type": "LLM",
@@ -56,7 +56,7 @@
     "tags": ["chat", "vision", "multilingual", "lightweight"]
   },
   {
-    "id": "qwen3.5-2b",
+    "id": "qwen3_5_2b",
     "name": "Qwen3.5-2B-MNN",
     "description": "阿里通义千问 3.5 2B 版本，更强的推理能力，适合高端设备本地运行",
     "type": "LLM",

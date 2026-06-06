@@ -76,29 +76,14 @@ class AgentOrchestrator private constructor(private val context: Context) {
 
     /**
      * 创建远程编排器
+     *
+     * 统一走腾讯云 SCF Gateway 兜底，不再依赖 Kimi Coding API。
      */
     private fun createRemoteOrchestrator(): RemoteOrchestrator {
-        val apiKey = getApiKey()
-        val remoteConfig = RemoteModelConfig(
-            modelId = "kimi-for-coding",
-            apiKey = apiKey,
-            baseUrl = "https://api.kimi.com/coding/v1/"
-        )
         return RemoteOrchestrator(
-            remoteConfig = remoteConfig,
+            remoteConfig = RemoteModelConfig.TENCENT_SCF_DEFAULT,
             promptBuilder = promptBuilder
         )
-    }
-
-    /**
-     * 获取 API Key（优先从 BuildConfig 读取，否则返回空字符串）
-     */
-    private fun getApiKey(): String {
-        return try {
-            com.picme.BuildConfig.KIMI_API_KEY
-        } catch (exception: Throwable) {
-            ""
-        }
     }
 
     /**
@@ -186,6 +171,30 @@ class AgentOrchestrator private constructor(private val context: Context) {
         get() = localLlmEngine.isLoaded
 
     /**
+     * 场景驱动的模型加载策略
+     *
+     * - CAMERA 场景：卸载 LLM 模型，释放内存给相机预览
+     * - 其他场景：按需加载模型
+     */
+    private fun applySceneDrivenModelPolicy() {
+        val currentScene = sceneManager.currentScene.value
+        when (currentScene) {
+            SceneManager.Scene.CAMERA -> {
+                if (localLlmEngine.isLoaded) {
+                    // 相机场景：不卸载模型（避免与 Sherpa-MNN ASR 的 MNN 全局状态冲突）
+                    // 改为清理 KV Cache 和历史记录，降低内存占用
+                    Logger.i(tag, "CAMERA scene: trimming LLM memory (clear history, keep model)")
+                    localLlmEngine.trimMemory()
+                }
+            }
+            else -> {
+                // 非相机场景：如果本地模式且模型未加载，保持当前状态
+                // 实际加载在 processUserInput 中按需触发
+            }
+        }
+    }
+
+    /**
      * 处理用户输入
      *
      * 根据当前 agentMode 选择推理引擎：
@@ -206,6 +215,9 @@ class AgentOrchestrator private constructor(private val context: Context) {
         customSystemPrompt: String? = null
     ): Result<AgentAction> = withContext(Dispatchers.IO) {
         Logger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}, mode=$agentMode")
+
+        // 场景驱动的模型管理：相机页卸载 LLM
+        applySceneDrivenModelPolicy()
 
         // 0. L1 缓存查询（本地高频指令快速响应，零 LLM 开销）
         intentCache.match(input)?.let { cachedCommand ->
@@ -252,6 +264,8 @@ class AgentOrchestrator private constructor(private val context: Context) {
         val inferenceResult = when (agentMode) {
             AiAgentMode.LOCAL -> {
                 // 本地模式：使用 MNN-LLM
+                // 相机场景不再卸载模型（改为 trimMemory 清理 KV Cache）
+                // 如果模型未加载，尝试加载
                 if (!localLlmEngine.isLoaded) {
                     val loadResult = tryLoadModel()
                     if (loadResult.isFailure) {
@@ -451,6 +465,32 @@ class AgentOrchestrator private constructor(private val context: Context) {
         fallbackText: String
     ): AgentCommand {
         return AgentCommandParser.parseCommandByMethod(method, json, context, fallbackText)
+    }
+
+    /**
+     * 相机场景回退到远程推理
+     */
+    private suspend fun fallbackToRemote(
+        input: String,
+        systemPrompt: String,
+        userPrompt: String,
+        agentContext: AgentContext,
+        pageContext: PageContext?
+    ): Result<AgentAction> {
+        Logger.d(tag, "Falling back to remote inference in camera scene")
+        return try {
+            val result = inferenceRouter.processInput(input, agentContext)
+            handleInferenceResult(result, input, agentContext, pageContext)
+        } catch (exception: Exception) {
+            Logger.e(tag, "Remote fallback failed", exception)
+            Result.success(
+                AgentAction.Error(
+                    commandId = AgentIdGenerator.nextId(),
+                    errorCode = AgentErrorCode.INTERNAL_ERROR,
+                    message = "相机场景下本地模型已卸载，远程推理失败：${exception.message ?: "未知错误"}"
+                )
+            )
+        }
     }
 
     /**

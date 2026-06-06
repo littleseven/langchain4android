@@ -32,12 +32,12 @@ class MemoryManager(private val context: Context) {
     /**
      * 每个 session 的最大消息数
      */
-    private val maxMessagesPerSession = 50
+    private val maxMessagesPerSession = 20
 
     /**
      * 构建 prompt 时保留的最大历史轮数（一轮 = user + assistant）
      */
-    private val maxHistoryRounds = 10
+    private val maxHistoryRounds = 5
 
     /**
      * 加载指定 session 的对话历史

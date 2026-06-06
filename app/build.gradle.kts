@@ -110,7 +110,6 @@ android {
     }
 
     defaultConfig {
-        buildConfigField("String", "KIMI_API_KEY", "\"\"")
         buildConfigField(
             "String",
             "TENCENT_SCF_APP_TOKEN",

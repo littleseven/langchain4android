@@ -467,7 +467,7 @@ fun rememberAgentChatConfig(
         AiAgentUseCase(
             context = context,
             agentMode = AiAgentMode.LOCAL,
-            localModelId = "qwen3_1_7b",
+            localModelId = "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
             codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
             codingModel = remoteConfig.modelId,
             codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },

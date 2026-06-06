@@ -29,7 +29,7 @@ class MnnLlmClient(private val context: Context) {
     /**
      * 加载本地 LLM 模型
      *
-     * @param modelKey ModelManager 中注册的模型 key，默认 "qwen3_1_7b"
+     * @param modelKey ModelManager 中注册的模型 key，默认 "qwen3_1_7b"（下划线格式）
      * @return 加载是否成功
      */
     suspend fun load(modelKey: String = "qwen3_1_7b"): Boolean = withContext(Dispatchers.IO) {
@@ -142,10 +142,23 @@ class MnnLlmClient(private val context: Context) {
         }
     }
 
+    /**
+     * 重置模型状态，清理历史记录和 KV Cache（不卸载模型）
+     *
+     * 用于相机场景降低内存占用，避免与 Sherpa-MNN ASR 的 MNN 全局状态冲突。
+     */
+    fun reset() {
+        if (nativeHandle != 0L) {
+            nativeReset(nativeHandle)
+            Logger.d(tag, "LLM reset (history cleared)")
+        }
+    }
+
     // ── Native Methods ─────────────────────────────────────
 
     private external fun nativeCreate(configPath: String): Long
     private external fun nativeDestroy(handle: Long)
+    private external fun nativeReset(handle: Long)
     private external fun nativeGenerate(handle: Long, prompt: String, maxNewTokens: Int): String
     private external fun nativeGenerateWithSystem(
         handle: Long,

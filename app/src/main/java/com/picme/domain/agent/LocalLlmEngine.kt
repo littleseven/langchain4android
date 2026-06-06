@@ -231,6 +231,28 @@ class LocalLlmEngine(private val context: Context) {
     }
 
     /**
+     * 重置模型状态，清理历史记录和 KV Cache（不卸载模型）
+     *
+     * 用于相机场景降低内存占用，避免与 Sherpa-MNN ASR 的 MNN 全局状态冲突。
+     * 比 unload() 更安全，不会破坏 MNN 全局内存分配器。
+     */
+    fun trimMemory() {
+        if (!engineMutex.tryLock()) {
+            Logger.w(tag, "Skip trimMemory: engine is busy")
+            return
+        }
+
+        try {
+            if (client.isLoaded) {
+                client.reset()
+                Logger.i(tag, "LLM memory trimmed (history cleared, model still loaded)")
+            }
+        } finally {
+            engineMutex.unlock()
+        }
+    }
+
+    /**
      * 将 ChatMessages 拼接为单个 prompt 字符串
      *
      * MNN-LLM 当前版本支持 ChatMessages 格式，但为兼容性

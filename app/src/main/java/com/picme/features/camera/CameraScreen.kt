@@ -961,11 +961,14 @@ fun CameraContent(
     // 读取腾讯云 SCF Gateway Token（从 DataStore 或 BuildConfig）
     val cloudflareGatewayToken by userPreferencesRepository.cloudflareGatewayTokenFlow.collectAsState(initial = "")
 
-    // 当关键配置变化时重新创建 UseCase（mode/apiKey/forceRemote/gatewayToken 等）
+    // 当关键配置变化时重新创建 UseCase（mode/remoteConfig/forceRemote/gatewayToken 等）
+    // 注意：aiAgentLocalModel 从 DataStore 异步加载，初始值为 ""，加载完成后变为具体模型 ID。
+    // 如果 remember key 包含 aiAgentLocalModel，会导致重组时重新创建 UseCase，
+    // 进而触发 LaunchedEffect 重新加载模型，造成重复加载。
+    // 因此 remember key 只包含稳定配置，模型 ID 通过 LaunchedEffect 动态设置。
     val aiAgentUseCase = remember(
         context,
         aiAgentMode,
-        aiAgentLocalModel,
         remoteConfig,
         aiAgentForceRemote,
         cloudflareGatewayToken
@@ -973,7 +976,7 @@ fun CameraContent(
         AiAgentUseCase(
             context = context,
             agentMode = aiAgentMode,
-            localModelId = aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_1_7b",
+            localModelId = "qwen3_1_7b", // 初始默认值，LaunchedEffect 中会更新为实际值
             codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
             codingModel = remoteConfig.modelId,
             codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },
@@ -982,12 +985,18 @@ fun CameraContent(
         )
     }
 
-    // 当设置中的模型 ID 变化时，重新配置并加载模型
-    LaunchedEffect(aiAgentLocalModel) {
-        if (aiAgentLocalModel.isNotBlank() && !aiAgentUseCase.isLocalModelLoaded) {
-            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model: $aiAgentLocalModel")
-            val result = aiAgentUseCase.loadLocalModel(aiAgentLocalModel)
+    // 当设置中的模型 ID 变化时，更新 UseCase 的模型 ID 并加载模型
+    // 使用 remember 缓存 resolvedModelId，避免空字符串触发重复加载
+    val resolvedModelId = remember(aiAgentLocalModel) {
+        aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_1_7b"
+    }
+    LaunchedEffect(resolvedModelId) {
+        if (!aiAgentUseCase.isLocalModelLoaded) {
+            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model: $resolvedModelId")
+            val result = aiAgentUseCase.loadLocalModel(resolvedModelId)
             Logger.i(TAG_AI_AGENT, "Local MNN-LLM model load result: $result")
+        } else {
+            Logger.d(TAG_AI_AGENT, "Local MNN-LLM model already loaded, skip")
         }
     }
 
@@ -1288,6 +1297,17 @@ fun CameraContent(
                 if (!cameraStateManager.canRebind()) {
                     Logger.w(TAG, "Flip rejected: state=${cameraStateManager.getState().name}")
                         return@agentCommandHandler
+                }
+                // [状态机] 进入 Rebinding 状态，防止重复触发
+                runCatching {
+                    cameraStateManager.transition(
+                        CameraStateMachine.Rebinding(
+                            CameraStateMachine.RebindReason.LENS_FACING_CHANGED
+                        )
+                    )
+                }.onFailure {
+                    Logger.w(TAG, "FlipCamera transition to Rebinding failed: ${it.message}")
+                    return@agentCommandHandler
                 }
                 val nextLens = nextLensFacing(lensFacing)
                 lensFacing = nextLens
