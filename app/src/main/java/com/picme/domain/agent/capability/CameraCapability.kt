@@ -1,5 +1,10 @@
 package com.picme.domain.agent.capability
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
@@ -13,28 +18,37 @@ import com.picme.domain.model.MediaType
 import com.picme.beauty.api.BeautySettings
 
 /**
- * 相机控制 Capability
+ * 相机控制 Capability（页面级）
  *
- * 应用级单例，通过 delegate 模式与页面解耦：
- * - 在 Application.onCreate() 中注册一次，永不注销
- * - CameraScreen 通过绑定 delegate 提供实际执行逻辑
- * - 页面离开时解绑 delegate，Capability 仍然注册但返回不可用状态
- * - 支持跨页面指令排队：当 Camera 页面再次激活时自动执行待处理命令
+ * **架构设计**：
+ * - 页面级生命周期：由 CameraScreen 创建和持有，Screen 销毁时释放
+ * - 状态内聚：直接持有可观察的状态，无需 delegate 模式
+ * - 零泄漏：不持有 Activity/Screen 的引用，状态通过 Compose 状态系统驱动 UI
+ * - 跨页面命令：通过 NavigationCapability 导航到相机页后，新 CameraCapability 自动接管
+ *
+ * **生命周期**：
+ * ```
+ * CameraScreen Enter ──► CameraCapability() 创建 ──► 注册到 CapabilityHost
+ *     │
+ *     ├── 命令执行直接修改内部状态
+ *     │
+ * CameraScreen Exit ──► CapabilityHost 注销 ──► CameraCapability 被 GC 回收
+ * ```
+ *
+ * **状态同步**：
+ * CameraScreen 通过读取 CameraCapability 的状态来驱动 UI：
+ * ```kotlin
+ * val cameraCapability = remember { CameraCapability() }
+ * RegisterCapability(cameraCapability)
+ *
+ * // 状态绑定
+ * val aspectRatio = cameraCapability.aspectRatio
+ * val beautySettings = cameraCapability.beautySettings
+ * ```
  *
  * 仅在 CAMERA 场景可用。
  */
 class CameraCapability : BaseCapability() {
-
-    companion object {
-        @Volatile
-        private var instance: CameraCapability? = null
-
-        fun getInstance(): CameraCapability {
-            return instance ?: synchronized(this) {
-                instance ?: CameraCapability().also { instance = it }
-            }
-        }
-    }
 
     private val tag = "CameraCapability"
 
@@ -42,50 +56,89 @@ class CameraCapability : BaseCapability() {
     override val description: String =
         "控制相机拍摄、美颜参数、滤镜、风格、变焦、曝光、画幅比例、场景模式和摄像头翻转"
 
-    /**
-     * 相机操作委托接口
-     *
-     * CameraScreen 实现此接口并绑定到 Capability
-     */
-    interface Delegate {
-        fun onAdjustBeauty(settings: BeautySettings)
-        fun onSwitchFilter(filterType: FilterType)
-        fun onSwitchStyle(styleFilter: StyleFilter)
-        fun onSwitchScene(sceneName: String)
-        fun onSwitchRatio(ratio: String)
-        fun onAdjustExposure(exposure: Int)
-        fun onAdjustZoom(zoomRatio: Float)
-        fun onFlipCamera()
-        fun onCapturePhoto()
-        fun onToggleRecording()
-        fun onSwitchMode(mode: MediaType)
-    }
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 可观察状态（页面级，随 Capability 创建和销毁）
+    // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * 当前绑定的委托，null 表示相机页面未激活
-     */
-    @Volatile
-    var delegate: Delegate? = null
+    /** 当前画幅比例 */
+    var aspectRatio by mutableIntStateOf(RATIO_FULL)
         private set
 
-    /**
-     * 绑定委托（由 CameraScreen 调用）
-     */
-    fun bindDelegate(delegate: Delegate) {
-        this.delegate = delegate
-        Logger.i(tag, "Delegate bound")
+    /** 当前摄像头方向 */
+    var lensFacing by mutableIntStateOf(androidx.camera.core.CameraSelector.LENS_FACING_BACK)
+        private set
+
+    /** 当前美颜设置 */
+    var beautySettings by mutableStateOf(BeautySettings(enabled = false))
+        private set
+
+    /** 当前滤镜 */
+    var filterType by mutableStateOf(FilterType.NONE)
+        private set
+
+    /** 当前风格 */
+    var styleFilter by mutableStateOf(StyleFilter.NONE)
+        private set
+
+    /** 当前曝光补偿 */
+    var exposureCompensation by mutableIntStateOf(0)
+        private set
+
+    /** 当前变焦比例 */
+    var zoomRatio by mutableFloatStateOf(1.0f)
+        private set
+
+    /** 当前场景模式 */
+    var sceneMode by mutableStateOf(SceneMode.NONE)
+        private set
+
+    /** 当前拍摄模式 */
+    var captureMode by mutableStateOf(MediaType.PHOTO)
+        private set
+
+    /** 是否正在录像 */
+    var isRecording by mutableStateOf(false)
+        private set
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 状态变更回调（可选，用于通知外部监听者）
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private var onStateChanged: ((StateChange) -> Unit)? = null
+
+    /** 状态变更事件 */
+    sealed class StateChange {
+        data class AspectRatioChanged(val ratio: Int) : StateChange()
+        data class BeautySettingsChanged(val settings: BeautySettings) : StateChange()
+        data class FilterChanged(val filter: FilterType) : StateChange()
+        data class StyleChanged(val style: StyleFilter) : StateChange()
+        data class SceneChanged(val scene: SceneMode) : StateChange()
+        data class ExposureChanged(val exposure: Int) : StateChange()
+        data class ZoomChanged(val zoom: Float) : StateChange()
+        data class LensFacingChanged(val facing: Int) : StateChange()
+        data class CaptureModeChanged(val mode: MediaType) : StateChange()
+        data object CaptureRequested : StateChange()
+        data object RecordingToggled : StateChange()
     }
 
     /**
-     * 解绑委托（由 CameraScreen onDispose 调用）
+     * 设置状态变更监听器
+     *
+     * @param listener 状态变更回调，null 表示移除监听
      */
-    fun unbindDelegate() {
-        this.delegate = null
-        Logger.i(tag, "Delegate unbound")
+    fun setOnStateChangedListener(listener: ((StateChange) -> Unit)?) {
+        onStateChanged = listener
     }
 
-    override fun isAvailable(): Boolean {
-        return delegate != null
+    private fun notifyChange(change: StateChange) {
+        onStateChanged?.invoke(change)
+    }
+
+    override fun isAvailable(): Boolean = true
+
+    /** 场景模式枚举 */
+    enum class SceneMode {
+        NONE, NIGHT, MOON
     }
 
     override fun activeScenes(): List<SceneManager.Scene> {
@@ -126,68 +179,77 @@ class CameraCapability : BaseCapability() {
         context: AgentContext,
         pageContext: PageContext?
     ): Result<AgentAction> {
-        val d = delegate
-            ?: return Result.success(
-                AgentAction.Error(
-                    commandId = command.commandId,
-                    errorCode = AgentErrorCode.CAPABILITY_UNAVAILABLE,
-                    message = "相机页面未激活，请先切换到相机页面"
-                )
-            )
-
         return when (command) {
             is AgentCommand.AdjustBeauty -> {
-                d.onAdjustBeauty(command.settings)
+                beautySettings = command.settings
+                notifyChange(StateChange.BeautySettingsChanged(command.settings))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchFilter -> {
-                d.onSwitchFilter(command.filterType)
+                filterType = command.filterType
+                notifyChange(StateChange.FilterChanged(command.filterType))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchStyle -> {
-                d.onSwitchStyle(command.styleFilter)
+                styleFilter = command.styleFilter
+                notifyChange(StateChange.StyleChanged(command.styleFilter))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchScene -> {
-                d.onSwitchScene(command.sceneName)
+                sceneMode = when (command.sceneName.lowercase()) {
+                    "night", "夜景" -> SceneMode.NIGHT
+                    "moon", "月亮" -> SceneMode.MOON
+                    else -> SceneMode.NONE
+                }
+                notifyChange(StateChange.SceneChanged(sceneMode))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchRatio -> {
-                d.onSwitchRatio(command.ratio)
+                aspectRatio = parseRatio(command.ratio)
+                notifyChange(StateChange.AspectRatioChanged(aspectRatio))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.AdjustExposure -> {
-                d.onAdjustExposure(command.exposure)
+                exposureCompensation = command.exposure
+                notifyChange(StateChange.ExposureChanged(command.exposure))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.AdjustZoom -> {
-                d.onAdjustZoom(command.zoomRatio)
+                zoomRatio = command.zoomRatio
+                notifyChange(StateChange.ZoomChanged(command.zoomRatio))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.FlipCamera -> {
-                d.onFlipCamera()
+                lensFacing = if (lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_BACK) {
+                    androidx.camera.core.CameraSelector.LENS_FACING_FRONT
+                } else {
+                    androidx.camera.core.CameraSelector.LENS_FACING_BACK
+                }
+                notifyChange(StateChange.LensFacingChanged(lensFacing))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.CapturePhoto -> {
-                d.onCapturePhoto()
+                notifyChange(StateChange.CaptureRequested)
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.ToggleRecording -> {
-                d.onToggleRecording()
+                isRecording = !isRecording
+                notifyChange(StateChange.RecordingToggled)
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
             is AgentCommand.SwitchMode -> {
-                d.onSwitchMode(command.mode)
+                captureMode = command.mode
+                notifyChange(StateChange.CaptureModeChanged(command.mode))
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }
 
@@ -201,6 +263,24 @@ class CameraCapability : BaseCapability() {
                     )
                 )
             }
+        }
+    }
+
+    companion object {
+        const val RATIO_4_3 = 0
+        const val RATIO_16_9 = 1
+        const val RATIO_FULL = 2
+    }
+
+    /**
+     * 解析比例字符串为内部枚举值
+     */
+    private fun parseRatio(ratio: String): Int {
+        return when (ratio.trim().lowercase().replace("-", ":")) {
+            "4:3", "4_3", "4/3" -> RATIO_4_3
+            "16:9", "16_9", "16/9" -> RATIO_16_9
+            "full", "full_screen", "fullscreen" -> RATIO_FULL
+            else -> RATIO_FULL
         }
     }
 }

@@ -169,11 +169,20 @@ class CapabilityRegistry private constructor(
     /**
      * 获取当前场景下活跃的 Capability 列表
      *
+     * 优先从 CapabilityHost 查询（新架构），回退到本地 registry（兼容旧架构）。
      * 只返回在当前场景活跃的 Capability（不检查 isAvailable）
      * 用于构建 system prompt，让 LLM 知道当前页面"应该"支持哪些命令
      */
     fun getCapabilitiesForCurrentScene(): List<Capability> {
         val currentScene = sceneManager.currentScene.value
+
+        // 优先从 CapabilityHost 查询（新架构：页面级 Capability）
+        val hostCapabilities = GlobalCapabilityHost.get()?.findForScene(currentScene)
+        if (!hostCapabilities.isNullOrEmpty()) {
+            return hostCapabilities
+        }
+
+        // 回退到本地 registry（兼容旧架构）
         return registry.values.filter { capability ->
             capability.activeScenes().contains(currentScene) ||
                     capability.activeScenes().isEmpty()
@@ -518,12 +527,17 @@ class CapabilityRegistry private constructor(
     /**
      * 根据命令查找对应的 Capability
      *
-     * 优先在当前场景的可用 Capability 中查找，
-     * 如果找不到，在所有已注册的 Capability 中查找（用于跨页面指令）
+     * 优先从 CapabilityHost 查询（新架构），回退到本地 registry（兼容旧架构）。
+     * 先查找当前场景的可用 Capability，找不到时查找所有已注册的 Capability（用于跨页面指令）。
      */
     private fun findCapabilityForCommand(command: AgentCommand): Capability? {
         val commandName = AgentCommand.getMethodName(command)
 
+        // 优先从 CapabilityHost 查询（新架构）
+        val hostMatch = GlobalCapabilityHost.get()?.findForCommand(commandName)
+        if (hostMatch != null) return hostMatch
+
+        // 回退到本地 registry（兼容旧架构）
         // 首先在当前场景的可用 Capability 中查找
         val currentSceneCapabilities = getCapabilitiesForCurrentScene()
         val availableMatch = currentSceneCapabilities.find { capability ->

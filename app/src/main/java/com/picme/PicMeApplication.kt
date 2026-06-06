@@ -10,10 +10,7 @@ import com.picme.core.image.CoilConfig
 import com.picme.di.AppContainer
 import com.picme.di.AppContainerImpl
 import com.picme.domain.agent.CapabilityRegistry
-import com.picme.domain.agent.capability.CameraCapability
-import com.picme.domain.agent.capability.GalleryCapability
-import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.domain.agent.capability.SettingsCapability
+// Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
 import com.picme.domain.repository.MediaRepository
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.beauty.log.BeautyLogProxy
@@ -87,36 +84,30 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         }
         override fun onActivityStopped(activity: Activity) {}
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-        override fun onActivityDestroyed(activity: Activity) {}
+        override fun onActivityDestroyed(activity: Activity) {
+            // Activity 销毁时清理引用
+            // NavigationCapability 现在由 MainActivity 持有，随 Activity 自动释放
+            if (currentActivity == activity) {
+                currentActivity = null
+            }
+        }
     }
 
     /**
      * 初始化应用级 Capability
      *
-     * 所有 Capability 在 Application.onCreate() 中注册一次，永不注销。
-     * 页面通过绑定/解绑 delegate 来激活/停用 Capability。
-     * 这支持跨页面指令：命令可以在后台排队，当目标页面激活时自动执行。
+     * **已废弃**：Capability 现在采用页面级生命周期管理。
+     * - NavigationCapability 由 MainActivity 创建（Activity 级）
+     * - CameraCapability/GalleryCapability/SettingsCapability 由各 Screen 创建（页面级）
+     *
+     * 保留此方法用于向后兼容的日志输出，实际注册已移至 MainActivity 和各 Screen。
      */
     private fun initializeCapabilities() {
-        val registry = CapabilityRegistry.getInstance()
-
-        // 注册导航 Capability（全局可用）- 使用单例实例
-        registry.register(NavigationCapability.getInstance())
-        Logger.i(TAG, "NavigationCapability registered")
-
-        // 注册相机 Capability（仅在 CAMERA 场景可用，需绑定 delegate）- 使用单例实例
-        registry.register(CameraCapability.getInstance())
-        Logger.i(TAG, "CameraCapability registered")
-
-        // 注册相册 Capability（仅在 GALLERY 场景可用，需绑定 delegate）- 使用单例实例
-        registry.register(GalleryCapability.getInstance())
-        Logger.i(TAG, "GalleryCapability registered")
-
-        // 注册设置 Capability（仅在 SETTINGS 场景可用，需绑定 delegate）- 使用单例实例
-        registry.register(SettingsCapability.getInstance())
-        Logger.i(TAG, "SettingsCapability registered")
-
-        Logger.i(TAG, "All capabilities initialized")
+        Logger.i(TAG, "Capability lifecycle migrated to page-scoped model")
+        Logger.i(TAG, "- NavigationCapability: Activity-scoped (MainActivity)")
+        Logger.i(TAG, "- CameraCapability: Page-scoped (CameraScreen)")
+        Logger.i(TAG, "- GalleryCapability: Page-scoped (GalleryScreen)")
+        Logger.i(TAG, "- SettingsCapability: Page-scoped (SettingsScreen)")
     }
 
     override fun newImageLoader(): ImageLoader {

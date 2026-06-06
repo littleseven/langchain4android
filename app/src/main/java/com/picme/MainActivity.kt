@@ -58,10 +58,10 @@ import com.picme.navigation.Screen
 import com.picme.core.common.Logger
 import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.agent.AgentOrchestrator
+import com.picme.domain.agent.CapabilityHost
+import com.picme.domain.agent.GlobalCapabilityHost
+import com.picme.domain.agent.LocalCapabilityHost
 import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.domain.agent.capability.CameraCapability
-import com.picme.domain.agent.capability.GalleryCapability
-import com.picme.domain.agent.capability.SettingsCapability
 import com.picme.testing.agent.bridge.TestEntryPoint
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -129,49 +129,56 @@ class MainActivity : ComponentActivity() {
                 PicMeTheme(themeMode = themeMode) {
                     val navController = rememberNavController()
 
-                    // 绑定 NavigationCapability 的 NavController（应用级单例）
-                    LaunchedEffect(navController) {
-                        Logger.i(TAG, "Binding NavController to NavigationCapability")
-                        NavigationCapability.getInstance().bindNavController(navController)
-                        Logger.i(TAG, "NavController bound successfully")
+                    // 创建 Activity 级 CapabilityHost，注入 NavigationCapability
+                    val navigationCapability = remember { NavigationCapability(navController) }
+                    val rootCapabilityHost = remember { CapabilityHost().apply { register(navigationCapability) } }
 
+                    // 设置全局引用，供非 Composable 代码访问
+                    DisposableEffect(rootCapabilityHost) {
+                        GlobalCapabilityHost.set(rootCapabilityHost)
+                        onDispose { GlobalCapabilityHost.clear() }
+                    }
+
+                    LaunchedEffect(navController) {
+                        Logger.i(TAG, "NavigationCapability initialized with NavController")
                         // 通知测试入口点应用已就绪
                         testEntryPoint?.onAppReady()
                     }
 
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize(),
-                        contentWindowInsets = WindowInsets(0, 0, 0, 0)
-                    ) { innerPadding ->
-                        NavHost(
-                            navController = navController,
-                            startDestination = Screen.Camera.route,
-                            modifier = Modifier.padding(innerPadding),
-                            enterTransition = {
-                                fadeIn(tween(400)) + slideIntoContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Start,
-                                    tween(400)
-                                )
-                            },
-                            exitTransition = {
-                                fadeOut(tween(400)) + slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Start,
-                                    tween(400)
-                                )
-                            },
-                            popEnterTransition = {
-                                fadeIn(tween(400)) + slideIntoContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.End,
-                                    tween(400)
-                                )
-                            },
-                            popExitTransition = {
-                                fadeOut(tween(400)) + slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.End,
-                                    tween(400)
-                                )
-                            }
-                        ) {
+                    CompositionLocalProvider(LocalCapabilityHost provides rootCapabilityHost) {
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                        ) { innerPadding ->
+                            NavHost(
+                                navController = navController,
+                                startDestination = Screen.Camera.route,
+                                modifier = Modifier.padding(innerPadding),
+                                enterTransition = {
+                                    fadeIn(tween(400)) + slideIntoContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Start,
+                                        tween(400)
+                                    )
+                                },
+                                exitTransition = {
+                                    fadeOut(tween(400)) + slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.Start,
+                                        tween(400)
+                                    )
+                                },
+                                popEnterTransition = {
+                                    fadeIn(tween(400)) + slideIntoContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.End,
+                                        tween(400)
+                                    )
+                                },
+                                popExitTransition = {
+                                    fadeOut(tween(400)) + slideOutOfContainer(
+                                        AnimatedContentTransitionScope.SlideDirection.End,
+                                        tween(400)
+                                    )
+                                }
+                            ) {
                             composable(Screen.Camera.route) {
                                 // 场景管理：进入 Camera 页面
                                 DisposableEffect(Unit) {
@@ -254,23 +261,24 @@ class MainActivity : ComponentActivity() {
                                     mediaViewModel = mediaViewModel
                                 )
                             }
+                            }
                         }
                     }
-                }
 
-                // 全局日志浮层：跨越页面生命周期
-                val showLogOverlay by settingsViewModel.showLogOverlay.collectAsState()
-                if (showLogOverlay) {
-                    LogOverlay(onDismiss = { settingsViewModel.setShowLogOverlay(false) })
-                }
+                    // 全局日志浮层：跨越页面生命周期
+                    val showLogOverlay by settingsViewModel.showLogOverlay.collectAsState()
+                    if (showLogOverlay) {
+                        LogOverlay(onDismiss = { settingsViewModel.setShowLogOverlay(false) })
+                    }
 
-                // 必要模型一键下载提示（由 CameraScreen 在进入相机 3 秒后触发）
-                EssentialModelsDownloadDialog(
-                    showPrompt = settingsViewModel.showEssentialModelsPrompt.collectAsState().value,
-                    isDownloading = settingsViewModel.isBatchDownloading.collectAsState().value,
-                    onDownload = { settingsViewModel.startBatchDownload() },
-                    onDismiss = { settingsViewModel.dismissDownloadPrompt() }
-                )
+                    // 必要模型一键下载提示（由 CameraScreen 在进入相机 3 秒后触发）
+                    EssentialModelsDownloadDialog(
+                        showPrompt = settingsViewModel.showEssentialModelsPrompt.collectAsState().value,
+                        isDownloading = settingsViewModel.isBatchDownloading.collectAsState().value,
+                        onDownload = { settingsViewModel.startBatchDownload() },
+                        onDismiss = { settingsViewModel.dismissDownloadPrompt() }
+                    )
+                }
             }
         }
     }

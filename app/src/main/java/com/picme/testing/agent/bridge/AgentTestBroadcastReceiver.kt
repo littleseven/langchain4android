@@ -11,6 +11,7 @@ import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.model.MediaType
 import com.picme.domain.agent.AgentCommandParser
+import com.picme.domain.agent.model.SceneManager
 import com.picme.testing.agent.cases.BeautyAgentTestCases
 import com.picme.testing.agent.cases.CameraAgentTestCases
 import com.picme.testing.agent.device.DeviceTestController
@@ -217,6 +218,29 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
 
         scope.launch {
             try {
+                // 如果当前场景不是 CAMERA，先导航到相机页面
+                // 例外：NavigateTo 和 GoBack 不需要自动导航（它们本身就是导航命令）
+                val currentScene = SceneManager.getInstance().currentScene.value
+                if (currentScene != SceneManager.Scene.CAMERA &&
+                    command !is AgentCommand.NavigateTo &&
+                    command !is AgentCommand.GoBack
+                ) {
+                    Logger.i(TAG, "Current scene is $currentScene, navigating to CAMERA first")
+                    registry.dispatch(
+                        AgentCommand.NavigateTo(destination = "camera"),
+                        AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)
+                    )
+                    // 等待场景切换和 delegate 绑定
+                    var waitCount = 0
+                    while (SceneManager.getInstance().currentScene.value != SceneManager.Scene.CAMERA && waitCount < 20) {
+                        kotlinx.coroutines.delay(100)
+                        waitCount++
+                    }
+                    // 额外等待 delegate 绑定
+                    kotlinx.coroutines.delay(300)
+                    Logger.i(TAG, "Navigation wait done, scene=${SceneManager.getInstance().currentScene.value}")
+                }
+
                 val result = registry.dispatch(
                     command,
                     AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)

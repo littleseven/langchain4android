@@ -76,6 +76,8 @@ import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.agent.capability.CameraCapability
+import com.picme.domain.agent.LocalCapabilityHost
+import com.picme.domain.agent.RegisterCapability
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.BeautyStrategy
@@ -710,6 +712,7 @@ fun CameraScreen(
     )
 
     if (permissionsState.allPermissionsGranted) {
+        android.util.Log.i("CameraDebug", "CameraScreen: permissions granted, calling CameraContent")
         CameraContent(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
@@ -717,6 +720,7 @@ fun CameraScreen(
             settingsViewModel = settingsViewModel
         )
     } else {
+        android.util.Log.i("CameraDebug", "CameraScreen: permissions NOT granted")
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Button(onClick = { permissionsState.launchMultiplePermissionRequest() }) {
                 Text(stringResource(R.string.grant_permissions))
@@ -1270,7 +1274,8 @@ fun CameraContent(
                     Logger.w(TAG, "Ratio switch rejected: state=${cameraStateManager.getState().name}")
                         return@agentCommandHandler
                 }
-                val ratio = when (cmd.ratio) {
+                val normalizedRatio = cmd.ratio.replace("_", ":")
+                val ratio = when (normalizedRatio) {
                     "4:3" -> AspectRatio.RATIO_4_3
                     "16:9" -> AspectRatio.RATIO_16_9
                     else -> AspectRatio.RATIO_FULL
@@ -1373,55 +1378,64 @@ fun CameraContent(
         }
     }
 
-    // 绑定命令处理器到语音协调器的回调引用
-    // 同时绑定 CameraCapability 的 delegate，确保 Chat 面板命令能正确执行
-    DisposableEffect(agentCommandHandler) {
-        onCommandRef.value = agentCommandHandler
+    // 创建页面级 CameraCapability 并注册到 CapabilityHost
+    val cameraCapability = remember { CameraCapability() }
+    RegisterCapability(cameraCapability)
 
-        // 获取应用级单例 Capability 并绑定 delegate（页面激活时绑定）
-        val cameraCapability = CameraCapability.getInstance()
-        cameraCapability.bindDelegate(object : CameraCapability.Delegate {
-            override fun onAdjustBeauty(settings: BeautySettings) {
-                agentCommandHandler(AiAgentCommand.AdjustBeauty(settings))
+    // 绑定 CameraCapability 状态变更到本地状态
+    DisposableEffect(cameraCapability) {
+        cameraCapability.setOnStateChangedListener { change ->
+            when (change) {
+                is CameraCapability.StateChange.AspectRatioChanged -> {
+                    aspectRatio = change.ratio
+                }
+                is CameraCapability.StateChange.BeautySettingsChanged -> {
+                    beautySettings = change.settings
+                }
+                is CameraCapability.StateChange.FilterChanged -> {
+                    selectedFilter = change.filter
+                    beautySettings = beautySettings.copy(colorFilter = change.filter)
+                }
+                is CameraCapability.StateChange.StyleChanged -> {
+                    beautySettings = beautySettings.copy(styleFilter = change.style)
+                }
+                is CameraCapability.StateChange.SceneChanged -> {
+                    currentScene = when (change.scene) {
+                        CameraCapability.SceneMode.NIGHT -> ScenePreset.NIGHT
+                        CameraCapability.SceneMode.MOON -> ScenePreset.MOON
+                        else -> ScenePreset.NONE
+                    }
+                }
+                is CameraCapability.StateChange.ExposureChanged -> {
+                    exposureCompensation = change.exposure
+                    cameraControl?.setExposureCompensationIndex(change.exposure)
+                }
+                is CameraCapability.StateChange.ZoomChanged -> {
+                    cameraControl?.setZoomRatio(change.zoom)
+                }
+                is CameraCapability.StateChange.LensFacingChanged -> {
+                    lensFacing = change.facing
+                }
+                is CameraCapability.StateChange.CaptureModeChanged -> {
+                    captureMode = change.mode
+                }
+                is CameraCapability.StateChange.CaptureRequested -> {
+                    agentCommandHandler(AiAgentCommand.CapturePhoto)
+                }
+                is CameraCapability.StateChange.RecordingToggled -> {
+                    agentCommandHandler(AiAgentCommand.ToggleRecording)
+                }
             }
-            override fun onSwitchFilter(filterType: FilterType) {
-                agentCommandHandler(AiAgentCommand.SwitchFilter(filterType))
-            }
-            override fun onSwitchStyle(styleFilter: StyleFilter) {
-                agentCommandHandler(AiAgentCommand.SwitchStyle(styleFilter))
-            }
-            override fun onSwitchScene(sceneName: String) {
-                agentCommandHandler(AiAgentCommand.SwitchScene(sceneName))
-            }
-            override fun onSwitchRatio(ratio: String) {
-                agentCommandHandler(AiAgentCommand.SwitchRatio(ratio))
-            }
-            override fun onAdjustExposure(exposure: Int) {
-                agentCommandHandler(AiAgentCommand.AdjustExposure(exposure))
-            }
-            override fun onAdjustZoom(zoomRatio: Float) {
-                agentCommandHandler(AiAgentCommand.AdjustZoom(zoomRatio))
-            }
-            override fun onFlipCamera() {
-                agentCommandHandler(AiAgentCommand.FlipCamera)
-            }
-            override fun onCapturePhoto() {
-                agentCommandHandler(AiAgentCommand.CapturePhoto)
-            }
-            override fun onToggleRecording() {
-                agentCommandHandler(AiAgentCommand.ToggleRecording)
-            }
-            override fun onSwitchMode(mode: MediaType) {
-                agentCommandHandler(AiAgentCommand.SwitchMode(mode))
-            }
-        })
-        Logger.i(TAG, "CameraCapability delegate bound")
-
-        onDispose {
-            // 解绑 delegate（页面离开时解绑，Capability 仍然注册）
-            cameraCapability.unbindDelegate()
-            Logger.i(TAG, "CameraCapability delegate unbound")
         }
+        onDispose {
+            cameraCapability.setOnStateChangedListener(null)
+        }
+    }
+
+    // 绑定命令处理器到语音协调器的回调引用
+    DisposableEffect(Unit) {
+        onCommandRef.value = agentCommandHandler
+        onDispose { }
     }
 
     var facePoint by remember { mutableStateOf(Offset.Zero) }

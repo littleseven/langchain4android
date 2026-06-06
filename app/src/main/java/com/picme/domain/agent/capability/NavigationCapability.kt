@@ -12,61 +12,37 @@ import kotlinx.coroutines.withContext
 import androidx.navigation.NavController
 
 /**
- * 导航 Capability
- *
- * 应用级单例，负责页面导航：切换页面、返回上一页
- * 在所有场景都可用
+ * 导航 Capability（Activity 级）
  *
  * **架构设计**：
- * - 在 Application.onCreate() 中注册一次，永不注销
- * - 通过 bindNavController() 绑定导航控制器
- * - 支持跨页面指令：导航命令可以在任何场景执行
+ * - Activity 级生命周期：由 MainActivity 创建和持有，Activity 销毁时释放
+ * - 构造函数注入 NavController，无需 bind/unbind 模式
+ * - 状态内聚：直接持有 NavController 引用（Activity 级，同生命周期）
+ *
+ * **生命周期**：
+ * ```
+ * MainActivity.onCreate() ──► NavigationCapability(navController) 创建
+ *     │
+ *     ├── 注册到根 CapabilityHost
+ *     │
+ * MainActivity.onDestroy() ──► NavigationCapability 随 Activity 释放
+ * ```
  *
  * **注意**：导航回调涉及 Compose NavController 操作，必须在主线程执行。
  * execute() 内部会自动切换到 Main 线程。
  */
-class NavigationCapability : BaseCapability() {
-
-    companion object {
-        @Volatile
-        private var instance: NavigationCapability? = null
-
-        fun getInstance(): NavigationCapability {
-            return instance ?: synchronized(this) {
-                instance ?: NavigationCapability().also { instance = it }
-            }
-        }
-    }
+class NavigationCapability(
+    private val navController: NavController
+) : BaseCapability() {
 
     private val tag = "NavigationCapability"
 
     override val name: String = "navigation"
     override val description: String = "页面导航：切换页面、返回上一页"
 
-    /**
-     * 导航控制器引用，由 MainActivity 绑定
-     */
-    private var navController: NavController? = null
-
-    /**
-     * 绑定 NavController（由 MainActivity 调用）
-     */
-    fun bindNavController(navController: NavController) {
-        this.navController = navController
-        Logger.i(tag, "NavController bound, isAvailable=${isAvailable()}")
-    }
-
-    /**
-     * 解绑 NavController（由 MainActivity onDispose 调用）
-     */
-    fun unbindNavController() {
-        this.navController = null
-        Logger.i(tag, "NavController unbound")
-    }
-
     override fun isAvailable(): Boolean {
-        // NavigationCapability 只有在 NavController 绑定后才可用
-        return navController != null
+        // NavigationCapability 只要有 NavController 就可用
+        return true
     }
 
     override fun activeScenes(): List<SceneManager.Scene> {
@@ -92,21 +68,12 @@ class NavigationCapability : BaseCapability() {
     ): Result<AgentAction> {
         Logger.d(tag, "Executing command: ${command::class.simpleName}")
 
-        val nav = navController
-            ?: return Result.success(
-                AgentAction.Error(
-                    commandId = command.commandId,
-                    errorCode = AgentErrorCode.CAPABILITY_UNAVAILABLE,
-                    message = "导航系统未初始化"
-                )
-            )
-
         return when (command) {
             is AgentCommand.NavigateTo -> {
                 val destination = parseDestination(command.destination)
                 if (destination != null) {
                     withContext(Dispatchers.Main) {
-                        navigateTo(nav, destination)
+                        navigateTo(navController, destination)
                     }
                     Result.success(AgentAction.Success(commandId = command.commandId, command = command))
                 } else {
@@ -122,7 +89,7 @@ class NavigationCapability : BaseCapability() {
 
             is AgentCommand.GoBack -> {
                 withContext(Dispatchers.Main) {
-                    nav.popBackStack()
+                    navController.popBackStack()
                 }
                 Result.success(AgentAction.Success(commandId = command.commandId, command = command))
             }

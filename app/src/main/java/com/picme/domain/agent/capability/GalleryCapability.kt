@@ -7,6 +7,7 @@ import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentErrorCode
 import com.picme.domain.agent.model.PageContext
 import com.picme.domain.agent.model.SceneManager
+import java.lang.ref.WeakReference
 
 /**
  * Gallery 相册控制 Capability
@@ -54,16 +55,15 @@ class GalleryCapability : BaseCapability() {
 
     /**
      * 当前绑定的委托，null 表示相册页面未激活
+     * 使用 WeakReference 防止 Compose 页面泄漏
      */
-    @Volatile
-    var delegate: Delegate? = null
-        private set
+    private var delegateRef: WeakReference<Delegate>? = null
 
     /**
      * 绑定委托（由 GalleryScreen 调用）
      */
     fun bindDelegate(delegate: Delegate) {
-        this.delegate = delegate
+        this.delegateRef = WeakReference(delegate)
         Logger.i(tag, "Delegate bound")
     }
 
@@ -71,12 +71,12 @@ class GalleryCapability : BaseCapability() {
      * 解绑委托（由 GalleryScreen onDispose 调用）
      */
     fun unbindDelegate() {
-        this.delegate = null
+        this.delegateRef = null
         Logger.i(tag, "Delegate unbound")
     }
 
     override fun isAvailable(): Boolean {
-        return delegate != null
+        return delegateRef?.get() != null
     }
 
     override fun activeScenes(): List<SceneManager.Scene> {
@@ -112,7 +112,7 @@ class GalleryCapability : BaseCapability() {
     ): Result<AgentAction> {
         Logger.d(tag, "Executing command: ${command::class.simpleName}")
 
-        val d = delegate
+        val d = delegateRef?.get()
             ?: return Result.success(
                 AgentAction.Error(
                     commandId = command.commandId,

@@ -10,6 +10,7 @@ import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.ThemeMode
+import java.lang.ref.WeakReference
 
 /**
  * 设置控制 Capability
@@ -55,22 +56,24 @@ class SettingsCapability : BaseCapability() {
         fun onToggleSetting(key: String, enabled: Boolean)
     }
 
-    @Volatile
-    var delegate: Delegate? = null
-        private set
+    /**
+     * 当前绑定的委托，null 表示设置页面未激活
+     * 使用 WeakReference 防止 Compose 页面泄漏
+     */
+    private var delegateRef: WeakReference<Delegate>? = null
 
     fun bindDelegate(delegate: Delegate) {
-        this.delegate = delegate
+        this.delegateRef = WeakReference(delegate)
         Logger.i(TAG, "Delegate bound")
     }
 
     fun unbindDelegate() {
-        this.delegate = null
+        this.delegateRef = null
         Logger.i(TAG, "Delegate unbound")
     }
 
     override fun isAvailable(): Boolean {
-        return delegate != null
+        return delegateRef?.get() != null
     }
 
     override fun activeScenes(): List<SceneManager.Scene> =
@@ -100,7 +103,7 @@ class SettingsCapability : BaseCapability() {
     ): Result<AgentAction> {
         Logger.i(TAG, "Executing command: $command")
 
-        val d = delegate
+        val d = delegateRef?.get()
             ?: return Result.success(
                 AgentAction.Error(
                     commandId = command.commandId,
