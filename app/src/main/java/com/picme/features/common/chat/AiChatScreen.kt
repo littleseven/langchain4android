@@ -65,10 +65,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
@@ -350,6 +352,9 @@ private fun UserTextBubble(
     message: AgentMessage.UserText,
     modifier: Modifier = Modifier
 ) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterEnd
@@ -362,6 +367,14 @@ private fun UserTextBubble(
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = {
+                            clipboardManager.setText(AnnotatedString(message.content))
+                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
         )
     }
 }
@@ -371,6 +384,9 @@ private fun AgentTextBubble(
     message: AgentMessage.AgentText,
     modifier: Modifier = Modifier
 ) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterStart
@@ -383,6 +399,14 @@ private fun AgentTextBubble(
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.DarkGray.copy(alpha = 0.8f))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = {
+                            clipboardManager.setText(AnnotatedString(message.content))
+                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
         )
     }
 }
