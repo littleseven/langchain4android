@@ -243,8 +243,9 @@ python3 scripts/check_i18n_sync.py
 | 工具/Skill | 整合方式 |
 |-----------|----------|
 | `scripts/ai-gate.sh` | L1 自动化检查入口 |
-| `scripts/auto-dev-loop.sh` | L1 设备验证入口 |
-| `scripts/regression-test.sh` | L1 回归测试入口 |
+| `scripts/auto-dev-loop.sh` | L1 设备验证入口（JSON 命令驱动） |
+| `scripts/regression-test.sh` | L1 回归测试入口（JSON 命令驱动） |
+| `.qoder/skills/agent-test-expert/skill.md` | JSON 驱动测试方法（主要方法） |
 | [adb-bot](.qoder/skills/adb-bot/SKILL.md) | 设备控制与日志收集 |
 | [image-quality-checker](.qoder/skills/image-quality-checker/SKILL.md) | 截图质量分析 |
 | [error-healer](.qoder/skills/error-healer/SKILL.md) | 编译错误自动修复 |
@@ -258,8 +259,11 @@ python3 scripts/check_i18n_sync.py
 ## 快速命令
 
 ```bash
-# 完整验收（有设备时）
+# 完整验收（有设备时，使用 JSON 命令驱动）
 ./scripts/auto-dev-loop.sh && ./scripts/regression-test.sh
+
+# 发送单个 JSON 测试命令
+adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"switch_ratio\",\"params\":{\"ratio\":\"16_9\"}}'"
 
 # 仅代码检查（无设备时）
 ./scripts/ai-gate.sh

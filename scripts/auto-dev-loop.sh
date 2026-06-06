@@ -280,26 +280,26 @@ run_phase4() {
         log_warn "未检测到 BeautyEngine 初始化日志"
     fi
 
-    # 4.4 广播命令测试（替代 Instrumented Tests，更快速可靠）
+    # 4.4 JSON 命令测试（通过 AgentTestBroadcastReceiver，复用 AgentCommand 解析路径）
     echo ""
-    echo "→ 广播命令功能测试..."
-    
+    echo "→ JSON 命令功能测试..."
+
     # 测试拍照命令
-    adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture" > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'" > /dev/null 2>&1
     sleep 1
-    if adb logcat -d | grep -q "PicMe:CameraTest.*Command emitted successfully"; then
-        log_ok "拍照广播命令测试通过"
+    if adb logcat -d | grep -qE "AgentTestReceiver.*JSON command executed.*success"; then
+        log_ok "拍照 JSON 命令测试通过"
     else
-        log_warn "拍照广播命令测试未检测到成功日志"
+        log_warn "拍照 JSON 命令测试未检测到成功日志"
     fi
-    
-    # 测试获取状态命令
-    adb shell am broadcast -a com.picme.TEST_COMMAND --es action "get_state" > /dev/null 2>&1
+
+    # 测试获取状态命令（通过 switch_ratio 验证命令分发链路）
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"switch_ratio\",\"params\":{\"ratio\":\"4_3\"}}'" > /dev/null 2>&1
     sleep 0.5
-    if adb logcat -d | grep -q "PicMe:CameraTest.*StateSnapshot"; then
-        log_ok "状态查询广播命令测试通过"
+    if adb logcat -d | grep -qE "AgentTestReceiver.*JSON command executed.*success"; then
+        log_ok "画幅切换 JSON 命令测试通过"
     else
-        log_warn "状态查询广播命令测试未检测到成功日志"
+        log_warn "画幅切换 JSON 命令测试未检测到成功日志"
     fi
 
     # 4.5 可选：Instrumented Tests（仅指定 --test-suite 时运行）

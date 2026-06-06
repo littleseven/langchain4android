@@ -4,11 +4,9 @@ package com.picme.features.camera
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.content.IntentFilter
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -58,7 +56,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -93,12 +90,7 @@ import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
-import com.picme.features.camera.test.CameraTestCommand
-import com.picme.features.camera.test.CameraTestCommandConverters
-import com.picme.features.camera.test.CameraTestCommandDispatcher
-import com.picme.features.camera.test.CameraTestCommandReceiver
-import com.picme.features.camera.test.CameraTestResult
-import com.picme.features.camera.test.CameraTestStateSnapshot
+
 import com.picme.features.camera.thread.CameraThreadRegistry
 import com.picme.features.camera.voice.AsrEngine
 import com.picme.features.camera.voice.MnnAsrClient
@@ -166,7 +158,7 @@ private fun Int.toCameraAspectRatioMode(): CameraAspectRatioMode = when (this) {
 
 private const val TAG = "Camera"
 private const val TAG_AI_AGENT = "AiAgent"
-private const val TAG_CAMERA_TEST = "CameraTest"
+
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1457,208 +1449,6 @@ fun CameraContent(
     }
     var renderPerfStats by remember {
         mutableStateOf(BeautyPerfStats())
-    }
-
-    // RD 动态注册测试命令广播接收器（解决 Android 8.0+ 后台广播限制）
-    DisposableEffect(Unit) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                if (intent.action == CameraTestCommandReceiver.ACTION_TEST_COMMAND) {
-                    Logger.i(TAG_CAMERA_TEST, "Broadcast received: ${intent.getStringExtra("action")}")
-                    CameraTestCommandDispatcher.dispatchFromIntent(intent)
-                }
-            }
-        }
-        val filter = IntentFilter(CameraTestCommandReceiver.ACTION_TEST_COMMAND)
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            filter,
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-        Logger.i(TAG_CAMERA_TEST, "Test command receiver registered dynamically")
-
-        onDispose {
-            context.unregisterReceiver(receiver)
-            Logger.i(TAG_CAMERA_TEST, "Test command receiver unregistered")
-        }
-    }
-
-    // RD 测试命令收集器：接收 adb 广播命令并执行对应操作
-    LaunchedEffect(Unit) {
-        CameraTestCommandDispatcher.commandFlow.collect { command ->
-            Logger.i(TAG_CAMERA_TEST, "Executing command: ${CameraTestCommandDispatcher.describeCommand(command)}")
-            when (command) {
-                is CameraTestCommand.Capture -> {
-                    if (!cameraStateManager.canCapture()) {
-                        Logger.w(TAG_CAMERA_TEST, "Capture command rejected: state=${cameraStateManager.getState().name}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Camera busy, state=${cameraStateManager.getState().name}")
-                        )
-                        return@collect
-                    }
-                    handleCaptureClick(
-                        context = context,
-                        captureMode = captureMode,
-                        isRecording = isRecording,
-                        recording = recording,
-                        videoCapture = videoCapture,
-                        viewModel = viewModel,
-                        imageCapture = imageCapture,
-                        imageProcessor = imageProcessor,
-                        selectedFilter = selectedFilter,
-                        beautySettings = beautySettings,
-                        lensFacing = lensFacing,
-                        cachedFaces = emptyList(),
-                        beautyStrategy = beautyStrategy,
-                        glPreviewProvider = glPreviewProvider,
-                        beautyVideoRecorder = beautyVideoRecorder,
-                        onRecordingChanged = { updated -> recording = updated },
-                        onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
-                        coroutineScope = coroutineScope,
-                        cameraStateManager = cameraStateManager
-                    )
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Capture triggered")
-                    )
-                }
-                is CameraTestCommand.FlipCamera -> {
-                    val nextLens = nextLensFacing(lensFacing)
-                    lensFacing = nextLens
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Camera flipped to ${CameraTestCommandConverters.lensFacingToString(nextLens)}")
-                    )
-                }
-                is CameraTestCommand.SetMode -> {
-                    captureMode = CameraTestCommandConverters.parseMediaType(command.mode)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Mode set to ${command.mode}")
-                    )
-                }
-                is CameraTestCommand.SetBeauty -> {
-                    val newSettings = beautySettings.copy(
-                        smoothing = command.smooth?.toFloat()?.div(100f) ?: beautySettings.smoothing,
-                        whitening = command.whiten?.toFloat()?.div(100f) ?: beautySettings.whitening,
-                        slimFace = command.slimFace?.toFloat()?.div(100f) ?: beautySettings.slimFace,
-                        bigEyes = command.bigEye?.toFloat()?.div(100f) ?: beautySettings.bigEyes
-                    )
-                    beautySettings = newSettings
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Beauty settings updated")
-                    )
-                }
-                is CameraTestCommand.SetFilter -> {
-                    val filter = CameraTestCommandConverters.parseFilterType(command.filter)
-                    selectedFilter = filter
-                    beautySettings = beautySettings.copy(colorFilter = filter)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Filter set to ${command.filter}")
-                    )
-                }
-                is CameraTestCommand.SetStyle -> {
-                    val style = CameraTestCommandConverters.parseStyleFilter(command.style)
-                    beautySettings = beautySettings.copy(styleFilter = style)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Style set to ${command.style}")
-                    )
-                }
-                is CameraTestCommand.SetScene -> {
-                    currentScene = CameraTestCommandConverters.parseScenePreset(command.scene)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Scene set to ${command.scene}")
-                    )
-                }
-                is CameraTestCommand.SetRatio -> {
-                    aspectRatio = CameraTestCommandConverters.parseAspectRatio(command.ratio)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Ratio set to ${command.ratio}")
-                    )
-                }
-                is CameraTestCommand.SetExposure -> {
-                    exposureCompensation = command.exposure.coerceIn(-2, 2)
-                    cameraControl?.setExposureCompensationIndex(exposureCompensation)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Exposure set to ${command.exposure}")
-                    )
-                }
-                is CameraTestCommand.SetZoom -> {
-                    val clampedZoom = command.zoom.coerceIn(minZoomRatio, maxZoomRatio)
-                    zoomRatio = clampedZoom
-                    cameraControl?.setZoomRatio(clampedZoom)
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Zoom set to ${clampedZoom}x")
-                    )
-                }
-                is CameraTestCommand.ToggleBeautyPanel -> {
-                    panelState.showBeautySelector = !panelState.showBeautySelector
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Beauty panel toggled")
-                    )
-                }
-                is CameraTestCommand.ToggleFilterPanel -> {
-                    panelState.showFilterSelector = !panelState.showFilterSelector
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Filter panel toggled")
-                    )
-                }
-                is CameraTestCommand.ToggleSettingsPanel -> {
-                    onNavigateToSettings()
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Settings opened")
-                    )
-                }
-                is CameraTestCommand.GetState -> {
-                    val result = CameraTestCommandDispatcher.handleGetState(command)
-                    CameraTestCommandDispatcher.emitResult(result)
-                }
-                is CameraTestCommand.Unknown -> {
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Error(command, "Unknown command: ${command.rawAction}")
-                    )
-                }
-                is CameraTestCommand.EnterGallery -> {
-                    onNavigateToGallery()
-                    Logger.i(TAG_CAMERA_TEST, "Navigate to gallery requested")
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Navigated to gallery")
-                    )
-                }
-                else -> {
-                    // Gallery 相关命令在 CameraScreen 中不支持
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Error(command, "Command not supported in camera mode")
-                    )
-                }
-            }
-        }
-    }
-
-    // RD 定期更新测试状态快照
-    LaunchedEffect(
-        lensFacing, captureMode, aspectRatio, zoomRatio, exposureCompensation,
-        currentScene, selectedFilter, beautySettings, isRecording, panelState
-    ) {
-        val isAnyPanelOpen = panelState.showBeautySelector || panelState.showFilterSelector ||
-            panelState.showRatioSelector || panelState.showSceneSelector ||
-            panelState.showGridSelector || panelState.showFacialRefinement ||
-            panelState.showMakeupAdjustment || panelState.showBodyManagement
-        CameraTestCommandDispatcher.updateState(
-            CameraTestStateSnapshot(
-                lensFacing = CameraTestCommandConverters.lensFacingToString(lensFacing),
-                captureMode = CameraTestCommandConverters.mediaTypeToString(captureMode),
-                aspectRatio = CameraTestCommandConverters.aspectRatioToString(aspectRatio),
-                zoomRatio = zoomRatio,
-                exposureCompensation = exposureCompensation,
-                currentScene = CameraTestCommandConverters.scenePresetToString(currentScene),
-                currentFilter = CameraTestCommandConverters.filterTypeToString(selectedFilter),
-                currentStyle = CameraTestCommandConverters.styleFilterToString(beautySettings.styleFilter),
-                beautyEnabled = beautySettings.enabled,
-                beautySmooth = beautySettings.smoothing,
-                beautyWhiten = beautySettings.whitening,
-                isRecording = isRecording,
-                isAnyPanelOpen = isAnyPanelOpen
-            )
-        )
     }
 
     // 监听 Shader Debug Mode 变化，同步到 GL Provider

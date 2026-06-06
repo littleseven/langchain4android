@@ -72,15 +72,7 @@ class AgentStateProbe(private val registry: CapabilityRegistry) {
             snapshot["canNavigate"] = isCommandAvailable(AgentCommand.NavigateTo(destination = ""))
             snapshot["canSettings"] = isCapabilityAvailable("settings")
 
-            // 4. 从 CameraTestCommandDispatcher 获取相机状态（如果可用）
-            try {
-                val cameraState = getCameraStateSnapshot()
-                snapshot.putAll(cameraState)
-            } catch (e: Exception) {
-                Logger.d(TAG, "Camera state not available: ${e.message}")
-            }
-
-            // 5. 时间戳
+            // 4. 时间戳
             snapshot["timestamp"] = System.currentTimeMillis()
         } catch (e: Exception) {
             Logger.e(TAG, "Failed to capture state snapshot", e)
@@ -138,40 +130,5 @@ class AgentStateProbe(private val registry: CapabilityRegistry) {
         )
     }
 
-    /**
-     * 从 CameraTestCommandDispatcher 获取相机状态快照
-     *
-     * 使用反射避免直接依赖，因为 CameraTestCommandDispatcher 可能在测试包中
-     */
-    private fun getCameraStateSnapshot(): Map<String, Any?> {
-        val result = mutableMapOf<String, Any?>()
 
-        try {
-            // 尝试通过反射获取 CameraTestCommandDispatcher 的 currentState
-            val dispatcherClass = Class.forName(
-                "com.picme.features.camera.test.CameraTestCommandDispatcher"
-            )
-            val instanceField = dispatcherClass.getDeclaredField("INSTANCE")
-            val dispatcher = instanceField.get(null)
-
-            val stateField = dispatcherClass.getDeclaredField("currentState")
-            stateField.isAccessible = true
-            val state = stateField.get(dispatcher)
-
-            if (state != null) {
-                val stateClass = state.javaClass
-                // 反射读取所有字段
-                stateClass.declaredFields.forEach { field ->
-                    field.isAccessible = true
-                    val value = field.get(state)
-                    result[field.name] = value
-                }
-            }
-        } catch (e: Exception) {
-            // CameraTestCommandDispatcher 不可用，忽略
-            Logger.d(TAG, "CameraTestCommandDispatcher not available")
-        }
-
-        return result
-    }
 }

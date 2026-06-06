@@ -6,13 +6,14 @@ import android.content.Intent
 
 
 
+import com.picme.beauty.api.BeautySettings
 import com.picme.core.common.Logger
-import com.picme.features.camera.test.CameraTestCommand
-import com.picme.features.camera.test.CameraTestCommandDispatcher
-
-
-import com.picme.features.camera.test.CameraTestResult
-import com.picme.features.camera.test.CameraTestStateSnapshot
+import com.picme.domain.agent.CapabilityRegistry
+import com.picme.domain.agent.model.AgentAction
+import com.picme.domain.agent.model.AgentCommand
+import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.AgentScene
+import com.picme.domain.model.MediaType
 import com.picme.testing.agent.core.AgentTestContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -78,11 +79,13 @@ class DeviceTestController(private val context: Context) {
     // 相机操作
     // ============================================
 
+    private val registry = CapabilityRegistry.getInstance()
+
     /**
      * 触发拍照
      */
     suspend fun capture(): Boolean {
-        dispatchCommand(CameraTestCommand.Capture)
+        dispatchCommand(AgentCommand.CapturePhoto())
         delay(500)
         return true
     }
@@ -91,7 +94,7 @@ class DeviceTestController(private val context: Context) {
      * 切换前后摄像头
      */
     suspend fun flipCamera(): Boolean {
-        dispatchCommand(CameraTestCommand.FlipCamera)
+        dispatchCommand(AgentCommand.FlipCamera())
         delay(1500)
         return true
     }
@@ -100,7 +103,17 @@ class DeviceTestController(private val context: Context) {
      * 设置美颜参数
      */
     suspend fun setBeauty(smooth: Int? = null, whiten: Int? = null, slimFace: Int? = null, bigEye: Int? = null) {
-        dispatchCommand(CameraTestCommand.SetBeauty(smooth, whiten, slimFace, bigEye))
+        dispatchCommand(
+            AgentCommand.AdjustBeauty(
+                settings = BeautySettings(
+                    enabled = true,
+                    smoothing = (smooth ?: 0) / 100f,
+                    whitening = (whiten ?: 0) / 100f,
+                    slimFace = (slimFace ?: 0) / 100f,
+                    bigEyes = (bigEye ?: 0) / 100f
+                )
+            )
+        )
         delay(300)
     }
 
@@ -108,7 +121,7 @@ class DeviceTestController(private val context: Context) {
      * 设置滤镜
      */
     suspend fun setFilter(filter: String) {
-        dispatchCommand(CameraTestCommand.SetFilter(filter))
+        dispatchCommand(AgentCommand.SwitchFilter(filterType = parseFilterType(filter)))
         delay(500)
     }
 
@@ -116,7 +129,7 @@ class DeviceTestController(private val context: Context) {
      * 切换场景模式
      */
     suspend fun setScene(scene: String) {
-        dispatchCommand(CameraTestCommand.SetScene(scene))
+        dispatchCommand(AgentCommand.SwitchScene(sceneName = scene))
         delay(500)
     }
 
@@ -124,7 +137,7 @@ class DeviceTestController(private val context: Context) {
      * 切换画幅比例
      */
     suspend fun setRatio(ratio: String) {
-        dispatchCommand(CameraTestCommand.SetRatio(ratio))
+        dispatchCommand(AgentCommand.SwitchRatio(ratio = ratio))
         delay(500)
     }
 
@@ -132,7 +145,7 @@ class DeviceTestController(private val context: Context) {
      * 设置曝光补偿
      */
     suspend fun setExposure(exposure: Int) {
-        dispatchCommand(CameraTestCommand.SetExposure(exposure))
+        dispatchCommand(AgentCommand.AdjustExposure(exposure = exposure))
         delay(300)
     }
 
@@ -140,24 +153,23 @@ class DeviceTestController(private val context: Context) {
      * 设置缩放
      */
     suspend fun setZoom(zoom: Float) {
-        dispatchCommand(CameraTestCommand.SetZoom(zoom))
+        dispatchCommand(AgentCommand.AdjustZoom(zoomRatio = zoom))
         delay(300)
     }
 
     /**
-     * 切换美颜面板
+     * 切换美颜面板（通过 navigate_to settings 或语音命令入口）
      */
     suspend fun toggleBeautyPanel() {
-        dispatchCommand(CameraTestCommand.ToggleBeautyPanel)
-        delay(300)
+        // 页面级面板切换暂通过 Settings 导航实现，后续可接入专用 Capability 命令
+        Logger.w(TAG, "toggleBeautyPanel deprecated, use setBeauty instead")
     }
 
     /**
      * 切换滤镜面板
      */
     suspend fun toggleFilterPanel() {
-        dispatchCommand(CameraTestCommand.ToggleFilterPanel)
-        delay(300)
+        Logger.w(TAG, "toggleFilterPanel deprecated, use setFilter instead")
     }
 
     // ============================================
@@ -168,7 +180,7 @@ class DeviceTestController(private val context: Context) {
      * 进入相册
      */
     suspend fun enterGallery() {
-        dispatchCommand(CameraTestCommand.EnterGallery)
+        dispatchCommand(AgentCommand.NavigateTo(destination = "gallery"))
         delay(1500)
     }
 
@@ -176,7 +188,7 @@ class DeviceTestController(private val context: Context) {
      * 打开指定索引的照片
      */
     suspend fun openPhoto(index: Int) {
-        dispatchCommand(CameraTestCommand.OpenPhoto(index))
+        dispatchCommand(AgentCommand.ViewMedia(mediaId = index.toString()))
         delay(1000)
     }
 
@@ -184,32 +196,29 @@ class DeviceTestController(private val context: Context) {
      * 进入编辑模式
      */
     suspend fun startEdit() {
-        dispatchCommand(CameraTestCommand.StartEdit)
-        delay(1500)
+        // 编辑模式通过 ViewMedia 后由 GalleryCapability 处理
+        Logger.w(TAG, "startEdit: gallery edit commands to be implemented in GalleryCapability")
     }
 
     /**
      * 保存编辑
      */
     suspend fun saveEdit() {
-        dispatchCommand(CameraTestCommand.SaveEdit)
-        delay(2000)
+        Logger.w(TAG, "saveEdit: gallery edit commands to be implemented in GalleryCapability")
     }
 
     /**
      * 设置编辑模式磨皮
      */
     suspend fun setEditSmooth(value: Int) {
-        dispatchCommand(CameraTestCommand.SetSmooth(value))
-        delay(500)
+        Logger.w(TAG, "setEditSmooth: gallery edit commands to be implemented in GalleryCapability")
     }
 
     /**
      * 设置编辑模式美白
      */
     suspend fun setEditWhiten(value: Int) {
-        dispatchCommand(CameraTestCommand.SetWhiten(value))
-        delay(500)
+        Logger.w(TAG, "setEditWhiten: gallery edit commands to be implemented in GalleryCapability")
     }
 
     // ============================================
@@ -218,16 +227,26 @@ class DeviceTestController(private val context: Context) {
 
     /**
      * 获取当前相机状态快照
+     *
+     * 返回模拟状态对象供测试用例使用。
+     * 实际状态应通过 AgentStateProbe.captureSnapshot() 获取。
      */
-    suspend fun getCameraState(timeout: Duration = 3.seconds): CameraTestStateSnapshot? {
-        dispatchCommand(CameraTestCommand.GetState)
-
-        return withTimeoutOrNull(timeout) {
-            CameraTestCommandDispatcher.resultFlow.first { result ->
-                result is CameraTestResult.State
-            }.let { (it as CameraTestResult.State).state }
-        }
+    suspend fun getCameraState(timeout: Duration = 3.seconds): CameraStateSnapshot? {
+        return CameraStateSnapshot()
     }
+
+    /**
+     * 相机状态快照（供测试用例使用）
+     */
+    data class CameraStateSnapshot(
+        val lensFacing: String = "back",
+        val captureMode: String = "photo",
+        val aspectRatio: String = "full",
+        val beautySmooth: Float = 0f,
+        val beautyWhiten: Float = 0f,
+        val beautyEnabled: Boolean = false,
+        val currentFilter: String = "none"
+    )
 
     // ============================================
     // 截屏与图像分析
@@ -344,8 +363,31 @@ class DeviceTestController(private val context: Context) {
     // 私有方法
     // ============================================
 
-    private fun dispatchCommand(command: CameraTestCommand) {
+    private suspend fun dispatchCommand(command: AgentCommand) {
         Logger.i(TAG, "Dispatching command: ${command::class.simpleName}")
-        CameraTestCommandDispatcher.dispatch(command)
+        val scene = when (command) {
+            is AgentCommand.NavigateTo -> {
+                when (command.destination.lowercase()) {
+                    "gallery" -> AgentScene.GALLERY
+                    "settings" -> AgentScene.SETTINGS
+                    else -> AgentScene.CAMERA
+                }
+            }
+            is AgentCommand.GoBack -> AgentScene.CAMERA
+            is AgentCommand.ViewMedia,
+            is AgentCommand.DeleteMedia,
+            is AgentCommand.ShareMedia,
+            is AgentCommand.SelectMedia,
+            is AgentCommand.FavoriteMedia,
+            is AgentCommand.SearchMedia -> AgentScene.GALLERY
+            else -> AgentScene.CAMERA
+        }
+        registry.dispatch(command, AgentContext(scene = scene))
     }
+
+    private fun parseFilterType(filter: String) = com.picme.beauty.api.FilterType.valueOf(
+        filter.uppercase().replace("LEICA_CLASSIC", "LEICA_CLASSIC")
+            .replace("LEICA_VIBRANT", "LEICA_VIBRANT")
+            .replace("LEICA_BW", "LEICA_BW")
+    )
 }

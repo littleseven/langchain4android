@@ -151,15 +151,13 @@ tc_camera_01_startup() {
 tc_camera_02_flip() {
     print_test_header "TC-CAMERA-02: 前后摄像头切换"
 
-    local action="com.picme.TEST_COMMAND"
-
     # 切换到前置
-    adb shell am broadcast -a $action --es action "flip_camera" > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"flip_camera\",\"params\":{}}'" > /dev/null 2>&1
     sleep 2
     screenshot "tc02_front"
 
     # 切换回后置
-    adb shell am broadcast -a $action --es action "flip_camera" > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"flip_camera\",\"params\":{}}'" > /dev/null 2>&1
     sleep 2
     screenshot "tc02_back"
 
@@ -172,21 +170,19 @@ tc_camera_02_flip() {
 tc_camera_03_capture() {
     print_test_header "TC-CAMERA-03: 拍照与 GPU 后处理"
 
-    local action="com.picme.TEST_COMMAND"
-
     # 确保后置摄像头
-    adb shell am broadcast -a $action --es action "flip_camera" > /dev/null 2>&1 || true
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"flip_camera\",\"params\":{}}'" > /dev/null 2>&1 || true
     sleep 1
 
     # 设置美颜参数
-    adb shell am broadcast -a $action --es action "set_beauty" --ei smooth 80 --ei whiten 60 > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":80,\"whitening\":60}}'" > /dev/null 2>&1
     sleep 0.5
 
     # 拍照前清除日志
     adb logcat -c > /dev/null 2>&1
 
     # 触发拍照
-    adb shell am broadcast -a $action --es action "capture" > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'" > /dev/null 2>&1
     sleep 3
 
     # 验证 GPU 处理日志
@@ -218,18 +214,14 @@ tc_camera_03_capture() {
 tc_beauty_01_slider() {
     print_test_header "TC-BEAUTY-01: 美颜参数设置"
 
-    local action="com.picme.TEST_COMMAND"
-
     # 清除日志
     adb logcat -c > /dev/null 2>&1
 
     # 设置不同参数组合
-    adb shell am broadcast -a $action --es action "set_beauty" \
-        --ei smooth 100 --ei whiten 100 --ei slim_face 80 --ei big_eye 60 > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":100,\"whitening\":100,\"slimFace\":80,\"bigEyes\":60}}'" > /dev/null 2>&1
     sleep 1
 
-    adb shell am broadcast -a $action --es action "set_beauty" \
-        --ei smooth 0 --ei whiten 0 --ei slim_face 0 --ei big_eye 0 > /dev/null 2>&1
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":0,\"whitening\":0,\"slimFace\":0,\"bigEyes\":0}}'" > /dev/null 2>&1
     sleep 1
 
     screenshot "tc_beauty_reset"
@@ -247,12 +239,11 @@ tc_beauty_01_slider() {
 tc_beauty_02_filter() {
     print_test_header "TC-BEAUTY-02: 滤镜切换"
 
-    local action="com.picme.TEST_COMMAND"
     local filters="none leica_classic leica_vibrant leica_bw film_gold"
     local count=0
 
     for filter in $filters; do
-        adb shell am broadcast -a $action --es action "set_filter" --es filter "$filter" > /dev/null 2>&1
+        adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"switch_filter\",\"params\":{\"filter\":\"$filter\"}}'" > /dev/null 2>&1
         sleep 0.8
         count=$((count + 1))
     done

@@ -98,26 +98,31 @@ onView(withText("确认"))
     .check(matches(isDisplayed()))
 ```
 
-## adb-bot Skill 的改进用法
+## 推荐触发方式
 
-`adb-bot` 技能应优先使用以下方式：
+按优先级排列：
 
 ```bash
-# **通过**：通过 am start 启动特定页面（最可靠）
-adb shell am start -n com.picme/.features.camera.CameraActivity
+# ✅ 首选：通过 AgentTestBroadcastReceiver 发送 JSON 命令
+# 复用与 LLM 相同的 AgentCommand 解析路径，统一、可靠、可扩展
+adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'"
+adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"navigate_to\",\"params\":{\"destination\":\"gallery\"}}'"
 
-# **通过**：通过广播触发功能
-adb shell am broadcast -a com.picme.ACTION_TAKE_PHOTO
+# ✅ 次选：通过 am start 启动特定页面
+adb shell am start -n com.picme/.MainActivity
 
-# **通过**：通过 input keyevent 模拟硬件按键
+# ✅ 通过 input keyevent 模拟硬件按键
 adb shell input keyevent KEYCODE_CAMERA
 adb shell input keyevent KEYCODE_VOLUME_UP
 
-# 错误：避免：基于坐标的盲目点击
+# ❌ 避免：基于坐标的盲目点击
 adb shell input tap 500 1500
 
-# 错误：避免：基于图像识别的点击
+# ❌ 避免：基于图像识别的点击
 # 任何需要截图比对再点击的方式
+
+# ❌ 避免：旧版 TEST_COMMAND 广播（已废弃）
+# adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
 ```
 
 ## 测试数据准备

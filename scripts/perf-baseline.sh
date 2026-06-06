@@ -201,8 +201,8 @@ capture_perf_data() {
         sleep 3
     fi
     
-    # 触发拍照
-    adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture" > /dev/null 2>&1
+    # 触发拍照（通过 AgentTestBroadcastReceiver JSON 命令）
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'" > /dev/null 2>&1
     sleep 3
     
     # 收集日志

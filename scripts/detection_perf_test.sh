@@ -77,8 +77,8 @@ test_detection_performance() {
         # 记录开始时间
         local start_time=$(date +%s%N)
         
-        # 触发拍照
-        adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture" > /dev/null 2>&1
+        # 触发拍照（通过 AgentTestBroadcastReceiver JSON 命令）
+        adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'" > /dev/null 2>&1
         
         # 等待检测完成
         sleep 2

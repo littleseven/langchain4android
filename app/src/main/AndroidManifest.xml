@@ -45,14 +45,6 @@
             android:theme="@style/Theme.PicMe" />
 
         <receiver
-            android:name=".features.camera.test.CameraTestCommandReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.picme.TEST_COMMAND" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
             android:name=".testing.agent.bridge.AgentTestBroadcastReceiver"
             android:exported="true">
             <intent-filter>

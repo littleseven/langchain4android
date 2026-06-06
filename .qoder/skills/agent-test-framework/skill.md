@@ -29,7 +29,7 @@ tags:
 - **设备端执行** — 测试逻辑在 Android 设备上运行，避免 adb 命令碎片化
 - **状态驱动断言** — 基于应用状态快照而非日志文本匹配
 - **自动上下文收集** — 失败时自动保留截屏、日志、状态快照
-- **双向通信** — AI Agent 通过广播触发测试，设备端返回结构化 JSON 结果
+- **双向通信** — AI Agent 通过 `AgentTestBroadcastReceiver` 发送 JSON 命令触发测试，设备端返回结构化 JSON 结果
 
 ## 架构概览
 
@@ -49,11 +49,9 @@ AI Agent (PC/Server)
 ├─────────────────────────────────────┤
 │  DeviceTestController               │
 │  (封装设备操作：相机/相册/截屏/日志)   │
-├─────────────────────────────────────┤
-│  CameraTestCommandDispatcher        │
-│  (复用现有广播命令体系)               │
+│  通过 CapabilityRegistry 直接分发命令 │
 └─────────────────────────────────────┘
-    │  StateFlow / SharedFlow
+    │  AgentCommand → Capability
     ▼
 CameraScreen / GalleryScreen
 ```
@@ -158,8 +156,8 @@ AgentAsserts.beautySettingsApplied(smooth = 80, whiten = 60)
 ### 从 AI Agent 触发测试
 
 ```bash
-# 1. 发送测试命令
-adb shell am broadcast -a com.picme.AGENT_TEST --es suite "camera"
+# 1. 发送测试命令（显式组件，Android 12+ 必需）
+adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}'"
 
 # 2. 等待响应（通过日志）
 adb logcat -d | grep "AgentTestReceiver: Response sent"
@@ -188,17 +186,9 @@ adb logcat -d | grep "AgentTestReceiver: Response sent"
 }
 ```
 
-### 在 Screen 中注册接收器
+### 测试入口
 
-```kotlin
-@Composable
-fun CameraScreen(...) {
-    // 注册 Agent 测试命令接收器
-    AgentTestCommandIntegration()
-
-    // ... 原有 UI 代码
-}
-```
+测试命令通过 [AgentTestBroadcastReceiver](app/src/main/java/com/picme/testing/agent/bridge/AgentTestBroadcastReceiver.kt) 统一接收，无需在每个 Screen 中单独注册接收器。Capability 生命周期重构后，命令通过 `CapabilityRegistry` 分发到当前页面级 Capability 执行。
 
 ## 现有用例清单
 
@@ -222,23 +212,26 @@ fun CameraScreen(...) {
 
 ## 与旧体系对比
 
-| 维度 | 旧体系 (bash + adb) | 新体系 (Agent Framework) |
-|------|---------------------|--------------------------|
-| 用例定义 | bash 函数 | Kotlin DSL |
+| 维度 | 旧体系 (TEST_COMMAND 广播) | 新体系 (Agent Framework JSON) |
+|------|---------------------------|-------------------------------|
+| 命令格式 | `adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"` | `adb shell "am broadcast -n ... --es json '{"method":"capture"}'"` |
+| 用例定义 | bash 函数 | Kotlin DSL + JSON 用例 |
 | 断言方式 | grep 日志文本 | 状态快照 + 类型安全断言 |
 | 失败诊断 | 手动查看日志 | 自动收集上下文快照 |
-| 扩展性 | 需修改脚本 | 新增 Kotlin 文件即可 |
-| AI 理解 | 需解析 bash | 直接理解 DSL 语义 |
+| 扩展性 | 需修改脚本 + Screen 注册接收器 | 新增 JSON/Kotlin 文件即可 |
+| AI 理解 | 需解析 bash | 直接理解 DSL/JSON 语义 |
 | 截屏关联 | 手动命名 | 自动关联到步骤 |
 | 报告格式 | Markdown | JSON + Markdown |
+| 生命周期 | 广播接收器随 Screen 注册/注销 | 统一入口，Capability 页面级生命周期 |
 
 ## 故障排除
 
 ### 命令无响应
 
 1. 确认应用在前台运行
-2. 检查 `AgentTestCommandIntegration()` 是否已在目标 Screen 中注册
-3. 查看日志：`adb logcat -s PicMe:AgentTest:*`
+2. 确认使用显式组件 `-n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver`
+3. 确认 JSON 用单引号包裹：`--es json '{"method":"..."}'`
+4. 查看日志：`adb logcat -s PicMe:AgentTest:*`
 
 ### 截屏失败
 
@@ -247,7 +240,7 @@ fun CameraScreen(...) {
 
 ### 状态断言失败
 
-- 确认 `CameraTestCommandDispatcher.updateState()` 在 Screen 中被正确调用
+- 确认 Capability 已正确注册到 CapabilityHost 且 `isAvailable()` 返回 true
 - 检查状态字段名是否与断言一致
 
 ## 相关文件

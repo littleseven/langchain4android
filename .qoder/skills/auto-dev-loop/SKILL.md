@@ -44,7 +44,7 @@ tags:
 1. **代码检查** — ktlint + detekt + JVM unit tests
 2. **编译** — `./gradlew :app:assembleDebug`
 3. **安装** — 自动 `adb install -r`
-4. **设备验证** — 启动应用 + 截屏 + 执行 broadcast 命令 + 收集日志
+4. **设备验证** — 启动应用 + 截屏 + 执行 JSON 命令（通过 AgentTestBroadcastReceiver）+ 收集日志
 5. **报告生成** — Markdown 格式报告 + 所有日志/截图归档
 
 ### 快速模式（仅编译+安装+启动）
@@ -171,12 +171,12 @@ local tap_y=$((h * 95 / 100))
 # ============================================
 tc_new_01_feature() {
     print_test_header "TC-NEW-01: 新功能描述"
-    
-    # 执行测试步骤
-    adb shell am broadcast -a com.picme.TEST_COMMAND --es action "xxx"
+
+    # 执行测试步骤（JSON 命令通过 AgentTestBroadcastReceiver）
+    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"xxx\",\"params\":{}}'"
     sleep 1
     screenshot "tc_new_01"
-    
+
     # 验证结果
     if [ 条件满足 ]; then
         log_pass "测试通过"
@@ -211,10 +211,11 @@ fi
 ## 相关文件
 
 - `scripts/auto-dev-loop.sh` — 一键开发自循环
-- `scripts/regression-test.sh` — 端到端回归测试
+- `scripts/regression-test.sh` — 端到端回归测试（JSON 命令驱动）
 - `scripts/ai-gate.sh` — 代码级质量门禁
 - `.qoder/skills/android-build-debug/SKILL.md` — 编译调试参考
 - `.qoder/skills/adb-bot/SKILL.md` — adb 命令参考
+- `.qoder/skills/agent-test-expert/skill.md` — JSON 驱动测试方法（主要测试方法）
 - `.qoder/skills/image-quality-checker/SKILL.md` — 图片质量分析
 - `.qoder/skills/compose-ui-expert/SKILL.md` — UI 验证参考
 - `.qoder/skills/perf-optimizer/SKILL.md` — 性能基线对比

@@ -103,10 +103,6 @@ import com.picme.core.common.Logger
 import com.picme.domain.model.MediaAsset
 import com.picme.domain.model.MediaType
 import com.picme.features.camera.components.BeautySelector
-import com.picme.features.camera.test.CameraTestCommand
-import com.picme.features.camera.test.CameraTestCommandConverters
-import com.picme.features.camera.test.CameraTestCommandDispatcher
-import com.picme.features.camera.test.CameraTestResult
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.common.chat.AiChatScreen
@@ -125,7 +121,6 @@ import androidx.compose.material3.ButtonDefaults
 import java.io.IOException
 
 private const val TAG = "Gallery"
-private const val TAG_TEST = "GalleryTest"
 
 @OptIn(ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
@@ -232,179 +227,6 @@ fun MediaPager(
                     onProcessPhoto(bitmap, settings)
                 }
             }
-    }
-
-    // Gallery 测试命令收集器：接收 adb 广播命令并执行对应操作
-    LaunchedEffect(Unit) {
-        CameraTestCommandDispatcher.commandFlow.collect { command ->
-            when (command) {
-                is CameraTestCommand.EnterGallery -> {
-                    Logger.i(TAG_TEST, "Already in gallery mode")
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Already in gallery mode")
-                    )
-                }
-                is CameraTestCommand.OpenPhoto -> {
-                    val targetIndex = command.index.coerceIn(0, assets.size - 1)
-                    pagerState.scrollToPage(targetIndex)
-                    Logger.i(TAG_TEST, "OpenPhoto scrolled to index $targetIndex")
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Scrolled to photo index $targetIndex")
-                    )
-                }
-                is CameraTestCommand.LongPressPhoto,
-                is CameraTestCommand.StartEdit -> {
-                    if (!isEditing && currentAsset?.type == MediaType.PHOTO) {
-                        startPhotoEdit()
-                        Logger.i(TAG_TEST, "Photo edit started")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Photo edit started")
-                        )
-                    } else {
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Cannot start edit: already editing or not a photo")
-                        )
-                    }
-                }
-                is CameraTestCommand.SaveEdit -> {
-                    if (isEditing && processedBitmap != null) {
-                        processedBitmap?.let { bitmap ->
-                            onSavePhoto(bitmap)
-                            isEditing = false
-                            editSettings = BeautySettings()
-                            processedBitmap = null
-                            onClearEditState()
-                            Logger.i(TAG_TEST, "Edit saved")
-                            CameraTestCommandDispatcher.emitResult(
-                                CameraTestResult.Success(command, "Edit saved")
-                            )
-                        }
-                    } else {
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Cannot save: not in edit mode or no processed bitmap")
-                        )
-                    }
-                }
-                is CameraTestCommand.CancelEdit -> {
-                    if (isEditing) {
-                        isEditing = false
-                        editSettings = BeautySettings()
-                        processedBitmap = null
-                        onClearEditState()
-                        Logger.i(TAG_TEST, "Edit cancelled")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Edit cancelled")
-                        )
-                    } else {
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Cannot cancel: not in edit mode")
-                        )
-                    }
-                }
-                is CameraTestCommand.SetSmooth -> {
-                    if (isEditing) {
-                        editSettings = editSettings.copy(smoothing = command.value / 100f)
-                        Logger.i(TAG_TEST, "Smooth set to ${command.value}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Smooth set to ${command.value}")
-                        )
-                    } else {
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Cannot set smooth: not in edit mode")
-                        )
-                    }
-                }
-                is CameraTestCommand.SetWhiten -> {
-                    if (isEditing) {
-                        editSettings = editSettings.copy(whitening = command.value / 100f)
-                        Logger.i(TAG_TEST, "Whiten set to ${command.value}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Whiten set to ${command.value}")
-                        )
-                    } else {
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Cannot set whiten: not in edit mode")
-                        )
-                    }
-                }
-                is CameraTestCommand.SetEditFilter -> {
-                    if (isEditing) {
-                        val filter = CameraTestCommandConverters.parseFilterType(command.filter)
-                        editSettings = editSettings.copy(colorFilter = filter)
-                        Logger.i(TAG_TEST, "Filter set to ${command.filter}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Filter set to ${command.filter}")
-                        )
-                    } else {
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Error(command, "Cannot set filter: not in edit mode")
-                        )
-                    }
-                }
-                is CameraTestCommand.StartOcr -> {
-                    currentAsset?.let { asset ->
-                        onStartOcr(asset.uri)
-                        Logger.i(TAG_TEST, "OCR started for ${asset.id}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "OCR started")
-                        )
-                    } ?: CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Error(command, "No current asset for OCR")
-                    )
-                }
-                is CameraTestCommand.DismissOcr -> {
-                    onDismissOcr()
-                    Logger.i(TAG_TEST, "OCR dismissed")
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "OCR dismissed")
-                    )
-                }
-                is CameraTestCommand.ToggleLandmark -> {
-                    showLandmarkOverlay = !showLandmarkOverlay
-                    Logger.i(TAG_TEST, "Landmark overlay toggled to $showLandmarkOverlay")
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Landmark overlay: $showLandmarkOverlay")
-                    )
-                }
-                is CameraTestCommand.ToggleInfo -> {
-                    showInfo = !showInfo
-                    Logger.i(TAG_TEST, "Info toggled to $showInfo")
-                    CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Success(command, "Info visibility: $showInfo")
-                    )
-                }
-                is CameraTestCommand.DeletePhoto -> {
-                    currentAsset?.let { asset ->
-                        onDelete(asset)
-                        Logger.i(TAG_TEST, "Delete requested for ${asset.id}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Delete requested")
-                        )
-                    } ?: CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Error(command, "No current asset to delete")
-                    )
-                }
-                is CameraTestCommand.SharePhoto -> {
-                    currentAsset?.let { asset ->
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            putExtra(Intent.EXTRA_STREAM, asset.uri.toUri())
-                            type = if (asset.type == MediaType.VIDEO) "video/*" else "image/*"
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, null))
-                        Logger.i(TAG_TEST, "Share requested for ${asset.id}")
-                        CameraTestCommandDispatcher.emitResult(
-                            CameraTestResult.Success(command, "Share requested")
-                        )
-                    } ?: CameraTestCommandDispatcher.emitResult(
-                        CameraTestResult.Error(command, "No current asset to share")
-                    )
-                }
-                else -> {
-                    // Camera 相关命令在 Gallery 中不支持，静默忽略
-                }
-            }
-        }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
