@@ -157,7 +157,10 @@ internal data class CameraPreviewActions(
     val onDismissPanels: () -> Unit,
     val onToggleVoiceControl: () -> Unit,
     val onToggleAiAgentPanel: () -> Unit,
-    val onToggleProPanel: () -> Unit
+    val onToggleProPanel: () -> Unit,
+    val onUnloadAsr: () -> Unit = {},
+    val onUnloadLlm: () -> Unit = {},
+    val onUnloadFaceDetection: () -> Unit = {}
 )
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
@@ -265,7 +268,10 @@ internal fun buildCameraPreviewActions(
     onWhiteBalanceModeChanged: (Int) -> Unit,
     onToggleVoiceControl: () -> Unit,
     onToggleAiAgentPanel: () -> Unit,
-    onToggleLogs: () -> Unit
+    onToggleLogs: () -> Unit,
+    onUnloadAsr: () -> Unit = {},
+    onUnloadLlm: () -> Unit = {},
+    onUnloadFaceDetection: () -> Unit = {}
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onResetCameraMemoryState = onResetCameraMemoryState,
@@ -351,6 +357,9 @@ internal fun buildCameraPreviewActions(
         onToggleAiAgentPanel = onToggleAiAgentPanel,
         onToggleProPanel = {
             panelState.showProPanel = !panelState.showProPanel
-        }
+        },
+        onUnloadAsr = onUnloadAsr,
+        onUnloadLlm = onUnloadLlm,
+        onUnloadFaceDetection = onUnloadFaceDetection
     )
 }

@@ -12,11 +12,14 @@ import com.picme.agent.core.Logger
 import com.picme.agent.core.mnn.MnnResourceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import android.util.Log
 
@@ -51,6 +54,7 @@ class SherpaMnnAsrEngine(
     private var streamingThread: Thread? = null
     private var audioRecorder: AudioRecorder? = null
     private var streamingScope: CoroutineScope? = null
+    private var streamingJob: Job? = null
 
     /**
      * 是否已向 ResourceManager 注册引用
@@ -174,7 +178,7 @@ class SherpaMnnAsrEngine(
         isStreaming.set(true)
         streamingScope = CoroutineScope(Dispatchers.IO)
 
-        streamingScope?.launch {
+        streamingJob = streamingScope?.launch {
             val recorder = AudioRecorder(context)
             audioRecorder = recorder
 
@@ -244,13 +248,36 @@ class SherpaMnnAsrEngine(
 
     /**
      * 停止实时流式识别
+     *
+     * 等待流式协程完全结束后才返回，确保 recognizer 不会在推理中被释放。
      */
     override fun stopStreaming() {
         if (!isStreaming.get()) return
         isStreaming.set(false)
         audioRecorder?.stop()
+
+        // 等待流式协程结束（最多 2 秒），防止 recognizer 在推理中被释放导致崩溃
+        val job = streamingJob
+        if (job != null && job.isActive) {
+            try {
+                val latch = CountDownLatch(1)
+                streamingScope?.launch {
+                    job.join()
+                    latch.countDown()
+                }
+                // 阻塞等待最多 2 秒
+                val finished = latch.await(2000, TimeUnit.MILLISECONDS)
+                if (!finished) {
+                    Logger.w(tag, "Streaming job did not finish within 2s, proceeding anyway")
+                }
+            } catch (e: Exception) {
+                Logger.w(tag, "Error waiting for streaming job", e)
+            }
+        }
+
         streamingScope?.launch { } // 取消所有协程
-        Logger.d(tag, "Streaming ASR stop requested")
+        streamingJob = null
+        Logger.d(tag, "Streaming ASR stopped")
     }
 
     /**
@@ -339,8 +366,12 @@ class SherpaMnnAsrEngine(
 
     /**
      * 完全卸载：释放 recognizer
+     *
+     * 注意：此操作会调用 MNN native 释放，必须通过 MnnGlobalReleaseLock 串行化，
+     * 防止与人脸检测或 LLM 的 MNN 释放并发导致崩溃。
      */
     private fun performUnload() {
+        // 先停止流式识别，等待协程结束
         stopStreaming()
         synchronized(initLock) {
             recognizer?.release()

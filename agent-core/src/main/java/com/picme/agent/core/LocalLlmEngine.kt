@@ -13,6 +13,7 @@ import com.picme.agent.core.llm.LlmModelManager
 import com.picme.agent.core.model.ChatMessage
 import com.picme.agent.core.model.ChatRole
 import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.mnn.MnnGlobalReleaseLock
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -319,6 +320,7 @@ class LocalLlmEngine(private val context: Context) {
      * 将 unload 任务投递到专用线程执行
      *
      * 避免递归 runBlocking 导致的死锁。
+     * 使用 MnnGlobalReleaseLock 串行化 MNN native 释放。
      */
     private fun enqueueUnload() {
         modelExecutor.execute {
@@ -328,7 +330,10 @@ class LocalLlmEngine(private val context: Context) {
             }
             try {
                 if (client.isLoaded) {
-                    client.unload()
+                    // 使用 MNN 全局锁串行化 native 释放
+                    MnnGlobalReleaseLock.withLock {
+                        client.unload()
+                    }
                     currentModelId = null
                     Logger.i(tag, "LLM fully unloaded")
                 }
@@ -350,9 +355,22 @@ class LocalLlmEngine(private val context: Context) {
         }
     }
 
+    /**
+     * 安全卸载回调（由 ResourceManager 触发）
+     *
+     * 注意：此回调已在 MnnGlobalReleaseLock 保护下执行，直接同步卸载即可。
+     * 不要投递到 modelExecutor，否则真正的释放会脱离锁保护。
+     */
     private fun onSafeUnload() {
         if (client.isLoaded) {
-            enqueueUnload()
+            try {
+                // 同步卸载，确保在 MnnGlobalReleaseLock 保护下完成
+                client.unload()
+                currentModelId = null
+                Logger.i(tag, "LLM fully unloaded (sync)")
+            } catch (e: Exception) {
+                Logger.e(tag, "LLM sync unload failed", e)
+            }
         }
         isRegistered.set(false)
     }

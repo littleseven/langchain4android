@@ -736,6 +736,16 @@ fun CameraContent(
         }
     }
 
+    // 场景感知：进入/离开相机页时通知 FaceDetectorManager 和 ResourceManager
+    // 触发人脸检测模型的保留/释放
+    val faceDetectorManager = runtimeContext.faceDetectorManager
+    DisposableEffect(Unit) {
+        (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.onEnterCameraScene()
+        onDispose {
+            (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.onLeaveCameraScene()
+        }
+    }
+
     // 移除本地 state,改用设置页配置
     // var showCameraInfo by remember { mutableStateOf(false) }
     // var showLogOverlay by remember { mutableStateOf(false) }
@@ -1498,6 +1508,18 @@ CameraPreviewContent(
             coroutineScope.launch {
                 userPreferencesRepository.updateShowLogOverlay(!showLogOverlay)
             }
+        },
+        onUnloadAsr = {
+            voiceCoordinator?.releaseAsr()
+            Logger.i(TAG, "Debug: ASR unload requested")
+        },
+        onUnloadLlm = {
+            aiAgentUseCase?.unloadLocalModel()
+            Logger.i(TAG, "Debug: LLM unload requested")
+        },
+        onUnloadFaceDetection = {
+            (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.release()
+            Logger.i(TAG, "Debug: Face detection unload requested")
         }
     )
     }

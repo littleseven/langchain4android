@@ -10,6 +10,8 @@ import android.os.SystemClock
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
+import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.mnn.MnnGlobalReleaseLock
 import java.io.File
 import android.graphics.Color
 
@@ -18,6 +20,11 @@ import android.graphics.Color
  * 替代 InsightFace 2D106 (ONNX Runtime)，提供更快的 GPU 推理
  *
  * 兼容骁龙 765G + Adreno 620（Vulkan 1.1）
+ *
+ * [Agent First] 支持动态加载/卸载：
+ * - 通过 MnnResourceManager 注册引用，参与全局内存协调
+ * - 场景切换时自动卸载（如进入聊天页），返回相机页时自动恢复
+ * - 内存压力时优先被卸载（模型小，恢复快）
  */
 class MnnLandmarkDetector(
     context: Context,
@@ -33,12 +40,22 @@ class MnnLandmarkDetector(
     }
 
     private val appContext = context.applicationContext
+    private val resourceManager = MnnResourceManager.getInstance(appContext)
     private var detector: MnnFaceDetector? = null
     private var isInitialized = false
     private var isGpuEnabled: Boolean = false
 
     // [性能优化] 复用 Bitmap 池
     private var reusableScaledBitmap: Bitmap? = null
+
+    init {
+        // [优化] 不立即初始化，改为懒加载
+        Logger.d(TAG, "MnnLandmarkDetector created (lazy initialization, requireGpu=$requireGpu)")
+
+        // 注册资源管理监听器，响应全局卸载/加载事件
+        resourceManager.registerFaceDetectionUnloadListener(::onResourceManagerUnload)
+        resourceManager.registerFaceDetectionLoadListener(::onResourceManagerLoad)
+    }
 
     /**
      * 懒加载初始化 - 仅在首次 detect 时调用
@@ -52,11 +69,6 @@ class MnnLandmarkDetector(
             initialize()
             isInitialized = true
         }
-    }
-
-    init {
-        // [优化] 不立即初始化，改为懒加载
-        Logger.d(TAG, "MnnLandmarkDetector created (lazy initialization, requireGpu=$requireGpu)")
     }
 
     private fun initialize() {
@@ -77,6 +89,8 @@ class MnnLandmarkDetector(
             if (detector != null) {
                 isGpuEnabled = true
                 Logger.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with Vulkan GPU")
+                // 向 ResourceManager 注册引用，参与全局协调
+                resourceManager.acquireFaceDetection("MnnLandmarkDetector")
             } else {
                 // [关键策略] 要求 GPU 时初始化失败，直接放弃，不降级到 CPU
                 isGpuEnabled = false
@@ -91,6 +105,47 @@ class MnnLandmarkDetector(
             Logger.e(TAG, "Failed to initialize MnnLandmarkDetector (requireGpu=$requireGpu)", e)
             detector = null
         }
+    }
+
+    /**
+     * ResourceManager 触发的卸载回调
+     * 释放 native 模型资源，但保留 Kotlin 对象以便快速恢复
+     */
+    private fun onResourceManagerUnload() {
+        synchronized(this) {
+            if (!isInitialized) return
+            Logger.i(TAG, "Unloading due to ResourceManager request")
+            performUnload()
+        }
+    }
+
+    /**
+     * ResourceManager 触发的加载回调
+     * 重新初始化模型（如果当前未加载）
+     */
+    private fun onResourceManagerLoad() {
+        synchronized(this) {
+            if (isInitialized) return
+            Logger.i(TAG, "Loading due to ResourceManager request")
+            initialize()
+            isInitialized = true
+        }
+    }
+
+    /**
+     * 执行实际卸载（线程安全）
+     *
+     * 使用 MnnGlobalReleaseLock 串行化 MNN native 释放，
+     * 防止与 ASR/LLM 的 MNN 释放并发导致崩溃。
+     */
+    private fun performUnload() {
+        MnnGlobalReleaseLock.withLock {
+            detector?.release()
+        }
+        detector = null
+        isInitialized = false
+        isGpuEnabled = false
+        Logger.d(TAG, "Native resources unloaded")
     }
 
     override fun detectLandmarks(bitmap: Bitmap, lensFacing: Int, roi: RectF?): FloatArray? {
@@ -292,8 +347,17 @@ class MnnLandmarkDetector(
     }
 
     override fun release() {
-        detector?.release()
-        detector = null
+        // 注销监听器，避免已释放对象收到回调
+        resourceManager.unregisterFaceDetectionUnloadListener(::onResourceManagerUnload)
+        resourceManager.unregisterFaceDetectionLoadListener(::onResourceManagerLoad)
+
+        // 释放引用（触发 ResourceManager 协调）
+        resourceManager.releaseFaceDetection(
+            owner = "MnnLandmarkDetector",
+            onSafeUnload = ::performUnload,
+            onSoftRelease = ::performUnload
+        )
+
         reusableScaledBitmap?.recycle()
         reusableScaledBitmap = null
         Logger.i(TAG, "MnnLandmarkDetector released")

@@ -25,6 +25,9 @@ import androidx.compose.material.icons.rounded.Landscape
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -44,6 +47,9 @@ fun CameraLeftControls(
     onToggleLogOverlay: () -> Unit,
     debugUiEnabled: Boolean,
     showLogOverlay: Boolean,
+    onUnloadAsr: () -> Unit = {},
+    onUnloadLlm: () -> Unit = {},
+    onUnloadFaceDetection: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -59,6 +65,24 @@ fun CameraLeftControls(
                 icon = Icons.Rounded.Terminal,
                 onClick = onToggleLogOverlay,
                 isActive = showLogOverlay
+            )
+                // 调试：释放 ASR 模型 (橙色)
+            ControlButton(
+                icon = Icons.Rounded.Mic,
+                onClick = onUnloadAsr,
+                tint = Color(0xFFFF7043)
+            )
+            // 调试：释放 LLM 模型 (蓝色)
+            ControlButton(
+                icon = Icons.Rounded.Psychology,
+                onClick = onUnloadLlm,
+                tint = Color(0xFF42A5F5)
+            )
+            // 调试：释放人脸检测模型 (绿色)
+            ControlButton(
+                icon = Icons.Rounded.Face,
+                onClick = onUnloadFaceDetection,
+                tint = Color(0xFF66BB6A)
             )
         }
     }
@@ -187,6 +211,7 @@ fun ControlButton(
     icon: ImageVector,
     onClick: () -> Unit,
     isActive: Boolean = false,
+    tint: Color? = null,
     modifier: Modifier = Modifier
 ) {
     FilledIconButton(
@@ -198,7 +223,7 @@ fun ControlButton(
             } else {
                 Color.Black.copy(alpha = 0.5f)
             },
-            contentColor = if (isActive) Color.Black else Color.White
+            contentColor = tint ?: if (isActive) Color.Black else Color.White
         )
     ) {
         Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))

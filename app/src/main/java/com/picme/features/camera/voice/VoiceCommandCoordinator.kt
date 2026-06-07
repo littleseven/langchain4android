@@ -153,6 +153,16 @@ class VoiceCommandCoordinator(
     }
 
     /**
+     * 释放 ASR 引擎资源
+     */
+    fun releaseAsr() {
+        stopWakeWordListening()
+        stopPushToTalk()
+        (asrEngine as? SherpaMnnAsrEngine)?.release()
+        Logger.i(tag, "ASR released")
+    }
+
+    /**
      * 将识别文本加入串行处理队列
      * 参考 VoiceChatPresenter: 通过 Channel 保证按序处理
      */

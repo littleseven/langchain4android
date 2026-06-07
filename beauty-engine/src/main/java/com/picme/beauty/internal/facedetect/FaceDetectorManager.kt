@@ -13,6 +13,7 @@ import com.picme.beauty.api.facedetect.InferenceBackendType
 import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
+import com.picme.agent.core.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import android.graphics.RectF
 
@@ -23,6 +24,11 @@ import android.graphics.RectF
  * 所有检测输入均为 Bitmap，ImageProxy → Bitmap 转换由调用方负责。
  *
  * 配置来源：设置页的 StageConfig（ROI + Landmark 独立配置），通过 updatePipelineConfig() 传入。
+ *
+ * [Agent First] 场景感知内存管理：
+ * - 相机页自动通知 ResourceManager 保留人脸检测模型
+ * - 离开相机页自动触发模型卸载，释放 MNN 内存
+ * - 内存压力时人脸检测优先被卸载（模型小、恢复快）
  */
 class FaceDetectorManager(context: Context) : FaceDetector {
 
@@ -35,6 +41,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     }
 
     private val appContext: Context = context.applicationContext
+    private val resourceManager = MnnResourceManager.getInstance(appContext)
 
     // [线程安全] 所有状态变量通过 lock 保护，防止预览/拍照/配置更新竞态
     private val lock = Any()
@@ -313,6 +320,24 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     fun getPoint(landmarks106: FloatArray, index: Int): PointF {
         require(index in 0 until POINT_COUNT)
         return PointF(landmarks106[index * 2], landmarks106[index * 2 + 1])
+    }
+
+    /**
+     * 通知进入相机场景
+     * 触发 ResourceManager 保留人脸检测模型
+     */
+    fun onEnterCameraScene() {
+        resourceManager.setScene(MnnResourceManager.Scene.CAMERA)
+        Logger.d(TAG, "Entered camera scene")
+    }
+
+    /**
+     * 通知离开相机场景
+     * 触发 ResourceManager 释放人脸检测模型
+     */
+    fun onLeaveCameraScene() {
+        resourceManager.setScene(MnnResourceManager.Scene.OTHER)
+        Logger.d(TAG, "Left camera scene")
     }
 
     override fun release() {

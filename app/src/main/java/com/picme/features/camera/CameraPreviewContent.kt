@@ -469,6 +469,9 @@ private fun BoxScope.CameraPreviewSideControls(
         onToggleLogOverlay = actions.onToggleLogs,
         debugUiEnabled = uiState.debugUiEnabled,
         showLogOverlay = uiState.showLogOverlay,
+        onUnloadAsr = actions.onUnloadAsr,
+        onUnloadLlm = actions.onUnloadLlm,
+        onUnloadFaceDetection = actions.onUnloadFaceDetection,
         modifier = Modifier.align(Alignment.TopStart)
     )
 

@@ -810,6 +810,15 @@ void MnnFaceDetector::release() {
         interpreter_->releaseSession(session_);
         session_ = nullptr;
     }
+
+    // [关键修复] 释放模型权重缓冲区（mmap 的模型文件内存）
+    // releaseModel() 必须在 releaseSession() 之后、reset() 之前调用
+    // 否则模型文件映射的内存不会被释放，导致 Native Heap 不下降
+    if (interpreter_) {
+        LOGI("Releasing model buffer...");
+        interpreter_->releaseModel();
+    }
+
     interpreter_.reset();
     inputTensor_ = nullptr;
     outputTensors_.clear();

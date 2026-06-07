@@ -143,6 +143,13 @@ class AiAgentUseCase(
         get() = orchestrator.isModelLoaded
 
     /**
+     * 卸载本地模型，释放内存
+     */
+    fun unloadLocalModel() {
+        orchestrator.unloadModel()
+    }
+
+    /**
      * 加载本地模型
      *
      * @param modelId 模型 ID，为空时使用当前配置的模型。如果模型 ID 与当前加载的不同，会先卸载旧模型。
