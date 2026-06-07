@@ -80,7 +80,9 @@ import com.picme.agent.core.voice.SherpaMnnAsrEngine
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.facedetect.DetectionPipelineConfig
 import com.picme.beauty.api.facedetect.FaceWarpParams
+import com.picme.beauty.internal.facedetect.FaceDetectorManager
 import com.picme.beauty.recorder.BeautyVideoRecorder
 import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
@@ -174,6 +176,10 @@ private fun showReleaseMemoryToast(
 
         activeReleaseDialog?.show()
     }
+}
+
+private fun BeautySettings.requiresFaceDetection(): Boolean {
+    return slimFace != 0f || bigEyes > 0f || lipColor > 0f || blush > 0f || eyebrow > 0f
 }
 
 /**
@@ -437,6 +443,7 @@ fun CameraContent(
     var faceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
     var previewFaceWarpParams by remember { mutableStateOf(FaceWarpParams()) }
     var lastFaceWarpDetectedAtMs by remember { mutableStateOf(0L) }
+    var isFacePipelineInitialized by remember { mutableStateOf(false) }
 
     val previewRuntimeViews = rememberPreviewRuntimeViews(
         context = context,
@@ -581,6 +588,9 @@ fun CameraContent(
     val aiAgentSelectedRemoteModel by userPreferencesRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
     val aiAgentInferencePreference by userPreferencesRepository.aiAgentInferencePreferenceFlow.collectAsState(initial = AiAgentInferencePreference.FORCE_LOCAL)
     val aiAgentMode by userPreferencesRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
+    val voiceCommandMode by userPreferencesRepository.voiceCommandModeFlow.collectAsState(
+        initial = VoiceCommandMode.DISABLED
+    )
 
     // 解析远程模型配置
     // 注意：aiAgentSelectedRemoteModel 保存的是 uniqueKey（providerId:modelId），
@@ -621,14 +631,32 @@ fun CameraContent(
         )
     }
 
-    // 当设置中的模型 ID 变化时，更新 UseCase 的模型 ID 并加载模型
-    // 使用 remember 缓存 resolvedModelId，避免空字符串触发重复加载
+    // LLM 按需加载：仅在 AI Chat 打开或语音控制打开时加载本地模型。
     val resolvedModelId = remember(aiAgentLocalModel) {
         aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_1_7b"
     }
-    LaunchedEffect(resolvedModelId) {
+    val shouldLoadLocalLlm = remember(
+        aiAgentChatVisible,
+        voiceCommandMode,
+        aiAgentMode,
+        aiAgentInferencePreference
+    ) {
+        val localModeEnabled = aiAgentMode == AiAgentMode.LOCAL || aiAgentMode == AiAgentMode.OFF
+        val forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE
+        localModeEnabled && !forceRemote &&
+            (aiAgentChatVisible || voiceCommandMode != VoiceCommandMode.DISABLED)
+    }
+    LaunchedEffect(resolvedModelId, shouldLoadLocalLlm) {
+        if (!shouldLoadLocalLlm) {
+            if (aiAgentUseCase.isLocalModelLoaded) {
+                Logger.i(TAG_AI_AGENT, "No active AI entry, unload local MNN-LLM model")
+                aiAgentUseCase.unloadLocalModel()
+            }
+            return@LaunchedEffect
+        }
+
         if (!aiAgentUseCase.isLocalModelLoaded) {
-            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model: $resolvedModelId")
+            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model on demand: $resolvedModelId")
             val result = aiAgentUseCase.loadLocalModel(resolvedModelId)
             Logger.i(TAG_AI_AGENT, "Local MNN-LLM model load result: $result")
         } else {
@@ -644,32 +672,23 @@ fun CameraContent(
     }
 
     // 语音命令协调器
-    val voiceCommandMode by userPreferencesRepository.voiceCommandModeFlow.collectAsState(
-        initial = VoiceCommandMode.DISABLED
-    )
 
-    // 声控开关切换：DISABLED ↔ WAKE_WORD
-    val onToggleVoiceControl = remember(coroutineScope) {
-        {
-            val nextMode = if (voiceCommandMode == VoiceCommandMode.DISABLED) {
-                VoiceCommandMode.WAKE_WORD
-            } else {
-                VoiceCommandMode.DISABLED
-            }
-            coroutineScope.launch {
-                userPreferencesRepository.updateVoiceCommandMode(nextMode)
-                Logger.i(TAG, "Voice control toggled to: $nextMode")
-            }
-            Unit
-        }
-    }
-    // ASR 引擎选择：优先使用 Sherpa-MNN ASR（如果模型已下载），否则回退到系统 ASR
-    // 异步初始化避免主线程阻塞（先降级为系统ASR，后台加载本地模型）
+    // ASR 按需加载：仅在语音入口（唤醒词/AI Chat）激活时初始化本地 ASR。
     val localAsrModel by userPreferencesRepository.localAsrModelFlow.collectAsState(initial = "")
-    var asrEngine by remember(context, localAsrModel) {
+    var asrEngine by remember(context) {
         mutableStateOf<AsrEngine>(SystemAsrEngine(context))
     }
-    LaunchedEffect(context, localAsrModel) {
+    val shouldLoadLocalAsr = remember(voiceCommandMode, aiAgentChatVisible) {
+        voiceCommandMode != VoiceCommandMode.DISABLED || aiAgentChatVisible
+    }
+    LaunchedEffect(context, localAsrModel, shouldLoadLocalAsr) {
+        if (!shouldLoadLocalAsr) {
+            (asrEngine as? SherpaMnnAsrEngine)?.release()
+            asrEngine = SystemAsrEngine(context)
+            Logger.d(TAG, "ASR entry inactive, keep system ASR only")
+            return@LaunchedEffect
+        }
+
         val engine = withContext(Dispatchers.IO) {
             if (localAsrModel.isNotBlank()) {
                 val modelDir = context.filesDir.resolve("llm_models/$localAsrModel")
@@ -677,12 +696,10 @@ fun CameraContent(
 
                 // 参考 VoiceModelsChecker: 先检查模型目录和文件是否存在
                 val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                    // Sherpa-MNN Zipformer 模型：检查 .mnn 文件和 tokens.txt
                     modelDir.exists() && modelDir.isDirectory &&
                         modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
                         File(modelDir, "tokens.txt").exists()
                 } else {
-                    // 其他模型：检查目录存在
                     modelDir.exists() && modelDir.isDirectory
                 }
 
@@ -690,7 +707,6 @@ fun CameraContent(
                     Logger.w(TAG, "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
                     SystemAsrEngine(context)
                 } else {
-                    // 1. 尝试 Sherpa-MNN ASR（zipformer 模型）
                     if (localAsrModel.contains("zipformer", ignoreCase = true)) {
                         val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
                         if (sherpaAsr.isAvailable()) {
@@ -701,7 +717,6 @@ fun CameraContent(
                             SystemAsrEngine(context)
                         }
                     } else {
-                        // 2. 尝试旧版 MnnAsrClient（whisper 模型）
                         val mnnAsr = MnnAsrClient(context, localAsrModel)
                         if (mnnAsr.isAvailable()) {
                             Logger.i(TAG, "Using MNN ASR engine with model: $localAsrModel")
@@ -717,8 +732,43 @@ fun CameraContent(
                 SystemAsrEngine(context)
             }
         }
+
+        val previousEngine = asrEngine
         asrEngine = engine
+        if (previousEngine !== engine) {
+            (previousEngine as? SherpaMnnAsrEngine)?.release()
+        }
     }
+    // 声控开关切换：DISABLED ↔ WAKE_WORD
+    val onToggleVoiceControl = remember(
+        coroutineScope,
+        voiceCommandMode,
+        aiAgentChatVisible,
+        aiAgentUseCase,
+        asrEngine
+    ) {
+        {
+            val nextMode = if (voiceCommandMode == VoiceCommandMode.DISABLED) {
+                VoiceCommandMode.WAKE_WORD
+            } else {
+                VoiceCommandMode.DISABLED
+            }
+            coroutineScope.launch {
+                userPreferencesRepository.updateVoiceCommandMode(nextMode)
+                Logger.i(TAG, "Voice control toggled to: $nextMode")
+            }
+
+            if (nextMode == VoiceCommandMode.DISABLED && !aiAgentChatVisible) {
+                (asrEngine as? SherpaMnnAsrEngine)?.release()
+                if (aiAgentUseCase.isLocalModelLoaded) {
+                    aiAgentUseCase.unloadLocalModel()
+                }
+                Logger.i(TAG, "Voice feature closed, release ASR/LLM")
+            }
+            Unit
+        }
+    }
+
     val onCommandRef = remember { mutableStateOf<(AiAgentCommand) -> Unit>({}) }
     val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
         VoiceCommandCoordinator(
@@ -781,14 +831,61 @@ fun CameraContent(
         }
     }
 
-    // 场景感知：进入/离开相机页时通知 FaceDetectorManager 和 ResourceManager
-    // 触发人脸检测模型的保留/释放
+    // 场景感知：进入/离开相机页时通知 ResourceManager
     val faceDetectorManager = runtimeContext.faceDetectorManager
     DisposableEffect(Unit) {
-        (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.onEnterCameraScene()
+        MnnResourceManager.getInstance(context).setScene(MnnResourceManager.Scene.CAMERA)
         onDispose {
-            (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.onLeaveCameraScene()
+            MnnResourceManager.getInstance(context).setScene(MnnResourceManager.Scene.OTHER)
         }
+    }
+
+    // FaceDetection 按需加载：仅在美颜开关且涉及人脸特效时初始化 pipeline。
+    val roiStageConfig = runtimeContext.roiStageConfig
+    val landmarkStageConfig = runtimeContext.landmarkStageConfig
+    val shouldEnableFaceDetection = remember(beautySettings, faceLandmarkModeEnabled) {
+        faceLandmarkModeEnabled && beautySettings.enabled && beautySettings.requiresFaceDetection()
+    }
+    LaunchedEffect(
+        shouldEnableFaceDetection,
+        roiStageConfig,
+        landmarkStageConfig,
+        faceDetectorManager
+    ) {
+        val manager = faceDetectorManager as? FaceDetectorManager
+        if (manager == null) {
+            Logger.w(TAG, "FaceDetectorManager unavailable, skip lazy init")
+            return@LaunchedEffect
+        }
+
+        if (!shouldEnableFaceDetection) {
+            if (isFacePipelineInitialized) {
+                Logger.i(TAG, "Face detection disabled by feature switch, release pipeline")
+                manager.release()
+                isFacePipelineInitialized = false
+                faceWarpParams = FaceWarpParams(
+                    requestedDetectionEngineMode = faceDetectionEngineMode.toEngineType()
+                )
+                previewFaceWarpParams = faceWarpParams
+            }
+            return@LaunchedEffect
+        }
+
+        val config = DetectionPipelineConfig(
+            roiDetector = roiStageConfig.modelType.toRoiDetectorType(),
+            landmarkDetector = landmarkStageConfig.modelType.toLandmarkDetectorType(),
+            roiEngine = roiStageConfig.engineType.toInferenceBackendType(),
+            landmarkEngine = landmarkStageConfig.engineType.toInferenceBackendType(),
+            roiDevice = roiStageConfig.devicePreference.toDevicePreference(),
+            landmarkDevice = landmarkStageConfig.devicePreference.toDevicePreference()
+        )
+        manager.updatePipelineConfig(config)
+        isFacePipelineInitialized = true
+        Logger.d(
+            TAG,
+            "Face detection pipeline initialized lazily: roi=${roiStageConfig.engineType}, " +
+                "landmark=${landmarkStageConfig.engineType}"
+        )
     }
 
     // 移除本地 state,改用设置页配置
@@ -1076,9 +1173,7 @@ fun CameraContent(
 
 
 
-    // [重构] 设置页为唯一配置来源，StageConfig 通过 DataStore 下发
-    // faceDetectionEngineMode 变化时，SettingsViewModel 已自动更新 StageConfig
-    // CameraRuntimeState 监听 StageConfig 变化并调用 updatePipelineConfig()
+    // faceDetectionEngineMode 变化时仅同步 debug 展示字段。
     LaunchedEffect(faceDetectionEngineMode) {
         val engineType = faceDetectionEngineMode.toEngineType()
         faceWarpParams = faceWarpParams.copy(requestedDetectionEngineMode = engineType)
@@ -1102,7 +1197,7 @@ fun CameraContent(
             previewView = previewView,
             bindPreviewSurfaceProvider = bindPreviewSurfaceProvider,
             cameraExecutor = analysisExecutor,
-            isBeautyEnabled = { beautySettings.enabled },
+            isBeautyEnabled = { shouldEnableFaceDetection },
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode.toEngineType(),
             videoCapture = videoCapture,
@@ -1548,7 +1643,19 @@ CameraPreviewContent(
         onExposureCompensationChanged = { exposure -> exposureCompensation = exposure },
         onWhiteBalanceModeChanged = { wb -> whiteBalanceMode = wb },
         onToggleVoiceControl = onToggleVoiceControl,
-        onToggleAiAgentPanel = { aiAgentChatVisible = !aiAgentChatVisible },
+        onToggleAiAgentPanel = {
+            aiAgentChatVisible = !aiAgentChatVisible
+            if (!aiAgentChatVisible) {
+                voiceCoordinator.stopWakeWordListening()
+                if (voiceCommandMode == VoiceCommandMode.DISABLED) {
+                    (asrEngine as? SherpaMnnAsrEngine)?.release()
+                    if (aiAgentUseCase.isLocalModelLoaded) {
+                        aiAgentUseCase.unloadLocalModel()
+                    }
+                    Logger.i(TAG, "AI panel closed, release ASR/LLM")
+                }
+            }
+        },
         onToggleLogs = {
             coroutineScope.launch {
                 userPreferencesRepository.updateShowLogOverlay(!showLogOverlay)
@@ -1582,7 +1689,7 @@ CameraPreviewContent(
             val before = captureMnnMemoryStats(context)
             Logger.i(TAG, "🎤 [ASR释放3-Full] 开始 - 释放类型: weights+full")
             Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
-            voiceCoordinator?.releaseAsr()
+            voiceCoordinator.releaseAsr()
             coroutineScope.launch {
                 val after = sampleMemoryAfterRelease(context)
                 showReleaseMemoryToast(context, "ASR", "weights+full", before, after)
@@ -1616,7 +1723,7 @@ CameraPreviewContent(
             val before = captureMnnMemoryStats(context)
             Logger.i(TAG, "🧠 [LLM释放3-Full] 开始 - 释放类型: weights+full")
             Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
-            aiAgentUseCase?.unloadLocalModel()
+            aiAgentUseCase.unloadLocalModel()
             coroutineScope.launch {
                 val after = sampleMemoryAfterRelease(context)
                 showReleaseMemoryToast(context, "LLM", "weights+full", before, after)
@@ -1650,7 +1757,7 @@ CameraPreviewContent(
             val before = captureMnnMemoryStats(context)
             Logger.i(TAG, "👤 [FaceDetect释放3-Full] 开始 - 释放类型: weights+full")
             Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
-            (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.release()
+            (faceDetectorManager as? FaceDetectorManager)?.release()
             coroutineScope.launch {
                 val after = sampleMemoryAfterRelease(context)
                 showReleaseMemoryToast(context, "FaceDetection", "weights+full", before, after)

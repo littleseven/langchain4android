@@ -1,5 +1,11 @@
 package com.picme.features.camera
 
+import android.bluetooth.BluetoothHeadset
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -34,21 +40,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import android.bluetooth.BluetoothHeadset
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.media.AudioManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.voice.AudioRecorder
+import com.picme.agent.core.voice.InputAudioDevice
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.domain.model.AiAgentCommand
-import com.picme.agent.core.model.MediaType
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls
@@ -62,15 +65,11 @@ import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
-import com.picme.agent.core.voice.AudioRecorder
-import com.picme.agent.core.voice.InputAudioDevice
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.camera.voice.VoiceWakeIndicator
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.common.chat.AiChatScreen
 import kotlinx.coroutines.launch
-import androidx.compose.ui.geometry.Rect
-import com.picme.core.common.Logger
 
 // [常量定义] 调试文本颜色
 private val INSIGHTFACE_DEBUG_TEXT_COLOR = Color(0xFFFFAB91)

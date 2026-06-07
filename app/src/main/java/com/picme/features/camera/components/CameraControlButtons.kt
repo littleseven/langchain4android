@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -19,15 +18,15 @@ import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Crop169
 import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.CropSquare
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.FilterBAndW
 import androidx.compose.material.icons.rounded.GridOn
 import androidx.compose.material.icons.rounded.Landscape
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
-import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.Psychology
-import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults

@@ -42,25 +42,25 @@ import kotlinx.coroutines.launch
 private const val R_PLAN_RECOVERY_COOLDOWN_MS = 3 * 60 * 1000L
 
 // 领域模型 → 推理引擎层模型转换
-private fun DetectionModelType.toRoiDetectorType(): RoiDetectorType = when (this) {
+internal fun DetectionModelType.toRoiDetectorType(): RoiDetectorType = when (this) {
     DetectionModelType.MEDIAPIPE -> RoiDetectorType.MEDIAPIPE
     DetectionModelType.DET_500M_MNN, DetectionModelType.DET_500M_NCNN -> RoiDetectorType.DET10G
     else -> RoiDetectorType.MEDIAPIPE
 }
 
-private fun DetectionModelType.toLandmarkDetectorType(): LandmarkDetectorType = when (this) {
+internal fun DetectionModelType.toLandmarkDetectorType(): LandmarkDetectorType = when (this) {
     DetectionModelType.MEDIAPIPE -> LandmarkDetectorType.MEDIAPIPE
     DetectionModelType.FACE_2D106_MNN, DetectionModelType.FACE_2D106_NCNN -> LandmarkDetectorType.INSIGHTFACE_2D106
     else -> LandmarkDetectorType.MEDIAPIPE
 }
 
-private fun InferenceEngineType.toInferenceBackendType(): InferenceBackendType = when (this) {
+internal fun InferenceEngineType.toInferenceBackendType(): InferenceBackendType = when (this) {
     InferenceEngineType.MNN -> InferenceBackendType.MNN
     InferenceEngineType.NCNN -> InferenceBackendType.NCNN
     InferenceEngineType.TFLITE -> InferenceBackendType.TFLITE
 }
 
-private fun InferenceDevicePreference.toDevicePreference(): DevicePreference = when (this) {
+internal fun InferenceDevicePreference.toDevicePreference(): DevicePreference = when (this) {
     InferenceDevicePreference.AUTO -> DevicePreference.AUTO
     InferenceDevicePreference.FORCE_CPU -> DevicePreference.FORCE_CPU
     InferenceDevicePreference.FORCE_GPU -> DevicePreference.FORCE_GPU
@@ -116,26 +116,8 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
     )
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // [重构] 监听 StageConfig 变化，统一调用 updatePipelineConfig()
-    // SettingsViewModel 在快捷模式选择时已自动更新 StageConfig
-    LaunchedEffect(roiStageConfigNullable, landmarkStageConfigNullable) {
-        val roiConfig = roiStageConfigNullable ?: return@LaunchedEffect
-        val landmarkConfig = landmarkStageConfigNullable ?: return@LaunchedEffect
-
-        val config = DetectionPipelineConfig(
-            roiDetector = roiConfig.modelType.toRoiDetectorType(),
-            landmarkDetector = landmarkConfig.modelType.toLandmarkDetectorType(),
-            roiEngine = roiConfig.engineType.toInferenceBackendType(),
-            landmarkEngine = landmarkConfig.engineType.toInferenceBackendType(),
-            roiDevice = roiConfig.devicePreference.toDevicePreference(),
-            landmarkDevice = landmarkConfig.devicePreference.toDevicePreference()
-        )
-
-        faceDetectorManager.updatePipelineConfig(config)
-        Logger.d("Camera", "Pipeline config updated: ROI=${roiConfig.engineType}, Landmark=${landmarkConfig.engineType}")
-    }
-
-    // 提供非 null 值给下游使用（真实值到达前使用默认值，但不触发 detector 创建）
+    // 提供非 null 值给下游使用（真实值到达前使用默认值）
+    // 人脸检测流水线的实际初始化由 CameraScreen 按功能开关懒加载触发。
     val roiStageConfig = roiStageConfigNullable ?: StageConfig.defaultRoi()
     val landmarkStageConfig = landmarkStageConfigNullable ?: StageConfig.defaultLandmark()
 
