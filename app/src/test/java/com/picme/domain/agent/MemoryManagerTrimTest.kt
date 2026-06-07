@@ -1,7 +1,7 @@
 package com.picme.domain.agent
 
-import com.picme.domain.agent.model.ChatMessage
-import com.picme.domain.agent.model.ChatRole
+import com.picme.agent.core.model.ChatMessage
+import com.picme.agent.core.model.ChatRole
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

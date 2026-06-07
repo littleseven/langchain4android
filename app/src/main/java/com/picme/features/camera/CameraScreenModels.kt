@@ -13,8 +13,8 @@ import com.picme.domain.model.CameraGridMode
 import com.picme.domain.model.CameraMemoryState
 import com.picme.domain.model.CameraSceneMode
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.domain.model.StageConfig
 
 enum class ScenePreset { NONE, NIGHT, MOON }

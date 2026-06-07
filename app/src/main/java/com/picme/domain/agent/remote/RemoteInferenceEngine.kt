@@ -1,15 +1,20 @@
 package com.picme.domain.agent.remote
 
+import com.picme.agent.core.remote.ExecutionPlan
+import com.picme.agent.core.remote.PlanStep
+import com.picme.agent.core.remote.RemoteOrchestrator
+import com.picme.agent.core.remote.UnifiedRemoteClient
+import com.picme.agent.core.PromptBuilder
 import com.picme.core.common.Logger
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.InferenceResult
-import com.picme.domain.model.RemoteModelConfig
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.InferenceResult
+import com.picme.agent.core.model.RemoteModelConfig
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.delay
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaType
 
 /**
  * 远程推理引擎
@@ -61,7 +66,7 @@ class RemoteInferenceEngine(
         // 委托给 RemoteOrchestrator，使用统一的 PromptBuilder
         val remoteOrchestrator = RemoteOrchestrator(
             remoteConfig = remoteConfig,
-            promptBuilder = com.picme.domain.agent.PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
+            promptBuilder = PromptBuilder(com.picme.agent.core.SceneManager.getInstance())
         )
         val result = remoteOrchestrator.processBatch(userInput, context)
         return Result.success(
@@ -95,7 +100,7 @@ class RemoteInferenceEngine(
     ): Result<ExecutionPlan> {
         val remoteOrchestrator = RemoteOrchestrator(
             remoteConfig = remoteConfig,
-            promptBuilder = com.picme.domain.agent.PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
+            promptBuilder = PromptBuilder(com.picme.agent.core.SceneManager.getInstance())
         )
         val result = remoteOrchestrator.processPlan(userInput, context)
         return when (result) {
@@ -125,11 +130,11 @@ class RemoteInferenceEngine(
     ): Result<String> {
         val remoteOrchestrator = RemoteOrchestrator(
             remoteConfig = remoteConfig,
-            promptBuilder = com.picme.domain.agent.PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
+            promptBuilder = PromptBuilder(com.picme.agent.core.SceneManager.getInstance())
         )
         // 创建最小 AgentContext
         val agentContext = AgentContext(
-            scene = com.picme.domain.agent.model.AgentScene.CAMERA,
+            scene = com.picme.agent.core.model.AgentScene.CAMERA,
             beautySettings = stateSnapshot.beautySettings,
             filterType = stateSnapshot.filterType,
             styleFilter = stateSnapshot.styleFilter,

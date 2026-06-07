@@ -1,19 +1,19 @@
 package com.picme.domain.agent.capability
 
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentScene
-import com.picme.domain.agent.model.PageContext
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AgentScene
+import com.picme.agent.core.model.PageContext
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.picme.domain.agent.model.SceneManager
+import com.picme.agent.core.SceneManager
 
 /**
  * GalleryCapability 场景化单元测试

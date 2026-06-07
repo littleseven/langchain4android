@@ -40,8 +40,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.core.designsystem.PicMeTheme
-import com.picme.domain.agent.capability.SettingsCapability
-import com.picme.domain.model.AiAgentMode
+import com.picme.features.settings.capability.SettingsCapability
+import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage

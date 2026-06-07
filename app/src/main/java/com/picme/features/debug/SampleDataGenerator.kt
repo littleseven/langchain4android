@@ -11,8 +11,8 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
 import com.picme.R
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.domain.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async

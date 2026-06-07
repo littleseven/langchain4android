@@ -5,24 +5,24 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
-import com.picme.domain.agent.AgentOrchestrator
-import com.picme.domain.agent.PromptBuilder
-import com.picme.domain.agent.capability.CameraCapability
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentScene
-import com.picme.domain.agent.model.SceneManager
-import com.picme.domain.agent.remote.AdaptiveStrategySelector
-import com.picme.domain.agent.remote.InferenceStrategy
-import com.picme.domain.agent.remote.RemoteOrchestrator
+import com.picme.agent.core.AgentOrchestrator
+import com.picme.agent.core.PromptBuilder
+import com.picme.features.camera.capability.CameraCapability
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AgentScene
+import com.picme.agent.core.SceneManager
+import com.picme.agent.core.remote.AdaptiveStrategySelector
+import com.picme.agent.core.remote.InferenceStrategy
+import com.picme.agent.core.remote.RemoteOrchestrator
 import com.picme.domain.model.AiAgentCommand
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.model.AiAgentPrivacyLevel
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
+import com.picme.agent.core.model.MediaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.picme.domain.model.RemoteModelConfig
+import com.picme.agent.core.model.RemoteModelConfig
 
 /**
  * AI Agent 核心用例（Facade）
@@ -249,7 +249,7 @@ class AiAgentUseCase(
                 )
                 Result.success(
                     when (result) {
-                        is com.picme.domain.agent.model.InferenceResult.Batch -> {
+                        is com.picme.agent.core.model.InferenceResult.Batch -> {
                             when {
                                 result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
                                 result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
@@ -269,7 +269,7 @@ class AiAgentUseCase(
                 )
                 Result.success(
                     when (result) {
-                        is com.picme.domain.agent.model.InferenceResult.Batch -> {
+                        is com.picme.agent.core.model.InferenceResult.Batch -> {
                             when {
                                 result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
                                 result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
@@ -288,7 +288,7 @@ class AiAgentUseCase(
                 )
                 Result.success(
                     when (result) {
-                        is com.picme.domain.agent.model.InferenceResult.Chat -> AiAgentCommand.TextReply(result.message)
+                        is com.picme.agent.core.model.InferenceResult.Chat -> AiAgentCommand.TextReply(result.message)
                         else -> AiAgentCommand.TextReply("推理结果类型不匹配")
                     }
                 )

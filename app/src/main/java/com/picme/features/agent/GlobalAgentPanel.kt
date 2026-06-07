@@ -57,12 +57,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.core.common.Logger
-import com.picme.domain.agent.AgentOrchestrator
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentScene
-import com.picme.domain.agent.model.PageContext
-import com.picme.domain.agent.model.SceneManager
+import com.picme.agent.core.AgentOrchestrator
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AgentScene
+import com.picme.agent.core.model.PageContext
+import com.picme.agent.core.SceneManager
 import kotlinx.coroutines.launch
 
 /**

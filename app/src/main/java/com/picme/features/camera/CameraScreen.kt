@@ -75,26 +75,26 @@ import com.picme.beauty.recorder.BeautyVideoRecorder
 import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
-import com.picme.domain.agent.capability.CameraCapability
-import com.picme.domain.agent.LocalCapabilityHost
-import com.picme.domain.agent.RegisterCapability
+import com.picme.features.camera.capability.CameraCapability
+import com.picme.agent.core.LocalCapabilityHost
+import com.picme.agent.core.RegisterCapability
 import com.picme.domain.model.AiAgentCommand
-import com.picme.domain.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.CameraAspectRatioMode
 import com.picme.domain.model.CameraGridMode
 import com.picme.domain.model.CameraMemoryState
 import com.picme.domain.model.CameraSceneMode
 import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
 
-import com.picme.domain.agent.MnnResourceManager
+import com.picme.agent.core.mnn.MnnResourceManager
 import com.picme.features.camera.thread.CameraThreadRegistry
 import com.picme.features.camera.voice.AsrEngine
 import com.picme.features.camera.voice.MnnAsrClient
@@ -115,8 +115,8 @@ import kotlin.math.sqrt
 import android.app.Activity
 import android.util.Log
 import android.view.HapticFeedbackConstants
-import com.picme.domain.model.RemoteModelConfig
-import com.picme.domain.model.RemoteModelConfigs
+import com.picme.agent.core.model.RemoteModelConfig
+import com.picme.agent.core.model.RemoteModelConfigs
 import java.util.concurrent.Executor
 
 private const val TAG = "Camera"

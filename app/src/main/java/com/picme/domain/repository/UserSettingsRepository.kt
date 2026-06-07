@@ -1,7 +1,7 @@
 package com.picme.domain.repository
 
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.model.AiAgentPrivacyLevel
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.CameraMemoryState

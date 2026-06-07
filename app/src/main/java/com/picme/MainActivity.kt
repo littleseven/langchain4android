@@ -57,11 +57,11 @@ import com.picme.features.settings.SettingsViewModelFactory
 import com.picme.features.debug.LogOverlay
 import com.picme.navigation.Screen
 import com.picme.core.common.Logger
-import com.picme.domain.agent.model.SceneManager
-import com.picme.domain.agent.AgentOrchestrator
-import com.picme.domain.agent.CapabilityHost
-import com.picme.domain.agent.GlobalCapabilityHost
-import com.picme.domain.agent.LocalCapabilityHost
+import com.picme.agent.core.SceneManager
+import com.picme.agent.core.AgentOrchestrator
+import com.picme.agent.core.ComposeCapabilityHost
+import com.picme.agent.core.GlobalCapabilityHost
+import com.picme.agent.core.LocalCapabilityHost
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.testing.agent.bridge.TestEntryPoint
 import kotlinx.coroutines.delay
@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
 
                     // 创建 Activity 级 CapabilityHost，注入 NavigationCapability
                     val navigationCapability = remember { NavigationCapability(navController) }
-                    val rootCapabilityHost = remember { CapabilityHost().apply { register(navigationCapability) } }
+                    val rootCapabilityHost = remember { ComposeCapabilityHost().apply { register(navigationCapability) } }
 
                     // 设置全局引用，供非 Composable 代码访问
                     DisposableEffect(rootCapabilityHost) {

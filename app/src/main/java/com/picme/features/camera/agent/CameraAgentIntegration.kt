@@ -5,22 +5,22 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.picme.domain.agent.AgentOrchestrator
-import com.picme.domain.agent.capability.CameraCapability
+import com.picme.agent.core.AgentOrchestrator
+import com.picme.features.camera.capability.CameraCapability
 import com.picme.domain.agent.capability.NavigationCapability
 
-import com.picme.domain.agent.model.AgentContext
+import com.picme.agent.core.model.AgentContext
 import com.picme.core.common.Logger
-import com.picme.domain.agent.model.SceneManager
+import com.picme.agent.core.SceneManager
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.agent.GlobalAgentPanel
 import com.picme.features.agent.rememberGlobalAgentPanelState
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.model.AiAgentPrivacyLevel
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
+import com.picme.agent.core.model.MediaType
 
 private const val TAG = "CameraAgent"
 

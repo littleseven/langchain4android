@@ -32,8 +32,8 @@ import com.picme.core.common.Logger
 import com.picme.beauty.api.toBeautyParams
 import com.picme.beauty.api.BeautySettings
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.beauty.api.BeautyProcessor
 import com.picme.beauty.api.Face
 import com.picme.beauty.api.FaceContour

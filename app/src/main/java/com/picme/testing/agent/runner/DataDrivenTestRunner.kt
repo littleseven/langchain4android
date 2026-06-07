@@ -2,7 +2,7 @@ package com.picme.testing.agent.runner
 
 import android.content.Context
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistry
+import com.picme.agent.core.CapabilityRegistry
 import com.picme.testing.agent.data.DataDrivenTestCase
 import com.picme.testing.agent.data.DataDrivenTestResult
 import com.picme.testing.agent.engine.AgentStateProbe

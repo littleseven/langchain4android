@@ -100,8 +100,8 @@ import coil.compose.AsyncImage
 import com.picme.R
 import com.picme.beauty.api.BeautySettings
 import com.picme.core.common.Logger
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.features.camera.components.BeautySelector
 import com.picme.features.gallery.MediaViewModel
 import com.picme.features.common.chat.AgentMessage

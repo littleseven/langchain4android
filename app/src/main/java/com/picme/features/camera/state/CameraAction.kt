@@ -6,7 +6,7 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.core.image.ImageProcessor
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaType
 import com.picme.features.gallery.MediaViewModel
 
 /**

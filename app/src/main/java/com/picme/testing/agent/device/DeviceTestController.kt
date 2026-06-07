@@ -8,12 +8,12 @@ import android.content.Intent
 
 import com.picme.beauty.api.BeautySettings
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistry
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentScene
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.CapabilityRegistry
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AgentScene
+import com.picme.agent.core.model.MediaType
 import com.picme.testing.agent.core.AgentTestContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

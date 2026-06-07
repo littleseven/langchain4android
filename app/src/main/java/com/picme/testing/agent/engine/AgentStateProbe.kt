@@ -1,9 +1,9 @@
 package com.picme.testing.agent.engine
 
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistry
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.SceneManager
+import com.picme.agent.core.CapabilityRegistry
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.SceneManager
 import kotlinx.coroutines.delay
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds

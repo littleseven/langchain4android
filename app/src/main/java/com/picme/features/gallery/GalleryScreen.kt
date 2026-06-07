@@ -56,9 +56,9 @@ import com.picme.features.gallery.components.shareMediaAssets
 import com.picme.features.gallery.agent.GalleryAgentPanel
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.rememberAgentChatConfig
-import com.picme.domain.agent.model.AgentScene
+import com.picme.agent.core.model.AgentScene
 import android.app.Activity
-import com.picme.domain.agent.capability.GalleryCapability
+import com.picme.features.gallery.capability.GalleryCapability
 
 private const val TAG = "Gallery"
 private const val TAG_AGENT = "GalleryAgent"

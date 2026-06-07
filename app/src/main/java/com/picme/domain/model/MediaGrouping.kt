@@ -1,5 +1,7 @@
 package com.picme.domain.model
 
+import com.picme.agent.core.model.MediaAsset
+
 enum class GroupingMode {
     NONE,
     DATE,

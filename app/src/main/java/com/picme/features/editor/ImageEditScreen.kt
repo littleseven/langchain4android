@@ -71,8 +71,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.picme.R
 import com.picme.core.designsystem.PicMeTheme
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

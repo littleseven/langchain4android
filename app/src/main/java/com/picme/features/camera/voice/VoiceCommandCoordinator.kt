@@ -5,7 +5,7 @@ import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaType
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.CoroutineScope

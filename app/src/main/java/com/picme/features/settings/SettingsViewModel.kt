@@ -9,8 +9,8 @@ import com.picme.data.download.DownloadState
 import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.model.AiAgentPrivacyLevel
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage

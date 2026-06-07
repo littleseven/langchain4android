@@ -11,8 +11,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.picme.data.local.MediaDao
 import com.picme.data.model.MediaEntity
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import com.picme.domain.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow

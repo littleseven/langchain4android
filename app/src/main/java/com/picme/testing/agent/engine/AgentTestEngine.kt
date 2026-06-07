@@ -3,12 +3,12 @@ package com.picme.testing.agent.engine
 import android.content.Context
 import com.picme.beauty.api.BeautySettings
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistry
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.SceneManager
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.CapabilityRegistry
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.SceneManager
+import com.picme.agent.core.model.MediaType
 import com.picme.testing.agent.data.ActionJson
 import com.picme.testing.agent.data.DataDrivenTestCase
 import com.picme.testing.agent.data.DataDrivenTestResult
@@ -59,7 +59,7 @@ class AgentTestEngine(
      */
     suspend fun execute(
         case: DataDrivenTestCase,
-        agentContext: AgentContext = AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)
+        agentContext: AgentContext = AgentContext(scene = com.picme.agent.core.model.AgentScene.CAMERA)
     ): DataDrivenTestResult {
         val startTime = System.currentTimeMillis()
         var context = TestExecutionContext(caseId = case.caseId, caseName = case.name)

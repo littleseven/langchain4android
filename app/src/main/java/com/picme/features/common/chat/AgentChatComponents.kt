@@ -24,13 +24,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.picme.core.common.Logger
 import com.picme.data.preferences.UserPreferencesRepository
-import com.picme.domain.agent.AgentOrchestrator
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentScene
-import com.picme.domain.agent.model.PageContext
+import com.picme.agent.core.AgentOrchestrator
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AgentScene
+import com.picme.agent.core.model.PageContext
 import com.picme.domain.model.AiAgentCommand
-import com.picme.domain.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.voice.AsrEngine
 import com.picme.features.camera.voice.MnnAsrClient
@@ -41,9 +41,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.model.RemoteModelConfig
-import com.picme.domain.model.RemoteModelConfigs
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.RemoteModelConfig
+import com.picme.agent.core.model.RemoteModelConfigs
 import java.io.File
 
 // ─────────────────────────────────────────────────────────────────────────────

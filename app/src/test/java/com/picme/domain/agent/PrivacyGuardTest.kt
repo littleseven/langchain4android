@@ -1,7 +1,7 @@
 package com.picme.domain.agent
 
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.model.AiAgentPrivacyLevel
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

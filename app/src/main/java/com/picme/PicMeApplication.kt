@@ -9,8 +9,8 @@ import com.picme.core.common.Logger
 import com.picme.core.image.CoilConfig
 import com.picme.di.AppContainer
 import com.picme.di.AppContainerImpl
-import com.picme.domain.agent.CapabilityRegistry
-import com.picme.domain.agent.MnnResourceManager
+import com.picme.agent.core.CapabilityRegistry
+import com.picme.agent.core.mnn.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
 import com.picme.domain.repository.MediaRepository
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry

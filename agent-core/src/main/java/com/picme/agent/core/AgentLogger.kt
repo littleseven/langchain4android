@@ -1,0 +1,43 @@
+package com.picme.agent.core
+
+/**
+ * Agent 核心模块日志接口
+ *
+ * 抽象日志依赖，让 :agent-core 模块保持平台无关。
+ * App 模块通过 [AgentLogger.setDelegate] 注入平台特定实现。
+ */
+interface AgentLogger {
+    fun d(tag: String, message: String)
+    fun i(tag: String, message: String)
+    fun w(tag: String, message: String)
+    fun w(tag: String, message: String, throwable: Throwable)
+    fun e(tag: String, message: String, throwable: Throwable? = null)
+
+    companion object : AgentLogger {
+        private var delegate: AgentLogger? = null
+
+        fun setDelegate(logger: AgentLogger) {
+            delegate = logger
+        }
+
+        override fun d(tag: String, message: String) {
+            delegate?.d(tag, message) ?: println("[DEBUG] Agent:$tag: $message")
+        }
+
+        override fun i(tag: String, message: String) {
+            delegate?.i(tag, message) ?: println("[INFO] Agent:$tag: $message")
+        }
+
+        override fun w(tag: String, message: String) {
+            delegate?.w(tag, message) ?: println("[WARN] Agent:$tag: $message")
+        }
+
+        override fun w(tag: String, message: String, throwable: Throwable) {
+            delegate?.w(tag, message, throwable) ?: println("[WARN] Agent:$tag: $message")
+        }
+
+        override fun e(tag: String, message: String, throwable: Throwable?) {
+            delegate?.e(tag, message, throwable) ?: println("[ERROR] Agent:$tag: $message")
+        }
+    }
+}

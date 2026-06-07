@@ -16,7 +16,7 @@ import com.picme.beauty.internal.facedetect.Face106ToWarpParams
 import com.picme.domain.model.DuplicateGroup
 import com.picme.domain.model.GroupedMedia
 import com.picme.domain.model.GroupingMode
-import com.picme.domain.model.MediaAsset
+import com.picme.agent.core.model.MediaAsset
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase

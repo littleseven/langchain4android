@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.domain.model.AiAgentCommand
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaType
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.components.BeautyPanel
 import com.picme.features.camera.components.CameraBottomControls

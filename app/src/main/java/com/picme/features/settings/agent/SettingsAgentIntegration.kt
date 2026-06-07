@@ -6,12 +6,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistry
+import com.picme.agent.core.CapabilityRegistry
 import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.domain.agent.capability.SettingsCapability
-import com.picme.domain.agent.model.PageContext
-import com.picme.domain.agent.model.SceneManager
-import com.picme.domain.agent.model.AgentScene
+import com.picme.features.settings.capability.SettingsCapability
+import com.picme.agent.core.model.PageContext
+import com.picme.agent.core.SceneManager
+import com.picme.agent.core.model.AgentScene
 import com.picme.features.common.chat.AgentChatPanel
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.settings.SettingsViewModel

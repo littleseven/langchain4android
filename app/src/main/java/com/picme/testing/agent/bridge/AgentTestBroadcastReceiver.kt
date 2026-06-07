@@ -5,13 +5,13 @@ import android.content.Context
 import android.content.Intent
 import com.picme.beauty.api.BeautySettings
 import com.picme.core.common.Logger
-import com.picme.domain.agent.CapabilityRegistry
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.model.MediaType
-import com.picme.domain.agent.AgentCommandParser
-import com.picme.domain.agent.model.SceneManager
+import com.picme.agent.core.CapabilityRegistry
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.AgentCommandParser
+import com.picme.agent.core.SceneManager
 import com.picme.testing.agent.cases.BeautyAgentTestCases
 import com.picme.testing.agent.cases.CameraAgentTestCases
 import com.picme.testing.agent.device.DeviceTestController
@@ -213,7 +213,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
         val registry = CapabilityRegistry.getInstance()
         val command = AgentCommandParser.parseLlmResponse(
             json,
-            AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)
+            AgentContext(scene = com.picme.agent.core.model.AgentScene.CAMERA)
         )
 
         scope.launch {
@@ -228,7 +228,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
                     Logger.i(TAG, "Current scene is $currentScene, navigating to CAMERA first")
                     registry.dispatch(
                         AgentCommand.NavigateTo(destination = "camera"),
-                        AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)
+                        AgentContext(scene = com.picme.agent.core.model.AgentScene.CAMERA)
                     )
                     // 等待场景切换和 delegate 绑定
                     var waitCount = 0
@@ -243,7 +243,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
 
                 val result = registry.dispatch(
                     command,
-                    AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)
+                    AgentContext(scene = com.picme.agent.core.model.AgentScene.CAMERA)
                 )
 
                 val response = when (val action = result.getOrNull()) {
@@ -293,7 +293,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
             try {
                 val result = registry.dispatch(
                     command,
-                    AgentContext(scene = com.picme.domain.agent.model.AgentScene.CAMERA)
+                    AgentContext(scene = com.picme.agent.core.model.AgentScene.CAMERA)
                 )
 
                 val response = when (val action = result.getOrNull()) {

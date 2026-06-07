@@ -9,7 +9,7 @@ import com.k2fsa.sherpa.mnn.OnlineStream
 import com.k2fsa.sherpa.mnn.getEndpointConfig
 import com.k2fsa.sherpa.mnn.getFeatureConfig
 import com.picme.core.common.Logger
-import com.picme.domain.agent.MnnResourceManager
+import com.picme.agent.core.mnn.MnnResourceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

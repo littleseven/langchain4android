@@ -40,11 +40,11 @@ import androidx.compose.ui.unit.dp
 import com.picme.R
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
-import com.picme.domain.model.AiAgentMode
-import com.picme.domain.model.RemoteModelConfig
-import com.picme.domain.model.RemoteModelConfigs
-import com.picme.domain.model.RemoteModelProvider
-import com.picme.domain.model.RemoteProtocol
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.RemoteModelConfig
+import com.picme.agent.core.model.RemoteModelConfigs
+import com.picme.agent.core.model.RemoteModelProvider
+import com.picme.agent.core.model.RemoteProtocol
 import java.util.Locale
 
 @Composable
@@ -304,7 +304,7 @@ internal fun AiAgentRemoteModelsSection(
                             onSelectedModelChange(nextModel ?: "")
                         }
                     },
-                    isPredefined = RemoteModelConfig.PREDEFINED_MODELS.any { it.modelId == config.modelId }
+                    isPredefined = RemoteModelConfig.ALL_PREDEFINED_MODELS.any { it.modelId == config.modelId }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }

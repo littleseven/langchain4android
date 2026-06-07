@@ -1,9 +1,9 @@
 package com.picme.domain.agent.capability
 
-import com.picme.domain.agent.model.AgentAction
-import com.picme.domain.agent.model.AgentCommand
-import com.picme.domain.agent.model.AgentContext
-import com.picme.domain.agent.model.AgentScene
+import com.picme.agent.core.model.AgentAction
+import com.picme.agent.core.model.AgentCommand
+import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AgentScene
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.ThemeMode
@@ -13,7 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import com.picme.domain.agent.model.SceneManager
+import com.picme.agent.core.SceneManager
 
 /**
  * SettingsCapability 场景化单元测试

@@ -1,15 +1,6 @@
 package com.picme.domain.model
 
 /**
- * 媒体类型领域模型
- */
-enum class MediaType {
-    PHOTO,      // 照片
-    VIDEO,      // 视频
-    DOCUMENT    // 文档模式 (OCR)
-}
-
-/**
  * 相机镜头方向（纯 Kotlin 领域模型，与 CameraX 无关）
  * Features 层在使用时自行映射到 CameraSelector.LENS_FACING_* 常量。
  */

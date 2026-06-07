@@ -15,7 +15,7 @@ import com.picme.core.common.Logger
 import com.picme.core.image.ImageProcessor
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaType
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
 import com.picme.features.gallery.MediaViewModel

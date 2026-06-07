@@ -2,8 +2,8 @@ package com.picme.domain.usecase
 
 import com.picme.domain.model.GroupTitleType
 import com.picme.domain.model.GroupingMode
-import com.picme.domain.model.MediaAsset
-import com.picme.domain.model.MediaType
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.MediaType
 import org.junit.Assert.*
 import org.junit.Test
 

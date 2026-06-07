@@ -1,5 +1,6 @@
 package com.picme.domain.model
 
+import com.picme.agent.core.model.MediaType
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter

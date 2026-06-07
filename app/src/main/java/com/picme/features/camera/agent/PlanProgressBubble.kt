@@ -17,8 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.domain.agent.model.ExecutionState
-import com.picme.domain.agent.remote.PlanStep
+import com.picme.agent.core.model.ExecutionState
+import com.picme.agent.core.remote.PlanStep
 
 @Composable
 fun PlanProgressBubble(

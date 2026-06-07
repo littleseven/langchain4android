@@ -1,0 +1,205 @@
+package com.picme.agent.core
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
+import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Capability
+import com.picme.agent.core.SceneManager
+
+/**
+ * Capability 宿主接口
+ *
+ * 用于解耦 CapabilityRegistry 对 Compose UI 的依赖。
+ */
+interface CapabilityHost {
+    /**
+     * 查找指定场景的 Capability 列表
+     */
+    fun findForScene(scene: SceneManager.Scene): List<Capability>?
+
+    /**
+     * 根据命令名查找 Capability
+     */
+    fun findForCommand(commandName: String): Capability?
+
+    companion object {
+        @Volatile
+        private var instance: CapabilityHost? = null
+
+        fun set(host: CapabilityHost) {
+            instance = host
+        }
+
+        fun get(): CapabilityHost? = instance
+    }
+}
+
+/**
+ * Capability 宿主
+ *
+ * 管理当前作用域内所有 Capability 的注册和查询。
+ * 支持层级查找：如果当前宿主找不到，会委托给父宿主。
+ *
+ * **设计原则**：
+ * - 页面级 Capability 随页面创建和销毁，避免单例常驻内存
+ * - 通过 CompositionLocal 在 Compose 树中传递，无需全局单例
+ * - 层级查找支持 Capability 的继承和覆盖
+ *
+ * **生命周期**：
+ * ```
+ * MainActivity.onCreate() ──► 创建根 CapabilityHost
+ *     │
+ *     ├── CameraScreen ──► 创建子 CapabilityHost（注册 CameraCapability）
+ *     │       └── Screen Exit ──► 子 CapabilityHost 销毁，CameraCapability 释放
+ *     │
+ *     ├── GalleryScreen ──► 创建子 CapabilityHost（注册 GalleryCapability）
+ *     │       └── Screen Exit ──► 子 CapabilityHost 销毁，GalleryCapability 释放
+ *     │
+ *     └── Activity.onDestroy() ──► 根 CapabilityHost 销毁
+ * ```
+ *
+ * @param parent 父级 CapabilityHost，用于层级查找
+ */
+class ComposeCapabilityHost(
+    private val parent: ComposeCapabilityHost? = null
+)  : CapabilityHost {
+    private val tag = "CapabilityHost"
+    private val capabilities = mutableMapOf<String, Capability>()
+
+    /**
+     * 注册 Capability
+     */
+    fun register(capability: Capability) {
+        val existing = capabilities[capability.name]
+        if (existing != null) {
+            AgentLogger.w(tag, "Capability '${capability.name}' already registered, replacing")
+        }
+        capabilities[capability.name] = capability
+        AgentLogger.i(tag, "Registered: ${capability.name} (total: ${capabilities.size})")
+    }
+
+    /**
+     * 注销 Capability
+     */
+    fun unregister(capability: Capability) {
+        val removed = capabilities.remove(capability.name)
+        if (removed != null) {
+            AgentLogger.i(tag, "Unregistered: ${capability.name} (total: ${capabilities.size})")
+        }
+    }
+
+    /**
+     * 按名称查找 Capability（支持层级查找）
+     */
+    fun find(name: String): Capability? {
+        return capabilities[name] ?: parent?.find(name)
+    }
+
+    /**
+     * 查找支持指定命令的 Capability（支持层级查找）
+     */
+    override fun findForCommand(commandName: String): Capability? {
+        return capabilities.values.find { it.supportedCommands().contains(commandName) }
+            ?: parent?.findForCommand(commandName)
+    }
+
+    /**
+     * 获取指定场景下活跃的 Capability 列表
+     */
+    override fun findForScene(scene: SceneManager.Scene): List<Capability> {
+        val local = capabilities.values.filter {
+            it.activeScenes().contains(scene) || it.activeScenes().isEmpty()
+        }
+        val parentCapabilities = parent?.findForScene(scene) ?: emptyList()
+        // 本地 Capability 优先（覆盖父级同名 Capability）
+        val localNames = local.map { it.name }.toSet()
+        return local + parentCapabilities.filter { it.name !in localNames }
+    }
+
+    /**
+     * 获取所有 Capability（包含父级）
+     */
+    fun getAll(): List<Capability> {
+        val parentCapabilities = parent?.getAll() ?: emptyList()
+        val localNames = capabilities.keys
+        return capabilities.values.toList() +
+                parentCapabilities.filter { it.name !in localNames }
+    }
+}
+
+/**
+ * Compose CompositionLocal，用于在组件树中传递 CapabilityHost
+ */
+val LocalCapabilityHost = compositionLocalOf<ComposeCapabilityHost> {
+    error("CapabilityHost not provided. Wrap your content with CapabilityHostProvider.")
+}
+
+/**
+ * 全局 CapabilityHost 引用（用于非 Composable 上下文）
+ *
+ * 由 MainActivity 在创建根 CapabilityHost 时设置，
+ * 供 CapabilityRegistry 等非 Composable 代码访问。
+ */
+object GlobalCapabilityHost {
+    @Volatile
+    private var host: ComposeCapabilityHost? = null
+
+    fun set(host: ComposeCapabilityHost) {
+        this.host = host
+        CapabilityHost.set(host)
+    }
+
+    fun get(): ComposeCapabilityHost? = host
+
+    fun clear() {
+        host = null
+        CapabilityHost.set(object : CapabilityHost {
+            override fun findForScene(scene: SceneManager.Scene): List<Capability>? = null
+            override fun findForCommand(commandName: String): Capability? = null
+        })
+    }
+}
+
+/**
+ * 创建并记住 CapabilityHost
+ *
+ * @param parent 父级 CapabilityHost，默认为当前 CompositionLocal 中的值
+ * @param capabilities 要注册到该宿主的能力列表
+ * @return 创建的 CapabilityHost
+ */
+@Composable
+fun rememberCapabilityHost(
+    vararg capabilities: Capability,
+    parent: ComposeCapabilityHost? = null
+): ComposeCapabilityHost {
+    val localHost = runCatching { LocalCapabilityHost.current }.getOrNull()
+    val resolvedParent = parent ?: localHost
+    return remember(*capabilities) {
+        ComposeCapabilityHost(resolvedParent).apply {
+            capabilities.forEach { register(it) }
+        }
+    }
+}
+
+/**
+ * 在 Compose 中注册 Capability 的便捷函数
+ *
+ * 自动处理注册和注销生命周期。
+ *
+ * @param capability 要注册的 Capability
+ * @param host 目标 CapabilityHost，默认为 LocalCapabilityHost.current
+ */
+@Composable
+fun RegisterCapability(
+    capability: Capability,
+    host: ComposeCapabilityHost = LocalCapabilityHost.current
+) {
+    DisposableEffect(capability, host) {
+        host.register(capability)
+        onDispose {
+            host.unregister(capability)
+        }
+    }
+}

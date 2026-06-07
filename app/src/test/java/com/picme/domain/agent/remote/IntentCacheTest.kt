@@ -3,7 +3,7 @@ package com.picme.domain.agent.remote
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.domain.agent.model.AgentCommand
+import com.picme.agent.core.model.AgentCommand
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
