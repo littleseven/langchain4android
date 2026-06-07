@@ -1,6 +1,6 @@
 package com.picme.agent.core
 
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.InferenceResult
@@ -51,43 +51,43 @@ class InferenceRouter(
         userInput: String,
         context: AgentContext
     ): InferenceResult {
-        AgentLogger.d(tag, "Processing input: '$userInput'")
+        Logger.d(tag, "Processing input: '$userInput'")
 
         // 1. 隐私分级检查
         val privacyLevel = privacyGuard.classify(userInput)
-        AgentLogger.d(tag, "Privacy level: $privacyLevel")
+        Logger.d(tag, "Privacy level: $privacyLevel")
 
         if (privacyLevel == PrivacyLevel.RESTRICTED) {
-            AgentLogger.i(tag, "RESTRICTED content detected, routing to local engine")
+            Logger.i(tag, "RESTRICTED content detected, routing to local engine")
             return routeToLocal(userInput, context)
         }
 
         // 2. 选择策略
         val strategy = strategySelector.selectStrategy(userInput, context)
-        AgentLogger.d(tag, "Selected strategy: ${strategy::class.simpleName}")
+        Logger.d(tag, "Selected strategy: ${strategy::class.simpleName}")
 
         // 3. 根据策略路由
         return when (strategy) {
             is InferenceStrategy.L1_Cached -> {
-                AgentLogger.d(tag, "L1 Cache hit, returning cached command")
+                Logger.d(tag, "L1 Cache hit, returning cached command")
                 InferenceResult.Local(command = strategy.command)
             }
             is InferenceStrategy.L2_BatchFC -> {
-                AgentLogger.d(tag, "Routing to L2 Batch FC (remote)")
+                Logger.d(tag, "Routing to L2 Batch FC (remote)")
                 remoteOrchestrator.processBatch(
                     userInput = strategy.userInput,
                     context = strategy.context
                 )
             }
             is InferenceStrategy.L3_PlanExecute -> {
-                AgentLogger.d(tag, "Routing to L3 Plan-Execute (remote)")
+                Logger.d(tag, "Routing to L3 Plan-Execute (remote)")
                 remoteOrchestrator.processPlan(
                     userInput = strategy.userInput,
                     context = strategy.context
                 )
             }
             is InferenceStrategy.L4_ReAct -> {
-                AgentLogger.d(tag, "Routing to L4 ReAct Chat (remote)")
+                Logger.d(tag, "Routing to L4 ReAct Chat (remote)")
                 remoteOrchestrator.processChat(
                     userInput = strategy.userInput,
                     context = strategy.context
@@ -123,13 +123,13 @@ class InferenceRouter(
         // 打印完整 prompt 用于调试
         val totalPromptLength = systemPrompt.length + userPrompt.length
         val estimatedTokens = totalPromptLength / 2  // 中文字符约 1-2 token，取保守估计
-        AgentLogger.d(tag, "===== SYSTEM PROMPT ===== [len=${systemPrompt.length}, estTokens~${systemPrompt.length / 2}]")
+        Logger.d(tag, "===== SYSTEM PROMPT ===== [len=${systemPrompt.length}, estTokens~${systemPrompt.length / 2}]")
         systemPrompt.lineSequence().forEach { line ->
-            AgentLogger.d(tag, line)
+            Logger.d(tag, line)
         }
-        AgentLogger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
-        AgentLogger.d(tag, userPrompt)
-        AgentLogger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
+        Logger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
+        Logger.d(tag, userPrompt)
+        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
         val result = localEngine.generateWithSystem(
             systemPrompt = systemPrompt,
@@ -143,7 +143,7 @@ class InferenceRouter(
                 InferenceResult.Local(command = command)
             },
             onFailure = { error ->
-                AgentLogger.e(tag, "Local engine failed", error)
+                Logger.e(tag, "Local engine failed", error)
                 InferenceResult.Local(
                     command = AgentCommand.Error(reason = "本地推理失败：${error.message ?: "未知错误"}")
                 )

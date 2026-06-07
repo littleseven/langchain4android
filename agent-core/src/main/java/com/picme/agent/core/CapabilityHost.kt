@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.Capability
 import com.picme.agent.core.SceneManager
 
@@ -74,10 +74,10 @@ class ComposeCapabilityHost(
     fun register(capability: Capability) {
         val existing = capabilities[capability.name]
         if (existing != null) {
-            AgentLogger.w(tag, "Capability '${capability.name}' already registered, replacing")
+            Logger.w(tag, "Capability '${capability.name}' already registered, replacing")
         }
         capabilities[capability.name] = capability
-        AgentLogger.i(tag, "Registered: ${capability.name} (total: ${capabilities.size})")
+        Logger.i(tag, "Registered: ${capability.name} (total: ${capabilities.size})")
     }
 
     /**
@@ -86,7 +86,7 @@ class ComposeCapabilityHost(
     fun unregister(capability: Capability) {
         val removed = capabilities.remove(capability.name)
         if (removed != null) {
-            AgentLogger.i(tag, "Unregistered: ${capability.name} (total: ${capabilities.size})")
+            Logger.i(tag, "Unregistered: ${capability.name} (total: ${capabilities.size})")
         }
     }
 

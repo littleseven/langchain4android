@@ -2,7 +2,7 @@ package com.picme.agent.core
 
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.AgentIdGenerator
@@ -72,7 +72,7 @@ object AgentCommandParser {
         // 2. 移除 markdown 代码块标记 (```json ... ``` 或 ``` ... ```)
         cleaned = cleaned.replace(Regex("^```\\w*\\n?"), "").replace(Regex("\\n?```\\s*$"), "").trim()
 
-        AgentLogger.i(TAG, "Cleaned response: '$cleaned'")
+        Logger.i(TAG, "Cleaned response: '$cleaned'")
 
         // 3. 检查是否包含 JSON method 字段
         val hasJsonMethod = cleaned.contains("method")
@@ -80,7 +80,7 @@ object AgentCommandParser {
             // 兜底 1：尝试从原始响应中直接提取 JSON（绕过 think 标签截断问题）
             val fallbackJson = tryExtractJsonFromRaw(response)
             if (fallbackJson != null) {
-                AgentLogger.i(TAG, "Fallback JSON extraction succeeded: '$fallbackJson'")
+                Logger.i(TAG, "Fallback JSON extraction succeeded: '$fallbackJson'")
                 cleaned = fallbackJson
             } else {
                 // 兜底 2：关键词匹配（小模型不输出 JSON 时的最终防线）
@@ -88,10 +88,10 @@ object AgentCommandParser {
                 val keywordCommand = tryParseByKeywords(cleaned)
                     ?: tryParseByKeywords(response)
                 if (keywordCommand != null) {
-                    AgentLogger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
+                    Logger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
                     return keywordCommand
                 }
-                AgentLogger.d(TAG, "No JSON method found, treating as free chat")
+                Logger.d(TAG, "No JSON method found, treating as free chat")
                 return AgentCommand.TextReply(message = cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
             }
         }
@@ -123,7 +123,7 @@ object AgentCommandParser {
 
             parseCommandByMethod(effectiveAction, mergedJson, context, cleaned, commandId)
         } catch (exception: Exception) {
-            AgentLogger.w(TAG, "Failed to parse LLM response, fallback to text: $json", exception)
+            Logger.w(TAG, "Failed to parse LLM response, fallback to text: $json", exception)
             AgentCommand.TextReply(message = cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
         }
     }

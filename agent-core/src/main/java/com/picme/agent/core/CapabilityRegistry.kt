@@ -1,6 +1,6 @@
 package com.picme.agent.core
 
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.Capability
 import com.picme.agent.core.CommandExecutor
 import com.picme.agent.core.CrossPageCommandQueue
@@ -83,11 +83,11 @@ class CapabilityRegistry private constructor(
      */
     fun register(capability: Capability) {
         if (registry.containsKey(capability.name)) {
-            AgentLogger.w(tag, "Capability ${capability.name} already registered, skipping")
+            Logger.w(tag, "Capability ${capability.name} already registered, skipping")
             return
         }
         registry[capability.name] = capability
-        AgentLogger.i(tag, "Registered capability: ${capability.name} " +
+        Logger.i(tag, "Registered capability: ${capability.name} " +
             "(scenes: ${capability.activeScenes().joinToString { it.name }})")
     }
 
@@ -148,7 +148,7 @@ class CapabilityRegistry private constructor(
                 Result.success(AgentAction.TextReply(commandId = command.commandId, message = command.message))
             }
             is AgentCommand.Unknown -> {
-                AgentLogger.w(tag, "[$commandType] Unknown command at $currentScene")
+                Logger.w(tag, "[$commandType] Unknown command at $currentScene")
                 Result.success(
                     AgentAction.TextReply(
                         commandId = command.commandId,
@@ -157,7 +157,7 @@ class CapabilityRegistry private constructor(
                 )
             }
             is AgentCommand.Error -> {
-                AgentLogger.e(tag, "[$commandType] Command error: ${command.reason}")
+                Logger.e(tag, "[$commandType] Command error: ${command.reason}")
                 Result.success(
                     AgentAction.Error(
                         commandId = command.commandId,
@@ -191,7 +191,7 @@ class CapabilityRegistry private constructor(
         val capability = findCapabilityForCommand(command)
 
         if (capability == null) {
-            AgentLogger.w(tag, "[$commandType] No capability found for command in scene $currentScene")
+            Logger.w(tag, "[$commandType] No capability found for command in scene $currentScene")
             return Result.success(
                 AgentAction.Error(
                     commandId = command.commandId,
@@ -215,7 +215,7 @@ class CapabilityRegistry private constructor(
                 !sceneMatch -> "scene mismatch (current=$currentScene, required=${capability.activeScenes()})"
                 else -> "delegate not bound"
             }
-            AgentLogger.i(tag, "[$commandType] Capability ${capability.name} unavailable ($reason), queuing command")
+            Logger.i(tag, "[$commandType] Capability ${capability.name} unavailable ($reason), queuing command")
             commandQueue.enqueue(command, context, pageContext, capability)
             return Result.success(
                 AgentAction.TextReply(
@@ -226,7 +226,7 @@ class CapabilityRegistry private constructor(
         }
 
         // 直接执行命令
-        AgentLogger.i(tag, "[$commandType] Dispatching to ${capability.name} in scene $currentScene")
+        Logger.i(tag, "[$commandType] Dispatching to ${capability.name} in scene $currentScene")
         return commandExecutor.execute(command, context, pageContext, capability)
     }
 
@@ -313,7 +313,7 @@ class CapabilityRegistry private constructor(
         pageContext: PageContext?,
         currentScene: SceneManager.Scene
     ): Result<AgentAction> {
-        AgentLogger.i(tag, "[BatchExecute] Starting batch of ${batchCommand.commands.size} commands, atomic=${batchCommand.atomic}")
+        Logger.i(tag, "[BatchExecute] Starting batch of ${batchCommand.commands.size} commands, atomic=${batchCommand.atomic}")
 
         if (batchCommand.commands.isEmpty()) {
             return Result.success(
@@ -329,14 +329,14 @@ class CapabilityRegistry private constructor(
         val executedCommands = mutableListOf<AgentCommand>() // 用于 atomic 回滚
 
         for ((index, subCommand) in batchCommand.commands.withIndex()) {
-            AgentLogger.d(tag, "[BatchExecute] Executing sub-command ${index + 1}/${batchCommand.commands.size}: ${subCommand::class.simpleName}")
+            Logger.d(tag, "[BatchExecute] Executing sub-command ${index + 1}/${batchCommand.commands.size}: ${subCommand::class.simpleName}")
 
             val subResult = dispatch(subCommand, context, pageContext)
             val action = subResult.getOrNull()
 
             if (subResult.isFailure || action == null) {
                 val errorMsg = subResult.exceptionOrNull()?.message ?: "子命令执行失败"
-                AgentLogger.w(tag, "[BatchExecute] Sub-command ${index + 1} failed: $errorMsg")
+                Logger.w(tag, "[BatchExecute] Sub-command ${index + 1} failed: $errorMsg")
 
                 // atomic 模式：回滚已执行的命令
                 if (batchCommand.atomic) {
@@ -364,7 +364,7 @@ class CapabilityRegistry private constructor(
 
             // 检查子结果是否表示失败（即使 Result 是成功的）
             if (!action.isSuccess) {
-                AgentLogger.w(tag, "[BatchExecute] Sub-command ${index + 1} returned error action")
+                Logger.w(tag, "[BatchExecute] Sub-command ${index + 1} returned error action")
 
                 if (batchCommand.atomic) {
                     rollbackExecuted(executedCommands, context, pageContext)
@@ -379,7 +379,7 @@ class CapabilityRegistry private constructor(
             }
         }
 
-        AgentLogger.i(tag, "[BatchExecute] All ${batchCommand.commands.size} commands completed successfully")
+        Logger.i(tag, "[BatchExecute] All ${batchCommand.commands.size} commands completed successfully")
         return Result.success(
             AgentAction.BatchResult(
                 commandId = batchCommand.commandId,
@@ -398,11 +398,11 @@ class CapabilityRegistry private constructor(
         context: AgentContext,
         pageContext: PageContext?
     ) {
-        AgentLogger.w(tag, "[BatchExecute] Atomic rollback: ${executedCommands.size} commands to revert")
+        Logger.w(tag, "[BatchExecute] Atomic rollback: ${executedCommands.size} commands to revert")
         // 注意：实际回滚需要每个 Capability 支持 undo 操作
         // 当前版本仅记录日志，后续可通过 Capability 扩展 undo 接口
         for (cmd in executedCommands.asReversed()) {
-            AgentLogger.d(tag, "[BatchExecute] Rollback: ${cmd::class.simpleName} (id=${cmd.commandId})")
+            Logger.d(tag, "[BatchExecute] Rollback: ${cmd::class.simpleName} (id=${cmd.commandId})")
         }
     }
 
@@ -418,7 +418,7 @@ class CapabilityRegistry private constructor(
         context: AgentContext,
         pageContext: PageContext?
     ): Result<AgentAction> {
-        AgentLogger.i(tag, "[ExecutePlan] Dispatching plan: ${planCommand.plan.planId}, steps=${planCommand.plan.steps.size}")
+        Logger.i(tag, "[ExecutePlan] Dispatching plan: ${planCommand.plan.planId}, steps=${planCommand.plan.steps.size}")
 
         val engine = ExecutionEngine(
             capabilityRegistry = this,
@@ -427,7 +427,7 @@ class CapabilityRegistry private constructor(
 
         return try {
             val result = engine.execute(planCommand.plan)
-            AgentLogger.i(tag, "[ExecutePlan] Plan completed: success=${result.isSuccess}, steps=${result.stepResults.size}")
+            Logger.i(tag, "[ExecutePlan] Plan completed: success=${result.isSuccess}, steps=${result.stepResults.size}")
 
             // 将 ExecutionResult 转换为 AgentAction
             if (result.isSuccess) {
@@ -456,7 +456,7 @@ class CapabilityRegistry private constructor(
                 )
             }
         } catch (throwable: Throwable) {
-            AgentLogger.e(tag, "[ExecutePlan] Plan execution threw exception", throwable)
+            Logger.e(tag, "[ExecutePlan] Plan execution threw exception", throwable)
             Result.success(
                 AgentAction.Error(
                     commandId = planCommand.commandId,

@@ -1,6 +1,5 @@
 package com.picme.agent.core
 
-import com.picme.agent.core.model.AgentAction
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.PageContext
@@ -28,7 +27,7 @@ class CrossPageCommandQueue(
     private val commandExecutor: CommandExecutor,
     private val findCapability: (AgentCommand) -> Capability?,
     private val externalScope: CoroutineScope? = null,
-    private val logger: AgentLogger? = null
+    private val logger: Logger? = null
 ) {
 
     companion object {

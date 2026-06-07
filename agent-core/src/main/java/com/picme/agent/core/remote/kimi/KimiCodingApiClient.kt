@@ -1,6 +1,6 @@
 package com.picme.agent.core.remote.kimi
 
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -52,7 +52,7 @@ class KimiCodingApiClient(
 
         if (enableLogging) {
             val loggingInterceptor = HttpLoggingInterceptor { message ->
-                AgentLogger.d(TAG, message)
+                Logger.d(TAG, message)
             }.apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
@@ -69,7 +69,7 @@ class KimiCodingApiClient(
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
 
-        AgentLogger.i(TAG, "KimiCodingApiClient initialized, baseUrl=$baseUrl")
+        Logger.i(TAG, "KimiCodingApiClient initialized, baseUrl=$baseUrl")
         return retrofit.create(KimiCodingApiService::class.java)
     }
 

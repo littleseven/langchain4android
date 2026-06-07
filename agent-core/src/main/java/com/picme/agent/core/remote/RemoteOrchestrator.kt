@@ -5,7 +5,7 @@ import com.picme.agent.core.remote.PlanStep
 import com.picme.agent.core.remote.WaitCondition
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.PromptBuilder
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
@@ -53,7 +53,7 @@ class RemoteOrchestrator(
         try {
             val systemPrompt = promptBuilder.buildBatchPrompt(userInput, context)
 
-            AgentLogger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+            Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
 
             val result = unifiedClient.chat(
                 systemPrompt = systemPrompt,
@@ -64,21 +64,21 @@ class RemoteOrchestrator(
 
             val content = result.getOrElse { error ->
                 val latencyMs = System.currentTimeMillis() - startTime
-                AgentLogger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
+                Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Batch(
                     commands = listOf(AgentCommand.Error(reason = "Batch API error: ${error.message}"))
                 )
             }
 
             val latencyMs = System.currentTimeMillis() - startTime
-            AgentLogger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$content\"")
+            Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$content\"")
 
             val commands = parseCommandArray(content, context)
-            AgentLogger.d(tag, "[L2-BATCH] parsed ${commands.size} commands")
+            Logger.d(tag, "[L2-BATCH] parsed ${commands.size} commands")
             return InferenceResult.Batch(commands = commands)
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
-            AgentLogger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
+            Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
             return InferenceResult.Batch(
                 commands = listOf(AgentCommand.Error(reason = "Batch parsing error: ${exception.message}"))
             )
@@ -104,7 +104,7 @@ class RemoteOrchestrator(
         try {
             val systemPrompt = promptBuilder.buildPlanPrompt(userInput, context)
 
-            AgentLogger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+            Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
 
             val result = unifiedClient.chat(
                 systemPrompt = systemPrompt,
@@ -115,7 +115,7 @@ class RemoteOrchestrator(
 
             val content = result.getOrElse { error ->
                 val latencyMs = System.currentTimeMillis() - startTime
-                AgentLogger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
+                Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Plan(
                     plan = ExecutionPlan(
                         planId = "error_${System.currentTimeMillis()}",
@@ -126,14 +126,14 @@ class RemoteOrchestrator(
             }
 
             val latencyMs = System.currentTimeMillis() - startTime
-            AgentLogger.d(tag, "[L3-PLAN] RSP: latency=${latencyMs}ms, content=\"$content\"")
+            Logger.d(tag, "[L3-PLAN] RSP: latency=${latencyMs}ms, content=\"$content\"")
 
             val plan = parseExecutionPlan(content, context)
-            AgentLogger.d(tag, "[L3-PLAN] parsed plan with ${plan.steps.size} steps")
+            Logger.d(tag, "[L3-PLAN] parsed plan with ${plan.steps.size} steps")
             return InferenceResult.Plan(plan = plan)
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
-            AgentLogger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
+            Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
             return InferenceResult.Plan(
                 plan = ExecutionPlan(
                     planId = "error_${System.currentTimeMillis()}",
@@ -163,7 +163,7 @@ class RemoteOrchestrator(
         try {
             val systemPrompt = promptBuilder.buildChatPrompt(userInput, context)
 
-            AgentLogger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
+            Logger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
 
             val result = unifiedClient.chat(
                 systemPrompt = systemPrompt,
@@ -174,19 +174,19 @@ class RemoteOrchestrator(
 
             val content = result.getOrElse { error ->
                 val latencyMs = System.currentTimeMillis() - startTime
-                AgentLogger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${error.message}", error)
+                Logger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Chat(
                     message = "抱歉，服务暂时不可用，请稍后再试。（错误：${error.message}）"
                 )
             }
 
             val latencyMs = System.currentTimeMillis() - startTime
-            AgentLogger.d(tag, "[L4-CHAT] RSP: latency=${latencyMs}ms, content=\"$content\"")
+            Logger.d(tag, "[L4-CHAT] RSP: latency=${latencyMs}ms, content=\"$content\"")
 
             return InferenceResult.Chat(message = content)
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
-            AgentLogger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
+            Logger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
             return InferenceResult.Chat(
                 message = "抱歉，处理出错了：${exception.message ?: "未知错误"}"
             )
@@ -225,7 +225,7 @@ class RemoteOrchestrator(
                 }
             }
         } catch (exception: Exception) {
-            AgentLogger.e(tag, "Failed to parse command array: $cleaned", exception)
+            Logger.e(tag, "Failed to parse command array: $cleaned", exception)
             listOf(AgentCommand.TextReply(message = cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
         }
     }
@@ -299,7 +299,7 @@ class RemoteOrchestrator(
                 description = description
             )
         } catch (exception: Exception) {
-            AgentLogger.e(tag, "Failed to parse execution plan: $cleaned", exception)
+            Logger.e(tag, "Failed to parse execution plan: $cleaned", exception)
             ExecutionPlan(
                 planId = "error_${System.currentTimeMillis()}",
                 steps = emptyList(),

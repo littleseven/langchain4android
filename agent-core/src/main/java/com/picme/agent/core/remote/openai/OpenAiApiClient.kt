@@ -1,6 +1,6 @@
 package com.picme.agent.core.remote.openai
 
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.OkHttpClient
@@ -60,7 +60,7 @@ class OpenAiApiClient(
 
         if (enableLogging) {
             val loggingInterceptor = HttpLoggingInterceptor { message ->
-                AgentLogger.d(TAG, message)
+                Logger.d(TAG, message)
             }.apply {
                 level = HttpLoggingInterceptor.Level.BODY
             }
@@ -77,7 +77,7 @@ class OpenAiApiClient(
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .build()
 
-        AgentLogger.i(TAG, "OpenAiApiClient initialized, baseUrl=$baseUrl")
+        Logger.i(TAG, "OpenAiApiClient initialized, baseUrl=$baseUrl")
         return retrofit.create(OpenAiApiService::class.java)
     }
 

@@ -1,6 +1,6 @@
 package com.picme.agent.core.remote
 
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.remote.kimi.KimiCodingApiClient
 import com.picme.agent.core.remote.kimi.KimiCodingMessage
 import com.picme.agent.core.remote.kimi.KimiCodingRequest
@@ -71,7 +71,7 @@ class UnifiedRemoteClient(
                 else -> Result.failure(IllegalStateException("No client available for model ${config.modelId}"))
             }
         } catch (e: Exception) {
-            AgentLogger.e(tag, "Chat failed for model=${config.modelId}", e)
+            Logger.e(tag, "Chat failed for model=${config.modelId}", e)
             Result.failure(e)
         }
     }
@@ -132,7 +132,7 @@ class UnifiedRemoteClient(
     ): Result<String> {
         if (!response.isSuccessful) {
             val errorBody = response.errorBody()?.string()
-            AgentLogger.e(tag, "HTTP ${response.code()}, body=$errorBody")
+            Logger.e(tag, "HTTP ${response.code()}, body=$errorBody")
             return Result.failure(RuntimeException("API error: ${response.code()}"))
         }
 

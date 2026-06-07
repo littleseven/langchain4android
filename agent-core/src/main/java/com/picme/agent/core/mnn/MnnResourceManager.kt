@@ -6,7 +6,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -99,12 +99,12 @@ class MnnResourceManager private constructor(context: Context) {
                 override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {}
 
                 override fun onLowMemory() {
-                    AgentLogger.w(TAG, "System onLowMemory triggered")
+                    Logger.w(TAG, "System onLowMemory triggered")
                     handleMemoryPressure(ComponentCallbacks2.TRIM_MEMORY_COMPLETE)
                 }
 
                 override fun onTrimMemory(level: Int) {
-                    AgentLogger.d(TAG, "onTrimMemory level=$level")
+                    Logger.d(TAG, "onTrimMemory level=$level")
                     handleMemoryPressure(level)
                 }
             })
@@ -120,7 +120,7 @@ class MnnResourceManager private constructor(context: Context) {
      */
     fun acquireLlm(owner: String) {
         val count = llmRefCount.incrementAndGet()
-        AgentLogger.d(TAG, "LLM acquired by $owner, refCount=$count")
+        Logger.d(TAG, "LLM acquired by $owner, refCount=$count")
         cancelBackgroundUnload()
     }
 
@@ -137,16 +137,16 @@ class MnnResourceManager private constructor(context: Context) {
         onSoftRelease: () -> Unit
     ) {
         val count = llmRefCount.decrementAndGet()
-        AgentLogger.d(TAG, "LLM released by $owner, refCount=$count")
+        Logger.d(TAG, "LLM released by $owner, refCount=$count")
 
         if (count <= 0) {
             synchronized(this) {
                 llmRefCount.set(0)
                 if (asrRefCount.get() <= 0) {
-                    AgentLogger.i(TAG, "LLM safe to unload (no ASR reference)")
+                    Logger.i(TAG, "LLM safe to unload (no ASR reference)")
                     onSafeUnload()
                 } else {
-                    AgentLogger.i(TAG, "LLM soft release (ASR still active)")
+                    Logger.i(TAG, "LLM soft release (ASR still active)")
                     onSoftRelease()
                 }
             }
@@ -158,7 +158,7 @@ class MnnResourceManager private constructor(context: Context) {
      */
     fun acquireAsr(owner: String) {
         val count = asrRefCount.incrementAndGet()
-        AgentLogger.d(TAG, "ASR acquired by $owner, refCount=$count")
+        Logger.d(TAG, "ASR acquired by $owner, refCount=$count")
         cancelBackgroundUnload()
     }
 
@@ -171,16 +171,16 @@ class MnnResourceManager private constructor(context: Context) {
         onSoftRelease: () -> Unit
     ) {
         val count = asrRefCount.decrementAndGet()
-        AgentLogger.d(TAG, "ASR released by $owner, refCount=$count")
+        Logger.d(TAG, "ASR released by $owner, refCount=$count")
 
         if (count <= 0) {
             synchronized(this) {
                 asrRefCount.set(0)
                 if (llmRefCount.get() <= 0) {
-                    AgentLogger.i(TAG, "ASR safe to unload (no LLM reference)")
+                    Logger.i(TAG, "ASR safe to unload (no LLM reference)")
                     onSafeUnload()
                 } else {
-                    AgentLogger.i(TAG, "ASR soft release (LLM still active)")
+                    Logger.i(TAG, "ASR soft release (LLM still active)")
                     onSoftRelease()
                 }
             }
@@ -195,7 +195,7 @@ class MnnResourceManager private constructor(context: Context) {
     fun onAppForeground() {
         _isAppInForeground.set(true)
         cancelBackgroundUnload()
-        AgentLogger.i(TAG, "App entered foreground")
+        Logger.i(TAG, "App entered foreground")
     }
 
     /**
@@ -203,19 +203,19 @@ class MnnResourceManager private constructor(context: Context) {
      */
     fun onAppBackground() {
         _isAppInForeground.set(false)
-        AgentLogger.i(TAG, "App entered background, scheduling unload")
+        Logger.i(TAG, "App entered background, scheduling unload")
 
         if (backgroundUnloadScheduled.compareAndSet(false, true)) {
             scope.launch {
                 delay(BACKGROUND_UNLOAD_DELAY_MS)
                 if (!isAppInForeground && !isAnyRequested) {
-                    AgentLogger.i(TAG, "Background timeout, triggering soft trim for all")
+                    Logger.i(TAG, "Background timeout, triggering soft trim for all")
                     notifySoftTrim()
                 }
 
                 delay(BACKGROUND_FORCE_UNLOAD_DELAY_MS - BACKGROUND_UNLOAD_DELAY_MS)
                 if (!isAppInForeground && !isAnyRequested) {
-                    AgentLogger.i(TAG, "Background force unload timeout, triggering safe unload")
+                    Logger.i(TAG, "Background force unload timeout, triggering safe unload")
                     notifySafeUnload()
                 }
                 backgroundUnloadScheduled.set(false)
@@ -228,22 +228,22 @@ class MnnResourceManager private constructor(context: Context) {
     private fun handleMemoryPressure(level: Int) {
         when (level) {
             ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE -> {
-                AgentLogger.i(TAG, "Memory pressure: MODERATE, soft trim")
+                Logger.i(TAG, "Memory pressure: MODERATE, soft trim")
                 notifySoftTrim()
             }
             ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW,
             ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> {
-                AgentLogger.i(TAG, "Memory pressure: LOW/CRITICAL, force unload")
+                Logger.i(TAG, "Memory pressure: LOW/CRITICAL, force unload")
                 notifySafeUnload()
             }
             ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> {
                 if (!isAnyRequested) {
-                    AgentLogger.i(TAG, "UI hidden, scheduling unload")
+                    Logger.i(TAG, "UI hidden, scheduling unload")
                     onAppBackground()
                 }
             }
             ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> {
-                AgentLogger.w(TAG, "Memory pressure: COMPLETE, emergency unload")
+                Logger.w(TAG, "Memory pressure: COMPLETE, emergency unload")
                 notifySafeUnload()
             }
         }

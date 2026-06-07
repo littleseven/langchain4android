@@ -6,7 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.model.ChatMessage
 import com.picme.agent.core.model.ChatRole
 import kotlinx.coroutines.flow.first
@@ -58,7 +58,7 @@ class MemoryManager(private val context: Context) {
                 parseMessagesFromJson(jsonStr)
             }
         } catch (exception: Exception) {
-            AgentLogger.w(tag, "Failed to load history for session $sessionId", exception)
+            Logger.w(tag, "Failed to load history for session $sessionId", exception)
             emptyList()
         }
     }
@@ -78,9 +78,9 @@ class MemoryManager(private val context: Context) {
             dataStore.edit { preferences ->
                 preferences[key] = jsonStr
             }
-            AgentLogger.d(tag, "Saved ${trimmed.size} messages to session $sessionId")
+            Logger.d(tag, "Saved ${trimmed.size} messages to session $sessionId")
         } catch (exception: Exception) {
-            AgentLogger.e(tag, "Failed to save history for session $sessionId", exception)
+            Logger.e(tag, "Failed to save history for session $sessionId", exception)
         }
     }
 
@@ -125,9 +125,9 @@ class MemoryManager(private val context: Context) {
             dataStore.edit { preferences ->
                 preferences.remove(key)
             }
-            AgentLogger.i(tag, "Cleared history for session $sessionId")
+            Logger.i(tag, "Cleared history for session $sessionId")
         } catch (exception: Exception) {
-            AgentLogger.e(tag, "Failed to clear history for session $sessionId", exception)
+            Logger.e(tag, "Failed to clear history for session $sessionId", exception)
         }
     }
 
@@ -142,9 +142,9 @@ class MemoryManager(private val context: Context) {
                         preferences.remove(key)
                     }
             }
-            AgentLogger.i(tag, "Cleared all conversation history")
+            Logger.i(tag, "Cleared all conversation history")
         } catch (exception: Exception) {
-            AgentLogger.e(tag, "Failed to clear all history", exception)
+            Logger.e(tag, "Failed to clear all history", exception)
         }
     }
 
@@ -245,7 +245,7 @@ class MemoryManager(private val context: Context) {
                 ChatMessage(role = role, content = obj.getString("content"))
             }
         } catch (exception: Exception) {
-            AgentLogger.w(tag, "Failed to parse messages JSON", exception)
+            Logger.w(tag, "Failed to parse messages JSON", exception)
             emptyList()
         }
     }

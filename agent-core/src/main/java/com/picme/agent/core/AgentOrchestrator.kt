@@ -1,7 +1,7 @@
 package com.picme.agent.core
 
 import android.content.Context
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.Capability
 import com.picme.agent.core.model.AgentAction
 import com.picme.agent.core.model.AgentCommand
@@ -81,7 +81,7 @@ class AgentOrchestrator private constructor(context: Context) {
      */
     fun transitionToScene(scene: SceneManager.Scene, saveToHistory: Boolean = true) {
         sceneManager.transitionTo(scene, saveToHistory)
-        AgentLogger.i(tag, "Transitioned to scene: $scene")
+        Logger.i(tag, "Transitioned to scene: $scene")
     }
 
     /**
@@ -110,7 +110,7 @@ class AgentOrchestrator private constructor(context: Context) {
         val targetModel = modelId ?: configurator.getCurrentModelId()
 
         if (!localLlmEngine.isModelAvailable(targetModel, configurator.getContext())) {
-            AgentLogger.w(tag, "Model not downloaded: $targetModel")
+            Logger.w(tag, "Model not downloaded: $targetModel")
             return Result.failure(
                 LlmModelNotFoundException(
                     "模型未下载，请前往设置 → AI 模型管理下载 $targetModel"
@@ -145,7 +145,7 @@ class AgentOrchestrator private constructor(context: Context) {
         when (currentScene) {
             SceneManager.Scene.CAMERA -> {
                 if (localLlmEngine.isLoaded) {
-                    AgentLogger.i(tag, "CAMERA scene: trimming LLM memory (clear history, keep model)")
+                    Logger.i(tag, "CAMERA scene: trimming LLM memory (clear history, keep model)")
                     localLlmEngine.trimMemory()
                 }
             }
@@ -175,7 +175,7 @@ class AgentOrchestrator private constructor(context: Context) {
         pageContext: PageContext? = null,
         customSystemPrompt: String? = null
     ): Result<AgentAction> = withContext(Dispatchers.IO) {
-        AgentLogger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}, mode=${configurator.getAgentMode()}")
+        Logger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}, mode=${configurator.getAgentMode()}")
 
         // 场景驱动的模型管理
         applySceneDrivenModelPolicy()
@@ -183,7 +183,7 @@ class AgentOrchestrator private constructor(context: Context) {
         // 0. L1 缓存查询（本地高频指令快速响应，零 LLM 开销）
         val cachedCommand = intentCache.match(input)
         if (cachedCommand != null) {
-            AgentLogger.i(tag, "L1 cache hit for input='$input' -> ${cachedCommand::class.simpleName}")
+            Logger.i(tag, "L1 cache hit for input='$input' -> ${cachedCommand::class.simpleName}")
             saveConversation(agentContext.memorySessionId, input, cachedCommand, "")
             return@withContext _capabilityRegistry.dispatch(cachedCommand, agentContext, pageContext)
         }
@@ -191,7 +191,7 @@ class AgentOrchestrator private constructor(context: Context) {
         // 1. 获取当前场景的 Capability 列表
         val capabilities = _capabilityRegistry.getCapabilitiesForCurrentScene()
         if (capabilities.isEmpty()) {
-            AgentLogger.w(tag, "No capabilities available for current scene")
+            Logger.w(tag, "No capabilities available for current scene")
             return@withContext Result.success(
                 AgentAction.Error(
                     commandId = AgentIdGenerator.nextId(),
@@ -214,13 +214,13 @@ class AgentOrchestrator private constructor(context: Context) {
         // 打印完整 prompt 用于调试
         val totalPromptLength = systemPrompt.length + userPrompt.length
         val estimatedTokens = totalPromptLength / 2
-        AgentLogger.d(tag, "===== SYSTEM PROMPT ===== [len=${systemPrompt.length}, estTokens~${systemPrompt.length / 2}]")
+        Logger.d(tag, "===== SYSTEM PROMPT ===== [len=${systemPrompt.length}, estTokens~${systemPrompt.length / 2}]")
         systemPrompt.lineSequence().forEach { line ->
-            AgentLogger.d(tag, line)
+            Logger.d(tag, line)
         }
-        AgentLogger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
-        AgentLogger.d(tag, userPrompt)
-        AgentLogger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
+        Logger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
+        Logger.d(tag, userPrompt)
+        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
         // 3. 根据模式选择推理引擎
         val inferenceResult = when (configurator.getAgentMode()) {
@@ -232,7 +232,7 @@ class AgentOrchestrator private constructor(context: Context) {
                         return@withContext handleModelLoadError(loadResult)
                     }
                 }
-                AgentLogger.d(tag, "Using local LLM (MNN-LLM)")
+                Logger.d(tag, "Using local LLM (MNN-LLM)")
                 val responseResult = localLlmEngine.generateWithSystem(
                     systemPrompt = systemPrompt,
                     userPrompt = userPrompt,
@@ -243,7 +243,7 @@ class AgentOrchestrator private constructor(context: Context) {
                         handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
                     },
                     onFailure = { error ->
-                        AgentLogger.e(tag, "LLM inference failed (mode=${configurator.getAgentMode()})", error)
+                        Logger.e(tag, "LLM inference failed (mode=${configurator.getAgentMode()})", error)
                         Result.success(
                             AgentAction.Error(
                                 commandId = AgentIdGenerator.nextId(),
@@ -256,11 +256,11 @@ class AgentOrchestrator private constructor(context: Context) {
             }
             AiAgentMode.REMOTE -> {
                 // 远程模式：通过 InferenceRouter 进行混合编排
-                AgentLogger.d(tag, "Using InferenceRouter for REMOTE mode")
+                Logger.d(tag, "Using InferenceRouter for REMOTE mode")
                 try {
                     configurator.getInferenceRouter().processInput(input, agentContext)
                 } catch (exception: Exception) {
-                    AgentLogger.e(tag, "Remote inference failed, falling back to local", exception)
+                    Logger.e(tag, "Remote inference failed, falling back to local", exception)
                     // 远程失败时回退到本地
                     if (!localLlmEngine.isLoaded) {
                         val loadResult = tryLoadModel()
@@ -278,7 +278,7 @@ class AgentOrchestrator private constructor(context: Context) {
                             handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
                         },
                         onFailure = { error ->
-                            AgentLogger.e(tag, "Fallback local inference also failed", error)
+                            Logger.e(tag, "Fallback local inference also failed", error)
                             Result.success(
                                 AgentAction.Error(
                                     commandId = AgentIdGenerator.nextId(),
@@ -291,7 +291,7 @@ class AgentOrchestrator private constructor(context: Context) {
                 }
             }
             AiAgentMode.OFF -> {
-                AgentLogger.w(tag, "Agent is OFF")
+                Logger.w(tag, "Agent is OFF")
                 return@withContext Result.success(
                     AgentAction.Error(
                         commandId = AgentIdGenerator.nextId(),
@@ -348,16 +348,16 @@ class AgentOrchestrator private constructor(context: Context) {
     ): Result<AgentAction> {
         // 过滤 Qwen3 的 <think> 标签
         val response = filterThinkTags(rawResponse)
-        AgentLogger.i(tag, "LLM raw response: $response")
+        Logger.i(tag, "LLM raw response: $response")
 
         // 解析命令
         val command = AgentCommandParser.parseLlmResponse(response, agentContext)
-        AgentLogger.i(tag, "Parsed command: ${command::class.simpleName}")
+        Logger.i(tag, "Parsed command: ${command::class.simpleName}")
 
         // L1 缓存学习：解析成功且非错误命令时写入缓存
         if (command !is AgentCommand.Error && command !is AgentCommand.TextReply) {
             intentCache.put(userInput, command)
-            AgentLogger.d(tag, "L1 cache learned: '$userInput' -> ${command::class.simpleName}")
+            Logger.d(tag, "L1 cache learned: '$userInput' -> ${command::class.simpleName}")
         }
 
         // 保存对话历史
@@ -437,12 +437,12 @@ class AgentOrchestrator private constructor(context: Context) {
         agentContext: AgentContext,
         pageContext: PageContext?
     ): Result<AgentAction> {
-        AgentLogger.d(tag, "Falling back to remote inference in camera scene")
+        Logger.d(tag, "Falling back to remote inference in camera scene")
         return try {
             val result = configurator.getInferenceRouter().processInput(input, agentContext)
             handleInferenceResult(result, input, agentContext, pageContext)
         } catch (exception: Exception) {
-            AgentLogger.e(tag, "Remote fallback failed", exception)
+            Logger.e(tag, "Remote fallback failed", exception)
             Result.success(
                 AgentAction.Error(
                     commandId = AgentIdGenerator.nextId(),
@@ -466,12 +466,12 @@ class AgentOrchestrator private constructor(context: Context) {
 
         return when (inferenceResult) {
             is InferenceResult.Local -> {
-                AgentLogger.d(tag, "Handling Local result: ${inferenceResult.command::class.simpleName}")
+                Logger.d(tag, "Handling Local result: ${inferenceResult.command::class.simpleName}")
                 saveConversation(memorySessionId, userInput, inferenceResult.command, "")
                 _capabilityRegistry.dispatch(inferenceResult.command, agentContext, pageContext)
             }
             is InferenceResult.Batch -> {
-                AgentLogger.d(tag, "Handling Batch result: ${inferenceResult.commands.size} commands")
+                Logger.d(tag, "Handling Batch result: ${inferenceResult.commands.size} commands")
                 if (inferenceResult.commands.isEmpty()) {
                     Result.success(
                         AgentAction.Error(
@@ -496,13 +496,13 @@ class AgentOrchestrator private constructor(context: Context) {
                 }
             }
             is InferenceResult.Plan -> {
-                AgentLogger.d(tag, "Handling Plan result: ${inferenceResult.plan.steps.size} steps")
+                Logger.d(tag, "Handling Plan result: ${inferenceResult.plan.steps.size} steps")
                 val planCommand = AgentCommand.ExecutePlan(plan = inferenceResult.plan)
                 saveConversation(memorySessionId, userInput, planCommand, inferenceResult.plan.description)
                 _capabilityRegistry.dispatch(planCommand, agentContext, pageContext)
             }
             is InferenceResult.Chat -> {
-                AgentLogger.d(tag, "Handling Chat result: ${inferenceResult.message}")
+                Logger.d(tag, "Handling Chat result: ${inferenceResult.message}")
                 val textCommand = AgentCommand.TextReply(message = inferenceResult.message)
                 saveConversation(memorySessionId, userInput, textCommand, inferenceResult.message)
                 Result.success(

@@ -2,7 +2,7 @@ package com.picme.agent.core
 
 import android.content.Context
 import com.picme.beauty.api.llm.MnnLlmClient
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -98,29 +98,29 @@ class LocalLlmEngine(private val context: Context) {
             // 双重检查：已加载且是同一模型，直接返回
             if (client.isLoaded && currentModelId == modelId) {
                 ensureRegistered()
-                AgentLogger.d(tag, "Model $modelId already loaded")
+                Logger.d(tag, "Model $modelId already loaded")
                 return@withLock Result.success(Unit)
             }
 
             // 如果已加载的是其他模型，先卸载
             if (client.isLoaded) {
-                AgentLogger.d(tag, "Unloading previous model: $currentModelId")
+                Logger.d(tag, "Unloading previous model: $currentModelId")
                 client.unload()
                 currentModelId = null
                 isRegistered.set(false)
             }
 
             try {
-                AgentLogger.i(tag, "Loading LLM model: $modelId")
+                Logger.i(tag, "Loading LLM model: $modelId")
                 val success = client.load(modelId)
                 if (success) {
                     // 原子性设置：nativeHandle 和 currentModelId 在同一把锁内完成
                     currentModelId = modelId
                     ensureRegistered()
-                    AgentLogger.i(tag, "Model $modelId loaded successfully")
+                    Logger.i(tag, "Model $modelId loaded successfully")
                     Result.success(Unit)
                 } else {
-                    AgentLogger.e(tag, "Failed to load model $modelId (native load returned false)")
+                    Logger.e(tag, "Failed to load model $modelId (native load returned false)")
                     Result.failure(
                         LlmModelNotFoundException(
                             "模型加载失败，请确认模型已下载。设置 → AI 模型管理 → 下载 $modelId"
@@ -129,11 +129,11 @@ class LocalLlmEngine(private val context: Context) {
                 }
             } catch (exception: CancellationException) {
                 // 取消异常必须重新抛出，不吞没
-                AgentLogger.w(tag, "Model loading cancelled: $modelId")
+                Logger.w(tag, "Model loading cancelled: $modelId")
                 throw exception
             } catch (exception: IllegalStateException) {
                 // ModelManager 抛出的模型未找到异常
-                AgentLogger.e(tag, "Model not found: $modelId", exception)
+                Logger.e(tag, "Model not found: $modelId", exception)
                 Result.failure(
                     LlmModelNotFoundException(
                         "模型未下载，请前往设置 → AI 模型管理下载模型",
@@ -141,7 +141,7 @@ class LocalLlmEngine(private val context: Context) {
                     )
                 )
             } catch (exception: Exception) {
-                AgentLogger.e(tag, "Exception loading model $modelId", exception)
+                Logger.e(tag, "Exception loading model $modelId", exception)
                 Result.failure(exception)
             }
         }
@@ -166,12 +166,12 @@ class LocalLlmEngine(private val context: Context) {
     suspend fun generate(prompt: String, maxTokens: Int = 128): Result<String> = withContext(modelDispatcher) {
         engineMutex.withLock {
             if (!client.isLoaded) {
-                AgentLogger.w(tag, "LLM not loaded, cannot generate")
+                Logger.w(tag, "LLM not loaded, cannot generate")
                 return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
             }
 
             try {
-                AgentLogger.d(tag, "Generating response with maxTokens=$maxTokens, promptLength=${prompt.length}")
+                Logger.d(tag, "Generating response with maxTokens=$maxTokens, promptLength=${prompt.length}")
                 val response = client.generate(
                     prompt = prompt,
                     maxNewTokens = maxTokens
@@ -184,7 +184,7 @@ class LocalLlmEngine(private val context: Context) {
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                AgentLogger.e(tag, "Generation failed", exception)
+                Logger.e(tag, "Generation failed", exception)
                 Result.failure(exception)
             }
         }
@@ -208,12 +208,12 @@ class LocalLlmEngine(private val context: Context) {
     ): Result<String> = withContext(modelDispatcher) {
         engineMutex.withLock {
             if (!client.isLoaded) {
-                AgentLogger.w(tag, "LLM not loaded, cannot generate")
+                Logger.w(tag, "LLM not loaded, cannot generate")
                 return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
             }
 
             try {
-                AgentLogger.d(tag, "Generating response with maxTokens=$maxTokens")
+                Logger.d(tag, "Generating response with maxTokens=$maxTokens")
                 val response = client.generateWithSystem(
                     systemPrompt = systemPrompt,
                     userPrompt = userPrompt,
@@ -227,7 +227,7 @@ class LocalLlmEngine(private val context: Context) {
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                AgentLogger.e(tag, "Generation with system prompt failed", exception)
+                Logger.e(tag, "Generation with system prompt failed", exception)
                 Result.failure(exception)
             }
         }
@@ -246,13 +246,13 @@ class LocalLlmEngine(private val context: Context) {
     ): Result<String> = withContext(modelDispatcher) {
         engineMutex.withLock {
             if (!client.isLoaded) {
-                AgentLogger.w(tag, "LLM not loaded, cannot generate")
+                Logger.w(tag, "LLM not loaded, cannot generate")
                 return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
             }
 
             try {
                 val prompt = buildPromptFromMessages(messages)
-                AgentLogger.d(tag, "Generating with history, messages=${messages.size}")
+                Logger.d(tag, "Generating with history, messages=${messages.size}")
                 val response = client.generate(
                     prompt = prompt,
                     maxNewTokens = maxTokens
@@ -265,7 +265,7 @@ class LocalLlmEngine(private val context: Context) {
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
-                AgentLogger.e(tag, "Generation with history failed", exception)
+                Logger.e(tag, "Generation with history failed", exception)
                 Result.failure(exception)
             }
         }
@@ -301,13 +301,13 @@ class LocalLlmEngine(private val context: Context) {
     private fun enqueueTrimMemory() {
         modelExecutor.execute {
             if (!engineMutex.tryLock()) {
-                AgentLogger.w(tag, "Skip trimMemory: engine is busy")
+                Logger.w(tag, "Skip trimMemory: engine is busy")
                 return@execute
             }
             try {
                 if (client.isLoaded) {
                     client.reset()
-                    AgentLogger.i(tag, "LLM memory trimmed (history cleared, model still loaded)")
+                    Logger.i(tag, "LLM memory trimmed (history cleared, model still loaded)")
                 }
             } finally {
                 engineMutex.unlock()
@@ -323,14 +323,14 @@ class LocalLlmEngine(private val context: Context) {
     private fun enqueueUnload() {
         modelExecutor.execute {
             if (!engineMutex.tryLock()) {
-                AgentLogger.w(tag, "Skip unload: engine is busy, will retry on next operation")
+                Logger.w(tag, "Skip unload: engine is busy, will retry on next operation")
                 return@execute
             }
             try {
                 if (client.isLoaded) {
                     client.unload()
                     currentModelId = null
-                    AgentLogger.i(tag, "LLM fully unloaded")
+                    Logger.i(tag, "LLM fully unloaded")
                 }
             } finally {
                 engineMutex.unlock()

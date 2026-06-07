@@ -1,6 +1,6 @@
 package com.picme.agent.core
 
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.model.AgentAction
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
@@ -89,7 +89,7 @@ class ExecutionEngine(
      * @return 执行结果
      */
     suspend fun execute(plan: ExecutionPlan): ExecutionResult {
-        AgentLogger.d(tag, "Starting execution of plan: ${plan.planId}, steps: ${plan.steps.size}")
+        Logger.d(tag, "Starting execution of plan: ${plan.planId}, steps: ${plan.steps.size}")
 
         isCancelled = false
         isPaused = false
@@ -103,7 +103,7 @@ class ExecutionEngine(
         try {
             for (planStep in plan.steps) {
                 if (isCancelled) {
-                    AgentLogger.d(tag, "Execution cancelled at step ${planStep.step}")
+                    Logger.d(tag, "Execution cancelled at step ${planStep.step}")
                     _stateFlow.value = ExecutionState.Cancelled
                     val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
                     reporter.report(result)
@@ -116,7 +116,7 @@ class ExecutionEngine(
                 }
 
                 if (isCancelled) {
-                    AgentLogger.d(tag, "Execution cancelled after pause at step ${planStep.step}")
+                    Logger.d(tag, "Execution cancelled after pause at step ${planStep.step}")
                     _stateFlow.value = ExecutionState.Cancelled
                     val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
                     reporter.report(result)
@@ -135,18 +135,18 @@ class ExecutionEngine(
 
                 // 步骤间延迟
                 if (planStep.delayMs > 0) {
-                    AgentLogger.d(tag, "Delaying ${planStep.delayMs}ms after step ${planStep.step}")
+                    Logger.d(tag, "Delaying ${planStep.delayMs}ms after step ${planStep.step}")
                     delay(planStep.delayMs)
                 }
             }
         } catch (exception: CancellationException) {
-            AgentLogger.d(tag, "Execution cancelled via CancellationException")
+            Logger.d(tag, "Execution cancelled via CancellationException")
             _stateFlow.value = ExecutionState.Cancelled
             val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
             reporter.report(result)
             return result
         } catch (throwable: Throwable) {
-            AgentLogger.e(tag, "Execution failed with unexpected error", throwable)
+            Logger.e(tag, "Execution failed with unexpected error", throwable)
             _stateFlow.value = ExecutionState.Completed(Result.failure(throwable))
             val result = ExecutionResult(planId = plan.planId, stepResults = stepResults)
             reporter.report(result)
@@ -160,7 +160,7 @@ class ExecutionEngine(
         )
         reporter.report(result)
 
-        AgentLogger.d(tag, "Plan execution completed: ${plan.planId}, success=${result.isSuccess}")
+        Logger.d(tag, "Plan execution completed: ${plan.planId}, success=${result.isSuccess}")
         return result
     }
 
@@ -173,7 +173,7 @@ class ExecutionEngine(
     private suspend fun executeStep(planStep: PlanStep): StepResult {
         // 条件评估
         if (!evaluateCondition(planStep.condition)) {
-            AgentLogger.d(tag, "Step ${planStep.step} skipped: condition '${planStep.condition}' is false")
+            Logger.d(tag, "Step ${planStep.step} skipped: condition '${planStep.condition}' is false")
             return StepResult.Skipped(
                 step = planStep,
                 reason = "Condition '${planStep.condition}' evaluated to false"
@@ -183,11 +183,11 @@ class ExecutionEngine(
         // 等待条件评估
         val waitResult = evaluateWaitCondition(planStep.waitCondition)
         if (waitResult != null) {
-            AgentLogger.d(tag, "Step ${planStep.step} wait condition failed: $waitResult")
+            Logger.d(tag, "Step ${planStep.step} wait condition failed: $waitResult")
             return StepResult.Skipped(step = planStep, reason = waitResult)
         }
 
-        AgentLogger.d(tag, "Executing step ${planStep.step}: ${planStep.description}, repeat=${planStep.repeatCount}")
+        Logger.d(tag, "Executing step ${planStep.step}: ${planStep.description}, repeat=${planStep.repeatCount}")
 
         return try {
             // 循环重复执行
@@ -195,7 +195,7 @@ class ExecutionEngine(
             var hasFailure = false
             repeat(planStep.repeatCount.coerceAtLeast(1)) { index ->
                 if (index > 0) {
-                    AgentLogger.d(tag, "Step ${planStep.step} repeat ${index + 1}/${planStep.repeatCount}")
+                    Logger.d(tag, "Step ${planStep.step} repeat ${index + 1}/${planStep.repeatCount}")
                 }
                 val dispatchResult = dispatcher.dispatch(
                     command = planStep.action,
@@ -211,7 +211,7 @@ class ExecutionEngine(
             }
 
             if (!hasFailure && lastAction != null) {
-                AgentLogger.d(tag, "Step ${planStep.step} executed successfully (x${planStep.repeatCount})")
+                Logger.d(tag, "Step ${planStep.step} executed successfully (x${planStep.repeatCount})")
                 StepResult.Executed(step = planStep, action = lastAction!!)
             } else {
                 val errorMessage = lastAction?.let {
@@ -220,14 +220,14 @@ class ExecutionEngine(
                         else -> "Step ${planStep.step} failed"
                     }
                 } ?: "Step ${planStep.step} failed without action"
-                AgentLogger.e(tag, "Step ${planStep.step} failed: $errorMessage")
+                Logger.e(tag, "Step ${planStep.step} failed: $errorMessage")
                 tryFallback(planStep, errorMessage, planStep.action.commandId)
             }
         } catch (throwable: Throwable) {
             if (throwable is CancellationException) {
                 throw throwable
             }
-            AgentLogger.e(tag, "Step ${planStep.step} threw exception: ${throwable.message}", throwable)
+            Logger.e(tag, "Step ${planStep.step} threw exception: ${throwable.message}", throwable)
             tryFallback(
                 planStep,
                 throwable.message ?: "Step ${planStep.step} threw exception",
@@ -248,15 +248,15 @@ class ExecutionEngine(
         return when (waitCondition) {
             is WaitCondition.SmileDetected -> {
                 // 微笑检测预留，暂未实现具体逻辑
-                AgentLogger.w(tag, "Smile detection not implemented yet, skipping wait")
+                Logger.w(tag, "Smile detection not implemented yet, skipping wait")
                 "微笑检测暂未实现"
             }
             is WaitCondition.FaceDetected -> {
-                AgentLogger.d(tag, "Waiting for face detection, timeout=${waitCondition.timeoutMs}ms")
+                Logger.d(tag, "Waiting for face detection, timeout=${waitCondition.timeoutMs}ms")
                 val startTime = System.currentTimeMillis()
                 while (System.currentTimeMillis() - startTime < waitCondition.timeoutMs) {
                     if (FaceDetectionProvider.get()?.isFaceValid() == true) {
-                        AgentLogger.d(tag, "Face detected")
+                        Logger.d(tag, "Face detected")
                         return null
                     }
                     delay(200)
@@ -264,13 +264,13 @@ class ExecutionEngine(
                 "等待人脸检测超时"
             }
             is WaitCondition.Duration -> {
-                AgentLogger.d(tag, "Waiting for duration: ${waitCondition.delayMs}ms")
+                Logger.d(tag, "Waiting for duration: ${waitCondition.delayMs}ms")
                 delay(waitCondition.delayMs)
                 null
             }
             is WaitCondition.UserConfirm -> {
                 // 用户确认需要 UI 交互，暂不支持自动等待
-                AgentLogger.w(tag, "User confirm wait not supported in auto mode")
+                Logger.w(tag, "User confirm wait not supported in auto mode")
                 "用户确认需手动操作"
             }
         }
@@ -286,7 +286,7 @@ class ExecutionEngine(
     ): StepResult {
         val fallbackAction = planStep.fallbackAction
         return if (fallbackAction != null) {
-            AgentLogger.d(tag, "Trying fallback for step ${planStep.step}")
+            Logger.d(tag, "Trying fallback for step ${planStep.step}")
             try {
                 val fallbackResult = dispatcher.dispatch(
                     command = fallbackAction,
@@ -296,12 +296,12 @@ class ExecutionEngine(
                 )
                 val fallbackAction = fallbackResult.getOrNull()
                 if (fallbackResult.isSuccess && fallbackAction?.isSuccess == true) {
-                    AgentLogger.d(tag, "Fallback for step ${planStep.step} succeeded")
+                    Logger.d(tag, "Fallback for step ${planStep.step} succeeded")
                     StepResult.Executed(step = planStep, action = fallbackAction)
                 } else {
                     val fallbackErrorMsg = (fallbackAction as? AgentAction.Error)?.message
                         ?: "Fallback failed"
-                    AgentLogger.e(tag, "Fallback for step ${planStep.step} failed: $fallbackErrorMsg")
+                    Logger.e(tag, "Fallback for step ${planStep.step} failed: $fallbackErrorMsg")
                     StepResult.Failed(
                         step = planStep,
                         action = AgentAction.Error(
@@ -316,7 +316,7 @@ class ExecutionEngine(
                 if (throwable is CancellationException) {
                     throw throwable
                 }
-                AgentLogger.e(tag, "Fallback for step ${planStep.step} threw exception", throwable)
+                Logger.e(tag, "Fallback for step ${planStep.step} threw exception", throwable)
                 StepResult.Failed(
                     step = planStep,
                     action = AgentAction.Error(
@@ -363,7 +363,7 @@ class ExecutionEngine(
      */
     fun pause() {
         if (_stateFlow.value is ExecutionState.Running) {
-            AgentLogger.d(tag, "Execution paused")
+            Logger.d(tag, "Execution paused")
             isPaused = true
             _stateFlow.value = ExecutionState.Paused
         }
@@ -374,7 +374,7 @@ class ExecutionEngine(
      */
     fun resume() {
         if (_stateFlow.value is ExecutionState.Paused) {
-            AgentLogger.d(tag, "Execution resumed")
+            Logger.d(tag, "Execution resumed")
             isPaused = false
             // 状态会在 execute 循环中自动更新回 Running
         }
@@ -384,7 +384,7 @@ class ExecutionEngine(
      * 取消执行
      */
     fun cancel() {
-        AgentLogger.d(tag, "Execution cancel requested")
+        Logger.d(tag, "Execution cancel requested")
         isCancelled = true
         isPaused = false
     }
@@ -393,7 +393,7 @@ class ExecutionEngine(
      * 重置引擎状态
      */
     fun reset() {
-        AgentLogger.d(tag, "Execution engine reset")
+        Logger.d(tag, "Execution engine reset")
         isCancelled = false
         isPaused = false
         _stateFlow.value = ExecutionState.Idle

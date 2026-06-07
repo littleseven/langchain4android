@@ -1,7 +1,7 @@
 package com.picme.agent.core
 
 import android.content.Context
-import com.picme.agent.core.AgentLogger
+import com.picme.agent.core.Logger
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.agent.core.model.RemoteModelConfig
@@ -78,7 +78,7 @@ class AgentConfigurator(private val context: Context) {
      * 创建远程编排器
      */
     private fun createRemoteOrchestrator(config: RemoteModelConfig): RemoteOrchestrator {
-        AgentLogger.i(tag, "Creating RemoteOrchestrator with model=${config.modelId}, baseUrl=${config.baseUrl}")
+        Logger.i(tag, "Creating RemoteOrchestrator with model=${config.modelId}, baseUrl=${config.baseUrl}")
         return RemoteOrchestrator(
             remoteConfig = config,
             promptBuilder = promptBuilder
@@ -102,7 +102,7 @@ class AgentConfigurator(private val context: Context) {
             inferenceRouterConfig = null
         }
         privacyGuard.updateConfig(privacyLevel, mode)
-        AgentLogger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +
+        Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +
             "remoteModel=${remoteConfig?.modelId ?: "default"}, " +
             "effectiveRemoteModel=${userRemoteConfig?.modelId ?: "fallback"}")
     }
