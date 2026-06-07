@@ -24,9 +24,12 @@ class AdaptiveStrategySelector {
      * @return 选择的推理策略
      */
     fun selectStrategy(userInput: String, context: AgentContext): InferenceStrategy {
-        // 1. 先查 L1 缓存
+        // 1. 先查 L1 缓存（复合指令不走缓存，确保走远程 LLM 解析）
         intentCache.match(userInput)?.let { command ->
-            return InferenceStrategy.L1_Cached(command)
+            // 复合指令（如"5秒后换暖色滤镜拍照"）不走缓存，避免缓存中简单的 BatchExecute 不匹配复杂意图
+            if (!isComplexCommand(userInput)) {
+                return InferenceStrategy.L1_Cached(command)
+            }
         }
 
         // 2. 分析输入特征
@@ -71,6 +74,33 @@ class AdaptiveStrategySelector {
         )
     }
 
+    /**
+     * 判断是否为复合指令（包含多个动作或延迟+其他操作）
+     * 复合指令应走远程 LLM 解析，不走本地缓存
+     */
+    private fun isComplexCommand(input: String): Boolean {
+        val lower = input.lowercase()
+        // 包含延迟/倒计时 + 其他操作（如滤镜、美颜、风格等）
+        val hasDelay = lower.contains("延迟") || lower.contains("延时") || lower.contains("倒计时") ||
+            lower.contains("几秒后") || lower.contains("秒后") || lower.contains("稍后")
+        val hasExtraAction = lower.contains("滤镜") || lower.contains("美颜") || lower.contains("磨皮") ||
+            lower.contains("美白") || lower.contains("瘦脸") || lower.contains("风格") ||
+            lower.contains("调") || lower.contains("换") || lower.contains("切")
+        if (hasDelay && hasExtraAction) return true
+
+        // 包含多个步骤关键词
+        val stepKeywords = listOf("先", "然后", "接着", "再", "最后", "之后")
+        val stepCount = stepKeywords.count { lower.contains(it) }
+        if (stepCount >= 1) return true
+
+        // 包含多个动作关键词（简单估算：超过2个不同动作）
+        val actionKeywords = listOf("拍照", "拍", "滤镜", "美颜", "磨皮", "美白", "瘦脸", "风格", "模式", "变焦")
+        val actionCount = actionKeywords.count { lower.contains(it) }
+        if (actionCount >= 2) return true
+
+        return false
+    }
+
     private fun estimateCommandCount(input: String): Int {
         var count = 0
         // 通过动作关键词估算命令数量
@@ -79,6 +109,10 @@ class AdaptiveStrategySelector {
         }
         // 通过步骤关键词估算
         count += STEP_KEYWORDS.count { input.contains(it) }
+        // 延迟关键词也算一个命令
+        if (input.contains("秒") || input.contains("延迟") || input.contains("延时") || input.contains("倒计时")) {
+            count++
+        }
         return maxOf(1, count)
     }
 

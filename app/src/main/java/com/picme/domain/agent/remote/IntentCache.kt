@@ -137,6 +137,15 @@ class IntentCache(maxSize: Int = 100) {
             put("take a photo", AgentCommand.CapturePhoto())
             put("capture", AgentCommand.CapturePhoto())
 
+            // 纯延迟拍摄（解析为 BatchExecute([Delay, CapturePhoto])）
+            // 注意：包含滤镜/美颜等额外操作的复合指令不应放入缓存，应走 LLM 解析
+            put("3秒后拍照", AgentCommand.BatchExecute(commands = listOf(AgentCommand.Delay(delayMs = 3000), AgentCommand.CapturePhoto())))
+            put("倒计时拍照", AgentCommand.BatchExecute(commands = listOf(AgentCommand.Delay(delayMs = 3000), AgentCommand.CapturePhoto())))
+            put("延时拍照", AgentCommand.BatchExecute(commands = listOf(AgentCommand.Delay(delayMs = 3000), AgentCommand.CapturePhoto())))
+            put("延迟拍摄", AgentCommand.BatchExecute(commands = listOf(AgentCommand.Delay(delayMs = 3000), AgentCommand.CapturePhoto())))
+            put("5秒后拍照", AgentCommand.BatchExecute(commands = listOf(AgentCommand.Delay(delayMs = 5000), AgentCommand.CapturePhoto())))
+            put("10秒后拍照", AgentCommand.BatchExecute(commands = listOf(AgentCommand.Delay(delayMs = 10000), AgentCommand.CapturePhoto())))
+
             // 录像
             put("录像", AgentCommand.ToggleRecording())
             put("开始录像", AgentCommand.ToggleRecording())

@@ -283,6 +283,8 @@ private fun mapAgentActionToAiAgentCommand(action: AgentAction.Success): AiAgent
             AiAgentCommand.ToggleRecording
         is AgentCommand.SwitchMode ->
             AiAgentCommand.SwitchMode(cmd.mode)
+        is AgentCommand.Delay ->
+            AiAgentCommand.Delay(cmd.delayMs)
         is AgentCommand.NavigateTo ->
             AiAgentCommand.NavigateTo(cmd.destination)
         is AgentCommand.GoBack ->
@@ -338,6 +340,7 @@ private fun getAgentCommandDisplayName(command: AgentCommand): String =
         is AgentCommand.AdjustZoom -> "调整变焦"
         is AgentCommand.FlipCamera -> "翻转摄像头"
         is AgentCommand.CapturePhoto -> "拍照"
+        is AgentCommand.Delay -> "等待"
         is AgentCommand.ToggleRecording -> "切换录像"
         is AgentCommand.SwitchMode -> "切换模式"
         is AgentCommand.NavigateTo -> "页面跳转"
@@ -386,6 +389,7 @@ private fun getAgentCommandDetail(command: AgentCommand): String =
         is AgentCommand.ToggleSetting -> "${command.settingKey}: ${if (command.enabled) "开启" else "关闭"}"
         is AgentCommand.SearchMedia -> "关键词: ${command.query}"
         is AgentCommand.ExecutePlan -> "计划: ${command.plan.description}"
+        is AgentCommand.Delay -> "延迟: ${command.delayMs}ms"
         else -> ""
     }
 

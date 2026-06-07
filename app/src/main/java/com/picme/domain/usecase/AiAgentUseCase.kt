@@ -6,14 +6,16 @@ import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
 import com.picme.domain.agent.AgentOrchestrator
+import com.picme.domain.agent.PromptBuilder
 import com.picme.domain.agent.capability.CameraCapability
 import com.picme.domain.agent.model.AgentAction
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
 import com.picme.domain.agent.model.AgentScene
+import com.picme.domain.agent.model.SceneManager
 import com.picme.domain.agent.remote.AdaptiveStrategySelector
 import com.picme.domain.agent.remote.InferenceStrategy
-import com.picme.domain.agent.remote.RemoteInferenceEngine
+import com.picme.domain.agent.remote.RemoteOrchestrator
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.AiAgentMode
 import com.picme.domain.model.AiAgentPrivacyLevel
@@ -77,11 +79,15 @@ class AiAgentUseCase(
         get() = userRemoteConfig ?: fallbackRemoteConfig
 
     /**
-     * 远程推理引擎（L2/L3/L4）
-     * 每次访问时根据当前 effectiveRemoteConfig 创建，确保配置变化后使用新配置
+     * 远程编排器（L2/L3/L4）
+     * 使用 PromptBuilder 统一构建 prompt，避免与 RemoteInferenceEngine 的 prompt 重复
      */
-    private val remoteEngine: RemoteInferenceEngine
-        get() = RemoteInferenceEngine(remoteConfig = effectiveRemoteConfig)
+    private val remoteOrchestrator: RemoteOrchestrator by lazy {
+        RemoteOrchestrator(
+            remoteConfig = effectiveRemoteConfig,
+            promptBuilder = PromptBuilder(SceneManager.getInstance())
+        )
+    }
 
     /**
      * 是否使用兜底 Gateway（用于限频检测）
@@ -237,30 +243,55 @@ class AiAgentUseCase(
             }
 
             is InferenceStrategy.L2_BatchFC -> {
-                remoteEngine.processBatch(userInput, agentContext, currentState).map { commands ->
-                    when {
-                        commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
-                        commands.size == 1 -> mapAgentCommandToLegacy(commands.first())
-                        else -> AiAgentCommand.BatchExecute(commands.map { mapAgentCommandToLegacy(it) })
+                val result = remoteOrchestrator.processBatch(
+                    userInput = userInput,
+                    context = agentContext
+                )
+                Result.success(
+                    when (result) {
+                        is com.picme.domain.agent.model.InferenceResult.Batch -> {
+                            when {
+                                result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
+                                result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
+                                else -> AiAgentCommand.BatchExecute(result.commands.map { mapAgentCommandToLegacy(it) })
+                            }
+                        }
+                        else -> AiAgentCommand.TextReply("推理结果类型不匹配")
                     }
-                }
+                )
             }
 
             is InferenceStrategy.L3_PlanExecute -> {
                 Logger.d(REMOTE_TAG, "[L3] plan mode → fallback to L2 batch")
-                remoteEngine.processBatch(userInput, agentContext, currentState).map { commands ->
-                    when {
-                        commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
-                        commands.size == 1 -> mapAgentCommandToLegacy(commands.first())
-                        else -> AiAgentCommand.BatchExecute(commands.map { mapAgentCommandToLegacy(it) })
+                val result = remoteOrchestrator.processBatch(
+                    userInput = userInput,
+                    context = agentContext
+                )
+                Result.success(
+                    when (result) {
+                        is com.picme.domain.agent.model.InferenceResult.Batch -> {
+                            when {
+                                result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
+                                result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
+                                else -> AiAgentCommand.BatchExecute(result.commands.map { mapAgentCommandToLegacy(it) })
+                            }
+                        }
+                        else -> AiAgentCommand.TextReply("推理结果类型不匹配")
                     }
-                }
+                )
             }
 
             is InferenceStrategy.L4_ReAct -> {
-                remoteEngine.react(userInput, currentState).map { message ->
-                    AiAgentCommand.TextReply(message)
-                }
+                val result = remoteOrchestrator.processChat(
+                    userInput = userInput,
+                    context = agentContext
+                )
+                Result.success(
+                    when (result) {
+                        is com.picme.domain.agent.model.InferenceResult.Chat -> AiAgentCommand.TextReply(result.message)
+                        else -> AiAgentCommand.TextReply("推理结果类型不匹配")
+                    }
+                )
             }
         }
 
@@ -301,6 +332,7 @@ class AiAgentUseCase(
             is AgentCommand.CapturePhoto -> AiAgentCommand.CapturePhoto
             is AgentCommand.ToggleRecording -> AiAgentCommand.ToggleRecording
             is AgentCommand.SwitchMode -> AiAgentCommand.SwitchMode(command.mode)
+            is AgentCommand.Delay -> AiAgentCommand.Delay(command.delayMs)
             is AgentCommand.TextReply -> AiAgentCommand.TextReply(command.message)
             is AgentCommand.BatchExecute -> AiAgentCommand.BatchExecute(
                 command.commands.map { mapAgentCommandToLegacy(it) }
@@ -353,6 +385,7 @@ class AiAgentUseCase(
                     is AgentCommand.CapturePhoto -> AiAgentCommand.CapturePhoto
                     is AgentCommand.ToggleRecording -> AiAgentCommand.ToggleRecording
                     is AgentCommand.SwitchMode -> AiAgentCommand.SwitchMode(cmd.mode)
+                    is AgentCommand.Delay -> AiAgentCommand.Delay(cmd.delayMs)
                     is AgentCommand.NavigateTo -> AiAgentCommand.NavigateTo(cmd.destination)
                     is AgentCommand.GoBack -> AiAgentCommand.GoBack
                     is AgentCommand.TextReply -> AiAgentCommand.TextReply(cmd.message)

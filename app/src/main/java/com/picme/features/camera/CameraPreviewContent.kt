@@ -729,6 +729,7 @@ private fun getCommandDisplayName(command: AiAgentCommand): String = when (comma
     is AiAgentCommand.AdjustZoom -> "调整变焦"
     is AiAgentCommand.FlipCamera -> "翻转摄像头"
     is AiAgentCommand.CapturePhoto -> "拍照"
+    is AiAgentCommand.Delay -> "等待"
     is AiAgentCommand.ToggleRecording -> "切换录像"
     is AiAgentCommand.SwitchMode -> "切换模式"
     is AiAgentCommand.NavigateTo -> "页面跳转"

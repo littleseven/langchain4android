@@ -40,18 +40,23 @@ class PromptBuilder(
 3) 聊天或不确定：{"method":"text_reply","params":{"message":"中文简短回复"}}
 4) 导航只能使用 navigate_to / go_back。
 5) destination 只能是：camera / gallery / settings / debug。
-6) params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message。
+6) params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message, delay_ms。
 7) 不要输出未定义字段；不需要的参数不要输出。
 8) 用户说"去相机/回相机/打开相机/去拍照"时，必须输出 params.destination="camera"。
 9) 用户说"调高美颜/增强美颜/美颜"时，磨皮(smoothing)和美白(whitening)都提升到 60-70。
 10) 用户说"打开前置/切前置/前置"时，必须输出 method="flip_camera"。
 11) 用户说"冷调/冷色/冷滤镜"时，必须输出 params.filter="COOL"。
+12) 用户说"3秒后拍照/延时拍照/倒计时拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]。
+13) 用户说"3秒后调暖色调再拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]。
+14) 用户说包含多个动作时（如"5秒后换暖色滤镜拍照"），必须输出 JSON 数组，每个动作一个对象，按顺序执行。
 
 场景映射示例（严格遵循）：
 「拍张照」→ {"method":"capture","params":{}}
 「调高美颜」→ {"method":"adjust_beauty","params":{"smoothing":65,"whitening":65}}
 「换个冷调滤镜」→ {"method":"switch_filter","params":{"filter":"COOL"}}
 「打开前置」→ {"method":"flip_camera","params":{}}
+「3秒后拍照」→ [{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]
+「5秒后换暖色滤镜拍照」→ [{method:"delay",params:{delay_ms:5000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]
 """.trimIndent()
 
     /**
@@ -145,6 +150,8 @@ class PromptBuilder(
             appendLine("3. 用户是闲聊时，输出 [{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]。")
             appendLine("4. 导航只能是 navigate_to / go_back，params.destination 只能是 camera|gallery|settings|debug。")
             appendLine("5. params 中字段名必须使用既定键，不要创造新字段。")
+            appendLine("6. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，必须输出 delay 命令作为第一个元素，delay_ms 单位为毫秒。")
+            appendLine("7. delay 命令是支持的，不要告诉用户不支持延迟。")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, sceneManager.currentScene.value))
@@ -154,11 +161,17 @@ class PromptBuilder(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 去相机")
-            appendLine("→ [{\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}]")
+            appendLine("-> [{method:navigate_to,params:{destination:camera}}]")
             appendLine("用户: 磨皮60并拍一张")
-            appendLine("→ [{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("-> [{method:adjust_beauty,params:{smoothing:60}},{method:capture,params:{}}]")
+            appendLine("用户: 3秒后拍照")
+            appendLine("-> [{method:delay,params:{delay_ms:3000}},{method:capture,params:{}}]")
+            appendLine("用户: 5秒后换暖色滤镜拍照")
+            appendLine("-> [{method:delay,params:{delay_ms:5000}},{method:switch_filter,params:{filter:WARM}},{method:capture,params:{}}]")
+            appendLine("用户: 5秒后换暖冷色滤镜开美白拍照")
+            appendLine("-> [{method:delay,params:{delay_ms:5000}},{method:switch_filter,params:{filter:WARM}},{method:adjust_beauty,params:{whitening:60}},{method:capture,params:{}}]")
             appendLine("用户: 你好")
-            appendLine("→ [{\"method\":\"text_reply\",\"params\":{\"message\":\"你好呀，我是小觅\"}}]")
+            appendLine("-> [{method:text_reply,params:{message:\"你好呀，我是小觅\"}}]")
         }
     }
 
@@ -188,7 +201,9 @@ class PromptBuilder(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 去相机后等1秒连拍3张")
-            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切到相机后连拍\",\"steps\":[{\"step\":1,\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"},\"condition\":null,\"wait_condition\":null,\"repeat_count\":1,\"description\":\"切换到相机\",\"delayMs\":0},{\"step\":2,\"method\":\"text_reply\",\"params\":{\"message\":\"准备连拍\"},\"condition\":null,\"wait_condition\":{\"type\":\"duration\",\"delay_ms\":1000},\"repeat_count\":1,\"description\":\"等待1秒\",\"delayMs\":0},{\"step\":3,\"method\":\"capture\",\"params\":{},\"condition\":null,\"wait_condition\":null,\"repeat_count\":3,\"description\":\"连拍3张\",\"delayMs\":500}]}")
+            appendLine("-> {plan_id:plan_1,description:切到相机后连拍,steps:[{step:1,method:navigate_to,params:{destination:camera},condition:null,wait_condition:null,repeat_count:1,description:切换到相机,delayMs:0},{step:2,method:text_reply,params:{message:准备连拍},condition:null,wait_condition:{type:duration,delay_ms:1000},repeat_count:1,description:等待1秒,delayMs:0},{step:3,method:capture,params:{},condition:null,wait_condition:null,repeat_count:3,description:连拍3张,delayMs:500}]}")
+            appendLine("用户: 3秒后调暖色调拍照")
+            appendLine("-> {plan_id:plan_2,description:延迟后调暖色调拍照,steps:[{step:1,method:delay,params:{delay_ms:3000},condition:null,wait_condition:null,repeat_count:1,description:等待3秒,delayMs:0},{step:2,method:switch_filter,params:{filter:WARM},condition:null,wait_condition:null,repeat_count:1,description:切换暖色调,delayMs:0},{step:3,method:capture,params:{},condition:null,wait_condition:null,repeat_count:1,description:拍照,delayMs:0}]}")
         }
     }
 
@@ -280,6 +295,7 @@ class PromptBuilder(
                 appendLine("- camera: capture, toggle_recording, flip_camera, switch_mode")
                 appendLine("- camera_adjust: adjust_beauty, adjust_exposure, adjust_zoom")
                 appendLine("- camera_style: switch_filter, switch_style, switch_scene, switch_ratio")
+                appendLine("- delay: delay(params.delay_ms) — 通用延迟原语，必须与其他命令组合使用。用户说\"X秒后做某事\"时，delay 必须是数组第一个元素。例：3秒后拍照 -> [{method:delay,params:{delay_ms:3000}},{method:capture,params:{}}]；5秒后换暖色滤镜拍照 -> [{method:delay,params:{delay_ms:5000}},{method:switch_filter,params:{filter:WARM}},{method:capture,params:{}}]")
             }
 
             if (includeGallery) {

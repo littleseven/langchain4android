@@ -215,6 +215,7 @@ private fun getCommandDisplayName(command: AiAgentCommand): String = when (comma
     is AiAgentCommand.AdjustZoom -> "调整变焦"
     is AiAgentCommand.FlipCamera -> "翻转摄像头"
     is AiAgentCommand.CapturePhoto -> "拍照"
+    is AiAgentCommand.Delay -> "等待"
     is AiAgentCommand.ToggleRecording -> "切换录像"
     is AiAgentCommand.SwitchMode -> "切换模式"
     is AiAgentCommand.NavigateTo -> "页面跳转"
@@ -240,6 +241,7 @@ private fun getCommandDetail(command: AiAgentCommand): String = when (command) {
     is AiAgentCommand.AdjustExposure -> "曝光: ${command.exposure}"
     is AiAgentCommand.AdjustZoom -> "变焦: ${command.zoomRatio}x"
     is AiAgentCommand.NavigateTo -> "目标: ${command.destination}"
+    is AiAgentCommand.Delay -> "延迟: ${command.delayMs}ms"
     else -> ""
 }
 
@@ -1409,6 +1411,10 @@ fun CameraContent(
             is AiAgentCommand.TextReply -> {
                 // 文本回复已在面板中显示，无需额外操作
             }
+            is AiAgentCommand.Delay -> {
+                // Delay 命令在 BatchExecute 顶层协程中处理，此处单条收到时也是协程内调用
+                Logger.i(TAG, "Delay command: ${cmd.delayMs}ms")
+            }
             is AiAgentCommand.BatchExecute -> {
                 // 批量命令在顶层处理，不在 handler 内部递归
                 Logger.w(TAG, "BatchExecute should be handled at top level, not in agentCommandHandler")
@@ -1856,7 +1862,13 @@ CameraPreviewContent(
             coroutineScope.launch {
                 command.commands.forEachIndexed { index, subCmd ->
                     Logger.i(TAG, "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
-                    agentCommandHandler(subCmd)
+                    // Delay 命令在协程中直接挂起
+                    if (subCmd is AiAgentCommand.Delay) {
+                        Logger.i(TAG, "BatchExecute: delaying ${subCmd.delayMs}ms")
+                        kotlinx.coroutines.delay(subCmd.delayMs)
+                    } else {
+                        agentCommandHandler(subCmd)
+                    }
                     // 如果当前命令是拍照，等待状态回到 Previewing 再执行下一个
                     if (subCmd is AiAgentCommand.CapturePhoto && index < command.commands.size - 1) {
                         Logger.i(TAG, "BatchExecute: waiting for capture to complete...")
@@ -1867,12 +1879,18 @@ CameraPreviewContent(
                         }
                         val finalState = cameraStateManager.getState()
                         Logger.i(TAG, "BatchExecute: capture completed, state=${finalState.name}")
-                    } else if (index < command.commands.size - 1) {
-                        // 非拍照命令之间短暂延迟，确保 UI 更新
+                    } else if (index < command.commands.size - 1 && subCmd !is AiAgentCommand.Delay) {
+                        // 非拍照、非 Delay 命令之间短暂延迟，确保 UI 更新
                         kotlinx.coroutines.delay(200)
                     }
                 }
                 Logger.i(TAG, "BatchExecute: all commands completed")
+            }
+        } else if (command is AiAgentCommand.Delay) {
+            // 单独的 Delay 命令也在协程中处理
+            coroutineScope.launch {
+                Logger.i(TAG, "Delay: ${command.delayMs}ms")
+                kotlinx.coroutines.delay(command.delayMs)
             }
         } else {
             agentCommandHandler(command)

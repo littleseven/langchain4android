@@ -391,6 +391,10 @@ class RemoteOrchestrator(
             "flip_camera" -> AgentCommand.FlipCamera()
             "capture", "photo" -> AgentCommand.CapturePhoto()
             "toggle_recording" -> AgentCommand.ToggleRecording()
+            "delay" -> {
+                val delayMs = jsonObject.optLong("delay_ms", 3000)
+                AgentCommand.Delay(delayMs = delayMs.coerceIn(1, 300000))
+            }
             "switch_mode" -> {
                 val modeName = jsonObject.optString("mode", "PHOTO")
                 val mode = runCatching { MediaType.valueOf(modeName) }

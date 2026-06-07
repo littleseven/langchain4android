@@ -76,6 +76,18 @@ sealed class AiAgentCommand {
     object ToggleRecording : AiAgentCommand()
 
     /**
+     * 延迟等待（通用原语）
+     *
+     * 按指定毫秒数等待，可与其他命令组合实现延迟执行效果。
+     * 例如：BatchExecute([Delay(3000), CapturePhoto]) 实现 3 秒后拍照。
+     *
+     * @property delayMs 延迟毫秒数
+     */
+    data class Delay(
+        val delayMs: Long
+    ) : AiAgentCommand()
+
+    /**
      * 切换拍摄模式
      */
     data class SwitchMode(

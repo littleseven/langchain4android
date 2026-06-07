@@ -105,6 +105,19 @@ sealed class AgentCommand {
     ) : AgentCommand()
 
     /**
+     * 延迟等待（通用原语）
+     *
+     * 按指定毫秒数等待，可与其他命令组合实现延迟执行效果。
+     * 例如：BatchExecute([Delay(3000), CapturePhoto]) 实现 3 秒后拍照。
+     *
+     * @property delayMs 延迟毫秒数（1~300000，即最多 5 分钟）
+     */
+    data class Delay(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val delayMs: Long
+    ) : AgentCommand()
+
+    /**
      * 切换拍摄模式
      */
     data class SwitchMode(
@@ -301,6 +314,7 @@ sealed class AgentCommand {
             is FlipCamera -> "flip_camera"
             is CapturePhoto -> "capture"
             is ToggleRecording -> "toggle_recording"
+            is Delay -> "delay"
             is SwitchMode -> "switch_mode"
             is ViewMedia -> "view_media"
             is DeleteMedia -> "delete_media"

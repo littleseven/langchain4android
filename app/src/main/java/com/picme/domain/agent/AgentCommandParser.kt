@@ -197,6 +197,10 @@ object AgentCommandParser {
             "flip_camera" -> AgentCommand.FlipCamera(commandId = commandId)
             "capture", "photo" -> AgentCommand.CapturePhoto(commandId = commandId)
             "toggle_recording" -> AgentCommand.ToggleRecording(commandId = commandId)
+            "delay" -> {
+                val delayMs = extractJsonInt(json, "delay_ms") ?: (extractJsonInt(json, "delay_seconds")?.times(1000) ?: 3000)
+                AgentCommand.Delay(commandId = commandId, delayMs = delayMs.coerceIn(1, 300000).toLong())
+            }
             "switch_mode" -> {
                 val modeName = extractJsonField(json, "mode") ?: "PHOTO"
                 val mode = runCatching { MediaType.valueOf(modeName) }.getOrDefault(MediaType.PHOTO)
@@ -413,6 +417,43 @@ object AgentCommandParser {
             lower.contains("返回") || lower.contains("回去") || lower.contains("上一页") ||
                 lower.contains("后退") || lower.contains("回退") ->
                 AgentCommand.GoBack()
+            // 复合指令：延迟 + 滤镜/美颜 + 拍照
+            // 例如："5秒后换暖色滤镜拍照" -> [Delay, SwitchFilter(WARM), CapturePhoto]
+            (lower.contains("延迟") || lower.contains("延时") || lower.contains("倒计时") ||
+                lower.contains("几秒后") || lower.contains("秒后") || lower.contains("稍后")) &&
+                (lower.contains("拍") || lower.contains("照")) &&
+                (lower.contains("滤镜") || lower.contains("美颜") || lower.contains("磨皮") ||
+                    lower.contains("美白") || lower.contains("瘦脸") || lower.contains("风格")) -> {
+                val delaySeconds = extractDelaySeconds(lower)
+                val commands = mutableListOf<AgentCommand>(
+                    AgentCommand.Delay(delayMs = delaySeconds * 1000L)
+                )
+                // 识别滤镜
+                when {
+                    lower.contains("暖") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.WARM))
+                    lower.contains("冷") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.COOL))
+                    lower.contains("徕卡") && lower.contains("经典") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_CLASSIC))
+                    lower.contains("徕卡") && (lower.contains("鲜艳") || lower.contains(" vibrant")) -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_VIBRANT))
+                    lower.contains("徕卡") && (lower.contains("黑白") || lower.contains("bw")) -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_BW))
+                    lower.contains("胶片") && lower.contains("金") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.FILM_GOLD))
+                    lower.contains("胶片") && lower.contains("富士") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.FILM_FUJI))
+                    lower.contains("复古") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.VINTAGE))
+                }
+                commands.add(AgentCommand.CapturePhoto())
+                AgentCommand.BatchExecute(commands = commands)
+            }
+            // 纯延迟拍摄（关键词兜底：解析为 BatchExecute([Delay, CapturePhoto])）
+            (lower.contains("延迟") || lower.contains("延时") || lower.contains("倒计时") ||
+                lower.contains("几秒后") || lower.contains("秒后") || lower.contains("稍后")) &&
+                (lower.contains("拍") || lower.contains("照")) -> {
+                val delaySeconds = extractDelaySeconds(lower)
+                AgentCommand.BatchExecute(
+                    commands = listOf(
+                        AgentCommand.Delay(delayMs = delaySeconds * 1000L),
+                        AgentCommand.CapturePhoto()
+                    )
+                )
+            }
             // Gallery 相关
             lower.contains("删除") || lower.contains("删掉") ->
                 AgentCommand.DeleteMedia(mediaIds = emptyList())
@@ -505,6 +546,31 @@ object AgentCommandParser {
     /**
      * 提取 Float 类型的 Map
      */
+    /**
+     * 从文本中提取延迟秒数
+     *
+     * 支持 "3秒后"、"5秒"、"十秒后" 等说法，默认 3 秒。
+     */
+    private fun extractDelaySeconds(text: String): Int {
+        val numberMap = mapOf(
+            "一" to 1, "二" to 2, "两" to 2, "三" to 3, "四" to 4,
+            "五" to 5, "六" to 6, "七" to 7, "八" to 8, "九" to 9, "十" to 10
+        )
+        // 先尝试匹配阿拉伯数字
+        val digitRegex = "(\\d+)\\s*[秒s]".toRegex()
+        val digitMatch = digitRegex.find(text)
+        if (digitMatch != null) {
+            return digitMatch.groupValues[1].toIntOrNull()?.coerceIn(1, 30) ?: 3
+        }
+        // 再尝试匹配中文数字
+        for ((cn, num) in numberMap) {
+            if (text.contains(cn + "秒") || text.contains(cn + "秒后")) {
+                return num.coerceIn(1, 30)
+            }
+        }
+        return 3
+    }
+
     private fun extractJsonFloatMap(json: String, key: String): Map<String, Float> {
         val result = mutableMapOf<String, Float>()
 

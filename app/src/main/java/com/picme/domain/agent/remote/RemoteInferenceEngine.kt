@@ -3,6 +3,7 @@ package com.picme.domain.agent.remote
 import com.picme.core.common.Logger
 import com.picme.domain.agent.model.AgentCommand
 import com.picme.domain.agent.model.AgentContext
+import com.picme.domain.agent.model.InferenceResult
 import com.picme.domain.model.RemoteModelConfig
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.delay
@@ -45,42 +46,30 @@ class RemoteInferenceEngine(
      * @param stateSnapshot 相机状态快照（用于构建 prompt）
      * @return 解析后的命令列表
      */
+    /**
+     * L2 批量命令解析（已废弃，请使用 RemoteOrchestrator）
+     *
+     * 保留此方法用于向后兼容，内部委托给 RemoteOrchestrator。
+     * Prompt 构建已统一迁移到 PromptBuilder。
+     */
+    @Deprecated("Use RemoteOrchestrator.processBatch instead", ReplaceWith("remoteOrchestrator.processBatch(userInput, context)"))
     suspend fun processBatch(
         userInput: String,
         context: AgentContext,
         stateSnapshot: AiAgentUseCase.CameraStateSnapshot
     ): Result<List<AgentCommand>> {
-        val startTime = System.currentTimeMillis()
-        try {
-            val systemPrompt = buildBatchSystemPrompt(stateSnapshot)
-
-            Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
-
-            val result = unifiedClient.chat(
-                systemPrompt = systemPrompt,
-                userInput = userInput,
-                maxTokens = 1024,
-                temperature = 0.3
-            )
-
-            val content = result.getOrElse { error ->
-                val latencyMs = System.currentTimeMillis() - startTime
-                Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
-                return Result.failure(error)
+        // 委托给 RemoteOrchestrator，使用统一的 PromptBuilder
+        val remoteOrchestrator = RemoteOrchestrator(
+            remoteConfig = remoteConfig,
+            promptBuilder = com.picme.domain.agent.PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
+        )
+        val result = remoteOrchestrator.processBatch(userInput, context)
+        return Result.success(
+            when (result) {
+                is InferenceResult.Batch -> result.commands
+                else -> emptyList()
             }
-
-            val latencyMs = System.currentTimeMillis() - startTime
-            Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$content\"")
-
-            // 解析命令数组
-            val commands = parseCommandArray(content, stateSnapshot)
-            Logger.d(tag, "[L2-BATCH] parsed ${commands.size} commands")
-            return Result.success(commands)
-        } catch (e: Exception) {
-            val latencyMs = System.currentTimeMillis() - startTime
-            Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${e.message}", e)
-            return Result.failure(e)
-        }
+        )
     }
 
     // ── L3: Plan-and-Execute ───────────────────────────────────
@@ -95,40 +84,23 @@ class RemoteInferenceEngine(
      * @param stateSnapshot 相机状态快照
      * @return 执行计划
      */
+    /**
+     * L3 生成执行计划（已废弃，请使用 RemoteOrchestrator）
+     */
+    @Deprecated("Use RemoteOrchestrator.processPlan instead")
     suspend fun generatePlan(
         userInput: String,
         context: AgentContext,
         stateSnapshot: AiAgentUseCase.CameraStateSnapshot
     ): Result<ExecutionPlan> {
-        val startTime = System.currentTimeMillis()
-        try {
-            val systemPrompt = buildPlanSystemPrompt(stateSnapshot)
-
-            Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
-
-            val result = unifiedClient.chat(
-                systemPrompt = systemPrompt,
-                userInput = userInput,
-                maxTokens = 2048,
-                temperature = 0.3
-            )
-
-            val content = result.getOrElse { error ->
-                val latencyMs = System.currentTimeMillis() - startTime
-                Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
-                return Result.failure(error)
-            }
-
-            val latencyMs = System.currentTimeMillis() - startTime
-            Logger.d(tag, "[L3-PLAN] RSP: latency=${latencyMs}ms, content=\"$content\"")
-
-            val plan = parseExecutionPlan(content)
-            Logger.d(tag, "[L3-PLAN] parsed plan with ${plan.steps.size} steps")
-            return Result.success(plan)
-        } catch (e: Exception) {
-            val latencyMs = System.currentTimeMillis() - startTime
-            Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${e.message}", e)
-            return Result.failure(e)
+        val remoteOrchestrator = RemoteOrchestrator(
+            remoteConfig = remoteConfig,
+            promptBuilder = com.picme.domain.agent.PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
+        )
+        val result = remoteOrchestrator.processPlan(userInput, context)
+        return when (result) {
+            is InferenceResult.Plan -> Result.success(result.plan)
+            else -> Result.success(ExecutionPlan(planId = "fallback", steps = emptyList(), description = "Fallback"))
         }
     }
 
@@ -143,144 +115,53 @@ class RemoteInferenceEngine(
      * @param stateSnapshot 相机状态快照
      * @return 文本回复
      */
+    /**
+     * L4 ReAct 兜底回复（已废弃，请使用 RemoteOrchestrator）
+     */
+    @Deprecated("Use RemoteOrchestrator.processChat instead")
     suspend fun react(
         userInput: String,
         stateSnapshot: AiAgentUseCase.CameraStateSnapshot
     ): Result<String> {
-        val startTime = System.currentTimeMillis()
-        try {
-            val systemPrompt = buildReActSystemPrompt(stateSnapshot)
-
-            Logger.d(tag, "[L4-REACT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
-
-            val result = unifiedClient.chat(
-                systemPrompt = systemPrompt,
-                userInput = userInput,
-                maxTokens = 1024,
-                temperature = 0.5
-            )
-
-            val content = result.getOrElse { error ->
-                val latencyMs = System.currentTimeMillis() - startTime
-                Logger.e(tag, "[L4-REACT] ERR: latency=${latencyMs}ms, ${error.message}", error)
-                return Result.failure(error)
-            }
-
-            val latencyMs = System.currentTimeMillis() - startTime
-            Logger.d(tag, "[L4-REACT] RSP: latency=${latencyMs}ms, content=\"$content\"")
-
-            return Result.success(content)
-        } catch (e: Exception) {
-            val latencyMs = System.currentTimeMillis() - startTime
-            Logger.e(tag, "[L4-REACT] ERR: latency=${latencyMs}ms, ${e.message}", e)
-            return Result.failure(e)
+        val remoteOrchestrator = RemoteOrchestrator(
+            remoteConfig = remoteConfig,
+            promptBuilder = com.picme.domain.agent.PromptBuilder(com.picme.domain.agent.model.SceneManager.getInstance())
+        )
+        // 创建最小 AgentContext
+        val agentContext = AgentContext(
+            scene = com.picme.domain.agent.model.AgentScene.CAMERA,
+            beautySettings = stateSnapshot.beautySettings,
+            filterType = stateSnapshot.filterType,
+            styleFilter = stateSnapshot.styleFilter,
+            zoomRatio = stateSnapshot.zoomRatio,
+            exposureCompensation = stateSnapshot.exposureCompensation,
+            captureMode = stateSnapshot.captureMode,
+            isRecording = stateSnapshot.isRecording,
+            memorySessionId = "camera"
+        )
+        val result = remoteOrchestrator.processChat(userInput, agentContext)
+        return when (result) {
+            is InferenceResult.Chat -> Result.success(result.message)
+            else -> Result.success("抱歉，服务暂时不可用")
         }
     }
 
-   // ── Prompt 构建 ────────────────────────────────────────────
+   // ── Prompt 构建（已废弃，全部迁移到 PromptBuilder）────────────────────────
 
-    private fun buildBatchSystemPrompt(state: AiAgentUseCase.CameraStateSnapshot): String {
-        return buildString {
-            appendLine("你是PicMe相机的AI助手小觅。用户通过语音或文字与你交互。")
-            appendLine()
-            appendLine("【绝对规则 - 必须遵守】")
-            appendLine("1. 无论用户要求什么，你的回复永远只输出一个JSON数组，不要任何其他文字、解释、标点或换行")
-            appendLine("2. 数组中每个元素是一个命令对象: {\"method\":\"命令名\", \"params\":{参数...}}")
-            appendLine("3. 命令按数组顺序依次执行")
-            appendLine("4. 如果用户只是聊天，输出: [{\"method\":\"text_reply\",\"params\":{\"message\":\"用中文友好回复\"}}]")
-            appendLine("5. 绝对不要输出<think>标签或思考过程")
-            appendLine("6. 绝对不要输出markdown代码块```")
-            appendLine()
-            appendLine(buildStateSection(state))
-            appendLine()
-            appendLine(buildCapabilitiesSection())
-            appendLine()
-            appendLine("【示例 - 严格模仿】")
-            appendLine("用户: 磨皮开到60，美白30，然后拍一张")
-            appendLine("→ [{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60}},{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":30}},{\"method\":\"capture\",\"params\":{}}]")
-            appendLine("用户: 你好")
-            appendLine("→ [{\"method\":\"text_reply\",\"params\":{\"message\":\"你好呀，我是小觅！\"}}]")
-            appendLine("用户: 切徕卡黑白再拍照")
-            appendLine("→ [{\"method\":\"switch_filter\",\"params\":{\"filter\":\"LEICA_BW\"}},{\"method\":\"capture\",\"params\":{}}]")
-        }
-    }
+    @Deprecated("Prompt building migrated to PromptBuilder")
+    private fun buildBatchSystemPrompt(state: AiAgentUseCase.CameraStateSnapshot): String = ""
 
-    private fun buildPlanSystemPrompt(state: AiAgentUseCase.CameraStateSnapshot): String {
-        return buildString {
-            appendLine("你是PicMe相机的AI助手小觅。用户可能提出包含条件或复杂步骤的请求。")
-            appendLine()
-            appendLine("【输出格式 - 严格JSON】")
-            appendLine("{")
-            appendLine("  \"plan_id\": \"plan_1\",")
-            appendLine("  \"description\": \"计划描述\",")
-            appendLine("  \"steps\": [")
-            appendLine("    {\"step\":1, \"condition\":\"条件表达式或null\", \"method\":\"命令名\", \"params\":{...}, \"description\":\"步骤描述\", \"delayMs\":500},")
-            appendLine("    {\"step\":2, \"condition\":null, \"method\":\"命令名\", \"params\":{...}, \"description\":\"步骤描述\", \"delayMs\":0}")
-            appendLine("  ]")
-            appendLine("}")
-            appendLine()
-            appendLine("【规则】")
-            appendLine("1. condition 字段：需要条件判断时填写描述性条件，无条件时填 null")
-            appendLine("2. delayMs 字段：给UI反应时间的延迟（毫秒），拍照建议 500ms，其他 0ms")
-            appendLine("3. 绝对不要输出任何其他文字")
-            appendLine()
-            appendLine(buildStateSection(state))
-            appendLine()
-            appendLine(buildCapabilitiesSection())
-            appendLine()
-            appendLine("【示例】")
-            appendLine("用户: 如果是后置摄像头就切前置，然后设置磨皮80美白60，最后拍一张")
-            appendLine("→ {\"plan_id\":\"plan_1\",\"description\":\"切换前置并拍摄人像\",\"steps\":[{\"step\":1,\"condition\":\"当前是后置摄像头\",\"method\":\"flip_camera\",\"params\":{},\"description\":\"切换到前置摄像头\",\"delayMs\":300},{\"step\":2,\"condition\":null,\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":80,\"whitening\":60},\"description\":\"设置人像美颜参数\",\"delayMs\":0},{\"step\":3,\"condition\":null,\"method\":\"capture\",\"params\":{},\"description\":\"拍照\",\"delayMs\":500}]}")
-        }
-    }
+    @Deprecated("Prompt building migrated to PromptBuilder")
+    private fun buildPlanSystemPrompt(state: AiAgentUseCase.CameraStateSnapshot): String = ""
 
-    private fun buildReActSystemPrompt(state: AiAgentUseCase.CameraStateSnapshot): String {
-        return buildString {
-            appendLine("你是PicMe相机的AI助手小觅。用户的问题可能无法直接映射到相机命令，请友好回复。")
-            appendLine()
-            appendLine("【规则】")
-            appendLine("1. 用中文友好、简洁地回复")
-            appendLine("2. 如果用户问你能做什么，列出你可以控制的相机功能")
-            appendLine("3. 如果用户的问题与相机无关，礼貌地引导回相机功能")
-            appendLine("4. 绝对不要输出JSON格式")
-            appendLine()
-            appendLine(buildStateSection(state))
-        }
-    }
+    @Deprecated("Prompt building migrated to PromptBuilder")
+    private fun buildReActSystemPrompt(state: AiAgentUseCase.CameraStateSnapshot): String = ""
 
-    private fun buildStateSection(state: AiAgentUseCase.CameraStateSnapshot): String {
-        return buildString {
-            appendLine("【当前相机状态】")
-            appendLine("美颜=${if (state.beautySettings.enabled) "开" else "关"}, 磨皮=${state.beautySettings.smoothing.toInt()}, 美白=${state.beautySettings.whitening.toInt()}, 瘦脸=${state.beautySettings.slimFace.toInt()}, 大眼=${state.beautySettings.bigEyes.toInt()}, 唇色=${state.beautySettings.lipColor.toInt()}, 腮红=${state.beautySettings.blush.toInt()}, 眉毛=${state.beautySettings.eyebrow.toInt()}")
-            appendLine("滤镜=${state.filterType.name}, 风格=${state.styleFilter.name}, 变焦=${state.zoomRatio}x, 曝光=${state.exposureCompensation}, 模式=${state.captureMode.name}")
-        }
-    }
+    @Deprecated("Prompt building migrated to PromptBuilder")
+    private fun buildStateSection(state: AiAgentUseCase.CameraStateSnapshot): String = ""
 
-    private fun buildCapabilitiesSection(): String {
-        return buildString {
-            appendLine("【可用命令】")
-            appendLine("adjust_beauty: smoothing=0~100(磨皮), whitening=0~100(美白), slim_face=-50~50(瘦脸), big_eyes=0~100(大眼), lip_color=0~100(唇色), blush=0~100(腮红), eyebrow=0~100(眉毛)")
-            appendLine("switch_filter: filter=NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
-            appendLine("switch_style: style=NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
-            appendLine("switch_scene: scene=night|moon|none")
-            appendLine("switch_ratio: ratio=4:3|16:9|full")
-            appendLine("adjust_exposure: exposure=-2~2")
-            appendLine("adjust_zoom: zoom=0.5~10.0")
-            appendLine("flip_camera: 翻转前后摄像头")
-            appendLine("capture: 拍照")
-            appendLine("toggle_recording: 开始/停止录像")
-            appendLine("switch_mode: mode=PHOTO|VIDEO|PRO|DOCUMENT")
-            appendLine("text_reply: 普通聊天回复")
-            appendLine()
-            appendLine("【中文名称映射】")
-            appendLine("滤镜: 无→NONE, 徕卡经典→LEICA_CLASSIC, 徕卡鲜艳→LEICA_VIBRANT, 徕卡黑白→LEICA_BW")
-            appendLine("滤镜: 胶片金→FILM_GOLD, 胶片富士→FILM_FUJI, 复古→VINTAGE, 冷调→COOL, 暖调→WARM")
-            appendLine("风格: 无→NONE, 卡通→TOON, 素描→SKETCH, 色调分离→POSTERIZE, 浮雕→EMBOSS, 交叉线→CROSSHATCH")
-            appendLine("模式: 拍照→PHOTO, 录像→VIDEO, 专业→PRO, 文档→DOCUMENT")
-            appendLine("场景: 夜景→night, 月亮→moon, 关闭→none")
-            appendLine("比例: 4比3→4:3, 16比9→16:9, 全屏→full")
-        }
-    }
+    @Deprecated("Prompt building migrated to PromptBuilder")
+    private fun buildCapabilitiesSection(): String = ""
 
     // ── 解析器 ─────────────────────────────────────────────────
 
