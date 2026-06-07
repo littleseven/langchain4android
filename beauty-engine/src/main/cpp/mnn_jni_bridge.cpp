@@ -72,6 +72,48 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDestroy(
     LOGD("MnnFaceDetector destroyed");
 }
 
+JNIEXPORT void JNICALL
+Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseSession(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle) {
+    auto *detector = reinterpret_cast<picme::MnnFaceDetector *>(handle);
+    if (!detector) {
+        return;
+    }
+    detector->release(picme::MnnFaceDetector::RELEASE_TENSORS | picme::MnnFaceDetector::RELEASE_SESSION);
+    LOGD("MnnFaceDetector session+tensors released");
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeRebuildSession(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle) {
+    auto *detector = reinterpret_cast<picme::MnnFaceDetector *>(handle);
+    if (!detector) {
+        return JNI_FALSE;
+    }
+    bool ok = detector->rebuildSession();
+    LOGD("MnnFaceDetector rebuild session result=%d", ok ? 1 : 0);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseModelBuffer(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle) {
+    auto *detector = reinterpret_cast<picme::MnnFaceDetector *>(handle);
+    if (!detector) {
+        return;
+    }
+    detector->release(picme::MnnFaceDetector::RELEASE_TENSORS |
+                      picme::MnnFaceDetector::RELEASE_SESSION |
+                      picme::MnnFaceDetector::RELEASE_MODEL);
+    LOGD("MnnFaceDetector model buffer released");
+}
+
 JNIEXPORT jint JNICALL
 Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect(
         JNIEnv *env,

@@ -4,18 +4,21 @@ package com.picme.features.camera
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
+import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -49,9 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -62,44 +62,39 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.picme.R
+import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.model.AiAgentInferencePreference
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.model.RemoteModelConfig
+import com.picme.agent.core.model.RemoteModelConfigs
+import com.picme.agent.core.voice.AsrEngine
+import com.picme.agent.core.voice.MnnAsrClient
+import com.picme.agent.core.voice.SherpaMnnAsrEngine
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
-import com.picme.beauty.api.StyleFilter
-import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.recorder.BeautyVideoRecorder
 import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
-import com.picme.features.camera.capability.CameraCapability
-import com.picme.domain.agent.LocalCapabilityHost
 import com.picme.domain.agent.RegisterCapability
 import com.picme.domain.model.AiAgentCommand
-import com.picme.agent.core.model.AiAgentInferencePreference
-import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.CameraAspectRatioMode
-import com.picme.domain.model.CameraGridMode
 import com.picme.domain.model.CameraMemoryState
-import com.picme.domain.model.CameraSceneMode
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.agent.core.model.MediaAsset
-import com.picme.agent.core.model.MediaType
-import com.picme.domain.model.StageConfig
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
+import com.picme.features.camera.capability.CameraCapability
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
-
-import com.picme.agent.core.mnn.MnnResourceManager
 import com.picme.features.camera.thread.CameraThreadRegistry
-import com.picme.agent.core.voice.AsrEngine
-import com.picme.agent.core.voice.MnnAsrClient
-import com.picme.agent.core.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.AgentMessage
@@ -110,25 +105,55 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.sqrt
-import android.app.Activity
-import android.util.Log
-import android.view.HapticFeedbackConstants
-import com.picme.agent.core.model.RemoteModelConfig
-import com.picme.agent.core.model.RemoteModelConfigs
-import java.util.concurrent.Executor
 
 private const val TAG = "Camera"
 private const val TAG_AI_AGENT = "AiAgent"
 
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
+private const val DEBUG_RELEASE_TOAST_DELAY_MS = 350L
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+private fun captureMnnMemoryStats(context: Context): MnnResourceManager.MemoryStats? = runCatching {
+    MnnResourceManager.getInstance(context).getMemoryStats()
+}.getOrNull()
+
+private suspend fun sampleMemoryAfterRelease(context: Context): MnnResourceManager.MemoryStats? {
+    delay(DEBUG_RELEASE_TOAST_DELAY_MS)
+    Runtime.getRuntime().gc()
+    System.runFinalization()
+    delay(120)
+    return captureMnnMemoryStats(context)
+}
+
+private fun showReleaseMemoryToast(
+    context: Context,
+    target: String,
+    releaseMode: String,
+    before: MnnResourceManager.MemoryStats?,
+    after: MnnResourceManager.MemoryStats?
+) {
+    val message = if (before == null || after == null) {
+        "$target($releaseMode) 已触发释放 - 内存采样失败"
+    } else {
+        val releasedNative = (before.nativeHeapMB - after.nativeHeapMB).coerceAtLeast(0)
+        val releasedJava = (before.javaHeapUsedMB - after.javaHeapUsedMB).coerceAtLeast(0)
+        "$target($releaseMode) ✓ 释放完成\n" +
+            "当前: Native ${after.nativeHeapMB}MB | Java ${after.javaHeapUsedMB}MB\n" +
+            "释放: Native -${releasedNative}MB | Java -${releasedJava}MB"
+    }
+
+    // 同时输出到日志和 Toast
+    Logger.i(TAG, "🔓 [内存释放] $target($releaseMode)\n$message")
+    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
 }
 
 /**
@@ -1510,16 +1535,34 @@ CameraPreviewContent(
             }
         },
         onUnloadAsr = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "🎤 [ASR手动释放] 开始 - 释放类型: weights+session+tensor")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
             voiceCoordinator?.releaseAsr()
-            Logger.i(TAG, "Debug: ASR unload requested")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "ASR", "weights+session+tensor", before, after)
+            }
         },
         onUnloadLlm = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "🧠 [LLM手动释放] 开始 - 释放类型: weights+interpreter+tensors")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
             aiAgentUseCase?.unloadLocalModel()
-            Logger.i(TAG, "Debug: LLM unload requested")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "LLM", "weights+interpreter+tensors", before, after)
+            }
         },
         onUnloadFaceDetection = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "👤 [人脸检测手动释放] 开始 - 释放类型: weights+session+tensor")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
             (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.release()
-            Logger.i(TAG, "Debug: Face detection unload requested")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "FaceDetection", "weights+session+tensor", before, after)
+            }
         }
     )
     }

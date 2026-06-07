@@ -1,14 +1,15 @@
 package com.picme.agent.core.voice
 
 import android.content.Context
+import android.util.Log
 import com.k2fsa.sherpa.mnn.AsrConfigManager
 import com.k2fsa.sherpa.mnn.OnlineCtcFstDecoderConfig
 import com.k2fsa.sherpa.mnn.OnlineRecognizer
 import com.k2fsa.sherpa.mnn.OnlineRecognizerConfig
-import com.k2fsa.sherpa.mnn.OnlineStream
 import com.k2fsa.sherpa.mnn.getEndpointConfig
 import com.k2fsa.sherpa.mnn.getFeatureConfig
 import com.picme.agent.core.Logger
+import com.picme.agent.core.mnn.MnnGlobalReleaseLock
 import com.picme.agent.core.mnn.MnnResourceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,6 @@ import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import android.util.Log
 
 /**
  * Sherpa-MNN ASR 引擎实现
@@ -118,28 +118,31 @@ class SherpaMnnAsrEngine(
 
             @Suppress("TooGenericExceptionCaught")
             try {
-                // 1. 将 16bit PCM ByteArray 转为 FloatArray（归一化到 [-1, 1]）
-                val samples = pcm16ToFloatArray(audioData)
-                Logger.d(tag, "Transcribing ${samples.size} samples (${audioData.size} bytes)")
+                val text = MnnGlobalReleaseLock.withOperation {
+                    // 1. 将 16bit PCM ByteArray 转为 FloatArray（归一化到 [-1, 1]）
+                    val samples = pcm16ToFloatArray(audioData)
+                    Logger.d(tag, "Transcribing ${samples.size} samples (${audioData.size} bytes)")
 
-                // 2. 创建识别流
-                val stream = recog.createStream("")
+                    // 2. 创建识别流
+                    val stream = recog.createStream("")
 
-                // 3. 送入音频数据
-                stream.acceptWaveform(samples, SAMPLE_RATE)
-                stream.inputFinished()
+                    try {
+                        // 3. 送入音频数据
+                        stream.acceptWaveform(samples, SAMPLE_RATE)
+                        stream.inputFinished()
 
-                // 4. 循环解码直到没有更多结果
-                while (recog.isReady(stream)) {
-                    recog.decode(stream)
+                        // 4. 循环解码直到没有更多结果
+                        while (recog.isReady(stream)) {
+                            recog.decode(stream)
+                        }
+
+                        // 5. 获取最终结果
+                        val result = recog.getResult(stream)
+                        result.text.trim()
+                    } finally {
+                        stream.release()
+                    }
                 }
-
-                // 5. 获取最终结果
-                val result = recog.getResult(stream)
-                val text = result.text.trim()
-
-                stream.release()
-
                 Logger.i(tag, "ASR result: '$text'")
                 Result.success(text)
             } catch (e: Exception) {
@@ -191,57 +194,59 @@ class SherpaMnnAsrEngine(
 
             Logger.i(tag, "Streaming ASR started")
 
-            // 创建识别流
-            val stream = recog.createStream("")
+            MnnGlobalReleaseLock.withOperation {
+                // 创建识别流
+                val stream = recog.createStream("")
 
-            val interval = 0.1 // 100ms per chunk
-            val bufferSize = (interval * SAMPLE_RATE).toInt() // samples per chunk
-            val buffer = ShortArray(bufferSize)
+                val interval = 0.1 // 100ms per chunk
+                val bufferSize = (interval * SAMPLE_RATE).toInt() // samples per chunk
+                val buffer = ShortArray(bufferSize)
 
-            try {
-                while (isStreaming.get()) {
-                    val ret = recorder.readShortArray(buffer, 0, buffer.size)
-                    if (ret > 0) {
-                        // 转换为 FloatArray 并归一化
-                        val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
+                try {
+                    while (isStreaming.get()) {
+                        val ret = recorder.readShortArray(buffer, 0, buffer.size)
+                        if (ret > 0) {
+                            // 转换为 FloatArray 并归一化
+                            val samples = FloatArray(ret) { i -> buffer[i] / 32768.0f }
 
-                        // 送入音频数据
-                        stream.acceptWaveform(samples, SAMPLE_RATE)
+                            // 送入音频数据
+                            stream.acceptWaveform(samples, SAMPLE_RATE)
 
-                        // 循环解码
-                        while (recog.isReady(stream)) {
-                            recog.decode(stream)
-                        }
-
-                        // 检查端点
-                        val isEndpoint = recog.isEndpoint(stream)
-
-                        // 获取当前结果（用于 partial result）
-                        val currentResult = recog.getResult(stream)
-                        if (currentResult.text.isNotBlank()) {
-                            onPartialResult?.invoke(currentResult.text.trim())
-                        }
-
-                        if (isEndpoint) {
-                            val text = currentResult.text.trim()
-                            if (text.isNotEmpty()) {
-                                Logger.i(tag, "Streaming ASR endpoint: '$text'")
-                                withContext(Dispatchers.Main) {
-                                    onFinalResult(text)
-                                }
+                            // 循环解码
+                            while (recog.isReady(stream)) {
+                                recog.decode(stream)
                             }
-                            // Reset stream for next utterance
-                            recog.reset(stream)
+
+                            // 检查端点
+                            val isEndpoint = recog.isEndpoint(stream)
+
+                            // 获取当前结果（用于 partial result）
+                            val currentResult = recog.getResult(stream)
+                            if (currentResult.text.isNotBlank()) {
+                                onPartialResult?.invoke(currentResult.text.trim())
+                            }
+
+                            if (isEndpoint) {
+                                val text = currentResult.text.trim()
+                                if (text.isNotEmpty()) {
+                                    Logger.i(tag, "Streaming ASR endpoint: '$text'")
+                                    streamingScope?.launch(Dispatchers.Main) {
+                                        onFinalResult(text)
+                                    }
+                                }
+                                // Reset stream for next utterance
+                                recog.reset(stream)
+                            }
                         }
                     }
+                } catch (e: Exception) {
+                    Logger.e(tag, "Streaming ASR error", e)
+                } finally {
+                    stream.release()
+                    recorder.stop()
+                    audioRecorder = null
+                    Logger.i(tag, "Streaming ASR stopped")
                 }
-            } catch (e: Exception) {
-                Logger.e(tag, "Streaming ASR error", e)
-            } finally {
-                stream.release()
-                recorder.stop()
-                audioRecorder = null
-                Logger.i(tag, "Streaming ASR stopped")
             }
         }
     }
@@ -331,7 +336,9 @@ class SherpaMnnAsrEngine(
                     ruleFars = "",
                 )
 
-                recognizer = OnlineRecognizer(null, config)
+                recognizer = MnnGlobalReleaseLock.withOperation {
+                    OnlineRecognizer(null, config)
+                }
                 ensureRegistered()
                 Logger.i(tag, "Sherpa-MNN recognizer initialized successfully")
                 true
@@ -374,7 +381,9 @@ class SherpaMnnAsrEngine(
         // 先停止流式识别，等待协程结束
         stopStreaming()
         synchronized(initLock) {
-            recognizer?.release()
+            MnnGlobalReleaseLock.withLock {
+                recognizer?.release()
+            }
             recognizer = null
             Logger.i(tag, "ASR fully unloaded")
         }

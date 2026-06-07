@@ -71,7 +71,16 @@ public:
                                           float confidenceThreshold = 0.5f,
                                           float nmsThreshold = 0.4f);
 
-    void release();
+    enum ReleaseFlags {
+        RELEASE_TENSORS = 1 << 0,
+        RELEASE_SESSION = 1 << 1,
+        RELEASE_MODEL = 1 << 2,
+        RELEASE_INTERPRETER = 1 << 3,
+        RELEASE_ALL = RELEASE_TENSORS | RELEASE_SESSION | RELEASE_MODEL | RELEASE_INTERPRETER
+    };
+
+    void release(int flags = RELEASE_ALL);
+    bool rebuildSession();
 
     bool isLoaded() const { return loaded_; }
 
@@ -92,6 +101,8 @@ private:
     bool useGpu_;
     bool loaded_;
     bool hasBuiltInNormalization_;  // [关键] 模型是否包含内置归一化节点
+    bool modelBufferReleased_ = false;
+    std::string modelPath_;
     std::string inputName_;
     std::vector<std::string> outputNames_;
 
@@ -115,6 +126,7 @@ private:
     std::vector<FaceBox> applyNMS(std::vector<FaceBox> &faces, float threshold);
 
     // 辅助函数
+    bool bindSessionTensors();
     bool createSession();
 };
 

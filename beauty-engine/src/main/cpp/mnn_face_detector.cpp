@@ -28,12 +28,14 @@ bool MnnFaceDetector::load(const std::string &modelPath,
                            bool useGpu,
                            const std::string &inputName,
                            const std::vector<std::string> &outputNames) {
-    release();
+    release(RELEASE_ALL);
 
     inputSize_ = inputSize;
     useGpu_ = useGpu;
     inputName_ = inputName;
     outputNames_ = outputNames;
+    modelPath_ = modelPath;
+    modelBufferReleased_ = false;
 
     // 创建 MNN 解释器
     interpreter_.reset(MNN::Interpreter::createFromFile(modelPath.c_str()));
@@ -44,94 +46,10 @@ bool MnnFaceDetector::load(const std::string &modelPath,
 
     LOGI("MNN model loaded: %s", modelPath.c_str());
 
-    // 配置调度器
-    MNN::ScheduleConfig config;
-    config.numThread = 4;
-
-    if (useGpu_) {
-        // [关键] 强制使用 Vulkan GPU，不允许降级到 CPU
-        config.type = MNN_FORWARD_VULKAN;
-        
-        LOGI("Requesting Vulkan GPU backend...");
-    } else {
-        config.numThread = 4;
-        config.type = MNN_FORWARD_CPU;
-        LOGI("Using CPU backend with %d threads", config.numThread);
-    }
-
-    // 创建会话
-    auto sessionCreateStart = std::chrono::high_resolution_clock::now();
-    session_ = interpreter_->createSession(config);
-    auto sessionCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::high_resolution_clock::now() - sessionCreateStart).count();
-    
-    if (!session_) {
-        LOGE("Failed to create MNN session - GPU not supported or model incompatible!");
+    if (!createSession()) {
         return false;
     }
     
-    // [简化验证] 仅记录请求的后端类型
-    // 注意：MNN 旧版本 API 不支持 getBackendCode()，只能通过性能判断是否真正使用 GPU
-    LOGI("MNN session created in %lldms, requested=%s", 
-         sessionCreateElapsed, 
-         useGpu_ ? "Vulkan" : "CPU");
-    
-    if (useGpu_) {
-        LOGI("Note: If inference is slow (~seconds), MNN may have fallen back to CPU");
-        LOGI("      Check device Vulkan support and model compatibility");
-    }
-
-    // 获取输入张量
-    inputTensor_ = interpreter_->getSessionInput(session_, inputName_.c_str());
-    if (!inputTensor_) {
-        // 尝试用 nullptr 获取默认输入
-        inputTensor_ = interpreter_->getSessionInput(session_, nullptr);
-        if (!inputTensor_) {
-            LOGE("Failed to get input tensor");
-            return false;
-        }
-        LOGI("Using default input tensor");
-    }
-
-    LOGI("Input tensor shape: [%d, %d, %d, %d]",
-         inputTensor_->batch(), inputTensor_->channel(),
-         inputTensor_->height(), inputTensor_->width());
-
-    // [关键修复] 如果输入张量有动态维度 (-1)，reshape 为固定尺寸
-    // 这修复了 ONNX→MNN 转换时未指定固定输入尺寸的问题
-    if (inputTensor_->height() <= 0 || inputTensor_->width() <= 0) {
-        LOGI("Dynamic input detected, reshaping to fixed size: %d x %d", inputSize_, inputSize_);
-        interpreter_->resizeTensor(inputTensor_, {1, 3, inputSize_, inputSize_});
-        interpreter_->resizeSession(session_);
-        LOGI("Reshaped input tensor: [%d, %d, %d, %d]",
-             inputTensor_->batch(), inputTensor_->channel(),
-             inputTensor_->height(), inputTensor_->width());
-    }
-
-    // 获取输出张量
-    if (!outputNames_.empty()) {
-        for (const auto &name : outputNames_) {
-            MNN::Tensor *tensor = interpreter_->getSessionOutput(session_, name.c_str());
-            if (tensor) {
-                outputTensors_.push_back(tensor);
-                LOGI("Output tensor '%s': [%d, %d, %d, %d]",
-                     name.c_str(), tensor->batch(), tensor->channel(),
-                     tensor->height(), tensor->width());
-            } else {
-                LOGE("Failed to get output tensor: %s", name.c_str());
-            }
-        }
-    } else {
-        // 单输出模式：获取默认输出
-        MNN::Tensor *tensor = interpreter_->getSessionOutput(session_, nullptr);
-        if (tensor) {
-            outputTensors_.push_back(tensor);
-            LOGI("Default output tensor: [%d, %d, %d, %d]",
-                 tensor->batch(), tensor->channel(),
-                 tensor->height(), tensor->width());
-        }
-    }
-
     // 配置图像预处理（用于 BGR/RGB 归一化）
     MNN::CV::ImageProcess::Config pretreatConfig;
     pretreatConfig.sourceFormat = MNN::CV::ImageFormat::RGB;
@@ -805,8 +723,144 @@ std::vector<FaceBox> MnnFaceDetector::applyNMS(std::vector<FaceBox> &faces, floa
     return result;
 }
 
-void MnnFaceDetector::release() {
-    if (interpreter_ && session_) {
+bool MnnFaceDetector::bindSessionTensors() {
+    if (!interpreter_ || !session_) {
+        return false;
+    }
+
+    outputTensors_.clear();
+
+    // 获取输入张量
+    inputTensor_ = interpreter_->getSessionInput(session_, inputName_.c_str());
+    if (!inputTensor_) {
+        // 尝试用 nullptr 获取默认输入
+        inputTensor_ = interpreter_->getSessionInput(session_, nullptr);
+        if (!inputTensor_) {
+            LOGE("Failed to get input tensor");
+            return false;
+        }
+        LOGI("Using default input tensor");
+    }
+
+    LOGI("Input tensor shape: [%d, %d, %d, %d]",
+         inputTensor_->batch(), inputTensor_->channel(),
+         inputTensor_->height(), inputTensor_->width());
+
+    // [关键修复] 如果输入张量有动态维度 (-1)，reshape 为固定尺寸
+    // 这修复了 ONNX→MNN 转换时未指定固定输入尺寸的问题
+    if (inputTensor_->height() <= 0 || inputTensor_->width() <= 0) {
+        LOGI("Dynamic input detected, reshaping to fixed size: %d x %d", inputSize_, inputSize_);
+        interpreter_->resizeTensor(inputTensor_, {1, 3, inputSize_, inputSize_});
+        interpreter_->resizeSession(session_);
+        inputTensor_ = interpreter_->getSessionInput(session_, inputName_.c_str());
+        if (!inputTensor_) {
+            inputTensor_ = interpreter_->getSessionInput(session_, nullptr);
+        }
+        if (!inputTensor_) {
+            LOGE("Failed to rebind input tensor after resize");
+            return false;
+        }
+        LOGI("Reshaped input tensor: [%d, %d, %d, %d]",
+             inputTensor_->batch(), inputTensor_->channel(),
+             inputTensor_->height(), inputTensor_->width());
+    }
+
+    // 获取输出张量
+    if (!outputNames_.empty()) {
+        for (const auto &name : outputNames_) {
+            MNN::Tensor *tensor = interpreter_->getSessionOutput(session_, name.c_str());
+            if (tensor) {
+                outputTensors_.push_back(tensor);
+                LOGI("Output tensor '%s': [%d, %d, %d, %d]",
+                     name.c_str(), tensor->batch(), tensor->channel(),
+                     tensor->height(), tensor->width());
+            } else {
+                LOGE("Failed to get output tensor: %s", name.c_str());
+            }
+        }
+    } else {
+        // 单输出模式：获取默认输出
+        MNN::Tensor *tensor = interpreter_->getSessionOutput(session_, nullptr);
+        if (tensor) {
+            outputTensors_.push_back(tensor);
+            LOGI("Default output tensor: [%d, %d, %d, %d]",
+                 tensor->batch(), tensor->channel(),
+                 tensor->height(), tensor->width());
+        }
+    }
+
+    return !outputTensors_.empty();
+}
+
+bool MnnFaceDetector::createSession() {
+    if (!interpreter_) {
+        LOGE("createSession failed: interpreter is null");
+        return false;
+    }
+
+    if (modelBufferReleased_) {
+        LOGE("createSession failed: model buffer already released, reload model required");
+        return false;
+    }
+
+    release(RELEASE_TENSORS | RELEASE_SESSION);
+
+    MNN::ScheduleConfig config;
+    config.numThread = 4;
+    if (useGpu_) {
+        config.type = MNN_FORWARD_VULKAN;
+        LOGI("Requesting Vulkan GPU backend...");
+    } else {
+        config.type = MNN_FORWARD_CPU;
+        LOGI("Using CPU backend with %d threads", config.numThread);
+    }
+
+    auto sessionCreateStart = std::chrono::high_resolution_clock::now();
+    session_ = interpreter_->createSession(config);
+    auto sessionCreateElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::high_resolution_clock::now() - sessionCreateStart).count();
+
+    if (!session_) {
+        LOGE("Failed to create MNN session - GPU not supported or model incompatible!");
+        return false;
+    }
+
+    LOGI("MNN session created in %lldms, requested=%s",
+         sessionCreateElapsed,
+         useGpu_ ? "Vulkan" : "CPU");
+
+    if (useGpu_) {
+        LOGI("Note: If inference is slow (~seconds), MNN may have fallen back to CPU");
+        LOGI("      Check device Vulkan support and model compatibility");
+    }
+
+    return bindSessionTensors();
+}
+
+bool MnnFaceDetector::rebuildSession() {
+    if (!interpreter_) {
+        LOGE("rebuildSession failed: interpreter is null");
+        return false;
+    }
+    if (modelBufferReleased_) {
+        LOGE("rebuildSession failed: model buffer released, cannot rebuild without reload");
+        return false;
+    }
+    return createSession();
+}
+
+void MnnFaceDetector::release(int flags) {
+    const bool releaseInterpreter = (flags & RELEASE_INTERPRETER) != 0;
+    const bool releaseModel = (flags & RELEASE_MODEL) != 0;
+    const bool releaseSession = ((flags & RELEASE_SESSION) != 0) || releaseInterpreter;
+    const bool releaseTensors = ((flags & RELEASE_TENSORS) != 0) || releaseSession;
+
+    if (releaseTensors) {
+        inputTensor_ = nullptr;
+        outputTensors_.clear();
+    }
+
+    if (releaseSession && interpreter_ && session_) {
         interpreter_->releaseSession(session_);
         session_ = nullptr;
     }
@@ -814,17 +868,32 @@ void MnnFaceDetector::release() {
     // [关键修复] 释放模型权重缓冲区（mmap 的模型文件内存）
     // releaseModel() 必须在 releaseSession() 之后、reset() 之前调用
     // 否则模型文件映射的内存不会被释放，导致 Native Heap 不下降
-    if (interpreter_) {
+    if (releaseModel && interpreter_) {
         LOGI("Releasing model buffer...");
         interpreter_->releaseModel();
+        modelBufferReleased_ = true;
     }
 
-    interpreter_.reset();
-    inputTensor_ = nullptr;
-    outputTensors_.clear();
-    pretreat_.reset();
-    loaded_ = false;
-    useGpu_ = false;
+    if (releaseInterpreter) {
+        interpreter_.reset();
+        modelBufferReleased_ = false;
+        modelPath_.clear();
+    }
+
+    if (releaseTensors || releaseInterpreter) {
+        resultBuffer_.clear();
+        retinaResultBuffer_.clear();
+    }
+
+    if (releaseInterpreter) {
+        pretreat_.reset();
+        loaded_ = false;
+        useGpu_ = false;
+        inputName_.clear();
+        outputNames_.clear();
+        inputSize_ = 0;
+        hasBuiltInNormalization_ = false;
+    }
 }
 
 } // namespace picme

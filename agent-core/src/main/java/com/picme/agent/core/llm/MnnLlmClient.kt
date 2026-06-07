@@ -2,6 +2,7 @@ package com.picme.agent.core.llm
 
 import android.content.Context
 import com.picme.agent.core.Logger
+import com.picme.agent.core.mnn.MnnGlobalReleaseLock
 import java.io.File
 
 /**
@@ -17,6 +18,11 @@ import java.io.File
  */
 class MnnLlmClient(private val context: Context) {
 
+    enum class NativeReleaseTarget {
+        KV_CACHE,
+        WEIGHTS_INTERPRETER_TENSORS
+    }
+
     private var nativeHandle: Long = 0L
     private val tag = "MnnLlmClient"
 
@@ -24,7 +30,9 @@ class MnnLlmClient(private val context: Context) {
      * 模型加载状态
      */
     val isLoaded: Boolean
-        get() = nativeHandle != 0L && nativeIsLoaded(nativeHandle)
+        get() = nativeHandle != 0L && MnnGlobalReleaseLock.withOperation {
+            nativeIsLoaded(nativeHandle)
+        }
 
     /**
      * 加载本地 LLM 模型
@@ -72,7 +80,9 @@ class MnnLlmClient(private val context: Context) {
             }
 
             Logger.i(tag, "Loading LLM model from: $configPath")
-            nativeHandle = nativeCreate(configPath)
+            nativeHandle = MnnGlobalReleaseLock.withOperation {
+                nativeCreate(configPath)
+            }
 
             if (nativeHandle == 0L) {
                 Logger.e(tag, "Failed to create LLM native instance")
@@ -103,7 +113,9 @@ class MnnLlmClient(private val context: Context) {
         }
 
         return try {
-            nativeGenerate(nativeHandle, prompt, maxNewTokens)
+            MnnGlobalReleaseLock.withOperation {
+                nativeGenerate(nativeHandle, prompt, maxNewTokens)
+            }
         } catch (exception: Exception) {
             Logger.e(tag, "Generation failed", exception)
             ""
@@ -131,7 +143,9 @@ class MnnLlmClient(private val context: Context) {
         }
 
         return try {
-            nativeGenerateWithSystem(nativeHandle, systemPrompt, userPrompt, maxNewTokens)
+            MnnGlobalReleaseLock.withOperation {
+                nativeGenerateWithSystem(nativeHandle, systemPrompt, userPrompt, maxNewTokens)
+            }
         } catch (exception: Exception) {
             Logger.e(tag, "Generation with system prompt failed", exception)
             ""
@@ -139,14 +153,37 @@ class MnnLlmClient(private val context: Context) {
     }
 
     /**
+     * 显式释放 native 资源。
+     *
+     * - KV_CACHE: 仅清理 KV cache / history，保留权重
+     * - WEIGHTS_INTERPRETER_TENSORS: 彻底卸载（权重 + interpreter + tensor）
+     */
+    fun releaseNative(target: NativeReleaseTarget) {
+        if (nativeHandle == 0L) {
+            return
+        }
+        when (target) {
+            NativeReleaseTarget.KV_CACHE -> {
+                MnnGlobalReleaseLock.withOperation {
+                    nativeReset(nativeHandle)
+                }
+                Logger.d(tag, "LLM KV cache released (history cleared)")
+            }
+            NativeReleaseTarget.WEIGHTS_INTERPRETER_TENSORS -> {
+                MnnGlobalReleaseLock.withLock {
+                    nativeDestroy(nativeHandle)
+                }
+                nativeHandle = 0L
+                Logger.d(tag, "LLM weights/interpreter/tensors released")
+            }
+        }
+    }
+
+    /**
      * 释放模型资源
      */
     fun unload() {
-        if (nativeHandle != 0L) {
-            nativeDestroy(nativeHandle)
-            nativeHandle = 0L
-            Logger.d(tag, "LLM unloaded")
-        }
+        releaseNative(NativeReleaseTarget.WEIGHTS_INTERPRETER_TENSORS)
     }
 
     /**
@@ -155,10 +192,7 @@ class MnnLlmClient(private val context: Context) {
      * 用于相机场景降低内存占用，避免与 Sherpa-MNN ASR 的 MNN 全局状态冲突。
      */
     fun reset() {
-        if (nativeHandle != 0L) {
-            nativeReset(nativeHandle)
-            Logger.d(tag, "LLM reset (history cleared)")
-        }
+        releaseNative(NativeReleaseTarget.KV_CACHE)
     }
 
     // ── Native Methods ─────────────────────────────────────

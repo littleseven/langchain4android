@@ -1,6 +1,7 @@
 package com.picme.beauty.internal.facedetect.mnn
 
 import android.graphics.Bitmap
+import com.picme.agent.core.mnn.MnnGlobalReleaseLock
 import com.picme.beauty.api.Logger
 import java.nio.ByteBuffer
 
@@ -103,7 +104,9 @@ class MnnFaceDetector private constructor(
             inputName: String = "input.1",
             outputNames: Array<String> = emptyArray()
         ): MnnFaceDetector? {
-            val handle = nativeCreate(modelPath, inputSize, useGpu, inputName, outputNames)
+            val handle = MnnGlobalReleaseLock.withOperation {
+                nativeCreate(modelPath, inputSize, useGpu, inputName, outputNames)
+            }
             return if (handle != 0L) {
                 MnnFaceDetector(handle, inputSize)
             } else {
@@ -123,6 +126,15 @@ class MnnFaceDetector private constructor(
 
         @JvmStatic
         private external fun nativeDestroy(handle: Long)
+
+        @JvmStatic
+        private external fun nativeReleaseSession(handle: Long)
+
+        @JvmStatic
+        private external fun nativeRebuildSession(handle: Long): Boolean
+
+        @JvmStatic
+        private external fun nativeReleaseModelBuffer(handle: Long)
 
         @JvmStatic
         private external fun nativeDetect(
@@ -175,7 +187,9 @@ class MnnFaceDetector private constructor(
         }
 
         val outResult = getDetectResult(pixelCount * 2)  // 最大 212 个 float (106 点 × 2)
-        val written = nativeDetect(nativeHandle, rgbBuffer, width, height, 3, outResult)
+        val written = MnnGlobalReleaseLock.withOperation {
+            nativeDetect(nativeHandle, rgbBuffer, width, height, 3, outResult)
+        }
         return if (written > 0) outResult.copyOf(written) else null
     }
 
@@ -204,13 +218,42 @@ class MnnFaceDetector private constructor(
         }
 
         val outResult = getRetinaResult()
-        val detected = nativeDetectRetinaFace(nativeHandle, rgbBuffer, width, height, 3, confidenceThreshold, nmsThreshold, outResult)
+        val detected = MnnGlobalReleaseLock.withOperation {
+            nativeDetectRetinaFace(nativeHandle, rgbBuffer, width, height, 3, confidenceThreshold, nmsThreshold, outResult)
+        }
         return if (detected) outResult.copyOf() else null
+    }
+
+    fun releaseSession() {
+        if (nativeHandle != 0L) {
+            MnnGlobalReleaseLock.withLock {
+                nativeReleaseSession(nativeHandle)
+            }
+        }
+    }
+
+    fun rebuildSession(): Boolean {
+        if (nativeHandle == 0L) {
+            return false
+        }
+        return MnnGlobalReleaseLock.withOperation {
+            nativeRebuildSession(nativeHandle)
+        }
+    }
+
+    fun releaseModelBuffer() {
+        if (nativeHandle != 0L) {
+            MnnGlobalReleaseLock.withLock {
+                nativeReleaseModelBuffer(nativeHandle)
+            }
+        }
     }
 
     fun release() {
         if (nativeHandle != 0L) {
-            nativeDestroy(nativeHandle)
+            MnnGlobalReleaseLock.withLock {
+                nativeDestroy(nativeHandle)
+            }
             nativeHandle = 0L
         }
     }

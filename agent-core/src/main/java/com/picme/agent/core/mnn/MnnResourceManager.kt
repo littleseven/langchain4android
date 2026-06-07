@@ -31,14 +31,41 @@ import java.util.concurrent.atomic.AtomicLong
  */
 object MnnGlobalReleaseLock {
     private val lock = Object()
+    private var activeOperationCount: Int = 0
 
     /**
-     * 执行 MNN native 释放操作（线程安全）
+     * 标记一次 MNN native 运行中操作（推理 / create / reset 等）。
      *
-     * @param block 释放操作闭包
+     * 释放操作会等待活跃操作归零后再执行，避免共享 Allocator 在使用中被销毁。
+     */
+    fun <T> withOperation(block: () -> T): T {
+        synchronized(lock) {
+            activeOperationCount += 1
+        }
+        try {
+            return block()
+        } finally {
+            synchronized(lock) {
+                activeOperationCount -= 1
+                if (activeOperationCount <= 0) {
+                    activeOperationCount = 0
+                    lock.notifyAll()
+                }
+            }
+        }
+    }
+
+    /**
+     * 执行 MNN native 释放操作（线程安全）。
+     *
+     * 会先等待所有 in-flight MNN 操作完成，再串行执行释放，
+     * 防止 use-after-free / allocator double-free。
      */
     fun <T> withLock(block: () -> T): T {
         synchronized(lock) {
+            while (activeOperationCount > 0) {
+                lock.wait(16L)
+            }
             return block()
         }
     }
@@ -615,6 +642,15 @@ class MnnResourceManager private constructor(context: Context) {
         val asrActive = !excludeAsr && asrRefCount.get() > 0
         val faceActive = !excludeFaceDetection && faceDetectionRefCount.get() > 0
         return llmActive || asrActive || faceActive
+    }
+
+    /**
+     * 当前是否可以安全卸载 LLM（不影响 ASR / FaceDetection）。
+     */
+    fun canSafelyUnloadLlm(): Boolean {
+        synchronized(this) {
+            return !hasOtherReferences(excludeLlm = true)
+        }
     }
 
     // ── 调试诊断 ─────────────────────────────────────────────

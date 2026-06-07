@@ -1,19 +1,19 @@
 package com.picme.agent.core
 
 import android.content.Context
+import com.picme.agent.core.llm.LlmModelManager
 import com.picme.agent.core.llm.MnnLlmClient
-import com.picme.agent.core.Logger
+import com.picme.agent.core.llm.MnnLlmClient.NativeReleaseTarget
+import com.picme.agent.core.mnn.MnnGlobalReleaseLock
+import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.model.ChatMessage
+import com.picme.agent.core.model.ChatRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import com.picme.agent.core.llm.LlmModelManager
-import com.picme.agent.core.model.ChatMessage
-import com.picme.agent.core.model.ChatRole
-import com.picme.agent.core.mnn.MnnResourceManager
-import com.picme.agent.core.mnn.MnnGlobalReleaseLock
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -297,6 +297,13 @@ class LocalLlmEngine(private val context: Context) {
     }
 
     /**
+     * 显式释放 LLM native 权重/interpreter/tensor。
+     */
+    fun releaseWeightsInterpreterTensors() {
+        enqueueUnload()
+    }
+
+    /**
      * 将 trimMemory 任务投递到专用线程执行
      */
     private fun enqueueTrimMemory() {
@@ -307,7 +314,7 @@ class LocalLlmEngine(private val context: Context) {
             }
             try {
                 if (client.isLoaded) {
-                    client.reset()
+                    client.releaseNative(NativeReleaseTarget.KV_CACHE)
                     Logger.i(tag, "LLM memory trimmed (history cleared, model still loaded)")
                 }
             } finally {
@@ -332,7 +339,7 @@ class LocalLlmEngine(private val context: Context) {
                 if (client.isLoaded) {
                     // 使用 MNN 全局锁串行化 native 释放
                     MnnGlobalReleaseLock.withLock {
-                        client.unload()
+                        client.releaseNative(NativeReleaseTarget.WEIGHTS_INTERPRETER_TENSORS)
                     }
                     currentModelId = null
                     Logger.i(tag, "LLM fully unloaded")
@@ -365,7 +372,7 @@ class LocalLlmEngine(private val context: Context) {
         if (client.isLoaded) {
             try {
                 // 同步卸载，确保在 MnnGlobalReleaseLock 保护下完成
-                client.unload()
+                client.releaseNative(NativeReleaseTarget.WEIGHTS_INTERPRETER_TENSORS)
                 currentModelId = null
                 Logger.i(tag, "LLM fully unloaded (sync)")
             } catch (e: Exception) {
