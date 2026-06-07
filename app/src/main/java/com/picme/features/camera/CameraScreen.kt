@@ -5,6 +5,7 @@ package com.picme.features.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.ContextWrapper
 import android.hardware.Sensor
@@ -18,7 +19,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
@@ -116,6 +116,8 @@ private const val TAG_AI_AGENT = "AiAgent"
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 private const val DEBUG_RELEASE_TOAST_DELAY_MS = 350L
 
+private var activeReleaseDialog: AlertDialog? = null
+
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
@@ -142,7 +144,7 @@ private fun showReleaseMemoryToast(
     after: MnnResourceManager.MemoryStats?
 ) {
     val message = if (before == null || after == null) {
-        "$target($releaseMode) 已触发释放 - 内存采样失败"
+        "$target($releaseMode) 已触发释放\n内存采样失败，请查看日志"
     } else {
         val releasedNative = (before.nativeHeapMB - after.nativeHeapMB).coerceAtLeast(0)
         val releasedJava = (before.javaHeapUsedMB - after.javaHeapUsedMB).coerceAtLeast(0)
@@ -151,9 +153,27 @@ private fun showReleaseMemoryToast(
             "释放: Native -${releasedNative}MB | Java -${releasedJava}MB"
     }
 
-    // 同时输出到日志和 Toast
     Logger.i(TAG, "🔓 [内存释放] $target($releaseMode)\n$message")
-    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+
+    val activity = context.findActivity()
+    if (activity == null || activity.isFinishing || activity.isDestroyed) {
+        Logger.w(TAG, "[内存释放] Activity 不可用，弹窗未显示: $target($releaseMode)")
+        return
+    }
+
+    activity.runOnUiThread {
+        activeReleaseDialog?.dismiss()
+        activeReleaseDialog = AlertDialog.Builder(activity)
+            .setTitle("内存释放结果")
+            .setMessage(message)
+            .setCancelable(true)
+            .setPositiveButton("知道了") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .create()
+
+        activeReleaseDialog?.show()
+    }
 }
 
 /**
@@ -1534,34 +1554,106 @@ CameraPreviewContent(
                 userPreferencesRepository.updateShowLogOverlay(!showLogOverlay)
             }
         },
-        onUnloadAsr = {
+
+        // ========== ASR 三级释放 ==========
+        onAsrReleaseKvCache = {
             val before = captureMnnMemoryStats(context)
-            Logger.i(TAG, "🎤 [ASR手动释放] 开始 - 释放类型: weights+session+tensor")
+            Logger.i(TAG, "🎤 [ASR释放1-KVCache] 开始 - 释放类型: kv_cache_only")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
+            // TODO: 实现 ASR KV Cache 仅释放逻辑
+            Logger.i(TAG, "🎤 [ASR释放1-KVCache] 功能预留")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "ASR", "kv_cache_only", before, after)
+            }
+        },
+        onAsrReleaseSession = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "🎤 [ASR释放2-Session] 开始 - 释放类型: session+tensor")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
+            // TODO: 实现 ASR Session+Tensor 释放逻辑
+            Logger.i(TAG, "🎤 [ASR释放2-Session] 功能预留")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "ASR", "session+tensor", before, after)
+            }
+        },
+        onAsrReleaseFull = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "🎤 [ASR释放3-Full] 开始 - 释放类型: weights+full")
             Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
             voiceCoordinator?.releaseAsr()
             coroutineScope.launch {
                 val after = sampleMemoryAfterRelease(context)
-                showReleaseMemoryToast(context, "ASR", "weights+session+tensor", before, after)
+                showReleaseMemoryToast(context, "ASR", "weights+full", before, after)
             }
         },
-        onUnloadLlm = {
+
+        // ========== LLM 三级释放 ==========
+        onLlmReleaseKvCache = {
             val before = captureMnnMemoryStats(context)
-            Logger.i(TAG, "🧠 [LLM手动释放] 开始 - 释放类型: weights+interpreter+tensors")
+            Logger.i(TAG, "🧠 [LLM释放1-KVCache] 开始 - 释放类型: kv_cache_only")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
+            // TODO: 实现 LLM KV Cache 仅释放逻辑
+            Logger.i(TAG, "🧠 [LLM释放1-KVCache] 功能预留")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "LLM", "kv_cache_only", before, after)
+            }
+        },
+        onLlmReleaseSession = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "🧠 [LLM释放2-Session] 开始 - 释放类型: session+tensor")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
+            // TODO: 实现 LLM Session+Tensor 释放逻辑
+            Logger.i(TAG, "🧠 [LLM释放2-Session] 功能预留")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "LLM", "session+tensor", before, after)
+            }
+        },
+        onLlmReleaseFull = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "🧠 [LLM释放3-Full] 开始 - 释放类型: weights+full")
             Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
             aiAgentUseCase?.unloadLocalModel()
             coroutineScope.launch {
                 val after = sampleMemoryAfterRelease(context)
-                showReleaseMemoryToast(context, "LLM", "weights+interpreter+tensors", before, after)
+                showReleaseMemoryToast(context, "LLM", "weights+full", before, after)
             }
         },
-        onUnloadFaceDetection = {
+
+        // ========== Face Detection 三级释放 ==========
+        onFaceDetectReleaseKvCache = {
             val before = captureMnnMemoryStats(context)
-            Logger.i(TAG, "👤 [人脸检测手动释放] 开始 - 释放类型: weights+session+tensor")
+            Logger.i(TAG, "👤 [FaceDetect释放1-KVCache] 开始 - 释放类型: kv_cache_only")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
+            // TODO: 实现人脸检测 KV Cache 仅释放逻辑
+            Logger.i(TAG, "👤 [FaceDetect释放1-KVCache] 功能预留")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "FaceDetection", "kv_cache_only", before, after)
+            }
+        },
+        onFaceDetectReleaseSession = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "👤 [FaceDetect释放2-Session] 开始 - 释放类型: session+tensor")
+            Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
+            // TODO: 实现人脸检测 Session+Tensor 释放逻辑
+            Logger.i(TAG, "👤 [FaceDetect释放2-Session] 功能预留")
+            coroutineScope.launch {
+                val after = sampleMemoryAfterRelease(context)
+                showReleaseMemoryToast(context, "FaceDetection", "session+tensor", before, after)
+            }
+        },
+        onFaceDetectReleaseFull = {
+            val before = captureMnnMemoryStats(context)
+            Logger.i(TAG, "👤 [FaceDetect释放3-Full] 开始 - 释放类型: weights+full")
             Logger.i(TAG, "📊 [释放前内存] Native ${before?.nativeHeapMB}MB | Java ${before?.javaHeapUsedMB}MB")
             (faceDetectorManager as? com.picme.beauty.internal.facedetect.FaceDetectorManager)?.release()
             coroutineScope.launch {
                 val after = sampleMemoryAfterRelease(context)
-                showReleaseMemoryToast(context, "FaceDetection", "weights+session+tensor", before, after)
+                showReleaseMemoryToast(context, "FaceDetection", "weights+full", before, after)
             }
         }
     )

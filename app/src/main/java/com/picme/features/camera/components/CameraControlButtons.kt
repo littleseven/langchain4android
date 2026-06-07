@@ -47,16 +47,22 @@ fun CameraLeftControls(
     onToggleLogOverlay: () -> Unit,
     debugUiEnabled: Boolean,
     showLogOverlay: Boolean,
-    onUnloadAsr: () -> Unit = {},
-    onUnloadLlm: () -> Unit = {},
-    onUnloadFaceDetection: () -> Unit = {},
+    onAsrReleaseKvCache: () -> Unit = {},
+    onAsrReleaseSession: () -> Unit = {},
+    onAsrReleaseFull: () -> Unit = {},
+    onLlmReleaseKvCache: () -> Unit = {},
+    onLlmReleaseSession: () -> Unit = {},
+    onLlmReleaseFull: () -> Unit = {},
+    onFaceDetectReleaseKvCache: () -> Unit = {},
+    onFaceDetectReleaseSession: () -> Unit = {},
+    onFaceDetectReleaseFull: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .padding(16.dp)
             .statusBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
         ControlButton(icon = Icons.Rounded.Refresh, onClick = onResetCameraMemoryState)
@@ -66,23 +72,65 @@ fun CameraLeftControls(
                 onClick = onToggleLogOverlay,
                 isActive = showLogOverlay
             )
-                // 调试：释放 ASR 模型 (橙色)
+
+            // ========== ASR 三级释放 ==========
             ControlButton(
                 icon = Icons.Rounded.Mic,
-                onClick = onUnloadAsr,
-                tint = Color(0xFFFF7043)
+                onClick = onAsrReleaseKvCache,
+                tint = Color(0xFFFF9800),  // 橙色
+                modifier = Modifier.size(36.dp)
             )
-            // 调试：释放 LLM 模型 (蓝色)
+            ControlButton(
+                icon = Icons.Rounded.Mic,
+                onClick = onAsrReleaseSession,
+                tint = Color(0xFFFF6F00),  // 深橙色
+                modifier = Modifier.size(36.dp)
+            )
+            ControlButton(
+                icon = Icons.Rounded.Mic,
+                onClick = onAsrReleaseFull,
+                tint = Color(0xFFE65100),  // 极深橙色
+                modifier = Modifier.size(36.dp)
+            )
+
+            // ========== LLM 三级释放 ==========
             ControlButton(
                 icon = Icons.Rounded.Psychology,
-                onClick = onUnloadLlm,
-                tint = Color(0xFF42A5F5)
+                onClick = onLlmReleaseKvCache,
+                tint = Color(0xFF64B5F6),  // 浅蓝色
+                modifier = Modifier.size(36.dp)
             )
-            // 调试：释放人脸检测模型 (绿色)
+            ControlButton(
+                icon = Icons.Rounded.Psychology,
+                onClick = onLlmReleaseSession,
+                tint = Color(0xFF42A5F5),  // 中蓝色
+                modifier = Modifier.size(36.dp)
+            )
+            ControlButton(
+                icon = Icons.Rounded.Psychology,
+                onClick = onLlmReleaseFull,
+                tint = Color(0xFF1E88E5),  // 深蓝色
+                modifier = Modifier.size(36.dp)
+            )
+
+            // ========== Face Detection 三级释放 ==========
             ControlButton(
                 icon = Icons.Rounded.Face,
-                onClick = onUnloadFaceDetection,
-                tint = Color(0xFF66BB6A)
+                onClick = onFaceDetectReleaseKvCache,
+                tint = Color(0xFF81C784),  // 浅绿色
+                modifier = Modifier.size(36.dp)
+            )
+            ControlButton(
+                icon = Icons.Rounded.Face,
+                onClick = onFaceDetectReleaseSession,
+                tint = Color(0xFF66BB6A),  // 中绿色
+                modifier = Modifier.size(36.dp)
+            )
+            ControlButton(
+                icon = Icons.Rounded.Face,
+                onClick = onFaceDetectReleaseFull,
+                tint = Color(0xFF43A047),  // 深绿色
+                modifier = Modifier.size(36.dp)
             )
         }
     }

@@ -158,9 +158,15 @@ internal data class CameraPreviewActions(
     val onToggleVoiceControl: () -> Unit,
     val onToggleAiAgentPanel: () -> Unit,
     val onToggleProPanel: () -> Unit,
-    val onUnloadAsr: () -> Unit = {},
-    val onUnloadLlm: () -> Unit = {},
-    val onUnloadFaceDetection: () -> Unit = {}
+    val onAsrReleaseKvCache: () -> Unit = {},
+    val onAsrReleaseSession: () -> Unit = {},
+    val onAsrReleaseFull: () -> Unit = {},
+    val onLlmReleaseKvCache: () -> Unit = {},
+    val onLlmReleaseSession: () -> Unit = {},
+    val onLlmReleaseFull: () -> Unit = {},
+    val onFaceDetectReleaseKvCache: () -> Unit = {},
+    val onFaceDetectReleaseSession: () -> Unit = {},
+    val onFaceDetectReleaseFull: () -> Unit = {}
 )
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
@@ -269,9 +275,15 @@ internal fun buildCameraPreviewActions(
     onToggleVoiceControl: () -> Unit,
     onToggleAiAgentPanel: () -> Unit,
     onToggleLogs: () -> Unit,
-    onUnloadAsr: () -> Unit = {},
-    onUnloadLlm: () -> Unit = {},
-    onUnloadFaceDetection: () -> Unit = {}
+    onAsrReleaseKvCache: () -> Unit = {},
+    onAsrReleaseSession: () -> Unit = {},
+    onAsrReleaseFull: () -> Unit = {},
+    onLlmReleaseKvCache: () -> Unit = {},
+    onLlmReleaseSession: () -> Unit = {},
+    onLlmReleaseFull: () -> Unit = {},
+    onFaceDetectReleaseKvCache: () -> Unit = {},
+    onFaceDetectReleaseSession: () -> Unit = {},
+    onFaceDetectReleaseFull: () -> Unit = {}
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onResetCameraMemoryState = onResetCameraMemoryState,
@@ -358,8 +370,14 @@ internal fun buildCameraPreviewActions(
         onToggleProPanel = {
             panelState.showProPanel = !panelState.showProPanel
         },
-        onUnloadAsr = onUnloadAsr,
-        onUnloadLlm = onUnloadLlm,
-        onUnloadFaceDetection = onUnloadFaceDetection
+        onAsrReleaseKvCache = onAsrReleaseKvCache,
+        onAsrReleaseSession = onAsrReleaseSession,
+        onAsrReleaseFull = onAsrReleaseFull,
+        onLlmReleaseKvCache = onLlmReleaseKvCache,
+        onLlmReleaseSession = onLlmReleaseSession,
+        onLlmReleaseFull = onLlmReleaseFull,
+        onFaceDetectReleaseKvCache = onFaceDetectReleaseKvCache,
+        onFaceDetectReleaseSession = onFaceDetectReleaseSession,
+        onFaceDetectReleaseFull = onFaceDetectReleaseFull
     )
 }
