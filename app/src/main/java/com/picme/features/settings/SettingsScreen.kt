@@ -522,11 +522,13 @@ private fun LogModuleConfigSection(
     config: LogModuleConfig,
     onConfigChange: (LogModuleConfig) -> Unit
 ) {
-    CompactOptionChips(
+    CompactMultiSelectChips(
         options = LogModule.entries.map { it to it.displayName },
-        currentValue = null,
+        isSelected = { module -> config.isEnabled(module) },
         maxLines = 3,
-        onSelected = { }
+        onToggle = { module ->
+            onConfigChange(config.toggle(module, !config.isEnabled(module)))
+        }
     )
 }
 

@@ -86,6 +86,43 @@ internal fun <T> CompactOptionChips(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun <T> CompactMultiSelectChips(
+    options: List<Pair<T, String>>,
+    isSelected: (T) -> Boolean,
+    maxLines: Int,
+    onToggle: (T) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        maxLines = maxLines
+    ) {
+        options.forEach { (value, label) ->
+            val selected = isSelected(value)
+            FilterChip(
+                selected = selected,
+                onClick = { onToggle(value) },
+                label = {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                )
+            )
+        }
+    }
+}
+
 @Composable
 internal fun DebugOptionRow(
     title: String,
