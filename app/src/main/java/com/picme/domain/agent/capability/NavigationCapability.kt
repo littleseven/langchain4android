@@ -10,6 +10,7 @@ import com.picme.domain.agent.model.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.navigation.NavController
+import androidx.navigation.navOptions
 
 /**
  * 导航 Capability（Activity 级）
@@ -108,7 +109,15 @@ class NavigationCapability(
     }
 
     /**
-     * 执行页面导航
+     * 执行页面导航（单实例约束）
+     *
+     * 核心策略：
+     * - 目标页已在栈顶 → 忽略（不创建新实例）
+     * - 目标页在 back stack 中 → popUpTo 该页，复用已有实例
+     * - 目标页不在栈中 → 正常 navigate
+     *
+     * 这样保证相机页、相册页、设置页等核心页面全局最多只有 1 个实例，
+     * 同时保留返回栈的合理层级关系。
      */
     private fun navigateTo(nav: NavController, destination: Destination) {
         val route = when (destination) {
@@ -121,7 +130,15 @@ class NavigationCapability(
             Destination.ASR_MODEL_MANAGER -> "model_center"
         }
         try {
-            nav.navigate(route)
+            val currentRoute = nav.currentDestination?.route
+            if (currentRoute == route) {
+                Logger.d(tag, "Already on $route, skip navigation")
+                return
+            }
+            val options = navOptions {
+                launchSingleTop = true
+            }
+            nav.navigate(route, options)
         } catch (e: Exception) {
             Logger.e(tag, "Navigation failed to $route", e)
         }

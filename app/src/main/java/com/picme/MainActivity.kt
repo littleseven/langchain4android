@@ -42,6 +42,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.navigation.navOptions
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AppLanguage
@@ -188,8 +189,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                                 CameraScreen(
-                                    onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
-                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                                    onNavigateToGallery = { navController.navigate(Screen.Gallery.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
                                     viewModel = mediaViewModel,
                                     settingsViewModel = settingsViewModel
                                 )
@@ -205,8 +206,8 @@ class MainActivity : ComponentActivity() {
                                 GalleryScreen(
                                     viewModel = mediaViewModel,
                                     onNavigateBack = { navController.popBackStack() },
-                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route) }
+                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) }
                                 )
                             }
                             composable(Screen.Settings.route) {
@@ -221,7 +222,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel = settingsViewModel,
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToModelCenter = { categoryTag ->
-                                        navController.navigate(Screen.ModelCenter.createRoute(categoryTag))
+                                        navController.navigate(Screen.ModelCenter.createRoute(categoryTag), navOptions { launchSingleTop = true })
                                     }
                                 )
                             }
