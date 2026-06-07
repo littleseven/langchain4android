@@ -119,142 +119,15 @@ import com.picme.domain.model.RemoteModelConfig
 import com.picme.domain.model.RemoteModelConfigs
 import java.util.concurrent.Executor
 
-enum class ScenePreset { NONE, NIGHT, MOON }
-enum class GridType { NONE, THIRDS, GOLDEN }
-enum class CameraAspectRatio { RATIO_4_3, RATIO_16_9, RATIO_FULL }
-enum class BeautyPreviewStatus { ACTIVE, SKIPPED }
-
-private fun CameraSceneMode.toScenePreset(): ScenePreset = when (this) {
-    CameraSceneMode.NONE -> ScenePreset.NONE
-    CameraSceneMode.NIGHT -> ScenePreset.NIGHT
-    CameraSceneMode.MOON -> ScenePreset.MOON
-}
-
-private fun ScenePreset.toCameraSceneMode(): CameraSceneMode = when (this) {
-    ScenePreset.NONE -> CameraSceneMode.NONE
-    ScenePreset.NIGHT -> CameraSceneMode.NIGHT
-    ScenePreset.MOON -> CameraSceneMode.MOON
-}
-
-private fun CameraGridMode.toGridType(): GridType = when (this) {
-    CameraGridMode.NONE -> GridType.NONE
-    CameraGridMode.THIRDS -> GridType.THIRDS
-    CameraGridMode.GOLDEN -> GridType.GOLDEN
-}
-
-private fun GridType.toCameraGridMode(): CameraGridMode = when (this) {
-    GridType.NONE -> CameraGridMode.NONE
-    GridType.THIRDS -> CameraGridMode.THIRDS
-    GridType.GOLDEN -> CameraGridMode.GOLDEN
-}
-
-private fun CameraAspectRatioMode.toAspectRatio(): Int = when (this) {
-    CameraAspectRatioMode.RATIO_4_3 -> AspectRatio.RATIO_4_3
-    CameraAspectRatioMode.RATIO_16_9 -> AspectRatio.RATIO_16_9
-    CameraAspectRatioMode.FULL -> AspectRatio.RATIO_FULL
-}
-
-private fun Int.toCameraAspectRatioMode(): CameraAspectRatioMode = when (this) {
-    AspectRatio.RATIO_4_3 -> CameraAspectRatioMode.RATIO_4_3
-    AspectRatio.RATIO_16_9 -> CameraAspectRatioMode.RATIO_16_9
-    else -> CameraAspectRatioMode.FULL
-}
-
 private const val TAG = "Camera"
 private const val TAG_AI_AGENT = "AiAgent"
 
 private const val PROVIDER_VIEW_BIND_TIMEOUT_MS = 5000L
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 命令执行消息转换辅助函数（文件级，供 CameraScreen 内多处使用）
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * 将 AiAgentCommand 转换为 CommandExecution 消息列表
- *
- * 单命令 → 一条 CommandExecution
- * BatchExecute → 多条 CommandExecution（展开显示每个子命令）
- * TextReply → AgentText（纯文本回复）
- */
-private fun commandToExecutionMessages(command: AiAgentCommand): List<AgentMessage> {
-    return when (command) {
-        is AiAgentCommand.BatchExecute -> {
-            val total = command.commands.size
-            command.commands.mapIndexed { index, subCmd ->
-                AgentMessage.CommandExecution(
-                    commandName = getCommandDisplayName(subCmd),
-                    status = AgentMessage.CommandExecution.Status.SUCCESS,
-                    detail = getCommandDetail(subCmd),
-                    index = index + 1,
-                    total = total
-                )
-            }
-        }
-        is AiAgentCommand.TextReply -> listOf(
-            AgentMessage.AgentText(content = command.message)
-        )
-        else -> listOf(
-            AgentMessage.CommandExecution(
-                commandName = getCommandDisplayName(command),
-                status = AgentMessage.CommandExecution.Status.SUCCESS,
-                detail = getCommandDetail(command),
-                index = 0,
-                total = 1
-            )
-        )
-    }
-}
-
-private fun getCommandDisplayName(command: AiAgentCommand): String = when (command) {
-    is AiAgentCommand.AdjustBeauty -> "调整美颜"
-    is AiAgentCommand.SwitchFilter -> "切换滤镜"
-    is AiAgentCommand.SwitchStyle -> "切换风格"
-    is AiAgentCommand.SwitchScene -> "切换场景"
-    is AiAgentCommand.SwitchRatio -> "切换画幅"
-    is AiAgentCommand.AdjustExposure -> "调整曝光"
-    is AiAgentCommand.AdjustZoom -> "调整变焦"
-    is AiAgentCommand.FlipCamera -> "翻转摄像头"
-    is AiAgentCommand.CapturePhoto -> "拍照"
-    is AiAgentCommand.Delay -> "等待"
-    is AiAgentCommand.ToggleRecording -> "切换录像"
-    is AiAgentCommand.SwitchMode -> "切换模式"
-    is AiAgentCommand.NavigateTo -> "页面跳转"
-    is AiAgentCommand.GoBack -> "返回"
-    is AiAgentCommand.BatchExecute -> "批量执行"
-    is AiAgentCommand.TextReply -> "文本回复"
-}
-
-private fun getCommandDetail(command: AiAgentCommand): String = when (command) {
-    is AiAgentCommand.AdjustBeauty -> buildString {
-        val s = command.settings
-        val parts = mutableListOf<String>()
-        if (s.smoothing > 0) parts.add("磨皮 ${s.smoothing.toInt()}%")
-        if (s.whitening > 0) parts.add("美白 ${s.whitening.toInt()}%")
-        if (s.slimFace != 0f) parts.add("瘦脸 ${s.slimFace.toInt()}%")
-        if (s.bigEyes > 0) parts.add("大眼 ${s.bigEyes.toInt()}%")
-        if (parts.isEmpty()) append("默认参数") else append(parts.joinToString(", "))
-    }
-    is AiAgentCommand.SwitchFilter -> "滤镜: ${command.filterType.name}"
-    is AiAgentCommand.SwitchStyle -> "风格: ${command.styleFilter.name}"
-    is AiAgentCommand.SwitchScene -> "场景: ${command.sceneName}"
-    is AiAgentCommand.SwitchRatio -> "比例: ${command.ratio}"
-    is AiAgentCommand.AdjustExposure -> "曝光: ${command.exposure}"
-    is AiAgentCommand.AdjustZoom -> "变焦: ${command.zoomRatio}x"
-    is AiAgentCommand.NavigateTo -> "目标: ${command.destination}"
-    is AiAgentCommand.Delay -> "延迟: ${command.delayMs}ms"
-    else -> ""
-}
-
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
-}
-
-object AspectRatio {
-    const val RATIO_4_3 = 0
-    const val RATIO_16_9 = 1
-    const val RATIO_FULL = 2
 }
 
 /**
@@ -337,299 +210,6 @@ internal fun transformFaceCoordinate(
     )
 
     return Offset(screenX, screenY)
-}
-
-internal data class BeautyDebugState(
-    val status: BeautyPreviewStatus,
-    val fps: Float,
-    val processingMs: Int,
-    val delayMs: Int,
-    val cpuUsage: Float,
-    val nullFrames: Int,
-    val rendererErrorCategory: String,
-    val rendererErrorReason: String,
-    val persistedFallback: Boolean,
-    val persistedFallbackReason: String?,
-    val strategy: BeautyStrategy,
-    val recoveryAvailableAtMs: Long,
-    val providerRenderActive: Boolean
-)
-
-internal data class CameraPreviewUiState(
-    val faceDetectionEngineMode: FaceDetectionEngineMode,
-    val selectedFilter: FilterType,
-    val selectedStyleFilter: StyleFilter,
-    val facePoint: Offset?,
-    val faceWarpParams: FaceWarpParams,
-    val showFaceDebugOverlay: Boolean,
-    val focusIndicatorAlpha: Float,
-    val lastMedia: MediaAsset?,
-    val zoomRatio: Float,
-    val minZoomRatio: Float,
-    val maxZoomRatio: Float,
-    val captureMode: MediaType,
-    val isRecording: Boolean,
-    val isStable: Boolean,
-    val showFilterSelector: Boolean,
-    val showBeautySelector: Boolean,
-    val showRatioSelector: Boolean,
-    val showCameraInfo: Boolean,
-    val showSceneSelector: Boolean,
-    val showGridSelector: Boolean,
-    val debugUiEnabled: Boolean,
-    val showFacialRefinement: Boolean,
-    val showMakeupAdjustment: Boolean,
-    val activeMakeupEntry: MakeupEntry,
-    val showBodyManagement: Boolean,
-    val currentScene: ScenePreset,
-    val currentGrid: GridType,
-    val beautySettings: BeautySettings,
-    val beautyDebugState: BeautyDebugState,
-    val aspectRatio: Int,
-    val lensFacing: Int,
-    val exposureCompensation: Int,
-    val exposureRange: IntRange,
-    val whiteBalanceMode: Int,
-    val beautyStrategy: BeautyStrategy,
-    val isVoiceControlEnabled: Boolean,
-    val roiStageConfig: StageConfig,
-    val landmarkStageConfig: StageConfig,
-    val showProPanel: Boolean,
-    val showLogOverlay: Boolean
-)
-
-internal data class CameraPreviewActions(
-    val onNavigateToSettings: () -> Unit,
-    val onResetCameraMemoryState: () -> Unit,
-    val onNavigateToDebug: () -> Unit,
-    val onFlipCamera: () -> Unit,
-    val onToggleBeauty: () -> Unit,
-    val onToggleFilter: () -> Unit,
-    val onToggleRatio: () -> Unit,
-    val onToggleCameraInfo: () -> Unit,
-    val onToggleScene: () -> Unit,
-    val onToggleGrid: () -> Unit,
-    val onToggleLogs: () -> Unit,
-    val onToggleFaceDebugOverlay: () -> Unit,
-    val onToggleFacialRefinement: () -> Unit,
-    val onToggleMakeupAdjustment: () -> Unit,
-    val onToggleLipColor: () -> Unit,
-    val onToggleBlush: () -> Unit,
-    val onToggleEyebrow: () -> Unit,
-    val onToggleBodyManagement: () -> Unit,
-    val onZoomPresetClick: (Float) -> Unit,
-    val onExposureChange: (Int) -> Unit,
-    val onWhiteBalanceChange: (Int) -> Unit,
-    val onSceneSelected: (ScenePreset) -> Unit,
-    val onGridSelected: (GridType) -> Unit,
-    val onGalleryClick: () -> Unit,
-    val onCaptureClick: () -> Unit,
-    val onModeChange: (MediaType) -> Unit,
-    val onFilterSelected: (FilterType) -> Unit,
-    val onStyleFilterSelected: (StyleFilter) -> Unit,
-    val onBeautySettingsChanged: (BeautySettings) -> Unit,
-    val onRatioSelected: (Int) -> Unit,
-    val onDismissPanels: () -> Unit,
-    val onToggleVoiceControl: () -> Unit,
-    val onToggleAiAgentPanel: () -> Unit,
-    val onToggleProPanel: () -> Unit
-)
-
-internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
-    FaceDetectionEngineMode.MEDIAPIPE -> EngineType.MEDIAPIPE
-    FaceDetectionEngineMode.MNN -> EngineType.MNN
-    FaceDetectionEngineMode.NCNN -> EngineType.NCNN
-    FaceDetectionEngineMode.CUSTOM -> EngineType.MEDIAPIPE // CUSTOM 模式由 StageConfig 决定
-}
-
-private fun buildCameraPreviewUiState(
-    selectedFilter: FilterType,
-    selectedStyleFilter: StyleFilter,
-    faceDetectionEngineMode: FaceDetectionEngineMode,
-    facePoint: Offset?,
-    faceWarpParams: FaceWarpParams,
-    showFaceDebugOverlay: Boolean,
-    focusIndicatorAlpha: Float,
-    lastMedia: MediaAsset?,
-    zoomRatio: Float,
-    minZoomRatio: Float,
-    maxZoomRatio: Float,
-    captureMode: MediaType,
-    isRecording: Boolean,
-    isStable: Boolean,
-    panelState: CameraPanelState,
-    showCameraInfo: Boolean,
-    debugUiEnabled: Boolean,
-    currentScene: ScenePreset,
-    currentGrid: GridType,
-    beautySettings: BeautySettings,
-    beautyDebugState: BeautyDebugState,
-    aspectRatio: Int,
-    lensFacing: Int,
-    exposureCompensation: Int,
-    exposureRange: IntRange,
-    whiteBalanceMode: Int,
-    beautyStrategy: BeautyStrategy,
-    isVoiceControlEnabled: Boolean,
-    roiStageConfig: StageConfig,
-    landmarkStageConfig: StageConfig,
-    showLogOverlay: Boolean
-): CameraPreviewUiState {
-    return CameraPreviewUiState(
-        selectedFilter = selectedFilter,
-        selectedStyleFilter = selectedStyleFilter,
-        faceDetectionEngineMode = faceDetectionEngineMode,
-        facePoint = facePoint,
-        faceWarpParams = faceWarpParams,
-        showFaceDebugOverlay = showFaceDebugOverlay,
-        focusIndicatorAlpha = focusIndicatorAlpha,
-        lastMedia = lastMedia,
-        zoomRatio = zoomRatio,
-        minZoomRatio = minZoomRatio,
-        maxZoomRatio = maxZoomRatio,
-        captureMode = captureMode,
-        isRecording = isRecording,
-        isStable = isStable,
-        showFilterSelector = panelState.showFilterSelector,
-        showBeautySelector = panelState.showBeautySelector,
-        showRatioSelector = panelState.showRatioSelector,
-        showCameraInfo = showCameraInfo,
-        showSceneSelector = panelState.showSceneSelector,
-        showGridSelector = panelState.showGridSelector,
-        debugUiEnabled = debugUiEnabled,
-        showFacialRefinement = panelState.showFacialRefinement,
-        showMakeupAdjustment = panelState.showMakeupAdjustment,
-        activeMakeupEntry = panelState.activeMakeupEntry,
-        showBodyManagement = panelState.showBodyManagement,
-        currentScene = currentScene,
-        currentGrid = currentGrid,
-        beautySettings = beautySettings,
-        beautyDebugState = beautyDebugState,
-        aspectRatio = aspectRatio,
-        lensFacing = lensFacing,
-        exposureCompensation = exposureCompensation,
-        exposureRange = exposureRange,
-        whiteBalanceMode = whiteBalanceMode,
-        beautyStrategy = beautyStrategy,
-        isVoiceControlEnabled = isVoiceControlEnabled,
-        roiStageConfig = roiStageConfig,
-        landmarkStageConfig = landmarkStageConfig,
-        showProPanel = panelState.showProPanel,
-        showLogOverlay = showLogOverlay
-    )
-}
-
-private fun buildCameraPreviewActions(
-    onNavigateToSettings: () -> Unit,
-    onResetCameraMemoryState: () -> Unit,
-    lensFacing: Int,
-    onLensFacingChanged: (Int) -> Unit,
-    onActualLensFacingChanged: (Int) -> Unit,
-    panelState: CameraPanelState,
-    cameraControl: CameraControl?,
-    onCurrentSceneChanged: (ScenePreset) -> Unit,
-    onCurrentGridChanged: (GridType) -> Unit,
-    onNavigateToGallery: () -> Unit,
-    onCaptureClick: () -> Unit,
-    onCaptureModeChanged: (MediaType) -> Unit,
-    onSelectedFilterChanged: (FilterType) -> Unit,
-    onStyleFilterSelected: (StyleFilter) -> Unit,
-    onBeautySettingsChanged: (BeautySettings) -> Unit,
-    onAspectRatioChanged: (Int) -> Unit,
-    onExposureCompensationChanged: (Int) -> Unit,
-    onWhiteBalanceModeChanged: (Int) -> Unit,
-    onToggleVoiceControl: () -> Unit,
-    onToggleAiAgentPanel: () -> Unit,
-    onToggleLogs: () -> Unit
-): CameraPreviewActions {
-    return CameraPreviewActions(
-        onResetCameraMemoryState = onResetCameraMemoryState,
-        onNavigateToSettings = onNavigateToSettings,
-        onNavigateToDebug = {}, // 已废弃,保留空实现以兼容
-        onFlipCamera = {
-            val nextLens = nextLensFacing(lensFacing)
-            onLensFacingChanged(nextLens)
-            onActualLensFacingChanged(nextLens)
-        },
-        onToggleBeauty = {
-            togglePrimaryPanel(
-                isCurrentlyVisible = panelState.showBeautySelector,
-                closePrimaryPanels = panelState::closePrimaryPanels,
-                onPanelVisibilityChanged = { isVisible -> panelState.showBeautySelector = isVisible }
-            )
-        },
-        onToggleFilter = {
-            togglePrimaryPanel(
-                isCurrentlyVisible = panelState.showFilterSelector,
-                closePrimaryPanels = panelState::closePrimaryPanels,
-                onPanelVisibilityChanged = { isVisible -> panelState.showFilterSelector = isVisible }
-            )
-        },
-        onToggleRatio = {
-            togglePrimaryPanel(
-                isCurrentlyVisible = panelState.showRatioSelector,
-                closePrimaryPanels = panelState::closePrimaryPanels,
-                onPanelVisibilityChanged = { isVisible -> panelState.showRatioSelector = isVisible }
-            )
-        },
-        onToggleCameraInfo = {}, // 已废弃,由设置页控制
-        onToggleScene = {
-            togglePrimaryPanel(
-                isCurrentlyVisible = panelState.showSceneSelector,
-                closePrimaryPanels = panelState::closePrimaryPanels,
-                onPanelVisibilityChanged = { isVisible -> panelState.showSceneSelector = isVisible }
-            )
-        },
-        onToggleGrid = {
-            togglePrimaryPanel(
-                isCurrentlyVisible = panelState.showGridSelector,
-                closePrimaryPanels = panelState::closePrimaryPanels,
-                onPanelVisibilityChanged = { isVisible -> panelState.showGridSelector = isVisible }
-            )
-        },
-        onToggleLogs = onToggleLogs,
-        onToggleFaceDebugOverlay = {}, // 已废弃,由设置页控制
-        onToggleFacialRefinement = panelState::toggleFacialRefinement,
-        onToggleMakeupAdjustment = panelState::toggleMakeupAdjustment,
-        onToggleLipColor = { panelState.openMakeupEntry(MakeupEntry.LIP_COLOR) },
-        onToggleBlush = { panelState.openMakeupEntry(MakeupEntry.BLUSH) },
-        onToggleEyebrow = { panelState.openMakeupEntry(MakeupEntry.EYEBROW) },
-        onToggleBodyManagement = panelState::toggleBodyManagement,
-        onZoomPresetClick = { ratio -> cameraControl?.setZoomRatio(ratio) },
-        onExposureChange = { exposure ->
-            onExposureCompensationChanged(exposure)
-            cameraControl?.setExposureCompensationIndex(exposure)
-            Log.d("ProMode", "Local state updated: exposure=$exposure")
-        },
-        onWhiteBalanceChange = { wb ->
-            onWhiteBalanceModeChanged(wb)
-            Log.d("ProMode", "White balance updated: $wb")
-        },
-        onSceneSelected = { scene ->
-            onCurrentSceneChanged(scene)
-            panelState.showSceneSelector = false
-        },
-        onGridSelected = { grid ->
-            onCurrentGridChanged(grid)
-            panelState.showGridSelector = false
-        },
-        onGalleryClick = onNavigateToGallery,
-        onCaptureClick = onCaptureClick,
-        onModeChange = { mode -> onCaptureModeChanged(mode) },
-        onFilterSelected = { filter -> onSelectedFilterChanged(filter) },
-        onStyleFilterSelected = { style -> onStyleFilterSelected(style) },
-        onBeautySettingsChanged = { settings -> onBeautySettingsChanged(settings) },
-        onRatioSelected = { ratio ->
-            onAspectRatioChanged(ratio)
-            panelState.showRatioSelector = false
-        },
-        onDismissPanels = panelState::closeAllPanels,
-        onToggleVoiceControl = onToggleVoiceControl,
-        onToggleAiAgentPanel = onToggleAiAgentPanel,
-        onToggleProPanel = {
-            panelState.showProPanel = !panelState.showProPanel
-        }
-    )
 }
 
 private data class PreviewTargetDecision(
@@ -1272,159 +852,58 @@ fun CameraContent(
 
     val beautyVideoRecorder = remember { BeautyVideoRecorder() }
 
-    // Agent 命令处理器：提取到顶层确保语音命令无需打开面板即可执行
-    val agentCommandHandler: (AiAgentCommand) -> Unit = agentCommandHandler@{ cmd ->
-        Logger.i(TAG, "agentCommandHandler executing: ${cmd.javaClass.simpleName}")
-        when (cmd) {
-            is AiAgentCommand.AdjustBeauty -> {
-                beautySettings = resolveNextBeautySettings(
-                    currentSettings = beautySettings,
-                    updatedSettings = cmd.settings
-                )
-            }
-            is AiAgentCommand.SwitchFilter -> {
-                selectedFilter = cmd.filterType
-                beautySettings = beautySettings.copy(colorFilter = cmd.filterType)
-            }
-            is AiAgentCommand.SwitchStyle -> {
-                beautySettings = beautySettings.copy(styleFilter = cmd.styleFilter)
-            }
-            is AiAgentCommand.SwitchScene -> {
-                val scene = when (cmd.sceneName.lowercase()) {
-                    "night" -> ScenePreset.NIGHT
-                    "moon" -> ScenePreset.MOON
-                    else -> ScenePreset.NONE
-                }
-                currentScene = scene
-            }
-            is AiAgentCommand.SwitchRatio -> {
-                // [状态机保护] 忙碌时不允许切换比例
-                if (!cameraStateManager.canRebind()) {
-                    Logger.w(TAG, "Ratio switch rejected: state=${cameraStateManager.getState().name}")
-                        return@agentCommandHandler
-                }
-                val normalizedRatio = cmd.ratio.replace("_", ":")
-                val ratio = when (normalizedRatio) {
-                    "4:3" -> AspectRatio.RATIO_4_3
-                    "16:9" -> AspectRatio.RATIO_16_9
-                    else -> AspectRatio.RATIO_FULL
-                }
-                aspectRatio = ratio
-            }
-            is AiAgentCommand.AdjustExposure -> {
-                exposureCompensation = cmd.exposure.coerceIn(-2, 2)
-                cameraControl?.setExposureCompensationIndex(exposureCompensation)
-            }
-            is AiAgentCommand.AdjustZoom -> {
-                val clampedZoom = cmd.zoomRatio.coerceIn(minZoomRatio, maxZoomRatio)
-                zoomRatio = clampedZoom
-                cameraControl?.setZoomRatio(clampedZoom)
-            }
-            is AiAgentCommand.FlipCamera -> {
-                // [状态机保护] 忙碌时不允许切换镜头
-                if (!cameraStateManager.canRebind()) {
-                    Logger.w(TAG, "Flip rejected: state=${cameraStateManager.getState().name}")
-                        return@agentCommandHandler
-                }
-                // [状态机] 进入 Rebinding 状态，防止重复触发
-                runCatching {
-                    cameraStateManager.transition(
-                        CameraStateMachine.Rebinding(
-                            CameraStateMachine.RebindReason.LENS_FACING_CHANGED
-                        )
-                    )
-                }.onFailure {
-                    Logger.w(TAG, "FlipCamera transition to Rebinding failed: ${it.message}")
-                    return@agentCommandHandler
-                }
-                val nextLens = nextLensFacing(lensFacing)
-                lensFacing = nextLens
-            }
-            is AiAgentCommand.CapturePhoto -> {
-                Logger.i(TAG, "Executing CapturePhoto command")
-                // [状态机保护] 仅在 Previewing 状态允许拍照
-                if (!cameraStateManager.canCapture()) {
-                    Logger.w(TAG, "Capture rejected: state=${cameraStateManager.getState().name}")
-                        return@agentCommandHandler
-                }
-                handleCaptureClick(
-                    context = context,
-                    captureMode = captureMode,
-                    isRecording = isRecording,
-                    recording = recording,
-                    videoCapture = videoCapture,
-                    viewModel = viewModel,
-                    imageCapture = imageCapture,
-                    imageProcessor = imageProcessor,
-                    selectedFilter = selectedFilter,
-                    beautySettings = beautySettings,
-                    lensFacing = lensFacing,
-                    cachedFaces = emptyList(),
-                    beautyStrategy = beautyStrategy,
-                    glPreviewProvider = glPreviewProvider,
-                    beautyVideoRecorder = beautyVideoRecorder,
-                    onRecordingChanged = { updated -> recording = updated },
-                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
-                    coroutineScope = coroutineScope,
-                    cameraStateManager = cameraStateManager
-                )
-            }
-            is AiAgentCommand.ToggleRecording -> {
-                handleCaptureClick(
-                    context = context,
-                    captureMode = captureMode,
-                    isRecording = isRecording,
-                    recording = recording,
-                    videoCapture = videoCapture,
-                    viewModel = viewModel,
-                    imageCapture = imageCapture,
-                    imageProcessor = imageProcessor,
-                    selectedFilter = selectedFilter,
-                    beautySettings = beautySettings,
-                    lensFacing = lensFacing,
-                    cachedFaces = emptyList(),
-                    beautyStrategy = beautyStrategy,
-                    glPreviewProvider = glPreviewProvider,
-                    beautyVideoRecorder = beautyVideoRecorder,
-                    onRecordingChanged = { updated -> recording = updated },
-                    onIsRecordingChanged = { recordingFlag -> isRecording = recordingFlag },
-                    coroutineScope = coroutineScope,
-                    cameraStateManager = cameraStateManager
-                )
-            }
-            is AiAgentCommand.SwitchMode -> {
-                captureMode = cmd.mode
-            }
-            is AiAgentCommand.NavigateTo -> {
-                when (cmd.destination.lowercase()) {
-                    "settings" -> onNavigateToSettings()
-                    "gallery" -> onNavigateToGallery()
-                    "debug" -> { /* 相机页无 debug 入口，忽略 */ }
-                    "model_center" -> onNavigateToSettings() // 从相机到模型中心需先进入设置
-                    else -> Logger.w(TAG, "Unknown navigation destination: ${cmd.destination}")
-                }
-            }
-            is AiAgentCommand.GoBack -> {
-                // 相机页是根页面，返回无操作
-                Logger.d(TAG, "GoBack ignored on camera screen (root)")
-            }
-            is AiAgentCommand.TextReply -> {
-                // 文本回复已在面板中显示，无需额外操作
-            }
-            is AiAgentCommand.Delay -> {
-                // Delay 命令在 BatchExecute 顶层协程中处理，此处单条收到时也是协程内调用
-                Logger.i(TAG, "Delay command: ${cmd.delayMs}ms")
-            }
-            is AiAgentCommand.BatchExecute -> {
-                // 批量命令在顶层处理，不在 handler 内部递归
-                Logger.w(TAG, "BatchExecute should be handled at top level, not in agentCommandHandler")
-            }
-        }
-    }
-
     // 创建页面级 CameraCapability 并注册到 CapabilityHost
     val cameraCapability = remember { CameraCapability() }
     RegisterCapability(cameraCapability)
+
+    // 初始化 Agent 命令处理器
+    val agentCommandHandler = remember(
+        context, viewModel, imageProcessor, beautyVideoRecorder,
+        glPreviewProvider, videoCapture, cameraStateManager, coroutineScope,
+        onNavigateToSettings, onNavigateToGallery
+    ) {
+        CameraAgentCommandHandler(
+            context = context,
+            viewModel = viewModel,
+            imageProcessor = imageProcessor,
+            beautyVideoRecorder = beautyVideoRecorder,
+            glPreviewProvider = glPreviewProvider,
+            videoCapture = videoCapture,
+            cameraStateManager = cameraStateManager,
+            coroutineScope = coroutineScope,
+            onNavigateToSettings = onNavigateToSettings,
+            onNavigateToGallery = onNavigateToGallery
+        )
+    }
+
+    // 同步可变状态到 Handler
+    agentCommandHandler.lensFacing = lensFacing
+    agentCommandHandler.captureMode = captureMode
+    agentCommandHandler.isRecording = isRecording
+    agentCommandHandler.recording = recording
+    agentCommandHandler.imageCapture = imageCapture
+    agentCommandHandler.selectedFilter = selectedFilter
+    agentCommandHandler.beautySettings = beautySettings
+    agentCommandHandler.beautyStrategy = beautyStrategy
+    agentCommandHandler.exposureCompensation = exposureCompensation
+    agentCommandHandler.zoomRatio = zoomRatio
+    agentCommandHandler.minZoomRatio = minZoomRatio
+    agentCommandHandler.maxZoomRatio = maxZoomRatio
+    agentCommandHandler.cameraControl = cameraControl
+    agentCommandHandler.currentScene = currentScene
+    agentCommandHandler.aspectRatio = aspectRatio
+
+    // 绑定回调
+    agentCommandHandler.onLensFacingChanged = { lensFacing = it }
+    agentCommandHandler.onCaptureModeChanged = { captureMode = it }
+    agentCommandHandler.onIsRecordingChanged = { isRecording = it }
+    agentCommandHandler.onRecordingChanged = { recording = it }
+    agentCommandHandler.onSelectedFilterChanged = { selectedFilter = it }
+    agentCommandHandler.onBeautySettingsChanged = { beautySettings = it }
+    agentCommandHandler.onExposureCompensationChanged = { exposureCompensation = it }
+    agentCommandHandler.onZoomRatioChanged = { zoomRatio = it }
+    agentCommandHandler.onAspectRatioChanged = { aspectRatio = it }
+    agentCommandHandler.onCurrentSceneChanged = { currentScene = it }
 
     // 绑定 CameraCapability 状态变更到本地状态
     DisposableEffect(cameraCapability) {
@@ -1464,10 +943,10 @@ fun CameraContent(
                     captureMode = change.mode
                 }
                 is CameraCapability.StateChange.CaptureRequested -> {
-                    agentCommandHandler(AiAgentCommand.CapturePhoto)
+                    agentCommandHandler.handleCommand(AiAgentCommand.CapturePhoto)
                 }
                 is CameraCapability.StateChange.RecordingToggled -> {
-                    agentCommandHandler(AiAgentCommand.ToggleRecording)
+                    agentCommandHandler.handleCommand(AiAgentCommand.ToggleRecording)
                 }
             }
         }
@@ -1478,7 +957,7 @@ fun CameraContent(
 
     // 绑定命令处理器到语音协调器的回调引用
     DisposableEffect(Unit) {
-        onCommandRef.value = agentCommandHandler
+        onCommandRef.value = agentCommandHandler::handleCommand
         onDispose { }
     }
 
@@ -1855,7 +1334,7 @@ CameraPreviewContent(
     isWakeWordActive = voiceCommandMode == VoiceCommandMode.WAKE_WORD,
     onAiAgentCommand = { command ->
         Logger.i(TAG, "onAiAgentCommand received: ${command.javaClass.simpleName}")
-        onCommandRef.value = agentCommandHandler
+        onCommandRef.value = agentCommandHandler::handleCommand
         // BatchExecute 在协程中串行执行子命令
         if (command is AiAgentCommand.BatchExecute) {
             Logger.i(TAG, "BatchExecute: ${command.commands.size} commands, launching sequentially")
@@ -1865,23 +1344,23 @@ CameraPreviewContent(
                     // Delay 命令在协程中直接挂起
                     if (subCmd is AiAgentCommand.Delay) {
                         Logger.i(TAG, "BatchExecute: delaying ${subCmd.delayMs}ms")
-                        kotlinx.coroutines.delay(subCmd.delayMs)
+                        delay(subCmd.delayMs)
                     } else {
-                        agentCommandHandler(subCmd)
+                        agentCommandHandler.handleCommand(subCmd)
                     }
                     // 如果当前命令是拍照，等待状态回到 Previewing 再执行下一个
                     if (subCmd is AiAgentCommand.CapturePhoto && index < command.commands.size - 1) {
                         Logger.i(TAG, "BatchExecute: waiting for capture to complete...")
                         var waitCount = 0
                         while (cameraStateManager.isBusy() && waitCount < 50) {
-                            kotlinx.coroutines.delay(100)
+                            delay(100)
                             waitCount++
                         }
                         val finalState = cameraStateManager.getState()
                         Logger.i(TAG, "BatchExecute: capture completed, state=${finalState.name}")
                     } else if (index < command.commands.size - 1 && subCmd !is AiAgentCommand.Delay) {
                         // 非拍照、非 Delay 命令之间短暂延迟，确保 UI 更新
-                        kotlinx.coroutines.delay(200)
+                        delay(200)
                     }
                 }
                 Logger.i(TAG, "BatchExecute: all commands completed")
@@ -1890,10 +1369,10 @@ CameraPreviewContent(
             // 单独的 Delay 命令也在协程中处理
             coroutineScope.launch {
                 Logger.i(TAG, "Delay: ${command.delayMs}ms")
-                kotlinx.coroutines.delay(command.delayMs)
+                delay(command.delayMs)
             }
         } else {
-            agentCommandHandler(command)
+            agentCommandHandler.handleCommand(command)
         }
     },
     onUpdateVoiceCoordinatorState = {

@@ -1,0 +1,206 @@
+package com.picme.features.camera.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Crop169
+import androidx.compose.material.icons.rounded.CropFree
+import androidx.compose.material.icons.rounded.CropSquare
+import androidx.compose.material.icons.rounded.FilterBAndW
+import androidx.compose.material.icons.rounded.GridOn
+import androidx.compose.material.icons.rounded.Landscape
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun CameraLeftControls(
+    onNavigateToSettings: () -> Unit,
+    onResetCameraMemoryState: () -> Unit,
+    onToggleLogOverlay: () -> Unit,
+    debugUiEnabled: Boolean,
+    showLogOverlay: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .statusBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        ControlButton(icon = Icons.Rounded.Settings, onClick = onNavigateToSettings)
+        ControlButton(icon = Icons.Rounded.Refresh, onClick = onResetCameraMemoryState)
+        if (debugUiEnabled) {
+            ControlButton(
+                icon = Icons.Rounded.Terminal,
+                onClick = onToggleLogOverlay,
+                isActive = showLogOverlay
+            )
+        }
+    }
+}
+
+@Composable
+fun CameraRightControls(
+    onToggleBeauty: () -> Unit,
+    onToggleFilter: () -> Unit,
+    onToggleRatio: () -> Unit,
+    onToggleScene: () -> Unit,
+    onToggleGrid: () -> Unit,
+    onToggleProPanel: () -> Unit,
+    onToggleBeautyEnabled: () -> Unit,
+    isBeautySelected: Boolean,
+    isFilterSelected: Boolean,
+    isRatioSelected: Boolean,
+    isSceneActive: Boolean,
+    isGridActive: Boolean,
+    isProPanelOpen: Boolean,
+    isBeautyEnabled: Boolean,
+    currentRatio: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .statusBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        BeautyEntryButton(
+            isEnabled = isBeautyEnabled,
+            isPanelOpen = isBeautySelected,
+            onTogglePanel = onToggleBeauty,
+            onToggleEnabled = onToggleBeautyEnabled
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ControlButton(
+            icon = when (currentRatio) {
+                0 -> Icons.Rounded.AspectRatio
+                1 -> Icons.Rounded.Crop169
+                2 -> Icons.Rounded.CropSquare
+                else -> Icons.Rounded.CropFree
+            },
+            onClick = onToggleRatio,
+            isActive = isRatioSelected
+        )
+        ControlButton(
+            icon = Icons.Rounded.GridOn,
+            onClick = onToggleGrid,
+            isActive = isGridActive
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ControlButton(
+            icon = Icons.Rounded.Landscape,
+            onClick = onToggleScene,
+            isActive = isSceneActive
+        )
+        ControlButton(
+            icon = Icons.Rounded.FilterBAndW,
+            onClick = onToggleFilter,
+            isActive = isFilterSelected
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        ControlButton(
+            icon = Icons.Filled.Tune,
+            onClick = onToggleProPanel,
+            isActive = isProPanelOpen
+        )
+    }
+}
+
+@Composable
+private fun BeautyEntryButton(
+    isEnabled: Boolean,
+    isPanelOpen: Boolean,
+    onTogglePanel: () -> Unit,
+    onToggleEnabled: () -> Unit
+) {
+    Box(contentAlignment = Alignment.TopEnd) {
+        FilledIconButton(
+            onClick = onTogglePanel,
+            modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = when {
+                    isPanelOpen -> MaterialTheme.colorScheme.primary
+                    isEnabled -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                    else -> Color.Black.copy(alpha = 0.5f)
+                },
+                contentColor = when {
+                    isPanelOpen -> Color.Black
+                    isEnabled -> MaterialTheme.colorScheme.primary
+                    else -> Color.White.copy(alpha = 0.55f)
+                }
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.AutoFixHigh,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        if (isEnabled && !isPanelOpen) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp, end = 4.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(1.dp, Color.Black.copy(alpha = 0.6f), CircleShape)
+            )
+        }
+    }
+}
+
+@Composable
+fun ControlButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    isActive: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    FilledIconButton(
+        onClick = onClick,
+        modifier = modifier.size(48.dp),
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = if (isActive) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                Color.Black.copy(alpha = 0.5f)
+            },
+            contentColor = if (isActive) Color.Black else Color.White
+        )
+    ) {
+        Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(24.dp))
+    }
+}
