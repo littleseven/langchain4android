@@ -12,6 +12,7 @@ interface Logger {
     fun w(tag: String, message: String)
     fun w(tag: String, message: String, throwable: Throwable)
     fun e(tag: String, message: String, throwable: Throwable? = null)
+    fun isLogEnabled(tag: String): Boolean
 
     companion object : Logger {
         private var delegate: Logger? = null
@@ -21,23 +22,32 @@ interface Logger {
         }
 
         override fun d(tag: String, message: String) {
+            if (!isLogEnabled(tag)) return
             delegate?.d(tag, message) ?: println("[DEBUG] Agent:$tag: $message")
         }
 
         override fun i(tag: String, message: String) {
+            if (!isLogEnabled(tag)) return
             delegate?.i(tag, message) ?: println("[INFO] Agent:$tag: $message")
         }
 
         override fun w(tag: String, message: String) {
+            if (!isLogEnabled(tag)) return
             delegate?.w(tag, message) ?: println("[WARN] Agent:$tag: $message")
         }
 
         override fun w(tag: String, message: String, throwable: Throwable) {
+            if (!isLogEnabled(tag)) return
             delegate?.w(tag, message, throwable) ?: println("[WARN] Agent:$tag: $message")
         }
 
         override fun e(tag: String, message: String, throwable: Throwable?) {
+            if (!isLogEnabled(tag)) return
             delegate?.e(tag, message, throwable) ?: println("[ERROR] Agent:$tag: $message")
+        }
+
+        override fun isLogEnabled(tag: String): Boolean {
+            return delegate?.isLogEnabled(tag) ?: true
         }
     }
 }

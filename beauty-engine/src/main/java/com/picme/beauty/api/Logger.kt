@@ -32,6 +32,7 @@ object Logger {
      * @param intervalMs 最短打印间隔，默认 1000ms
      */
     fun dThrottled(tag: String, key: String, message: String, intervalMs: Long = 1_000L) {
+        if (!isLogEnabled(tag)) return
         BeautyLogProxy.dThrottled(tag, key, message, intervalMs)
     }
 
@@ -42,6 +43,7 @@ object Logger {
      * @param message 日志内容
      */
     fun d(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
         BeautyLogProxy.d(tag, message)
     }
 
@@ -52,6 +54,7 @@ object Logger {
      * @param message 日志内容
      */
     fun i(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
         BeautyLogProxy.i(tag, message)
     }
 
@@ -62,6 +65,7 @@ object Logger {
      * @param message 日志内容
      */
     fun w(tag: String, message: String) {
+        if (!isLogEnabled(tag)) return
         BeautyLogProxy.w(tag, message)
     }
 
@@ -73,6 +77,7 @@ object Logger {
      * @param throwable 异常对象
      */
     fun w(tag: String, message: String, throwable: Throwable) {
+        if (!isLogEnabled(tag)) return
         BeautyLogProxy.w(tag, message, throwable)
     }
 
@@ -84,6 +89,7 @@ object Logger {
      * @param throwable 异常对象（可选）
      */
     fun e(tag: String, message: String, throwable: Throwable? = null) {
+        if (!isLogEnabled(tag)) return
         if (throwable != null) {
             BeautyLogProxy.e(tag, message, throwable)
         } else {

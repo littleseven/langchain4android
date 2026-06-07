@@ -10,6 +10,7 @@ import com.picme.core.image.CoilConfig
 import com.picme.di.AppContainer
 import com.picme.di.AppContainerImpl
 import com.picme.agent.core.CapabilityRegistry
+import com.picme.agent.core.Logger as AgentCoreLogger
 import com.picme.agent.core.mnn.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
 import com.picme.domain.repository.MediaRepository
@@ -52,6 +53,16 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 绑定 Beauty Engine 日志代理，使 beauty-engine 模块的日志受 Logger 模块开关控制
         BeautyLogProxy.bindLogger(Logger)
+
+        // 绑定 Agent Core 日志代理，使 agent-core 模块的日志受 Logger 模块开关控制
+        AgentCoreLogger.setDelegate(object : AgentCoreLogger {
+            override fun d(tag: String, message: String) = Logger.d(tag, message)
+            override fun i(tag: String, message: String) = Logger.i(tag, message)
+            override fun w(tag: String, message: String) = Logger.w(tag, message)
+            override fun w(tag: String, message: String, throwable: Throwable) = Logger.w(tag, message, throwable)
+            override fun e(tag: String, message: String, throwable: Throwable?) = Logger.e(tag, message, throwable)
+            override fun isLogEnabled(tag: String): Boolean = Logger.isLogEnabled(tag)
+        })
 
         // 从 DataStore 加载日志模块配置并同步到 Logger
         applicationScope.launch {
