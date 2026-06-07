@@ -1,6 +1,5 @@
 package com.picme.features.common.chat
 
-import android.content.Context
 import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -43,6 +42,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.Icon
@@ -80,9 +80,17 @@ import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AiAgentCommand
+import com.picme.features.camera.voice.AudioRecorder
+import com.picme.features.camera.voice.InputAudioDevice
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.launch
 import android.app.Activity
+import android.bluetooth.BluetoothHeadset
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -642,7 +650,8 @@ private fun ChatInputBar(
                     scope.launch {
                         settingsRepository.updateChatInputMode("voice")
                     }
-                }
+                },
+                voiceCoordinator = voiceCoordinator
             )
             InputMode.VOICE -> VoiceInputMode(
                 onSwitchToText = {
@@ -664,30 +673,95 @@ private fun ChatInputBar(
     }
 }
 
+/**
+ * 检测当前音频输入设备类型（广播驱动，无需轮询）
+ */
+@Composable
+private fun rememberInputAudioDevice(voiceCoordinator: VoiceCommandCoordinator?): InputAudioDevice {
+    var device by remember { mutableStateOf<InputAudioDevice>(InputAudioDevice.BuiltInMic) }
+    val context = LocalContext.current
+
+    // 初始检测
+    LaunchedEffect(Unit) {
+        val initialDevice = AudioRecorder(context).currentInputDevice
+        Logger.i(TAG, "Initial input device: ${initialDevice.label}")
+        device = initialDevice
+    }
+
+    // 注册系统广播监听耳机连接/断开
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    AudioManager.ACTION_HEADSET_PLUG -> {
+                        val state = intent.getIntExtra("state", 0)
+                        val hasMic = intent.getIntExtra("microphone", 0) == 1
+                        Logger.i(TAG, "Headset plug event: state=$state, hasMic=$hasMic")
+                        device = AudioRecorder(context).currentInputDevice
+                    }
+                    BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
+                        val state = intent.getIntExtra(BluetoothHeadset.EXTRA_STATE, BluetoothHeadset.STATE_DISCONNECTED)
+                        Logger.i(TAG, "Bluetooth headset event: state=$state")
+                        device = AudioRecorder(context).currentInputDevice
+                    }
+                }
+            }
+        }
+
+        val filter = IntentFilter().apply {
+            addAction(AudioManager.ACTION_HEADSET_PLUG)
+            addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+        }
+        context.registerReceiver(receiver, filter)
+        Logger.d(TAG, "Audio device broadcast receiver registered")
+
+        onDispose {
+            context.unregisterReceiver(receiver)
+            Logger.d(TAG, "Audio device broadcast receiver unregistered")
+        }
+    }
+
+    return device
+}
+
 @Composable
 private fun TextInputMode(
     text: String,
     onTextChange: (String) -> Unit,
     isProcessing: Boolean,
     onSend: () -> Unit,
-    onSwitchToVoice: () -> Unit
+    onSwitchToVoice: () -> Unit,
+    voiceCoordinator: VoiceCommandCoordinator? = null
 ) {
+    val inputDevice = rememberInputAudioDevice(voiceCoordinator)
+    val isHeadsetConnected = inputDevice is InputAudioDevice.BluetoothSco ||
+        inputDevice is InputAudioDevice.WiredHeadset
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Voice switch button
-        IconButton(
-            onClick = onSwitchToVoice,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.KeyboardVoice,
-                contentDescription = "Switch to voice",
-                tint = Color.White.copy(alpha = 0.7f),
-                modifier = Modifier.size(22.dp)
-            )
+        // Voice switch button with headset indicator
+        Box {
+            IconButton(
+                onClick = onSwitchToVoice,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardVoice,
+                    contentDescription = "Switch to voice",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            // 耳机连接状态小标记
+            if (isHeadsetConnected) {
+                HeadsetBadge(
+                    device = inputDevice,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
         }
 
         // Text input
@@ -818,14 +892,18 @@ private fun VoiceInputMode(
                                         isListening = true
                                         isCancelRecord = false
                                         Logger.d(TAG, "Using VoiceCommandCoordinator for push-to-talk")
-                                        voiceCoordinator?.startPushToTalk { result ->
-                                            Logger.i(TAG, "VoiceCoordinator result: '$result'")
-                                            isListening = false
-                                            isCancelRecord = false
-                                            if (result.isNotBlank()) {
-                                                onVoiceResult(result)
-                                            }
-                                        }
+                                        voiceCoordinator?.startPushToTalk(
+                                            onResult = { result ->
+                                                Logger.i(TAG, "VoiceCoordinator result: '$result'")
+                                                isListening = false
+                                                isCancelRecord = false
+                                                if (result.isNotBlank()) {
+                                                    onVoiceResult(result)
+                                                }
+                                            },
+                                            // Chat 面板自己处理 LLM，避免与 VoiceCommandCoordinator 内部处理重复
+                                            processAsCommand = false
+                                        )
                                     }
                                     // 手指抬起
                                     !change.pressed -> {
@@ -868,5 +946,42 @@ private fun VoiceInputMode(
 
         // Placeholder for balance
         Box(modifier = Modifier.size(40.dp))
+    }
+}
+
+/**
+ * 耳机状态小标记
+ * 在语音输入按钮右上角显示一个小圆点/图标，指示当前音频输入设备
+ */
+@Composable
+private fun HeadsetBadge(
+    device: InputAudioDevice,
+    modifier: Modifier = Modifier
+) {
+    val tintColor = when (device) {
+        is InputAudioDevice.BluetoothSco -> Color(0xFF4FC3F7) // 浅蓝色表示蓝牙
+        is InputAudioDevice.WiredHeadset -> Color(0xFF81C784) // 浅绿色表示有线
+        is InputAudioDevice.BuiltInMic -> Color.Transparent
+    }
+
+    Box(
+        modifier = modifier
+            .padding(top = 2.dp, end = 2.dp)
+            .size(14.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Headphones,
+            contentDescription = when (device) {
+                is InputAudioDevice.BluetoothSco -> "蓝牙耳机"
+                is InputAudioDevice.WiredHeadset -> "有线耳机"
+                is InputAudioDevice.BuiltInMic -> "内置麦克风"
+            },
+            tint = tintColor,
+            modifier = Modifier.size(10.dp)
+        )
     }
 }

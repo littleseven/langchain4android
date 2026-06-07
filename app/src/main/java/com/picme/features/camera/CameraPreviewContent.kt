@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material3.FloatingActionButton
@@ -27,10 +28,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.bluetooth.BluetoothHeadset
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,12 +62,15 @@ import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
+import com.picme.features.camera.voice.AudioRecorder
+import com.picme.features.camera.voice.InputAudioDevice
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.camera.voice.VoiceWakeIndicator
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.common.chat.AiChatScreen
 import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Rect
+import com.picme.core.common.Logger
 
 // [常量定义] 调试文本颜色
 private val INSIGHTFACE_DEBUG_TEXT_COLOR = Color(0xFFFFAB91)
@@ -552,6 +564,37 @@ private fun CameraFloatingActionButtons(
     isVoiceControlEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var inputDevice by remember { mutableStateOf(AudioRecorder(context).currentInputDevice) }
+
+    // 初始检测
+    LaunchedEffect(Unit) {
+        inputDevice = AudioRecorder(context).currentInputDevice
+    }
+
+    // 注册系统广播监听耳机连接/断开（替代轮询）
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    AudioManager.ACTION_HEADSET_PLUG,
+                    BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED -> {
+                        inputDevice = AudioRecorder(context).currentInputDevice
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(AudioManager.ACTION_HEADSET_PLUG)
+            addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED)
+        }
+        context.registerReceiver(receiver, filter)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    val isHeadsetConnected = inputDevice is InputAudioDevice.BluetoothSco ||
+        inputDevice is InputAudioDevice.WiredHeadset
+
     Column(
         modifier = modifier
             .padding(end = 16.dp, bottom = 180.dp)
@@ -560,22 +603,31 @@ private fun CameraFloatingActionButtons(
         horizontalAlignment = Alignment.End
     ) {
         // 语音控制按钮 - 使用 RecordVoiceOver 区别于 Chat 入口
-        FloatingActionButton(
-            onClick = onToggleVoiceControl,
-            modifier = Modifier.size(52.dp),
-            shape = CircleShape,
-            containerColor = if (isVoiceControlEnabled) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                Color.Black.copy(alpha = 0.6f)
+        Box {
+            FloatingActionButton(
+                onClick = onToggleVoiceControl,
+                modifier = Modifier.size(52.dp),
+                shape = CircleShape,
+                containerColor = if (isVoiceControlEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.Black.copy(alpha = 0.6f)
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.RecordVoiceOver,
+                    contentDescription = "语音控制",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
             }
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.RecordVoiceOver,
-                contentDescription = "语音控制",
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
+            // 耳机连接状态小标记
+            if (isHeadsetConnected) {
+                CameraHeadsetBadge(
+                    device = inputDevice,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
+            }
         }
 
         // AI Chat 入口按钮 - 使用 KeyboardVoice（与 Gallery/Settings 一致）
@@ -592,6 +644,38 @@ private fun CameraFloatingActionButtons(
                 modifier = Modifier.size(24.dp)
             )
         }
+    }
+}
+
+/**
+ * 相机页耳机状态小标记
+ */
+@Composable
+private fun CameraHeadsetBadge(
+    device: InputAudioDevice,
+    modifier: Modifier = Modifier
+) {
+    val tintColor = when (device) {
+        is InputAudioDevice.BluetoothSco -> Color(0xFF4FC3F7)
+        is InputAudioDevice.WiredHeadset -> Color(0xFF81C784)
+        is InputAudioDevice.BuiltInMic -> Color.Transparent
+    }
+
+    Box(
+        modifier = modifier
+            .padding(top = 2.dp, end = 2.dp)
+            .size(16.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Headphones,
+            contentDescription = null,
+            tint = tintColor,
+            modifier = Modifier.size(12.dp)
+        )
     }
 }
 

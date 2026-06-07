@@ -276,7 +276,7 @@ val screenY = adjustedY * previewHeight
 - 新版：`ModalBottomSheet` 设计的 `AiChatScreen`，支持折叠/展开
 - 通过 `CameraAgentIntegration` 统一消息状态管理
 
-## 2.8 语音控制集成（2026-05 新增）
+### 2.8 语音控制集成（2026-05 新增，2026-06 耳机模式适配）
 
 **VoiceCommandCoordinator**
 - 在 `CameraScreen` 中通过 `remember { VoiceCommandCoordinator(...) }` 创建
@@ -287,6 +287,16 @@ val screenY = adjustedY * previewHeight
 - 仅在相机预览可见时运行，页面退出自动停止
 - VAD 阈值：30dB，最小语音时长：100ms
 - 检测到语音后自动触发 ASR → LLM 解析 → 命令执行
+
+**耳机模式适配（2026-06 新增）**
+- 自动检测音频输入设备优先级：**蓝牙耳机 SCO > 有线耳机 > 内置麦克风**
+- `AudioRecorder` 根据设备类型动态选择音源和效果器：
+  - 蓝牙耳机：启动 `startBluetoothSco()`，使用 `MIC` 音源，关闭 AEC/NS（蓝牙协议自带 DSP 处理），增益 0.7
+  - 有线耳机：使用 `MIC` 音源，关闭 AEC（耳机通常自带），启用 NS，增益 0.9
+  - 内置麦克风：使用 `VOICE_COMMUNICATION` 音源，启用 AEC + NS，增益 1.0
+- 输入增益在 `read()` / `readShortArray()` / `readSegment()` 中实时应用，防止蓝牙耳机麦克风过驱动导致削波
+- 所有语音入口（`PushToTalkEngine`、`WakeWordEngine`、`SherpaMnnAsrEngine` 流式识别）统一通过 `context` 传入 `AudioRecorder`，确保耳机模式全局生效
+- 蓝牙 SCO 生命周期：录音启动时 `startBluetoothSco()` + `MODE_IN_COMMUNICATION`，停止时恢复 `MODE_NORMAL`
 
 **语音命令反馈**
 - 识别成功：AgentMessage.AgentText 显示识别结果

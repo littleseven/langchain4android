@@ -125,7 +125,8 @@ fun createVoiceCommandCoordinator(
     scope: CoroutineScope,
     onCommand: (AiAgentCommand) -> Unit,
     onTranscript: ((String) -> Unit)? = null,
-    onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null
+    onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null,
+    context: Context? = null
 ): VoiceCommandCoordinator {
     return VoiceCommandCoordinator(
         asrEngine = asrEngine,
@@ -133,7 +134,8 @@ fun createVoiceCommandCoordinator(
         onCommand = onCommand,
         scope = scope,
         onTranscript = onTranscript,
-        onAgentResponse = onAgentResponse
+        onAgentResponse = onAgentResponse,
+        context = context
     )
 }
 
@@ -492,7 +494,8 @@ fun rememberAgentChatConfig(
             scope = scope,
             onCommand = onCommand,
             onTranscript = onTranscript,
-            onAgentResponse = onAgentResponse
+            onAgentResponse = onAgentResponse,
+            context = context
         )
     }
     DisposableEffect(voiceCoordinator) {

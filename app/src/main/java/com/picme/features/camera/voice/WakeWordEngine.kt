@@ -7,10 +7,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-private const val POLL_DELAY_MS = 50L
-private const val LOW_POWER_POLL_MS = 100L
+private const val POLL_DELAY_MS = 30L
+private const val LOW_POWER_POLL_MS = 150L
 private const val MAX_SEGMENT_DURATION_MS = 4000
-private const val SEGMENT_SILENCE_TIMEOUT_MS = 800
+private const val SEGMENT_SILENCE_TIMEOUT_MS = 1500
+private const val WAKE_COOLDOWN_MS = 1200L
 
 /**
  * 唤醒词
@@ -39,16 +40,18 @@ private val WAKE_WORD_VARIANTS = setOf(
  */
 class WakeWordEngine(
     private val asrEngine: AsrEngine,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    context: android.content.Context? = null
 ) {
 
     private val tag = "WakeWord"
-    private val audioRecorder = AudioRecorder()
-    // 降低阈值和最小语音时长以提高灵敏度，与 Chat 按住说话的敏感度接近
-    // thresholdDb: 40f → 30f（降低 10dB，捕获更轻声细语）
-    // minSpeechMs: 300ms → 100ms（更快触发，减少漏检）
-    private val vadDetector = VadDetector(thresholdDb = 30f, minSpeechMs = 100)
+    private val audioRecorder = AudioRecorder(context)
+    // 提高灵敏度配置：
+    // thresholdDb: 30f → 25f（更低阈值，捕获更轻声细语）
+    // minSpeechMs: 100ms → 80ms（更快触发，减少漏检）
+    private val vadDetector = VadDetector(thresholdDb = 25f, minSpeechMs = 80)
     private var isRunning = false
+    private var lastWakeTime = 0L
 
     /**
      * 启动唤醒词监听
@@ -81,6 +84,15 @@ class WakeWordEngine(
 
                 val isSpeech = vadDetector.process(buffer)
                 if (isSpeech) {
+                    val now = System.currentTimeMillis()
+                    // 冷却期检查：避免短时间内重复触发
+                    if (now - lastWakeTime < WAKE_COOLDOWN_MS) {
+                        Logger.d(tag, "Speech detected but in cooldown, skipped")
+                        vadDetector.reset()
+                        delay(LOW_POWER_POLL_MS)
+                        continue
+                    }
+
                     Logger.d(tag, "Speech detected, starting ASR")
 
                     val audioSegment = audioRecorder.readSegment(
@@ -96,6 +108,7 @@ class WakeWordEngine(
                                 if (matchedVariant != null) {
                                     val command = stripWakeWord(transcript, matchedVariant)
                                     Logger.i(tag, "Wake word matched: '$matchedVariant', command: '$command' (raw: '$transcript')")
+                                    lastWakeTime = System.currentTimeMillis()
                                     scope.launch(Dispatchers.Main) {
                                         onTranscript(command)
                                     }

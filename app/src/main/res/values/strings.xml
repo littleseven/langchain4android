@@ -339,6 +339,9 @@
     <string name="voice_command_mode_disabled">Disabled</string>
     <string name="voice_command_mode_push_to_talk">Push to Talk</string>
     <string name="voice_command_mode_wake_word">Wake Word</string>
+    <string name="asr_input_device_bluetooth">Bluetooth headset connected</string>
+    <string name="asr_input_device_wired">Wired headset connected</string>
+    <string name="asr_input_device_builtin">Using phone microphone</string>
     <string name="local_asr_model">Local ASR Model</string>
     <string name="local_asr_model_fallback">No local ASR model downloaded. Tap below to download.</string>
     <string name="asr_model_manager">ASR Model Manager</string>

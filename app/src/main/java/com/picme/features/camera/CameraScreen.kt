@@ -701,10 +701,13 @@ fun CameraScreen(
     }
 
     val permissionsState = rememberMultiplePermissionsState(
-        permissions = listOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO
-        )
+        permissions = buildList {
+            add(Manifest.permission.CAMERA)
+            add(Manifest.permission.RECORD_AUDIO)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        }
     )
 
     if (permissionsState.allPermissionsGranted) {
@@ -1109,7 +1112,8 @@ fun CameraContent(
                         content = "处理出错了：${error.message ?: "未知错误"}"
                     )
                 }
-            }
+            },
+            context = context
         )
     }
 

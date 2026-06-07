@@ -175,7 +175,7 @@ class SherpaMnnAsrEngine(
         streamingScope = CoroutineScope(Dispatchers.IO)
 
         streamingScope?.launch {
-            val recorder = AudioRecorder()
+            val recorder = AudioRecorder(context)
             audioRecorder = recorder
 
             val started = recorder.start()

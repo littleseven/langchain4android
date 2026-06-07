@@ -332,6 +332,9 @@
     <string name="voice_command_mode_disabled">關閉</string>
     <string name="voice_command_mode_push_to_talk">按住說話</string>
     <string name="voice_command_mode_wake_word">喚醒詞</string>
+    <string name="asr_input_device_bluetooth">已連接藍牙耳機</string>
+    <string name="asr_input_device_wired">已連接有线耳機</string>
+    <string name="asr_input_device_builtin">使用手機麥克風</string>
     <string name="local_asr_model">本地語音識別模型</string>
     <string name="local_asr_model_fallback">未下載本地 ASR 模型，將自動回退到系統語音識別。</string>
 <string name="asr_model_manager">ASR 模型管理</string>

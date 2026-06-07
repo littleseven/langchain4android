@@ -16,12 +16,20 @@ private const val SILENCE_TIMEOUT_MS = 1500
  */
 class PushToTalkEngine(
     private val asrEngine: AsrEngine,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    context: android.content.Context? = null
 ) {
 
     private val tag = "PushToTalk"
-    private val audioRecorder = AudioRecorder()
+    private val audioRecorder = AudioRecorder(context)
     private var isRecording = false
+
+    /**
+     * 当前音频输入设备类型
+     * 供 UI 层查询以显示耳机状态标记
+     */
+    val currentInputDevice: InputAudioDevice
+        get() = audioRecorder.currentInputDevice
 
     /**
      * 开始录音

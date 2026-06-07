@@ -37,13 +37,21 @@ class VoiceCommandCoordinator(
     private val onCommand: (AiAgentCommand) -> Unit,
     private val scope: CoroutineScope,
     private val onTranscript: ((String) -> Unit)? = null,
-    private val onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null
+    private val onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null,
+    context: android.content.Context? = null
 ) {
 
     private val tag = "VoiceCommand"
 
-    private val pushToTalkEngine = PushToTalkEngine(asrEngine, scope)
-    private val wakeWordEngine = WakeWordEngine(asrEngine, scope)
+    private val pushToTalkEngine = PushToTalkEngine(asrEngine, scope, context)
+    private val wakeWordEngine = WakeWordEngine(asrEngine, scope, context)
+
+    /**
+     * 当前音频输入设备类型
+     * 供 UI 层查询以显示耳机状态标记
+     */
+    val currentInputDevice: InputAudioDevice
+        get() = pushToTalkEngine.currentInputDevice
 
     /**
      * 当前语音命令模式
@@ -113,8 +121,14 @@ class VoiceCommandCoordinator(
      * 开始按住说话录音
      *
      * @param onResult 识别结果回调（在主线程）
+     * @param processAsCommand 是否将识别结果送入内部 LLM 解析为命令。
+     *                         默认为 true（相机页面语音命令场景）。
+     *                         Chat 面板语音输入时应设为 false，由调用方自行处理 LLM。
      */
-    fun startPushToTalk(onResult: (String) -> Unit) {
+    fun startPushToTalk(
+        onResult: (String) -> Unit,
+        processAsCommand: Boolean = true
+    ) {
         if (!asrEngine.isAvailable()) {
             Logger.w(tag, "ASR engine not available")
             onResult("")
@@ -122,7 +136,7 @@ class VoiceCommandCoordinator(
         }
         pushToTalkEngine.start { transcript ->
             onResult(transcript)
-            if (transcript.isNotBlank()) {
+            if (processAsCommand && transcript.isNotBlank()) {
                 enqueueTranscript(transcript)
             }
         }

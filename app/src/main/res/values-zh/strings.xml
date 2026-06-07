@@ -171,6 +171,9 @@
 <string name="settings_face_detection_advanced_desc">控制人脸关键点和动态检测节奏，平衡性能与精度。</string>
     <string name="asr_model_manager">ASR 模型管理</string>
     <string name="asr_model_manager_desc">下载和管理端侧语音识别模型。</string>
+    <string name="asr_input_device_bluetooth">已连接蓝牙耳机</string>
+    <string name="asr_input_device_wired">已连接有线耳机</string>
+    <string name="asr_input_device_builtin">使用手机麦克风</string>
     <string name="model_center">模型中心</string>
     <string name="model_center_desc">统一下载和管理所有本地模型。</string>
     <string name="model_download_notification_title">模型下载进行中</string>
