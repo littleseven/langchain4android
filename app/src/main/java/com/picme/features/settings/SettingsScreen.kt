@@ -41,6 +41,7 @@ import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.core.designsystem.PicMeTheme
 import com.picme.features.settings.capability.SettingsCapability
+import com.picme.agent.core.model.AiAgentInferencePreference
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
@@ -98,7 +99,7 @@ fun SettingsScreen(
     val aiAgentLocalModel by viewModel.aiAgentLocalModel.collectAsState()
     val aiAgentRemoteModelConfigs by viewModel.aiAgentRemoteModelConfigs.collectAsState()
     val aiAgentSelectedRemoteModel by viewModel.aiAgentSelectedRemoteModel.collectAsState()
-    val aiAgentForceRemote by viewModel.aiAgentForceRemote.collectAsState()
+    val aiAgentInferencePreference by viewModel.aiAgentInferencePreference.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
     val logModuleConfig by viewModel.logModuleConfig.collectAsState()
@@ -212,8 +213,8 @@ fun SettingsScreen(
             onAiAgentRemoteModelConfigsChange = { viewModel.setAiAgentRemoteModelConfigs(it) },
             aiAgentSelectedRemoteModel = aiAgentSelectedRemoteModel,
             onAiAgentSelectedRemoteModelChange = { viewModel.setAiAgentSelectedRemoteModel(it) },
-            aiAgentForceRemote = aiAgentForceRemote,
-            onAiAgentForceRemoteChange = { viewModel.setAiAgentForceRemote(it) },
+            aiAgentInferencePreference = aiAgentInferencePreference,
+            onAiAgentInferencePreferenceChange = { viewModel.setAiAgentInferencePreference(it) },
             voiceCommandMode = voiceCommandMode,
             onVoiceCommandModeChange = { viewModel.setVoiceCommandMode(it) },
             localAsrModel = localAsrModel,
@@ -260,8 +261,8 @@ private fun SettingsContent(
     onAiAgentRemoteModelConfigsChange: (String) -> Unit,
     aiAgentSelectedRemoteModel: String,
     onAiAgentSelectedRemoteModelChange: (String) -> Unit,
-    aiAgentForceRemote: Boolean,
-    onAiAgentForceRemoteChange: (Boolean) -> Unit,
+    aiAgentInferencePreference: AiAgentInferencePreference,
+    onAiAgentInferencePreferenceChange: (AiAgentInferencePreference) -> Unit,
     voiceCommandMode: VoiceCommandMode,
     onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
     localAsrModel: String,
@@ -334,6 +335,14 @@ private fun SettingsContent(
                     currentMode = aiAgentMode,
                     onModeSelected = onAiAgentModeChange
                 )
+
+                // 推理偏好选择（仅 LOCAL 模式下显示）
+                if (aiAgentMode == AiAgentMode.LOCAL) {
+                    InferencePreferenceSelection(
+                        currentPreference = aiAgentInferencePreference,
+                        onPreferenceSelected = onAiAgentInferencePreferenceChange
+                    )
+                }
 
                 when (aiAgentMode) {
                     AiAgentMode.OFF -> {
@@ -533,6 +542,43 @@ private fun LogModuleConfigSection(
 }
 
 @Composable
+private fun InferencePreferenceSelection(
+    currentPreference: AiAgentInferencePreference,
+    onPreferenceSelected: (AiAgentInferencePreference) -> Unit
+) {
+    val options = listOf(
+        AiAgentInferencePreference.AUTO to stringResource(R.string.ai_agent_inference_auto),
+        AiAgentInferencePreference.FORCE_LOCAL to stringResource(R.string.ai_agent_inference_force_local),
+        AiAgentInferencePreference.FORCE_REMOTE to stringResource(R.string.ai_agent_inference_force_remote)
+    )
+
+    Text(
+        text = stringResource(R.string.ai_agent_inference_preference),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 0.dp)
+    )
+
+    CompactOptionChips(
+        options = options,
+        currentValue = currentPreference,
+        maxLines = 1,
+        onSelected = onPreferenceSelected
+    )
+
+    Text(
+        text = when (currentPreference) {
+            AiAgentInferencePreference.AUTO -> stringResource(R.string.ai_agent_inference_auto_desc)
+            AiAgentInferencePreference.FORCE_LOCAL -> stringResource(R.string.ai_agent_inference_force_local_desc)
+            AiAgentInferencePreference.FORCE_REMOTE -> stringResource(R.string.ai_agent_inference_force_remote_desc)
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
 private fun ThemeSelection(
     currentMode: ThemeMode,
     onModeSelected: (ThemeMode) -> Unit
@@ -663,8 +709,8 @@ fun SettingsScreenPreview() {
             onAiAgentRemoteModelConfigsChange = {},
             aiAgentSelectedRemoteModel = "deepseek-v4-flash",
             onAiAgentSelectedRemoteModelChange = {},
-            aiAgentForceRemote = false,
-            onAiAgentForceRemoteChange = {},
+            aiAgentInferencePreference = AiAgentInferencePreference.FORCE_LOCAL,
+            onAiAgentInferencePreferenceChange = {},
             voiceCommandMode = VoiceCommandMode.DISABLED,
             onVoiceCommandModeChange = {},
             localAsrModel = "",

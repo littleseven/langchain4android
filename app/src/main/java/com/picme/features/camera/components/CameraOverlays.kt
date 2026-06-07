@@ -42,6 +42,7 @@ import com.picme.agent.core.model.MediaType
 import com.picme.features.camera.GridType
 import com.picme.features.camera.ScenePreset
 import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.displayNameRes
 import java.util.Locale
 
 @Composable

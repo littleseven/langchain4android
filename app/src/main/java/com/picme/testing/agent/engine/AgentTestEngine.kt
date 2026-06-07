@@ -9,6 +9,7 @@ import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.SceneManager
 import com.picme.agent.core.model.MediaType
+import com.picme.beauty.api.StyleFilter
 import com.picme.testing.agent.data.ActionJson
 import com.picme.testing.agent.data.DataDrivenTestCase
 import com.picme.testing.agent.data.DataDrivenTestResult
@@ -494,7 +495,7 @@ class AgentTestEngine(
             .replace("LEICA_BW", "LEICA_BW")
     )
 
-    private fun parseStyleFilter(style: String) = com.picme.beauty.api.StyleFilter.valueOf(
+    private fun parseStyleFilter(style: String) = StyleFilter.valueOf(
         style.uppercase()
     )
 

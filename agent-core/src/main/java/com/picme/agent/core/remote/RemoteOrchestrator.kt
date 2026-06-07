@@ -467,7 +467,7 @@ class RemoteOrchestrator(
     }
 
     /**
-     * 将 LLM 输出的 style 名称解析为 [StyleFilter]（支持别名/模糊匹配）
+     * 将 LLM 输出的 style 名称解析为 [com.picme.beauty.api.StyleFilter]（支持别名/模糊匹配）
      */
     private fun resolveStyleFilter(name: String): StyleFilter {
         val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")

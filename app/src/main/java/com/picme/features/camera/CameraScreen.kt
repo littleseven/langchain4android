@@ -76,9 +76,10 @@ import com.picme.beauty.render.GlBeautyPreviewProvider
 import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.features.camera.capability.CameraCapability
-import com.picme.agent.core.LocalCapabilityHost
-import com.picme.agent.core.RegisterCapability
+import com.picme.domain.agent.LocalCapabilityHost
+import com.picme.domain.agent.RegisterCapability
 import com.picme.domain.model.AiAgentCommand
+import com.picme.agent.core.model.AiAgentInferencePreference
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.CameraAspectRatioMode
@@ -96,9 +97,9 @@ import com.picme.features.camera.state.CameraStateManager
 
 import com.picme.agent.core.mnn.MnnResourceManager
 import com.picme.features.camera.thread.CameraThreadRegistry
-import com.picme.features.camera.voice.AsrEngine
-import com.picme.features.camera.voice.MnnAsrClient
-import com.picme.features.camera.voice.SherpaMnnAsrEngine
+import com.picme.agent.core.voice.AsrEngine
+import com.picme.agent.core.voice.MnnAsrClient
+import com.picme.agent.core.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.AgentMessage
@@ -533,7 +534,7 @@ fun CameraContent(
 
     val aiAgentRemoteModelConfigs by userPreferencesRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
     val aiAgentSelectedRemoteModel by userPreferencesRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
-    val aiAgentForceRemote by userPreferencesRepository.aiAgentForceRemoteFlow.collectAsState(initial = false)
+    val aiAgentInferencePreference by userPreferencesRepository.aiAgentInferencePreferenceFlow.collectAsState(initial = AiAgentInferencePreference.FORCE_LOCAL)
     val aiAgentMode by userPreferencesRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
 
     // 解析远程模型配置
@@ -562,7 +563,7 @@ fun CameraContent(
         context,
         aiAgentMode,
         remoteConfig,
-        aiAgentForceRemote,
+        aiAgentInferencePreference,
         cloudflareGatewayToken
     ) {
         AiAgentUseCase(
@@ -570,7 +571,7 @@ fun CameraContent(
             agentMode = aiAgentMode,
             localModelId = "qwen3_1_7b", // 初始默认值，LaunchedEffect 中会更新为实际值
             remoteConfig = remoteConfig,
-            forceRemote = aiAgentForceRemote,
+            forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE,
             gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
         )
     }

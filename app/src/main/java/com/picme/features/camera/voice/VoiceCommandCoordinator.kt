@@ -3,6 +3,9 @@ package com.picme.features.camera.voice
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
+import com.picme.agent.core.voice.AsrEngine
+import com.picme.agent.core.voice.InputAudioDevice
+import com.picme.agent.core.voice.SherpaMnnAsrEngine
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
 import com.picme.agent.core.model.MediaType

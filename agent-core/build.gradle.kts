@@ -10,10 +10,31 @@ android {
     defaultConfig {
         minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DANDROID_STL=c++_shared",
+                    "-DANDROID_PLATFORM=android-24"
+                )
+            }
+        }
     }
 
-    buildFeatures {
-        compose = true
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     compileOptions {
@@ -23,7 +44,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":beauty-engine"))
+    implementation(project(":beauty-api"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)

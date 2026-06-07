@@ -189,6 +189,8 @@ dependencies {
     androidTestImplementation(libs.androidx.runner)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    // 美颜 API 接口模块（纯数据类型，被 beauty-engine 和 agent-core 共享）
+    implementation(project(":beauty-api"))
     // 美颜引擎模块
     implementation(project(":beauty-engine"))
     // Agent 核心模块（将来提取独立库）

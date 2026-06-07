@@ -50,6 +50,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":beauty-api"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.mediapipe.face.landmarker)
 

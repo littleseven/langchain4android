@@ -10,7 +10,11 @@
 #endif
 
 #define LOG_TAG "PicMe:NcnnJNI"
+#if NCNN_AVAILABLE
 #define LOGD(...) do { if (picme::NcnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__); } while(0)
+#else
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#endif
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // [修复 OpenMP 崩溃] 在 JNI_OnLoad 中提前收敛 OpenMP 运行时配置

@@ -1,7 +1,7 @@
 package com.picme.agent.core
 
 import android.content.Context
-import com.picme.beauty.api.llm.MnnLlmClient
+import com.picme.agent.core.llm.MnnLlmClient
 import com.picme.agent.core.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -9,7 +9,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import com.picme.beauty.internal.model.ModelManager
+import com.picme.agent.core.llm.LlmModelManager
 import com.picme.agent.core.model.ChatMessage
 import com.picme.agent.core.model.ChatRole
 import com.picme.agent.core.mnn.MnnResourceManager
@@ -132,7 +132,7 @@ class LocalLlmEngine(private val context: Context) {
                 Logger.w(tag, "Model loading cancelled: $modelId")
                 throw exception
             } catch (exception: IllegalStateException) {
-                // ModelManager 抛出的模型未找到异常
+                // LlmModelManager 抛出的模型未找到异常
                 Logger.e(tag, "Model not found: $modelId", exception)
                 Result.failure(
                     LlmModelNotFoundException(
@@ -151,7 +151,7 @@ class LocalLlmEngine(private val context: Context) {
      * 检查指定模型是否已下载可用
      */
     fun isModelAvailable(modelId: String, context: Context): Boolean {
-        return ModelManager.isLlmModelCached(modelId, context)
+        return LlmModelManager(context).isModelCached(modelId)
     }
 
     /**

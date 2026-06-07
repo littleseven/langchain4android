@@ -3,7 +3,6 @@ package com.picme.agent.core.model
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.model.MediaType
 import java.util.concurrent.atomic.AtomicInteger
 
 /**

@@ -59,9 +59,9 @@ import com.picme.navigation.Screen
 import com.picme.core.common.Logger
 import com.picme.agent.core.SceneManager
 import com.picme.agent.core.AgentOrchestrator
-import com.picme.agent.core.ComposeCapabilityHost
-import com.picme.agent.core.GlobalCapabilityHost
-import com.picme.agent.core.LocalCapabilityHost
+import com.picme.domain.agent.ComposeCapabilityHost
+import com.picme.domain.agent.GlobalCapabilityHost
+import com.picme.domain.agent.LocalCapabilityHost
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.testing.agent.bridge.TestEntryPoint
 import kotlinx.coroutines.delay

@@ -39,6 +39,7 @@ import com.picme.beauty.api.Face
 import com.picme.beauty.api.FaceContour
 import com.picme.beauty.api.FaceLandmark
 import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.toAndroidColorMatrix
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.internal.facedetect.Face106ToWarpParams

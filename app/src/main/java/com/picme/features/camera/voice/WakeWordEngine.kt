@@ -1,6 +1,9 @@
 package com.picme.features.camera.voice
 
 import com.picme.core.common.Logger
+import com.picme.agent.core.voice.AsrEngine
+import com.picme.agent.core.voice.AudioRecorder
+import com.picme.agent.core.voice.VadDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

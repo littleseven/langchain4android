@@ -62,8 +62,8 @@ import com.picme.features.camera.components.ProModeControls
 import com.picme.features.camera.components.RatioSelector
 import com.picme.features.camera.components.SceneSelector
 import com.picme.features.camera.components.UnifiedFilterSelector
-import com.picme.features.camera.voice.AudioRecorder
-import com.picme.features.camera.voice.InputAudioDevice
+import com.picme.agent.core.voice.AudioRecorder
+import com.picme.agent.core.voice.InputAudioDevice
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.camera.voice.VoiceWakeIndicator
 import com.picme.features.common.chat.AgentMessage

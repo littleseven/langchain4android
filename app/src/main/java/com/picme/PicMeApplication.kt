@@ -46,6 +46,11 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+
+        // 预加载 Native 库（agent-core 模块依赖这些库，但 agent-core 不直接依赖 beauty-engine
+        // 的 aar，因此需要在 Application 中统一加载，确保类加载器命名空间可见）
+        loadNativeLibraries()
+
         container = AppContainerImpl(this)
 
         // 初始化人脸关键点适配器注册表
@@ -137,5 +142,21 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return CoilConfig.createImageLoader(this)
+    }
+
+    /**
+     * 预加载 Native 共享库
+     *
+     * sherpa-mnn-jni.so 由 SherpaMnnAsrEngine 通过 System.loadLibrary 加载，
+     * 但它依赖 libMNN_Express.so 中的符号。在 Application 中提前加载可确保
+     * 所有依赖 so 在类加载器命名空间中可见，避免运行时符号解析失败。
+     */
+    private fun loadNativeLibraries() {
+        try {
+            System.loadLibrary("sherpa-mnn-jni")
+            Logger.d(TAG, "Native library loaded: sherpa-mnn-jni")
+        } catch (e: UnsatisfiedLinkError) {
+            Logger.e(TAG, "Failed to load sherpa-mnn-jni", e)
+        }
     }
 }

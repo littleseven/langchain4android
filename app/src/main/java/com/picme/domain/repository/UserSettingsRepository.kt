@@ -1,5 +1,6 @@
 package com.picme.domain.repository
 
+import com.picme.agent.core.model.AiAgentInferencePreference
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
@@ -95,9 +96,9 @@ interface UserSettingsRepository {
     val aiAgentSelectedRemoteModelFlow: Flow<String>
     suspend fun updateAiAgentSelectedRemoteModel(modelId: String)
 
-    // ── 强制使用远程模型 ─────────────────────────────────────
-    val aiAgentForceRemoteFlow: Flow<Boolean>
-    suspend fun updateAiAgentForceRemote(enabled: Boolean)
+    // ── AI Agent 推理偏好（LOCAL 模式下的本地/远程路由策略） ────
+    val aiAgentInferencePreferenceFlow: Flow<AiAgentInferencePreference>
+    suspend fun updateAiAgentInferencePreference(preference: AiAgentInferencePreference)
 
     // ── Cloudflare AI Gateway Token ─────────────────────────
     val cloudflareGatewayTokenFlow: Flow<String>

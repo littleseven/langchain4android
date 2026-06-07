@@ -1,13 +1,13 @@
 package com.picme.agent.core
 
-import com.picme.beauty.api.FilterType
-import com.picme.beauty.api.StyleFilter
 import com.picme.agent.core.Logger
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.AgentIdGenerator
-import com.picme.agent.core.model.MediaType
 import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
+import com.picme.agent.core.model.MediaType
 
 /**
  * Agent 命令解析器

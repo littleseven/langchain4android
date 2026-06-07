@@ -295,7 +295,13 @@
     <string name="api_key_hint">输入 API Key</string>
     <string name="api_key_set">API Key 已配置</string>
     <string name="api_key_not_set">未配置</string>
-    <string name="ai_agent_force_remote">强制使用远程模型</string>
+    <string name="ai_agent_inference_preference">推理偏好</string>
+    <string name="ai_agent_inference_auto">自动</string>
+    <string name="ai_agent_inference_auto_desc">根据模型可用性自动选择本地或远程推理。</string>
+    <string name="ai_agent_inference_force_local">强制本地</string>
+    <string name="ai_agent_inference_force_local_desc">始终使用本地模型。模型不可用时回退到文本回复。</string>
+    <string name="ai_agent_inference_force_remote">强制远程</string>
+    <string name="ai_agent_inference_force_remote_desc">始终使用远程 API，绕过本地模型检查。</string>
     <string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
     <string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
     <string name="ai_agent_input_hint">向 AI 助手提问...</string>

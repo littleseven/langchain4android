@@ -9,6 +9,7 @@ import com.picme.data.download.DownloadState
 import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
+import com.picme.agent.core.model.AiAgentInferencePreference
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
@@ -155,11 +156,11 @@ class SettingsViewModel(
             initialValue = "deepseek-v4-flash"
         )
 
-    val aiAgentForceRemote: StateFlow<Boolean> = repository.aiAgentForceRemoteFlow
+    val aiAgentInferencePreference: StateFlow<AiAgentInferencePreference> = repository.aiAgentInferencePreferenceFlow
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = false
+            initialValue = AiAgentInferencePreference.FORCE_LOCAL
         )
 
     val aiAgentMode: StateFlow<AiAgentMode> = repository.aiAgentModeFlow
@@ -698,10 +699,10 @@ class SettingsViewModel(
         }
     }
 
-    fun setAiAgentForceRemote(enabled: Boolean) {
+    fun setAiAgentInferencePreference(preference: AiAgentInferencePreference) {
         viewModelScope.launch {
-            Logger.d("UX", "AI Agent force remote changed: $enabled")
-            repository.updateAiAgentForceRemote(enabled)
+            Logger.d("UX", "AI Agent inference preference changed: ${preference.name}")
+            repository.updateAiAgentInferencePreference(preference)
         }
     }
 

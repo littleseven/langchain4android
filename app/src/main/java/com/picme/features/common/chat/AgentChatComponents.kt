@@ -30,11 +30,12 @@ import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.AgentScene
 import com.picme.agent.core.model.PageContext
 import com.picme.domain.model.AiAgentCommand
+import com.picme.agent.core.model.AiAgentInferencePreference
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.domain.usecase.AiAgentUseCase
-import com.picme.features.camera.voice.AsrEngine
-import com.picme.features.camera.voice.MnnAsrClient
-import com.picme.features.camera.voice.SherpaMnnAsrEngine
+import com.picme.agent.core.voice.AsrEngine
+import com.picme.agent.core.voice.MnnAsrClient
+import com.picme.agent.core.voice.SherpaMnnAsrEngine
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.CoroutineScope
@@ -452,7 +453,7 @@ fun rememberAgentChatConfig(
 
     // 读取 Agent 模式与远程配置
     val aiAgentMode by settingsRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
-    val aiAgentForceRemote by settingsRepository.aiAgentForceRemoteFlow.collectAsState(initial = false)
+    val aiAgentInferencePreference by settingsRepository.aiAgentInferencePreferenceFlow.collectAsState(initial = AiAgentInferencePreference.FORCE_LOCAL)
     val aiAgentRemoteModelConfigs by settingsRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
     val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
 
@@ -476,7 +477,7 @@ fun rememberAgentChatConfig(
     // AiAgentUseCase：根据设置动态配置 mode 和 forceRemote
     val aiAgentUseCase = remember(
         aiAgentMode,
-        aiAgentForceRemote,
+        aiAgentInferencePreference,
         remoteConfig,
         cloudflareGatewayToken
     ) {
@@ -485,7 +486,7 @@ fun rememberAgentChatConfig(
             agentMode = aiAgentMode,
             localModelId = "qwen3_1_7b",
             remoteConfig = remoteConfig,
-            forceRemote = aiAgentForceRemote,
+            forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE,
             gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
         )
     }

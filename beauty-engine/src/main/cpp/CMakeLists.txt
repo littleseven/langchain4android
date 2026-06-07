@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10.2)
-project("picme_native")
+project("beauty_native")
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,28 +21,31 @@ else()
     message(FATAL_ERROR "MNN headers not found. Please ensure MNN is set up.")
 endif()
 
-# MNN 库路径（从 jniLibs）
-set(MNN_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}")
+# MNN 库路径（优先从 agent-core 的 jniLibs 查找，回退到自身 jniLibs）
+set(MNN_LIB_DIR_AGENT_CORE "${CMAKE_CURRENT_SOURCE_DIR}/../../../../agent-core/src/main/jniLibs/${ANDROID_ABI}")
+set(MNN_LIB_DIR_SELF "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}")
 
-set(MNN_SO_PATH "${MNN_LIB_DIR}/libMNN.so")
-if(EXISTS ${MNN_SO_PATH})
-    message(STATUS "Using MNN shared library: ${MNN_SO_PATH}")
-    add_library(mnn SHARED IMPORTED)
-    set_target_properties(mnn PROPERTIES IMPORTED_LOCATION ${MNN_SO_PATH})
+if(EXISTS "${MNN_LIB_DIR_AGENT_CORE}/libMNN.so")
+    set(MNN_LIB_DIR ${MNN_LIB_DIR_AGENT_CORE})
+    message(STATUS "Using MNN from agent-core: ${MNN_LIB_DIR}")
+elseif(EXISTS "${MNN_LIB_DIR_SELF}/libMNN.so")
+    set(MNN_LIB_DIR ${MNN_LIB_DIR_SELF})
+    message(STATUS "Using MNN from beauty-engine: ${MNN_LIB_DIR}")
 else()
-    message(FATAL_ERROR "libMNN.so not found at ${MNN_SO_PATH}")
+    message(FATAL_ERROR "libMNN.so not found in agent-core or beauty-engine jniLibs")
 endif()
 
+set(MNN_SO_PATH "${MNN_LIB_DIR}/libMNN.so")
+add_library(mnn SHARED IMPORTED)
+set_target_properties(mnn PROPERTIES IMPORTED_LOCATION ${MNN_SO_PATH})
+
 # [注意] libMNN_Vulkan.so 已合并到 libMNN.so（统一构建）
-# 新版本的 libMNN.so 包含 Vulkan 后端符号，不再需要单独链接
 set(MNN_VULKAN_SO_PATH "${MNN_LIB_DIR}/libMNN_Vulkan.so")
 if(EXISTS ${MNN_VULKAN_SO_PATH})
-    message(STATUS "libMNN_Vulkan.so found but NOT linking - Vulkan symbols are already in libMNN.so (unified build)")
+    message(STATUS "libMNN_Vulkan.so found but NOT linking - Vulkan symbols are already in libMNN.so")
 endif()
 
 # MNN-LLM 库
-# [注意] 新版本的 libMNN.so 已包含 LLM 符号（统一构建）
-# 如果 libllm.so 存在则链接，否则依赖 libMNN.so 中的符号
 set(MNN_LLM_SO_PATH "${MNN_LIB_DIR}/libllm.so")
 if(EXISTS ${MNN_LLM_SO_PATH})
     message(STATUS "Using MNN-LLM library: ${MNN_LLM_SO_PATH}")
@@ -52,12 +55,10 @@ else()
     message(STATUS "libllm.so not found. LLM symbols should be in libMNN.so (unified build)")
 endif()
 
-# MNN Express 库（已合并到 libMNN.so，不再需要单独加载）
-# 从 MNN 源码编译的 libMNN.so 已包含 Express 符号
-# [注意] 如果 libMNN_Express.so 存在，不要链接它，避免符号重复定义
+# MNN Express 库（已合并到 libMNN.so）
 set(MNN_EXPRESS_SO_PATH "${MNN_LIB_DIR}/libMNN_Express.so")
 if(EXISTS ${MNN_EXPRESS_SO_PATH})
-    message(STATUS "libMNN_Express.so found but NOT linking - Express symbols are already in libMNN.so (unified build)")
+    message(STATUS "libMNN_Express.so found but NOT linking - Express symbols are already in libMNN.so")
 endif()
 
 # ── NCNN 配置 ───────────────────────────────────────────
@@ -86,13 +87,11 @@ else()
 endif()
 
 # ── 源文件 ──────────────────────────────────────────────
-# [修改] 始终编译 NCNN 源文件，即使库不存在（提供空实现 stub）
 set(NATIVE_SOURCES
     mnn_jni_bridge.cpp
     mnn_face_detector.cpp
     ncnn_jni_bridge.cpp
     ncnn_face_detector.cpp
-    llm_jni_bridge.cpp
 )
 
 if(NCNN_LINK_AVAILABLE)
@@ -104,7 +103,7 @@ else()
 endif()
 
 # ── 创建共享库 ──────────────────────────────────────────
-add_library(picme_native SHARED ${NATIVE_SOURCES})
+add_library(beauty_native SHARED ${NATIVE_SOURCES})
 
 # 查找 Android 基础库
 find_library(log-lib log)
@@ -112,12 +111,11 @@ find_library(android-lib android)
 find_library(jnigraphics-lib jnigraphics)
 
 # 编译定义
-target_compile_definitions(picme_native PRIVATE
+target_compile_definitions(beauty_native PRIVATE
     MNN_USE_THREAD_POOL=1
 )
 
 # 链接库
-# [注意] mnn_vulkan 不再单独链接，Vulkan 符号已合并到 libMNN.so
 set(LINK_LIBRARIES
     mnn
     ${log-lib}
@@ -130,20 +128,14 @@ if(TARGET mnn_llm)
     list(APPEND LINK_LIBRARIES mnn_llm)
 endif()
 
-# [注意] mnn_express 不再链接，因为 Express 符号已合并到 libMNN.so 中
-# 链接 libMNN_Express.so 会导致符号重复定义，引发运行时 SIGABRT
-# if(TARGET mnn_express)
-#     list(APPEND LINK_LIBRARIES mnn_express)
-# endif()
-
 if(NCNN_LINK_AVAILABLE)
     list(APPEND LINK_LIBRARIES ncnn)
 endif()
 
-target_link_libraries(picme_native ${LINK_LIBRARIES})
+target_link_libraries(beauty_native ${LINK_LIBRARIES})
 
 # 编译选项
-target_compile_options(picme_native PRIVATE
+target_compile_options(beauty_native PRIVATE
     -O3
     -fexceptions
     -fPIC
@@ -151,7 +143,7 @@ target_compile_options(picme_native PRIVATE
     -fdata-sections
 )
 
-set_target_properties(picme_native PROPERTIES
+set_target_properties(beauty_native PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
 )

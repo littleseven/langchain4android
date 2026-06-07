@@ -302,7 +302,13 @@
     <string name="api_key_hint">Enter API Key</string>
     <string name="api_key_set">API Key configured</string>
     <string name="api_key_not_set">Not configured</string>
-    <string name="ai_agent_force_remote">Force Remote Model</string>
+    <string name="ai_agent_inference_preference">Inference Preference</string>
+    <string name="ai_agent_inference_auto">Auto</string>
+    <string name="ai_agent_inference_auto_desc">Automatically choose local or remote based on model availability.</string>
+    <string name="ai_agent_inference_force_local">Force Local</string>
+    <string name="ai_agent_inference_force_local_desc">Always use on-device model. Falls back to text reply if model unavailable.</string>
+    <string name="ai_agent_inference_force_remote">Force Remote</string>
+    <string name="ai_agent_inference_force_remote_desc">Always use remote API, bypassing local model check.</string>
     <string name="ai_agent_auto_execute_plans">Auto-Execute Multi-Step Plans</string>
     <string name="ai_agent_auto_execute_plans_desc">When disabled, Agent will ask for confirmation before executing multi-step plans.</string>
     <string name="ai_agent_input_hint">Ask AI Agent...</string>

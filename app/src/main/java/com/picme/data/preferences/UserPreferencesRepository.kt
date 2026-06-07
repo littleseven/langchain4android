@@ -15,6 +15,7 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
+import com.picme.agent.core.model.AiAgentInferencePreference
 import com.picme.agent.core.model.AiAgentMode
 import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
@@ -84,8 +85,8 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_REMOTE_MODEL_CONFIGS = stringPreferencesKey("ai_agent_remote_model_configs_v2")
         val AI_AGENT_SELECTED_REMOTE_MODEL = stringPreferencesKey("ai_agent_selected_remote_model")
 
-        // 强制使用远程模型（绕过本地模型检查）
-        val AI_AGENT_FORCE_REMOTE = booleanPreferencesKey("ai_agent_force_remote")
+        // AI Agent 推理偏好（LOCAL 模式下的本地/远程路由策略）
+        val AI_AGENT_INFERENCE_PREFERENCE = stringPreferencesKey("ai_agent_inference_preference")
 
         // Cloudflare AI Gateway Token
         val CLOUDFLARE_GATEWAY_TOKEN = stringPreferencesKey("cloudflare_gateway_token")
@@ -646,7 +647,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
     }
 
-    override val aiAgentForceRemoteFlow: Flow<Boolean> = context.dataStore.data
+    override val aiAgentInferencePreferenceFlow: Flow<AiAgentInferencePreference> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -655,12 +656,15 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            preferences[PreferencesKeys.AI_AGENT_FORCE_REMOTE] ?: false
+            val prefName = preferences[PreferencesKeys.AI_AGENT_INFERENCE_PREFERENCE]
+                ?: AiAgentInferencePreference.FORCE_LOCAL.name
+            runCatching { AiAgentInferencePreference.valueOf(prefName) }
+                .getOrDefault(AiAgentInferencePreference.FORCE_LOCAL)
         }
 
-    override suspend fun updateAiAgentForceRemote(enabled: Boolean) {
+    override suspend fun updateAiAgentInferencePreference(preference: AiAgentInferencePreference) {
         context.dataStore.edit { preferences ->
-            preferences[PreferencesKeys.AI_AGENT_FORCE_REMOTE] = enabled
+            preferences[PreferencesKeys.AI_AGENT_INFERENCE_PREFERENCE] = preference.name
         }
     }
 

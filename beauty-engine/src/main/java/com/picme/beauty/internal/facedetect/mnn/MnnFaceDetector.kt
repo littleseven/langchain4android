@@ -28,7 +28,7 @@ class MnnFaceDetector private constructor(
 
         init {
             try {
-                System.loadLibrary("picme_native")
+                System.loadLibrary("beauty_native")
                 // 同步 native 层日志开关状态
                 val logEnabled = Logger.isLogEnabled(TAG)
                 nativeSetLogEnabled(logEnabled)
