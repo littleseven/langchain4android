@@ -32,19 +32,16 @@ import com.picme.domain.model.RemoteModelConfig
  * @param agentMode Agent 运行模式，默认 LOCAL
  * @param privacyLevel 隐私级别，默认 STRICT
  * @param localModelId 本地模型 ID，默认 qwen3_1_7b（下划线格式）
- * @param codingApiKey Kimi Coding API Key
- * @param codingModel Kimi Coding 模型 ID，默认 kimi-for-coding
- * @param codingBaseUrl Kimi Coding API Base URL
+ * @param remoteConfig 用户自定义远程模型配置（完整配置，包含 modelId/apiKey/baseUrl/gatewayToken）
  * @param forceRemote 是否强制使用远程模型（绕过本地模型检查）
+ * @param gatewayToken 腾讯云 SCF Gateway Token（兜底用）
  */
 class AiAgentUseCase(
     context: Context,
     agentMode: AiAgentMode = AiAgentMode.LOCAL,
     privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
     localModelId: String = "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
-    codingApiKey: String? = null,
-    codingModel: String = "kimi-for-coding",
-    codingBaseUrl: String? = null,
+    remoteConfig: RemoteModelConfig? = null,
     forceRemote: Boolean = false,
     gatewayToken: String? = null
 ) {
@@ -57,16 +54,11 @@ class AiAgentUseCase(
     private val orchestrator = AgentOrchestrator.getInstance(context)
 
     /**
-     * 用户自定义远程模型配置（高优先级：用户自己的 API Key）
+     * 用户自定义远程模型配置（高优先级）
+     * 只要 remoteConfig 有 baseUrl + modelId 就使用，apiKey 由调用链路自行处理
      */
     private val userRemoteConfig: RemoteModelConfig? =
-        codingApiKey?.takeIf { it.isNotBlank() }?.let { apiKey ->
-            RemoteModelConfig(
-                modelId = codingModel,
-                apiKey = apiKey,
-                baseUrl = codingBaseUrl ?: CODING_DEFAULT_BASE_URL
-            )
-        }
+        remoteConfig?.takeIf { it.baseUrl.isNotBlank() && it.modelId.isNotBlank() }
 
     /**
      * 兜底远程模型配置（腾讯云 SCF Gateway，无需用户配置）
@@ -79,12 +71,17 @@ class AiAgentUseCase(
         )
 
     /**
-     * 远程推理引擎（L2/L3/L4）
-     * 优先使用用户自定义配置，未配置时使用兜底 SCF Gateway
+     * 当前实际使用的远程模型配置
      */
-    private val remoteEngine: RemoteInferenceEngine = RemoteInferenceEngine(
-        remoteConfig = userRemoteConfig ?: fallbackRemoteConfig
-    )
+    private val effectiveRemoteConfig: RemoteModelConfig
+        get() = userRemoteConfig ?: fallbackRemoteConfig
+
+    /**
+     * 远程推理引擎（L2/L3/L4）
+     * 每次访问时根据当前 effectiveRemoteConfig 创建，确保配置变化后使用新配置
+     */
+    private val remoteEngine: RemoteInferenceEngine
+        get() = RemoteInferenceEngine(remoteConfig = effectiveRemoteConfig)
 
     /**
      * 是否使用兜底 Gateway（用于限频检测）
@@ -112,10 +109,17 @@ class AiAgentUseCase(
     private var currentLocalModelId: String = localModelId
 
     init {
+        Logger.i(tag, "AiAgentUseCase init: remoteConfig=${remoteConfig?.modelId ?: "null"}, " +
+            "baseUrl=${remoteConfig?.baseUrl?.take(40) ?: "null"}, " +
+            "apiKey=${if (remoteConfig?.apiKey.isNullOrBlank()) "empty" else "set"}, " +
+            "gatewayToken=${if (remoteConfig?.gatewayToken.isNullOrBlank()) "empty" else "set"}, " +
+            "effectiveBaseUrl=${effectiveRemoteConfig.baseUrl.take(40)}, " +
+            "isUsingFallbackGateway=$isUsingFallbackGateway")
         orchestrator.configure(
             mode = agentMode,
             modelId = localModelId,
-            privacyLevel = privacyLevel
+            privacyLevel = privacyLevel,
+            remoteConfig = effectiveRemoteConfig
         )
     }
 

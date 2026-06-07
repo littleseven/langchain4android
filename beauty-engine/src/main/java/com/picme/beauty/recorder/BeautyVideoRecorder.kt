@@ -66,8 +66,14 @@ class BeautyVideoRecorder {
      */
     fun start(outputFile: File, width: Int, height: Int, callback: Callback) {
         if (isRecording.get()) {
-            Logger.w(TAG, "Already recording, ignore start request")
-            return
+            // [防御性修复] 如果 isRecording 为 true 但 drain 线程已死亡，强制清理状态
+            if (drainThread?.isAlive != true) {
+                Logger.w(TAG, "isRecording=true but drain thread dead, forcing release")
+                release()
+            } else {
+                Logger.w(TAG, "Already recording, ignore start request")
+                return
+            }
         }
 
         this.outputFile = outputFile
@@ -93,12 +99,15 @@ class BeautyVideoRecorder {
 
             isRecording.set(true)
             isStopping.set(false)
+            muxerStarted = false
+            videoTrackIndex = -1
 
             drainThread = Thread {
                 try {
                     drainEncoder()
                 } catch (e: Exception) {
                     Logger.e(TAG, "Drain thread error", e)
+                    release()
                     callback.onError(e)
                 }
             }.apply {
@@ -193,14 +202,15 @@ class BeautyVideoRecorder {
                         if (isConfig) {
                             configFrameCount++
                             Logger.d(TAG, "Codec config frame received, size=${bufferInfo.size}, dropping for muxer")
-                        } else if (muxerStarted) {
+                        } else if (muxerStarted && videoTrackIndex >= 0) {
+                            // [防御性修复] 双重检查 videoTrackIndex，避免 trackIndex is invalid 崩溃
                             muxer.writeSampleData(videoTrackIndex, outputBuffer, bufferInfo)
                             outputFrameCount++
                             if (outputFrameCount <= 5 || outputFrameCount % 30 == 0) {
                                 Logger.d(TAG, "Encoded frame written: count=$outputFrameCount, pts=${bufferInfo.presentationTimeUs}us, size=${bufferInfo.size}")
                             }
                         } else {
-                            Logger.w(TAG, "Muxer not started yet, dropping encoded frame. size=${bufferInfo.size}, flags=${bufferInfo.flags}")
+                            Logger.w(TAG, "Muxer not started yet, dropping encoded frame. size=${bufferInfo.size}, flags=${bufferInfo.flags}, muxerStarted=$muxerStarted, videoTrackIndex=$videoTrackIndex")
                         }
                     } else {
                         Logger.d(TAG, "Empty output buffer, size=${bufferInfo.size}, flags=${bufferInfo.flags}")
@@ -238,6 +248,12 @@ class BeautyVideoRecorder {
     }
 
     private fun release() {
+        // [防御性修复] 避免重复释放导致的竞争
+        if (!isRecording.get() && mediaCodec == null && mediaMuxer == null) {
+            Logger.d(TAG, "Already released, skip")
+            return
+        }
+
         isRecording.set(false)
 
         drainThread?.join(2000)
@@ -266,6 +282,7 @@ class BeautyVideoRecorder {
         encoderSurface = null
         muxerStarted = false
         videoTrackIndex = -1
+        isStopping.set(false)
 
         Logger.i(TAG, "Recorder released")
     }

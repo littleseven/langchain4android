@@ -195,11 +195,18 @@ class VoiceCommandCoordinator(
 
     /**
      * 释放资源
+     *
+     * 关键修复：正确调用 SherpaMnnAsrEngine 的 release()，
+     * 通过 ResourceManager 协调释放，避免 MNN 全局状态冲突。
      */
     fun release() {
         stopWakeWordListening()
         stopPushToTalk()
         taskChannel.close()
+
+        // 修复：如果 ASR 是 SherpaMnnAsrEngine，调用其 release() 进行协调释放
+        (asrEngine as? SherpaMnnAsrEngine)?.release()
+
         Logger.d(tag, "VoiceCommandCoordinator released")
     }
 

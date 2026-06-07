@@ -142,7 +142,8 @@ data class RemoteModelConfigs(
     }
 
     fun getConfigByModelId(modelId: String): RemoteModelConfig? {
-        return configs.find { it.modelId == modelId }
+        val candidates = configs.filter { it.modelId == modelId }
+        return candidates.find { it.isConfigured } ?: candidates.firstOrNull()
     }
 
     /**
@@ -234,7 +235,9 @@ data class RemoteModelConfigs(
                             saved.copy(
                                 baseUrl = saved.baseUrl.ifBlank { predefined.baseUrl },
                                 protocol = saved.protocol,
-                                providerId = saved.providerId.ifBlank { predefined.providerId }
+                                providerId = saved.providerId.ifBlank { predefined.providerId },
+                                apiKey = saved.apiKey,
+                                gatewayToken = saved.gatewayToken
                             )
                         } else {
                             predefined.copy()

@@ -26,6 +26,13 @@ class RemoteInferenceEngine(
 
     private val tag = REMOTE_TAG
 
+    init {
+        Logger.i(tag, "RemoteInferenceEngine init: model=${remoteConfig.modelId}, " +
+            "baseUrl=${remoteConfig.baseUrl.take(40)}, " +
+            "apiKey=${if (remoteConfig.apiKey.isBlank()) "empty" else "set"}, " +
+            "gatewayToken=${if (remoteConfig.gatewayToken.isBlank()) "empty" else "set"}")
+    }
+
     // ── L2: Batch Function Calling ─────────────────────────────
 
     /**

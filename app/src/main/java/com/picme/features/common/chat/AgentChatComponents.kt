@@ -444,33 +444,42 @@ fun rememberAgentChatConfig(
         asrEngine = engine
     }
 
-    // 读取远程模型配置
+    // 读取 Agent 模式与远程配置
+    val aiAgentMode by settingsRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
+    val aiAgentForceRemote by settingsRepository.aiAgentForceRemoteFlow.collectAsState(initial = false)
     val aiAgentRemoteModelConfigs by settingsRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
     val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
 
     // 解析远程模型配置
+    // 注意：aiAgentSelectedRemoteModel 保存的是 uniqueKey（providerId:modelId），
+    // 优先按 uniqueKey 查找；找不到再按 modelId 查找并 fallback 到默认配置。
     val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
         val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
             RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
         } else {
             RemoteModelConfigs()
         }
-        configs.getConfigByModelId(aiAgentSelectedRemoteModel)
+        configs.getConfig(aiAgentSelectedRemoteModel)
+            ?: configs.getConfigByModelId(aiAgentSelectedRemoteModel)
             ?: RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
     // 读取腾讯云 SCF Gateway Token
     val cloudflareGatewayToken by settingsRepository.cloudflareGatewayTokenFlow.collectAsState(initial = "")
 
-    // AiAgentUseCase
-    val aiAgentUseCase = remember(remoteConfig, cloudflareGatewayToken) {
+    // AiAgentUseCase：根据设置动态配置 mode 和 forceRemote
+    val aiAgentUseCase = remember(
+        aiAgentMode,
+        aiAgentForceRemote,
+        remoteConfig,
+        cloudflareGatewayToken
+    ) {
         AiAgentUseCase(
             context = context,
-            agentMode = AiAgentMode.LOCAL,
-            localModelId = "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
-            codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
-            codingModel = remoteConfig.modelId,
-            codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },
+            agentMode = aiAgentMode,
+            localModelId = "qwen3_1_7b",
+            remoteConfig = remoteConfig,
+            forceRemote = aiAgentForceRemote,
             gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
         )
     }

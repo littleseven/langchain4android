@@ -165,7 +165,7 @@ object AsrConfigManager {
         val shouldUseLm = dirName.contains("zh") || dirName.contains("bilingual") || dirName.contains("chinese")
 
         return if (shouldUseLm) {
-            val lmPath = "$modelDir/with-state-epoch-99-avg-1.int8.onnx"
+            val lmPath = "$modelDir/with-state-epoch-99-avg-1.int8.mnn"
             if (File(lmPath).exists()) {
                 Logger.d(TAG, "Using default LM config with model: $lmPath")
                 OnlineLMConfig(
@@ -173,7 +173,7 @@ object AsrConfigManager {
                     scale = 0.5f
                 )
             } else {
-                Logger.d(TAG, "LM file not found at $lmPath, using empty LM config")
+                // 当前部署的 Sherpa-MNN 模型包不包含 LM 文件，静默使用空配置
                 OnlineLMConfig()
             }
         } else {

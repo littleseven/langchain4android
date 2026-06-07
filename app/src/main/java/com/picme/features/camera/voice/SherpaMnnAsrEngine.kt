@@ -9,6 +9,7 @@ import com.k2fsa.sherpa.mnn.OnlineStream
 import com.k2fsa.sherpa.mnn.getEndpointConfig
 import com.k2fsa.sherpa.mnn.getFeatureConfig
 import com.picme.core.common.Logger
+import com.picme.domain.agent.MnnResourceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,12 +44,23 @@ class SherpaMnnAsrEngine(
     private val tag = "SherpaMnnAsr"
     private var recognizer: OnlineRecognizer? = null
     private val initLock = Object()
+    private val resourceManager = MnnResourceManager.getInstance(context)
 
     // 流式识别状态
     private var isStreaming = AtomicBoolean(false)
     private var streamingThread: Thread? = null
     private var audioRecorder: AudioRecorder? = null
     private var streamingScope: CoroutineScope? = null
+
+    /**
+     * 是否已向 ResourceManager 注册引用
+     */
+    private val isRegistered = AtomicBoolean(false)
+
+    init {
+        resourceManager.registerSoftTrimListener(::onSoftTrim)
+        resourceManager.registerSafeUnloadListener(::onSafeUnload)
+    }
 
     companion object {
         private const val TAG = "SherpaMnnAsr"
@@ -293,6 +305,7 @@ class SherpaMnnAsrEngine(
                 )
 
                 recognizer = OnlineRecognizer(null, config)
+                ensureRegistered()
                 Logger.i(tag, "Sherpa-MNN recognizer initialized successfully")
                 true
             } catch (e: Exception) {
@@ -304,13 +317,52 @@ class SherpaMnnAsrEngine(
 
     /**
      * 释放识别器资源
+     *
+     * 通过 ResourceManager 协调释放，避免与 LLM 的 MNN 全局状态冲突。
      */
     fun release() {
+        resourceManager.releaseAsr(
+            owner = "SherpaMnnAsrEngine",
+            onSafeUnload = ::performUnload,
+            onSoftRelease = ::softRelease
+        )
+        isRegistered.set(false)
+    }
+
+    /**
+     * 软释放：停止流式识别，保留 recognizer 实例
+     */
+    private fun softRelease() {
+        stopStreaming()
+        Logger.i(tag, "ASR soft released (recognizer kept)")
+    }
+
+    /**
+     * 完全卸载：释放 recognizer
+     */
+    private fun performUnload() {
         stopStreaming()
         synchronized(initLock) {
             recognizer?.release()
             recognizer = null
-            Logger.d(tag, "Sherpa-MNN recognizer released")
+            Logger.i(tag, "ASR fully unloaded")
+        }
+    }
+
+    private fun onSoftTrim() {
+        if (isStreaming.get()) {
+            stopStreaming()
+        }
+    }
+
+    private fun onSafeUnload() {
+        performUnload()
+        isRegistered.set(false)
+    }
+
+    private fun ensureRegistered() {
+        if (isRegistered.compareAndSet(false, true)) {
+            resourceManager.acquireAsr("SherpaMnnAsrEngine")
         }
     }
 

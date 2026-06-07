@@ -92,11 +92,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = if (releaseStoreFile.isNotBlank()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig =
+                if (releaseStoreFile.isNotBlank()) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
         debug {
             isDebuggable = true
@@ -113,7 +114,7 @@ android {
         buildConfigField(
             "String",
             "TENCENT_SCF_APP_TOKEN",
-            "\"${project.findProperty("tencent.scf.app.token") ?: ""}\""
+            "\"${project.findProperty("tencent.scf.app.token") ?: ""}\"",
         )
     }
 

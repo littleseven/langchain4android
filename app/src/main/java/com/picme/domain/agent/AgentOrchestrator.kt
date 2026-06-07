@@ -59,29 +59,50 @@ class AgentOrchestrator private constructor(private val context: Context) {
     // L1 意图缓存（本地高频指令快速响应）
     private val intentCache = IntentCache()
 
-    // 推理路由器（懒加载，避免在不需要时初始化远程组件）
-    private val inferenceRouter: InferenceRouter by lazy {
-        val remoteOrchestrator = createRemoteOrchestrator()
-        InferenceRouter(
+    // 配置状态
+    private var agentMode: AiAgentMode = AiAgentMode.LOCAL
+    private var currentModelId: String = "qwen3_1_7b"
+
+    // 用户自定义远程配置（由 AiAgentUseCase 注入）
+    private var userRemoteConfig: RemoteModelConfig? = null
+
+    // 当前 inferenceRouter 使用的配置（用于检测配置是否变化）
+    private var inferenceRouterConfig: RemoteModelConfig? = null
+
+    // 推理路由器（可变，配置变化时重新创建）
+    private var inferenceRouter: InferenceRouter? = null
+
+    /**
+     * 获取或创建 InferenceRouter
+     * 如果配置变化，会重新创建以确保使用最新远程配置
+     */
+    private fun getInferenceRouter(): InferenceRouter {
+        val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
+        val existing = inferenceRouter
+        if (existing != null && inferenceRouterConfig == currentConfig) {
+            return existing
+        }
+        val remoteOrchestrator = createRemoteOrchestrator(currentConfig)
+        val newRouter = InferenceRouter(
             localEngine = localLlmEngine,
             remoteOrchestrator = remoteOrchestrator,
             strategySelector = strategySelector,
             privacyGuard = privacyGuard
         )
+        inferenceRouter = newRouter
+        inferenceRouterConfig = currentConfig
+        return newRouter
     }
-
-    // 配置状态
-    private var agentMode: AiAgentMode = AiAgentMode.LOCAL
-    private var currentModelId: String = "qwen3_1_7b"
 
     /**
      * 创建远程编排器
      *
-     * 统一走腾讯云 SCF Gateway 兜底，不再依赖 Kimi Coding API。
+     * @param config 远程模型配置，由 [getInferenceRouter] 传入当前有效配置
      */
-    private fun createRemoteOrchestrator(): RemoteOrchestrator {
+    private fun createRemoteOrchestrator(config: RemoteModelConfig): RemoteOrchestrator {
+        Logger.i(tag, "Creating RemoteOrchestrator with model=${config.modelId}, baseUrl=${config.baseUrl}")
         return RemoteOrchestrator(
-            remoteConfig = RemoteModelConfig.TENCENT_SCF_DEFAULT,
+            remoteConfig = config,
             promptBuilder = promptBuilder
         )
     }
@@ -125,16 +146,31 @@ class AgentOrchestrator private constructor(private val context: Context) {
 
     /**
      * 初始化配置
+     *
+     * @param mode Agent 运行模式
+     * @param modelId 本地模型 ID
+     * @param privacyLevel 隐私级别
+     * @param remoteConfig 用户自定义远程模型配置（可选，用于 REMOTE 模式或 forceRemote 时）
      */
     fun configure(
         mode: AiAgentMode,
         modelId: String,
-        privacyLevel: AiAgentPrivacyLevel
+        privacyLevel: AiAgentPrivacyLevel,
+        remoteConfig: RemoteModelConfig? = null
     ) {
         this.agentMode = mode
         this.currentModelId = modelId
+        // 只有传入有效的 remoteConfig 时才更新，避免用 null 覆盖已配置的用户自定义模型
+        if (remoteConfig != null && remoteConfig.baseUrl.isNotBlank() && remoteConfig.modelId.isNotBlank()) {
+            this.userRemoteConfig = remoteConfig
+            // 配置变化时清除 inferenceRouter，下次使用时会重新创建
+            inferenceRouter = null
+            inferenceRouterConfig = null
+        }
         privacyGuard.updateConfig(privacyLevel, mode)
-        Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel")
+        Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +
+            "remoteModel=${remoteConfig?.modelId ?: "default"}, " +
+            "effectiveRemoteModel=${userRemoteConfig?.modelId ?: "fallback"}")
     }
 
     /**
@@ -298,7 +334,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
                 // 远程模式：通过 InferenceRouter 进行混合编排
                 Logger.d(tag, "Using InferenceRouter for REMOTE mode")
                 try {
-                    inferenceRouter.processInput(input, agentContext)
+                    getInferenceRouter().processInput(input, agentContext)
                 } catch (exception: Exception) {
                     Logger.e(tag, "Remote inference failed, falling back to local", exception)
                     // 远程失败时回退到本地
@@ -479,7 +515,7 @@ class AgentOrchestrator private constructor(private val context: Context) {
     ): Result<AgentAction> {
         Logger.d(tag, "Falling back to remote inference in camera scene")
         return try {
-            val result = inferenceRouter.processInput(input, agentContext)
+            val result = getInferenceRouter().processInput(input, agentContext)
             handleInferenceResult(result, input, agentContext, pageContext)
         } catch (exception: Exception) {
             Logger.e(tag, "Remote fallback failed", exception)

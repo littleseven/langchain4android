@@ -49,6 +49,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -91,6 +94,7 @@ import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
 
+import com.picme.domain.agent.MnnResourceManager
 import com.picme.features.camera.thread.CameraThreadRegistry
 import com.picme.features.camera.voice.AsrEngine
 import com.picme.features.camera.voice.MnnAsrClient
@@ -948,13 +952,16 @@ fun CameraContent(
     val aiAgentMode by userPreferencesRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
 
     // 解析远程模型配置
+    // 注意：aiAgentSelectedRemoteModel 保存的是 uniqueKey（providerId:modelId），
+    // 优先按 uniqueKey 查找；找不到再按 modelId 查找并 fallback 到默认配置。
     val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
         val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
             RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
         } else {
             RemoteModelConfigs()
         }
-        configs.getConfigByModelId(aiAgentSelectedRemoteModel)
+        configs.getConfig(aiAgentSelectedRemoteModel)
+            ?: configs.getConfigByModelId(aiAgentSelectedRemoteModel)
             ?: RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
@@ -977,9 +984,7 @@ fun CameraContent(
             context = context,
             agentMode = aiAgentMode,
             localModelId = "qwen3_1_7b", // 初始默认值，LaunchedEffect 中会更新为实际值
-            codingApiKey = remoteConfig.apiKey.takeIf { it.isNotBlank() },
-            codingModel = remoteConfig.modelId,
-            codingBaseUrl = remoteConfig.baseUrl.takeIf { it.isNotBlank() },
+            remoteConfig = remoteConfig,
             forceRemote = aiAgentForceRemote,
             gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
         )
@@ -1124,6 +1129,23 @@ fun CameraContent(
     DisposableEffect(voiceCoordinator) {
         onDispose {
             voiceCoordinator.release()
+        }
+    }
+
+    // 应用前后台生命周期监听，联动 MnnResourceManager
+    val cameraLifecycleOwner = LocalLifecycleOwner.current
+    val resourceManager = remember { MnnResourceManager.getInstance(context) }
+    DisposableEffect(cameraLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> resourceManager.onAppForeground()
+                Lifecycle.Event.ON_PAUSE -> resourceManager.onAppBackground()
+                else -> {}
+            }
+        }
+        cameraLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            cameraLifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 

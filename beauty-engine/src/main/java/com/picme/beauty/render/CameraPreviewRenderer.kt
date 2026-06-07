@@ -230,7 +230,13 @@ class CameraPreviewRenderer(private val context: Context) {
 
     fun startRecording(encoderSurface: Surface, width: Int, height: Int) {
         glEventQueue.offer {
-            recordingWindowSurface?.release()
+            // [防御性修复] 如果已经在录制中，先停止旧的录制再开始新的
+            if (isRecordingVideo) {
+                Logger.w(TAG, "startRecording called while already recording, stopping old first")
+                recordingWindowSurface?.release()
+                recordingWindowSurface = null
+                isRecordingVideo = false
+            }
             recordingWindowSurface = WindowSurface(encoderSurface, eglCore).apply { create() }
             recordingViewportWidth = width
             recordingViewportHeight = height
@@ -243,6 +249,10 @@ class CameraPreviewRenderer(private val context: Context) {
 
     fun stopRecording() {
         glEventQueue.offer {
+            if (!isRecordingVideo) {
+                Logger.d(TAG, "stopRecording called but not recording, ignore")
+                return@offer
+            }
             isRecordingVideo = false
             recordingWindowSurface?.release()
             recordingWindowSurface = null

@@ -10,6 +10,7 @@ import com.picme.core.image.CoilConfig
 import com.picme.di.AppContainer
 import com.picme.di.AppContainerImpl
 import com.picme.domain.agent.CapabilityRegistry
+import com.picme.domain.agent.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
 import com.picme.domain.repository.MediaRepository
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
@@ -68,11 +69,19 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     /**
      * Activity 生命周期跟踪器
      *
-     * 用于测试框架获取当前前台 Activity 进行截屏等操作。
+     * 用于测试框架获取当前前台 Activity 进行截屏等操作，
+     * 同时联动 MnnResourceManager 实现应用级前后台状态感知。
      */
     private inner class ActivityTracker : ActivityLifecycleCallbacks {
+        private var activityCount = 0
+
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
-        override fun onActivityStarted(activity: Activity) {}
+        override fun onActivityStarted(activity: Activity) {
+            if (activityCount == 0) {
+                MnnResourceManager.getInstance(this@PicMeApplication).onAppForeground()
+            }
+            activityCount++
+        }
         override fun onActivityResumed(activity: Activity) {
             currentActivity = activity
             Logger.d(TAG, "Activity resumed: ${activity.javaClass.simpleName}")
@@ -82,7 +91,12 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                 currentActivity = null
             }
         }
-        override fun onActivityStopped(activity: Activity) {}
+        override fun onActivityStopped(activity: Activity) {
+            activityCount--
+            if (activityCount == 0) {
+                MnnResourceManager.getInstance(this@PicMeApplication).onAppBackground()
+            }
+        }
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
         override fun onActivityDestroyed(activity: Activity) {
             // Activity 销毁时清理引用
