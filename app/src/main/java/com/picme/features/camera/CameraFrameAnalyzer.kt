@@ -27,10 +27,22 @@ private object FaceDetectionFrameCounter {
     // 减少检测频率以缓解 GC 压力和发热。
     private const val DETECTION_INTERVAL = 3
 
+    // [过热修复] 时间冷却：最小检测间隔，防止检测线程持续满载导致发热
+    private var lastDetectTimeMs: Long = 0L
+    private const val MIN_DETECTION_INTERVAL_MS = 100L  // 最高 10fps 检测频率，平衡响应与功耗
+
+    // [过热修复] 检测进行中标志，防止 Handler 队列积压导致重复检测排队
+    @Volatile
+    private var isDetecting = false
+
     // 运动检测: 记录上次人脸中心点
     private var lastFaceCenterX: Float = -1f
     private var lastFaceCenterY: Float = -1f
     private const val MOTION_THRESHOLD = 0.05f  // 归一化坐标变化超过 5% 视为快速移动
+
+    // [过热修复] 连续运动检测计数器，防止快移场景下每帧都触发检测
+    private var consecutiveMotionDetects = 0
+    private const val MAX_CONSECUTIVE_MOTION = 2  // 最多连续 2 次运动触发后强制回到间隔模式
 
     // [常量定义] 人脸关键点索引（106 点模型）
     internal const val LANDMARK_106_INDEX_X = 48
@@ -44,25 +56,60 @@ private object FaceDetectionFrameCounter {
     fun shouldDetect(currentFaceCenter: Offset? = null): Boolean {
         counter++
 
+        // [过热修复-1] 时间冷却：距离上次检测不足 MIN_DETECTION_INTERVAL_MS 时直接跳过
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastDetectTimeMs < MIN_DETECTION_INTERVAL_MS) {
+            return false
+        }
+
+        // [过热修复-2] 检测进行中时跳过，防止 Handler 队列积压导致背靠背检测
+        if (isDetecting) {
+            Logger.dThrottled("Camera", "skip_detecting", "[Perf] Skip frame: detection in progress")
+            return false
+        }
+
         // 规则1: 每隔 N 帧必须检测一次
         if (counter % DETECTION_INTERVAL == 0) {
             return true
         }
 
-        // 规则2: 如果从未检测到人脸,需要检测
+        // 规则2: 如果从未检测到人脸,需要检测（但受时间冷却约束）
         if (currentFaceCenter == null || lastFaceCenterX < 0) {
             return true
         }
 
-        // 规则3: 检测快速移动,立即重新检测
+        // 规则3: 检测快速移动,但限制连续运动检测次数防止过热
         val deltaX = kotlin.math.abs(currentFaceCenter.x - lastFaceCenterX)
         val deltaY = kotlin.math.abs(currentFaceCenter.y - lastFaceCenterY)
         if (deltaX > MOTION_THRESHOLD || deltaY > MOTION_THRESHOLD) {
-            Logger.d("Camera", "[Perf] Fast motion detected (dx=$deltaX, dy=$deltaY), force re-detect")
-            return true
+            if (consecutiveMotionDetects < MAX_CONSECUTIVE_MOTION) {
+                Logger.d("Camera", "[Perf] Fast motion detected (dx=$deltaX, dy=$deltaY), force re-detect")
+                return true
+            }
+            // 超过连续运动检测上限，退回间隔模式冷却
+            return false
         }
 
+        // 运动停止时重置连续运动计数
+        consecutiveMotionDetects = 0
+
         return false
+    }
+
+    /**
+     * 标记检测开始（由分析线程在 YUV 转换前调用）
+     */
+    fun markDetectionStart() {
+        isDetecting = true
+    }
+
+    /**
+     * 标记检测完成（由分析线程在推理和坐标转换完成后调用）
+     */
+    fun markDetectionComplete() {
+        isDetecting = false
+        lastDetectTimeMs = SystemClock.elapsedRealtime()
+        consecutiveMotionDetects++
     }
 
     /**
@@ -77,6 +124,9 @@ private object FaceDetectionFrameCounter {
         counter = 0
         lastFaceCenterX = -1f
         lastFaceCenterY = -1f
+        lastDetectTimeMs = 0L
+        isDetecting = false
+        consecutiveMotionDetects = 0
     }
 }
 
@@ -213,8 +263,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
             Offset(it.faceCenterX, it.faceCenterY)
         }
 
-        val shouldSkipDetection = !FaceDetectionFrameCounter.shouldDetect(lastFaceCenter) &&
-                                   existingWarpParams?.hasFace == true
+        val shouldDetect = FaceDetectionFrameCounter.shouldDetect(lastFaceCenter)
+        val shouldSkipDetection = !shouldDetect && existingWarpParams?.hasFace == true
 
         // [帧同步 CR-P0-3] 使用 ImageProxy 时间戳精确查询对应的 FrameId。
         // ImageProxy.imageInfo.timestamp 与 SurfaceTexture.timestamp 共享相机硬件时间基准。
@@ -252,21 +302,23 @@ internal fun handleImageAnalysisFrameMediaPipe(
             return
         }
 
+        // [过热修复] 标记检测开始，防止后续帧排队检测
+        FaceDetectionFrameCounter.markDetectionStart()
+
         val detectionStartMs = System.currentTimeMillis()
 
         // [GPU 检测优化] YUV→Bitmap 零 JPEG 路径
-        val detectionResult = run {
-            val yuvStart = SystemClock.elapsedRealtime()
-            val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
-            val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
-            if (bitmap == null) {
-                return
-            }
-            Logger.dThrottled("Camera", "yuv_bitmap", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
-            // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
-            val result = faceDetector.detect(bitmap, 0, lensFacing)
-            result
+        val yuvStart = SystemClock.elapsedRealtime()
+        val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
+        val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
+        if (bitmap == null) {
+            // [过热修复] Bitmap 转换失败也需标记检测完成，防止 isDetecting 永久卡住
+            FaceDetectionFrameCounter.markDetectionComplete()
+            return
         }
+        Logger.dThrottled("Camera", "yuv_bitmap", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
+        // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
+        val detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
@@ -326,14 +378,22 @@ internal fun handleImageAnalysisFrameMediaPipe(
             onShowFocusIndicatorChanged(true)
 
             onFaceWarpParamsChanged(faceWarpParams)
+
+            // [过热修复] 标记检测完成，更新时间戳和运动计数
+            FaceDetectionFrameCounter.markDetectionComplete()
         } else {
             onShowFocusIndicatorChanged(false)
             onFaceWarpParamsChanged(
                 FaceWarpParams(requestedDetectionEngineMode = detectionEngineMode)
             )
+
+            // [过热修复] 检测完成（即使未检测到人脸也更新冷却时间）
+            FaceDetectionFrameCounter.markDetectionComplete()
         }
     } catch (error: Exception) {
         Logger.e("Camera", "MediaPipe face detection error", error)
+        // [过热修复] 异常时重置检测状态，防止 isDetecting 永久卡住
+        FaceDetectionFrameCounter.markDetectionComplete()
     } finally {
         imageProxy.close()
     }
