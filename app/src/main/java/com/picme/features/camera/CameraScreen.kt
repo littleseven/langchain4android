@@ -840,11 +840,11 @@ fun CameraContent(
         }
     }
 
-    // FaceDetection 按需加载：当美颜参数需要人脸能力时强制拉起，不受默认检测开关阻断。
+    // FaceDetection 按需加载：美颜开关打开即加载（满足“开即生效”），关闭即卸载。
     val roiStageConfig = runtimeContext.roiStageConfig
     val landmarkStageConfig = runtimeContext.landmarkStageConfig
-    val shouldEnableFaceDetection = remember(beautySettings) {
-        beautySettings.enabled && beautySettings.requiresFaceDetection()
+    val shouldEnableFaceDetection = remember(beautySettings.enabled) {
+        beautySettings.enabled
     }
     LaunchedEffect(
         shouldEnableFaceDetection,
