@@ -460,7 +460,8 @@ fun rememberAgentChatConfig(
 
     // 解析远程模型配置
     // 注意：aiAgentSelectedRemoteModel 保存的是 uniqueKey（providerId:modelId），
-    // 优先按 uniqueKey 查找；找不到再按 modelId 查找并 fallback 到默认配置。
+    // 优先按 uniqueKey 查找；找不到再按 modelId 查找。
+    // 用户未配置时返回 null，让 AiAgentUseCase 使用 SCF 兜底配置。
     val remoteConfig = remember(aiAgentRemoteModelConfigs, aiAgentSelectedRemoteModel) {
         val configs = if (aiAgentRemoteModelConfigs.isNotBlank()) {
             RemoteModelConfigs.fromJson(aiAgentRemoteModelConfigs)
@@ -469,7 +470,6 @@ fun rememberAgentChatConfig(
         }
         configs.getConfig(aiAgentSelectedRemoteModel)
             ?: configs.getConfigByModelId(aiAgentSelectedRemoteModel)
-            ?: RemoteModelConfig.defaultConfig(aiAgentSelectedRemoteModel)
     }
 
     // 读取腾讯云 SCF Gateway Token

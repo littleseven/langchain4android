@@ -92,12 +92,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig =
-                if (releaseStoreFile.isNotBlank()) {
-                    signingConfigs.getByName("release")
-                } else {
-                    signingConfigs.getByName("debug")
-                }
+            // 显式使用 debug 签名构建 release 包
+            signingConfig = signingConfigs.getByName("debug")
         }
         debug {
             isDebuggable = true
