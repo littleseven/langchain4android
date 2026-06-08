@@ -1,11 +1,11 @@
 package com.picme.agent.core.api.command
 
+import com.picme.agent.core.api.context.AgentIdGenerator
+import com.picme.agent.core.api.context.MediaType
+import com.picme.agent.core.api.execution.ExecutionPlan
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.api.execution.ExecutionPlan
-import com.picme.agent.core.api.context.AgentIdGenerator
-import com.picme.agent.core.api.context.MediaType
 
 /**
  * Agent 命令 V2 —— 精简 JSON 风格

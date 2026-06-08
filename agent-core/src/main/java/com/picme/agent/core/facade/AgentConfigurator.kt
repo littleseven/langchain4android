@@ -1,20 +1,20 @@
 package com.picme.agent.core.facade
 
 import android.content.Context
-import com.picme.agent.core.platform.logging.Logger
+import com.picme.agent.core.api.android.RemoteModelConfig
 import com.picme.agent.core.api.policy.AiAgentMode
 import com.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.picme.agent.core.api.android.RemoteModelConfig
-import com.picme.agent.core.runtime.state.SceneManager
-import com.picme.agent.core.runtime.inference.AdaptiveStrategySelector
-import com.picme.agent.core.runtime.inference.IntentCache
-import com.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.picme.agent.core.platform.llm.local.LocalLlmEngine
+import com.picme.agent.core.platform.llm.remote.RemoteOrchestrator
+import com.picme.agent.core.platform.logging.Logger
 import com.picme.agent.core.platform.storage.MemoryManager
-import com.picme.agent.core.runtime.policy.PrivacyGuard
-import com.picme.agent.core.runtime.parsing.PromptBuilder
 import com.picme.agent.core.runtime.capability.CapabilityRegistry
+import com.picme.agent.core.runtime.inference.AdaptiveStrategySelector
 import com.picme.agent.core.runtime.inference.InferenceRouter
+import com.picme.agent.core.runtime.inference.IntentCache
+import com.picme.agent.core.runtime.parsing.PromptBuilder
+import com.picme.agent.core.runtime.policy.PrivacyGuard
+import com.picme.agent.core.runtime.state.SceneManager
 
 /**
  * Agent 平台配置器

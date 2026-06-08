@@ -71,6 +71,28 @@ public:
                                           float confidenceThreshold = 0.5f,
                                           float nmsThreshold = 0.4f);
 
+    /**
+     * [Zero-Copy] RetinaFace 检测——直接从 YUV NV21 输入
+     * 使用 MNN ImageProcess::convert 做 NV21→RGB + resize + 归一化，
+     * 替换手动 pixel loop，消除 Kotlin 层 YUV→ARGB→RGB 的多重 CPU 拷贝
+     *
+     * @param nv21Data 紧凑 NV21 数据 (Y 平面 + 交错 VU 平面)
+     * @param width 原始图像宽度
+     * @param height 原始图像高度
+     */
+    std::vector<FaceBox> detectRetinaFaceFromNv21(const unsigned char *nv21Data,
+                                                   int width,
+                                                   int height,
+                                                   float confidenceThreshold = 0.5f,
+                                                   float nmsThreshold = 0.4f);
+
+    /**
+     * [Zero-Copy] 单输出检测（2D106 关键点）——直接从 YUV NV21 输入
+     */
+    std::vector<float> detectFromNv21(const unsigned char *nv21Data,
+                                      int width,
+                                      int height);
+
     enum ReleaseFlags {
         RELEASE_TENSORS = 1 << 0,
         RELEASE_SESSION = 1 << 1,
@@ -106,8 +128,11 @@ private:
     std::string inputName_;
     std::vector<std::string> outputNames_;
 
-    // 预处理配置
+    // 预处理配置 (RGB 输入，保留兼容旧路径)
     std::unique_ptr<MNN::CV::ImageProcess> pretreat_;
+
+    // [Zero-Copy] NV21 YUV 预处理配置
+    std::unique_ptr<MNN::CV::ImageProcess> pretreatNv21_;
 
     // [性能优化] 复用结果缓冲区，避免每帧 std::vector 分配
     std::vector<float> resultBuffer_;

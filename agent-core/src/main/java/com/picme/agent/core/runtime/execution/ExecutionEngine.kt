@@ -1,25 +1,24 @@
 package com.picme.agent.core.runtime.execution
 
-import com.picme.agent.core.platform.logging.Logger
-import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.capability.FaceDetectionProvider
 import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentAction
 import com.picme.agent.core.api.context.AgentContext
 import com.picme.agent.core.api.context.AgentErrorCode
-import com.picme.agent.core.runtime.execution.ExecutionState
+import com.picme.agent.core.api.context.AgentScene
 import com.picme.agent.core.api.context.PageContext
 import com.picme.agent.core.api.execution.ExecutionPlan
 import com.picme.agent.core.api.execution.ExecutionResult
 import com.picme.agent.core.api.execution.PlanStep
 import com.picme.agent.core.api.execution.StepResult
+import com.picme.agent.core.api.execution.WaitCondition
+import com.picme.agent.core.platform.logging.Logger
+import com.picme.agent.core.runtime.capability.CapabilityRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.picme.agent.core.api.context.AgentScene
-import com.picme.agent.core.api.execution.WaitCondition
-import com.picme.agent.core.api.capability.FaceDetectionProvider
-import com.picme.agent.core.runtime.capability.CapabilityRegistry
 
 /**
  * 命令分发器接口

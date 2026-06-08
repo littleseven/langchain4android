@@ -230,6 +230,65 @@ class MnnRoiDetector(
     }
 
     /**
+     * [Zero-Copy] ROI 检测——直接从 YUV NV21 输入
+     *
+     * 绕过 Bitmap 转换和 getScaledBitmap CPU 缩放，
+     * NV21 DirectByteBuffer 直传 MNN，由 C++ 层 ImageProcess::convert 处理。
+     *
+     * @param nv21Data 紧凑 NV21 数据
+     * @param width 原始图像宽度（可能已旋转）
+     * @param height 原始图像高度（可能已旋转）
+     * @return 原图坐标的 ROI 矩形，未检测到返回 null
+     */
+    fun detectRoiFromYuv(nv21Data: java.nio.ByteBuffer, width: Int, height: Int): RectF? {
+        ensureInitialized()
+
+        val det = detector ?: run {
+            Logger.w(TAG, "[Perf] MnnRoiDetector not initialized after lazy init, skipping")
+            return null
+        }
+
+        return try {
+            val result = det.detectRetinaFaceFromYuv(nv21Data, width, height,
+                CONFIDENCE_THRESHOLD, 0.4f)
+
+            if (result == null || result.size < 5) {
+                return null
+            }
+
+            // MNN ImageProcess 内部做了 letterbox + resize → inputSize_ × inputSize_
+            // 输出坐标在 inputSize_ 空间，需要映射回原图
+            val origW = width.toFloat()
+            val origH = height.toFloat()
+            val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
+            val padLeft = ((INPUT_SIZE - (origW * scale).toInt()) / 2).toFloat()
+            val padTop = ((INPUT_SIZE - (origH * scale).toInt()) / 2).toFloat()
+
+            var mappedX1 = ((result[0] - padLeft) / scale)
+            var mappedY1 = ((result[1] - padTop) / scale)
+            var mappedX2 = ((result[2] - padLeft) / scale)
+            var mappedY2 = ((result[3] - padTop) / scale)
+
+            val centerX = (mappedX1 + mappedX2) / 2f
+            val centerY = (mappedY1 + mappedY2) / 2f
+            val w = mappedX2 - mappedX1
+            val h = mappedY2 - mappedY1
+            val newWidth = w * ROI_EXPAND_RATIO
+            val newHeight = h * ROI_EXPAND_RATIO
+
+            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+
+            RectF(mappedX1, mappedY1, mappedX2, mappedY2)
+        } catch (e: Exception) {
+            Logger.e(TAG, "MnnRoi YUV detection failed", e)
+            null
+        }
+    }
+
+    /**
      * 获取复用的缩放 Bitmap，避免每帧创建
      */
     private fun getScaledBitmap(source: Bitmap, targetSize: Int): Bitmap {

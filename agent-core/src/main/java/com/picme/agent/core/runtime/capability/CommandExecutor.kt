@@ -1,10 +1,10 @@
 package com.picme.agent.core.runtime.capability
 
-import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.capability.Capability
 import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentAction
 import com.picme.agent.core.api.context.AgentContext
 import com.picme.agent.core.api.context.PageContext
-import com.picme.agent.core.api.capability.Capability
 import kotlinx.coroutines.withTimeout
 
 /**

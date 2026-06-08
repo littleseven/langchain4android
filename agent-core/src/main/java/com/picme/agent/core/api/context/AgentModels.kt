@@ -1,9 +1,9 @@
 package com.picme.agent.core.api.context
 
+import com.picme.agent.core.api.command.AgentCommand
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.api.command.AgentCommand
 import java.util.concurrent.atomic.AtomicInteger
 
 /**

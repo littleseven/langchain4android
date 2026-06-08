@@ -64,6 +64,19 @@ bool MnnFaceDetector::load(const std::string &modelPath,
 
     pretreat_.reset(MNN::CV::ImageProcess::create(pretreatConfig));
 
+    // [Zero-Copy] 创建 NV21 YUV 预处理配置
+    // YUV_NV21 → RGB，同时完成 resize + 归一化，替代手动 pixel loop
+    MNN::CV::ImageProcess::Config nv21Config;
+    nv21Config.sourceFormat = MNN::CV::YUV_NV21;
+    nv21Config.destFormat = MNN::CV::RGB;
+    nv21Config.mean[0] = 127.5f;
+    nv21Config.mean[1] = 127.5f;
+    nv21Config.mean[2] = 127.5f;
+    nv21Config.normal[0] = 0.0078125f; // 1/128
+    nv21Config.normal[1] = 0.0078125f;
+    nv21Config.normal[2] = 0.0078125f;
+    pretreatNv21_.reset(MNN::CV::ImageProcess::create(nv21Config));
+
     // [关键修复] 检测模型是否包含内置归一化节点
     // 2d106det.mnn 包含 _minusscalar0 和 _mulscalar0，有内置归一化
     // det_10g.mnn 没有这些节点，需要外部归一化
@@ -579,6 +592,188 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
     return result;
 }
 
+std::vector<FaceBox> MnnFaceDetector::detectRetinaFaceFromNv21(const unsigned char *nv21Data,
+                                                                int width,
+                                                                int height,
+                                                                float confidenceThreshold,
+                                                                float nmsThreshold) {
+    if (!loaded_ || !inputTensor_ || !pretreatNv21_) {
+        LOGE("Detector or NV21 pretreat not ready");
+        return {};
+    }
+
+    auto totalStart = std::chrono::high_resolution_clock::now();
+    int totalPixels = inputSize_ * inputSize_;
+
+    // [Zero-Copy] NV21 stride = width (紧凑布局，无 padding)
+    int nv21Stride = width;
+
+    // [Letterbox] 计算缩放参数
+    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
+    int scaledW = static_cast<int>(width * scale);
+    int scaledH = static_cast<int>(height * scale);
+    int padLeft = (inputSize_ - scaledW) / 2;
+    int padTop = (inputSize_ - scaledH) / 2;
+
+    // 1. 先把 input tensor 填成归一化后的黑色
+    MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
+    MNN::Tensor tmpInput(inputTensor_, inputDimType);
+    float *inputData = tmpInput.host<float>();
+    float normMean = hasBuiltInNormalization_ ? 0.0f : 127.5f;
+    float normStd = hasBuiltInNormalization_ ? 1.0f : 128.0f;
+    float blackVal = (0.0f - normMean) / normStd;
+    std::fill_n(inputData, tmpInput.elementSize(), blackVal);
+
+    // 2. 构造 letterbox 变换矩阵（目标→源坐标映射）
+    // MNN Matrix 将目标像素映射到源 NV21 坐标
+    MNN::CV::Matrix trans;
+    trans.setScale(1.0f / scale, 1.0f / scale);
+    trans.postTranslate(-padLeft / scale, -padTop / scale);
+
+    // 3. 调用 MNN ImageProcess::convert —— 内部做 NV21→RGB + resize + letterbox + 归一化
+    auto tPreStart = std::chrono::high_resolution_clock::now();
+    pretreatNv21_->setMatrix(trans);
+    auto result = pretreatNv21_->convert(nv21Data, width, height, nv21Stride,
+                                         inputTensor_);
+    auto tPreEnd = std::chrono::high_resolution_clock::now();
+
+    if (result != MNN::NO_ERROR) {
+        LOGE("NV21 ImageProcess::convert failed: error=%d", result);
+        return {};
+    }
+
+    // 注意：pretreatNv21_->convert() 直接写入 inputTensor_（GPU 后端时为 device tensor）
+    // 无需额外 copyFromHostTensor，因为 convert 已经处理了 device 写入
+    // 但当前实现使用 tmpInput 的 host 数据，所以仍需 copyFromHostTensor
+    // [关键] 如果 MNN 后端是 GPU，convert 写入的是 host tensor，需要 copyToDevice
+    // 对于 CPU 后端则不需要
+
+    // 重新构建 tmpInput（因为 convert 可能改变了 inputTensor_ 的 device 内存）
+    // 实际上 pretreatNv21_->convert 写入的是 inputTensor_ 的 host 内存区域
+    // 需要 copyFromHostTensor 来同步到 device（如果是 GPU 后端）
+    inputTensor_->copyFromHostTensor(&tmpInput);
+
+    auto preprocessMs = std::chrono::duration_cast<std::chrono::milliseconds>(tPreEnd - tPreStart).count();
+
+    // 4. 推理
+    auto tInferStart = std::chrono::high_resolution_clock::now();
+    interpreter_->runSession(session_);
+    auto tInferEnd = std::chrono::high_resolution_clock::now();
+    auto inferMs = std::chrono::duration_cast<std::chrono::milliseconds>(tInferEnd - tInferStart).count();
+
+    // 5. 输出处理（与 detectRetinaFace 相同）
+    std::vector<FaceBox> allFaces;
+
+    // Scale 1,2,3 处理（与 detectRetinaFace 相同）
+    for (int scaleIdx = 0; scaleIdx < 3; scaleIdx++) {
+        MNN::Tensor *scoreOut = outputNames_.size() > (size_t)scaleIdx ? interpreter_->getSessionOutput(session_, outputNames_[scaleIdx].c_str()) : nullptr;
+        MNN::Tensor *bboxOut = outputNames_.size() > (size_t)(scaleIdx + 3) ? interpreter_->getSessionOutput(session_, outputNames_[scaleIdx + 3].c_str()) : nullptr;
+        MNN::Tensor *landmarkOut = outputNames_.size() > (size_t)(scaleIdx + 6) ? interpreter_->getSessionOutput(session_, outputNames_[scaleIdx + 6].c_str()) : nullptr;
+        if (!scoreOut || !bboxOut || !landmarkOut) {
+            LOGE("Failed to get scale %d outputs", scaleIdx + 1);
+            continue;
+        }
+
+        int featH = scoreOut->height(), featW = scoreOut->width();
+        int featureSize;
+        int scoreChannels = scoreOut->channel();
+        if (featH > 1 && featW > 1) {
+            featureSize = featH;
+        } else {
+            if (scoreOut->batch() > 1 && scoreOut->channel() >= 1) {
+                scoreChannels = scoreOut->channel();
+                featureSize = scoreChannels == 1 ?
+                    static_cast<int>(std::sqrt(scoreOut->batch() / 2.0f)) :
+                    static_cast<int>(std::sqrt(scoreOut->batch()));
+            } else {
+                scoreChannels = 2;
+                featureSize = static_cast<int>(std::sqrt(scoreOut->elementSize() / 2.0f));
+            }
+            if (featureSize <= 0) featureSize = inputSize_ / (8 << scaleIdx);
+        }
+
+        MNN::Tensor scoreTensor(scoreOut, MNN::Tensor::DimensionType::CAFFE);
+        MNN::Tensor bboxTensor(bboxOut, MNN::Tensor::DimensionType::CAFFE);
+        MNN::Tensor landmarkTensor(landmarkOut, MNN::Tensor::DimensionType::CAFFE);
+        scoreOut->copyToHostTensor(&scoreTensor);
+        bboxOut->copyToHostTensor(&bboxTensor);
+        landmarkOut->copyToHostTensor(&landmarkTensor);
+
+        const float *scoreData = scoreTensor.host<float>();
+        const float *bboxData = bboxTensor.host<float>();
+        const float *landmarkData = landmarkTensor.host<float>();
+        if (scoreData && bboxData && landmarkData) {
+            processRetinaFaceOutput(scoreData, bboxData, landmarkData, featureSize,
+                                    8 << scaleIdx, scoreChannels, allFaces, confidenceThreshold);
+        }
+    }
+
+    auto tPostEnd = std::chrono::high_resolution_clock::now();
+    auto postMs = std::chrono::duration_cast<std::chrono::milliseconds>(tPostEnd - tInferEnd).count();
+
+    // NMS
+    auto resultNms = applyNMS(allFaces, nmsThreshold);
+    auto tTotalEnd = std::chrono::high_resolution_clock::now();
+    auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(tTotalEnd - totalStart).count();
+
+    LOGI("[Perf] MNN RetinaFace[NV21→ZERO-COPY] DONE: total=%lldms (preprocess=%lldms, infer=%lldms, postprocess=%lldms), faces=%zu",
+         totalMs, preprocessMs, inferMs, postMs, resultNms.size());
+
+    return resultNms;
+}
+
+std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data,
+                                                    int width,
+                                                    int height) {
+    if (!loaded_ || !inputTensor_ || !pretreatNv21_ || outputTensors_.empty()) {
+        return {};
+    }
+
+    int nv21Stride = width;
+    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
+    int scaledW = static_cast<int>(width * scale);
+    int scaledH = static_cast<int>(height * scale);
+    int padLeft = (inputSize_ - scaledW) / 2;
+    int padTop = (inputSize_ - scaledH) / 2;
+
+    // 填充黑色
+    MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
+    MNN::Tensor tmpInput(inputTensor_, inputDimType);
+    float *inputData = tmpInput.host<float>();
+    float normMean = hasBuiltInNormalization_ ? 0.0f : 127.5f;
+    float normStd = hasBuiltInNormalization_ ? 1.0f : 128.0f;
+    float blackVal = (0.0f - normMean) / normStd;
+    std::fill_n(inputData, tmpInput.elementSize(), blackVal);
+
+    MNN::CV::Matrix trans;
+    trans.setScale(1.0f / scale, 1.0f / scale);
+    trans.postTranslate(-padLeft / scale, -padTop / scale);
+    pretreatNv21_->setMatrix(trans);
+
+    auto result = pretreatNv21_->convert(nv21Data, width, height, nv21Stride, inputTensor_);
+    if (result != MNN::NO_ERROR) {
+        LOGE("NV21 ImageProcess::convert failed for landmark detection: error=%d", result);
+        return {};
+    }
+
+    inputTensor_->copyFromHostTensor(&tmpInput);
+    interpreter_->runSession(session_);
+
+    MNN::Tensor *output = outputTensors_[0];
+    MNN::Tensor::DimensionType outputDimType = output->getDimensionType();
+    MNN::Tensor tmpOutput(output, outputDimType);
+    output->copyToHostTensor(&tmpOutput);
+
+    int elementSize = tmpOutput.elementSize();
+    resultBuffer_.clear();
+    resultBuffer_.reserve(elementSize);
+    const float *data = tmpOutput.host<float>();
+    for (int i = 0; i < elementSize; i++) {
+        resultBuffer_.push_back(data[i]);
+    }
+    return resultBuffer_;
+}
+
 void MnnFaceDetector::processRetinaFaceOutput(const float *score,
                                               const float *bbox,
                                               const float *landmark,
@@ -887,6 +1082,7 @@ void MnnFaceDetector::release(int flags) {
 
     if (releaseInterpreter) {
         pretreat_.reset();
+        pretreatNv21_.reset();
         loaded_ = false;
         useGpu_ = false;
         inputName_.clear();

@@ -16,6 +16,7 @@ import com.picme.beauty.api.facedetect.InferenceBackendType
 import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
+import java.nio.ByteBuffer
 
 /**
  * 人脸检测管理器
@@ -140,6 +141,104 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             // [NCNN 保护] 捕获 native 崩溃（如 OpenMP 线程亲和性错误）
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
             Logger.e(TAG, "Face detection native error (NCNN/OpenMP?)", e)
+            null
+        }
+    }
+
+    /**
+     * [Zero-Copy] MNN 人脸检测——直接从 YUV NV21 输入
+     *
+     * 仅支持 MNN ROI 检测器。NV21 DirectByteBuffer 直传 C++ 层，
+     * 由 MNN ImageProcess::convert 在 native 端完成 NV21→RGB + resize + letterbox + 归一化。
+     * 消除 YUV→ARGB Bitmap（~5ms）和 Bitmap→RGB ByteBuffer（~2ms）的 CPU 开销。
+     *
+     * @param nv21Data 紧凑 NV21 DirectByteBuffer
+     * @param width 原始图像宽度
+     * @param height 原始图像高度
+     * @param bitmap 若 ROI 检测成功，用于 landmark 检测的 Bitmap（可为 null，跳过 landmark 阶段）
+     * @return ROI 矩形（原图坐标），或 null
+     */
+    fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int): RectF? {
+        if (!isPipelineInitialized) {
+            Logger.w(TAG, "Pipeline not initialized, skipping NV21 detection")
+            return null
+        }
+
+        // 仅 MNN ROI 检测器支持 NV21 路径
+        val mnnRoi = roiDetector as? MnnRoiDetector ?: run {
+            Logger.d(TAG, "NV21 path only available for MNN ROI detector")
+            return null
+        }
+
+        return try {
+            mnnRoi.detectRoiFromYuv(nv21Data, width, height)
+        } catch (e: Exception) {
+            Logger.e(TAG, "NV21 ROI detection failed", e)
+            null
+        }
+    }
+
+    /**
+     * 仅执行 landmark 检测（使用预计算的 ROI）
+     *
+     * 配合 detectRoiFromNv21() 使用：ROI 由 NV21 零拷贝路径得到，
+     * landmark 检测基于 Bitmap 完成（含 ROI 裁剪）。
+     *
+     * @return FaceDetectionResult（含 106 landmarks），或 null
+     */
+    fun detectLandmarksWithRoi(bitmap: Bitmap, lensFacing: Int, roi: RectF): FaceDetectionResult? {
+        if (!isPipelineInitialized) {
+            Logger.w(TAG, "Pipeline not initialized")
+            return null
+        }
+
+        val startTime = SystemClock.elapsedRealtime()
+        val config = pipelineConfig ?: return null
+
+        return try {
+            synchronized(lock) {
+                val landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roi)
+                lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+                if (landmarkResult == null || landmarkResult.size < POINT_COUNT * 2) {
+                    return null
+                }
+
+                val detectionSource = when (config.landmarkEngine) {
+                    InferenceBackendType.MNN -> FaceDetectionSource.MNN
+                    InferenceBackendType.NCNN -> FaceDetectionSource.NCNN
+                    else -> FaceDetectionSource.MEDIAPIPE
+                }
+                lastDetectionSource = detectionSource
+
+                val adapter = FaceLandmarkAdapterRegistry.getAdapter(detectionSource)
+                    ?: return null
+                val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
+                    ?: return null
+
+                val normalizedRoi = RectF(
+                    roi.left / bitmap.width.toFloat(),
+                    roi.top / bitmap.height.toFloat(),
+                    roi.right / bitmap.width.toFloat(),
+                    roi.bottom / bitmap.height.toFloat()
+                )
+
+                val useGpuForLandmark = config.landmarkEngine == InferenceBackendType.MNN ||
+                    config.landmarkEngine == InferenceBackendType.NCNN
+
+                FaceDetectionResult(
+                    landmarks106 = adaptedResult,
+                    detectionSource = detectionSource,
+                    roiRect = normalizedRoi,
+                    roiDetectorName = "${config.roiEngine.name}(NV21)",
+                    useGpuForRoi = config.roiEngine == InferenceBackendType.MNN,
+                    landmarkDetectorName = config.landmarkEngine.name,
+                    useGpuForLandmark = useGpuForLandmark
+                )
+            }
+        } catch (e: Exception) {
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Logger.e(TAG, "Landmark detection with precomputed ROI failed", e)
             null
         }
     }

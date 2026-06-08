@@ -3,6 +3,7 @@ package com.picme.features.camera.facedetect
 import android.graphics.Bitmap
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
+import java.nio.ByteBuffer
 
 /**
  * 图像处理工具类
@@ -196,5 +197,104 @@ object ImageUtils {
         reusableYPlane = null
         reusableUPlane = null
         reusableVPlane = null
+        reusableNv21Buffer = null
+    }
+
+    // [Zero-Copy] 复用 NV21 DirectByteBuffer 池
+    private var reusableNv21Buffer: ByteBuffer? = null
+
+    /**
+     * [Zero-Copy] ImageProxy → NV21 DirectByteBuffer
+     *
+     * 将 CameraX YUV_420_888 三平面紧凑打包为 NV21 格式的 DirectByteBuffer。
+     * NV21 布局: Y 平面 (width*height) + 交错 VU 平面 (width*height/2)
+     *
+     * 此方法做一次紧凑的 memcpy（处理 rowStride/pixelStride），
+     * 替代之前的 YUV→ARGB Bitmap（~5ms）+ Bitmap→RGB ByteBuffer（~2ms）双重重 CPU 拷贝。
+     *
+     * @return NV21 DirectByteBuffer，直接可传入 MNN ImageProcess
+     */
+    @ExperimentalGetImage
+    fun imageProxyToNv21(imageProxy: ImageProxy): ByteBuffer? {
+        val width = imageProxy.width
+        val height = imageProxy.height
+        val yPlane = imageProxy.planes[0]
+        val uPlane = imageProxy.planes[1]
+        val vPlane = imageProxy.planes[2]
+
+        val yBuffer = yPlane.buffer
+        val uBuffer = uPlane.buffer
+        val vBuffer = vPlane.buffer
+
+        val yRowStride = yPlane.rowStride
+        val uvRowStride = uPlane.rowStride
+        val uvPixelStride = uPlane.pixelStride
+
+        val nv21Size = width * height * 3 / 2
+        var nv21 = reusableNv21Buffer
+        if (nv21 == null || nv21.capacity() < nv21Size) {
+            nv21 = ByteBuffer.allocateDirect(nv21Size)
+            reusableNv21Buffer = nv21
+        }
+        nv21.clear()
+
+        // --- Y 平面拷贝（处理 rowStride） ---
+        if (yRowStride == width) {
+            // 最优路径：无 padding，直接 bulk copy
+            yBuffer.position(0)
+            yBuffer.limit(width * height)
+            nv21.put(yBuffer)
+        } else {
+            // 逐行拷贝（处理 rowStride > width 的情况）
+            val yBytes = ByteArray(width)
+            for (row in 0 until height) {
+                yBuffer.position(row * yRowStride)
+                yBuffer.get(yBytes, 0, width)
+                nv21.put(yBytes)
+            }
+        }
+
+        // --- UV 交错平面拷贝 (VU VU VU...) ---
+        val uvHeight = height / 2
+        val uvWidth = width / 2
+        if (uvPixelStride == 2 && uvRowStride == width) {
+            // [最优路径] 标准 NV12 格式（UV 交错），只需交换 U↔V 字节顺序
+            // 逐对交换：...UV UV UV... → ...VU VU VU...
+            val uvBytes = ByteArray(width * uvHeight)
+            uBuffer.position(0)
+            uBuffer.get(uvBytes)
+            // Swap each pair
+            for (i in 0 until width * uvHeight step 2) {
+                nv21.put(uvBytes[i + 1])  // V
+                nv21.put(uvBytes[i])      // U
+            }
+        } else if (uvPixelStride == 1) {
+            // [Planar] U 和 V 分离，需要交错
+            val uRowStride = uPlane.rowStride
+            val vRowStride = vPlane.rowStride
+            for (row in 0 until uvHeight) {
+                uBuffer.position(row * uRowStride)
+                vBuffer.position(row * vRowStride)
+                for (col in 0 until uvWidth) {
+                    nv21.put(vBuffer.get())  // V first (NV21)
+                    nv21.put(uBuffer.get())  // U second
+                }
+            }
+        } else {
+            // [通用路径] pixelStride=2 但有 row padding
+            for (row in 0 until uvHeight) {
+                uBuffer.position(row * uvRowStride)
+                for (col in 0 until uvWidth) {
+                    val uvIdx = col * uvPixelStride
+                    uBuffer.position(row * uvRowStride + uvIdx)
+                    vBuffer.position(row * uvRowStride + uvIdx)
+                    nv21.put(vBuffer.get())  // V first
+                    nv21.put(uBuffer.get())  // U second
+                }
+            }
+        }
+
+        nv21.flip()
+        return nv21
     }
 }

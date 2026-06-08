@@ -1,19 +1,17 @@
 package com.picme.agent.core.runtime.inference
 
-import com.picme.agent.core.platform.logging.Logger
 import com.picme.agent.core.api.command.AgentCommand
 import com.picme.agent.core.api.context.AgentContext
-import com.picme.agent.core.runtime.execution.InferenceResult
-import com.picme.agent.core.runtime.inference.AdaptiveStrategySelector
-import com.picme.agent.core.runtime.inference.InferenceStrategy
+import com.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.picme.agent.core.platform.llm.remote.RemoteOrchestrator
+import com.picme.agent.core.platform.logging.Logger
 import com.picme.agent.core.runtime.capability.CapabilityRegistry
-import com.picme.agent.core.runtime.state.SceneManager
+import com.picme.agent.core.runtime.execution.InferenceResult
 import com.picme.agent.core.runtime.parsing.AgentCommandParser
 import com.picme.agent.core.runtime.parsing.PromptBuilder
 import com.picme.agent.core.runtime.policy.PrivacyGuard
 import com.picme.agent.core.runtime.policy.PrivacyLevel
-import com.picme.agent.core.platform.llm.local.LocalLlmEngine
+import com.picme.agent.core.runtime.state.SceneManager
 
 /**
  * 推理路由器

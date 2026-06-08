@@ -13,6 +13,9 @@ import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.internal.facedetect.Face106ToWarpParams
 import com.picme.beauty.internal.framesync.FrameSyncBridge
 import com.picme.beauty.internal.framesync.FrameSyncManager
+import com.picme.beauty.internal.facedetect.FaceDetectorManager
+import com.picme.beauty.api.facedetect.FaceDetectionResult
+import android.graphics.RectF
 import com.picme.features.camera.facedetect.ImageUtils
 import androidx.camera.core.ImageProxy
 import com.picme.domain.model.FaceDetectIntervalProfile
@@ -382,6 +385,23 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         val detectionStartMs = System.currentTimeMillis()
 
+        // [Zero-Copy] 尝试 MNN NV21 YUV 直传路径
+        // 避免 YUV→ARGB Bitmap（~5ms）+ Bitmap→RGB ByteBuffer（~2ms）的双重 CPU 拷贝
+        val useNv21Path = faceDetector is FaceDetectorManager && detectionEngineMode == EngineType.MNN
+        var nv21Result: RectF? = null
+        var nv21Buffer: java.nio.ByteBuffer? = null
+
+        if (useNv21Path) {
+            val nv21Start = SystemClock.elapsedRealtime()
+            nv21Buffer = ImageUtils.imageProxyToNv21(imageProxy)
+            val nv21Elapsed = SystemClock.elapsedRealtime() - nv21Start
+            if (nv21Buffer != null) {
+                Logger.dThrottled("Camera", "yuv_nv21", "[Perf] YUV→NV21: ${nv21Elapsed}ms, size=${imageProxy.width}x${imageProxy.height}")
+                nv21Result = (faceDetector as FaceDetectorManager).detectRoiFromNv21(
+                    nv21Buffer, imageProxy.width, imageProxy.height)
+            }
+        }
+
         // [GPU 检测优化] YUV→Bitmap 零 JPEG 路径
         val yuvStart = SystemClock.elapsedRealtime()
         val bitmap = ImageUtils.imageProxyToBitmap(imageProxy)
@@ -392,8 +412,22 @@ internal fun handleImageAnalysisFrameMediaPipe(
             return
         }
         Logger.dThrottled("Camera", "yuv_bitmap", "[Perf] YUV→Bitmap: ${yuvElapsed}ms, size=${bitmap.width}x${bitmap.height}")
-        // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
-        val detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
+
+        // [Zero-Copy] 如果 NV21 ROI 检测成功，优先使用其结果
+        // 但需要从 Bitmap 完成 landmark 检测（含 ROI 裁剪）
+        val detectionResult: FaceDetectionResult?
+        if (nv21Result != null) {
+            // 使用 NV21 得到的 ROI 坐标，从 Bitmap 做 landmark 检测
+            val lmStart = SystemClock.elapsedRealtime()
+            val landmarkResult = (faceDetector as FaceDetectorManager).detectLandmarksWithRoi(
+                bitmap, lensFacing, nv21Result)
+            val lmElapsed = SystemClock.elapsedRealtime() - lmStart
+            Logger.dThrottled("Camera", "nv21_path", "[Perf] NV21 ROI + Bitmap Landmark: ${lmElapsed}ms, roi=${nv21Result}")
+            detectionResult = landmarkResult
+        } else {
+            // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
+            detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
+        }
 
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106

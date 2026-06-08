@@ -1,9 +1,9 @@
 package com.picme.agent.core.runtime.capability
 
+import com.picme.agent.core.api.capability.Capability
 import com.picme.agent.core.api.command.AgentCommand
 import com.picme.agent.core.api.context.AgentContext
 import com.picme.agent.core.api.context.PageContext
-import com.picme.agent.core.api.capability.Capability
 import com.picme.agent.core.platform.logging.Logger
 import com.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.CoroutineScope
