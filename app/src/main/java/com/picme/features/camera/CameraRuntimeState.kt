@@ -27,6 +27,7 @@ import com.picme.core.common.Logger
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectionEngineMode
+import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
@@ -77,6 +78,8 @@ internal data class CameraRuntimeContext(
     val showLogOverlay: Boolean,
     val faceDetectionEngineMode: FaceDetectionEngineMode,
     val faceLandmarkModeEnabled: Boolean,
+    val adaptiveFaceDetectionIntervalEnabled: Boolean,
+    val faceDetectIntervalProfile: FaceDetectIntervalProfile,
     val glRecoveryAvailableAtMs: Long,
     val lifecycleOwner: LifecycleOwner,
     val faceDetectorManager: FaceDetector,
@@ -105,6 +108,10 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         initial = FaceDetectionEngineMode.MEDIAPIPE
     )
     val faceLandmarkModeEnabled by userPreferencesRepository.faceDetectionLandmarkModeFlow.collectAsState(initial = true)
+    val adaptiveFaceDetectionIntervalEnabled by userPreferencesRepository.adaptiveFaceDetectionIntervalEnabledFlow.collectAsState(initial = true)
+    val faceDetectIntervalProfile by userPreferencesRepository.faceDetectIntervalProfileFlow.collectAsState(
+        initial = FaceDetectIntervalProfile.BALANCED
+    )
     val glRecoveryAvailableAtMs by userPreferencesRepository.glEngineRecoveryAvailableAtFlow.collectAsState(initial = 0L)
     // [关键修复] 使用 null 作为 initial，确保只在 DataStore 真实值到达后才初始化 detector
     // 避免 collectAsState 先发射默认值导致创建错误的 detector 再释放
@@ -132,6 +139,8 @@ internal fun rememberCameraRuntimeContext(context: Context): CameraRuntimeContex
         showLogOverlay = showLogOverlay,
         faceDetectionEngineMode = faceDetectionEngineMode,
         faceLandmarkModeEnabled = faceLandmarkModeEnabled,
+        adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
+        faceDetectIntervalProfile = faceDetectIntervalProfile,
         glRecoveryAvailableAtMs = glRecoveryAvailableAtMs,
         lifecycleOwner = lifecycleOwner,
         faceDetectorManager = faceDetectorManager,

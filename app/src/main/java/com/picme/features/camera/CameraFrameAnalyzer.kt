@@ -15,21 +15,30 @@ import com.picme.beauty.internal.framesync.FrameSyncBridge
 import com.picme.beauty.internal.framesync.FrameSyncManager
 import com.picme.features.camera.facedetect.ImageUtils
 import androidx.camera.core.ImageProxy
+import com.picme.domain.model.FaceDetectIntervalProfile
 
 /**
  * InsightFace 性能优化: 智能帧跳过管理器
  * 平衡性能与响应速度,避免人脸跟随延迟
  */
 private object FaceDetectionFrameCounter {
+    // [默认均衡档] 用户未配置时默认使用 BALANCED。
+    private const val BALANCED_DETECTION_INTERVAL = 3
+    private const val BALANCED_MIN_INTERVAL_MS = 100L
+    private const val BALANCED_MOTION_THRESHOLD = 0.05f
+    private const val BALANCED_MAX_CONSECUTIVE_MOTION = 2
+
     private var counter = 0
-    // [GPU 检测优化] YUV→Bitmap 零 JPEG 后，检测耗时降低约 40%，
-    // 但 MNN/NCNN native 推理每帧内部分配 20-50MB 临时张量，
-    // 减少检测频率以缓解 GC 压力和发热。
-    private const val DETECTION_INTERVAL = 3
+    private var detectionIntervalFrames = BALANCED_DETECTION_INTERVAL
+    private var minDetectionIntervalMs = BALANCED_MIN_INTERVAL_MS
+    private var motionThreshold = BALANCED_MOTION_THRESHOLD
+    private var maxConsecutiveMotion = BALANCED_MAX_CONSECUTIVE_MOTION
+
+    private var adaptiveEnabled = true
+    private var activeProfile = FaceDetectIntervalProfile.BALANCED
 
     // [过热修复] 时间冷却：最小检测间隔，防止检测线程持续满载导致发热
     private var lastDetectTimeMs: Long = 0L
-    private const val MIN_DETECTION_INTERVAL_MS = 100L  // 最高 10fps 检测频率，平衡响应与功耗
 
     // [过热修复] 检测进行中标志，防止 Handler 队列积压导致重复检测排队
     @Volatile
@@ -38,15 +47,52 @@ private object FaceDetectionFrameCounter {
     // 运动检测: 记录上次人脸中心点
     private var lastFaceCenterX: Float = -1f
     private var lastFaceCenterY: Float = -1f
-    private const val MOTION_THRESHOLD = 0.05f  // 归一化坐标变化超过 5% 视为快速移动
 
     // [过热修复] 连续运动检测计数器，防止快移场景下每帧都触发检测
     private var consecutiveMotionDetects = 0
-    private const val MAX_CONSECUTIVE_MOTION = 2  // 最多连续 2 次运动触发后强制回到间隔模式
+    private var lastDetectionTriggeredByMotion = false
 
     // [常量定义] 人脸关键点索引（106 点模型）
     internal const val LANDMARK_106_INDEX_X = 48
     internal const val LANDMARK_106_INDEX_Y = 97
+
+    fun applyPolicy(enabled: Boolean, profile: FaceDetectIntervalProfile) {
+        val targetProfile = if (enabled) profile else FaceDetectIntervalProfile.BALANCED
+        if (adaptiveEnabled == enabled && activeProfile == targetProfile) {
+            return
+        }
+
+        adaptiveEnabled = enabled
+        activeProfile = targetProfile
+
+        when (targetProfile) {
+            FaceDetectIntervalProfile.CONSERVATIVE -> {
+                detectionIntervalFrames = 5
+                minDetectionIntervalMs = 160L
+                motionThreshold = 0.09f
+                maxConsecutiveMotion = 1
+            }
+            FaceDetectIntervalProfile.BALANCED -> {
+                detectionIntervalFrames = BALANCED_DETECTION_INTERVAL
+                minDetectionIntervalMs = BALANCED_MIN_INTERVAL_MS
+                motionThreshold = BALANCED_MOTION_THRESHOLD
+                maxConsecutiveMotion = BALANCED_MAX_CONSECUTIVE_MOTION
+            }
+            FaceDetectIntervalProfile.AGGRESSIVE -> {
+                detectionIntervalFrames = 2
+                minDetectionIntervalMs = 70L
+                motionThreshold = 0.035f
+                maxConsecutiveMotion = 3
+            }
+        }
+
+        Logger.i(
+            "Camera",
+            "Face detection policy applied: adaptive=$enabled, profile=$targetProfile, " +
+                "interval=$detectionIntervalFrames, minIntervalMs=$minDetectionIntervalMs, " +
+                "motionThreshold=$motionThreshold, maxMotion=$maxConsecutiveMotion"
+        )
+    }
 
     /**
      * 判断是否应该执行人脸检测
@@ -56,9 +102,9 @@ private object FaceDetectionFrameCounter {
     fun shouldDetect(currentFaceCenter: Offset? = null): Boolean {
         counter++
 
-        // [过热修复-1] 时间冷却：距离上次检测不足 MIN_DETECTION_INTERVAL_MS 时直接跳过
+        // [过热修复-1] 时间冷却：距离上次检测不足 minDetectionIntervalMs 时直接跳过
         val now = SystemClock.elapsedRealtime()
-        if (now - lastDetectTimeMs < MIN_DETECTION_INTERVAL_MS) {
+        if (now - lastDetectTimeMs < minDetectionIntervalMs) {
             return false
         }
 
@@ -69,29 +115,34 @@ private object FaceDetectionFrameCounter {
         }
 
         // 规则1: 每隔 N 帧必须检测一次
-        if (counter % DETECTION_INTERVAL == 0) {
+        if (counter % detectionIntervalFrames == 0) {
+            lastDetectionTriggeredByMotion = false
             return true
         }
 
         // 规则2: 如果从未检测到人脸,需要检测（但受时间冷却约束）
         if (currentFaceCenter == null || lastFaceCenterX < 0) {
+            lastDetectionTriggeredByMotion = false
             return true
         }
 
         // 规则3: 检测快速移动,但限制连续运动检测次数防止过热
         val deltaX = kotlin.math.abs(currentFaceCenter.x - lastFaceCenterX)
         val deltaY = kotlin.math.abs(currentFaceCenter.y - lastFaceCenterY)
-        if (deltaX > MOTION_THRESHOLD || deltaY > MOTION_THRESHOLD) {
-            if (consecutiveMotionDetects < MAX_CONSECUTIVE_MOTION) {
+        if (deltaX > motionThreshold || deltaY > motionThreshold) {
+            if (consecutiveMotionDetects < maxConsecutiveMotion) {
                 Logger.d("Camera", "[Perf] Fast motion detected (dx=$deltaX, dy=$deltaY), force re-detect")
+                lastDetectionTriggeredByMotion = true
                 return true
             }
             // 超过连续运动检测上限，退回间隔模式冷却
+            lastDetectionTriggeredByMotion = false
             return false
         }
 
         // 运动停止时重置连续运动计数
         consecutiveMotionDetects = 0
+        lastDetectionTriggeredByMotion = false
 
         return false
     }
@@ -109,7 +160,12 @@ private object FaceDetectionFrameCounter {
     fun markDetectionComplete() {
         isDetecting = false
         lastDetectTimeMs = SystemClock.elapsedRealtime()
-        consecutiveMotionDetects++
+        if (lastDetectionTriggeredByMotion) {
+            consecutiveMotionDetects++
+        } else {
+            consecutiveMotionDetects = 0
+        }
+        lastDetectionTriggeredByMotion = false
     }
 
     /**
@@ -127,6 +183,15 @@ private object FaceDetectionFrameCounter {
         lastDetectTimeMs = 0L
         isDetecting = false
         consecutiveMotionDetects = 0
+        lastDetectionTriggeredByMotion = false
+
+        // 重置回默认均衡档
+        adaptiveEnabled = true
+        activeProfile = FaceDetectIntervalProfile.BALANCED
+        detectionIntervalFrames = BALANCED_DETECTION_INTERVAL
+        minDetectionIntervalMs = BALANCED_MIN_INTERVAL_MS
+        motionThreshold = BALANCED_MOTION_THRESHOLD
+        maxConsecutiveMotion = BALANCED_MAX_CONSECUTIVE_MOTION
     }
 }
 
@@ -225,6 +290,8 @@ internal fun stopFaceDetectionWorker() {
  * @param onFacePointChanged 人脸中心点回调（屏幕坐标，用于聚焦指示器）
  * @param onFaceWarpParamsChanged FaceWarpParams 回调
  * @param onShowFocusIndicatorChanged 聚焦指示器显示回调
+ * @param adaptiveFaceDetectionIntervalEnabled 是否启用动态检测间隔
+ * @param faceDetectIntervalProfile 动态检测间隔档位（默认均衡）
  * @param beautyEnabled 美颜是否启用，未启用时跳过人脸检测以节省性能
  */
 @ExperimentalGetImage
@@ -234,6 +301,8 @@ internal fun handleImageAnalysisFrameMediaPipe(
     faceDetector: FaceDetector,
     lensFacing: Int,
     detectionEngineMode: EngineType,
+    adaptiveFaceDetectionIntervalEnabled: Boolean = true,
+    faceDetectIntervalProfile: FaceDetectIntervalProfile = FaceDetectIntervalProfile.BALANCED,
     showFaceDebugOverlay: Boolean = false,
     onFacePointChanged: (Offset) -> Unit,
     onFaceWarpParamsChanged: (FaceWarpParams) -> Unit,
@@ -257,6 +326,12 @@ internal fun handleImageAnalysisFrameMediaPipe(
         val previewHeight = previewView.height.takeIf { height -> height > 0 }?.toFloat()
             ?: imageProxy.height.toFloat()
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+
+        // 根据设置应用检测策略（默认均衡档）
+        FaceDetectionFrameCounter.applyPolicy(
+            enabled = adaptiveFaceDetectionIntervalEnabled,
+            profile = faceDetectIntervalProfile
+        )
 
         // 获取上次的人脸中心点用于运动检测
         val lastFaceCenter = existingWarpParams?.let {

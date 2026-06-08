@@ -386,6 +386,8 @@ fun CameraContent(
     val showLogOverlay = runtimeContext.showLogOverlay
     val faceDetectionEngineMode = runtimeContext.faceDetectionEngineMode
     val faceLandmarkModeEnabled = runtimeContext.faceLandmarkModeEnabled
+    val adaptiveFaceDetectionIntervalEnabled = runtimeContext.adaptiveFaceDetectionIntervalEnabled
+    val faceDetectIntervalProfile = runtimeContext.faceDetectIntervalProfile
     val glRecoveryAvailableAtMs = runtimeContext.glRecoveryAvailableAtMs
     val lifecycleOwner = runtimeContext.lifecycleOwner
     LaunchedEffect(beautyStrategy) {
@@ -1186,7 +1188,16 @@ fun CameraContent(
         Logger.d("Camera", "Switched to lensFacing=$lensFacing, isFront=${lensFacing == androidx.camera.core.CameraSelector.LENS_FACING_FRONT}")
     }
 
-    LaunchedEffect(lensFacing, captureMode, aspectRatio, beautyStrategy, faceDetectionEngineMode, previewRebindSignal) {
+    LaunchedEffect(
+        lensFacing,
+        captureMode,
+        aspectRatio,
+        beautyStrategy,
+        faceDetectionEngineMode,
+        adaptiveFaceDetectionIntervalEnabled,
+        faceDetectIntervalProfile,
+        previewRebindSignal
+    ) {
         Logger.d("Camera", "Rebinding camera use cases for face engine mode=${faceDetectionEngineMode.name}")
         bindCameraUseCases(
             context = context,
@@ -1201,6 +1212,8 @@ fun CameraContent(
             isBeautyEnabled = { shouldEnableFaceDetection },
             beautyStrategy = beautyStrategy,
             detectionEngineMode = faceDetectionEngineMode.toEngineType(),
+            adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
+            faceDetectIntervalProfile = faceDetectIntervalProfile,
             videoCapture = videoCapture,
             faceDetector = runtimeContext.faceDetectorManager,
             onImageCaptureChanged = { capture -> imageCapture = capture },

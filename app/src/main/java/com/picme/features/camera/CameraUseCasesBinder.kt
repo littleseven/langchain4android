@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import com.google.common.util.concurrent.ListenableFuture
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautyStrategy
+import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.agent.core.model.MediaType
 import com.picme.beauty.api.facedetect.FaceDetector
@@ -44,6 +45,8 @@ internal fun bindCameraUseCases(
     isBeautyEnabled: () -> Boolean,
     beautyStrategy: BeautyStrategy,
     detectionEngineMode: EngineType,
+    adaptiveFaceDetectionIntervalEnabled: Boolean,
+    faceDetectIntervalProfile: FaceDetectIntervalProfile,
     videoCapture: VideoCapture<Recorder>,
     faceDetector: FaceDetector,
     onImageCaptureChanged: (ImageCapture) -> Unit,
@@ -135,6 +138,8 @@ internal fun bindCameraUseCases(
                 faceDetector = faceDetector,
                 lensFacing = lensFacing,
                 detectionEngineMode = detectionEngineMode,
+                adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
+                faceDetectIntervalProfile = faceDetectIntervalProfile,
                 onFacePointChanged = onFacePointChanged,
                 onFaceWarpParamsChanged = onFaceWarpParamsChanged,
                 onShowFocusIndicatorChanged = onShowFocusIndicatorChanged,
