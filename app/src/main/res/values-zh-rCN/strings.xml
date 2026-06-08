@@ -278,6 +278,10 @@
     <string name="ai_agent_privacy_strict">严格（仅本地）</string>
     <string name="ai_agent_privacy_permissive">宽松（允许远程）</string>
     <string name="ai_agent_local_model">已选模型</string>
+    <string name="ai_agent_local_backend">本地 LLM 后端</string>
+    <string name="ai_agent_local_backend_cpu">CPU</string>
+    <string name="ai_agent_local_backend_opencl">OpenCL（GPU）</string>
+    <string name="ai_agent_local_backend_desc">选择本地 LLM 推理后端。OpenCL 依赖设备支持，部分模型或机型稳定性可能较差。</string>
     <string name="ai_agent_no_local_model">暂无已下载模型，前往模型管理下载。</string>
     <string name="remote_models">远程模型</string>
     <string name="configured">已配置</string>

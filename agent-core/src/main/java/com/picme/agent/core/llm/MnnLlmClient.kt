@@ -3,6 +3,7 @@ package com.picme.agent.core.llm
 import android.content.Context
 import com.picme.agent.core.Logger
 import com.picme.agent.core.mnn.MnnGlobalReleaseLock
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -43,7 +44,7 @@ class MnnLlmClient(private val context: Context) {
      * @param modelKey LlmModelManager 中注册的模型 key，默认 "qwen3_1_7b"（下划线格式）
      * @return 加载是否成功
      */
-    fun load(modelKey: String = "qwen3_1_7b"): Boolean {
+    fun load(modelKey: String = "qwen3_1_7b", useOpencl: Boolean = false): Boolean {
         if (isLoaded) {
             Logger.d(tag, "Model already loaded")
             return true
@@ -79,9 +80,21 @@ class MnnLlmClient(private val context: Context) {
                 }
             }
 
-            Logger.i(tag, "Loading LLM model from: $configPath")
+            val runtimeConfigPath = if (useOpencl) {
+                runCatching {
+                    createRuntimeConfig(modelDir, configFile)
+                }.onFailure { exception ->
+                    Logger.w(tag, "Failed to patch backend_type=opencl, fallback to original config", exception)
+                }.getOrNull()?.also { patchedPath ->
+                    Logger.i(tag, "Using OpenCL runtime config: $patchedPath")
+                } ?: configPath
+            } else {
+                configPath
+            }
+
+            Logger.i(tag, "Loading LLM model from: $runtimeConfigPath")
             nativeHandle = MnnGlobalReleaseLock.withOperation {
-                nativeCreate(configPath)
+                nativeCreate(runtimeConfigPath)
             }
 
             if (nativeHandle == 0L) {
@@ -193,6 +206,21 @@ class MnnLlmClient(private val context: Context) {
      */
     fun reset() {
         releaseNative(NativeReleaseTarget.KV_CACHE)
+    }
+
+    private fun createRuntimeConfig(modelDir: String, configFile: File): String {
+        val rawJson = configFile.readText()
+        val root = JSONObject(rawJson)
+        root.put("backend_type", "opencl")
+
+        val mllmObject = root.optJSONObject("mllm") ?: JSONObject().also { objectNode ->
+            root.put("mllm", objectNode)
+        }
+        mllmObject.put("backend_type", "opencl")
+
+        val runtimeConfigFile = File(modelDir, "config_runtime_opencl.json")
+        runtimeConfigFile.writeText(root.toString(2))
+        return runtimeConfigFile.absolutePath
     }
 
     // ── Native Methods ─────────────────────────────────────

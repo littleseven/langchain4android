@@ -587,6 +587,7 @@ fun CameraContent(
     var aiAgentMessages by remember { mutableStateOf<List<AgentMessage>>(emptyList()) }
     var aiAgentIsProcessing by remember { mutableStateOf(false) }
     val aiAgentLocalModel by userPreferencesRepository.aiAgentLocalModelFlow.collectAsState(initial = "")
+    val aiAgentLocalUseOpencl by userPreferencesRepository.aiAgentLocalUseOpenclFlow.collectAsState(initial = false)
 
     val aiAgentRemoteModelConfigs by userPreferencesRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
     val aiAgentSelectedRemoteModel by userPreferencesRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
@@ -623,12 +624,14 @@ fun CameraContent(
         aiAgentMode,
         remoteConfig,
         aiAgentInferencePreference,
+        aiAgentLocalUseOpencl,
         cloudflareGatewayToken
     ) {
         AiAgentUseCase(
             context = context,
             agentMode = aiAgentMode,
             localModelId = "qwen3_1_7b", // 初始默认值，LaunchedEffect 中会更新为实际值
+            localUseOpencl = aiAgentLocalUseOpencl,
             remoteConfig = remoteConfig,
             forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE,
             gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }
@@ -650,7 +653,7 @@ fun CameraContent(
         localModeEnabled && !forceRemote &&
             (aiAgentChatVisible || voiceCommandMode != VoiceCommandMode.DISABLED)
     }
-    LaunchedEffect(resolvedModelId, shouldLoadLocalLlm) {
+    LaunchedEffect(resolvedModelId, aiAgentLocalUseOpencl, shouldLoadLocalLlm) {
         if (!shouldLoadLocalLlm) {
             if (aiAgentUseCase.isLocalModelLoaded) {
                 Logger.i(TAG_AI_AGENT, "No active AI entry, unload local MNN-LLM model")
@@ -660,8 +663,8 @@ fun CameraContent(
         }
 
         if (!aiAgentUseCase.isLocalModelLoaded) {
-            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model on demand: $resolvedModelId")
-            val result = aiAgentUseCase.loadLocalModel(resolvedModelId)
+            Logger.i(TAG_AI_AGENT, "Loading local MNN-LLM model on demand: $resolvedModelId, opencl=$aiAgentLocalUseOpencl")
+            val result = aiAgentUseCase.loadLocalModel(resolvedModelId, aiAgentLocalUseOpencl)
             Logger.i(TAG_AI_AGENT, "Local MNN-LLM model load result: $result")
         } else {
             Logger.d(TAG_AI_AGENT, "Local MNN-LLM model already loaded, skip")

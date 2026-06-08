@@ -285,6 +285,10 @@
     <string name="ai_agent_privacy_strict">Strict (Local Only)</string>
     <string name="ai_agent_privacy_permissive">Permissive (Allow Remote)</string>
     <string name="ai_agent_local_model">Selected Model</string>
+    <string name="ai_agent_local_backend">Local LLM Backend</string>
+    <string name="ai_agent_local_backend_cpu">CPU</string>
+    <string name="ai_agent_local_backend_opencl">OpenCL (GPU)</string>
+    <string name="ai_agent_local_backend_desc">Choose the on-device backend for local LLM inference. OpenCL requires device support and may be less stable on some models.</string>
     <string name="ai_agent_no_local_model">No downloaded models. Go to Model Manager to download.</string>
     <string name="remote_models">Remote Models</string>
     <string name="configured">Configured</string>

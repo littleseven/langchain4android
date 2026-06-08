@@ -454,6 +454,7 @@ fun rememberAgentChatConfig(
     // 读取 Agent 模式与远程配置
     val aiAgentMode by settingsRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
     val aiAgentInferencePreference by settingsRepository.aiAgentInferencePreferenceFlow.collectAsState(initial = AiAgentInferencePreference.FORCE_LOCAL)
+    val aiAgentLocalUseOpencl by settingsRepository.aiAgentLocalUseOpenclFlow.collectAsState(initial = false)
     val aiAgentRemoteModelConfigs by settingsRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
     val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")
 
@@ -478,6 +479,7 @@ fun rememberAgentChatConfig(
     val aiAgentUseCase = remember(
         aiAgentMode,
         aiAgentInferencePreference,
+        aiAgentLocalUseOpencl,
         remoteConfig,
         cloudflareGatewayToken
     ) {
@@ -485,6 +487,7 @@ fun rememberAgentChatConfig(
             context = context,
             agentMode = aiAgentMode,
             localModelId = "qwen3_1_7b",
+            localUseOpencl = aiAgentLocalUseOpencl,
             remoteConfig = remoteConfig,
             forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE,
             gatewayToken = cloudflareGatewayToken.takeIf { it.isNotBlank() }

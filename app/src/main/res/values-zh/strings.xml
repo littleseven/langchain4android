@@ -167,6 +167,10 @@
 <string name="landmark_compatibility">GPUPixel</string>
 <string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
 <string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
+<string name="ai_agent_local_backend">本地 LLM 后端</string>
+<string name="ai_agent_local_backend_cpu">CPU</string>
+<string name="ai_agent_local_backend_opencl">OpenCL（GPU）</string>
+<string name="ai_agent_local_backend_desc">选择本地 LLM 推理后端。OpenCL 依赖设备支持，部分模型或机型稳定性可能较差。</string>
 <string name="face_detection_advanced">人脸检测高级配置</string>
 <string name="settings_face_detection_advanced_desc">控制人脸关键点和动态检测节奏，平衡性能与精度。</string>
     <string name="asr_model_manager">ASR 模型管理</string>

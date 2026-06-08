@@ -184,6 +184,13 @@ class SettingsViewModel(
             initialValue = ""
         )
 
+    val aiAgentLocalUseOpencl: StateFlow<Boolean> = repository.aiAgentLocalUseOpenclFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
     val voiceCommandMode: StateFlow<VoiceCommandMode> = repository.voiceCommandModeFlow
         .stateIn(
             scope = viewModelScope,
@@ -684,6 +691,13 @@ class SettingsViewModel(
     fun setAiAgentLocalModel(modelId: String) {
         viewModelScope.launch {
             repository.updateAiAgentLocalModel(modelId)
+        }
+    }
+
+    fun setAiAgentLocalUseOpencl(enabled: Boolean) {
+        viewModelScope.launch {
+            Logger.d("UX", "AI Agent local OpenCL changed: $enabled")
+            repository.updateAiAgentLocalUseOpencl(enabled)
         }
     }
 

@@ -98,9 +98,10 @@ class AgentOrchestrator private constructor(context: Context) {
         mode: AiAgentMode,
         modelId: String,
         privacyLevel: AiAgentPrivacyLevel,
-        remoteConfig: RemoteModelConfig? = null
+        remoteConfig: RemoteModelConfig? = null,
+        localUseOpencl: Boolean = false
     ) {
-        configurator.configure(mode, modelId, privacyLevel, remoteConfig)
+        configurator.configure(mode, modelId, privacyLevel, remoteConfig, localUseOpencl)
     }
 
     /**
@@ -118,7 +119,7 @@ class AgentOrchestrator private constructor(context: Context) {
             )
         }
 
-        return localLlmEngine.loadModel(targetModel)
+        return localLlmEngine.loadModel(targetModel, configurator.getLocalUseOpencl())
     }
 
     /**
@@ -346,12 +347,12 @@ class AgentOrchestrator private constructor(context: Context) {
         pageContext: PageContext?,
         memorySessionId: String
     ): Result<AgentAction> {
-        // 过滤 Qwen3 的 <think> 标签
-        val response = filterThinkTags(rawResponse)
-        Logger.i(tag, "LLM raw response: $response")
+        // 保留原始输出给解析器，避免提前清理 think 标签导致 JSON/关键词信息丢失。
+        val responseForHistory = filterThinkTags(rawResponse)
+        Logger.i(tag, "LLM raw response: $rawResponse")
 
         // 解析命令
-        val command = AgentCommandParser.parseLlmResponse(response, agentContext)
+        val command = AgentCommandParser.parseLlmResponse(rawResponse, agentContext)
         Logger.i(tag, "Parsed command: ${command::class.simpleName}")
 
         // L1 缓存学习：解析成功且非错误命令时写入缓存
@@ -361,7 +362,7 @@ class AgentOrchestrator private constructor(context: Context) {
         }
 
         // 保存对话历史
-        saveConversation(memorySessionId, userInput, command, response)
+        saveConversation(memorySessionId, userInput, command, responseForHistory)
 
         // 分发到 Capability 执行
         return _capabilityRegistry.dispatch(command, agentContext, pageContext)

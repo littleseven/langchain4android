@@ -36,6 +36,7 @@ import kotlinx.coroutines.withContext
  * @param agentMode Agent 运行模式，默认 LOCAL
  * @param privacyLevel 隐私级别，默认 STRICT
  * @param localModelId 本地模型 ID，默认 qwen3_1_7b（下划线格式）
+ * @param localUseOpencl 本地模型是否启用 OpenCL 后端
  * @param remoteConfig 用户自定义远程模型配置（完整配置，包含 modelId/apiKey/baseUrl/gatewayToken）
  * @param forceRemote 是否强制使用远程模型（绕过本地模型检查）
  * @param gatewayToken 腾讯云 SCF Gateway Token（兜底用）
@@ -45,6 +46,7 @@ class AiAgentUseCase(
     agentMode: AiAgentMode = AiAgentMode.LOCAL,
     privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
     localModelId: String = "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
+    localUseOpencl: Boolean = false,
     remoteConfig: RemoteModelConfig? = null,
     forceRemote: Boolean = false,
     gatewayToken: String? = null
@@ -115,11 +117,13 @@ class AiAgentUseCase(
      * 当前配置的本地模型 ID
      */
     private var currentLocalModelId: String = localModelId
+    private var currentLocalUseOpencl: Boolean = localUseOpencl
 
     init {
         Logger.i(tag, "AiAgentUseCase init: remoteConfig=${remoteConfig?.modelId ?: "null"}, " +
             "baseUrl=${remoteConfig?.baseUrl?.take(40) ?: "null"}, " +
             "apiKey=${if (remoteConfig?.apiKey.isNullOrBlank()) "empty" else "set"}, " +
+            "localUseOpencl=$localUseOpencl, " +
             "gatewayToken=${if (remoteConfig?.gatewayToken.isNullOrBlank()) "empty" else "set"}, " +
             "effectiveBaseUrl=${effectiveRemoteConfig.baseUrl.take(40)}, " +
             "isUsingFallbackGateway=$isUsingFallbackGateway")
@@ -127,7 +131,8 @@ class AiAgentUseCase(
             mode = agentMode,
             modelId = localModelId,
             privacyLevel = privacyLevel,
-            remoteConfig = effectiveRemoteConfig
+            remoteConfig = effectiveRemoteConfig,
+            localUseOpencl = localUseOpencl
         )
     }
 
@@ -156,14 +161,17 @@ class AiAgentUseCase(
      *
      * @param modelId 模型 ID，为空时使用当前配置的模型。如果模型 ID 与当前加载的不同，会先卸载旧模型。
      */
-    suspend fun loadLocalModel(modelId: String? = null): Result<Unit> {
+    suspend fun loadLocalModel(modelId: String? = null, useOpencl: Boolean? = null): Result<Unit> {
         val targetModel = modelId ?: currentLocalModelId
-        if (targetModel != currentLocalModelId && modelId != null) {
+        val targetUseOpencl = useOpencl ?: currentLocalUseOpencl
+        if (targetModel != currentLocalModelId || targetUseOpencl != currentLocalUseOpencl) {
             currentLocalModelId = targetModel
+            currentLocalUseOpencl = targetUseOpencl
             orchestrator.configure(
                 mode = currentMode,
                 modelId = targetModel,
-                privacyLevel = AiAgentPrivacyLevel.STRICT
+                privacyLevel = AiAgentPrivacyLevel.STRICT,
+                localUseOpencl = targetUseOpencl
             )
         }
         return orchestrator.loadModel(targetModel)

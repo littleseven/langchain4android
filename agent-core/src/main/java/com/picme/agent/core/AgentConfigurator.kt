@@ -51,6 +51,7 @@ class AgentConfigurator(private val context: Context) {
     private var userRemoteConfig: RemoteModelConfig? = null
     private var inferenceRouterConfig: RemoteModelConfig? = null
     private var inferenceRouter: InferenceRouter? = null
+    private var localUseOpencl: Boolean = false
 
     /**
      * 获取或创建 InferenceRouter
@@ -92,10 +93,12 @@ class AgentConfigurator(private val context: Context) {
         mode: AiAgentMode,
         modelId: String,
         privacyLevel: AiAgentPrivacyLevel,
-        remoteConfig: RemoteModelConfig? = null
+        remoteConfig: RemoteModelConfig? = null,
+        localUseOpencl: Boolean = false
     ) {
         this.agentMode = mode
         this.currentModelId = modelId
+        this.localUseOpencl = localUseOpencl
         if (remoteConfig != null && remoteConfig.baseUrl.isNotBlank() && remoteConfig.modelId.isNotBlank()) {
             this.userRemoteConfig = remoteConfig
             inferenceRouter = null
@@ -103,6 +106,7 @@ class AgentConfigurator(private val context: Context) {
         }
         privacyGuard.updateConfig(privacyLevel, mode)
         Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +
+            "localUseOpencl=$localUseOpencl, " +
             "remoteModel=${remoteConfig?.modelId ?: "default"}, " +
             "effectiveRemoteModel=${userRemoteConfig?.modelId ?: "fallback"}")
     }
@@ -116,6 +120,11 @@ class AgentConfigurator(private val context: Context) {
      * 当前模型 ID
      */
     fun getCurrentModelId(): String = currentModelId
+
+    /**
+     * 当前本地 LLM 后端是否使用 OpenCL
+     */
+    fun getLocalUseOpencl(): Boolean = localUseOpencl
 
     /**
      * 用户远程配置

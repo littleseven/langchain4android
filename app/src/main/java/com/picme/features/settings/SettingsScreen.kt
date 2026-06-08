@@ -100,6 +100,7 @@ fun SettingsScreen(
     val aiAgentRemoteModelConfigs by viewModel.aiAgentRemoteModelConfigs.collectAsState()
     val aiAgentSelectedRemoteModel by viewModel.aiAgentSelectedRemoteModel.collectAsState()
     val aiAgentInferencePreference by viewModel.aiAgentInferencePreference.collectAsState()
+    val aiAgentLocalUseOpencl by viewModel.aiAgentLocalUseOpencl.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
     val logModuleConfig by viewModel.logModuleConfig.collectAsState()
@@ -163,6 +164,7 @@ fun SettingsScreen(
                     "agent_mode" -> viewModel.setAiAgentMode(
                         if (enabled) AiAgentMode.LOCAL else AiAgentMode.OFF
                     )
+                    "agent_local_opencl" -> viewModel.setAiAgentLocalUseOpencl(enabled)
                     else -> Logger.w(TAG, "Unknown setting key: $key")
                 }
             }
@@ -215,6 +217,8 @@ fun SettingsScreen(
             onAiAgentSelectedRemoteModelChange = { viewModel.setAiAgentSelectedRemoteModel(it) },
             aiAgentInferencePreference = aiAgentInferencePreference,
             onAiAgentInferencePreferenceChange = { viewModel.setAiAgentInferencePreference(it) },
+            aiAgentLocalUseOpencl = aiAgentLocalUseOpencl,
+            onAiAgentLocalUseOpenclChange = { viewModel.setAiAgentLocalUseOpencl(it) },
             voiceCommandMode = voiceCommandMode,
             onVoiceCommandModeChange = { viewModel.setVoiceCommandMode(it) },
             localAsrModel = localAsrModel,
@@ -263,6 +267,8 @@ private fun SettingsContent(
     onAiAgentSelectedRemoteModelChange: (String) -> Unit,
     aiAgentInferencePreference: AiAgentInferencePreference,
     onAiAgentInferencePreferenceChange: (AiAgentInferencePreference) -> Unit,
+    aiAgentLocalUseOpencl: Boolean,
+    onAiAgentLocalUseOpenclChange: (Boolean) -> Unit,
     voiceCommandMode: VoiceCommandMode,
     onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
     localAsrModel: String,
@@ -341,6 +347,10 @@ private fun SettingsContent(
                     InferencePreferenceSelection(
                         currentPreference = aiAgentInferencePreference,
                         onPreferenceSelected = onAiAgentInferencePreferenceChange
+                    )
+                    OpenClBackendSelection(
+                        useOpencl = aiAgentLocalUseOpencl,
+                        onToggle = onAiAgentLocalUseOpenclChange
                     )
                 }
 
@@ -579,6 +589,38 @@ private fun InferencePreferenceSelection(
 }
 
 @Composable
+private fun OpenClBackendSelection(
+    useOpencl: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    val options = listOf(
+        false to stringResource(R.string.ai_agent_local_backend_cpu),
+        true to stringResource(R.string.ai_agent_local_backend_opencl)
+    )
+
+    Text(
+        text = stringResource(R.string.ai_agent_local_backend),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 0.dp)
+    )
+
+    CompactOptionChips(
+        options = options,
+        currentValue = useOpencl,
+        maxLines = 1,
+        onSelected = onToggle
+    )
+
+    Text(
+        text = stringResource(R.string.ai_agent_local_backend_desc),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
 private fun ThemeSelection(
     currentMode: ThemeMode,
     onModeSelected: (ThemeMode) -> Unit
@@ -711,6 +753,8 @@ fun SettingsScreenPreview() {
             onAiAgentSelectedRemoteModelChange = {},
             aiAgentInferencePreference = AiAgentInferencePreference.FORCE_LOCAL,
             onAiAgentInferencePreferenceChange = {},
+            aiAgentLocalUseOpencl = false,
+            onAiAgentLocalUseOpenclChange = {},
             voiceCommandMode = VoiceCommandMode.DISABLED,
             onVoiceCommandModeChange = {},
             localAsrModel = "",

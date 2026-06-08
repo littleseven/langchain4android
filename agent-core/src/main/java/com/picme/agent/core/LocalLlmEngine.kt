@@ -107,7 +107,7 @@ class LocalLlmEngine(private val context: Context) {
      * @param modelId 模型注册表中的 key，如 "qwen3_1_7b" 或 "qwen3_0_6b"
      * @return 加载结果，失败时返回具体错误原因
      */
-    suspend fun loadModel(modelId: String): Result<Unit> = withContext(modelDispatcher) {
+    suspend fun loadModel(modelId: String, useOpencl: Boolean = false): Result<Unit> = withContext(modelDispatcher) {
         engineMutex.withLock {
             // 双重检查：已加载且是同一模型，直接返回
             if (client.isLoaded && currentModelId == modelId) {
@@ -125,8 +125,8 @@ class LocalLlmEngine(private val context: Context) {
             }
 
             try {
-                Logger.i(tag, "Loading LLM model: $modelId")
-                val success = client.load(modelId)
+                Logger.i(tag, "Loading LLM model: $modelId, useOpencl=$useOpencl")
+                val success = client.load(modelId, useOpencl)
                 if (success) {
                     // 原子性设置：nativeHandle 和 currentModelId 在同一把锁内完成
                     currentModelId = modelId

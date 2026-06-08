@@ -80,6 +80,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_MODE = stringPreferencesKey("ai_agent_mode")
         val AI_AGENT_PRIVACY_LEVEL = stringPreferencesKey("ai_agent_privacy_level")
         val AI_AGENT_LOCAL_MODEL = stringPreferencesKey("ai_agent_local_model")
+        val AI_AGENT_LOCAL_USE_OPENCL = booleanPreferencesKey("ai_agent_local_use_opencl")
 
         // 远程模型配置（供应商维度 JSON + 当前选中模型ID）
         val AI_AGENT_REMOTE_MODEL_CONFIGS = stringPreferencesKey("ai_agent_remote_model_configs_v2")
@@ -586,6 +587,24 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentLocalModel(modelId: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_LOCAL_MODEL] = modelId
+        }
+    }
+
+    override val aiAgentLocalUseOpenclFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_LOCAL_USE_OPENCL] ?: false
+        }
+
+    override suspend fun updateAiAgentLocalUseOpencl(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_LOCAL_USE_OPENCL] = enabled
         }
     }
 
