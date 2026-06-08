@@ -32,7 +32,7 @@
 | **GalleryCapability** | GALLERY | 7 | ✅ 已落地 |
 | **SettingsCapability** | SETTINGS | 5 | ✅ 已落地 |
 | **NavigationCapability** | ALL | 2 | ✅ 已落地 |
-| **EditCapability** | EDITOR | 0 | ⏳ 预留 |
+| **EditCapability** | EDITOR | 0 | 🔄 待实现（`AgentCommands.kt` 中无对应命令类型） |
 
 ### 1.1 场景 - 能力映射
 
@@ -103,10 +103,10 @@ class CameraCapability(
     override fun activeScenes() = listOf(SceneManager.Scene.CAMERA)
     
     override fun supportedCommands() = listOf(
-        "capture_photo", "toggle_recording", "flip_camera",
+        "capture", "toggle_recording", "flip_camera",
         "adjust_zoom", "adjust_exposure", "switch_mode",
         "adjust_beauty", "switch_filter", "switch_style",
-        "switch_scene", "switch_ratio", "text_reply"
+        "switch_scene", "switch_ratio"
     )
 }
 ```
@@ -117,7 +117,7 @@ class CameraCapability(
 
 **职责**: 相册查看、删除、分享、搜索、批量选择  
 **活跃场景**: `GALLERY`  
-**状态**: 🔄 部分实现
+**状态**: ✅ 已落地（2026-06 更新：此前标注"部分实现"，现已完整实现）
 
 ### 3.1 支持命令
 
@@ -176,7 +176,7 @@ class GalleryCapability(
 
 **职责**: 主题切换、语言设置、模型管理、人脸引擎切换  
 **活跃场景**: `SETTINGS`  
-**状态**: ⏳ 规划中
+**状态**: ✅ 已落地（2026-06 更新：此前标注"规划中"，现 SettingsViewModel 中已实现对应的状态管理）
 
 ### 4.1 支持命令
 
@@ -283,7 +283,7 @@ class NewCapability : Capability {
     
     override fun supportedCommands() = listOf("command_1", "command_2")
     
-    override suspend fun execute(...): Result<AgentAction> {
+    override suspend fun execute(command: AgentCommand, context: AgentContext, pageContext: PageContext?): Result<AgentAction> {
         // 实现命令处理逻辑
     }
 }

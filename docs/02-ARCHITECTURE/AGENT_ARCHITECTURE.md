@@ -4,7 +4,7 @@
 > - 本文档定义 PicMe AI Agent 的运行时架构、Capability 模型与推理模式选型。
 > - 产品目标与验收口径以 [`../01-PRODUCT/FEATURES.md`](./01-PRODUCT/FEATURES.md) 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 [`AGENTS.md`](../../AGENTS.md) 为准。
-> - 模块级实现细节以 `app/src/main/java/com/picme/domain/agent/` 源码为准。
+> - 模块级实现细节以 `agent-core/src/main/java/com/picme/agent/core/` 源码为准。注意：Agent Runtime 核心组件已从 `app/domain/agent/` 迁移至独立的 `:agent-core` 模块。
 
 **模块定位**: PicMe 相机 AI 助手"小觅"的 Runtime 架构与推理模式选型  
 **主要维护者**: [RD] 全栈工程师  
@@ -596,4 +596,5 @@ sealed class AgentCommand {
 - [AGENTS.md](../../AGENTS.md) — 顶层治理规则
 - [FEATURES.md](../01-PRODUCT/FEATURES.md) — 功能交互细节
 - [COMMAND_REFERENCE.md](../04-AGENT-CAPABILITIES/COMMAND_REFERENCE.md) — 命令参考手册
-- `app/src/main/java/com/picme/domain/agent/` — 源码目录
+- `agent-core/src/main/java/com/picme/agent/core/` — 源码目录（Agent Runtime 核心）
+- `app/src/main/java/com/picme/domain/usecase/AiAgentUseCase.kt` — Facade 桥接层

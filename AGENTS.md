@@ -99,6 +99,8 @@ Logger.log(AgentCommandParsedEvent(...))
 
 **收益**：结构化日志可被 AI 消费，实现自我诊断和自我改进。
 
+> **实现状态（2026-06）**：结构化可观测性为架构设计愿景。实际代码中目前以 `PicMe:` 前缀标签 + `Log.d/w/e` 为主要日志形式，结构化事件（如 `AgentCommandParsedEvent`）尚未在全局范围强制要求。这是后续 Phase 3 的重点推进方向。
+
 ---
 
 ## 3. Agent 角色与协作流程
@@ -147,15 +149,17 @@ PicMe 采用**角色化协作模型**：每个 Agent 角色有明确的职责边
 
 基础设施原子化为 **Tools**，供 Agent 编排调用：
 
-| Tool | 功能 | 调用者 |
-|------|------|--------|
-| `CompileTool` | 代码编译检查 | RD |
-| `InstallTool` | 安装到设备 | RD |
-| `ScreenshotTool` | 自动截屏 | RD/QA |
-| `LogAnalysisTool` | 结构化日志分析 | RD |
-| `DocSyncTool` | 文档同步检查 | CR |
-| `ScreenshotDiffTool` | UI 回归检测 | QA |
-| `PerfBaselineTool` | 性能基线对比 | QA |
+| Tool | 功能 | 调用者 | 状态 |
+|------|------|--------|------|
+| `CompileTool` | 代码编译检查 | RD | 🔄 脚本实现 (`./gradlew`) |
+| `InstallTool` | 安装到设备 | RD | 🔄 脚本实现 (`adb install`) |
+| `ScreenshotTool` | 自动截屏 | RD/QA | 🔄 脚本实现 (`adb screencap`) |
+| `LogAnalysisTool` | 结构化日志分析 | RD | 📋 设计愿景 |
+| `DocSyncTool` | 文档同步检查 | CR | 📋 设计愿景 |
+| `ScreenshotDiffTool` | UI 回归检测 | QA | 🔄 脚本实现 (`screenshot-diff.py`) |
+| `PerfBaselineTool` | 性能基线对比 | QA | 📋 设计愿景 |
+
+> **实现状态（2026-06）**：Tools 层概念已定义，但大部分以独立 shell 脚本（`./scripts/`）或 Gradle task 形式存在，尚未封装为统一的 Agent-tools 接口。`ScreenshotDiffTool` 等已有对应脚本落地。
 
 **关键转变**：从「人类操作脚本」到「Agent 编排 Tools」。
 
@@ -285,6 +289,8 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 | AI 生成代码占比 | 待评估 | > 60% |
 | 人工介入频次 | 待评估 | < 20% |
 
+> **实现状态（2026-06）**：以上度量指标目前均为手动统计或待收集状态。自动化采集代码尚未落地（如 Self-Heal 成功率统计脚本、文档一致性 CI 检查工具等），是后续 Phase 3 的基础设施建设重点。
+
 ---
 
 ## 8. 文档索引
@@ -295,8 +301,10 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 | **产品定义** | `PRODUCT.md` |
 | **交互规范** | `docs/01-PRODUCT/FEATURES.md` |
 | **AI 协作角色** | `agents/README.md`, `agents/co_agent.md`, `agents/rd_agent.md`, `agents/pm_agent.md`, `agents/review_agent.md`, `agents/qa_agent.md` |
-| **模块规范** | 各模块 `AGENTS.md` |
+| **模块规范** | 各模块 `AGENTS.md`（`app/`、`beauty-engine/`、`agent-core/`、`app/src/.../features/camera/` 等） |
 | **技术专项** | `docs/*.md` |
+
+> **架构说明（2026-06）**：`AiAgentUseCase` 作为 Facade 兼容层存在，内部委托给 `AgentOrchestrator` 执行。此双 Facade 架构在模块迁移过程中形成：`agent-core` 提供 `AgentOrchestrator`（核心编排逻辑），`app` 层通过 `AiAgentUseCase` 桥接访问。
 
 ---
 

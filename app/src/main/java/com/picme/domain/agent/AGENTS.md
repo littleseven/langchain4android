@@ -1,12 +1,16 @@
 # Agent Runtime 模块技术实现规范 (Agent Runtime Technical Implementation)
 
+> **⚠️ 迁移通知（2026-06）**
+> - Agent Runtime 核心组件已于 2026-05 从 `app/domain/agent/` 迁移至独立的 `:agent-core` 模块（`agent-core/src/main/java/com/picme/agent/core/`）。
+> - 本文档保留作为历史参考及架构说明。详细的实现规范请参考 `agent-core/AGENTS.md` 和实际源码。
+> - `app/domain/agent/` 目录当前仅保留桥接层代码（`AiAgentUseCase` 等 Facade）。
+>
 > **边界声明（Boundary Statement）**
-> - 本文档仅承载 `domain/agent/` 模块的实现细节（架构、代码约束、检查清单）。
 > - 产品目标与验收口径以 `PRODUCT.md` 为准；交互流程与体验规则以 `docs/01-PRODUCT/FEATURES.md` 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
 > - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-**模块定位**：PicMe 的 Agent 运行时核心，负责自然语言理解、意图解析、能力路由和命令执行。是连接用户输入与业务能力的"中枢神经系统"。
+**模块定位**：PicMe 的 Agent 运行时架构设计参考文档。核心实现已迁移至 `:agent-core` 独立模块。
 
 **主要维护者**：[RD] 全栈工程师
 

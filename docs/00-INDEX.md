@@ -1,8 +1,8 @@
 # PicMe 文档导航索引
 
 > **维护者**: CO Agent  
-> **最后更新**: 2026-05-29  
-> **版本**: 1.0
+> **最后更新**: 2026-06-08
+> **版本**: 1.1
 
 ---
 
@@ -99,13 +99,16 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`CHAT_UI_UNIFICATION.md`](./03-TECHNICAL-SPECS/CHAT_UI_UNIFICATION.md) | Chat UI 统一化改造 | RD |
 | [`AGENT_UI_DESIGN.md`](./03-TECHNICAL-SPECS/AGENT_UI_DESIGN.md) | Agent UI 层设计（Plan 消息气泡） | RD |
 | [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](./03-TECHNICAL-SPECS/REMOTE_LLM_ORCHESTRATION_DESIGN.md) | 远程 LLM 混合编排架构设计 | RD |
+| [`REMOTE_INFERENCE_ARCHITECTURE.md`](./03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md) | 远程推理架构（含 IntentCache L1 缓存） | RD |
 | [`MNN_LANDMARK_DIAGNOSIS.md`](./03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
 
 **核心内容**：
+- Agent 运行时核心组件已迁移至 `:agent-core` 模块
 - EGL 上下文管理、Shader 编译、资源释放
 - FrameId 体系、FrameSyncManager、预测补偿算法
-- InsightFace vs MediaPipe 引擎切换
+- MNN/NCNN 双引擎人脸检测（InsightFace ONNX 路径已移除）
 - ROC 关键点映射、MNN 维度类型修复
+- 远程推理架构：IntentCache（L1 缓存）、AdaptiveStrategySelector
 
 ---
 

@@ -22,18 +22,22 @@
 
 ### 2.1 AppContainer 架构
 
+> **代码状态（2026-06）**：`AppContainer` 接口已扩展，新增 `faceDetector`、`llmModelDownloadManager` 依赖。`MediaViewModelDependencies` 新增 `photoProcessor`、`faceDetector` 字段。
+
 **技术规范**:
-- **接口定义**: `AppContainer` 接口暴露全局依赖（Repository、ImageProcessor、UserPreferences）
+- **接口定义**: `AppContainer` 接口暴露全局依赖（Repository、ImageProcessor、FaceDetector、UserSettingsRepository、LlmModelDownloadManager）
 - **实现类**: `AppContainerImpl` 使用 `by lazy` 延迟初始化，确保单例且线程安全
 - **ViewModel Factory**: 通过 `MediaViewModelFactory` 注入 ViewModel 依赖，避免直接访问 Container
-- **依赖数据结构**: `MediaViewModelDependencies` 封装 ViewModel 所需的全部依赖
+- **依赖数据结构**: `MediaViewModelDependencies` 封装 ViewModel 所需的全部依赖（含 photoProcessor、faceDetector）
 
 **代码示例**:
 ```kotlin
 interface AppContainer {
     val repository: MediaRepository
-    val userPreferencesRepository: UserPreferencesRepository
+    val userPreferencesRepository: UserSettingsRepository
     val imageProcessor: ImageProcessor
+    val faceDetector: FaceDetector
+    val llmModelDownloadManager: LlmModelDownloadManager
     
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
 }
@@ -45,8 +49,16 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         MediaRepositoryImpl(database.mediaDao(), context)
     }
     
+    override val faceDetector: FaceDetector by lazy {
+        FaceDetectorFactory.create(context)
+    }
+
     override val imageProcessor: ImageProcessor by lazy {
-        ImageProcessorImpl(beautyProcessor)
+        ImageProcessorImpl(beautyProcessor, photoProcessor, faceDetector)
+    }
+
+    override val llmModelDownloadManager: LlmModelDownloadManager by lazy {
+        LlmModelDownloadManager(context)
     }
 }
 ```
@@ -83,6 +95,7 @@ private val cpuBeautyProcessor: BeautyProcessor by lazy {
 // 实时预览引擎由 Composable 维护（见 GlBeautyPreviewRuntime.kt）
 // rememberGlBeautyPreviewProvider(context, beautyStrategy)
 // └─> BeautyStrategy.BIG_BEAUTY  → GlBeautyPreviewProvider
+// 注意：GlBeautyPreviewProviderFactory 用于创建 PhotoProcessor（拍照 GPU 路径）
 
 object BeautyEngineRuntimeState {
     @Volatile
@@ -114,7 +127,9 @@ data class MediaViewModelDependencies(
     val repository: MediaRepository,
     val getGroupedMediaUseCase: GetGroupedMediaUseCase,
     val findDuplicateMediaUseCase: FindDuplicateMediaUseCase,
-    val ocrUseCase: OcrProcessor
+    val ocrUseCase: OcrProcessor,
+    val photoProcessor: PhotoProcessor,
+    val faceDetector: FaceDetector
 )
 
 class MediaViewModelFactory(
@@ -127,7 +142,9 @@ class MediaViewModelFactory(
                 repository = dependencies.repository,
                 getGroupedMediaUseCase = dependencies.getGroupedMediaUseCase,
                 findDuplicateMediaUseCase = dependencies.findDuplicateMediaUseCase,
-                ocrUseCase = dependencies.ocrUseCase
+                ocrUseCase = dependencies.ocrUseCase,
+                photoProcessor = dependencies.photoProcessor,
+                faceDetector = dependencies.faceDetector
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
@@ -180,4 +197,4 @@ class MediaViewModelFactory(
 - 单引擎策略（BIG_BEAUTY）：实时预览引擎由 Composable 层维护，DI 层不硬编
 - 故障降级机制：大美丽 异常时降级为无美颜预览（PreviewView 直出），保证相机可用
 - 依赖数据结构封装：通过 MediaViewModelDependencies 聚合依赖，简化 Factory 构造
-- `BeautyPreviewProviderFactory.kt` 已删除（2026-04）：实时预览 Provider 由 `rememberGlBeautyPreviewProvider` Composable 接管，不需要独立工厂类
+- `GlBeautyPreviewProviderFactory`：工厂类仍保留用于创建 `PhotoProcessor`（拍照 GPU 路径），实时预览 Provider 由 `rememberGlBeautyPreviewProvider` Composable 接管（2026-04 更新）

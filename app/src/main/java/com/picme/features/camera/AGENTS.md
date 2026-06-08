@@ -285,7 +285,7 @@ val screenY = adjustedY * previewHeight
 
 **WakeWordEngine**
 - 仅在相机预览可见时运行，页面退出自动停止
-- VAD 阈值：30dB，最小语音时长：100ms
+- VAD 阈值：40dB（`VadDetector` 默认值），最小语音时长：100ms
 - 检测到语音后自动触发 ASR → LLM 解析 → 命令执行
 
 **耳机模式适配（2026-06 新增）**

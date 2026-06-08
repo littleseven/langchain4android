@@ -32,40 +32,76 @@
 
 ### 2.1 模块包结构规范
 
+> **注意**：纯 API 契约类型（`BeautySettings`、`FilterType`、`StyleFilter`、`Face`、`FaceDetector`、`FrameSyncConfig` 等）已提取到独立的 `:beauty-api` 模块（`beauty-api/src/main/java/com/picme/beauty/api/`），供 `:app` 和 `:beauty-engine` 共同依赖。`beauty-engine` 内的 `api/` 包仅保留 `:beauty-api` 不可承载的实现相关接口。
+
 ```
 beauty-engine/src/main/java/com/picme/beauty/
-├── api/                               # 对外稳定 API（能力契约层）
-│   ├── BeautySettings.kt              # 美颜设置领域模型（UI 原始值）
+├── api/                               # 实现层 API（依赖 :beauty-api 共享类型）
 │   ├── BeautyParams.kt                # 美颜参数数据类（Shader 归一化值）
 │   ├── BeautyParamsConverter.kt       # BeautySettings → BeautyParams 转换
-│   ├── FilterType.kt                  # 色调滤镜枚举（含 ColorMatrix）
-│   ├── StyleFilter.kt                 # 风格特效枚举
-│   ├── Face.kt                        # 人脸数据结构（Face/FaceContour/FaceLandmark）
-│   ├── BeautyProcessor.kt             # CPU 后处理接口契约
 │   ├── BeautyPerfStats.kt             # 性能统计模型
 │   ├── BeautyPreviewCapability.kt     # GL 能力扩展接口（FaceWarp/LipMask 等）
 │   ├── BeautyPreviewProvider.kt       # 预览 Provider 基础接口
 │   ├── BeautyPreviewEngine.kt         # 组合接口（Provider + Capability + getView）
 │   ├── BeautyPreviewProviderFactory.kt # Factory（未来 DI 扩展点）
-│   └── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染，2026-05 新增）
-├── render/                               # 内部实现（GL 渲染管线层）
+│   ├── PhotoProcessor.kt              # 拍照后处理接口（GPU 离屏渲染，2026-05 新增）
+│   ├── FilterTypeExt.kt               # FilterType 扩展函数
+│   ├── StyleFilterExt.kt              # StyleFilter 扩展函数
+│   ├── Logger.kt                      # 日志接口
+│   └── facedetect/                    # 人脸检测契约
+│       └── FaceDetectorFactory.kt
+├── render/                            # 内部实现（GL 渲染管线层）
 │   ├── BeautyPreviewView.kt           # 自定义 View（SurfaceView 封装）
 │   ├── CameraPreviewRenderer.kt       # 渲染管线核心
 │   ├── BeautyRenderer.kt              # 美颜 Shader 渲染器
-│   ├── BeautyShaders.kt               # GLSL Shader 源码
+│   ├── BeautyShaders.kt               # Shader 常量/调试 Shader（GLSL 已迁移至 assets/shaders/）
+│   ├── ShaderModuleLoader.kt          # GLSL 模块化加载器
 │   ├── ShaderProgram.kt               # Shader 编译与链接
 │   ├── EGLCore.kt                     # EGL 上下文与 Surface 管理
 │   ├── WindowSurface.kt               # EGL Window Surface 封装
 │   ├── GLRenderer.kt                  # GL 渲染通用基类
+│   ├── BeautyPass.kt                  # 美颜 Pass 抽象
+│   ├── Framebuffer.kt                 # FBO 封装
+│   ├── FramebufferPool.kt             # FBO 池化管理
+│   ├── LutTextureLoader.kt            # LUT 纹理加载
+│   ├── StyleEffect.kt                 # 风格特效定义
+│   ├── StyleEffectShader.kt           # 风格特效 Shader 渲染
+│   ├── FaceMakeupPass.kt              # 妆容 Pass（唇色/腮红）
 │   ├── GlBeautyPreviewProvider.kt     # Provider 接口实现（内部适配器）
 │   ├── GlBeautyPreviewProviderFactory.kt # GL Provider 工厂
 │   └── PhotoProcessorImpl.kt          # 拍照 GPU 化处理实现（2026-05 新增）
+├── internal/                          # 内部基础设施
+│   ├── BeautyShaderChain.kt           # Shader 链式编排
+│   ├── model/
+│   │   └── ModelManager.kt            # 模型下载与缓存管理
+│   ├── framesync/                     # 帧同步系统（解决妆容甩飞）
+│   │   ├── FrameSyncBridge.kt
+│   │   ├── FrameSyncManager.kt
+│   │   └── MotionTracker.kt
+│   └── facedetect/                    # 人脸检测实现（MNN/NCNN/MediaPipe）
+│       ├── FaceDetectorManager.kt
+│       ├── DetectionPipelineFactory.kt
+│       ├── MediaPipeFaceDetector.kt
+│       ├── MediaPipeLandmarkDetector.kt
+│       ├── MediaPipeRoiDetector.kt
+│       ├── Face106ToWarpParams.kt
+│       ├── RoiDetector.kt / MnnRoiDetector.kt / NcnnRoiDetector.kt
+│       ├── LandmarkDetector.kt / MnnLandmarkDetector.kt / NcnnLandmarkDetector.kt
+│       ├── mnn/MnnFaceDetector.kt
+│       ├── ncnn/NcnnFaceDetector.kt
+│       └── adapter/ (FaceLandmarkAdapter, MediaPipe468Adapter, MnnLandmarkAdapter, NcnnLandmarkAdapter)
+├── log/                               # 结构化日志
+│   ├── BeautyLog.kt
+│   └── BeautyLogProxy.kt
+└── recorder/                          # 录制能力
+    └── BeautyVideoRecorder.kt
 ```
 
 **依赖方向红线**：
-- `api/` 包：**禁止**依赖 `render/`、`androidx.camera.*`、`features.*`、`data.*` 等任何实现细节
+- App 层：依赖 `:beauty-api`（纯 Kotlin 类型契约）+ `beauty-engine:api/`（实现相关接口），禁止直接引用 `render/`、`internal/`、`log/`、`recorder/`
+- `beauty-engine:api/` 包：可依赖 `:beauty-api`，**禁止**依赖 `render/`、`androidx.camera.*`、`features.*`、`data.*`
 - `render/` 包：允许实现 `api/` 接口，允许依赖 `android.*` 和 OpenGL ES 相关库
-- App 层：只允许依赖 `beauty-engine` 的 `api/` 接口，禁止直接实例化 `render/` 内部类
+- `:beauty-api` 模块：零 Android/OpenGL 依赖，纯 Kotlin
 
 ### 2.2 对外 API 层 (`api/`)
 
@@ -126,10 +162,10 @@ beauty-engine/src/main/java/com/picme/beauty/
 **美颜算法实现规范**：
 
 - **磨皮 (Smoothing)**：
-  - **算法选择**：采用双边滤波（Bilateral Filter）快速近似，通过 9 点采样结合值域高斯权重，在平滑皮肤的同时保留边缘细节
+  - **算法选择**：采用双边滤波（Bilateral Filter）快速近似，通过 5×5 采样核结合值域高斯权重，在平滑皮肤的同时保留边缘细节
   - **实现要点**：在 Fragment Shader 内以当前像素为中心，在 3×3 邻域内采样；根据邻域像素与中心像素的亮度差异计算值域权重 exp(-(ΔLuma)² / 2σ_r²)，并结合空间距离权重 exp(-dist² / 2σ_s²)；仅对皮肤蒙版（skinMask）区域生效
   - **参数映射**：uSmoothing (0.0~1.0) 同时控制磨皮强度与值域 σ_r 的宽度；uTexelSize 由 CameraPreviewRenderer 根据输入分辨率实时传入，确保跨分辨率下采样半径一致
-  - **性能优化**：单 Pass 内完成，无需额外 FBO；共 9 次 texture2D 采样，空间 σ_s=1.8 像素，值域 σ_r=0.10~0.18，兼顾效果自然度与移动端实时性
+  - **性能优化**：单 Pass 内完成，无需额外 FBO；5×5 采样核 + 后处理锐化 Pass，空间 σ_s=2.5 像素，兼顾效果自然度与移动端实时性
   - **演进路线**：双边滤波（当前）→ **引导滤波 Guided Filter**（O(N) 闭式解，无梯度反转光晕，更适合移动端）→ 多尺度细节分层（工业级效果）
 
 - **美白 (Whitening)**：
@@ -138,7 +174,7 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **参数映射**：UI 参数 → ΔL (亮度提升) 和 ΔU/ΔV (色度调整)
 
 - **瘦脸 (Slim Face)**：
-  - **人脸检测**：`FaceDetectorManager` 按需初始化，主链路 `MediaPipeFaceDetector` 输出 468→106 点；`InsightFace2D106Detector` 作为异步备选（连续 3 次漏检 + 冷却时间后触发）
+  - **人脸检测**：`FaceDetectorManager` 按需初始化，主链路 `MediaPipeFaceDetector` 输出 468→106 点；`MnnFaceDetector` / `NcnnFaceDetector` 作为备选（连续 3 次漏检 + 冷却时间后触发）。旧 InsightFace ONNX 路径已完全移除。
   - **变形算法**：基于 Delaunay 三角剖分的网格变形 (Mesh Warping)
   - **实现要点**：以下颌角为中心点，向内收缩 5%-30%
   - **安全约束**：变形幅度限制在 30% 以内，保持面部比例协调
@@ -167,8 +203,8 @@ beauty-engine/src/main/java/com/picme/beauty/
   - **安全约束**：调整幅度限制在 20% 以内，保持身体比例
 
 **Shader 工程规范**（与实际代码对齐）：
-- **当前实现**：基础美颜由主 Shader（`FRAGMENT_SHADER_BEAUTY`）处理；唇色/腮红启用时，会先经过 `FaceMakeupPass` 纹理妆容 Pass，再回到主 Shader 完成后续渲染
-- **磨皮算法**：双边滤波快速近似（9 点采样 + 值域高斯权重），**非** Box Blur；早期文档中“盒式模糊”的描述是规划期草案，与当前实现不符，已纠正。演进路线：双边滤波 → 引导滤波（Phase 2）→ 多尺度分层（Phase 3）
+- **当前实现**：基础美颜由 Shader 模块化管线处理；唇色/腮红启用时，会先经过 `FaceMakeupPass` 纹理妆容 Pass，再回到主 Shader 完成后续渲染。GLSL 源码从 `BeautyShaders.kt` 迁移至 `beauty-engine/src/main/assets/shaders/`，通过 `ShaderModuleLoader` 按需加载。
+- **磨皮算法**：双边滤波快速近似（5×5 采样核 + 后处理锐化），**非** Box Blur；早期文档中"盒式模糊"的描述是规划期草案，与当前实现不符，已纠正。演进路线：双边滤波 → 引导滤波（Phase 2）→ 多尺度分层（Phase 3）
 - **参数传递**：通过 `glUniform1f`/`glUniform2f`/`glUniform1i` 实时更新，禁止在参数变化时重新编译 Shader
 - **纹理类型**：相机输入使用 `GL_TEXTURE_EXTERNAL_OES`，调试 Shader 使用普通 `GL_TEXTURE_2D`
 - **调试 Shader**：`FRAGMENT_SHADER_DEBUG_RED`（全红）、`FRAGMENT_SHADER_DEBUG_TEXTURE_R`（R 通道灰度）供渲染链路验证使用
@@ -295,7 +331,9 @@ if (fps < 25 || processingMs > 20) {
 
 ### 3.4 Shader 开发规范
 
-- 所有 GLSL 源码集中放在 `BeautyShaders.kt`
+- GLSL 源码集中管理在 `beauty-engine/src/main/assets/shaders/`，通过 `ShaderModuleLoader` 按需加载，而非硬编码在 `BeautyShaders.kt` 中
+- BeautyShaders.kt 仅保留 Shader 常量定义和调试 Shader（`FRAGMENT_SHADER_DEBUG_RED`、`FRAGMENT_SHADER_DEBUG_TEXTURE_R`）
+- Shader 模块划分：`header.glsl`（OES 扩展）、`pass_smoothing.glsl`（磨皮）、`main.glsl`（主美颜）、`warp.glsl`（美型）、`lip.glsl`（唇色）、`blush.glsl`（腮红）、`makeup_*.glsl`（妆容）、`style/*.glsl`（风格特效 7 个）
 - Shader 必须声明 `precision mediump float;`
 - 外部纹理 Shader 必须包含 `#extension GL_OES_EGL_image_external : require`
 - 新增 Shader 必须附带性能注释（复杂度、采样次数、适用机型）
@@ -336,7 +374,7 @@ if (fps < 25 || processingMs > 20) {
 - [ ] 美白是否避免全图过曝？（仅提升肤色区域亮度）
 - [ ] 人脸检测器是否按需初始化？（禁止启动时预加载）
 - [ ] MediaPipe 是否避免重复初始化？（`c67211ea` 修复）
-- [ ] InsightFace 是否仅在备选触发时初始化？（禁止每帧常驻）
+- [ ] MNN/NCNN 检测器是否仅在备选触发时初始化？（禁止每帧常驻，旧 InsightFace ONNX 路径已移除）
 
 ### 4.6 拍照 GPU 化检查清单（2026-05 新增）
 - [ ] `PhotoProcessor` 接口是否已添加到 `api/` 包？
@@ -360,7 +398,7 @@ if (fps < 25 || processingMs > 20) {
 
 #### 自研风格特效（2026-05 实现）
 
-> GPUPixel 已于 2026-05 完全移除。以下风格特效由自研 `StyleEffectShader` 实现。
+> GPUPixel 已于 2026-05 完全移除。GLSL 源码位于 `beauty-engine/src/main/assets/shaders/style/`。以下风格特效由自研 `StyleEffectShader` 实现。
 
 **风格特效列表**：
 
@@ -402,9 +440,9 @@ if (fps < 25 || processingMs > 20) {
 - 选择 OpenGL ES 而非 Vulkan：CameraX 兼容性更好、设备覆盖率更高、开发周期更短
 - 选择 `SurfaceView` 而非 `TextureView`：直接硬件合成，延迟更低，功耗更小
 - 输入/显示 Surface 解耦：避免 CameraX 与 View 生命周期抖动互相影响
-- 磨皮使用双边滤波快速近似（9pt）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档“盒式模糊”描述已纠正）。后续评估引导滤波（O(N) 无序复杂度）作为 Phase 2 升级方向
-- 基础美颜优先走主 Shader；妆容纹理通过 `FaceMakeupPass` 独立 Pass 处理，在效果与实时性间平衡
-- `api/` 纯 Kotlin 接口层：为后续独立发布 AAR/Maven 做准备
+- 磨皮使用双边滤波快速近似（5×5 采样核）而非盒式模糊：保边效果更自然，移动端单帧耗时可接受（早期文档"盒式模糊"描述已纠正）。后续评估引导滤波（O(N) 无序复杂度）作为 Phase 2 升级方向
+- 基础美颜通过模块化 Shader 管线处理；妆容纹理通过 `FaceMakeupPass` 独立 Pass 处理，在效果与实时性间平衡
+- `api/` 纯 Kotlin 接口层 + `:beauty-api` 独立模块：为后续独立发布 AAR/Maven 做准备
 - 帧同步系统（2026-05）：解决人脸检测 ~10fps 与渲染 30~60fps 不同步导致的妆容滞后问题
 
 ---
@@ -413,28 +451,30 @@ if (fps < 25 || processingMs > 20) {
 
 ### 5.1 架构定位
 帧同步是 beauty-engine 的**横切能力**，核心目标是**解决妆容甩飞问题**（妆容粘屏幕不跟脸、悬空残留、录制跳变）。沉淀在 `internal/framesync/` 包下：
-- `api/` 层新增 `FrameId`、`FrameSyncConfig`、`FrameSyncResult` 数据契约
-- `internal/framesync/` 实现时序对齐核心，不侵入 `render/` 具体 Pass
+- `:beauty-api` 提供 `FrameId`、`FrameSyncConfig`、`FrameSyncResult` 数据契约（跨模块共享）
+- `internal/framesync/` 实现时序对齐核心（`FrameSyncBridge`、`FrameSyncManager`、`MotionTracker`），不侵入 `render/` 具体 Pass
 - `FaceMakeupPass` 只消费同步后的顶点数据，不关心同步逻辑
 - **录制场景强制启用**：视频录制必须复用预览同一套帧同步逻辑，确保录制帧与预览帧行为一致
+- **当前实现状态**：核心 `FrameSyncManager` + `MotionTracker` + `FrameSyncBridge` 已落地。`DetectionQueue` / `FaceDetectionWorker` 为设计期概念，当前人脸检测走同步路径（`FaceDetectionProvider`），未来可能引入异步队列优化吞吐。
 
 ### 5.2 核心组件
 
-| 组件 | 职责 | 线程 |
-|------|------|------|
-| `FrameId` | 单调递增全局帧标识符 | 任意（AtomicLong） |
-| `FrameSyncBridge` | 线程安全共享分析线程的最新 FrameId 给渲染线程 | 分析线程写 / 渲染线程读 |
-| `FrameSyncManager` | 时序对齐：精确匹配 → 历史回退 → 预测补偿 → 缺失隐藏 | 渲染线程读 / 检测线程写 |
-| `MotionTracker` | 速度外推预测算法，保留 3 帧历史 | 渲染线程读 / 检测线程写 |
-| `DetectionQueue` | 带 FrameId 的检测任务队列，深度限制 2，超时 200ms | 分析线程写 / 检测线程读 |
-| `FaceDetectionWorker` | 消费 DetectionQueue，异步执行人脸检测 | 独立工作线程 |
+| 组件 | 职责 | 线程 | 状态 |
+|------|------|------|------|
+| `FrameId` | 单调递增全局帧标识符 | 任意（AtomicLong） | ✅ 已落地（`:beauty-api`） |
+| `FrameSyncConfig` | 帧同步配置参数 | — | ✅ 已落地（`:beauty-api`） |
+| `FrameSyncResult` | 帧同步查询结果 | — | ✅ 已落地（`:beauty-api`） |
+| `FrameSyncBridge` | 线程安全共享分析线程的最新 FrameId 给渲染线程 | 分析线程写 / 渲染线程读 | ✅ 已落地 |
+| `FrameSyncManager` | 时序对齐：精确匹配 → 历史回退 → 预测补偿 → 缺失隐藏 | 渲染线程读 / 检测线程写 | ✅ 已落地 |
+| `MotionTracker` | 速度外推预测算法，保留 3 帧历史 | 渲染线程读 / 检测线程写 | ✅ 已落地 |
+| `DetectionQueue` | 带 FrameId 的检测任务队列（设计期概念） | — | 🔄 未实现 |
+| `FaceDetectionWorker` | 异步人脸检测工作线程（设计期概念） | — | 🔄 未实现 |
 
-### 5.3 FrameId 传递机制（CR-P0-1 修复后）
+### 5.3 FrameId 传递机制（当前实现）
 ```
 CameraFrameAnalyzer（分析线程）
     ↓ FrameId.next()
     ├── FrameSyncBridge.setLatestFrameId(frameId) ──→ 渲染线程读取
-    ├── DetectionQueue.offer(Task(frameId, ...)) ───→ FaceDetectionWorker 异步检测
     └── faceDetector.detect() 同步检测 ─────────────→ FrameSyncManager.storeResult()
 
 CameraPreviewRenderer（渲染线程）
@@ -448,7 +488,7 @@ CameraPreviewRenderer（渲染线程）
 
 **关键约束**：
 - 分析线程和渲染线程**共用同一套 FrameId 序列**，通过 `FrameSyncBridge` 共享
-- 同步检测路径（FaceWarpParams 用）和异步检测路径（妆容用）**都存入 FrameSyncManager**，统一数据源（CR-P0-2）
+- 当前版本使用同步检测路径，检测结果直接存入 `FrameSyncManager`
 - **`FrameSyncBridge` 在 `CameraPreviewRenderer.release()` 时调用 `reset()` 清理**
 - **录制链路必须复用同一 `FrameSyncManager` 实例**，禁止录制时单独创建新的帧同步上下文（防止预览和录制行为不一致）
 
@@ -463,19 +503,17 @@ CameraPreviewRenderer（渲染线程）
 ### 5.5 性能约束
 - `MotionTracker.predict()` 内部复用预分配缓冲区，避免每帧 GC（CR-P1-1）
 - `CameraPreviewRenderer.applySyncResultToRenderer()` 复用 `syncMappedBuffer`，避免每帧 new FloatArray
-- `DetectionQueue` 队列深度 2，超时 200ms，防止检测线程积压
 
 ### 5.6 资源生命周期
 - `CameraPreviewRenderer.release()` 必须调用：
   1. `frameSyncManager.clear()` — 清空历史检测结果
   2. `FrameSyncBridge.reset()` — 重置共享 FrameId
-  3. `stopFaceDetectionWorker()` — 停止检测工作线程
 
 ### 5.7 检查清单
 - [ ] `FrameSyncBridge.setLatestFrameId()` 在每次分析帧检测前调用
-- [ ] 同步检测路径和异步检测路径都调用 `FrameSyncManager.storeResult()`
+- [ ] 检测结果调用 `FrameSyncManager.storeResult()`
 - [ ] `CameraPreviewRenderer` 使用 `FrameSyncBridge.getLatestFrameId()` 而非 `FrameId.next()`
-- [ ] `release()` 时清理 `FrameSyncManager` + `FrameSyncBridge` + `FaceDetectionWorker`
+- [ ] `release()` 时清理 `FrameSyncManager` + `FrameSyncBridge`
 - [ ] `FaceMakeupPass.updateFaceLandmarksSynced()` 输入为 UV [0,1]，内部转 NDC [-1,1]
 - [ ] `FrameSyncManager.updateConfig()` 能真正生效（config 为 var）
 - [ ] **录制场景复用同一 `FrameSyncManager` 实例，预览与录制帧同步行为一致**

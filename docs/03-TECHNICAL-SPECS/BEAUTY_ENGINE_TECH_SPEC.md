@@ -104,14 +104,14 @@
 
 ### 1.4 磨皮算法演进路线（2026-04）
 
-**当前实现**：双边滤波快速近似（9 点采样 + 值域高斯权重），已落地在 `BeautyShaders.FRAGMENT_SHADER_BEAUTY`。
+**当前实现**：双边滤波快速近似（5×5 采样核 + 值域高斯权重），已落地在 `beauty-engine/src/main/assets/shaders/pass_smoothing.glsl`。
 
 **算法演进路线**：
 
 | 阶段 | 方案 | 复杂度 | 边缘保持 | 状态 |
 |------|------|------|------|------|
 | 已放弃 | 盒式模糊（Box Blur） | O(1) | 无，失真明显 | ❌ 放弃 |
-| **当前** | 双边滤波快速近似（9pt Shader 内联） | O(N·r²) 近似 | 良好，保留皮肤轮廓 | ✅ 已落地 |
+| **当前** | 双边滤波快速近似（5×5 采样核 + 锐化后处理） | O(N·r²) 近似 | 良好，保留皮肤轮廓 | ✅ 已落地 |
 | Phase 2 | **引导滤波（Guided Filter）** | **O(N)，与半径无关** | 更优，结构转移特性，无梯度反转光晕 | ⏳ 规划中 |
 | Phase 3 | 多尺度细节分层（Multi-scale） | O(N·K)，K层 | 工业级，分频层独立处理后融合 | 🔭 长期目标 |
 
@@ -355,7 +355,7 @@ while (isRendering && !Thread.interrupted()) {
 
 ### 3.5 难点 5：MediaPipe 468 点 → 106 点映射
 
-**背景**：人脸检测双引擎统一输出 106 点标准格式。MediaPipe Face Landmarker 输出 468 点，需映射为 106 点；InsightFace 2D106 直接输出 106 点，仅需重排。两种来源供大美丽链路复用。
+**背景**：人脸检测多引擎统一输出 106 点标准格式。MediaPipe Face Landmarker 输出 468 点，需映射为 106 点；MNN/NCNN 2D106 检测器输出 106 点，通过 Adapter 重排。多种来源供大美丽链路复用。旧 InsightFace ONNX 路径已移除。
 
 **关键说明**：具体映射关系以代码实现为准，本文档仅记录核心原则。
 
@@ -453,7 +453,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - [x] **滤镜一致性修复**：`FilterType` 新增 `toAndroidColorMatrix()` 方法，修复 Compose ColorMatrix 与 Android ColorMatrix 类型不兼容导致的滤镜失效问题。
 - [x] **GPU 离屏拍照**：`PhotoProcessorImpl` 实现 GPU 离屏渲染拍照路径，预览与拍照复用同一套 Shader 管线，效果一致性 ≥ 99%。
 - [x] **风格特效**：`BeautyShaders` 新增 `LEICA_CLASSIC`、`FILM_GOLD`、`COOL`、`WARM` 等风格滤镜 Shader。
-- [x] **帧同步美妆（🔄 部分实现）**：`FrameSyncManager` + `MotionTracker` + `DetectionQueue` 框架已落地，解决检测帧率（~10fps）与渲染帧率（30~60fps）不同步导致的妆容飞脱问题。完整预测补偿与 hide 策略待收尾。
+- [x] **帧同步美妆（🔄 部分实现）**：`FrameSyncManager` + `MotionTracker` + `FrameSyncBridge` 框架已落地，解决检测帧率（~10fps）与渲染帧率（30~60fps）不同步导致的妆容飞脱问题。`DetectionQueue`/`FaceDetectionWorker` 为设计期概念，当前使用同步检测路径。
 
 ### 4.2 引擎现状
 
@@ -661,7 +661,7 @@ QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIS
 - `CAMERA_PREVIEW_TECH_SPEC.md` — 相机预览与坐标系统规范
 - `BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md` — 大美丽 QA 独立执行清单
 - `beauty-engine/src/main/java/com/picme/beauty/api/` — 对外稳定 API（`BeautyParams`、`BeautyPreviewProvider`、`BeautyPreviewCapability`、`BeautyPreviewEngine`）
-- `beauty-engine/src/main/java/com/picme/beauty/egl/` — GL 渲染管线核心实现
+- `beauty-engine/src/main/java/com/picme/beauty/render/` — GL 渲染管线核心实现
 - `app/src/main/java/com/picme/features/camera/CameraScreen.kt` — 预览绑定、容灾回退与调试浮层
 - `app/src/main/java/com/picme/features/camera/CameraPreviewStrategies.kt` — 引擎策略路由
 
@@ -833,7 +833,7 @@ verts[i * 2 + 1] += eyeAxisY * axisOffset * str * slimRadius
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
 | 引擎 | 自研 大美丽（OpenGL ES） | 可控性最高、零授权、全链路可观测 |
-| 磨皮算法 | 双边滤波快速近似（9pt） | 保边效果好，移动端性能可接受 |
+| 磨皮算法 | 双边滤波快速近似（5×5 采样核） | 保边效果好，移动端性能可接受 |
 | 显示层 | SurfaceView | 直接硬件合成，延迟更低，功耗更小 |
 | 人脸检测 | MediaPipe 468→106（主链路） | 与当前预览分析流一致，直接服务 `FaceWarpParams` |
 | 渲染参数 | 全 uniform 实时更新 | 无需重新编译 Shader，延迟 < 100ms |

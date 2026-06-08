@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 PicMe is a technology research project exploring two main tracks: **(1) AI Coding paradigm** — on-device Agent mechanisms and Agent-centric application architecture, and **(2) Audio/Video technology** — self-developed real-time beauty/filter/makeup engine ("BIG_BEAUTY") via OpenGL ES + EGL. The camera app serves as a concrete case study at the intersection of these two tracks. This project does not pursue commercialization; its core value lies in technical exploration and engineering practice.
 
 Key technological decisions:
-- **On-device Agent**: `domain/agent/` implements an Agent Runtime that maps natural language to device capabilities via Qwen3-1.7B running on MNN-LLM.
+- **On-device Agent**: `agent-core/` implements an Agent Runtime (AgentOrchestrator, LocalLlmEngine, CapabilityRegistry, etc.) that maps natural language to device capabilities via Qwen3-1.7B running on MNN-LLM.
 - **Privacy-first**: All sensitive AI processing (LLM inference, face detection, OCR) runs locally; non-sensitive commands may use remote orchestration in REMOTE mode.
 - **Self-developed Engine**: Full OpenGL ES + EGL pipeline (no third-party beauty SDKs); GPUPixel has been completely removed.
 
@@ -48,9 +48,13 @@ adb logcat -s "PicMe:*"
 
 ### Module Structure
 
-Two Gradle modules defined in `settings.gradle.kts`:
+Four Gradle modules defined in `settings.gradle.kts`:
 - **`:app`** — Main Android application (Camera, Gallery, Editor, Settings)
+- **`:beauty-api`** — Pure Kotlin library; stable API contracts shared between `:app` and `:beauty-engine`
+  (BeautySettings, FilterType, StyleFilter, Face, FaceDetector, FrameSyncConfig, etc.)
 - **`:beauty-engine`** — Independent Android library; self-developed OpenGL ES + EGL real-time beauty engine
+- **`:agent-core`** — Pure Kotlin library; Agent Runtime infrastructure (AgentOrchestrator, CapabilityRegistry,
+  LocalLlmEngine, InferenceRouter, ExecutionEngine, PrivacyGuard, MemoryManager, voice/ASR, remote/ orchestration, etc.)
 
 GPUPixel has been fully removed; all GPU capabilities are provided by the self-developed engine.
 
@@ -59,67 +63,78 @@ GPUPixel has been fully removed; all GPU capabilities are provided by the self-d
 ```
 features/  →  domain/usecase/  →  domain/repository/  →  data/
    ↓                ↓
-domain/agent/  beauty-engine:api/  (strict boundary — see below)
+agent-core/   beauty-api/   beauty-engine/  (strict boundaries — see below)
 ```
 
 - **Features**: Compose UI + ViewModels. Camera features include an Agent interaction panel for natural language control.
-- **Domain**: Pure Kotlin, no Android dependencies. Includes `domain/agent/` for Agent Runtime (`AgentOrchestrator`, `LocalLlmEngine`, `CapabilityRegistry`, `MemoryManager`, `PrivacyGuard`) and `domain/usecase/AiAgentUseCase` as Facade.
+- **Domain**: Pure Kotlin, no Android dependencies. Includes `domain/usecase/AiAgentUseCase` as Facade to `agent-core`.
 - **Data**: Repository implementations, Room DB, DataStore preferences, and LLM model download management (`LlmModelDownloadManager`).
+- **agent-core**: Agent Runtime infrastructure moved from `domain/agent/` to independent module.
 
 ### Beauty-Engine Layered Architecture (Critical Dependency Boundary)
 
 ```
 App Layer
     ↓ (only dependency allowed)
-beauty-engine:api/          ← Public API contract (BeautySettings, BeautyParams,
-                               FilterType, Face, BeautyProcessor, PhotoProcessor,
-                               FaceDetector, BeautyPreviewProvider, etc.)
+beauty-api/                 ← Pure Kotlin API contracts (BeautySettings, FilterType,
+                               StyleFilter, Face, FaceDetector, FrameSyncConfig, etc.)
     ↑
-beauty-engine:egl/          ← Internal OpenGL ES + EGL pipeline (BeautyRenderer,
+beauty-engine:api/          ← Implementation-facing API (BeautyParams, BeautyPreviewProvider,
+                               BeautyPreviewEngine, PhotoProcessor, BeautyPerfStats, etc.)
+    ↑
+beauty-engine:render/       ← Internal OpenGL ES + EGL pipeline (BeautyRenderer,
                                CameraPreviewRenderer, PhotoProcessorImpl, EGLCore)
     ↑
-beauty-engine:internal/     ← Face detection adapters, frame-sync system
+beauty-engine:internal/     ← Face detection adapters (MNN/NCNN/MediaPipe), frame-sync system
 ```
 
 **Dependency rules**:
-- App code **must only** depend on `beauty-engine:api/` classes. Direct references to `egl/` or `internal/` are forbidden.
-- `api/` package **must not** depend on `egl/`, `androidx.camera.*`, or any App-layer packages.
-- `egl/` implements `api/` interfaces and may depend on Android/OpenGL ES libraries.
-- All GPU/EGL operations are encapsulated inside `beauty-engine:egl`.
+- App code **must only** depend on `beauty-api/` and `beauty-engine:api/` classes. Direct references to `render/` or `internal/` are forbidden.
+- `beauty-api/` is a pure Kotlin module with zero Android/OpenGL dependencies.
+- `beauty-engine:api/` depends on `beauty-api/` for shared types.
+- `beauty-engine:render/` implements `api/` interfaces and may depend on Android/OpenGL ES libraries.
+- All GPU/EGL operations are encapsulated inside `beauty-engine:render/`.
 
 ### Face Detection Architecture
 
-Dual-engine detection unified to 106 landmarks:
+Multi-engine detection unified to 106 landmarks via adapter pattern:
 - **MediaPipe Face Mesh 468→106** (default): TFLite GPU delegate inference with precise 468→106 semantic mapping.
-- **InsightFace 2D106** (fallback): Local MNN inference with Vulkan/CPU backend. Two-stage pipeline: RetinaFace ROI → 2D106 landmarks.
-- Auto mode: prefers MediaPipe; falls back to InsightFace on miss or init failure.
+- **MNN 2D106** (alternative): Local MNN inference for landmark detection.
+- **NCNN 2D106** (alternative): Local NCNN inference for ROI + landmark detection.
+- Auto mode: prefers MediaPipe; cascades through alternatives on miss or init failure.
 
-All detection implementations live in `beauty-engine/internal/facedetect/`. App layer consumes only `beauty-engine:api/facedetect/` contracts.
+All detection implementations live in `beauty-engine/internal/facedetect/` with adapter pattern (`FaceLandmarkAdapter`).
+App layer consumes only `beauty-api/facedetect/` contracts. The old InsightFace ONNX path has been fully replaced by MNN/NCNN detectors.
 
 ### Frame-Sync Makeup System
 
 Solves makeup "flying off" caused by face detection (~10 fps) and rendering (30–60 fps) running at different rates.
 
-- Components in `beauty-engine/internal/framesync/`: `FrameSyncBridge`, `FrameSyncManager`, `MotionTracker`, `DetectionQueue`, `FaceDetectionWorker`.
+- Core components in `beauty-engine/internal/framesync/`: `FrameSyncBridge`, `FrameSyncManager`, `MotionTracker`.
 - Rendering thread queries `FrameSyncManager` by `FrameId` to get time-aligned face data (exact match → history fallback → prediction compensation → hide).
+- `FrameSyncConfig` and `FrameSyncResult` contracts live in `beauty-api/` for cross-module sharing.
 - **Recording must reuse the same `FrameSyncManager` instance** as preview to ensure consistent behavior.
+- Note: `DetectionQueue` and `FaceDetectionWorker` are design-phase concepts; current implementation uses synchronous detection via `FaceDetectionProvider`.
 
 ### Agent Runtime (On-Device)
 
 ```
 User Input ("拍张照" / "换个冷调滤镜")
-    → AiAgentUseCase (Facade)
-    → AgentOrchestrator.processUserInput()
+    → AiAgentUseCase (Facade in domain/usecase/)
+    → AgentOrchestrator.processUserInput() (in agent-core/)
     → LocalLlmEngine (Qwen3-1.7B via MNN-LLM, 100% on-device)
     → AgentCommandParser (LLM response → AgentCommand)
     → CapabilityRegistry (route to Capability)
     → CameraCapability (execute device operation)
 ```
 
+- **Module**: `:agent-core` — independent pure Kotlin module containing all Agent Runtime components.
 - **Model**: Qwen3-1.7B-MNN downloaded from ModelScope via `LlmModelDownloadManager` (resumable + SHA256).
-- **Capabilities**: `AdjustBeauty` (smooth/whiten/slim/eye/lip/blush/brow), `SwitchFilter`, `SwitchStyle`, `SwitchScene`, `SwitchRatio`, `AdjustExposure`, `AdjustZoom`, `FlipCamera`, `CapturePhoto`, `TextReply`.
+- **Capabilities**: `AdjustBeauty` (smooth/whiten/slim/eye/lip/blush/brow), `SwitchFilter`, `SwitchStyle`, `SwitchScene`, `SwitchRatio`, `AdjustExposure`, `AdjustZoom`, `FlipCamera`, `Capture`, `ToggleRecording`.
 - **Privacy**: `PrivacyGuard` grades operations; all LLM inference runs 100% locally.
 - **Memory**: `MemoryManager` maintains conversation context for multi-turn dialogue.
+- **Voice**: Voice interaction support via `voice/` sub-package (ASR, VAD, AudioRecorder, SherpaMnnAsrEngine).
+- **Remote**: Remote LLM orchestration via `remote/` sub-package (Kimi API, OpenAI API, IntentCache, AdaptiveStrategySelector).
 
 ### Zero-Copy GPU Pipeline (Preview)
 
@@ -152,7 +167,7 @@ CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
 
 - **ktlint** (v1.3.1) — Kotlin code style
 - **detekt** (v1.23.6, config: `detekt-config.yml`) — Static analysis
-- **Unit tests** — Pure JVM tests covering coordinate algorithms, state machines, converters, end-to-end flows. ~50 test files across `app/src/test/` and `beauty-engine/src/test/`.
+- **Unit tests** — Pure JVM tests covering coordinate algorithms, state machines, converters, end-to-end flows. ~50 test files across `app/src/test/`, `beauty-engine/src/test/`, and `agent-core/src/test/`.
 - **Instrumentation tests** — Require connected device/emulator.
 
 ## Documentation Hierarchy
@@ -168,9 +183,10 @@ docs/01-PRODUCT/FEATURES.md    → Interaction and UX rules (How)
 Key technical specs:
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md` — Rendering pipeline, fallback, cooldown recovery, observability
 - `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md` — Coordinate conversion, viewport calculation
-- `docs/03-TECHNICAL-SPECS/FACE_DETECTION_ENGINE_ARCHITECTURE.md` — InsightFace + MediaPipe dual-engine architecture
+- `docs/03-TECHNICAL-SPECS/FACE_DETECTION_ENGINE_ARCHITECTURE.md` — MediaPipe + MNN/NCNN multi-engine architecture
 - `docs/02-ARCHITECTURE/ADR/ADR-001-beauty-engine-architecture.md` — Layered module architecture decision
 - `docs/02-ARCHITECTURE/ADR/ADR-002-opengl-offscreen-unified-pipeline.md` — GPU off-screen rendering for photo processing
+- `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` — Agent runtime architecture design
 
 ## Build Configuration
 
