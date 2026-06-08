@@ -566,12 +566,12 @@ class SettingsViewModel(
             StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.TFLITE, InferenceDevicePreference.AUTO)
         )
         FaceDetectionEngineMode.MNN -> Pair(
-            StageConfig(DetectionStage.ROI, DetectionModelType.MEDIAPIPE, InferenceEngineType.MNN, InferenceDevicePreference.AUTO),
-            StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.MNN, InferenceDevicePreference.AUTO)
+            StageConfig(DetectionStage.ROI, DetectionModelType.DET_500M_MNN, InferenceEngineType.MNN, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.FACE_2D106_MNN, InferenceEngineType.MNN, InferenceDevicePreference.AUTO)
         )
         FaceDetectionEngineMode.NCNN -> Pair(
-            StageConfig(DetectionStage.ROI, DetectionModelType.MEDIAPIPE, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO),
-            StageConfig(DetectionStage.LANDMARK, DetectionModelType.MEDIAPIPE, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO)
+            StageConfig(DetectionStage.ROI, DetectionModelType.DET_500M_NCNN, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO),
+            StageConfig(DetectionStage.LANDMARK, DetectionModelType.FACE_2D106_NCNN, InferenceEngineType.NCNN, InferenceDevicePreference.AUTO)
         )
         FaceDetectionEngineMode.CUSTOM -> Pair(
             StageConfig.defaultRoi(),
