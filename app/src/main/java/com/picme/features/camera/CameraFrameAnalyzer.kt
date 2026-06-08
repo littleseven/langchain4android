@@ -419,17 +419,18 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         // [降级] 非 MediaPipe → Bitmap 路径（此时 Image 未被关闭）
         if (detectionResult == null) {
-            // [Zero-Copy #2] 尝试 MNN NV21 YUV 直传路径（仅 YUV 输出时可用）
+            // [Zero-Copy #2] 尝试 MNN/NCNN NV21 YUV 直传路径（仅 YUV 输出时可用）
             // 避免 YUV→ARGB Bitmap（~5ms）+ Bitmap→RGB ByteBuffer（~2ms）的双重 CPU 拷贝
             var nv21Result: RectF? = null
             if (!isRgbaOutput) {
-                val useNv21Path = faceDetector is FaceDetectorManager && detectionEngineMode == EngineType.MNN
+                val useNv21Path = faceDetector is FaceDetectorManager &&
+                    (detectionEngineMode == EngineType.MNN || detectionEngineMode == EngineType.NCNN)
                 if (useNv21Path) {
                     val nv21Start = SystemClock.elapsedRealtime()
                     val nv21Buffer = ImageUtils.imageProxyToNv21(imageProxy)
                     val nv21Elapsed = SystemClock.elapsedRealtime() - nv21Start
                     if (nv21Buffer != null) {
-                        Logger.dThrottled("Camera", "yuv_nv21", "[Perf] YUV→NV21: ${nv21Elapsed}ms, size=${imageProxy.width}x${imageProxy.height}")
+                        Logger.dThrottled("Camera", "yuv_nv21", "[Perf] YUV→NV21 (${detectionEngineMode.name}): ${nv21Elapsed}ms, size=${imageProxy.width}x${imageProxy.height}")
                         nv21Result = (faceDetector as FaceDetectorManager).detectRoiFromNv21(
                             nv21Buffer, imageProxy.width, imageProxy.height)
                     }
@@ -458,7 +459,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 val landmarkResult = (faceDetector as FaceDetectorManager).detectLandmarksWithRoi(
                     bitmap, lensFacing, nv21Result)
                 val lmElapsed = SystemClock.elapsedRealtime() - lmStart
-                Logger.dThrottled("Camera", "nv21_path", "[Perf] NV21 ROI + Bitmap Landmark: ${lmElapsed}ms, roi=${nv21Result}")
+                Logger.dThrottled("Camera", "nv21_path", "[Perf] NV21 ROI(${detectionEngineMode.name}) + Bitmap Landmark: ${lmElapsed}ms, roi=${nv21Result}")
                 detectionResult = landmarkResult
             } else {
                 // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配

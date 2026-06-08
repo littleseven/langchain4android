@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.picme.agent.core.api.policy.AiAgentInferencePreference
 import com.picme.agent.core.api.policy.AiAgentMode
 import com.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
+import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.core.common.Logger
 import com.picme.data.download.DownloadState
 import com.picme.data.download.DownloadStatus
@@ -19,6 +21,7 @@ import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.LogModule
 import com.picme.domain.model.LogModuleConfig
 import com.picme.domain.model.ModelCategory
 import com.picme.domain.model.StageConfig
@@ -742,6 +745,10 @@ class SettingsViewModel(
     fun setLogModuleConfig(config: LogModuleConfig) {
         // 同步更新内存中的 Logger 配置，使开关立即生效
         Logger.setModuleConfig(config)
+        // 同步 C++ 层的人脸检测日志开关（静态全局开关，影响所有 native 实例）
+        val faceDetectionEnabled = config.isEnabled(LogModule.FACE_DETECTION)
+        MnnFaceDetector.setNativeLogEnabled(faceDetectionEnabled)
+        NcnnFaceDetector.setNativeLogEnabled(faceDetectionEnabled)
         viewModelScope.launch {
             repository.updateLogModuleConfig(config)
         }

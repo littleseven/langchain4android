@@ -117,8 +117,8 @@ data class LogModuleConfig(
                 LogModule.AGENT,
                 LogModule.ORCHESTRATOR,
                 LogModule.DOWNLOAD,
-                LogModule.SETTINGS,
-                LogModule.FACE_DETECTION
+                LogModule.SETTINGS
+                // FACE_DETECTION 默认关闭，用户可在设置页手动开启
             )
         )
 

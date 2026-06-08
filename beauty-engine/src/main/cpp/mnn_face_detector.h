@@ -26,7 +26,7 @@ struct FaceBox {
 /**
  * MNN 人脸检测器封装
  * 支持 ROI 检测（RetinaFace）和关键点检测（2D106）
- * 兼容骁龙 765G + Adreno 620（Vulkan 1.1）
+ * 兼容骁龙 765G + Adreno 620（OpenCL）
  */
 class MnnFaceDetector {
 public:
@@ -37,7 +37,7 @@ public:
      * 加载 MNN 模型
      * @param modelPath MNN 模型文件路径
      * @param inputSize 模型输入尺寸（正方形）
-     * @param useGpu 是否使用 Vulkan GPU
+     * @param useGpu 是否使用 OpenCL GPU
      * @param inputName 输入层名称
      * @param outputNames 输出层名称列表（RetinaFace 多输出）
      */

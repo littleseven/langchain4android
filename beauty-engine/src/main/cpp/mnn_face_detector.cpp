@@ -586,7 +586,7 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
 
     LOGI("[Perf] MNN RetinaFace DONE: total=%ldms (preprocess+fill=%ldms, copyToDevice=%ldms, infer=%ldms, postprocess=%ldms, nms=%ldms), faces=%zu, backend=%s",
          totalMs, totalMs - copyMs - inferMs - nmsMs, copyMs, inferMs, totalMs - copyMs - inferMs - nmsMs - (totalMs - copyMs - inferMs - nmsMs), nmsMs, result.size(),
-         useGpu_ ? "Vulkan" : "CPU");
+         useGpu_ ? "OpenCL" : "CPU");
 
     LOGD("RetinaFace after NMS: %zu", result.size());
     return result;
@@ -1003,8 +1003,8 @@ bool MnnFaceDetector::createSession() {
     MNN::ScheduleConfig config;
     config.numThread = 4;
     if (useGpu_) {
-        config.type = MNN_FORWARD_VULKAN;
-        LOGI("Requesting Vulkan GPU backend...");
+        config.type = MNN_FORWARD_OPENCL;
+        LOGI("Requesting OpenCL GPU backend...");
     } else {
         config.type = MNN_FORWARD_CPU;
         LOGI("Using CPU backend with %d threads", config.numThread);
@@ -1022,7 +1022,7 @@ bool MnnFaceDetector::createSession() {
 
     LOGI("MNN session created in %lldms, requested=%s",
          sessionCreateElapsed,
-         useGpu_ ? "Vulkan" : "CPU");
+         useGpu_ ? "OpenCL" : "CPU");
 
     // [诊断] 验证实际后端，检测静默 CPU 回退
     if (useGpu_) {
@@ -1042,8 +1042,8 @@ bool MnnFaceDetector::createSession() {
                 default: break;
             }
             LOGI("MNN session actual backend: %s (type=%d)", backendName, actualBackend);
-            if (actualBackend != MNN_FORWARD_VULKAN) {
-                LOGE("MNN Vulkan request was SILENTLY degraded! Actual backend=%s."
+            if (actualBackend != MNN_FORWARD_OPENCL) {
+                LOGE("MNN OpenCL request was SILENTLY degraded! Actual backend=%s."
                      " Inference will be slow.", backendName);
                 useGpu_ = false;
             }

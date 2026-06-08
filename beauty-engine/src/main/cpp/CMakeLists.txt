@@ -40,10 +40,10 @@ set(MNN_SO_PATH "${MNN_LIB_DIR}/libMNN.so")
 add_library(mnn SHARED IMPORTED)
 set_target_properties(mnn PROPERTIES IMPORTED_LOCATION ${MNN_SO_PATH})
 
-# [注意] libMNN_Vulkan.so 已合并到 libMNN.so（统一构建）
-set(MNN_VULKAN_SO_PATH "${MNN_LIB_DIR}/libMNN_Vulkan.so")
-if(EXISTS ${MNN_VULKAN_SO_PATH})
-    message(STATUS "libMNN_Vulkan.so found but NOT linking - Vulkan symbols are already in libMNN.so")
+# [注意] libMNN_CL.so 提供 OpenCL GPU 后端
+set(MNN_CL_SO_PATH "${MNN_LIB_DIR}/libMNN_CL.so")
+if(EXISTS ${MNN_CL_SO_PATH})
+    message(STATUS "libMNN_CL.so found - OpenCL GPU backend available")
 endif()
 
 # MNN-LLM 库

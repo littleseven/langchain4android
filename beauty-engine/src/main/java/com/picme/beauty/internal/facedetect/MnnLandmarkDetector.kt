@@ -16,10 +16,10 @@ import com.picme.beauty.internal.model.ModelManager
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 基于 MNN + Vulkan GPU 的 106 点关键点检测器
+ * 基于 MNN + OpenCL GPU 的 106 点关键点检测器
  * 替代 InsightFace 2D106 (ONNX Runtime)，提供更快的 GPU 推理
  *
- * 兼容骁龙 765G + Adreno 620（Vulkan 1.1）
+ * 兼容骁龙 765G + Adreno 620（OpenCL）
  *
  * [Agent First] 支持动态加载/卸载：
  * - 通过 MnnResourceManager 注册引用，参与全局内存协调
@@ -103,7 +103,7 @@ class MnnLandmarkDetector(
 
             if (detector != null) {
                 isGpuEnabled = requireGpu
-                val backendLabel = if (requireGpu) "Vulkan GPU" else "CPU"
+                val backendLabel = if (requireGpu) "OpenCL GPU" else "CPU"
                 Logger.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with $backendLabel")
                 // 向 ResourceManager 注册引用，参与全局协调
                 resourceManager.acquireFaceDetection("MnnLandmarkDetector")
@@ -180,7 +180,7 @@ class MnnLandmarkDetector(
             return null
         }
 
-        val engineLabel = if (isGpuEnabled) "MNN-Vulkan" else "MNN-CPU"
+        val engineLabel = if (isGpuEnabled) "MNN-OpenCL" else "MNN-CPU"
         Logger.d(TAG, "[Perf] MnnLandmark START: engine=$engineLabel, bitmap=${bitmap.width}x${bitmap.height}, roi=$roi")
 
         return try {

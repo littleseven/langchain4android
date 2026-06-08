@@ -170,7 +170,7 @@ private fun FaceDebugStatusRow(
 private fun faceDebugRequestedColor(mode: EngineType): Color {
     return when (mode) {
         EngineType.MEDIAPIPE -> MEDIAPIPE_DEBUG_COLOR
-        EngineType.MNN -> MNN_DEBUG_COLOR  // [性能优化] MNN Vulkan GPU
+        EngineType.MNN -> MNN_DEBUG_COLOR  // [性能优化] MNN OpenCL GPU
         EngineType.NCNN -> NCNN_DEBUG_COLOR  // [性能优化] NCNN 轻量级检测器
     }
 }
@@ -178,7 +178,7 @@ private fun faceDebugRequestedColor(mode: EngineType): Color {
 private fun faceDebugSourceColor(source: FaceDetectionSource): Color {
     return when (source) {
         FaceDetectionSource.MEDIAPIPE -> MEDIAPIPE_SOURCE_COLOR
-        FaceDetectionSource.MNN -> MNN_SOURCE_COLOR  // [性能优化] MNN Vulkan GPU
+        FaceDetectionSource.MNN -> MNN_SOURCE_COLOR  // [性能优化] MNN OpenCL GPU
         FaceDetectionSource.NCNN -> NCNN_SOURCE_COLOR  // [性能优化] NCNN 轻量级检测器
         FaceDetectionSource.NONE -> NONE_DEBUG_COLOR
     }

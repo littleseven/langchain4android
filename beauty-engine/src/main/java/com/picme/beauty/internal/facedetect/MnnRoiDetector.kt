@@ -15,10 +15,10 @@ import com.picme.beauty.internal.model.ModelManager
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 基于 MNN + Vulkan GPU 的 ROI 检测器
+ * 基于 MNN + OpenCL GPU 的 ROI 检测器
  * 替代 InsightFace Det10G (ONNX Runtime)，提供更快的 GPU 推理
  *
- * 兼容骁龙 765G + Adreno 620（Vulkan 1.1）
+ * 兼容骁龙 765G + Adreno 620（OpenCL）
  *
  * [Agent First] 支持动态加载/卸载：
  * - 通过 MnnResourceManager 注册引用，参与全局内存协调
@@ -107,7 +107,7 @@ class MnnRoiDetector(
         try {
             val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
-            Logger.i(TAG, "Initializing MNN RetinaFace detector with Vulkan GPU (requireGpu=$requireGpu)...")
+            Logger.i(TAG, "Initializing MNN RetinaFace detector with OpenCL GPU (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
             detector = MnnFaceDetector.create(
                 modelPath = modelFile.absolutePath,
@@ -120,7 +120,7 @@ class MnnRoiDetector(
 
             if (detector != null) {
                 isGpuEnabled = true
-                Logger.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with Vulkan GPU")
+                Logger.i(TAG, "MnnRoiDetector initialized in ${initElapsed}ms with OpenCL GPU")
                 // 向 ResourceManager 注册引用，参与全局协调
                 resourceManager.acquireFaceDetection("MnnRoiDetector")
             } else {
@@ -196,7 +196,7 @@ class MnnRoiDetector(
             return null
         }
 
-        val engineLabel = if (isGpuEnabled) "MNN-Vulkan" else "MNN-CPU"
+        val engineLabel = if (isGpuEnabled) "MNN-OpenCL" else "MNN-CPU"
         Logger.d(TAG, "[Perf] MnnRoi START: engine=$engineLabel, original=${bitmap.width}x${bitmap.height}, scaled=$INPUT_SIZE")
 
         return try {
@@ -280,7 +280,7 @@ class MnnRoiDetector(
         }
 
         val yuvStart = SystemClock.elapsedRealtime()
-        val yuvEngineLabel = if (isGpuEnabled) "MNN-Vulkan" else "MNN-CPU"
+        val yuvEngineLabel = if (isGpuEnabled) "MNN-OpenCL" else "MNN-CPU"
         Logger.d(TAG, "[Perf] MnnRoi NV21 START: engine=$yuvEngineLabel, input=${width}x${height}")
 
         return try {
