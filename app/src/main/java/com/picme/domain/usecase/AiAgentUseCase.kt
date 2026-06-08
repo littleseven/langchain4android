@@ -1,28 +1,30 @@
 package com.picme.domain.usecase
 
 import android.content.Context
-import com.picme.beauty.api.BeautySettings
-import com.picme.beauty.api.FilterType
-import com.picme.beauty.api.StyleFilter
-import com.picme.core.common.Logger
+import com.picme.BuildConfig
 import com.picme.agent.core.AgentOrchestrator
 import com.picme.agent.core.PromptBuilder
-import com.picme.features.camera.capability.CameraCapability
+import com.picme.agent.core.SceneManager
 import com.picme.agent.core.model.AgentAction
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.SceneManager
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
+import com.picme.agent.core.model.InferenceResult
+import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.model.RemoteModelConfig
 import com.picme.agent.core.remote.AdaptiveStrategySelector
 import com.picme.agent.core.remote.InferenceStrategy
 import com.picme.agent.core.remote.RemoteOrchestrator
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.beauty.api.StyleFilter
+import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.AiAgentPrivacyLevel
-import com.picme.agent.core.model.MediaType
+import com.picme.features.camera.capability.CameraCapability
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.picme.agent.core.model.RemoteModelConfig
 
 /**
  * AI Agent 核心用例（Facade）
@@ -69,7 +71,7 @@ class AiAgentUseCase(
     private val fallbackRemoteConfig: RemoteModelConfig =
         RemoteModelConfig.TENCENT_SCF_DEFAULT.copy(
             gatewayToken = gatewayToken?.takeIf { it.isNotBlank() }
-                ?: com.picme.BuildConfig.TENCENT_SCF_APP_TOKEN
+                ?: BuildConfig.TENCENT_SCF_APP_TOKEN
         )
 
     /**
@@ -80,7 +82,7 @@ class AiAgentUseCase(
 
     /**
      * 远程编排器（L2/L3/L4）
-     * 使用 PromptBuilder 统一构建 prompt，避免与 RemoteInferenceEngine 的 prompt 重复
+     * 使用 PromptBuilder 统一构建 prompt
      */
     private val remoteOrchestrator: RemoteOrchestrator by lazy {
         RemoteOrchestrator(
@@ -256,7 +258,7 @@ class AiAgentUseCase(
                 )
                 Result.success(
                     when (result) {
-                        is com.picme.agent.core.model.InferenceResult.Batch -> {
+                        is InferenceResult.Batch -> {
                             when {
                                 result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
                                 result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
@@ -276,7 +278,7 @@ class AiAgentUseCase(
                 )
                 Result.success(
                     when (result) {
-                        is com.picme.agent.core.model.InferenceResult.Batch -> {
+                        is InferenceResult.Batch -> {
                             when {
                                 result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
                                 result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
@@ -295,7 +297,7 @@ class AiAgentUseCase(
                 )
                 Result.success(
                     when (result) {
-                        is com.picme.agent.core.model.InferenceResult.Chat -> AiAgentCommand.TextReply(result.message)
+                        is InferenceResult.Chat -> AiAgentCommand.TextReply(result.message)
                         else -> AiAgentCommand.TextReply("推理结果类型不匹配")
                     }
                 )

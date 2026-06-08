@@ -4,14 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.picme.agent.core.model.AiAgentInferencePreference
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.core.common.Logger
 import com.picme.data.download.DownloadState
 import com.picme.data.download.DownloadStatus
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
-import com.picme.agent.core.model.AiAgentInferencePreference
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
@@ -19,6 +19,7 @@ import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
+import com.picme.domain.model.LogModuleConfig
 import com.picme.domain.model.ModelCategory
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.TagTranslations
@@ -32,7 +33,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.picme.domain.model.LogModuleConfig
 
 class SettingsViewModel(
     private val repository: UserSettingsRepository,

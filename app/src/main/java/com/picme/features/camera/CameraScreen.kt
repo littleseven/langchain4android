@@ -94,14 +94,15 @@ import com.picme.domain.model.CameraMemoryState
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.capability.CameraCapability
+import com.picme.features.camera.facedetect.ImageUtils
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
-import com.picme.features.camera.facedetect.ImageUtils
 import com.picme.features.camera.thread.CameraThreadRegistry
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.gallery.MediaViewModel
+import com.picme.features.settings.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -307,7 +308,7 @@ fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
     viewModel: MediaViewModel,
-    settingsViewModel: com.picme.features.settings.SettingsViewModel? = null
+    settingsViewModel: SettingsViewModel? = null
 ) {
     // RD 沉浸式模式：隐藏系统栏
     val view = LocalView.current
@@ -371,7 +372,7 @@ fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    settingsViewModel: com.picme.features.settings.SettingsViewModel? = null
+    settingsViewModel: SettingsViewModel? = null
 ) {
     val context = LocalContext.current
     val runtimeContext = rememberCameraRuntimeContext(context)

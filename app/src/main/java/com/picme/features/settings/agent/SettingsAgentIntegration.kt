@@ -5,19 +5,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.picme.core.common.Logger
-import com.picme.agent.core.CapabilityRegistry
-import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.features.settings.capability.SettingsCapability
-import com.picme.agent.core.model.PageContext
 import com.picme.agent.core.SceneManager
 import com.picme.agent.core.model.AgentScene
-import com.picme.features.common.chat.AgentChatPanel
+import com.picme.agent.core.model.PageContext
+import com.picme.core.common.Logger
 import com.picme.features.camera.voice.VoiceCommandCoordinator
-import com.picme.features.settings.SettingsViewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.picme.features.common.chat.AgentChatPanel
 
 /**
  * SettingsScreen 的 Agent 集成
@@ -38,7 +31,6 @@ class SettingsAgentIntegration(
     private val appContext = context.applicationContext
 
     private val sceneManager = SceneManager.getInstance()
-    private val registry = CapabilityRegistry.getInstance()
 
     /**
      * 进入 Settings 场景时调用
@@ -58,30 +50,6 @@ class SettingsAgentIntegration(
     fun onExitSettings() {
         Logger.i(TAG, "Exiting SETTINGS scene (scene managed by MainActivity)")
         // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
-    }
-
-    /**
-     * 注册 Settings 相关的 Capability
-     *
-     * **已弃用**：Capability 现在由 PicMeApplication 统一注册，
-     * 页面只需通过 SettingsCapability.getInstance().bindDelegate() 绑定 delegate。
-     */
-    @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
-    fun registerCapabilities(
-        viewModel: SettingsViewModel,
-        onNavigateToModelManager: () -> Unit
-    ) {
-        Logger.i(TAG, "registerCapabilities is deprecated, capabilities registered by PicMeApplication")
-    }
-
-    /**
-     * 注销 Settings 相关的 Capability
-     *
-     * **已弃用**：Capability 不再注销，由 PicMeApplication 统一管理。
-     */
-    @Deprecated("Capability 不再注销，由 PicMeApplication 统一管理")
-    fun unregisterCapabilities() {
-        Logger.i(TAG, "unregisterCapabilities is deprecated, capabilities managed by PicMeApplication")
     }
 
     fun buildPageContext(

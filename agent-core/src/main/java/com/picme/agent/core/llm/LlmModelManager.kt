@@ -48,17 +48,15 @@ class LlmModelManager(private val context: Context) {
      * @throws IllegalArgumentException 如果 key 不存在
      */
     fun prepareModel(modelKey: String): String {
-        val info = llmModelRegistry[modelKey]
-            ?: throw IllegalArgumentException("Unknown LLM model key: $modelKey")
-
-        // 1. 优先检查下载目录 (llm_models/<cacheDirName>/)
-        val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
-        if (downloadDir.exists() && isModelComplete(downloadDir)) {
-            Logger.d(tag, "LLM model found: ${downloadDir.absolutePath}")
-            return downloadDir.absolutePath
+        // 1. 优先检查下载目录：支持注册表模型和动态新增模型（如 qwen3_5_0_8b）
+        findDownloadedModelDir(modelKey)?.let { modelDir ->
+            Logger.d(tag, "LLM model found in download dir: ${modelDir.absolutePath}")
+            return modelDir.absolutePath
         }
 
-        // 2. 从 assets 复制（兜底）
+        // 2. 从注册表回退到 assets（仅注册表内模型支持）
+        val info = llmModelRegistry[modelKey]
+            ?: throw IllegalArgumentException("Unknown LLM model key: $modelKey (not downloaded and not in registry)")
         return copyAssetModelToCache(info.assetDir, info.cacheDirName)
     }
 
@@ -66,19 +64,32 @@ class LlmModelManager(private val context: Context) {
      * 检查指定模型是否已缓存可用
      */
     fun isModelCached(modelKey: String): Boolean {
-        val info = llmModelRegistry[modelKey] ?: return false
-
-        val downloadDir = File(context.filesDir, "llm_models/${info.cacheDirName}")
-        if (downloadDir.exists() && isModelComplete(downloadDir)) {
+        findDownloadedModelDir(modelKey)?.let { _ ->
             return true
         }
 
+        val info = llmModelRegistry[modelKey] ?: return false
         val cacheDir = File(context.filesDir, info.cacheDirName)
         return cacheDir.exists() && isModelComplete(cacheDir)
     }
 
+    private fun findDownloadedModelDir(modelKey: String): File? {
+        val directDir = File(File(context.filesDir, "llm_models"), modelKey)
+        if (directDir.exists() && isModelComplete(directDir)) {
+            return directDir
+        }
+
+        val info = llmModelRegistry[modelKey] ?: return null
+        val mappedDir = File(File(context.filesDir, "llm_models"), info.cacheDirName)
+        return if (mappedDir.exists() && isModelComplete(mappedDir)) {
+            mappedDir
+        } else {
+            null
+        }
+    }
+
     private fun isModelComplete(dir: File): Boolean {
-        return dir.walkTopDown().any { it.name.endsWith(".mnn") }
+        return dir.walkTopDown().any { file -> file.name.endsWith(".mnn") }
     }
 
     private fun copyAssetModelToCache(assetDir: String, cacheDirName: String): String {

@@ -3,7 +3,10 @@ package com.picme.beauty.internal.facedetect
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PointF
+import android.graphics.RectF
 import android.os.SystemClock
+import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.facedetect.DetectionPipelineConfig
 import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetectionResult
@@ -13,9 +16,6 @@ import com.picme.beauty.api.facedetect.InferenceBackendType
 import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
-import com.picme.agent.core.mnn.MnnResourceManager
-import com.picme.beauty.api.Logger
-import android.graphics.RectF
 
 /**
  * 人脸检测管理器

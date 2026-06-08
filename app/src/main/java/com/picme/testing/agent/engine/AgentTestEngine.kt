@@ -1,23 +1,21 @@
 package com.picme.testing.agent.engine
 
 import android.content.Context
-import com.picme.beauty.api.BeautySettings
-import com.picme.core.common.Logger
 import com.picme.agent.core.CapabilityRegistry
 import com.picme.agent.core.model.AgentAction
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.SceneManager
+import com.picme.agent.core.model.AgentScene
 import com.picme.agent.core.model.MediaType
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
+import com.picme.core.common.Logger
 import com.picme.testing.agent.data.ActionJson
 import com.picme.testing.agent.data.DataDrivenTestCase
 import com.picme.testing.agent.data.DataDrivenTestResult
 import com.picme.testing.agent.data.TestExecutionContext
-import com.picme.testing.agent.data.TestStepJson
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -60,7 +58,7 @@ class AgentTestEngine(
      */
     suspend fun execute(
         case: DataDrivenTestCase,
-        agentContext: AgentContext = AgentContext(scene = com.picme.agent.core.model.AgentScene.CAMERA)
+        agentContext: AgentContext = AgentContext(scene = AgentScene.CAMERA)
     ): DataDrivenTestResult {
         val startTime = System.currentTimeMillis()
         var context = TestExecutionContext(caseId = case.caseId, caseName = case.name)
@@ -489,7 +487,7 @@ class AgentTestEngine(
         )
     }
 
-    private fun parseFilterType(filter: String) = com.picme.beauty.api.FilterType.valueOf(
+    private fun parseFilterType(filter: String) = FilterType.valueOf(
         filter.uppercase().replace("LEICA_CLASSIC", "LEICA_CLASSIC")
             .replace("LEICA_VIBRANT", "LEICA_VIBRANT")
             .replace("LEICA_BW", "LEICA_BW")

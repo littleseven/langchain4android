@@ -3,15 +3,14 @@ package com.picme.beauty.internal.facedetect
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Rect
 import android.graphics.RectF
 import android.os.SystemClock
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
-import java.io.File
-import android.graphics.Color
-import android.graphics.Rect
 
 /**
  * 基于 NCNN 的 106 点关键点检测器

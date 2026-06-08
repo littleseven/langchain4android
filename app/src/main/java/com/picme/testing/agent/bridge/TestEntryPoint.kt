@@ -1,8 +1,8 @@
 package com.picme.testing.agent.bridge
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
+import com.picme.PicMeApplication
 import com.picme.core.common.Logger
 import com.picme.testing.agent.launcher.DataDrivenTestLauncher
 import kotlinx.coroutines.CoroutineScope
@@ -80,7 +80,7 @@ class TestEntryPoint(private val activity: Activity) {
         Logger.i(TAG, "App ready, launching data-driven test: $path")
 
         // 使用应用级 Scope 避免 Activity 重建导致测试被取消
-        val app = activity.application as com.picme.PicMeApplication
+        val app = activity.application as PicMeApplication
         testJob = app.applicationScope.launch(Dispatchers.Main) {
             Logger.i(TAG, "Test coroutine started")
             try {

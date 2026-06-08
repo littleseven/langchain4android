@@ -1,30 +1,24 @@
 package com.picme.testing.agent.device
 
+
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
-
-
-
-
-import com.picme.beauty.api.BeautySettings
-import com.picme.core.common.Logger
 import com.picme.agent.core.CapabilityRegistry
-import com.picme.agent.core.model.AgentAction
 import com.picme.agent.core.model.AgentCommand
 import com.picme.agent.core.model.AgentContext
 import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.model.MediaType
+import com.picme.beauty.api.BeautySettings
+import com.picme.beauty.api.FilterType
+import com.picme.core.common.Logger
 import com.picme.testing.agent.core.AgentTestContext
+import com.picme.testing.agent.core.LogLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
-import android.app.ActivityManager
-import com.picme.testing.agent.core.LogLevel
 
 /**
  * 设备端测试控制器
@@ -385,7 +379,7 @@ class DeviceTestController(private val context: Context) {
         registry.dispatch(command, AgentContext(scene = scene))
     }
 
-    private fun parseFilterType(filter: String) = com.picme.beauty.api.FilterType.valueOf(
+    private fun parseFilterType(filter: String) = FilterType.valueOf(
         filter.uppercase().replace("LEICA_CLASSIC", "LEICA_CLASSIC")
             .replace("LEICA_VIBRANT", "LEICA_VIBRANT")
             .replace("LEICA_BW", "LEICA_BW")

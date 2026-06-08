@@ -6,21 +6,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.picme.agent.core.AgentOrchestrator
-import com.picme.features.camera.capability.CameraCapability
-import com.picme.domain.agent.capability.NavigationCapability
-
 import com.picme.agent.core.model.AgentContext
+import com.picme.agent.core.model.AiAgentMode
+import com.picme.agent.core.model.AiAgentPrivacyLevel
 import com.picme.core.common.Logger
-import com.picme.agent.core.SceneManager
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.agent.GlobalAgentPanel
 import com.picme.features.agent.rememberGlobalAgentPanelState
-import com.picme.beauty.api.BeautySettings
-import com.picme.beauty.api.FilterType
-import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.AiAgentPrivacyLevel
-import com.picme.agent.core.model.MediaType
 
 private const val TAG = "CameraAgent"
 
@@ -34,32 +26,6 @@ class CameraAgentIntegration(
     val orchestrator: AgentOrchestrator,
     private val useCase: AiAgentUseCase
 ) {
-    /**
-     * 初始化 Camera 相关 Capability
-     *
-     * **已弃用**：Capability 现在由 PicMeApplication 统一注册，
-     * 页面只需通过 CameraCapability.getInstance().bindDelegate() 绑定 delegate。
-     */
-    @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
-    fun initializeCameraCapabilities(
-        onAdjustBeauty: (BeautySettings) -> Unit,
-        onSwitchFilter: (FilterType) -> Unit,
-        onSwitchStyle: (StyleFilter) -> Unit,
-        onSwitchScene: (String) -> Unit,
-        onSwitchRatio: (String) -> Unit,
-        onAdjustExposure: (Int) -> Unit,
-        onAdjustZoom: (Float) -> Unit,
-        onFlipCamera: () -> Unit,
-        onCapturePhoto: () -> Unit,
-        onToggleRecording: () -> Unit,
-        onSwitchMode: (MediaType) -> Unit,
-        onNavigateTo: (String) -> Unit,
-        onBack: () -> Unit
-    ) {
-        // 不再在此处注册 Capability，由 PicMeApplication 统一注册
-        Logger.i(TAG, "initializeCameraCapabilities is deprecated, capabilities registered by PicMeApplication")
-    }
-
     /**
      * 进入 Camera 场景
      *

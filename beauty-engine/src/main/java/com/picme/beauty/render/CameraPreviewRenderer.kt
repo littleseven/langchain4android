@@ -2,20 +2,19 @@ package com.picme.beauty.render
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.opengl.EGLContext
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.Matrix
-import com.picme.beauty.api.Logger
+import android.view.Surface
 import android.view.View
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.FrameId
-import com.picme.beauty.api.FrameSyncConfig
 import com.picme.beauty.api.FrameSyncResult
+import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.framesync.FrameSyncBridge
 import com.picme.beauty.internal.framesync.FrameSyncManager
 import java.util.concurrent.ConcurrentLinkedQueue
-import android.opengl.EGLContext
-import android.view.Surface
 
 /**
  * 大美丽 - 相机预览渲染器

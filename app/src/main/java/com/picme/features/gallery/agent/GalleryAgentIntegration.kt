@@ -5,21 +5,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.picme.core.common.Logger
 import com.picme.agent.core.AgentOrchestrator
-import com.picme.features.gallery.capability.GalleryCapability
-import com.picme.domain.agent.capability.NavigationCapability
-import com.picme.agent.core.model.PageContext
 import com.picme.agent.core.SceneManager
-import com.picme.domain.model.AiAgentCommand
-import com.picme.agent.core.model.MediaAsset
 import com.picme.agent.core.model.AgentScene
-import com.picme.features.common.chat.AgentChatPanel
+import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.model.PageContext
+import com.picme.core.common.Logger
 import com.picme.features.camera.voice.VoiceCommandCoordinator
-import com.picme.features.gallery.MediaViewModel
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.picme.features.common.chat.AgentChatPanel
 
 /**
  * GalleryScreen 的 Agent 集成
@@ -63,37 +56,6 @@ class GalleryAgentIntegration(
     fun onExitGallery() {
         Logger.i(TAG, "Exiting GALLERY scene (scene managed by MainActivity)")
         // Scene 切换由 MainActivity 的 DisposableEffect 统一管理
-    }
-
-    /**
-     * 注册 Gallery 相关的 Capability
-     *
-     * **已弃用**：Capability 现在由 PicMeApplication 统一注册，
-     * 页面只需通过 GalleryCapability.getInstance().bindDelegate() 绑定 delegate。
-     */
-    @Deprecated("Capability 由 PicMeApplication 统一注册，页面只需绑定 delegate")
-    fun registerCapabilities(
-        viewModel: MediaViewModel,
-        allMedia: List<MediaAsset>,
-        onViewMedia: (MediaAsset) -> Unit,
-        onDeleteMedia: (List<MediaAsset>) -> Unit,
-        onShareMedia: (List<MediaAsset>) -> Unit,
-        onSelectMedia: (MediaAsset, Boolean) -> Unit,
-        onSearchMedia: (String) -> Unit,
-        onSwitchViewMode: (String) -> Unit,
-        onFavoriteMedia: (MediaAsset, Boolean) -> Unit
-    ) {
-        Logger.i(TAG, "registerCapabilities is deprecated, capabilities registered by PicMeApplication")
-    }
-
-    /**
-     * 注销 Gallery 相关的 Capability
-     *
-     * **已弃用**：Capability 不再注销，由 PicMeApplication 统一管理。
-     */
-    @Deprecated("Capability 不再注销，由 PicMeApplication 统一管理")
-    fun unregisterCapabilities() {
-        Logger.i(TAG, "unregisterCapabilities is deprecated, capabilities managed by PicMeApplication")
     }
 
     /**

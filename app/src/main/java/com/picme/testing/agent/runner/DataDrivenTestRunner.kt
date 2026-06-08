@@ -1,10 +1,11 @@
 package com.picme.testing.agent.runner
 
 import android.content.Context
-import com.picme.core.common.Logger
 import com.picme.agent.core.CapabilityRegistry
+import com.picme.core.common.Logger
 import com.picme.testing.agent.data.DataDrivenTestCase
 import com.picme.testing.agent.data.DataDrivenTestResult
+import com.picme.testing.agent.data.TestExecutionContext
 import com.picme.testing.agent.engine.AgentStateProbe
 import com.picme.testing.agent.engine.AgentTestEngine
 import com.squareup.moshi.Moshi
@@ -77,7 +78,7 @@ class DataDrivenTestRunner(private val context: Context) {
                     failedStep = -1,
                     stepDescription = "load",
                     reason = e.message ?: "Unknown error",
-                    context = com.picme.testing.agent.data.TestExecutionContext(
+                    context = TestExecutionContext(
                         caseId = filePath,
                         caseName = filePath
                     )
@@ -131,7 +132,7 @@ class DataDrivenTestRunner(private val context: Context) {
                         failedStep = -1,
                         stepDescription = "load",
                         reason = e.message ?: "Unknown error",
-                        context = com.picme.testing.agent.data.TestExecutionContext(
+                        context = TestExecutionContext(
                             caseId = file.name,
                             caseName = file.name
                         )

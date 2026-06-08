@@ -7,9 +7,9 @@ import android.opengl.EGLContext
 import android.opengl.EGLSurface
 import android.opengl.GLES20
 import android.opengl.GLUtils
-import com.picme.beauty.api.Logger
 import com.picme.beauty.api.BeautyParams
 import com.picme.beauty.api.FaceData
+import com.picme.beauty.api.Logger
 import com.picme.beauty.api.PhotoProcessException
 import com.picme.beauty.api.PhotoProcessor
 import java.nio.ByteBuffer
