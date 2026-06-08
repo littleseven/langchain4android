@@ -1,8 +1,8 @@
 package com.picme.beauty.internal.facedetect.adapter
 
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark
-import com.picme.beauty.api.Logger
 import com.picme.beauty.api.facedetect.FaceDetectionSource
+import com.picme.beauty.internal.facedetect.adapter.MediaPipe468Adapter.Companion.NON_CONTOUR_MAPPING
 
 // CameraSelector.LENS_FACING_FRONT = 0, LENS_FACING_BACK = 1
 private const val LENS_FACING_FRONT = 0
@@ -251,7 +251,14 @@ class MediaPipe468Adapter : FaceLandmarkAdapter {
             if (mpIndex < landmarks.size) {
                 val landmark = landmarks[mpIndex]
                 var x = landmark.x()
-                val y = landmark.y()
+                var y = landmark.y()
+
+                // 先旋转坐标（与轮廓点 getMpPoint() 一致）
+                val (rx, ry) = rotateNormalized(x, y, rotationDegrees)
+                x = rx
+                y = ry
+
+                // 再前置摄像头镜像
                 if (isFrontCamera) {
                     x = 1f - x
                 }

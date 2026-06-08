@@ -1,5 +1,6 @@
 package com.picme.features.camera
 
+
 import android.content.Context
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
@@ -13,28 +14,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.picme.core.image.ImageProcessor
 import com.picme.PicMeApplication
 import com.picme.beauty.api.BeautyPreviewEngine
-import com.picme.beauty.api.facedetect.DetectionPipelineConfig
 import com.picme.beauty.api.facedetect.DevicePreference
-import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.InferenceBackendType
 import com.picme.beauty.api.facedetect.LandmarkDetectorType
 import com.picme.beauty.api.facedetect.RoiDetectorType
 import com.picme.core.common.Logger
+import com.picme.core.image.ImageProcessor
 import com.picme.di.BeautyEngineRuntimeState
 import com.picme.domain.model.BeautyStrategy
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.repository.UserSettingsRepository
-
-
 import com.picme.features.camera.preview.gl.rememberGlBeautyPreviewProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first

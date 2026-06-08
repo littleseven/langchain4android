@@ -68,12 +68,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.picme.R
-import com.picme.agent.core.platform.mnn.MnnResourceManager
-import com.picme.agent.core.api.policy.AiAgentInferencePreference
-import com.picme.agent.core.api.policy.AiAgentMode
-import com.picme.agent.core.api.context.MediaType
 import com.picme.agent.core.api.android.RemoteModelConfig
 import com.picme.agent.core.api.android.RemoteModelConfigs
+import com.picme.agent.core.api.context.MediaType
+import com.picme.agent.core.api.policy.AiAgentInferencePreference
+import com.picme.agent.core.api.policy.AiAgentMode
+import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.agent.core.platform.voice.AsrEngine
 import com.picme.agent.core.platform.voice.MnnAsrClient
 import com.picme.agent.core.platform.voice.SherpaMnnAsrEngine
@@ -81,6 +81,7 @@ import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.facedetect.DetectionPipelineConfig
+import com.picme.beauty.api.facedetect.EngineType
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.beauty.internal.facedetect.FaceDetectorManager
 import com.picme.beauty.recorder.BeautyVideoRecorder
@@ -91,6 +92,8 @@ import com.picme.domain.agent.RegisterCapability
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.CameraMemoryState
+import com.picme.domain.model.DetectionModelType
+import com.picme.domain.model.InferenceEngineType
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.capability.CameraCapability
@@ -850,6 +853,21 @@ fun CameraContent(
     // FaceDetection 按需加载：美颜开关打开即加载（满足“开即生效”），关闭即卸载。
     val roiStageConfig = runtimeContext.roiStageConfig
     val landmarkStageConfig = runtimeContext.landmarkStageConfig
+
+    // 从用户实际选择的 landmark stage config 推导有效引擎模式
+    // 而非使用 faceDetectionEngineMode 的默认值 MEDIAPIPE
+    val effectiveEngineMode = remember(landmarkStageConfig) {
+        if (landmarkStageConfig.modelType == DetectionModelType.MEDIAPIPE) {
+            EngineType.MEDIAPIPE
+        } else {
+            when (landmarkStageConfig.engineType) {
+                InferenceEngineType.MNN -> EngineType.MNN
+                InferenceEngineType.NCNN -> EngineType.NCNN
+                InferenceEngineType.TFLITE -> EngineType.MEDIAPIPE
+            }
+        }
+    }
+
     val shouldEnableFaceDetection = remember(beautySettings.enabled) {
         beautySettings.enabled
     }
@@ -1197,12 +1215,12 @@ fun CameraContent(
         captureMode,
         aspectRatio,
         beautyStrategy,
-        faceDetectionEngineMode,
+        effectiveEngineMode,
         adaptiveFaceDetectionIntervalEnabled,
         faceDetectIntervalProfile,
         previewRebindSignal
     ) {
-        Logger.d("Camera", "Rebinding camera use cases for face engine mode=${faceDetectionEngineMode.name}")
+        Logger.d("Camera", "Rebinding camera use cases for face engine mode=${effectiveEngineMode.name}")
         bindCameraUseCases(
             context = context,
             lifecycleOwner = lifecycleOwner,
@@ -1215,7 +1233,7 @@ fun CameraContent(
             cameraExecutor = analysisExecutor,
             isBeautyEnabled = { shouldEnableFaceDetection },
             beautyStrategy = beautyStrategy,
-            detectionEngineMode = faceDetectionEngineMode.toEngineType(),
+            detectionEngineMode = effectiveEngineMode,
             adaptiveFaceDetectionIntervalEnabled = adaptiveFaceDetectionIntervalEnabled,
             faceDetectIntervalProfile = faceDetectIntervalProfile,
             videoCapture = videoCapture,

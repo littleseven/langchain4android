@@ -13,6 +13,7 @@ import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 基于 MNN + Vulkan GPU 的 106 点关键点检测器
@@ -35,13 +36,13 @@ class MnnLandmarkDetector(
         private const val MODEL_KEY = "2d106_mnn"
         private const val INPUT_SIZE = 192  // [对齐 ONNX] 与 InsightFace2D106Detector 保持一致
         private const val POINT_COUNT = 106
-        private const val ENGINE_NAME = "MNN-Vulkan"
     }
 
     private val appContext = context.applicationContext
     private val resourceManager = MnnResourceManager.getInstance(appContext)
     private var detector: MnnFaceDetector? = null
-    private var isInitialized = false
+    private val initialized = AtomicBoolean(false)
+    private val initializing = AtomicBoolean(false)
     private var isGpuEnabled: Boolean = false
 
     // [性能优化] 复用 Bitmap 池
@@ -58,15 +59,30 @@ class MnnLandmarkDetector(
 
     /**
      * 懒加载初始化 - 仅在首次 detect 时调用
+     *
+     * 使用 AtomicBoolean CAS 确保只有一个线程执行初始化，
+     * 其他线程直接返回 false（跳过本帧检测），避免锁竞争阻塞渲染管线。
+     *
+     * @return true 如果检测器已就绪，false 如果正在初始化或初始化失败
      */
-    private fun ensureInitialized() {
-        if (isInitialized) return
+    private fun ensureInitialized(): Boolean {
+        if (initialized.get()) return detector != null
 
-        synchronized(this) {
-            if (isInitialized) return
+        // CAS: 只有一个线程执行初始化
+        if (!initializing.compareAndSet(false, true)) {
+            Logger.d(TAG, "[Perf] Initialization already in progress, skipping frame")
+            return false
+        }
 
+        try {
+            if (initialized.get()) return detector != null  // Double-check
             initialize()
-            isInitialized = true
+            if (detector != null) {
+                initialized.set(true)
+            }
+            return detector != null
+        } finally {
+            initializing.set(false)
         }
     }
 
@@ -74,20 +90,21 @@ class MnnLandmarkDetector(
         try {
             val modelFile = ModelManager.prepareModel(MODEL_KEY, appContext)
 
-            Logger.i(TAG, "Initializing MNN landmark detector with Vulkan GPU (requireGpu=$requireGpu)...")
+            Logger.i(TAG, "Initializing MNN landmark detector (requireGpu=$requireGpu)...")
             val initStart = SystemClock.elapsedRealtime()
             detector = MnnFaceDetector.create(
                 modelPath = modelFile.absolutePath,
                 inputSize = INPUT_SIZE,
-                useGpu = true,
+                useGpu = requireGpu,
                 inputName = "data",
                 outputNames = arrayOf("fc1")
             )
             val initElapsed = SystemClock.elapsedRealtime() - initStart
 
             if (detector != null) {
-                isGpuEnabled = true
-                Logger.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with Vulkan GPU")
+                isGpuEnabled = requireGpu
+                val backendLabel = if (requireGpu) "Vulkan GPU" else "CPU"
+                Logger.i(TAG, "MnnLandmarkDetector initialized in ${initElapsed}ms with $backendLabel")
                 // 向 ResourceManager 注册引用，参与全局协调
                 resourceManager.acquireFaceDetection("MnnLandmarkDetector")
             } else {
@@ -112,23 +129,24 @@ class MnnLandmarkDetector(
      */
     private fun onResourceManagerUnload() {
         synchronized(this) {
-            if (!isInitialized) return
+            if (!initialized.get()) return
             Logger.i(TAG, "Unloading due to ResourceManager request")
             performUnload()
+            initialized.set(false)
+            isGpuEnabled = false
         }
     }
 
     /**
      * ResourceManager 触发的加载回调
-     * 重新初始化模型（如果当前未加载）
+     *
+     * 通过 ensureInitialized() 的 CAS 机制在后台线程异步初始化，
+     * 不阻塞 detection 协程。初始化期间帧会被跳过，完成后自动恢复。
      */
     private fun onResourceManagerLoad() {
-        synchronized(this) {
-            if (isInitialized) return
-            Logger.i(TAG, "Loading due to ResourceManager request")
-            initialize()
-            isInitialized = true
-        }
+        if (initialized.get()) return
+        Logger.i(TAG, "Load requested by ResourceManager, starting async init")
+        ensureInitialized()  // CAS: 无锁、不阻塞，失败代表已在初始化中
     }
 
     /**
@@ -142,14 +160,17 @@ class MnnLandmarkDetector(
             detector?.release()
         }
         detector = null
-        isInitialized = false
+        initialized.set(false)
         isGpuEnabled = false
         Logger.d(TAG, "Native resources unloaded")
     }
 
     override fun detectLandmarks(bitmap: Bitmap, lensFacing: Int, roi: RectF?): FloatArray? {
-        // [优化] 懒加载初始化
-        ensureInitialized()
+        // [优化] 懒加载初始化（CAS 无锁，初始化中的线程直接返回）
+        if (!ensureInitialized()) {
+            Logger.d(TAG, "[Perf] Skipping detection: detector not ready")
+            return null
+        }
 
         val totalStart = SystemClock.elapsedRealtime()
         val det = detector
@@ -158,6 +179,9 @@ class MnnLandmarkDetector(
             Logger.w(TAG, "[Perf] MnnLandmarkDetector not initialized after lazy init, skipping")
             return null
         }
+
+        val engineLabel = if (isGpuEnabled) "MNN-Vulkan" else "MNN-CPU"
+        Logger.d(TAG, "[Perf] MnnLandmark START: engine=$engineLabel, bitmap=${bitmap.width}x${bitmap.height}, roi=$roi")
 
         return try {
             val prepStart = SystemClock.elapsedRealtime()
@@ -168,11 +192,20 @@ class MnnLandmarkDetector(
             val result = det.detect(cropResult.bitmap)
 
             if (result == null || result.isEmpty()) {
+                val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+                val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+                Logger.d(TAG, "[Perf] MnnLandmark DONE (no face): total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms)")
                 return null
             }
 
             // 使用逆变换矩阵将模型输出坐标映射回原始图像
+            val parseStart = SystemClock.elapsedRealtime()
             val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
+            val parseElapsed = SystemClock.elapsedRealtime() - parseStart
+            val inferElapsed = SystemClock.elapsedRealtime() - inferStart - parseElapsed
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+
+            Logger.i(TAG, "[Perf] MnnLandmark DONE: total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms, parse=${parseElapsed}ms), pts=${landmarks.size/2}")
             landmarks
         } catch (e: Exception) {
             Logger.e(TAG, "MnnLandmark detection failed", e)

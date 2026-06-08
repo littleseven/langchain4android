@@ -204,6 +204,67 @@ object ImageUtils {
     private var reusableNv21Buffer: ByteBuffer? = null
 
     /**
+     * ImageProxy → Bitmap（RGBA_8888 输出格式专用，零色彩转换）
+     *
+     * CameraX OUTPUT_IMAGE_FORMAT_RGBA_8888 输出时，planes[0] 已是 RGBA_8888 数据。
+     * 只需将 buffer 拷贝到 Bitmap，无需 YUV→ARGB 色彩空间转换（省去 ~5ms）。
+     *
+     * @param imageProxy CameraX ImageProxy，planes[0] 为 RGBA_8888 数据
+     * @return ARGB_8888 Bitmap（经 rotation 和 scale 处理），或 null
+     */
+    @ExperimentalGetImage
+    fun imageProxyToBitmapRgba(imageProxy: ImageProxy): Bitmap? {
+        val width = imageProxy.width
+        val height = imageProxy.height
+        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+        val buffer = imageProxy.planes[0].buffer
+        val pixelStride = imageProxy.planes[0].pixelStride
+        val rowStride = imageProxy.planes[0].rowStride
+
+        val needSwap = rotationDegrees == ROTATION_90 || rotationDegrees == ROTATION_270
+        val rotatedWidth = if (needSwap) height else width
+        val rotatedHeight = if (needSwap) width else height
+
+        val scale = TARGET_MAX_SIZE.toFloat() / maxOf(rotatedWidth, rotatedHeight)
+        val outWidth = (rotatedWidth * scale).toInt().coerceAtLeast(1)
+        val outHeight = (rotatedHeight * scale).toInt().coerceAtLeast(1)
+        val pixelCount = outWidth * outHeight
+
+        val argb = getArgbBuffer(pixelCount)
+
+        // 逐像素采样，处理旋转 + 缩放
+        val invScale = 1f / scale
+
+        for (outY in 0 until outHeight) {
+            val srcY = (outY * invScale).toInt().coerceIn(0, rotatedHeight - 1)
+            for (outX in 0 until outWidth) {
+                val srcX = (outX * invScale).toInt().coerceIn(0, rotatedWidth - 1)
+
+                val (origCol, origRow) = when (rotationDegrees) {
+                    ROTATION_90 -> Pair(srcY, height - 1 - srcX)
+                    ROTATION_180 -> Pair(width - 1 - srcX, height - 1 - srcY)
+                    ROTATION_270 -> Pair(width - 1 - srcY, srcX)
+                    else -> Pair(srcX, srcY)
+                }
+
+                val pixelOffset = origRow * rowStride + origCol * pixelStride
+                buffer.position(pixelOffset)
+                val r = (buffer.get().toInt() and BYTE_MASK)
+                val g = (buffer.get().toInt() and BYTE_MASK)
+                val b = (buffer.get().toInt() and BYTE_MASK)
+                val a = (buffer.get().toInt() and BYTE_MASK)
+
+                val argbPixel = ((a shl 24) or (r shl RED_SHIFT) or (g shl GREEN_SHIFT) or b)
+                argb[outY * outWidth + outX] = argbPixel
+            }
+        }
+
+        val bitmap = getReusableBitmap(outWidth, outHeight)
+        bitmap.setPixels(argb, 0, outWidth, 0, 0, outWidth, outHeight)
+        return bitmap
+    }
+
+    /**
      * [Zero-Copy] ImageProxy → NV21 DirectByteBuffer
      *
      * 将 CameraX YUV_420_888 三平面紧凑打包为 NV21 格式的 DirectByteBuffer。

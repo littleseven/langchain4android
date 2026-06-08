@@ -247,4 +247,71 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
 #endif
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFaceFromNv21(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jobject nv21Data,        // DirectByteBuffer (compact NV21)
+        jint width,
+        jint height,
+        jfloat confidenceThreshold,
+        jfloat nmsThreshold,
+        jfloatArray outResult) {
+#if NCNN_AVAILABLE
+    auto *detector = reinterpret_cast<picme::NcnnFaceDetector *>(handle);
+    if (!detector) {
+        return JNI_FALSE;
+    }
+
+    unsigned char *data = static_cast<unsigned char *>(env->GetDirectBufferAddress(nv21Data));
+    if (!data) {
+        LOGE("nativeDetectRetinaFaceFromNv21: GetDirectBufferAddress returned null");
+        return JNI_FALSE;
+    }
+
+    std::vector<picme::FaceBox> faces = detector->detectRetinaFaceFromNv21(
+            data, width, height, confidenceThreshold, nmsThreshold);
+
+    if (faces.empty()) {
+        return JNI_FALSE;
+    }
+
+    // 选择置信度 * 面积最大的人脸
+    const picme::FaceBox *selectedFace = &faces[0];
+    float maxScore = faces[0].confidence * faces[0].area();
+    for (size_t i = 1; i < faces.size(); i++) {
+        float score = faces[i].confidence * faces[i].area();
+        if (score > maxScore) {
+            maxScore = score;
+            selectedFace = &faces[i];
+        }
+    }
+
+    jfloat output[15];
+    output[0] = selectedFace->x1;
+    output[1] = selectedFace->y1;
+    output[2] = selectedFace->x2;
+    output[3] = selectedFace->y2;
+    output[4] = selectedFace->confidence;
+    for (int i = 0; i < 10; i++) {
+        output[5 + i] = selectedFace->landmarks[i];
+    }
+
+    env->SetFloatArrayRegion(outResult, 0, 15, output);
+    return JNI_TRUE;
+#else
+    (void)env;
+    (void)clazz;
+    (void)handle;
+    (void)nv21Data;
+    (void)width;
+    (void)height;
+    (void)confidenceThreshold;
+    (void)nmsThreshold;
+    (void)outResult;
+    return JNI_FALSE;
+#endif
+}
+
 } // extern "C"

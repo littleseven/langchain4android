@@ -2,6 +2,7 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.Image
 import com.picme.beauty.api.Logger
 import android.graphics.RectF
 
@@ -14,6 +15,31 @@ class MediaPipeLandmarkDetector(
 ) : LandmarkDetector {
     companion object {
         private const val TAG = "MediaPipeLandmark"
+    }
+
+    /**
+     * 预览路径 landmark 检测（Image 零拷贝输入）
+     *
+     * MediaPipe 不需要 ROI，直接全图检测。
+     * 使用 [MediaPipeFaceDetector.detect] 的 Image 重载。
+     */
+    fun detectLandmarks(
+        mediaImage: Image,
+        lensFacing: Int,
+        rotationDegrees: Int,
+        roi: RectF?
+    ): FloatArray? {
+        return try {
+            val result = faceDetector.detect(mediaImage, rotationDegrees, lensFacing)
+
+            if (result != null) {
+                Logger.d(TAG, "MediaPipe landmarks detected (Image): ${result.size / 2} points")
+            }
+            result
+        } catch (e: Exception) {
+            Logger.e(TAG, "MediaPipe landmark detection (Image) failed", e)
+            null
+        }
     }
 
     override fun detectLandmarks(

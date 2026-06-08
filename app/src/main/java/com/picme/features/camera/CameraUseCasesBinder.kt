@@ -1,33 +1,32 @@
 package com.picme.features.camera
 
 import android.content.Context
+import android.util.Log
+import android.util.Rational
+import android.view.Surface
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.ViewPort
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.Recorder
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
+import androidx.lifecycle.LifecycleOwner
 import com.google.common.util.concurrent.ListenableFuture
+import com.picme.agent.core.api.context.MediaType
+import com.picme.beauty.api.facedetect.EngineType
+import com.picme.beauty.api.facedetect.FaceDetector
+import com.picme.beauty.api.facedetect.FaceWarpParams
 import com.picme.core.common.Logger
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
-import com.picme.beauty.api.facedetect.EngineType
-import com.picme.agent.core.api.context.MediaType
-import com.picme.beauty.api.facedetect.FaceDetector
-import com.picme.beauty.api.facedetect.FaceWarpParams
-import java.nio.ByteBuffer
 import java.util.concurrent.Executor
-import android.util.Log
-import android.util.Rational
-import android.view.Surface
-import androidx.camera.core.UseCaseGroup
-import androidx.camera.core.ViewPort
-import androidx.lifecycle.LifecycleOwner
 
 private const val TAG = "Camera"
 
@@ -67,7 +66,7 @@ internal fun bindCameraUseCases(
     val imageAnalysis = ImageAnalysis.Builder()
         .setTargetAspectRatio(toCameraAspectRatio(aspectRatio))
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
+        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
         .build()
 
     val imageCapture = ImageCapture.Builder()

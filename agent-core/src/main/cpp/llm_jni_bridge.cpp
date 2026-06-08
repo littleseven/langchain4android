@@ -70,7 +70,7 @@ private:
 };
 
 JNIEXPORT jlong JNICALL
-Java_com_picme_agent_core_llm_MnnLlmClient_nativeCreate(
+Java_com_picme_agent_core_platform_llm_local_MnnLlmClient_nativeCreate(
         JNIEnv *env,
         jclass clazz,
         jstring configPath) {
@@ -98,7 +98,7 @@ Java_com_picme_agent_core_llm_MnnLlmClient_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_picme_agent_core_llm_MnnLlmClient_nativeDestroy(
+Java_com_picme_agent_core_platform_llm_local_MnnLlmClient_nativeDestroy(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -111,7 +111,7 @@ Java_com_picme_agent_core_llm_MnnLlmClient_nativeDestroy(
 }
 
 JNIEXPORT void JNICALL
-Java_com_picme_agent_core_llm_MnnLlmClient_nativeReset(
+Java_com_picme_agent_core_platform_llm_local_MnnLlmClient_nativeReset(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -124,7 +124,7 @@ Java_com_picme_agent_core_llm_MnnLlmClient_nativeReset(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_picme_agent_core_llm_MnnLlmClient_nativeGenerate(
+Java_com_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerate(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -157,7 +157,7 @@ Java_com_picme_agent_core_llm_MnnLlmClient_nativeGenerate(
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_picme_agent_core_llm_MnnLlmClient_nativeGenerateWithSystem(
+Java_com_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithSystem(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -200,7 +200,7 @@ Java_com_picme_agent_core_llm_MnnLlmClient_nativeGenerateWithSystem(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_picme_agent_core_llm_MnnLlmClient_nativeIsLoaded(
+Java_com_picme_agent_core_platform_llm_local_MnnLlmClient_nativeIsLoaded(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {

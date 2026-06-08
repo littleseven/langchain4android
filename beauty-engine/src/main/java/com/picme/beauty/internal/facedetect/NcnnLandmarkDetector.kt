@@ -39,20 +39,29 @@ class NcnnLandmarkDetector(
     private var isInitialized = false
     private var isGpuEnabled: Boolean = false
 
+    // [诊断] 初始化失败原因（供运行时查询与日志诊断）
+    @Volatile
+    var initFailureReason: String? = null
+        private set
+
     // [性能优化] 复用 Bitmap 池
     private var reusableScaledBitmap: Bitmap? = null
 
     /**
      * 懒加载初始化 - 仅在首次 detect 时调用
+     * [修复] 初始化失败时不标记 isInitialized=true，允许后续调用重试
      */
     private fun ensureInitialized() {
-        if (isInitialized) return
+        if (isInitialized && detector != null) return
 
         synchronized(this) {
-            if (isInitialized) return
+            if (isInitialized && detector != null) return
 
             initialize()
-            isInitialized = true
+            if (detector != null) {
+                isInitialized = true
+                initFailureReason = null
+            }
         }
     }
 
@@ -86,11 +95,20 @@ class NcnnLandmarkDetector(
                     return
                 }
 
-                // [CO指令] 不启用 fallback，直接报告失败
+                // [诊断] nativeCreate 返回 null：libncnn.so 缺失或模型文件不兼容
                 isGpuEnabled = false
-                Logger.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
+                initFailureReason = "nativeCreate returned null in ${initElapsed}ms " +
+                    "— likely libncnn.so is missing from jniLibs/ or model is incompatible"
+                Logger.e(TAG, "NCNN init FAILED: ${initFailureReason}. " +
+                    "Ensure libncnn.so in jniLibs/arm64-v8a/ AND model [$MODEL_KEY] is valid.")
+            } catch (e: IllegalStateException) {
+                initFailureReason = "Model not found: $MODEL_KEY. " +
+                    "Download 'picme-face-landmark-ncnn' from ModelScope via Settings."
+                Logger.e(TAG, initFailureReason!!, e)
+                detector = null
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to initialize NcnnLandmarkDetector (requireGpu=$requireGpu)", e)
+                initFailureReason = "${e.javaClass.simpleName}: ${e.message}"
+                Logger.e(TAG, "NcnnLandmarkDetector init failed: ${initFailureReason}", e)
                 detector = null
             }
         }
@@ -103,7 +121,7 @@ class NcnnLandmarkDetector(
         val det = detector
 
         if (det == null) {
-            Logger.w(TAG, "[Perf] NcnnLandmarkDetector not initialized after lazy init, skipping")
+            Logger.w(TAG, "[Perf] NcnnLandmarkDetector not initialized. Reason: ${initFailureReason ?: "unknown"}. Will retry on next call.")
             return null
         }
 

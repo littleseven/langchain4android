@@ -2,20 +2,23 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.media.Image
 import android.os.SystemClock
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MediaImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
+import com.picme.beauty.api.Logger
+import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.picme.beauty.internal.facedetect.adapter.MediaPipe468Adapter
-import com.picme.beauty.api.facedetect.FaceDetectionSource
-import com.picme.beauty.api.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+
 /**
  * MediaPipe 人脸检测器
  *
@@ -67,7 +70,45 @@ class MediaPipeFaceDetector(context: Context) {
     }
 
     /**
-     * 预览路径检测（VIDEO 模式）—— Bitmap 输入
+     * 预览路径检测（VIDEO 模式）—— Image 零拷贝输入
+     *
+     * MediaPipe MediaImageBuilder 仅支持 RGBA_8888 格式的 android.media.Image。
+     * 需配合 CameraX ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888 使用。
+     * 若设备不支持 RGBA 输出（降级到 YUV），调用方应 catch UnsupportedOperationException
+     * 并降级到 detect(Bitmap) 路径。
+     *
+     * 此路径由 FaceDetectorManager.detectFromImage() 调用，
+     * 是 MediaPipe 统一管线的首选路径。
+     */
+    fun detect(mediaImage: Image, rotationDegrees: Int, lensFacing: Int): FloatArray? {
+        val landmarker = videoLandmarker ?: return null
+
+        val mpImage = MediaImageBuilder(mediaImage).build()
+        return try {
+            val result = landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
+
+            if (result.faceLandmarks().isEmpty()) {
+                return null
+            }
+
+            val adapter = FaceLandmarkAdapterRegistry.getAdapter(FaceDetectionSource.MEDIAPIPE)
+                as? MediaPipe468Adapter
+                ?: return null
+
+            adapter.adapt(result.faceLandmarks()[0], lensFacing, rotationDegrees).getOrNull()
+        } catch (e: Exception) {
+            Logger.e("MediaPipeDetector", "MediaPipe preview detection (Image) failed", e)
+            if (e is RuntimeException && e.message?.contains("native") == true) {
+                handleNativeCrash()
+            }
+            null
+        } finally {
+            runCatching { mpImage.close() }
+        }
+    }
+
+    /**
+     * 预览路径检测（VIDEO 模式）—— Bitmap 输入（降级路径）
      */
     fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FloatArray? {
         val landmarker = videoLandmarker ?: return null

@@ -295,7 +295,9 @@ class MediaViewModel(
                     Logger.w(TAG, "No face detected for editing")
                 }
 
+                val oldReady = _photoEditState.value as? PhotoEditState.Ready
                 _photoEditState.value = PhotoEditState.Ready(bitmap, faceData)
+                oldReady?.bitmap?.let { if (!it.isRecycled) it.recycle() }
             } catch (e: Exception) {
                 Logger.e(TAG, "Face detection failed: ${e.message}", e)
                 _photoEditState.value = PhotoEditState.Error("人脸检测失败：${e.message}")
@@ -326,7 +328,10 @@ class MediaViewModel(
                 val processedBitmap = photoProcessor.process(bitmap, params, faceData)
 
                 Logger.d(TAG, "Photo processing completed")
+                // 回收上一帧的旧 Bitmap（避免多次参数调节时累积）
+                val oldReady = _photoEditState.value as? PhotoEditState.Ready
                 _photoEditState.value = PhotoEditState.Ready(processedBitmap, faceData)
+                oldReady?.bitmap?.let { if (!it.isRecycled) it.recycle() }
             } catch (e: Exception) {
                 Logger.e(TAG, "Photo processing failed: ${e.message}", e)
                 _photoEditState.value = PhotoEditState.Error("处理失败：${e.message}")
@@ -364,8 +369,16 @@ class MediaViewModel(
     }
 
     fun clearPhotoEditState() {
+        val oldState = _photoEditState.value
         _photoEditState.value = PhotoEditState.Idle
         cachedEditFaceData = null
+        // 安全回收旧 Bitmap，避免 HWUI use-after-recycle 警告
+        (oldState as? PhotoEditState.Ready)?.bitmap?.let { bmp ->
+            if (!bmp.isRecycled) {
+                bmp.recycle()
+                Logger.d(TAG, "Recycled old edit bitmap")
+            }
+        }
     }
 
     /**

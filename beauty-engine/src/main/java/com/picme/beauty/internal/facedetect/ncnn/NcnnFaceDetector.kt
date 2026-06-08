@@ -147,6 +147,17 @@ class NcnnFaceDetector private constructor(
             nmsThreshold: Float,
             outResult: FloatArray
         ): Boolean
+
+        @JvmStatic
+        private external fun nativeDetectRetinaFaceFromNv21(
+            handle: Long,
+            nv21Data: ByteBuffer,
+            width: Int,
+            height: Int,
+            confidenceThreshold: Float,
+            nmsThreshold: Float,
+            outResult: FloatArray
+        ): Boolean
     }
 
     /**
@@ -207,6 +218,41 @@ class NcnnFaceDetector private constructor(
 
         val outResult = getRetinaResult()
         val detected = nativeDetectRetinaFace(nativeHandle, rgbBuffer, width, height, 3, confidenceThreshold, nmsThreshold, outResult)
+        return if (detected) outResult.copyOf() else null
+    }
+
+    /**
+     * [Zero-Copy] RetinaFace 检测——直接从 YUV NV21 输入
+     *
+     * 绕过 YUV→ARGB Bitmap→RGB ByteBuffer 的多重 CPU 拷贝，
+     * 将 NV21 DirectByteBuffer 直接传入 C++ 层，由 C++ 层完成
+     * NV21→RGB + resize + letterbox + normalize 的一体化处理。
+     *
+     * @param nv21Data 紧凑 NV21 数据 (Y 平面 + 交错 VU 平面)
+     * @param width 原始图像宽度
+     * @param height 原始图像高度
+     * @return [x1, y1, x2, y2, score, landmarks(10)] 或 null
+     */
+    fun detectRetinaFaceFromNv21(
+        nv21Data: ByteBuffer,
+        width: Int,
+        height: Int,
+        confidenceThreshold: Float = 0.5f,
+        nmsThreshold: Float = 0.4f
+    ): FloatArray? {
+        if (nativeHandle == 0L) {
+            Logger.w(TAG, "Detector not initialized")
+            return null
+        }
+        if (!nv21Data.isDirect) {
+            Logger.e(TAG, "NV21 buffer must be direct")
+            return null
+        }
+        val outResult = getRetinaResult()
+        val detected = nativeDetectRetinaFaceFromNv21(
+            nativeHandle, nv21Data, width, height,
+            confidenceThreshold, nmsThreshold, outResult
+        )
         return if (detected) outResult.copyOf() else null
     }
 

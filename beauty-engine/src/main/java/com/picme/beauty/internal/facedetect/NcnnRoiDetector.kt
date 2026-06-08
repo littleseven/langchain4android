@@ -2,14 +2,15 @@ package com.picme.beauty.internal.facedetect
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.RectF
 import android.os.SystemClock
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Matrix
+import java.nio.ByteBuffer
 
 /**
  * 基于 NCNN 的 ROI 检测器
@@ -50,20 +51,29 @@ class NcnnRoiDetector(
     private var isInitialized = false
     private var isGpuEnabled: Boolean = false
 
+    // [诊断] 初始化失败原因（供运行时查询与日志诊断）
+    @Volatile
+    var initFailureReason: String? = null
+        private set
+
     // [性能优化] Bitmap 缩放复用池
     private var reusableScaledBitmap: Bitmap? = null
 
     /**
      * 懒加载初始化 - 仅在首次 detect 时调用
+     * [修复] 初始化失败时不标记 isInitialized=true，允许后续调用重试
      */
     private fun ensureInitialized() {
-        if (isInitialized) return
+        if (isInitialized && detector != null) return
 
         synchronized(this) {
-            if (isInitialized) return
+            if (isInitialized && detector != null) return
 
             initialize()
-            isInitialized = true
+            if (detector != null) {
+                isInitialized = true
+                initFailureReason = null
+            }
         }
     }
 
@@ -105,11 +115,20 @@ class NcnnRoiDetector(
                     return
                 }
 
-                // [CO指令] 不启用 fallback，直接报告失败
+                // [诊断] nativeCreate 返回 null：libncnn.so 缺失或模型文件不兼容
                 isGpuEnabled = false
-                Logger.e(TAG, "NCNN initialization FAILED (requireGpu=$requireGpu, no fallback per CO directive)")
+                initFailureReason = "nativeCreate returned null in ${initElapsed}ms " +
+                    "— likely libncnn.so is missing from jniLibs/ or model is incompatible"
+                Logger.e(TAG, "NCNN init FAILED: ${initFailureReason}. " +
+                    "Ensure libncnn.so in jniLibs/arm64-v8a/ AND model [$MODEL_KEY] is valid.")
+            } catch (e: IllegalStateException) {
+                initFailureReason = "Model not found: $MODEL_KEY. " +
+                    "Download 'picme-face-det-500m-ncnn' from ModelScope via Settings."
+                Logger.e(TAG, initFailureReason!!, e)
+                detector = null
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to initialize NcnnRoiDetector (requireGpu=$requireGpu)", e)
+                initFailureReason = "${e.javaClass.simpleName}: ${e.message}"
+                Logger.e(TAG, "NcnnRoiDetector init failed: ${initFailureReason}", e)
                 detector = null
             }
         }
@@ -122,7 +141,7 @@ class NcnnRoiDetector(
         val det = detector
 
         if (det == null) {
-            Logger.w(TAG, "[Perf] NcnnRoiDetector not initialized after lazy init, skipping")
+            Logger.w(TAG, "[Perf] NcnnRoiDetector not initialized. Reason: ${initFailureReason ?: "unknown"}. Will retry on next call.")
             return null
         }
 
@@ -189,6 +208,71 @@ class NcnnRoiDetector(
         Logger.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
         Logger.i(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
         return roi
+    }
+
+    /**
+     * [Zero-Copy] ROI 检测——直接从 YUV NV21 输入
+     *
+     * 绕过 Bitmap 转换和 getScaledBitmap CPU 缩放，
+     * NV21 DirectByteBuffer 直传 NCNN C++ 层，由 C++ 层完成
+     * NV21→RGB + resize + letterbox + normalize 的一体化预处理。
+     *
+     * @param nv21Data 紧凑 NV21 数据
+     * @param width 原始图像宽度
+     * @param height 原始图像高度
+     * @return 原图坐标的 ROI 矩形，未检测到返回 null
+     */
+    fun detectRoiFromYuv(nv21Data: ByteBuffer, width: Int, height: Int): RectF? {
+        ensureInitialized()
+
+        val det = detector ?: run {
+            Logger.w(TAG, "[Perf] NcnnRoiDetector not initialized (YUV path). Reason: ${initFailureReason ?: "unknown"}. Will retry on next call.")
+            return null
+        }
+
+        return synchronized(NCNN_GLOBAL_LOCK) {
+            try {
+                val result = det.detectRetinaFaceFromNv21(nv21Data, width, height,
+                    CONFIDENCE_THRESHOLD, 0.3f)
+
+                if (result == null || result.size < 5) {
+                    return@synchronized null
+                }
+
+                // C++ 层 preprocessFromNv21 内部做了 letterbox + resize → INPUT_SIZE × INPUT_SIZE
+                // 输出坐标在 INPUT_SIZE 空间，需要映射回原图
+                val origW = width.toFloat()
+                val origH = height.toFloat()
+                val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
+                val scaledW = (origW * scale).toInt()
+                val scaledH = (origH * scale).toInt()
+                val padLeft = (INPUT_SIZE - scaledW) / 2f
+                val padTop = (INPUT_SIZE - scaledH) / 2f
+
+                var mappedX1 = ((result[0] - padLeft) / scale)
+                var mappedY1 = ((result[1] - padTop) / scale)
+                var mappedX2 = ((result[2] - padLeft) / scale)
+                var mappedY2 = ((result[3] - padTop) / scale)
+
+                val centerX = (mappedX1 + mappedX2) / 2f
+                val centerY = (mappedY1 + mappedY2) / 2f
+                val w = mappedX2 - mappedX1
+                val h = mappedY2 - mappedY1
+                val newWidth = w * ROI_EXPAND_RATIO
+                val newHeight = h * ROI_EXPAND_RATIO
+
+                mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+                mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+                mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+                mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+
+                Logger.d(TAG, "[Perf] NcnnRoi YUV detection: result=$result, roi=(${mappedX1.toInt()},${mappedY1.toInt()},${mappedX2.toInt()},${mappedY2.toInt()})")
+                RectF(mappedX1, mappedY1, mappedX2, mappedY2)
+            } catch (e: Exception) {
+                Logger.e(TAG, "NcnnRoi YUV detection failed", e)
+                null
+            }
+        }
     }
 
     /**

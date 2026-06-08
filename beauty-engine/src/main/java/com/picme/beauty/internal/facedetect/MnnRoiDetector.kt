@@ -12,6 +12,7 @@ import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 基于 MNN + Vulkan GPU 的 ROI 检测器
@@ -35,8 +36,6 @@ class MnnRoiDetector(
         private const val INPUT_SIZE = 320  // [RetinaFace-MobileNet0.25] 320×320 输入，75% 像素减少
         private const val CONFIDENCE_THRESHOLD = 0.5f
         private const val ROI_EXPAND_RATIO = 1.2f  // [对齐 ONNX] ROI 扩展比例，与 InsightFaceDet10G 一致
-        private const val ENGINE_NAME = "MNN-Vulkan"
-
         // [det_500m] RetinaFace-MobileNet0.25 9 个输出层名称（与 MNNConvert 输出一致）
         // 尺度分组: stride 8/16/32，每个 3 输出 (score/bbox/landmark)
         private val OUTPUT_NAMES = arrayOf(
@@ -49,7 +48,8 @@ class MnnRoiDetector(
     private val appContext = context.applicationContext
     private val resourceManager = MnnResourceManager.getInstance(appContext)
     private var detector: MnnFaceDetector? = null
-    private var isInitialized = false
+    private val initialized = AtomicBoolean(false)
+    private val initializing = AtomicBoolean(false)
     private var isGpuEnabled: Boolean = false
 
     // [性能优化] Bitmap 缩放复用池
@@ -76,15 +76,30 @@ class MnnRoiDetector(
 
     /**
      * 懒加载初始化 - 仅在首次 detect 时调用
+     *
+     * 使用 AtomicBoolean CAS 确保只有一个线程执行初始化，
+     * 其他线程直接返回 false（跳过本帧检测），避免锁竞争阻塞渲染管线。
+     *
+     * @return true 如果检测器已就绪，false 如果正在初始化或初始化失败
      */
-    private fun ensureInitialized() {
-        if (isInitialized) return
+    private fun ensureInitialized(): Boolean {
+        if (initialized.get()) return detector != null
 
-        synchronized(this) {
-            if (isInitialized) return
+        // CAS: 只有一个线程执行初始化
+        if (!initializing.compareAndSet(false, true)) {
+            Logger.d(TAG, "[Perf] Initialization already in progress, skipping frame")
+            return false
+        }
 
+        try {
+            if (initialized.get()) return detector != null  // Double-check
             initialize()
-            isInitialized = true
+            if (detector != null) {
+                initialized.set(true)
+            }
+            return detector != null
+        } finally {
+            initializing.set(false)
         }
     }
 
@@ -130,23 +145,24 @@ class MnnRoiDetector(
      */
     private fun onResourceManagerUnload() {
         synchronized(this) {
-            if (!isInitialized) return
+            if (!initialized.get()) return
             Logger.i(TAG, "Unloading due to ResourceManager request")
             performUnload()
+            initialized.set(false)
+            isGpuEnabled = false
         }
     }
 
     /**
      * ResourceManager 触发的加载回调
-     * 重新初始化模型（如果当前未加载）
+     *
+     * 通过 ensureInitialized() 的 CAS 机制在后台线程异步初始化，
+     * 不阻塞 detection 协程。初始化期间帧会被跳过，完成后自动恢复。
      */
     private fun onResourceManagerLoad() {
-        synchronized(this) {
-            if (isInitialized) return
-            Logger.i(TAG, "Loading due to ResourceManager request")
-            initialize()
-            isInitialized = true
-        }
+        if (initialized.get()) return
+        Logger.i(TAG, "Load requested by ResourceManager, starting async init")
+        ensureInitialized()  // CAS: 无锁、不阻塞，失败代表已在初始化中
     }
 
     /**
@@ -160,14 +176,17 @@ class MnnRoiDetector(
             detector?.release()
         }
         detector = null
-        isInitialized = false
+        initialized.set(false)
         isGpuEnabled = false
         Logger.d(TAG, "Native resources unloaded")
     }
 
     override fun detectRoi(bitmap: Bitmap): RectF? {
-        // [优化] 懒加载初始化
-        ensureInitialized()
+        // [优化] 懒加载初始化（CAS 无锁，初始化中的线程直接返回）
+        if (!ensureInitialized()) {
+            Logger.d(TAG, "[Perf] Skipping ROI detection: detector not ready")
+            return null
+        }
 
         val totalStart = SystemClock.elapsedRealtime()
         val det = detector
@@ -177,6 +196,9 @@ class MnnRoiDetector(
             return null
         }
 
+        val engineLabel = if (isGpuEnabled) "MNN-Vulkan" else "MNN-CPU"
+        Logger.d(TAG, "[Perf] MnnRoi START: engine=$engineLabel, original=${bitmap.width}x${bitmap.height}, scaled=$INPUT_SIZE")
+
         return try {
             val scaleStart = SystemClock.elapsedRealtime()
             val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
@@ -184,10 +206,15 @@ class MnnRoiDetector(
 
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
+            val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.size < 5) {
+                Logger.d(TAG, "[Perf] MnnRoi DONE (no face): total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
                 return null
             }
+
+            Logger.i(TAG, "[Perf] MnnRoi DONE: engine=$engineLabel, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
 
             // result: [x1, y1, x2, y2, score, landmarks(10)]
             // [关键修复] MNN native 层输出的是 320x320 letterbox 空间的坐标
@@ -241,18 +268,28 @@ class MnnRoiDetector(
      * @return 原图坐标的 ROI 矩形，未检测到返回 null
      */
     fun detectRoiFromYuv(nv21Data: java.nio.ByteBuffer, width: Int, height: Int): RectF? {
-        ensureInitialized()
+        // [优化] 懒加载初始化（CAS 无锁，初始化中的线程直接返回）
+        if (!ensureInitialized()) {
+            Logger.d(TAG, "[Perf] Skipping NV21 ROI detection: detector not ready")
+            return null
+        }
 
         val det = detector ?: run {
             Logger.w(TAG, "[Perf] MnnRoiDetector not initialized after lazy init, skipping")
             return null
         }
 
+        val yuvStart = SystemClock.elapsedRealtime()
+        val yuvEngineLabel = if (isGpuEnabled) "MNN-Vulkan" else "MNN-CPU"
+        Logger.d(TAG, "[Perf] MnnRoi NV21 START: engine=$yuvEngineLabel, input=${width}x${height}")
+
         return try {
             val result = det.detectRetinaFaceFromYuv(nv21Data, width, height,
                 CONFIDENCE_THRESHOLD, 0.4f)
+            val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
 
             if (result == null || result.size < 5) {
+                Logger.d(TAG, "[Perf] MnnRoi NV21 DONE (no face): total=${yuvElapsed}ms")
                 return null
             }
 
@@ -281,6 +318,7 @@ class MnnRoiDetector(
             mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
             mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
 
+            Logger.i(TAG, "[Perf] MnnRoi NV21 DONE: engine=$yuvEngineLabel, total=${yuvElapsed}ms, rect=[$mappedX1,$mappedY1,$mappedX2,$mappedY2]")
             RectF(mappedX1, mappedY1, mappedX2, mappedY2)
         } catch (e: Exception) {
             Logger.e(TAG, "MnnRoi YUV detection failed", e)

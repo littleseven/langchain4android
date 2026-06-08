@@ -64,6 +64,18 @@ public:
                                           float confidenceThreshold = 0.5f,
                                           float nmsThreshold = 0.4f);
 
+    /**
+     * [Zero-Copy] RetinaFace 检测——直接从 NV21 YUV 输入
+     *
+     * 绕过 Bitmap 转换，在 C++ 层完成 NV21→RGB + resize + letterbox + normalize 一体化。
+     * 对齐 MNN ImageProcess::convert 的零拷贝路径。
+     */
+    std::vector<FaceBox> detectRetinaFaceFromNv21(const unsigned char *nv21Data,
+                                                  int width,
+                                                  int height,
+                                                  float confidenceThreshold = 0.5f,
+                                                  float nmsThreshold = 0.4f);
+
     void release();
 
     bool isLoaded() const { return loaded_; }
@@ -102,6 +114,8 @@ private:
 #if NCNN_AVAILABLE
     // 辅助函数：预处理图像数据到 ncnn::Mat
     ncnn::Mat preprocess(const unsigned char *imageData, int width, int height, int channels);
+    // [Zero-Copy] NV21 YUV → RGB + resize + letterbox + normalize 一体化
+    ncnn::Mat preprocessFromNv21(const unsigned char *nv21Data, int width, int height);
 #endif
 };
 

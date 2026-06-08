@@ -1024,9 +1024,33 @@ bool MnnFaceDetector::createSession() {
          sessionCreateElapsed,
          useGpu_ ? "Vulkan" : "CPU");
 
+    // [诊断] 验证实际后端，检测静默 CPU 回退
     if (useGpu_) {
-        LOGI("Note: If inference is slow (~seconds), MNN may have fallen back to CPU");
-        LOGI("      Check device Vulkan support and model compatibility");
+        // [API v2] getSessionInfo 新签名：bool getSessionInfo(session, code, void* ptr)
+        // BACKENDS code: ptr 指向 int[]，ptr[0]=数量, ptr[1..]=MNNForwardType 枚举值
+        int backendInfo[4] = {0};
+        bool ok = interpreter_->getSessionInfo(session_,
+            MNN::Interpreter::BACKENDS, backendInfo);
+        if (ok && backendInfo[0] > 0) {
+            int actualBackend = backendInfo[1]; // 第一个后端类型
+            const char* backendName = "Unknown";
+            switch (actualBackend) {
+                case MNN_FORWARD_VULKAN: backendName = "Vulkan"; break;
+                case MNN_FORWARD_CPU:    backendName = "CPU"; break;
+                case MNN_FORWARD_OPENCL: backendName = "OpenCL"; break;
+                case MNN_FORWARD_OPENGL: backendName = "OpenGL"; break;
+                default: break;
+            }
+            LOGI("MNN session actual backend: %s (type=%d)", backendName, actualBackend);
+            if (actualBackend != MNN_FORWARD_VULKAN) {
+                LOGE("MNN Vulkan request was SILENTLY degraded! Actual backend=%s."
+                     " Inference will be slow.", backendName);
+                useGpu_ = false;
+            }
+        } else {
+            LOGI("Cannot query MNN backend type (getSessionInfo failed)."
+                 " If inference is >20ms for 192x192, likely CPU fallback.");
+        }
     }
 
     return bindSessionTensors();

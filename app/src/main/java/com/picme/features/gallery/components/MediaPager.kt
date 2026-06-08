@@ -229,6 +229,16 @@ fun MediaPager(
             }
     }
 
+    // [Bitmap 生命周期] 退出编辑时安全回收 Bitmap
+    // DisposableEffect 的 onDispose 在 Compose 停止渲染 processedBitmap 后执行
+    DisposableEffect(isEditing) {
+        onDispose {
+            processedBitmap?.let { if (!it.isRecycled) it.recycle() }
+            loadedBitmap?.let { if (!it.isRecycled) it.recycle() }
+            Log.d("Gallery", "Recycled edit bitmaps after leaving edit mode")
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(
             state = pagerState,

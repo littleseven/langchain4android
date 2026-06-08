@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -38,27 +37,27 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.picme.R
-import com.picme.core.common.Logger
-import com.picme.core.designsystem.PicMeTheme
-import com.picme.features.settings.capability.SettingsCapability
 import com.picme.agent.core.api.policy.AiAgentInferencePreference
 import com.picme.agent.core.api.policy.AiAgentMode
+import com.picme.core.common.Logger
+import com.picme.core.designsystem.PicMeTheme
+import com.picme.data.download.DownloadState
+import com.picme.data.download.ModelConfig
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.DetectionModelType
 import com.picme.domain.model.DetectionStage
 import com.picme.domain.model.FaceDetectIntervalProfile
+import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
+import com.picme.domain.model.LogModule
 import com.picme.domain.model.LogModuleConfig
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
-import com.picme.data.download.DownloadState
-import com.picme.data.download.ModelConfig
-import com.picme.domain.model.FaceDetectionEngineMode
-import com.picme.domain.model.LogModule
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.features.common.chat.rememberAgentChatConfig
 import com.picme.features.settings.agent.SettingsAgentPanel
 import com.picme.features.settings.agent.rememberSettingsAgentIntegration
+import com.picme.features.settings.capability.SettingsCapability
 
 private const val TAG = "Settings"
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.RectF
+import android.media.Image
 import android.os.SystemClock
 import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
@@ -146,34 +147,52 @@ class FaceDetectorManager(context: Context) : FaceDetector {
     }
 
     /**
-     * [Zero-Copy] MNN 人脸检测——直接从 YUV NV21 输入
+     * [Zero-Copy] 人脸 ROI 检测——直接从 YUV NV21 输入
      *
-     * 仅支持 MNN ROI 检测器。NV21 DirectByteBuffer 直传 C++ 层，
-     * 由 MNN ImageProcess::convert 在 native 端完成 NV21→RGB + resize + letterbox + 归一化。
-     * 消除 YUV→ARGB Bitmap（~5ms）和 Bitmap→RGB ByteBuffer（~2ms）的 CPU 开销。
+     * 支持 MNN 和 NCNN ROI 检测器的 NV21 直传路径。
+     * NV21 DirectByteBuffer 直传 C++ 层，在 native 端完成
+     * NV21→RGB + resize + letterbox + 归一化的一体化预处理。
      *
      * @param nv21Data 紧凑 NV21 DirectByteBuffer
      * @param width 原始图像宽度
      * @param height 原始图像高度
-     * @param bitmap 若 ROI 检测成功，用于 landmark 检测的 Bitmap（可为 null，跳过 landmark 阶段）
      * @return ROI 矩形（原图坐标），或 null
      */
-    fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int): RectF? {
+     fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int): RectF? {
         if (!isPipelineInitialized) {
             Logger.w(TAG, "Pipeline not initialized, skipping NV21 detection")
             return null
         }
 
-        // 仅 MNN ROI 检测器支持 NV21 路径
-        val mnnRoi = roiDetector as? MnnRoiDetector ?: run {
-            Logger.d(TAG, "NV21 path only available for MNN ROI detector")
-            return null
-        }
+        val config = pipelineConfig ?: return null
+        val roiStart = SystemClock.elapsedRealtime()
 
         return try {
-            mnnRoi.detectRoiFromYuv(nv21Data, width, height)
+            val result: RectF? = when (config.roiEngine) {
+                InferenceBackendType.MNN -> {
+                    val mnnRoi = roiDetector as? MnnRoiDetector
+                    mnnRoi?.detectRoiFromYuv(nv21Data, width, height)
+                }
+                InferenceBackendType.NCNN -> {
+                    val ncnnRoi = roiDetector as? NcnnRoiDetector
+                    ncnnRoi?.detectRoiFromYuv(nv21Data, width, height)
+                }
+                else -> {
+                    Logger.d(TAG, "NV21 path not available for ${config.roiEngine}")
+                    null
+                }
+            }
+
+            val roiTime = SystemClock.elapsedRealtime() - roiStart
+            if (result != null) {
+                Logger.d(TAG, "[Perf] NV21 ROI(${config.roiEngine}) detected: ${roiTime}ms, rect=$result")
+            } else {
+                Logger.d(TAG, "[Perf] NV21 ROI(${config.roiEngine}) no face: ${roiTime}ms")
+            }
+            result
         } catch (e: Exception) {
-            Logger.e(TAG, "NV21 ROI detection failed", e)
+            val roiTime = SystemClock.elapsedRealtime() - roiStart
+            Logger.e(TAG, "[Perf] NV21 ROI failed: ${roiTime}ms", e)
             null
         }
     }
@@ -186,7 +205,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
      *
      * @return FaceDetectionResult（含 106 landmarks），或 null
      */
-    fun detectLandmarksWithRoi(bitmap: Bitmap, lensFacing: Int, roi: RectF): FaceDetectionResult? {
+     fun detectLandmarksWithRoi(bitmap: Bitmap, lensFacing: Int, roi: RectF): FaceDetectionResult? {
         if (!isPipelineInitialized) {
             Logger.w(TAG, "Pipeline not initialized")
             return null
@@ -197,10 +216,13 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
         return try {
             synchronized(lock) {
+                val lmStart = SystemClock.elapsedRealtime()
                 val landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roi)
+                val lmTime = SystemClock.elapsedRealtime() - lmStart
                 lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
 
                 if (landmarkResult == null || landmarkResult.size < POINT_COUNT * 2) {
+                    Logger.d(TAG, "[Perf] NV21 path: Landmark failed (${lmTime}ms, total=${lastProcessTimeMs}ms)")
                     return null
                 }
 
@@ -225,6 +247,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
                 val useGpuForLandmark = config.landmarkEngine == InferenceBackendType.MNN ||
                     config.landmarkEngine == InferenceBackendType.NCNN
+
+                val roiEngineLabel = "${config.roiDetector.name}/${config.roiEngine.name}(NV21)"
+                val lmEngineLabel = "${config.landmarkDetector.name}/${config.landmarkEngine.name}"
+                Logger.d(TAG, "[Perf] NV21 path breakdown: ROI($roiEngineLabel) → Landmark($lmEngineLabel)=${lmTime}ms, Total=${lastProcessTimeMs}ms")
 
                 FaceDetectionResult(
                     landmarks106 = adaptedResult,
@@ -289,6 +315,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
         return if (mediaPipeResult != null) {
             lastDetectionSource = FaceDetectionSource.MEDIAPIPE
+            Logger.d(TAG, "[Perf] MediaPipe unified detection: ${lastProcessTimeMs}ms, ${mediaPipeResult.size / 2}pts")
             FaceDetectionResult(
                 landmarks106 = mediaPipeResult,
                 detectionSource = FaceDetectionSource.MEDIAPIPE,
@@ -317,6 +344,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
         if (roiResult == null) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Logger.d(TAG, "[Perf] No face detected by ROI (${roiTime}ms, total=${lastProcessTimeMs}ms)")
             return null
         }
 
@@ -326,7 +354,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
 
-        // [Perf] Detection breakdown logged only in debug builds
+        val roiEngineLabel = "${config.roiDetector.name}/${config.roiEngine.name}"
+        val lmEngineLabel = "${config.landmarkDetector.name}/${config.landmarkEngine.name}"
+        Logger.d(TAG, "[Perf] Detection breakdown: ROI($roiEngineLabel)=${roiTime}ms, Landmark($lmEngineLabel)=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
 
         return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
             val detectionSource = when (config.landmarkEngine) {
@@ -409,6 +439,60 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             Logger.e(TAG, "Photo detection native error (NCNN/OpenMP?)", e)
             null
         }
+    }
+
+    /**
+     * 预览路径检测（Image 零拷贝输入）
+     *
+     * 仅 MediaPipe 统一路径支持：使用 [MediaImageBuilder] 直接包装
+     * CameraX ImageProxy.image，跳过 YUV→ARGB CPU 转换（~5ms）。
+     *
+     * @return FaceDetectionResult？或 null（若非 MediaPipe 路径）
+     */
+    fun detectFromImage(mediaImage: Image, rotationDegrees: Int, lensFacing: Int): FaceDetectionResult? {
+        if (!isPipelineInitialized) {
+            Logger.w(TAG, "Pipeline not initialized, skipping Image detection")
+            return null
+        }
+
+        val detector = landmarkDetector as? MediaPipeLandmarkDetector
+        if (detector == null) {
+            Logger.w(TAG, "MediaPipe landmark detector not available for Image path")
+            return null
+        }
+
+        val startTime = SystemClock.elapsedRealtime()
+
+        return try {
+            val mediaPipeResult = detector.detectLandmarks(mediaImage, lensFacing, rotationDegrees, null)
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+            if (mediaPipeResult != null) {
+                lastDetectionSource = FaceDetectionSource.MEDIAPIPE
+                Logger.d(TAG, "[Perf] MediaPipe Image (zero-copy): ${lastProcessTimeMs}ms, ${mediaPipeResult.size / 2}pts")
+                FaceDetectionResult(
+                    landmarks106 = mediaPipeResult,
+                    detectionSource = FaceDetectionSource.MEDIAPIPE,
+                    roiRect = null,
+                    roiDetectorName = "N/A",
+                    useGpuForRoi = false,
+                    landmarkDetectorName = "MediaPipe(Image)",
+                    useGpuForLandmark = false
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Logger.e(TAG, "MediaPipe Image detection failed", e)
+            null
+        }
+    }
+
+    fun isMediaPipePipeline(): Boolean {
+        val config = pipelineConfig ?: return false
+        return config.roiDetector == RoiDetectorType.MEDIAPIPE &&
+            config.landmarkDetector == LandmarkDetectorType.MEDIAPIPE
     }
 
     override fun getLastProcessTimeMs(): Long = lastProcessTimeMs
