@@ -19,6 +19,7 @@ import com.picme.beauty.internal.framesync.FrameSyncManager
 import com.picme.core.common.Logger
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.features.camera.facedetect.ImageUtils
+import java.nio.ByteBuffer
 
 /**
  * InsightFace 性能优化: 智能帧跳过管理器
@@ -26,8 +27,10 @@ import com.picme.features.camera.facedetect.ImageUtils
  */
 private object FaceDetectionFrameCounter {
     // [默认均衡档] 用户未配置时默认使用 BALANCED。
-    private const val BALANCED_DETECTION_INTERVAL = 3
-    private const val BALANCED_MIN_INTERVAL_MS = 100L
+    // detectionIntervalFrames=1: 每帧都触发检测，由 isDetecting 自然限流
+    // minDetectionIntervalMs=0: 不设冷却，检测耗时(~33ms)自然限制帧率
+    private const val BALANCED_DETECTION_INTERVAL = 1
+    private const val BALANCED_MIN_INTERVAL_MS = 0L
     private const val BALANCED_MOTION_THRESHOLD = 0.05f
     private const val BALANCED_MAX_CONSECUTIVE_MOTION = 2
 
@@ -70,8 +73,8 @@ private object FaceDetectionFrameCounter {
 
         when (targetProfile) {
             FaceDetectIntervalProfile.CONSERVATIVE -> {
-                detectionIntervalFrames = 5
-                minDetectionIntervalMs = 160L
+                detectionIntervalFrames = 2
+                minDetectionIntervalMs = 33L
                 motionThreshold = 0.09f
                 maxConsecutiveMotion = 1
             }
@@ -82,10 +85,10 @@ private object FaceDetectionFrameCounter {
                 maxConsecutiveMotion = BALANCED_MAX_CONSECUTIVE_MOTION
             }
             FaceDetectIntervalProfile.AGGRESSIVE -> {
-                detectionIntervalFrames = 2
-                minDetectionIntervalMs = 70L
+                detectionIntervalFrames = 1
+                minDetectionIntervalMs = 0L
                 motionThreshold = 0.035f
-                maxConsecutiveMotion = 3
+                maxConsecutiveMotion = 5
             }
         }
 
@@ -386,18 +389,18 @@ internal fun handleImageAnalysisFrameMediaPipe(
         val detectionStartMs = System.currentTimeMillis()
 
         // [格式检测] 在 detectFromImage 之前读取 planes，避免 MediaPipe mpImage.close() 关闭底层 Image
-        // RGBA 输出时 planes 有 1 个 plane + pixelStride=4，YUV 输出有 3 个 plane
+        // YUV 输出时 planes 有 3 个 plane，RGBA 输出时 1 个 plane + pixelStride=4
         val isRgbaOutput = imageProxy.planes.size == 1 && imageProxy.planes[0].pixelStride == 4
 
         var detectionResult: FaceDetectionResult? = null
 
         // [Zero-Copy #1] MediaPipe Image 零拷贝路径
-        // CameraX 配置为 OUTPUT_IMAGE_FORMAT_RGBA_8888 时，imageProxy.image 为 RGBA_8888，
-        // MediaPipe MediaImageBuilder 可直接消费。
+        // 仅 RGBA 输出时可用：MediaPipe AndroidPacketCreator 要求 RGBA_8888 的 android.media.Image。
+        // YUV 输出时走 Bitmap 降级路径（BitmapImageBuilder 不限制格式）。
         //
         // 注意：detectFromImage() 内部 mpImage.close() 会关闭底层 Image，
         // 因此失败后无法降级到 Bitmap（Image 已关闭），直接跳过本帧。
-        if (faceDetector is FaceDetectorManager && detectionEngineMode == EngineType.MEDIAPIPE) {
+        if (faceDetector is FaceDetectorManager && detectionEngineMode == EngineType.MEDIAPIPE && isRgbaOutput) {
             val imageStart = SystemClock.elapsedRealtime()
             try {
                 detectionResult = (faceDetector as FaceDetectorManager).detectFromImage(mediaImage, rotationDegrees, lensFacing)
@@ -417,53 +420,69 @@ internal fun handleImageAnalysisFrameMediaPipe(
             }
         }
 
-        // [降级] 非 MediaPipe → Bitmap 路径（此时 Image 未被关闭）
+        // [降级] 非 MediaPipe → Bitmap / NV21 路径（此时 Image 未被关闭）
         if (detectionResult == null) {
             // [Zero-Copy #2] 尝试 MNN/NCNN NV21 YUV 直传路径（仅 YUV 输出时可用）
             // 避免 YUV→ARGB Bitmap（~5ms）+ Bitmap→RGB ByteBuffer（~2ms）的双重 CPU 拷贝
             var nv21Result: RectF? = null
+            var nv21Buffer: ByteBuffer? = null
             if (!isRgbaOutput) {
                 val useNv21Path = faceDetector is FaceDetectorManager &&
                     (detectionEngineMode == EngineType.MNN || detectionEngineMode == EngineType.NCNN)
                 if (useNv21Path) {
                     val nv21Start = SystemClock.elapsedRealtime()
-                    val nv21Buffer = ImageUtils.imageProxyToNv21(imageProxy)
+                    nv21Buffer = ImageUtils.imageProxyToNv21(imageProxy)
                     val nv21Elapsed = SystemClock.elapsedRealtime() - nv21Start
                     if (nv21Buffer != null) {
                         Logger.dThrottled("Camera", "yuv_nv21", "[Perf] YUV→NV21 (${detectionEngineMode.name}): ${nv21Elapsed}ms, size=${imageProxy.width}x${imageProxy.height}")
                         nv21Result = (faceDetector as FaceDetectorManager).detectRoiFromNv21(
                             nv21Buffer, imageProxy.width, imageProxy.height)
+
+                        // [Zero-Copy #3] NV21 Landmark 检测（MNN 模式：跳过 Bitmap 创建，省 ~5ms）
+                        // NCNN 暂不支持 NV21 landmark，走 Bitmap 降级路径
+                        if (nv21Result != null && detectionEngineMode == EngineType.MNN) {
+                            val lmStart = SystemClock.elapsedRealtime()
+                            detectionResult = (faceDetector as FaceDetectorManager).detectLandmarksFromNv21WithRoi(
+                                nv21Buffer, imageProxy.width, imageProxy.height,
+                                nv21Result, lensFacing)
+                            val lmElapsed = SystemClock.elapsedRealtime() - lmStart
+                            Logger.dThrottled("Camera", "nv21_full",
+                                "[Perf] NV21 zero-copy (ROI+Landmark): ${lmElapsed}ms, roi=${nv21Result}")
+                        }
                     }
                 }
             }
 
-            // Bitmap 转换：RGBA 输出时零色彩转换（直接拷贝），YUV 输出时做 YUV→ARGB 色彩转换
-            val bitmapStart = SystemClock.elapsedRealtime()
-            val bitmap = if (isRgbaOutput) {
-                ImageUtils.imageProxyToBitmapRgba(imageProxy)
-            } else {
-                ImageUtils.imageProxyToBitmap(imageProxy)
-            }
-            val bitmapElapsed = SystemClock.elapsedRealtime() - bitmapStart
-            if (bitmap == null) {
-                // [过热修复] Bitmap 转换失败也需标记检测完成，防止 isDetecting 永久卡住
-                FaceDetectionFrameCounter.markDetectionComplete()
-                return
-            }
-            val pathLabel = if (isRgbaOutput) "RGBA→Bitmap" else "YUV→Bitmap"
-            Logger.dThrottled("Camera", "bitmap_convert", "[Perf] $pathLabel: ${bitmapElapsed}ms, size=${bitmap.width}x${bitmap.height}")
+            // NV21 全链路未产出结果时，降级到 Bitmap 路径
+            if (detectionResult == null) {
+                // Bitmap 转换：RGBA 输出时零色彩转换（直接拷贝），YUV 输出时做 YUV→ARGB 色彩转换
+                val bitmapStart = SystemClock.elapsedRealtime()
+                val bitmap = if (isRgbaOutput) {
+                    ImageUtils.imageProxyToBitmapRgba(imageProxy)
+                } else {
+                    ImageUtils.imageProxyToBitmap(imageProxy)
+                }
+                val bitmapElapsed = SystemClock.elapsedRealtime() - bitmapStart
+                if (bitmap == null) {
+                    // [过热修复] Bitmap 转换失败也需标记检测完成，防止 isDetecting 永久卡住
+                    FaceDetectionFrameCounter.markDetectionComplete()
+                    return
+                }
+                val pathLabel = if (isRgbaOutput) "RGBA→Bitmap" else "YUV→Bitmap"
+                Logger.dThrottled("Camera", "bitmap_convert", "[Perf] $pathLabel: ${bitmapElapsed}ms, size=${bitmap.width}x${bitmap.height}")
 
-            // 如果 NV21 ROI 检测成功，优先使用其结果
-            if (nv21Result != null) {
-                val lmStart = SystemClock.elapsedRealtime()
-                val landmarkResult = (faceDetector as FaceDetectorManager).detectLandmarksWithRoi(
-                    bitmap, lensFacing, nv21Result)
-                val lmElapsed = SystemClock.elapsedRealtime() - lmStart
-                Logger.dThrottled("Camera", "nv21_path", "[Perf] NV21 ROI(${detectionEngineMode.name}) + Bitmap Landmark: ${lmElapsed}ms, roi=${nv21Result}")
-                detectionResult = landmarkResult
-            } else {
-                // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
-                detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
+                // 如果 NV21 ROI 检测成功但 Landmark NV21 路径未产出（NCNN 或失败），用 Bitmap 做 Landmark
+                if (nv21Result != null) {
+                    val lmStart = SystemClock.elapsedRealtime()
+                    val landmarkResult = (faceDetector as FaceDetectorManager).detectLandmarksWithRoi(
+                        bitmap, lensFacing, nv21Result)
+                    val lmElapsed = SystemClock.elapsedRealtime() - lmStart
+                    Logger.dThrottled("Camera", "nv21_path", "[Perf] NV21 ROI(${detectionEngineMode.name}) + Bitmap Landmark: ${lmElapsed}ms, roi=${nv21Result}")
+                    detectionResult = landmarkResult
+                } else {
+                    // [性能优化] 不要 recycle！ImageUtils 内部复用此 Bitmap，recycle 会导致每帧重新分配
+                    detectionResult = faceDetector.detect(bitmap, 0, lensFacing)
+                }
             }
         }
 

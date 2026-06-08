@@ -66,7 +66,7 @@ internal fun bindCameraUseCases(
     val imageAnalysis = ImageAnalysis.Builder()
         .setTargetAspectRatio(toCameraAspectRatio(aspectRatio))
         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
         .build()
 
     val imageCapture = ImageCapture.Builder()

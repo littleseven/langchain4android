@@ -72,10 +72,10 @@ class MediaPipeFaceDetector(context: Context) {
     /**
      * 预览路径检测（VIDEO 模式）—— Image 零拷贝输入
      *
-     * MediaPipe MediaImageBuilder 仅支持 RGBA_8888 格式的 android.media.Image。
-     * 需配合 CameraX ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888 使用。
-     * 若设备不支持 RGBA 输出（降级到 YUV），调用方应 catch UnsupportedOperationException
-     * 并降级到 detect(Bitmap) 路径。
+     * MediaPipe MediaImageBuilder 支持 RGBA_8888 和 YUV_420_888 格式的 android.media.Image，
+     * 内部自动处理格式转换（YUV → NV21 发送给 native 层）。
+     * 需配合 CameraX ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888 使用，
+     * 以同时兼容 MNN/NCNN NV21 零拷贝 ROI 路径。
      *
      * 此路径由 FaceDetectorManager.detectFromImage() 调用，
      * 是 MediaPipe 统一管线的首选路径。

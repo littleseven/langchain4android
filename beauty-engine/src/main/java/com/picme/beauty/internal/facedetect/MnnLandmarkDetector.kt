@@ -13,6 +13,7 @@ import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -209,6 +210,83 @@ class MnnLandmarkDetector(
             landmarks
         } catch (e: Exception) {
             Logger.e(TAG, "MnnLandmark detection failed", e)
+            null
+        }
+    }
+
+    /**
+     * [Zero-Copy] 关键点检测——YUV NV21 + ROI 裁剪
+     *
+     * 跳过 Bitmap 创建和 CPU pixel loop，直接通过 MNN ImageProcess 在 GPU 上完成
+     * NV21→RGB + ROI 裁剪 + 缩放到模型输入尺寸的一体化预处理。
+     *
+     * @param nv21Data 紧凑 NV21 DirectByteBuffer
+     * @param nv21Width NV21 图像宽度
+     * @param nv21Height NV21 图像高度
+     * @param roiLeft ROI 左边界（NV21 像素坐标）
+     * @param roiTop ROI 上边界（NV21 像素坐标）
+     * @param roiRight ROI 右边界（NV21 像素坐标）
+     * @param roiBottom ROI 下边界（NV21 像素坐标）
+     * @return 归一化 [0,1] 的 106 点关键点，或 null
+     */
+    fun detectLandmarksFromNv21(
+        nv21Data: ByteBuffer,
+        nv21Width: Int,
+        nv21Height: Int,
+        roiLeft: Int,
+        roiTop: Int,
+        roiRight: Int,
+        roiBottom: Int
+    ): FloatArray? {
+        if (!ensureInitialized()) {
+            Logger.d(TAG, "[Perf] Skipping NV21 detection: detector not ready")
+            return null
+        }
+
+        val det = detector ?: run {
+            Logger.w(TAG, "[Perf] MnnLandmarkDetector not initialized, skipping NV21")
+            return null
+        }
+
+        val totalStart = SystemClock.elapsedRealtime()
+
+        return try {
+            val inferStart = SystemClock.elapsedRealtime()
+            val result = det.detectLandmarksFromYuv(
+                nv21Data, nv21Width, nv21Height,
+                roiLeft, roiTop, roiRight, roiBottom
+            )
+            val inferElapsed = SystemClock.elapsedRealtime() - inferStart
+
+            if (result == null || result.isEmpty()) {
+                val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+                Logger.d(TAG, "[Perf] MnnLandmark[NV21] DONE (no face): total=${totalElapsed}ms (infer=${inferElapsed}ms)")
+                return null
+            }
+
+            // 构建逆变换矩阵：192×192 模型坐标 → NV21 像素坐标
+            // C++ MNN Matrix: tx = (sx - roiLeft) / roiW * 192, ty = (sy - roiTop) / roiH * 192
+            // 逆: sx = tx / 192 * roiW + roiLeft, sy = ty / 192 * roiH + roiTop
+            val roiW = (roiRight - roiLeft).toFloat()
+            val roiH = (roiBottom - roiTop).toFloat()
+            val inverseMatrix = Matrix()
+            inverseMatrix.setValues(
+                floatArrayOf(
+                    roiW / INPUT_SIZE, 0f, roiLeft.toFloat(),
+                    0f, roiH / INPUT_SIZE, roiTop.toFloat(),
+                    0f, 0f, 1f
+                )
+            )
+
+            val parseStart = SystemClock.elapsedRealtime()
+            val landmarks = parseLandmarks(result, nv21Width, nv21Height, inverseMatrix)
+            val parseElapsed = SystemClock.elapsedRealtime() - parseStart
+            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
+
+            Logger.i(TAG, "[Perf] MnnLandmark[NV21] DONE: total=${totalElapsed}ms (infer=${inferElapsed}ms, parse=${parseElapsed}ms), pts=${landmarks.size/2}")
+            landmarks
+        } catch (e: Exception) {
+            Logger.e(TAG, "MnnLandmark NV21 detection failed", e)
             null
         }
     }

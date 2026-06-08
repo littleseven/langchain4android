@@ -93,6 +93,24 @@ public:
                                       int width,
                                       int height);
 
+    /**
+     * [Zero-Copy] 单输出检测（2D106 关键点）——YUV NV21 + ROI 裁剪
+     * 跳过 Bitmap 创建，直接通过 MNN ImageProcess 在 GPU 上完成
+     * NV21→RGB + ROI 裁剪 + 缩放到 INPUT_SIZE 的一体化预处理。
+     *
+     * @param nv21Data 紧凑 NV21 数据
+     * @param nv21Width NV21 图像宽度
+     * @param nv21Height NV21 图像高度
+     * @param roiLeft ROI 左边界（NV21 像素坐标）
+     * @param roiTop ROI 上边界（NV21 像素坐标）
+     * @param roiRight ROI 右边界（NV21 像素坐标）
+     * @param roiBottom ROI 下边界（NV21 像素坐标）
+     */
+    std::vector<float> detectFromNv21(const unsigned char *nv21Data,
+                                      int nv21Width, int nv21Height,
+                                      int roiLeft, int roiTop,
+                                      int roiRight, int roiBottom);
+
     enum ReleaseFlags {
         RELEASE_TENSORS = 1 << 0,
         RELEASE_SESSION = 1 << 1,

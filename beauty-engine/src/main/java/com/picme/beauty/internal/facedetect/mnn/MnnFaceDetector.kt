@@ -177,6 +177,19 @@ class MnnFaceDetector private constructor(
             height: Int,
             outResult: FloatArray
         ): Int
+
+        @JvmStatic
+        private external fun nativeDetectLandmarksFromNv21(
+            handle: Long,
+            nv21Data: ByteBuffer,
+            nv21Width: Int,
+            nv21Height: Int,
+            roiLeft: Int,
+            roiTop: Int,
+            roiRight: Int,
+            roiBottom: Int,
+            outResult: FloatArray
+        ): Int
     }
 
     /**
@@ -323,6 +336,50 @@ class MnnFaceDetector private constructor(
         val outResult = getDetectResult(width * height * 2)
         val written = MnnGlobalReleaseLock.withOperation {
             nativeDetectFromNv21(nativeHandle, nv21Data, width, height, outResult)
+        }
+        return if (written > 0) outResult.copyOf(written) else null
+    }
+
+    /**
+     * [Zero-Copy] 关键点检测——YUV NV21 + ROI 裁剪
+     *
+     * 跳过 Bitmap 创建和 pixel loop，直接通过 MNN ImageProcess 在 GPU 上完成
+     * NV21→RGB + ROI 裁剪 + 缩放到模型输入尺寸的一体化预处理。
+     *
+     * @param nv21Data 紧凑 NV21 DirectByteBuffer
+     * @param nv21Width NV21 图像宽度
+     * @param nv21Height NV21 图像高度
+     * @param roiLeft ROI 左边界（NV21 像素坐标）
+     * @param roiTop ROI 上边界（NV21 像素坐标）
+     * @param roiRight ROI 右边界（NV21 像素坐标）
+     * @param roiBottom ROI 下边界（NV21 像素坐标）
+     * @return 模型原始输出（未做坐标逆映射），失败返回 null
+     */
+    fun detectLandmarksFromYuv(
+        nv21Data: ByteBuffer,
+        nv21Width: Int,
+        nv21Height: Int,
+        roiLeft: Int,
+        roiTop: Int,
+        roiRight: Int,
+        roiBottom: Int
+    ): FloatArray? {
+        if (nativeHandle == 0L) {
+            Logger.w(TAG, "Detector not initialized")
+            return null
+        }
+        if (!nv21Data.isDirect) {
+            Logger.e(TAG, "NV21 buffer must be direct")
+            return null
+        }
+        val outResult = getDetectResult(nv21Width * nv21Height * 2)
+        val written = MnnGlobalReleaseLock.withOperation {
+            nativeDetectLandmarksFromNv21(
+                nativeHandle, nv21Data,
+                nv21Width, nv21Height,
+                roiLeft, roiTop, roiRight, roiBottom,
+                outResult
+            )
         }
         return if (written > 0) outResult.copyOf(written) else null
     }

@@ -296,4 +296,41 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectFromNv
     return copySize;
 }
 
+JNIEXPORT jint JNICALL
+Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectLandmarksFromNv21(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jobject nv21Data,
+        jint nv21Width,
+        jint nv21Height,
+        jint roiLeft,
+        jint roiTop,
+        jint roiRight,
+        jint roiBottom,
+        jfloatArray outResult) {
+    auto *detector = reinterpret_cast<picme::MnnFaceDetector *>(handle);
+    if (!detector) {
+        return 0;
+    }
+
+    unsigned char *data = static_cast<unsigned char *>(env->GetDirectBufferAddress(nv21Data));
+    if (!data) {
+        LOGE("nativeDetectLandmarksFromNv21: GetDirectBufferAddress returned null");
+        return 0;
+    }
+
+    const std::vector<float>& result = detector->detectFromNv21(
+        data, nv21Width, nv21Height,
+        roiLeft, roiTop, roiRight, roiBottom);
+    if (result.empty()) {
+        return 0;
+    }
+
+    jsize maxSize = env->GetArrayLength(outResult);
+    jsize copySize = static_cast<jsize>(std::min(result.size(), static_cast<size_t>(maxSize)));
+    env->SetFloatArrayRegion(outResult, 0, copySize, result.data());
+    return copySize;
+}
+
 } // extern "C"

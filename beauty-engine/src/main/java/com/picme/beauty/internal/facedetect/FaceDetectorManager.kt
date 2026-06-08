@@ -269,6 +269,101 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         }
     }
 
+    /**
+     * [Zero-Copy] 关键点检测——YUV NV21 + ROI 裁剪
+     *
+     * 配合 detectRoiFromNv21() 使用：ROI 由 NV21 零拷贝路径得到后，
+     * Landmark 检测也直接基于 NV21 完成，跳过 Bitmap 创建步骤。
+     *
+     * 目前仅支持 MNN landmark 引擎。
+     *
+     * @param nv21Data 紧凑 NV21 DirectByteBuffer
+     * @param nv21Width NV21 图像宽度
+     * @param nv21Height NV21 图像高度
+     * @param roi ROI 矩形（NV21 像素坐标）
+     * @param lensFacing 镜头方向
+     * @return FaceDetectionResult（含 106 landmarks），或 null
+     */
+    fun detectLandmarksFromNv21WithRoi(
+        nv21Data: ByteBuffer,
+        nv21Width: Int,
+        nv21Height: Int,
+        roi: RectF,
+        lensFacing: Int
+    ): FaceDetectionResult? {
+        if (!isPipelineInitialized) {
+            Logger.w(TAG, "Pipeline not initialized")
+            return null
+        }
+
+        val startTime = SystemClock.elapsedRealtime()
+        val config = pipelineConfig ?: return null
+
+        val mnnLandmarkDetector = landmarkDetector as? MnnLandmarkDetector
+            ?: run {
+                Logger.d(TAG, "[Perf] NV21 Landmark: MNN not available (current=${config.landmarkEngine})")
+                return null
+            }
+
+        val roiLeft = maxOf(0, roi.left.toInt())
+        val roiTop = maxOf(0, roi.top.toInt())
+        val roiRight = minOf(nv21Width, roi.right.toInt())
+        val roiBottom = minOf(nv21Height, roi.bottom.toInt())
+
+        if (roiRight <= roiLeft || roiBottom <= roiTop) {
+            Logger.w(TAG, "[Perf] NV21 Landmark: invalid ROI")
+            return null
+        }
+
+        return try {
+            val lmStart = SystemClock.elapsedRealtime()
+            val landmarkResult = mnnLandmarkDetector.detectLandmarksFromNv21(
+                nv21Data, nv21Width, nv21Height,
+                roiLeft, roiTop, roiRight, roiBottom
+            )
+            val lmTime = SystemClock.elapsedRealtime() - lmStart
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+
+            if (landmarkResult == null || landmarkResult.size < POINT_COUNT * 2) {
+                Logger.d(TAG, "[Perf] NV21 Landmark: failed (${lmTime}ms, total=${lastProcessTimeMs}ms)")
+                return null
+            }
+
+            val detectionSource = FaceDetectionSource.MNN
+            lastDetectionSource = detectionSource
+
+            val adapter = FaceLandmarkAdapterRegistry.getAdapter(detectionSource)
+                ?: return null
+            val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
+                ?: return null
+
+            val normalizedRoi = RectF(
+                roiLeft / nv21Width.toFloat(),
+                roiTop / nv21Height.toFloat(),
+                roiRight / nv21Width.toFloat(),
+                roiBottom / nv21Height.toFloat()
+            )
+
+            val roiEngineLabel = "${config.roiEngine.name}(NV21)"
+            val lmEngineLabel = "${config.landmarkEngine.name}(NV21→GPU)"
+            Logger.d(TAG, "[Perf] NV21 path breakdown (zero-copy): ROI($roiEngineLabel) → Landmark($lmEngineLabel)=${lmTime}ms, Total=${lastProcessTimeMs}ms")
+
+            FaceDetectionResult(
+                landmarks106 = adaptedResult,
+                detectionSource = detectionSource,
+                roiRect = normalizedRoi,
+                roiDetectorName = "${config.roiEngine.name}(NV21)",
+                useGpuForRoi = config.roiEngine == InferenceBackendType.MNN,
+                landmarkDetectorName = "${config.landmarkEngine.name}(NV21-GPU)",
+                useGpuForLandmark = true
+            )
+        } catch (e: Exception) {
+            lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
+            Logger.e(TAG, "Landmark NV21+ROI detection failed", e)
+            null
+        }
+    }
+
     private fun getMediaPipeDetector(): MediaPipeFaceDetector {
         return mediaPipeDetector ?: MediaPipeFaceDetector(appContext).also {
             mediaPipeDetector = it

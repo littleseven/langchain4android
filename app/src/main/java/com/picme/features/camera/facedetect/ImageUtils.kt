@@ -1,6 +1,7 @@
 package com.picme.features.camera.facedetect
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageProxy
 import java.nio.ByteBuffer
@@ -321,13 +322,30 @@ object ImageUtils {
         if (uvPixelStride == 2 && uvRowStride == width) {
             // [最优路径] 标准 NV12 格式（UV 交错），只需交换 U↔V 字节顺序
             // 逐对交换：...UV UV UV... → ...VU VU VU...
-            val uvBytes = ByteArray(width * uvHeight)
-            uBuffer.position(0)
-            uBuffer.get(uvBytes)
-            // Swap each pair
-            for (i in 0 until width * uvHeight step 2) {
-                nv21.put(uvBytes[i + 1])  // V
-                nv21.put(uvBytes[i])      // U
+            val uvSize = width * uvHeight
+            // [修复] 显式设置 limit=capacity，防止 BufferUnderflowException
+            // 部分设备 CameraX YUV plane buffer 的 limit 可能被污染为错误值
+            uBuffer.clear()
+            if (uBuffer.remaining() >= uvSize) {
+                uBuffer.limit(uvSize)
+                val uvBytes = ByteArray(uvSize)
+                uBuffer.get(uvBytes)
+                for (i in 0 until uvSize step 2) {
+                    nv21.put(uvBytes[i + 1])  // V
+                    nv21.put(uvBytes[i])      // U
+                }
+            } else {
+                // 降级：容量不足，退回到逐行安全路径
+                Log.w("PicMe:ImageUtils", "UV plane capacity(${uBuffer.capacity()}) < expected($uvSize), falling back to safe path")
+                for (row in 0 until uvHeight) {
+                    uBuffer.position(row * uvRowStride)
+                    for (col in 0 until uvWidth) {
+                        val idx = col * uvPixelStride
+                        uBuffer.position(row * uvRowStride + idx)
+                        nv21.put(uBuffer.get(idx + 1))  // V
+                        nv21.put(uBuffer.get(idx))      // U
+                    }
+                }
             }
         } else if (uvPixelStride == 1) {
             // [Planar] U 和 V 分离，需要交错
@@ -354,6 +372,12 @@ object ImageUtils {
                 }
             }
         }
+
+        // [修复] 恢复 plane buffer 的 position=0，供后续 imageProxyToBitmap 使用
+        // nv21.put() 会推进 yBuffer/uBuffer/vBuffer.position，导致 remaining()=0
+        yBuffer.position(0)
+        uBuffer.position(0)
+        vBuffer.position(0)
 
         nv21.flip()
         return nv21

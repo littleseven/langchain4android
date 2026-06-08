@@ -774,6 +774,69 @@ std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data
     return resultBuffer_;
 }
 
+std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data,
+                                                    int nv21Width, int nv21Height,
+                                                    int roiLeft, int roiTop,
+                                                    int roiRight, int roiBottom) {
+    if (!loaded_ || !inputTensor_ || !pretreatNv21_ || outputTensors_.empty()) {
+        return {};
+    }
+
+    // Clamp ROI to image bounds
+    roiLeft = std::max(0, roiLeft);
+    roiTop = std::max(0, roiTop);
+    roiRight = std::min(nv21Width, roiRight);
+    roiBottom = std::min(nv21Height, roiBottom);
+
+    int roiW = roiRight - roiLeft;
+    int roiH = roiBottom - roiTop;
+    if (roiW <= 0 || roiH <= 0) {
+        return {};
+    }
+
+    int nv21Stride = nv21Width;
+
+    // Fill input tensor with normalized black
+    MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
+    MNN::Tensor tmpInput(inputTensor_, inputDimType);
+    float *inputData = tmpInput.host<float>();
+    float normMean = hasBuiltInNormalization_ ? 0.0f : 127.5f;
+    float normStd = hasBuiltInNormalization_ ? 1.0f : 128.0f;
+    float blackVal = (0.0f - normMean) / normStd;
+    std::fill_n(inputData, tmpInput.elementSize(), blackVal);
+
+    // Build MNN Matrix: map target (INPUT_SIZE×INPUT_SIZE) to source ROI region
+    // Scale: each target pixel covers (roiW/inputSize_, roiH/inputSize_) in source
+    // Translate: start at roiLeft, roiTop
+    MNN::CV::Matrix trans;
+    trans.setScale((float)roiW / inputSize_, (float)roiH / inputSize_);
+    trans.postTranslate((float)roiLeft, (float)roiTop);
+
+    pretreatNv21_->setMatrix(trans);
+    auto result = pretreatNv21_->convert(nv21Data, nv21Width, nv21Height, nv21Stride,
+                                         inputTensor_);
+    if (result != MNN::NO_ERROR) {
+        return {};
+    }
+
+    inputTensor_->copyFromHostTensor(&tmpInput);
+    interpreter_->runSession(session_);
+
+    MNN::Tensor *output = outputTensors_[0];
+    MNN::Tensor::DimensionType outputDimType = output->getDimensionType();
+    MNN::Tensor tmpOutput(output, outputDimType);
+    output->copyToHostTensor(&tmpOutput);
+
+    int elementSize = tmpOutput.elementSize();
+    resultBuffer_.clear();
+    resultBuffer_.reserve(elementSize);
+    const float *data = tmpOutput.host<float>();
+    for (int i = 0; i < elementSize; i++) {
+        resultBuffer_.push_back(data[i]);
+    }
+    return resultBuffer_;
+}
+
 void MnnFaceDetector::processRetinaFaceOutput(const float *score,
                                               const float *bbox,
                                               const float *landmark,
