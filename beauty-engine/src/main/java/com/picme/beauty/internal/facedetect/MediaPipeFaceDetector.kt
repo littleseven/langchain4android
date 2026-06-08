@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.framework.image.MediaImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -17,8 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
 /**
  * MediaPipe 人脸检测器
  *
@@ -75,8 +72,8 @@ class MediaPipeFaceDetector(context: Context) {
     fun detect(bitmap: Bitmap, rotationDegrees: Int, lensFacing: Int): FloatArray? {
         val landmarker = videoLandmarker ?: return null
 
+        val mpImage = BitmapImageBuilder(bitmap).build()
         return try {
-            val mpImage = BitmapImageBuilder(bitmap).build()
             val result = landmarker.detectForVideo(mpImage, SystemClock.uptimeMillis())
 
             if (result.faceLandmarks().isEmpty()) {
@@ -95,6 +92,8 @@ class MediaPipeFaceDetector(context: Context) {
                 handleNativeCrash()
             }
             null
+        } finally {
+            runCatching { mpImage.close() }
         }
     }
 
@@ -104,8 +103,8 @@ class MediaPipeFaceDetector(context: Context) {
     fun detectForPhoto(bitmap: Bitmap, lensFacing: Int): FloatArray? {
         val landmarker = imageLandmarker ?: return null
 
+        val mpImage = BitmapImageBuilder(bitmap).build()
         return try {
-            val mpImage = BitmapImageBuilder(bitmap).build()
             val result = landmarker.detect(mpImage)
 
             if (result.faceLandmarks().isEmpty()) {
@@ -120,6 +119,8 @@ class MediaPipeFaceDetector(context: Context) {
         } catch (e: Exception) {
             Logger.e("MediaPipeDetector", "MediaPipe photo detection failed", e)
             null
+        } finally {
+            runCatching { mpImage.close() }
         }
     }
 

@@ -1,6 +1,5 @@
 package com.picme.beauty.internal.facedetect
 
-import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import com.picme.beauty.api.Logger
@@ -20,10 +19,10 @@ class MediaPipeRoiDetector(
 
     override fun detectRoi(bitmap: Bitmap): RectF? {
         val startTime = SystemClock.elapsedRealtime()
+        val mpImage = BitmapImageBuilder(bitmap).build()
         return try {
             Logger.d(TAG, "[Perf] MediaPipe ROI START: bitmap=${bitmap.width}x${bitmap.height}")
 
-            val mpImage = BitmapImageBuilder(bitmap).build()
             val inferenceStart = SystemClock.elapsedRealtime()
             val result = faceDetector.videoLandmarker?.detectForVideo(
                 mpImage,
@@ -64,6 +63,8 @@ class MediaPipeRoiDetector(
         } catch (e: Exception) {
             Logger.e(TAG, "MediaPipe ROI detection failed", e)
             null
+        } finally {
+            runCatching { mpImage.close() }
         }
     }
 

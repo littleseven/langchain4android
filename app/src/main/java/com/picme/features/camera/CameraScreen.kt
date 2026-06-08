@@ -96,6 +96,7 @@ import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.camera.capability.CameraCapability
 import com.picme.features.camera.state.CameraStateMachine
 import com.picme.features.camera.state.CameraStateManager
+import com.picme.features.camera.facedetect.ImageUtils
 import com.picme.features.camera.thread.CameraThreadRegistry
 import com.picme.features.camera.voice.SystemAsrEngine
 import com.picme.features.camera.voice.VoiceCommandCoordinator
@@ -1352,6 +1353,10 @@ fun CameraContent(
         onDispose {
             // [Day1 线程隔离] 释放专用线程
             CameraThreadRegistry.release()
+            // 释放相机分析路径复用缓存，避免退出后常驻内存拖高 RSS
+            ImageUtils.release()
+            // 清空最近一帧人脸缓存，避免页面退出后保留数组引用
+            FaceDetectionCache.clear()
         }
     }
 
