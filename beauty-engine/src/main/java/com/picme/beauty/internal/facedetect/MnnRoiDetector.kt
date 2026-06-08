@@ -63,6 +63,16 @@ class MnnRoiDetector(
         // 注册资源管理监听器，响应全局卸载/加载事件
         resourceManager.registerFaceDetectionUnloadListener(::onResourceManagerUnload)
         resourceManager.registerFaceDetectionLoadListener(::onResourceManagerLoad)
+
+        // [P0-4] 注册分级释放回调，供 releaseAtLevel("face", level) 使用
+        resourceManager.registerFaceReleaseCallback(MnnResourceManager.ReleaseLevel.SESSION) {
+            MnnGlobalReleaseLock.withLock {
+                detector?.releaseSession()
+            }
+        }
+        resourceManager.registerFaceReleaseCallback(MnnResourceManager.ReleaseLevel.FULL) {
+            performUnload()
+        }
     }
 
     /**

@@ -149,6 +149,44 @@ class MnnResourceManager private constructor(context: Context) {
     // ── 场景状态 ─────────────────────────────────────────────
 
     /**
+     * [P1-1] 每模型独立状态机
+     *
+     * 将"是否被请求"与"是否已加载"分离，支持精细化策略（如保留模型、释放会话）。
+     */
+    enum class ModelState {
+        UNLOADED,       // 未加载任何资源
+        MODEL_LOADED,   // 模型权重已加载到内存（Interpreter 创建完成）
+        SESSION_READY,  // Session 已创建，可立即推理
+        ACTIVE          // 正在推理中
+    }
+
+    private val llmModelState = AtomicInteger(ModelState.UNLOADED.ordinal)
+    private val asrModelState = AtomicInteger(ModelState.UNLOADED.ordinal)
+    private val faceModelState = AtomicInteger(ModelState.UNLOADED.ordinal)
+
+    val llmState: ModelState get() = ModelState.entries[llmModelState.get()]
+    val asrState: ModelState get() = ModelState.entries[asrModelState.get()]
+    val faceState: ModelState get() = ModelState.entries[faceModelState.get()]
+
+    /**
+     * 更新指定模型的状态
+     */
+    fun setModelState(module: String, newState: ModelState) {
+        val oldState = when (module.lowercase()) {
+            "llm" -> ModelState.entries[llmModelState.getAndSet(newState.ordinal)]
+            "asr" -> ModelState.entries[asrModelState.getAndSet(newState.ordinal)]
+            "face" -> ModelState.entries[faceModelState.getAndSet(newState.ordinal)]
+            else -> {
+                Logger.w(TAG, "Unknown module for setModelState: $module")
+                return
+            }
+        }
+        if (oldState != newState) {
+            Logger.i(TAG, "ModelState: $module $oldState -> $newState")
+        }
+    }
+
+    /**
      * 当前应用场景
      */
     enum class Scene {
@@ -214,9 +252,11 @@ class MnnResourceManager private constructor(context: Context) {
      * 切换应用场景
      *
      * 场景切换会触发模型的自动加载/卸载：
-     * - CAMERA: 保留人脸检测，延迟卸载 LLM/ASR
-     * - CHAT: 保留 LLM/ASR，立即卸载人脸检测
+     * - CAMERA: 保留人脸检测，LLM 不受场景切换影响（跨页面保活）
+     * - CHAT: 保留 LLM/ASR，强制卸载人脸检测
      * - BACKGROUND: 延迟卸载所有模型
+     *
+     * [Agent First] LLM 永不被场景切换触发卸载，仅响应内存压力。
      *
      * @param newScene 目标场景
      */
@@ -228,31 +268,99 @@ class MnnResourceManager private constructor(context: Context) {
 
         when (newScene) {
             Scene.CAMERA -> {
-                // 相机页：确保人脸检测可用，LLM 可延迟卸载
+                // 相机页：确保人脸检测可用
                 cancelFaceDetectionUnload()
                 notifyFaceDetectionLoad()
-                // 如果 LLM 不再被引用，安排软释放
-                if (!isLlmRequested) {
-                    scheduleSoftTrim()
-                }
             }
             Scene.CHAT -> {
-                // 聊天页：人脸检测不再需要，立即安排卸载
-                scheduleFaceDetectionUnload(immediate = false)
-                // LLM/ASR 由各自的引用计数管理
+                // 聊天页：人脸检测不再需要，强制卸载（忽略引用计数）
+                // [P0-1] 场景驱动的强制卸载，不与引用计数耦合
+                forceFaceDetectionUnload()
             }
             Scene.SETTINGS -> {
-                // 设置页：保留当前模型，不做激进卸载
-                cancelFaceDetectionUnload()
+                // 设置页：人脸检测不再需要，强制卸载
+                forceFaceDetectionUnload()
             }
             Scene.BACKGROUND -> {
                 // 后台：所有模型可卸载
                 onAppBackground()
             }
             Scene.OTHER -> {
-                // 其他页面：人脸检测延迟卸载
-                scheduleFaceDetectionUnload(immediate = false)
+                // 其他页面（如相册）：人脸检测强制卸载
+                forceFaceDetectionUnload()
             }
+        }
+    }
+
+    // ── 引用管理 API ─────────────────────────────────────────
+
+    /**
+     * [P0-4] 统一释放等级
+     *
+     * - SOFT: 清缓存（如 LLM KV cache、ASR stop streaming），保留模型和 Session
+     * - SESSION: 释放 Session/Tensor，保留模型权重（可快速恢复）
+     * - FULL: 释放一切（权重 + Interpreter + Tensor），彻底卸载
+     */
+    enum class ReleaseLevel {
+        SOFT,
+        SESSION,
+        FULL
+    }
+
+    // 各模型释放等级对应的回调注册
+    private val llmReleaseCallbacks = mutableMapOf<ReleaseLevel, () -> Unit>()
+    private val asrReleaseCallbacks = mutableMapOf<ReleaseLevel, () -> Unit>()
+    private val faceReleaseCallbacks = mutableMapOf<ReleaseLevel, () -> Unit>()
+
+    /**
+     * 注册 LLM 在各释放等级的回调
+     */
+    fun registerLlmReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
+        llmReleaseCallbacks[level] = callback
+    }
+
+    /**
+     * 注册 ASR 在各释放等级的回调
+     */
+    fun registerAsrReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
+        asrReleaseCallbacks[level] = callback
+    }
+
+    /**
+     * 注册人脸检测在各释放等级的回调
+     */
+    fun registerFaceReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
+        faceReleaseCallbacks[level] = callback
+    }
+
+    /**
+     * 统一释放入口：按模块和等级执行释放
+     *
+     * @param module "llm" / "asr" / "face"
+     * @param level 释放等级
+     */
+    fun releaseAtLevel(module: String, level: ReleaseLevel) {
+        Logger.i(TAG, "releaseAtLevel: module=$module, level=$level")
+        val callback = when (module.lowercase()) {
+            "llm" -> llmReleaseCallbacks[level]
+            "asr" -> asrReleaseCallbacks[level]
+            "face" -> faceReleaseCallbacks[level]
+            else -> {
+                Logger.w(TAG, "Unknown module for release: $module")
+                null
+            }
+        }
+        callback?.invoke()
+    }
+
+    /**
+     * 注销模块的所有释放回调
+     */
+    fun unregisterReleaseCallbacks(module: String) {
+        when (module.lowercase()) {
+            "llm" -> llmReleaseCallbacks.clear()
+            "asr" -> asrReleaseCallbacks.clear()
+            "face" -> faceReleaseCallbacks.clear()
         }
     }
 
@@ -464,12 +572,12 @@ class MnnResourceManager private constructor(context: Context) {
             MemoryPressureLevel.EMERGENCY -> {
                 // 紧急：卸载一切可卸载的
                 notifySafeUnload()
-                scheduleFaceDetectionUnload(immediate = true)
+                forceFaceDetectionUnload()
             }
             MemoryPressureLevel.CRITICAL -> {
                 // 严重：软释放 LLM（保留模型，清 KV Cache），卸载人脸检测
                 notifySoftTrim()
-                scheduleFaceDetectionUnload(immediate = true)
+                forceFaceDetectionUnload()
             }
             MemoryPressureLevel.WARNING -> {
                 // 警告：仅软释放
@@ -513,21 +621,23 @@ class MnnResourceManager private constructor(context: Context) {
 
     // ── 人脸检测自动卸载调度 ─────────────────────────────────
 
-    private fun scheduleFaceDetectionUnload(immediate: Boolean) {
-        if (faceDetectionUnloadScheduled.get()) return
-        if (!isFaceDetectionRequested) return
+    /**
+     * [P0-1] 场景驱动的强制卸载：忽略引用计数，直接触发人脸检测卸载。
+     *
+     * 与 [releaseFaceDetection] 不同，此方法不由引用计数驱动，而是由场景切换
+     * （离开相机页）或内存压力驱动。卸载后将引用计数重置为 0，确保下次进入
+     * 相机页时可以正常重新初始化。
+     */
+    private fun forceFaceDetectionUnload() {
+        if (faceDetectionUnloadScheduled.getAndSet(true)) return
 
-        val delayMs = if (immediate) 0L else FACE_DETECTION_UNLOAD_DELAY_MS
-
-        if (faceDetectionUnloadScheduled.compareAndSet(false, true)) {
-            scope.launch {
-                delay(delayMs)
-                if (faceDetectionUnloadScheduled.get() && !isFaceDetectionRequested) {
-                    Logger.i(TAG, "FaceDetection auto-unload triggered")
-                    notifyFaceDetectionUnload()
-                }
-                faceDetectionUnloadScheduled.set(false)
-            }
+        scope.launch {
+            delay(FACE_DETECTION_UNLOAD_DELAY_MS)
+            // 强制重置引用计数，场景驱动不受引用计数约束
+            val refCount = faceDetectionRefCount.getAndSet(0)
+            Logger.i(TAG, "Force unload face detection: refCount was $refCount, reset to 0")
+            notifyFaceDetectionUnload()
+            faceDetectionUnloadScheduled.set(false)
         }
     }
 

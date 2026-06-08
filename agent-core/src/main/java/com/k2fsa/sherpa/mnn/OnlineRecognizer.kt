@@ -95,14 +95,17 @@ class OnlineRecognizer(
         }
     }
 
-    protected fun finalize() {
-        if (ptr != 0L) {
-            delete(ptr)
-            ptr = 0
-        }
+/**
+ * [P0-3] 不使用 finalize()，改为显式 release()。
+ * 业务层应在 try/finally 或 use{} 中调用 release() 或通过
+ * OnlineRecognizer.use {} 扩展确保资源释放。
+ */
+fun release() {
+    if (ptr != 0L) {
+        delete(ptr)
+        ptr = 0
     }
-
-    fun release() = finalize()
+}
 
     fun createStream(hotwords: String = ""): OnlineStream {
         val p = createStream(ptr, hotwords)

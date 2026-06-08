@@ -81,6 +81,19 @@ class LocalLlmEngine(private val context: Context) {
     init {
         resourceManager.registerSoftTrimListener(::onSoftTrim)
         resourceManager.registerSafeUnloadListener(::onSafeUnload)
+
+        // [P0-4] 注册分级释放回调，供 releaseAtLevel("llm", level) 使用
+        resourceManager.registerLlmReleaseCallback(MnnResourceManager.ReleaseLevel.SOFT) {
+            enqueueTrimMemory()
+        }
+        resourceManager.registerLlmReleaseCallback(MnnResourceManager.ReleaseLevel.SESSION) {
+            if (client.isLoaded) {
+                client.releaseNative(NativeReleaseTarget.KV_CACHE)
+            }
+        }
+        resourceManager.registerLlmReleaseCallback(MnnResourceManager.ReleaseLevel.FULL) {
+            enqueueUnload()
+        }
     }
 
     /**
@@ -301,6 +314,18 @@ class LocalLlmEngine(private val context: Context) {
      */
     fun releaseWeightsInterpreterTensors() {
         enqueueUnload()
+    }
+
+    /**
+     * [P0-2] 反注册 ResourceManager 监听器，释放所有资源。
+     *
+     * 应在不再使用此引擎时调用，防止监听器累积和 native 泄漏。
+     */
+    fun release() {
+        resourceManager.unregisterSoftTrimListener(::onSoftTrim)
+        resourceManager.unregisterSafeUnloadListener(::onSafeUnload)
+        resourceManager.unregisterReleaseCallbacks("llm")
+        unload()
     }
 
     /**

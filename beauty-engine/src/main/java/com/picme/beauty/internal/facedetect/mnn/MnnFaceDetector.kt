@@ -258,7 +258,5 @@ class MnnFaceDetector private constructor(
         }
     }
 
-    protected fun finalize() {
-        release()
-    }
+    // [P0-3] 已移除 finalize()，业务层必须显式调用 release() 释放 native 资源。
 }

@@ -33,13 +33,36 @@ data class AgentContext(
 )
 
 /**
- * Agent 场景枚举
+ * 场景标识（等同于 Camera/Gallery/PhotoEdit/Settings）
+ *
+ * 注意：AgentScene 与 MnnResourceManager.Scene 语义不同：
+ * - AgentScene 描述用户所在页面（用于 Agent 能力路由）
+ * - MnnResourceManager.Scene 描述 MNN 模型生命周期策略
  */
 enum class AgentScene {
     CAMERA,
     GALLERY,
     PHOTO_EDIT,
     SETTINGS
+}
+
+/**
+ * [P1-4] 模型使用模式
+ *
+ * 不同模型的生命周期策略根本不同，此枚举定义了模型的"使用模式"，
+ * 供 MnnResourceManager 决策卸载策略。
+ *
+ * - CROSS_PAGE_PERSISTENT: 跨页面常驻，页面切换不触发卸载（如 LLM）
+ * - PAGE_SCOPED: 页面级绑定，离开页面即触发卸载（如 Face）
+ * - SESSION_SCOPED: 会话级绑定，关闭时延迟释放（如 ASR）
+ */
+enum class ModelUsagePattern {
+    /** 跨页面常驻：页面切换不触发卸载，仅响应内存压力 */
+    CROSS_PAGE_PERSISTENT,
+    /** 页面级绑定：离开页面即触发卸载 */
+    PAGE_SCOPED,
+    /** 会话级绑定：关闭时延迟释放（冷却时间防止频繁切换） */
+    SESSION_SCOPED
 }
 
 /**

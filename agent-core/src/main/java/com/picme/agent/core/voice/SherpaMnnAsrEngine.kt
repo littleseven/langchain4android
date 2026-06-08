@@ -64,6 +64,17 @@ class SherpaMnnAsrEngine(
     init {
         resourceManager.registerSoftTrimListener(::onSoftTrim)
         resourceManager.registerSafeUnloadListener(::onSafeUnload)
+
+        // [P0-4] 注册分级释放回调，供 releaseAtLevel("asr", level) 使用
+        resourceManager.registerAsrReleaseCallback(MnnResourceManager.ReleaseLevel.SOFT) {
+            stopStreaming()
+        }
+        resourceManager.registerAsrReleaseCallback(MnnResourceManager.ReleaseLevel.SESSION) {
+            stopStreaming()
+        }
+        resourceManager.registerAsrReleaseCallback(MnnResourceManager.ReleaseLevel.FULL) {
+            performUnload()
+        }
     }
 
     companion object {
@@ -361,6 +372,19 @@ class SherpaMnnAsrEngine(
             onSoftRelease = ::softRelease
         )
         isRegistered.set(false)
+    }
+
+    /**
+     * [P0-2] 反注册 ResourceManager 监听器，释放所有资源。
+     *
+     * 应在不再使用此引擎时调用，防止监听器累积和 native 泄漏。
+     * 注意：必须先调用此方法再释放引用，确保不会接收后续回调。
+     */
+    fun releaseAll() {
+        resourceManager.unregisterSoftTrimListener(::onSoftTrim)
+        resourceManager.unregisterSafeUnloadListener(::onSafeUnload)
+        resourceManager.unregisterReleaseCallbacks("asr")
+        release()
     }
 
     /**
