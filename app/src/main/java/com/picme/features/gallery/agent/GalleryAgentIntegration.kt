@@ -5,11 +5,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import com.picme.agent.core.AgentOrchestrator
-import com.picme.agent.core.SceneManager
-import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.model.MediaAsset
-import com.picme.agent.core.model.PageContext
+import com.picme.agent.core.facade.AgentOrchestrator
+import com.picme.agent.core.runtime.state.SceneManager
+import com.picme.agent.core.api.context.AgentScene
+import com.picme.agent.core.api.context.MediaAsset
+import com.picme.agent.core.api.context.PageContext
 import com.picme.core.common.Logger
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import com.picme.features.common.chat.AgentChatPanel

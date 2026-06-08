@@ -37,8 +37,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.R
-import com.picme.agent.core.model.MediaAsset
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.MediaAsset
+import com.picme.agent.core.api.context.MediaType
 
 @Composable
 fun CameraBottomControls(

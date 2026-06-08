@@ -7,8 +7,8 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.RectF
 import android.os.SystemClock
-import com.picme.agent.core.mnn.MnnGlobalReleaseLock
-import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
+import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager
@@ -233,13 +233,22 @@ class MnnRoiDetector(
      * 获取复用的缩放 Bitmap，避免每帧创建
      */
     private fun getScaledBitmap(source: Bitmap, targetSize: Int): Bitmap {
+        // 防御：source 可能在 CameraX ImageProxy 关闭后被回收
+        if (source.isRecycled) {
+            throw IllegalStateException("Source bitmap recycled before scaling")
+        }
         if (source.width == targetSize && source.height == targetSize) {
             return source
         }
         var bmp = reusableScaledBitmap
         if (bmp == null || bmp.isRecycled || bmp.width != targetSize || bmp.height != targetSize) {
             bmp?.recycle()
-            bmp = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+            try {
+                bmp = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+            } catch (e: OutOfMemoryError) {
+                Logger.e(TAG, "OOM creating ${targetSize}x$targetSize bitmap, fallback to RGB_565")
+                bmp = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.RGB_565)
+            }
             reusableScaledBitmap = bmp
         }
         val canvas = Canvas(bmp)

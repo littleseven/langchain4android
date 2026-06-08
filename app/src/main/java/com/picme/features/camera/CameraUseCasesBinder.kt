@@ -17,7 +17,7 @@ import com.picme.core.common.Logger
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.beauty.api.facedetect.EngineType
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.MediaType
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.FaceWarpParams
 import java.nio.ByteBuffer

@@ -8,8 +8,8 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.SystemClock
-import com.picme.agent.core.mnn.MnnGlobalReleaseLock
-import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
+import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import com.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.picme.beauty.internal.model.ModelManager

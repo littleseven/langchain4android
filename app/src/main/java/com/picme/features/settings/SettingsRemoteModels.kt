@@ -23,8 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.picme.R
-import com.picme.agent.core.model.RemoteModelConfig
-import com.picme.agent.core.model.RemoteModelProvider
+import com.picme.agent.core.api.android.RemoteModelConfig
+import com.picme.agent.core.api.android.RemoteModelProvider
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

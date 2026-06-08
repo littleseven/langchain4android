@@ -5,10 +5,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import com.picme.agent.core.AgentOrchestrator
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.AiAgentPrivacyLevel
+import com.picme.agent.core.facade.AgentOrchestrator
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.policy.AiAgentMode
+import com.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.picme.core.common.Logger
 import com.picme.domain.usecase.AiAgentUseCase
 import com.picme.features.agent.GlobalAgentPanel

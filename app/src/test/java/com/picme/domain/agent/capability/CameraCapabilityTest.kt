@@ -3,11 +3,11 @@ package com.picme.domain.agent.capability
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentScene
+import com.picme.agent.core.api.context.MediaType
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -15,7 +15,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import com.picme.agent.core.SceneManager
+import com.picme.agent.core.runtime.state.SceneManager
 
 /**
  * CameraCapability 场景化单元测试

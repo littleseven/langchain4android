@@ -57,8 +57,8 @@ import com.picme.features.settings.SettingsViewModelFactory
 import com.picme.features.debug.LogOverlay
 import com.picme.navigation.Screen
 import com.picme.core.common.Logger
-import com.picme.agent.core.SceneManager
-import com.picme.agent.core.AgentOrchestrator
+import com.picme.agent.core.runtime.state.SceneManager
+import com.picme.agent.core.facade.AgentOrchestrator
 import com.picme.domain.agent.ComposeCapabilityHost
 import com.picme.domain.agent.GlobalCapabilityHost
 import com.picme.domain.agent.LocalCapabilityHost

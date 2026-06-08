@@ -3,11 +3,11 @@ package com.picme.domain.agent
 import com.picme.features.gallery.capability.GalleryCapability
 import com.picme.domain.agent.capability.NavigationCapability
 import com.picme.features.settings.capability.SettingsCapability
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.SceneManager
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentScene
+import com.picme.agent.core.runtime.state.SceneManager
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

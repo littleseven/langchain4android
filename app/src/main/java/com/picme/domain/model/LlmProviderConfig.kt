@@ -1,7 +1,7 @@
 package com.picme.domain.model
 
-import com.picme.agent.core.model.RemoteModelConfig
-import com.picme.agent.core.model.RemoteProtocol
+import com.picme.agent.core.api.android.RemoteModelConfig
+import com.picme.agent.core.api.android.RemoteProtocol
 
 /**
  * LLM 供应商枚举

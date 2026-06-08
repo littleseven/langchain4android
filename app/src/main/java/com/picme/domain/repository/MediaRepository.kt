@@ -1,7 +1,7 @@
 package com.picme.domain.repository
 
 import android.net.Uri
-import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.api.context.MediaAsset
 import kotlinx.coroutines.flow.Flow
 import android.content.IntentSender
 

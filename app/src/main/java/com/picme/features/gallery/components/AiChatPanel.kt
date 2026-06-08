@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.picme.R
-import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.api.context.MediaAsset
 import com.picme.features.common.chat.AgentMessage
 import com.picme.features.common.chat.AiChatScreen
 

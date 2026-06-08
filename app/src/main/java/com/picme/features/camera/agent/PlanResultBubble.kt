@@ -14,8 +14,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.agent.core.remote.ExecutionResult
-import com.picme.agent.core.remote.StepResult
+import com.picme.agent.core.api.execution.ExecutionResult
+import com.picme.agent.core.api.execution.StepResult
 
 @Composable
 fun PlanResultBubble(

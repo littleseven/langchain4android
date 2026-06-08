@@ -1,8 +1,8 @@
 package com.picme.features.camera.agent
 
-import com.picme.agent.core.model.ExecutionState
-import com.picme.agent.core.remote.ExecutionPlan
-import com.picme.agent.core.remote.ExecutionResult
+import com.picme.agent.core.runtime.execution.ExecutionState
+import com.picme.agent.core.api.execution.ExecutionPlan
+import com.picme.agent.core.api.execution.ExecutionResult
 
 /**
  * Agent 消息密封类

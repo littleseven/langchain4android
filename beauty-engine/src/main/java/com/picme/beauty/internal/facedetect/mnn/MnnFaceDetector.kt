@@ -1,7 +1,7 @@
 package com.picme.beauty.internal.facedetect.mnn
 
 import android.graphics.Bitmap
-import com.picme.agent.core.mnn.MnnGlobalReleaseLock
+import com.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import com.picme.beauty.api.Logger
 import java.nio.ByteBuffer
 

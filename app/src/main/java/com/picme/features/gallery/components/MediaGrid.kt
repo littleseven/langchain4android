@@ -43,8 +43,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.picme.domain.model.GroupedMedia
-import com.picme.agent.core.model.MediaAsset
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.MediaAsset
+import com.picme.agent.core.api.context.MediaType
 import androidx.compose.foundation.layout.PaddingValues
 
 @Composable

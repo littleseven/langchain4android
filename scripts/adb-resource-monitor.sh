@@ -122,6 +122,15 @@ if [ -r /sys/class/kgsl/kgsl-3d0/gpu_busy_percentage ]; then
   exit 0
 fi
 
+if [ -r /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq ]; then
+  cur=$(cat /sys/class/kgsl/kgsl-3d0/devfreq/cur_freq 2>/dev/null)
+  max=$(cat /sys/class/kgsl/kgsl-3d0/devfreq/max_freq 2>/dev/null)
+  if [ -n "$cur" ] && [ -n "$max" ] && [ "$max" -gt 0 ] 2>/dev/null; then
+    echo "kgsl_freq_ratio ${cur} ${max}"
+    exit 0
+  fi
+fi
+
 for f in /sys/class/devfreq/*gpu*/load /sys/class/devfreq/*mali*/load; do
   if [ -r "$f" ]; then
     echo "devfreq_load $(cat "$f" 2>/dev/null)"
@@ -135,6 +144,18 @@ for f in /sys/class/devfreq/*gpu*/utilization /sys/class/devfreq/*mali*/utilizat
     exit 0
   fi
 done
+
+if command -v dumpsys >/dev/null 2>&1; then
+  mem_line=$(dumpsys gpu 2>/dev/null | grep -m 1 "^Memory snapshot for GPU")
+  global_line=$(dumpsys gpu 2>/dev/null | grep -m 1 "^Global total:")
+  if [ -n "$global_line" ]; then
+    global_val=$(echo "$global_line" | awk "{print \$3}")
+    if [ -n "$global_val" ]; then
+      echo "dumpsys_gpu_mem ${global_val}"
+      exit 0
+    fi
+  fi
+fi
 
 echo "none NA"
 ' 2>/dev/null | adb_clean | head -n 1
@@ -240,9 +261,29 @@ while true; do
         last_gpu_a=""
         last_gpu_b=""
         ;;
+      kgsl_freq_ratio)
+        gpu_source="kgsl_freq_ratio"
+        cur_freq="$(echo "$gpu_rest" | awk '{print $1}')"
+        max_freq="$(echo "$gpu_rest" | awk '{print $2}')"
+        if [[ -n "$cur_freq" && -n "$max_freq" && "$max_freq" != "0" ]]; then
+          gpu_pct="$(awk -v cur="$cur_freq" -v max="$max_freq" 'BEGIN{printf "%.2f", (cur/max)*100}')"
+        else
+          gpu_pct="NA"
+        fi
+        last_gpu_mode="$gpu_mode"
+        last_gpu_a=""
+        last_gpu_b=""
+        ;;
       devfreq_load|devfreq_util)
         gpu_source="$gpu_mode"
         gpu_pct="$(echo "$gpu_rest" | awk '{print $1}')"
+        last_gpu_mode="$gpu_mode"
+        last_gpu_a=""
+        last_gpu_b=""
+        ;;
+      dumpsys_gpu_mem)
+        gpu_source="dumpsys_gpu_mem"
+        gpu_pct="NA"
         last_gpu_mode="$gpu_mode"
         last_gpu_a=""
         last_gpu_b=""

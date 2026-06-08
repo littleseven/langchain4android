@@ -1,12 +1,12 @@
 package com.picme.testing.agent.engine
 
 import android.content.Context
-import com.picme.agent.core.CapabilityRegistry
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.runtime.capability.CapabilityRegistry
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentScene
+import com.picme.agent.core.api.context.MediaType
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter

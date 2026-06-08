@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.RectF
 import android.os.SystemClock
-import com.picme.agent.core.mnn.MnnResourceManager
+import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.beauty.api.Logger
 import com.picme.beauty.api.facedetect.DetectionPipelineConfig
 import com.picme.beauty.api.facedetect.EngineType

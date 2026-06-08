@@ -1,6 +1,6 @@
 package com.k2fsa.sherpa.mnn
 
-import com.picme.agent.core.Logger
+import com.picme.agent.core.platform.logging.Logger
 import org.json.JSONObject
 import java.io.File
 

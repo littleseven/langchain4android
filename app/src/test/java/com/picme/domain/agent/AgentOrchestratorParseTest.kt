@@ -3,11 +3,11 @@ package com.picme.domain.agent
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentScene
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentScene
+import com.picme.agent.core.api.context.MediaType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -21,7 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import com.picme.agent.core.remote.IntentCache
+import com.picme.agent.core.runtime.inference.IntentCache
 
 /**
  * AgentCommandParser 响应解析逻辑单元测试

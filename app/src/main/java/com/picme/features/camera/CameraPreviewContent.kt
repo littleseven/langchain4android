@@ -47,9 +47,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.agent.core.model.MediaType
-import com.picme.agent.core.voice.AudioRecorder
-import com.picme.agent.core.voice.InputAudioDevice
+import com.picme.agent.core.api.context.MediaType
+import com.picme.agent.core.platform.voice.AudioRecorder
+import com.picme.agent.core.platform.voice.InputAudioDevice
 import com.picme.beauty.api.facedetect.FaceDetectionSource
 import com.picme.domain.model.AiAgentCommand
 import com.picme.domain.usecase.AiAgentUseCase

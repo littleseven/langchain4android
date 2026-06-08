@@ -1,6 +1,6 @@
 package com.picme.features.camera.capability
 
-import com.picme.agent.core.BaseCapability
+import com.picme.agent.core.api.capability.BaseCapability
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -10,13 +10,13 @@ import androidx.compose.runtime.setValue
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentErrorCode
-import com.picme.agent.core.model.PageContext
-import com.picme.agent.core.SceneManager
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentErrorCode
+import com.picme.agent.core.api.context.PageContext
+import com.picme.agent.core.runtime.state.SceneManager
+import com.picme.agent.core.api.context.MediaType
 import com.picme.beauty.api.BeautySettings
 
 /**

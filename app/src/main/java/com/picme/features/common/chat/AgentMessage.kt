@@ -1,6 +1,6 @@
 package com.picme.features.common.chat
 
-import com.picme.agent.core.remote.ExecutionPlan
+import com.picme.agent.core.api.execution.ExecutionPlan
 
 /**
  * Agent 消息类型定义

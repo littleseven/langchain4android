@@ -4,10 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import com.picme.agent.core.Capability
-import com.picme.agent.core.CapabilityHost
-import com.picme.agent.core.Logger
-import com.picme.agent.core.SceneManager
+import com.picme.agent.core.api.capability.Capability
+import com.picme.agent.core.api.capability.CapabilityHost
+import com.picme.agent.core.platform.logging.Logger
+import com.picme.agent.core.runtime.state.SceneManager
 
 /**
  * Compose 实现的 Capability 宿主

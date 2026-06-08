@@ -80,8 +80,8 @@ import com.picme.R
 import com.picme.core.common.Logger
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AiAgentCommand
-import com.picme.agent.core.voice.AudioRecorder
-import com.picme.agent.core.voice.InputAudioDevice
+import com.picme.agent.core.platform.voice.AudioRecorder
+import com.picme.agent.core.platform.voice.InputAudioDevice
 import com.picme.features.camera.voice.VoiceCommandCoordinator
 import kotlinx.coroutines.launch
 import android.app.Activity

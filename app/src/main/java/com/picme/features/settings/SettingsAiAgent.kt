@@ -40,11 +40,11 @@ import androidx.compose.ui.unit.dp
 import com.picme.R
 import com.picme.data.download.LlmModelDownloadManager
 import com.picme.data.download.ModelConfig
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.RemoteModelConfig
-import com.picme.agent.core.model.RemoteModelConfigs
-import com.picme.agent.core.model.RemoteModelProvider
-import com.picme.agent.core.model.RemoteProtocol
+import com.picme.agent.core.api.policy.AiAgentMode
+import com.picme.agent.core.api.android.RemoteModelConfig
+import com.picme.agent.core.api.android.RemoteModelConfigs
+import com.picme.agent.core.api.android.RemoteModelProvider
+import com.picme.agent.core.api.android.RemoteProtocol
 import java.util.Locale
 
 @Composable

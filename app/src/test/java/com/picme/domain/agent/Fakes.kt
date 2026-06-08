@@ -1,11 +1,11 @@
 package com.picme.domain.agent
 
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.PageContext
-import com.picme.agent.core.remote.ExecutionResult
-import com.picme.agent.core.remote.StepResult
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.PageContext
+import com.picme.agent.core.api.execution.ExecutionResult
+import com.picme.agent.core.api.execution.StepResult
 
 /**
  * 测试用的 Fake CommandDispatcher

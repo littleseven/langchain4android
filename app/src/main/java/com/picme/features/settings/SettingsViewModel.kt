@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.picme.agent.core.model.AiAgentInferencePreference
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.AiAgentPrivacyLevel
+import com.picme.agent.core.api.policy.AiAgentInferencePreference
+import com.picme.agent.core.api.policy.AiAgentMode
+import com.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.picme.core.common.Logger
 import com.picme.data.download.DownloadState
 import com.picme.data.download.DownloadStatus

@@ -4,10 +4,10 @@ package com.picme.testing.agent.device
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
-import com.picme.agent.core.CapabilityRegistry
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentScene
+import com.picme.agent.core.runtime.capability.CapabilityRegistry
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentScene
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.core.common.Logger

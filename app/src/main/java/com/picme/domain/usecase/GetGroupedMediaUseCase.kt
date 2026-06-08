@@ -3,7 +3,7 @@ package com.picme.domain.usecase
 import com.picme.domain.model.GroupTitleType
 import com.picme.domain.model.GroupedMedia
 import com.picme.domain.model.GroupingMode
-import com.picme.agent.core.model.MediaAsset
+import com.picme.agent.core.api.context.MediaAsset
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

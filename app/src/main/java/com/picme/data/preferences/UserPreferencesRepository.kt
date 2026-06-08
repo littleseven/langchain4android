@@ -15,9 +15,9 @@ import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
 import com.picme.core.common.Logger
-import com.picme.agent.core.model.AiAgentInferencePreference
-import com.picme.agent.core.model.AiAgentMode
-import com.picme.agent.core.model.AiAgentPrivacyLevel
+import com.picme.agent.core.api.policy.AiAgentInferencePreference
+import com.picme.agent.core.api.policy.AiAgentMode
+import com.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.picme.domain.model.AppLanguage
 import com.picme.domain.model.BeautyStrategy
 import com.picme.domain.model.CameraAspectRatioMode
@@ -30,7 +30,7 @@ import com.picme.domain.model.FaceDetectIntervalProfile
 import com.picme.domain.model.FaceDetectionEngineMode
 import com.picme.domain.model.InferenceDevicePreference
 import com.picme.domain.model.InferenceEngineType
-import com.picme.agent.core.model.MediaType
+import com.picme.agent.core.api.context.MediaType
 import com.picme.domain.model.StageConfig
 import com.picme.domain.model.ThemeMode
 import com.picme.domain.model.VoiceCommandMode
@@ -44,7 +44,7 @@ import java.io.IOException
 import com.picme.domain.model.LogModuleConfig
 import com.picme.domain.model.ProviderConfig
 import com.picme.domain.model.ProviderConfigs
-import com.picme.agent.core.model.RemoteModelConfigs
+import com.picme.agent.core.api.android.RemoteModelConfigs
 
 // 枚举已迁移至 domain.model.UserPreferences，调用方请从 com.picme.domain.model 导入
 

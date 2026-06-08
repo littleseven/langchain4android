@@ -1,10 +1,10 @@
 package com.picme.domain.agent
 
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.remote.ExecutionPlan
-import com.picme.agent.core.remote.ExecutionResult
-import com.picme.agent.core.remote.PlanStep
-import com.picme.agent.core.remote.StepResult
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.execution.ExecutionPlan
+import com.picme.agent.core.api.execution.ExecutionResult
+import com.picme.agent.core.api.execution.PlanStep
+import com.picme.agent.core.api.execution.StepResult
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking

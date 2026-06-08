@@ -1,13 +1,13 @@
 package com.picme.domain.agent.capability
 
 import com.picme.core.common.Logger
-import com.picme.agent.core.BaseCapability
-import com.picme.agent.core.model.AgentAction
-import com.picme.agent.core.model.AgentCommand
-import com.picme.agent.core.model.AgentContext
-import com.picme.agent.core.model.AgentErrorCode
-import com.picme.agent.core.model.PageContext
-import com.picme.agent.core.SceneManager
+import com.picme.agent.core.api.capability.BaseCapability
+import com.picme.agent.core.api.context.AgentAction
+import com.picme.agent.core.api.command.AgentCommand
+import com.picme.agent.core.api.context.AgentContext
+import com.picme.agent.core.api.context.AgentErrorCode
+import com.picme.agent.core.api.context.PageContext
+import com.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.navigation.NavController
