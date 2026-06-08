@@ -8,10 +8,10 @@
 
 - **能力层**：对外暴露稳定的 `api/` 接口（`BeautyPreviewEngine`、`BeautyParams`、`BeautySettings`、`FilterType`、`StyleFilter`、`Face`、`PhotoProcessor`、`FaceDetector` 等）。
 - **渲染实现层**：内部封装 OpenGL ES + EGL 多 Pass 渲染管线（`render/` 包），禁止外部直接引用。
-- **人脸检测层**：多引擎 ROI + Landmark 双阶段检测（`internal/facedetect/`），支持 MediaPipe / NCNN / MNN 三引擎独立配置。
+- **人脸检测层**：多引擎 ROI + Landmark 双阶段检测（`internal/facedetect/`），支持 MediaPipe / NCNN / MNN 三引擎独立配置，含 NV21/Image 零拷贝路径。
 - **帧同步系统**：独立的时序对齐机制（`internal/framesync/`），解决妆容甩飞问题，预览与录制链路共用同一套同步逻辑。
 - **录制系统**：GPU 离屏渲染视频录制（`recorder/`），复用预览渲染管线。
-- **性能目标**：零拷贝 GPU 数据流，单帧处理 ≤ 16ms（60fps），参数响应延迟 < 100ms，人脸检测 < 100ms（高端机）。
+- **性能目标**：零拷贝 GPU 数据流，单帧处理 ≤ 16ms（60fps），参数响应延迟 < 100ms，人脸检测 < 100ms（高端机）；零拷贝路径额外节省 3-5ms（跳过 YUV→ARGB CPU 转换）。
 - **拍照 GPU 化**：支持 GPU 离屏渲染拍照，复用预览同一套 Shader 管线，1080p < 300ms, 4K < 800ms。
 
 ---
@@ -264,10 +264,10 @@ override fun onCleared() {
 ### M2 已完成项
 
 - ✅ 多引擎 ROI + Landmark 双阶段检测（引擎类型独立配置）
-- ✅ NCNN Vulkan GPU 推理（RetinaFace + 2D106）
-- ✅ MNN Vulkan GPU 推理（RetinaFace + 2D106）
-- ✅ MNN GPU/CPU 推理（InsightFace 2D106 模型）
-- ✅ MediaPipe TFLite GPU 推理（FaceLandmarker）
+- ✅ NCNN Vulkan GPU 推理（RetinaFace + 2D106）+ `detectRetinaFaceFromNv21()` NV21 零拷贝
+- ✅ MNN Vulkan GPU 推理（RetinaFace + 2D106）+ `AtomicBoolean` CAS 非阻塞懒加载
+- ✅ MNN GPU/CPU 推理（2D106 模型）
+- ✅ MediaPipe TFLite GPU 推理（FaceLandmarker）+ `detect(mediaImage: Image)` 零拷贝
 - ✅ 帧同步系统（FrameSyncManager + MotionTracker）
 - ✅ GPU 离屏渲染拍照（PhotoProcessorImpl）
 - ✅ 美颜视频录制（BeautyVideoRecorder）
@@ -276,6 +276,7 @@ override fun onCleared() {
 - ✅ ANR 修复（异步初始化 + 懒加载）
 - ✅ NCNN OpenMP 崩溃修复（JNI_OnLoad 设置 KMP_AFFINITY）
 - ✅ 移除 armeabi-v7a（仅保留 arm64-v8a，节省 54MB）
+- ✅ MNN 初始化并发优化（`synchronized` → `AtomicBoolean` CAS）
 
 ### M3 待办项
 
@@ -301,8 +302,8 @@ override fun onCleared() {
 | 浮雕 | Emboss Shader（3×3 卷积核） | ✅ |
 | 交叉线 | Crosshatch Shader（基于亮度绘制交叉线） | ✅ |
 | 色调滤镜 | ColorMatrix（OpenGL Shader） | ✅ |
-| 人脸关键点 | MediaPipe 468→106 / InsightFace 2D106 | ✅ |
-| **多引擎人脸检测** | MediaPipe / NCNN / MNN 三引擎独立配置 | ✅ |
+| 人脸关键点 | MediaPipe 468→106 / NCNN 2D106 / MNN 2D106 | ✅ |
+| **多引擎人脸检测** | MediaPipe / NCNN / MNN 三引擎独立配置 + 零拷贝路径 | ✅ |
 | **帧同步系统** | FrameSyncManager + MotionTracker 速度外推 | ✅ |
 | **GPU 拍照** | PhotoProcessorImpl（离屏渲染复用预览管线） | ✅ |
 | **视频录制美颜** | BeautyVideoRecorder 复用预览渲染管线 | ✅ |
@@ -311,7 +312,8 @@ override fun onCleared() {
 
 ## 人脸检测引擎性能基准
 
-> 测试日期：2026-05-24 | 测试模型：RetinaFace det_10g (ROI) + InsightFace 2D106 (Landmark)
+> 测试日期：2026-06-08 | 测试模型：RetinaFace det_10g (ROI) + 2D106 (Landmark)
+> 零拷贝路径（2026-06 新增）：NCNN NV21 跳过 Bitmap→RGB 拷贝（约 3-5ms），MediaPipe Image 跳过 YUV→ARGB 转换（约 5ms）
 
 ### 测试机型
 
@@ -342,11 +344,11 @@ override fun onCleared() {
 
 ### 关键结论
 
-1. **NCNN 是高端机最佳方案**：速度接近 MediaPipe，但保持 InsightFace 106 点精度
-2. **MediaPipe 是中端机最佳方案**：TFLite GPU delegate 优化好，跨设备性能稳定
-3. **MNN ROI 性能一般**：Vulkan 后端对 640x640 RetinaFace 优化不足，中端机 CPU  fallback 耗时较长
-
+1. **NCNN 是高端机最佳方案**：速度接近 MediaPipe，但保持 2D106 点精度；NV21 零拷贝路径额外节省 3-5ms
+2. **MediaPipe 是中端机最佳方案**：TFLite GPU delegate 优化好，跨设备性能稳定；Image 零拷贝额外节省约 5ms
+3. **MNN ROI 性能一般**：Vulkan 后端对 640x640 RetinaFace 优化不足，中端机 CPU fallback 耗时较长
 4. **GPU 算力是主要瓶颈**：同一模型同一框架，Adreno 740+ 比 Adreno 620 快 10-20 倍
+5. **零拷贝收益**：NV21/Image 路径消除 YUV→Bitmap→RGB 多重 CPU 拷贝，每帧节省 3-8ms
 
 ### 已知问题与修复
 
@@ -354,6 +356,8 @@ override fun onCleared() {
 |------|------|------|----------|
 | NCNN OpenMP 崩溃 | `SIGABRT` in `__kmp_affinity_initialize` | `setenv("KMP_AFFINITY", "disabled")` 调用太晚 | 提前到 `JNI_OnLoad` 中设置 |
 | ANR (启动卡死) | Input dispatching timed out | 检测器在 `init {}` 中同步初始化 | 改为协程异步初始化 + 懒加载 |
+| MNN 初始化阻塞渲染线程 | `synchronized` 导致分析线程等待 1s+ | 重型模型加载同步执行 | 切换为 `AtomicBoolean` CAS 非阻塞模式 |
+| MNN 初始化时丢帧 | `onResourceManagerLoad()` 中执行推理初始化 | 回调线程被长时间占用 | 延迟到下一次 `detect()` 调用 |
 
 ---
 
