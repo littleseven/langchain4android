@@ -1,7 +1,7 @@
 # MNN 模型卸载触发机制文档
 
 > **文档编号**: TECH-SPEC-MNN-UNLOAD-001
-> **关联模块**: `domain/agent/MnnResourceManager.kt`
+> **关联模块**: `agent-core/src/main/java/com/picme/agent/core/mnn/MnnResourceManager.kt`
 > **最后更新**: 2026-06-06
 
 ---
@@ -341,8 +341,8 @@ MnnResourceManager.getInstance(context).apply {
 
 | 文件 | 说明 |
 |------|------|
-| `app/src/main/java/com/picme/domain/agent/MnnResourceManager.kt` | 协调管理器核心实现 |
-| `app/src/main/java/com/picme/domain/agent/LocalLlmEngine.kt` | LLM 引擎，接入 ResourceManager |
+| `agent-core/src/main/java/com/picme/agent/core/mnn/MnnResourceManager.kt` | 协调管理器核心实现 |
+| `agent-core/src/main/java/com/picme/agent/core/LocalLlmEngine.kt` | LLM 引擎，接入 ResourceManager |
 | `app/src/main/java/com/picme/features/camera/voice/SherpaMnnAsrEngine.kt` | ASR 引擎，接入 ResourceManager |
 | `app/src/main/java/com/picme/features/camera/voice/VoiceCommandCoordinator.kt` | 语音协调器，触发 ASR 释放 |
 | `app/src/main/java/com/picme/features/camera/CameraScreen.kt` | 相机页面，生命周期绑定 |

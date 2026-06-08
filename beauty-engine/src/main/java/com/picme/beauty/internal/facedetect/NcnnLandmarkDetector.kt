@@ -125,30 +125,14 @@ class NcnnLandmarkDetector(
         val cropResult = prepareInputBitmap(bitmap, roi)
         val prepElapsed = SystemClock.elapsedRealtime() - prepStart
 
-        Logger.d(TAG, "[Perf] NcnnLandmark START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, input=${cropResult.bitmap.width}x${cropResult.bitmap.height}, roi=$roi")
-
         val inferStart = SystemClock.elapsedRealtime()
         val result = det.detect(cropResult.bitmap)
-        val inferElapsed = SystemClock.elapsedRealtime() - inferStart
-
-        if (result != null && result.isNotEmpty()) {
-            val sb = StringBuilder("[Diag] NCNN raw output first 10 points: ")
-            for (i in 0 until minOf(10, result.size / 2)) {
-                sb.append("(${String.format("%.3f", result[i * 2])},${String.format("%.3f", result[i * 2 + 1])}) ")
-            }
-            Logger.d(TAG, sb.toString())
-        }
-
-        val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
         if (result == null || result.isEmpty()) {
-            Logger.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), no landmarks")
             return null
         }
 
         val landmarks = parseLandmarks(result, bitmap.width, bitmap.height, cropResult.inverseTransform)
-
-        Logger.d(TAG, "[Perf] NcnnLandmark DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (prep=${prepElapsed}ms, infer=${inferElapsed}ms), points=${landmarks.size / 2}")
         return landmarks
     }
 

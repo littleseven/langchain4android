@@ -686,5 +686,5 @@ fun onAiAgentCommand(command: AiAgentCommand) {
 
 ### B. 相关代码
 - [AiAgentUseCase.kt](../../app/src/main/java/com/picme/domain/usecase/AiAgentUseCase.kt)
-- [AgentOrchestrator.kt](../../app/src/main/java/com/picme/domain/agent/AgentOrchestrator.kt)
-- [AgentCommands.kt](../../app/src/main/java/com/picme/domain/agent/model/AgentCommands.kt)
+- [AgentOrchestrator.kt](../../agent-core/src/main/java/com/picme/agent/core/AgentOrchestrator.kt)  ← 已迁移至 agent-core
+- [AgentCommands.kt](../../agent-core/src/main/java/com/picme/agent/core/model/AgentCommands.kt)  ← 已迁移至 agent-core

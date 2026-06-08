@@ -217,7 +217,7 @@ class PhotoProcessorImpl {
 }
 ```
 
-> **关键差异**：早期设计中的 `BeautyShaderChain` 类（含 `SmoothingShader`/`WhiteningShader` 等独立 Shader 类）未实际落地。实际实现中，`BeautyRenderer` 内部通过统一的主 Shader（`FRAGMENT_SHADER_BEAUTY`）和独立的 `FaceMakeupPass` 处理妆容，通过 `uniform` 参数控制各效果开关和强度。
+> **关键差异**：早期设计中的 `BeautyShaderChain` 类（含 `SmoothingShader`/`WhiteningShader` 等独立 Shader 类）未实际落地。实际实现中，GLSL 源码已迁移至 `assets/shaders/` 并通过 `ShaderModuleLoader` 按需加载；`BeautyRenderer` 内部通过多 Pass 管线（CopyPass → BeautyUnitPass → FaceMakeupPass → MainShader/style effect）和独立的 `FaceMakeupPass` 处理妆容，通过 `uniform` 参数控制各效果开关和强度。注意：早期常量名 `FRAGMENT_SHADER_BEAUTY` 已随 GLSL 迁移而移除。
 
 ### 3.3 预览与拍照复用
 

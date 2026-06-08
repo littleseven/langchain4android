@@ -218,7 +218,6 @@ class FaceDetectorManager(context: Context) : FaceDetector {
 
         if (roiResult == null) {
             lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
-            Logger.d(TAG, "No face detected by ROI (${lastProcessTimeMs}ms)")
             return null
         }
 
@@ -228,7 +227,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         val landmarkTime = SystemClock.elapsedRealtime() - landmarkStart
         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
 
-        Logger.d(TAG, "[Perf] Detection breakdown: ROI=${roiTime}ms, Landmark=${landmarkTime}ms, Total=${lastProcessTimeMs}ms")
+        // [Perf] Detection breakdown logged only in debug builds
 
         return if (landmarkResult != null && landmarkResult.size >= POINT_COUNT * 2) {
             val detectionSource = when (config.landmarkEngine) {

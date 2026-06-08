@@ -195,8 +195,11 @@ Task JSON（标准化任务描述）
 - **Acceptance**: AC-P0-1, AC-P0-2
 
 #### DetectionQueue 改造 [kimi-task:fsm-003]
+
+> **⚠️ 审计备注（2026-06）**：DetectionQueue 未落地（`DetectionQueue.kt` 不存在）。此 [kimi-task] 标记的目标文件路径无效。当前使用同步检测路径。如需实施异步检测改造，应先创建 DetectionQueue.kt 再更新此任务标记。
+
 - **Assignee**: RD
-- **Scope**: `beauty-engine/src/main/java/com/picme/beauty/internal/framesync/DetectionQueue.kt`
+- **Scope**: `beauty-engine/src/main/java/com/picme/beauty/internal/framesync/DetectionQueue.kt`（⏳ 设计中，未落地）
 - **Expected Change**:
   1. 创建 `DetectionQueue` 类，深度限制 2，超时 200ms
   2. 改造人脸检测线程为消费队列模式

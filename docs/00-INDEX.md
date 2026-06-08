@@ -137,7 +137,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`TASK_MARKUP_SPEC.md`](./05-DEVELOPMENT/TASK_MARKUP_SPEC.md) | `[kimi-task]` 标记语法与解析规则 | PM/CO |
 | [`CODE_REVIEW_CHECKLIST.md`](./05-DEVELOPMENT/CODE_REVIEW_CHECKLIST.md) | CR 检查项与一票否决项 | CR/RD |
 | [`PLAN-AGENT-UI.md`](./05-DEVELOPMENT/PLAN-AGENT-UI.md) | Agent UI 层实现计划（含 Plan 消息气泡） | RD |
-| [`PLAN-REMOTE-LLM-ORCHESTRATION.md`](./05-DEVELOPMENT/PLAN-REMOTE-LLM-ORCHESTRATION.md) | 远程 LLM 混合编排架构实现计划 | RD |
+| [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](../03-TECHNICAL-SPECS/REMOTE_LLM_ORCHESTRATION_DESIGN.md) | 远程 LLM 混合编排架构设计（详见技术规范） | RD |
 
 **核心内容**：
 - Spec ↔ Code 双向演进规则

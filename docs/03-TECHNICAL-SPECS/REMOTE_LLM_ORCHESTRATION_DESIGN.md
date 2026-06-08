@@ -102,11 +102,11 @@
 
 | 组件 | 职责 | 位置 |
 |------|------|------|
-| `InferenceRouter` | 输入特征分析 + 本地/远程路由决策 | `domain/agent/` |
-| `RemoteOrchestrator` | 远程 LLM 交互、Prompt 构建、响应解析 | `domain/agent/remote/` |
-| `ExecutionEngine` | ExecutionPlan 顺序执行、条件判断、状态管理 | `domain/agent/` |
-| `ExecutionReporter` | 执行结果收集、报告生成、UI 状态流推送 | `domain/agent/` |
-| `SceneContextCollector` | **预留**：场景上下文收集（时间/光线/偏好） | `domain/agent/`（接口层） |
+| `InferenceRouter` | 输入特征分析 + 本地/远程路由决策 | `agent.core/` (InferenceRouter.kt) |
+| `RemoteOrchestrator` | 远程 LLM 交互、Prompt 构建、响应解析 | `agent.core.remote/` (RemoteOrchestrator.kt) |
+| `ExecutionEngine` | ExecutionPlan 顺序执行、条件判断、状态管理 | `agent.core/` (ExecutionEngine.kt) |
+| `ExecutionReporter` | 执行结果收集、报告生成、UI 状态流推送 | `agent.core/` (ExecutionReporter.kt) |
+| `SceneContextCollector` | **预留**：场景上下文收集（时间/光线/偏好） | `agent.core/`（接口层） |
 
 ---
 

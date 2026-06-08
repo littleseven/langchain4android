@@ -183,16 +183,10 @@ class MnnRoiDetector(
             val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
             val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
-            Logger.d(TAG, "[Perf] MnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
-
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
-            val inferElapsed = SystemClock.elapsedRealtime() - inferStart
-
-            val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
             if (result == null || result.size < 5) {
-                Logger.d(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
                 return null
             }
 
@@ -207,8 +201,6 @@ class MnnRoiDetector(
             val padLeft = (INPUT_SIZE - scaledW) / 2f
             val padTop = (INPUT_SIZE - scaledH) / 2f
 
-            Logger.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
-            Logger.d(TAG, "[Diag] Raw MNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
 
             // [对齐 ONNX] 1. 减去 letterbox padding，再除以缩放比例，映射回原图
             var mappedX1 = ((result[0] - padLeft) / scale)
@@ -231,9 +223,6 @@ class MnnRoiDetector(
 
             val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
 
-            Logger.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
-
-            Logger.i(TAG, "[Perf] MnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), GPU✓")
             roi
         } catch (e: Exception) {
             Logger.e(TAG, "MnnRoi detection failed", e)

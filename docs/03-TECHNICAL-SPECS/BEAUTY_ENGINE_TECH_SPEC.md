@@ -461,7 +461,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
 - **触发条件**：`BeautyStrategy.BIG_BEAUTY`（默认值，唯一值）
 - **路由类**：`GlBeautyPreviewStrategy`
 - **Provider**：`GlBeautyPreviewProvider` → `BeautyPreviewView` → `CameraPreviewRenderer`
-- **人脸检测**：默认使用 MediaPipe Face Mesh 468→106 输出构建 `FaceWarpParams`，InsightFace 2D106（MNN 后端）作为备选，再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV
+- **人脸检测**：默认使用 MediaPipe Face Mesh 468→106 输出构建 `FaceWarpParams`，MNN 2D106 或 NCNN 2D106 作为备选（通过 DetectionPipelineFactory 配置），再由 `CameraPreviewRenderer.mapViewNormalizedToUv()` 映射到纹理 UV。旧 InsightFace ONNX 路径已完全移除。
 - **容灾**：warm-up 失败调用 `onGlWarmUpFallback(reason)` 上报，由 `CameraRuntimeState` 持久化
 
 ### 4.3 下一步技术项（RD，优先级排序）
@@ -491,7 +491,7 @@ M0=(0.119,0.380)  M1=(0.125,0.391)  ...  M16=(0.500,0.552)  ...  M31=(0.875,0.39
   - [x] `OcrUseCase` 实现下沉至 `data/local/MlKitOcrProcessor`，domain 层仅保留 `OcrProcessor` 接口。
   - [x] 新增 `domain/repository/UserSettingsRepository` 接口，ViewModel 依赖接口而非实现类。
   - [x] `PhotoProcessorImpl` GPU 离屏渲染拍照路径落地，预览/拍照 Shader 管线统一。
-  - [x] 帧同步美妆框架（`FrameSyncManager`、`MotionTracker`、`DetectionQueue`）落地。
+  - [x] 帧同步美妆框架（`FrameSyncManager`、`MotionTracker`、`FrameSyncBridge`）落地。`DetectionQueue`/`FaceDetectionWorker` 为设计期概念未实现，当前使用同步检测路径。
 - 剩余事项（⏳ 待排期）：
   - [ ] gallery 层 ViewModel 依赖审计与收敛。
   - [ ] camera 层其余直接调用 data 层的用例审计。
@@ -618,7 +618,7 @@ suspend fun triggerManualGlEngineRecovery() {
 
 ### 7.4 QA 与回归检查
 
-QA 相关内容已提取到独立文档：`docs/BIG_BEAUTY_QA_EXECUTION_CHECKLIST.md`
+QA 相关内容已提取到独立文档：`docs/06-QA/QA_EXECUTION_CHECKLIST.md`
 
 ---
 

@@ -72,25 +72,23 @@ CameraX ImageProxy
 ### 4.1 引擎选择（EngineType）
 
 - `MEDIAPIPE`：直接使用 `MediaPipeFaceDetector.detect()`
-- `INSIGHTFACE`：使用可配置流水线（ROI + Landmark）后再统一映射
+- `MNN` / `NCNN`：使用可配置流水线（ROI + Landmark）后再统一映射
 
-### 4.2 InsightFace 流水线组合（DetectionPipelineConfig）
+### 4.2 MNN/NCNN 流水线组合（DetectionPipelineConfig）
+
+> **⚠️ 审计备注（2026-06）**：原 InsightFace 流水线已随 ONNX 路径移除。当前 MNN/NCNN 备选引擎使用独立 ROI+Landmark 配置。
 
 ROI 检测器：
 
 - `RoiDetectorType.MEDIAPIPE`
-- `RoiDetectorType.DET10G`
+- `RoiDetectorType.MNN`（RetinaFace）
+- `RoiDetectorType.NCNN`
 
 Landmark 检测器：
 
-- `LandmarkDetectorType.INSIGHTFACE_2D106`
-- `LandmarkDetectorType.MEDIAPIPE`
-
-有效组合示例：
-
-- MediaPipe ROI + InsightFace 2D106（默认）
-- Det10G ROI + InsightFace 2D106
-- Det10G ROI + MediaPipe Landmark（用于诊断对照）
+- `LandmarkDetectorType.MEDIAPIPE_468`
+- `LandmarkDetectorType.MNN_2D106`
+- `LandmarkDetectorType.NCNN_2D106`
 
 ## 5. 关键映射与坐标约束
 
@@ -104,15 +102,15 @@ Landmark 检测器：
 
 参考：`docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
 
-### 5.2 InsightFace 原生 106 -> 统一 106
+### 5.2 MNN 原生 106 -> 统一 106
 
-由 `InsightFaceAdapter` 实现：
+由 `MnnLandmarkAdapter` 实现：使用 FULL_REMAP 对 106 点完整重排。不存在 `index -> same index` 直通点。前置镜头：`x = 1 - x`。
 
-- 使用 `FULL_REMAP` 对 106 点完整重排
-- 不存在 `index -> same index` 直通点
-- 前置镜头：`x = 1 - x`
+### 5.3 NCNN 原生 106 -> 统一 106
 
-参考：`docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
+由 `NcnnLandmarkAdapter` 实现：使用 FULL_REMAP 对 106 点完整重排。前置镜头：`x = 1 - x`。
+
+> **⚠️ 已废弃（2026-06）**：原 `InsightFaceAdapter.kt` 已删除。历史存档 — InsightFace 原生 106 -> 统一 106 映射参考：`docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`（已标记废弃）。如需恢复 InsightFace 支持，需从模型仓库重新引入 ONNX 模型并重新实现适配器。
 
 ## 6. 当前行为边界（避免文档误读）
 

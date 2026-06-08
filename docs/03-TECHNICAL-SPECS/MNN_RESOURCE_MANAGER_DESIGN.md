@@ -1,7 +1,7 @@
 # MNN 共享资源协调管理器设计文档
 
 > **文档编号**: TECH-SPEC-MNN-RM-001
-> **关联模块**: `domain/agent/`, `features/camera/voice/`
+> **关联模块**: `agent-core/src/main/java/com/picme/agent/core/mnn/` (MnnResourceManager), `agent-core/src/main/java/com/picme/agent/core/voice/` (SherpaMnnAsrEngine)
 > **最后更新**: 2026-06-06
 
 ---
@@ -109,14 +109,14 @@ ASR 请求释放  →  releaseAsr()
 
 ### 4.1 MnnResourceManager
 
-- **位置**: `domain/agent/MnnResourceManager.kt`
+- **位置**: `agent-core/src/main/java/com/picme/agent/core/mnn/MnnResourceManager.kt`
 - **职责**: 引用计数管理、生命周期监听、内存压力响应、事件分发
 - **线程安全**: 所有计数器使用 `AtomicInteger`，监听器使用 `CopyOnWriteArrayList`
 - **单例**: 进程级唯一实例
 
 ### 4.2 LocalLlmEngine
 
-- **位置**: `domain/agent/LocalLlmEngine.kt`
+- **位置**: `agent-core/src/main/java/com/picme/agent/core/LocalLlmEngine.kt`
 - **变更**:
   - `loadModel()` 成功后调用 `resourceManager.acquireLlm()`
   - `unload()` 改为调用 `resourceManager.releaseLlm()`，传入 `performUnload` 和 `trimMemory` 回调

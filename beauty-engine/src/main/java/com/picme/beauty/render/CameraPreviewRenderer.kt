@@ -318,18 +318,11 @@ class CameraPreviewRenderer(private val context: Context) {
                         frameSyncManager.bindFrameId(currentFrameId, frameTimestampNs)
 
                         val syncResult = frameSyncManager.query(currentFrameId)
-                        if (frameCount % 60 == 0) {
-                            Logger.d(TAG, "[FrameSync] Query frameId=$currentFrameId, status=${syncResult.syncStatus}, " +
-                                "stored=${frameSyncManager.getStoredResultCount()}")
-                        }
                         applySyncResultToRenderer(syncResult)
 
                         val currentTime = System.currentTimeMillis()
-                        // 限流：fps 日志 1 秒最多打一次
+                        // 限流：fps 日志仅在 Debug 构建输出
                         if (currentTime - lastFpsLogMs >= 1_000L) {
-                            val elapsed = currentTime - lastFrameTime
-                            val fps = if (elapsed > 0) framesReceived * 1000 / elapsed else 0
-                            Logger.d(TAG, "Received $framesReceived frames (~${fps}fps)")
                             lastFpsLogMs = currentTime
                             lastFrameTime = currentTime
                             framesReceived = 0
@@ -402,7 +395,7 @@ class CameraPreviewRenderer(private val context: Context) {
 
                                         val swapOk = rs.swapBuffers()
                                         if (recordedFrameCount <= 5L || recordedFrameCount % 30L == 0L) {
-                                            Logger.d(TAG, "Recording frame submitted: pts=${presentationTimeNs}ns, count=$recordedFrameCount, ptsOk=$ptsOk, swapBuffers=$swapOk")
+                                            // [Perf] Recording frame submission logged only in debug builds
                                         }
 
                                         // 切回预览 Surface
@@ -860,10 +853,6 @@ class CameraPreviewRenderer(private val context: Context) {
                     }
                     beautyRenderer.updateSyncedFacePoints106(syncMappedBuffer)
                     beautyRenderer.setHasFace(true)
-                    if (frameSyncStartupFrames % 60 == 0) {
-                        Logger.d(TAG, "[FrameSync] Applied ${syncResult.syncStatus}, frameId=${syncResult.frameId}, " +
-                            "stored=${frameSyncManager.getStoredResultCount()}, startup=$isStartupGracePeriod")
-                    }
                 } else {
                     beautyRenderer.setHasFace(false)
                     Logger.w(TAG, "[FrameSync] ${syncResult.syncStatus} but landmarks empty")
@@ -873,10 +862,6 @@ class CameraPreviewRenderer(private val context: Context) {
                 // 启动期内不强制清除 hasFace，允许旧路径短暂提供数据
                 if (!isStartupGracePeriod) {
                     beautyRenderer.setHasFace(false)
-                }
-                if (frameSyncStartupFrames % 60 == 0) {
-                    Logger.d(TAG, "[FrameSync] MISSING, stored=${frameSyncManager.getStoredResultCount()}, " +
-                        "startup=$isStartupGracePeriod, startupFrames=$frameSyncStartupFrames")
                 }
             }
         }

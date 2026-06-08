@@ -161,7 +161,8 @@ app/src/main/java/com/picme/features/camera/debug/
 ### 3.1 当前 Agent 模块结构
 
 ```
-app/src/main/java/com/picme/domain/agent/           # ~7939 行总计
+app/src/main/java/com/picme/domain/agent/           # ~~~7939 行~~~ → 已迁移至 :agent-core（~5000 行），当前仅剩 Facade/AiAgentUseCase/CapabilityRegistry 等桥接层
+agent-core/src/main/java/com/picme/agent/core/        # Agent Runtime 核心（从 domain/agent/ 迁移）
 ├── AgentCommandParser.kt       # 596 行 - 命令解析
 ├── AgentOrchestrator.kt        # 601 行 - 编排器（单例）
 ├── CapabilityRegistry.kt       # 768 行 - 能力注册表 + 队列
@@ -255,6 +256,8 @@ app/src/main/java/com/picme/domain/agent/           # ~7939 行总计
 
 | 文件 | 位置 | 说明 |
 |------|------|------|
+> **迁移状态（2026-06 审计）**：以上迁移均已落地。`Capability.kt`, `CommandExecutor.kt`, `CrossPageCommandQueue.kt`, `AgentCommands.kt`, `AgentModels.kt`, `ExecutionState.kt`, `InferenceResult.kt`, `MediaAsset.kt`, `PageContext.kt`, `SceneContext.kt`, `ExecutionPlan.kt` 均已在 `agent-core/` 中。`CapabilityRegistry.kt`, `AgentOrchestrator.kt`, `AgentConfigurator.kt` 仍在 app/ 中（Facade/策略路由层）。
+
 | `CapabilityRegistry.kt` | `app/.../domain/agent/` | 使用 `:agent-core` 的 `CommandExecutor` + `CrossPageCommandQueue` |
 | `AgentOrchestrator.kt` | `app/.../domain/agent/` | 使用 `:agent-core` 的模型和接口 |
 | `AgentConfigurator.kt` | `app/.../domain/agent/` | 平台特定组件配置 |

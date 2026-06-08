@@ -154,7 +154,7 @@ fun calculateEyeDistance() {
 | **UI 展示层** | 人脸坐标系 | 用户更容易理解"左眼"、"右眼" | 调试浮层标签、设置界面文案 |
 | **业务逻辑层** | 图像坐标系（推荐）或人脸坐标系 | 根据团队习惯统一选择 | 美颜参数计算、关键点分析 |
 | **渲染引擎层** | **必须**使用图像坐标系 | GPU Shader、OpenGL 原生支持 | BeautyRenderer、Shader 处理 |
-| **算法处理层** | **必须**使用图像坐标系 | OpenCV、MediaPipe 等库的标准 | InsightFaceAdapter、坐标转换 |
+| **算法处理层** | **必须**使用图像坐标系 | OpenCV、MediaPipe、MnnLandmarkAdapter、NcnnLandmarkAdapter、坐标转换 |
 
 ---
 
@@ -448,7 +448,7 @@ chmod +x .git/hooks/pre-commit
 
 **优先级**：
 1. 渲染引擎层（BeautyRenderer、Shader）
-2. 人脸检测适配层（InsightFaceAdapter、MediaPipeAdapter）
+2. 人脸检测适配层（MnnLandmarkAdapter、NcnnLandmarkAdapter、MediaPipe468Adapter）
 3. 坐标转换工具类
 
 **任务**：
@@ -631,7 +631,7 @@ scripts/check-doc-coordinate-annotation.sh # ✅ 通过
 
 - [COORDINATE_SYSTEM.md](../../07-STANDARDS/COORDINATE_SYSTEM.md) - 坐标系规范详细说明
 - [CAMERA_PREVIEW_TECH_SPEC.md](../../03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
-- [INSIGHTFACE_106_MAPPING.md](../../03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md) - 关键点映射文档
+- [INSIGHTFACE_106_MAPPING.md](../../03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md) - ⚠️ 已废弃（InsightFace 路径移除，见历史存档）
 
 ### 7.2 技术文档
 
@@ -673,7 +673,7 @@ scripts/check-doc-coordinate-annotation.sh # ✅ 通过
 
 #### Q4: 如何处理第三方 SDK 的坐标系？
 
-**A**: 在适配层统一转换。当前代码中，MediaPipe / InsightFace 的坐标转换逻辑内嵌在检测适配层（如 `FaceDetectionManager` 及相关检测器实现）中，未提取为独立的 `MLKitAdapter` 类。以下示例展示了理想的适配层设计：
+**A**: 在适配层统一转换。当前代码中，MediaPipe / MNN / NCNN 的坐标转换逻辑内嵌在检测适配层（如 `FaceDetectionManager` 及相关检测器实现）中，未提取为独立的通用适配器类。以下示例展示了理想的适配层设计（InsightFace 路径已于 2026-05 移除）：
 
 #### Q5: Code Review 时如何快速发现混用问题？
 

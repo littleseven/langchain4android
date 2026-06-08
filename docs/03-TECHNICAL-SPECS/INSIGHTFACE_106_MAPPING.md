@@ -1,5 +1,14 @@
 # 大美丽 106 与 InsightFace 106 映射说明
 
+> **⚠️ 已废弃 (OBSOLETE) — 2026-06 审计确认**
+> InsightFace ONNX 检测路径已于 2026-05 完全移除，`InsightFaceAdapter.kt` 已删除（0 个 `InsightFace*.kt` 文件残留）。
+> 本文档中的映射表仅作为**历史存档**保留。当前 106 点映射由以下文件各自实现：
+> - MediaPipe 468→106: `beauty-engine/.../adapter/MediaPipe468Adapter.kt`
+> - MNN 2D106→106: `beauty-engine/.../adapter/MnnLandmarkAdapter.kt`
+> - NCNN 2D106→106: `beauty-engine/.../adapter/NcnnLandmarkAdapter.kt`
+>
+> 如需恢复 InsightFace 支持，需从模型仓库重新引入 ONNX 模型并重新实现此适配器。
+
 ## 1. 文档目的
 
 本文档记录 PicMe 工程中 InsightFace 106 点到统一 106 标准（大美丽 106）的完整映射关系。

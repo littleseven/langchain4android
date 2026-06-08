@@ -111,7 +111,7 @@ textureFBO.unbind()
 **核心组件**:
 - `FrameId`: 全局单调递增帧标识符
 - `FrameSyncManager`: 帧同步管理器
-- `DetectionQueue`: 检测队列
+- `DetectionQueue`: 检测队列（📋 设计中，未落地 — 同步检测路径仍在 CameraFrameAnalyzer 中直接调用 detect()）
 - `MatchEngine`: 匹配引擎
 
 **工作流程**:

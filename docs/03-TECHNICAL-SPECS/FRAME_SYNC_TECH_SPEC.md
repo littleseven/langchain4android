@@ -1,7 +1,8 @@
 # 技术文档：帧同步美妆系统（Frame-Sync Makeup System）
 
 **版本**：1.1
-**状态**：🔄 部分实现（核心组件 FrameSyncManager / MotionTracker / DetectionQueue / FrameSyncBridge 已落地；预测补偿算法与 hide 降级策略待收尾）
+**状态**：🔄 部分实现（核心组件 FrameSyncManager / MotionTracker / FrameSyncBridge 已落地；预测补偿算法与 hide 降级策略待收尾）
+> ⚠️ **审计备注（2026-06）**：`DetectionQueue` 和 `FaceDetectionWorker` 为**设计期概念**，从未实际落地（对应 .kt 文件不存在）。当前使用同步检测路径（CameraFrameAnalyzer 直接调用 faceDetector.detect()）。本文档 Section 3.2 及 10(代码变更清单) 中关于 DetectionQueue 的内容均为设计方案，非已落地代码。
 **依赖**：`BIG_BEAUTY_TECH_SPEC.md`（已落地）
 **最后更新**：2026-05-24
 
@@ -32,9 +33,11 @@
 │           │                                                                  │
 │           ▼ FrameId + ImageProxy                                            │
 │  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐       │
-│  │  DetectionQueue │────▶│ FaceDetector    │────▶│ DetectionResult │       │
-│  │  (带FrameId队列) │     │ (InsightFace/   │     │ (106点+FrameId) │       │
-│  │   深度=2,超时丢帧 │     │  MediaPipe)     │     │                 │       │
+│  │  📋 DetectionQueue │────▶│ FaceDetector    │────▶│ DetectionResult │       │
+│  │  (设计概念，未落地) │     │ (MediaPipe/MNN/  │     │ (106点+FrameId) │       │
+│  │   深度=2,超时丢帧 │     │  NCNN)          │     │                 │       │
+│  │  > 注：未实现，当前 │     │                 │     │                 │       │
+│  │    使用同步检测路径 │     │                 │     │                 │       │
 │  └─────────────────┘     └─────────────────┘     └────────┬────────┘       │
 │                                                           │                  │
 │                                                           ▼                  │
@@ -109,6 +112,8 @@ beautyRenderer.applyFrameSyncResult(syncResult)
 
 ### 3.2 DetectionQueue（检测输入队列）
 
+> **⚠️ 设计概念（未落地）**：以下 DetectionQueue 为设计方案，当前代码库中 `DetectionQueue.kt` 不存在。同步检测路径仍在 CameraFrameAnalyzer 中直接调用 `faceDetector.detect()`。保留本节供未来异步检测改造参考。
+
 ```kotlin
 /**
  * 带帧ID的检测任务队列
@@ -151,6 +156,8 @@ class DetectionQueue(
 ```
 
 **检测线程改造**：
+
+> **⚠️ 设计概念（未落地）**：以下检测线程改造为设计方案，当前仍使用同步检测路径。
 
 ```kotlin
 // FaceDetectorManager.detect() 改为消费队列
@@ -534,7 +541,7 @@ data class BeautyPerfStats(
 ### 6.3 日志字段
 
 ```
-[FrameSync] frameId=1024, status=EXACT_MATCH, latency=32ms, source=INSIGHTFACE
+[FrameSync] frameId=1024, status=EXACT_MATCH, latency=32ms, source=MEDIAPIPE
 [FrameSync] frameId=1025, status=PREDICTED, latency=48ms, offset=5.1px, framesSinceDetection=2
 [FrameSync] frameId=1026, status=MISSING, hidden=true, framesSinceDetection=4
 ```
@@ -629,11 +636,11 @@ FrameSyncManager 初始化失败
 | `beauty-engine/.../FrameId.kt` | 新增 | 全局帧 ID |
 | `beauty-engine/.../FrameSyncManager.kt` | 新增 | 时序对齐核心 |
 | `beauty-engine/.../MotionTracker.kt` | 新增 | 运动预测 |
-| `beauty-engine/.../DetectionQueue.kt` | 新增 | 检测任务队列 |
+| `beauty-engine/.../DetectionQueue.kt` | 新增（⏳ 设计中，未落地） | 检测任务队列 |
 | `CameraPreviewRenderer.kt` | 修改 | 集成 FrameSyncManager |
 | `BeautyRenderer.kt` | 修改 | 新增同步接口 |
 | `FaceMakeupPass.kt` | 修改 | 新增同步入口 |
-| `FaceDetectorManager.kt` | 修改 | 改为消费队列 |
+| `FaceDetectorManager.kt` | 修改（⏳ 设计中，未落地） | 改为消费队列 |
 | `BeautyPerfStats.kt` | 修改 | 新增帧同步指标 |
 | `GlBeautyPreviewProvider.kt` | 修改 | 透传帧同步配置 |
 

@@ -76,19 +76,19 @@ App Layer → 大美丽模块 (混合业务逻辑+GPU实现)
 ### 4.1 模块结构
 ```
 beauty-engine/src/main/java/com/picme/beauty/
-├── api/                    # Domain Layer - 公开接口
+├── api/                    # Domain Layer - 实现层 API（依赖 :beauty-api 共享类型）
 │   ├── BeautyPreviewProvider.kt   # 预览 Provider 接口
 │   ├── BeautyPreviewEngine.kt     # 组合接口（Provider + Capability）
 │   ├── BeautyPreviewCapability.kt # GL 能力扩展（FaceWarp/LipMask）
 │   ├── PhotoProcessor.kt          # 拍照后处理接口
-│   ├── BeautyParams.kt            # Shader 参数
-│   ├── FaceData.kt                # 人脸数据（拍照后处理用）
-│   ├── FilterType.kt              # 色调滤镜枚举
-│   ├── StyleFilter.kt             # 风格特效枚举
-│   ├── BeautyPerfStats.kt         # 性能统计
-│   ├── FrameId.kt                 # 帧同步标识
-│   ├── FrameSyncConfig.kt         # 帧同步配置
-│   └── FrameSyncResult.kt         # 帧同步结果
+│   ├── BeautyParams.kt            # Shader 参数（来自 :beauty-api）
+│   ├── BeautyPerfStats.kt         # 性能统计（来自 :beauty-api）
+│   ├── FilterTypeExt.kt           # FilterType 扩展（来自 :beauty-api）
+│   ├── StyleFilterExt.kt          # StyleFilter 扩展（来自 :beauty-api）
+│   ├── FrameId.kt                 # 帧同步标识（来自 :beauty-api）
+│   ├── FrameSyncConfig.kt         # 帧同步配置（来自 :beauty-api）
+│   └── FrameSyncResult.kt         # 帧同步结果（来自 :beauty-api）
+│   > **Note**: `BeautyParams`, `FilterType`, `StyleFilter`, `FaceData`, `FrameId`, `FrameSyncConfig`, `FrameSyncResult`, `BeautyPerfStats` 等类型定义在 `:beauty-api` 模块，`beauty-engine:api/` 仅保留实现相关接口。
 └── render/                 # Data Layer - 自研引擎 GL 渲染实现
     ├── GlBeautyPreviewProvider.kt   # Provider 接口实现
     ├── CameraPreviewRenderer.kt     # 渲染管线核心
@@ -106,9 +106,10 @@ beauty-engine/src/main/java/com/picme/beauty/
 
 ### 4.2 依赖规则 (Gradle)
 ```groovy
-// App 层（只允许依赖 api）
+// App 层（只允许依赖 api 层类型）
 dependencies {
-    implementation project(':beauty-engine')
+    implementation project(':beauty-api')      // 共享类型契约（BeautySettings, FilterType, StyleFilter, Face 等）
+    implementation project(':beauty-engine')     // 实现层
     // 禁止: implementation project(':beauty-engine:render')
 }
 

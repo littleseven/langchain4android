@@ -74,7 +74,7 @@ AudioRecorder → VAD 检测 → ASR 识别 → LLM 解析 → 命令执行
 ```
 
 **关键参数**
-- VAD 阈值：30dB（平衡灵敏度与误触发）
+- VAD 阈值：40dB（平衡灵敏度与误触发）
 - 最小语音时长：100ms
 - 最大片段时长：4000ms
 - 静音超时：800ms
@@ -161,7 +161,7 @@ AudioRecorder → VAD 检测 → ASR 识别 → LLM 解析 → 命令执行
 
 ### 2.4 技术约束
 
-- **人脸检测**：InsightFace 2D106（默认），MediaPipe 468→106（备选）
+- **人脸检测**：MediaPipe Face Mesh 468→106（默认），MNN 2D106 / NCNN 2D106（备选）。InsightFace ONNX 路径已完全移除
 - **渲染引擎**：自研 OpenGL ES 管线（大美丽）
 - **拍照处理**：GPU 离屏渲染，预览/输出一致性
 

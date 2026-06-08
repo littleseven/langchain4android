@@ -1,7 +1,7 @@
 # MNN 模型卸载测试用例文档
 
 > **文档编号**: TECH-SPEC-MNN-TEST-001
-> **关联模块**: `domain/agent/MnnResourceManager.kt`
+> **关联模块**: `agent-core/src/main/java/com/picme/agent/core/mnn/MnnResourceManager.kt`
 > **最后更新**: 2026-06-06
 
 ---
@@ -369,5 +369,5 @@ cat /tmp/mnn_unload_test_*.log
 |------|------|
 | `docs/03-TECHNICAL-SPECS/MNN_RESOURCE_MANAGER_DESIGN.md` | 设计文档 |
 | `docs/03-TECHNICAL-SPECS/MNN_UNLOAD_TRIGGER_MECHANISM.md` | 触发机制文档 |
-| `app/src/main/java/com/picme/domain/agent/MnnResourceManager.kt` | 协调管理器 |
+| `agent-core/src/main/java/com/picme/agent/core/mnn/MnnResourceManager.kt` | 协调管理器 |
 | `scripts/test-mnn-unload.sh` | 自动化测试脚本（本文件配套） |

@@ -1400,11 +1400,7 @@ CameraPreviewContent(
                         previewView = previewView
                     )
 
-                    Log.d(
-                        TAG,
-                        "AndroidView update: useProviderRenderView=$useProviderRenderView, strategy=${activePreviewStrategy.strategy}, " +
-                            "targetView=${targetDecision.targetView}"
-                    )
+                    // [Perf] Compose recomposition logs removed; kept only error paths
 
                     if (targetDecision.scheduleProviderFallback) {
                         Logger.w("Camera", "Provider render view missing, fallback to PreviewView and request rebind")
@@ -1419,7 +1415,6 @@ CameraPreviewContent(
                     val targetView = targetDecision.targetView
 
                     if (targetView.parent !== container) {
-                        Log.d(TAG, "AndroidView update: targetView.parent=${targetView.parent}, container=$container, adding view")
                         (targetView.parent as? ViewGroup)?.removeView(targetView)
                         container.removeAllViews()
                         container.addView(
@@ -1430,7 +1425,7 @@ CameraPreviewContent(
                             )
                         )
                     } else {
-                        Log.d(TAG, "AndroidView update: targetView already in container, skip adding")
+                        // view already attached, skip
                     }
                 }
             )

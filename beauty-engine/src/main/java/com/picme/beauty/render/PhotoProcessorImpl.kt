@@ -84,7 +84,6 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
     override fun process(bitmap: Bitmap, params: BeautyParams, faceData: FaceData?): Bitmap {
         val startTime = System.currentTimeMillis()
-        Logger.d(TAG, "process START: bitmap=${bitmap.width}x${bitmap.height}, enabled=${params.enabled}")
 
         try {
             // 1. 初始化 EGL 环境（如果未初始化）并绑定到当前线程
@@ -100,7 +99,6 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
             // 2. 检查纹理尺寸限制（必须在 EGL 上下文绑定后调用）
             val maxTextureSize = getMaxTextureSize()
-            Logger.d(TAG, "Max texture size: $maxTextureSize (thread: ${Thread.currentThread().name})")
             if (maxTextureSize <= 0) {
                 throw PhotoProcessException("Failed to query GL_MAX_TEXTURE_SIZE (returned $maxTextureSize)")
             }
@@ -127,9 +125,6 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
             // 8. 读取 FBO 到 Bitmap
             val result = readPixelsToBitmap(bitmap.width, bitmap.height, outputTexture)
-
-            val elapsed = System.currentTimeMillis() - startTime
-            Logger.d(TAG, "process DONE: elapsed=${elapsed}ms")
 
             return result
         } catch (e: PhotoProcessException) {
@@ -242,7 +237,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         // PBO 初始化（当前禁用，需要 OpenGL ES 3.0）
         // if (usePbo) { initPbo(width, height) }
 
-        Logger.d(TAG, "FBO created: ${width}x${height}, texture=$fboTextureId")
+        Logger.d(TAG, "FBO created: ${width}x${height}")
     }
 
     // PBO 相关方法已移除（需要 OpenGL ES 3.0）
@@ -269,7 +264,7 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)
 
-        Logger.d(TAG, "Bitmap uploaded to texture: $inputTextureId")
+        Logger.d(TAG, "Bitmap uploaded to texture")
     }
 
     /**
@@ -381,10 +376,10 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             if (faceData.landmarks106 != null) {
                 renderer.updateFacePoints106(faceData.landmarks106)
                 renderer.setUseGpupixelWarp(true)
-                Logger.d(TAG, "PhotoProcessor: using GPUPixel warp (landmarks106 available)")
+                Logger.d(TAG, "Photo: using GPUPixel warp (landmarks106 available)")
             } else {
                 renderer.setUseGpupixelWarp(false)
-                Logger.d(TAG, "PhotoProcessor: falling back to traditional warp (no landmarks106)")
+                Logger.d(TAG, "Photo: using traditional warp (no landmarks106)")
             }
         } else {
             // 无人脸：重置人脸状态（默认值已基于 UV 坐标系，无需翻转）
@@ -417,17 +412,12 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         // [关键修复] 调用完整的渲染管线，确保与预览一致
         // 这会执行：BeautyUnitPass → FaceMakeupPass → MainShader
-        Logger.d(TAG, "Before renderBeautyMultiPass: inputTex=$inputTextureId, fbo=$fboId")
 
         // 设置输入纹理 ID（让 BeautyRenderer 从该纹理采样）
         renderer.setExternalTextureId(inputTextureId)
 
         // 绑定我们的 FBO 作为渲染目标
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboId)
-
-        // [调试] 检查 FBO 状态
-        val fboStatus = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
-        Logger.d(TAG, "FBO status before renderBeautyMultiPass: $fboStatus")
 
         // 清屏
         GLES20.glClearColor(0f, 0f, 0f, 1f)
@@ -444,7 +434,6 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
 
         if (needMultiPass) {
             // [关键修复] 使用与预览完全一致的完整多 Pass 管线
-            Logger.d(TAG, "Photo needs multi-pass pipeline, using renderBeautyMultiPass")
             renderer.renderBeautyMultiPass(
                 width = width,
                 height = height,
@@ -453,7 +442,6 @@ class PhotoProcessorImpl(private val context: Context) : PhotoProcessor {
             )
         } else {
             // 无需多 Pass：直接主 Shader
-            Logger.d(TAG, "Photo does not need multi-pass, using MainShader directly")
             renderer.renderMainShaderFromFbo2D(inputTextureId, width, height)
         }
 
