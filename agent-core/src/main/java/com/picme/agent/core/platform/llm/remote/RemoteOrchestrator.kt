@@ -343,17 +343,18 @@ class RemoteOrchestrator(
         jsonObject: JSONObject,
         context: AgentContext
     ): AgentCommand {
-        val method = jsonObject.optString("method", "")
+        val normalizedCommand = mergeParamsIntoRoot(jsonObject)
+        val method = normalizedCommand.optString("method", normalizedCommand.optString("action", ""))
 
         return when (method) {
             "adjust_beauty" -> {
-                val smoothing = jsonObject.optDouble("smoothing", context.beautySettings.smoothing.toDouble()).toFloat()
-                val whitening = jsonObject.optDouble("whitening", context.beautySettings.whitening.toDouble()).toFloat()
-                val slimFace = jsonObject.optDouble("slim_face", context.beautySettings.slimFace.toDouble()).toFloat()
-                val bigEyes = jsonObject.optDouble("big_eyes", context.beautySettings.bigEyes.toDouble()).toFloat()
-                val lipColor = jsonObject.optDouble("lip_color", context.beautySettings.lipColor.toDouble()).toFloat()
-                val blush = jsonObject.optDouble("blush", context.beautySettings.blush.toDouble()).toFloat()
-                val eyebrow = jsonObject.optDouble("eyebrow", context.beautySettings.eyebrow.toDouble()).toFloat()
+                val smoothing = normalizedCommand.optDouble("smoothing", context.beautySettings.smoothing.toDouble()).toFloat()
+                val whitening = normalizedCommand.optDouble("whitening", context.beautySettings.whitening.toDouble()).toFloat()
+                val slimFace = normalizedCommand.optDouble("slim_face", context.beautySettings.slimFace.toDouble()).toFloat()
+                val bigEyes = normalizedCommand.optDouble("big_eyes", context.beautySettings.bigEyes.toDouble()).toFloat()
+                val lipColor = normalizedCommand.optDouble("lip_color", context.beautySettings.lipColor.toDouble()).toFloat()
+                val blush = normalizedCommand.optDouble("blush", context.beautySettings.blush.toDouble()).toFloat()
+                val eyebrow = normalizedCommand.optDouble("eyebrow", context.beautySettings.eyebrow.toDouble()).toFloat()
                 AgentCommand.AdjustBeauty(
                     settings = context.beautySettings.copy(
                         enabled = true,
@@ -368,53 +369,64 @@ class RemoteOrchestrator(
                 )
             }
             "switch_filter" -> {
-                val filterName = jsonObject.optString("filter", "NONE")
+                val filterName = normalizedCommand.optString("filter", "NONE")
                 AgentCommand.SwitchFilter(filterType = resolveFilterType(filterName))
             }
             "switch_style" -> {
-                val styleName = jsonObject.optString("style", "NONE")
+                val styleName = normalizedCommand.optString("style", "NONE")
                 AgentCommand.SwitchStyle(styleFilter = resolveStyleFilter(styleName))
             }
             "switch_scene" -> {
-                val scene = jsonObject.optString("scene", "none")
+                val scene = normalizedCommand.optString("scene", "none")
                 AgentCommand.SwitchScene(sceneName = scene)
             }
             "switch_ratio" -> {
-                val ratio = jsonObject.optString("ratio", "full")
+                val ratio = normalizedCommand.optString("ratio", "full")
                 AgentCommand.SwitchRatio(ratio = ratio)
             }
             "adjust_exposure" -> {
-                val exposure = jsonObject.optInt("exposure", 0)
+                val exposure = normalizedCommand.optInt("exposure", 0)
                 AgentCommand.AdjustExposure(exposure = exposure.coerceIn(-2, 2))
             }
             "adjust_zoom" -> {
-                val zoom = jsonObject.optDouble("zoom", 1.0).toFloat()
+                val zoom = normalizedCommand.optDouble("zoom", 1.0).toFloat()
                 AgentCommand.AdjustZoom(zoomRatio = zoom.coerceAtLeast(0.5f))
             }
             "flip_camera" -> AgentCommand.FlipCamera()
             "capture", "photo" -> AgentCommand.CapturePhoto()
             "toggle_recording" -> AgentCommand.ToggleRecording()
             "delay" -> {
-                val delayMs = jsonObject.optLong("delay_ms", 3000)
+                val delayMs = normalizedCommand.optLong("delay_ms", 3000)
                 AgentCommand.Delay(delayMs = delayMs.coerceIn(1, 300000))
             }
             "switch_mode" -> {
-                val modeName = jsonObject.optString("mode", "PHOTO")
+                val modeName = normalizedCommand.optString("mode", "PHOTO")
                 val mode = runCatching { MediaType.valueOf(modeName) }
                     .getOrDefault(MediaType.PHOTO)
                 AgentCommand.SwitchMode(mode = mode)
             }
             "text_reply" -> {
-                val message = jsonObject.optString("message", "收到")
+                val message = normalizedCommand.optString("message", "收到")
                 AgentCommand.TextReply(message = message)
             }
             "navigate_to" -> {
-                val destination = jsonObject.optString("destination", "")
+                val destination = normalizedCommand.optString("destination", "")
                 AgentCommand.NavigateTo(destination = destination)
             }
             "go_back" -> AgentCommand.GoBack()
             else -> AgentCommand.TextReply(message = "收到，有什么其他需要帮忙的吗？")
         }
+    }
+
+    private fun mergeParamsIntoRoot(jsonObject: JSONObject): JSONObject {
+        val paramsObject = jsonObject.optJSONObject("params") ?: return jsonObject
+        val merged = JSONObject(jsonObject.toString())
+        paramsObject.keys().forEach { key ->
+            if (!merged.has(key) || merged.isNull(key)) {
+                merged.put(key, paramsObject.opt(key))
+            }
+        }
+        return merged
     }
 
     // ── 辅助方法 ───────────────────────────────────────────────
