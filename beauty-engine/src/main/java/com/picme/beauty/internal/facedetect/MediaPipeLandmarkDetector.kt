@@ -1,10 +1,9 @@
 package com.picme.beauty.internal.facedetect
 
-import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.RectF
 import android.media.Image
 import com.picme.beauty.api.Logger
-import android.graphics.RectF
 
 /**
  * 基于 MediaPipe 的关键点检测器
