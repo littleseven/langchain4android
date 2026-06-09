@@ -595,11 +595,16 @@ internal fun handleImageAnalysisFrameMediaPipe(
                         if (shouldRunLandmarkOnly) {
                             val cachedRoi = FaceDetectionCache.getCachedRoiNormalized()
                             if (cachedRoi != null) {
+                                // [关键修复] normalizedRoi 基于旋转后尺寸归一化，
+                                // 反归一化时也必须用旋转后尺寸（rotation=90/270 时宽高互换）
+                                val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+                                val rotatedW = if (needSwap) imageProxy.height else imageProxy.width
+                                val rotatedH = if (needSwap) imageProxy.width else imageProxy.height
                                 nv21Result = RectF(
-                                    cachedRoi.left * imageProxy.width,
-                                    cachedRoi.top * imageProxy.height,
-                                    cachedRoi.right * imageProxy.width,
-                                    cachedRoi.bottom * imageProxy.height
+                                    cachedRoi.left * rotatedW,
+                                    cachedRoi.top * rotatedH,
+                                    cachedRoi.right * rotatedW,
+                                    cachedRoi.bottom * rotatedH
                                 )
                                 Logger.dThrottled("Camera", "reuse_roi", "[Perf] Reuse cached ROI for landmark-only path: $nv21Result")
                                 FaceDetectionRuntimeStats.markRoiReused()
@@ -656,7 +661,10 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 if (nv21Result != null) {
                     val lmStart = SystemClock.elapsedRealtime()
                     val landmarkResult = (faceDetector as FaceDetectorManager).detectLandmarksWithRoi(
-                        bitmap, lensFacing, nv21Result)
+                        bitmap, lensFacing, nv21Result,
+                        nv21Width = imageProxy.width,
+                        nv21Height = imageProxy.height,
+                        rotationDegrees = rotationDegrees)
                     val lmElapsed = SystemClock.elapsedRealtime() - lmStart
                     Logger.dThrottled("Camera", "nv21_path", "[Perf] NV21 ROI(${detectionEngineMode.name}) + Bitmap Landmark: ${lmElapsed}ms, roi=${nv21Result}")
                     detectionResult = landmarkResult

@@ -222,7 +222,7 @@ class NcnnRoiDetector(
      * @param height 原始图像高度
      * @return 原图坐标的 ROI 矩形，未检测到返回 null
      */
-    fun detectRoiFromYuv(nv21Data: ByteBuffer, width: Int, height: Int): RectF? {
+    fun detectRoiFromYuv(nv21Data: ByteBuffer, width: Int, height: Int, rotationDegrees: Int = 0): RectF? {
         ensureInitialized()
 
         val det = detector ?: run {
@@ -232,20 +232,27 @@ class NcnnRoiDetector(
 
         return synchronized(NCNN_GLOBAL_LOCK) {
             try {
-                val result = det.detectRetinaFaceFromNv21(nv21Data, width, height,
-                    CONFIDENCE_THRESHOLD, 0.3f)
+                val result = det.detectRetinaFaceFromNv21(
+                    nv21Data,
+                    width,
+                    height,
+                    rotationDegrees,
+                    CONFIDENCE_THRESHOLD,
+                    0.3f
+                )
 
                 if (result == null || result.size < 5) {
                     return@synchronized null
                 }
 
-                // C++ 层 preprocessFromNv21 内部做了 letterbox + resize → INPUT_SIZE × INPUT_SIZE
-                // 输出坐标在 INPUT_SIZE 空间，需要映射回原图
-                val origW = width.toFloat()
-                val origH = height.toFloat()
-                val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
-                val scaledW = (origW * scale).toInt()
-                val scaledH = (origH * scale).toInt()
+                // C++ 层 preprocessFromNv21 内部做了 rotation + letterbox + resize → INPUT_SIZE × INPUT_SIZE
+                // 输出坐标在 INPUT_SIZE 空间，需要映射回旋转后坐标系。
+                val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+                val rotatedW = if (needSwap) height.toFloat() else width.toFloat()
+                val rotatedH = if (needSwap) width.toFloat() else height.toFloat()
+                val scale = INPUT_SIZE.toFloat() / maxOf(rotatedW, rotatedH)
+                val scaledW = (rotatedW * scale).toInt()
+                val scaledH = (rotatedH * scale).toInt()
                 val padLeft = (INPUT_SIZE - scaledW) / 2f
                 val padTop = (INPUT_SIZE - scaledH) / 2f
 
@@ -261,10 +268,10 @@ class NcnnRoiDetector(
                 val newWidth = w * ROI_EXPAND_RATIO
                 val newHeight = h * ROI_EXPAND_RATIO
 
-                mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
-                mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
-                mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
-                mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+                mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, rotatedW)
+                mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, rotatedH)
+                mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, rotatedW)
+                mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, rotatedH)
 
                 Logger.d(TAG, "[Perf] NcnnRoi YUV detection: result=$result, roi=(${mappedX1.toInt()},${mappedY1.toInt()},${mappedX2.toInt()},${mappedY2.toInt()})")
                 RectF(mappedX1, mappedY1, mappedX2, mappedY2)

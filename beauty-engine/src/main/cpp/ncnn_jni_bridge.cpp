@@ -255,6 +255,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
         jobject nv21Data,        // DirectByteBuffer (compact NV21)
         jint width,
         jint height,
+        jint rotationDegrees,    // 旋转角度 (0/90/180/270)
         jfloat confidenceThreshold,
         jfloat nmsThreshold,
         jfloatArray outResult) {
@@ -271,7 +272,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
     }
 
     std::vector<picme::FaceBox> faces = detector->detectRetinaFaceFromNv21(
-            data, width, height, confidenceThreshold, nmsThreshold);
+            data, width, height, rotationDegrees, confidenceThreshold, nmsThreshold);
 
     if (faces.empty()) {
         return JNI_FALSE;
@@ -307,6 +308,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
     (void)nv21Data;
     (void)width;
     (void)height;
+    (void)rotationDegrees;
     (void)confidenceThreshold;
     (void)nmsThreshold;
     (void)outResult;

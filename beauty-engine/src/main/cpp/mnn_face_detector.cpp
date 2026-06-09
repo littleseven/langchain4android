@@ -1,6 +1,7 @@
 #include "mnn_face_detector.h"
 #include <android/log.h>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -11,7 +12,27 @@
 #define LOGI(...) do { if (picme::MnnFaceDetector::isLogEnabled()) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__); } while(0)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+#if defined(NDEBUG)
+#define LOGD_VERBOSE(...) do {} while(0)
+#else
+#define LOGD_VERBOSE(...) LOGD(__VA_ARGS__)
+#endif
+
 namespace picme {
+
+namespace {
+constexpr uint32_t kMatrixLogInterval = 30U;
+constexpr uint32_t kClampLogInterval = 30U;
+std::atomic<uint32_t> gMatrixLogCounter{0U};
+std::atomic<uint32_t> gClampLogCounter{0U};
+
+inline bool shouldLogSample(std::atomic<uint32_t>& counter, uint32_t interval) {
+    if (interval <= 1U) {
+        return true;
+    }
+    return (counter.fetch_add(1, std::memory_order_relaxed) % interval) == 0U;
+}
+} // namespace
 
 bool MnnFaceDetector::logEnabled_ = true;
 
@@ -698,10 +719,12 @@ MNN::CV::Matrix MnnFaceDetector::buildNv21TransformMatrix(int srcWidth, int srcH
     //       | 0  0   1 |   | 0  0  1 |
     trans.setAll(a, b, tx, c, d, ty, 0.0f, 0.0f, 1.0f);
 
-    LOGD("buildNv21TransformMatrix: src=%dx%d, rot=%d, roi=[%d,%d,%d,%d], "
-         "rotated=%dx%d, scale=%.4f, pad=[%.1f,%.1f], matrix=[%.4f,%.4f,%.2f,%.4f,%.4f,%.2f]",
-         srcWidth, srcHeight, rotationDegrees, roiLeft, roiTop, roiRight, roiBottom,
-         rotatedW, rotatedH, scale, padLeft, padTop, a, b, tx, c, d, ty);
+    if (shouldLogSample(gMatrixLogCounter, kMatrixLogInterval)) {
+        LOGD_VERBOSE("buildNv21TransformMatrix: src=%dx%d, rot=%d, roi=[%d,%d,%d,%d], "
+                     "rotated=%dx%d, scale=%.4f, pad=[%.1f,%.1f], matrix=[%.4f,%.4f,%.2f,%.4f,%.4f,%.2f]",
+                     srcWidth, srcHeight, rotationDegrees, roiLeft, roiTop, roiRight, roiBottom,
+                     rotatedW, rotatedH, scale, padLeft, padTop, a, b, tx, c, d, ty);
+    }
 
     return trans;
 }
@@ -899,12 +922,13 @@ std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data
     roiRight = std::max(0, std::min(roiRight, roiMaxX));
     roiBottom = std::max(0, std::min(roiBottom, roiMaxY));
 
-    if (rawRoiLeft != roiLeft || rawRoiTop != roiTop ||
-        rawRoiRight != roiRight || rawRoiBottom != roiBottom) {
-        LOGD("detectFromNv21(ROI) clamp: raw=[%d,%d,%d,%d], clamped=[%d,%d,%d,%d], rot=%d, max=[%d,%d]",
-             rawRoiLeft, rawRoiTop, rawRoiRight, rawRoiBottom,
-             roiLeft, roiTop, roiRight, roiBottom,
-             rotationDegrees, roiMaxX, roiMaxY);
+    if ((rawRoiLeft != roiLeft || rawRoiTop != roiTop ||
+         rawRoiRight != roiRight || rawRoiBottom != roiBottom) &&
+        shouldLogSample(gClampLogCounter, kClampLogInterval)) {
+        LOGD_VERBOSE("detectFromNv21(ROI) clamp: raw=[%d,%d,%d,%d], clamped=[%d,%d,%d,%d], rot=%d, max=[%d,%d]",
+                     rawRoiLeft, rawRoiTop, rawRoiRight, rawRoiBottom,
+                     roiLeft, roiTop, roiRight, roiBottom,
+                     rotationDegrees, roiMaxX, roiMaxY);
     }
 
     int roiW = roiRight - roiLeft;

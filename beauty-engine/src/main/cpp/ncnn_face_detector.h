@@ -73,6 +73,7 @@ public:
     std::vector<FaceBox> detectRetinaFaceFromNv21(const unsigned char *nv21Data,
                                                   int width,
                                                   int height,
+                                                  int rotationDegrees = 0,
                                                   float confidenceThreshold = 0.5f,
                                                   float nmsThreshold = 0.4f);
 
@@ -114,8 +115,8 @@ private:
 #if NCNN_AVAILABLE
     // 辅助函数：预处理图像数据到 ncnn::Mat
     ncnn::Mat preprocess(const unsigned char *imageData, int width, int height, int channels);
-    // [Zero-Copy] NV21 YUV → RGB + resize + letterbox + normalize 一体化
-    ncnn::Mat preprocessFromNv21(const unsigned char *nv21Data, int width, int height);
+    // [Zero-Copy] NV21 YUV → RGB + rotation + resize + letterbox + normalize 一体化
+    ncnn::Mat preprocessFromNv21(const unsigned char *nv21Data, int width, int height, int rotationDegrees);
 #endif
 };
 

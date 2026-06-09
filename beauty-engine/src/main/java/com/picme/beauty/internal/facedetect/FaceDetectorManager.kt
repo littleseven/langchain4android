@@ -175,7 +175,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 }
                 InferenceBackendType.NCNN -> {
                     val ncnnRoi = roiDetector as? NcnnRoiDetector
-                    ncnnRoi?.detectRoiFromYuv(nv21Data, width, height)
+                    ncnnRoi?.detectRoiFromYuv(nv21Data, width, height, rotationDegrees)
                 }
                 else -> {
                     Logger.d(TAG, "NV21 path not available for ${config.roiEngine}")
@@ -205,7 +205,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
      *
      * @return FaceDetectionResult（含 106 landmarks），或 null
      */
-     fun detectLandmarksWithRoi(bitmap: Bitmap, lensFacing: Int, roi: RectF): FaceDetectionResult? {
+     fun detectLandmarksWithRoi(bitmap: Bitmap, lensFacing: Int, roi: RectF,
+                                       nv21Width: Int = 0, nv21Height: Int = 0,
+                                       rotationDegrees: Int = 0): FaceDetectionResult? {
         if (!isPipelineInitialized) {
             Logger.w(TAG, "Pipeline not initialized")
             return null
@@ -214,10 +216,29 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         val startTime = SystemClock.elapsedRealtime()
         val config = pipelineConfig ?: return null
 
+        // [关键修复] ROI 坐标在"旋转后原始分辨率"空间（如 720×1280 旋转90°后为 1280×720），
+        // 而 Bitmap 是 imageProxyToBitmap 生成的已旋转+缩放图（如 320×180）。
+        // 需要将 ROI 从旋转后原始分辨率映射到 Bitmap 像素空间。
+        val mappedRoi: RectF = if (nv21Width > 0 && nv21Height > 0) {
+            val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+            val rotatedW = if (needSwap) nv21Height else nv21Width
+            val rotatedH = if (needSwap) nv21Width else nv21Height
+            val scaleX = bitmap.width.toFloat() / rotatedW.toFloat()
+            val scaleY = bitmap.height.toFloat() / rotatedH.toFloat()
+            RectF(
+                roi.left * scaleX,
+                roi.top * scaleY,
+                roi.right * scaleX,
+                roi.bottom * scaleY
+            )
+        } else {
+            roi
+        }
+
         return try {
             synchronized(lock) {
                 val lmStart = SystemClock.elapsedRealtime()
-                val landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, roi)
+                val landmarkResult = landmarkDetector?.detectLandmarks(bitmap, lensFacing, mappedRoi)
                 val lmTime = SystemClock.elapsedRealtime() - lmStart
                 lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
 
@@ -238,12 +259,26 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 val adaptedResult = adapter.adapt(landmarkResult, lensFacing).getOrNull()
                     ?: return null
 
-                val normalizedRoi = RectF(
-                    roi.left / bitmap.width.toFloat(),
-                    roi.top / bitmap.height.toFloat(),
-                    roi.right / bitmap.width.toFloat(),
-                    roi.bottom / bitmap.height.toFloat()
-                )
+                // [关键修复] normalizedRoi 必须基于旋转后原始分辨率归一化，
+                // 而非 Bitmap 尺寸，因为 CameraFrameAnalyzer 使用 imageProxy.width/height 做反归一化。
+                val normalizedRoi = if (nv21Width > 0 && nv21Height > 0) {
+                    val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+                    val rotatedW = if (needSwap) nv21Height else nv21Width
+                    val rotatedH = if (needSwap) nv21Width else nv21Height
+                    RectF(
+                        roi.left / rotatedW.toFloat(),
+                        roi.top / rotatedH.toFloat(),
+                        roi.right / rotatedW.toFloat(),
+                        roi.bottom / rotatedH.toFloat()
+                    )
+                } else {
+                    RectF(
+                        mappedRoi.left / bitmap.width.toFloat(),
+                        mappedRoi.top / bitmap.height.toFloat(),
+                        mappedRoi.right / bitmap.width.toFloat(),
+                        mappedRoi.bottom / bitmap.height.toFloat()
+                    )
+                }
 
                 val useGpuForLandmark = config.landmarkEngine == InferenceBackendType.MNN ||
                     config.landmarkEngine == InferenceBackendType.NCNN

@@ -154,6 +154,7 @@ class NcnnFaceDetector private constructor(
             nv21Data: ByteBuffer,
             width: Int,
             height: Int,
+            rotationDegrees: Int,
             confidenceThreshold: Float,
             nmsThreshold: Float,
             outResult: FloatArray
@@ -237,6 +238,7 @@ class NcnnFaceDetector private constructor(
         nv21Data: ByteBuffer,
         width: Int,
         height: Int,
+        rotationDegrees: Int = 0,
         confidenceThreshold: Float = 0.5f,
         nmsThreshold: Float = 0.4f
     ): FloatArray? {
@@ -251,6 +253,7 @@ class NcnnFaceDetector private constructor(
         val outResult = getRetinaResult()
         val detected = nativeDetectRetinaFaceFromNv21(
             nativeHandle, nv21Data, width, height,
+            rotationDegrees,
             confidenceThreshold, nmsThreshold, outResult
         )
         return if (detected) outResult.copyOf() else null

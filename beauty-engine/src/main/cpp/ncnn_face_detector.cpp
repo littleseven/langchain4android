@@ -178,7 +178,7 @@ bool NcnnFaceDetector::load(const std::string &paramPath,
     return true;
 }
 
-ncnn::Mat NcnnFaceDetector::preprocessFromNv21(const unsigned char *nv21Data, int width, int height) {
+ncnn::Mat NcnnFaceDetector::preprocessFromNv21(const unsigned char *nv21Data, int width, int height, int rotationDegrees) {
     // [Zero-Copy] NV21 YUV → RGB + bilinear resize + letterbox + normalize 一体化
     // 单次内存遍历完成所有操作，对齐 MNN ImageProcess::convert 的零拷贝路径
     //
@@ -189,10 +189,15 @@ ncnn::Mat NcnnFaceDetector::preprocessFromNv21(const unsigned char *nv21Data, in
     const uint8_t* yPlane = nv21Data;
     const uint8_t* vuPlane = nv21Data + width * height;
 
-    // Letterbox 缩放：保持宽高比，居中，黑边填充
-    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
-    int scaledW = static_cast<int>(width * scale);
-    int scaledH = static_cast<int>(height * scale);
+    // 旋转后的逻辑尺寸（与 MNN NV21 路径保持一致）
+    bool needSwap = (rotationDegrees == 90 || rotationDegrees == 270);
+    int rotatedW = needSwap ? height : width;
+    int rotatedH = needSwap ? width : height;
+
+    // Letterbox 缩放：保持宽高比，居中，黑边填充（基于旋转后尺寸）
+    float scale = std::min((float)inputSize_ / rotatedW, (float)inputSize_ / rotatedH);
+    int scaledW = static_cast<int>(rotatedW * scale);
+    int scaledH = static_cast<int>(rotatedH * scale);
     int padLeft = (inputSize_ - scaledW) / 2;
     int padTop = (inputSize_ - scaledH) / 2;
 
@@ -214,18 +219,44 @@ ncnn::Mat NcnnFaceDetector::preprocessFromNv21(const unsigned char *nv21Data, in
 
     // 双线性采样：逐输出像素逆映射到源 NV21 坐标
     for (int dstY = 0; dstY < scaledH; dstY++) {
-        float srcY = (dstY + 0.5f) * invScale - 0.5f;
-        srcY = std::max(0.0f, std::min(srcY, (float)(height - 1)));
-        int srcY0 = static_cast<int>(srcY);
-        int srcY1 = std::min(srcY0 + 1, height - 1);
-        float fy = srcY - srcY0;
+        float rotatedY = (dstY + 0.5f) * invScale - 0.5f;
+        rotatedY = std::max(0.0f, std::min(rotatedY, (float)(rotatedH - 1)));
 
         for (int dstX = 0; dstX < scaledW; dstX++) {
-            float srcX = (dstX + 0.5f) * invScale - 0.5f;
-            srcX = std::max(0.0f, std::min(srcX, (float)(width - 1)));
-            int srcX0 = static_cast<int>(srcX);
+            float rotatedX = (dstX + 0.5f) * invScale - 0.5f;
+            rotatedX = std::max(0.0f, std::min(rotatedX, (float)(rotatedW - 1)));
+
+            // 旋转后坐标 -> 原始 NV21 坐标（与 MNN buildNv21TransformMatrix 保持一致）
+            float srcXF;
+            float srcYF;
+            switch (rotationDegrees) {
+                case 90:
+                    srcXF = rotatedY;
+                    srcYF = (float)(height - 1) - rotatedX;
+                    break;
+                case 180:
+                    srcXF = (float)(width - 1) - rotatedX;
+                    srcYF = (float)(height - 1) - rotatedY;
+                    break;
+                case 270:
+                    srcXF = (float)(width - 1) - rotatedY;
+                    srcYF = rotatedX;
+                    break;
+                default:
+                    srcXF = rotatedX;
+                    srcYF = rotatedY;
+                    break;
+            }
+
+            srcXF = std::max(0.0f, std::min(srcXF, (float)(width - 1)));
+            srcYF = std::max(0.0f, std::min(srcYF, (float)(height - 1)));
+
+            int srcX0 = static_cast<int>(srcXF);
+            int srcY0 = static_cast<int>(srcYF);
             int srcX1 = std::min(srcX0 + 1, width - 1);
-            float fx = srcX - srcX0;
+            int srcY1 = std::min(srcY0 + 1, height - 1);
+            float fx = srcXF - srcX0;
+            float fy = srcYF - srcY0;
 
             // --- Bilinear 采样 Y 通道 ---
             float y00 = yPlane[srcY0 * width + srcX0];
@@ -236,8 +267,8 @@ ncnn::Mat NcnnFaceDetector::preprocessFromNv21(const unsigned char *nv21Data, in
 
             // --- Bilinear 采样 V/U 通道（VU 交错平面）---
             int uvW = width / 2;
-            float uvSrcX = srcX * 0.5f;
-            float uvSrcY = srcY * 0.5f;
+            float uvSrcX = srcXF * 0.5f;
+            float uvSrcY = srcYF * 0.5f;
             int uvX0 = static_cast<int>(uvSrcX);
             int uvY0 = static_cast<int>(uvSrcY);
             int uvX1 = std::min(uvX0 + 1, uvW - 1);
@@ -611,6 +642,7 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
 std::vector<FaceBox> NcnnFaceDetector::detectRetinaFaceFromNv21(const unsigned char *nv21Data,
                                                                 int width,
                                                                 int height,
+                                                                int rotationDegrees,
                                                                 float confidenceThreshold,
                                                                 float nmsThreshold) {
     if (!loaded_) {
@@ -621,7 +653,7 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFaceFromNv21(const unsigned c
     auto totalStart = std::chrono::high_resolution_clock::now();
 
     auto t1 = std::chrono::high_resolution_clock::now();
-    ncnn::Mat in = preprocessFromNv21(nv21Data, width, height);
+    ncnn::Mat in = preprocessFromNv21(nv21Data, width, height, rotationDegrees);
     auto t2 = std::chrono::high_resolution_clock::now();
     auto preprocessMs = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
 
@@ -911,6 +943,7 @@ std::vector<FaceBox> NcnnFaceDetector::detectRetinaFace(const unsigned char *ima
 std::vector<FaceBox> NcnnFaceDetector::detectRetinaFaceFromNv21(const unsigned char *nv21Data,
                                                                 int width,
                                                                 int height,
+                                                                int rotationDegrees,
                                                                 float confidenceThreshold,
                                                                 float nmsThreshold) {
     (void)nv21Data;
