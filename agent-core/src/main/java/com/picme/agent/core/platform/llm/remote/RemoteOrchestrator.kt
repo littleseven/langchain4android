@@ -344,7 +344,7 @@ class RemoteOrchestrator(
         context: AgentContext
     ): AgentCommand {
         val normalizedCommand = mergeParamsIntoRoot(jsonObject)
-        val method = normalizedCommand.optString("method", normalizedCommand.optString("action", ""))
+        val method = normalizedCommand.optString("method", "")
 
         return when (method) {
             "adjust_beauty" -> {

@@ -104,7 +104,7 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `parse valid JSON command returns correct command`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = """{"action":"capture"}"""
+        val response = """{"method":"capture"}"""
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 
@@ -114,7 +114,7 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `parse adjust beauty command extracts all parameters`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = """{"action":"adjust_beauty","smoothing":80,"whitening":60,"slim_face":20}"""
+        val response = """{"method":"adjust_beauty","smoothing":80,"whitening":60,"slim_face":20}"""
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 
@@ -128,7 +128,7 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `parse navigate command returns NavigateTo`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = """{"action":"navigate_to","destination":"gallery"}"""
+        val response = """{"method":"navigate_to","destination":"gallery"}"""
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 
@@ -148,9 +148,9 @@ class AgentOrchestratorCommandChainTest {
     }
 
     @Test
-    fun `parse unknown action returns TextReply`() {
+    fun `parse unknown method returns TextReply`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = """{"action":"do_magic","param":"xyz"}"""
+        val response = """{"method":"do_magic","param":"xyz"}"""
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 
@@ -209,7 +209,7 @@ class AgentOrchestratorCommandChainTest {
 
         // 模拟 LLM 输出
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val parsedCommand = AgentCommandParser.parseLlmResponse("""{"action":"capture"}""", context)
+        val parsedCommand = AgentCommandParser.parseLlmResponse("""{"method":"capture"}""", context)
 
         // 分发并执行
         val result = registry.dispatch(parsedCommand, context)
@@ -231,7 +231,7 @@ class AgentOrchestratorCommandChainTest {
         registry.register(cameraCap)
 
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val parsedCommand = AgentCommandParser.parseLlmResponse("""{"action":"capture"}""", context)
+        val parsedCommand = AgentCommandParser.parseLlmResponse("""{"method":"capture"}""", context)
 
         val result = registry.dispatch(parsedCommand, context)
         advanceUntilIdle()
@@ -256,7 +256,7 @@ class AgentOrchestratorCommandChainTest {
 
         val context = AgentContext(scene = AgentScene.GALLERY)
         val parsedCommand = AgentCommandParser.parseLlmResponse(
-            """{"action":"navigate_to","destination":"settings"}""",
+            """{"method":"navigate_to","destination":"settings"}""",
             context
         )
 
@@ -274,7 +274,7 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `parse response with think tags strips them correctly`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = """<think>让我想想</think>{"action":"flip_camera"}"""
+        val response = """<think>让我想想</think>{"method":"flip_camera"}"""
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 
@@ -284,7 +284,7 @@ class AgentOrchestratorCommandChainTest {
     @Test
     fun `parse response with markdown code block strips fences`() {
         val context = AgentContext(scene = AgentScene.CAMERA)
-        val response = """```json\n{"action":"capture"}\n```"""
+        val response = """```json\n{"method":"capture"}\n```"""
 
         val command = AgentCommandParser.parseLlmResponse(response, context)
 

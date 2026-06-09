@@ -34,6 +34,11 @@ private object FaceDetectionFrameCounter {
     private const val BALANCED_MOTION_THRESHOLD = 0.05f
     private const val BALANCED_MAX_CONSECUTIVE_MOTION = 2
 
+    // [硬策略] ROI keyframe 间隔：静止低频ROI，运动中中频ROI
+    private const val HARD_ROI_KEYFRAME_STABLE_INTERVAL = 8
+    private const val HARD_ROI_KEYFRAME_MOTION_INTERVAL = 3
+    private const val HARD_ROI_MOTION_THRESHOLD = 0.035f
+
     private var counter = 0
     private var detectionIntervalFrames = BALANCED_DETECTION_INTERVAL
     private var minDetectionIntervalMs = BALANCED_MIN_INTERVAL_MS
@@ -57,6 +62,10 @@ private object FaceDetectionFrameCounter {
     // [过热修复] 连续运动检测计数器，防止快移场景下每帧都触发检测
     private var consecutiveMotionDetects = 0
     private var lastDetectionTriggeredByMotion = false
+
+    // [硬策略] ROI keyframe 计数
+    private var hardFrameCounter = 0
+    private var lastHardRoiKeyframeCounter = 0
 
     // [常量定义] 人脸关键点索引（106 点模型）
     internal const val LANDMARK_106_INDEX_X = 48
@@ -154,6 +163,42 @@ private object FaceDetectionFrameCounter {
     }
 
     /**
+     * ROI 复用硬策略：true=执行 FULL(ROI+Landmark)，false=执行 LANDMARK_ONLY（复用 ROI）
+     */
+    fun shouldForceRoiKeyframeHard(
+        currentFaceCenter: Offset?,
+        canReuseRoi: Boolean,
+        hasExistingFace: Boolean
+    ): Boolean {
+        hardFrameCounter++
+
+        if (!hasExistingFace || !canReuseRoi) {
+            return true
+        }
+
+        if (currentFaceCenter == null || lastFaceCenterX < 0f) {
+            return true
+        }
+
+        val deltaX = kotlin.math.abs(currentFaceCenter.x - lastFaceCenterX)
+        val deltaY = kotlin.math.abs(currentFaceCenter.y - lastFaceCenterY)
+        val isFastMotion = deltaX > HARD_ROI_MOTION_THRESHOLD || deltaY > HARD_ROI_MOTION_THRESHOLD
+
+        val keyframeInterval = if (isFastMotion) {
+            HARD_ROI_KEYFRAME_MOTION_INTERVAL
+        } else {
+            HARD_ROI_KEYFRAME_STABLE_INTERVAL
+        }
+
+        val framesSinceLastRoi = hardFrameCounter - lastHardRoiKeyframeCounter
+        return framesSinceLastRoi >= keyframeInterval
+    }
+
+    fun markRoiKeyframeUsed() {
+        lastHardRoiKeyframeCounter = hardFrameCounter
+    }
+
+    /**
      * 标记检测开始（由分析线程在 YUV 转换前调用）
      */
     fun markDetectionStart() {
@@ -190,6 +235,8 @@ private object FaceDetectionFrameCounter {
         isDetecting = false
         consecutiveMotionDetects = 0
         lastDetectionTriggeredByMotion = false
+        hardFrameCounter = 0
+        lastHardRoiKeyframeCounter = 0
 
         // 重置回默认均衡档
         adaptiveEnabled = true
@@ -198,6 +245,89 @@ private object FaceDetectionFrameCounter {
         minDetectionIntervalMs = BALANCED_MIN_INTERVAL_MS
         motionThreshold = BALANCED_MOTION_THRESHOLD
         maxConsecutiveMotion = BALANCED_MAX_CONSECUTIVE_MOTION
+        FaceDetectionRuntimeStats.reset()
+    }
+}
+
+private object FaceDetectionRuntimeStats {
+    private const val LOG_INTERVAL_MS = 1000L
+
+    private var windowStartMs = SystemClock.elapsedRealtime()
+    private var frameCount = 0
+    private var fullPlanCount = 0
+    private var landmarkOnlyPlanCount = 0
+    private var skipPlanCount = 0
+    private var roiExecCount = 0
+    private var roiReuseCount = 0
+    private var detectSuccessCount = 0
+    private var detectFailCount = 0
+
+    fun markPlan(shouldSkip: Boolean, shouldRunLandmarkOnly: Boolean) {
+        frameCount++
+        when {
+            shouldSkip -> skipPlanCount++
+            shouldRunLandmarkOnly -> landmarkOnlyPlanCount++
+            else -> fullPlanCount++
+        }
+        maybeLogWindow()
+    }
+
+    fun markRoiExecuted() {
+        roiExecCount++
+    }
+
+    fun markRoiReused() {
+        roiReuseCount++
+    }
+
+    fun markDetectionResult(success: Boolean) {
+        if (success) {
+            detectSuccessCount++
+        } else {
+            detectFailCount++
+        }
+        maybeLogWindow()
+    }
+
+    fun reset() {
+        windowStartMs = SystemClock.elapsedRealtime()
+        frameCount = 0
+        fullPlanCount = 0
+        landmarkOnlyPlanCount = 0
+        skipPlanCount = 0
+        roiExecCount = 0
+        roiReuseCount = 0
+        detectSuccessCount = 0
+        detectFailCount = 0
+    }
+
+    private fun maybeLogWindow() {
+        val now = SystemClock.elapsedRealtime()
+        val elapsed = now - windowStartMs
+        if (elapsed < LOG_INTERVAL_MS) return
+
+        val reuseRate = if (roiExecCount + roiReuseCount > 0) {
+            roiReuseCount * 100f / (roiExecCount + roiReuseCount).toFloat()
+        } else {
+            0f
+        }
+
+        Logger.i(
+            "Camera",
+            "[Perf][ROI-Stats] frames=$frameCount, plan(full=$fullPlanCount, lmOnly=$landmarkOnlyPlanCount, skip=$skipPlanCount), " +
+                "roi(exec=$roiExecCount, reuse=$roiReuseCount, reuseRate=${"%.1f".format(reuseRate)}%), " +
+                "detect(ok=$detectSuccessCount, fail=$detectFailCount), window=${elapsed}ms"
+        )
+
+        windowStartMs = now
+        frameCount = 0
+        fullPlanCount = 0
+        landmarkOnlyPlanCount = 0
+        skipPlanCount = 0
+        roiExecCount = 0
+        roiReuseCount = 0
+        detectSuccessCount = 0
+        detectFailCount = 0
     }
 }
 
@@ -344,8 +474,30 @@ internal fun handleImageAnalysisFrameMediaPipe(
             Offset(it.faceCenterX, it.faceCenterY)
         }
 
-        val shouldDetect = FaceDetectionFrameCounter.shouldDetect(lastFaceCenter)
-        val shouldSkipDetection = !shouldDetect && existingWarpParams?.hasFace == true
+        val hasExistingFace = (existingWarpParams?.hasFace == true) || FaceDetectionCache.isValid()
+        val canReuseRoi = FaceDetectionCache.isRoiValid()
+        val supportsRoiReuse = detectionEngineMode == EngineType.MNN || detectionEngineMode == EngineType.NCNN
+
+        val shouldRunLandmarkOnly: Boolean
+        val shouldSkipDetection: Boolean
+        if (supportsRoiReuse) {
+            val shouldForceRoiKeyframe = FaceDetectionFrameCounter.shouldForceRoiKeyframeHard(
+                currentFaceCenter = lastFaceCenter,
+                canReuseRoi = canReuseRoi,
+                hasExistingFace = hasExistingFace
+            )
+            shouldRunLandmarkOnly = hasExistingFace && canReuseRoi && !shouldForceRoiKeyframe
+            shouldSkipDetection = false
+        } else {
+            val shouldDetect = FaceDetectionFrameCounter.shouldDetect(lastFaceCenter)
+            shouldRunLandmarkOnly = false
+            shouldSkipDetection = !shouldDetect && hasExistingFace
+        }
+
+        FaceDetectionRuntimeStats.markPlan(
+            shouldSkip = shouldSkipDetection,
+            shouldRunLandmarkOnly = shouldRunLandmarkOnly
+        )
 
         // [帧同步 CR-P0-3] 使用 ImageProxy 时间戳精确查询对应的 FrameId。
         // ImageProxy.imageInfo.timestamp 与 SurfaceTexture.timestamp 共享相机硬件时间基准。
@@ -362,8 +514,10 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
         if (shouldSkipDetection) {
             // 跳过检测,复用上一帧的结果
-            Logger.dThrottled("Camera", "skip_frame", "[Perf] Skip frame")
-            onFaceWarpParamsChanged(existingWarpParams)
+            Logger.dThrottled("Camera", "skip_frame", "[Perf] Skip frame (no reusable ROI)")
+            existingWarpParams?.let { warpParams ->
+                onFaceWarpParamsChanged(warpParams)
+            }
 
             // [帧同步关键修复] 跳帧时也必须向 FrameSyncManager 存储结果，
             // 否则渲染线程查询这些帧时会得到 MISSING，导致妆容闪烁/消失。
@@ -416,6 +570,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                     FaceWarpParams(requestedDetectionEngineMode = detectionEngineMode)
                 )
                 FaceDetectionFrameCounter.markDetectionComplete()
+                FaceDetectionRuntimeStats.markDetectionResult(false)
                 return
             }
         }
@@ -435,19 +590,44 @@ internal fun handleImageAnalysisFrameMediaPipe(
                     val nv21Elapsed = SystemClock.elapsedRealtime() - nv21Start
                     if (nv21Buffer != null) {
                         Logger.dThrottled("Camera", "yuv_nv21", "[Perf] YUV→NV21 (${detectionEngineMode.name}): ${nv21Elapsed}ms, size=${imageProxy.width}x${imageProxy.height}")
-                        nv21Result = (faceDetector as FaceDetectorManager).detectRoiFromNv21(
-                            nv21Buffer, imageProxy.width, imageProxy.height)
+
+                        val detectorManager = faceDetector as FaceDetectorManager
+                        if (shouldRunLandmarkOnly) {
+                            val cachedRoi = FaceDetectionCache.getCachedRoiNormalized()
+                            if (cachedRoi != null) {
+                                nv21Result = RectF(
+                                    cachedRoi.left * imageProxy.width,
+                                    cachedRoi.top * imageProxy.height,
+                                    cachedRoi.right * imageProxy.width,
+                                    cachedRoi.bottom * imageProxy.height
+                                )
+                                Logger.dThrottled("Camera", "reuse_roi", "[Perf] Reuse cached ROI for landmark-only path: $nv21Result")
+                                FaceDetectionRuntimeStats.markRoiReused()
+                            }
+                        }
+
+                        if (nv21Result == null) {
+                            FaceDetectionFrameCounter.markRoiKeyframeUsed()
+                            FaceDetectionRuntimeStats.markRoiExecuted()
+                            nv21Result = detectorManager.detectRoiFromNv21(
+                                nv21Buffer,
+                                imageProxy.width,
+                                imageProxy.height,
+                                rotationDegrees
+                            )
+                        }
 
                         // [Zero-Copy #3] NV21 Landmark 检测（MNN 模式：跳过 Bitmap 创建，省 ~5ms）
                         // NCNN 暂不支持 NV21 landmark，走 Bitmap 降级路径
                         if (nv21Result != null && detectionEngineMode == EngineType.MNN) {
                             val lmStart = SystemClock.elapsedRealtime()
-                            detectionResult = (faceDetector as FaceDetectorManager).detectLandmarksFromNv21WithRoi(
+                            detectionResult = detectorManager.detectLandmarksFromNv21WithRoi(
                                 nv21Buffer, imageProxy.width, imageProxy.height,
-                                nv21Result, lensFacing)
+                                rotationDegrees, nv21Result, lensFacing)
                             val lmElapsed = SystemClock.elapsedRealtime() - lmStart
+                            val modeLabel = if (shouldRunLandmarkOnly) "LANDMARK_ONLY" else "FULL"
                             Logger.dThrottled("Camera", "nv21_full",
-                                "[Perf] NV21 zero-copy (ROI+Landmark): ${lmElapsed}ms, roi=${nv21Result}")
+                                "[Perf] NV21 $modeLabel (ROI+Landmark): ${lmElapsed}ms, roi=${nv21Result}")
                         }
                     }
                 }
@@ -466,6 +646,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
                 if (bitmap == null) {
                     // [过热修复] Bitmap 转换失败也需标记检测完成，防止 isDetecting 永久卡住
                     FaceDetectionFrameCounter.markDetectionComplete()
+                    FaceDetectionRuntimeStats.markDetectionResult(false)
                     return
                 }
                 val pathLabel = if (isRgbaOutput) "RGBA→Bitmap" else "YUV→Bitmap"
@@ -489,6 +670,9 @@ internal fun handleImageAnalysisFrameMediaPipe(
         if (detectionResult != null) {
             val landmarks106 = detectionResult.landmarks106
             FaceDetectionCache.updateLandmarks106(landmarks106)
+            detectionResult.roiRect?.let { normalizedRoi ->
+                FaceDetectionCache.updateRoiNormalized(normalizedRoi)
+            }
 
             // [调试信息] 显示检测器类型和 GPU 状态
             if (showFaceDebugOverlay) {
@@ -547,6 +731,7 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
             // [过热修复] 标记检测完成，更新时间戳和运动计数
             FaceDetectionFrameCounter.markDetectionComplete()
+            FaceDetectionRuntimeStats.markDetectionResult(true)
         } else {
             onShowFocusIndicatorChanged(false)
             onFaceWarpParamsChanged(
@@ -555,11 +740,13 @@ internal fun handleImageAnalysisFrameMediaPipe(
 
             // [过热修复] 检测完成（即使未检测到人脸也更新冷却时间）
             FaceDetectionFrameCounter.markDetectionComplete()
+            FaceDetectionRuntimeStats.markDetectionResult(false)
         }
     } catch (error: Exception) {
         Logger.e("Camera", "MediaPipe face detection error", error)
         // [过热修复] 异常时重置检测状态，防止 isDetecting 永久卡住
         FaceDetectionFrameCounter.markDetectionComplete()
+        FaceDetectionRuntimeStats.markDetectionResult(false)
     } finally {
         imageProxy.close()
     }

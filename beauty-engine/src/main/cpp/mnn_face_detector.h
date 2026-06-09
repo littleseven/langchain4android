@@ -77,37 +77,43 @@ public:
      * 替换手动 pixel loop，消除 Kotlin 层 YUV→ARGB→RGB 的多重 CPU 拷贝
      *
      * @param nv21Data 紧凑 NV21 数据 (Y 平面 + 交错 VU 平面)
-     * @param width 原始图像宽度
-     * @param height 原始图像高度
+     * @param width 原始图像宽度（未旋转）
+     * @param height 原始图像高度（未旋转）
+     * @param rotationDegrees 旋转角度 (0/90/180/270)，在 MNN Matrix 中完成旋转，零额外拷贝
      */
     std::vector<FaceBox> detectRetinaFaceFromNv21(const unsigned char *nv21Data,
                                                    int width,
                                                    int height,
+                                                   int rotationDegrees,
                                                    float confidenceThreshold = 0.5f,
                                                    float nmsThreshold = 0.4f);
 
     /**
      * [Zero-Copy] 单输出检测（2D106 关键点）——直接从 YUV NV21 输入
+     * @param rotationDegrees 旋转角度 (0/90/180/270)
      */
     std::vector<float> detectFromNv21(const unsigned char *nv21Data,
                                       int width,
-                                      int height);
+                                      int height,
+                                      int rotationDegrees);
 
     /**
      * [Zero-Copy] 单输出检测（2D106 关键点）——YUV NV21 + ROI 裁剪
      * 跳过 Bitmap 创建，直接通过 MNN ImageProcess 在 GPU 上完成
-     * NV21→RGB + ROI 裁剪 + 缩放到 INPUT_SIZE 的一体化预处理。
+     * NV21→RGB + 旋转 + ROI 裁剪 + 缩放到 INPUT_SIZE 的一体化预处理。
      *
      * @param nv21Data 紧凑 NV21 数据
-     * @param nv21Width NV21 图像宽度
-     * @param nv21Height NV21 图像高度
-     * @param roiLeft ROI 左边界（NV21 像素坐标）
-     * @param roiTop ROI 上边界（NV21 像素坐标）
-     * @param roiRight ROI 右边界（NV21 像素坐标）
-     * @param roiBottom ROI 下边界（NV21 像素坐标）
+     * @param nv21Width NV21 图像宽度（未旋转）
+     * @param nv21Height NV21 图像高度（未旋转）
+     * @param rotationDegrees 旋转角度 (0/90/180/270)
+     * @param roiLeft ROI 左边界（旋转后像素坐标）
+     * @param roiTop ROI 上边界（旋转后像素坐标）
+     * @param roiRight ROI 右边界（旋转后像素坐标）
+     * @param roiBottom ROI 下边界（旋转后像素坐标）
      */
     std::vector<float> detectFromNv21(const unsigned char *nv21Data,
                                       int nv21Width, int nv21Height,
+                                      int rotationDegrees,
                                       int roiLeft, int roiTop,
                                       int roiRight, int roiBottom);
 
@@ -151,6 +157,26 @@ private:
 
     // [Zero-Copy] NV21 YUV 预处理配置
     std::unique_ptr<MNN::CV::ImageProcess> pretreatNv21_;
+
+    /**
+     * [Zero-Copy] 构建 NV21→InputTensor 的 MNN Matrix
+     *
+     * MNN Matrix 是「目标→源」的仿射变换矩阵，将目标像素 (inputSize×inputSize 空间)
+     * 映射回源 NV21 像素坐标。旋转、letterbox、ROI 裁剪全部在此矩阵中完成，
+     * 由 MNN ImageProcess::convert 内部在 GPU 上一次性执行，零额外拷贝。
+     *
+     * @param srcWidth NV21 原始宽度（未旋转）
+     * @param srcHeight NV21 原始高度（未旋转）
+     * @param rotationDegrees 旋转角度 (0/90/180/270)
+     * @param roiLeft ROI 左边界（旋转后坐标），-1 表示不裁剪
+     * @param roiTop ROI 上边界（旋转后坐标），-1 表示不裁剪
+     * @param roiRight ROI 右边界（旋转后坐标），-1 表示不裁剪
+     * @param roiBottom ROI 下边界（旋转后坐标），-1 表示不裁剪
+     */
+    MNN::CV::Matrix buildNv21TransformMatrix(int srcWidth, int srcHeight,
+                                              int rotationDegrees,
+                                              int roiLeft = -1, int roiTop = -1,
+                                              int roiRight = -1, int roiBottom = -1);
 
     // [性能优化] 复用结果缓冲区，避免每帧 std::vector 分配
     std::vector<float> resultBuffer_;

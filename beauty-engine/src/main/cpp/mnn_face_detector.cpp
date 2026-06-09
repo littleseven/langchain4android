@@ -592,9 +592,124 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFace(const unsigned char *imag
     return result;
 }
 
+MNN::CV::Matrix MnnFaceDetector::buildNv21TransformMatrix(int srcWidth, int srcHeight,
+                                                            int rotationDegrees,
+                                                            int roiLeft, int roiTop,
+                                                            int roiRight, int roiBottom) {
+    // MNN Matrix 是「目标→源」的仿射变换。
+    // 目标空间 = inputSize_×inputSize_（模型输入）
+    // 源空间   = 原始 NV21 像素坐标 (srcWidth×srcHeight，未旋转)
+    //
+    // 变换链（从目标到源，每一步都是 post 组合）：
+    //   1. ROI 逆变换：目标 inputSize → 旋转后的 ROI 区域
+    //   2. Letterbox 逆变换：减去 padding → 旋转后全图
+    //   3. 旋转逆变换：旋转后坐标 → 原始 NV21 坐标
+    //
+    // MNN Matrix 的 post 操作是右乘（在当前变换之后追加），
+    // 但因为 Matrix 是「目标→源」方向，post 操作的语义是"先做当前变换，再做新变换"。
+    // 我们按 "目标 → 中间 → 源" 的顺序组合，使用 setScale + postTranslate 构建。
+
+    // 旋转后的逻辑尺寸
+    bool needSwap = (rotationDegrees == 90 || rotationDegrees == 270);
+    int rotatedW = needSwap ? srcHeight : srcWidth;
+    int rotatedH = needSwap ? srcWidth : srcHeight;
+
+    // ROI 区域（旋转后坐标），-1 表示不裁剪
+    bool hasRoi = (roiLeft >= 0 && roiTop >= 0 && roiRight > roiLeft && roiBottom > roiTop);
+    float regionW = hasRoi ? (float)(roiRight - roiLeft) : (float)rotatedW;
+    float regionH = hasRoi ? (float)(roiBottom - roiTop) : (float)rotatedH;
+    float regionLeft = hasRoi ? (float)roiLeft : 0.0f;
+    float regionTop = hasRoi ? (float)roiTop : 0.0f;
+
+    // Letterbox 缩放参数（基于旋转后的区域尺寸）
+    float scale = std::min((float)inputSize_ / regionW, (float)inputSize_ / regionH);
+    int scaledW = static_cast<int>(regionW * scale);
+    int scaledH = static_cast<int>(regionH * scale);
+    float padLeft = ((float)inputSize_ - scaledW) / 2.0f;
+    float padTop = ((float)inputSize_ - scaledH) / 2.0f;
+
+    // Step 1: 目标像素 (inputSize 空间) → 旋转后 ROI 区域像素
+    // dst → rotatedROI: x = (dstX - padLeft) / scale + regionLeft
+    //                     y = (dstY - padTop) / scale + regionTop
+    // 用 MNN Matrix 表示（目标→源）:
+    //   先 setScale(1/scale, 1/scale)  -- 缩放逆
+    //   再 postTranslate(-padLeft/scale + regionLeft, -padTop/scale + regionTop)  -- 平移逆+ROI偏移
+    MNN::CV::Matrix trans;
+    float txOffset = -padLeft / scale + regionLeft;
+    float tyOffset = -padTop / scale + regionTop;
+
+    // Step 2: 旋转后坐标 → 原始 NV21 坐标
+    // MNN Matrix setScale + postTranslate 的组合等价于：
+    //   srcX = dstX * scaleX + txOffset
+    //   srcY = dstY * scaleY + tyOffset
+    // 其中 dst 是旋转后空间，src 是 NV21 空间
+    //
+    // 但旋转不能简单用 scale+translate 表达，需要完整的仿射矩阵。
+    // MNN::CV::Matrix 内部是 3x3 矩阵，可通过 setValues 直接设置。
+    //
+    // 完整变换（目标inputSize → 旋转后 → 原始NV21）：
+    //   rotatedX = dstX / scale - padLeft/scale + regionLeft
+    //   rotatedY = dstY / scale - padTop/scale + regionTop
+    //   然后根据旋转角度映射到 NV21 坐标：
+    //
+    // 旋转 0°:  nv21X = rotatedX,               nv21Y = rotatedY
+    // 旋转 90°: nv21X = rotatedY,               nv21Y = srcHeight - 1 - rotatedX
+    // 旋转 180°: nv21X = srcWidth - 1 - rotatedX, nv21Y = srcHeight - 1 - rotatedY
+    // 旋转 270°: nv21X = srcWidth - 1 - rotatedY, nv21Y = rotatedX
+    //
+    // 合并为一步：dst → NV21
+    float invScale = 1.0f / scale;
+    float rx = -padLeft / scale + regionLeft;  // rotatedX offset
+    float ry = -padTop / scale + regionTop;    // rotatedY offset
+
+    // 3x3 仿射矩阵 [a, b, tx; c, d, ty; 0, 0, 1]
+    // nv21X = a * dstX + b * dstY + tx
+    // nv21Y = c * dstX + d * dstY + ty
+    float a, b, tx, c, d, ty;
+    switch (rotationDegrees) {
+        case 90:
+            // nv21X = rotatedY = dstY * invScale + ry
+            // nv21Y = srcHeight - 1 - rotatedX = srcHeight - 1 - (dstX * invScale + rx)
+            a = 0.0f;         b = invScale;     tx = ry;
+            c = -invScale;    d = 0.0f;         ty = (float)(srcHeight - 1) - rx;
+            break;
+        case 180:
+            // nv21X = srcWidth - 1 - rotatedX = srcWidth - 1 - (dstX * invScale + rx)
+            // nv21Y = srcHeight - 1 - rotatedY = srcHeight - 1 - (dstY * invScale + ry)
+            a = -invScale;    b = 0.0f;         tx = (float)(srcWidth - 1) - rx;
+            c = 0.0f;         d = -invScale;    ty = (float)(srcHeight - 1) - ry;
+            break;
+        case 270:
+            // nv21X = srcWidth - 1 - rotatedY = srcWidth - 1 - (dstY * invScale + ry)
+            // nv21Y = rotatedX = dstX * invScale + rx
+            a = 0.0f;         b = -invScale;    tx = (float)(srcWidth - 1) - ry;
+            c = invScale;     d = 0.0f;         ty = rx;
+            break;
+        default: // 0°
+            a = invScale;     b = 0.0f;         tx = rx;
+            c = 0.0f;         d = invScale;     ty = ry;
+            break;
+    }
+
+    // MNN::CV::Matrix::setAll 接受 9 个参数（行优先 3x3 矩阵）：
+    //   scaleX, skewX, transX, skewY, scaleY, transY, persp0, persp1, persp2
+    // 对应：| a  b  tx |   | 0  0  1 |
+    //       | c  d  ty | = | 0  0  1 |（仿射变换，persp=0,0,1）
+    //       | 0  0   1 |   | 0  0  1 |
+    trans.setAll(a, b, tx, c, d, ty, 0.0f, 0.0f, 1.0f);
+
+    LOGD("buildNv21TransformMatrix: src=%dx%d, rot=%d, roi=[%d,%d,%d,%d], "
+         "rotated=%dx%d, scale=%.4f, pad=[%.1f,%.1f], matrix=[%.4f,%.4f,%.2f,%.4f,%.4f,%.2f]",
+         srcWidth, srcHeight, rotationDegrees, roiLeft, roiTop, roiRight, roiBottom,
+         rotatedW, rotatedH, scale, padLeft, padTop, a, b, tx, c, d, ty);
+
+    return trans;
+}
+
 std::vector<FaceBox> MnnFaceDetector::detectRetinaFaceFromNv21(const unsigned char *nv21Data,
                                                                 int width,
                                                                 int height,
+                                                                int rotationDegrees,
                                                                 float confidenceThreshold,
                                                                 float nmsThreshold) {
     if (!loaded_ || !inputTensor_ || !pretreatNv21_) {
@@ -608,13 +723,6 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFaceFromNv21(const unsigned ch
     // [Zero-Copy] NV21 stride = width (紧凑布局，无 padding)
     int nv21Stride = width;
 
-    // [Letterbox] 计算缩放参数
-    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
-    int scaledW = static_cast<int>(width * scale);
-    int scaledH = static_cast<int>(height * scale);
-    int padLeft = (inputSize_ - scaledW) / 2;
-    int padTop = (inputSize_ - scaledH) / 2;
-
     // 1. 先把 input tensor 填成归一化后的黑色
     MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
     MNN::Tensor tmpInput(inputTensor_, inputDimType);
@@ -624,17 +732,14 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFaceFromNv21(const unsigned ch
     float blackVal = (0.0f - normMean) / normStd;
     std::fill_n(inputData, tmpInput.elementSize(), blackVal);
 
-    // 2. 构造 letterbox 变换矩阵（目标→源坐标映射）
-    // MNN Matrix 将目标像素映射到源 NV21 坐标
-    MNN::CV::Matrix trans;
-    trans.setScale(1.0f / scale, 1.0f / scale);
-    trans.postTranslate(-padLeft / scale, -padTop / scale);
-
-    // 3. 调用 MNN ImageProcess::convert —— 内部做 NV21→RGB + resize + letterbox + 归一化
+    // 2. 构造旋转 + letterbox 变换矩阵（目标→源坐标映射）
     auto tPreStart = std::chrono::high_resolution_clock::now();
+    MNN::CV::Matrix trans = buildNv21TransformMatrix(width, height, rotationDegrees);
+
+    // 3. 调用 MNN ImageProcess::convert —— 内部做 NV21→RGB + 旋转 + resize + letterbox + 归一化
     pretreatNv21_->setMatrix(trans);
     auto result = pretreatNv21_->convert(nv21Data, width, height, nv21Stride,
-                                         inputTensor_);
+                                         &tmpInput);
     auto tPreEnd = std::chrono::high_resolution_clock::now();
 
     if (result != MNN::NO_ERROR) {
@@ -724,17 +829,13 @@ std::vector<FaceBox> MnnFaceDetector::detectRetinaFaceFromNv21(const unsigned ch
 
 std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data,
                                                     int width,
-                                                    int height) {
+                                                    int height,
+                                                    int rotationDegrees) {
     if (!loaded_ || !inputTensor_ || !pretreatNv21_ || outputTensors_.empty()) {
         return {};
     }
 
     int nv21Stride = width;
-    float scale = std::min((float)inputSize_ / width, (float)inputSize_ / height);
-    int scaledW = static_cast<int>(width * scale);
-    int scaledH = static_cast<int>(height * scale);
-    int padLeft = (inputSize_ - scaledW) / 2;
-    int padTop = (inputSize_ - scaledH) / 2;
 
     // 填充黑色
     MNN::Tensor::DimensionType inputDimType = inputTensor_->getDimensionType();
@@ -745,14 +846,13 @@ std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data
     float blackVal = (0.0f - normMean) / normStd;
     std::fill_n(inputData, tmpInput.elementSize(), blackVal);
 
-    MNN::CV::Matrix trans;
-    trans.setScale(1.0f / scale, 1.0f / scale);
-    trans.postTranslate(-padLeft / scale, -padTop / scale);
+    // [旋转+letterbox] 使用统一的变换矩阵构建
+    MNN::CV::Matrix trans = buildNv21TransformMatrix(width, height, rotationDegrees);
     pretreatNv21_->setMatrix(trans);
 
-    auto result = pretreatNv21_->convert(nv21Data, width, height, nv21Stride, inputTensor_);
-    if (result != MNN::NO_ERROR) {
-        LOGE("NV21 ImageProcess::convert failed for landmark detection: error=%d", result);
+    auto cvtResult = pretreatNv21_->convert(nv21Data, width, height, nv21Stride, &tmpInput);
+    if (cvtResult != MNN::NO_ERROR) {
+        LOGE("NV21 ImageProcess::convert failed for landmark detection: error=%d", cvtResult);
         return {};
     }
 
@@ -776,17 +876,36 @@ std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data
 
 std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data,
                                                     int nv21Width, int nv21Height,
+                                                    int rotationDegrees,
                                                     int roiLeft, int roiTop,
                                                     int roiRight, int roiBottom) {
     if (!loaded_ || !inputTensor_ || !pretreatNv21_ || outputTensors_.empty()) {
         return {};
     }
 
-    // Clamp ROI to image bounds
-    roiLeft = std::max(0, roiLeft);
-    roiTop = std::max(0, roiTop);
-    roiRight = std::min(nv21Width, roiRight);
-    roiBottom = std::min(nv21Height, roiBottom);
+    // Clamp ROI in rotated coordinate space.
+    // For rotation 90/270, ROI uses rotated dimensions: width=nv21Height, height=nv21Width.
+    bool needSwap = (rotationDegrees == 90 || rotationDegrees == 270);
+    int roiMaxX = needSwap ? nv21Height : nv21Width;
+    int roiMaxY = needSwap ? nv21Width : nv21Height;
+
+    int rawRoiLeft = roiLeft;
+    int rawRoiTop = roiTop;
+    int rawRoiRight = roiRight;
+    int rawRoiBottom = roiBottom;
+
+    roiLeft = std::max(0, std::min(roiLeft, roiMaxX));
+    roiTop = std::max(0, std::min(roiTop, roiMaxY));
+    roiRight = std::max(0, std::min(roiRight, roiMaxX));
+    roiBottom = std::max(0, std::min(roiBottom, roiMaxY));
+
+    if (rawRoiLeft != roiLeft || rawRoiTop != roiTop ||
+        rawRoiRight != roiRight || rawRoiBottom != roiBottom) {
+        LOGD("detectFromNv21(ROI) clamp: raw=[%d,%d,%d,%d], clamped=[%d,%d,%d,%d], rot=%d, max=[%d,%d]",
+             rawRoiLeft, rawRoiTop, rawRoiRight, rawRoiBottom,
+             roiLeft, roiTop, roiRight, roiBottom,
+             rotationDegrees, roiMaxX, roiMaxY);
+    }
 
     int roiW = roiRight - roiLeft;
     int roiH = roiBottom - roiTop;
@@ -805,17 +924,15 @@ std::vector<float> MnnFaceDetector::detectFromNv21(const unsigned char *nv21Data
     float blackVal = (0.0f - normMean) / normStd;
     std::fill_n(inputData, tmpInput.elementSize(), blackVal);
 
-    // Build MNN Matrix: map target (INPUT_SIZE×INPUT_SIZE) to source ROI region
-    // Scale: each target pixel covers (roiW/inputSize_, roiH/inputSize_) in source
-    // Translate: start at roiLeft, roiTop
-    MNN::CV::Matrix trans;
-    trans.setScale((float)roiW / inputSize_, (float)roiH / inputSize_);
-    trans.postTranslate((float)roiLeft, (float)roiTop);
+    // [旋转+letterbox+ROI] 使用统一的变换矩阵构建
+    MNN::CV::Matrix trans = buildNv21TransformMatrix(nv21Width, nv21Height, rotationDegrees,
+                                                       roiLeft, roiTop, roiRight, roiBottom);
 
     pretreatNv21_->setMatrix(trans);
     auto result = pretreatNv21_->convert(nv21Data, nv21Width, nv21Height, nv21Stride,
-                                         inputTensor_);
+                                         &tmpInput);
     if (result != MNN::NO_ERROR) {
+        LOGE("detectFromNv21(ROI) ImageProcess::convert failed: error=%d", result);
         return {};
     }
 

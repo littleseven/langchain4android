@@ -164,6 +164,7 @@ class MnnFaceDetector private constructor(
             nv21Data: ByteBuffer,
             width: Int,
             height: Int,
+            rotationDegrees: Int,
             confidenceThreshold: Float,
             nmsThreshold: Float,
             outResult: FloatArray
@@ -175,6 +176,7 @@ class MnnFaceDetector private constructor(
             nv21Data: ByteBuffer,
             width: Int,
             height: Int,
+            rotationDegrees: Int,
             outResult: FloatArray
         ): Int
 
@@ -184,6 +186,7 @@ class MnnFaceDetector private constructor(
             nv21Data: ByteBuffer,
             nv21Width: Int,
             nv21Height: Int,
+            rotationDegrees: Int,
             roiLeft: Int,
             roiTop: Int,
             roiRight: Int,
@@ -298,6 +301,7 @@ class MnnFaceDetector private constructor(
         nv21Data: ByteBuffer,
         width: Int,
         height: Int,
+        rotationDegrees: Int = 0,
         confidenceThreshold: Float = 0.5f,
         nmsThreshold: Float = 0.4f
     ): FloatArray? {
@@ -312,7 +316,7 @@ class MnnFaceDetector private constructor(
         val outResult = getRetinaResult()
         val detected = MnnGlobalReleaseLock.withOperation {
             nativeDetectRetinaFaceFromNv21(nativeHandle, nv21Data, width, height,
-                confidenceThreshold, nmsThreshold, outResult)
+                rotationDegrees, confidenceThreshold, nmsThreshold, outResult)
         }
         return if (detected) outResult.copyOf() else null
     }
@@ -323,7 +327,8 @@ class MnnFaceDetector private constructor(
     fun detectFromYuv(
         nv21Data: ByteBuffer,
         width: Int,
-        height: Int
+        height: Int,
+        rotationDegrees: Int = 0
     ): FloatArray? {
         if (nativeHandle == 0L) {
             Logger.w(TAG, "Detector not initialized")
@@ -335,7 +340,7 @@ class MnnFaceDetector private constructor(
         }
         val outResult = getDetectResult(width * height * 2)
         val written = MnnGlobalReleaseLock.withOperation {
-            nativeDetectFromNv21(nativeHandle, nv21Data, width, height, outResult)
+            nativeDetectFromNv21(nativeHandle, nv21Data, width, height, rotationDegrees, outResult)
         }
         return if (written > 0) outResult.copyOf(written) else null
     }
@@ -359,6 +364,7 @@ class MnnFaceDetector private constructor(
         nv21Data: ByteBuffer,
         nv21Width: Int,
         nv21Height: Int,
+        rotationDegrees: Int = 0,
         roiLeft: Int,
         roiTop: Int,
         roiRight: Int,
@@ -377,6 +383,7 @@ class MnnFaceDetector private constructor(
             nativeDetectLandmarksFromNv21(
                 nativeHandle, nv21Data,
                 nv21Width, nv21Height,
+                rotationDegrees,
                 roiLeft, roiTop, roiRight, roiBottom,
                 outResult
             )

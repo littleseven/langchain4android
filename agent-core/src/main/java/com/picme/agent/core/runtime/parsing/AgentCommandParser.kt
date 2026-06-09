@@ -13,7 +13,7 @@ import com.picme.agent.core.api.context.MediaType
  * Agent 命令解析器
  *
  * 将 LLM 文本响应解析为结构化 [AgentCommand]。
- * 只支持精简 JSON 格式（method + params），不兼容旧格式。
+ * 支持精简 JSON 格式（method + params）。
  * 提取为独立 object 以便在纯 JVM 单元测试中直接调用，
  * 避免实例化 [AgentOrchestrator] 时触发 JNI/MNN 加载。
  */
@@ -24,8 +24,7 @@ object AgentCommandParser {
     /**
      * 解析 LLM 响应为 AgentCommand
      *
-     * 支持精简 JSON 格式：{"method":"...","params":{...}}
-     * 不兼容旧格式（不再支持 {"action":"..."}）。
+     * 支持精简 JSON 格式：{"method":"...","params":{...}}。
      *
      * @param response LLM 原始文本输出
      * @param context 当前 Agent 上下文
@@ -59,7 +58,7 @@ object AgentCommandParser {
                 val afterTag = cleaned.substring(orphanStart + startTag.length).trim()
                 val beforeTag = cleaned.substring(0, orphanStart).trim()
                 // 优先使用标签后的内容（通常 JSON 在 think 标签后）
-                cleaned = if (afterTag.contains("method")) {
+                cleaned = if (containsJsonMethodKey(afterTag)) {
                     afterTag
                 } else {
                     beforeTag
@@ -75,7 +74,7 @@ object AgentCommandParser {
         Logger.i(TAG, "Cleaned response: '$cleaned'")
 
         // 3. 检查是否包含 JSON method 字段
-        val hasJsonMethod = cleaned.contains("method")
+        val hasJsonMethod = containsJsonMethodKey(cleaned)
         if (!hasJsonMethod) {
             // 兜底 1：尝试从原始响应中直接提取 JSON（绕过 think 标签截断问题）
             val fallbackJson = tryExtractJsonFromRaw(response)
@@ -106,7 +105,6 @@ object AgentCommandParser {
         }
 
         return try {
-            // 只支持 method + params 格式
             val method = extractJsonField(json, "method")
             val commandId = extractJsonInt(json, "id") ?: AgentIdGenerator.nextId()
 
@@ -290,11 +288,15 @@ object AgentCommandParser {
         val jsonEnd = raw.lastIndexOf('}')
         if (jsonStart >= 0 && jsonEnd > jsonStart) {
             val candidate = raw.substring(jsonStart, jsonEnd + 1)
-            if (candidate.contains("\"method\"")) {
+            if (containsJsonMethodKey(candidate)) {
                 return candidate
             }
         }
         return null
+    }
+
+    private fun containsJsonMethodKey(content: String): Boolean {
+        return content.contains("\"method\"")
     }
 
     /**

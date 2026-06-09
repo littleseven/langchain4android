@@ -8,6 +8,8 @@ import com.picme.agent.core.api.command.AgentCommand
 import com.picme.agent.core.api.context.AgentContext
 import com.picme.agent.core.api.context.AgentScene
 import com.picme.agent.core.api.context.MediaType
+import com.picme.agent.core.runtime.capability.CapabilityRegistry
+import com.picme.agent.core.runtime.parsing.AgentCommandParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -27,7 +29,7 @@ import com.picme.agent.core.runtime.inference.IntentCache
  * AgentCommandParser 响应解析逻辑单元测试
  *
  * 直接测试生产方法 [AgentCommandParser.parseLlmResponse] 和
- * [AgentCommandParser.parseCommandByAction]，确保测试能够真实反映生产代码行为。
+ * [AgentCommandParser.parseCommandByMethod]，确保测试能够真实反映生产代码行为。
  *
  * 提取为独立 object 的原因：避免实例化 [AgentOrchestrator] 时触发
  * [LocalLlmEngine] -> [MnnLlmClient] 的 JNI 加载，导致纯 JVM 单元测试失败。
@@ -106,7 +108,7 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `parseLlmResponse handles free chat without action`() {
+    fun `parseLlmResponse handles free chat without method`() {
         val input = "你好！我是小觅，有什么可以帮你的吗？"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.TextReply)
@@ -243,7 +245,7 @@ class AgentOrchestratorParseTest {
 
     // ------------------------------------------------------------------
     // 关键回归测试：photo 别名映射到 CapturePhoto
-    // 这些测试如果之前存在，就能发现 LLM 输出 action=photo 时无法拍照的 bug
+    // 这些测试如果之前存在，就能发现 LLM 输出 method=photo 时无法拍照的 bug
     // ------------------------------------------------------------------
 
     @Test
@@ -251,7 +253,7 @@ class AgentOrchestratorParseTest {
         val input = "{\"action\":\"photo\"}"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
-            "LLM 输出 action=photo 时必须解析为 CapturePhoto",
+            "LLM 输出 method=photo 时必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
         )
     }
@@ -271,19 +273,19 @@ class AgentOrchestratorParseTest {
         val input = "```json\n{\"action\":\"photo\"}\n```"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
-            "markdown 包裹的 photo action 必须解析为 CapturePhoto",
+            "markdown 包裹的 photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
         )
     }
 
     // ------------------------------------------------------------------
-    // 直接测试生产方法 parseCommandByAction
+    // 直接测试生产方法 parseCommandByMethod
     // ------------------------------------------------------------------
 
     @Test
-    fun `parseCommandByAction capture returns CapturePhoto`() {
-        val command = AgentCommandParser.parseCommandByAction(
-            action = "capture",
+    fun `parseCommandByMethod capture returns CapturePhoto`() {
+        val command = AgentCommandParser.parseCommandByMethod(
+            method = "capture",
             json = "{\"action\":\"capture\"}",
             context = defaultContext,
             fallbackText = ""
@@ -292,23 +294,23 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `parseCommandByAction photo returns CapturePhoto`() {
-        val command = AgentCommandParser.parseCommandByAction(
-            action = "photo",
+    fun `parseCommandByMethod photo returns CapturePhoto`() {
+        val command = AgentCommandParser.parseCommandByMethod(
+            method = "photo",
             json = "{\"action\":\"photo\"}",
             context = defaultContext,
             fallbackText = ""
         )
         assertTrue(
-            "action=photo 必须映射为 CapturePhoto",
+            "method=photo 必须映射为 CapturePhoto",
             command is AgentCommand.CapturePhoto
         )
     }
 
     @Test
-    fun `parseCommandByAction flip_camera returns FlipCamera`() {
-        val command = AgentCommandParser.parseCommandByAction(
-            action = "flip_camera",
+    fun `parseCommandByMethod flip_camera returns FlipCamera`() {
+        val command = AgentCommandParser.parseCommandByMethod(
+            method = "flip_camera",
             json = "{\"action\":\"flip_camera\"}",
             context = defaultContext,
             fallbackText = ""
@@ -317,9 +319,9 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `parseCommandByAction adjust_beauty returns AdjustBeauty`() {
-        val command = AgentCommandParser.parseCommandByAction(
-            action = "adjust_beauty",
+    fun `parseCommandByMethod adjust_beauty returns AdjustBeauty`() {
+        val command = AgentCommandParser.parseCommandByMethod(
+            method = "adjust_beauty",
             json = "{\"action\":\"adjust_beauty\",\"smoothing\":0.8}",
             context = defaultContext,
             fallbackText = ""
@@ -330,9 +332,9 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `parseCommandByAction switch_filter returns SwitchFilter`() {
-        val command = AgentCommandParser.parseCommandByAction(
-            action = "switch_filter",
+    fun `parseCommandByMethod switch_filter returns SwitchFilter`() {
+        val command = AgentCommandParser.parseCommandByMethod(
+            method = "switch_filter",
             json = "{\"action\":\"switch_filter\",\"filter\":\"VINTAGE\"}",
             context = defaultContext,
             fallbackText = ""
@@ -342,9 +344,9 @@ class AgentOrchestratorParseTest {
     }
 
     @Test
-    fun `parseCommandByAction unknown action returns TextReply`() {
-        val command = AgentCommandParser.parseCommandByAction(
-            action = "unknown_action",
+    fun `parseCommandByMethod unknown method returns TextReply`() {
+        val command = AgentCommandParser.parseCommandByMethod(
+            method = "unknown_action",
             json = "{\"action\":\"unknown_action\"}",
             context = defaultContext,
             fallbackText = "fallback message"
@@ -361,7 +363,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `capabilityRegistry dispatch CapturePhoto without registered capability returns Error`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
-        val command = AgentCommand.CapturePhoto
+        val command = AgentCommand.CapturePhoto()
         val result = registry.dispatch(command, defaultContext)
         advanceUntilIdle()
         assertTrue(result.isSuccess)
@@ -374,7 +376,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `capabilityRegistry dispatch TextReply returns TextReply action`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
-        val command = AgentCommand.TextReply("你好")
+        val command = AgentCommand.TextReply(message = "你好")
         val result = registry.dispatch(command, defaultContext)
         advanceUntilIdle()
         assertTrue(result.isSuccess)
@@ -386,7 +388,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `capabilityRegistry dispatch FlipCamera without registered capability returns Error`() = runTest(testDispatcher) {
         val registry = CapabilityRegistry.getInstance()
-        val command = AgentCommand.FlipCamera
+        val command = AgentCommand.FlipCamera()
         val result = registry.dispatch(command, defaultContext)
         advanceUntilIdle()
         assertTrue(result.isSuccess)
@@ -401,32 +403,32 @@ class AgentOrchestratorParseTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `end to end qwen3 real response with photo action`() {
+    fun `end to end qwen3 real response with photo method`() {
         val input = "<think>\n用户说\"拍照\"，需要触发相机拍照。\n\n{\"action\":\"photo\"}"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         // 修复后：从未闭合 think 标签后提取 JSON
         assertTrue(
-            "未闭合 think + photo action 必须解析为 CapturePhoto",
+            "未闭合 think + photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
         )
     }
 
     @Test
-    fun `end to end qwen3 closed think with photo action`() {
+    fun `end to end qwen3 closed think with photo method`() {
         val input = "<think>用户说拍照</think>\n{\"action\":\"photo\"}"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
-            "闭合 think 标签 + photo action 必须解析为 CapturePhoto",
+            "闭合 think 标签 + photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
         )
     }
 
     @Test
-    fun `end to end markdown wrapped photo action`() {
+    fun `end to end markdown wrapped photo method`() {
         val input = "```json\n{\"action\":\"photo\"}\n```"
         val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
-            "markdown 包裹的 photo action 必须解析为 CapturePhoto",
+            "markdown 包裹的 photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
         )
     }

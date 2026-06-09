@@ -267,7 +267,7 @@ class MnnRoiDetector(
      * @param height 原始图像高度（可能已旋转）
      * @return 原图坐标的 ROI 矩形，未检测到返回 null
      */
-    fun detectRoiFromYuv(nv21Data: java.nio.ByteBuffer, width: Int, height: Int): RectF? {
+    fun detectRoiFromYuv(nv21Data: java.nio.ByteBuffer, width: Int, height: Int, rotationDegrees: Int = 0): RectF? {
         // [优化] 懒加载初始化（CAS 无锁，初始化中的线程直接返回）
         if (!ensureInitialized()) {
             Logger.d(TAG, "[Perf] Skipping NV21 ROI detection: detector not ready")
@@ -281,11 +281,11 @@ class MnnRoiDetector(
 
         val yuvStart = SystemClock.elapsedRealtime()
         val yuvEngineLabel = if (isGpuEnabled) "MNN-OpenCL" else "MNN-CPU"
-        Logger.d(TAG, "[Perf] MnnRoi NV21 START: engine=$yuvEngineLabel, input=${width}x${height}")
+        Logger.d(TAG, "[Perf] MnnRoi NV21 START: engine=$yuvEngineLabel, input=${width}x${height}, rot=$rotationDegrees")
 
         return try {
             val result = det.detectRetinaFaceFromYuv(nv21Data, width, height,
-                CONFIDENCE_THRESHOLD, 0.4f)
+                rotationDegrees, CONFIDENCE_THRESHOLD, 0.4f)
             val yuvElapsed = SystemClock.elapsedRealtime() - yuvStart
 
             if (result == null || result.size < 5) {
@@ -293,13 +293,16 @@ class MnnRoiDetector(
                 return null
             }
 
-            // MNN ImageProcess 内部做了 letterbox + resize → inputSize_ × inputSize_
-            // 输出坐标在 inputSize_ 空间，需要映射回原图
-            val origW = width.toFloat()
-            val origH = height.toFloat()
-            val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
-            val padLeft = ((INPUT_SIZE - (origW * scale).toInt()) / 2).toFloat()
-            val padTop = ((INPUT_SIZE - (origH * scale).toInt()) / 2).toFloat()
+            // MNN ImageProcess 内部做了 rotation + letterbox + resize → inputSize_ × inputSize_
+            // 输出坐标在 inputSize_ 空间，需要先逆向 letterbox，再映射到“旋转后坐标系”。
+            val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+            val rotatedW = if (needSwap) height.toFloat() else width.toFloat()
+            val rotatedH = if (needSwap) width.toFloat() else height.toFloat()
+            val scale = INPUT_SIZE.toFloat() / maxOf(rotatedW, rotatedH)
+            val scaledW = (rotatedW * scale).toInt()
+            val scaledH = (rotatedH * scale).toInt()
+            val padLeft = (INPUT_SIZE - scaledW) / 2f
+            val padTop = (INPUT_SIZE - scaledH) / 2f
 
             var mappedX1 = ((result[0] - padLeft) / scale)
             var mappedY1 = ((result[1] - padTop) / scale)
@@ -313,10 +316,10 @@ class MnnRoiDetector(
             val newWidth = w * ROI_EXPAND_RATIO
             val newHeight = h * ROI_EXPAND_RATIO
 
-            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
-            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
-            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
-            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, rotatedW)
+            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, rotatedH)
+            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, rotatedW)
+            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, rotatedH)
 
             Logger.i(TAG, "[Perf] MnnRoi NV21 DONE: engine=$yuvEngineLabel, total=${yuvElapsed}ms, rect=[$mappedX1,$mappedY1,$mappedX2,$mappedY2]")
             RectF(mappedX1, mappedY1, mappedX2, mappedY2)

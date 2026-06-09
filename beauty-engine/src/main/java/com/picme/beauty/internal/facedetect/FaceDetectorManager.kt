@@ -158,7 +158,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
      * @param height 原始图像高度
      * @return ROI 矩形（原图坐标），或 null
      */
-     fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int): RectF? {
+     fun detectRoiFromNv21(nv21Data: ByteBuffer, width: Int, height: Int, rotationDegrees: Int = 0): RectF? {
         if (!isPipelineInitialized) {
             Logger.w(TAG, "Pipeline not initialized, skipping NV21 detection")
             return null
@@ -171,7 +171,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             val result: RectF? = when (config.roiEngine) {
                 InferenceBackendType.MNN -> {
                     val mnnRoi = roiDetector as? MnnRoiDetector
-                    mnnRoi?.detectRoiFromYuv(nv21Data, width, height)
+                    mnnRoi?.detectRoiFromYuv(nv21Data, width, height, rotationDegrees)
                 }
                 InferenceBackendType.NCNN -> {
                     val ncnnRoi = roiDetector as? NcnnRoiDetector
@@ -288,6 +288,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
         nv21Data: ByteBuffer,
         nv21Width: Int,
         nv21Height: Int,
+        rotationDegrees: Int = 0,
         roi: RectF,
         lensFacing: Int
     ): FaceDetectionResult? {
@@ -305,10 +306,15 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 return null
             }
 
+        val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+        val rotatedWidth = if (needSwap) nv21Height else nv21Width
+        val rotatedHeight = if (needSwap) nv21Width else nv21Height
+
+        // ROI 坐标在“旋转后坐标系”中，需按旋转后尺寸做 clamp。
         val roiLeft = maxOf(0, roi.left.toInt())
         val roiTop = maxOf(0, roi.top.toInt())
-        val roiRight = minOf(nv21Width, roi.right.toInt())
-        val roiBottom = minOf(nv21Height, roi.bottom.toInt())
+        val roiRight = minOf(rotatedWidth, roi.right.toInt())
+        val roiBottom = minOf(rotatedHeight, roi.bottom.toInt())
 
         if (roiRight <= roiLeft || roiBottom <= roiTop) {
             Logger.w(TAG, "[Perf] NV21 Landmark: invalid ROI")
@@ -319,6 +325,7 @@ class FaceDetectorManager(context: Context) : FaceDetector {
             val lmStart = SystemClock.elapsedRealtime()
             val landmarkResult = mnnLandmarkDetector.detectLandmarksFromNv21(
                 nv21Data, nv21Width, nv21Height,
+                rotationDegrees,
                 roiLeft, roiTop, roiRight, roiBottom
             )
             val lmTime = SystemClock.elapsedRealtime() - lmStart
@@ -338,10 +345,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                 ?: return null
 
             val normalizedRoi = RectF(
-                roiLeft / nv21Width.toFloat(),
-                roiTop / nv21Height.toFloat(),
-                roiRight / nv21Width.toFloat(),
-                roiBottom / nv21Height.toFloat()
+                roiLeft / rotatedWidth.toFloat(),
+                roiTop / rotatedHeight.toFloat(),
+                roiRight / rotatedWidth.toFloat(),
+                roiBottom / rotatedHeight.toFloat()
             )
 
             val roiEngineLabel = "${config.roiEngine.name}(NV21)"

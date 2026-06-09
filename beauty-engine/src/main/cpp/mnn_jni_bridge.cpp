@@ -213,6 +213,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetina
         jobject nv21Data,       // DirectByteBuffer — 紧凑 NV21 (Y + 交错 VU)
         jint width,
         jint height,
+        jint rotationDegrees,  // 旋转角度 (0/90/180/270)
         jfloat confidenceThreshold,
         jfloat nmsThreshold,
         jfloatArray outResult) {  // 预分配 [15 floats]
@@ -235,7 +236,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetina
     }
 
     std::vector<picme::FaceBox> faces = detector->detectRetinaFaceFromNv21(
-            data, width, height, confidenceThreshold, nmsThreshold);
+            data, width, height, rotationDegrees, confidenceThreshold, nmsThreshold);
 
     if (faces.empty()) {
         return JNI_FALSE;
@@ -273,6 +274,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectFromNv
         jobject nv21Data,       // DirectByteBuffer
         jint width,
         jint height,
+        jint rotationDegrees,  // 旋转角度 (0/90/180/270)
         jfloatArray outResult) {
     auto *detector = reinterpret_cast<picme::MnnFaceDetector *>(handle);
     if (!detector) {
@@ -285,7 +287,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectFromNv
         return 0;
     }
 
-    const std::vector<float>& result = detector->detectFromNv21(data, width, height);
+    const std::vector<float>& result = detector->detectFromNv21(data, width, height, rotationDegrees);
     if (result.empty()) {
         return 0;
     }
@@ -304,6 +306,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectLandma
         jobject nv21Data,
         jint nv21Width,
         jint nv21Height,
+        jint rotationDegrees,  // 旋转角度 (0/90/180/270)
         jint roiLeft,
         jint roiTop,
         jint roiRight,
@@ -321,7 +324,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectLandma
     }
 
     const std::vector<float>& result = detector->detectFromNv21(
-        data, nv21Width, nv21Height,
+        data, nv21Width, nv21Height, rotationDegrees,
         roiLeft, roiTop, roiRight, roiBottom);
     if (result.empty()) {
         return 0;

@@ -233,6 +233,7 @@ class MnnLandmarkDetector(
         nv21Data: ByteBuffer,
         nv21Width: Int,
         nv21Height: Int,
+        rotationDegrees: Int = 0,
         roiLeft: Int,
         roiTop: Int,
         roiRight: Int,
@@ -254,6 +255,7 @@ class MnnLandmarkDetector(
             val inferStart = SystemClock.elapsedRealtime()
             val result = det.detectLandmarksFromYuv(
                 nv21Data, nv21Width, nv21Height,
+                rotationDegrees,
                 roiLeft, roiTop, roiRight, roiBottom
             )
             val inferElapsed = SystemClock.elapsedRealtime() - inferStart
@@ -264,22 +266,38 @@ class MnnLandmarkDetector(
                 return null
             }
 
-            // 构建逆变换矩阵：192×192 模型坐标 → NV21 像素坐标
-            // C++ MNN Matrix: tx = (sx - roiLeft) / roiW * 192, ty = (sy - roiTop) / roiH * 192
-            // 逆: sx = tx / 192 * roiW + roiLeft, sy = ty / 192 * roiH + roiTop
+            // 构建逆变换矩阵：192×192 模型坐标 → 旋转后 ROI 像素坐标
+            // 与 C++ buildNv21TransformMatrix(ROI) 保持一致：
+            //   rotatedX = (dstX - padLeft) / scale + roiLeft
+            //   rotatedY = (dstY - padTop) / scale + roiTop
             val roiW = (roiRight - roiLeft).toFloat()
             val roiH = (roiBottom - roiTop).toFloat()
+            val scale = minOf(INPUT_SIZE.toFloat() / roiW, INPUT_SIZE.toFloat() / roiH)
+            // 与 C++ buildNv21TransformMatrix 完全对齐：scaledW/scaledH 先截断为 Int 再计算 padding。
+            // 若直接使用 Float，会在 scale<1（近脸大 ROI）场景放大反向映射误差，导致唇色贴合偏移。
+            val scaledW = (roiW * scale).toInt()
+            val scaledH = (roiH * scale).toInt()
+            val padLeft = (INPUT_SIZE - scaledW) / 2f
+            val padTop = (INPUT_SIZE - scaledH) / 2f
+            val invScale = 1f / scale
+            val tx = -padLeft * invScale + roiLeft
+            val ty = -padTop * invScale + roiTop
+
             val inverseMatrix = Matrix()
             inverseMatrix.setValues(
                 floatArrayOf(
-                    roiW / INPUT_SIZE, 0f, roiLeft.toFloat(),
-                    0f, roiH / INPUT_SIZE, roiTop.toFloat(),
+                    invScale, 0f, tx,
+                    0f, invScale, ty,
                     0f, 0f, 1f
                 )
             )
 
+            val needSwap = rotationDegrees == 90 || rotationDegrees == 270
+            val normalizedWidth = if (needSwap) nv21Height else nv21Width
+            val normalizedHeight = if (needSwap) nv21Width else nv21Height
+
             val parseStart = SystemClock.elapsedRealtime()
-            val landmarks = parseLandmarks(result, nv21Width, nv21Height, inverseMatrix)
+            val landmarks = parseLandmarks(result, normalizedWidth, normalizedHeight, inverseMatrix)
             val parseElapsed = SystemClock.elapsedRealtime() - parseStart
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 

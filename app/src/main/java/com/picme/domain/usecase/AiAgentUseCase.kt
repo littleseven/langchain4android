@@ -504,15 +504,16 @@ class AiAgentUseCase(
 
         return try {
             val method = extractJsonField(json, "method") ?: "text_reply"
+            val mergedJson = mergeParamsIntoJson(json)
             when (method) {
                 "adjust_beauty" -> {
-                    val smoothing = extractJsonFloat(json, "smoothing") ?: state.beautySettings.smoothing
-                    val whitening = extractJsonFloat(json, "whitening") ?: state.beautySettings.whitening
-                    val slimFace = extractJsonFloat(json, "slim_face") ?: state.beautySettings.slimFace
-                    val bigEyes = extractJsonFloat(json, "big_eyes") ?: state.beautySettings.bigEyes
-                    val lipColor = extractJsonFloat(json, "lip_color") ?: state.beautySettings.lipColor
-                    val blush = extractJsonFloat(json, "blush") ?: state.beautySettings.blush
-                    val eyebrow = extractJsonFloat(json, "eyebrow") ?: state.beautySettings.eyebrow
+                    val smoothing = extractJsonFloat(mergedJson, "smoothing") ?: state.beautySettings.smoothing
+                    val whitening = extractJsonFloat(mergedJson, "whitening") ?: state.beautySettings.whitening
+                    val slimFace = extractJsonFloat(mergedJson, "slim_face") ?: state.beautySettings.slimFace
+                    val bigEyes = extractJsonFloat(mergedJson, "big_eyes") ?: state.beautySettings.bigEyes
+                    val lipColor = extractJsonFloat(mergedJson, "lip_color") ?: state.beautySettings.lipColor
+                    val blush = extractJsonFloat(mergedJson, "blush") ?: state.beautySettings.blush
+                    val eyebrow = extractJsonFloat(mergedJson, "eyebrow") ?: state.beautySettings.eyebrow
                     AiAgentCommand.AdjustBeauty(
                         state.beautySettings.copy(
                             enabled = true,
@@ -527,29 +528,29 @@ class AiAgentUseCase(
                     )
                 }
                 "switch_filter" -> {
-                    val filterName = extractJsonField(json, "filter") ?: "NONE"
+                    val filterName = extractJsonField(mergedJson, "filter") ?: "NONE"
                     val filterType = resolveFilterType(filterName)
                     AiAgentCommand.SwitchFilter(filterType)
                 }
                 "switch_style" -> {
-                    val styleName = extractJsonField(json, "style") ?: "NONE"
+                    val styleName = extractJsonField(mergedJson, "style") ?: "NONE"
                     val styleFilter = resolveStyleFilter(styleName)
                     AiAgentCommand.SwitchStyle(styleFilter)
                 }
                 "switch_scene" -> {
-                    val scene = extractJsonField(json, "scene") ?: "none"
+                    val scene = extractJsonField(mergedJson, "scene") ?: "none"
                     AiAgentCommand.SwitchScene(scene)
                 }
                 "switch_ratio" -> {
-                    val ratio = extractJsonField(json, "ratio") ?: "full"
+                    val ratio = extractJsonField(mergedJson, "ratio") ?: "full"
                     AiAgentCommand.SwitchRatio(ratio)
                 }
                 "adjust_exposure" -> {
-                    val exposure = extractJsonInt(json, "exposure") ?: 0
+                    val exposure = extractJsonInt(mergedJson, "exposure") ?: 0
                     AiAgentCommand.AdjustExposure(exposure.coerceIn(-2, 2))
                 }
                 "adjust_zoom" -> {
-                    val zoom = extractJsonFloat(json, "zoom") ?: 1f
+                    val zoom = extractJsonFloat(mergedJson, "zoom") ?: 1f
                     val minZoom = 0.5f
                     AiAgentCommand.AdjustZoom(zoom.coerceAtLeast(minZoom))
                 }
@@ -557,17 +558,17 @@ class AiAgentUseCase(
                 "capture", "photo" -> AiAgentCommand.CapturePhoto
                 "toggle_recording" -> AiAgentCommand.ToggleRecording
                 "switch_mode" -> {
-                    val modeName = extractJsonField(json, "mode") ?: "PHOTO"
+                    val modeName = extractJsonField(mergedJson, "mode") ?: "PHOTO"
                     val mode = runCatching { MediaType.valueOf(modeName) }.getOrDefault(MediaType.PHOTO)
                     AiAgentCommand.SwitchMode(mode)
                 }
                 "navigate_to" -> {
-                    val destination = extractJsonField(json, "destination") ?: ""
+                    val destination = extractJsonField(mergedJson, "destination") ?: ""
                     AiAgentCommand.NavigateTo(destination)
                 }
                 "go_back" -> AiAgentCommand.GoBack
                 else -> {
-                    val message = extractJsonField(json, "message")
+                    val message = extractJsonField(mergedJson, "message")
                         ?: cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }
                     AiAgentCommand.TextReply(message)
                 }
@@ -576,6 +577,52 @@ class AiAgentUseCase(
             Logger.w(tag, "Failed to parse LLM response, fallback to text: $json", exception)
             AiAgentCommand.TextReply(cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
         }
+    }
+
+    private fun mergeParamsIntoJson(json: String): String {
+        val paramsObject = extractJsonObject(json, "params") ?: return json
+        val paramsContent = paramsObject.removePrefix("{").removeSuffix("}").trim()
+        if (paramsContent.isBlank()) return json
+
+        val paramsPattern = """\"params\"\s*:\s*\{[^{}]*\}""".toRegex()
+        val withoutParams = json.replace(paramsPattern, "").trim()
+        val lastBrace = withoutParams.lastIndexOf('}')
+        if (lastBrace <= 0) return json
+
+        val prefix = withoutParams.substring(0, lastBrace).trimEnd().trimEnd(',')
+        val separator = if (prefix.endsWith('{')) "" else ","
+        return "$prefix$separator$paramsContent}"
+    }
+
+    private fun extractJsonObject(json: String, key: String): String? {
+        val keyIndex = json.indexOf("\"$key\"")
+        if (keyIndex == -1) return null
+
+        val colonIndex = json.indexOf(':', keyIndex)
+        if (colonIndex == -1) return null
+
+        var braceStart = colonIndex + 1
+        while (braceStart < json.length && json[braceStart].isWhitespace()) braceStart++
+        if (braceStart >= json.length || json[braceStart] != '{') return null
+
+        var depth = 1
+        var pos = braceStart + 1
+        while (pos < json.length && depth > 0) {
+            when (json[pos]) {
+                '{' -> depth++
+                '}' -> depth--
+                '"' -> {
+                    pos++
+                    while (pos < json.length && json[pos] != '"') {
+                        if (json[pos] == '\\' && pos + 1 < json.length) pos++
+                        pos++
+                    }
+                }
+            }
+            pos++
+        }
+
+        return if (depth == 0) json.substring(braceStart, pos) else null
     }
 
     private fun extractJsonField(json: String, key: String): String? {
