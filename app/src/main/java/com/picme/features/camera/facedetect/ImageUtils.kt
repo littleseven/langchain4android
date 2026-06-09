@@ -13,6 +13,8 @@ import java.nio.ByteBuffer
  * YUV_420_888 直接转 ARGB_8888 Bitmap，降低 CPU→GPU 传输延迟。
  */
 object ImageUtils {
+    private const val TAG = "PicMe:ImageUtils"
+
     // [常量定义] 旋转角度
     internal const val ROTATION_90 = 90
     internal const val ROTATION_180 = 180
@@ -199,10 +201,12 @@ object ImageUtils {
         reusableUPlane = null
         reusableVPlane = null
         reusableNv21Buffer = null
+        hasLoggedUvFallbackWarning = false
     }
 
     // [Zero-Copy] 复用 NV21 DirectByteBuffer 池
     private var reusableNv21Buffer: ByteBuffer? = null
+    private var hasLoggedUvFallbackWarning = false
 
     /**
      * ImageProxy → Bitmap（RGBA_8888 输出格式专用，零色彩转换）
@@ -265,6 +269,12 @@ object ImageUtils {
         return bitmap
     }
 
+    private fun logUvFallbackWarningOnce(message: String) {
+        if (hasLoggedUvFallbackWarning) return
+        Log.w(TAG, message)
+        hasLoggedUvFallbackWarning = true
+    }
+
     /**
      * [Zero-Copy] ImageProxy → NV21 DirectByteBuffer
      *
@@ -320,32 +330,28 @@ object ImageUtils {
         val uvHeight = height / 2
         val uvWidth = width / 2
         if (uvPixelStride == 2 && uvRowStride == width) {
-            // [最优路径] 标准 NV12 格式（UV 交错），只需交换 U↔V 字节顺序
-            // 逐对交换：...UV UV UV... → ...VU VU VU...
-            val uvSize = width * uvHeight
-            // [修复] 显式设置 limit=capacity，防止 BufferUnderflowException
-            // 部分设备 CameraX YUV plane buffer 的 limit 可能被污染为错误值
-            uBuffer.clear()
-            if (uBuffer.remaining() >= uvSize) {
-                uBuffer.limit(uvSize)
-                val uvBytes = ByteArray(uvSize)
-                uBuffer.get(uvBytes)
-                for (i in 0 until uvSize step 2) {
-                    nv21.put(uvBytes[i + 1])  // V
-                    nv21.put(uvBytes[i])      // U
+            // 常见设备上 U/V plane 可能共享底层内存且有 1 byte 偏移，
+            // 不能用 uvSize(宽*高/2) 作为单 plane 的容量判定，否则会误报降级。
+            val uvLastIndex = (uvHeight - 1) * uvRowStride + (uvWidth - 1) * uvPixelStride
+            val uLimit = uBuffer.limit()
+            val vLimit = vBuffer.limit()
+
+            for (row in 0 until uvHeight) {
+                val rowBase = row * uvRowStride
+                for (col in 0 until uvWidth) {
+                    val uvIdx = rowBase + col * uvPixelStride
+                    val v = if (uvIdx < vLimit) vBuffer.get(uvIdx) else UV_OFFSET.toByte()
+                    val u = if (uvIdx < uLimit) uBuffer.get(uvIdx) else UV_OFFSET.toByte()
+                    nv21.put(v)
+                    nv21.put(u)
                 }
-            } else {
-                // 降级：容量不足，退回到逐行安全路径
-                Log.w("PicMe:ImageUtils", "UV plane capacity(${uBuffer.capacity()}) < expected($uvSize), falling back to safe path")
-                for (row in 0 until uvHeight) {
-                    uBuffer.position(row * uvRowStride)
-                    for (col in 0 until uvWidth) {
-                        val idx = col * uvPixelStride
-                        uBuffer.position(row * uvRowStride + idx)
-                        nv21.put(uBuffer.get(idx + 1))  // V
-                        nv21.put(uBuffer.get(idx))      // U
-                    }
-                }
+            }
+
+            if (uLimit <= uvLastIndex || vLimit <= uvLastIndex) {
+                logUvFallbackWarningOnce(
+                    "UV plane readable range insufficient, filled missing bytes with neutral chroma; " +
+                        "uLimit=$uLimit, vLimit=$vLimit, requiredIndex=$uvLastIndex"
+                )
             }
         } else if (uvPixelStride == 1) {
             // [Planar] U 和 V 分离，需要交错
@@ -360,15 +366,17 @@ object ImageUtils {
                 }
             }
         } else {
-            // [通用路径] pixelStride=2 但有 row padding
+            // [通用路径] pixelStride=2 且存在 row padding，使用绝对索引读取避免 position 抖动
+            val uLimit = uBuffer.limit()
+            val vLimit = vBuffer.limit()
             for (row in 0 until uvHeight) {
-                uBuffer.position(row * uvRowStride)
+                val rowBase = row * uvRowStride
                 for (col in 0 until uvWidth) {
-                    val uvIdx = col * uvPixelStride
-                    uBuffer.position(row * uvRowStride + uvIdx)
-                    vBuffer.position(row * uvRowStride + uvIdx)
-                    nv21.put(vBuffer.get())  // V first
-                    nv21.put(uBuffer.get())  // U second
+                    val uvIdx = rowBase + col * uvPixelStride
+                    val v = if (uvIdx < vLimit) vBuffer.get(uvIdx) else UV_OFFSET.toByte()
+                    val u = if (uvIdx < uLimit) uBuffer.get(uvIdx) else UV_OFFSET.toByte()
+                    nv21.put(v)
+                    nv21.put(u)
                 }
             }
         }
