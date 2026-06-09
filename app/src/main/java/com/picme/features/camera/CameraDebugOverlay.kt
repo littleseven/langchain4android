@@ -60,7 +60,8 @@ internal fun FaceDebugOverlay(
     aspectRatio: Int = AspectRatio.RATIO_FULL
 ) {
     val bigBeautyLandmarks = faceWarpParams.bigBeautyLandmarks
-    val hasBigBeauty = bigBeautyLandmarks.hasFace && bigBeautyLandmarks.points.isNotEmpty()
+    val hasBigBeauty = bigBeautyLandmarks.hasFace &&
+        (bigBeautyLandmarks.rawPoints.size >= 106 * 2 || bigBeautyLandmarks.points.isNotEmpty())
     val detectionLabel = when (faceWarpParams.detectionSource) {
         FaceDetectionSource.MEDIAPIPE -> stringResource(R.string.face_detection_engine_mode_mediapipe)
         FaceDetectionSource.MNN -> stringResource(R.string.inference_engine_mnn)
@@ -276,7 +277,24 @@ private fun FaceDebugOverlayBigBeauty(
         }
 
         // 绘制大美丽点位（蓝色，带序号）
-        val bbPoints = bigBeautyLandmarks.points.map { pt -> toCanvasPoint(Offset(pt.x, pt.y)) }
+        val bbPoints = if (bigBeautyLandmarks.rawPoints.size >= 106 * 2) {
+            buildList(106) {
+                var index = 0
+                repeat(106) {
+                    add(
+                        toCanvasPoint(
+                            Offset(
+                                bigBeautyLandmarks.rawPoints[index],
+                                bigBeautyLandmarks.rawPoints[index + 1]
+                            )
+                        )
+                    )
+                    index += 2
+                }
+            }
+        } else {
+            bigBeautyLandmarks.points.map { pt -> toCanvasPoint(Offset(pt.x, pt.y)) }
+        }
         bbPoints.forEachIndexed { index, point ->
             drawCircle(
                 color = Color.Blue.copy(alpha = 0.85f),
