@@ -86,8 +86,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // 通过 project property 控制是否启用混淆，release-plain 模式不混淆
+            isMinifyEnabled = !(project.findProperty("picme.release.plain")?.toString()?.toBoolean() ?: false)
+            isShrinkResources = isMinifyEnabled
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
