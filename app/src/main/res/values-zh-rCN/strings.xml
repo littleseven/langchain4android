@@ -25,7 +25,10 @@
     <string name="pro">专业</string>
     <string name="flip_camera">翻转相机</string>
     <string name="grant_permissions">授予权限</string>
-    <string name="gallery_permission_required">允许访问系统相册后即可浏览系统照片和视频</string>
+    <string name="camera_permission_title">相机访问权限</string>
+    <string name="camera_permission_desc">需要使用相机和麦克风权限，以支持拍照、录像和语音功能</string>
+    <string name="gallery_permission_title">相册访问权限</string>
+    <string name="gallery_permission_desc">允许访问以浏览和管理您的照片与视频</string>
     <string name="theme_mode">主题模式</string>
     <string name="beauty_engine">美颜引擎</string>
 

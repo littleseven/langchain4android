@@ -24,7 +24,10 @@
     <string name="pro">PRO</string>
     <string name="flip_camera">Flip Camera</string>
     <string name="grant_permissions">Grant Permissions</string>
-    <string name="gallery_permission_required">Allow gallery access to browse system photos and videos</string>
+    <string name="camera_permission_title">Camera Access</string>
+    <string name="camera_permission_desc">Camera and microphone access are needed for photo, video, and voice features</string>
+    <string name="gallery_permission_title">Gallery Access</string>
+    <string name="gallery_permission_desc">Allow access to browse and manage your photos and videos</string>
     <string name="theme_mode">Theme Mode</string>
     <string name="beauty_engine">Beauty Engine</string>
 
