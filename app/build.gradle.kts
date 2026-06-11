@@ -48,8 +48,8 @@ android {
         applicationId = "com.mamba.picme"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 10000
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -93,12 +93,23 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // 显式使用 debug 签名构建 release 包
-            signingConfig = signingConfigs.getByName("debug")
+            // Release 包默认使用正式签名；AAB 构建时会通过注入参数覆盖
+            signingConfig = if (releaseStoreFile.isNotBlank()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    bundle {
+        // AAB 统一使用 release 签名配置；如未配置环境变量则回退 debug 签名
+        storeArchive {
+            enable = false
         }
     }
 

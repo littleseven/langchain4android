@@ -1,12 +1,14 @@
 #!/bin/bash
 #
-# PicMe APK 打包脚本
-# 支持 debug / release / release-no-proguard 三种模式
+# PicMe APK/AAB 打包脚本
+# 支持 debug / release / release-no-proguard / aab / aab-plain 五种模式
 #
 # 用法:
 #   ./scripts/build.sh debug          # 打 debug 包
-#   ./scripts/build.sh release        # 打 release 包（使用 app/keystore/picme-release.jks）
-#   ./scripts/build.sh release-plain  # 打 release 包但不混淆（用于调试 release 问题）
+#   ./scripts/build.sh release        # 打 release APK（使用 app/keystore/picme-release.jks）
+#   ./scripts/build.sh release-plain  # 打 release APK 但不混淆（用于调试 release 问题）
+#   ./scripts/build.sh aab            # 打 release AAB（Google Play 上架格式）
+#   ./scripts/build.sh aab-plain      # 打 release AAB 但不混淆（用于调试 release 问题）
 #
 # Release 签名配置从环境变量读取：
 #   export PICME_RELEASE_STORE_PASSWORD=your_password
@@ -18,6 +20,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APK_OUTPUT_DIR="$PROJECT_ROOT/app/build/outputs/apk"
+AAB_OUTPUT_DIR="$PROJECT_ROOT/app/build/outputs/bundle"
 KEYSTORE_PATH="$PROJECT_ROOT/app/keystore/picme-release.jks"
 
 # 颜色定义
@@ -51,25 +54,26 @@ check_env() {
     fi
 }
 
-# 查找最新生成的 APK
-find_apk() {
+# 查找最新生成的 APK/AAB
+find_artifact() {
     local dir="$1"
+    local suffix="$2"
     if [ -d "$dir" ]; then
-        find "$dir" -name "*.apk" -type f -print0 | xargs -0 ls -t 2>/dev/null | head -1
+        find "$dir" -name "*.${suffix}" -type f -print0 | xargs -0 ls -t 2>/dev/null | head -1
     fi
 }
 
-# 打印 APK 信息
-print_apk_info() {
-    local apk="$1"
-    if [ -f "$apk" ]; then
+# 打印产物信息
+print_artifact_info() {
+    local artifact="$1"
+    if [ -f "$artifact" ]; then
         local size
-        size=$(du -h "$apk" | cut -f1)
-        log_info "APK 路径: $apk"
-        log_info "APK 大小: $size"
-        # 尝试提取签名信息
-        if command -v apksigner &> /dev/null; then
-            apksigner verify -v "$apk" 2>/dev/null | head -5 || true
+        size=$(du -h "$artifact" | cut -f1)
+        log_info "产物路径: $artifact"
+        log_info "产物大小: $size"
+        # 尝试提取签名信息（仅 APK）
+        if [[ "$artifact" == *.apk ]] && command -v apksigner &> /dev/null; then
+            apksigner verify -v "$artifact" 2>/dev/null | head -5 || true
         fi
     fi
 }
@@ -80,9 +84,9 @@ build_debug() {
     ./gradlew :app:assembleDebug
 
     local apk
-    apk=$(find_apk "$APK_OUTPUT_DIR/debug")
+    apk=$(find_artifact "$APK_OUTPUT_DIR/debug" "apk")
     if [ -n "$apk" ]; then
-        print_apk_info "$apk"
+        print_artifact_info "$apk"
         log_success "Debug 包构建完成"
     else
         log_error "Debug 包未找到"
@@ -142,9 +146,9 @@ build_release() {
         --no-configuration-cache
 
     local apk
-    apk=$(find_apk "$APK_OUTPUT_DIR/release")
+    apk=$(find_artifact "$APK_OUTPUT_DIR/release" "apk")
     if [ -n "$apk" ]; then
-        print_apk_info "$apk"
+        print_artifact_info "$apk"
         if [ "$plain_mode" = "true" ]; then
             log_success "Release 包（不混淆）构建完成"
         else
@@ -152,6 +156,72 @@ build_release() {
         fi
     else
         log_error "Release 包未找到"
+        exit 1
+    fi
+}
+
+# 构建 Release AAB（Google Play 上架格式）
+build_aab() {
+    local plain_mode="${1:-false}"
+
+    # 检查 keystore 存在
+    if [ ! -f "$KEYSTORE_PATH" ]; then
+        log_error "Release keystore 未找到: $KEYSTORE_PATH"
+        exit 1
+    fi
+
+    # 检查环境变量
+    if [ -z "$PICME_RELEASE_STORE_PASSWORD" ]; then
+        log_warn "环境变量 PICME_RELEASE_STORE_PASSWORD 未设置"
+        read -rsp "请输入 keystore 密码: " PICME_RELEASE_STORE_PASSWORD
+        echo
+        export PICME_RELEASE_STORE_PASSWORD
+    fi
+
+    if [ -z "$PICME_RELEASE_KEY_ALIAS" ]; then
+        log_warn "环境变量 PICME_RELEASE_KEY_ALIAS 未设置"
+        read -rp "请输入 key alias: " PICME_RELEASE_KEY_ALIAS
+        export PICME_RELEASE_KEY_ALIAS
+    fi
+
+    if [ -z "$PICME_RELEASE_KEY_PASSWORD" ]; then
+        log_warn "环境变量 PICME_RELEASE_KEY_PASSWORD 未设置"
+        read -rsp "请输入 key 密码: " PICME_RELEASE_KEY_PASSWORD
+        echo
+        export PICME_RELEASE_KEY_PASSWORD
+    fi
+
+    # 设置 keystore 路径环境变量
+    export PICME_RELEASE_STORE_FILE="$KEYSTORE_PATH"
+
+    # 传递构建类型标记给 Gradle
+    local plain_flag=""
+    if [ "$plain_mode" = "true" ]; then
+        plain_flag="-Ppicme.release.plain=true"
+        log_info "开始构建 Release AAB（不混淆）..."
+    else
+        log_info "开始构建 Release AAB（Google Play 上架格式）..."
+    fi
+
+    ./gradlew :app:bundleRelease \
+        -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
+        -Pandroid.injected.signing.store.password="$PICME_RELEASE_STORE_PASSWORD" \
+        -Pandroid.injected.signing.key.alias="$PICME_RELEASE_KEY_ALIAS" \
+        -Pandroid.injected.signing.key.password="$PICME_RELEASE_KEY_PASSWORD" \
+        $plain_flag \
+        --no-configuration-cache
+
+    local aab
+    aab=$(find_artifact "$AAB_OUTPUT_DIR/release" "aab")
+    if [ -n "$aab" ]; then
+        print_artifact_info "$aab"
+        if [ "$plain_mode" = "true" ]; then
+            log_success "Release AAB（不混淆）构建完成"
+        else
+            log_success "Release AAB 构建完成"
+        fi
+    else
+        log_error "Release AAB 未找到"
         exit 1
     fi
 }
@@ -173,12 +243,20 @@ main() {
         release-plain|release-plain|plain)
             build_release true
             ;;
+        aab)
+            build_aab false
+            ;;
+        aab-plain)
+            build_aab true
+            ;;
         *)
-            echo "用法: $0 {debug|release|release-plain}"
+            echo "用法: $0 {debug|release|release-plain|aab|aab-plain}"
             echo ""
-            echo "  debug          - 构建 debug 包"
-            echo "  release        - 构建 release 包（使用 app/keystore/picme-release.jks）"
-            echo "  release-plain  - 构建 release 包但不启用混淆/R8"
+            echo "  debug          - 构建 debug APK"
+            echo "  release        - 构建 release APK（使用 app/keystore/picme-release.jks）"
+            echo "  release-plain  - 构建 release APK 但不启用混淆/R8"
+            echo "  aab            - 构建 release AAB（Google Play 上架格式）"
+            echo "  aab-plain      - 构建 release AAB 但不启用混淆/R8"
             echo ""
             echo "Release 签名需要环境变量："
             echo "  PICME_RELEASE_STORE_PASSWORD  - keystore 密码"

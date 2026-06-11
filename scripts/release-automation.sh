@@ -7,12 +7,14 @@
 # Options:
 #   --type <type>     版本类型: major|minor|patch (默认: patch)
 #   --dry-run         预览变更，不实际执行
-#   --skip-build      跳过 APK 构建（仅更新版本和 CHANGELOG）
+#   --skip-build      跳过构建（仅更新版本和 CHANGELOG）
 #   --output <dir>    输出目录
+#   --aab             同时构建 AAB（Google Play 上架格式）
 #
 # 示例:
 #   ./scripts/release-automation.sh --type patch --dry-run    # 预览 patch 版本变更
 #   ./scripts/release-automation.sh --type minor              # 执行 minor 版本发布
+#   ./scripts/release-automation.sh --type patch --aab        # 发布 APK + AAB
 #
 
 set -euo pipefail
@@ -30,13 +32,16 @@ NC='\033[0m'
 RELEASE_TYPE="patch"
 DRY_RUN=false
 SKIP_BUILD=false
+BUILD_AAB=false
 OUTPUT_DIR="$PROJECT_ROOT/app/build/outputs/apk/release"
+AAB_OUTPUT_DIR="$PROJECT_ROOT/app/build/outputs/bundle/release"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --type) RELEASE_TYPE="$2"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         --skip-build) SKIP_BUILD=true; shift ;;
+        --aab) BUILD_AAB=true; shift ;;
         --output) OUTPUT_DIR="$2"; shift 2 ;;
         *) echo "未知参数: $1"; exit 1 ;;
     esac
@@ -180,15 +185,18 @@ build_release() {
         echo -e "${YELLOW}⏭️ 跳过构建 (--skip-build)${NC}"
         return
     fi
-    
+
     if [ "$DRY_RUN" = true ]; then
         echo -e "${BLUE}[DRY-RUN] 将执行: ./gradlew :app:assembleRelease${NC}"
+        if [ "$BUILD_AAB" = true ]; then
+            echo -e "${BLUE}[DRY-RUN] 将执行: ./gradlew :app:bundleRelease${NC}"
+        fi
         return
     fi
-    
+
     echo "🔨 构建 Release APK..."
     ./gradlew :app:assembleRelease
-    
+
     # 查找 APK
     local apk=$(find "$OUTPUT_DIR" -name "*.apk" -type f | sort | tail -1)
     if [ -n "$apk" ]; then
@@ -196,6 +204,20 @@ build_release() {
         echo -e "${GREEN}✅ APK 构建成功:${NC}"
         echo "  路径: $apk"
         echo "  大小: $size"
+    fi
+
+    if [ "$BUILD_AAB" = true ]; then
+        echo ""
+        echo "🔨 构建 Release AAB（Google Play 上架格式）..."
+        ./gradlew :app:bundleRelease
+
+        local aab=$(find "$AAB_OUTPUT_DIR" -name "*.aab" -type f | sort | tail -1)
+        if [ -n "$aab" ]; then
+            local aab_size=$(du -h "$aab" | cut -f1)
+            echo -e "${GREEN}✅ AAB 构建成功:${NC}"
+            echo "  路径: $aab"
+            echo "  大小: $aab_size"
+        fi
     fi
 }
 
@@ -228,7 +250,12 @@ git_operations() {
     echo "  Tag: v$version"
     echo ""
     echo "后续步骤:"
-    echo "  1. 测试 Release APK"
+    if [ "$BUILD_AAB" = true ]; then
+        echo "  1. 测试 Release APK 与 AAB"
+        echo "  2. 上传 AAB 到 Google Play Console"
+    else
+        echo "  1. 测试 Release APK"
+    fi
     echo "  2. git push origin main --tags"
     echo "  3. 在 GitHub 创建 Release"
 }
