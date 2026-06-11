@@ -148,7 +148,7 @@ CameraX → SurfaceTexture → OpenGL ES Shader → SurfaceView
 ## Code Style & Constraints
 
 ### Hard Rules (Enforced)
-- **No fully-qualified names** for `com.picme.*` in source (custom Gradle task `checkNoFullyQualifiedName`); use imports.
+- **No fully-qualified names** for `com.mamba.picme.*` in source (custom Gradle task `checkNoFullyQualifiedName`); use imports.
 - **No wildcard imports** (`*`).
 - **Lambda parameters must be explicitly named**; implicit `it` is prohibited.
 - **Log tags** must follow `PicMe:[ModuleName]` (e.g., `PicMe:Camera`, `PicMe:BeautyEngine`).

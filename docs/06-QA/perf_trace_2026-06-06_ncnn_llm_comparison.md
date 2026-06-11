@@ -217,9 +217,9 @@
 
 ```bash
 # 性能数据快照
-adb shell dumpsys cpuinfo | grep com.picme
-adb shell dumpsys meminfo com.picme
-adb shell dumpsys gfxinfo com.picme
+adb shell dumpsys cpuinfo | grep com.mamba.picme
+adb shell dumpsys meminfo com.mamba.picme
+adb shell dumpsys gfxinfo com.mamba.picme
 adb shell dumpsys battery | grep temperature
 adb shell cat /sys/class/thermal/thermal_zone*/temp
 

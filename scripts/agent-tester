@@ -94,12 +94,12 @@ send_cmd() {
     local receiver="com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver"
     
     if [ -n "$param" ]; then
-        adb shell am broadcast -n "$receiver" -a com.picme.AGENT_TEST \
+        adb shell am broadcast -n "$receiver" -a com.mamba.picme.AGENT_TEST \
             --es "cmd" "$cmd" \
             --es "param" "$param" \
             > /dev/null 2>&1 || true
     else
-        adb shell am broadcast -n "$receiver" -a com.picme.AGENT_TEST \
+        adb shell am broadcast -n "$receiver" -a com.mamba.picme.AGENT_TEST \
             --es "cmd" "$cmd" \
             > /dev/null 2>&1 || true
     fi
@@ -110,13 +110,13 @@ collect_perf() {
     log_info "采集性能数据..."
     
     # FPS
-    local fps_data=$(adb shell dumpsys gfxinfo com.picme 2>/dev/null | grep -E "Janky frames|Total frames" | head -5)
+    local fps_data=$(adb shell dumpsys gfxinfo com.mamba.picme 2>/dev/null | grep -E "Janky frames|Total frames" | head -5)
     if [ -n "$fps_data" ]; then
         echo "$fps_data" >> "$OUTPUT_DIR/perf_fps.txt"
     fi
     
     # 内存
-    local mem_data=$(adb shell dumpsys meminfo com.picme 2>/dev/null | grep -E "TOTAL PSS|Native Heap|Dalvik Heap" | head -5)
+    local mem_data=$(adb shell dumpsys meminfo com.mamba.picme 2>/dev/null | grep -E "TOTAL PSS|Native Heap|Dalvik Heap" | head -5)
     if [ -n "$mem_data" ]; then
         echo "$mem_data" >> "$OUTPUT_DIR/perf_memory.txt"
     fi
@@ -278,10 +278,10 @@ run_camera_suite() {
     log_info "发现 $total 个测试用例"
     
     # 启动应用
-    adb shell am force-stop com.picme > /dev/null 2>&1 || true
+    adb shell am force-stop com.mamba.picme > /dev/null 2>&1 || true
     sleep 1
     adb logcat -c > /dev/null 2>&1 || true
-    adb shell am start -n com.picme/.MainActivity > /dev/null 2>&1
+    adb shell am start -n com.mamba.picme/.MainActivity > /dev/null 2>&1
     sleep 3
     
     # 按顺序执行每个JSON用例
@@ -321,9 +321,9 @@ run_settings_suite() {
     log_info "发现 $total 个测试用例"
     
     # 启动应用
-    adb shell am force-stop com.picme > /dev/null 2>&1 || true
+    adb shell am force-stop com.mamba.picme > /dev/null 2>&1 || true
     sleep 1
-    adb shell am start -n com.picme/.MainActivity > /dev/null 2>&1
+    adb shell am start -n com.mamba.picme/.MainActivity > /dev/null 2>&1
     sleep 2
     
     # 导航到设置页

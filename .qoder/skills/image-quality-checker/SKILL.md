@@ -99,7 +99,7 @@ D PicMe:ImageProcessor: GPU photo processing succeeded
 ### 场曯2: 验证 GPU 拍照是否黑屏
 ```bash
 # 1. 触发拍照
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"
 sleep 2
 
 # 2. 拉取相册最新照片

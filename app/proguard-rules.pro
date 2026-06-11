@@ -21,4 +21,4 @@
 #-renamesourcefileattribute SourceFile
 
 # Keep Logger class for reflection binding from beauty-engine module
--keep class com.picme.core.common.Logger { public *; }
+-keep class com.mamba.picme.core.common.Logger { public *; }

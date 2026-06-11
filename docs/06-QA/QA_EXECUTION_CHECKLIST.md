@@ -254,7 +254,7 @@
 
 **执行命令**:
 ```bash
-adb shell am start -W com.picme/com.picme.ui.MainActivity
+adb shell am start -W com.mamba.picme/com.mamba.picme.ui.MainActivity
 ```
 
 ### 3.2 预览性能
@@ -403,13 +403,13 @@ tcpdump -i any port 443 -w capture.pcap  # 抓包验证
 
 ```bash
 # 启动性能测试
-adb shell am start -W com.picme/com.picme.ui.MainActivity
+adb shell am start -W com.mamba.picme/com.mamba.picme.ui.MainActivity
 
 # 开启调试浮层
 adb shell setprop picme.debug.perf true
 
 # 清除应用数据
-adb shell pm clear com.picme
+adb shell pm clear com.mamba.picme
 
 # 查看日志
 adb logcat -s PicMe:Agent PicMe:BeautyEngine PicMe:*
@@ -426,7 +426,7 @@ adb pull /sdcard/screenshot.png
 # perf_test.sh
 
 # 冷启动测试
-START_TIME=$(adb shell am start -W com.picme/com.picme.ui.MainActivity | grep mTotalTime | awk -F= '{print $2}' | awk '{print $1}')
+START_TIME=$(adb shell am start -W com.mamba.picme/com.mamba.picme.ui.MainActivity | grep mTotalTime | awk -F= '{print $2}' | awk '{print $1}')
 echo "Cold startup: ${START_TIME}ms"
 
 # 帧率测试
@@ -435,7 +435,7 @@ adb shell dumpsys SurfaceFlinger --list | grep CameraPreview | while read surfac
 done
 
 # 内存测试
-adb shell dumpsys meminfo com.picme | grep Total PSS
+adb shell dumpsys meminfo com.mamba.picme | grep Total PSS
 ```
 
 ---

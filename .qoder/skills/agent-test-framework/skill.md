@@ -157,7 +157,7 @@ AgentAsserts.beautySettingsApplied(smooth = 80, whiten = 60)
 
 ```bash
 # 1. 发送测试命令（显式组件，Android 12+ 必需）
-adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}'"
+adb shell "am broadcast -n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.mamba.picme.AGENT_TEST --es json '{\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}'"
 
 # 2. 等待响应（通过日志）
 adb logcat -d | grep "AgentTestReceiver: Response sent"
@@ -214,7 +214,7 @@ adb logcat -d | grep "AgentTestReceiver: Response sent"
 
 | 维度 | 旧体系 (TEST_COMMAND 广播) | 新体系 (Agent Framework JSON) |
 |------|---------------------------|-------------------------------|
-| 命令格式 | `adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"` | `adb shell "am broadcast -n ... --es json '{"method":"capture"}'"` |
+| 命令格式 | `adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"` | `adb shell "am broadcast -n ... --es json '{"method":"capture"}'"` |
 | 用例定义 | bash 函数 | Kotlin DSL + JSON 用例 |
 | 断言方式 | grep 日志文本 | 状态快照 + 类型安全断言 |
 | 失败诊断 | 手动查看日志 | 自动收集上下文快照 |
@@ -229,7 +229,7 @@ adb logcat -d | grep "AgentTestReceiver: Response sent"
 ### 命令无响应
 
 1. 确认应用在前台运行
-2. 确认使用显式组件 `-n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver`
+2. 确认使用显式组件 `-n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver`
 3. 确认 JSON 用单引号包裹：`--es json '{"method":"..."}'`
 4. 查看日志：`adb logcat -s PicMe:AgentTest:*`
 

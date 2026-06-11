@@ -327,7 +327,7 @@ stripWakeWord handles close sound variant                   // 小妹
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 6. 启动相机应用
-adb shell am start -n com.picme/.features.camera.CameraScreen
+adb shell am start -n com.mamba.picme/.features.camera.CameraScreen
 
 # 7. 测试唤醒词识别
 # 说出：

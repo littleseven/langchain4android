@@ -1,7 +1,7 @@
 package com.k2fsa.sherpa.mnn
 
 import android.content.res.AssetManager
-import com.picme.agent.core.platform.logging.Logger
+import com.mamba.picme.agent.core.platform.logging.Logger
 
 data class EndpointRule(
     var mustContainNonSilence: Boolean,

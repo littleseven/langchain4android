@@ -103,7 +103,7 @@
 ## 6. 包划分建议（Android-First，v3）
 
 ```text
-com.picme.agent.core
+com.mamba.picme.agent.core
 ├── api
 │   ├── command
 │   ├── context

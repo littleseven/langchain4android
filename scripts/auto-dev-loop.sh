@@ -195,7 +195,7 @@ run_phase3() {
         log_ok "APK 安装成功"
     else
         echo "   尝试卸载后重装..."
-        adb uninstall com.picme > /dev/null 2>&1 || true
+        adb uninstall com.mamba.picme > /dev/null 2>&1 || true
         if adb install "$apk" > "$OUTPUT_DIR/install.log" 2>&1; then
             log_ok "APK 卸载重装成功"
         else
@@ -206,8 +206,8 @@ run_phase3() {
 
     echo ""
     echo "→ 启动应用..."
-    adb shell am start -n com.picme/.ui.CameraScreen > /dev/null 2>&1 || \
-    adb shell am start -n com.picme/.MainActivity > /dev/null 2>&1
+    adb shell am start -n com.mamba.picme/.ui.CameraScreen > /dev/null 2>&1 || \
+    adb shell am start -n com.mamba.picme/.MainActivity > /dev/null 2>&1
     sleep 3
 
     if adb shell ps | grep -q "com.picme"; then

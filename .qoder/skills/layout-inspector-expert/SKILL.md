@@ -44,7 +44,7 @@ tags:
 
 1. 确保应用运行在 Debug 模式
 2. Android Studio → Tools → Layout Inspector
-3. 选择正在运行的进程 `com.picme`
+3. 选择正在运行的进程 `com.mamba.picme`
 4. 等待组件树加载完成
 
 ### Phase 2: 检查组件树结构

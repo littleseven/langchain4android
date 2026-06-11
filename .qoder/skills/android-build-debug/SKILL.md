@@ -41,8 +41,8 @@ adb logcat -s PicMe:* *:S
 ### 4. 清除日志后重新启动
 ```bash
 adb logcat -c
-adb shell am force-stop com.picme
-adb shell am start -n com.picme/.MainActivity
+adb shell am force-stop com.mamba.picme
+adb shell am start -n com.mamba.picme/.MainActivity
 ```
 
 ## 分层编译策略（减少等待）

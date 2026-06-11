@@ -26,9 +26,9 @@ tags:
 
 ### 1. 启动应用并拍照
 ```bash
-adb shell am start -n com.picme/.MainActivity
+adb shell am start -n com.mamba.picme/.MainActivity
 sleep 3
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"
 ```
 
 ### 2. 截屏并拉取
@@ -63,19 +63,19 @@ adb logcat -s PicMe:* *:S
 ### 模式设置
 ```bash
 # 切换拍照模式 (photo/video/pro)
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_mode" --es mode "video"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_mode" --es mode "video"
 
 # 切换场景 (none/night/moon)
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_scene" --es scene "night"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_scene" --es scene "night"
 
 # 切换画幅 (4_3/16_9/full)
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_ratio" --es ratio "16_9"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_ratio" --es ratio "16_9"
 ```
 
 ### 美颜设置
 ```bash
 # 设置美颜参数 (0-100)
-adb shell am broadcast -a com.picme.TEST_COMMAND \
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND \
     --es action "set_beauty" \
     --ei smooth 80 \
     --ei whiten 60 \
@@ -86,46 +86,46 @@ adb shell am broadcast -a com.picme.TEST_COMMAND \
 ### 滤镜与风格
 ```bash
 # 设置滤镜
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_filter" --es filter "leica_classic"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_filter" --es filter "leica_classic"
 
 # 设置风格滤镜
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_style" --es style "toon"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_style" --es style "toon"
 ```
 
 ### 相机参数
 ```bash
 # 设置曝光补偿 (-2 ~ 2)
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_exposure" --ei exposure 1
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_exposure" --ei exposure 1
 
 # 设置缩放
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_zoom" --ef zoom 2.0
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_zoom" --ef zoom 2.0
 ```
 
 ### 面板控制
 ```bash
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "toggle_beauty"
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "toggle_filter"
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "toggle_settings"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "toggle_beauty"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "toggle_filter"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "toggle_settings"
 ```
 
 ### 完整拍照流程示例
 ```bash
 #!/bin/bash
 # 启动应用
-adb shell am start -n com.picme/.MainActivity
+adb shell am start -n com.mamba.picme/.MainActivity
 sleep 3
 
 # 确保后置摄像头
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "flip_camera"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "flip_camera"
 sleep 1
 
 # 设置美颜
-adb shell am broadcast -a com.picme.TEST_COMMAND \
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND \
     --es action "set_beauty" --ei smooth 80 --ei whiten 60
 sleep 0.5
 
 # 拍照
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"
 ```
 
 ### Gallery / MediaPager 命令（2026-05 新增）
@@ -151,35 +151,35 @@ adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
 ```bash
 #!/bin/bash
 # 启动应用
-adb shell am start -n com.picme/.MainActivity
+adb shell am start -n com.mamba.picme/.MainActivity
 sleep 3
 
 # 进入相册
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "enter_gallery"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "enter_gallery"
 sleep 2
 
 # 打开第一张照片
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "open_photo" --ei index 0
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "open_photo" --ei index 0
 sleep 1
 
 # 进入编辑模式
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "start_edit"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "start_edit"
 sleep 2
 
 # 设置磨皮 50、美白 30
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_smooth" --ei value 50
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_whiten" --ei value 30
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_smooth" --ei value 50
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_whiten" --ei value 30
 sleep 2
 
 # 保存编辑
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "save_edit"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "save_edit"
 ```
 
 ### 命令验证
 ```bash
 # 清除日志后执行命令
 adb logcat -c
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"
 sleep 1
 
 # 查看 PicMe:CameraTest / PicMe:GalleryTest 标签日志
@@ -227,8 +227,8 @@ adb logcat -s PicMe:BeautyRenderer:FaceMakeupPass:* *:S
 
 # 清除后重新捕获
 adb logcat -c
-adb shell am force-stop com.picme
-adb shell am start -n com.picme/.MainActivity
+adb shell am force-stop com.mamba.picme
+adb shell am start -n com.mamba.picme/.MainActivity
 adb logcat -s PicMe:*
 ```
 
@@ -242,24 +242,24 @@ grep -i "error\|exception\|failed" /tmp/logcat.txt
 
 ```bash
 # 检查应用是否运行
-adb shell pidof com.picme
+adb shell pidof com.mamba.picme
 
 # 强制重启应用
-adb shell am force-stop com.picme
-adb shell am start -n com.picme/.MainActivity
+adb shell am force-stop com.mamba.picme
+adb shell am start -n com.mamba.picme/.MainActivity
 
 # 检查 GPU/渲染状态
-adb shell dumpsys gfxinfo com.picme
+adb shell dumpsys gfxinfo com.mamba.picme
 ```
 
 ### 文件操作
 
 ```bash
 # 拉取 SharedPreferences
-adb shell run-as com.picme cat /data/data/com.picme/shared_prefs/*.xml
+adb shell run-as com.mamba.picme cat /data/data/com.mamba.picme/shared_prefs/*.xml
 
 # 拉取数据库
-adb shell run-as com.picme cat /data/data/com.picme/databases/*.db > /tmp/app.db
+adb shell run-as com.mamba.picme cat /data/data/com.mamba.picme/databases/*.db > /tmp/app.db
 
 # 推送测试资源
 adb push test_image.jpg /sdcard/Pictures/
@@ -282,10 +282,10 @@ adb logcat -d | grep -i "texture\|bitmap\|load"
 
 ```bash
 # FPS 监控
-adb shell dumpsys gfxinfo com.picme | grep -i "jank\|frame"
+adb shell dumpsys gfxinfo com.mamba.picme | grep -i "jank\|frame"
 
 # 内存使用
-adb shell dumpsys meminfo com.picme
+adb shell dumpsys meminfo com.mamba.picme
 ```
 
 ---
@@ -296,8 +296,8 @@ adb shell dumpsys meminfo com.picme
 ```bash
 #!/bin/bash
 # 1. 确保应用运行
-if ! adb shell pidof com.picme > /dev/null; then
-    adb shell am start -n com.picme/.MainActivity
+if ! adb shell pidof com.mamba.picme > /dev/null; then
+    adb shell am start -n com.mamba.picme/.MainActivity
     sleep 3
 fi
 
@@ -309,9 +309,9 @@ adb shell screencap -p /sdcard/before.png
 adb pull /sdcard/before.png /tmp/before.png
 
 # 4. 执行相机操作
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "set_filter" --es filter "leica_classic"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "set_filter" --es filter "leica_classic"
 sleep 0.5
-adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"
 
 # 5. 等待渲染完成
 sleep 1
@@ -339,7 +339,7 @@ adb logcat -d > /tmp/logcat.txt
 | `adb shell input swipe x1 y1 x2 y2` | 模拟滑动 |
 | `adb shell am start -n pkg/.Activity` | 启动 Activity |
 | `adb shell am force-stop pkg` | 强制停止应用 |
-| `adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"` | 拍照 |
+| `adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"` | 拍照 |
 | `adb shell pidof pkg` | 检查进程是否存在 |
 | `adb shell dumpsys gfxinfo pkg` | GPU 渲染信息 |
 | `adb shell dumpsys meminfo pkg` | 内存信息 |
@@ -349,7 +349,7 @@ adb logcat -d > /tmp/logcat.txt
 ## 五、故障排除
 
 ### 命令无响应
-1. 确认应用在前台运行：`adb shell pidof com.picme`
+1. 确认应用在前台运行：`adb shell pidof com.mamba.picme`
 2. 清除日志后重试：`adb logcat -c && adb shell am broadcast ... && sleep 1 && adb logcat -d`
 3. 检查 `adb logcat | grep PicMe:(CameraTest|GalleryTest)` 是否有接收日志
 4. 如果显示 `Background execution not allowed`，说明静态接收器被限制——**GalleryScreen 和 CameraScreen 各自通过 DisposableEffect 动态注册接收器，导航切换时必须确保目标 Screen 已挂载**
@@ -368,7 +368,7 @@ adb logcat -d > /tmp/logcat.txt
 
 ## 六、技术说明
 
-- **广播 Action**: `com.picme.TEST_COMMAND`
+- **广播 Action**: `com.mamba.picme.TEST_COMMAND`
 - **动态注册**: CameraScreen 通过 DisposableEffect 注册 BroadcastReceiver
 - **命令分发**: CameraTestCommandDispatcher 使用 SharedFlow 分发命令
 - **状态更新**: LaunchedEffect 定期更新 CameraTestStateSnapshot

@@ -227,7 +227,7 @@ adb install -r app/build/outputs/apk/debug/picme-debug.apk
 
 ```bash
 adb logcat -c
-adb shell am start -n com.picme/.MainActivity
+adb shell am start -n com.mamba.picme/.MainActivity
 sleep 15
 adb logcat -d | grep "MNN vs ONNX"
 ```

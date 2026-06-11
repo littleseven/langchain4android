@@ -42,8 +42,8 @@ tags:
 
 ```bash
 # 收集基础性能数据
-adb shell dumpsys meminfo com.picme
-adb shell dumpsys gfxinfo com.picme | grep -i "jank\|frame"
+adb shell dumpsys meminfo com.mamba.picme
+adb shell dumpsys gfxinfo com.mamba.picme | grep -i "jank\|frame"
 adb logcat -d | grep -E "PicMe:.*elapsed|PicMe:.*FPS|PicMe:.*perf"
 ```
 

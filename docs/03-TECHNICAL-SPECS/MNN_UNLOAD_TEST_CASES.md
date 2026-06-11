@@ -29,11 +29,11 @@ adb logcat -s "MnnResourceManager:*" "LocalLlmEngine:*" "SherpaMnnAsr:*" "VoiceC
 
 ```bash
 # 监控进程内存
-adb shell dumpsys meminfo com.picme | grep -E "TOTAL|Java Heap|Native Heap"
+adb shell dumpsys meminfo com.mamba.picme | grep -E "TOTAL|Java Heap|Native Heap"
 
 # 或持续监控
 while true; do
-    adb shell dumpsys meminfo com.picme | grep "TOTAL PSS"
+    adb shell dumpsys meminfo com.mamba.picme | grep "TOTAL PSS"
     sleep 5
 done
 ```
@@ -115,10 +115,10 @@ done
 **ADB 命令**:
 ```bash
 # 模拟 RUNNING_CRITICAL
-adb shell am send-trim-memory com.picme RUNNING_CRITICAL
+adb shell am send-trim-memory com.mamba.picme RUNNING_CRITICAL
 
 # 或模拟 COMPLETE
-adb shell am send-trim-memory com.picme COMPLETE
+adb shell am send-trim-memory com.mamba.picme COMPLETE
 ```
 
 **验证标准**:
@@ -197,7 +197,7 @@ adb shell am send-trim-memory com.picme COMPLETE
 
 set -e
 
-PACKAGE="com.picme"
+PACKAGE="com.mamba.picme"
 LOG_FILE="/tmp/mnn_unload_test_$(date +%Y%m%d_%H%M%S).log"
 TAGS="MnnResourceManager:LocalLlmEngine:SherpaMnnAsr:VoiceCommand"
 

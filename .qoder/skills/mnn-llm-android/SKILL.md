@@ -151,14 +151,14 @@ if (!loaded) {
 ### Step 1: 确认模型文件完整性
 
 ```bash
-adb shell run-as com.picme ls -la files/llm_models/qwen3-0-6b/
+adb shell run-as com.mamba.picme ls -la files/llm_models/qwen3-0-6b/
 # 检查文件大小，config.json 应 > 1KB，llm.mnn 应 > 100MB
 ```
 
 ### Step 2: 检查 config.json 关键配置
 
 ```bash
-adb shell run-as com.picme cat files/llm_models/qwen3-0-6b/config.json
+adb shell run-as com.mamba.picme cat files/llm_models/qwen3-0-6b/config.json
 ```
 
 关键字段：

@@ -41,11 +41,11 @@ ktlint {
 // }
 
 android {
-    namespace = "com.picme"
+    namespace = "com.mamba.picme"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.picme"
+        applicationId = "com.mamba.picme"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

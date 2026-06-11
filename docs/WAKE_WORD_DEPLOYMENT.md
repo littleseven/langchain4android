@@ -112,7 +112,7 @@
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 3. 启动相机应用
-adb shell am start -n com.picme/.features.camera.CameraScreen
+adb shell am start -n com.mamba.picme/.features.camera.CameraScreen
 
 # 4. 打开唤醒词模式（点击语音按钮进入唤醒词模式）
 
@@ -219,7 +219,7 @@ ASR 输出: "天气怎么样"
 
 | 问题 | 检查项 | 解决方案 |
 |------|--------|---------|
-| 识别失败 | ASR 模型是否下载 | 检查 `/data/data/com.picme/llm/` 目录 |
+| 识别失败 | ASR 模型是否下载 | 检查 `/data/data/com.mamba.picme/llm/` 目录 |
 | 频繁误触 | VAD 阈值是否过低 | 提高 `thresholdDb` 参数 |
 | 延迟过长 | 设备 CPU 占用 | 检查是否有其他应用占用 |
 | "嘿小觅"无反应 | 词库是否包含 | 检查 `WAKE_WORD_VARIANTS` 包含该词 |

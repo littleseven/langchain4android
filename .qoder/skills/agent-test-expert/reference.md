@@ -42,16 +42,16 @@
 
 ```bash
 # 显式广播发送 JSON 命令
-adb shell "am broadcast -n 'com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver' -a com.picme.AGENT_TEST --es json '{\"method\":\"flip_camera\",\"params\":{}}'"
+adb shell "am broadcast -n 'com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver' -a com.mamba.picme.AGENT_TEST --es json '{\"method\":\"flip_camera\",\"params\":{}}'"
 
 # 查看广播注册状态
-adb shell dumpsys activity broadcasts | grep com.picme.AGENT_TEST
+adb shell dumpsys activity broadcasts | grep com.mamba.picme.AGENT_TEST
 
 # 查看应用进程
-adb shell ps | grep com.picme
+adb shell ps | grep com.mamba.picme
 
 # 按 PID 查看日志
-adb logcat --pid=$(adb shell pidof com.picme) -d
+adb logcat --pid=$(adb shell pidof com.mamba.picme) -d
 ```
 
 ## 输出目录结构

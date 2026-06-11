@@ -109,7 +109,7 @@ adb shell
 adb shell screencap /sdcard/screen.png && adb pull /sdcard/screen.png
 
 # 启动耗时测量
-adb shell am start -W com.picme/.MainActivity
+adb shell am start -W com.mamba.picme/.MainActivity
 ```
 
 ## IDE 快捷键

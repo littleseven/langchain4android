@@ -18,7 +18,7 @@
 ### 创建新的 Feature 模块
 ```kotlin
 // 在 features 包下创建新模块
-package com.picme.features.[feature_name]
+package com.mamba.picme.features.[feature_name]
 
 // 1. 创建 Screen Composable
 @Composable

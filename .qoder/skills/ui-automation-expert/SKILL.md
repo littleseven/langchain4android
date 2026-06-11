@@ -105,11 +105,11 @@ onView(withText("确认"))
 ```bash
 # ✅ 首选：通过 AgentTestBroadcastReceiver 发送 JSON 命令
 # 复用与 LLM 相同的 AgentCommand 解析路径，统一、可靠、可扩展
-adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'"
-adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"navigate_to\",\"params\":{\"destination\":\"gallery\"}}'"
+adb shell "am broadcast -n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.mamba.picme.AGENT_TEST --es json '{\"method\":\"capture\",\"params\":{}}'"
+adb shell "am broadcast -n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.mamba.picme.AGENT_TEST --es json '{\"method\":\"navigate_to\",\"params\":{\"destination\":\"gallery\"}}'"
 
 # ✅ 次选：通过 am start 启动特定页面
-adb shell am start -n com.picme/.MainActivity
+adb shell am start -n com.mamba.picme/.MainActivity
 
 # ✅ 通过 input keyevent 模拟硬件按键
 adb shell input keyevent KEYCODE_CAMERA
@@ -122,7 +122,7 @@ adb shell input tap 500 1500
 # 任何需要截图比对再点击的方式
 
 # ❌ 避免：旧版 TEST_COMMAND 广播（已废弃）
-# adb shell am broadcast -a com.picme.TEST_COMMAND --es action "capture"
+# adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action "capture"
 ```
 
 ## 测试数据准备

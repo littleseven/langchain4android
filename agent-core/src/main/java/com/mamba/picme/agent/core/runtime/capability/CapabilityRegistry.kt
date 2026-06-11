@@ -1,0 +1,471 @@
+package com.mamba.picme.agent.core.runtime.capability
+
+import com.mamba.picme.agent.core.api.capability.Capability
+import com.mamba.picme.agent.core.api.capability.CapabilityHost
+import com.mamba.picme.agent.core.api.command.AgentCommand
+import com.mamba.picme.agent.core.api.context.AgentAction
+import com.mamba.picme.agent.core.api.context.AgentContext
+import com.mamba.picme.agent.core.api.context.AgentErrorCode
+import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.api.execution.StepResult
+import com.mamba.picme.agent.core.platform.logging.Logger
+import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
+import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
+import com.mamba.picme.agent.core.runtime.state.SceneManager
+import kotlinx.coroutines.CoroutineScope
+
+/**
+ * 能力注册表
+ *
+ * 应用级单例，负责：
+ * - 按场景过滤 Capability
+ * - 页面上下文传递
+ * - 命令分发到对应 Capability
+ * - 跨页面命令队列管理（委托给 CrossPageCommandQueue）
+ *
+ * **架构原则**：
+ * - Capability 在 Application.onCreate() 中注册一次，永不注销
+ * - 通过 isAvailable() 检查 Capability 是否可用（delegate 是否绑定）
+ * - 支持跨页面指令排队执行
+ *
+ * 重构后职责拆分：
+ * - CapabilityRegistry：纯注册表 + 查询 + 分发入口
+ * - CommandExecutor：命令执行（超时、异常处理）
+ * - CrossPageCommandQueue：跨页面队列管理
+ */
+class CapabilityRegistry private constructor(
+    private val sceneManager: SceneManager,
+    private val externalScope: CoroutineScope? = null
+) {
+
+    companion object {
+        @Volatile
+        private var instance: CapabilityRegistry? = null
+
+        const val DEFAULT_COMMAND_TIMEOUT_MS = CommandExecutor.DEFAULT_TIMEOUT_MS
+
+        /**
+         * 获取单例实例（使用默认协程作用域）
+         */
+        fun getInstance(): CapabilityRegistry {
+            return instance ?: synchronized(this) {
+                instance ?: CapabilityRegistry(SceneManager.getInstance()).also { instance = it }
+            }
+        }
+
+        /**
+         * 创建实例（支持注入外部协程作用域，便于生命周期绑定和测试）
+         */
+        fun create(
+            sceneManager: SceneManager = SceneManager.getInstance(),
+            scope: CoroutineScope? = null
+        ): CapabilityRegistry {
+            return CapabilityRegistry(sceneManager, scope)
+        }
+    }
+
+    private val tag = "CapabilityRegistry"
+    private val registry = mutableMapOf<String, Capability>()
+
+    // 委托组件
+    private val commandExecutor = CommandExecutor()
+    private val commandQueue = CrossPageCommandQueue(
+        sceneManager = sceneManager,
+        commandExecutor = commandExecutor,
+        findCapability = ::findCapabilityForCommand,
+        externalScope = externalScope
+    )
+
+    /** 队列状态事件流（透传自 CrossPageCommandQueue） */
+    val queueEvents = commandQueue.queueEvents
+
+    /**
+     * 注册 Capability（应用级，只注册一次，永不注销）
+     */
+    fun register(capability: Capability) {
+        if (registry.containsKey(capability.name)) {
+            Logger.w(tag, "Capability ${capability.name} already registered, skipping")
+            return
+        }
+        registry[capability.name] = capability
+        Logger.i(tag, "Registered capability: ${capability.name} " +
+            "(scenes: ${capability.activeScenes().joinToString { it.name }})")
+    }
+
+    /**
+     * 获取指定名称的 Capability
+     */
+    fun get(name: String): Capability? {
+        return registry[name]
+    }
+
+    /**
+     * 获取所有已注册的 Capability
+     */
+    fun getAll(): List<Capability> {
+        return registry.values.toList()
+    }
+
+    /**
+     * 获取当前场景下活跃的 Capability 列表
+     *
+     * 优先从 CapabilityHost 查询（新架构），回退到本地 registry（兼容旧架构）。
+     * 只返回在当前场景活跃的 Capability（不检查 isAvailable）
+     * 用于构建 system prompt，让 LLM 知道当前页面"应该"支持哪些命令
+     */
+    fun getCapabilitiesForCurrentScene(): List<Capability> {
+        val currentScene = sceneManager.currentScene.value
+
+        // 优先从 CapabilityHost 查询（新架构：页面级 Capability）
+        val hostCapabilities = CapabilityHost.get()?.findForScene(currentScene)
+        if (!hostCapabilities.isNullOrEmpty()) {
+            return hostCapabilities
+        }
+
+        // 回退到本地 registry（兼容旧架构）
+        return registry.values.filter { capability ->
+            capability.activeScenes().contains(currentScene) ||
+                    capability.activeScenes().isEmpty()
+        }
+    }
+
+    /**
+     * 分发命令到对应的 Capability
+     *
+     * **跨页面指令支持**：
+     * - 如果目标 Capability 在当前场景不可用（场景不匹配或 delegate 未绑定），命令会自动入队
+     * - 当目标页面激活时，队列中的命令会自动执行
+     */
+    suspend fun dispatch(
+        command: AgentCommand,
+        context: AgentContext,
+        pageContext: PageContext? = null
+    ): Result<AgentAction> {
+        val commandType = command::class.simpleName ?: "Unknown"
+        val currentScene = sceneManager.currentScene.value
+
+        return when (command) {
+            is AgentCommand.TextReply -> {
+                Result.success(AgentAction.TextReply(commandId = command.commandId, message = command.message))
+            }
+            is AgentCommand.Unknown -> {
+                Logger.w(tag, "[$commandType] Unknown command at $currentScene")
+                Result.success(
+                    AgentAction.TextReply(
+                        commandId = command.commandId,
+                        message = "收到你的消息了，但没理解具体意图，请再描述一下~"
+                    )
+                )
+            }
+            is AgentCommand.Error -> {
+                Logger.e(tag, "[$commandType] Command error: ${command.reason}")
+                Result.success(
+                    AgentAction.Error(
+                        commandId = command.commandId,
+                        errorCode = AgentErrorCode.INVALID_REQUEST,
+                        message = command.reason
+                    )
+                )
+            }
+            is AgentCommand.BatchExecute -> {
+                dispatchBatch(command, context, pageContext, currentScene)
+            }
+            is AgentCommand.ExecutePlan -> {
+                dispatchPlan(command, context, pageContext)
+            }
+            else -> {
+                dispatchWithQueueSupport(command, context, pageContext, currentScene, commandType)
+            }
+        }
+    }
+
+    /**
+     * 分发命令，支持跨页面排队
+     */
+    private suspend fun dispatchWithQueueSupport(
+        command: AgentCommand,
+        context: AgentContext,
+        pageContext: PageContext?,
+        currentScene: SceneManager.Scene,
+        commandType: String
+    ): Result<AgentAction> {
+        val capability = findCapabilityForCommand(command)
+
+        if (capability == null) {
+            Logger.w(tag, "[$commandType] No capability found for command in scene $currentScene")
+            return Result.success(
+                AgentAction.Error(
+                    commandId = command.commandId,
+                    errorCode = AgentErrorCode.METHOD_NOT_FOUND,
+                    message = "暂不支持此操作",
+                    detail = "No capability found for command '$commandType' in scene $currentScene"
+                )
+            )
+        }
+
+        // 检查场景是否匹配
+        val sceneMatch = capability.activeScenes().contains(currentScene) ||
+                capability.activeScenes().isEmpty()
+
+        // 检查 Capability 是否可用（delegate 是否绑定）
+        val isAvailable = capability.isAvailable()
+
+        // 如果场景不匹配或 Capability 不可用，将命令入队
+        if (!sceneMatch || !isAvailable) {
+            val reason = when {
+                !sceneMatch -> "scene mismatch (current=$currentScene, required=${capability.activeScenes()})"
+                else -> "delegate not bound"
+            }
+            Logger.i(tag, "[$commandType] Capability ${capability.name} unavailable ($reason), queuing command")
+            commandQueue.enqueue(command, context, pageContext, capability)
+            return Result.success(
+                AgentAction.TextReply(
+                    commandId = command.commandId,
+                    message = "正在为您切换到对应页面执行操作..."
+                )
+            )
+        }
+
+        // 直接执行命令
+        Logger.i(tag, "[$commandType] Dispatching to ${capability.name} in scene $currentScene")
+        return commandExecutor.execute(command, context, pageContext, capability)
+    }
+
+    /**
+     * 清空命令队列
+     */
+    fun clearCommandQueue() {
+        commandQueue.clear()
+    }
+
+    /**
+     * 根据命令查找对应的 Capability
+     *
+     * 优先从 CapabilityHost 查询（新架构），回退到本地 registry（兼容旧架构）。
+     * 先查找当前场景的可用 Capability，找不到时查找所有已注册的 Capability（用于跨页面指令）。
+     */
+    private fun findCapabilityForCommand(command: AgentCommand): Capability? {
+        val commandName = AgentCommand.getMethodName(command)
+
+        // 优先从 CapabilityHost 查询（新架构）
+        val hostMatch = CapabilityHost.get()?.findForCommand(commandName)
+        if (hostMatch != null) return hostMatch
+
+        // 回退到本地 registry（兼容旧架构）
+        // 首先在当前场景的可用 Capability 中查找
+        val currentSceneCapabilities = getCapabilitiesForCurrentScene()
+        val availableMatch = currentSceneCapabilities.find { capability ->
+            capability.supportedCommands().contains(commandName)
+        }
+        if (availableMatch != null) return availableMatch
+
+        // 如果当前场景找不到，在所有已注册的 Capability 中查找
+        // 这支持跨页面指令：即使目标 Capability 当前不可用，也能找到它并排队
+        return registry.values.find { it.supportedCommands().contains(commandName) }
+    }
+
+    /**
+     * 构建 Capability 描述文本（用于 system prompt）
+     *
+     * 只包含当前场景可用且 isAvailable 的 Capability
+     */
+    fun buildCapabilityDescription(): String {
+        val capabilities = getCapabilitiesForCurrentScene()
+        return capabilities.joinToString("\n") { capability ->
+            capability.buildCapabilityDescription()
+        }
+    }
+
+    /**
+     * 获取所有已注册 Capability 的描述（用于调试）
+     */
+    fun buildAllCapabilitiesDescription(): String {
+        return registry.values.joinToString("\n") { capability ->
+            val available = if (capability.isAvailable()) "✓" else "✗"
+            "$available ${capability.buildCapabilityDescription()}"
+        }
+    }
+
+    /**
+     * 获取指定命令在当前场景是否可用
+     *
+     * 同时检查场景匹配和 Capability 可用性（delegate 是否绑定）
+     */
+    fun isCommandAvailable(command: AgentCommand): Boolean {
+        val capability = findCapabilityForCommand(command) ?: return false
+        val currentScene = sceneManager.currentScene.value
+        return capability.activeScenes().contains(currentScene) && capability.isAvailable()
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 批量命令执行（BatchExecute）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 批量执行命令
+     *
+     * 顺序执行子命令列表，每个子命令独立分发到对应 Capability，
+     * 收集所有子结果，汇总为 BatchResult。
+     * - atomic=true 时，任一失败触发全部回滚（已执行的通过 fallback 补偿）
+     */
+    private suspend fun dispatchBatch(
+        batchCommand: AgentCommand.BatchExecute,
+        context: AgentContext,
+        pageContext: PageContext?,
+        currentScene: SceneManager.Scene
+    ): Result<AgentAction> {
+        Logger.i(tag, "[BatchExecute] Starting batch of ${batchCommand.commands.size} commands, atomic=${batchCommand.atomic}")
+
+        if (batchCommand.commands.isEmpty()) {
+            return Result.success(
+                AgentAction.Error(
+                    commandId = batchCommand.commandId,
+                    errorCode = AgentErrorCode.INVALID_PARAMS,
+                    message = "批量命令列表为空"
+                )
+            )
+        }
+
+        val results = mutableListOf<AgentAction>()
+        val executedCommands = mutableListOf<AgentCommand>() // 用于 atomic 回滚
+
+        for ((index, subCommand) in batchCommand.commands.withIndex()) {
+            Logger.d(tag, "[BatchExecute] Executing sub-command ${index + 1}/${batchCommand.commands.size}: ${subCommand::class.simpleName}")
+
+            val subResult = dispatch(subCommand, context, pageContext)
+            val action = subResult.getOrNull()
+
+            if (subResult.isFailure || action == null) {
+                val errorMsg = subResult.exceptionOrNull()?.message ?: "子命令执行失败"
+                Logger.w(tag, "[BatchExecute] Sub-command ${index + 1} failed: $errorMsg")
+
+                // atomic 模式：回滚已执行的命令
+                if (batchCommand.atomic) {
+                    rollbackExecuted(executedCommands, context, pageContext)
+                }
+
+                results.add(
+                    AgentAction.Error(
+                        commandId = subCommand.commandId,
+                        errorCode = AgentErrorCode.INTERNAL_ERROR,
+                        message = errorMsg,
+                        detail = "Batch sub-command ${index + 1} failed"
+                    )
+                )
+                return Result.success(
+                    AgentAction.BatchResult(
+                        commandId = batchCommand.commandId,
+                        results = results.toList()
+                    )
+                )
+            }
+
+            results.add(action)
+            executedCommands.add(subCommand)
+
+            // 检查子结果是否表示失败（即使 Result 是成功的）
+            if (!action.isSuccess) {
+                Logger.w(tag, "[BatchExecute] Sub-command ${index + 1} returned error action")
+
+                if (batchCommand.atomic) {
+                    rollbackExecuted(executedCommands, context, pageContext)
+                }
+
+                return Result.success(
+                    AgentAction.BatchResult(
+                        commandId = batchCommand.commandId,
+                        results = results.toList()
+                    )
+                )
+            }
+        }
+
+        Logger.i(tag, "[BatchExecute] All ${batchCommand.commands.size} commands completed successfully")
+        return Result.success(
+            AgentAction.BatchResult(
+                commandId = batchCommand.commandId,
+                results = results.toList()
+            )
+        )
+    }
+
+    /**
+     * 原子模式回滚
+     *
+     * 对已执行的命令尝试执行反向操作（简化实现，实际回滚逻辑由具体 Capability 决定）
+     */
+    private suspend fun rollbackExecuted(
+        executedCommands: List<AgentCommand>,
+        context: AgentContext,
+        pageContext: PageContext?
+    ) {
+        Logger.w(tag, "[BatchExecute] Atomic rollback: ${executedCommands.size} commands to revert")
+        // 注意：实际回滚需要每个 Capability 支持 undo 操作
+        // 当前版本仅记录日志，后续可通过 Capability 扩展 undo 接口
+        for (cmd in executedCommands.asReversed()) {
+            Logger.d(tag, "[BatchExecute] Rollback: ${cmd::class.simpleName} (id=${cmd.commandId})")
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // 执行计划分发（ExecutePlan）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * 分发执行计划到 ExecutionEngine
+     */
+    private suspend fun dispatchPlan(
+        planCommand: AgentCommand.ExecutePlan,
+        context: AgentContext,
+        pageContext: PageContext?
+    ): Result<AgentAction> {
+        Logger.i(tag, "[ExecutePlan] Dispatching plan: ${planCommand.plan.planId}, steps=${planCommand.plan.steps.size}")
+
+        val engine = ExecutionEngine(
+            capabilityRegistry = this,
+            reporter = ExecutionReporterImpl()
+        )
+
+        return try {
+            val result = engine.execute(planCommand.plan)
+            Logger.i(tag, "[ExecutePlan] Plan completed: success=${result.isSuccess}, steps=${result.stepResults.size}")
+
+            // 将 ExecutionResult 转换为 AgentAction
+            if (result.isSuccess) {
+                val lastAction = result.actions.lastOrNull()
+                if (lastAction != null) {
+                    Result.success(lastAction)
+                } else {
+                    Result.success(
+                        AgentAction.Success(
+                            commandId = planCommand.commandId,
+                            command = planCommand
+                        )
+                    )
+                }
+            } else {
+                val firstError = result.stepResults
+                    .filterIsInstance<StepResult.Failed>()
+                    .firstOrNull()
+                Result.success(
+                    AgentAction.Error(
+                        commandId = planCommand.commandId,
+                        errorCode = firstError?.action?.errorCode ?: AgentErrorCode.INTERNAL_ERROR,
+                        message = firstError?.action?.message ?: "计划执行失败",
+                        detail = "Plan '${planCommand.plan.planId}' failed at step ${firstError?.step?.step ?: "unknown"}"
+                    )
+                )
+            }
+        } catch (throwable: Throwable) {
+            Logger.e(tag, "[ExecutePlan] Plan execution threw exception", throwable)
+            Result.success(
+                AgentAction.Error(
+                    commandId = planCommand.commandId,
+                    errorCode = AgentErrorCode.INTERNAL_ERROR,
+                    message = "计划执行异常: ${throwable.message}",
+                    detail = throwable.stackTraceToString()
+                )
+            )
+        }
+    }
+}

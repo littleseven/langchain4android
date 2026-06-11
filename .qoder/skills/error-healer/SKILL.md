@@ -99,12 +99,12 @@ tags:
 **PicMe 特定导入规则**：
 ```kotlin
 // beauty-engine 模块的公开 API
-import com.picme.beauty.api.*              // 禁止（AGENTS.md 规则）
-import com.picme.beauty.api.BeautySettings  // 正确
-import com.picme.beauty.api.FaceData        // 正确
+import com.mamba.picme.beauty.api.*              // 禁止（AGENTS.md 规则）
+import com.mamba.picme.beauty.api.BeautySettings  // 正确
+import com.mamba.picme.beauty.api.FaceData        // 正确
 
 // 内部实现不应被外部引用
-import com.picme.beauty.internal.*          // 错误（app 模块不应引用）
+import com.mamba.picme.beauty.internal.*          // 错误（app 模块不应引用）
 ```
 
 ### Class D: 可见性与访问权限 (Visibility)

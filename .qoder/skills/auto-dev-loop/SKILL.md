@@ -173,7 +173,7 @@ tc_new_01_feature() {
     print_test_header "TC-NEW-01: 新功能描述"
 
     # 执行测试步骤（JSON 命令通过 AgentTestBroadcastReceiver）
-    adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"xxx\",\"params\":{}}'"
+    adb shell "am broadcast -n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.mamba.picme.AGENT_TEST --es json '{\"method\":\"xxx\",\"params\":{}}'"
     sleep 1
     screenshot "tc_new_01"
 

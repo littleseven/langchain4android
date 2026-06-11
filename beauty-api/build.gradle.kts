@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.picme.beauty.api"
+    namespace = "com.mamba.picme.beauty.api"
     compileSdk = 36
 
     defaultConfig {

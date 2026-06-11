@@ -778,53 +778,56 @@
     <ID>TooGenericExceptionCaught:MlKitOcrProcessor.kt$MlKitOcrProcessor$error: Exception</ID>
     <ID>TooGenericExceptionCaught:SampleDataGenerator.kt$SampleDataGenerator$error: Exception</ID>
     <ID>TooGenericExceptionCaught:ScreenshotUtil.kt$ScreenshotUtil$e: Exception</ID>
-    <ID>TooManyFunctions:CameraComponents.kt$com.picme.features.camera.components.CameraComponents.kt</ID>
-    <ID>TooManyFunctions:CameraDebugOverlay.kt$com.picme.features.camera.CameraDebugOverlay.kt</ID>
-    <ID>TooManyFunctions:GalleryScreen.kt$com.picme.features.gallery.GalleryScreen.kt</ID>
+    <ID>TooManyFunctions:CameraComponents.kt$com.mamba.picme.features.camera.components.CameraComponents.kt</ID>
+    <ID>TooManyFunctions:CameraDebugOverlay.kt$com.mamba.picme.features.camera.CameraDebugOverlay.kt</ID>
+    <ID>TooManyFunctions:GalleryScreen.kt$com.mamba.picme.features.gallery.GalleryScreen.kt</ID>
     <ID>TooManyFunctions:GpuBeautyProcessor.kt$GpuBeautyProcessor : BeautyProcessor</ID>
     <ID>TooManyFunctions:MediaRepositoryImpl.kt$MediaRepositoryImpl : MediaRepository</ID>
     <ID>TooManyFunctions:MediaViewModel.kt$MediaViewModel : ViewModel</ID>
     <ID>TooManyFunctions:SampleDataGenerator.kt$SampleDataGenerator</ID>
     <ID>TooManyFunctions:UserPreferencesRepository.kt$UserPreferencesRepository : UserSettingsRepository</ID>
     <ID>TooManyFunctions:UserSettingsRepository.kt$UserSettingsRepository</ID>
-    <ID>TrailingWhitespace:CameraComponents.kt$com.picme.features.camera.components.CameraComponents.kt</ID>
-    <ID>TrailingWhitespace:CameraDebugOverlay.kt$com.picme.features.camera.CameraDebugOverlay.kt</ID>
-    <ID>TrailingWhitespace:CameraFrameAnalyzer.kt$com.picme.features.camera.CameraFrameAnalyzer.kt</ID>
-    <ID>TrailingWhitespace:CameraOverlays.kt$com.picme.features.camera.components.CameraOverlays.kt</ID>
-    <ID>TrailingWhitespace:CameraRuntimeState.kt$com.picme.features.camera.CameraRuntimeState.kt</ID>
-    <ID>TrailingWhitespace:CameraScreen.kt$com.picme.features.camera.CameraScreen.kt</ID>
-    <ID>TrailingWhitespace:DocumentDetectionOverlay.kt$com.picme.features.camera.components.DocumentDetectionOverlay.kt</ID>
-    <ID>TrailingWhitespace:DuplicateGroup.kt$com.picme.domain.model.DuplicateGroup.kt</ID>
-    <ID>TrailingWhitespace:DuplicateImageDetector.kt$com.picme.core.common.DuplicateImageDetector.kt</ID>
-    <ID>TrailingWhitespace:FaceDataFlowTest.kt$com.picme.features.camera.FaceDataFlowTest.kt</ID>
-    <ID>TrailingWhitespace:FaceLandmarkOverlay.kt$com.picme.features.gallery.components.FaceLandmarkOverlay.kt</ID>
-    <ID>TrailingWhitespace:FindDuplicateMediaUseCase.kt$com.picme.domain.usecase.FindDuplicateMediaUseCase.kt</ID>
-    <ID>TrailingWhitespace:GalleryScreen.kt$com.picme.features.gallery.GalleryScreen.kt</ID>
-    <ID>TrailingWhitespace:GetGroupedMediaUseCaseTest.kt$com.picme.domain.usecase.GetGroupedMediaUseCaseTest.kt</ID>
-    <ID>TrailingWhitespace:GpuBeautyProcessor.kt$com.picme.core.image.GpuBeautyProcessor.kt</ID>
-    <ID>TrailingWhitespace:LipColorAlgorithmTest.kt$com.picme.core.image.LipColorAlgorithmTest.kt</ID>
-    <ID>TrailingWhitespace:MediaPager.kt$com.picme.features.gallery.components.MediaPager.kt</ID>
-    <ID>TrailingWhitespace:MediaRepository.kt$com.picme.domain.repository.MediaRepository.kt</ID>
-    <ID>TrailingWhitespace:MediaRepositoryImpl.kt$com.picme.data.repository.MediaRepositoryImpl.kt</ID>
-    <ID>TrailingWhitespace:MediaViewModel.kt$com.picme.features.gallery.MediaViewModel.kt</ID>
-    <ID>TrailingWhitespace:SettingsScreen.kt$com.picme.features.settings.SettingsScreen.kt</ID>
-    <ID>UnusedImports:BeautySettingsTest.kt$import com.picme.beauty.api.BeautySettings</ID>
+    <ID>TrailingWhitespace:CameraComponents.kt$com.mamba.picme.features.camera.components.CameraComponents.kt</ID>
+    <ID>TrailingWhitespace:CameraDebugOverlay.kt$com.mamba.picme.features.camera.CameraDebugOverlay.kt</ID>
+    <ID>TrailingWhitespace:CameraFrameAnalyzer.kt$com.mamba.picme.features.camera.CameraFrameAnalyzer.kt</ID>
+    <ID>TrailingWhitespace:CameraOverlays.kt$com.mamba.picme.features.camera.components.CameraOverlays.kt</ID>
+    <ID>TrailingWhitespace:CameraRuntimeState.kt$com.mamba.picme.features.camera.CameraRuntimeState.kt</ID>
+    <ID>TrailingWhitespace:CameraScreen.kt$com.mamba.picme.features.camera.CameraScreen.kt</ID>
+    <ID>TrailingWhitespace:DocumentDetectionOverlay.kt$com.mamba.picme.features.camera.components.DocumentDetectionOverlay.kt</ID>
+    <ID>TrailingWhitespace:DuplicateGroup.kt$com.mamba.picme.domain.model.DuplicateGroup.kt</ID>
+    <ID>TrailingWhitespace:DuplicateImageDetector.kt$com.mamba.picme.core.common.DuplicateImageDetector.kt</ID>
+    <ID>TrailingWhitespace:FaceDataFlowTest.kt$com.mamba.picme.features.camera.FaceDataFlowTest.kt</ID>
+    <ID>TrailingWhitespace:FaceLandmarkOverlay.kt$com.mamba.picme.features.gallery.components.FaceLandmarkOverlay.kt</ID>
+    <ID>TrailingWhitespace:FindDuplicateMediaUseCase.kt$com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase.kt</ID>
+    <ID>TrailingWhitespace:GalleryScreen.kt$com.mamba.picme.features.gallery.GalleryScreen.kt</ID>
+    <ID>TrailingWhitespace:GetGroupedMediaUseCaseTest.kt$com.mamba.picme.domain.usecase.GetGroupedMediaUseCaseTest.kt</ID>
+    <ID>TrailingWhitespace:GpuBeautyProcessor.kt$com.mamba.picme.core.image.GpuBeautyProcessor.kt</ID>
+    <ID>TrailingWhitespace:LipColorAlgorithmTest.kt$com.mamba.picme.core.image.LipColorAlgorithmTest.kt</ID>
+    <ID>TrailingWhitespace:MediaPager.kt$com.mamba.picme.features.gallery.components.MediaPager.kt</ID>
+    <ID>TrailingWhitespace:MediaRepository.kt$com.mamba.picme.domain.repository.MediaRepository.kt</ID>
+    <ID>TrailingWhitespace:MediaRepositoryImpl.kt$com.mamba.picme.data.repository.MediaRepositoryImpl.kt</ID>
+    <ID>TrailingWhitespace:MediaViewModel.kt$com.mamba.picme.features.gallery.MediaViewModel.kt</ID>
+    <ID>TrailingWhitespace:SettingsScreen.kt$com.mamba.picme.features.settings.SettingsScreen.kt</ID>
+    <ID>UnusedImports:BeautySettingsTest.kt$import com.mamba.picme.beauty.api.BeautySettings</ID>
     <ID>UnusedImports:CameraComponents.kt$import androidx.compose.foundation.lazy.rememberLazyListState</ID>
     <ID>UnusedImports:CameraComponents.kt$import androidx.compose.runtime.LaunchedEffect</ID>
     <ID>UnusedImports:CameraComponents.kt$import androidx.compose.ui.geometry.Offset</ID>
     <ID>UnusedImports:CameraDebugOverlay.kt$import android.graphics.PointF</ID>
-    <ID>UnusedImports:CameraDebugOverlay.kt$import com.picme.core.common.Logger</ID>
-    <ID>UnusedImports:CameraPreviewContent.kt$import com.picme.domain.model.BeautyStrategy</ID>
-    <ID>UnusedImports:CameraPreviewStrategies.kt$import com.picme.core.common.Logger</ID>
-    <ID>UnusedImports:CameraRuntimeState.kt$import com.picme.beauty.api.facedetect.EngineType</ID>
-    <ID>UnusedImports:CameraScreen.kt$import com.picme.beauty.api.facedetect.FaceDetectionSource</ID>
-    <ID>UnusedImports:CameraScreen.kt$import com.picme.beauty.internal.facedetect.Face106ToWarpParams</ID>
-    <ID>UnusedImports:CameraTestCommand.kt$import com.picme.beauty.api.BeautySettings</ID>
-    <ID>UnusedImports:CameraTestCommand.kt$import com.picme.beauty.api.FilterType</ID>
-    <ID>UnusedImports:CameraTestCommand.kt$import com.picme.beauty.api.StyleFilter</ID>
+    <ID>UnusedImports:CameraDebugOverlay.kt$import com.mamba.picme.core.common.Logger</ID>
+    <ID>UnusedImports:CameraPreviewContent.kt$import com.mamba.picme.domain.model.BeautyStrategy</ID>
+    <ID>UnusedImports:CameraPreviewStrategies.kt$import com.mamba.picme.core.common.Logger</ID>
+    <ID>UnusedImports:CameraRuntimeState.kt$import com.mamba.picme.beauty.api.facedetect.EngineType</ID>
+    <ID>UnusedImports:CameraScreen.kt$import
+        com.mamba.picme.beauty.api.facedetect.FaceDetectionSource</ID>
+    <ID>UnusedImports:CameraScreen.kt$import
+        com.mamba.picme.beauty.internal.facedetect.Face106ToWarpParams</ID>
+    <ID>UnusedImports:CameraTestCommand.kt$import com.mamba.picme.beauty.api.BeautySettings</ID>
+    <ID>UnusedImports:CameraTestCommand.kt$import com.mamba.picme.beauty.api.FilterType</ID>
+    <ID>UnusedImports:CameraTestCommand.kt$import com.mamba.picme.beauty.api.StyleFilter</ID>
     <ID>UnusedImports:CameraTestCommandDispatcher.kt$import android.content.Context</ID>
-    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import com.picme.features.camera.CameraAspectRatio</ID>
-    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import com.picme.features.camera.GridType</ID>
+    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import
+        com.mamba.picme.features.camera.CameraAspectRatio</ID>
+    <ID>UnusedImports:CameraTestCommandDispatcher.kt$import com.mamba.picme.features.camera.GridType</ID>
     <ID>UnusedImports:CameraTestCommandDispatcher.kt$import kotlinx.coroutines.launch</ID>
     <ID>UnusedImports:CameraUseCasesBinder.kt$import java.nio.ByteBuffer</ID>
     <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.foundation.border</ID>
@@ -834,10 +837,11 @@
     <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.ui.graphics.drawscope.DrawScope</ID>
     <ID>UnusedImports:DocumentDetectionOverlay.kt$import androidx.compose.ui.unit.dp</ID>
     <ID>UnusedImports:FaceLandmarkOverlay.kt$import androidx.core.graphics.scale</ID>
-    <ID>UnusedImports:FaceLandmarkOverlay.kt$import com.picme.beauty.api.facedetect.FaceDetector</ID>
+    <ID>UnusedImports:FaceLandmarkOverlay.kt$import
+        com.mamba.picme.beauty.api.facedetect.FaceDetector</ID>
     <ID>UnusedImports:FaceLandmarkOverlay.kt$import java.nio.ByteBuffer</ID>
     <ID>UnusedImports:FaceLandmarkOverlay.kt$import kotlin.math.max</ID>
-    <ID>UnusedImports:ImageProcessor.kt$import com.picme.beauty.api.PhotoProcessException</ID>
+    <ID>UnusedImports:ImageProcessor.kt$import com.mamba.picme.beauty.api.PhotoProcessException</ID>
     <ID>UnusedImports:ImageProcessor.kt$import kotlin.math.abs</ID>
     <ID>UnusedImports:SampleDataGenerator.kt$import kotlin.coroutines.resume</ID>
     <ID>UnusedImports:SampleDataGenerator.kt$import kotlinx.coroutines.suspendCancellableCoroutine</ID>

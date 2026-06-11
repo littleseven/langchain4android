@@ -2,9 +2,9 @@
 
 # 通过 ADB 按秒采集应用资源变化：内存 / CPU / GPU
 # 示例：
-#   ./scripts/adb-resource-monitor.sh -p com.picme -i 1
-#   ./scripts/adb-resource-monitor.sh -p com.picme -i 1 -d 120
-#   ./scripts/adb-resource-monitor.sh -p com.picme -i 0.5 -d 60 -o /tmp/picme_monitor.csv
+#   ./scripts/adb-resource-monitor.sh -p com.mamba.picme -i 1
+#   ./scripts/adb-resource-monitor.sh -p com.mamba.picme -i 1 -d 120
+#   ./scripts/adb-resource-monitor.sh -p com.mamba.picme -i 0.5 -d 60 -o /tmp/picme_monitor.csv
 
 set -u -o pipefail
 

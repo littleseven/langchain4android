@@ -39,11 +39,11 @@
 - [ ] **Step 1: 创建 AgentMessage 密封类**
 
 ```kotlin
-package com.picme.features.camera.agent
+package com.mamba.picme.features.camera.agent
 
-import com.picme.domain.agent.remote.ExecutionPlan
-import com.picme.domain.agent.remote.ExecutionResult
-import com.picme.domain.agent.model.ExecutionState
+import com.mamba.picme.domain.agent.remote.ExecutionPlan
+import com.mamba.picme.domain.agent.remote.ExecutionResult
+import com.mamba.picme.domain.agent.model.ExecutionState
 
 sealed class AgentMessage {
     abstract val timestamp: Long
@@ -187,7 +187,7 @@ git commit -m "feat(agent-ui): AgentMessage 密封类与基础气泡框架
 - [ ] **Step 1: 创建 PlanPreviewBubble**
 
 ```kotlin
-package com.picme.features.camera.agent
+package com.mamba.picme.features.camera.agent
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -208,8 +208,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.domain.agent.remote.ExecutionPlan
-import com.picme.domain.agent.remote.PlanStep
+import com.mamba.picme.domain.agent.remote.ExecutionPlan
+import com.mamba.picme.domain.agent.remote.PlanStep
 
 @Composable
 fun PlanPreviewBubble(
@@ -322,7 +322,7 @@ git commit -m "feat(agent-ui): PlanPreviewBubble 计划预览气泡
 - [ ] **Step 1: 创建 PlanProgressBubble**
 
 ```kotlin
-package com.picme.features.camera.agent
+package com.mamba.picme.features.camera.agent
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -341,9 +341,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.domain.agent.model.ExecutionState
-import com.picme.domain.agent.remote.PlanStep
-import com.picme.domain.agent.remote.StepResult
+import com.mamba.picme.domain.agent.model.ExecutionState
+import com.mamba.picme.domain.agent.remote.PlanStep
+import com.mamba.picme.domain.agent.remote.StepResult
 
 @Composable
 fun PlanProgressBubble(
@@ -502,7 +502,7 @@ git commit -m "feat(agent-ui): PlanProgressBubble 执行进度气泡
 - [ ] **Step 1: 创建 PlanResultBubble**
 
 ```kotlin
-package com.picme.features.camera.agent
+package com.mamba.picme.features.camera.agent
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -518,8 +518,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.picme.domain.agent.remote.ExecutionResult
-import com.picme.domain.agent.remote.StepResult
+import com.mamba.picme.domain.agent.remote.ExecutionResult
+import com.mamba.picme.domain.agent.remote.StepResult
 
 @Composable
 fun PlanResultBubble(
@@ -620,22 +620,22 @@ onSend = { input ->
         try {
             // 这里将来会调用真正的 AgentOrchestrator
             // 目前模拟 Plan 结果用于测试
-            val mockPlan = com.picme.domain.agent.remote.ExecutionPlan(
+            val mockPlan = com.mamba.picme.domain.agent.remote.ExecutionPlan(
                 planId = "mock-${System.currentTimeMillis()}",
                 steps = listOf(
-                    com.picme.domain.agent.remote.PlanStep(
+                    com.mamba.picme.domain.agent.remote.PlanStep(
                         step = 1,
-                        action = com.picme.domain.agent.model.AgentCommand.CapturePhoto,
+                        action = com.mamba.picme.domain.agent.model.AgentCommand.CapturePhoto,
                         description = "切换人像模式"
                     ),
-                    com.picme.domain.agent.remote.PlanStep(
+                    com.mamba.picme.domain.agent.remote.PlanStep(
                         step = 2,
-                        action = com.picme.domain.agent.model.AgentCommand.CapturePhoto,
+                        action = com.mamba.picme.domain.agent.model.AgentCommand.CapturePhoto,
                         description = "磨皮调至 60"
                     ),
-                    com.picme.domain.agent.remote.PlanStep(
+                    com.mamba.picme.domain.agent.remote.PlanStep(
                         step = 3,
-                        action = com.picme.domain.agent.model.AgentCommand.CapturePhoto,
+                        action = com.mamba.picme.domain.agent.model.AgentCommand.CapturePhoto,
                         description = "拍照"
                     )
                 ),
@@ -707,9 +707,9 @@ class AiAgentPanelState {
 
 ```kotlin
 // 在收到 InferenceResult.Plan 时的处理逻辑
-if (state.autoExecutePlans && plan.interactionMode != com.picme.domain.agent.remote.InteractionMode.PREVIEW) {
+if (state.autoExecutePlans && plan.interactionMode != com.mamba.picme.domain.agent.remote.InteractionMode.PREVIEW) {
     // 自动执行：直接显示进度
-    state.addMessage(AgentMessage.PlanProgress(plan, com.picme.domain.agent.model.ExecutionState.Running(plan.steps.size, 0)))
+    state.addMessage(AgentMessage.PlanProgress(plan, com.mamba.picme.domain.agent.model.ExecutionState.Running(plan.steps.size, 0)))
     // TODO: 启动 ExecutionEngine
 } else {
     // 手动确认：显示预览

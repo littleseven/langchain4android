@@ -292,7 +292,7 @@ object ShutterFeedback {
 #### 冷启动
 
 ```bash
-adb shell am start -W com.picme/com.picme.ui.MainActivity
+adb shell am start -W com.mamba.picme/com.mamba.picme.ui.MainActivity
 # 输出：mTotalTime: 450ms
 ```
 

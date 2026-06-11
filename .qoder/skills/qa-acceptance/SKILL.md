@@ -263,7 +263,7 @@ python3 scripts/check_i18n_sync.py
 ./scripts/auto-dev-loop.sh && ./scripts/regression-test.sh
 
 # 发送单个 JSON 测试命令
-adb shell "am broadcast -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.picme.AGENT_TEST --es json '{\"method\":\"switch_ratio\",\"params\":{\"ratio\":\"16_9\"}}'"
+adb shell "am broadcast -n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver -a com.mamba.picme.AGENT_TEST --es json '{\"method\":\"switch_ratio\",\"params\":{\"ratio\":\"16_9\"}}'"
 
 # 仅代码检查（无设备时）
 ./scripts/ai-gate.sh

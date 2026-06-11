@@ -136,7 +136,7 @@ JSON action
 +------------------------+
 | adb shell "am broadcast|
 | -n <receiver>          |
-| -a com.picme.AGENT_TEST|
+| -a com.mamba.picme.AGENT_TEST|
 | --es json '{...}'"     |
 +------------------------+
        |
@@ -278,10 +278,10 @@ scripts/agent-tester
 ```bash
 send_json_cmd() {
     local json="$1"
-    local receiver="com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver"
+    local receiver="com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver"
     
     # 注意：JSON 必须用单引号包裹，防止 adb shell 解释 {} 为 brace expansion
-    adb shell "am broadcast -n '$receiver' -a com.picme.AGENT_TEST --es json '$json'"
+    adb shell "am broadcast -n '$receiver' -a com.mamba.picme.AGENT_TEST --es json '$json'"
 }
 ```
 
@@ -322,7 +322,7 @@ run_json_case() {
     with open(json_file) as f:
         case = json.load(f)
     
-    receiver = 'com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver'
+    receiver = 'com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver'
     
     for step in case['steps']:
         # 1. 执行action：直接透传原始JSON，不解析参数
@@ -332,7 +332,7 @@ run_json_case() {
             
             # 必须用单引号包裹JSON，防止adb shell解释{}为brace expansion
             shell_cmd = (
-                f"am broadcast -n '{receiver}' -a com.picme.AGENT_TEST "
+                f"am broadcast -n '{receiver}' -a com.mamba.picme.AGENT_TEST "
                 f"--es json '{action_json}'"
             )
             subprocess.run(['adb', 'shell', shell_cmd], capture_output=True)
@@ -376,11 +376,10 @@ scripts/auto_test_output/agent_20260606_165436/
 **注册方式**: AndroidManifest.xml 静态注册
 
 ```xml
-<receiver
-    android:name=".testing.agent.bridge.AgentTestBroadcastReceiver"
-    android:exported="true">
+
+<receiver android:name=".testing.agent.bridge.AgentTestBroadcastReceiver" android:exported="true">
     <intent-filter>
-        <action android:name="com.picme.AGENT_TEST" />
+        <action android:name="com.mamba.picme.AGENT_TEST" />
     </intent-filter>
 </receiver>
 ```
@@ -444,12 +443,12 @@ val command = AgentCommandParser.parseLlmResponse(json, context)
 
 ```bash
 # 错误（隐式广播）
-adb shell am broadcast -a com.picme.AGENT_TEST --es cmd "flip_camera"
+adb shell am broadcast -a com.mamba.picme.AGENT_TEST --es cmd "flip_camera"
 
 # 正确（显式组件）
 adb shell am broadcast \
-    -n com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver \
-    -a com.picme.AGENT_TEST \
+    -n com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver \
+    -a com.mamba.picme.AGENT_TEST \
     --es json '{"method":"flip_camera","params":{}}'
 ```
 
@@ -465,7 +464,7 @@ PC 端不做任何转换，直接把 JSON 字符串传给应用端：
 action_json = json.dumps(action)  # '{"method":"switch_filter","params":{"filter":"leica_vibrant"}}'
 
 // adb 命令
-adb shell "am broadcast -n '...' -a com.picme.AGENT_TEST --es json '{...}'"
+adb shell "am broadcast -n '...' -a com.mamba.picme.AGENT_TEST --es json '{...}'"
 
 // 应用端解析
 AgentCommandParser.parseLlmResponse(json, context) → AgentCommand.SwitchFilter(LEICA_VIBRANT)

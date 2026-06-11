@@ -348,7 +348,7 @@ voiceCommandCoordinator.startWakeWordListening()
 
 ```bash
 # 在设备上运行
-adb shell am start -n com.picme/.features.camera.CameraScreen
+adb shell am start -n com.mamba.picme/.features.camera.CameraScreen
 
 # 点击语音按钮进入唤醒词模式
 

@@ -15,7 +15,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
-        android:name="com.picme.PicMeApplication"
+        android:name="com.mamba.picme.PicMeApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -49,7 +49,7 @@
             android:name=".testing.agent.bridge.AgentTestBroadcastReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.picme.AGENT_TEST" />
+                <action android:name="com.mamba.picme.AGENT_TEST" />
             </intent-filter>
         </receiver>
 

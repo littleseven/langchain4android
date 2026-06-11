@@ -39,7 +39,7 @@
 
 | 线程名 | TID | 状态 | 说明 |
 |--------|-----|------|------|
-| `com.picme` (主线程) | 30590 | **R**unning | 主线程活跃 |
+| `com.mamba.picme` (主线程) | 30590 | **R**unning | 主线程活跃 |
 | `PicMe-CameraAna` | 2227 | **R**unning | 相机分析线程忙碌 |
 | `Jit thread pool` | 420 | **R**unning | JIT 编译活跃 |
 | `Profile Saver` | 444 | **R**unning | ART Profile |
@@ -150,12 +150,12 @@
 # 设备状态检查
 adb devices
 adb shell dumpsys battery | grep temperature
-adb shell ps | grep com.picme
+adb shell ps | grep com.mamba.picme
 
 # 实时性能数据
-adb shell dumpsys cpuinfo | grep com.picme
-adb shell dumpsys meminfo com.picme
-adb shell dumpsys gfxinfo com.picme
+adb shell dumpsys cpuinfo | grep com.mamba.picme
+adb shell dumpsys meminfo com.mamba.picme
+adb shell dumpsys gfxinfo com.mamba.picme
 
 # 温度读取
 adb shell cat /sys/class/thermal/thermal_zone*/temp

@@ -75,12 +75,12 @@ KWS 继续监听
 
 ```kotlin
 // 在应用启动时（PicMeApplication.kt）
-import com.picme.agent.core.platform.voice.KeywordSpotterEngine
-import com.picme.features.camera.voice.KwakeWordKwsEngine
+import com.mamba.picme.agent.core.platform.voice.KeywordSpotterEngine
+import com.mamba.picme.features.camera.voice.KwakeWordKwsEngine
 
 // 1. 初始化 KWS 引擎
 val kwsEngine = KeywordSpotterEngine(
-    modelDir = "/data/data/com.picme/llm/sherpa-onnx-kws"
+    modelDir = "/data/data/com.mamba.picme/llm/sherpa-onnx-kws"
 )
 
 // 2. 包装为应用层 KWS 引擎
@@ -342,7 +342,7 @@ LLM 处理
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 # 3. 启动相机
-adb shell am start -n com.picme/.features.camera.CameraScreen
+adb shell am start -n com.mamba.picme/.features.camera.CameraScreen
 
 # 4. 唤醒词测试（观察日志）
 adb logcat -s "PicMe:WakeWordKWS" | grep "Wake word detected"
@@ -390,7 +390,7 @@ keywordsThreshold = 0.5f,    // 识别概率阈值（0.0-1.0）
 
 | 问题 | 原因 | 解决方案 |
 |------|------|---------|
-| KWS 引擎不可用 | 模型文件缺失 | 检查 `/data/data/com.picme/llm/sherpa-onnx-kws/` 目录 |
+| KWS 引擎不可用 | 模型文件缺失 | 检查 `/data/data/com.mamba.picme/llm/sherpa-onnx-kws/` 目录 |
 | 无法检测到唤醒词 | 阈值过高 | 降低 `keywordsThreshold` (如改为 0.3) |
 | 误触发频繁 | 阈值过低 | 提高 `keywordsThreshold` (如改为 0.7) |
 | 冷却期内被跳过 | 正常行为 | 这是防重复机制，预期行为 |

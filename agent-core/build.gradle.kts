@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.picme.agent.core"
+    namespace = "com.mamba.picme.agent.core"
     compileSdk = 36
 
     defaultConfig {

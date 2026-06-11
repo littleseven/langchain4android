@@ -39,7 +39,7 @@ tags:
 
 1. **PC 端主导**：测试编排、截屏、报告全部由 PC 端完成，应用端只接收命令
 2. **JSON 透传**：PC 端不解析参数，直接把 `{"method":"...","params":{...}}` 传给应用端
-3. **显式广播**：Android 12+ 必须用 `-n` 指定组件：`com.picme/.testing.agent.bridge.AgentTestBroadcastReceiver`
+3. **显式广播**：Android 12+ 必须用 `-n` 指定组件：`com.mamba.picme/.testing.agent.bridge.AgentTestBroadcastReceiver`
 4. **单引号包裹 JSON**：防止 adb shell 把 `{}` 解释为 brace expansion
 5. **复用 AgentCommandParser**：应用端用与 LLM 命令相同的解析路径处理测试命令
 
@@ -96,10 +96,10 @@ adb devices | grep "device$"
 
 ```bash
 # 应用是否运行
-adb shell pidof com.picme
+adb shell pidof com.mamba.picme
 
 # 启动应用
-adb shell am start -n com.picme/.MainActivity
+adb shell am start -n com.mamba.picme/.MainActivity
 ```
 
 ### Step 3: 发送命令并观察

@@ -210,7 +210,7 @@ output->copyToHostTensor(&tmpOutput);
 ./gradlew :app:assembleDebug && adb install -r app/build/outputs/apk/debug/picme-debug.apk
 
 # 2. 启动应用并收集日志
-adb logcat -c && adb shell am start -n com.picme/.MainActivity
+adb logcat -c && adb shell am start -n com.mamba.picme/.MainActivity
 sleep 10 && adb logcat -d | grep "MNN vs Baseline"
 
 # 3. 使用 auto-dev-loop 一键验证

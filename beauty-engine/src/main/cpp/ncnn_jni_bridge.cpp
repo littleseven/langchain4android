@@ -42,7 +42,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeSetLogEnabled(
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeSetLogEnabled(
         JNIEnv *env,
         jclass clazz,
         jboolean enabled) {
@@ -57,7 +57,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeSetLogEnab
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeCreate(
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeCreate(
         JNIEnv *env,
         jclass clazz,
         jstring paramPath,
@@ -116,7 +116,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDestroy(
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDestroy(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -132,7 +132,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDestroy(
 }
 
 JNIEXPORT jint JNICALL
-Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetect(
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetect(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -177,7 +177,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetect(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFace(
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFace(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -248,7 +248,7 @@ Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectReti
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFaceFromNv21(
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFaceFromNv21(
         JNIEnv *env,
         jclass clazz,
         jlong handle,

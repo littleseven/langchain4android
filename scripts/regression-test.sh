@@ -91,7 +91,7 @@ check_prerequisites() {
 
 # 启动应用并等待稳定
 launch_app() {
-    adb shell am start -n com.picme/.MainActivity > /dev/null 2>&1
+    adb shell am start -n com.mamba.picme/.MainActivity > /dev/null 2>&1
     sleep 3
 }
 
@@ -128,7 +128,7 @@ tc_camera_01_startup() {
     screenshot "tc01_startup"
 
     # 检查进程存在
-    if adb shell pidof com.picme > /dev/null 2>&1; then
+    if adb shell pidof com.mamba.picme > /dev/null 2>&1; then
         log_pass "应用成功启动并在运行"
     else
         log_fail "应用启动失败"

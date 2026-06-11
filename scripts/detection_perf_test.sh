@@ -59,8 +59,8 @@ test_detection_performance() {
     adb logcat -c > /dev/null 2>&1 || true
     
     # 确保应用运行
-    if ! adb shell pidof com.picme > /dev/null 2>&1; then
-        adb shell am start -n com.picme/.MainActivity > /dev/null 2>&1
+    if ! adb shell pidof com.mamba.picme > /dev/null 2>&1; then
+        adb shell am start -n com.mamba.picme/.MainActivity > /dev/null 2>&1
         sleep 3
     fi
     

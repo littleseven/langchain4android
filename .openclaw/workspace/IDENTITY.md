@@ -4,7 +4,7 @@
 - **项目名称**: PicMe
 - **项目类型**: Android 相机应用
 - **项目路径**: ~/AndroidStudioProjects/PicMe
-- **包名**: com.picme
+- **包名**: com.mamba.picme
 
 ## 开发者信息
 - **主要开发者**: littleseven

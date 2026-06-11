@@ -11,7 +11,7 @@
 extern "C" {
 
 JNIEXPORT void JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeSetLogEnabled(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeSetLogEnabled(
         JNIEnv *env,
         jclass clazz,
         jboolean enabled) {
@@ -20,7 +20,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeSetLogEnable
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeCreate(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeCreate(
         JNIEnv *env,
         jclass clazz,
         jstring modelPath,
@@ -63,7 +63,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDestroy(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDestroy(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -73,7 +73,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDestroy(
 }
 
 JNIEXPORT void JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseSession(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseSession(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -86,7 +86,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseSessi
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeRebuildSession(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeRebuildSession(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -100,7 +100,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeRebuildSessi
 }
 
 JNIEXPORT void JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseModelBuffer(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseModelBuffer(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -115,7 +115,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeReleaseModel
 }
 
 JNIEXPORT jint JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -149,7 +149,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect(
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetinaFace(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetinaFace(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -206,7 +206,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetina
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetinaFaceFromNv21(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetinaFaceFromNv21(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -267,7 +267,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetina
 }
 
 JNIEXPORT jint JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectFromNv21(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectFromNv21(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -299,7 +299,7 @@ Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectFromNv
 }
 
 JNIEXPORT jint JNICALL
-Java_com_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectLandmarksFromNv21(
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectLandmarksFromNv21(
         JNIEnv *env,
         jclass clazz,
         jlong handle,

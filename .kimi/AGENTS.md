@@ -7,7 +7,7 @@
 
 - **名称**: PicMe
 - **类型**: Android 相机应用（Kotlin + Jetpack Compose）
-- **包名**: com.picme
+- **包名**: com.mamba.picme
 - **架构**: Clean Architecture + MVVM
 - **关键约束**: 100% 本地 AI 处理、交互反馈 < 100ms、三语言 I18N（EN/CN/TW）
 
