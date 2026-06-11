@@ -1,5 +1,6 @@
 package com.picme.features.camera.voice
 
+import com.picme.agent.core.platform.voice.AsrEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
@@ -155,6 +156,111 @@ class WakeWordEngineTest {
         val engine = createEngine()
         val result = engine.stripWakeWord("小觅拍张照")
         assertEquals("拍张照", result)
+    }
+
+    // ── findMatchedWakeWordWithScore 测试：新增带权重的匹配方法 ──────────────────
+
+    @Test
+    fun `findMatchedWakeWordWithScore returns standard wake word with perfect score`() {
+        val engine = createEngine()
+        val result = engine.findMatchedWakeWordWithScore("小觅拍张照")
+        assertNotNull("应该匹配到小觅", result)
+        assertEquals("小觅", result?.first)
+        assertEquals(1.0f, result?.second)
+    }
+
+    @Test
+    fun `findMatchedWakeWordWithScore returns homophone with high confidence`() {
+        val engine = createEngine()
+        val result = engine.findMatchedWakeWordWithScore("小蜜拍张照")
+        assertNotNull("应该匹配到小蜜", result)
+        assertEquals("小蜜", result?.first)
+        // 小蜜的信心度应该接近 0.95
+        assertEquals(0.95f, result?.second)
+    }
+
+    @Test
+    fun `findMatchedWakeWordWithScore prefers higher confidence match`() {
+        val engine = createEngine()
+        // 小米同时包含"小"和"米"，但应该匹配整个"小米"而不是部分
+        val result = engine.findMatchedWakeWordWithScore("小米打开")
+        assertNotNull("应该匹配到小米", result)
+        assertEquals("小米", result?.first)
+        // 小米的信心度应该是 0.88
+        assertEquals(0.88f, result?.second)
+    }
+
+    @Test
+    fun `findMatchedWakeWordWithScore returns null for no match`() {
+        val engine = createEngine()
+        val result = engine.findMatchedWakeWordWithScore("今天天气不错")
+        assertNull("无关文本应该返回 null", result)
+    }
+
+    // ── 新增关键词测试：口语启动词 ────────────────────────────────────────────
+
+    @Test
+    fun `findMatchedWakeWord matches oral prefix variant hey`() {
+        val engine = createEngine()
+        // 嘿小觅 - 口语启动词 + 唤醒词
+        assertEquals("嘿小觅", engine.findMatchedWakeWord("嘿小觅拍照"))
+    }
+
+    @Test
+    fun `findMatchedWakeWord matches oral prefix variant call`() {
+        val engine = createEngine()
+        // 哎小觅 - 口语启动词
+        assertEquals("哎小觅", engine.findMatchedWakeWord("哎小觅换个美颜"))
+    }
+
+    @Test
+    fun `findMatchedWakeWord matches greeting variant`() {
+        val engine = createEngine()
+        // 小觅你好 - 打招呼表达
+        assertEquals("小觅你好", engine.findMatchedWakeWord("小觅你好拍张照"))
+    }
+
+    @Test
+    fun `stripWakeWord removes oral prefix variant`() {
+        val engine = createEngine()
+        // 嘿小觅拍照 → 拍照
+        val result = engine.stripWakeWord("嘿小觅拍照", "嘿小觅")
+        assertEquals("拍照", result)
+    }
+
+    @Test
+    fun `stripWakeWord handles mixed wake word variants`() {
+        val engine = createEngine()
+        // 复杂场景：同时有前缀和唤醒词
+        // 嘿小觅 被识别为唤醒词，需要彻底移除
+        val result = engine.stripWakeWord("嘿小觅拍照", "嘿小觅")
+        assertEquals("拍照", result)
+    }
+
+    @Test
+    fun `stripWakeWord removes all variant occurrences`() {
+        val engine = createEngine()
+        // 测试移除多个不同的唤醒词变体
+        // "小蜜拍照小米" → 应该移除 小蜜 和 小米，留下 拍照
+        val result = engine.stripWakeWord("小蜜拍照小米", "小蜜")
+        // 先移除 "小蜜"，再移除其他变体如 "小米"
+        assertEquals("拍照", result)
+    }
+
+    @Test
+    fun `stripWakeWord handles variant with tone particle`() {
+        val engine = createEngine()
+        // 小觅啊 - 带语气助词的唤醒词
+        val result = engine.stripWakeWord("小觅啊拍张照", "小觅啊")
+        assertEquals("拍张照", result)
+    }
+
+    @Test
+    fun `stripWakeWord handles close sound variant`() {
+        val engine = createEngine()
+        // 小妹 - 近音变体（可能被误识）
+        val result = engine.stripWakeWord("小妹调整美颜", "小妹")
+        assertEquals("调整美颜", result)
     }
 
     /**

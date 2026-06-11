@@ -2,6 +2,7 @@ uniform sampler2D uTexture;
 uniform vec2 uTexelSize;
 uniform float uSmoothing;
 uniform float uWhitening;
+uniform float uSharpen;               // 锐化强度 0~1
 uniform float uBigEyes;
 uniform float uSlimFace;
 uniform vec2 uFaceCenter;
@@ -38,9 +39,11 @@ uniform float uSaturation;
 uniform float uTemperature;
 uniform float uTint;
 uniform float uBrightness;
+uniform float uWarmth;               // 暖色调强度 0~1
 uniform float uRedAdj;
 uniform float uGreenAdj;
 uniform float uBlueAdj;
+uniform float uContourThinFace;      // 轮廓瘦脸强度 0~1
 uniform int uDebugMode;
 
 // GPUPixel 瘦脸/大眼：106点人脸关键点

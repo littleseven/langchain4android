@@ -24,18 +24,17 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Sherpa-MNN ASR 引擎实现
+ * [已弃用] Sherpa-MNN ASR 引擎实现
  *
+ * 已迁移至 SherpaOnnxAsrEngine (ONNX Runtime 后端)。
+ * 保留此类仅用于兼容已缓存的 MNN 格式模型。
  * 使用 MNN 官方集成的 sherpa-onnx-mnn 库进行端侧语音识别。
+ *
  * 支持两种模式：
  * 1. 离线模式（Push-to-Talk）：一次性送入所有音频
  * 2. 实时流式模式（Streaming）：持续送入音频 chunk，实时获取结果
  *
- * 流式模式参考 MnnLlmChat AsrService 的实现：
- * - 每 100ms 读取一个音频 chunk
- * - 送入 OnlineStream.acceptWaveform()
- * - 循环 decode → 检查 endpoint → 返回结果 → reset stream
- *
+ * @Deprecated 请使用 SherpaOnnxAsrEngine
  * @param context Application Context
  * @param modelDir 模型目录路径（包含 encoder/decoder/joiner .mnn 和 tokens.txt）
  */
@@ -365,7 +364,7 @@ class SherpaMnnAsrEngine(
      *
      * 通过 ResourceManager 协调释放，避免与 LLM 的 MNN 全局状态冲突。
      */
-    fun release() {
+    override fun release() {
         resourceManager.releaseAsr(
             owner = "SherpaMnnAsrEngine",
             onSafeUnload = ::performUnload,

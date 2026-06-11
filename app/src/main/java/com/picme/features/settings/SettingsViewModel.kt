@@ -46,12 +46,13 @@ class SettingsViewModel(
     companion object {
         private const val TAG = "Settings"
 
-        // 必要模型（LLM + ASR），检测到缺少时提示一键下载
-        // 仅保留核心模型以节省用户首次进入时间
-        private val ESSENTIAL_MODEL_IDS = listOf(
-            "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
-            "sherpa-mnn-zipformer-zh-en"
-        )
+// 必要模型（LLM + ASR + KWS），检测到缺少时提示一键下载
+// 仅保留核心模型以节省用户首次进入时间
+private val ESSENTIAL_MODEL_IDS = listOf(
+    "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
+    "sherpa-onnx-zipformer-zh-en", // ASR 模型
+    "sherpa-onnx-kws-zipformer-wenetspeech" // KWS 唤醒词模型
+)
     }
 
     val themeMode: StateFlow<ThemeMode> = repository.themeModeFlow
@@ -288,8 +289,10 @@ class SettingsViewModel(
         _showEssentialModelsPrompt.value = false
         viewModelScope.launch {
             try {
-                // Step 1: 下载所有未下载的 LLM 模型
-                val llmIds = ESSENTIAL_MODEL_IDS.filter { it != "sherpa-mnn-zipformer-zh-en" }
+                // Step 1: 下载所有未下载的 LLM 模型（排除 ASR 和 KWS）
+                val llmIds = ESSENTIAL_MODEL_IDS.filter {
+                    it != "sherpa-onnx-zipformer-zh-en" && it != "sherpa-onnx-kws-zipformer-wenetspeech"
+                }
                 for (modelId in llmIds) {
                     if (!modelDownloadManager.isModelDownloaded(modelId)) {
                         val config = _allModels.value.find { it.id == modelId }
@@ -306,7 +309,7 @@ class SettingsViewModel(
                 }
 
                 // Step 2: 下载 ASR 模型
-                val asrId = "sherpa-mnn-zipformer-zh-en"
+                val asrId = "sherpa-onnx-zipformer-zh-en"
                 if (!modelDownloadManager.isModelDownloaded(asrId)) {
                     val config = _allModels.value.find { it.id == asrId }
                     if (config != null) {
@@ -315,6 +318,20 @@ class SettingsViewModel(
                         modelDownloadManager.downloadStates.first { states ->
                             states[asrId]?.status == DownloadStatus.COMPLETED ||
                                 states[asrId]?.status == DownloadStatus.FAILED
+                        }
+                    }
+                }
+
+                // Step 3: 下载 KWS 唤醒词模型
+                val kwsId = "sherpa-onnx-kws-zipformer-wenetspeech"
+                if (!modelDownloadManager.isModelDownloaded(kwsId)) {
+                    val config = _allModels.value.find { it.id == kwsId }
+                    if (config != null) {
+                        Logger.i(TAG, "Batch: downloading KWS model $kwsId")
+                        modelDownloadManager.enqueueDownload(kwsId, config)
+                        modelDownloadManager.downloadStates.first { states ->
+                            states[kwsId]?.status == DownloadStatus.COMPLETED ||
+                                states[kwsId]?.status == DownloadStatus.FAILED
                         }
                     }
                 }

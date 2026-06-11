@@ -461,7 +461,7 @@ class AiAgentUseCase(
             append("switch_scene(night/moon/none) switch_ratio(4:3/16:9/full) adjust_exposure(-2~2) adjust_zoom(0.5~10) ")
             append("flip_camera capture toggle_recording switch_mode(PHOTO/VIDEO/PRO/DOCUMENT) ")
             append("navigate_to(camera/gallery/settings/debug/model_center) go_back text_reply。")
-            append("例:拍照片→{\"method\":\"capture\",\"params\":{}} 磨皮80→{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":80}} 徕卡黑白→{\"method\":\"switch_filter\",\"params\":{\"filter\":\"BW\"}} 去相册→{\"method\":\"navigate_to\",\"params\":{\"destination\":\"gallery\"}} 返回→{\"method\":\"go_back\",\"params\":{}} 你好→{\"method\":\"text_reply\",\"params\":{\"message\":\"你好\"}}。")
+            append("例:拍照片→{\"method\":\"capture\",\"params\":{}} 磨皮80→{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":80}} 暖色滤镜→{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}} 冷色滤镜→{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}} 复古滤镜→{\"method\":\"switch_filter\",\"params\":{\"filter\":\"VINTAGE\"}} 徕卡黑白→{\"method\":\"switch_filter\",\"params\":{\"filter\":\"BW\"}} 去相册→{\"method\":\"navigate_to\",\"params\":{\"destination\":\"gallery\"}} 返回→{\"method\":\"go_back\",\"params\":{}} 你好→{\"method\":\"text_reply\",\"params\":{\"message\":\"你好\"}}。")
             append("规则:相对调整±15 未提及参数不变 message用中文 导航必须用navigate_to/go_back")
         }
     }

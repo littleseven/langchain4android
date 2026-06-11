@@ -34,7 +34,7 @@ import com.picme.agent.core.api.policy.AiAgentMode
 import com.picme.agent.core.facade.AgentOrchestrator
 import com.picme.agent.core.platform.voice.AsrEngine
 import com.picme.agent.core.platform.voice.MnnAsrClient
-import com.picme.agent.core.platform.voice.SherpaMnnAsrEngine
+import com.picme.agent.core.platform.voice.SherpaOnnxAsrEngine
 import com.picme.core.common.Logger
 import com.picme.data.preferences.UserPreferencesRepository
 import com.picme.domain.model.AiAgentCommand
@@ -73,8 +73,9 @@ fun createAsrEngine(
     val modelDirPath = modelDir.absolutePath
 
     val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
+        // 修复 P0-3：检查 .onnx 文件而非 .mnn（已迁移到 Sherpa-ONNX）
         modelDir.exists() && modelDir.isDirectory &&
-            modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
+            modelDir.walkTopDown().any { it.name.endsWith(".onnx") } &&
             File(modelDir, "tokens.txt").exists()
     } else {
         modelDir.exists() && modelDir.isDirectory
@@ -86,12 +87,12 @@ fun createAsrEngine(
     }
 
     return if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-        val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
-        if (sherpaAsr.isAvailable()) {
-            Logger.i(logTag, "Using Sherpa-MNN ASR engine")
-            sherpaAsr
+        val sherpaOnnxAsr = SherpaOnnxAsrEngine(context, modelDirPath)
+        if (sherpaOnnxAsr.isAvailable()) {
+            Logger.i(logTag, "Using Sherpa-ONNX ASR engine")
+            sherpaOnnxAsr
         } else {
-            Logger.w(logTag, "Sherpa-MNN ASR init failed, fallback to system ASR")
+            Logger.w(logTag, "Sherpa-ONNX ASR init failed, fallback to system ASR")
             SystemAsrEngine(context)
         }
     } else {
@@ -168,6 +169,11 @@ fun AgentChatPanel(
     onCommand: ((AiAgentCommand) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    // 修复P0-2：诊断 voiceCoordinator
+    LaunchedEffect(voiceCoordinator) {
+        Logger.d("AgentChatPanel", "AgentChatPanel received voiceCoordinator: $voiceCoordinator (memorySessionId=$memorySessionId)")
+    }
+
     var isVisible by remember { mutableStateOf(false) }
     var isProcessing by remember { mutableStateOf(false) }
     val messages = remember { mutableStateOf<List<AgentMessage>>(emptyList()) }
@@ -422,9 +428,19 @@ data class AgentChatConfig(
  *     onAgentResponse = { result -> /* 处理 Agent 响应 */ }
  * )
  * DisposableEffect(Unit) {
- *     onDispose { config.voiceCoordinator.release() }
+ *     onDispose {
+ *         // 修复 P0-1：不应该调用 release()，而是进行"软释放"
+ *         config.voiceCoordinator.stopWakeWordListening()
+ *         config.voiceCoordinator.stopPushToTalk()
+ *     }
  * }
  * ```
+ *
+ * 为什么不能调用 release()？
+ * - voiceCoordinator 在多个屏幕（Camera、Gallery、Settings）间共享使用
+ * - 如果在某个页面调用 release()，会完全释放 ASR 引擎
+ * - 切换到其他屏幕后，ASR 引擎已被销毁，无法再使用语音功能
+ * - 正确的做法：每个页面只进行"软释放"（停止监听但保留引擎状态）
  */
 @Composable
 fun rememberAgentChatConfig(
@@ -496,7 +512,8 @@ fun rememberAgentChatConfig(
 
     // VoiceCommandCoordinator - asrEngine 变化时自动重建
     val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
-        createVoiceCommandCoordinator(
+        Logger.d("AgentChatConfig", "Creating voiceCoordinator: asrEngine=$asrEngine, aiAgentUseCase=$aiAgentUseCase")
+        val coordinator = createVoiceCommandCoordinator(
             asrEngine = asrEngine,
             aiAgentUseCase = aiAgentUseCase,
             scope = scope,
@@ -505,9 +522,24 @@ fun rememberAgentChatConfig(
             onAgentResponse = onAgentResponse,
             context = context
         )
+        Logger.d("AgentChatConfig", "VoiceCoordinator created: $coordinator")
+        coordinator
     }
+    // 修复 P0-1：不应该在 voiceCoordinator 变化时调用 release()
+    // 原因：voiceCoordinator 在多个 Chat 屏幕（Camera、Gallery、Settings）间共享使用
+    // release() 会完全释放 ASR 引擎，导致后续屏幕无法再使用语音功能
+    //
+    // 正确做法：每个使用 voiceCoordinator 的页面在自己的 onDispose 时，只进行"软释放"
+    // （调用 stopWakeWordListening() + stopPushToTalk()，不调用 release()）
+    //
+    // ASR 引擎的完全释放应该由 Application 生命周期或单独的释放策略管理
     DisposableEffect(voiceCoordinator) {
-        onDispose { voiceCoordinator.release() }
+        onDispose {
+            // 旧代码注释：voiceCoordinator.release() // ❌ 不再调用
+            Logger.d("AgentChatConfig", "rememberAgentChatConfig disposed - soft release only (not calling release())")
+            voiceCoordinator.stopWakeWordListening()
+            voiceCoordinator.stopPushToTalk()
+        }
     }
 
     return AgentChatConfig(

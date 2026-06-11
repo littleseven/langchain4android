@@ -55,28 +55,35 @@ class PushToTalkEngine(
         Logger.d(tag, "Push-to-talk started")
 
         scope.launch(Dispatchers.IO) {
-            val audioData = audioRecorder.readSegment(
-                maxDurationMs = MAX_RECORD_DURATION_MS,
-                silenceTimeoutMs = SILENCE_TIMEOUT_MS
-            )
+            try {
+                val audioData = audioRecorder.readSegment(
+                    maxDurationMs = MAX_RECORD_DURATION_MS,
+                    silenceTimeoutMs = SILENCE_TIMEOUT_MS
+                )
 
-            if (audioData.isEmpty()) {
-                Logger.w(tag, "No audio data recorded")
-                withContext(Dispatchers.Main) { onResult("") }
-                return@launch
-            }
-
-            Logger.d(tag, "Audio recorded: ${audioData.size} bytes")
-
-            val result = asrEngine.transcribe(audioData)
-            withContext(Dispatchers.Main) {
-                result.onSuccess { transcript ->
-                    Logger.d(tag, "Transcript: $transcript")
-                    onResult(transcript)
-                }.onFailure { error ->
-                    Logger.e(tag, "ASR failed", error)
-                    onResult("")
+                if (audioData.isEmpty()) {
+                    Logger.w(tag, "No audio data recorded")
+                    withContext(Dispatchers.Main) { onResult("") }
+                    return@launch
                 }
+
+                Logger.d(tag, "Audio recorded: ${audioData.size} bytes")
+
+                val result = asrEngine.transcribe(audioData)
+                withContext(Dispatchers.Main) {
+                    result.onSuccess { transcript ->
+                        Logger.d(tag, "Transcript: $transcript")
+                        onResult(transcript)
+                    }.onFailure { error ->
+                        Logger.e(tag, "ASR failed", error)
+                        onResult("")
+                    }
+                }
+            } finally {
+                // 录音+转录完成后释放 AudioRecorder，避免下次唤醒时 "Already recording"
+                isRecording = false
+                audioRecorder.stop()
+                Logger.d(tag, "Push-to-talk completed, recorder released")
             }
         }
     }

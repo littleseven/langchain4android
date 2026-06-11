@@ -175,7 +175,12 @@ fun GalleryScreen(
     val voiceCoordinator = agentChatConfig.voiceCoordinator
     DisposableEffect(Unit) {
         onDispose {
-            voiceCoordinator.release()
+            // 修复 P0-1：不应该完全释放 voiceCoordinator，因为它在多个 Chat 屏幕间共享
+            // 而应该只进行"软释放"（停止监听但保留引擎）
+            Logger.i(TAG, "Gallery screen disposed - performing soft release of voice coordinator")
+            voiceCoordinator.stopWakeWordListening()
+            voiceCoordinator.stopPushToTalk()
+            // 注意：不调用 voiceCoordinator.release() 以避免破坏 ASR 引擎状态
         }
     }
 

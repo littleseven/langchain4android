@@ -1,14 +1,14 @@
 package com.picme.features.camera.voice
 
+import com.picme.agent.core.api.context.MediaType
+import com.picme.agent.core.platform.voice.AsrEngine
+import com.picme.agent.core.platform.voice.InputAudioDevice
+import com.picme.agent.core.platform.voice.KeywordSpotterEngine
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
 import com.picme.beauty.api.StyleFilter
-import com.picme.agent.core.platform.voice.AsrEngine
-import com.picme.agent.core.platform.voice.InputAudioDevice
-import com.picme.agent.core.platform.voice.SherpaMnnAsrEngine
 import com.picme.core.common.Logger
 import com.picme.domain.model.AiAgentCommand
-import com.picme.agent.core.api.context.MediaType
 import com.picme.domain.model.VoiceCommandMode
 import com.picme.domain.usecase.AiAgentUseCase
 import kotlinx.coroutines.CoroutineScope
@@ -21,8 +21,13 @@ import kotlinx.coroutines.withContext
 /**
  * 语音命令协调器
  *
- * 统一管理两种语音交互模式（Push-to-Talk / WakeWord）、
+ * 统一管理三种语音交互模式（Push-to-Talk / WakeWord / KWS）、
  * ASR 引擎调用、LLM 意图解析和命令分发。
+ *
+ * 【工作流程】
+ * - Push-to-Talk 模式：用户按住按钮录音 → 识别 → ASR → LLM
+ * - WakeWord 模式：检测 VAD → 识别 → ASR → LLM
+ * - KWS 模式（新）：专用轻量 KWS 模型检测关键词 → ASR → LLM（低功耗）
  *
  * 参考 MnnLlmChat VoiceChatPresenter 的 Channel 串行任务处理：
  * - 使用 Channel 保证任务按序执行，避免并发问题
@@ -31,6 +36,7 @@ import kotlinx.coroutines.withContext
  * @param context Application Context
  * @param asrEngine ASR 引擎（优先本地 MNN，回退系统）
  * @param aiAgentUseCase AI Agent 用例，负责 LLM 推理和命令解析
+ * @param kwsEngine KWS 引擎（可选，用于低功耗唤醒词检测）
  * @param onCommand 识别到有效命令后的回调
  * @param scope CoroutineScope，用于异步任务
  */
@@ -41,6 +47,7 @@ class VoiceCommandCoordinator(
     private val scope: CoroutineScope,
     private val onTranscript: ((String) -> Unit)? = null,
     private val onAgentResponse: ((Result<AiAgentCommand>) -> Unit)? = null,
+    private val kwsEngine: KeywordSpotterEngine? = null,
     context: android.content.Context? = null
 ) {
 
@@ -48,6 +55,16 @@ class VoiceCommandCoordinator(
 
     private val pushToTalkEngine = PushToTalkEngine(asrEngine, scope, context)
     private val wakeWordEngine = WakeWordEngine(asrEngine, scope, context)
+    private var kwsWakeWordEngine: KwakeWordKwsEngine? = null  // 延迟初始化 KWS 引擎
+    private var kwsWakeInProgress = false  // 标记 KWS 唤醒后的 ASR+LLM 处理进行中
+
+    init {
+        // 如果提供了 KWS 引擎，初始化 KWS 唤醒词检测
+        if (kwsEngine != null) {
+            kwsWakeWordEngine = KwakeWordKwsEngine(kwsEngine, scope, context)
+            Logger.i(tag, "KWS engine initialized for low-power wake word detection")
+        }
+    }
 
     /**
      * 当前音频输入设备类型
@@ -97,17 +114,40 @@ class VoiceCommandCoordinator(
     /**
      * 开始唤醒词监听
      *
-     * 仅在 WAKE_WORD 模式下有效。
+     * 支持两种模式：
+     * - WAKE_WORD：VAD + ASR（原有模式）
+     * - KWS：专用轻量模型（新增，低功耗）
+     *
+     * 优先级：KWS > WAKE_WORD
      */
     fun startWakeWordListening() {
         if (mode != VoiceCommandMode.WAKE_WORD) {
             Logger.d(tag, "Not in wake word mode, skipping")
             return
         }
+
+        // 优先使用 KWS 引擎（低功耗）
+        if (kwsWakeWordEngine != null) {
+            Logger.i(tag, "Starting KWS wake word engine (low-power mode)")
+            kwsWakeWordEngine!!.start(onWakeWord = {
+                Logger.i(tag, "KWS detected wake word, stopping KWS and starting ASR")
+                // 1. 先停止 KWS 释放麦克风，避免与 ASR 的 AudioRecorder 互斥
+                kwsWakeWordEngine?.stop()
+                // 2. 清理可能残留的 PushToTalk 录制（上次未正常释放导致 Already recording）
+                stopPushToTalk()
+                kwsWakeInProgress = true
+                // 3. 启动 ASR 进行完整转录 → LLM 处理
+                startAsrForTranscription()
+            })
+            return
+        }
+
+        // 回退到原有的 VAD + ASR 模式
         if (!asrEngine.isAvailable()) {
             Logger.w(tag, "ASR engine not available")
             return
         }
+        Logger.i(tag, "Starting traditional wake word engine (VAD + ASR mode)")
         wakeWordEngine.start { transcript ->
             enqueueTranscript(transcript)
         }
@@ -117,7 +157,57 @@ class VoiceCommandCoordinator(
      * 停止唤醒词监听
      */
     fun stopWakeWordListening() {
+        // 停止 KWS 引擎
+        kwsWakeWordEngine?.stop()
+        // 停止传统引擎
         wakeWordEngine.stop()
+    }
+
+    /**
+     * 启动 ASR 进行完整转录（在 KWS 检测到唤醒词后调用）
+     *
+     * 【后续优化】目前是同步启动 ASR，后续可以考虑：
+     * - ASR 只录制 1-2 秒的音频（快速命令）
+     * - 自动检测命令结束后关闭 ASR
+     */
+    private fun startAsrForTranscription() {
+        if (!asrEngine.isAvailable()) {
+            Logger.w(tag, "ASR engine not available after KWS wake")
+            // ASR 不可用时立即重启 KWS 继续监听
+            restartKwsIfNeeded()
+            return
+        }
+
+        startPushToTalk(
+            onResult = { transcript ->
+                Logger.i(tag, "ASR transcription: $transcript")
+                if (transcript.isNotBlank()) {
+                    // 有效转录 → 送入 LLM 处理（processTranscriptInternal 完成后会自动重启 KWS）
+                    enqueueTranscript(transcript)
+                } else {
+                    // 空转录 → 立即重启 KWS 继续监听
+                    Logger.d(tag, "Empty transcript, restarting KWS immediately")
+                    restartKwsIfNeeded()
+                }
+            },
+            processAsCommand = false  // startAsrForTranscription 自己处理 enqueue，避免重复入队
+        )
+    }
+
+    /**
+     * ASR+LLM 处理完成后重启 KWS 持续监听
+     *
+     * 仅在 KWS 唤醒触发的处理流程中调用，且需检查当前模式是否仍为 WAKE_WORD。
+     */
+    private fun restartKwsIfNeeded() {
+        if (!kwsWakeInProgress) return
+        kwsWakeInProgress = false
+        if (mode == VoiceCommandMode.WAKE_WORD) {
+            Logger.i(tag, "Restarting KWS for continuous listening")
+            startWakeWordListening()
+        } else {
+            Logger.d(tag, "KWS restart skipped (mode=$mode)")
+        }
     }
 
     /**
@@ -158,7 +248,7 @@ class VoiceCommandCoordinator(
     fun releaseAsr() {
         stopWakeWordListening()
         stopPushToTalk()
-        (asrEngine as? SherpaMnnAsrEngine)?.release()
+        asrEngine.release()
         Logger.i(tag, "ASR released")
     }
 
@@ -218,23 +308,36 @@ class VoiceCommandCoordinator(
         }.onFailure { error ->
             Logger.e(tag, "Failed to process voice command", error)
         }
+
+        // ASR+LLM 处理完成后重启 KWS 持续监听
+        restartKwsIfNeeded()
     }
 
     /**
      * 释放资源
      *
-     * 关键修复：正确调用 SherpaMnnAsrEngine 的 release()，
+     * 【释放流程】
+     * 1. 停止所有语音引擎（KWS + VAD + PushToTalk）
+     * 2. 关闭任务队列
+     * 3. 释放 ASR 引擎（需要特别处理 MNN 全局状态）
+     *
+     * 关键修复：通过 AsrEngine.release() 统一释放，支持 SherpaOnnxAsrEngine。
      * 通过 ResourceManager 协调释放，避免 MNN 全局状态冲突。
      */
     fun release() {
+        Logger.i(tag, "Releasing VoiceCommandCoordinator...")
+
+        // 停止所有语音监听引擎
         stopWakeWordListening()
         stopPushToTalk()
+
+        // 关闭任务处理队列
         taskChannel.close()
 
-        // 修复：如果 ASR 是 SherpaMnnAsrEngine，调用其 release() 进行协调释放
-        (asrEngine as? SherpaMnnAsrEngine)?.release()
+        // 释放 ASR 引擎（统一管理）
+        asrEngine.release()
 
-        Logger.d(tag, "VoiceCommandCoordinator released")
+        Logger.i(tag, "✓ VoiceCommandCoordinator released")
     }
 
     /**

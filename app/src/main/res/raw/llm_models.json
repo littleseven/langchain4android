@@ -1,20 +1,38 @@
 [
   {
-    "id": "sherpa-mnn-zipformer-zh-en",
-    "name": "Sherpa-MNN Zipformer 中英双语",
-    "description": "MNN 官方流式语音识别模型，支持中文+英文，端侧实时推理",
+    "id": "sherpa-onnx-zipformer-zh-en",
+    "name": "Sherpa-ONNX Zipformer 中英双语",
+    "description": "ONNX 流式语音识别模型，支持中文+英文，ONNX Runtime 端侧实时推理",
     "type": "ASR",
-    "size": 295334441,
+    "size": 280000000,
     "sources": {
-      "ModelScope": "MNN/sherpa-mnn-streaming-zipformer-bilingual-zh-en-2023-02-20"
+      "ModelScope": "budaoshou/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
     },
     "files": [
-      "encoder-epoch-99-avg-1.int8.mnn",
-      "decoder-epoch-99-avg-1.int8.mnn",
-      "joiner-epoch-99-avg-1.int8.mnn",
+      "encoder-epoch-99-avg-1.int8.onnx",
+      "decoder-epoch-99-avg-1.int8.onnx",
+      "joiner-epoch-99-avg-1.int8.onnx",
       "tokens.txt"
     ],
-    "tags": ["ASR", "speech", "chinese", "english"]
+    "tags": ["ASR", "speech", "chinese", "english", "onnx"]
+  },
+  {
+    "id": "sherpa-onnx-kws-zipformer-wenetspeech",
+    "name": "Sherpa-ONNX KWS 唤醒词",
+    "description": "轻量级关键词识别模型，~14MB，支持自定义唤醒词（always-on 超低功耗）",
+    "type": "KWS",
+    "size": 14000000,
+    "sources": {
+      "ModelScope": "budaoshou/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
+    },
+    "files": [
+      "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "tokens.txt",
+      "keywords.txt"
+    ],
+    "tags": ["KWS", "wake-word", "keyword", "always-on", "onnx"]
   },
   {
     "id": "qwen3_1_7b",

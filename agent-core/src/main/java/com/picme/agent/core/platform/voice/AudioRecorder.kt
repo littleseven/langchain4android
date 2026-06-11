@@ -239,10 +239,13 @@ class AudioRecorder(private val context: Context? = null) {
         isRecording = false
         inputGain = GAIN_BUILTIN_MIC
         try {
-            audioRecord?.stop()
+            // 仅当 AudioRecord 处于录制状态时才 stop，避免 IllegalStateException
+            if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                audioRecord?.stop()
+            }
             audioRecord?.release()
-        } catch (illegalStateException: IllegalStateException) {
-            Logger.w(TAG, "Error stopping recorder", illegalStateException)
+        } catch (e: Exception) {
+            Logger.w(TAG, "Error stopping recorder", e)
         }
         audioRecord = null
         stopBluetoothSco()

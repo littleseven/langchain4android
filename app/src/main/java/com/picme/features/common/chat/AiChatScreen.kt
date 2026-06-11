@@ -830,6 +830,14 @@ private fun VoiceInputMode(
     var isCancelRecord by remember { mutableStateOf(false) }
 
     // 检查语音协调器是否可用
+    // 修复P0-2：如果voiceCoordinator为null，添加诊断日志
+    LaunchedEffect(voiceCoordinator) {
+        if (voiceCoordinator == null) {
+            Logger.w(TAG, "VoiceInputMode: voiceCoordinator is NULL! This should not happen.")
+        } else {
+            Logger.d(TAG, "VoiceInputMode: voiceCoordinator is available: $voiceCoordinator")
+        }
+    }
     val isVoiceAvailable = voiceCoordinator != null
 
     LaunchedEffect(isListening, isCancelRecord) {

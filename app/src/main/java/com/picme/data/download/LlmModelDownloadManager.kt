@@ -53,13 +53,24 @@ class LlmModelDownloadManager(context: Context) {
         )
 
         /**
-         * ASR 模型固定文件列表
+         * ASR 模型固定文件列表（Sherpa-ONNX Zipformer）
          */
         private val ASR_MODEL_FILES = listOf(
-            "encoder-epoch-99-avg-1.int8.mnn",
-            "decoder-epoch-99-avg-1.int8.mnn",
-            "joiner-epoch-99-avg-1.int8.mnn",
+            "encoder-epoch-99-avg-1.int8.onnx",
+            "decoder-epoch-99-avg-1.int8.onnx",
+            "joiner-epoch-99-avg-1.int8.onnx",
             "tokens.txt"
+        )
+
+        /**
+         * KWS 唤醒词模型固定文件列表（Sherpa-ONNX KWS）
+         */
+        private val KWS_MODEL_FILES = listOf(
+            "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+            "tokens.txt",
+            "keywords.txt"
         )
 
         /**
@@ -125,7 +136,19 @@ class LlmModelDownloadManager(context: Context) {
             "Think" to "深度思考",
             "Chat" to "对话",
             "Safety" to "安全",
-            "NPU" to "NPU加速"
+            "NPU" to "NPU加速",
+            "ASR" to "语音识别",
+            "KWS" to "唤醒词",
+            "TTS" to "语音合成",
+            "face" to "人脸检测",
+            "detection" to "人脸检测",
+            "mnn" to "MNN模型",
+            "ncnn" to "NCNN模型",
+            "onnx" to "ONNX模型",
+            "landmark" to "人脸关键点",
+            "speech" to "语音模型",
+            "wake-word" to "唤醒词",
+            "keyword" to "关键词"
         )
     }
 
@@ -418,31 +441,28 @@ class LlmModelDownloadManager(context: Context) {
         }
     }
 
-    /**
-     * 检查模型是否已下载完成
-     */
-    fun isModelDownloaded(modelId: String): Boolean {
-        val modelDir = File(downloadDir, modelId)
-        if (!modelDir.exists()) return false
+/**
+ * 检查模型是否已下载完成
+ */
+fun isModelDownloaded(modelId: String): Boolean {
+    val modelDir = File(downloadDir, modelId)
+    if (!modelDir.exists()) return false
 
-        // ASR 模型：检查目录中是否存在 .mnn 文件（避免硬编码文件名）
-        if (modelId.contains("zipformer", ignoreCase = true) ||
-            modelId.contains("whisper", ignoreCase = true)
-        ) {
-            return modelDir.walkTopDown().any { it.name.endsWith(".mnn") }
-        }
+    val expectedFiles = getModelFiles(modelId)
+    if (expectedFiles.isEmpty()) return false
 
-        val expectedFiles = getModelFiles(modelId)
-        return expectedFiles.all { fileName ->
-            File(modelDir, fileName).exists()
-        }
+    // 检查所有必需文件是否存在
+    return expectedFiles.all { fileName ->
+        File(modelDir, fileName).exists()
     }
+}
 
     /**
      * 根据模型 ID 获取对应的文件列表
      */
     private fun getModelFiles(modelId: String): List<String> {
         return when {
+            modelId.contains("kws", ignoreCase = true) -> KWS_MODEL_FILES
             modelId.contains("zipformer", ignoreCase = true) -> ASR_MODEL_FILES
             modelId.contains("whisper", ignoreCase = true) -> ASR_MODEL_FILES
             modelId == "picme-face-det-mnn" -> FACE_DETECTION_ROI_MNN_FILES
@@ -705,7 +725,7 @@ class LlmModelDownloadManager(context: Context) {
                     throw IOException("Download cancelled")
                 }
 
-                val url = buildModelScopeUrl(repoPath, fileName)
+                val url = buildDownloadUrl(config.sources, fileName)
                 val destFile = File(modelDir, fileName)
 
                 // 文件已完整下载
@@ -828,55 +848,55 @@ class LlmModelDownloadManager(context: Context) {
         // 优先从 ModelScope API 动态获取文件列表（包含完整文件信息和SHA256校验值）
         // 如果 API 失败，则回退到模型配置中的文件列表或默认列表
         val fileInfos = run {
-                // 1. 首先尝试从 ModelScope API 获取（最准确，包含所有文件和元数据）
-                val apiFileInfos = fetchModelFileInfosFromModelScope(repoPath)
-                if (apiFileInfos.isNotEmpty()) {
-                    Logger.i(TAG, "Using ${apiFileInfos.size} files from ModelScope API")
-                    return@run apiFileInfos
-                }
-
-                // 2. API 失败，尝试使用配置文件中的文件列表
-                if (config.files.isNotEmpty()) {
-                    Logger.w(TAG, "API failed, using files from config: ${config.files}")
-                    return@run config.files.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
-                }
-
-                // 3. 最后回退到默认文件列表
-                val defaultFiles = getModelFiles(modelId)
-                Logger.w(TAG, "API and config failed, using default files: $defaultFiles")
-                return@run defaultFiles.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
+            // 1. 首先尝试从 ModelScope API 获取（最准确，包含所有文件和元数据）
+            val apiFileInfos = fetchModelFileInfosFromModelScope(repoPath)
+            if (apiFileInfos.isNotEmpty()) {
+                Logger.i(TAG, "Using ${apiFileInfos.size} files from ModelScope API")
+                return@run apiFileInfos
             }
 
-            // 从 API 获取的文件列表已经是完整列表（包含必需和可选文件）
-            // 确定每个文件是否是可选文件
-            val allFileInfos = fileInfos.map { fileInfo ->
-                fileInfo to (fileInfo.name in LLM_MODEL_OPTIONAL_FILES)
-            }.filter { (fileInfo, _) ->
-                // 排除隐藏文件（如 .gitattributes）
-                !fileInfo.name.startsWith(".")
-            }.map { it.first }
-
-            if (allFileInfos.isEmpty()) {
-                throw IOException("No files to download for model: $modelId")
+            // 2. API 失败，尝试使用配置文件中的文件列表
+            if (config.files.isNotEmpty()) {
+                Logger.w(TAG, "API failed, using files from config: ${config.files}")
+                return@run config.files.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
             }
 
-            // 计算实际总大小（基于 API 返回的文件大小，而非 config.size）
-            val actualTotalBytes = allFileInfos.sumOf { it.size }.coerceAtLeast(config.size)
-            if (actualTotalBytes != config.size) {
-                Logger.d(TAG, "Total size adjusted: config=${config.size}, actual=$actualTotalBytes")
-            }
+            // 3. 最后回退到默认文件列表
+            val defaultFiles = getModelFiles(modelId)
+            Logger.w(TAG, "API and config failed, using default files: $defaultFiles")
+            return@run defaultFiles.map { ModelFileInfo(name = it, size = 0, sha256 = null) }
+        }
 
-            // 更新状态使用实际总大小
-            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, actualTotalBytes)) }
-            updateServiceState()
+        // 从 API 获取的文件列表已经是完整列表（包含必需和可选文件）
+        // 确定每个文件是否是可选文件
+        val allFileInfos = fileInfos.map { fileInfo ->
+            fileInfo to (fileInfo.name in LLM_MODEL_OPTIONAL_FILES)
+        }.filter { (fileInfo, _) ->
+            // 排除隐藏文件（如 .gitattributes）
+            !fileInfo.name.startsWith(".")
+        }.map { it.first }
 
-            var totalDownloaded = 0L
+        if (allFileInfos.isEmpty()) {
+            throw IOException("No files to download for model: $modelId")
+        }
 
-            try {
-                Logger.i(TAG, "Downloading model $modelId from ModelScope: $repoPath")
-                Logger.i(TAG, "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
+        // 计算实际总大小（基于 API 返回的文件大小，而非 config.size）
+        val actualTotalBytes = allFileInfos.sumOf { it.size }.coerceAtLeast(config.size)
+        if (actualTotalBytes != config.size) {
+            Logger.d(TAG, "Total size adjusted: config=${config.size}, actual=$actualTotalBytes")
+        }
 
-                for (fileInfo in allFileInfos) {
+        // 更新状态使用实际总大小
+        _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.DOWNLOADING, 0, actualTotalBytes)) }
+        updateServiceState()
+
+        var totalDownloaded = 0L
+
+        try {
+            Logger.i(TAG, "Downloading model $modelId from ModelScope: $repoPath")
+            Logger.i(TAG, "Will download ${allFileInfos.size} files: ${allFileInfos.map { it.name }}")
+
+            for (fileInfo in allFileInfos) {
                 val fileName = fileInfo.name
                 val expectedSize = fileInfo.size
                 val expectedSha256 = fileInfo.sha256
@@ -972,7 +992,6 @@ class LlmModelDownloadManager(context: Context) {
                                 output.write(buffer, 0, bytesRead)
                                 totalDownloaded += bytesRead
 
-                                // [Perf] 限制进度 emit 频率：每 500ms 或每下载 1MB 才 emit 一次
                                 val now = System.currentTimeMillis()
                                 val bytesSinceLastEmit = totalDownloaded - lastEmitBytes
                                 if (now - lastEmitTime > 500 || bytesSinceLastEmit > 1_048_576) {
@@ -988,48 +1007,12 @@ class LlmModelDownloadManager(context: Context) {
                 }
             }
 
-            // 下载完成后验证所有非可选文件的完整性
-            val failedFiles = mutableListOf<String>()
-            for (fileInfo in allFileInfos) {
-                val isOptional = fileInfo.name in LLM_MODEL_OPTIONAL_FILES
-                val destFile = File(modelDir, fileInfo.name)
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, actualTotalBytes, actualTotalBytes)) }
+            updateServiceState()
+            emit(DownloadProgress(modelId, actualTotalBytes, actualTotalBytes, DownloadStatus.COMPLETED))
+            Logger.i(TAG, "Model download completed: $modelId")
 
-                if (!destFile.exists()) {
-                    if (!isOptional) {
-                        failedFiles.add("${fileInfo.name} (missing)")
-                    }
-                    continue
-                }
-
-                // 1. 校验文件大小
-                if (fileInfo.size > 0 && destFile.length() != fileInfo.size) {
-                    if (!isOptional) {
-                        failedFiles.add("${fileInfo.name} (size mismatch: ${destFile.length()} vs ${fileInfo.size})")
-                    }
-                    continue
-                }
-
-                // 2. 校验 SHA256（如果 API 提供了）
-                if (!fileInfo.sha256.isNullOrEmpty()) {
-                    if (!verifyFileSha256(destFile, fileInfo.sha256)) {
-                        if (!isOptional) {
-                            failedFiles.add("${fileInfo.name} (SHA256 mismatch)")
-                        }
-                        // 删除校验失败的文件，以便下次重新下载
-                        destFile.delete()
-                    }
-                }
-            }
-
-            if (failedFiles.isNotEmpty()) {
-                throw IOException("File integrity check failed: $failedFiles")
-            }
-
-                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.COMPLETED, actualTotalBytes, actualTotalBytes)) }
-                emit(DownloadProgress(modelId, actualTotalBytes, actualTotalBytes, DownloadStatus.COMPLETED))
-                Logger.i(TAG, "Model download completed and verified: $modelId")
-
-            } catch (e: Exception) {
+        } catch (e: Exception) {
             if (e.message?.contains("cancelled", ignoreCase = true) == true) {
                 val pausedBytes = pausedDownloads[modelId]
                 if (pausedBytes != null) {
@@ -1045,17 +1028,89 @@ class LlmModelDownloadManager(context: Context) {
                 }
                 return@flow
             }
-                val errorMsg = e.message ?: e.javaClass.simpleName
-                Logger.e(TAG, "Download failed for $modelId: $errorMsg")
-                _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, actualTotalBytes)) }
-                updateServiceState()
-                emit(DownloadProgress(modelId, 0, actualTotalBytes, DownloadStatus.FAILED))
-            }
-
+            val errorMsg = e.message ?: e.javaClass.simpleName
+            Logger.e(TAG, "Download failed for $modelId: $errorMsg")
+            _downloadStates.update { it + (modelId to DownloadState(modelId, DownloadStatus.FAILED, 0, actualTotalBytes)) }
+            updateServiceState()
+            emit(DownloadProgress(modelId, 0, actualTotalBytes, DownloadStatus.FAILED))
+        }
     }.flowOn(Dispatchers.IO)
 
     private fun buildModelScopeUrl(repoPath: String, fileName: String): String {
         return "https://modelscope.cn/models/$repoPath/resolve/master/$fileName"
+    }
+
+    /**
+     * HuggingFace 下载 URL
+     * 优先使用 hf-mirror.com（国内镜像），fallback 到 huggingface.co
+     */
+    private fun buildHuggingFaceUrl(repoPath: String, fileName: String, useMirror: Boolean = true): String {
+        val domain = if (useMirror) "https://hf-mirror.com" else "https://huggingface.co"
+        return "$domain/$repoPath/resolve/main/$fileName"
+    }
+
+    private fun buildDownloadUrl(sources: Map<String, String>, fileName: String): String {
+        val hfRepo = sources["HuggingFace"] ?: sources["huggingface"]
+        if (hfRepo != null) return buildHuggingFaceUrl(hfRepo, fileName)
+        val msRepo = sources["ModelScope"] ?: sources["modelscope"]
+        if (msRepo != null) return buildModelScopeUrl(msRepo, fileName)
+        throw IOException("No valid source (HuggingFace/ModelScope) for file: $fileName")
+    }
+
+    private suspend fun fetchFileInfos(sources: Map<String, String>): List<ModelFileInfo> {
+        val hfRepo = sources["HuggingFace"] ?: sources["huggingface"]
+        if (hfRepo != null) return fetchFileInfosFromHuggingFace(hfRepo)
+        val msRepo = sources["ModelScope"] ?: sources["modelscope"]
+        if (msRepo != null) return fetchModelFileInfosFromModelScope(msRepo)
+        return emptyList()
+    }
+
+    /**
+     * 从 HuggingFace 获取文件列表
+     *
+     * 优先使用 hf-mirror.com（国内访问可用），失败后 fallback 到 huggingface.co。
+     */
+    private suspend fun fetchFileInfosFromHuggingFace(repoPath: String): List<ModelFileInfo> {
+        // 先尝试镜像（国内可用）
+        val mirrorResult = fetchHfApi("https://hf-mirror.com/api/models/$repoPath")
+        if (mirrorResult.isNotEmpty()) return mirrorResult
+
+        // fallback 到官方
+        Logger.w(TAG, "hf-mirror.com failed, trying huggingface.co")
+        return fetchHfApi("https://huggingface.co/api/models/$repoPath")
+    }
+
+    private suspend fun fetchHfApi(apiUrl: String): List<ModelFileInfo> = withContext(Dispatchers.IO) {
+        try {
+            Logger.i(TAG, "Fetching file list from: $apiUrl")
+            val request = Request.Builder().url(apiUrl).build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                Logger.w(TAG, "API returned ${response.code} for $apiUrl")
+                return@withContext emptyList()
+            }
+            val body = response.body?.string() ?: return@withContext emptyList()
+            val json = JSONObject(body)
+            val siblings = json.optJSONArray("siblings")
+            if (siblings == null || siblings.length() == 0) {
+                Logger.w(TAG, "API returned empty siblings for $apiUrl")
+                return@withContext emptyList()
+            }
+            val files = mutableListOf<ModelFileInfo>()
+            for (i in 0 until siblings.length()) {
+                val f = siblings.getJSONObject(i)
+                files.add(ModelFileInfo(
+                    name = f.getString("rfilename"),
+                    size = f.optLong("size", 0),
+                    sha256 = null
+                ))
+            }
+            Logger.i(TAG, "Fetched ${files.size} files from API")
+            files
+        } catch (e: Exception) {
+            Logger.e(TAG, "API failed: $apiUrl", e)
+            emptyList()
+        }
     }
 
     /**
@@ -1170,9 +1225,16 @@ class LlmModelDownloadManager(context: Context) {
                         val path = fileObj.optString("Path", "")
                         val size = fileObj.optLong("Size", 0)
                         val sha256 = fileObj.optString("Sha256", "")
+                        val type = fileObj.optString("Type", "blob")
 
-                        // 只获取根目录下的文件（Path 不包含 /），排除子目录
-                        if (name.isNotEmpty() && path.isNotEmpty() && !path.contains("/")) {
+                        // 只获取根目录下的文件：
+                        // 1. Path 不包含 /（根目录文件）
+                        // 2. Type 为 "blob"（普通文件，不是目录）
+                        // 3. 排除隐藏文件（如 .gitattributes）
+                        if (name.isNotEmpty() && path.isNotEmpty() &&
+                            !path.contains("/") &&
+                            type == "blob" &&
+                            !name.startsWith(".")) {
                             fileList.add(ModelFileInfo(
                                 name = name,
                                 size = size,

@@ -56,4 +56,11 @@ interface AsrEngine {
     fun stopStreaming() {
         // 默认实现：空操作
     }
+
+    /**
+     * 释放引擎资源
+     */
+    fun release() {
+        // 默认实现：空操作
+    }
 }

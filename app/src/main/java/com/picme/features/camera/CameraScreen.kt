@@ -68,15 +68,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.picme.R
-import com.picme.agent.core.api.android.RemoteModelConfig
 import com.picme.agent.core.api.android.RemoteModelConfigs
 import com.picme.agent.core.api.context.MediaType
 import com.picme.agent.core.api.policy.AiAgentInferencePreference
 import com.picme.agent.core.api.policy.AiAgentMode
 import com.picme.agent.core.platform.mnn.MnnResourceManager
 import com.picme.agent.core.platform.voice.AsrEngine
-import com.picme.agent.core.platform.voice.MnnAsrClient
-import com.picme.agent.core.platform.voice.SherpaMnnAsrEngine
+import com.picme.agent.core.platform.voice.SherpaOnnxAsrEngine
+import com.picme.agent.core.runtime.state.SceneManager
 import com.picme.beauty.api.BeautyPerfStats
 import com.picme.beauty.api.BeautySettings
 import com.picme.beauty.api.FilterType
@@ -693,7 +692,7 @@ fun CameraContent(
     }
     LaunchedEffect(context, localAsrModel, shouldLoadLocalAsr) {
         if (!shouldLoadLocalAsr) {
-            (asrEngine as? SherpaMnnAsrEngine)?.release()
+            asrEngine.release()
             asrEngine = SystemAsrEngine(context)
             Logger.d(TAG, "ASR entry inactive, keep system ASR only")
             return@LaunchedEffect
@@ -707,7 +706,7 @@ fun CameraContent(
                 // 参考 VoiceModelsChecker: 先检查模型目录和文件是否存在
                 val isModelReady = if (localAsrModel.contains("zipformer", ignoreCase = true)) {
                     modelDir.exists() && modelDir.isDirectory &&
-                        modelDir.walkTopDown().any { it.name.endsWith(".mnn") } &&
+                        modelDir.walkTopDown().any { it.name.endsWith(".onnx") } &&
                         File(modelDir, "tokens.txt").exists()
                 } else {
                     modelDir.exists() && modelDir.isDirectory
@@ -717,24 +716,14 @@ fun CameraContent(
                     Logger.w(TAG, "ASR model not ready: $localAsrModel (dir exists=${modelDir.exists()})")
                     SystemAsrEngine(context)
                 } else {
-                    if (localAsrModel.contains("zipformer", ignoreCase = true)) {
-                        val sherpaAsr = SherpaMnnAsrEngine(context, modelDirPath)
-                        if (sherpaAsr.isAvailable()) {
-                            Logger.i(TAG, "Using Sherpa-MNN ASR engine with model: $localAsrModel")
-                            sherpaAsr
-                        } else {
-                            Logger.w(TAG, "Sherpa-MNN ASR init failed, falling back to system ASR")
-                            SystemAsrEngine(context)
-                        }
+                    // 统一使用 SherpaOnnxAsrEngine（支持所有 ONNX 模型格式）
+                    val sherpaOnnxAsr = SherpaOnnxAsrEngine(context, modelDirPath)
+                    if (sherpaOnnxAsr.isAvailable()) {
+                        Logger.i(TAG, "Using Sherpa-ONNX ASR engine with model: $localAsrModel")
+                        sherpaOnnxAsr
                     } else {
-                        val mnnAsr = MnnAsrClient(context, localAsrModel)
-                        if (mnnAsr.isAvailable()) {
-                            Logger.i(TAG, "Using MNN ASR engine with model: $localAsrModel")
-                            mnnAsr
-                        } else {
-                            Logger.w(TAG, "MNN ASR not available, falling back to system ASR")
-                            SystemAsrEngine(context)
-                        }
+                        Logger.w(TAG, "Sherpa-ONNX ASR init failed, falling back to system ASR")
+                        SystemAsrEngine(context)
                     }
                 }
             } else {
@@ -746,7 +735,7 @@ fun CameraContent(
         val previousEngine = asrEngine
         asrEngine = engine
         if (previousEngine !== engine) {
-            (previousEngine as? SherpaMnnAsrEngine)?.release()
+            previousEngine.release()
         }
     }
     // 声控开关切换：DISABLED ↔ WAKE_WORD
@@ -769,7 +758,7 @@ fun CameraContent(
             }
 
             if (nextMode == VoiceCommandMode.DISABLED && !aiAgentChatVisible) {
-                (asrEngine as? SherpaMnnAsrEngine)?.release()
+                asrEngine.release()
                 if (aiAgentUseCase.isLocalModelLoaded) {
                     aiAgentUseCase.unloadLocalModel()
                 }
@@ -780,7 +769,9 @@ fun CameraContent(
     }
 
     val onCommandRef = remember { mutableStateOf<(AiAgentCommand) -> Unit>({}) }
-    val voiceCoordinator = remember(asrEngine, aiAgentUseCase) {
+    val app = context.applicationContext as com.picme.PicMeApplication
+    val kwsEngine = remember { app.container.kwsEngine }
+    val voiceCoordinator = remember(asrEngine, aiAgentUseCase, kwsEngine) {
         VoiceCommandCoordinator(
             asrEngine = asrEngine,
             aiAgentUseCase = aiAgentUseCase,
@@ -801,6 +792,7 @@ fun CameraContent(
                     )
                 }
             },
+            kwsEngine = kwsEngine,  // 【新增】启用 KWS 低功耗唤醒词检测
             context = context
         )
     }
@@ -809,7 +801,8 @@ fun CameraContent(
     voiceCoordinator.mode = voiceCommandMode
 
     // 根据模式启停唤醒词监听
-    LaunchedEffect(voiceCommandMode) {
+    // 同时监听 voiceCoordinator 变化，防止 asrEngine 切换导致 coordinator 重建后 KWS 丢失
+    LaunchedEffect(voiceCommandMode, voiceCoordinator) {
         if (voiceCommandMode == VoiceCommandMode.WAKE_WORD) {
             voiceCoordinator.startWakeWordListening()
         } else {
@@ -817,12 +810,17 @@ fun CameraContent(
         }
     }
 
-    // voiceCoordinator 变化或页面退出时释放语音资源
-    DisposableEffect(voiceCoordinator) {
-        onDispose {
-            voiceCoordinator.release()
-        }
-    }
+// voiceCoordinator 变化或页面退出时释放语音资源
+// 修复 P0-1：不应该完全释放 voiceCoordinator，因为它在多个 Chat 屏幕间共享
+// 而应该只进行"软释放"（停止监听但保留引擎）
+DisposableEffect(voiceCoordinator) {
+onDispose {
+Logger.i("PicMe:Camera", "Camera screen disposed - performing soft release of voice coordinator")
+voiceCoordinator.stopWakeWordListening()
+voiceCoordinator.stopPushToTalk()
+// 注意：不调用 voiceCoordinator.release() 以避免破坏 ASR 引擎状态
+}
+}
 
     // 应用前后台生命周期监听，联动 MnnResourceManager
     val cameraLifecycleOwner = LocalLifecycleOwner.current
@@ -841,12 +839,14 @@ fun CameraContent(
         }
     }
 
-    // 场景感知：进入/离开相机页时通知 ResourceManager
+    // 场景感知：进入/离开相机页时通知 ResourceManager 和 SceneManager
     val faceDetectorManager = runtimeContext.faceDetectorManager
     DisposableEffect(Unit) {
         MnnResourceManager.getInstance(context).setScene(MnnResourceManager.Scene.CAMERA)
+        SceneManager.getInstance().transitionTo(SceneManager.Scene.CAMERA)
         onDispose {
             MnnResourceManager.getInstance(context).setScene(MnnResourceManager.Scene.OTHER)
+            SceneManager.getInstance().leaveScene(SceneManager.Scene.CAMERA)
         }
     }
 
@@ -1053,6 +1053,48 @@ fun CameraContent(
             onNavigateToGallery = onNavigateToGallery
         )
     }
+
+    // 统一命令入口：处理 BatchExecute、Delay、普通命令，UI 和语音两路共用
+    val handleCommand: (AiAgentCommand) -> Unit = remember(agentCommandHandler, coroutineScope, cameraStateManager) {
+        { command ->
+            when {
+                command is AiAgentCommand.BatchExecute -> {
+                    Logger.i(TAG, "BatchExecute: ${command.commands.size} commands, launching sequentially")
+                    coroutineScope.launch {
+                        command.commands.forEachIndexed { index, subCmd ->
+                            Logger.i(TAG, "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
+                            if (subCmd is AiAgentCommand.Delay) {
+                                Logger.i(TAG, "BatchExecute: delaying ${subCmd.delayMs}ms")
+                                delay(subCmd.delayMs)
+                            } else {
+                                agentCommandHandler.handleCommand(subCmd)
+                            }
+                            if (subCmd is AiAgentCommand.CapturePhoto && index < command.commands.size - 1) {
+                                Logger.i(TAG, "BatchExecute: waiting for capture to complete...")
+                                var waitCount = 0
+                                while (cameraStateManager.isBusy() && waitCount < 50) {
+                                    delay(100)
+                                    waitCount++
+                                }
+                                Logger.i(TAG, "BatchExecute: capture completed, state=${cameraStateManager.getState().name}")
+                            } else if (index < command.commands.size - 1 && subCmd !is AiAgentCommand.Delay) {
+                                delay(200)
+                            }
+                        }
+                        Logger.i(TAG, "BatchExecute: all commands completed")
+                    }
+                }
+                command is AiAgentCommand.Delay -> {
+                    coroutineScope.launch {
+                        Logger.i(TAG, "Delay: ${command.delayMs}ms")
+                        delay(command.delayMs)
+                    }
+                }
+                else -> agentCommandHandler.handleCommand(command)
+            }
+        }
+    }
+    onCommandRef.value = handleCommand
 
     // 同步可变状态到 Handler
     agentCommandHandler.lensFacing = lensFacing
@@ -1520,46 +1562,7 @@ CameraPreviewContent(
     isWakeWordActive = voiceCommandMode == VoiceCommandMode.WAKE_WORD,
     onAiAgentCommand = { command ->
         Logger.i(TAG, "onAiAgentCommand received: ${command.javaClass.simpleName}")
-        onCommandRef.value = agentCommandHandler::handleCommand
-        // BatchExecute 在协程中串行执行子命令
-        if (command is AiAgentCommand.BatchExecute) {
-            Logger.i(TAG, "BatchExecute: ${command.commands.size} commands, launching sequentially")
-            coroutineScope.launch {
-                command.commands.forEachIndexed { index, subCmd ->
-                    Logger.i(TAG, "BatchExecute [$index/${command.commands.size}]: ${subCmd.javaClass.simpleName}")
-                    // Delay 命令在协程中直接挂起
-                    if (subCmd is AiAgentCommand.Delay) {
-                        Logger.i(TAG, "BatchExecute: delaying ${subCmd.delayMs}ms")
-                        delay(subCmd.delayMs)
-                    } else {
-                        agentCommandHandler.handleCommand(subCmd)
-                    }
-                    // 如果当前命令是拍照，等待状态回到 Previewing 再执行下一个
-                    if (subCmd is AiAgentCommand.CapturePhoto && index < command.commands.size - 1) {
-                        Logger.i(TAG, "BatchExecute: waiting for capture to complete...")
-                        var waitCount = 0
-                        while (cameraStateManager.isBusy() && waitCount < 50) {
-                            delay(100)
-                            waitCount++
-                        }
-                        val finalState = cameraStateManager.getState()
-                        Logger.i(TAG, "BatchExecute: capture completed, state=${finalState.name}")
-                    } else if (index < command.commands.size - 1 && subCmd !is AiAgentCommand.Delay) {
-                        // 非拍照、非 Delay 命令之间短暂延迟，确保 UI 更新
-                        delay(200)
-                    }
-                }
-                Logger.i(TAG, "BatchExecute: all commands completed")
-            }
-        } else if (command is AiAgentCommand.Delay) {
-            // 单独的 Delay 命令也在协程中处理
-            coroutineScope.launch {
-                Logger.i(TAG, "Delay: ${command.delayMs}ms")
-                delay(command.delayMs)
-            }
-        } else {
-            agentCommandHandler.handleCommand(command)
-        }
+        onCommandRef.value(command)
     },
     onUpdateVoiceCoordinatorState = {
         voiceCoordinator.currentCameraState = VoiceCommandCoordinator.CameraStateSnapshot(
@@ -1683,7 +1686,7 @@ CameraPreviewContent(
             if (!aiAgentChatVisible) {
                 voiceCoordinator.stopWakeWordListening()
                 if (voiceCommandMode == VoiceCommandMode.DISABLED) {
-                    (asrEngine as? SherpaMnnAsrEngine)?.release()
+                    asrEngine.release()
                     if (aiAgentUseCase.isLocalModelLoaded) {
                         aiAgentUseCase.unloadLocalModel()
                     }

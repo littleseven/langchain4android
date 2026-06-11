@@ -147,11 +147,17 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     /**
      * 预加载 Native 共享库
      *
-     * sherpa-mnn-jni.so 由 SherpaMnnAsrEngine 通过 System.loadLibrary 加载，
-     * 但它依赖 libMNN_Express.so 中的符号。在 Application 中提前加载可确保
-     * 所有依赖 so 在类加载器命名空间中可见，避免运行时符号解析失败。
+     * sherpa-onnx-jni.so 由 SherpaOnnxAsrEngine / KeywordSpotterEngine 通过
+     * System.loadLibrary 加载。sherpa-mnn-jni.so 供 LLM、人脸检测等 MNN 路径使用。
+     * 在 Application 中提前加载可确保所有依赖 so 在类加载器命名空间中可见。
      */
     private fun loadNativeLibraries() {
+        try {
+            System.loadLibrary("sherpa-onnx-jni")
+            Logger.d(TAG, "Native library loaded: sherpa-onnx-jni")
+        } catch (e: UnsatisfiedLinkError) {
+            Logger.e(TAG, "Failed to load sherpa-onnx-jni", e)
+        }
         try {
             System.loadLibrary("sherpa-mnn-jni")
             Logger.d(TAG, "Native library loaded: sherpa-mnn-jni")

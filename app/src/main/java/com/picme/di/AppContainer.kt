@@ -2,12 +2,14 @@ package com.picme.di
 
 import android.content.Context
 import androidx.lifecycle.ViewModelProvider
+import com.picme.agent.core.platform.voice.KeywordSpotterEngine
 import com.picme.beauty.api.PhotoProcessor
 import com.picme.beauty.render.GlBeautyPreviewProviderFactory
 import com.picme.beauty.api.BeautyProcessor
 import com.picme.core.image.GpuBeautyProcessor
 import com.picme.core.image.ImageProcessor
 import com.picme.core.image.ImageProcessorImpl
+import com.picme.core.common.Logger
 import com.picme.data.local.AppDatabase
 import com.picme.beauty.api.facedetect.FaceDetector
 import com.picme.beauty.api.facedetect.FaceDetectorFactory
@@ -17,6 +19,7 @@ import com.picme.data.repository.MediaRepositoryImpl
 import com.picme.domain.repository.MediaRepository
 import com.picme.domain.repository.UserSettingsRepository
 import com.picme.data.download.LlmModelDownloadManager
+import com.picme.data.download.ModelPathConfig
 import com.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.picme.domain.usecase.GetGroupedMediaUseCase
 import com.picme.domain.usecase.OcrProcessor
@@ -58,6 +61,7 @@ interface AppContainer {
     val imageProcessor: ImageProcessor
     val faceDetector: FaceDetector
     val llmModelDownloadManager: LlmModelDownloadManager
+    val kwsEngine: KeywordSpotterEngine?  // 【新增】KWS 唤醒词引擎（可选）
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
 }
@@ -97,6 +101,78 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     override val llmModelDownloadManager: LlmModelDownloadManager by lazy {
         LlmModelDownloadManager(context)
+    }
+
+    /**
+     * 【新增】KWS 唤醒词引擎（sherpa-onnx 版）
+     *
+     * 用于低功耗的 always-on 唤醒词检测。
+     * 【重要】不允许自动降级，如果 KWS 初始化失败就直接抛异常！
+     *
+     * 【模型路径管理】
+     * 使用 ModelPathConfig 统一管理模型路径，避免硬编码。
+     * 支持灵活扩展新模型，只需在 ModelPathConfig 中添加配置。
+     */
+    override val kwsEngine: KeywordSpotterEngine? by lazy {
+        // KWS 引擎初始化：必须成功，否则抛异常
+        // 【强制要求】不允许任何自动降级或 fallback
+
+        val kwsModelDir = ModelPathConfig.getKwsModelDir(context)
+        Logger.i("AppContainer", "【KWS 初始化】Starting KWS engine initialization...")
+        Logger.i("AppContainer", "  Model path: ${kwsModelDir.absolutePath}")
+
+        // 【安全保护】在调用 native 构造前，先验证模型文件完整性
+        // KeywordSpotter(null, config) 内部会启动 ONNX Runtime 线程池，
+        // 如果模型不兼容或损坏，native 层会触发 FORTIFY pthread_mutex_lock
+        // on destroyed mutex 崩溃（SIGABRT），此崩溃不可被 Kotlin try-catch 捕获。
+        val missingFiles = ModelPathConfig.getMissingFiles(kwsModelDir, ModelPathConfig.KWS_MODEL_FILES)
+        if (missingFiles.isNotEmpty()) {
+            val errorMsg = buildString {
+                append("❌ KWS 模型文件缺失，跳过 native 初始化以避免崩溃\n")
+                append("  Model dir: ${kwsModelDir.absolutePath}\n")
+                append("  Missing files: ${missingFiles.joinToString(", ")}\n")
+                append("  Expected ${ModelPathConfig.KWS_MODEL_FILES.size} files, " +
+                    "found ${ModelPathConfig.KWS_MODEL_FILES.size - missingFiles.size}\n")
+                append("【安全降级】返回 null，KWS 唤醒词功能不可用")
+            }
+            Logger.w("AppContainer", errorMsg)
+            return@lazy null
+        }
+
+        // 【安全保护】验证模型文件非空（损坏文件可能导致 native crash）
+        val emptyFiles = ModelPathConfig.KWS_MODEL_FILES.filter { fileName ->
+            val file = java.io.File(kwsModelDir, fileName)
+            file.exists() && file.length() == 0L
+        }
+        if (emptyFiles.isNotEmpty()) {
+            val errorMsg = buildString {
+                append("❌ KWS 模型文件为空（可能损坏），跳过 native 初始化以避免崩溃\n")
+                append("  Model dir: ${kwsModelDir.absolutePath}\n")
+                append("  Empty files: ${emptyFiles.joinToString(", ")}\n")
+                append("【安全降级】返回 null，KWS 唤醒词功能不可用")
+            }
+            Logger.w("AppContainer", errorMsg)
+            return@lazy null
+        }
+
+        Logger.i("AppContainer", "✓ KWS model files validated, creating KeywordSpotterEngine...")
+        val kwsEngine = KeywordSpotterEngine(kwsModelDir.absolutePath)
+
+        // 检查模型可用性（内部调用 KeywordSpotter native 构造）
+        if (!kwsEngine.isAvailable()) {
+            val errorMsg = buildString {
+                append("❌ KWS 引擎初始化失败 - native 构造返回不可用\n")
+                append("  Model dir: ${kwsModelDir.absolutePath}\n")
+                append("【安全降级】返回 null，KWS 唤醒词功能不可用")
+            }
+            Logger.w("AppContainer", errorMsg)
+            return@lazy null
+        }
+
+        Logger.i("AppContainer", "✓ KWS engine initialized successfully")
+        Logger.i("AppContainer", "  Keywords: ${kwsEngine.getKeywords().joinToString(", ")}")
+
+        kwsEngine
     }
 
     private val ocrProcessor: OcrProcessor by lazy {

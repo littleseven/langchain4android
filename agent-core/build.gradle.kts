@@ -55,6 +55,10 @@ dependencies {
     implementation(libs.logging.interceptor)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
+
+    // sherpa-onnx v1.10.46（2025-02，匹配 2024-01 的 KWS 模型）
+    implementation(files("libs/sherpa-onnx-1.10.46.aar"))
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

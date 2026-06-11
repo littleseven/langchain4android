@@ -45,15 +45,17 @@ class PromptBuilder(
 8) 用户说"去相机/回相机/打开相机/去拍照"时，必须输出 params.destination="camera"。
 9) 用户说"调高美颜/增强美颜/美颜"时，磨皮(smoothing)和美白(whitening)都提升到 60-70。
 10) 用户说"打开前置/切前置/前置"时，必须输出 method="flip_camera"。
-11) 用户说"冷调/冷色/冷滤镜"时，必须输出 params.filter="COOL"。
-12) 用户说"3秒后拍照/延时拍照/倒计时拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]。
-13) 用户说"3秒后调暖色调再拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]。
-14) 用户说包含多个动作时（如"5秒后换暖色滤镜拍照"），必须输出 JSON 数组，每个动作一个对象，按顺序执行。
+11) 用户说"冷调/冷色/冷滤镜/冷调滤镜/冷色滤镜"时，必须输出 params.filter="COOL"。
+12) 用户说"暖调/暖色/暖滤镜/暖色滤镜/暖调滤镜"时，必须输出 params.filter="WARM"。
+13) 用户说"3秒后拍照/延时拍照/倒计时拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]。
+14) 用户说"3秒后调暖色调再拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]。
+15) 用户说包含多个动作时（如"5秒后换暖色滤镜拍照"），必须输出 JSON 数组，每个动作一个对象，按顺序执行。
 
 场景映射示例（严格遵循）：
 「拍张照」→ {"method":"capture","params":{}}
 「调高美颜」→ {"method":"adjust_beauty","params":{"smoothing":65,"whitening":65}}
 「换个冷调滤镜」→ {"method":"switch_filter","params":{"filter":"COOL"}}
+「换暖色滤镜」→ {"method":"switch_filter","params":{"filter":"WARM"}}
 「打开前置」→ {"method":"flip_camera","params":{}}
 「3秒后拍照」→ [{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]
 「5秒后换暖色滤镜拍照」→ [{method:"delay",params:{delay_ms:5000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]
@@ -311,6 +313,7 @@ class PromptBuilder(
             appendLine("params 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
             appendLine("滤镜: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
             appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
+            appendLine("滤镜映射: 冷调/冷色/冷滤镜->COOL; 暖调/暖色/暖滤镜->WARM; 复古/怀旧->VINTAGE; 胶片金->FILM_GOLD; 胶片富士/富士->FILM_FUJI")
             appendLine("导航映射: 去相机/回相机/打开相机/去拍照->params.destination=camera; 去相册/打开相册->params.destination=gallery; 去设置/打开设置->params.destination=settings; 返回/上一页/后退->go_back")
             appendLine("导航示例: {\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}")
 

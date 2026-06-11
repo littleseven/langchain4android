@@ -74,8 +74,11 @@ object MnnGlobalReleaseLock {
 /**
  * MNN 共享资源协调管理器
  *
- * 解决 LLM (MNN::Transformer::Llm)、ASR (Sherpa-MNN via MNN::Express)
- * 与人脸检测 (MNN::Interpreter) 共享 libMNN.so 时的全局状态冲突和内存压力问题。
+ * 解决 LLM (MNN::Transformer::Llm) 与人脸检测 (MNN::Interpreter 备选路径)
+ * 共享 libMNN.so 时的全局状态冲突和内存压力问题。
+ *
+ * 注意：sherpa-onnx 迁移后，ASR/KWS 使用 ONNX Runtime，不再依赖 MNN，
+ * 因此不再需要 ASR 维度的资源协调。ASR 相关 API 已标记为 @Deprecated。
  *
  * 核心策略：
  * 1. 引用计数：LLM、ASR、FaceDetection 分别持有独立引用
@@ -320,8 +323,9 @@ class MnnResourceManager private constructor(context: Context) {
     }
 
     /**
-     * 注册 ASR 在各释放等级的回调
+     * @Deprecated sherpa-onnx 迁移后，ASR 使用 ONNX Runtime，不再需要 MNN 资源协调。
      */
+    @Deprecated("ASR migrated to sherpa-onnx (ONNX Runtime), no longer needs MNN coordination")
     fun registerAsrReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
         asrReleaseCallbacks[level] = callback
     }
@@ -409,7 +413,9 @@ class MnnResourceManager private constructor(context: Context) {
 
     /**
      * 请求保持 ASR 加载
+     * @Deprecated sherpa-onnx 迁移后，ASR 使用 ONNX Runtime，不再需要 MNN 资源协调。
      */
+    @Deprecated("ASR migrated to sherpa-onnx (ONNX Runtime), no longer needs MNN coordination")
     fun acquireAsr(owner: String) {
         val count = asrRefCount.incrementAndGet()
         Logger.d(TAG, "ASR acquired by $owner, refCount=$count")
@@ -418,7 +424,9 @@ class MnnResourceManager private constructor(context: Context) {
 
     /**
      * 释放 ASR 引用
+     * @Deprecated sherpa-onnx 迁移后，ASR 使用 ONNX Runtime，不再需要 MNN 资源协调。
      */
+    @Deprecated("ASR migrated to sherpa-onnx (ONNX Runtime), no longer needs MNN coordination")
     fun releaseAsr(
         owner: String,
         onSafeUnload: () -> Unit,
