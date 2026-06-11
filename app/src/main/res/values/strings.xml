@@ -354,6 +354,8 @@
     <string name="asr_input_device_builtin">Using phone microphone</string>
     <string name="local_asr_model">Local ASR Model</string>
     <string name="local_asr_model_fallback">No local ASR model downloaded. Tap below to download.</string>
+<string name="local_kws_model">Local KWS Model</string>
+<string name="local_kws_model_fallback">No local KWS model downloaded. Tap below to download.</string>
     <string name="asr_model_manager">ASR Model Manager</string>
     <string name="asr_model_manager_desc">Download and manage on-device speech recognition models.</string>
     <string name="model_download_notification_title">Model download in progress</string>

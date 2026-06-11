@@ -130,3 +130,76 @@ internal fun LocalAsrModelSelection(
         }
     }
 }
+
+@Composable
+internal fun LocalKwsModelSelection(
+    currentModel: String,
+    onModelSelected: (String) -> Unit,
+    onNavigateToModelCenter: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val downloadManager = remember { LlmModelDownloadManager(context) }
+    var downloadedModels by remember { mutableStateOf<List<ModelConfig>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        downloadedModels = downloadManager.getDownloadedModels()
+            .filter { model ->
+                model.tags.any { tag -> tag.equals("KWS", ignoreCase = true) } ||
+                    model.id.contains("kws", ignoreCase = true)
+            }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.local_kws_model),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier
+                    .clickable(onClick = { onNavigateToModelCenter("Audio") })
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.model_center),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.Outlined.CloudDownload,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        if (downloadedModels.isEmpty()) {
+            Text(
+                text = stringResource(R.string.local_kws_model_fallback),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+        } else {
+            val options = downloadedModels.map { it.id to it.name }
+            CompactOptionChips(
+                options = options,
+                currentValue = currentModel,
+                maxLines = 2,
+                onSelected = onModelSelected
+            )
+        }
+    }
+}

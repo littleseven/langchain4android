@@ -95,6 +95,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         // 语音控制
         val VOICE_COMMAND_MODE = stringPreferencesKey("voice_command_mode")
         val LOCAL_ASR_MODEL = stringPreferencesKey("local_asr_model")
+        val LOCAL_KWS_MODEL = stringPreferencesKey("local_kws_model")
 
         // 相机参数记忆
         val CAMERA_MEMORY_USE_FRONT_CAMERA = booleanPreferencesKey("camera_memory_use_front_camera")
@@ -743,6 +744,24 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateLocalAsrModel(modelId: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LOCAL_ASR_MODEL] = modelId
+        }
+    }
+
+    override val localKwsModelFlow: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.LOCAL_KWS_MODEL] ?: ""
+        }
+
+    override suspend fun updateLocalKwsModel(modelId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOCAL_KWS_MODEL] = modelId
         }
     }
 

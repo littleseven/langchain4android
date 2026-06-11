@@ -209,6 +209,13 @@ private val ESSENTIAL_MODEL_IDS = listOf(
             initialValue = ""
         )
 
+    val localKwsModel: StateFlow<String> = repository.localKwsModelFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = ""
+        )
+
     val logModuleConfig: StateFlow<LogModuleConfig> = repository.logModuleConfigFlow
         .stateIn(
             scope = viewModelScope,
@@ -750,6 +757,12 @@ private val ESSENTIAL_MODEL_IDS = listOf(
     fun setLocalAsrModel(modelId: String) {
         viewModelScope.launch {
             repository.updateLocalAsrModel(modelId)
+        }
+    }
+
+    fun setLocalKwsModel(modelId: String) {
+        viewModelScope.launch {
+            repository.updateLocalKwsModel(modelId)
         }
     }
 

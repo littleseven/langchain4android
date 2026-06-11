@@ -102,6 +102,7 @@ fun SettingsScreen(
     val aiAgentLocalUseOpencl by viewModel.aiAgentLocalUseOpencl.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
+    val localKwsModel by viewModel.localKwsModel.collectAsState()
     val logModuleConfig by viewModel.logModuleConfig.collectAsState()
     val downloadStates by viewModel.downloadStates.collectAsState()
     val allModels by viewModel.allModels.collectAsState()
@@ -229,6 +230,8 @@ fun SettingsScreen(
             onVoiceCommandModeChange = { viewModel.setVoiceCommandMode(it) },
             localAsrModel = localAsrModel,
             onLocalAsrModelChange = { viewModel.setLocalAsrModel(it) },
+            localKwsModel = localKwsModel,
+            onLocalKwsModelChange = { viewModel.setLocalKwsModel(it) },
             onNavigateToModelCenter = onNavigateToModelCenter,
             isModelDownloaded = viewModel::isModelDownloaded,
             getModelId = viewModel::getModelId,
@@ -279,6 +282,8 @@ private fun SettingsContent(
     onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
     localAsrModel: String,
     onLocalAsrModelChange: (String) -> Unit,
+    localKwsModel: String,
+    onLocalKwsModelChange: (String) -> Unit,
     onThemeModeSelected: (ThemeMode) -> Unit,
     onAppLanguageSelected: (AppLanguage) -> Unit,
     onDebugUiEnabledChange: (Boolean) -> Unit,
@@ -403,6 +408,12 @@ private fun SettingsContent(
                     LocalAsrModelSelection(
                         currentModel = localAsrModel,
                         onModelSelected = onLocalAsrModelChange,
+                        onNavigateToModelCenter = onNavigateToModelCenter
+                    )
+
+                    LocalKwsModelSelection(
+                        currentModel = localKwsModel,
+                        onModelSelected = onLocalKwsModelChange,
                         onNavigateToModelCenter = onNavigateToModelCenter
                     )
                 }
@@ -765,6 +776,8 @@ fun SettingsScreenPreview() {
             onVoiceCommandModeChange = {},
             localAsrModel = "",
             onLocalAsrModelChange = {},
+            localKwsModel = "",
+            onLocalKwsModelChange = {},
             onNavigateToModelCenter = {},
             isModelDownloaded = { true },
             getModelId = { _, _ -> null },

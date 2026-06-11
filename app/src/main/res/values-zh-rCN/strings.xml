@@ -347,6 +347,8 @@
     <string name="asr_input_device_builtin">使用手机麦克风</string>
     <string name="local_asr_model">本地语音识别模型</string>
     <string name="local_asr_model_fallback">未下载本地 ASR 模型，将自动回退到系统语音识别。</string>
+<string name="local_kws_model">本地唤醒词模型</string>
+<string name="local_kws_model_fallback">未下载本地 KWS 唤醒词模型，语音唤醒功能将不可用。</string>
 <string name="asr_model_manager">ASR 模型管理</string>
 <string name="asr_model_manager_desc">下载和管理端侧语音识别模型。</string>
 <string name="model_download_notification_title">模型下载进行中</string>

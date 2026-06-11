@@ -114,6 +114,9 @@ interface UserSettingsRepository {
     val localAsrModelFlow: Flow<String>
     suspend fun updateLocalAsrModel(modelId: String)
 
+    val localKwsModelFlow: Flow<String>
+    suspend fun updateLocalKwsModel(modelId: String)
+
     // ── 相机参数记忆 ──────────────────────────────────────────
     val cameraMemoryStateFlow: Flow<CameraMemoryState>
     suspend fun updateCameraMemoryState(state: CameraMemoryState)
