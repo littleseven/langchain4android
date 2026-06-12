@@ -2,12 +2,15 @@ package com.mamba.picme.agent.core.runtime.inference
 
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
+import com.mamba.picme.beauty.api.BeautySettings
+import com.mamba.picme.beauty.api.FilterType
 
 /**
  * 自适应推理策略选择器
  *
  * 根据用户输入特征自动选择最合适的远程推理层级：
  * - L1_Cached: 本地意图缓存命中
+ * - L1_5_Template: 模板匹配（常见组合指令零 LLM 开销）
  * - L2_BatchFC: 单轮多指令（默认模式）
  * - L3_PlanExecute: 条件/依赖/多步骤
  * - L4_ReAct: 开放式探索/兜底
@@ -30,6 +33,11 @@ class AdaptiveStrategySelector {
             if (!isComplexCommand(userInput)) {
                 return InferenceStrategy.L1_Cached(command)
             }
+        }
+
+        // 1.5. 模板匹配：常见组合指令零 LLM 开销
+        matchTemplate(userInput)?.let { commands ->
+            return InferenceStrategy.L1_5_Template(userInput, context, commands)
         }
 
         // 2. 分析输入特征
@@ -90,6 +98,66 @@ class AdaptiveStrategySelector {
      * 判断是否为复合指令（包含多个动作或延迟+其他操作）
      * 复合指令应走远程 LLM 解析，不走本地缓存
      */
+    /**
+     * L1.5 模板匹配：常见组合指令直接生成命令，零 LLM 开销
+     *
+     * 匹配模式：
+     * - "X滤镜拍照" → [switch_filter(X), capture()]
+     * - "X美颜拍照" → [adjust_beauty(...), capture()]
+     * - "磨皮X拍照" → [adjust_beauty(smoothing=X), capture()]
+     * - "美白X拍照" → [adjust_beauty(whitening=X), capture()]
+     */
+    private fun matchTemplate(input: String): List<AgentCommand>? {
+        val lower = input.trim().lowercase().replace(" ", "").replace("，", "")
+
+        // 1. 滤镜 + 拍照 模板
+        val filterPhotoRegex = Regex("(.*)(滤镜|色调|风格)(拍照|拍一张|拍个照)")
+        filterPhotoRegex.matchEntire(lower)?.let { match ->
+            val filterName = match.groupValues[1]
+            val filterValue = FILTER_NAME_MAP[filterName]
+            if (filterValue != null) {
+                val filterType = FilterType.valueOf(filterValue)
+                return listOf(
+                    AgentCommand.SwitchFilter(filterType = filterType),
+                    AgentCommand.CapturePhoto()
+                )
+            }
+        }
+
+        // 2. 美颜参数 + 拍照 模板（磨皮/美白/瘦脸/大眼）
+        val beautyPhotoRegex = Regex("(磨皮|美白|瘦脸|大眼)(\\d+)(拍照|拍一张|拍个照)")
+        beautyPhotoRegex.matchEntire(lower)?.let { match ->
+            val paramName = match.groupValues[1]
+            val paramValue = match.groupValues[2].toIntOrNull() ?: 50
+            val settings = when (paramName) {
+                "磨皮" -> BeautySettings(smoothing = paramValue.toFloat())
+                "美白" -> BeautySettings(whitening = paramValue.toFloat())
+                "瘦脸" -> BeautySettings(slimFace = paramValue.toFloat())
+                "大眼" -> BeautySettings(bigEyes = paramValue.toFloat())
+                else -> BeautySettings()
+            }
+            return listOf(
+                AgentCommand.AdjustBeauty(settings = settings),
+                AgentCommand.CapturePhoto()
+            )
+        }
+
+        // 3. 通用美颜 + 拍照（无具体参数）
+        if (lower.contains("美颜") && (lower.contains("拍照") || lower.contains("拍一张"))) {
+            return listOf(
+                AgentCommand.AdjustBeauty(settings = BeautySettings(smoothing = 65f, whitening = 65f)),
+                AgentCommand.CapturePhoto()
+            )
+        }
+
+        // 4. 纯拍照（已在 L1 缓存中，此处兜底）
+        if (lower == "拍照" || lower == "拍一张" || lower == "拍个照") {
+            return listOf(AgentCommand.CapturePhoto())
+        }
+
+        return null
+    }
+
     private fun isComplexCommand(input: String): Boolean {
         val lower = input.lowercase()
         // 包含延迟/倒计时 + 其他操作（如滤镜、美颜、风格等）
@@ -157,6 +225,28 @@ class AdaptiveStrategySelector {
             "capture", "switch", "adjust", "set", "open", "close", "flip",
             "磨皮", "美白", "瘦脸", "大眼", "滤镜", "风格", "模式", "变焦"
         )
+
+        // 滤镜名称映射表（用于 L1.5 模板匹配）
+        val FILTER_NAME_MAP = mapOf(
+            "冷色" to "COOL",
+            "冷色调" to "COOL",
+            "冷滤镜" to "COOL",
+            "冷色滤镜" to "COOL",
+            "冷调滤镜" to "COOL",
+            "暖色" to "WARM",
+            "暖色调" to "WARM",
+            "暖滤镜" to "WARM",
+            "暖色滤镜" to "WARM",
+            "暖调滤镜" to "WARM",
+            "复古" to "VINTAGE",
+            "怀旧" to "VINTAGE",
+            "胶片金" to "FILM_GOLD",
+            "胶片富士" to "FILM_FUJI",
+            "富士" to "FILM_FUJI",
+            "徕卡经典" to "LEICA_CLASSIC",
+            "徕卡鲜艳" to "LEICA_VIBRANT",
+            "徕卡黑白" to "LEICA_BW"
+        )
     }
 }
 
@@ -168,6 +258,15 @@ sealed class InferenceStrategy {
      * L1: 本地意图缓存命中
      */
     data class L1_Cached(val command: AgentCommand) : InferenceStrategy()
+
+    /**
+     * L1.5: 模板匹配（常见组合指令零 LLM 开销）
+     */
+    data class L1_5_Template(
+        val userInput: String,
+        val context: AgentContext,
+        val commands: List<AgentCommand>
+    ) : InferenceStrategy()
 
     /**
      * L2: Batch Function Calling（单轮多指令）

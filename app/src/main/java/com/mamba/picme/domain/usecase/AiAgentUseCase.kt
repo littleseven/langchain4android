@@ -297,6 +297,16 @@ class AiAgentUseCase(
                 Result.success(command)
             }
 
+            is InferenceStrategy.L1_5_Template -> {
+                Logger.d(REMOTE_TAG, "[L1.5] template matched → ${strategy.commands.size} commands")
+                val command = when {
+                    strategy.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
+                    strategy.commands.size == 1 -> mapAgentCommandToLegacy(strategy.commands.first())
+                    else -> AiAgentCommand.BatchExecute(strategy.commands.map { mapAgentCommandToLegacy(it) })
+                }
+                Result.success(command)
+            }
+
             is InferenceStrategy.L2_BatchFC -> {
                 val result = remoteOrchestrator.processBatch(
                     userInput = userInput,

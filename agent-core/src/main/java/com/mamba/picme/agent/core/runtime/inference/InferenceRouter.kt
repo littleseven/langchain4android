@@ -80,11 +80,19 @@ class InferenceRouter(
         val strategy = strategySelector.selectStrategy(userInput, context)
         Logger.d(tag, "Selected strategy: ${strategy::class.simpleName}")
 
-        // 3. 根据策略路由（L2 优先本地快速通道，L3/L4 走远程）
+        // 3. 根据策略路由（L1.5 模板直接返回，L2 优先本地快速通道，L3/L4 走远程）
         return when (strategy) {
             is InferenceStrategy.L1_Cached -> {
                 Logger.d(tag, "L1 Cache hit, returning cached command")
                 InferenceResult.Local(command = strategy.command)
+            }
+            is InferenceStrategy.L1_5_Template -> {
+                Logger.i(tag, "[L1.5-TEMPLATE] Template matched for input='${strategy.userInput}', commands=${strategy.commands.size}")
+                if (strategy.commands.size == 1) {
+                    InferenceResult.Local(command = strategy.commands.first())
+                } else {
+                    InferenceResult.Batch(commands = strategy.commands)
+                }
             }
             is InferenceStrategy.L2_BatchFC -> {
                 // P0: L2 本地快速通道 —— 先尝试本地模型处理简单批量指令
