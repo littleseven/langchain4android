@@ -35,6 +35,11 @@ class LlmModelManager(private val context: Context) {
             assetDir = "models/llm/Qwen3-1.7B-MNN",
             cacheDirName = "qwen3_1_7b",
             version = "1.0"
+        ),
+        "qwen3_5_2b" to LlmModelInfo(
+            assetDir = "models/llm/Qwen3.5-2B-MNN",
+            cacheDirName = "qwen3_5_2b",
+            version = "1.0"
         )
     )
 

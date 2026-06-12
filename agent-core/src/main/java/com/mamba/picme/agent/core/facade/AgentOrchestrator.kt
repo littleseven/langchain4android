@@ -161,7 +161,79 @@ class AgentOrchestrator private constructor(context: Context) {
     }
 
     /**
-     * 处理用户输入
+     * 使用 InferenceRouter 处理输入（支持 L2 本地快速通道）
+     *
+     * 统一走 InferenceRouter 路由，LOCAL 模式下优先尝试 L2 本地快速通道，
+     * 超时或失败时自动降级到远程推理。
+     *
+     * @param input 用户自然语言输入
+     * @param agentContext 当前 Agent 上下文
+     * @param pageContext 页面特定上下文（可选）
+     * @return 推理结果
+     */
+    suspend fun processInputWithRouter(
+        input: String,
+        agentContext: AgentContext,
+        pageContext: PageContext? = null
+    ): InferenceResult = withContext(Dispatchers.IO) {
+        Logger.d(tag, "Processing input via InferenceRouter: '$input'")
+
+        // 场景驱动的模型管理
+        applySceneDrivenModelPolicy()
+
+        Logger.i(tag, "[RouterEntry] mode=${configurator.getAgentMode()}, input='$input', modelLoaded=${localLlmEngine.isLoaded}")
+
+        // 0. L1 缓存查询（本地高频指令快速响应，零 LLM 开销）
+        val cachedCommand = intentCache.match(input)
+        if (cachedCommand != null) {
+            Logger.i(tag, "L1 cache hit for input='$input' -> ${cachedCommand::class.simpleName}")
+            return@withContext InferenceResult.Local(command = cachedCommand)
+        }
+
+        // 确保本地模型已加载（LOCAL 模式）
+        if (configurator.getAgentMode() == AiAgentMode.LOCAL || configurator.getAgentMode() == AiAgentMode.OFF) {
+            if (!localLlmEngine.isLoaded) {
+                Logger.i(tag, "[RouterEntry] Local model not loaded, attempting load")
+                val loadResult = tryLoadModel()
+                if (loadResult.isFailure) {
+                    Logger.e(tag, "[RouterEntry] Local model load failed, falling back to remote via router")
+                } else {
+                    Logger.i(tag, "[RouterEntry] Local model loaded successfully")
+                }
+            } else {
+                Logger.i(tag, "[RouterEntry] Local model already loaded")
+            }
+        } else {
+            Logger.i(tag, "[RouterEntry] Mode is ${configurator.getAgentMode()}, skip local model load check")
+        }
+
+        // 通过 InferenceRouter 路由
+        Logger.i(tag, "[RouterEntry] Calling InferenceRouter.processInput")
+        val inferenceResult = try {
+            configurator.getInferenceRouter().processInput(input, agentContext)
+        } catch (exception: Exception) {
+            Logger.e(tag, "InferenceRouter failed", exception)
+            InferenceResult.Local(
+                command = AgentCommand.Error(reason = "推理路由失败：${exception.message ?: "未知错误"}")
+            )
+        }
+
+        Logger.i(tag, "[RouterEntry] InferenceRouter result: ${inferenceResult::class.simpleName}")
+
+        // 学习：解析成功且非错误命令时写入 L1 缓存
+        if (inferenceResult is InferenceResult.Local &&
+            inferenceResult.command !is AgentCommand.Error &&
+            inferenceResult.command !is AgentCommand.TextReply
+        ) {
+            intentCache.put(input, inferenceResult.command)
+            Logger.d(tag, "L1 cache learned: '$input' -> ${inferenceResult.command::class.simpleName}")
+        }
+
+        inferenceResult
+    }
+
+    /**
+     * 处理用户输入（原始入口，保留兼容）
      *
      * 根据当前 agentMode 选择推理引擎：
      * - LOCAL: 本地 MNN-LLM（默认，符合隐私红线）
@@ -352,7 +424,7 @@ class AgentOrchestrator private constructor(context: Context) {
     ): Result<AgentAction> {
         // 保留原始输出给解析器，避免提前清理 think 标签导致 JSON/关键词信息丢失。
         val responseForHistory = filterThinkTags(rawResponse)
-        Logger.i(tag, "LLM raw response: $rawResponse")
+        Logger.i(tag, "LLM raw response: ${rawResponse.replace("\n", "\\n")}")
 
         // 解析命令
         val command = AgentCommandParser.parseLlmResponse(rawResponse, agentContext)

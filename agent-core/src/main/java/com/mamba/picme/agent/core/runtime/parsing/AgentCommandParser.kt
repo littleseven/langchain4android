@@ -25,13 +25,151 @@ object AgentCommandParser {
      * 解析 LLM 响应为 AgentCommand
      *
      * 支持精简 JSON 格式：{"method":"...","params":{...}}。
+     * 支持 JSON 数组格式：[{"method":"...","params":{}}, ...]，解析为 BatchExecute。
      *
      * @param response LLM 原始文本输出
      * @param context 当前 Agent 上下文
      * @return 解析后的命令
      */
     fun parseLlmResponse(response: String, context: AgentContext): AgentCommand {
+        val cleaned = cleanLlmResponse(response)
+
+        // 优先处理 JSON 数组（L2 本地快速通道输出）
+        if (cleaned.startsWith("[")) {
+            return parseLlmResponseArray(cleaned, context, response)
+        }
+
+        return parseSingleCommand(cleaned, context, response)
+    }
+
+    /**
+     * 解析 L2 Batch 响应为命令列表（用于 L3 本地快速通道）
+     *
+     * 与 [parseLlmResponse] 不同，此方法返回命令列表而非 BatchExecute 包装对象，
+     * 便于 L3 本地快速通道将命令列表包装为 ExecutionPlan。
+     *
+     * @param response LLM 原始文本输出
+     * @param context 当前 Agent 上下文
+     * @return 解析后的命令列表（空列表表示解析失败）
+     */
+    fun parseL2BatchResponse(response: String, context: AgentContext): List<AgentCommand> {
+        val cleaned = cleanLlmResponse(response)
+
+        // 优先处理 JSON 数组
+        if (cleaned.startsWith("[")) {
+            return parseLlmResponseArrayToList(cleaned, context, response)
+        }
+
+        // 单个 JSON 对象
+        val command = parseSingleCommand(cleaned, context, response)
+        return if (command is AgentCommand.Error) emptyList() else listOf(command)
+    }
+
+    /**
+     * 解析 JSON 数组为命令列表（内部方法）
+     */
+    private fun parseLlmResponseArrayToList(
+        cleaned: String,
+        context: AgentContext,
+        fallbackText: String
+    ): List<AgentCommand> {
+        Logger.i(TAG, "Parsing LLM response as array to list")
+
+        val commands = mutableListOf<AgentCommand>()
+        var depth = 0
+        var objectStart = -1
+
+        for (i in cleaned.indices) {
+            when (cleaned[i]) {
+                '{' -> {
+                    if (depth == 0) objectStart = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && objectStart >= 0) {
+                        val objectJson = cleaned.substring(objectStart, i + 1)
+                        val command = parseSingleCommand(objectJson, context, objectJson)
+                        if (command !is AgentCommand.Error) {
+                            commands.add(command)
+                        }
+                        objectStart = -1
+                    }
+                }
+            }
+        }
+
+        Logger.i(TAG, "Parsed ${commands.size} commands from array to list")
+        return commands
+    }
+
+    /**
+     * 解析 JSON 数组为 BatchExecute（内部方法）
+     */
+    private fun parseLlmResponseArray(
+        cleaned: String,
+        context: AgentContext,
+        fallbackText: String
+    ): AgentCommand {
+        Logger.i(TAG, "Parsing LLM response as array")
+
+        val commands = mutableListOf<AgentCommand>()
+        var depth = 0
+        var objectStart = -1
+
+        for (i in cleaned.indices) {
+            when (cleaned[i]) {
+                '{' -> {
+                    if (depth == 0) objectStart = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && objectStart >= 0) {
+                        val objectJson = cleaned.substring(objectStart, i + 1)
+                        val command = parseSingleCommand(objectJson, context, objectJson)
+                        if (command !is AgentCommand.Error) {
+                            commands.add(command)
+                        }
+                        objectStart = -1
+                    }
+                }
+            }
+        }
+
+        return if (commands.isNotEmpty()) {
+            Logger.i(TAG, "Parsed ${commands.size} commands from array")
+            AgentCommand.BatchExecute(commandId = AgentIdGenerator.nextId(), commands = commands)
+        } else {
+            Logger.w(TAG, "Array parsing yielded no valid commands, falling back")
+            parseSingleCommand(cleaned, context, fallbackText)
+        }
+    }
+
+    /**
+     * 清理 LLM 原始响应
+     */
+    private fun cleanLlmResponse(response: String): String {
         var cleaned = response.trim()
+
+        // 0. 预处理：修复小模型常见格式错误
+        // 0a. 移除 [last] 等模型内部标记
+        cleaned = cleaned.replace(Regex("\\[last\\]"), "").trim()
+        // 0b. 修复用 [] 包裹 JSON 对象的情况（如 ["method":"..."]）
+        // 将 ["method" -> {"method" ， "params"]" -> "params"} 等常见错误模式修复
+        if (cleaned.contains("[\"method\"") || cleaned.contains("[\"action\"")) {
+            cleaned = cleaned.replace("[\"method\"", "{\"method\"")
+            cleaned = cleaned.replace("[\"action\"", "{\"action\"")
+            cleaned = cleaned.replace("\"params\"][", "\"params\":{")
+            cleaned = cleaned.replace("][]", "}")
+            cleaned = cleaned.replace("][", "},{")
+        }
+        // 0c. 修复缺少外层 {} 的情况（如 "method":"...","params":{...}）
+        if (!cleaned.startsWith("{") && !cleaned.startsWith("[") &&
+            (cleaned.contains("\"method\"") || cleaned.contains("\"action\""))
+        ) {
+            cleaned = "{$cleaned}"
+        }
 
         // 1. 移除 <think>...</think> 和 <thinking>...</thinking> 标签（含未闭合情况）
         val thinkTags = listOf("<think>" to "</think>", "<thinking>" to "</thinking>")
@@ -68,47 +206,61 @@ object AgentCommandParser {
             cleaned = cleaned.replace(endTag, "").trim()
         }
 
-        // 2. 移除 markdown 代码块标记 (```json ... ``` 或 ``` ... ```)
+        // 2. 移除代码块标记 (``json ... ``` 或 ``` ... ```)
         cleaned = cleaned.replace(Regex("^```\\w*\\n?"), "").replace(Regex("\\n?```\\s*$"), "").trim()
 
         Logger.i(TAG, "Cleaned response: '$cleaned'")
 
+        return cleaned
+    }
+
+    /**
+     * 解析单个 JSON 对象为 AgentCommand
+     */
+    private fun parseSingleCommand(
+        cleaned: String,
+        context: AgentContext,
+        fallbackText: String
+    ): AgentCommand {
+        var localCleaned = cleaned
+
         // 3. 检查是否包含 JSON method 字段
-        val hasJsonMethod = containsJsonMethodKey(cleaned)
+        val hasJsonMethod = containsJsonMethodKey(localCleaned)
         if (!hasJsonMethod) {
             // 兜底 1：尝试从原始响应中直接提取 JSON（绕过 think 标签截断问题）
-            val fallbackJson = tryExtractJsonFromRaw(response)
+            val fallbackJson = tryExtractJsonFromRaw(fallbackText)
             if (fallbackJson != null) {
                 Logger.i(TAG, "Fallback JSON extraction succeeded: '$fallbackJson'")
-                cleaned = fallbackJson
+                localCleaned = fallbackJson
             } else {
                 // 兜底 2：关键词匹配（小模型不输出 JSON 时的最终防线）
                 // 先尝试清理后的内容，再尝试原始响应（think 标签内可能包含关键词）
-                val keywordCommand = tryParseByKeywords(cleaned)
-                    ?: tryParseByKeywords(response)
+                val keywordCommand = tryParseByKeywords(localCleaned)
+                    ?: tryParseByKeywords(fallbackText)
                 if (keywordCommand != null) {
                     Logger.i(TAG, "Keyword fallback matched: ${keywordCommand::class.simpleName}")
                     return keywordCommand
                 }
                 Logger.d(TAG, "No JSON method found, treating as free chat")
-                return AgentCommand.TextReply(message = cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
+                return AgentCommand.TextReply(message = localCleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" })
             }
         }
 
         // 4. 提取 JSON 部分
-        val jsonStart = cleaned.indexOf('{')
-        val jsonEnd = cleaned.lastIndexOf('}')
+        val jsonStart = localCleaned.indexOf('{')
+        val jsonEnd = localCleaned.lastIndexOf('}')
         val json = if (jsonStart >= 0 && jsonEnd > jsonStart) {
-            cleaned.substring(jsonStart, jsonEnd + 1)
+            localCleaned.substring(jsonStart, jsonEnd + 1)
         } else {
-            cleaned
+            localCleaned
         }
 
         return try {
             val method = extractJsonField(json, "method")
+            val action = extractJsonField(json, "action")
             val commandId = extractJsonInt(json, "id") ?: AgentIdGenerator.nextId()
 
-            val effectiveAction = method ?: "text_reply"
+            val effectiveAction = method ?: action ?: "text_reply"
 
             // 如果有 params 对象，将 params 中的字段合并到 json 中用于解析
             val paramsJson = extractJsonObject(json, "params")
@@ -119,13 +271,22 @@ object AgentCommandParser {
                 json
             }
 
-            parseCommandByMethod(effectiveAction, mergedJson, context, cleaned, commandId)
+            parseCommandByMethod(effectiveAction, mergedJson, context, localCleaned, commandId)
         } catch (exception: Exception) {
             Logger.w(TAG, "Failed to parse LLM response, fallback to text: $json", exception)
-            AgentCommand.TextReply(message = cleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
+            AgentCommand.TextReply(message = localCleaned.ifBlank { "收到你的消息了，但没理解具体意图，请再描述一下~" })
         }
     }
 
+    /**
+     * 解析 LLM 响应为 AgentCommand（兼容旧版单命令入口）
+     *
+     * 支持精简 JSON 格式：{"method":"...","params":{...}}。
+     *
+     * @param response LLM 原始文本输出
+     * @param context 当前 Agent 上下文
+     * @return 解析后的命令
+     */
     /**
      * 根据 method 字段解析为具体命令
      *
@@ -296,7 +457,7 @@ object AgentCommandParser {
     }
 
     private fun containsJsonMethodKey(content: String): Boolean {
-        return content.contains("\"method\"")
+        return content.contains("\"method\"") || content.contains("\"action\"") || content.trim().startsWith("[")
     }
 
     /**
@@ -435,7 +596,7 @@ object AgentCommandParser {
                     lower.contains("暖") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.WARM))
                     lower.contains("冷") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.COOL))
                     lower.contains("徕卡") && lower.contains("经典") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_CLASSIC))
-                    lower.contains("徕卡") && (lower.contains("鲜艳") || lower.contains(" vibrant")) -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_VIBRANT))
+                    lower.contains("徕卡") && (lower.contains("鲜艳") || lower.contains("vibrant")) -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_VIBRANT))
                     lower.contains("徕卡") && (lower.contains("黑白") || lower.contains("bw")) -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.LEICA_BW))
                     lower.contains("胶片") && lower.contains("金") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.FILM_GOLD))
                     lower.contains("胶片") && lower.contains("富士") -> commands.add(AgentCommand.SwitchFilter(filterType = FilterType.FILM_FUJI))

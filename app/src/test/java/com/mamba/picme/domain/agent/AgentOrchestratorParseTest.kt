@@ -433,4 +433,62 @@ class AgentOrchestratorParseTest {
         )
     }
 
+    // ------------------------------------------------------------------
+    // L2 本地快速通道 JSON 数组解析测试
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `parseLlmResponse parses json array with filter and capture`() {
+        val input = "[{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}}]"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "JSON 数组应解析为 BatchExecute",
+            command is AgentCommand.BatchExecute
+        )
+        val batch = command as AgentCommand.BatchExecute
+        assertEquals(2, batch.commands.size)
+        assertTrue(batch.commands[0] is AgentCommand.SwitchFilter)
+        assertEquals(FilterType.COOL, (batch.commands[0] as AgentCommand.SwitchFilter).filterType)
+        assertTrue(batch.commands[1] is AgentCommand.CapturePhoto)
+    }
+
+    @Test
+    fun `parseLlmResponse parses json array with beauty and capture`() {
+        val input = "[{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60,\"whitening\":30}},{\"method\":\"capture\",\"params\":{}}]"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "美颜+拍照 JSON 数组应解析为 BatchExecute",
+            command is AgentCommand.BatchExecute
+        )
+        val batch = command as AgentCommand.BatchExecute
+        assertEquals(2, batch.commands.size)
+        assertTrue(batch.commands[0] is AgentCommand.AdjustBeauty)
+        assertTrue(batch.commands[1] is AgentCommand.CapturePhoto)
+    }
+
+    @Test
+    fun `parseLlmResponse parses json array with delay filter and capture`() {
+        val input = "[{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}},{\"method\":\"capture\",\"params\":{}}]"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "延迟+滤镜+拍照 JSON 数组应解析为 BatchExecute",
+            command is AgentCommand.BatchExecute
+        )
+        val batch = command as AgentCommand.BatchExecute
+        assertEquals(3, batch.commands.size)
+        assertTrue(batch.commands[0] is AgentCommand.Delay)
+        assertTrue(batch.commands[1] is AgentCommand.SwitchFilter)
+        assertTrue(batch.commands[2] is AgentCommand.CapturePhoto)
+    }
+
+    @Test
+    fun `parseLlmResponse single json object still works`() {
+        val input = "{\"method\":\"capture\",\"params\":{}}"
+        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        assertTrue(
+            "单个 JSON 对象仍应正常解析",
+            command is AgentCommand.CapturePhoto
+        )
+    }
+
 }

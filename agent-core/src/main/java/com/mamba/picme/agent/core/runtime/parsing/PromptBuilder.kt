@@ -138,7 +138,85 @@ class PromptBuilder(
     // ── 远程 LLM Prompt 模板（L2/L3/L4）────────────────────────────
 
     /**
-     * 构建 L2 Batch 模式 Prompt
+     * 构建 L2 本地快速通道专用简化 Prompt
+     *
+     * 面向端侧小模型（Qwen3-1.7B）优化，减少 token 数，提升推理速度：
+     * - 只保留核心命令和格式约束
+     * - 省略详细场景描述和状态信息
+     * - 输出格式为 JSON 数组
+     *
+     * @param capabilities 当前可用的 Capability 列表
+     * @param context Agent 上下文
+     * @return 简化的 system prompt
+     */
+    fun buildL2SystemPrompt(
+        capabilities: List<Capability>,
+        context: AgentContext
+    ): String {
+        val currentScene = sceneManager.currentScene.value
+
+        return buildString {
+            appendLine("你是相机助手。将用户指令解析为JSON命令数组。")
+            appendLine()
+            appendLine("输出规则：")
+            appendLine("1. 只输出JSON数组，不要解释、不要markdown、不要思考过程。")
+            appendLine("2. 格式：[{\"method\":\"命令\",\"params\":{...}}]")
+            appendLine("3. 【组合规则】用户说包含多个动作时（如'磨皮拍照'、'冷色滤镜拍照'），必须输出JSON数组，每个动作一个对象。")
+            appendLine("4. 【组合规则】用户说'X滤镜拍照'或'X美颜拍照'时，必须同时输出滤镜/美颜命令 + capture命令。")
+            appendLine("4a. 【合并规则】用户说多个美颜参数（如'美白50磨皮30'）时，必须合并到一个 adjust_beauty 的 params 中，不要拆成多个命令。")
+            appendLine("4b. 【强制规则】用户输入以'拍照'结尾时，数组最后一个元素必须是{\"method\":\"capture\",\"params\":{}}，绝对不要漏掉。")
+            appendLine("5. 闲聊时：[{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]")
+            appendLine("6. 导航：navigate_to(params.destination=camera|gallery|settings|debug) 或 go_back")
+            appendLine("7. 延迟：delay(params.delay_ms)，必须放数组第一个")
+            appendLine()
+            appendLine("【当前状态】")
+            appendLine(buildStateSection(context, currentScene))
+            appendLine()
+            appendLine("【可用命令】")
+            appendLine(buildL2CapabilitiesSection(currentScene))
+        }
+    }
+
+    /**
+     * 构建 L2 本地快速通道能力描述（简化版）
+     */
+    private fun buildL2CapabilitiesSection(
+        scene: SceneManager.Scene? = null
+    ): String {
+        val includeCamera = scene == null || scene == SceneManager.Scene.CAMERA
+        val includeGallery = scene == null || scene == SceneManager.Scene.GALLERY
+        val includeSettings = scene == null || scene == SceneManager.Scene.SETTINGS
+
+        return buildString {
+            if (includeCamera) {
+                appendLine("capture, toggle_recording, flip_camera, adjust_beauty(params: smoothing=磨皮, whitening=美白, slim_face=瘦脸, big_eyes=大眼, lip_color=唇色, blush=腮红, eyebrow=眉毛), switch_filter(filter), switch_style(style), switch_scene(scene), switch_ratio(ratio), adjust_exposure(exposure), adjust_zoom(zoom), delay(delay_ms)")
+            }
+            if (includeGallery) {
+                appendLine("view_media, delete_media, share_media, select_media, search_media, switch_view_mode, favorite_media")
+            }
+            if (includeSettings) {
+                appendLine("change_theme, change_language, download_model, switch_face_engine, toggle_setting")
+            }
+            appendLine("navigate_to(destination), go_back, text_reply(message)")
+            appendLine()
+            appendLine("示例：")
+            appendLine("磨皮60拍照 -> [{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("美白50磨皮30拍照 -> [{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":50,\"smoothing\":30}},{\"method\":\"capture\",\"params\":{}}]  // 注意：以'拍照'结尾，必须有capture")
+            appendLine("美白50磨皮30 -> [{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":50,\"smoothing\":30}}]  // 注意：不以'拍照'结尾，不要capture")
+            appendLine("冷色滤镜拍照 -> [{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("暖色滤镜拍照 -> [{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("美白30并拍照 -> [{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":30}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("3秒后拍照 -> [{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("5秒后换冷色滤镜拍照 -> [{\"method\":\"delay\",\"params\":{\"delay_ms\":5000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("3秒后冷色调拍照 -> [{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("3秒后换冷色调拍3张 -> [{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}},{\"method\":\"capture\",\"params\":{}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("切前置 -> [{\"method\":\"flip_camera\",\"params\":{}}]")
+            appendLine("拍照 -> [{\"method\":\"capture\",\"params\":{}}]")
+        }
+    }
+
+    /**
+     * 构建 L2 Batch 模式 Prompt（远程 LLM 使用）
      *
      * 输出格式为 JSON 数组，每个元素是精简命令对象（method + params）。
      */

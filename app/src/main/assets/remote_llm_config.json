@@ -1,0 +1,8 @@
+{
+    "l2_temperature": 0.1,
+    "l2_max_tokens": 2048,
+    "l3_temperature": 0.3,
+    "l3_max_tokens": 2048,
+    "l4_temperature": 0.7,
+    "l4_max_tokens": 2048
+}

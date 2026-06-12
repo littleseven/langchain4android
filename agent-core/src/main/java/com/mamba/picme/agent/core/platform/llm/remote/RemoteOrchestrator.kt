@@ -1,5 +1,6 @@
 package com.mamba.picme.agent.core.platform.llm.remote
 
+import android.content.Context
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
 import com.mamba.picme.agent.core.api.execution.PlanStep
 import com.mamba.picme.agent.core.api.execution.WaitCondition
@@ -16,20 +17,71 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
+ * 远程 LLM 推理参数配置
+ * 从 assets/remote_llm_config.json 加载，支持按层级覆盖
+ */
+object RemoteLlmConfig {
+    private var config: JSONObject? = null
+
+    data class Config(
+        val l2Temperature: Double = 0.1,
+        val l2MaxTokens: Int = 2048,
+        val l3Temperature: Double = 0.3,
+        val l3MaxTokens: Int = 2048,
+        val l4Temperature: Double = 0.7,
+        val l4MaxTokens: Int = 2048
+    )
+
+    fun load(context: Context): Config {
+        if (config == null) {
+            try {
+                val json = context.assets.open("remote_llm_config.json")
+                    .bufferedReader().use { it.readText() }
+                config = JSONObject(json)
+                Logger.i("RemoteLlmConfig", "Loaded remote_llm_config.json")
+            } catch (e: Exception) {
+                Logger.w("RemoteLlmConfig", "remote_llm_config.json not found, using defaults")
+                config = JSONObject()
+            }
+        }
+
+        val root = config ?: JSONObject()
+        return Config(
+            l2Temperature = root.optDouble("l2_temperature", 0.1),
+            l2MaxTokens = root.optInt("l2_max_tokens", 2048),
+            l3Temperature = root.optDouble("l3_temperature", 0.3),
+            l3MaxTokens = root.optInt("l3_max_tokens", 2048),
+            l4Temperature = root.optDouble("l4_temperature", 0.7),
+            l4MaxTokens = root.optInt("l4_max_tokens", 2048)
+        )
+    }
+}
+
+/**
  * 远程编排器
  *
  * 负责执行 L2 Batch FC、L3 Plan-and-Execute、L4 Chat 三种远程推理模式。
  * 通过 [UnifiedRemoteClient] 自动适配 Claude/OpenAI 协议。
  *
+ * @param context Application Context，用于加载本地配置
  * @param remoteConfig 远程模型配置
  * @param promptBuilder Prompt 构建器
  */
 class RemoteOrchestrator(
+    private val context: Context,
     private val remoteConfig: RemoteModelConfig,
     private val promptBuilder: PromptBuilder
 ) {
 
     private val unifiedClient = UnifiedRemoteClient(remoteConfig)
+
+    /**
+     * 远程推理参数配置
+     * 从本地 JSON 文件加载，支持按层级覆盖
+     */
+    private val remoteLlmConfig by lazy {
+        RemoteLlmConfig.load(context)
+    }
 
     private val tag = "RemoteOrchestrator"
 
@@ -58,8 +110,8 @@ class RemoteOrchestrator(
             val result = unifiedClient.chat(
                 systemPrompt = systemPrompt,
                 userInput = userInput,
-                maxTokens = 2048,
-                temperature = 0.3
+                maxTokens = remoteLlmConfig.l2MaxTokens,
+                temperature = remoteLlmConfig.l2Temperature
             )
 
             val content = result.getOrElse { error ->
@@ -109,8 +161,8 @@ class RemoteOrchestrator(
             val result = unifiedClient.chat(
                 systemPrompt = systemPrompt,
                 userInput = userInput,
-                maxTokens = 2048,
-                temperature = 0.3
+                maxTokens = remoteLlmConfig.l3MaxTokens,
+                temperature = remoteLlmConfig.l3Temperature
             )
 
             val content = result.getOrElse { error ->
@@ -168,8 +220,8 @@ class RemoteOrchestrator(
             val result = unifiedClient.chat(
                 systemPrompt = systemPrompt,
                 userInput = userInput,
-                maxTokens = 2048,
-                temperature = 0.3
+                maxTokens = remoteLlmConfig.l4MaxTokens,
+                temperature = remoteLlmConfig.l4Temperature
             )
 
             val content = result.getOrElse { error ->

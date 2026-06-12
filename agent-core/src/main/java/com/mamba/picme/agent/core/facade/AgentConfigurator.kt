@@ -2,6 +2,8 @@ package com.mamba.picme.agent.core.facade
 
 import android.content.Context
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
+import com.mamba.picme.agent.core.api.capability.Capability
+import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
@@ -17,18 +19,10 @@ import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
 /**
- * Agent 平台配置器
+ * Agent 配置器
  *
- * 负责创建和配置 Agent 运行所需的平台特定组件：
- * - 本地 LLM 引擎（MNN-LLM）
- * - 远程编排器（RemoteOrchestrator）
- * - 推理路由器（InferenceRouter）
- * - 隐私守卫（PrivacyGuard）
- * - 场景管理器（SceneManager）
- * - 提示词构建器（PromptBuilder）
- *
- * 将平台特定的组件创建逻辑从 AgentOrchestrator 中剥离，
- * 使 Orchestrator 专注于纯编排逻辑，便于独立库提取。
+ * 负责初始化和配置 Agent 运行时所需的所有核心组件。
+ * 作为 [AgentOrchestrator] 的依赖工厂，集中管理组件生命周期。
  */
 class AgentConfigurator(private val context: Context) {
 
@@ -53,7 +47,7 @@ class AgentConfigurator(private val context: Context) {
 
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL
-    private var currentModelId: String = "qwen3_1_7b"
+    private var currentModelId: String = "qwen3_5_2b"
     private var userRemoteConfig: RemoteModelConfig? = null
     private var inferenceRouterConfig: RemoteModelConfig? = null
     private var inferenceRouter: InferenceRouter? = null
@@ -87,6 +81,7 @@ class AgentConfigurator(private val context: Context) {
     private fun createRemoteOrchestrator(config: RemoteModelConfig): RemoteOrchestrator {
         Logger.i(tag, "Creating RemoteOrchestrator with model=${config.modelId}, baseUrl=${config.baseUrl}")
         return RemoteOrchestrator(
+            context = context,
             remoteConfig = config,
             promptBuilder = promptBuilder
         )

@@ -64,9 +64,21 @@ class AdaptiveStrategySelector {
 
     private fun analyzeInput(input: String): InputFeatures {
         val trimmed = input.trim()
+        
+        // 延迟关键词贡献：基础 1 + 额外动作数
+        // 例如 "3秒后换冷色调拍照" = 1(延迟) + 2(换+拍) = 3 → 触发 L3
+        val delayKeywordCount = DELAY_KEYWORDS.count { trimmed.contains(it) }
+        val hasDelay = delayKeywordCount > 0
+        val extraActions = if (hasDelay) {
+            // 延迟指令中除延迟外的动作数：换、调、切、拍、照等
+            listOf("换", "调", "切", "拍", "照", "滤镜", "美颜", "磨皮", "美白", "风格")
+                .count { trimmed.contains(it) }
+        } else 0
+        val delayStepCount = if (hasDelay) 1 + extraActions else 0
+        
         return InputFeatures(
             hasConditionals = CONDITION_KEYWORDS.any { trimmed.contains(it) },
-            stepCount = STEP_KEYWORDS.count { trimmed.contains(it) } + 1,
+            stepCount = STEP_KEYWORDS.count { trimmed.contains(it) } + delayStepCount + 1,
             commandCount = estimateCommandCount(trimmed),
             isOpenEnded = OPEN_ENDED_PATTERNS.any { trimmed.matches(it) },
             isQuestion = trimmed.endsWith("?") || trimmed.endsWith("？") ||
@@ -122,6 +134,9 @@ class AdaptiveStrategySelector {
 
         // 步骤关键词
         val STEP_KEYWORDS = listOf("先", "然后", "接着", "再", "最后", "之后", "第一步", "第二步")
+        
+        // 延迟/时间关键词（表示明确的步骤边界，如"3秒后"、"5秒后"）
+        val DELAY_KEYWORDS = listOf("秒后", "秒后", "分钟后", "小时后", "延迟", "延时", "倒计时")
 
         // 疑问词
         val QUESTION_WORDS = listOf("什么", "怎么", "哪些", "多少", "吗", "呢", "为什么", "如何")

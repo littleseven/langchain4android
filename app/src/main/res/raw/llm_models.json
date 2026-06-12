@@ -80,8 +80,7 @@
     "type": "LLM",
     "size": 1200000000,
     "sources": {
-      "HuggingFace": "taobao-mnn/Qwen3.5-2B-MNN",
-      "ModelScope": "MNN/Qwen3.5-2B-MNN"
+      "ModelScope": "budaoshou/Qwen3.5-2B-MNN"
     },
     "files": [
       "config.json",

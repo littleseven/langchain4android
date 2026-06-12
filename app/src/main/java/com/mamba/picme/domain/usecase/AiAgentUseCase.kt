@@ -45,7 +45,7 @@ class AiAgentUseCase(
     context: Context,
     agentMode: AiAgentMode = AiAgentMode.LOCAL,
     privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
-    localModelId: String = "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
+    localModelId: String = "qwen3_5_2b", // 下划线格式，与 ModelManager 注册表一致
     localUseOpencl: Boolean = false,
     remoteConfig: RemoteModelConfig? = null,
     forceRemote: Boolean = false,
@@ -88,6 +88,7 @@ class AiAgentUseCase(
      */
     private val remoteOrchestrator: RemoteOrchestrator by lazy {
         RemoteOrchestrator(
+            context = context,
             remoteConfig = effectiveRemoteConfig,
             promptBuilder = PromptBuilder(SceneManager.getInstance())
         )
@@ -212,30 +213,67 @@ class AiAgentUseCase(
                     Logger.d(tag, "[REMOTE] Force remote enabled, bypassing local model")
                     return@withContext processRemote(userInput, agentContext, currentState)
                 }
-                // 本地推理（传入高质量自定义 system prompt）
-                val systemPrompt = buildSystemPrompt(currentState)
 
-                // 打印完整 prompt 用于调试
-                val promptLength = systemPrompt.length
-                val estimatedTokens = promptLength / 2  // 中文字符约 1-2 token，取保守估计
-                Logger.d(tag, "===== CAMERA SYSTEM PROMPT ===== [len=$promptLength, estTokens~$estimatedTokens]")
-                systemPrompt.lineSequence().forEach { line ->
-                    Logger.d(tag, line)
-                }
-                Logger.d(tag, "===== END CAMERA PROMPT ===== [totalLen=$promptLength, totalEstTokens~$estimatedTokens, maxTokens=256]")
-
-                val result = orchestrator.processUserInput(
+                // 本地推理：优先使用 InferenceRouter 的 L2 本地快速通道（支持 JSON 数组）
+                Logger.i(tag, "[UseCase] LOCAL mode, calling processInputWithRouter for input='$userInput'")
+                val inferenceResult = orchestrator.processInputWithRouter(
                     input = userInput,
-                    agentContext = agentContext,
-                    customSystemPrompt = systemPrompt
+                    agentContext = agentContext
                 )
-                return@withContext result.map { action ->
-                    mapAgentActionToLegacyCommand(action)
-                }
+                Logger.i(tag, "[UseCase] processInputWithRouter returned: ${inferenceResult::class.simpleName}")
+                return@withContext handleInferenceResult(inferenceResult, userInput, agentContext, currentState)
             }
             AiAgentMode.REMOTE -> {
                 // REMOTE 模式：使用分层自适应推理
+                Logger.i(tag, "[UseCase] REMOTE mode, calling processRemote for input='$userInput'")
                 return@withContext processRemote(userInput, agentContext, currentState)
+            }
+        }
+    }
+
+    /**
+     * 处理 InferenceResult 并转换为 AiAgentCommand
+     */
+    private fun handleInferenceResult(
+        inferenceResult: InferenceResult,
+        userInput: String,
+        agentContext: AgentContext,
+        currentState: CameraStateSnapshot
+    ): Result<AiAgentCommand> {
+        return when (inferenceResult) {
+            is InferenceResult.Local -> {
+                val command = inferenceResult.command
+                Logger.d(tag, "Local result: ${command::class.simpleName}")
+                Result.success(mapAgentCommandToLegacy(command))
+            }
+            is InferenceResult.Batch -> {
+                Logger.d(tag, "Batch result: ${inferenceResult.commands.size} commands")
+                if (inferenceResult.commands.isEmpty()) {
+                    Result.success(AiAgentCommand.TextReply("未识别到有效命令"))
+                } else {
+                    val commands = inferenceResult.commands.map { mapAgentCommandToLegacy(it) }
+                    Result.success(
+                        if (commands.size == 1) commands.first() else AiAgentCommand.BatchExecute(commands)
+                    )
+                }
+            }
+            is InferenceResult.Plan -> {
+                Logger.d(tag, "Plan result: ${inferenceResult.plan.steps.size} steps")
+                val commands = inferenceResult.plan.steps.mapNotNull { step ->
+                    // PlanStep 的 action 已经是 AgentCommand，直接映射
+                    mapAgentCommandToLegacy(step.action)
+                }
+                if (commands.isEmpty()) {
+                    Result.success(AiAgentCommand.TextReply("未识别到有效命令"))
+                } else {
+                    Result.success(
+                        if (commands.size == 1) commands.first() else AiAgentCommand.BatchExecute(commands)
+                    )
+                }
+            }
+            is InferenceResult.Chat -> {
+                Logger.d(tag, "Chat result: ${inferenceResult.message}")
+                Result.success(AiAgentCommand.TextReply(inferenceResult.message))
             }
         }
     }

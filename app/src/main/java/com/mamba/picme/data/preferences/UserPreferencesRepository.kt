@@ -677,9 +677,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
         .map { preferences ->
             val prefName = preferences[PreferencesKeys.AI_AGENT_INFERENCE_PREFERENCE]
-                ?: AiAgentInferencePreference.FORCE_REMOTE.name
+                ?: AiAgentInferencePreference.FORCE_LOCAL.name
             runCatching { AiAgentInferencePreference.valueOf(prefName) }
-                .getOrDefault(AiAgentInferencePreference.FORCE_REMOTE)
+                .getOrDefault(AiAgentInferencePreference.FORCE_LOCAL)
         }
 
     override suspend fun updateAiAgentInferencePreference(preference: AiAgentInferencePreference) {
