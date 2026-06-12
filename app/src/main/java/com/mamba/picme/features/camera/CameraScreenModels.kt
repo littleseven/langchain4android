@@ -158,7 +158,8 @@ internal data class CameraPreviewActions(
     val onToggleProPanel: () -> Unit,
     val onAsrRelease: () -> Unit = {},
     val onLlmRelease: () -> Unit = {},
-    val onFaceDetectRelease: () -> Unit = {}
+    val onFaceDetectRelease: () -> Unit = {},
+    val onNavigateBack: () -> Unit = {}
 )
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
@@ -269,12 +270,14 @@ internal fun buildCameraPreviewActions(
     onToggleLogs: () -> Unit,
     onAsrRelease: () -> Unit = {},
     onLlmRelease: () -> Unit = {},
-    onFaceDetectRelease: () -> Unit = {}
+    onFaceDetectRelease: () -> Unit = {},
+    onNavigateBack: () -> Unit = {}
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onResetCameraMemoryState = onResetCameraMemoryState,
         onNavigateToSettings = onNavigateToSettings,
         onNavigateToDebug = {},
+        onNavigateBack = onNavigateBack,
         onFlipCamera = {
             val nextLens = nextLensFacing(lensFacing)
             onLensFacingChanged(nextLens)

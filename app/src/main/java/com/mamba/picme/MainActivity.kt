@@ -205,6 +205,7 @@ class MainActivity : ComponentActivity() {
                                 CameraScreen(
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateBack = { navController.popBackStack() },
                                     viewModel = mediaViewModel,
                                     settingsViewModel = settingsViewModel
                                 )

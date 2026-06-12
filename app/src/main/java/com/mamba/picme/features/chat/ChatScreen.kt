@@ -1,16 +1,21 @@
 package com.mamba.picme.features.chat
 
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,11 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +40,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,11 +53,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mamba.picme.R
 import com.mamba.picme.core.common.Logger
@@ -78,6 +90,7 @@ fun ChatScreen(
     onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val messages by viewModel.messages.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
     val currentModel by viewModel.currentModel.collectAsState()
@@ -91,8 +104,24 @@ fun ChatScreen(
         }
     }
 
+    // 沉浸式模式：隐藏系统栏
+    DisposableEffect(Unit) {
+        val activity = context as? Activity
+        val window = activity?.window
+        val insetsController = window?.let { WindowCompat.getInsetsController(it, view) }
+        insetsController?.hide(WindowInsetsCompat.Type.systemBars())
+        insetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+
+        onDispose {
+            insetsController?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    var showQuickActions by remember { mutableStateOf(false) }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatTopBar(
                 onNavigateToSettings = onNavigateToSettings,
@@ -100,42 +129,81 @@ fun ChatScreen(
             )
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // 消息列表
-            LazyColumn(
-                state = listState,
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxSize()
+                    .imePadding()
             ) {
-                items(messages, key = { it.id }) { message ->
-                    ChatMessageItem(message = message)
+                // 消息列表
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(messages, key = { it.id }) { message ->
+                        ChatMessageItem(message = message)
+                    }
                 }
+
+                // 输入区
+                ChatInputArea(
+                    currentModel = currentModel,
+                    isProcessing = isProcessing,
+                    onModelSwitch = { viewModel.switchModel(it) },
+                    onSendMessage = { text ->
+                        viewModel.sendMessage(text)
+                    },
+                    onToggleQuickActions = { showQuickActions = !showQuickActions }
+                )
             }
 
-            // 输入区
-            ChatInputArea(
-                currentModel = currentModel,
-                isProcessing = isProcessing,
-                onModelSwitch = { viewModel.switchModel(it) },
-                onSendMessage = { text ->
-                    viewModel.sendMessage(text)
-                }
-            )
+            // 快捷入口 FAB — 右下角浮动
+            FloatingActionButton(
+                onClick = { showQuickActions = !showQuickActions },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 80.dp)
+                    .navigationBarsPadding()
+                    .size(52.dp),
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = "Quick Actions",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
-            // 快捷入口栏
-            QuickActionBar(
-                onCameraClick = onNavigateToCamera,
-                onGalleryClick = onNavigateToGallery,
-                onEditorClick = onNavigateToEditor
-            )
+            // 快捷入口展开面板
+            if (showQuickActions) {
+                QuickActionPanel(
+                    onCameraClick = {
+                        showQuickActions = false
+                        onNavigateToCamera()
+                    },
+                    onGalleryClick = {
+                        showQuickActions = false
+                        onNavigateToGallery()
+                    },
+                    onEditorClick = {
+                        showQuickActions = false
+                        onNavigateToEditor()
+                    },
+                    onDismiss = { showQuickActions = false },
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                )
+            }
         }
     }
 }
@@ -148,6 +216,7 @@ private fun ChatTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -220,7 +289,8 @@ private fun ChatInputArea(
     currentModel: ChatModelOption,
     isProcessing: Boolean,
     onModelSwitch: (ChatModelOption) -> Unit,
-    onSendMessage: (String) -> Unit
+    onSendMessage: (String) -> Unit,
+    onToggleQuickActions: () -> Unit = {}
 ) {
     var text by remember { mutableStateOf("") }
 
@@ -228,6 +298,7 @@ private fun ChatInputArea(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
+            .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -287,6 +358,81 @@ private fun ChatInputArea(
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * 快捷入口展开面板 — 悬浮在右下角
+ */
+@Composable
+private fun QuickActionPanel(
+    onCameraClick: () -> Unit,
+    onGalleryClick: () -> Unit,
+    onEditorClick: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scope = rememberCoroutineScope()
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.3f))
+            .padding(end = 16.dp, bottom = 140.dp)
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.BottomEnd),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            QuickActionFabItem(
+                label = "相机",
+                icon = Icons.Rounded.CameraAlt,
+                onClick = onCameraClick
+            )
+            QuickActionFabItem(
+                label = "相册",
+                icon = Icons.Rounded.PhotoLibrary,
+                onClick = onGalleryClick
+            )
+            QuickActionFabItem(
+                label = "编辑",
+                icon = Icons.Rounded.Edit,
+                onClick = onEditorClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickActionFabItem(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
+        FloatingActionButton(
+            onClick = onClick,
+            modifier = Modifier.size(48.dp),
+            shape = CircleShape,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

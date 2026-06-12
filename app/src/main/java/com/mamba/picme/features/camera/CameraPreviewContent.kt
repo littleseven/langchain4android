@@ -471,6 +471,7 @@ private fun BoxScope.CameraPreviewSideControls(
         onAsrRelease = actions.onAsrRelease,
         onLlmRelease = actions.onLlmRelease,
         onFaceDetectRelease = actions.onFaceDetectRelease,
+        onNavigateBack = actions.onNavigateBack,
         modifier = Modifier.align(Alignment.TopStart)
     )
 

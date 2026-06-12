@@ -320,6 +320,7 @@ private fun resolvePreviewTargetView(
 fun CameraScreen(
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateBack: () -> Unit = {},
     viewModel: MediaViewModel,
     settingsViewModel: SettingsViewModel? = null
 ) {
@@ -365,6 +366,7 @@ fun CameraScreen(
             viewModel = viewModel,
             onNavigateToGallery = onNavigateToGallery,
             onNavigateToSettings = onNavigateToSettings,
+            onNavigateBack = onNavigateBack,
             settingsViewModel = settingsViewModel
         )
     } else {
@@ -419,6 +421,7 @@ fun CameraContent(
     viewModel: MediaViewModel,
     onNavigateToGallery: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateBack: () -> Unit = {},
     settingsViewModel: SettingsViewModel? = null
 ) {
     val context = LocalContext.current
@@ -1624,6 +1627,7 @@ CameraPreviewContent(
                 val currentView = LocalView.current
                 buildCameraPreviewActions(
                 onNavigateToSettings = onNavigateToSettings,
+                onNavigateBack = onNavigateBack,
                 onResetCameraMemoryState = {
                     val defaultState = CameraMemoryState()
                     lensFacing = if (defaultState.useFrontCamera) {
