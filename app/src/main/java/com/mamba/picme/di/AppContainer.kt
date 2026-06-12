@@ -23,6 +23,8 @@ import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.mamba.picme.domain.usecase.GetGroupedMediaUseCase
 import com.mamba.picme.domain.usecase.OcrProcessor
+import com.mamba.picme.features.chat.ChatViewModel
+import com.mamba.picme.features.chat.ChatViewModelFactory
 import com.mamba.picme.features.gallery.MediaViewModel
 import androidx.lifecycle.ViewModel
 
@@ -55,6 +57,25 @@ class MediaViewModelFactory(
     }
 }
 
+class ChatViewModelDependencies(
+    val chatMessageDao: com.mamba.picme.data.local.ChatMessageDao
+)
+
+class ChatViewModelFactory(
+    private val dependencies: ChatViewModelDependencies
+) : ViewModelProvider.Factory {
+
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return ChatViewModel(
+                chatMessageDao = dependencies.chatMessageDao
+            ) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
 interface AppContainer {
     val repository: MediaRepository
     val userPreferencesRepository: UserSettingsRepository
@@ -64,6 +85,7 @@ interface AppContainer {
     val kwsEngine: KeywordSpotterEngine?  // 【新增】KWS 唤醒词引擎（可选）
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
+    fun createChatViewModelFactory(): ViewModelProvider.Factory
 }
 
 class AppContainerImpl(private val context: Context) : AppContainer {
@@ -194,7 +216,21 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         MediaViewModelFactory(mediaViewModelDependencies)
     }
 
+    private val chatViewModelDependencies: ChatViewModelDependencies by lazy {
+        ChatViewModelDependencies(
+            chatMessageDao = database.chatMessageDao()
+        )
+    }
+
+    private val chatViewModelFactory: ViewModelProvider.Factory by lazy {
+        ChatViewModelFactory(chatViewModelDependencies)
+    }
+
     override fun createMediaViewModelFactory(): ViewModelProvider.Factory {
         return mediaViewModelFactory
+    }
+
+    override fun createChatViewModelFactory(): ViewModelProvider.Factory {
+        return chatViewModelFactory
     }
 }

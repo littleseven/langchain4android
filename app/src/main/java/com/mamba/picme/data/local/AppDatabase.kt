@@ -6,10 +6,11 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.mamba.picme.data.model.MediaEntity
 
-@Database(entities = [MediaEntity::class], version = 3, exportSchema = false)
+@Database(entities = [MediaEntity::class, ChatMessageEntity::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun mediaDao(): MediaDao
+    abstract fun chatMessageDao(): ChatMessageDao
 
     companion object {
         @Volatile

@@ -42,6 +42,8 @@ import com.mamba.picme.core.designsystem.PicMeTheme
 import com.mamba.picme.data.preferences.UserPreferencesRepository
 import com.mamba.picme.domain.model.AppLanguage
 import com.mamba.picme.features.camera.CameraScreen
+import com.mamba.picme.features.chat.ChatScreen
+import com.mamba.picme.features.chat.ChatViewModel
 import com.mamba.picme.features.debug.DebugScreen
 import com.mamba.picme.features.gallery.GalleryScreen
 import com.mamba.picme.features.gallery.MediaViewModel
@@ -94,6 +96,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val app = application as PicMeApplication
             val context = LocalContext.current
+            val chatViewModel: ChatViewModel = viewModel(
+                factory = app.container.createChatViewModelFactory()
+            )
             val mediaViewModel: MediaViewModel = viewModel(
                 factory = app.container.createMediaViewModelFactory()
             )
@@ -146,7 +151,7 @@ class MainActivity : ComponentActivity() {
                         ) { innerPadding ->
                             NavHost(
                                 navController = navController,
-                                startDestination = Screen.Camera.route,
+                                startDestination = Screen.Chat.route,
                                 modifier = Modifier.padding(innerPadding),
                                 enterTransition = {
                                     fadeIn(tween(400)) + slideIntoContainer(
@@ -173,6 +178,22 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             ) {
+                            composable(Screen.Chat.route) {
+                                // 场景管理：进入 Chat 页面
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.CHAT)
+                                    onDispose {
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.CHAT)
+                                    }
+                                }
+                                ChatScreen(
+                                    viewModel = chatViewModel,
+                                    onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToGallery = { navController.navigate(Screen.Gallery.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToEditor = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) }
+                                )
+                            }
                             composable(Screen.Camera.route) {
                                 // 场景管理：进入 Camera 页面
                                 DisposableEffect(Unit) {

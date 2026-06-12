@@ -1,0 +1,70 @@
+package com.mamba.picme.data.local
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Room DAO：聊天消息数据访问对象
+ */
+@Dao
+interface ChatMessageDao {
+
+    /**
+     * 获取指定会话的所有消息，按时间升序排列
+     */
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp ASC")
+    fun getMessagesBySession(sessionId: String): Flow<List<ChatMessageEntity>>
+
+    /**
+     * 获取指定会话的最近 N 条消息
+     */
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentMessages(sessionId: String, limit: Int): List<ChatMessageEntity>
+
+    /**
+     * 插入单条消息
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessage(message: ChatMessageEntity)
+
+    /**
+     * 批量插入消息
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessages(messages: List<ChatMessageEntity>)
+
+    /**
+     * 删除指定会话的最早 N 条消息（用于清理超限消息）
+     */
+    @Query("""
+        DELETE FROM chat_messages 
+        WHERE id IN (
+            SELECT id FROM chat_messages 
+            WHERE sessionId = :sessionId 
+            ORDER BY timestamp ASC 
+            LIMIT :count
+        )
+    """)
+    suspend fun deleteOldestMessages(sessionId: String, count: Int)
+
+    /**
+     * 删除指定会话的所有消息
+     */
+    @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun deleteAllMessagesBySession(sessionId: String)
+
+    /**
+     * 获取指定会话的消息数量
+     */
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun getMessageCount(sessionId: String): Int
+
+    /**
+     * 获取指定会话的最后一条消息时间戳
+     */
+    @Query("SELECT MAX(timestamp) FROM chat_messages WHERE sessionId = :sessionId")
+    suspend fun getLastMessageTimestamp(sessionId: String): Long?
+}

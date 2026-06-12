@@ -1,55 +1,282 @@
-# AI Chat UI 组件库
+# Chat 首页模块技术实现规范
 
-统一聊天界面组件，为 PicMe 所有模块提供一致的 Chat UI 体验。
+> **边界声明（Boundary Statement）**
+> - 本文档仅承载本模块的实现细节（架构、代码约束、检查清单）。
+> - 产品目标与验收口径以 `PRODUCT.md` 为准；交互流程与体验规则以 `docs/01-PRODUCT/FEATURES.md` 为准。
+> - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 `AGENTS.md` 为准。
+> - 禁止将模块级实现细节回填到顶层 `AGENTS.md`；跨模块或专项技术内容应下沉到对应模块文档或 `docs/*_TECH_SPEC.md`。
 
-## 组件列表
+**模块定位**: 应用首页，AI 对话核心入口，支持本地/远程模型切换、对话持久化、快捷能力入口
 
-### 1. AiChatScreen
+**主要维护者**: [RD] 全栈工程师
 
-主聊天界面组件，使用 ModalBottomSheet 设计。
+**阅读对象**: RD、AI Agent
 
-**特性：**
-- ModalBottomSheet 设计，系统自动处理键盘 insets
-- 折叠/展开功能，节省屏幕空间
-- 文字 + 语音输入切换
-- 支持多种消息类型（UserText、AgentText、PlanPreview、PlanProgress、PlanResult）
-- 优雅的动画效果
-- 拖拽把手设计
+## 1. 核心产品逻辑 (Core Product Logic)
 
-**使用示例：**
+- **[PRIVACY] 隐私绝对保护**: 敏感数据（人脸/对话/图片）100% 端侧处理，零云端传输
+- **[PERF] 响应延迟**: 本地模型首字 < 500ms，远程模型首字 < 1.5s
+- **[I18N] 多语言文案**: 模型切换提示、输入框占位符、快捷入口标签必须提取到 strings.xml
+- **[FEEDBACK] 模型切换反馈**: 切换本地/远程模型时必须显示 Toast 提示当前模型状态
+- **[PERSISTENCE] 对话持久化**: 所有消息自动保存到 Room 数据库，应用重启后自动恢复
 
+## 2. 页面架构 (Page Architecture)
+
+### 2.1 ChatScreen 布局
+
+```
+┌─────────────────────────────┐
+│  TopBar: Logo + 设置 + 清空  │
+├─────────────────────────────┤
+│                             │
+│      MessageList (LazyColumn)│
+│      - 文本消息              │
+│      - 图片消息              │
+│      - 命令执行卡片          │
+│                             │
+├─────────────────────────────┤
+│  ModelSelector + InputBar   │
+│  [本地模型 ▼] [输入框] [发送]│
+├─────────────────────────────┤
+│  QuickActionBar              │
+│  [相机] [相册] [编辑]        │
+└─────────────────────────────┘
+```
+
+### 2.2 核心组件
+
+| 组件 | 文件 | 职责 |
+|------|------|------|
+| **ChatScreen** | `features/chat/ChatScreen.kt` | 首页容器，组合各子组件 |
+| **ChatViewModel** | `features/chat/ChatViewModel.kt` | 对话状态管理、消息发送、模型切换 |
+| **MessageList** | `features/chat/components/MessageList.kt` | 消息列表渲染，支持多种消息类型 |
+| **ModelSelector** | `features/chat/components/ModelSelector.kt` | 输入框左侧下拉，本地/远程模型切换 |
+| **ChatInputBar** | `features/chat/components/ChatInputBar.kt` | 输入框 + 发送按钮 + 语音切换 |
+| **QuickActionBar** | `features/chat/components/QuickActionBar.kt` | 底部快捷入口：相机/相册/编辑 |
+| **MessageRepository** | `data/repository/MessageRepository.kt` | Room 数据库读写，对话持久化 |
+
+## 3. 模型切换实现 (Model Switching)
+
+### 3.1 ModelSelector 组件
+
+**位置**: 输入框左侧，固定宽度 80dp
+
+**状态标识**:
+- 本地模型（Qwen3.5-2B）：绿色圆点 `#4CAF50` + 文字 "本地"
+- 远程模型（DeepSeek）：蓝色圆点 `#2196F3` + 文字 "远程"
+
+**下拉选项**:
 ```kotlin
-@Composable
-fun MyScreen() {
-    val chatState = remember { mutableStateOf(ChatState()) }
-    
-    AiChatScreen(
-        visible = chatState.isVisible,
-        messages = chatState.messages,
-        isProcessing = chatState.isProcessing,
-        onVisibleChange = { chatState.isVisible = it },
-        onSendMessage = { input ->
-            // Handle message send
-            chatState.messages.add(AgentMessage.UserText(input))
-            
-            // Simulate AI response
-            LaunchedEffect(input) {
-                delay(1000)
-                chatState.messages.add(AgentMessage.AgentText("Response"))
-            }
-        },
-        onCommand = { command ->
-            // Execute agent command
-        },
-        onPlanConfirm = {
-            // Confirm plan execution
-        },
-        onPlanCancel = {
-            // Cancel plan execution
-        }
-    )
+sealed class ModelOption(val label: String, val indicatorColor: Color) {
+    data object Local : ModelOption("本地模型", Color(0xFF4CAF50))
+    data object Remote : ModelOption("远程模型", Color(0xFF2196F3))
 }
 ```
+
+**切换逻辑**:
+```kotlin
+fun switchModel(target: ModelOption) {
+    when (target) {
+        is ModelOption.Local -> {
+            if (!localModel.isDownloaded) {
+                showToast("本地模型未下载，前往设置下载？")
+                return
+            }
+            if (!localModel.isLoaded) {
+                showLoading("正在加载本地模型...")
+                localModel.load()
+            }
+            currentModel = localModel
+            showToast("已切换至本地模型（Qwen3.5-2B）")
+        }
+        is ModelOption.Remote -> {
+            if (!networkManager.isConnected) {
+                showToast("网络不可用，已回退至本地模型")
+                currentModel = localModel
+                return
+            }
+            currentModel = remoteModel
+            showToast("已切换至远程模型（DeepSeek）")
+        }
+    }
+    // 保留当前对话上下文
+    memorySession.preserveContext()
+}
+```
+
+### 3.2 默认策略
+
+```kotlin
+fun getDefaultModel(): ModelOption {
+    return when {
+        !localModel.isDownloaded -> ModelOption.Remote
+        !networkManager.isConnected -> ModelOption.Local
+        userPreference.defaultModel == "local" -> ModelOption.Local
+        else -> ModelOption.Remote
+    }
+}
+```
+
+## 4. 对话持久化 (Message Persistence)
+
+### 4.1 数据库 Schema
+
+```kotlin
+@Entity(tableName = "chat_messages")
+data class ChatMessageEntity(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val sessionId: String = "default", // 后续支持多会话
+    val type: String, // "user_text", "agent_text", "image", "command"
+    val content: String, // 文本内容或图片路径
+    val timestamp: Long = System.currentTimeMillis(),
+    val modelUsed: String? = null, // 生成该消息的模型标识
+    val metadata: String? = null // JSON 扩展字段
+)
+```
+
+### 4.2 存储策略
+
+- **自动保存**: 每条消息发送/接收后立即插入数据库
+- **加载恢复**: ChatScreen 进入时异步加载最近 100 条消息
+- **清理策略**: 单会话超过 1000 条时，自动删除最早 100 条
+- **手动清空**: 顶部栏菜单提供"清空对话"选项，清空后保留空会话
+
+### 4.3 消息类型映射
+
+| UI 消息类型 | 数据库 type | 内容格式 |
+|-------------|-------------|----------|
+| UserText | `user_text` | 纯文本 |
+| AgentText | `agent_text` | 纯文本 |
+| UserImage | `user_image` | 图片文件路径 |
+| AgentImage | `agent_image` | 图片文件路径 |
+| CommandExecution | `command` | JSON: `{command, status, detail}` |
+| PlanPreview | `plan_preview` | JSON: `{content, plan}` |
+
+## 5. 快捷入口实现 (QuickActionBar)
+
+### 5.1 入口定义
+
+```kotlin
+sealed class QuickAction(val icon: ImageVector, val label: String, val route: String) {
+    data object Camera : QuickAction(Icons.Rounded.Camera, "相机", Screen.Camera.route)
+    data object Gallery : QuickAction(Icons.Rounded.PhotoLibrary, "相册", Screen.Gallery.route)
+    data object Editor : QuickAction(Icons.Rounded.Edit, "编辑", Screen.Editor.route)
+}
+```
+
+### 5.2 跳转与返回流程
+
+```kotlin
+fun onQuickActionClick(action: QuickAction) {
+    // 1. 保存当前对话状态
+    viewModel.saveDraft()
+    
+    // 2. 跳转目标页面
+    navController.navigate(action.route)
+    
+    // 3. 目标页面完成后返回（通过回调或结果回调）
+    // 4. 将结果图片作为图片消息插入对话
+    viewModel.sendImageMessage(resultImageUri)
+    
+    // 5. 可选：触发 AI 自动分析
+    viewModel.requestImageAnalysis(resultImageUri)
+}
+```
+
+### 5.3 返回行为
+
+| 入口 | 跳转页面 | 返回触发条件 | 返回后行为 |
+|------|----------|--------------|------------|
+| 相机 | CameraScreen | 拍照完成/取消 | 照片作为图片消息插入；AI 自动分析（可选） |
+| 相册 | GalleryScreen | 选择照片/取消 | 照片作为图片消息插入；AI 自动分析（可选） |
+| 编辑 | EditorScreen | 保存/取消 | 编辑后图片作为图片消息插入；AI 给出编辑建议（可选） |
+
+## 6. 与旧版对比
+
+### 旧版（浮动面板）
+```kotlin
+// ❌ 依附于 Camera/Gallery 页面，非独立页面
+AiChatScreen(
+    visible = isVisible, // 需要外部控制可见性
+    messages = messages,
+    ...
+)
+```
+
+### 新版（独立首页）
+```kotlin
+// ✅ 独立 ChatScreen，作为应用首页
+ChatScreen(
+    viewModel = chatViewModel,
+    onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
+    onNavigateToGallery = { navController.navigate(Screen.Gallery.route) },
+    onNavigateToEditor = { navController.navigate(Screen.Editor.route) }
+)
+```
+
+**改进点**:
+1. 独立首页，不再依附于其他页面
+2. 模型切换下拉，本地/远程实时切换
+3. 对话持久化，Room 数据库存储
+4. 快捷入口栏，相机/相册/编辑一键跳转
+5. 消息类型扩展，支持图片消息
+6. 全屏对话体验，非浮动面板
+
+## 7. 跨模块复用
+
+- ✅ **ChatScreen（首页）**: 使用完整 Chat UI，包含模型切换、持久化、快捷入口
+- ✅ **Camera**: 保留 AiChatScreen 浮动面板（作为页面内辅助）
+- ✅ **Gallery**: 保留 AiChatScreen 浮动面板（作为页面内辅助）
+- ✅ **Editor**: 保留 AiChatScreen 浮动面板（作为页面内辅助）
+
+## 8. 语音输入集成
+
+`ChatInputBar` 支持语音输入模式切换：
+
+- **文字模式**：底部输入栏，支持键盘输入
+- **语音模式**：按住麦克风按钮说话（Push-to-Talk），或开启 WakeWord 自动监听
+
+语音输入通过 `VoiceCommandCoordinator` 处理，识别结果以 `AgentMessage.UserText` 形式进入消息列表。
+
+## 9. Agent 执行规约 (Execution Rules)
+
+- **模型切换**: 必须在 UI 线程更新状态，模型加载在 IO 线程
+- **消息发送**: 先插入本地数据库，再发起网络/本地推理请求
+- **图片消息**: 图片保存到应用私有目录，数据库只存储路径
+- **数据库查询**: 使用 Flow 监听，自动响应数据变化
+- **I18N**: 所有用户可见文案必须提取到 strings.xml
+- **日志规范**: 关键操作（模型切换、消息发送、数据库读写）需记录 `PicMe:Chat` 日志
+- **内存管理**: 图片消息使用 Coil/Glide 加载，避免内存泄漏
+- **状态恢复**: 进程被杀后重启，自动恢复最近对话
+
+## 10. 常见陷阱检查清单 (Checklist)
+
+- [ ] 模型切换时是否保留了对话上下文？
+- [ ] 本地模型未下载时是否给出明确引导？
+- [ ] 消息发送失败时是否有重试机制？
+- [ ] 数据库读写是否在 IO 线程执行？
+- [ ] 图片消息是否使用了适当的压缩？
+- [ ] 单会话消息数是否超过 1000 条限制？
+- [ ] 应用重启后对话历史是否正确恢复？
+- [ ] 快捷入口跳转后是否正确返回并插入图片消息？
+- [ ] 模型切换提示是否遵循 I18N 规范？
+- [ ] 语音输入是否在所有页面一致可用？
+
+## 11. 与产品文档对照 (Product Alignment)
+
+**必须满足的产品指标**:
+- ✅ 聊天首页 → 独立 ChatScreen，作为应用默认启动页
+- ✅ 模型切换 → 输入框下拉，本地(Qwen3.5-2B)/远程(DeepSeek)切换
+- ✅ 对话持久化 → Room 数据库，自动保存/恢复
+- ✅ 快捷入口 → 底部相机/相册/编辑入口，操作后返回聊天页
+- ✅ 响应延迟 → 本地 < 500ms，远程 < 1.5s
+- ✅ 隐私保护 → 敏感数据 100% 端侧
+
+**技术决策记录**:
+- 选择 Room 而非 DataStore：Room 支持复杂查询和分页，适合消息列表场景
+- 单会话 1000 条限制：平衡存储空间与历史完整性，后续可扩展为可配置
+- 默认远程模型：确保首次安装最佳体验，用户下载本地模型后自动切换偏好
+- 图片存储在私有目录：避免暴露到公共相册，用户主动分享时才导出
 
 ### 2. AgentMessage
 

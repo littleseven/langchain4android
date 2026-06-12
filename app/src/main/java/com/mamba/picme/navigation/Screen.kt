@@ -1,6 +1,7 @@
 package com.mamba.picme.navigation
 
 sealed class Screen(val route: String) {
+    data object Chat : Screen("chat")
     data object Camera : Screen("camera")
     data object Gallery : Screen("gallery")
     data object Settings : Screen("settings")

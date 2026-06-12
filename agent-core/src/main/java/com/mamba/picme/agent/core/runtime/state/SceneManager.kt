@@ -24,6 +24,7 @@ class SceneManager private constructor() {
     }
 
     enum class Scene {
+        CHAT,
         CAMERA,
         GALLERY,
         SETTINGS,
@@ -71,6 +72,7 @@ class SceneManager private constructor() {
     }
 
     fun getCapabilitiesForScene(scene: Scene): List<String> = when (scene) {
+        Scene.CHAT -> listOf("chat", "navigation")
         Scene.CAMERA -> listOf("camera", "navigation")
         Scene.GALLERY -> listOf("gallery", "navigation")
         Scene.SETTINGS -> listOf("settings", "navigation")
@@ -79,6 +81,7 @@ class SceneManager private constructor() {
     }
 
     fun getSceneDescription(scene: Scene): String = when (scene) {
+        Scene.CHAT -> "AI 对话首页，可以与本地/远程模型进行多轮对话"
         Scene.CAMERA -> "相机拍摄页面，可以拍照、录像、调节美颜参数"
         Scene.GALLERY -> "相册页面，可以查看、删除、分享照片"
         Scene.SETTINGS -> "设置页面，可以调整应用配置"
