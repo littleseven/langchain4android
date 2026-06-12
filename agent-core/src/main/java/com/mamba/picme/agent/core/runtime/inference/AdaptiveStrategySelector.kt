@@ -36,6 +36,10 @@ class AdaptiveStrategySelector {
         val features = analyzeInput(userInput)
 
         return when {
+            // 开放式/探索性 → L4（优先判断，避免被 commandCount 覆盖）
+            features.isOpenEnded || features.isQuestion ->
+                InferenceStrategy.L4_ReAct(userInput, context)
+
             // 条件/依赖/多步骤 → L3
             features.hasConditionals || features.stepCount >= 3 ->
                 InferenceStrategy.L3_PlanExecute(userInput, context)
@@ -48,10 +52,6 @@ class AdaptiveStrategySelector {
             features.commandCount == 1 ->
                 InferenceStrategy.L2_BatchFC(userInput, context)
 
-            // 开放式/探索性 → L4
-            features.isOpenEnded || features.isQuestion ->
-                InferenceStrategy.L4_ReAct(userInput, context)
-
             // 兜底：走 L2
             else -> InferenceStrategy.L2_BatchFC(userInput, context)
         }
@@ -63,26 +63,26 @@ class AdaptiveStrategySelector {
     fun getIntentCache(): IntentCache = intentCache
 
     private fun analyzeInput(input: String): InputFeatures {
-        val trimmed = input.trim()
-        
+        val lower = input.trim().lowercase()
+
         // 延迟关键词贡献：基础 1 + 额外动作数
         // 例如 "3秒后换冷色调拍照" = 1(延迟) + 2(换+拍) = 3 → 触发 L3
-        val delayKeywordCount = DELAY_KEYWORDS.count { trimmed.contains(it) }
+        val delayKeywordCount = DELAY_KEYWORDS.count { lower.contains(it) }
         val hasDelay = delayKeywordCount > 0
         val extraActions = if (hasDelay) {
             // 延迟指令中除延迟外的动作数：换、调、切、拍、照等
             listOf("换", "调", "切", "拍", "照", "滤镜", "美颜", "磨皮", "美白", "风格")
-                .count { trimmed.contains(it) }
+                .count { lower.contains(it) }
         } else 0
         val delayStepCount = if (hasDelay) 1 + extraActions else 0
-        
+
         return InputFeatures(
-            hasConditionals = CONDITION_KEYWORDS.any { trimmed.contains(it) },
-            stepCount = STEP_KEYWORDS.count { trimmed.contains(it) } + delayStepCount + 1,
-            commandCount = estimateCommandCount(trimmed),
-            isOpenEnded = OPEN_ENDED_PATTERNS.any { trimmed.matches(it) },
-            isQuestion = trimmed.endsWith("?") || trimmed.endsWith("？") ||
-                QUESTION_WORDS.any { trimmed.contains(it) }
+            hasConditionals = CONDITION_KEYWORDS.any { lower.contains(it) },
+            stepCount = STEP_KEYWORDS.count { lower.contains(it) } + delayStepCount,
+            commandCount = estimateCommandCount(lower),
+            isOpenEnded = OPEN_ENDED_PATTERNS.any { lower.matches(it) },
+            isQuestion = lower.endsWith("?") || lower.endsWith("？") ||
+                QUESTION_WORDS.any { lower.contains(it) }
         )
     }
 
@@ -100,10 +100,10 @@ class AdaptiveStrategySelector {
             lower.contains("调") || lower.contains("换") || lower.contains("切")
         if (hasDelay && hasExtraAction) return true
 
-        // 包含多个步骤关键词
+        // 包含多个步骤关键词（至少2个才认为是复合指令）
         val stepKeywords = listOf("先", "然后", "接着", "再", "最后", "之后")
         val stepCount = stepKeywords.count { lower.contains(it) }
-        if (stepCount >= 1) return true
+        if (stepCount >= 2) return true
 
         // 包含多个动作关键词（简单估算：超过2个不同动作）
         val actionKeywords = listOf("拍照", "拍", "滤镜", "美颜", "磨皮", "美白", "瘦脸", "风格", "模式", "变焦")
@@ -136,7 +136,7 @@ class AdaptiveStrategySelector {
         val STEP_KEYWORDS = listOf("先", "然后", "接着", "再", "最后", "之后", "第一步", "第二步")
         
         // 延迟/时间关键词（表示明确的步骤边界，如"3秒后"、"5秒后"）
-        val DELAY_KEYWORDS = listOf("秒后", "秒后", "分钟后", "小时后", "延迟", "延时", "倒计时")
+        val DELAY_KEYWORDS = listOf("秒后", "分钟后", "小时后", "延迟", "延时", "倒计时")
 
         // 疑问词
         val QUESTION_WORDS = listOf("什么", "怎么", "哪些", "多少", "吗", "呢", "为什么", "如何")
