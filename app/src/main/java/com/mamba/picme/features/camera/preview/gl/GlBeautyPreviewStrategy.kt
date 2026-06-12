@@ -22,6 +22,15 @@ internal class GlBeautyPreviewStrategy(
 ) : BeautyPreviewEngineStrategy {
     override val strategy: BeautyStrategy = BeautyStrategy.BIG_BEAUTY
 
+    /**
+     * 当前活跃的生产者 Surface，用于延迟释放避免 "Surface was abandoned" 崩溃。
+     * 当 CameraX 调用 unbindAll() → 重新 bindToLifecycle() 时，旧的 SurfaceRequest
+     * 可能在 CaptureSession 创建 OutputConfiguration 的异步窗口期内被 release()，
+     * 导致 IllegalArgumentException: Surface was abandoned。
+     * 解决方案：新 SurfaceProvider 设置完成后再释放旧 Surface。
+     */
+    private var activePreviewSurface: android.view.Surface? = null
+
     override fun bindPreview(previewUseCase: Preview, aspectRatio: Int): Boolean {
         return try {
             glBeautyPreviewProvider.initialize()
@@ -30,17 +39,34 @@ internal class GlBeautyPreviewStrategy(
 
             val mainExecutor = ContextCompat.getMainExecutor(previewView.context)
             previewUseCase.setSurfaceProvider { request ->
+                // [Surface 生命周期] 释放旧 Surface，避免 BufferQueue 生产者端堆积
+                val oldSurface = activePreviewSurface
+                activePreviewSurface = null
+
                 val resolution = request.resolution
                 glBeautyPreviewProvider.setCameraInputBufferSize(
                     width = resolution.width,
                     height = resolution.height
                 )
                 val previewSurface = glBeautyPreviewProvider.createPreviewSurface()
+                activePreviewSurface = previewSurface
+
                 request.provideSurface(previewSurface, mainExecutor) { result ->
                     Logger.d("Camera", "GL beauty surface request completed: $result")
-                    // [关键修复] SurfaceRequest 完成后必须释放 Surface，让 BufferQueue 生产者端断开，
-                    // 否则下次 createPreviewSurface() 返回的 Surface 无法重新建立生产者连接，导致画面静止
-                    previewSurface.release()
+                    // [关键修复] 延迟释放：仅当此 Surface 已不是当前活跃 Surface 时才释放。
+                    // 避免在 unbindAll() → 重新 bind 的异步窗口期内释放正在被 CameraX 使用的 Surface。
+                    if (activePreviewSurface != previewSurface) {
+                        previewSurface.release()
+                        Logger.d("Camera", "Old previewSurface released (not active anymore)")
+                    }
+                }
+
+                // 新 Surface 已建立，安全释放旧 Surface
+                oldSurface?.let { surface ->
+                    if (surface != previewSurface) {
+                        surface.release()
+                        Logger.d("Camera", "Previous previewSurface released after new one established")
+                    }
                 }
             }
 
@@ -115,6 +141,9 @@ internal class GlBeautyPreviewStrategy(
     override fun release() {
         // [帧同步] 停止全局 FaceDetectionWorker（若残留），再释放 GL 资源
         stopFaceDetectionWorker()
+        // [Surface 生命周期] 释放残留的生产者 Surface，避免内存泄漏
+        activePreviewSurface?.release()
+        activePreviewSurface = null
         glBeautyPreviewProvider.release()
     }
 }
