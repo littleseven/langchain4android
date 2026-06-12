@@ -156,15 +156,9 @@ internal data class CameraPreviewActions(
     val onToggleVoiceControl: () -> Unit,
     val onToggleAiAgentPanel: () -> Unit,
     val onToggleProPanel: () -> Unit,
-    val onAsrReleaseKvCache: () -> Unit = {},
-    val onAsrReleaseSession: () -> Unit = {},
-    val onAsrReleaseFull: () -> Unit = {},
-    val onLlmReleaseKvCache: () -> Unit = {},
-    val onLlmReleaseSession: () -> Unit = {},
-    val onLlmReleaseFull: () -> Unit = {},
-    val onFaceDetectReleaseKvCache: () -> Unit = {},
-    val onFaceDetectReleaseSession: () -> Unit = {},
-    val onFaceDetectReleaseFull: () -> Unit = {}
+    val onAsrRelease: () -> Unit = {},
+    val onLlmRelease: () -> Unit = {},
+    val onFaceDetectRelease: () -> Unit = {}
 )
 
 internal fun FaceDetectionEngineMode.toEngineType(): EngineType = when (this) {
@@ -273,15 +267,9 @@ internal fun buildCameraPreviewActions(
     onToggleVoiceControl: () -> Unit,
     onToggleAiAgentPanel: () -> Unit,
     onToggleLogs: () -> Unit,
-    onAsrReleaseKvCache: () -> Unit = {},
-    onAsrReleaseSession: () -> Unit = {},
-    onAsrReleaseFull: () -> Unit = {},
-    onLlmReleaseKvCache: () -> Unit = {},
-    onLlmReleaseSession: () -> Unit = {},
-    onLlmReleaseFull: () -> Unit = {},
-    onFaceDetectReleaseKvCache: () -> Unit = {},
-    onFaceDetectReleaseSession: () -> Unit = {},
-    onFaceDetectReleaseFull: () -> Unit = {}
+    onAsrRelease: () -> Unit = {},
+    onLlmRelease: () -> Unit = {},
+    onFaceDetectRelease: () -> Unit = {}
 ): CameraPreviewActions {
     return CameraPreviewActions(
         onResetCameraMemoryState = onResetCameraMemoryState,
@@ -328,6 +316,9 @@ internal fun buildCameraPreviewActions(
                 onPanelVisibilityChanged = { isVisible -> panelState.showGridSelector = isVisible }
             )
         },
+        onAsrRelease = onAsrRelease,
+        onLlmRelease = onLlmRelease,
+        onFaceDetectRelease = onFaceDetectRelease,
         onToggleLogs = onToggleLogs,
         onToggleFaceDebugOverlay = {},
         onToggleFacialRefinement = panelState::toggleFacialRefinement,
@@ -367,15 +358,6 @@ internal fun buildCameraPreviewActions(
         onToggleAiAgentPanel = onToggleAiAgentPanel,
         onToggleProPanel = {
             panelState.showProPanel = !panelState.showProPanel
-        },
-        onAsrReleaseKvCache = onAsrReleaseKvCache,
-        onAsrReleaseSession = onAsrReleaseSession,
-        onAsrReleaseFull = onAsrReleaseFull,
-        onLlmReleaseKvCache = onLlmReleaseKvCache,
-        onLlmReleaseSession = onLlmReleaseSession,
-        onLlmReleaseFull = onLlmReleaseFull,
-        onFaceDetectReleaseKvCache = onFaceDetectReleaseKvCache,
-        onFaceDetectReleaseSession = onFaceDetectReleaseSession,
-        onFaceDetectReleaseFull = onFaceDetectReleaseFull
+        }
     )
 }

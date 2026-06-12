@@ -468,15 +468,9 @@ private fun BoxScope.CameraPreviewSideControls(
         onToggleLogOverlay = actions.onToggleLogs,
         debugUiEnabled = uiState.debugUiEnabled,
         showLogOverlay = uiState.showLogOverlay,
-        onAsrReleaseKvCache = actions.onAsrReleaseKvCache,
-        onAsrReleaseSession = actions.onAsrReleaseSession,
-        onAsrReleaseFull = actions.onAsrReleaseFull,
-        onLlmReleaseKvCache = actions.onLlmReleaseKvCache,
-        onLlmReleaseSession = actions.onLlmReleaseSession,
-        onLlmReleaseFull = actions.onLlmReleaseFull,
-        onFaceDetectReleaseKvCache = actions.onFaceDetectReleaseKvCache,
-        onFaceDetectReleaseSession = actions.onFaceDetectReleaseSession,
-        onFaceDetectReleaseFull = actions.onFaceDetectReleaseFull,
+        onAsrRelease = actions.onAsrRelease,
+        onLlmRelease = actions.onLlmRelease,
+        onFaceDetectRelease = actions.onFaceDetectRelease,
         modifier = Modifier.align(Alignment.TopStart)
     )
 
