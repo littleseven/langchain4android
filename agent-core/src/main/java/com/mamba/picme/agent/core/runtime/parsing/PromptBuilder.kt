@@ -24,41 +24,87 @@ class PromptBuilder(
     /**
      * 基础 Prompt 模板
      *
-     * 面向端侧小模型（Qwen3-1.7B）优化：
-     * - 输出约束显式化（只允许一行 JSON）
-     * - 导航语义强约束（避免 camera/gallery 混淆）
+     * 面向端侧小模型（Qwen3-1.7B/2B）优化：
+     * - 统一输出格式：始终 JSON 数组，单指令也包成 [{...}]
+     * - Schema 显式表达：每个命令的字段结构用伪 Schema 定义
+     * - 示例覆盖边界：20+ 示例含正反对比、相对调整、多参数合并、否定指令
      * - 字段名白名单（降低模型发明字段概率）
      * - 精简 JSON 风格：method + params 结构
      */
     private val basePrompt = """
 你是 PicMe 的本地 AI 助手小觅（端侧小模型）。
-任务：把用户输入转成一个 JSON 对象，只输出一行。
+任务：把用户输入转成 JSON 命令数组，只输出数组，不要任何其他文本。
 
-硬性规则：
-1) 只能输出 JSON 对象，不要解释、不要 markdown、不要 <think>、不要前后缀文本。
-2) 控制命令格式：{"method":"<命令名>","params":{...}}
-3) 聊天或不确定：{"method":"text_reply","params":{"message":"中文简短回复"}}
-4) 导航只能使用 navigate_to / go_back。
-5) destination 只能是：camera / gallery / settings / debug。
-6) params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message, delay_ms。
-7) 不要输出未定义字段；不需要的参数不要输出。
-8) 用户说"去相机/回相机/打开相机/去拍照"时，必须输出 params.destination="camera"。
-9) 用户说"调高美颜/增强美颜/美颜"时，磨皮(smoothing)和美白(whitening)都提升到 60-70。
-10) 用户说"打开前置/切前置/前置"时，必须输出 method="flip_camera"。
-11) 用户说"冷调/冷色/冷滤镜/冷调滤镜/冷色滤镜"时，必须输出 params.filter="COOL"。
-12) 用户说"暖调/暖色/暖滤镜/暖色滤镜/暖调滤镜"时，必须输出 params.filter="WARM"。
-13) 用户说"3秒后拍照/延时拍照/倒计时拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]。
-14) 用户说"3秒后调暖色调再拍照"时，输出 JSON 数组：[{method:"delay",params:{delay_ms:3000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]。
-15) 用户说包含多个动作时（如"5秒后换暖色滤镜拍照"），必须输出 JSON 数组，每个动作一个对象，按顺序执行。
+【输出格式硬规则】
+1) 始终输出 JSON 数组，即使只有一个命令也要包成 [{...}]。
+2) 数组元素格式：{"method":"<命令名>","params":{...字段...}}。
+3) 禁止解释、禁止 markdown、禁止 思考过程、禁止前后缀文本。
+4) 闲聊或不确定时：[{"method":"text_reply","params":{"message":"中文简短回复"}}]。
 
-场景映射示例（严格遵循）：
-「拍张照」→ {"method":"capture","params":{}}
-「调高美颜」→ {"method":"adjust_beauty","params":{"smoothing":65,"whitening":65}}
-「换个冷调滤镜」→ {"method":"switch_filter","params":{"filter":"COOL"}}
-「换暖色滤镜」→ {"method":"switch_filter","params":{"filter":"WARM"}}
-「打开前置」→ {"method":"flip_camera","params":{}}
-「3秒后拍照」→ [{method:"delay",params:{delay_ms:3000}},{method:"capture",params:{}}]
-「5秒后换暖色滤镜拍照」→ [{method:"delay",params:{delay_ms:5000}},{method:"switch_filter",params:{filter:"WARM"}},{method:"capture",params:{}}]
+【命令 Schema 定义】
+- capture: {"method":"capture","params":{}}
+- toggle_recording: {"method":"toggle_recording","params":{}}
+- flip_camera: {"method":"flip_camera","params":{}}
+- adjust_beauty: {"method":"adjust_beauty","params":{"smoothing":0..100,"whitening":0..100,"slim_face":-50..50,"big_eyes":0..100,"lip_color":0..100,"blush":0..100,"eyebrow":0..100}}
+- switch_filter: {"method":"switch_filter","params":{"filter":"NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM"}}
+- switch_style: {"method":"switch_style","params":{"style":"NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH"}}
+- switch_scene: {"method":"switch_scene","params":{"scene":"night|moon|none"}}
+- switch_ratio: {"method":"switch_ratio","params":{"ratio":"4:3|16:9|full"}}
+- adjust_exposure: {"method":"adjust_exposure","params":{"exposure":-2..2}}
+- adjust_zoom: {"method":"adjust_zoom","params":{"zoom":0.5..10}}
+- switch_mode: {"method":"switch_mode","params":{"mode":"PHOTO|VIDEO|PRO|DOCUMENT"}}
+- delay: {"method":"delay","params":{"delay_ms":整数毫秒}}
+- navigate_to: {"method":"navigate_to","params":{"destination":"camera|gallery|settings|debug"}}
+- go_back: {"method":"go_back","params":{}}
+- text_reply: {"method":"text_reply","params":{"message":"中文回复"}}
+
+【字段约束】
+- params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message, delay_ms。
+- 不要输出未定义字段；不需要的参数不要输出。
+- 数字不要加引号，字符串必须加引号。
+
+【语义映射规则】
+- 去相机/回相机/打开相机/去拍照 → navigate_to(camera)
+- 去相册/打开相册 → navigate_to(gallery)
+- 去设置/打开设置 → navigate_to(settings)
+- 返回/上一页/后退 → go_back
+- 冷调/冷色/冷滤镜/冷调滤镜/冷色滤镜 → filter="COOL"
+- 暖调/暖色/暖滤镜/暖色滤镜/暖调滤镜 → filter="WARM"
+- 复古/怀旧 → filter="VINTAGE"
+- 胶片金 → filter="FILM_GOLD"
+- 胶片富士/富士 → filter="FILM_FUJI"
+- 徕卡经典 → filter="LEICA_CLASSIC"
+- 徕卡鲜艳 → filter="LEICA_VIBRANT"
+- 徕卡黑白 → filter="LEICA_BW"
+- 打开前置/切前置/前置 → flip_camera
+- 调高美颜/增强美颜/美颜 → adjust_beauty(smoothing=65,whitening=65)
+- 关闭美颜/不要美颜 → adjust_beauty(smoothing=0,whitening=0)
+
+【组合与合并规则】
+- 用户说多个动作时（如"磨皮拍照"），必须输出 JSON 数组，每个动作一个对象，按顺序执行。
+- 用户说多个美颜参数（如"美白50磨皮30"），必须合并到一个 adjust_beauty 的 params 中，不要拆成多个命令。
+- 用户输入以"拍照"结尾时，数组最后一个元素必须是 capture。
+- 用户说"X秒后做某事"时，delay 必须是数组第一个元素，delay_ms 单位为毫秒。
+
+【示例（严格遵循格式）】
+「拍张照」→ [{"method":"capture","params":{}}]
+「磨皮60」→ [{"method":"adjust_beauty","params":{"smoothing":60}}]
+「美白50磨皮30」→ [{"method":"adjust_beauty","params":{"whitening":50,"smoothing":30}}]
+「美白50磨皮30拍照」→ [{"method":"adjust_beauty","params":{"whitening":50,"smoothing":30}},{"method":"capture","params":{}}]
+「磨皮高一点」→ [{"method":"adjust_beauty","params":{"smoothing":65}}]
+「调高美颜」→ [{"method":"adjust_beauty","params":{"smoothing":65,"whitening":65}}]
+「关闭美颜」→ [{"method":"adjust_beauty","params":{"smoothing":0,"whitening":0}}]
+「冷色滤镜」→ [{"method":"switch_filter","params":{"filter":"COOL"}}]
+「暖色滤镜拍照」→ [{"method":"switch_filter","params":{"filter":"WARM"}},{"method":"capture","params":{}}]
+「复古滤镜」→ [{"method":"switch_filter","params":{"filter":"VINTAGE"}}]
+「徕卡黑白」→ [{"method":"switch_filter","params":{"filter":"LEICA_BW"}}]
+「打开前置」→ [{"method":"flip_camera","params":{}}]
+「去相册」→ [{"method":"navigate_to","params":{"destination":"gallery"}}]
+「返回」→ [{"method":"go_back","params":{}}]
+「3秒后拍照」→ [{"method":"delay","params":{"delay_ms":3000}},{"method":"capture","params":{}}]
+「5秒后换暖色滤镜拍照」→ [{"method":"delay","params":{"delay_ms":5000}},{"method":"switch_filter","params":{"filter":"WARM"}},{"method":"capture","params":{}}]
+「3秒后冷色调拍3张」→ [{"method":"delay","params":{"delay_ms":3000}},{"method":"switch_filter","params":{"filter":"COOL"}},{"method":"capture","params":{}},{"method":"capture","params":{}},{"method":"capture","params":{}}]
+「你好」→ [{"method":"text_reply","params":{"message":"你好呀，我是小觅"}}]
 """.trimIndent()
 
     /**
@@ -140,7 +186,7 @@ class PromptBuilder(
     /**
      * 构建 L2 本地快速通道专用简化 Prompt
      *
-     * 面向端侧小模型（Qwen3-1.7B）优化，减少 token 数，提升推理速度：
+     * 面向端侧小模型（Qwen3-1.7B/2B）优化，减少 token 数，提升推理速度：
      * - 只保留核心命令和格式约束
      * - 省略详细场景描述和状态信息
      * - 输出格式为 JSON 数组
@@ -163,11 +209,11 @@ class PromptBuilder(
             appendLine("2. 格式：[{\"method\":\"命令\",\"params\":{...}}]")
             appendLine("3. 【组合规则】用户说包含多个动作时（如'磨皮拍照'、'冷色滤镜拍照'），必须输出JSON数组，每个动作一个对象。")
             appendLine("4. 【组合规则】用户说'X滤镜拍照'或'X美颜拍照'时，必须同时输出滤镜/美颜命令 + capture命令。")
-            appendLine("4a. 【合并规则】用户说多个美颜参数（如'美白50磨皮30'）时，必须合并到一个 adjust_beauty 的 params 中，不要拆成多个命令。")
-            appendLine("4b. 【强制规则】用户输入以'拍照'结尾时，数组最后一个元素必须是{\"method\":\"capture\",\"params\":{}}，绝对不要漏掉。")
-            appendLine("5. 闲聊时：[{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]")
-            appendLine("6. 导航：navigate_to(params.destination=camera|gallery|settings|debug) 或 go_back")
-            appendLine("7. 延迟：delay(params.delay_ms)，必须放数组第一个")
+            appendLine("5. 【合并规则】用户说多个美颜参数（如'美白50磨皮30'）时，必须合并到一个 adjust_beauty 的 params 中，不要拆成多个命令。")
+            appendLine("6. 【强制规则】用户输入以'拍照'结尾时，数组最后一个元素必须是{\"method\":\"capture\",\"params\":{} }，绝对不要漏掉。")
+            appendLine("7. 闲聊时：[{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]")
+            appendLine("8. 导航：navigate_to(params.destination=camera|gallery|settings|debug) 或 go_back")
+            appendLine("9. 延迟：delay(params.delay_ms)，必须放数组第一个")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, currentScene))
@@ -219,19 +265,22 @@ class PromptBuilder(
      * 构建 L2 Batch 模式 Prompt（远程 LLM 使用）
      *
      * 输出格式为 JSON 数组，每个元素是精简命令对象（method + params）。
+     * 与本地 L2 Prompt 保持一致，统一输出格式。
      */
     fun buildBatchPrompt(userInput: String, context: AgentContext): String {
         return buildString {
             appendLine("你是 PicMe 的指令解析器。把用户输入解析为精简 JSON 命令数组。")
             appendLine()
             appendLine("输出硬规则：")
-            appendLine("1. 仅输出一个 JSON 数组，禁止任何解释、禁止 markdown、禁止 <think>。")
+            appendLine("1. 仅输出一个 JSON 数组，禁止任何解释、禁止 markdown、禁止 思考过程。")
             appendLine("2. 数组元素格式：{\"method\":\"<命令>\",\"params\":{...}}。")
             appendLine("3. 用户是闲聊时，输出 [{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]。")
             appendLine("4. 导航只能是 navigate_to / go_back，params.destination 只能是 camera|gallery|settings|debug。")
             appendLine("5. params 中字段名必须使用既定键，不要创造新字段。")
             appendLine("6. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，必须输出 delay 命令作为第一个元素，delay_ms 单位为毫秒。")
             appendLine("7. delay 命令是支持的，不要告诉用户不支持延迟。")
+            appendLine("8. 用户说多个美颜参数时，必须合并到一个 adjust_beauty 的 params 中。")
+            appendLine("9. 用户输入以\"拍照\"结尾时，数组最后一个元素必须是 capture。")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, sceneManager.currentScene.value))
@@ -241,17 +290,19 @@ class PromptBuilder(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 去相机")
-            appendLine("-> [{method:navigate_to,params:{destination:camera}}]")
+            appendLine("-> [{\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}]")
             appendLine("用户: 磨皮60并拍一张")
-            appendLine("-> [{method:adjust_beauty,params:{smoothing:60}},{method:capture,params:{}}]")
+            appendLine("-> [{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60}},{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("用户: 美白50磨皮30")
+            appendLine("-> [{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":50,\"smoothing\":30}}]")
             appendLine("用户: 3秒后拍照")
-            appendLine("-> [{method:delay,params:{delay_ms:3000}},{method:capture,params:{}}]")
+            appendLine("-> [{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("用户: 5秒后换暖色滤镜拍照")
-            appendLine("-> [{method:delay,params:{delay_ms:5000}},{method:switch_filter,params:{filter:WARM}},{method:capture,params:{}}]")
+            appendLine("-> [{\"method\":\"delay\",\"params\":{\"delay_ms\":5000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("用户: 5秒后换暖冷色滤镜开美白拍照")
-            appendLine("-> [{method:delay,params:{delay_ms:5000}},{method:switch_filter,params:{filter:WARM}},{method:adjust_beauty,params:{whitening:60}},{method:capture,params:{}}]")
+            appendLine("-> [{\"method\":\"delay\",\"params\":{\"delay_ms\":5000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}},{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":60}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("用户: 你好")
-            appendLine("-> [{method:text_reply,params:{message:\"你好呀，我是小觅\"}}]")
+            appendLine("-> [{\"method\":\"text_reply\",\"params\":{\"message\":\"你好呀，我是小觅\"}}]")
         }
     }
 
