@@ -8,13 +8,13 @@
 
 `:agent-core` 是 **Agent Runtime 核心**，承载从 `app/domain/agent/` 迁移出的所有 Agent 组件。提供平台无关的泛型接口和 Android 无关的纯 Kotlin 实现：
 
-### 核心组件（29 个文件，6 个子包）
+### 核心组件（36 个文件，7 个子包）
 
 | 组件 | 职责 | 包路径 |
 |------|------|--------|
 | `AgentOrchestrator` | 应用级单例，统一入口，管理本地模型生命周期 | `agent.core` |
 | `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列 | `agent.core` |
-| `LocalLlmEngine` | 本地 Qwen3-1.7B MNN-LLM 推理封装 | `agent.core` |
+| `LocalLlmEngine` | 本地 Qwen3-1.7B MNN-LLM 推理封装，实现 `ChatLanguageModel` / `StreamingChatLanguageModel` | `agent.core` |
 | `AgentCommandParser` | LLM 响应解析为 AgentCommand | `agent.core` |
 | `InferenceRouter` | 隐私分级 + 本地/远程路由 | `agent.core` |
 | `ExecutionEngine` | 顺序执行 ExecutionPlan | `agent.core` |
@@ -35,7 +35,8 @@
 
 | 子包 | 内容 | 说明 |
 |------|------|------|
-| `llm/` | `MnnLlmClient`, `LlmModelManager` | MNN LLM 客户端和模型管理 |
+| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse` | 与 LangChain4j 对齐的模型 API 层（无外部依赖） |
+| `llm/` | `MnnLlmClient`, `LlmModelManager`, `LocalLlmEngine` | MNN LLM 客户端、模型管理与本地推理引擎 |
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |
 | `voice/` | `AsrEngine`, `VadDetector`, `MnnAsrClient`, `AudioRecorder`, `SherpaMnnAsrEngine` | 语音交互 |
@@ -80,9 +81,19 @@
 - `PromptBuilder.kt` — Prompt 构建器
 - `SceneManager.kt` — 场景管理器
 
+### `langchain4j/`
+- `ChatLanguageModel.kt` — 同步对话模型接口
+- `StreamingChatLanguageModel.kt` — 流式对话模型接口
+- `StreamingChatResponseHandler.kt` — 流式响应回调
+- `ChatMessage.kt` — 消息密封接口（`SystemMessage` / `UserMessage` / `AiMessage`）
+- `ChatRequest.kt` — 对话请求
+- `ChatResponse.kt` — 对话响应
+- `ChatResponseMetadata.kt` — 响应元数据（token、速度等）
+
 ### `llm/`
 - `MnnLlmClient.kt` — MNN LLM 客户端
 - `LlmModelManager.kt` — 模型管理器
+- `LocalLlmEngine.kt` — 本地 LLM 推理引擎
 
 ### `mnn/`
 - `MnnResourceManager.kt` — MNN 资源管理

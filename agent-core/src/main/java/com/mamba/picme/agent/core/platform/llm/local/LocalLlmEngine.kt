@@ -1,20 +1,26 @@
 package com.mamba.picme.agent.core.platform.llm.local
 
 import android.content.Context
-import com.mamba.picme.agent.core.api.context.ChatMessage
-import com.mamba.picme.agent.core.api.context.ChatRole
+import com.mamba.picme.agent.core.langchain4j.AiMessage
+import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
+import com.mamba.picme.agent.core.langchain4j.ChatMessage
+import com.mamba.picme.agent.core.langchain4j.ChatRequest
+import com.mamba.picme.agent.core.langchain4j.ChatResponse
+import com.mamba.picme.agent.core.langchain4j.ChatResponseMetadata
+import com.mamba.picme.agent.core.langchain4j.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.langchain4j.StreamingChatResponseHandler
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.MnnLlmClient.NativeReleaseTarget
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.channelFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -41,7 +47,7 @@ class LlmModelNotFoundException(
  *
  * @param context Application Context
  */
-class LocalLlmEngine(private val context: Context) {
+class LocalLlmEngine(private val context: Context) : ChatLanguageModel, StreamingChatLanguageModel {
 
     private val tag = "LocalLlmEngine"
     private val client = MnnLlmClient(context)
@@ -173,285 +179,141 @@ class LocalLlmEngine(private val context: Context) {
     }
 
     /**
-     * 使用纯文本 prompt 生成回复（同步阻塞）
-     *
-     * 在专用单线程 [modelDispatcher] 上执行，确保与 load/unload 互斥。
-     *
-     * @param prompt 完整 prompt 字符串（已包含 system/user/assistant 标记）
-     * @param maxTokens 最大生成 token 数
-     * @return 生成的文本
-     */
-    suspend fun generate(prompt: String, maxTokens: Int = 128): Result<String> = withContext(modelDispatcher) {
-        engineMutex.withLock {
-            if (!client.isLoaded) {
-                Logger.w(tag, "LLM not loaded, cannot generate")
-                return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
-            }
-
-            try {
-                Logger.d(tag, "Generating response with maxTokens=$maxTokens, promptLength=${prompt.length}")
-                val response = client.generate(
-                    prompt = prompt,
-                    maxNewTokens = maxTokens
-                )
-                if (response.isNotBlank()) {
-                    Result.success(response)
-                } else {
-                    Result.failure(RuntimeException("Empty LLM response"))
-                }
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (exception: Exception) {
-                Logger.e(tag, "Generation failed", exception)
-                Result.failure(exception)
-            }
-        }
-    }
-
-    // ── 流式生成 + 性能指标（新增）─────────────────────────────
-
-    /**
-     * 流式生成文本回复，逐 token 输出 + 性能指标
-     *
-     * 返回 Flow，每次 emit 包含：
-     * - 新生成的 token 文本
-     * - 当前累计完整文本
-     * - 是否为结束标记
-     * - 性能指标（仅在完成时）
-     *
-     * @param prompt 完整 prompt 字符串
-     * @param maxTokens 最大生成 token 数
-     * @return Flow<StreamEvent> 流式事件
-     */
-    fun generateStream(prompt: String, maxTokens: Int = 128): Flow<StreamEvent> = channelFlow {
-        engineMutex.withLock {
-            if (!client.isLoaded) {
-                Logger.w(tag, "LLM not loaded, cannot generate")
-                send(StreamEvent.Error("LLM model not loaded"))
-                return@withLock
-            }
-
-            try {
-                Logger.d(tag, "Stream generating with maxTokens=$maxTokens, promptLength=${prompt.length}")
-
-                val accumulatedText = StringBuilder()
-
-                val listener = object : StreamGenerateListener {
-                    override fun onToken(token: String?, isEop: Boolean): Boolean {
-                        if (token != null) {
-                            accumulatedText.append(token)
-                        }
-                        // 使用 trySend 避免阻塞 native 线程
-                        val event = StreamEvent.Token(
-                            token = token,
-                            accumulatedText = accumulatedText.toString(),
-                            isEop = isEop
-                        )
-                        trySend(event)
-                        return false // 不停止生成
-                    }
-                }
-
-                val streamResult = client.generateStream(prompt, maxTokens, listener)
-
-                if (streamResult.isSuccess) {
-                    send(StreamEvent.Complete(
-                        response = streamResult.response,
-                        promptLen = streamResult.promptLen,
-                        decodeLen = streamResult.decodeLen,
-                        prefillTime = streamResult.prefillTime,
-                        decodeTime = streamResult.decodeTime,
-                        prefillSpeed = streamResult.prefillSpeed,
-                        decodeSpeed = streamResult.decodeSpeed
-                    ))
-                } else {
-                    send(StreamEvent.Error(streamResult.error ?: "Unknown error"))
-                }
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (exception: Exception) {
-                Logger.e(tag, "Stream generation failed", exception)
-                send(StreamEvent.Error(exception.message ?: "Unknown error"))
-            }
-        }
-    }.flowOn(modelDispatcher)
-
-    /**
-     * 使用多轮对话历史进行流式生成
-     *
-     * @param messages 对话历史消息列表
-     * @param maxTokens 最大生成 token 数
-     * @return Flow<StreamEvent> 流式事件
-     */
-    fun generateWithHistoryStream(
-        messages: List<ChatMessage>,
-        maxTokens: Int = 128
-    ): Flow<StreamEvent> = channelFlow {
-        engineMutex.withLock {
-            if (!client.isLoaded) {
-                Logger.w(tag, "LLM not loaded, cannot generate")
-                send(StreamEvent.Error("LLM model not loaded"))
-                return@withLock
-            }
-
-            try {
-                Logger.d(tag, "Stream generating with history, messages=${messages.size}")
-
-                // 将 ChatMessage 转换为 Pair<String, String>
-                val history = messages.map { Pair(it.role.name.lowercase(), it.content) }
-
-                val accumulatedText = StringBuilder()
-                val listener = object : StreamGenerateListener {
-                    override fun onToken(token: String?, isEop: Boolean): Boolean {
-                        if (token != null) {
-                            accumulatedText.append(token)
-                        }
-                        val event = StreamEvent.Token(
-                            token = token,
-                            accumulatedText = accumulatedText.toString(),
-                            isEop = isEop
-                        )
-                        trySend(event)
-                        return false
-                    }
-                }
-
-                val streamResult = client.generateWithHistoryStream(history, maxTokens, listener)
-
-                if (streamResult.isSuccess) {
-                    send(StreamEvent.Complete(
-                        response = streamResult.response,
-                        promptLen = streamResult.promptLen,
-                        decodeLen = streamResult.decodeLen,
-                        prefillTime = streamResult.prefillTime,
-                        decodeTime = streamResult.decodeTime,
-                        prefillSpeed = streamResult.prefillSpeed,
-                        decodeSpeed = streamResult.decodeSpeed
-                    ))
-                } else {
-                    send(StreamEvent.Error(streamResult.error ?: "Unknown error"))
-                }
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (exception: Exception) {
-                Logger.e(tag, "History stream generation failed", exception)
-                send(StreamEvent.Error(exception.message ?: "Unknown error"))
-            }
-        }
-    }.flowOn(modelDispatcher)
-
-    /**
-     * 使用多轮对话历史进行流式生成（纯文本 prompt，与同步版 [generateWithHistory] 对齐）
-     *
-     * 说明：MNN-LLM 的 ChatMessages 流式 API 兼容性较差，因此复用 [buildPromptFromMessages]
-     * 拼接为纯文本 prompt 后调用 [generateStream]，避免空响应或模板重复问题。
-     *
-     * @param messages 对话历史消息列表
-     * @param maxTokens 最大生成 token 数
-     * @return Flow<StreamEvent> 流式事件
-     */
-    fun generateStreamWithHistory(
-        messages: List<ChatMessage>,
-        maxTokens: Int = 128
-    ): Flow<StreamEvent> = generateStream(buildPromptFromMessages(messages), maxTokens)
-
-    /**
-     * 使用 system prompt + user prompt 生成回复（同步阻塞）
-     *
-     * 注意：某些 MNN-LLM 模型版本可能不支持 ChatMessages API，
-     * 如遇空响应请改用单 prompt 的 [generate] 方法。
-     *
-     * @param systemPrompt 系统提示词
-     * @param userPrompt 用户输入
-     * @param maxTokens 最大生成 token 数
-     * @return 生成的文本
-     */
-    /**
      * 最近一次本地生成的性能指标（仅同步/流式生成完成后有效）。
      */
     @Volatile
     var lastGenerationMetrics: LlmGenerationMetrics? = null
         private set
 
-    suspend fun generateWithSystem(
-        systemPrompt: String,
-        userPrompt: String,
-        maxTokens: Int = 128
-    ): Result<String> = withContext(modelDispatcher) {
-        engineMutex.withLock {
-            if (!client.isLoaded) {
-                Logger.w(tag, "LLM not loaded, cannot generate")
-                return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
-            }
+    /**
+     * 使用 LangChain4j 风格 API 进行同步对话。
+     *
+     * 内部根据消息组成选择最优的底层调用：
+     * - 包含 SystemMessage + UserMessage → MNN generateWithSystem（可获取完整性能指标）
+     * - 仅 UserMessage → 直接 generate
+     * - 多轮历史 → 拼接为纯文本 prompt 后 generate
+     */
+    override fun chat(request: ChatRequest): ChatResponse {
+        return runBlocking(modelDispatcher) {
+            engineMutex.withLock {
+                if (!client.isLoaded) {
+                    throw IllegalStateException("LLM model not loaded")
+                }
 
-            try {
-                Logger.d(tag, "Generating response with maxTokens=$maxTokens")
-                val result = client.generateWithSystem(
-                    systemPrompt = systemPrompt,
-                    userPrompt = userPrompt,
-                    maxNewTokens = maxTokens
-                )
-                if (result.error != null) {
-                    return@withLock Result.failure(RuntimeException(result.error))
+                val messages = request.messages
+                val systemMessage = messages.filterIsInstance<SystemMessage>().lastOrNull()?.text
+                val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.text
+                    ?: messages.lastOrNull()?.let { extractText(it) }
+                    ?: throw IllegalArgumentException("ChatRequest must contain at least one message")
+
+                try {
+                    val response = if (systemMessage != null) {
+                        val result = client.generateWithSystem(
+                            systemPrompt = systemMessage,
+                            userPrompt = userMessage,
+                            maxNewTokens = 128
+                        )
+                        if (result.error != null) {
+                            throw RuntimeException(result.error)
+                        }
+                        lastGenerationMetrics = LlmGenerationMetrics(
+                            promptLen = result.promptLen,
+                            decodeLen = result.decodeLen,
+                            prefillTime = result.prefillTime,
+                            decodeTime = result.decodeTime,
+                            prefillSpeed = result.prefillSpeed,
+                            decodeSpeed = result.decodeSpeed
+                        )
+                        result.response
+                    } else {
+                        client.generate(
+                            prompt = buildPromptFromMessages(messages),
+                            maxNewTokens = 128
+                        )
+                    }
+
+                    if (response.isBlank()) {
+                        throw RuntimeException("Empty LLM response")
+                    }
+
+                    ChatResponse(
+                        aiMessage = AiMessage(response),
+                        metadata = lastGenerationMetrics?.let {
+                            ChatResponseMetadata(
+                                promptTokens = it.promptLen,
+                                completionTokens = it.decodeLen,
+                                prefillTimeMs = it.prefillTime,
+                                decodeTimeMs = it.decodeTime,
+                                prefillSpeed = it.prefillSpeed,
+                                decodeSpeed = it.decodeSpeed
+                            )
+                        }
+                    )
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    Logger.e(tag, "Chat failed", exception)
+                    throw exception
                 }
-                lastGenerationMetrics = LlmGenerationMetrics(
-                    promptLen = result.promptLen,
-                    decodeLen = result.decodeLen,
-                    prefillTime = result.prefillTime,
-                    decodeTime = result.decodeTime,
-                    prefillSpeed = result.prefillSpeed,
-                    decodeSpeed = result.decodeSpeed
-                )
-                if (result.response.isNotBlank()) {
-                    Result.success(result.response)
-                } else {
-                    Result.failure(RuntimeException("Empty LLM response"))
-                }
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (exception: Exception) {
-                Logger.e(tag, "Generation with system prompt failed", exception)
-                Result.failure(exception)
             }
         }
     }
 
     /**
-     * 使用 ChatMessages 格式生成回复（同步阻塞，支持多轮对话历史）
-     *
-     * @param messages 消息列表（system + history + user）
-     * @param maxTokens 最大生成 token 数
-     * @return 生成的文本
+     * 使用 LangChain4j 风格 API 进行流式对话。
      */
-    suspend fun generateWithHistory(
-        messages: List<ChatMessage>,
-        maxTokens: Int = 128
-    ): Result<String> = withContext(modelDispatcher) {
-        engineMutex.withLock {
-            if (!client.isLoaded) {
-                Logger.w(tag, "LLM not loaded, cannot generate")
-                return@withLock Result.failure(IllegalStateException("LLM model not loaded"))
-            }
-
-            try {
-                val prompt = buildPromptFromMessages(messages)
-                Logger.d(tag, "Generating with history, messages=${messages.size}")
-                val response = client.generate(
-                    prompt = prompt,
-                    maxNewTokens = maxTokens
-                )
-                if (response.isNotBlank()) {
-                    Result.success(response)
-                } else {
-                    Result.failure(RuntimeException("Empty LLM response"))
+    override fun chat(request: ChatRequest, handler: StreamingChatResponseHandler) {
+        CoroutineScope(modelDispatcher).launch {
+            engineMutex.withLock {
+                if (!client.isLoaded) {
+                    handler.onError(IllegalStateException("LLM model not loaded"))
+                    return@launch
                 }
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (exception: Exception) {
-                Logger.e(tag, "Generation with history failed", exception)
-                Result.failure(exception)
+
+                val prompt = buildPromptFromMessages(request.messages)
+                val accumulatedText = StringBuilder()
+
+                val listener = object : StreamGenerateListener {
+                    override fun onToken(token: String?, isEop: Boolean): Boolean {
+                        if (token != null) {
+                            accumulatedText.append(token)
+                            handler.onPartialResponse(token)
+                        }
+                        return false
+                    }
+                }
+
+                try {
+                    val streamResult = client.generateStream(prompt, 128, listener)
+                    if (streamResult.isSuccess) {
+                        handler.onCompleteResponse(
+                            ChatResponse(
+                                aiMessage = AiMessage(streamResult.response),
+                                metadata = ChatResponseMetadata(
+                                    promptTokens = streamResult.promptLen,
+                                    completionTokens = streamResult.decodeLen,
+                                    prefillTimeMs = streamResult.prefillTime,
+                                    decodeTimeMs = streamResult.decodeTime,
+                                    prefillSpeed = streamResult.prefillSpeed,
+                                    decodeSpeed = streamResult.decodeSpeed
+                                )
+                            )
+                        )
+                    } else {
+                        handler.onError(RuntimeException(streamResult.error ?: "Unknown error"))
+                    }
+                } catch (exception: Exception) {
+                    Logger.e(tag, "Streaming chat failed", exception)
+                    handler.onError(exception)
+                }
             }
         }
+    }
+
+    private fun extractText(message: ChatMessage): String = when (message) {
+        is UserMessage -> message.text
+        is SystemMessage -> message.text
+        is AiMessage -> message.text
     }
 
     /**
@@ -587,20 +449,20 @@ class LocalLlmEngine(private val context: Context) {
     ): String {
         return buildString {
             messages.forEach { message ->
-                when (message.role) {
-                    ChatRole.SYSTEM -> {
+                when (message) {
+                    is SystemMessage -> {
                         appendLine("system:")
-                        appendLine(message.content)
+                        appendLine(message.text)
                         appendLine()
                     }
-                    ChatRole.USER -> {
+                    is UserMessage -> {
                         appendLine("user:")
-                        appendLine(message.content)
+                        appendLine(message.text)
                         appendLine()
                     }
-                    ChatRole.ASSISTANT -> {
+                    is AiMessage -> {
                         appendLine("assistant:")
-                        appendLine(message.content)
+                        appendLine(message.text)
                         appendLine()
                     }
                 }
@@ -608,38 +470,4 @@ class LocalLlmEngine(private val context: Context) {
             append("assistant:")
         }
     }
-}
-
-// ── 流式生成事件（新增）────────────────────────────────────
-
-/**
- * 流式生成事件，用于 Flow 传递
- */
-sealed interface StreamEvent {
-    /**
-     * 新生成的 token
-     */
-    data class Token(
-        val token: String?,
-        val accumulatedText: String,
-        val isEop: Boolean
-    ) : StreamEvent
-
-    /**
-     * 生成完成，包含完整回复和性能指标
-     */
-    data class Complete(
-        val response: String,
-        val promptLen: Long,
-        val decodeLen: Long,
-        val prefillTime: Long,
-        val decodeTime: Long,
-        val prefillSpeed: Float,
-        val decodeSpeed: Float
-    ) : StreamEvent
-
-    /**
-     * 生成出错
-     */
-    data class Error(val message: String) : StreamEvent
 }

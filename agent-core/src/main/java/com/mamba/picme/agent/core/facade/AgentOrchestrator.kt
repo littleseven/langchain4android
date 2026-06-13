@@ -11,6 +11,9 @@ import com.mamba.picme.agent.core.api.context.AgentIdGenerator
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.langchain4j.ChatRequest
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
@@ -318,11 +321,20 @@ class AgentOrchestrator private constructor(context: Context) {
                     }
                 }
                 Logger.d(tag, "Using local LLM (MNN-LLM)")
-                val responseResult = localLlmEngine.generateWithSystem(
-                    systemPrompt = systemPrompt,
-                    userPrompt = userPrompt,
-                    maxTokens = 128
-                )
+                val responseResult = try {
+                    Result.success(
+                        localLlmEngine.chat(
+                            ChatRequest(
+                                messages = listOf(
+                                    SystemMessage(systemPrompt),
+                                    UserMessage(userPrompt)
+                                )
+                            )
+                        ).aiMessage.text
+                    )
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
                 return@withContext responseResult.fold(
                     onSuccess = { rawResponse ->
                         handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
@@ -353,11 +365,20 @@ class AgentOrchestrator private constructor(context: Context) {
                             return@withContext handleModelLoadError(loadResult)
                         }
                     }
-                    val fallbackResult = localLlmEngine.generateWithSystem(
-                        systemPrompt = systemPrompt,
-                        userPrompt = userPrompt,
-                        maxTokens = 128
-                    )
+                    val fallbackResult = try {
+                        Result.success(
+                            localLlmEngine.chat(
+                                ChatRequest(
+                                    messages = listOf(
+                                        SystemMessage(systemPrompt),
+                                        UserMessage(userPrompt)
+                                    )
+                                )
+                            ).aiMessage.text
+                        )
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
                     return@withContext fallbackResult.fold(
                         onSuccess = { rawResponse ->
                             handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)

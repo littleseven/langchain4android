@@ -13,6 +13,10 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
+import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
+import com.mamba.picme.agent.core.langchain4j.ChatRequest
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -70,10 +74,11 @@ object RemoteLlmConfig {
 class RemoteOrchestrator(
     private val context: Context,
     private val remoteConfig: RemoteModelConfig,
-    private val promptBuilder: PromptBuilder
+    private val promptBuilder: PromptBuilder,
+    private val chatLanguageModel: ChatLanguageModel = UnifiedRemoteClient(remoteConfig)
 ) {
 
-    private val unifiedClient = UnifiedRemoteClient(remoteConfig)
+    private val tag = "RemoteOrchestrator"
 
     /**
      * 远程推理参数配置
@@ -82,8 +87,6 @@ class RemoteOrchestrator(
     private val remoteLlmConfig by lazy {
         RemoteLlmConfig.load(context)
     }
-
-    private val tag = "RemoteOrchestrator"
 
     // ── L2: Batch Function Calling ─────────────────────────────
 
@@ -107,14 +110,16 @@ class RemoteOrchestrator(
 
             Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
 
-            val result = unifiedClient.chat(
-                systemPrompt = systemPrompt,
-                userInput = userInput,
-                maxTokens = remoteLlmConfig.l2MaxTokens,
-                temperature = remoteLlmConfig.l2Temperature
+            val chatRequest = ChatRequest(
+                messages = listOf(
+                    SystemMessage(systemPrompt),
+                    UserMessage(userInput)
+                )
             )
 
-            val content = result.getOrElse { error ->
+            val content = try {
+                chatLanguageModel.chat(chatRequest).aiMessage.text
+            } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Batch(
@@ -158,14 +163,16 @@ class RemoteOrchestrator(
 
             Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
 
-            val result = unifiedClient.chat(
-                systemPrompt = systemPrompt,
-                userInput = userInput,
-                maxTokens = remoteLlmConfig.l3MaxTokens,
-                temperature = remoteLlmConfig.l3Temperature
+            val chatRequest = ChatRequest(
+                messages = listOf(
+                    SystemMessage(systemPrompt),
+                    UserMessage(userInput)
+                )
             )
 
-            val content = result.getOrElse { error ->
+            val content = try {
+                chatLanguageModel.chat(chatRequest).aiMessage.text
+            } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Plan(
@@ -217,14 +224,16 @@ class RemoteOrchestrator(
 
             Logger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
 
-            val result = unifiedClient.chat(
-                systemPrompt = systemPrompt,
-                userInput = userInput,
-                maxTokens = remoteLlmConfig.l4MaxTokens,
-                temperature = remoteLlmConfig.l4Temperature
+            val chatRequest = ChatRequest(
+                messages = listOf(
+                    SystemMessage(systemPrompt),
+                    UserMessage(userInput)
+                )
             )
 
-            val content = result.getOrElse { error ->
+            val content = try {
+                chatLanguageModel.chat(chatRequest).aiMessage.text
+            } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${error.message}", error)
                 return InferenceResult.Chat(

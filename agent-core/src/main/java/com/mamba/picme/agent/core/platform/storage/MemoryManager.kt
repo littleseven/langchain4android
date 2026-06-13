@@ -6,9 +6,11 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mamba.picme.agent.core.langchain4j.AiMessage
+import com.mamba.picme.agent.core.langchain4j.ChatMessage
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.logging.Logger
-import com.mamba.picme.agent.core.api.context.ChatMessage
-import com.mamba.picme.agent.core.api.context.ChatRole
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
@@ -109,8 +111,8 @@ class MemoryManager(private val context: Context) {
         assistantResponse: String
     ) {
         val history = loadHistory(sessionId).toMutableList()
-        history.add(ChatMessage(role = ChatRole.USER, content = userInput))
-        history.add(ChatMessage(role = ChatRole.ASSISTANT, content = assistantResponse))
+        history.add(UserMessage(userInput))
+        history.add(AiMessage(assistantResponse))
         saveHistory(sessionId, history)
     }
 
@@ -167,9 +169,9 @@ class MemoryManager(private val context: Context) {
         val trimmedHistory = trimToRounds(history, maxHistoryRounds)
 
         val messages = mutableListOf<ChatMessage>()
-        messages.add(ChatMessage(role = ChatRole.SYSTEM, content = systemPrompt))
+        messages.add(SystemMessage(systemPrompt))
         messages.addAll(trimmedHistory)
-        messages.add(ChatMessage(role = ChatRole.USER, content = userInput))
+        messages.add(UserMessage(userInput))
 
         return messages
     }
@@ -193,14 +195,14 @@ class MemoryManager(private val context: Context) {
         var currentUser: ChatMessage? = null
 
         messages.forEach { message ->
-            when (message.role) {
-                ChatRole.USER -> {
+            when (message) {
+                is UserMessage -> {
                     if (currentUser != null) {
                         userAssistantPairs.add(currentUser to null)
                     }
                     currentUser = message
                 }
-                ChatRole.ASSISTANT -> {
+                is AiMessage -> {
                     userAssistantPairs.add(currentUser to message)
                     currentUser = null
                 }
@@ -223,9 +225,14 @@ class MemoryManager(private val context: Context) {
     private fun encodeMessagesToJson(messages: List<ChatMessage>): String {
         val array = JSONArray()
         messages.forEach { message ->
+            val (role, content) = when (message) {
+                is SystemMessage -> "system" to message.text
+                is UserMessage -> "user" to message.text
+                is AiMessage -> "assistant" to message.text
+            }
             val obj = JSONObject().apply {
-                put("role", message.role.name)
-                put("content", message.content)
+                put("role", role)
+                put("content", content)
             }
             array.put(obj)
         }
@@ -241,8 +248,12 @@ class MemoryManager(private val context: Context) {
             (0 until array.length()).map { i ->
                 val obj = array.getJSONObject(i)
                 val roleName = obj.getString("role")
-                val role = runCatching { ChatRole.valueOf(roleName) }.getOrDefault(ChatRole.USER)
-                ChatMessage(role = role, content = obj.getString("content"))
+                val content = obj.getString("content")
+                when (roleName) {
+                    "system" -> SystemMessage(content)
+                    "assistant" -> AiMessage(content)
+                    else -> UserMessage(content)
+                }
             }
         } catch (exception: Exception) {
             Logger.w(tag, "Failed to parse messages JSON", exception)

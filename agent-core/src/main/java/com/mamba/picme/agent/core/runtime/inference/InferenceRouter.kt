@@ -4,6 +4,9 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
 import com.mamba.picme.agent.core.api.execution.PlanStep
+import com.mamba.picme.agent.core.langchain4j.ChatRequest
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger
@@ -207,12 +210,21 @@ class InferenceRouter(
             appendLine("请输出 JSON 数组，不要其他内容:")
         }
 
-        Logger.i(tag, "[L3-LOCAL] Calling localEngine.generateWithSystem, modelLoaded=${localEngine.isLoaded}")
-        val result = localEngine.generateWithSystem(
-            systemPrompt = systemPrompt,
-            userPrompt = userPrompt,
-            maxTokens = 256  // L3 需要更多 token 生成多步骤
-        )
+        Logger.i(tag, "[L3-LOCAL] Calling localEngine.chat, modelLoaded=${localEngine.isLoaded}")
+        val result = try {
+            Result.success(
+                localEngine.chat(
+                    ChatRequest(
+                        messages = listOf(
+                            SystemMessage(systemPrompt),
+                            UserMessage(userPrompt)
+                        )
+                    )
+                ).aiMessage.text
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
 
         return result.fold(
             onSuccess = { response ->
@@ -342,12 +354,21 @@ class InferenceRouter(
         Logger.d(tag, userPrompt)
         Logger.d(tag, "===== END L2 PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
-        Logger.i(tag, "[L2-LOCAL] Calling localEngine.generateWithSystem, modelLoaded=${localEngine.isLoaded}")
-        val result = localEngine.generateWithSystem(
-            systemPrompt = systemPrompt,
-            userPrompt = userPrompt,
-            maxTokens = 256  // 增加 token 上限，避免思考过程占用导致 JSON 截断
-        )
+        Logger.i(tag, "[L2-LOCAL] Calling localEngine.chat, modelLoaded=${localEngine.isLoaded}")
+        val result = try {
+            Result.success(
+                localEngine.chat(
+                    ChatRequest(
+                        messages = listOf(
+                            SystemMessage(systemPrompt),
+                            UserMessage(userPrompt)
+                        )
+                    )
+                ).aiMessage.text
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
 
         return result.fold(
             onSuccess = { response ->
@@ -400,11 +421,20 @@ class InferenceRouter(
         Logger.d(tag, userPrompt)
         Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
-        val result = localEngine.generateWithSystem(
-            systemPrompt = systemPrompt,
-            userPrompt = userPrompt,
-            maxTokens = 128
-        )
+        val result = try {
+            Result.success(
+                localEngine.chat(
+                    ChatRequest(
+                        messages = listOf(
+                            SystemMessage(systemPrompt),
+                            UserMessage(userPrompt)
+                        )
+                    )
+                ).aiMessage.text
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
 
         return result.fold(
             onSuccess = { response ->

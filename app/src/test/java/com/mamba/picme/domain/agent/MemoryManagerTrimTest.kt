@@ -1,8 +1,11 @@
 package com.mamba.picme.domain.agent
 
-import com.mamba.picme.agent.core.api.context.ChatMessage
-import com.mamba.picme.agent.core.api.context.ChatRole
+import com.mamba.picme.agent.core.langchain4j.AiMessage
+import com.mamba.picme.agent.core.langchain4j.ChatMessage
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -25,14 +28,14 @@ class MemoryManagerTrimTest {
         var currentUser: ChatMessage? = null
 
         messages.forEach { message ->
-            when (message.role) {
-                ChatRole.USER -> {
+            when (message) {
+                is UserMessage -> {
                     if (currentUser != null) {
                         userAssistantPairs.add(currentUser to null)
                     }
                     currentUser = message
                 }
-                ChatRole.ASSISTANT -> {
+                is AiMessage -> {
                     userAssistantPairs.add(currentUser to message)
                     currentUser = null
                 }
@@ -52,18 +55,18 @@ class MemoryManagerTrimTest {
     @Test
     fun `trimToMaxSize keeps last N messages`() {
         val messages = (1..60).map { i ->
-            ChatMessage(role = if (i % 2 == 1) ChatRole.USER else ChatRole.ASSISTANT, content = "msg$i")
+            if (i % 2 == 1) UserMessage("msg$i") else AiMessage("msg$i")
         }
         val trimmed = trimToMaxSize(messages, 50)
         assertEquals(50, trimmed.size)
-        assertEquals("msg11", trimmed.first().content)
-        assertEquals("msg60", trimmed.last().content)
+        assertEquals("msg11", (trimmed.first() as UserMessage).text)
+        assertEquals("msg60", (trimmed.last() as AiMessage).text)
     }
 
     @Test
     fun `trimToMaxSize preserves small list`() {
         val messages = listOf(
-            ChatMessage(role = ChatRole.USER, content = "hi")
+            UserMessage("hi")
         )
         assertEquals(1, trimToMaxSize(messages).size)
     }
@@ -72,44 +75,44 @@ class MemoryManagerTrimTest {
     fun `trimToRounds keeps recent rounds`() {
         val messages = mutableListOf<ChatMessage>()
         repeat(15) { i ->
-            messages.add(ChatMessage(role = ChatRole.USER, content = "u$i"))
-            messages.add(ChatMessage(role = ChatRole.ASSISTANT, content = "a$i"))
+            messages.add(UserMessage("u$i"))
+            messages.add(AiMessage("a$i"))
         }
         val trimmed = trimToRounds(messages, 5)
         assertEquals(10, trimmed.size)
-        assertEquals("u10", trimmed[0].content)
-        assertEquals("a14", trimmed.last().content)
+        assertEquals("u10", (trimmed[0] as UserMessage).text)
+        assertEquals("a14", (trimmed.last() as AiMessage).text)
     }
 
     @Test
     fun `trimToRounds handles incomplete last round`() {
         val messages = listOf(
-            ChatMessage(role = ChatRole.USER, content = "u1"),
-            ChatMessage(role = ChatRole.ASSISTANT, content = "a1"),
-            ChatMessage(role = ChatRole.USER, content = "u2")
+            UserMessage("u1"),
+            AiMessage("a1"),
+            UserMessage("u2")
         )
         val trimmed = trimToRounds(messages, 1)
         assertEquals(1, trimmed.size)
-        assertEquals("u2", trimmed[0].content)
+        assertEquals("u2", (trimmed[0] as UserMessage).text)
     }
 
     @Test
     fun `trimToRounds ignores system messages`() {
         val messages = listOf(
-            ChatMessage(role = ChatRole.SYSTEM, content = "sys"),
-            ChatMessage(role = ChatRole.USER, content = "u1"),
-            ChatMessage(role = ChatRole.ASSISTANT, content = "a1")
+            SystemMessage("sys"),
+            UserMessage("u1"),
+            AiMessage("a1")
         )
         val trimmed = trimToRounds(messages, 1)
         assertEquals(2, trimmed.size)
-        assertEquals(ChatRole.USER, trimmed[0].role)
+        assertTrue(trimmed[0] is UserMessage)
     }
 
     @Test
     fun `trimToRounds with zero rounds returns empty`() {
         val messages = listOf(
-            ChatMessage(role = ChatRole.USER, content = "u1"),
-            ChatMessage(role = ChatRole.ASSISTANT, content = "a1")
+            UserMessage("u1"),
+            AiMessage("a1")
         )
         assertEquals(0, trimToRounds(messages, 0).size)
     }

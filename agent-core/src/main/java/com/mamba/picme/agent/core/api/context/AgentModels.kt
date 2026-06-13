@@ -68,25 +68,6 @@ enum class ModelUsagePattern {
 }
 
 /**
- * 对话消息
- *
- * @property role 消息角色
- * @property content 消息内容
- * @property timestamp 时间戳（毫秒）
- */
-data class ChatMessage(
-    val role: ChatRole,
-    val content: String,
-    val timestamp: Long = System.currentTimeMillis()
-)
-
-enum class ChatRole {
-    SYSTEM,
-    USER,
-    ASSISTANT
-}
-
-/**
  * 32位自增 ID 生成器
  *
  * 线程安全，使用 AtomicInteger 实现，循环使用（到达 Int.MAX_VALUE 后回到 1）。

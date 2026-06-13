@@ -1,6 +1,13 @@
 package com.mamba.picme.agent.core.platform.llm.remote
 
+import com.mamba.picme.agent.core.langchain4j.AiMessage
+import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
+import com.mamba.picme.agent.core.langchain4j.ChatRequest
+import com.mamba.picme.agent.core.langchain4j.ChatResponse
+import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.logging.Logger
+import kotlinx.coroutines.runBlocking
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingApiClient
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingMessage
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingRequest
@@ -24,7 +31,7 @@ import retrofit2.Response
  */
 class UnifiedRemoteClient(
     private val config: RemoteModelConfig
-) {
+) : ChatLanguageModel {
 
     private val tag = "UnifiedRemote"
 
@@ -50,29 +57,27 @@ class UnifiedRemoteClient(
     }
 
     /**
-     * 发送聊天请求，返回统一格式的文本内容
-     *
-     * @param systemPrompt 系统提示词
-     * @param userInput 用户输入
-     * @param maxTokens 最大 token 数
-     * @param temperature 温度
-     * @return 生成的文本内容，失败时返回 null
+     * 发送聊天请求，返回 LangChain4j 风格的 [ChatResponse]。
      */
-    suspend fun chat(
-        systemPrompt: String?,
-        userInput: String,
-        maxTokens: Int = 1024,
-        temperature: Double = 0.3
-    ): Result<String> {
-        return try {
-            when {
-                kimiClient != null -> chatKimi(systemPrompt, userInput, maxTokens, temperature)
-                openAiClient != null -> chatOpenAi(systemPrompt, userInput, maxTokens, temperature)
-                else -> Result.failure(IllegalStateException("No client available for model ${config.modelId}"))
+    override fun chat(request: ChatRequest): ChatResponse {
+        return runBlocking {
+            val systemPrompt = request.messages.filterIsInstance<SystemMessage>().lastOrNull()?.text
+            val userInput = request.messages.filterIsInstance<UserMessage>().lastOrNull()?.text
+                ?: throw IllegalArgumentException("ChatRequest must contain a UserMessage")
+            val maxTokens = 2048
+            val temperature = 0.3
+
+            try {
+                val content = when {
+                    kimiClient != null -> chatKimi(systemPrompt, userInput, maxTokens, temperature)
+                    openAiClient != null -> chatOpenAi(request, maxTokens, temperature)
+                    else -> throw IllegalStateException("No client available for model ${config.modelId}")
+                }
+                ChatResponse(aiMessage = AiMessage(content))
+            } catch (e: Exception) {
+                Logger.e(tag, "Chat failed for model=${config.modelId}", e)
+                throw e
             }
-        } catch (e: Exception) {
-            Logger.e(tag, "Chat failed for model=${config.modelId}", e)
-            Result.failure(e)
         }
     }
 
@@ -81,8 +86,8 @@ class UnifiedRemoteClient(
         userInput: String,
         maxTokens: Int,
         temperature: Double
-    ): Result<String> {
-        val client = kimiClient ?: return Result.failure(IllegalStateException("Kimi client not initialized"))
+    ): String {
+        val client = kimiClient ?: throw IllegalStateException("Kimi client not initialized")
         val request = KimiCodingRequest(
             model = config.modelId,
             messages = listOf(KimiCodingMessage(role = "user", content = userInput)),
@@ -95,24 +100,26 @@ class UnifiedRemoteClient(
         val response: Response<KimiCodingResponse> = client.service.messages(request)
         return parseResponse(response) { body ->
             body.content.firstOrNull()?.text?.trim()
-        }
+        }.getOrThrow()
     }
 
     private suspend fun chatOpenAi(
-        systemPrompt: String?,
-        userInput: String,
+        request: ChatRequest,
         maxTokens: Int,
         temperature: Double
-    ): Result<String> {
-        val client = openAiClient ?: return Result.failure(IllegalStateException("OpenAI client not initialized"))
+    ): String {
+        val client = openAiClient ?: throw IllegalStateException("OpenAI client not initialized")
 
-        val messages = mutableListOf<OpenAiMessage>()
-        if (!systemPrompt.isNullOrBlank()) {
-            messages.add(OpenAiMessage(role = "system", content = systemPrompt))
+        val messages = request.messages.mapNotNull { message ->
+            when (message) {
+                is SystemMessage -> OpenAiMessage(role = "system", content = message.text)
+                is UserMessage -> OpenAiMessage(role = "user", content = message.text)
+                is AiMessage -> OpenAiMessage(role = "assistant", content = message.text)
+                else -> null
+            }
         }
-        messages.add(OpenAiMessage(role = "user", content = userInput))
 
-        val request = OpenAiChatRequest(
+        val openAiRequest = OpenAiChatRequest(
             model = config.modelId,
             messages = messages,
             maxTokens = maxTokens,
@@ -120,10 +127,10 @@ class UnifiedRemoteClient(
             stream = false
         )
 
-        val response: Response<OpenAiChatResponse> = client.service.chatCompletions(request)
+        val response: Response<OpenAiChatResponse> = client.service.chatCompletions(openAiRequest)
         return parseResponse(response) { body ->
             body.choices.firstOrNull()?.message?.content?.trim()
-        }
+        }.getOrThrow()
     }
 
     private fun <T> parseResponse(
