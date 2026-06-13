@@ -25,6 +25,12 @@ interface ChatMessageDao {
     suspend fun getRecentMessages(sessionId: String, limit: Int): List<ChatMessageEntity>
 
     /**
+     * 获取指定会话的最后一条消息
+     */
+    @Query("SELECT * FROM chat_messages WHERE sessionId = :sessionId ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLastMessageForSession(sessionId: String): ChatMessageEntity?
+
+    /**
      * 插入单条消息
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
