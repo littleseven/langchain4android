@@ -92,7 +92,7 @@ fun ChatScreen(
 ) {
     val context = LocalContext.current
     val view = LocalView.current
-    val messages by viewModel.messages.collectAsState()
+    val messages by viewModel.displayMessages.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
     val currentModel by viewModel.currentModel.collectAsState()
     val threads by viewModel.threads.collectAsState()
@@ -107,8 +107,8 @@ fun ChatScreen(
         isSidebarOpen = false
     }
 
-    // 自动滚动到底部
-    LaunchedEffect(messages.size) {
+    // 自动滚动到底部：列表条数变化或最后一条内容变化时触发（支持流式打字效果）
+    LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
@@ -314,6 +314,16 @@ private fun ChatMessageItem(message: ChatMessageUi) {
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
+            message.performance?.let { perf ->
+                Text(
+                    text = "prompt ${perf.promptLen} · decode ${perf.decodeLen} " +
+                        "· prefill ${perf.prefillTimeMs}ms · decode ${perf.decodeTimeMs}ms " +
+                        "· ${String.format("%.1f", perf.decodeSpeed)} tok/s",
+                    color = if (isUser) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    fontSize = 9.sp,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
     }
 }
@@ -472,6 +482,18 @@ private fun QuickActionFabItem(
 }
 
 /**
+ * 本地 LLM 性能指标（展示用）
+ */
+data class LlmPerformance(
+    val promptLen: Long,
+    val decodeLen: Long,
+    val prefillTimeMs: Long,
+    val decodeTimeMs: Long,
+    val prefillSpeed: Float,
+    val decodeSpeed: Float
+)
+
+/**
  * 聊天消息 UI 数据类
  */
 data class ChatMessageUi(
@@ -479,7 +501,8 @@ data class ChatMessageUi(
     val type: ChatMessageType,
     val content: String,
     val modelUsed: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val performance: LlmPerformance? = null
 )
 
 enum class ChatMessageType {

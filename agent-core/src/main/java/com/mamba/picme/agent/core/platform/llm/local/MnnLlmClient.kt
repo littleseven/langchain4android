@@ -80,17 +80,13 @@ class MnnLlmClient(private val context: Context) {
                 }
             }
 
-            val runtimeConfigPath = if (useOpencl) {
-                runCatching {
-                    createRuntimeConfig(modelDir, configFile)
-                }.onFailure { exception ->
-                    Logger.w(tag, "Failed to patch backend_type=opencl, fallback to original config", exception)
-                }.getOrNull()?.also { patchedPath ->
-                    Logger.i(tag, "Using OpenCL runtime config: $patchedPath")
-                } ?: configPath
-            } else {
-                configPath
-            }
+            val runtimeConfigPath = runCatching {
+                createRuntimeConfig(modelDir, configFile, useOpencl)
+            }.onFailure { exception ->
+                Logger.w(tag, "Failed to create runtime config, fallback to original config", exception)
+            }.getOrNull()?.also { patchedPath ->
+                Logger.i(tag, "Using runtime config: $patchedPath (opencl=$useOpencl)")
+            } ?: configPath
 
             Logger.i(tag, "Loading LLM model from: $runtimeConfigPath")
             nativeHandle = MnnGlobalReleaseLock.withOperation {
@@ -111,7 +107,7 @@ class MnnLlmClient(private val context: Context) {
     }
 
     /**
-     * 生成文本回复
+     * 生成文本回复（同步阻塞）
      *
      * **注意**：此方法应在专用线程上调用（由 [LocalLlmEngine] 统一调度）。
      *
@@ -136,7 +132,7 @@ class MnnLlmClient(private val context: Context) {
     }
 
     /**
-     * 使用 system prompt + user prompt 生成回复
+     * 使用 system prompt + user prompt 生成回复（同步阻塞）
      *
      * **注意**：此方法应在专用线程上调用（由 [LocalLlmEngine] 统一调度）。
      *
@@ -162,6 +158,71 @@ class MnnLlmClient(private val context: Context) {
         } catch (exception: Exception) {
             Logger.e(tag, "Generation with system prompt failed", exception)
             ""
+        }
+    }
+
+    // ── 流式生成 + 性能指标（新增）─────────────────────────────
+
+    /**
+     * 流式生成文本回复，逐 token 回调 + 性能指标
+     *
+     * **注意**：此方法应在专用线程上调用（由 [LocalLlmEngine] 统一调度）。
+     * 回调在 native 线程执行，通过 JNI 同步调用 Java 方法。
+     *
+     * @param prompt 用户输入提示词
+     * @param maxNewTokens 最大生成 token 数，默认 128
+     * @param listener 流式回调监听器，每生成一个 token 调用一次
+     * @return 包含完整回复和性能指标的 StreamResult
+     */
+    fun generateStream(
+        prompt: String,
+        maxNewTokens: Int = 128,
+        listener: StreamGenerateListener
+    ): StreamResult {
+        if (!isLoaded) {
+            Logger.w(tag, "LLM not loaded, cannot generate")
+            return StreamResult(error = "LLM not loaded")
+        }
+
+        return try {
+            val resultMap = MnnGlobalReleaseLock.withOperation {
+                nativeGenerateStream(nativeHandle, prompt, maxNewTokens, listener)
+            }
+            StreamResult.fromHashMap(resultMap)
+        } catch (exception: Exception) {
+            Logger.e(tag, "Stream generation failed", exception)
+            StreamResult(error = exception.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * 使用多轮对话历史进行流式生成
+     *
+     * @param history 对话历史列表，每个 Pair 为 (role, content)
+     * @param maxNewTokens 最大生成 token 数
+     * @param listener 流式回调监听器
+     * @return 包含完整回复和性能指标的 StreamResult
+     */
+    fun generateWithHistoryStream(
+        history: List<Pair<String, String>>,
+        maxNewTokens: Int = 128,
+        listener: StreamGenerateListener
+    ): StreamResult {
+        if (!isLoaded) {
+            Logger.w(tag, "LLM not loaded, cannot generate")
+            return StreamResult(error = "LLM not loaded")
+        }
+
+        return try {
+            // 转换为 android.util.Pair 列表供 JNI 使用
+            val androidHistory = history.map { android.util.Pair(it.first, it.second) }
+            val resultMap = MnnGlobalReleaseLock.withOperation {
+                nativeGenerateWithHistoryStream(nativeHandle, androidHistory, maxNewTokens, listener)
+            }
+            StreamResult.fromHashMap(resultMap)
+        } catch (exception: Exception) {
+            Logger.e(tag, "History stream generation failed", exception)
+            StreamResult(error = exception.message ?: "Unknown error")
         }
     }
 
@@ -208,17 +269,24 @@ class MnnLlmClient(private val context: Context) {
         releaseNative(NativeReleaseTarget.KV_CACHE)
     }
 
-    private fun createRuntimeConfig(modelDir: String, configFile: File): String {
+    private fun createRuntimeConfig(modelDir: String, configFile: File, useOpencl: Boolean): String {
         val rawJson = configFile.readText()
         val root = JSONObject(rawJson)
-        root.put("backend_type", "opencl")
 
-        val mllmObject = root.optJSONObject("mllm") ?: JSONObject().also { objectNode ->
-            root.put("mllm", objectNode)
+        // 1. 禁用 Qwen3 思考模式，避免输出 <think>...</think> 占用 token
+        val jinjaObject = root.optJSONObject("jinja") ?: JSONObject().also { root.put("jinja", it) }
+        val contextObject = jinjaObject.optJSONObject("context") ?: JSONObject().also { jinjaObject.put("context", it) }
+        contextObject.put("enable_thinking", false)
+
+        // 2. 可选：使用 OpenCL 后端加速
+        if (useOpencl) {
+            root.put("backend_type", "opencl")
+            val mllmObject = root.optJSONObject("mllm") ?: JSONObject().also { root.put("mllm", it) }
+            mllmObject.put("backend_type", "opencl")
         }
-        mllmObject.put("backend_type", "opencl")
 
-        val runtimeConfigFile = File(modelDir, "config_runtime_opencl.json")
+        val fileName = if (useOpencl) "config_runtime_opencl.json" else "config_runtime.json"
+        val runtimeConfigFile = File(modelDir, fileName)
         runtimeConfigFile.writeText(root.toString(2))
         return runtimeConfigFile.absolutePath
     }
@@ -236,11 +304,86 @@ class MnnLlmClient(private val context: Context) {
         maxNewTokens: Int
     ): String
 
+    private external fun nativeGenerateStream(
+        handle: Long,
+        prompt: String,
+        maxNewTokens: Int,
+        listener: StreamGenerateListener
+    ): HashMap<String, Any>
+
+    private external fun nativeGenerateWithHistoryStream(
+        handle: Long,
+        history: List<android.util.Pair<String, String>>,
+        maxNewTokens: Int,
+        listener: StreamGenerateListener
+    ): HashMap<String, Any>
+
     private external fun nativeIsLoaded(handle: Long): Boolean
 
     companion object {
         init {
             System.loadLibrary("agent_native")
+        }
+    }
+}
+
+/**
+ * 流式生成回调接口
+ *
+ * 每生成一个 token（或遇到 <eop> 结束标记）时调用。
+ * 返回 true 表示请求停止生成。
+ */
+interface StreamGenerateListener {
+    /**
+     * @param token 新生成的 token 文本，isEop=true 时为 null
+     * @param isEop 是否为结束标记
+     * @return true 表示请求停止生成
+     */
+    fun onToken(token: String?, isEop: Boolean): Boolean
+}
+
+/**
+ * 流式生成结果，包含完整回复和性能指标
+ */
+data class StreamResult(
+    val response: String = "",
+    val promptLen: Long = 0,
+    val decodeLen: Long = 0,
+    val visionTime: Long = 0,
+    val audioTime: Long = 0,
+    val prefillTime: Long = 0,
+    val decodeTime: Long = 0,
+    val error: String? = null
+) {
+    val isSuccess: Boolean
+        get() = error == null
+
+    /**
+     * 计算 prefill 速度（tokens/秒）
+     */
+    val prefillSpeed: Float
+        get() = if (prefillTime > 0) promptLen * 1_000_000f / prefillTime else 0f
+
+    /**
+     * 计算 decode 速度（tokens/秒）
+     */
+    val decodeSpeed: Float
+        get() = if (decodeTime > 0) decodeLen * 1_000_000f / decodeTime else 0f
+
+    companion object {
+        @Suppress("UNCHECKED_CAST")
+        fun fromHashMap(map: HashMap<String, Any>): StreamResult {
+            val error = map["error"] as? String
+            return StreamResult(
+                response = map["response"] as? String ?: "",
+                promptLen = (map["prompt_len"] as? Long) ?: 0,
+                decodeLen = (map["decode_len"] as? Long) ?: 0,
+                visionTime = (map["vision_time"] as? Long) ?: 0,
+                audioTime = (map["audio_time"] as? Long) ?: 0,
+                prefillTime = (map["prefill_time"] as? Long) ?: 0,
+                decodeTime = (map["decode_time"] as? Long) ?: 0,
+                error = error
+            )
         }
     }
 }

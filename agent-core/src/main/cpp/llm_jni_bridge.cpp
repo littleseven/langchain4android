@@ -5,6 +5,8 @@
 #include <mutex>
 #include <streambuf>
 #include <dlfcn.h>
+#include <chrono>
+#include <vector>
 
 #include <MNN/llm/llm.hpp>
 
@@ -15,6 +17,16 @@
 extern "C" {
 
 static std::mutex g_llm_mutex;
+
+// ── 性能指标结构 ──────────────────────────────────────
+struct LlmMetrics {
+    int64_t prompt_len = 0;
+    int64_t decode_len = 0;
+    int64_t vision_time = 0;
+    int64_t audio_time = 0;
+    int64_t prefill_time = 0;
+    int64_t decode_time = 0;
+};
 
 /**
  * 恢复 Android 预编译 MNN 库的 stepping 状态。
@@ -35,7 +47,6 @@ static void restoreLlmStatusIfNeeded(MNN::Transformer::Llm* llm) {
     }
     if (context->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED ||
         context->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED) {
-        // 安全地重置状态为 RUNNING，允许继续生成
         auto* mutableContext = const_cast<MNN::Transformer::LlmContext*>(context);
         mutableContext->status = MNN::Transformer::LlmStatus::RUNNING;
         LOGD("LLM status restored to RUNNING (was FINISHED)");
@@ -44,30 +55,54 @@ static void restoreLlmStatusIfNeeded(MNN::Transformer::Llm* llm) {
 
 /**
  * 自定义 streambuf，用于收集 generate() 输出的 token
- * 参考官方 MnnLlmChat 实现
+ * 参考官方 MnnLlmChat 实现，通过回调机制实时传递数据
  */
 class LlmStreamBuffer : public std::streambuf {
 public:
-    LlmStreamBuffer() {
-        setp(buffer_, buffer_ + sizeof(buffer_) - 1);
-    }
+    using CallBack = std::function<void(const char *str, size_t len)>;
 
-    std::string str() const {
-        return std::string(pbase(), pptr() - pbase());
-    }
+    explicit LlmStreamBuffer(CallBack callback) : callback_(std::move(callback)) {}
 
 protected:
+    std::streamsize xsputn(const char *s, std::streamsize n) override {
+        if (callback_) {
+            callback_(s, n);
+        }
+        return n;
+    }
+
     virtual int_type overflow(int_type c) override {
-        if (c != traits_type::eof()) {
-            *pptr() = c;
-            pbump(1);
+        if (c != traits_type::eof() && callback_) {
+            char ch = static_cast<char>(c);
+            callback_(&ch, 1);
         }
         return c;
     }
 
 private:
-    char buffer_[4096];
+    CallBack callback_ = nullptr;
 };
+
+// ── 流式生成辅助：将 C++ token 回调桥接到 Java ──────────
+static void streamTokensToJava(
+        JNIEnv* env,
+        jobject progressListener,
+        jmethodID onTokenMethod,
+        const std::string& token,
+        bool isEop,
+        bool& stopRequested) {
+    if (progressListener == nullptr || onTokenMethod == nullptr) {
+        return;
+    }
+    jstring tokenStr = isEop ? nullptr : env->NewStringUTF(token.c_str());
+    jboolean shouldStop = env->CallBooleanMethod(progressListener, onTokenMethod, tokenStr, isEop);
+    if (tokenStr != nullptr) {
+        env->DeleteLocalRef(tokenStr);
+    }
+    if (shouldStop == JNI_TRUE) {
+        stopRequested = true;
+    }
+}
 
 JNIEXPORT jlong JNICALL
 Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeCreate(
@@ -123,6 +158,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeReset(
     }
 }
 
+// ── 同步生成（保留原有实现）─────────────────────────────
 JNIEXPORT jstring JNICALL
 Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerate(
         JNIEnv *env,
@@ -152,7 +188,19 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerate(
 
     std::string result = oss.str();
 
-    LOGD("Generated response: %s", result.c_str());
+    // 分段打印长 response，避免 Android 日志长度限制截断
+    const size_t LOG_CHUNK_SIZE = 1024;
+    if (result.length() <= LOG_CHUNK_SIZE) {
+        LOGD("Generated response: %s", result.c_str());
+    } else {
+        LOGD("Generated response (len=%zu, chunked):", result.length());
+        for (size_t i = 0; i < result.length(); i += LOG_CHUNK_SIZE) {
+            size_t len = (i + LOG_CHUNK_SIZE <= result.length()) ? LOG_CHUNK_SIZE : (result.length() - i);
+            std::string chunk = result.substr(i, len);
+            LOGD("  [chunk %zu/%zu]: %s", i / LOG_CHUNK_SIZE + 1,
+                 (result.length() + LOG_CHUNK_SIZE - 1) / LOG_CHUNK_SIZE, chunk.c_str());
+        }
+    }
     return env->NewStringUTF(result.c_str());
 }
 
@@ -194,9 +242,417 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
     }
 
     std::string result = oss.str();
-    LOGD("Generated response: %s", result.c_str());
+    // 分段打印长 response，避免 Android 日志长度限制截断
+    const size_t LOG_CHUNK_SIZE = 1024;
+    if (result.length() <= LOG_CHUNK_SIZE) {
+        LOGD("Generated response: %s", result.c_str());
+    } else {
+        LOGD("Generated response (len=%zu, chunked):", result.length());
+        for (size_t i = 0; i < result.length(); i += LOG_CHUNK_SIZE) {
+            size_t len = (i + LOG_CHUNK_SIZE <= result.length()) ? LOG_CHUNK_SIZE : (result.length() - i);
+            std::string chunk = result.substr(i, len);
+            LOGD("  [chunk %zu/%zu]: %s", i / LOG_CHUNK_SIZE + 1,
+                 (result.length() + LOG_CHUNK_SIZE - 1) / LOG_CHUNK_SIZE, chunk.c_str());
+        }
+    }
 
     return env->NewStringUTF(result.c_str());
+}
+
+// ── 流式生成 + 性能指标（新增）──────────────────────────
+JNIEXPORT jobject JNICALL
+Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateStream(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jstring prompt,
+        jint maxNewTokens,
+        jobject progressListener) {
+
+    auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
+    if (llm == nullptr) {
+        LOGE("LLM handle is null");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed, LLM handle is null"));
+        return hashMap;
+    }
+
+    const char *promptCStr = env->GetStringUTFChars(prompt, nullptr);
+    std::string promptStr(promptCStr);
+    env->ReleaseStringUTFChars(prompt, promptCStr);
+
+    LOGD("Stream generating for prompt: %s", promptStr.c_str());
+
+    // 获取 Java 回调方法
+    jclass listenerClass = env->GetObjectClass(progressListener);
+    jmethodID onTokenMethod = env->GetMethodID(listenerClass, "onToken",
+                                               "(Ljava/lang/String;Z)Z");
+    if (onTokenMethod == nullptr) {
+        LOGE("ProgressListener onToken method not found");
+    }
+
+    LlmMetrics metrics;
+    std::stringstream response_buffer;
+    bool stopRequested = false;
+    bool generateTextEnd = false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_llm_mutex);
+        restoreLlmStatusIfNeeded(llm);
+
+        auto prefill_start = std::chrono::high_resolution_clock::now();
+
+        // 使用 Utf8StreamProcessor 处理流式输出，确保中文字符完整
+        std::string utf8Buffer;
+        auto processUtf8Chunk = [&](const char *str, size_t len) {
+            utf8Buffer.append(str, len);
+
+            size_t i = 0;
+            std::string completeChars;
+            while (i < utf8Buffer.size()) {
+                unsigned char byte = static_cast<unsigned char>(utf8Buffer[i]);
+                int charLen = 0;
+                if ((byte & 0x80) == 0) charLen = 1;
+                else if ((byte & 0xE0) == 0xC0) charLen = 2;
+                else if ((byte & 0xF0) == 0xE0) charLen = 3;
+                else if ((byte & 0xF8) == 0xF0) charLen = 4;
+                else break;
+
+                if (i + charLen > utf8Buffer.size()) break;
+                completeChars.append(utf8Buffer, i, charLen);
+                i += charLen;
+            }
+            utf8Buffer = utf8Buffer.substr(i);
+
+            if (!completeChars.empty()) {
+                // 检查是否包含 <eop>（end-of-prefill 标记）
+                bool isEop = (completeChars.find("<eop>") != std::string::npos);
+                if (isEop) {
+                    generateTextEnd = true;
+                }
+
+                // 将 <eop> 从展示文本/最终回复中移除，避免 UI 显示出来
+                std::string displayChars = completeChars;
+                size_t eopPos = displayChars.find("<eop>");
+                if (eopPos != std::string::npos) {
+                    displayChars.erase(eopPos, 5); // strlen("<eop>") == 5
+                }
+                if (!displayChars.empty()) {
+                    response_buffer << displayChars;
+                }
+
+                streamTokensToJava(env, progressListener, onTokenMethod,
+                                   displayChars, isEop, stopRequested);
+            }
+        };
+
+        LlmStreamBuffer stream_buffer(processUtf8Chunk);
+        std::ostream output_ostream(&stream_buffer);
+
+        // prefill 阶段：response(..., 0) 只编码不生成
+        llm->response(promptStr, &output_ostream, "<eop>", 0);
+
+        auto prefill_end = std::chrono::high_resolution_clock::now();
+        metrics.prefill_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                prefill_end - prefill_start).count();
+
+        // 获取 prefill 后的上下文信息
+        auto* ctx = llm->getContext();
+        if (ctx != nullptr) {
+            metrics.prompt_len = ctx->prompt_len;
+        }
+
+        // decode 阶段：逐 token 生成
+        auto decode_start = std::chrono::high_resolution_clock::now();
+        int current_size = 0;
+
+        while (!stopRequested && !generateTextEnd && current_size < maxNewTokens) {
+            llm->generate(1);
+            current_size++;
+
+            // 检查状态
+            ctx = llm->getContext();
+            if (ctx != nullptr) {
+                if (ctx->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED ||
+                    ctx->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED) {
+                    generateTextEnd = true;
+                }
+            }
+        }
+
+        // 处理缓冲区中剩余的未完整 UTF-8 字符
+        if (!utf8Buffer.empty() && !generateTextEnd) {
+            response_buffer << utf8Buffer;
+            streamTokensToJava(env, progressListener, onTokenMethod,
+                               utf8Buffer, false, stopRequested);
+        }
+
+        auto decode_end = std::chrono::high_resolution_clock::now();
+        metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                decode_end - decode_start).count();
+
+        // 获取最终指标
+        ctx = llm->getContext();
+        if (ctx != nullptr) {
+            metrics.decode_len = ctx->gen_seq_len;
+            metrics.vision_time = ctx->vision_us;
+            metrics.audio_time = ctx->audio_us;
+        }
+    }
+
+    std::string result = response_buffer.str();
+    LOGD("Stream generation complete. len=%zu, prompt=%ld, decode=%ld, prefill_time=%ldus, decode_time=%ldus",
+         result.length(), metrics.prompt_len, metrics.decode_len,
+         metrics.prefill_time, metrics.decode_time);
+
+    // 构建返回 HashMap
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longInit = env->GetMethodID(longClass, "<init>", "(J)V");
+
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("response"),
+                          env->NewStringUTF(result.c_str()));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prompt_len"),
+                          env->NewObject(longClass, longInit, metrics.prompt_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_len"),
+                          env->NewObject(longClass, longInit, metrics.decode_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("vision_time"),
+                          env->NewObject(longClass, longInit, metrics.vision_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("audio_time"),
+                          env->NewObject(longClass, longInit, metrics.audio_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prefill_time"),
+                          env->NewObject(longClass, longInit, metrics.prefill_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_time"),
+                          env->NewObject(longClass, longInit, metrics.decode_time));
+
+    env->DeleteLocalRef(listenerClass);
+
+    return hashMap;
+}
+
+// ── 多轮对话流式生成（新增）─────────────────────────────
+JNIEXPORT jobject JNICALL
+Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithHistoryStream(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jobject historyList,  // List<Pair<String, String>>
+        jint maxNewTokens,
+        jobject progressListener) {
+
+    auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
+    if (llm == nullptr) {
+        LOGE("LLM handle is null");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed, LLM handle is null"));
+        return hashMap;
+    }
+
+    // 解析 Java List<Pair<String, String>> 到 C++ ChatMessages
+    MNN::Transformer::ChatMessages messages;
+
+    jclass listClass = env->GetObjectClass(historyList);
+    jmethodID sizeMethod = env->GetMethodID(listClass, "size", "()I");
+    jmethodID getMethod = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+    jint listSize = env->CallIntMethod(historyList, sizeMethod);
+
+    jclass pairClass = env->FindClass("android/util/Pair");
+    jfieldID firstField = env->GetFieldID(pairClass, "first", "Ljava/lang/Object;");
+    jfieldID secondField = env->GetFieldID(pairClass, "second", "Ljava/lang/Object;");
+
+    for (jint i = 0; i < listSize; i++) {
+        jobject pairObj = env->CallObjectMethod(historyList, getMethod, i);
+        if (pairObj == nullptr) continue;
+
+        jobject roleObj = env->GetObjectField(pairObj, firstField);
+        jobject contentObj = env->GetObjectField(pairObj, secondField);
+
+        const char *role = nullptr;
+        const char *content = nullptr;
+        if (roleObj != nullptr) {
+            role = env->GetStringUTFChars((jstring) roleObj, nullptr);
+        }
+        if (contentObj != nullptr) {
+            content = env->GetStringUTFChars((jstring) contentObj, nullptr);
+        }
+
+        if (role && content) {
+            messages.emplace_back(std::string(role), std::string(content));
+        }
+
+        if (role) env->ReleaseStringUTFChars((jstring) roleObj, role);
+        if (content) env->ReleaseStringUTFChars((jstring) contentObj, content);
+        env->DeleteLocalRef(pairObj);
+        if (roleObj) env->DeleteLocalRef(roleObj);
+        if (contentObj) env->DeleteLocalRef(contentObj);
+    }
+
+    env->DeleteLocalRef(listClass);
+    env->DeleteLocalRef(pairClass);
+
+    LOGD("Stream generating with history, messages=%zu", messages.size());
+
+    // 获取 Java 回调方法
+    jclass listenerClass = env->GetObjectClass(progressListener);
+    jmethodID onTokenMethod = env->GetMethodID(listenerClass, "onToken",
+                                               "(Ljava/lang/String;Z)Z");
+    if (onTokenMethod == nullptr) {
+        LOGE("ProgressListener onToken method not found");
+    }
+
+    LlmMetrics metrics;
+    std::stringstream response_buffer;
+    bool stopRequested = false;
+    bool generateTextEnd = false;
+
+    {
+        std::lock_guard<std::mutex> lock(g_llm_mutex);
+        restoreLlmStatusIfNeeded(llm);
+
+        auto prefill_start = std::chrono::high_resolution_clock::now();
+
+        // 使用 Utf8StreamProcessor 处理流式输出，确保中文字符完整
+        std::string utf8Buffer;
+        auto processUtf8Chunk = [&](const char *str, size_t len) {
+            utf8Buffer.append(str, len);
+
+            size_t i = 0;
+            std::string completeChars;
+            while (i < utf8Buffer.size()) {
+                unsigned char byte = static_cast<unsigned char>(utf8Buffer[i]);
+                int charLen = 0;
+                if ((byte & 0x80) == 0) charLen = 1;
+                else if ((byte & 0xE0) == 0xC0) charLen = 2;
+                else if ((byte & 0xF0) == 0xE0) charLen = 3;
+                else if ((byte & 0xF8) == 0xF0) charLen = 4;
+                else break;
+
+                if (i + charLen > utf8Buffer.size()) break;
+                completeChars.append(utf8Buffer, i, charLen);
+                i += charLen;
+            }
+            utf8Buffer = utf8Buffer.substr(i);
+
+            if (!completeChars.empty()) {
+                // 检查是否包含 <eop>（end-of-prefill 标记）
+                bool isEop = (completeChars.find("<eop>") != std::string::npos);
+                if (isEop) {
+                    generateTextEnd = true;
+                }
+
+                // 将 <eop> 从展示文本/最终回复中移除，避免 UI 显示出来
+                std::string displayChars = completeChars;
+                size_t eopPos = displayChars.find("<eop>");
+                if (eopPos != std::string::npos) {
+                    displayChars.erase(eopPos, 5); // strlen("<eop>") == 5
+                }
+                if (!displayChars.empty()) {
+                    response_buffer << displayChars;
+                }
+
+                streamTokensToJava(env, progressListener, onTokenMethod,
+                                   displayChars, isEop, stopRequested);
+            }
+        };
+
+        LlmStreamBuffer stream_buffer(processUtf8Chunk);
+        std::ostream output_ostream(&stream_buffer);
+
+        // prefill 阶段
+        llm->response(messages, &output_ostream, "<eop>", 0);
+
+        auto prefill_end = std::chrono::high_resolution_clock::now();
+        metrics.prefill_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                prefill_end - prefill_start).count();
+
+        auto* ctx = llm->getContext();
+        if (ctx != nullptr) {
+            metrics.prompt_len = ctx->prompt_len;
+        }
+
+        // decode 阶段
+        auto decode_start = std::chrono::high_resolution_clock::now();
+        int current_size = 0;
+
+        while (!stopRequested && !generateTextEnd && current_size < maxNewTokens) {
+            llm->generate(1);
+            current_size++;
+
+            ctx = llm->getContext();
+            if (ctx != nullptr) {
+                if (ctx->status == MNN::Transformer::LlmStatus::NORMAL_FINISHED ||
+                    ctx->status == MNN::Transformer::LlmStatus::MAX_TOKENS_FINISHED) {
+                    generateTextEnd = true;
+                }
+            }
+        }
+
+        // 处理缓冲区中剩余的未完整 UTF-8 字符
+        if (!utf8Buffer.empty() && !generateTextEnd) {
+            response_buffer << utf8Buffer;
+            streamTokensToJava(env, progressListener, onTokenMethod,
+                               utf8Buffer, false, stopRequested);
+        }
+
+        auto decode_end = std::chrono::high_resolution_clock::now();
+        metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                decode_end - decode_start).count();
+
+        ctx = llm->getContext();
+        if (ctx != nullptr) {
+            metrics.decode_len = ctx->gen_seq_len;
+            metrics.vision_time = ctx->vision_us;
+            metrics.audio_time = ctx->audio_us;
+        }
+    }
+
+    std::string result = response_buffer.str();
+    LOGD("History stream generation complete. len=%zu, prompt=%ld, decode=%ld",
+         result.length(), metrics.prompt_len, metrics.decode_len);
+
+    // 构建返回 HashMap
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longInit = env->GetMethodID(longClass, "<init>", "(J)V");
+
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("response"),
+                          env->NewStringUTF(result.c_str()));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prompt_len"),
+                          env->NewObject(longClass, longInit, metrics.prompt_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_len"),
+                          env->NewObject(longClass, longInit, metrics.decode_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("vision_time"),
+                          env->NewObject(longClass, longInit, metrics.vision_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("audio_time"),
+                          env->NewObject(longClass, longInit, metrics.audio_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prefill_time"),
+                          env->NewObject(longClass, longInit, metrics.prefill_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_time"),
+                          env->NewObject(longClass, longInit, metrics.decode_time));
+
+    env->DeleteLocalRef(listenerClass);
+
+    return hashMap;
 }
 
 JNIEXPORT jboolean JNICALL
@@ -206,9 +662,6 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeIsLoaded(
         jlong handle) {
 
     auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
-    // nativeHandle 有效即表示模型已加载
-    // reset() 会重置 ctx->status 为 NOT_LOADED，但不销毁模型
-    // 因此不能依赖 ctx->status 判断加载状态
     return (llm != nullptr) ? JNI_TRUE : JNI_FALSE;
 }
 

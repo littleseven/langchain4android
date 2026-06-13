@@ -10,16 +10,22 @@ import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.ChatMessageDao
 import com.mamba.picme.data.local.ChatMessageEntity
+import com.mamba.picme.agent.core.platform.llm.local.StreamEvent
+import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
 private const val TAG = "ChatViewModel"
 private const val MAX_MESSAGES = 500
-private const val CHAT_SYSTEM_PROMPT = "You are a helpful AI assistant. Respond concisely and naturally in the same language as the user."
+private const val CHAT_SYSTEM_PROMPT = "You are a helpful AI assistant. Respond concisely and naturally in the same language as the user. " +
+    "Do not output any thinking process. Do not use <think>, </think>, or <thinking> tags."
 
 /**
  * Chat 首页 ViewModel — 管理聊天状态与数据流
@@ -44,6 +50,19 @@ class ChatViewModel(
 
     private val _messages = MutableStateFlow<List<ChatMessageUi>>(emptyList())
     val messages: StateFlow<List<ChatMessageUi>> = _messages.asStateFlow()
+
+    /**
+     * 当前正在流式生成的 AI 消息（未落库），用于实时展示 token。
+     */
+    private val _streamingMessage = MutableStateFlow<ChatMessageUi?>(null)
+    val streamingMessage: StateFlow<ChatMessageUi?> = _streamingMessage.asStateFlow()
+
+    /**
+     * UI 实际展示的消息列表：已持久化消息 + 流式临时消息。
+     */
+    val displayMessages: StateFlow<List<ChatMessageUi>> = combine(_messages, _streamingMessage) { messages, streaming ->
+        if (streaming != null) messages + streaming else messages
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
@@ -133,24 +152,25 @@ class ChatViewModel(
 
                 // 3. 构建对话历史并调用 LLM
                 val history = buildChatHistory(sessionId)
-                val responseText = when (_currentModel.value) {
-                    is ChatModelOption.Local -> generateLocalResponse(history)
-                    is ChatModelOption.Remote -> generateRemoteResponse(history, text)
-                }
-
                 val modelLabel = when (_currentModel.value) {
                     is ChatModelOption.Local -> "local_qwen3.5_2b"
                     is ChatModelOption.Remote -> "remote_deepseek"
                 }
 
-                val agentMessage = ChatMessageEntity(
-                    id = UUID.randomUUID().toString(),
-                    sessionId = sessionId,
-                    type = "agent_text",
-                    content = responseText,
-                    modelUsed = modelLabel
-                )
-                chatMessageDao.insertMessage(agentMessage)
+                when (_currentModel.value) {
+                    is ChatModelOption.Local -> generateLocalResponse(history, modelLabel, sessionId)
+                    is ChatModelOption.Remote -> {
+                        val responseText = generateRemoteResponse(history, text)
+                        val agentMessage = ChatMessageEntity(
+                            id = UUID.randomUUID().toString(),
+                            sessionId = sessionId,
+                            type = "agent_text",
+                            content = responseText,
+                            modelUsed = modelLabel
+                        )
+                        chatMessageDao.insertMessage(agentMessage)
+                    }
+                }
 
                 // 4. 清理超限消息
                 cleanupIfNeeded(sessionId)
@@ -190,34 +210,164 @@ class ChatViewModel(
     }
 
     /**
-     * 本地模型推理
+     * 本地模型推理（流式）
+     *
+     * 通过 [LocalLlmEngine.generateStreamWithHistory] 实时获取 token，
+     * 在 UI 上展示流式临时消息，生成结束后清理 think 标签并落库。
      */
-    private suspend fun generateLocalResponse(history: List<ChatMessage>): String {
-        return try {
+    private suspend fun generateLocalResponse(
+        history: List<ChatMessage>,
+        modelLabel: String,
+        sessionId: String
+    ) {
+        try {
             // 确保模型已加载
             if (!orchestrator.isModelLoaded) {
                 Logger.i(TAG, "Local model not loaded, attempting to load...")
                 val loadResult = orchestrator.loadModel()
                 if (loadResult.isFailure) {
-                    return "模型未加载，请前往设置 → AI 模型管理下载本地模型"
+                    insertAgentMessage(sessionId, "模型未加载，请前往设置 → AI 模型管理下载本地模型", modelLabel)
+                    return
                 }
             }
 
-            // 使用 generateWithHistory 进行对话推理
             val engine = getLocalLlmEngine()
             if (engine == null) {
-                return "本地推理引擎不可用"
+                insertAgentMessage(sessionId, "本地推理引擎不可用", modelLabel)
+                return
             }
 
-            val result = engine.generateWithHistory(
-                messages = history,
-                maxTokens = 512
+            // 创建流式临时消息
+            val streamingId = UUID.randomUUID().toString()
+            _streamingMessage.value = ChatMessageUi(
+                id = streamingId,
+                type = ChatMessageType.AGENT_TEXT,
+                content = "",
+                modelUsed = modelLabel
             )
-            result.getOrElse { "推理失败：${it.message}" }
+
+            var rawResponse = ""
+            var performance: LlmPerformance? = null
+            engine.generateStreamWithHistory(messages = history, maxTokens = 512).collect { event ->
+                when (event) {
+                    is StreamEvent.Token -> {
+                        rawResponse = event.accumulatedText
+                        _streamingMessage.value = _streamingMessage.value?.copy(
+                            content = cleanThinkTags(rawResponse)
+                        )
+                    }
+                    is StreamEvent.Complete -> {
+                        rawResponse = event.response
+                        performance = LlmPerformance(
+                            promptLen = event.promptLen,
+                            decodeLen = event.decodeLen,
+                            prefillTimeMs = event.prefillTime / 1000L,
+                            decodeTimeMs = event.decodeTime / 1000L,
+                            prefillSpeed = event.prefillSpeed,
+                            decodeSpeed = event.decodeSpeed
+                        )
+                    }
+                    is StreamEvent.Error -> {
+                        throw RuntimeException(event.message)
+                    }
+                }
+            }
+
+            val cleanedResponse = cleanThinkTags(rawResponse)
+            _streamingMessage.value = null
+            insertAgentMessage(sessionId, cleanedResponse, modelLabel, performance)
         } catch (e: Exception) {
             Logger.e(TAG, "Local inference failed", e)
-            "本地推理出错：${e.message ?: "未知错误"}"
+            _streamingMessage.value = null
+            insertAgentMessage(sessionId, "本地推理出错：${e.message ?: "未知错误"}", "error")
         }
+    }
+
+    /**
+     * 插入 AI 回复到 Room
+     */
+    private suspend fun insertAgentMessage(
+        sessionId: String,
+        content: String,
+        modelUsed: String,
+        performance: LlmPerformance? = null
+    ) {
+        val metadata = performance?.let {
+            JSONObject().apply {
+                put("prompt_len", it.promptLen)
+                put("decode_len", it.decodeLen)
+                put("prefill_time_ms", it.prefillTimeMs)
+                put("decode_time_ms", it.decodeTimeMs)
+                put("prefill_speed", it.prefillSpeed.toDouble())
+                put("decode_speed", it.decodeSpeed.toDouble())
+            }.toString()
+        }
+        chatMessageDao.insertMessage(
+            ChatMessageEntity(
+                id = UUID.randomUUID().toString(),
+                sessionId = sessionId,
+                type = "agent_text",
+                content = content,
+                modelUsed = modelUsed,
+                metadata = metadata
+            )
+        )
+    }
+
+    /**
+     * 清理 LLM 响应中的 think 标签（Qwen3 的 <think>...</think>）
+     * 以及 <thinking>...</thinking>、思考...思考 等标记
+     *
+     * 参考 AgentCommandParser.cleanLlmResponse，针对闲聊场景做简化。
+     */
+    private fun cleanThinkTags(response: String): String {
+        var cleaned = response.trim()
+
+        val thinkTags = listOf(
+            "<think>" to "</think>",
+            "<thinking>" to "</thinking>",
+            "思考" to "思考"
+        )
+        for ((startTag, endTag) in thinkTags) {
+            // 1. 移除成对的 think 标签及其中间内容
+            if (startTag == endTag) {
+                // 中文“思考...思考”：start 与 end 是同一字符串，需按顺序配对
+                while (true) {
+                    val start = cleaned.indexOf(startTag)
+                    if (start < 0) break
+                    val end = cleaned.indexOf(endTag, start + startTag.length)
+                    if (end < 0) break
+                    cleaned = cleaned.removeRange(start, end + endTag.length).trim()
+                }
+            } else {
+                while (true) {
+                    val start = cleaned.indexOf(startTag)
+                    val end = cleaned.indexOf(endTag)
+                    if (start >= 0 && end > start) {
+                        cleaned = cleaned.removeRange(start, end + endTag.length).trim()
+                    } else {
+                        break
+                    }
+                }
+            }
+            // 2. 处理未闭合的开始标签：优先保留标签之后的正文
+            val orphanStart = cleaned.indexOf(startTag)
+            if (orphanStart >= 0) {
+                val afterTag = cleaned.substring(orphanStart + startTag.length).trim()
+                val beforeTag = cleaned.substring(0, orphanStart).trim()
+                cleaned = if (afterTag.isNotBlank()) afterTag else beforeTag
+            }
+            // 3. 移除残留的结束标签
+            cleaned = cleaned.replace(endTag, "").trim()
+        }
+
+        // 移除 markdown 代码块标记
+        cleaned = cleaned.replace(Regex("^```\\w*\\n?"), "").replace(Regex("\\n?```\\s*$"), "").trim()
+
+        // 移除流式生成可能残留的 <eop> end-of-prefill 标记
+        cleaned = cleaned.replace("<eop>", "").trim()
+
+        return cleaned.ifBlank { "你好，我是小觅，有什么可以帮你的吗？" }
     }
 
     /**
@@ -328,6 +478,7 @@ class ChatViewModel(
     }
 
     private fun ChatMessageEntity.toUiModel(): ChatMessageUi {
+        val performance = metadata?.let { parsePerformanceMetadata(it) }
         return ChatMessageUi(
             id = id,
             type = when (type) {
@@ -341,8 +492,29 @@ class ChatViewModel(
             },
             content = content,
             modelUsed = modelUsed,
-            timestamp = timestamp
+            timestamp = timestamp,
+            performance = performance
         )
+    }
+
+    /**
+     * 从 metadata JSON 解析本地 LLM 性能指标
+     */
+    private fun parsePerformanceMetadata(metadata: String): LlmPerformance? {
+        return try {
+            val json = JSONObject(metadata)
+            LlmPerformance(
+                promptLen = json.optLong("prompt_len", 0),
+                decodeLen = json.optLong("decode_len", 0),
+                prefillTimeMs = json.optLong("prefill_time_ms", 0),
+                decodeTimeMs = json.optLong("decode_time_ms", 0),
+                prefillSpeed = json.optDouble("prefill_speed", 0.0).toFloat(),
+                decodeSpeed = json.optDouble("decode_speed", 0.0).toFloat()
+            )
+        } catch (e: Exception) {
+            Logger.w(TAG, "Failed to parse performance metadata", e)
+            null
+        }
     }
 }
 
