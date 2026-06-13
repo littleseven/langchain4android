@@ -6,13 +6,20 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentErrorCode
+import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.execution.StepResult
+import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
+import com.mamba.picme.agent.core.langchain4j.ToolExecutor
+import com.mamba.picme.agent.core.langchain4j.ToolProvider
+import com.mamba.picme.agent.core.langchain4j.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
+import com.mamba.picme.agent.core.runtime.parsing.AgentCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.CoroutineScope
+import org.json.JSONObject
 
 /**
  * 能力注册表
@@ -36,7 +43,7 @@ import kotlinx.coroutines.CoroutineScope
 class CapabilityRegistry private constructor(
     private val sceneManager: SceneManager,
     private val externalScope: CoroutineScope? = null
-) {
+) : ToolProvider {
 
     companion object {
         @Volatile
@@ -265,6 +272,22 @@ class CapabilityRegistry private constructor(
     }
 
     /**
+     * 根据命令名查找 Capability（供 ToolProvider 使用）
+     */
+    private fun findCapabilityForCommandName(commandName: String): Capability? {
+        val hostMatch = CapabilityHost.get()?.findForCommand(commandName)
+        if (hostMatch != null) return hostMatch
+
+        val currentSceneCapabilities = getCapabilitiesForCurrentScene()
+        val availableMatch = currentSceneCapabilities.find { capability ->
+            capability.supportedCommands().contains(commandName)
+        }
+        if (availableMatch != null) return availableMatch
+
+        return registry.values.find { it.supportedCommands().contains(commandName) }
+    }
+
+    /**
      * 构建 Capability 描述文本（用于 system prompt）
      *
      * 只包含当前场景可用且 isAvailable 的 Capability
@@ -283,6 +306,53 @@ class CapabilityRegistry private constructor(
         return registry.values.joinToString("\n") { capability ->
             val available = if (capability.isAvailable()) "✓" else "✗"
             "$available ${capability.buildCapabilityDescription()}"
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // ToolProvider 实现（LangChain4j 风格 Tool Calling）
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    override suspend fun getToolSpecifications(): List<ToolSpecification> {
+        return getCapabilitiesForCurrentScene()
+            .flatMap { capability ->
+                capability.supportedCommands().map { command ->
+                    ToolSpecification(
+                        name = command,
+                        description = capability.getCommandDescription(command),
+                        parameters = capability.getCommandParameterSchema(command)
+                    )
+                }
+            }
+    }
+
+    override suspend fun findExecutor(toolName: String): ToolExecutor? {
+        val capability = findCapabilityForCommandName(toolName)
+            ?: return null
+
+        return object : ToolExecutor {
+            override suspend fun execute(request: ToolExecutionRequest): String {
+                val params = runCatching { JSONObject(request.arguments) }.getOrDefault(JSONObject())
+                val commandJson = JSONObject().apply {
+                    put("method", toolName)
+                    put("params", params)
+                }.toString()
+                val context = AgentContext(scene = AgentScene.CHAT)
+                val command = AgentCommandParser.parseCommandByMethod(
+                    method = toolName,
+                    json = commandJson,
+                    context = context,
+                    fallbackText = "",
+                    commandId = com.mamba.picme.agent.core.api.context.AgentIdGenerator.nextId()
+                )
+                val result = dispatch(command, context, null)
+                val action = result.getOrNull()
+                return if (action != null) {
+                    action.toString()
+                } else {
+                    "Error: ${result.exceptionOrNull()?.message}"
+                }
+            }
         }
     }
 

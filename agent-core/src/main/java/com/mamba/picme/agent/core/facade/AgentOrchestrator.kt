@@ -222,7 +222,7 @@ class AgentOrchestrator private constructor(context: Context) {
         // 通过 InferenceRouter 路由
         Logger.i(tag, "[RouterEntry] Calling InferenceRouter.processInput")
         val inferenceResult = try {
-            configurator.getInferenceRouter().processInput(input, agentContext)
+            configurator.getInferenceRouter().processInput(input, agentContext, configurator.toolProvider, configurator.toolCallingConfig)
         } catch (exception: Exception) {
             Logger.e(tag, "InferenceRouter failed", exception)
             InferenceResult.Local(
@@ -355,7 +355,7 @@ class AgentOrchestrator private constructor(context: Context) {
                 // 远程模式：通过 InferenceRouter 进行混合编排
                 Logger.d(tag, "Using InferenceRouter for REMOTE mode")
                 try {
-                    configurator.getInferenceRouter().processInput(input, agentContext)
+                    configurator.getInferenceRouter().processInput(input, agentContext, configurator.toolProvider, configurator.toolCallingConfig)
                 } catch (exception: Exception) {
                     Logger.e(tag, "Remote inference failed, falling back to local", exception)
                     // 远程失败时回退到本地
@@ -545,7 +545,7 @@ class AgentOrchestrator private constructor(context: Context) {
     ): Result<AgentAction> {
         Logger.d(tag, "Falling back to remote inference in camera scene")
         return try {
-            val result = configurator.getInferenceRouter().processInput(input, agentContext)
+            val result = configurator.getInferenceRouter().processInput(input, agentContext, configurator.toolProvider, configurator.toolCallingConfig)
             handleInferenceResult(result, input, agentContext, pageContext)
         } catch (exception: Exception) {
             Logger.e(tag, "Remote fallback failed", exception)

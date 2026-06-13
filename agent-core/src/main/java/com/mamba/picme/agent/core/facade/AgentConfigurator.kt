@@ -6,7 +6,9 @@ import com.mamba.picme.agent.core.api.capability.Capability
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.langchain4j.ToolProvider
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
+import com.mamba.picme.agent.core.runtime.tool.ToolCallingConfig
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
@@ -41,6 +43,33 @@ class AgentConfigurator(private val context: Context) {
     val promptBuilder = PromptBuilder(sceneManager)
     val capabilityRegistry = CapabilityRegistry.getInstance()
     val strategySelector = AdaptiveStrategySelector()
+
+    /**
+     * Tool Provider（LangChain4j 风格 Tool Calling）。
+     * 默认使用 [CapabilityRegistry]，未注册 Capability 时工具列表为空，自动回退到原有推理链路。
+     */
+    var toolProvider: ToolProvider? = capabilityRegistry
+        private set
+
+    /**
+     * Tool Calling 配置（默认 OpenAI tools 格式）。
+     */
+    var toolCallingConfig: ToolCallingConfig = ToolCallingConfig()
+        private set
+
+    /**
+     * 设置 Tool Provider。传入 null 可关闭 Tool Calling。
+     */
+    fun setToolProvider(provider: ToolProvider?) {
+        toolProvider = provider
+    }
+
+    /**
+     * 设置 Tool Calling 配置，例如切到 ReAct 模式用于调试。
+     */
+    fun setToolCallingConfig(config: ToolCallingConfig) {
+        toolCallingConfig = config
+    }
 
     // L1 意图缓存
     val intentCache = IntentCache()

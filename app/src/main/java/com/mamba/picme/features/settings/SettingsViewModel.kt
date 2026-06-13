@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.mamba.picme.agent.core.api.policy.AiAgentInferencePreference
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.runtime.inference.L1CacheSettings
 import com.mamba.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.mamba.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.mamba.picme.core.common.Logger
@@ -165,6 +166,13 @@ private val ESSENTIAL_MODEL_IDS = listOf(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = AiAgentInferencePreference.FORCE_LOCAL
+        )
+
+    val aiAgentL1CacheEnabled: StateFlow<Boolean> = repository.aiAgentL1CacheEnabledFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = true
         )
 
     val aiAgentMode: StateFlow<AiAgentMode> = repository.aiAgentModeFlow
@@ -363,6 +371,18 @@ private val ESSENTIAL_MODEL_IDS = listOf(
         lastDownloadStatuses.putAll(downloadStates.value.mapValues { entry -> entry.value.status })
         loadModels()
         observeDownloadCompletion()
+        syncL1CacheSetting()
+    }
+
+    private fun syncL1CacheSetting() {
+        viewModelScope.launch {
+            try {
+                val enabled = repository.aiAgentL1CacheEnabledFlow.first()
+                L1CacheSettings.setEnabled(enabled)
+            } catch (e: Exception) {
+                Logger.e("Settings", "Failed to sync L1 cache setting", e)
+            }
+        }
     }
 
     /**
@@ -744,6 +764,14 @@ private val ESSENTIAL_MODEL_IDS = listOf(
         viewModelScope.launch {
             Logger.d("UX", "AI Agent inference preference changed: ${preference.name}")
             repository.updateAiAgentInferencePreference(preference)
+        }
+    }
+
+    fun setAiAgentL1CacheEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            Logger.d("UX", "AI Agent L1 cache enabled changed: $enabled")
+            repository.updateAiAgentL1CacheEnabled(enabled)
+            L1CacheSettings.setEnabled(enabled)
         }
     }
 

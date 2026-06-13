@@ -171,6 +171,8 @@
 <string name="landmark_compatibility">GPUPixel</string>
 <string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
 <string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
+<string name="ai_agent_l1_cache">L1 意图缓存</string>
+<string name="ai_agent_l1_cache_desc">关闭后所有指令都会绕过缓存走 LLM，便于调试推理链路。</string>
 <string name="ai_agent_local_backend">本地 LLM 后端</string>
 <string name="ai_agent_local_backend_cpu">CPU</string>
 <string name="ai_agent_local_backend_opencl">OpenCL（GPU）</string>

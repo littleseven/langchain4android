@@ -44,6 +44,11 @@ class IntentCache(maxSize: Int = 100) {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return null
 
+        // 调试开关：关闭 L1 缓存时直接未命中
+        if (!L1CacheSettings.isEnabled()) {
+            return null
+        }
+
         // 1. 精确匹配预置意图
         presetIntents[trimmed]?.let {
             hitCount++

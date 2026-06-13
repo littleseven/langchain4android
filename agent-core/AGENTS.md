@@ -8,12 +8,12 @@
 
 `:agent-core` 是 **Agent Runtime 核心**，承载从 `app/domain/agent/` 迁移出的所有 Agent 组件。提供平台无关的泛型接口和 Android 无关的纯 Kotlin 实现：
 
-### 核心组件（36 个文件，7 个子包）
+### 核心组件（43 个文件，8 个子包）
 
 | 组件 | 职责 | 包路径 |
 |------|------|--------|
 | `AgentOrchestrator` | 应用级单例，统一入口，管理本地模型生命周期 | `agent.core` |
-| `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列 | `agent.core` |
+| `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列；同时实现 `ToolProvider` 支持 Tool Calling | `agent.core` |
 | `LocalLlmEngine` | 本地 Qwen3-1.7B MNN-LLM 推理封装，实现 `ChatLanguageModel` / `StreamingChatLanguageModel` | `agent.core` |
 | `AgentCommandParser` | LLM 响应解析为 AgentCommand | `agent.core` |
 | `InferenceRouter` | 隐私分级 + 本地/远程路由 | `agent.core` |
@@ -35,7 +35,8 @@
 
 | 子包 | 内容 | 说明 |
 |------|------|------|
-| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse` | 与 LangChain4j 对齐的模型 API 层（无外部依赖） |
+| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolExecutionRequest` | 与 LangChain4j 对齐的模型 API 层（无外部依赖） |
+| `tool/` | `ToolOrchestrator`, `ToolCallingChatLanguageModel`, `ToolCallingOutputParser`, `ToolPromptBuilder` | Tool/Function Calling 实现 |
 | `llm/` | `MnnLlmClient`, `LlmModelManager`, `LocalLlmEngine` | MNN LLM 客户端、模型管理与本地推理引擎 |
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |
@@ -85,10 +86,19 @@
 - `ChatLanguageModel.kt` — 同步对话模型接口
 - `StreamingChatLanguageModel.kt` — 流式对话模型接口
 - `StreamingChatResponseHandler.kt` — 流式响应回调
-- `ChatMessage.kt` — 消息密封接口（`SystemMessage` / `UserMessage` / `AiMessage`）
-- `ChatRequest.kt` — 对话请求
+- `ChatMessage.kt` — 消息密封接口（`SystemMessage` / `UserMessage` / `AiMessage` / `ToolExecutionResultMessage`）
+- `ChatRequest.kt` — 对话请求（含 `toolSpecifications`）
 - `ChatResponse.kt` — 对话响应
 - `ChatResponseMetadata.kt` — 响应元数据（token、速度等）
+- `ToolSpecification.kt` / `ToolParameters.kt` / `JsonSchemaProperty.kt` — 工具 Schema
+- `ToolExecutionRequest.kt` / `ToolExecutionResultMessage.kt` — 工具执行消息
+- `ToolExecutor.kt` / `ToolProvider.kt` — 工具执行与发现接口
+
+- `ToolOrchestrator.kt` — tool-request → execute → result 循环
+- `ToolCallingChatLanguageModel.kt` — 为模型注入工具提示并解析文本输出
+- `ToolCallingOutputParser.kt` — 解析 OpenAI `tool_calls` / `<tool_call>` / ReAct Action 格式
+- `ToolPromptBuilder.kt` — 工具说明渲染
+- `ToolCallingMode.kt` / `ToolCallingConfig.kt` — OPENAI_TOOLS / REACT 模式配置
 
 ### `llm/`
 - `MnnLlmClient.kt` — MNN LLM 客户端

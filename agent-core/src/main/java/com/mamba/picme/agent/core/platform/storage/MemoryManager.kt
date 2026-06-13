@@ -9,6 +9,8 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.mamba.picme.agent.core.langchain4j.AiMessage
 import com.mamba.picme.agent.core.langchain4j.ChatMessage
 import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
+import com.mamba.picme.agent.core.langchain4j.ToolExecutionResultMessage
 import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.logging.Logger
 import kotlinx.coroutines.flow.first
@@ -206,6 +208,9 @@ class MemoryManager(private val context: Context) {
                     userAssistantPairs.add(currentUser to message)
                     currentUser = null
                 }
+                is ToolExecutionResultMessage -> {
+                    // tool results are part of the assistant turn, skip as a separate pair
+                }
                 else -> { /* ignore system messages in history */ }
             }
         }
@@ -229,6 +234,7 @@ class MemoryManager(private val context: Context) {
                 is SystemMessage -> "system" to message.text
                 is UserMessage -> "user" to message.text
                 is AiMessage -> "assistant" to message.text
+                is ToolExecutionResultMessage -> "tool" to message.text
             }
             val obj = JSONObject().apply {
                 put("role", role)
@@ -252,6 +258,14 @@ class MemoryManager(private val context: Context) {
                 when (roleName) {
                     "system" -> SystemMessage(content)
                     "assistant" -> AiMessage(content)
+                    "tool" -> ToolExecutionResultMessage(
+                        toolExecutionRequest = ToolExecutionRequest(
+                            id = "",
+                            name = "",
+                            arguments = "{}"
+                        ),
+                        text = content
+                    )
                     else -> UserMessage(content)
                 }
             }

@@ -5,9 +5,10 @@ import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
 import com.mamba.picme.agent.core.langchain4j.ChatRequest
 import com.mamba.picme.agent.core.langchain4j.ChatResponse
 import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.ToolExecutionResultMessage
+import com.mamba.picme.agent.core.langchain4j.ToolSpecification
 import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.logging.Logger
-import kotlinx.coroutines.runBlocking
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingApiClient
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingMessage
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingRequest
@@ -15,9 +16,16 @@ import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingResponse
 import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiApiClient
 import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiChatRequest
 import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiChatResponse
+import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiFunction
+import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiFunctionParameters
+import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiJsonSchemaProperty
 import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiMessage
+import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiTool
+import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiToolCall
+import com.mamba.picme.agent.core.platform.llm.remote.openai.OpenAiToolCallFunction
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.android.RemoteProtocol
+import kotlinx.coroutines.runBlocking
 import retrofit2.Response
 
 /**
@@ -68,12 +76,14 @@ class UnifiedRemoteClient(
             val temperature = 0.3
 
             try {
-                val content = when {
-                    kimiClient != null -> chatKimi(systemPrompt, userInput, maxTokens, temperature)
+                when {
+                    kimiClient != null -> {
+                        val content = chatKimi(systemPrompt, userInput, maxTokens, temperature)
+                        ChatResponse(aiMessage = AiMessage(content))
+                    }
                     openAiClient != null -> chatOpenAi(request, maxTokens, temperature)
                     else -> throw IllegalStateException("No client available for model ${config.modelId}")
                 }
-                ChatResponse(aiMessage = AiMessage(content))
             } catch (e: Exception) {
                 Logger.e(tag, "Chat failed for model=${config.modelId}", e)
                 throw e
@@ -107,14 +117,31 @@ class UnifiedRemoteClient(
         request: ChatRequest,
         maxTokens: Int,
         temperature: Double
-    ): String {
+    ): ChatResponse {
         val client = openAiClient ?: throw IllegalStateException("OpenAI client not initialized")
 
         val messages = request.messages.mapNotNull { message ->
             when (message) {
                 is SystemMessage -> OpenAiMessage(role = "system", content = message.text)
                 is UserMessage -> OpenAiMessage(role = "user", content = message.text)
-                is AiMessage -> OpenAiMessage(role = "assistant", content = message.text)
+                is AiMessage -> OpenAiMessage(
+                    role = "assistant",
+                    content = message.text.takeIf { it.isNotBlank() },
+                    toolCalls = message.toolExecutionRequests.takeIf { it.isNotEmpty() }?.map { req ->
+                        OpenAiToolCall(
+                            id = req.id,
+                            function = OpenAiToolCallFunction(
+                                name = req.name,
+                                arguments = req.arguments
+                            )
+                        )
+                    }
+                )
+                is ToolExecutionResultMessage -> OpenAiMessage(
+                    role = "tool",
+                    content = message.text,
+                    toolCallId = message.toolExecutionRequest.id
+                )
                 else -> null
             }
         }
@@ -124,19 +151,57 @@ class UnifiedRemoteClient(
             messages = messages,
             maxTokens = maxTokens,
             temperature = temperature,
-            stream = false
+            stream = false,
+            tools = request.toolSpecifications.toOpenAiTools().takeIf { it.isNotEmpty() },
+            toolChoice = if (request.toolSpecifications.isNotEmpty()) "auto" else null
         )
 
         val response: Response<OpenAiChatResponse> = client.service.chatCompletions(openAiRequest)
-        return parseResponse(response) { body ->
-            body.choices.firstOrNull()?.message?.content?.trim()
+        val message = parseResponse(response) { body ->
+            body.choices.firstOrNull()?.message
         }.getOrThrow()
+
+        val content = message.content?.trim() ?: ""
+        val toolExecutionRequests = message.toolCalls?.map { call ->
+            com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest(
+                id = call.id,
+                name = call.function.name,
+                arguments = call.function.arguments
+            )
+        } ?: emptyList()
+
+        return ChatResponse(
+            aiMessage = AiMessage(
+                text = content,
+                toolExecutionRequests = toolExecutionRequests
+            )
+        )
     }
 
-    private fun <T> parseResponse(
+    private fun List<ToolSpecification>.toOpenAiTools(): List<OpenAiTool> = map { spec ->
+        OpenAiTool(
+            function = OpenAiFunction(
+                name = spec.name,
+                description = spec.description,
+                parameters = OpenAiFunctionParameters(
+                    type = spec.parameters.type,
+                    properties = spec.parameters.properties.mapValues { (_, prop) ->
+                        OpenAiJsonSchemaProperty(
+                            type = prop.type,
+                            description = prop.description,
+                            enum = prop.enum
+                        )
+                    },
+                    required = spec.parameters.required
+                )
+            )
+        )
+    }
+
+    private fun <T, R> parseResponse(
         response: Response<T>,
-        extractContent: (T) -> String?
-    ): Result<String> {
+        extractContent: (T) -> R?
+    ): Result<R> {
         if (!response.isSuccessful) {
             val errorBody = response.errorBody()?.string()
             Logger.e(tag, "HTTP ${response.code()}, body=$errorBody")

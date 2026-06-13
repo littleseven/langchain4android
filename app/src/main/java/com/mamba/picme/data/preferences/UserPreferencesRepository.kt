@@ -89,6 +89,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         // AI Agent 推理偏好（LOCAL 模式下的本地/远程路由策略）
         val AI_AGENT_INFERENCE_PREFERENCE = stringPreferencesKey("ai_agent_inference_preference")
 
+        // AI Agent L1 意图缓存调试开关
+        val AI_AGENT_L1_CACHE_ENABLED = booleanPreferencesKey("ai_agent_l1_cache_enabled")
+
         // Cloudflare AI Gateway Token
         val CLOUDFLARE_GATEWAY_TOKEN = stringPreferencesKey("cloudflare_gateway_token")
 
@@ -685,6 +688,24 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentInferencePreference(preference: AiAgentInferencePreference) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_INFERENCE_PREFERENCE] = preference.name
+        }
+    }
+
+    override val aiAgentL1CacheEnabledFlow: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_L1_CACHE_ENABLED] ?: true
+        }
+
+    override suspend fun updateAiAgentL1CacheEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.AI_AGENT_L1_CACHE_ENABLED] = enabled
         }
     }
 

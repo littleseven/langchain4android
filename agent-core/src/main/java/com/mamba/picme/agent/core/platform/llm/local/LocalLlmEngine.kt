@@ -10,6 +10,7 @@ import com.mamba.picme.agent.core.langchain4j.ChatResponseMetadata
 import com.mamba.picme.agent.core.langchain4j.StreamingChatLanguageModel
 import com.mamba.picme.agent.core.langchain4j.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.ToolExecutionResultMessage
 import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.MnnLlmClient.NativeReleaseTarget
 import com.mamba.picme.agent.core.platform.logging.Logger
@@ -314,6 +315,7 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
         is UserMessage -> message.text
         is SystemMessage -> message.text
         is AiMessage -> message.text
+        is ToolExecutionResultMessage -> message.text
     }
 
     /**
@@ -462,6 +464,11 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                     }
                     is AiMessage -> {
                         appendLine("assistant:")
+                        appendLine(message.text)
+                        appendLine()
+                    }
+                    is ToolExecutionResultMessage -> {
+                        appendLine("tool:")
                         appendLine(message.text)
                         appendLine()
                     }

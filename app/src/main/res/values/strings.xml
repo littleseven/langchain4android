@@ -319,6 +319,8 @@
     <string name="ai_agent_inference_force_remote_desc">Always use remote API, bypassing local model check.</string>
     <string name="ai_agent_auto_execute_plans">Auto-Execute Multi-Step Plans</string>
     <string name="ai_agent_auto_execute_plans_desc">When disabled, Agent will ask for confirmation before executing multi-step plans.</string>
+    <string name="ai_agent_l1_cache">L1 Intent Cache</string>
+    <string name="ai_agent_l1_cache_desc">When disabled, all commands bypass the cache and go through the LLM for debugging.</string>
     <string name="ai_agent_input_hint">Ask AI Agent...</string>
     <string name="clear_chat">Clear Chat</string>
     <string name="chat_input_hint">Ask AI Agent...</string>

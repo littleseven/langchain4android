@@ -110,6 +110,7 @@ fun SettingsScreen(
     val aiAgentRemoteModelConfigs by viewModel.aiAgentRemoteModelConfigs.collectAsState()
     val aiAgentSelectedRemoteModel by viewModel.aiAgentSelectedRemoteModel.collectAsState()
     val aiAgentInferencePreference by viewModel.aiAgentInferencePreference.collectAsState()
+    val aiAgentL1CacheEnabled by viewModel.aiAgentL1CacheEnabled.collectAsState()
     val aiAgentLocalUseOpencl by viewModel.aiAgentLocalUseOpencl.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
@@ -235,6 +236,8 @@ fun SettingsScreen(
             onAiAgentSelectedRemoteModelChange = { viewModel.setAiAgentSelectedRemoteModel(it) },
             aiAgentInferencePreference = aiAgentInferencePreference,
             onAiAgentInferencePreferenceChange = { viewModel.setAiAgentInferencePreference(it) },
+            aiAgentL1CacheEnabled = aiAgentL1CacheEnabled,
+            onAiAgentL1CacheEnabledChange = { viewModel.setAiAgentL1CacheEnabled(it) },
             aiAgentLocalUseOpencl = aiAgentLocalUseOpencl,
             onAiAgentLocalUseOpenclChange = { viewModel.setAiAgentLocalUseOpencl(it) },
             voiceCommandMode = voiceCommandMode,
@@ -287,6 +290,8 @@ private fun SettingsContent(
     onAiAgentSelectedRemoteModelChange: (String) -> Unit,
     aiAgentInferencePreference: AiAgentInferencePreference,
     onAiAgentInferencePreferenceChange: (AiAgentInferencePreference) -> Unit,
+    aiAgentL1CacheEnabled: Boolean,
+    onAiAgentL1CacheEnabledChange: (Boolean) -> Unit,
     aiAgentLocalUseOpencl: Boolean,
     onAiAgentLocalUseOpenclChange: (Boolean) -> Unit,
     voiceCommandMode: VoiceCommandMode,
@@ -401,6 +406,18 @@ private fun SettingsContent(
                         )
                     }
                 }
+
+                DebugOptionRow(
+                    title = stringResource(R.string.ai_agent_l1_cache),
+                    checked = aiAgentL1CacheEnabled,
+                    onCheckedChange = onAiAgentL1CacheEnabledChange
+                )
+                Text(
+                    text = stringResource(R.string.ai_agent_l1_cache_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -951,6 +968,8 @@ fun SettingsScreenPreview() {
             onAiAgentSelectedRemoteModelChange = {},
             aiAgentInferencePreference = AiAgentInferencePreference.FORCE_LOCAL,
             onAiAgentInferencePreferenceChange = {},
+            aiAgentL1CacheEnabled = true,
+            onAiAgentL1CacheEnabledChange = {},
             aiAgentLocalUseOpencl = false,
             onAiAgentLocalUseOpenclChange = {},
             voiceCommandMode = VoiceCommandMode.DISABLED,

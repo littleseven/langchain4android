@@ -26,15 +26,22 @@ data class OpenAiChatRequest(
     @Json(name = "max_tokens")
     val maxTokens: Int = 1024,
     val temperature: Double = 0.3,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    val tools: List<OpenAiTool>? = null,
+    @Json(name = "tool_choice")
+    val toolChoice: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class OpenAiMessage(
     val role: String,
-    val content: String,
+    val content: String? = null,
     @Json(name = "reasoning_content")
-    val reasoningContent: String? = null
+    val reasoningContent: String? = null,
+    @Json(name = "tool_calls")
+    val toolCalls: List<OpenAiToolCall>? = null,
+    @Json(name = "tool_call_id")
+    val toolCallId: String? = null
 )
 
 /**
@@ -66,6 +73,46 @@ data class OpenAiUsage(
     val completionTokens: Int,
     @Json(name = "total_tokens")
     val totalTokens: Int
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiTool(
+    val type: String = "function",
+    val function: OpenAiFunction
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiFunction(
+    val name: String,
+    val description: String,
+    val parameters: OpenAiFunctionParameters
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiFunctionParameters(
+    val type: String = "object",
+    val properties: Map<String, OpenAiJsonSchemaProperty>,
+    val required: List<String> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiJsonSchemaProperty(
+    val type: String,
+    val description: String? = null,
+    val enum: List<String>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiToolCall(
+    val id: String,
+    val type: String = "function",
+    val function: OpenAiToolCallFunction
+)
+
+@JsonClass(generateAdapter = true)
+data class OpenAiToolCallFunction(
+    val name: String,
+    val arguments: String
 )
 
 /**

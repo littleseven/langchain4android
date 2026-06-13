@@ -103,6 +103,10 @@ interface UserSettingsRepository {
     val aiAgentInferencePreferenceFlow: Flow<AiAgentInferencePreference>
     suspend fun updateAiAgentInferencePreference(preference: AiAgentInferencePreference)
 
+    // ── AI Agent L1 意图缓存调试开关 ─────────────────────────
+    val aiAgentL1CacheEnabledFlow: Flow<Boolean>
+    suspend fun updateAiAgentL1CacheEnabled(enabled: Boolean)
+
     // ── Cloudflare AI Gateway Token ─────────────────────────
     val cloudflareGatewayTokenFlow: Flow<String>
     suspend fun updateCloudflareGatewayToken(token: String)

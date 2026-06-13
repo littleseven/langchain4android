@@ -4,6 +4,7 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.langchain4j.ToolParameters
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
 /**
@@ -41,6 +42,9 @@ interface Capability {
     fun supportsCommand(command: AgentCommand): Boolean {
         return supportedCommands().contains(AgentCommand.getMethodName(command))
     }
+
+    /** 获取命令的参数 JSON Schema（用于 Tool Calling） */
+    fun getCommandParameterSchema(command: String): ToolParameters = ToolParameters()
 
     /** 构建 Capability 描述文本（用于 system prompt） */
     fun buildCapabilityDescription(): String {

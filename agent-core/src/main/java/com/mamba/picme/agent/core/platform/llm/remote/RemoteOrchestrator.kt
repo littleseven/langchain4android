@@ -75,7 +75,7 @@ class RemoteOrchestrator(
     private val context: Context,
     private val remoteConfig: RemoteModelConfig,
     private val promptBuilder: PromptBuilder,
-    private val chatLanguageModel: ChatLanguageModel = UnifiedRemoteClient(remoteConfig)
+    val chatLanguageModel: ChatLanguageModel = UnifiedRemoteClient(remoteConfig)
 ) {
 
     private val tag = "RemoteOrchestrator"

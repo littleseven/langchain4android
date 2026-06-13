@@ -4,8 +4,10 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
 import com.mamba.picme.agent.core.api.execution.PlanStep
+import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
 import com.mamba.picme.agent.core.langchain4j.ChatRequest
 import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.ToolProvider
 import com.mamba.picme.agent.core.langchain4j.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
@@ -17,6 +19,10 @@ import com.mamba.picme.agent.core.runtime.parsing.PromptBuilder
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.policy.PrivacyLevel
 import com.mamba.picme.agent.core.runtime.state.SceneManager
+import com.mamba.picme.agent.core.runtime.tool.ToolCallingChatLanguageModel
+import com.mamba.picme.agent.core.runtime.tool.ToolCallingConfig
+import com.mamba.picme.agent.core.runtime.tool.ToolOrchestrator
+import com.mamba.picme.agent.core.runtime.tool.ToolPromptBuilder
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -66,9 +72,20 @@ class InferenceRouter(
      */
     suspend fun processInput(
         userInput: String,
-        context: AgentContext
+        context: AgentContext,
+        toolProvider: ToolProvider? = null,
+        toolCallingConfig: ToolCallingConfig = ToolCallingConfig()
     ): InferenceResult {
         Logger.d(tag, "Processing input: '$userInput'")
+
+        // Tool Calling 路径：当传入 ToolProvider 且当前场景有可用的工具时优先走此路径
+        if (toolProvider != null) {
+            val toolSpecifications = runCatching { toolProvider.getToolSpecifications() }.getOrDefault(emptyList())
+            if (toolSpecifications.isNotEmpty()) {
+                Logger.i(tag, "Tool provider active with ${toolSpecifications.size} tools, using tool calling path")
+                return processInputWithTools(userInput, context, toolProvider, toolSpecifications, toolCallingConfig)
+            }
+        }
 
         // 1. 隐私分级检查
         val privacyLevel = privacyGuard.classify(userInput)
@@ -145,6 +162,53 @@ class InferenceRouter(
                 )
             }
         }
+    }
+
+    /**
+     * Tool Calling 路径：把可用工具注入 system prompt，通过 ToolOrchestrator 完成
+     * tool-request → execute → tool-result 循环，最后把模型最终输出解析为 AgentCommand。
+     */
+    private suspend fun processInputWithTools(
+        userInput: String,
+        context: AgentContext,
+        toolProvider: ToolProvider,
+        toolSpecifications: List<com.mamba.picme.agent.core.langchain4j.ToolSpecification>,
+        toolCallingConfig: ToolCallingConfig
+    ): InferenceResult {
+        val baseSystemPrompt = when (toolCallingConfig.mode) {
+            com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.OPENAI_TOOLS -> """
+                你是 PicMe AI 助手小觅。当用户请求需要工具时，请按 OpenAI tool_calls 格式调用工具；
+                工具调用完成后，把最终结果以 JSON 命令数组形式输出，或直接给出中文回复。
+            """.trimIndent()
+            com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.REACT -> """
+                你是 PicMe AI 助手小觅。请按 ReAct 格式思考并调用工具，最终给出中文回复或 JSON 命令数组。
+            """.trimIndent()
+        }
+        val toolSection = ToolPromptBuilder.buildToolSection(toolSpecifications, toolCallingConfig)
+        val systemPrompt = "$baseSystemPrompt\n$toolSection"
+
+        val chatRequest = ChatRequest(
+            messages = listOf(
+                SystemMessage(systemPrompt),
+                UserMessage(userInput)
+            ),
+            toolSpecifications = toolSpecifications
+        )
+
+        val baseModel: ChatLanguageModel = if (localEngine.isLoaded) {
+            localEngine
+        } else {
+            remoteOrchestrator.chatLanguageModel
+        }
+
+        val model = ToolOrchestrator(
+            ToolCallingChatLanguageModel(baseModel, toolCallingConfig),
+            toolProvider
+        )
+
+        val responseText = model.chat(chatRequest).aiMessage.text
+        val command = AgentCommandParser.parseLlmResponse(responseText, context)
+        return InferenceResult.Local(command = command)
     }
 
     /**
