@@ -6,11 +6,16 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.mamba.picme.data.model.MediaEntity
 
-@Database(entities = [MediaEntity::class, ChatMessageEntity::class], version = 4, exportSchema = false)
+@Database(
+    entities = [MediaEntity::class, ChatMessageEntity::class, ChatSessionEntity::class],
+    version = 5,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun mediaDao(): MediaDao
     abstract fun chatMessageDao(): ChatMessageDao
+    abstract fun chatSessionDao(): ChatSessionDao
 
     companion object {
         @Volatile
@@ -23,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
+                    .addMigrations(ChatDatabaseMigrations.MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
