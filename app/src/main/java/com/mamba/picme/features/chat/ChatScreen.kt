@@ -65,10 +65,11 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mamba.picme.R
 import com.mamba.picme.core.common.Logger
+import androidx.compose.material.icons.rounded.Menu
+import androidx.activity.compose.BackHandler
+import com.mamba.picme.features.chat.ChatThreadSidebar
 import com.mamba.picme.features.chat.components.ModelSelector
 import com.mamba.picme.features.chat.components.QuickActionBar
-import com.mamba.picme.features.common.chat.AgentMessage
-import kotlinx.coroutines.launch
 
 private const val TAG = "ChatScreen"
 
@@ -94,8 +95,17 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
     val currentModel by viewModel.currentModel.collectAsState()
+    val threads by viewModel.threads.collectAsState()
+    val currentSessionId by viewModel.currentSessionId.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+
+    var showQuickActions by remember { mutableStateOf(false) }
+    var isSidebarOpen by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isSidebarOpen) {
+        isSidebarOpen = false
+    }
 
     // 自动滚动到底部
     LaunchedEffect(messages.size) {
@@ -117,13 +127,12 @@ fun ChatScreen(
         }
     }
 
-    var showQuickActions by remember { mutableStateOf(false) }
-
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             ChatTopBar(
+                onOpenSidebar = { isSidebarOpen = true },
                 onNavigateToSettings = onNavigateToSettings,
                 onClearChat = { viewModel.clearChat() }
             )
@@ -204,12 +213,25 @@ fun ChatScreen(
                     modifier = Modifier.align(Alignment.BottomEnd)
                 )
             }
+
+            // 侧边栏
+            ChatThreadSidebar(
+                visible = isSidebarOpen,
+                threads = threads,
+                currentSessionId = currentSessionId,
+                onThreadSelected = { sessionId ->
+                    viewModel.switchSession(sessionId)
+                    isSidebarOpen = false
+                },
+                onDismiss = { isSidebarOpen = false }
+            )
         }
     }
 }
 
 @Composable
 private fun ChatTopBar(
+    onOpenSidebar: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onClearChat: () -> Unit
 ) {
@@ -221,12 +243,24 @@ private fun ChatTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "PicMe",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            IconButton(onClick = onOpenSidebar) {
+                Icon(
+                    imageVector = Icons.Rounded.Menu,
+                    contentDescription = "Open sidebar",
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Text(
+                text = "PicMe",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = onClearChat) {

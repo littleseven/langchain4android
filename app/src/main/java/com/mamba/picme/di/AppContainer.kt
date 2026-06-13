@@ -58,6 +58,7 @@ class MediaViewModelFactory(
 }
 
 class ChatViewModelDependencies(
+    val context: Context,
     val chatMessageDao: com.mamba.picme.data.local.ChatMessageDao
 )
 
@@ -69,6 +70,7 @@ class ChatViewModelFactory(
         if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
             return ChatViewModel(
+                context = dependencies.context,
                 chatMessageDao = dependencies.chatMessageDao
             ) as T
         }
@@ -218,6 +220,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     private val chatViewModelDependencies: ChatViewModelDependencies by lazy {
         ChatViewModelDependencies(
+            context = context,
             chatMessageDao = database.chatMessageDao()
         )
     }

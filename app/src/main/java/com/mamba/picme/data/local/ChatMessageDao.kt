@@ -63,8 +63,9 @@ interface ChatMessageDao {
     suspend fun getMessageCount(sessionId: String): Int
 
     /**
-     * 获取指定会话的最后一条消息时间戳
+     * 获取所有 distinct sessionId，按最近消息时间倒序排列
      */
-    @Query("SELECT MAX(timestamp) FROM chat_messages WHERE sessionId = :sessionId")
-    suspend fun getLastMessageTimestamp(sessionId: String): Long?
+    @Query("SELECT DISTINCT sessionId FROM chat_messages ORDER BY timestamp DESC")
+    fun getAllSessionIds(): Flow<List<String>>
 }
+

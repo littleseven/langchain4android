@@ -321,6 +321,8 @@
     <string name="ai_agent_input_hint">Ask AI Agent...</string>
     <string name="clear_chat">Clear Chat</string>
     <string name="chat_input_hint">Ask AI Agent...</string>
+    <string name="sidebar_title">Chat History</string>
+    <string name="sidebar_empty">No chat history</string>
     <string name="ai_model_manager">AI Model Manager</string>
     <string name="ai_model_manager_desc">Manage on-device AI models.</string>
     <string name="model_center">Model Center</string>
