@@ -517,30 +517,3 @@ class ChatViewModel(
         }
     }
 }
-
-/**
- * ChatViewModel 工厂
- */
-class ChatViewModelFactory(
-    private val dependencies: ChatViewModelDependencies
-) : ViewModelProvider.Factory {
-
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
-            return ChatViewModel(
-                context = dependencies.context,
-                chatMessageDao = dependencies.chatMessageDao
-            ) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class")
-    }
-}
-
-/**
- * ChatViewModel 依赖
- */
-class ChatViewModelDependencies(
-    val context: Context,
-    val chatMessageDao: com.mamba.picme.data.local.ChatMessageDao
-)

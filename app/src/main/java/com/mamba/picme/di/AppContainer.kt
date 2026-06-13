@@ -24,7 +24,7 @@ import com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.mamba.picme.domain.usecase.GetGroupedMediaUseCase
 import com.mamba.picme.domain.usecase.OcrProcessor
 import com.mamba.picme.features.chat.ChatViewModel
-import com.mamba.picme.features.chat.ChatViewModelFactory
+import com.mamba.picme.features.chat.ChatViewModelDependencies
 import com.mamba.picme.features.gallery.MediaViewModel
 import androidx.lifecycle.ViewModel
 
@@ -56,11 +56,6 @@ class MediaViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
-
-class ChatViewModelDependencies(
-    val context: Context,
-    val chatMessageDao: com.mamba.picme.data.local.ChatMessageDao
-)
 
 class ChatViewModelFactory(
     private val dependencies: ChatViewModelDependencies
@@ -221,7 +216,8 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     private val chatViewModelDependencies: ChatViewModelDependencies by lazy {
         ChatViewModelDependencies(
             context = context,
-            chatMessageDao = database.chatMessageDao()
+            chatMessageDao = database.chatMessageDao(),
+            chatSessionDao = database.chatSessionDao()
         )
     }
 
