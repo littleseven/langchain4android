@@ -22,6 +22,15 @@ interface ChatSessionDao {
         updatedAt: Long = System.currentTimeMillis()
     )
 
+    /**
+     * 更新会话的 updatedAt，不修改标题
+     */
+    @Query("UPDATE chat_sessions SET updatedAt = :updatedAt WHERE sessionId = :sessionId")
+    suspend fun touchSession(
+        sessionId: String,
+        updatedAt: Long = System.currentTimeMillis()
+    )
+
     @Query("DELETE FROM chat_sessions WHERE sessionId = :sessionId")
     suspend fun deleteSession(sessionId: String)
 

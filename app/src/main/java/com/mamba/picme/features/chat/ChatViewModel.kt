@@ -2,7 +2,6 @@ package com.mamba.picme.features.chat
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mamba.picme.agent.core.api.context.ChatMessage
 import com.mamba.picme.agent.core.api.context.ChatRole
@@ -25,6 +24,7 @@ import java.util.UUID
 
 private const val TAG = "ChatViewModel"
 private const val MAX_MESSAGES = 500
+private const val MAX_PREVIEW_LENGTH = 60
 private const val CHAT_SYSTEM_PROMPT = "You are a helpful AI assistant. Respond concisely and naturally in the same language as the user. " +
     "Do not output any thinking process. Do not use <think>, </think>, or <thinking> tags."
 
@@ -38,6 +38,7 @@ private const val CHAT_SYSTEM_PROMPT = "You are a helpful AI assistant. Respond 
  * - 提供处理中状态（isProcessing）
  * - 管理会话列表和当前会话切换
  */
+@Suppress("TooManyFunctions") // UI 状态协调器，函数数量由会话管理辅助方法驱动
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     dependencies: ChatViewModelDependencies
@@ -125,7 +126,7 @@ class ChatViewModel(
                             ChatThreadUi(
                                 sessionId = session.sessionId,
                                 title = resolveThreadTitle(session),
-                                lastMessagePreview = lastMessage?.content?.take(60) ?: "",
+                                lastMessagePreview = lastMessage?.content?.take(MAX_PREVIEW_LENGTH) ?: "",
                                 updatedAt = session.updatedAt,
                                 isSelected = session.sessionId == _currentSessionId.value
                             )
@@ -182,8 +183,9 @@ class ChatViewModel(
         if (newTitle.isBlank()) return
         viewModelScope.launch {
             try {
-                chatSessionDao.updateTitle(sessionId, newTitle.trim())
-                Logger.i(TAG, "Renamed session $sessionId to: $newTitle")
+                val trimmed = newTitle.trim()
+                chatSessionDao.updateTitle(sessionId, trimmed)
+                Logger.i(TAG, "Renamed session $sessionId to: $trimmed")
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to rename session", e)
             }
@@ -244,6 +246,9 @@ class ChatViewModel(
                 )
                 chatMessageDao.insertMessage(userMessage)
 
+                // 刷新会话活跃时间，确保线程列表排序正确
+                chatSessionDao.touchSession(sessionId)
+
                 // 2. 触发处理状态
                 _isProcessing.value = true
 
@@ -266,6 +271,7 @@ class ChatViewModel(
                             modelUsed = modelLabel
                         )
                         chatMessageDao.insertMessage(agentMessage)
+                        chatSessionDao.touchSession(sessionId)
                     }
                 }
 
@@ -282,6 +288,7 @@ class ChatViewModel(
                     modelUsed = "error"
                 )
                 chatMessageDao.insertMessage(errorMessage)
+                chatSessionDao.touchSession(_currentSessionId.value)
             } finally {
                 _isProcessing.value = false
             }
@@ -421,6 +428,7 @@ class ChatViewModel(
                 metadata = metadata
             )
         )
+        chatSessionDao.touchSession(sessionId)
     }
 
     /**
