@@ -64,10 +64,7 @@ class ChatViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChatViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ChatViewModel(
-                context = dependencies.context,
-                chatMessageDao = dependencies.chatMessageDao
-            ) as T
+            return ChatViewModel(dependencies) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

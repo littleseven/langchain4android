@@ -160,5 +160,6 @@ data class ChatThreadUi(
     val sessionId: String,
     val title: String,
     val lastMessagePreview: String = "",
+    val updatedAt: Long = System.currentTimeMillis(),
     val isSelected: Boolean = false
 )

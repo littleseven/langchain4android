@@ -10,6 +10,7 @@ import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.ChatMessageDao
 import com.mamba.picme.data.local.ChatMessageEntity
+import com.mamba.picme.data.local.ChatSessionEntity
 import com.mamba.picme.agent.core.platform.llm.local.StreamEvent
 import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,11 +40,14 @@ private const val CHAT_SYSTEM_PROMPT = "You are a helpful AI assistant. Respond 
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ChatViewModel(
-    context: Context,
-    private val chatMessageDao: ChatMessageDao
+    dependencies: ChatViewModelDependencies
 ) : ViewModel() {
 
-    private val orchestrator = AgentOrchestrator.getInstance(context.applicationContext)
+    private val context = dependencies.context.applicationContext
+    private val chatMessageDao = dependencies.chatMessageDao
+    private val chatSessionDao = dependencies.chatSessionDao
+
+    private val orchestrator = AgentOrchestrator.getInstance(context)
 
     private val _currentSessionId = MutableStateFlow("default")
     val currentSessionId: StateFlow<String> = _currentSessionId.asStateFlow()
@@ -73,6 +77,23 @@ class ChatViewModel(
     private val _threads = MutableStateFlow<List<ChatThreadUi>>(emptyList())
     val threads: StateFlow<List<ChatThreadUi>> = _threads.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /**
+     * 过滤后的线程列表
+     */
+    val filteredThreads: StateFlow<List<ChatThreadUi>> = combine(
+        _threads,
+        _searchQuery
+    ) { threads, query ->
+        if (query.isBlank()) threads
+        else threads.filter {
+            it.title.contains(query, ignoreCase = true) ||
+                it.lastMessagePreview.contains(query, ignoreCase = true)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         loadMessages()
         loadThreads()
@@ -97,19 +118,31 @@ class ChatViewModel(
     private fun loadThreads() {
         viewModelScope.launch {
             try {
-                chatMessageDao.getAllSessionIds()
-                    .collect { sessionIds ->
-                        _threads.value = sessionIds.map { id ->
+                chatSessionDao.getAllSessions()
+                    .collect { sessions ->
+                        val threads = sessions.map { session ->
+                            val lastMessage = chatMessageDao.getLastMessageForSession(session.sessionId)
                             ChatThreadUi(
-                                sessionId = id,
-                                title = if (id == "default") "New Chat" else id,
-                                isSelected = id == _currentSessionId.value
+                                sessionId = session.sessionId,
+                                title = resolveThreadTitle(session),
+                                lastMessagePreview = lastMessage?.content?.take(60) ?: "",
+                                updatedAt = session.updatedAt,
+                                isSelected = session.sessionId == _currentSessionId.value
                             )
                         }
+                        _threads.value = threads
                     }
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to load threads", e)
             }
+        }
+    }
+
+    private fun resolveThreadTitle(session: ChatSessionEntity): String {
+        return when {
+            session.sessionId == "default" && session.title == "default" -> "New Chat"
+            session.title.isBlank() -> "Chat"
+            else -> session.title
         }
     }
 
@@ -119,6 +152,67 @@ class ChatViewModel(
     fun switchSession(sessionId: String) {
         _currentSessionId.value = sessionId
         Logger.i(TAG, "Switched to session: $sessionId")
+    }
+
+    /**
+     * 创建新会话并切换过去
+     */
+    fun newSession() {
+        val sessionId = UUID.randomUUID().toString()
+        viewModelScope.launch {
+            try {
+                chatSessionDao.insertSession(
+                    ChatSessionEntity(
+                        sessionId = sessionId,
+                        title = "New Chat"
+                    )
+                )
+                _currentSessionId.value = sessionId
+                Logger.i(TAG, "Created new session: $sessionId")
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to create session", e)
+            }
+        }
+    }
+
+    /**
+     * 重命名会话
+     */
+    fun renameSession(sessionId: String, newTitle: String) {
+        if (newTitle.isBlank()) return
+        viewModelScope.launch {
+            try {
+                chatSessionDao.updateTitle(sessionId, newTitle.trim())
+                Logger.i(TAG, "Renamed session $sessionId to: $newTitle")
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to rename session", e)
+            }
+        }
+    }
+
+    /**
+     * 删除会话及其消息；如果删除的是当前会话，切回 default
+     */
+    fun deleteSession(sessionId: String) {
+        viewModelScope.launch {
+            try {
+                chatMessageDao.deleteAllMessagesBySession(sessionId)
+                chatSessionDao.deleteSession(sessionId)
+                if (_currentSessionId.value == sessionId) {
+                    _currentSessionId.value = "default"
+                }
+                Logger.i(TAG, "Deleted session: $sessionId")
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to delete session", e)
+            }
+        }
+    }
+
+    /**
+     * 更新搜索关键字（在内存中过滤线程列表）
+     */
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     /**
@@ -136,6 +230,9 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 val sessionId = _currentSessionId.value
+
+                // 0. 确保会话元数据存在（兼容旧数据或 default）
+                ensureSessionExists(sessionId)
 
                 // 1. 保存用户消息
                 val userMessage = ChatMessageEntity(
@@ -188,6 +285,18 @@ class ChatViewModel(
             } finally {
                 _isProcessing.value = false
             }
+        }
+    }
+
+    private suspend fun ensureSessionExists(sessionId: String) {
+        val existing = chatSessionDao.getSession(sessionId)
+        if (existing == null) {
+            chatSessionDao.insertSession(
+                ChatSessionEntity(
+                    sessionId = sessionId,
+                    title = if (sessionId == "default") "New Chat" else "Chat"
+                )
+            )
         }
     }
 
@@ -453,6 +562,7 @@ class ChatViewModel(
             try {
                 val sessionId = _currentSessionId.value
                 chatMessageDao.deleteAllMessagesBySession(sessionId)
+                chatSessionDao.updateTitle(sessionId, "New Chat")
                 _messages.value = emptyList()
                 Logger.i(TAG, "Chat cleared for session: $sessionId")
             } catch (e: Exception) {
