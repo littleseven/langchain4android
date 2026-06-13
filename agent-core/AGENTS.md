@@ -16,7 +16,7 @@
 | `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列；同时实现 `ToolProvider` 支持 Tool Calling | `agent.core` |
 | `LocalLlmEngine` | 本地 Qwen3-1.7B MNN-LLM 推理封装，实现 `ChatLanguageModel` / `StreamingChatLanguageModel` | `agent.core` |
 | `AgentCommandParser` | LLM 响应解析为 AgentCommand | `agent.core` |
-| `InferenceRouter` | 隐私分级 + 本地/远程路由 | `agent.core` |
+| `InferenceRouter` | 隐私分级 + 本地/远程路由；Tool Calling 路径直接把模型输出的 OpenAI `tool_calls` 解析为 `AgentCommand` | `agent.core` |
 | `ExecutionEngine` | 顺序执行 ExecutionPlan | `agent.core` |
 | `ExecutionReporter` | 执行过程报告，结构化日志 | `agent.core` |
 | `MemoryManager` | 对话历史管理 | `agent.core` |

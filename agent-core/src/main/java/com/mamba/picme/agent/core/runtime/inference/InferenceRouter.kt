@@ -2,13 +2,16 @@ package com.mamba.picme.agent.core.runtime.inference
 
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
+import com.mamba.picme.agent.core.api.context.AgentIdGenerator
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
 import com.mamba.picme.agent.core.api.execution.PlanStep
 import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
 import com.mamba.picme.agent.core.langchain4j.ChatRequest
 import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
 import com.mamba.picme.agent.core.langchain4j.ToolProvider
 import com.mamba.picme.agent.core.langchain4j.UserMessage
+import org.json.JSONObject
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger
@@ -165,8 +168,12 @@ class InferenceRouter(
     }
 
     /**
-     * Tool Calling 路径：把可用工具注入 system prompt，通过 ToolOrchestrator 完成
-     * tool-request → execute → tool-result 循环，最后把模型最终输出解析为 AgentCommand。
+     * Tool Calling 路径：把可用工具注入 system prompt，模型按 OpenAI tool_calls 格式输出命令。
+     *
+     * 关键修复：不再要求模型在工具调用后把最终结果转回提示词格式的 JSON 命令数组
+     *（{"method":"...","params":{}}），而是直接把模型产生的 tool_calls 解析为
+     * [AgentCommand] 返回。这样 chat 页面等入口在远程模型下得到的是 OpenAI 格式的
+     * 指令输出，符合预期。
      */
     private suspend fun processInputWithTools(
         userInput: String,
@@ -177,11 +184,11 @@ class InferenceRouter(
     ): InferenceResult {
         val baseSystemPrompt = when (toolCallingConfig.mode) {
             com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.OPENAI_TOOLS -> """
-                你是 PicMe AI 助手小觅。当用户请求需要工具时，请按 OpenAI tool_calls 格式调用工具；
-                工具调用完成后，把最终结果以 JSON 命令数组形式输出，或直接给出中文回复。
+                你是 PicMe AI 助手小觅。当用户请求需要执行操作时，请直接按 OpenAI tool_calls 格式调用对应工具；
+                如果无需工具（闲聊、解释、不确定），直接给出中文回复。禁止输出其他 JSON 格式。
             """.trimIndent()
             com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.REACT -> """
-                你是 PicMe AI 助手小觅。请按 ReAct 格式思考并调用工具，最终给出中文回复或 JSON 命令数组。
+                你是 PicMe AI 助手小觅。请按 ReAct 格式思考并调用工具，最终给出中文回复。
             """.trimIndent()
         }
         val toolSection = ToolPromptBuilder.buildToolSection(toolSpecifications, toolCallingConfig)
@@ -201,14 +208,49 @@ class InferenceRouter(
             remoteOrchestrator.chatLanguageModel
         }
 
-        val model = ToolOrchestrator(
-            ToolCallingChatLanguageModel(baseModel, toolCallingConfig),
-            toolProvider
-        )
+        val model = ToolCallingChatLanguageModel(baseModel, toolCallingConfig)
+        val response = model.chat(chatRequest)
+        val requests = response.aiMessage.toolExecutionRequests
 
-        val responseText = model.chat(chatRequest).aiMessage.text
-        val command = AgentCommandParser.parseLlmResponse(responseText, context)
-        return InferenceResult.Local(command = command)
+        return if (requests.isNotEmpty()) {
+            Logger.i(tag, "[ToolCalling] Model produced ${requests.size} tool call(s), converting to AgentCommand directly")
+            val commands = requests.map { toolRequestToAgentCommand(it, context) }
+            when {
+                commands.isEmpty() -> InferenceResult.Local(command = AgentCommand.TextReply(message = "未识别到有效命令"))
+                commands.size == 1 -> InferenceResult.Local(command = commands.first())
+                else -> InferenceResult.Batch(commands = commands)
+            }
+        } else {
+            val responseText = response.aiMessage.text
+            Logger.i(tag, "[ToolCalling] No tool calls, parsing text response: ${responseText.replace("\n", "\\n")}")
+            val command = AgentCommandParser.parseLlmResponse(responseText, context)
+            InferenceResult.Local(command = command)
+        }
+    }
+
+    /**
+     * 将 OpenAI tool_calls 请求转换为内部 [AgentCommand]。
+     *
+     * 这里只是把 function.arguments 作为 params，并套上 method/params 结构给
+     * [AgentCommandParser.parseCommandByMethod] 解析；返回的仍是内部命令对象，
+     * 不会把 method/params 格式暴露给上层或用户。
+     */
+    private fun toolRequestToAgentCommand(
+        request: ToolExecutionRequest,
+        context: AgentContext
+    ): AgentCommand {
+        val params = runCatching { JSONObject(request.arguments) }.getOrDefault(JSONObject())
+        val commandJson = JSONObject().apply {
+            put("method", request.name)
+            put("params", params)
+        }.toString()
+        return AgentCommandParser.parseCommandByMethod(
+            method = request.name,
+            json = commandJson,
+            context = context,
+            fallbackText = request.arguments,
+            commandId = AgentIdGenerator.nextId()
+        )
     }
 
     /**

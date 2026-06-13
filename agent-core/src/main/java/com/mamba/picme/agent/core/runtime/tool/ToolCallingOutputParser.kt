@@ -37,6 +37,9 @@ object ToolCallingOutputParser {
         Types.newParameterizedType(List::class.java, SimpleToolCall::class.java)
     )
     private val openAiWrapperAdapter = moshi.adapter(OpenAiToolCallsWrapper::class.java)
+    private val flexibleMapAdapter = moshi.adapter<Map<String, Any?>>(
+        Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
+    )
 
     fun parse(text: String, config: ToolCallingConfig = ToolCallingConfig()): List<ToolExecutionRequest> {
         if (text.isBlank()) return emptyList()
@@ -55,6 +58,11 @@ object ToolCallingOutputParser {
             runCatching {
                 openAiWrapperAdapter.fromJson(trimmed)?.tool_calls?.map { it.toRequest() }
             }.getOrNull()?.let { return it }
+
+            // 1.5 宽松解析：某些模型/接口会把 arguments 输出为对象而非字符串
+            runCatching {
+                parseOpenAiToolsLoosely(trimmed)
+            }.getOrNull()?.let { if (it.isNotEmpty()) return it }
         }
 
         // 2. <tool_call>...</tool_call> 标签（兼容旧格式）
@@ -73,6 +81,36 @@ object ToolCallingOutputParser {
 
         // 4. 单个 JSON 对象
         return parseSimple(trimmed)?.let { listOf(it) } ?: emptyList()
+    }
+
+    /**
+     * 宽松解析 OpenAI tool_calls：兼容 arguments 为对象或字符串的情况。
+     *
+     * 部分端侧/远程模型会把 arguments 直接输出为 JSON 对象（如
+     * {"destination":"gallery"}），而非标准字符串 "{\"destination\":\"gallery\"}"。
+     * 这里把对象重新序列化为字符串，保证下游统一按字符串处理。
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun parseOpenAiToolsLoosely(text: String): List<ToolExecutionRequest> {
+        val map = flexibleMapAdapter.fromJson(text) ?: return emptyList()
+        val toolCalls = map["tool_calls"] as? List<Map<String, Any?>> ?: return emptyList()
+
+        return toolCalls.mapNotNull { toolCall ->
+            val id = toolCall["id"] as? String ?: UUID.randomUUID().toString()
+            val function = toolCall["function"] as? Map<String, Any?> ?: return@mapNotNull null
+            val name = function["name"] as? String ?: return@mapNotNull null
+            val arguments = function["arguments"]
+            val argumentsString = when (arguments) {
+                is String -> arguments
+                is Map<*, *> -> mapToJsonString(arguments as Map<String, Any?>)
+                else -> "{}"
+            }
+            ToolExecutionRequest(
+                id = id,
+                name = name,
+                arguments = argumentsString
+            )
+        }
     }
 
     private fun parseReAct(text: String): List<ToolExecutionRequest> {

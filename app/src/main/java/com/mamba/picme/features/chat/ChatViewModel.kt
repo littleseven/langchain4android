@@ -276,7 +276,10 @@ class ChatViewModel(
     }
 
     /**
-     * 统一处理用户输入：本地模型走完整编排链路，远程模型走 InferenceRouter
+     * 统一处理用户输入：本地/远程模型都走 InferenceRouter。
+     *
+     * 本地 Qwen3-2B 已做过 OpenAI tool_calls 训练，因此 chat 页面统一通过 Tool Calling
+     * 路径输出 OpenAI 格式指令；远程模型同样走此路径。
      */
     private suspend fun processAgentInput(text: String, sessionId: String) {
         val agentContext = AgentContext(
@@ -288,41 +291,37 @@ class ChatViewModel(
             is ChatModelOption.Remote -> "remote_deepseek"
         }
 
-        when (_currentModel.value) {
-            is ChatModelOption.Local -> {
-                val result = orchestrator.processUserInput(text, agentContext)
-                val metrics = orchestrator.getLastLocalGenerationMetrics()
-                val performance = metrics?.toLlmPerformance()
-                handleAgentAction(result.getOrNull(), sessionId, modelLabel, performance)
+        val inferenceResult = orchestrator.processInputWithRouter(text, agentContext)
+        val performance = if (_currentModel.value is ChatModelOption.Local) {
+            orchestrator.getLastLocalGenerationMetrics()?.toLlmPerformance()
+        } else {
+            null
+        }
+
+        when (inferenceResult) {
+            is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Chat -> {
+                insertAgentMessage(sessionId, inferenceResult.message, modelLabel, performance)
             }
-            is ChatModelOption.Remote -> {
-                val inferenceResult = orchestrator.processInputWithRouter(text, agentContext)
-                when (inferenceResult) {
-                    is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Chat -> {
-                        insertAgentMessage(sessionId, inferenceResult.message, modelLabel)
-                    }
-                    is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Local -> {
-                        val action = orchestrator.getCapabilityRegistry()
-                            .dispatch(inferenceResult.command, agentContext)
-                        handleAgentAction(action.getOrNull(), sessionId, modelLabel)
-                    }
-                    is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Batch -> {
-                        val commands = inferenceResult.commands
-                        val finalCommand = if (commands.size > 1) {
-                            AgentCommand.BatchExecute(commands = commands)
-                        } else {
-                            commands.firstOrNull() ?: AgentCommand.TextReply(message = "没有可执行的命令")
-                        }
-                        val action = orchestrator.getCapabilityRegistry()
-                            .dispatch(finalCommand, agentContext)
-                        handleAgentAction(action.getOrNull(), sessionId, modelLabel)
-                    }
-                    is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Plan -> {
-                        val action = orchestrator.getCapabilityRegistry()
-                            .dispatch(AgentCommand.ExecutePlan(plan = inferenceResult.plan), agentContext)
-                        handleAgentAction(action.getOrNull(), sessionId, modelLabel)
-                    }
+            is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Local -> {
+                val action = orchestrator.getCapabilityRegistry()
+                    .dispatch(inferenceResult.command, agentContext)
+                handleAgentAction(action.getOrNull(), sessionId, modelLabel, performance)
+            }
+            is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Batch -> {
+                val commands = inferenceResult.commands
+                val finalCommand = if (commands.size > 1) {
+                    AgentCommand.BatchExecute(commands = commands)
+                } else {
+                    commands.firstOrNull() ?: AgentCommand.TextReply(message = "没有可执行的命令")
                 }
+                val action = orchestrator.getCapabilityRegistry()
+                    .dispatch(finalCommand, agentContext)
+                handleAgentAction(action.getOrNull(), sessionId, modelLabel, performance)
+            }
+            is com.mamba.picme.agent.core.runtime.execution.InferenceResult.Plan -> {
+                val action = orchestrator.getCapabilityRegistry()
+                    .dispatch(AgentCommand.ExecutePlan(plan = inferenceResult.plan), agentContext)
+                handleAgentAction(action.getOrNull(), sessionId, modelLabel, performance)
             }
         }
     }
