@@ -80,6 +80,15 @@ class AgentOrchestrator private constructor(context: Context) {
     }
 
     /**
+     * 获取最近一次本地 LLM 生成的性能指标。
+     *
+     * 仅在本地模型成功生成后有效，供 Chat UI 展示性能数据。
+     */
+    fun getLastLocalGenerationMetrics(): com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics? {
+        return localLlmEngine.lastGenerationMetrics
+    }
+
+    /**
      * 场景切换
      */
     fun transitionToScene(scene: SceneManager.Scene, saveToHistory: Boolean = true) {

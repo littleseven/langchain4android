@@ -139,25 +139,26 @@ class MnnLlmClient(private val context: Context) {
      * @param systemPrompt 系统提示词
      * @param userPrompt 用户输入
      * @param maxNewTokens 最大生成 token 数，默认 128
-     * @return 生成的文本
+     * @return 包含完整回复和性能指标的 [StreamResult]
      */
     fun generateWithSystem(
         systemPrompt: String,
         userPrompt: String,
         maxNewTokens: Int = 128
-    ): String {
+    ): StreamResult {
         if (!isLoaded) {
             Logger.w(tag, "LLM not loaded, cannot generate")
-            return ""
+            return StreamResult(error = "LLM not loaded")
         }
 
         return try {
-            MnnGlobalReleaseLock.withOperation {
+            val resultMap = MnnGlobalReleaseLock.withOperation {
                 nativeGenerateWithSystem(nativeHandle, systemPrompt, userPrompt, maxNewTokens)
             }
+            StreamResult.fromHashMap(resultMap)
         } catch (exception: Exception) {
             Logger.e(tag, "Generation with system prompt failed", exception)
-            ""
+            StreamResult(error = exception.message ?: "Unknown error")
         }
     }
 
@@ -302,7 +303,7 @@ class MnnLlmClient(private val context: Context) {
         systemPrompt: String,
         userPrompt: String,
         maxNewTokens: Int
-    ): String
+    ): HashMap<String, Any>
 
     private external fun nativeGenerateStream(
         handle: Long,

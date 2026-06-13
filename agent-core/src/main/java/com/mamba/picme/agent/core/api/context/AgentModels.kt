@@ -41,6 +41,7 @@ data class AgentContext(
  * - MnnResourceManager.Scene 描述 MNN 模型生命周期策略
  */
 enum class AgentScene {
+    CHAT,
     CAMERA,
     GALLERY,
     PHOTO_EDIT,

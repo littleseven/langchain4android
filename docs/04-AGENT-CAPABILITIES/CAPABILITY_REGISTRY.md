@@ -32,17 +32,20 @@
 | **GalleryCapability** | GALLERY | 7 | ✅ 已落地 |
 | **SettingsCapability** | SETTINGS | 5 | ✅ 已落地 |
 | **NavigationCapability** | ALL | 2 | ✅ 已落地 |
+| **SystemCapability** | ALL | 2 | ✅ 已落地 |
+| **AccessibilityCapability** | ALL | 1 | ✅ 已落地（需用户手动开启无障碍服务） |
 | **EditCapability** | EDITOR | 0 | 🔄 待实现（`AgentCommands.kt` 中无对应命令类型） |
 
 ### 1.1 场景 - 能力映射
 
 | 场景 | 可用 Capability |
 |------|-----------------|
-| `CAMERA` | CameraCapability, NavigationCapability |
-| `GALLERY` | GalleryCapability, NavigationCapability |
-| `SETTINGS` | SettingsCapability, NavigationCapability |
-| `EDITOR` | NavigationCapability（编辑独立路由预留） |
-| `DEBUG` | NavigationCapability |
+| `CAMERA` | CameraCapability, NavigationCapability, SystemCapability |
+| `GALLERY` | GalleryCapability, NavigationCapability, SystemCapability |
+| `SETTINGS` | SettingsCapability, NavigationCapability, SystemCapability |
+| `CHAT` | NavigationCapability, SystemCapability |
+| `EDITOR` | NavigationCapability, SystemCapability（编辑独立路由预留） |
+| `DEBUG` | NavigationCapability, SystemCapability |
 
 ---
 
@@ -243,13 +246,83 @@ class NavigationCapability(
 
 ---
 
-## 6. EditCapability（预留）
+## 6. SystemCapability
+
+**职责**: 启动其他应用、打开系统设置
+**活跃场景**: `ALL` (所有场景)
+**状态**: ✅ 已落地
+
+### 6.1 支持命令
+
+| 命令 | 参数 | 描述 | 示例 |
+|------|------|------|------|
+| `launch_app` | `packageName: String?`, `appName: String?` | 启动应用 | "打开微信" |
+| `open_system_settings` | `setting: String` | 打开系统设置 | "打开WiFi设置" |
+| `text_reply` | `message: String` | 文本回复 | "能打开哪些应用" |
+
+### 6.2 应用名解析
+
+- 优先使用 `packageName`。
+- 若只提供 `appName`，则在已安装应用列表中按应用标签模糊匹配。
+- 匹配失败时返回错误，不会随意启动未知应用。
+
+### 6.3 实现要点
+
+```kotlin
+class SystemCapability(
+    private val context: Context
+) : BaseCapability() {
+    override val name = "system"
+    override val description = "系统控制：打开其他应用、系统设置"
+
+    override fun supportedCommands() = listOf(
+        "launch_app",
+        "open_system_settings"
+    )
+}
+```
+
+---
+
+## 7. AccessibilityCapability
+
+**职责**: 在其他应用中执行无障碍自动操作（点击、输入、滚动、返回、主页、最近任务）
+**活跃场景**: `ALL` (所有场景)
+**状态**: ✅ 已落地（需用户在系统设置中手动开启 PicMe 无障碍服务）
+
+### 7.1 支持命令
+
+| 命令 | 参数 | 描述 | 示例 |
+|------|------|------|------|
+| `perform_accessibility_action` | `action: String`, `target: AccessibilityTarget?`, `params: Map<String,String>` | 执行无障碍动作 | "点击通讯录"、"输入 1234" |
+
+### 7.2 可用性
+
+- `isAvailable()` 仅在 `PicMeAccessibilityService` 已连接时返回 `true`。
+- 服务未开启时执行命令会返回 `CAPABILITY_UNAVAILABLE` 错误，并提示用户前往设置开启。
+
+### 7.3 实现要点
+
+```kotlin
+class AccessibilityCapability : BaseCapability() {
+    override val name = "accessibility"
+    override val description = "无障碍自动化：在其他应用中执行点击、输入、滚动、返回等操作"
+
+    override fun supportedCommands() = listOf("perform_accessibility_action")
+
+    override fun isAvailable() = AccessibilityController.isServiceConnected()
+}
+```
+
+---
+
+## 8. EditCapability（预留）
 
 **职责**: 图片编辑、保存、撤销/重做  
 **活跃场景**: `EDITOR`  
 **状态**: ⏳ 规划中
 
-### 6.1 支持命令
+### 8.1 支持命令
 
 | 命令 | 参数 | 描述 | 示例 |
 |------|------|------|------|
@@ -259,7 +332,7 @@ class NavigationCapability(
 | `redo_edit` | - | 重做上一步 | "重做" |
 | `text_reply` | `message: String` | 文本回复 | "能怎么编辑" |
 
-### 6.2 页面上下文
+### 8.2 页面上下文
 
 ```kotlin
 data class EditorContext(

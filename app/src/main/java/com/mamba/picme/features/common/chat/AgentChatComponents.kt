@@ -366,6 +366,9 @@ private fun getAgentCommandDisplayName(command: AgentCommand): String =
         is AgentCommand.SearchMedia -> "搜索照片"
         is AgentCommand.SwitchViewMode -> "切换视图"
         is AgentCommand.FavoriteMedia -> "收藏照片"
+        is AgentCommand.LaunchApp -> "打开应用"
+        is AgentCommand.OpenSystemSettings -> "打开设置"
+        is AgentCommand.PerformAccessibilityAction -> "自动操作"
         is AgentCommand.Unknown -> "未知命令"
         is AgentCommand.Error -> "执行错误"
     }
@@ -396,6 +399,9 @@ private fun getAgentCommandDetail(command: AgentCommand): String =
         is AgentCommand.SearchMedia -> "关键词: ${command.query}"
         is AgentCommand.ExecutePlan -> "计划: ${command.plan.description}"
         is AgentCommand.Delay -> "延迟: ${command.delayMs}ms"
+        is AgentCommand.LaunchApp -> command.appName ?: command.packageName ?: ""
+        is AgentCommand.OpenSystemSettings -> command.setting
+        is AgentCommand.PerformAccessibilityAction -> command.action
         else -> ""
     }
 

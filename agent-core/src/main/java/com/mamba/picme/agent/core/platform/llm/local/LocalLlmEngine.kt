@@ -366,6 +366,13 @@ class LocalLlmEngine(private val context: Context) {
      * @param maxTokens 最大生成 token 数
      * @return 生成的文本
      */
+    /**
+     * 最近一次本地生成的性能指标（仅同步/流式生成完成后有效）。
+     */
+    @Volatile
+    var lastGenerationMetrics: LlmGenerationMetrics? = null
+        private set
+
     suspend fun generateWithSystem(
         systemPrompt: String,
         userPrompt: String,
@@ -379,13 +386,24 @@ class LocalLlmEngine(private val context: Context) {
 
             try {
                 Logger.d(tag, "Generating response with maxTokens=$maxTokens")
-                val response = client.generateWithSystem(
+                val result = client.generateWithSystem(
                     systemPrompt = systemPrompt,
                     userPrompt = userPrompt,
                     maxNewTokens = maxTokens
                 )
-                if (response.isNotBlank()) {
-                    Result.success(response)
+                if (result.error != null) {
+                    return@withLock Result.failure(RuntimeException(result.error))
+                }
+                lastGenerationMetrics = LlmGenerationMetrics(
+                    promptLen = result.promptLen,
+                    decodeLen = result.decodeLen,
+                    prefillTime = result.prefillTime,
+                    decodeTime = result.decodeTime,
+                    prefillSpeed = result.prefillSpeed,
+                    decodeSpeed = result.decodeSpeed
+                )
+                if (result.response.isNotBlank()) {
+                    Result.success(result.response)
                 } else {
                     Result.failure(RuntimeException("Empty LLM response"))
                 }

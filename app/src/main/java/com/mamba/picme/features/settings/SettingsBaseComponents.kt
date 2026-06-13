@@ -1,5 +1,6 @@
 package com.mamba.picme.features.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -144,5 +145,45 @@ internal fun DebugOptionRow(
             checked = checked,
             onCheckedChange = { enabled -> onCheckedChange(enabled) }
         )
+    }
+}
+
+@Composable
+internal fun SettingsClickableRow(
+    title: String,
+    subtitle: String? = null,
+    valueText: String? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (subtitle.isNullOrBlank()) 44.dp else 56.dp)
+            .padding(horizontal = 12.dp)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (!valueText.isNullOrBlank()) {
+            Text(
+                text = valueText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }

@@ -1,6 +1,8 @@
 package com.mamba.picme.features.settings
 
 import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,15 +13,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +63,12 @@ import com.mamba.picme.features.common.chat.rememberAgentChatConfig
 import com.mamba.picme.features.settings.agent.SettingsAgentPanel
 import com.mamba.picme.features.settings.agent.rememberSettingsAgentIntegration
 import com.mamba.picme.features.settings.capability.SettingsCapability
+import com.mamba.picme.service.accessibility.AccessibilityController
+import com.mamba.picme.service.accessibility.PicMeAccessibilityService
+import com.mamba.picme.service.chat.FloatingChatBubbleService
+import com.mamba.picme.util.permission.BatteryOptimizationUtils
+import com.mamba.picme.util.permission.MiuiPermissionUtils
+import kotlinx.coroutines.delay
 
 private const val TAG = "Settings"
 
@@ -389,6 +400,176 @@ private fun SettingsContent(
                             onSelectedModelChange = onAiAgentSelectedRemoteModelChange
                         )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // AI 跨应用控制（无障碍）
+            val context = LocalContext.current
+            var isAccessibilityEnabled by remember {
+                mutableStateOf(AccessibilityController.isServiceConnected())
+            }
+            var showAccessibilityPrivacyDialog by remember { mutableStateOf(false) }
+
+            LaunchedEffect(Unit) {
+                while (true) {
+                    isAccessibilityEnabled = AccessibilityController.isServiceConnected()
+                    kotlinx.coroutines.delay(1000)
+                }
+            }
+
+            SettingsSection(
+                title = stringResource(R.string.settings_accessibility_title),
+                description = stringResource(R.string.settings_accessibility_summary)
+            ) {
+                SettingsClickableRow(
+                    title = stringResource(R.string.settings_accessibility_title),
+                    subtitle = stringResource(R.string.settings_accessibility_summary),
+                    valueText = stringResource(
+                        if (isAccessibilityEnabled) R.string.settings_accessibility_enabled else R.string.settings_accessibility_disabled
+                    ),
+                    onClick = {
+                        if (!isAccessibilityEnabled) {
+                            showAccessibilityPrivacyDialog = true
+                        } else {
+                            context.startActivity(PicMeAccessibilityService.openSettingsIntent())
+                        }
+                    }
+                )
+            }
+
+            if (showAccessibilityPrivacyDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAccessibilityPrivacyDialog = false },
+                    title = { Text(stringResource(R.string.dialog_accessibility_privacy_title)) },
+                    text = { Text(stringResource(R.string.dialog_accessibility_privacy_message)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showAccessibilityPrivacyDialog = false
+                                context.startActivity(PicMeAccessibilityService.openSettingsIntent())
+                            }
+                        ) {
+                            Text(stringResource(R.string.ok))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showAccessibilityPrivacyDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 全局悬浮聊天入口
+            var isFloatingChatRunning by remember {
+                mutableStateOf(FloatingChatBubbleService.isRunning(context))
+            }
+            var hasOverlayPermission by remember {
+                mutableStateOf(FloatingChatBubbleService.canDrawOverlays(context))
+            }
+            val overlayPermissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult()
+            ) {
+                hasOverlayPermission = FloatingChatBubbleService.canDrawOverlays(context)
+                if (hasOverlayPermission && !isFloatingChatRunning) {
+                    FloatingChatBubbleService.start(context)
+                    isFloatingChatRunning = true
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                while (true) {
+                    isFloatingChatRunning = FloatingChatBubbleService.isRunning(context)
+                    hasOverlayPermission = FloatingChatBubbleService.canDrawOverlays(context)
+                    delay(1000)
+                }
+            }
+
+            SettingsSection(
+                title = stringResource(R.string.floating_chat_title),
+                description = stringResource(R.string.floating_chat_summary)
+            ) {
+                SettingsClickableRow(
+                    title = stringResource(R.string.floating_chat_title),
+                    subtitle = stringResource(R.string.floating_chat_summary),
+                    valueText = stringResource(
+                        if (isFloatingChatRunning) R.string.floating_chat_enabled else R.string.floating_chat_disabled
+                    ),
+                    onClick = {
+                        when {
+                            !hasOverlayPermission -> {
+                                overlayPermissionLauncher.launch(
+                                    FloatingChatBubbleService.openOverlayPermissionSettingsIntent(context)
+                                )
+                            }
+                            isFloatingChatRunning -> {
+                                FloatingChatBubbleService.stop(context)
+                                isFloatingChatRunning = false
+                            }
+                            else -> {
+                                FloatingChatBubbleService.start(context)
+                                isFloatingChatRunning = true
+                            }
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 后台运行权限（国产 ROM 尤其是 MIUI 需要）
+            var isIgnoringBatteryOptimizations by remember {
+                mutableStateOf(BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context))
+            }
+            val isMiui = remember { MiuiPermissionUtils.isMiui() }
+
+            LaunchedEffect(Unit) {
+                while (true) {
+                    isIgnoringBatteryOptimizations =
+                        BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context)
+                    delay(1000)
+                }
+            }
+
+            SettingsSection(
+                title = stringResource(R.string.settings_background_permission_title),
+                description = stringResource(R.string.settings_background_permission_summary)
+            ) {
+                SettingsClickableRow(
+                    title = stringResource(R.string.settings_battery_optimization_title),
+                    subtitle = stringResource(R.string.settings_battery_optimization_summary),
+                    valueText = stringResource(
+                        if (isIgnoringBatteryOptimizations) {
+                            R.string.settings_battery_optimization_enabled
+                        } else {
+                            R.string.settings_battery_optimization_disabled
+                        }
+                    ),
+                    onClick = {
+                        if (!isIgnoringBatteryOptimizations) {
+                            BatteryOptimizationUtils.requestIgnoreBatteryOptimizations(context)
+                        }
+                    }
+                )
+
+                if (isMiui) {
+                    SettingsClickableRow(
+                        title = stringResource(R.string.settings_miui_auto_start_title),
+                        subtitle = stringResource(R.string.settings_miui_auto_start_summary),
+                        valueText = stringResource(R.string.settings_miui_action_open),
+                        onClick = { MiuiPermissionUtils.openMiuiAutoStart(context) }
+                    )
+
+                    SettingsClickableRow(
+                        title = stringResource(R.string.settings_miui_permission_editor_title),
+                        subtitle = stringResource(R.string.settings_miui_permission_editor_summary),
+                        valueText = stringResource(R.string.settings_miui_action_open),
+                        onClick = { MiuiPermissionUtils.openMiuiPermissionEditor(context) }
+                    )
                 }
             }
 

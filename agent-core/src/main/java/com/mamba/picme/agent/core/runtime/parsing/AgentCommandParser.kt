@@ -429,6 +429,46 @@ object AgentCommandParser {
                 AgentCommand.ToggleSetting(commandId = commandId, settingKey = key, enabled = enabled)
             }
 
+            // ===== 系统/外部 App 命令 =====
+            "launch_app" -> {
+                val packageName = extractJsonField(json, "package_name")
+                val appName = extractJsonField(json, "app_name")
+                val activityClass = extractJsonField(json, "activity_class")
+                AgentCommand.LaunchApp(
+                    commandId = commandId,
+                    packageName = packageName,
+                    appName = appName,
+                    activityClass = activityClass
+                )
+            }
+            "open_system_settings" -> {
+                val setting = extractJsonField(json, "setting") ?: ""
+                AgentCommand.OpenSystemSettings(commandId = commandId, setting = setting)
+            }
+
+            // ===== 无障碍动作命令 =====
+            "perform_accessibility_action" -> {
+                val action = extractJsonField(json, "action") ?: ""
+                val targetJson = extractJsonObject(json, "target")
+                val target = if (targetJson != null) {
+                    AgentCommand.AccessibilityTarget(
+                        type = extractJsonField(targetJson, "type") ?: "",
+                        value = extractJsonField(targetJson, "value") ?: "",
+                        index = extractJsonInt(targetJson, "index") ?: 0
+                    )
+                } else {
+                    null
+                }
+                val paramsJson = extractJsonObject(json, "params")
+                val params = if (paramsJson != null) parseStringMap(paramsJson) else emptyMap()
+                AgentCommand.PerformAccessibilityAction(
+                    commandId = commandId,
+                    action = action,
+                    target = target,
+                    params = params
+                )
+            }
+
             // ===== 默认文本回复 =====
             else -> {
                 val message = extractJsonField(json, "message")
@@ -733,6 +773,18 @@ object AgentCommandParser {
             }
         }
         return 3
+    }
+
+    /**
+     * 解析简单字符串键值对对象，例如 {"text":"hello","hint":"search"}
+     */
+    private fun parseStringMap(json: String): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        val regex = """"([^"]+)"\s*:\s*"([^"]*)"""".toRegex()
+        regex.findAll(json).forEach { matchResult ->
+            result[matchResult.groupValues[1]] = matchResult.groupValues[2]
+        }
+        return result
     }
 
     private fun extractJsonFloatMap(json: String, key: String): Map<String, Float> {

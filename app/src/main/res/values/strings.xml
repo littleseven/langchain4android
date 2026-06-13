@@ -127,6 +127,7 @@
     <string name="save_success">Saved successfully</string>
     <string name="save_failed">Save failed</string>
     <string name="load_failed">Load failed</string>
+    <string name="ok">OK</string>
     <string name="cancel">Cancel</string>
     <string name="generate_test_data">Generate Test Data</string>
     <string name="clear_test_data">Clear Test Data</string>
@@ -405,5 +406,41 @@
     <string name="essential_models_download_button">Download All</string>
     <string name="essential_models_download_later">Not Now</string>
     <string name="essential_models_download_progress">Downloading…</string>
+
+    <!-- Accessibility Service -->
+    <string name="accessibility_service_label">PicMe AI Assistant</string>
+    <string name="accessibility_service_description">Used only to execute actions you explicitly request in other apps, such as tap, type, scroll, or go back. No screen content is recorded or uploaded.</string>
+    <string name="settings_accessibility_title">Cross-App AI Control</string>
+    <string name="settings_accessibility_summary">Enable to let the AI assistant tap, type, and scroll in other apps.</string>
+    <string name="settings_accessibility_enabled">Enabled</string>
+    <string name="settings_accessibility_disabled">Disabled</string>
+    <string name="dialog_accessibility_privacy_title">Accessibility Permission</string>
+    <string name="dialog_accessibility_privacy_message">PicMe uses Accessibility Service only to perform actions you explicitly request in other apps. We do not read or upload your passwords, chat history, or other sensitive content. You can disable it anytime in system Settings.</string>
+
+    <!-- Floating Chat Bubble -->
+    <string name="floating_chat_title">AI Chat</string>
+    <string name="floating_chat_summary">Show a draggable bubble to chat with AI from any screen.</string>
+    <string name="floating_chat_enabled">Enabled</string>
+    <string name="floating_chat_disabled">Disabled</string>
+    <string name="floating_chat_input_hint">Ask AI Agent...</string>
+    <string name="floating_chat_stop">Stop</string>
+    <string name="floating_chat_notification_channel">AI Chat Bubble</string>
+    <string name="floating_chat_notification_channel_desc">Keeps the floating chat bubble running in background</string>
+    <string name="floating_chat_notification_title">AI Chat Bubble is running</string>
+    <string name="floating_chat_notification_content">Tap to open PicMe or stop the bubble.</string>
+    <string name="chat_send">Send</string>
+
+    <!-- Background permissions (MIUI / Xiaomi) -->
+    <string name="settings_background_permission_title">Background Running Permission</string>
+    <string name="settings_background_permission_summary">Required on some ROMs like MIUI to keep AI services alive.</string>
+    <string name="settings_battery_optimization_title">Ignore Battery Optimizations</string>
+    <string name="settings_battery_optimization_summary">Allow PicMe to run in the background without being killed.</string>
+    <string name="settings_battery_optimization_enabled">Allowed</string>
+    <string name="settings_battery_optimization_disabled">Restricted</string>
+    <string name="settings_miui_auto_start_title">MIUI Auto-start</string>
+    <string name="settings_miui_auto_start_summary">Allow PicMe to auto-start and run in the background.</string>
+    <string name="settings_miui_permission_editor_title">MIUI App Permissions</string>
+    <string name="settings_miui_permission_editor_summary">Enable "Display pop-up window" and "Background pop-up" for PicMe.</string>
+    <string name="settings_miui_action_open">Open</string>
 
 </resources>

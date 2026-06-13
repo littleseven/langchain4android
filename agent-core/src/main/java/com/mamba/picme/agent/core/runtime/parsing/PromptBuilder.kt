@@ -56,10 +56,13 @@ class PromptBuilder(
 - delay: {"method":"delay","params":{"delay_ms":整数毫秒}}
 - navigate_to: {"method":"navigate_to","params":{"destination":"camera|gallery|settings|debug"}}
 - go_back: {"method":"go_back","params":{}}
+- launch_app: {"method":"launch_app","params":{"package_name":"com.example.app","app_name":"微信"}}
+- open_system_settings: {"method":"open_system_settings","params":{"setting":"wifi|bluetooth|accessibility|display|location|app_notifications"}}
+- perform_accessibility_action: {"method":"perform_accessibility_action","params":{"action":"click|long_click|input|scroll_forward|scroll_backward|back|home|recent","target":{"type":"text|content_desc|resource_id","value":"..."},"params":{"text":"..."}}}
 - text_reply: {"method":"text_reply","params":{"message":"中文回复"}}
 
 【字段约束】
-- params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, message, delay_ms。
+- params 中只允许这些键：smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow, filter, style, scene, ratio, exposure, zoom, mode, destination, package_name, app_name, activity_class, setting, action, target, text, message, delay_ms。
 - 不要输出未定义字段；不需要的参数不要输出。
 - 数字不要加引号，字符串必须加引号。
 
@@ -68,6 +71,11 @@ class PromptBuilder(
 - 去相册/打开相册 → navigate_to(gallery)
 - 去设置/打开设置 → navigate_to(settings)
 - 返回/上一页/后退 → go_back
+- 打开微信/启动支付宝/打开淘宝 → launch_app(app_name=应用名)
+- 打开WiFi设置/打开蓝牙设置/打开通知设置 → open_system_settings(setting=wifi|bluetooth|app_notifications)
+- 点击通讯录/点击搜索框/点击发送 → perform_accessibility_action(action=click,target={type:text,value:目标文本})
+- 输入 1234 → perform_accessibility_action(action=input,target={type:class_name,value:android.widget.EditText},params={text:1234})
+- 返回/主页/最近任务 → perform_accessibility_action(action=back|home|recent)
 - 冷调/冷色/冷滤镜/冷调滤镜/冷色滤镜 → filter="COOL"
 - 暖调/暖色/暖滤镜/暖色滤镜/暖调滤镜 → filter="WARM"
 - 复古/怀旧 → filter="VINTAGE"
@@ -105,18 +113,67 @@ class PromptBuilder(
 「5秒后换暖色滤镜拍照」→ [{"method":"delay","params":{"delay_ms":5000}},{"method":"switch_filter","params":{"filter":"WARM"}},{"method":"capture","params":{}}]
 「3秒后冷色调拍3张」→ [{"method":"delay","params":{"delay_ms":3000}},{"method":"switch_filter","params":{"filter":"COOL"}},{"method":"capture","params":{}},{"method":"capture","params":{}},{"method":"capture","params":{}}]
 「你好」→ [{"method":"text_reply","params":{"message":"你好呀，我是小觅"}}]
+「打开微信」→ [{"method":"launch_app","params":{"app_name":"微信"}}]
+「打开WiFi设置」→ [{"method":"open_system_settings","params":{"setting":"wifi"}}]
+「点击通讯录」→ [{"method":"perform_accessibility_action","params":{"action":"click","target":{"type":"text","value":"通讯录"}}}]
+「输入 1234」→ [{"method":"perform_accessibility_action","params":{"action":"input","target":{"type":"class_name","value":"android.widget.EditText"},"params":{"text":"1234"}}}]
 """.trimIndent()
 
     /**
      * 场景特定提示
      */
     private val scenePrompts = mapOf(
+        SceneManager.Scene.CHAT to "当前聊天页：优先回答用户问题；只有当用户明确要求执行操作时，才输出系统/导航命令。", 
         SceneManager.Scene.CAMERA to "当前相机页：优先相机控制。仅当用户明确说去相册/去设置/返回时再导航。",
         SceneManager.Scene.GALLERY to "当前相册页：优先相册操作。用户说去相机/去拍照时必须导航到 camera。",
         SceneManager.Scene.SETTINGS to "当前设置页：优先设置操作。用户说去相机/回相机/打开相机时必须导航到 camera，不可导航到 gallery。",
         SceneManager.Scene.DEBUG to "当前调试页：优先调试相关；普通控制建议导航回 camera 或 settings。",
         SceneManager.Scene.UNKNOWN to "当前页面未知：优先使用导航或 text_reply。"
     )
+
+    /**
+     * 聊天/未知场景专用精简 Prompt
+     *
+     * 避免把相机页的大量美颜/滤镜 schema 和示例塞进小模型上下文，
+     * 让自由聊天和系统控制（打开应用、无障碍等）更稳定。
+     */
+    private val chatBasePrompt = """
+你是 PicMe 的 AI 助手小觅（端侧小模型）。
+任务：理解用户意图，输出 JSON 命令数组；如果是闲聊或不确定，用 text_reply 友好回复。
+
+【输出格式硬规则】
+1) 始终输出 JSON 数组，即使只有一个命令也要包成 [{...}]。
+2) 数组元素格式：{"method":"<命令名>","params":{...}}。
+3) 禁止解释、禁止 markdown、禁止思考过程、禁止前后缀文本。
+4) 闲聊/问答/解释/不确定时：[{"method":"text_reply","params":{"message":"中文简短回复"}}]。
+5) 用户询问某个命令的格式、用法、指令是什么时，只输出 text_reply 进行解释，不要附加任何可执行命令。
+6) 用户说"怎么做/怎么用/是什么"等疑问句时，优先 text_reply 解释，不要执行命令。
+
+【可用命令】
+- text_reply(params.message): 闲聊、问答、解释、不知道说什么
+- navigate_to(params.destination=camera|gallery|settings|debug): 页面导航
+- go_back: 返回上一页
+- launch_app(params.package_name|app_name): 打开本机应用
+- open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications): 打开系统设置
+- perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text}): 在其他应用执行无障碍操作
+
+【字段约束】
+- params 只允许：destination, package_name, app_name, setting, action, target, text, message。
+- 不要输出未定义字段；不需要的参数不要输出。
+- 数字不要加引号，字符串必须加引号。
+
+【示例】
+「你好」→ [{"method":"text_reply","params":{"message":"你好呀，我是小觅，有什么可以帮你的吗？"}}]
+「今天天气怎么样」→ [{"method":"text_reply","params":{"message":"我这边没法查实时天气哦，你可以问问系统助手～"}}]
+「打开微信的指令是什么」→ [{"method":"text_reply","params":{"message":"打开微信的指令是 launch_app，参数为 app_name='微信'。"}}]
+「怎么打开微信」→ [{"method":"text_reply","params":{"message":"你可以直接说'打开微信'，我会执行 launch_app(app_name='微信')。"}}]
+「去相机」→ [{"method":"navigate_to","params":{"destination":"camera"}}]
+「返回」→ [{"method":"go_back","params":{}}]
+「打开微信」→ [{"method":"launch_app","params":{"app_name":"微信"}}]
+「打开WiFi设置」→ [{"method":"open_system_settings","params":{"setting":"wifi"}}]
+「点击通讯录」→ [{"method":"perform_accessibility_action","params":{"action":"click","target":{"type":"text","value":"通讯录"}}}]
+「输入 1234」→ [{"method":"perform_accessibility_action","params":{"action":"input","target":{"type":"class_name","value":"android.widget.EditText"},"params":{"text":"1234"}}}]
+""".trimIndent()
 
     /**
      * 构建完整的 system prompt（本地 LLM 使用）
@@ -131,14 +188,44 @@ class PromptBuilder(
     ): String {
         val currentScene = sceneManager.currentScene.value
 
+        // 聊天/未知场景使用精简 Prompt，避免相机能力污染小模型上下文
+        return if (currentScene == SceneManager.Scene.CHAT || currentScene == SceneManager.Scene.UNKNOWN) {
+            buildChatSystemPrompt(capabilities, context, currentScene)
+        } else {
+            buildString {
+                appendLine(basePrompt)
+                appendLine()
+                appendLine("【当前页面】")
+                appendLine(scenePrompts[currentScene] ?: scenePrompts[SceneManager.Scene.UNKNOWN])
+                appendLine()
+                appendLine("【可用命令】")
+                appendLine(buildCapabilitiesSection(scene = currentScene))
+                appendLine()
+                appendLine("【当前状态】")
+                appendLine(buildStateSection(context, currentScene))
+
+                if (capabilities.isNotEmpty()) {
+                    appendLine()
+                    appendLine("【已激活能力】")
+                    appendLine(capabilities.joinToString(separator = ", ") { it.name })
+                }
+            }
+        }
+    }
+
+    /**
+     * 聊天/未知场景的精简 system prompt
+     */
+    private fun buildChatSystemPrompt(
+        capabilities: List<Capability>,
+        context: AgentContext,
+        currentScene: SceneManager.Scene
+    ): String {
         return buildString {
-            appendLine(basePrompt)
+            appendLine(chatBasePrompt)
             appendLine()
             appendLine("【当前页面】")
             appendLine(scenePrompts[currentScene] ?: scenePrompts[SceneManager.Scene.UNKNOWN])
-            appendLine()
-            appendLine("【可用命令】")
-            appendLine(buildCapabilitiesSection(scene = currentScene))
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, currentScene))
@@ -213,7 +300,9 @@ class PromptBuilder(
             appendLine("6. 【强制规则】用户输入以'拍照'结尾时，数组最后一个元素必须是{\"method\":\"capture\",\"params\":{} }，绝对不要漏掉。")
             appendLine("7. 闲聊时：[{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]")
             appendLine("8. 导航：navigate_to(params.destination=camera|gallery|settings|debug) 或 go_back")
-            appendLine("9. 延迟：delay(params.delay_ms)，必须放数组第一个")
+            appendLine("9. 系统：launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
+            appendLine("10. 无障碍：perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text})")
+            appendLine("11. 延迟：delay(params.delay_ms)，必须放数组第一个")
             appendLine()
             appendLine("【语义映射】")
             appendLine("冷色/冷色调/冷滤镜/冷色滤镜/冷调滤镜 -> filter=COOL")
@@ -242,6 +331,7 @@ class PromptBuilder(
         val includeCamera = scene == null || scene == SceneManager.Scene.CAMERA
         val includeGallery = scene == null || scene == SceneManager.Scene.GALLERY
         val includeSettings = scene == null || scene == SceneManager.Scene.SETTINGS
+        val includeSystem = scene == null || scene == SceneManager.Scene.CHAT || scene == SceneManager.Scene.UNKNOWN
 
         return buildString {
             if (includeCamera) {
@@ -252,6 +342,9 @@ class PromptBuilder(
             }
             if (includeSettings) {
                 appendLine("change_theme, change_language, download_model, switch_face_engine, toggle_setting")
+            }
+            if (includeSystem) {
+                appendLine("launch_app(package_name|app_name), open_system_settings(setting)")
             }
             appendLine("navigate_to(destination), go_back, text_reply(message)")
             appendLine()
@@ -268,6 +361,10 @@ class PromptBuilder(
             appendLine("3秒后换冷色调拍3张 -> [{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}},{\"method\":\"capture\",\"params\":{}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("切前置 -> [{\"method\":\"flip_camera\",\"params\":{}}]")
             appendLine("拍照 -> [{\"method\":\"capture\",\"params\":{}}]")
+            appendLine("打开微信 -> [{\"method\":\"launch_app\",\"params\":{\"app_name\":\"微信\"}}]")
+            appendLine("打开WiFi设置 -> [{\"method\":\"open_system_settings\",\"params\":{\"setting\":\"wifi\"}}]")
+            appendLine("点击通讯录 -> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}]")
+            appendLine("输入 1234 -> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"input\",\"target\":{\"type\":\"class_name\",\"value\":\"android.widget.EditText\"},\"params\":{\"text\":\"1234\"}}}] ")
         }
     }
 
@@ -286,11 +383,13 @@ class PromptBuilder(
             appendLine("2. 数组元素格式：{\"method\":\"<命令>\",\"params\":{...}}。")
             appendLine("3. 用户是闲聊时，输出 [{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]。")
             appendLine("4. 导航只能是 navigate_to / go_back，params.destination 只能是 camera|gallery|settings|debug。")
-            appendLine("5. params 中字段名必须使用既定键，不要创造新字段。")
-            appendLine("6. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，必须输出 delay 命令作为第一个元素，delay_ms 单位为毫秒。")
-            appendLine("7. delay 命令是支持的，不要告诉用户不支持延迟。")
-            appendLine("8. 用户说多个美颜参数时，必须合并到一个 adjust_beauty 的 params 中。")
-            appendLine("9. 用户输入以\"拍照\"结尾时，数组最后一个元素必须是 capture。")
+            appendLine("5. 系统控制：launch_app(params.package_name|app_name)、open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications)。")
+            appendLine("6. 无障碍控制：perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text})。")
+            appendLine("7. params 中字段名必须使用既定键，不要创造新字段。")
+            appendLine("8. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，必须输出 delay 命令作为第一个元素，delay_ms 单位为毫秒。")
+            appendLine("9. delay 命令是支持的，不要告诉用户不支持延迟。")
+            appendLine("10. 用户说多个美颜参数时，必须合并到一个 adjust_beauty 的 params 中。")
+            appendLine("11. 用户输入以\"拍照\"结尾时，数组最后一个元素必须是 capture。")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, sceneManager.currentScene.value))
@@ -313,6 +412,14 @@ class PromptBuilder(
             appendLine("-> [{\"method\":\"delay\",\"params\":{\"delay_ms\":5000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}},{\"method\":\"adjust_beauty\",\"params\":{\"whitening\":60}},{\"method\":\"capture\",\"params\":{}}]")
             appendLine("用户: 你好")
             appendLine("-> [{\"method\":\"text_reply\",\"params\":{\"message\":\"你好呀，我是小觅\"}}]")
+            appendLine("用户: 打开微信")
+            appendLine("-> [{\"method\":\"launch_app\",\"params\":{\"app_name\":\"微信\"}}]")
+            appendLine("用户: 打开WiFi设置")
+            appendLine("-> [{\"method\":\"open_system_settings\",\"params\":{\"setting\":\"wifi\"}}]")
+            appendLine("用户: 点击通讯录")
+            appendLine("-> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}]")
+            appendLine("用户: 输入 1234")
+            appendLine("-> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"input\",\"target\":{\"type\":\"class_name\",\"value\":\"android.widget.EditText\"},\"params\":{\"text\":\"1234\"}}}]")
         }
     }
 
@@ -428,6 +535,7 @@ class PromptBuilder(
         val includeCamera = scene == null || scene == SceneManager.Scene.CAMERA
         val includeGallery = scene == null || scene == SceneManager.Scene.GALLERY
         val includeSettings = scene == null || scene == SceneManager.Scene.SETTINGS
+        val includeSystem = scene == null || scene == SceneManager.Scene.CHAT || scene == SceneManager.Scene.UNKNOWN
 
         return buildString {
             appendLine("method 白名单（只能从下列 method 选择，参数放在 params 对象中）：")
@@ -447,6 +555,11 @@ class PromptBuilder(
                 appendLine("- settings: change_theme, change_language, download_model, switch_face_engine, toggle_setting")
             }
 
+            if (includeSystem) {
+                appendLine("- system: launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
+                appendLine("- accessibility: perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text})")
+            }
+
             appendLine("- navigation: navigate_to(params.destination=camera|gallery|settings|debug), go_back")
             appendLine("- fallback: text_reply(params.message)")
             appendLine("params 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
@@ -454,7 +567,11 @@ class PromptBuilder(
             appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
             appendLine("滤镜映射: 冷调/冷色/冷滤镜->COOL; 暖调/暖色/暖滤镜->WARM; 复古/怀旧->VINTAGE; 胶片金->FILM_GOLD; 胶片富士/富士->FILM_FUJI")
             appendLine("导航映射: 去相机/回相机/打开相机/去拍照->params.destination=camera; 去相册/打开相册->params.destination=gallery; 去设置/打开设置->params.destination=settings; 返回/上一页/后退->go_back")
+            appendLine("系统映射: 打开微信/启动支付宝/打开淘宝->launch_app(app_name=...); 打开WiFi设置/蓝牙设置/通知设置->open_system_settings(setting=wifi|bluetooth|app_notifications)")
+            appendLine("无障碍映射: 点击目标文本->perform_accessibility_action(action=click,target={type:text,value:目标}); 输入内容->perform_accessibility_action(action=input,target={type:class_name,value:android.widget.EditText},params={text:内容}); 返回/主页/最近任务->perform_accessibility_action(action=back|home|recent)")
             appendLine("导航示例: {\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}")
+            appendLine("系统示例: {\"method\":\"launch_app\",\"params\":{\"app_name\":\"微信\"}}")
+            appendLine("无障碍示例: {\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}")
 
             if (forPlan) {
                 appendLine("Plan 字段约束: step(Int), method(String), params(Object), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")

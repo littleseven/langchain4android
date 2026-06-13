@@ -419,6 +419,11 @@ class AiAgentUseCase(
             is AgentCommand.DownloadModel -> AiAgentCommand.TextReply("下载模型: ${command.modelId}")
             is AgentCommand.SwitchFaceEngine -> AiAgentCommand.TextReply("切换人脸引擎: ${command.engine}")
             is AgentCommand.ToggleSetting -> AiAgentCommand.TextReply("切换设置: ${command.settingKey}")
+            // 系统/外部 App 命令
+            is AgentCommand.LaunchApp -> AiAgentCommand.TextReply("打开应用: ${command.appName ?: command.packageName}")
+            is AgentCommand.OpenSystemSettings -> AiAgentCommand.TextReply("打开设置: ${command.setting}")
+            // 无障碍动作
+            is AgentCommand.PerformAccessibilityAction -> AiAgentCommand.TextReply("无障碍动作: ${command.action}")
             // 错误/未知命令 —— 明确报告，不允许掩盖
             is AgentCommand.Error -> AiAgentCommand.TextReply("命令错误: ${command.reason}")
             is AgentCommand.Unknown -> AiAgentCommand.TextReply("未知命令: ${command.raw}")
@@ -472,6 +477,11 @@ class AiAgentUseCase(
                     is AgentCommand.DownloadModel -> AiAgentCommand.TextReply("下载模型: ${cmd.modelId}")
                     is AgentCommand.SwitchFaceEngine -> AiAgentCommand.TextReply("切换人脸引擎: ${cmd.engine}")
                     is AgentCommand.ToggleSetting -> AiAgentCommand.TextReply("切换设置: ${cmd.settingKey}")
+                    // 系统/外部 App 命令
+                    is AgentCommand.LaunchApp -> AiAgentCommand.TextReply("打开应用: ${cmd.appName ?: cmd.packageName}")
+                    is AgentCommand.OpenSystemSettings -> AiAgentCommand.TextReply("打开设置: ${cmd.setting}")
+                    // 无障碍动作
+                    is AgentCommand.PerformAccessibilityAction -> AiAgentCommand.TextReply("无障碍动作: ${cmd.action}")
                     // 错误/未知 —— 明确报告，不允许掩盖
                     is AgentCommand.Error -> AiAgentCommand.TextReply("命令错误: ${cmd.reason}")
                     is AgentCommand.Unknown -> AiAgentCommand.TextReply("未知命令: ${cmd.raw}")

@@ -204,7 +204,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerate(
     return env->NewStringUTF(result.c_str());
 }
 
-JNIEXPORT jstring JNICALL
+JNIEXPORT jobject JNICALL
 Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithSystem(
         JNIEnv *env,
         jclass clazz,
@@ -216,7 +216,14 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
     auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
     if (llm == nullptr) {
         LOGE("LLM handle is null");
-        return env->NewStringUTF("");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed, LLM handle is null"));
+        return hashMap;
     }
 
     const char *systemCStr = env->GetStringUTFChars(systemPrompt, nullptr);
@@ -234,11 +241,25 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
 
     LOGD("Generating with system prompt + user prompt");
 
+    LlmMetrics metrics;
     std::ostringstream oss;
+    auto start = std::chrono::high_resolution_clock::now();
     {
         std::lock_guard<std::mutex> lock(g_llm_mutex);
         restoreLlmStatusIfNeeded(llm);
         llm->response(messages, &oss, nullptr, maxNewTokens);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    // 同步生成无法区分 prefill/decode，将总耗时全部计入 decode_time
+    metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            end - start).count();
+
+    auto* ctx = llm->getContext();
+    if (ctx != nullptr) {
+        metrics.prompt_len = ctx->prompt_len;
+        metrics.decode_len = ctx->gen_seq_len;
+        metrics.vision_time = ctx->vision_us;
+        metrics.audio_time = ctx->audio_us;
     }
 
     std::string result = oss.str();
@@ -256,7 +277,32 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
         }
     }
 
-    return env->NewStringUTF(result.c_str());
+    // 构建返回 HashMap
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longInit = env->GetMethodID(longClass, "<init>", "(J)V");
+
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("response"),
+                          env->NewStringUTF(result.c_str()));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prompt_len"),
+                          env->NewObject(longClass, longInit, metrics.prompt_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_len"),
+                          env->NewObject(longClass, longInit, metrics.decode_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("vision_time"),
+                          env->NewObject(longClass, longInit, metrics.vision_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("audio_time"),
+                          env->NewObject(longClass, longInit, metrics.audio_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prefill_time"),
+                          env->NewObject(longClass, longInit, metrics.prefill_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_time"),
+                          env->NewObject(longClass, longInit, metrics.decode_time));
+
+    return hashMap;
 }
 
 // ── 流式生成 + 性能指标（新增）──────────────────────────

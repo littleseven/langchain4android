@@ -67,6 +67,7 @@
     <string name="save_success">保存成功</string>
     <string name="save_failed">保存失败</string>
     <string name="load_failed">加载失败</string>
+    <string name="ok">确定</string>
     <string name="cancel">取消</string>
     <string name="generate_test_data">生成测试数据</string>
     <string name="clear_test_data">清除测试数据</string>
@@ -199,4 +200,40 @@
     <string name="essential_models_download_button">一键下载</string>
     <string name="essential_models_download_later">暂不下载</string>
     <string name="essential_models_download_progress">正在下载…</string>
+
+    <!-- 无障碍服务 -->
+    <string name="accessibility_service_label">PicMe AI 助手</string>
+    <string name="accessibility_service_description">仅用于执行你在其他 App 中明确要求的操作，例如点击、输入、滑动、返回。不会记录或上传任何屏幕内容。</string>
+    <string name="settings_accessibility_title">AI 跨应用控制</string>
+    <string name="settings_accessibility_summary">开启后，AI 助手可在其他 App 中执行点击、输入、滑动等操作。</string>
+    <string name="settings_accessibility_enabled">已开启</string>
+    <string name="settings_accessibility_disabled">未开启</string>
+    <string name="dialog_accessibility_privacy_title">无障碍权限说明</string>
+    <string name="dialog_accessibility_privacy_message">PicMe 仅在你主动发出指令时，使用无障碍服务在其他 App 中执行操作。我们不会读取或上传你的密码、聊天记录等敏感内容。你可以随时在系统设置中关闭该服务。</string>
+
+    <!-- 悬浮聊天入口 -->
+    <string name="floating_chat_title">AI 聊天</string>
+    <string name="floating_chat_summary">在任意界面显示可拖拽气泡，与 AI 助手对话。</string>
+    <string name="floating_chat_enabled">已开启</string>
+    <string name="floating_chat_disabled">未开启</string>
+    <string name="floating_chat_input_hint">向 AI 助手提问...</string>
+    <string name="floating_chat_stop">停止</string>
+    <string name="floating_chat_notification_channel">AI 聊天气泡</string>
+    <string name="floating_chat_notification_channel_desc">保持悬浮聊天气泡在后台运行</string>
+    <string name="floating_chat_notification_title">AI 聊天气泡运行中</string>
+    <string name="floating_chat_notification_content">点击打开 PicMe 或停止气泡。</string>
+    <string name="chat_send">发送</string>
+
+    <!-- 后台运行权限（MIUI / 小米） -->
+    <string name="settings_background_permission_title">后台运行权限</string>
+    <string name="settings_background_permission_summary">在小米/红米等 MIUI 设备上需要开启，否则 AI 服务容易被系统回收。</string>
+    <string name="settings_battery_optimization_title">忽略电池优化</string>
+    <string name="settings_battery_optimization_summary">允许 PicMe 在后台运行而不被系统杀死。</string>
+    <string name="settings_battery_optimization_enabled">已允许</string>
+    <string name="settings_battery_optimization_disabled">受限制</string>
+    <string name="settings_miui_auto_start_title">MIUI 自启动</string>
+    <string name="settings_miui_auto_start_summary">允许 PicMe 自启动并在后台运行。</string>
+    <string name="settings_miui_permission_editor_title">MIUI 应用权限管理</string>
+    <string name="settings_miui_permission_editor_summary">为 PicMe 开启「显示悬浮窗」和「后台弹出界面」。</string>
+    <string name="settings_miui_action_open">去开启</string>
 </resources>

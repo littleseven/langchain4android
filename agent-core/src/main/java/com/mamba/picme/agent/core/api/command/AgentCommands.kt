@@ -248,6 +248,61 @@ sealed class AgentCommand {
 
     // ==================== 编辑命令 ====================
 
+    // ==================== 系统/外部 App 命令 ====================
+
+    /**
+     * 启动其他应用或本应用指定 Activity
+     *
+     * @property packageName 目标应用包名（优先）
+     * @property appName 应用名称（如"微信"），用于自然语言映射
+     * @property activityClass 目标 Activity 全限定名（可选）
+     * @property extras 启动 Intent 附加参数（可选）
+     */
+    data class LaunchApp(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val packageName: String? = null,
+        val appName: String? = null,
+        val activityClass: String? = null,
+        val extras: Map<String, String> = emptyMap()
+    ) : AgentCommand()
+
+    /**
+     * 打开系统设置项
+     *
+     * @property setting 设置项标识，如 wifi / bluetooth / accessibility / display / location
+     */
+    data class OpenSystemSettings(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val setting: String
+    ) : AgentCommand()
+
+    /**
+     * 执行无障碍动作（跨应用自动化）
+     *
+     * @property action 动作类型：click / long_click / input / scroll_forward / scroll_backward / back / home / recent
+     * @property target 目标节点描述（可选，系统动作如 back/home 不需要）
+     * @property params 动作参数，例如 input 的 text
+     */
+    data class PerformAccessibilityAction(
+        override val commandId: Int = AgentIdGenerator.nextId(),
+        val action: String,
+        val target: AccessibilityTarget? = null,
+        val params: Map<String, String> = emptyMap()
+    ) : AgentCommand()
+
+    /**
+     * 无障碍动作目标描述
+     *
+     * @property type 匹配类型：text / content_desc / resource_id / class_name / bounds
+     * @property value 匹配值
+     * @property index 同类型节点中的第几个，默认 0
+     */
+    data class AccessibilityTarget(
+        val type: String,
+        val value: String,
+        val index: Int = 0
+    )
+
     // ==================== 远程模式专用命令 ====================
 
     /**
@@ -331,6 +386,9 @@ sealed class AgentCommand {
             is ToggleSetting -> "toggle_setting"
             is NavigateTo -> "navigate_to"
             is GoBack -> "go_back"
+            is LaunchApp -> "launch_app"
+            is OpenSystemSettings -> "open_system_settings"
+            is PerformAccessibilityAction -> "perform_accessibility_action"
             is BatchExecute -> "batch_execute"
             is ExecutePlan -> "execute_plan"
             is TextReply -> "text_reply"

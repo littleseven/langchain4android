@@ -312,6 +312,38 @@ Agent: ✅ 已切换到后置摄像头
 
 ---
 
+## 6. 系统/外部 App 命令
+
+### 6.1 启动应用
+
+| 自然语言 | 解析命令 | 说明 |
+|---------|---------|------|
+| "打开微信" | `LaunchApp(appName="微信")` | 按应用名启动 |
+| "启动支付宝" | `LaunchApp(appName="支付宝")` | 按应用名启动 |
+| "打开相机" | `LaunchApp(packageName="com.android.camera")` | 按包名启动（示例） |
+
+### 6.2 打开系统设置
+
+| 自然语言 | 解析命令 | 说明 |
+|---------|---------|------|
+| "打开WiFi设置" | `OpenSystemSettings("wifi")` | 打开无线网络设置 |
+| "打开蓝牙设置" | `OpenSystemSettings("bluetooth")` | 打开蓝牙设置 |
+| "打开通知设置" | `OpenSystemSettings("app_notifications")` | 打开本应用通知设置 |
+| "打开无障碍设置" | `OpenSystemSettings("accessibility")` | 打开系统无障碍设置 |
+
+### 6.3 无障碍自动操作（需开启无障碍服务）
+
+| 自然语言 | 解析命令 | 说明 |
+|---------|---------|------|
+| "点击通讯录" | `PerformAccessibilityAction("click", target={type:"text", value:"通讯录"})` | 点击界面上的目标文本 |
+| "输入 1234" | `PerformAccessibilityAction("input", target={type:"class_name", value:"android.widget.EditText"}, params={text:"1234"})` | 在输入框中填入文本 |
+| "返回" | `PerformAccessibilityAction("back")` | 模拟返回键 |
+| "主页" | `PerformAccessibilityAction("home")` | 模拟主页键 |
+| "最近任务" | `PerformAccessibilityAction("recent")` | 打开最近任务 |
+| "向上滑动" | `PerformAccessibilityAction("scroll_forward")` | 向上/向前滚动 |
+
+---
+
 ## 7. 通用命令
 
 ### 7.1 延迟命令

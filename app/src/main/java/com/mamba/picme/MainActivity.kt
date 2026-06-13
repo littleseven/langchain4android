@@ -58,7 +58,9 @@ import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.domain.agent.ComposeCapabilityHost
 import com.mamba.picme.domain.agent.GlobalCapabilityHost
 import com.mamba.picme.domain.agent.LocalCapabilityHost
+import com.mamba.picme.domain.agent.capability.AccessibilityCapability
 import com.mamba.picme.domain.agent.capability.NavigationCapability
+import com.mamba.picme.domain.agent.capability.SystemCapability
 import com.mamba.picme.testing.agent.bridge.TestEntryPoint
 import java.util.Locale
 import androidx.camera.core.ExperimentalGetImage
@@ -128,9 +130,17 @@ class MainActivity : ComponentActivity() {
                 PicMeTheme(themeMode = themeMode) {
                     val navController = rememberNavController()
 
-                    // 创建 Activity 级 CapabilityHost，注入 NavigationCapability
+                    // 创建 Activity 级 CapabilityHost，注入 NavigationCapability、SystemCapability、AccessibilityCapability
                     val navigationCapability = remember { NavigationCapability(navController) }
-                    val rootCapabilityHost = remember { ComposeCapabilityHost().apply { register(navigationCapability) } }
+                    val systemCapability = remember { SystemCapability(applicationContext) }
+                    val accessibilityCapability = remember { AccessibilityCapability() }
+                    val rootCapabilityHost = remember {
+                        ComposeCapabilityHost().apply {
+                            register(navigationCapability)
+                            register(systemCapability)
+                            register(accessibilityCapability)
+                        }
+                    }
 
                     // 设置全局引用，供非 Composable 代码访问
                     DisposableEffect(rootCapabilityHost) {
