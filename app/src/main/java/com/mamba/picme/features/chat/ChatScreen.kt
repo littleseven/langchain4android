@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import java.util.Locale
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -82,6 +83,7 @@ private const val TAG = "ChatScreen"
  * - 输入区：ModelSelector + 输入框 + 发送按钮
  * - 快捷入口：相机 / 相册 / 编辑
  */
+@Suppress("LongMethod") // Top-level Compose screen: scaffold + list + input + sidebar
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
@@ -95,7 +97,8 @@ fun ChatScreen(
     val messages by viewModel.displayMessages.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
     val currentModel by viewModel.currentModel.collectAsState()
-    val threads by viewModel.threads.collectAsState()
+    val threads by viewModel.filteredThreads.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val currentSessionId by viewModel.currentSessionId.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -219,9 +222,21 @@ fun ChatScreen(
                 visible = isSidebarOpen,
                 threads = threads,
                 currentSessionId = currentSessionId,
+                searchQuery = searchQuery,
+                onSearchQueryChange = { viewModel.setSearchQuery(it) },
                 onThreadSelected = { sessionId ->
                     viewModel.switchSession(sessionId)
                     isSidebarOpen = false
+                },
+                onNewChat = {
+                    viewModel.newSession()
+                    isSidebarOpen = false
+                },
+                onRename = { sessionId, newTitle ->
+                    viewModel.renameSession(sessionId, newTitle)
+                },
+                onDelete = { sessionId ->
+                    viewModel.deleteSession(sessionId)
                 },
                 onDismiss = { isSidebarOpen = false }
             )
@@ -318,7 +333,7 @@ private fun ChatMessageItem(message: ChatMessageUi) {
                 Text(
                     text = "prompt ${perf.promptLen} · decode ${perf.decodeLen} " +
                         "· prefill ${perf.prefillTimeMs}ms · decode ${perf.decodeTimeMs}ms " +
-                        "· ${String.format("%.1f", perf.decodeSpeed)} tok/s",
+                        "· ${String.format(Locale.ROOT, "%.1f", perf.decodeSpeed)} tok/s",
                     color = if (isUser) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
                     fontSize = 9.sp,
                     modifier = Modifier.padding(top = 2.dp)

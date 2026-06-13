@@ -368,6 +368,9 @@ class ChatViewModel(
                 when (event) {
                     is StreamEvent.Token -> {
                         rawResponse = event.accumulatedText
+                        if (rawResponse.contains("<think>") || rawResponse.contains("思考")) {
+                            Logger.d(TAG, "Streaming token contains think marker")
+                        }
                         _streamingMessage.value = _streamingMessage.value?.copy(
                             content = cleanThinkTags(rawResponse)
                         )
@@ -384,10 +387,12 @@ class ChatViewModel(
                         )
                     }
                     is StreamEvent.Error -> {
-                        throw RuntimeException(event.message)
+                        throw IllegalStateException(event.message)
                     }
                 }
             }
+
+            Logger.i(TAG, "Raw local response before cleaning: ${rawResponse.replace("\n", "\\n")}")
 
             val cleanedResponse = cleanThinkTags(rawResponse)
             _streamingMessage.value = null

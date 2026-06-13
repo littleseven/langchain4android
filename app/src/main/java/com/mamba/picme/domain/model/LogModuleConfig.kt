@@ -25,7 +25,11 @@ enum class LogModule(val tagPrefixes: List<String>, val displayName: String) {
     CAMERA(listOf("Camera"), "Camera"),
     DOWNLOAD(listOf("Download"), "Download"),
     SETTINGS(listOf("Settings"), "Settings"),
-    ORCHESTRATOR(listOf("Orchestrator"), "Orchestrator");
+    ORCHESTRATOR(listOf("Orchestrator"), "Orchestrator"),
+    CHAT(
+        listOf("ChatViewModel", "ChatScreen", "ChatThreadSidebar", "AgentCommandParser"),
+        "Chat"
+    );
 
     companion object {
         /**
@@ -45,13 +49,20 @@ enum class LogModule(val tagPrefixes: List<String>, val displayName: String) {
         /**
          * 根据标签查找对应的日志模块。
          * 使用预构建映射表实现 O(1) 平均查找。
+         * 当多个模块都能匹配时，选择最长前缀（最具体）的那个，
+         * 例如 "AgentCommandParser" 应归属 CHAT 而非 AGENT。
          */
         fun fromTag(tag: String): LogModule? {
             val lowerTag = tag.lowercase()
+            var bestModule: LogModule? = null
+            var bestPrefixLength = 0
             prefixToModule.forEach { (prefix, module) ->
-                if (lowerTag.contains(prefix)) return module
+                if (lowerTag.contains(prefix) && prefix.length > bestPrefixLength) {
+                    bestModule = module
+                    bestPrefixLength = prefix.length
+                }
             }
-            return null
+            return bestModule
         }
     }
 }
@@ -117,7 +128,8 @@ data class LogModuleConfig(
                 LogModule.AGENT,
                 LogModule.ORCHESTRATOR,
                 LogModule.DOWNLOAD,
-                LogModule.SETTINGS
+                LogModule.SETTINGS,
+                LogModule.CHAT
                 // FACE_DETECTION 默认关闭，用户可在设置页手动开启
             )
         )

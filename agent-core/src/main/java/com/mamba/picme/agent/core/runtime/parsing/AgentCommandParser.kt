@@ -150,6 +150,7 @@ object AgentCommandParser {
      * 清理 LLM 原始响应
      */
     private fun cleanLlmResponse(response: String): String {
+        Logger.i(TAG, "Raw LLM response before cleaning: '${response.replace("\n", "\\n")}'")
         var cleaned = response.trim()
 
         // 0. 预处理：修复小模型常见格式错误

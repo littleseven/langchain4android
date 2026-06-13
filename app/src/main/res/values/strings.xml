@@ -323,6 +323,13 @@
     <string name="chat_input_hint">Ask AI Agent...</string>
     <string name="sidebar_title">Chat History</string>
     <string name="sidebar_empty">No chat history</string>
+    <string name="new_chat">New Chat</string>
+    <string name="search_history">Search history</string>
+    <string name="chat_options">Chat options</string>
+    <string name="rename_chat">Rename</string>
+    <string name="delete_chat">Delete chat</string>
+    <string name="delete_chat_title">Delete Chat</string>
+    <string name="delete_chat_confirm">Delete "%1$s"? This cannot be undone.</string>
     <string name="ai_model_manager">AI Model Manager</string>
     <string name="ai_model_manager_desc">Manage on-device AI models.</string>
     <string name="model_center">Model Center</string>
