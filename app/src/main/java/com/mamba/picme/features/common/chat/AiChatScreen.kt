@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,13 +37,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Keyboard
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
-import androidx.compose.material.icons.rounded.Headphones
-import androidx.compose.material.icons.rounded.KeyboardVoice
+import androidx.compose.material.icons.automirrored.rounded.ShortText
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -550,17 +546,15 @@ private fun CommandExecutionBubble(
     }
 
     val statusIcon = when (message.status) {
-        AgentMessage.CommandExecution.Status.PENDING -> "○"
-        AgentMessage.CommandExecution.Status.RUNNING -> "◐"
-        AgentMessage.CommandExecution.Status.SUCCESS -> "✓"
-        AgentMessage.CommandExecution.Status.FAILED -> "✗"
+        AgentMessage.CommandExecution.Status.PENDING -> Icons.Rounded.RadioButtonUnchecked
+        AgentMessage.CommandExecution.Status.RUNNING -> Icons.Rounded.Sync
+        AgentMessage.CommandExecution.Status.SUCCESS -> Icons.Rounded.CheckCircle
+        AgentMessage.CommandExecution.Status.FAILED -> Icons.Rounded.Error
     }
 
-    val indexText = if (message.total > 1) {
-        "[${message.index}/${message.total}] "
-    } else {
-        ""
-    }
+    val commandIcon = message.commandIcon
+        // 兜底：无图标时显示一个通用命令图标
+        ?: Icons.AutoMirrored.Rounded.ShortText
 
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -570,29 +564,54 @@ private fun CommandExecutionBubble(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color.DarkGray.copy(alpha = 0.6f))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = statusIcon,
-                color = statusColor,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
+            // 执行状态图标
+            Icon(
+                imageVector = statusIcon,
+                contentDescription = message.status.name,
+                tint = statusColor,
+                modifier = Modifier.size(18.dp)
             )
-            Column {
-                Text(
-                    text = "$indexText${message.commandName}",
-                    color = Color.White,
-                    fontSize = 13.sp
+
+            // 命令类型图标（替代原本冗长的 commandName 文字）
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = commandIcon,
+                    contentDescription = message.commandName,
+                    tint = Color.White.copy(alpha = 0.85f),
+                    modifier = Modifier.size(20.dp)
                 )
-                if (message.detail.isNotBlank()) {
-                    Text(
-                        text = message.detail,
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 11.sp
-                    )
+                // 批量执行时显示小序号徽章
+                if (message.total > 1) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = 6.dp, y = (-4).dp)
+                            .size(14.dp)
+                            .background(statusColor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${message.index}",
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
+            }
+
+            // 命令详情（参数等）
+            if (message.detail.isNotBlank()) {
+                Text(
+                    text = message.detail,
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
             }
         }
     }

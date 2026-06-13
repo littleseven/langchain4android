@@ -1,5 +1,12 @@
 package com.mamba.picme.features.camera
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.FactCheck
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.ShortText
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.mamba.picme.domain.model.AiAgentCommand
 import com.mamba.picme.features.common.chat.AgentMessage
 
@@ -17,6 +24,7 @@ internal fun commandToExecutionMessages(command: AiAgentCommand): List<AgentMess
             command.commands.mapIndexed { index, subCmd ->
                 AgentMessage.CommandExecution(
                     commandName = getCommandDisplayName(subCmd),
+                    commandIcon = resolveCommandIcon(subCmd),
                     status = AgentMessage.CommandExecution.Status.SUCCESS,
                     detail = getCommandDetail(subCmd),
                     index = index + 1,
@@ -30,6 +38,7 @@ internal fun commandToExecutionMessages(command: AiAgentCommand): List<AgentMess
         else -> listOf(
             AgentMessage.CommandExecution(
                 commandName = getCommandDisplayName(command),
+                commandIcon = resolveCommandIcon(command),
                 status = AgentMessage.CommandExecution.Status.SUCCESS,
                 detail = getCommandDetail(command),
                 index = 0,
@@ -56,6 +65,28 @@ internal fun getCommandDisplayName(command: AiAgentCommand): String = when (comm
     is AiAgentCommand.GoBack -> "返回"
     is AiAgentCommand.BatchExecute -> "批量执行"
     is AiAgentCommand.TextReply -> "文本回复"
+}
+
+/**
+ * 将 AiAgentCommand 映射为可视化图标，与 common.chat 中的映射保持一致。
+ */
+internal fun resolveCommandIcon(command: AiAgentCommand): ImageVector = when (command) {
+    is AiAgentCommand.AdjustBeauty -> Icons.Rounded.Face
+    is AiAgentCommand.SwitchFilter -> Icons.Rounded.PhotoFilter
+    is AiAgentCommand.SwitchStyle -> Icons.Rounded.Style
+    is AiAgentCommand.SwitchScene -> Icons.Rounded.Videocam
+    is AiAgentCommand.SwitchRatio -> Icons.Rounded.AspectRatio
+    is AiAgentCommand.AdjustExposure -> Icons.Rounded.Exposure
+    is AiAgentCommand.AdjustZoom -> Icons.Rounded.ZoomIn
+    is AiAgentCommand.FlipCamera -> Icons.Rounded.FlipCameraAndroid
+    is AiAgentCommand.CapturePhoto -> Icons.Rounded.CameraAlt
+    is AiAgentCommand.Delay -> Icons.Rounded.HourglassEmpty
+    is AiAgentCommand.ToggleRecording -> Icons.Rounded.Videocam
+    is AiAgentCommand.SwitchMode -> Icons.Rounded.Settings
+    is AiAgentCommand.NavigateTo -> Icons.AutoMirrored.Rounded.OpenInNew
+    is AiAgentCommand.GoBack -> Icons.AutoMirrored.Rounded.ArrowBack
+    is AiAgentCommand.BatchExecute -> Icons.AutoMirrored.Rounded.FactCheck
+    is AiAgentCommand.TextReply -> Icons.AutoMirrored.Rounded.ShortText
 }
 
 internal fun getCommandDetail(command: AiAgentCommand): String = when (command) {

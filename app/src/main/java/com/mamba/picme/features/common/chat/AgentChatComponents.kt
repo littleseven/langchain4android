@@ -5,7 +5,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.KeyboardVoice
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.FactCheck
+import androidx.compose.material.icons.automirrored.rounded.Help
+import androidx.compose.material.icons.automirrored.rounded.Launch
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAddCheck
+import androidx.compose.material.icons.automirrored.rounded.ShortText
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mamba.picme.agent.core.api.android.RemoteModelConfigs
@@ -316,6 +324,7 @@ private fun agentActionToExecutionMessages(action: AgentAction.Success): List<Ag
             cmd.commands.mapIndexed { index, subCmd ->
                 AgentMessage.CommandExecution(
                     commandName = getAgentCommandDisplayName(subCmd),
+                    commandIcon = resolveCommandIcon(subCmd),
                     status = AgentMessage.CommandExecution.Status.SUCCESS,
                     detail = getAgentCommandDetail(subCmd),
                     index = index + 1,
@@ -326,6 +335,7 @@ private fun agentActionToExecutionMessages(action: AgentAction.Success): List<Ag
         else -> listOf(
             AgentMessage.CommandExecution(
                 commandName = getAgentCommandDisplayName(cmd),
+                commandIcon = resolveCommandIcon(cmd),
                 status = AgentMessage.CommandExecution.Status.SUCCESS,
                 detail = getAgentCommandDetail(cmd),
                 index = 0,
@@ -372,6 +382,46 @@ private fun getAgentCommandDisplayName(command: AgentCommand): String =
         is AgentCommand.Unknown -> "未知命令"
         is AgentCommand.Error -> "执行错误"
     }
+
+/**
+ * 将 AgentCommand 映射为可视化图标，减少 chat 中 command 文字标识的冗余。
+ */
+private fun resolveCommandIcon(command: AgentCommand): ImageVector = when (command) {
+    is AgentCommand.AdjustBeauty -> Icons.Rounded.Face
+    is AgentCommand.SwitchFilter -> Icons.Rounded.PhotoFilter
+    is AgentCommand.SwitchStyle -> Icons.Rounded.Style
+    is AgentCommand.SwitchScene -> Icons.Rounded.Videocam
+    is AgentCommand.SwitchRatio -> Icons.Rounded.AspectRatio
+    is AgentCommand.AdjustExposure -> Icons.Rounded.Exposure
+    is AgentCommand.AdjustZoom -> Icons.Rounded.ZoomIn
+    is AgentCommand.FlipCamera -> Icons.Rounded.FlipCameraAndroid
+    is AgentCommand.CapturePhoto -> Icons.Rounded.CameraAlt
+    is AgentCommand.Delay -> Icons.Rounded.HourglassEmpty
+    is AgentCommand.ToggleRecording -> Icons.Rounded.Videocam
+    is AgentCommand.SwitchMode -> Icons.Rounded.Settings
+    is AgentCommand.NavigateTo -> Icons.AutoMirrored.Rounded.OpenInNew
+    is AgentCommand.GoBack -> Icons.AutoMirrored.Rounded.ArrowBack
+    is AgentCommand.BatchExecute -> Icons.AutoMirrored.Rounded.FactCheck
+    is AgentCommand.TextReply -> Icons.AutoMirrored.Rounded.ShortText
+    is AgentCommand.ExecutePlan -> Icons.AutoMirrored.Rounded.PlaylistAddCheck
+    is AgentCommand.ChangeTheme -> Icons.Rounded.DarkMode
+    is AgentCommand.ChangeLanguage -> Icons.Rounded.Language
+    is AgentCommand.DownloadModel -> Icons.Rounded.Download
+    is AgentCommand.SwitchFaceEngine -> Icons.Rounded.Memory
+    is AgentCommand.ToggleSetting -> Icons.Rounded.ToggleOn
+    is AgentCommand.ViewMedia -> Icons.Rounded.Visibility
+    is AgentCommand.DeleteMedia -> Icons.Rounded.Delete
+    is AgentCommand.ShareMedia -> Icons.Rounded.Share
+    is AgentCommand.SelectMedia -> Icons.Rounded.CheckCircle
+    is AgentCommand.SearchMedia -> Icons.Rounded.Search
+    is AgentCommand.SwitchViewMode -> Icons.Rounded.GridView
+    is AgentCommand.FavoriteMedia -> Icons.Rounded.Favorite
+    is AgentCommand.LaunchApp -> Icons.AutoMirrored.Rounded.Launch
+    is AgentCommand.OpenSystemSettings -> Icons.Rounded.Settings
+    is AgentCommand.PerformAccessibilityAction -> Icons.Rounded.TouchApp
+    is AgentCommand.Unknown -> Icons.AutoMirrored.Rounded.Help
+    is AgentCommand.Error -> Icons.Rounded.Error
+}
 
 private fun getAgentCommandDetail(command: AgentCommand): String =
     when (command) {

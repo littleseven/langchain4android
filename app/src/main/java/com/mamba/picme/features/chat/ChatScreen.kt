@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,12 +26,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.automirrored.rounded.ShortText
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -295,6 +302,7 @@ private fun ChatTopBar(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatMessageItem(message: ChatMessageUi) {
     val isUser = message.type == ChatMessageType.USER_TEXT
@@ -330,16 +338,75 @@ private fun ChatMessageItem(message: ChatMessageUi) {
                 )
             }
             message.performance?.let { perf ->
-                Text(
-                    text = "prompt ${perf.promptLen} · decode ${perf.decodeLen} " +
-                        "· prefill ${perf.prefillTimeMs}ms · decode ${perf.decodeTimeMs}ms " +
-                        "· ${String.format(Locale.ROOT, "%.1f", perf.decodeSpeed)} tok/s",
-                    color = if (isUser) Color.White.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    fontSize = 9.sp,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
+                val metricTint = if (isUser) {
+                    Color.White.copy(alpha = 0.55f)
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                }
+                FlowRow(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    PerformanceMetric(
+                        icon = Icons.AutoMirrored.Rounded.ShortText,
+                        value = "${perf.promptLen}",
+                        tint = metricTint
+                    )
+                    PerformanceMetric(
+                        icon = Icons.Rounded.ChatBubble,
+                        value = "${perf.decodeLen}",
+                        tint = metricTint
+                    )
+                    PerformanceMetric(
+                        icon = Icons.Rounded.Bolt,
+                        value = "${perf.prefillTimeMs}ms",
+                        tint = metricTint
+                    )
+                    PerformanceMetric(
+                        icon = Icons.Rounded.Timer,
+                        value = "${perf.decodeTimeMs}ms",
+                        tint = metricTint
+                    )
+                    PerformanceMetric(
+                        icon = Icons.Rounded.Speed,
+                        value = "${String.format(Locale.ROOT, "%.1f", perf.decodeSpeed)}",
+                        tint = metricTint
+                    )
+                }
             }
         }
+    }
+}
+
+/**
+ * 单个性能指标：图标 + 数值，紧凑展示，避免一行文字过长。
+ */
+@Composable
+private fun PerformanceMetric(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(10.dp)
+        )
+        Text(
+            text = value,
+            color = tint,
+            fontSize = 9.sp
+        )
     }
 }
 

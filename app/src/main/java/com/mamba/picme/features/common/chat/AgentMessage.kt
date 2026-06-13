@@ -1,5 +1,6 @@
 package com.mamba.picme.features.common.chat
 
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
 
 /**
@@ -23,6 +24,8 @@ sealed class AgentMessage {
      * 用于展示单个命令的名称、执行状态和结果，支持多命令批量执行时的过程可视化。
      *
      * @property commandName 命令的友好名称（如"切换滤镜"、"调整美颜"）
+     * @property commandIcon 命令对应的图标（如 [androidx.compose.material.icons.rounded.Face]），
+     *                       优先用于 UI 展示以减少纯文字标识
      * @property status 当前执行状态
      * @property detail 命令的详细参数信息（如"磨皮: 80%"）
      * @property index 在批量命令中的序号（从 1 开始，单命令为 0）
@@ -30,6 +33,7 @@ sealed class AgentMessage {
      */
     data class CommandExecution(
         val commandName: String,
+        val commandIcon: ImageVector? = null,
         val status: Status = Status.PENDING,
         val detail: String = "",
         val index: Int = 0,

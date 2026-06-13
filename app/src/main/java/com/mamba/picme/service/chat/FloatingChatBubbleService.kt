@@ -228,6 +228,9 @@ class FloatingChatBubbleService : Service() {
 
         val container = FrameLayout(this).apply {
             setOnTouchListener(BubbleTouchListener())
+            // Compose 会沿着 parent 查找 Window root 的 LifecycleOwner，
+            // 因此必须在根 FrameLayout 上设置，而不仅仅是内部的 ComposeView。
+            setViewTreeLifecycleOwner(serviceLifecycleOwner)
         }
 
         val composeView = ComposeView(this).apply {
