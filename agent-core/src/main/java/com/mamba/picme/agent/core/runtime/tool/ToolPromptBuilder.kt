@@ -23,7 +23,7 @@ object ToolPromptBuilder {
             appendLine("当需要调用工具时，请严格输出如下 JSON（不要添加任何额外说明）：")
             appendLine(
                 """
-                {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"工具名","arguments":{}}]}
+                {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"工具名","arguments":{}}}]}
                 """.trimIndent()
             )
             appendLine("其中 arguments 是 JSON 对象，直接包含具体参数。")
