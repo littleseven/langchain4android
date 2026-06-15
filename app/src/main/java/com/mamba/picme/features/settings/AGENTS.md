@@ -111,7 +111,7 @@
 - **模型配置**：`res/raw/llm_models.json` 定义所有可用模型的元数据
 
 **Agent 模式设置**
-- **本地模式**：仅使用本地模型（默认 Qwen3-1.7B）
+- **本地模式**：仅使用本地模型（默认 Qwen3.5-2B）
 - **远程模式**：仅使用 Kimi API
 - **关闭模式**：禁用 Agent
 - **隐私级别**：`STRICT` / `PERMISSIVE`；运行时输入分级为 `PUBLIC` / `SENSITIVE` / `RESTRICTED`

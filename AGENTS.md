@@ -15,6 +15,7 @@ PicMe 是一个元实验（meta-experiment），同时探索三个层次：
 | **运行时** | 端侧 Agent 架构 | LLM 能否成为应用的中枢神经系统？ |
 | **架构层** | Agent First 客户端框架 | 什么样的架构让 Agent 最高效？ |
 | **流程层** | Agent First 研发流程 | Agent 如何通过编排 Tools 完成开发？ |
+| **2026-06 方向更新** | 觅影相机→觅影相册 | 产品重心迁移至相册与图片编辑，验证 AI 相册技术路线 |
 
 **核心假设**：当基础设施原子化为 Tools 层后，Agent 可以从「辅助工具」进化为「主导力量」。
 
@@ -304,7 +305,10 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 | **模块规范** | 各模块 `AGENTS.md`（`app/`、`beauty-engine/`、`agent-core/`、`app/src/.../features/camera/` 等） |
 | **技术专项** | `docs/*.md` |
 
-> **架构说明（2026-06）**：`AiAgentUseCase` 作为 Facade 兼容层存在，内部委托给 `AgentOrchestrator` 执行。此双 Facade 架构在模块迁移过程中形成：`agent-core` 提供 `AgentOrchestrator`（核心编排逻辑），`app` 层通过 `AiAgentUseCase` 桥接访问。
+> **架构说明（2026-06-15）**：
+> - **本地/远程推理协议已分离**（ADR-005）：本地使用自定义 JSON 数组协议，远程使用标准 OpenAI Chat Completions API 协议（含 tool_calls、流式、多轮对话）。两条链路完全独立，无共享路由逻辑。
+> - `AiAgentUseCase` 作为 Facade 兼容层存在，内部委托给 `AgentOrchestrator` 执行。
+> - 冗余组件已清理：`InferenceRouter`、`ToolCallingChatLanguageModel`、`ToolCallingOutputParser`、`ToolPromptBuilder` 等 ~1500 行代码已删除。
 
 ---
 
@@ -322,5 +326,5 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 ---
 
 > **维护者**：CO Agent
-> **最后更新**：2026-06-13
-> **实验状态**：进行中 · Phase 2 智能体验升级（Agent 混合编排 + 语音交互已落地），Phase 3 全局悬浮聊天入口已落地
+> **最后更新**：2026-06-15
+> **实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + 冗余清理 + 相册/编辑产品重心迁移）

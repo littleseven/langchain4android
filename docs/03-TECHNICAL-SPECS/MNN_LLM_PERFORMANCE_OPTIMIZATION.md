@@ -1,7 +1,8 @@
-# MNN-LLM (Qwen3-1.7B) 性能优化指南
+# MNN-LLM (Qwen3.5-2B) 性能优化指南
 
 > 基于 2026-06-06 性能诊断数据
-> 当前默认模型：Qwen3-1.7B-MNN（weight 1.2GB，约 3.5GB 运行时内存）
+> **2026-06 模型升级**：默认模型已从 Qwen3-1.7B 升级至 Qwen3.5-2B。本文档中 Qwen3-1.7B 的数据为历史基线，Qwen3.5-2B 对应指标待更新。
+> **当前默认模型**：Qwen3.5-2B-MNN（weight ~1.8GB，约 4.2GB 运行时内存）
 > 设备：高性能手机（8GB RAM，Adreno GPU）
 
 ---

@@ -8,22 +8,24 @@
 
 `:agent-core` 是 **Agent Runtime 核心**，承载从 `app/domain/agent/` 迁移出的所有 Agent 组件。提供平台无关的泛型接口和 Android 无关的纯 Kotlin 实现：
 
-### 核心组件（43 个文件，8 个子包）
+#### 核心组件（37+ 个文件，8 个子包）
 
 | 组件 | 职责 | 包路径 |
 |------|------|--------|
-| `AgentOrchestrator` | 应用级单例，统一入口，管理本地模型生命周期 | `agent.core` |
-| `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列；同时实现 `ToolProvider` 支持 Tool Calling | `agent.core` |
-| `LocalLlmEngine` | 本地 Qwen3-1.7B MNN-LLM 推理封装，实现 `ChatLanguageModel` / `StreamingChatLanguageModel` | `agent.core` |
+| `AgentOrchestrator` | 应用级单例，统一入口，管理本地/远程两条独立推理链路 | `agent.core` |
+| `LocalInferencePipeline` | 本地推理链路：L1 Cache + L2 Batch（自定义 JSON 数组协议） | `agent.core` |
+| `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式） | `agent.core` |
+| `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列 | `agent.core` |
+| `LocalLlmEngine` | 本地 Qwen3.5-2B MNN-LLM 推理封装 | `agent.core` |
 | `AgentCommandParser` | LLM 响应解析为 AgentCommand | `agent.core` |
-| `InferenceRouter` | 隐私分级 + 本地/远程路由；Tool Calling 路径直接把模型输出的 OpenAI `tool_calls` 解析为 `AgentCommand` | `agent.core` |
 | `ExecutionEngine` | 顺序执行 ExecutionPlan | `agent.core` |
 | `ExecutionReporter` | 执行过程报告，结构化日志 | `agent.core` |
 | `MemoryManager` | 对话历史管理 | `agent.core` |
 | `PrivacyGuard` | 输入内容隐私分级 | `agent.core` |
-| `PromptBuilder` | System prompt 动态构建 | `agent.core` |
+| `LocalPromptBuilder` | 本地模型 System prompt 构建（精简结构化） | `agent.core` |
+| `RemotePromptBuilder` | 远程模型 Tool Schema + ChatRequest 构建 | `agent.core` |
 | `SceneManager` | 页面场景状态管理 | `agent.core` |
-| `AgentConfigurator` | Agent 配置管理 | `agent.core` |
+| `AgentConfigurator` | Agent 配置管理（提供独立 Local/Remote 实例，不再创建 InferenceRouter） | `agent.core` |
 | `Capability<T,C,P,A>` | 泛型 Capability 接口 | `agent.core` |
 | `CapabilityHost` | Capability 宿主绑定 | `agent.core` |
 | `CommandExecutor<T,C,P,A>` | 命令执行器（超时+异常） | `agent.core` |
@@ -35,13 +37,19 @@
 
 | 子包 | 内容 | 说明 |
 |------|------|------|
-| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolExecutionRequest` | 与 LangChain4j 对齐的模型 API 层（无外部依赖） |
-| `tool/` | `ToolOrchestrator`, `ToolCallingChatLanguageModel`, `ToolCallingOutputParser`, `ToolPromptBuilder` | Tool/Function Calling 实现 |
+| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolParameters`, `JsonSchemaProperty`, `ToolExecutionRequest`, `ToolExecutionResultMessage`, `ToolExecutor`, `ToolProvider` | 与 LangChain4j 对齐的模型 API 层（远程推理链路接入层） |
 | `llm/` | `MnnLlmClient`, `LlmModelManager`, `LocalLlmEngine` | MNN LLM 客户端、模型管理与本地推理引擎 |
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |
 | `voice/` | `AsrEngine`, `VadDetector`, `MnnAsrClient`, `AudioRecorder`, `SherpaMnnAsrEngine` | 语音交互 |
-| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `AdaptiveStrategySelector`, `IntentCache`, `ExecutionPlan` + `kimi/` (KimiCodingApiClient 等) + `openai/` (OpenAiApiClient 等) | 远程推理编排 |
+| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `IntentCache`, `ExecutionPlan` + `kimi/` (KimiCodingApiClient 等) + `openai/` (OpenAiApiClient 等) | 远程推理编排（标准 OpenAI Chat Completions 协议） |
+
+> **2026-06-15 架构更新（ADR-005）**：
+> - 移除 `InferenceRouter`（拆分为 `LocalInferencePipeline` + `RemoteInferencePipeline`）
+> - 移除 `ToolCallingChatLanguageModel`、`ToolCallingOutputParser`、`ToolPromptBuilder`、`ToolCallingMode`、`ToolCallingConfig`（远程直用 OpenAI 原生协议，无需 Prompt 注入模拟）
+> - 移除 `AdaptiveStrategySelector`（本地不再需要策略分级）
+> - 拆分 `PromptBuilder` 为 `LocalPromptBuilder` + `RemotePromptBuilder`
+> - 移除所有不再需要的 Tool Calling 包装层代码，共 ~1500 行
 
 ## 设计原则
 
@@ -64,8 +72,10 @@
 
 ### 根包 (`agent.core`)
 - `AgentOrchestrator.kt` — 编排器（应用级单例）
+- `LocalInferencePipeline.kt` — 本地推理链路
+- `RemoteInferencePipeline.kt` — 远程推理链路
 - `AgentCommandParser.kt` — 命令解析器
-- `AgentConfigurator.kt` — 配置管理
+- `AgentConfigurator.kt` — 配置管理（直接提供 Local/Remote 实例）
 - `Capability.kt` — 泛型 Capability 接口
 - `CapabilityHost.kt` — Capability 宿主
 - `CapabilityRegistry.kt` — 注册表（应用级单例）
@@ -74,13 +84,15 @@
 - `ExecutionEngine.kt` — 执行引擎
 - `ExecutionReporter.kt` — 执行报告器
 - `FaceDetectionProvider.kt` — 人脸检测提供
-- `InferenceRouter.kt` — 推理路由器
 - `LocalLlmEngine.kt` — 本地 LLM 引擎
+- `LocalPromptBuilder.kt` — 本地 Prompt 构建
+- `RemotePromptBuilder.kt` — 远程 Prompt 构建
 - `Logger.kt` — 日志接口
 - `MemoryManager.kt` — 记忆管理
 - `PrivacyGuard.kt` — 隐私守卫
-- `PromptBuilder.kt` — Prompt 构建器
 - `SceneManager.kt` — 场景管理器
+
+> **已移除（ADR-005）**：`InferenceRouter.kt`、`PromptBuilder.kt`、`ToolCallingChatLanguageModel.kt`、`ToolCallingOutputParser.kt`、`ToolPromptBuilder.kt`、`ToolCallingMode.kt`、`ToolCallingConfig.kt`、`AdaptiveStrategySelector.kt`、`ToolOrchestrator.kt`
 
 ### `langchain4j/`
 - `ChatLanguageModel.kt` — 同步对话模型接口
@@ -94,11 +106,8 @@
 - `ToolExecutionRequest.kt` / `ToolExecutionResultMessage.kt` — 工具执行消息
 - `ToolExecutor.kt` / `ToolProvider.kt` — 工具执行与发现接口
 
-- `ToolOrchestrator.kt` — tool-request → execute → result 循环
-- `ToolCallingChatLanguageModel.kt` — 为模型注入工具提示并解析文本输出
-- `ToolCallingOutputParser.kt` — 解析 OpenAI `tool_calls` / `<tool_call>` / ReAct Action 格式
-- `ToolPromptBuilder.kt` — 工具说明渲染
-- `ToolCallingMode.kt` / `ToolCallingConfig.kt` — OPENAI_TOOLS / REACT 模式配置
+> **已移除（ADR-005）**：`ToolOrchestrator.kt`、`ToolCallingChatLanguageModel.kt`、`ToolCallingOutputParser.kt`、`ToolPromptBuilder.kt`、`ToolCallingMode.kt`、`ToolCallingConfig.kt`
+> **移除理由**：远程推理使用原生 OpenAI Chat Completions 协议，无需 Prompt 注入模拟 tool_calls 的包装层
 
 ### `llm/`
 - `MnnLlmClient.kt` — MNN LLM 客户端
@@ -128,8 +137,7 @@
 
 ### `remote/`
 - `RemoteOrchestrator.kt` — 远程编排器
-- `UnifiedRemoteClient.kt` — 统一远程客户端
-- `AdaptiveStrategySelector.kt` — 自适应策略选择器
+- `UnifiedRemoteClient.kt` — 统一远程客户端（OpenAI 标准协议）
 - `IntentCache.kt` — 意图缓存
 - `ExecutionPlan.kt` — 执行计划
 - `kimi/KimiCodingModels.kt` — Kimi 模型定义
@@ -139,8 +147,14 @@
 - `openai/OpenAiApiClient.kt` — OpenAI API 客户端
 - `openai/OpenAiApiService.kt` — OpenAI API 服务
 
+> **已移除（ADR-005）**：`AdaptiveStrategySelector.kt`
+
 ## 编译验证
 
 ```bash
 ./gradlew :agent-core:compileKotlin  # ✅ BUILD SUCCESSFUL
 ```
+
+## 相关 ADR
+
+- `docs/02-ARCHITECTURE/ADR/ADR-005-local-remote-inference-split.md` — 本地/远程推理协议分离（移除包装层 · 清除冗余代码 · 产品重心迁移）

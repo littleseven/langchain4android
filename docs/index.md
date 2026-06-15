@@ -1,6 +1,6 @@
 <meta http-equiv="refresh" content="0; url=wiki/">
 
-# 觅影相机 PicMe
+# 觅影相册 PicMe
 
 正在跳转到 [Wiki 文档中心](wiki/)...
 
