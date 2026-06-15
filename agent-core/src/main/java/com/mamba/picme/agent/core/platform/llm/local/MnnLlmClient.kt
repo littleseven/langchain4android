@@ -279,7 +279,10 @@ class MnnLlmClient(private val context: Context) {
         val contextObject = jinjaObject.optJSONObject("context") ?: JSONObject().also { jinjaObject.put("context", it) }
         contextObject.put("enable_thinking", false)
 
-        // 2. 可选：使用 OpenCL 后端加速
+        // 2. 设置低 temperature 提高 JSON 输出稳定性（Function Calling 场景推荐 0.1-0.2）
+        root.put("temperature", root.optDouble("temperature", 0.1))
+
+        // 3. 可选：使用 OpenCL 后端加速
         if (useOpencl) {
             root.put("backend_type", "opencl")
             val mllmObject = root.optJSONObject("mllm") ?: JSONObject().also { root.put("mllm", it) }
