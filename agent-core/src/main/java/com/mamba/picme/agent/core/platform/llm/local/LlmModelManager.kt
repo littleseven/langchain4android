@@ -26,16 +26,6 @@ class LlmModelManager(private val context: Context) {
     )
 
     private val llmModelRegistry = mapOf(
-        "qwen3_0_6b" to LlmModelInfo(
-            assetDir = "models/llm/Qwen3-0.6B-MNN",
-            cacheDirName = "qwen3_0_6b",
-            version = "1.0"
-        ),
-        "qwen3_1_7b" to LlmModelInfo(
-            assetDir = "models/llm/Qwen3-1.7B-MNN",
-            cacheDirName = "qwen3_1_7b",
-            version = "1.0"
-        ),
         "qwen3_5_2b" to LlmModelInfo(
             assetDir = "models/llm/Qwen3.5-2B-MNN",
             cacheDirName = "qwen3_5_2b",

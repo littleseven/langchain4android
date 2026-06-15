@@ -19,14 +19,15 @@ object ToolPromptBuilder {
         return buildString {
             appendLine()
             appendLine("【可用工具】")
+            appendLine("关键规则：每次最多只能调用一个工具，只选最相关的。若无需工具则输出中文回复。")
             appendLine("当需要调用工具时，请严格输出如下 JSON（不要添加任何额外说明）：")
             appendLine(
                 """
-                {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"工具名","arguments":"{\\"参数\\":\\"值\\"}"}}]}
+                {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"工具名","arguments":{}}]}
                 """.trimIndent()
             )
-            appendLine("其中 arguments 是 JSON 对象的字符串形式。")
-            appendLine("如果无需工具，直接输出最终回复或 JSON 命令数组。")
+            appendLine("其中 arguments 是 JSON 对象，直接包含具体参数。")
+            appendLine("如果无需工具，直接输出中文回复。禁止输出多个工具调用。")
             appendLine()
             toolSpecifications.forEach { tool ->
                 appendLine("- ${tool.name}: ${tool.description}")

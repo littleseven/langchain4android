@@ -209,10 +209,11 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
 
                 try {
                     val response = if (systemMessage != null) {
+                        val maxTokens = if (request.toolSpecifications.isNotEmpty()) 256 else 128
                         val result = client.generateWithSystem(
                             systemPrompt = systemMessage,
                             userPrompt = userMessage,
-                            maxNewTokens = 128
+                            maxNewTokens = maxTokens
                         )
                         if (result.error != null) {
                             throw RuntimeException(result.error)

@@ -175,28 +175,58 @@ class InferenceRouter(
      * [AgentCommand] 返回。这样 chat 页面等入口在远程模型下得到的是 OpenAI 格式的
      * 指令输出，符合预期。
      */
-    private suspend fun processInputWithTools(
+   private suspend fun processInputWithTools(
         userInput: String,
         context: AgentContext,
         toolProvider: ToolProvider,
         toolSpecifications: List<com.mamba.picme.agent.core.langchain4j.ToolSpecification>,
         toolCallingConfig: ToolCallingConfig
     ): InferenceResult {
+        val sceneDescription = SceneManager.getInstance().getSceneDescription(
+            SceneManager.getInstance().currentScene.value
+        )
+        val currentTime = java.time.LocalTime.now().format(
+            java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+        )
+        val pageContext = when (context.scene) {
+            com.mamba.picme.agent.core.api.context.AgentScene.CHAT -> "聊天首页"
+            com.mamba.picme.agent.core.api.context.AgentScene.CAMERA -> "相机拍摄页"
+            com.mamba.picme.agent.core.api.context.AgentScene.GALLERY -> "相册页"
+            com.mamba.picme.agent.core.api.context.AgentScene.PHOTO_EDIT -> "照片编辑页"
+            com.mamba.picme.agent.core.api.context.AgentScene.SETTINGS -> "设置页"
+            else -> "未知页面"
+        }
+
         val baseSystemPrompt = when (toolCallingConfig.mode) {
             com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.OPENAI_TOOLS -> """
-                你是 PicMe AI 助手小觅。当用户请求需要执行操作时，请直接按 OpenAI tool_calls 格式调用对应工具；
-                如果无需工具（闲聊、解释、不确定），直接给出中文回复。禁止输出其他 JSON 格式。
+                你是 PicMe AI 助手小觅。请根据用户需求调用最相关的工具。
+
+                【当前上下文】
+                - 当前时间: $currentTime
+                - 当前页面: $pageContext
+                - 页面说明: $sceneDescription
+
+                关键规则：
+                1. 每次最多调用一个工具，只选择与用户请求最相关的一个工具
+                2. 同一个意图不要组合多个工具（如"打开相机"只需 navigate_to，不要同时 launch_app）
+                3. 如果无需工具（闲聊、解释、不确定），直接给出中文回复
+                4. 禁止输出其他 JSON 格式
             """.trimIndent()
             com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.REACT -> """
                 你是 PicMe AI 助手小觅。请按 ReAct 格式思考并调用工具，最终给出中文回复。
+
+                【当前上下文】
+                - 当前时间: $currentTime
+                - 当前页面: $pageContext
+                - 页面说明: $sceneDescription
             """.trimIndent()
         }
-        val toolSection = ToolPromptBuilder.buildToolSection(toolSpecifications, toolCallingConfig)
-        val systemPrompt = "$baseSystemPrompt\n$toolSection"
 
+        // 注意：toolSection 由 ToolCallingChatLanguageModel.injectToolPrompt 自动追加，
+        // 这里只保留 baseSystemPrompt 避免重复注入
         val chatRequest = ChatRequest(
             messages = listOf(
-                SystemMessage(systemPrompt),
+                SystemMessage(baseSystemPrompt),
                 UserMessage(userInput)
             ),
             toolSpecifications = toolSpecifications

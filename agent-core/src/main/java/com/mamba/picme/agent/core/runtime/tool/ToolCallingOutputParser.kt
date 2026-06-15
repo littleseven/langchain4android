@@ -53,15 +53,21 @@ object ToolCallingOutputParser {
     private fun parseOpenAiTools(text: String): List<ToolExecutionRequest> {
         val trimmed = text.trim()
 
-        // 1. OpenAI 完整 wrapper: {"tool_calls":[...]}
         if (trimmed.contains("\"tool_calls\"")) {
+            // 1. 宽松解析优先：兼容 arguments 为对象（推荐）或字符串两种格式
+            // OpenAI 标准中 arguments 是字符串，但端侧小模型输出对象更可靠
+            runCatching {
+                parseOpenAiToolsLoosely(trimmed)
+            }.getOrNull()?.let { if (it.isNotEmpty()) return it }
+
+            // 1.5 严格解析：arguments 必须为字符串
             runCatching {
                 openAiWrapperAdapter.fromJson(trimmed)?.tool_calls?.map { it.toRequest() }
             }.getOrNull()?.let { return it }
 
-            // 1.5 宽松解析：某些模型/接口会把 arguments 输出为对象而非字符串
+            // 1.6 正则兜底：当 JSON 被截断时从原始文本中提取 function name
             runCatching {
-                parseOpenAiToolsLoosely(trimmed)
+                parseOpenAiToolsByRegex(trimmed)
             }.getOrNull()?.let { if (it.isNotEmpty()) return it }
         }
 
@@ -122,6 +128,54 @@ object ToolCallingOutputParser {
         return matches.mapNotNull { match ->
             parseSimple(match.groupValues[1].trim())
         }
+    }
+
+    /**
+     * 正则兜底解析：当 JSON 被截断时（如 maxNewTokens 不足导致 "]} 缺失），
+     * 或有多余字符时，从原始文本中提取 function name 和 arguments。
+     *
+     * 截断示例：
+     * {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"navigate_to","arguments":"{\"destination\":\"camera\"}"}]}
+     *                                                                                          ↑ 缺少 }]
+     *
+     * 多余字符示例（小模型常见）：
+     * {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"navigate_to","arguments":{"destination":"camera"}}]}}
+     *                                                                                             ↑ 多一个 }
+     */
+    private fun parseOpenAiToolsByRegex(text: String): List<ToolExecutionRequest> {
+        val trimmed = text.trim()
+    
+        // 找到所有 "function" 块的起始和结束位置
+        val functionRegex = Regex(""""function"s*:s*{([^}]+)}?""")
+        val functionMatches = functionRegex.findAll(trimmed)
+    
+        return functionMatches.mapNotNull { match ->
+            val functionBlock = match.groupValues[1]
+    
+            // 从 function 块中提取 name
+            val nameRegex = Regex(""""name"s*:s*"([^"]+)"""")
+            val name = nameRegex.find(functionBlock)?.groupValues?.get(1) ?: return@mapNotNull null
+    
+            // 从 function 块中提取 arguments（兼容对象和字符串两种格式）
+            val argBlockRegex = Regex(""""arguments"s*:s*({.*?}|\"(.*?)\")""")
+            val argBlockMatch = argBlockRegex.find(functionBlock)
+            val argumentsString = argBlockMatch?.let { matchResult ->
+                // groupValues[1] = {...} 对象格式，groupValues[2] = "..." 字符串格式（不含""）
+                val objectArgs = matchResult.groupValues[1]
+                val stringArgs = matchResult.groupValues[2]
+                when {
+                    objectArgs.isNotBlank() && objectArgs.startsWith("{") -> objectArgs
+                    stringArgs.isNotBlank() -> "{\"$stringArgs\"}"
+                    else -> "{}"
+                }
+            } ?: "{}"
+    
+            ToolExecutionRequest(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                arguments = argumentsString
+            )
+        }.toList()
     }
 
     private fun parseSimple(json: String): ToolExecutionRequest? {

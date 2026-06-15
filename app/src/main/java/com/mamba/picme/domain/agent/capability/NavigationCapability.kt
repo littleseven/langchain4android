@@ -68,17 +68,26 @@ class NavigationCapability(
         context: AgentContext,
         pageContext: PageContext?
     ): Result<AgentAction> {
-        Logger.d(tag, "Executing command: ${command::class.simpleName}")
+        Logger.d(tag, "Executing command: ${command::class.simpleName}, command=${command}")
+
+        Logger.d(tag, "Checking matches: is NavigateTo=${command is AgentCommand.NavigateTo}, is GoBack=${command is AgentCommand.GoBack}")
 
         return when (command) {
             is AgentCommand.NavigateTo -> {
+                Logger.d(tag, "Matched NavigateTo, destination='${command.destination}'")
                 val destination = parseDestination(command.destination)
+                Logger.d(tag, "parseDestination returned: $destination")
                 if (destination != null) {
+                    Logger.d(tag, "Before withContext(Dispatchers.Main)")
                     withContext(Dispatchers.Main) {
+                        Logger.d(tag, "Inside withContext, before navigateTo")
                         navigateTo(navController, destination)
+                        Logger.d(tag, "Inside withContext, after navigateTo")
                     }
+                    Logger.d(tag, "After withContext, returning Success")
                     Result.success(AgentAction.Success(commandId = command.commandId, command = command))
                 } else {
+                    Logger.w(tag, "Unknown destination: ${command.destination}")
                     Result.success(
                         AgentAction.Error(
                             commandId = command.commandId,
@@ -90,6 +99,7 @@ class NavigationCapability(
             }
 
             is AgentCommand.GoBack -> {
+                Logger.d(tag, "Matched GoBack")
                 withContext(Dispatchers.Main) {
                     navController.popBackStack()
                 }
@@ -139,7 +149,9 @@ class NavigationCapability(
             val options = navOptions {
                 launchSingleTop = true
             }
+            Logger.d(tag, "Navigating to $route (current=$currentRoute)")
             nav.navigate(route, options)
+            Logger.d(tag, "Navigation to $route dispatched successfully")
         } catch (e: Exception) {
             Logger.e(tag, "Navigation failed to $route", e)
         }
