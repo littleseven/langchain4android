@@ -81,13 +81,18 @@ class InferenceRouter(
     ): InferenceResult {
         Logger.d(tag, "Processing input: '$userInput'")
 
-        // Tool Calling 路径：当传入 ToolProvider 且当前场景有可用的工具时优先走此路径
-        if (toolProvider != null) {
+        // Tool Calling 路径：仅远程模型使用，本地小模型（Qwen）对 tool_calls 格式不稳定
+        // 沿用 PromptBuilder + method/params JSON 数组格式
+        if (toolProvider != null && !localEngine.isLoaded) {
             val toolSpecifications = runCatching { toolProvider.getToolSpecifications() }.getOrDefault(emptyList())
             if (toolSpecifications.isNotEmpty()) {
                 Logger.i(tag, "Tool provider active with ${toolSpecifications.size} tools, using tool calling path")
                 return processInputWithTools(userInput, context, toolProvider, toolSpecifications, toolCallingConfig)
             }
+        }
+
+        if (localEngine.isLoaded) {
+            Logger.d(tag, "Local engine active, using PromptBuilder + JSON array format")
         }
 
         // 1. 隐私分级检查
@@ -207,11 +212,12 @@ class InferenceRouter(
                 - 页面说明: $sceneDescription
 
                 关键规则：
-                1. 可以一次性输出多个工具调用，按顺序执行（如先 delay 再 capture 实现"5秒后拍照"）
-                2. 同一个意图不要组合无关工具（如"打开相机"只需 navigate_to，不要同时 launch_app）
-                3. 如果无需工具（闲聊、解释、不确定），直接给出中文回复
-                4. 禁止输出其他 JSON 格式
-                5. 用户说包含时间/延迟的指令（如"5秒后拍照"），必须输出 delay 工具作为第一个工具调用，delay_ms 参数单位为毫秒
+                1. 【单操作指令】如"换滤镜""调美颜""拍照"等单一需求，只输出对应的**一个**工具调用，不要组合其他无关工具
+                2. 【延迟/顺序指令】如"5秒后拍照""先磨皮再拍照"等需要按顺序执行的，可以输出多个工具调用，先 delay 再后续操作
+                3. 同一个意图不要组合无关工具（如"打开相机"只需 navigate_to，不要同时 launch_app）
+                4. 如果无需工具（闲聊、解释、不确定），直接给出中文回复
+                5. 禁止输出其他 JSON 格式
+                6. 用户说包含时间/延迟的指令（如"5秒后拍照"），必须输出 delay 工具作为第一个工具调用，delay_ms 参数单位为毫秒
             """.trimIndent()
             com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.REACT -> """
                 你是 PicMe AI 助手小觅。请按 ReAct 格式思考并调用工具，最终给出中文回复。

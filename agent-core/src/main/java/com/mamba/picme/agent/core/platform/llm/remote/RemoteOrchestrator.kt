@@ -527,14 +527,14 @@ class RemoteOrchestrator(
         val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
         return when (normalized) {
             "NONE" -> FilterType.NONE
-            "LEICA_CLASSIC" -> FilterType.LEICA_CLASSIC
-            "LEICA_VIBRANT", "VIBRANT", "LEICA_VIVID", "VIVID" -> FilterType.LEICA_VIBRANT
-            "LEICA_BW", "BW", "BLACK_WHITE", "LEICA_MONOCHROME", "MONOCHROME" -> FilterType.LEICA_BW
-            "FILM_GOLD" -> FilterType.FILM_GOLD
-            "FILM_FUJI" -> FilterType.FILM_FUJI
-            "VINTAGE", "RETRO", "OLD" -> FilterType.VINTAGE
-            "COOL", "COLD" -> FilterType.COOL
-            "WARM" -> FilterType.WARM
+            "LEICA_CLASSIC", "徕卡经典", "徕卡经典滤镜" -> FilterType.LEICA_CLASSIC
+            "LEICA_VIBRANT", "VIBRANT", "LEICA_VIVID", "VIVID", "徕卡鲜艳", "徕卡鲜艳滤镜" -> FilterType.LEICA_VIBRANT
+            "LEICA_BW", "BW", "BLACK_WHITE", "LEICA_MONOCHROME", "MONOCHROME", "徕卡黑白", "徕卡黑白滤镜" -> FilterType.LEICA_BW
+            "FILM_GOLD", "胶片金", "胶片金滤镜" -> FilterType.FILM_GOLD
+            "FILM_FUJI", "胶片富士", "富士", "胶片富士滤镜" -> FilterType.FILM_FUJI
+            "VINTAGE", "RETRO", "OLD", "复古", "怀旧" -> FilterType.VINTAGE
+            "COOL", "COLD", "冷色", "冷色调", "冷色滤镜", "冷调", "冷调滤镜", "冷滤镜" -> FilterType.COOL
+            "WARM", "暖色", "暖色调", "暖色滤镜", "暖调", "暖调滤镜", "暖滤镜" -> FilterType.WARM
             else -> runCatching { FilterType.valueOf(normalized) }.getOrDefault(FilterType.NONE)
         }
     }

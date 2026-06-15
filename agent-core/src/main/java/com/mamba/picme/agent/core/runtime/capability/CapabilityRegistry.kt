@@ -406,6 +406,17 @@ class CapabilityRegistry private constructor(
         for ((index, subCommand) in batchCommand.commands.withIndex()) {
             Logger.d(tag, "[BatchExecute] Executing sub-command ${index + 1}/${batchCommand.commands.size}: ${subCommand::class.simpleName}")
 
+            // Delay 命令是定时原语，需要在此处实际等待
+            if (subCommand is AgentCommand.Delay) {
+                Logger.i(tag, "[BatchExecute] Executing delay of ${subCommand.delayMs}ms")
+                Logger.i(tag, "[BatchExecute] Waiting ${subCommand.delayMs}ms...")
+                kotlinx.coroutines.delay(subCommand.delayMs)
+                Logger.i(tag, "[BatchExecute] Delay completed")
+                results.add(AgentAction.Success(commandId = subCommand.commandId, command = subCommand))
+                executedCommands.add(subCommand)
+                continue
+            }
+
             val subResult = dispatch(subCommand, context, pageContext)
             val action = subResult.getOrNull()
 
