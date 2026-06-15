@@ -177,6 +177,10 @@ class CapabilityRegistry private constructor(
             is AgentCommand.BatchExecute -> {
                 dispatchBatch(command, context, pageContext, currentScene)
             }
+            is AgentCommand.Delay -> {
+                Logger.i(tag, "[Delay] Delay command (${command.delayMs}ms) is a timing primitive, handled by BatchExecute")
+                Result.success(AgentAction.Success(commandId = command.commandId, command = command))
+            }
             is AgentCommand.ExecutePlan -> {
                 dispatchPlan(command, context, pageContext)
             }

@@ -42,7 +42,8 @@ class AgentConfigurator(private val context: Context) {
     val sceneManager = SceneManager.getInstance()
     val promptBuilder = PromptBuilder(sceneManager)
     val capabilityRegistry = CapabilityRegistry.getInstance()
-    val strategySelector = AdaptiveStrategySelector()
+    val intentCache = IntentCache()
+    val strategySelector = AdaptiveStrategySelector(intentCache)
 
     /**
      * Tool Provider（LangChain4j 风格 Tool Calling）。
@@ -71,8 +72,6 @@ class AgentConfigurator(private val context: Context) {
         toolCallingConfig = config
     }
 
-    // L1 意图缓存
-    val intentCache = IntentCache()
 
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL

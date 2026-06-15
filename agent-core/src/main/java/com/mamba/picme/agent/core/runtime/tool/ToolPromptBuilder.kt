@@ -19,7 +19,7 @@ object ToolPromptBuilder {
         return buildString {
             appendLine()
             appendLine("【可用工具】")
-            appendLine("关键规则：每次最多只能调用一个工具，只选最相关的。若无需工具则输出中文回复。")
+            appendLine("关键规则：支持一次性输出多个工具调用，按顺序执行。若需延迟/等待后再执行其他操作（如'5秒后拍照'），必须输出 delay 作为第一个工具调用，delay_ms 参数单位为毫秒，后续再输出实际操作的多个工具。若无需工具则输出中文回复。")
             appendLine("当需要调用工具时，请严格输出如下 JSON（不要添加任何额外说明）：")
             appendLine(
                 """
@@ -27,7 +27,7 @@ object ToolPromptBuilder {
                 """.trimIndent()
             )
             appendLine("其中 arguments 是 JSON 对象，直接包含具体参数。")
-            appendLine("如果无需工具，直接输出中文回复。禁止输出多个工具调用。")
+            appendLine("如果无需工具，直接输出中文回复。需要按顺序执行多个操作时（如先等待再拍照），可以输出多个工具调用。")
             appendLine()
             toolSpecifications.forEach { tool ->
                 appendLine("- ${tool.name}: ${tool.description}")

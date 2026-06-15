@@ -102,7 +102,18 @@ class IntentCache(maxSize: Int = 100) {
                 return command
             }
         }
-        return null
+
+        // 再查 LRU 学习缓存的模糊匹配
+        var bestDistance = Int.MAX_VALUE
+        var bestCommand: AgentCommand? = null
+        for ((cachedInput, command) in cache) {
+            val dist = levenshteinDistance(input, cachedInput)
+            if (dist <= 1 && dist < bestDistance) {
+                bestDistance = dist
+                bestCommand = command
+            }
+        }
+        return bestCommand
     }
 
     private fun levenshteinDistance(s1: String, s2: String): Int {

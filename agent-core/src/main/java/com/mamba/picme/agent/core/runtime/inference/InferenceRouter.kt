@@ -207,10 +207,11 @@ class InferenceRouter(
                 - 页面说明: $sceneDescription
 
                 关键规则：
-                1. 每次最多调用一个工具，只选择与用户请求最相关的一个工具
-                2. 同一个意图不要组合多个工具（如"打开相机"只需 navigate_to，不要同时 launch_app）
+                1. 可以一次性输出多个工具调用，按顺序执行（如先 delay 再 capture 实现"5秒后拍照"）
+                2. 同一个意图不要组合无关工具（如"打开相机"只需 navigate_to，不要同时 launch_app）
                 3. 如果无需工具（闲聊、解释、不确定），直接给出中文回复
                 4. 禁止输出其他 JSON 格式
+                5. 用户说包含时间/延迟的指令（如"5秒后拍照"），必须输出 delay 工具作为第一个工具调用，delay_ms 参数单位为毫秒
             """.trimIndent()
             com.mamba.picme.agent.core.runtime.tool.ToolCallingMode.REACT -> """
                 你是 PicMe AI 助手小觅。请按 ReAct 格式思考并调用工具，最终给出中文回复。

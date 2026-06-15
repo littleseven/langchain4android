@@ -12,6 +12,8 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentErrorCode
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.langchain4j.JsonSchemaProperty
+import com.mamba.picme.agent.core.langchain4j.ToolParameters
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
@@ -147,6 +149,7 @@ class CameraCapability : BaseCapability() {
     }
 
     override fun supportedCommands(): List<String> = listOf(
+        "delay",
         "adjust_beauty",
         "switch_filter",
         "switch_style",
@@ -160,7 +163,91 @@ class CameraCapability : BaseCapability() {
         "switch_mode"
     )
 
+    override fun getCommandParameterSchema(command: String): ToolParameters = when (command) {
+        "delay" -> ToolParameters(
+            properties = mapOf(
+                "delay_ms" to JsonSchemaProperty(type = "integer", description = "延迟毫秒数（1~300000，即最多5分钟）")
+            ),
+            required = listOf("delay_ms")
+        )
+        "adjust_beauty" -> ToolParameters(
+            properties = mapOf(
+                "smoothing" to JsonSchemaProperty(type = "integer", description = "磨皮程度 0~100"),
+                "whitening" to JsonSchemaProperty(type = "integer", description = "美白程度 0~100"),
+                "slim_face" to JsonSchemaProperty(type = "integer", description = "瘦脸 -50~50"),
+                "big_eyes" to JsonSchemaProperty(type = "integer", description = "大眼 0~100"),
+                "lip_color" to JsonSchemaProperty(type = "integer", description = "唇色 0~100"),
+                "blush" to JsonSchemaProperty(type = "integer", description = "腮红 0~100"),
+                "eyebrow" to JsonSchemaProperty(type = "integer", description = "眉毛 0~100")
+            )
+        )
+        "switch_filter" -> ToolParameters(
+            properties = mapOf(
+                "filter" to JsonSchemaProperty(
+                    type = "string",
+                    description = "滤镜名称",
+                    enum = listOf("NONE", "LEICA_CLASSIC", "LEICA_VIBRANT", "LEICA_BW", "FILM_GOLD", "FILM_FUJI", "VINTAGE", "COOL", "WARM")
+                )
+            ),
+            required = listOf("filter")
+        )
+        "switch_style" -> ToolParameters(
+            properties = mapOf(
+                "style" to JsonSchemaProperty(
+                    type = "string",
+                    description = "风格特效名称",
+                    enum = listOf("NONE", "TOON", "SKETCH", "POSTERIZE", "EMBOSS", "CROSSHATCH")
+                )
+            ),
+            required = listOf("style")
+        )
+        "switch_scene" -> ToolParameters(
+            properties = mapOf(
+                "scene" to JsonSchemaProperty(
+                    type = "string",
+                    description = "场景模式",
+                    enum = listOf("night", "moon", "none")
+                )
+            ),
+            required = listOf("scene")
+        )
+        "switch_ratio" -> ToolParameters(
+            properties = mapOf(
+                "ratio" to JsonSchemaProperty(
+                    type = "string",
+                    description = "画幅比例",
+                    enum = listOf("4:3", "16:9", "full")
+                )
+            ),
+            required = listOf("ratio")
+        )
+        "adjust_exposure" -> ToolParameters(
+            properties = mapOf(
+                "exposure" to JsonSchemaProperty(type = "integer", description = "曝光补偿 -2~2")
+            ),
+            required = listOf("exposure")
+        )
+        "adjust_zoom" -> ToolParameters(
+            properties = mapOf(
+                "zoom" to JsonSchemaProperty(type = "number", description = "变焦比例 0.5~10.0")
+            ),
+            required = listOf("zoom")
+        )
+        "switch_mode" -> ToolParameters(
+            properties = mapOf(
+                "mode" to JsonSchemaProperty(
+                    type = "string",
+                    description = "拍摄模式",
+                    enum = listOf("PHOTO", "VIDEO", "PRO", "DOCUMENT")
+                )
+            ),
+            required = listOf("mode")
+        )
+        else -> super.getCommandParameterSchema(command)
+    }
+
     override fun getCommandDescription(command: String): String = when (command) {
+        "delay" -> "等待指定毫秒数后再执行后续命令，必须与其他命令组合使用，参数: delay_ms (毫秒)"
         "adjust_beauty" -> "调整美颜参数，参数: smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow"
         "switch_filter" -> "切换滤镜，参数: filter (NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM)"
         "switch_style" -> "切换风格，参数: style (NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH)"

@@ -15,9 +15,7 @@ import com.mamba.picme.beauty.api.FilterType
  * - L3_PlanExecute: 条件/依赖/多步骤
  * - L4_ReAct: 开放式探索/兜底
  */
-class AdaptiveStrategySelector {
-
-    private val intentCache = IntentCache()
+class AdaptiveStrategySelector(private val intentCache: IntentCache = IntentCache()) {
 
     /**
      * 选择推理策略
