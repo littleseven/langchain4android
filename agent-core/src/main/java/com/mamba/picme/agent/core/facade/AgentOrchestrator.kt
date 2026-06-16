@@ -240,7 +240,7 @@ class AgentOrchestrator private constructor(context: Context) {
             is InferenceResult.Local -> {
                 val responseText = when (val cmd = result.command) {
                     is AgentCommand.TextReply -> cmd.message
-                    else -> ""
+                    else -> result.responseText.ifBlank { AgentCommand.getMethodName(cmd) }
                 }
                 saveConversation(sessionId, userInput, result.command, responseText)
             }

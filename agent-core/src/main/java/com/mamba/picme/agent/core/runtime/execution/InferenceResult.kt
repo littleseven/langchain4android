@@ -14,8 +14,9 @@ sealed class InferenceResult {
      * 本地单命令模式（L1 Single Tool Call）
      *
      * @property command 单个 Agent 命令
+     * @property responseText LLM 原始响应文本，用于保存记忆上下文
      */
-    data class Local(val command: AgentCommand) : InferenceResult()
+    data class Local(val command: AgentCommand, val responseText: String = "") : InferenceResult()
 
     /**
      * 批量命令模式（L2 Batch Function Calling）

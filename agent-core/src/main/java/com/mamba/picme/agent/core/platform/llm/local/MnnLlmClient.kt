@@ -197,6 +197,34 @@ class MnnLlmClient(private val context: Context) {
     }
 
     /**
+     * 使用多轮对话历史进行同步生成（含性能指标）
+     *
+     * @param history 对话历史列表，每个 Pair 为 (role, content)
+     * @param maxNewTokens 最大生成 token 数
+     * @return 包含完整回复和性能指标的 StreamResult
+     */
+    fun generateWithHistory(
+        history: List<Pair<String, String>>,
+        maxNewTokens: Int = 128
+    ): StreamResult {
+        if (!isLoaded) {
+            Logger.w(tag, "LLM not loaded, cannot generate")
+            return StreamResult(error = "LLM not loaded")
+        }
+
+        return try {
+            val androidHistory = history.map { android.util.Pair(it.first, it.second) }
+            val resultMap = MnnGlobalReleaseLock.withOperation {
+                nativeGenerateWithHistory(nativeHandle, androidHistory, maxNewTokens)
+            }
+            StreamResult.fromHashMap(resultMap)
+        } catch (exception: Exception) {
+            Logger.e(tag, "History generation failed", exception)
+            StreamResult(error = exception.message ?: "Unknown error")
+        }
+    }
+
+    /**
      * 使用多轮对话历史进行流式生成
      *
      * @param history 对话历史列表，每个 Pair 为 (role, content)
@@ -305,6 +333,12 @@ class MnnLlmClient(private val context: Context) {
         handle: Long,
         systemPrompt: String,
         userPrompt: String,
+        maxNewTokens: Int
+    ): HashMap<String, Any>
+
+    private external fun nativeGenerateWithHistory(
+        handle: Long,
+        history: List<android.util.Pair<String, String>>,
         maxNewTokens: Int
     ): HashMap<String, Any>
 

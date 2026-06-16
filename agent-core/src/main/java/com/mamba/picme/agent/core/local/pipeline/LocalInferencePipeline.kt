@@ -164,7 +164,7 @@ class LocalInferencePipeline(
                 Logger.i(tag, "[L2-LOCAL] Raw response: ${response.replace("\n", "\\n")}")
                 val command = LocalCommandParser.parseLlmResponse(response, context)
                 Logger.i(tag, "[L2-LOCAL] Parsed: ${command::class.simpleName}")
-                InferenceResult.Local(command = command)
+                InferenceResult.Local(command = command, responseText = response)
             },
             onFailure = { error ->
                 Logger.e(tag, "[L2-LOCAL] Engine failed", error)
@@ -306,7 +306,7 @@ class LocalInferencePipeline(
         return result.fold(
             onSuccess = { response ->
                 val command = LocalCommandParser.parseLlmResponse(response, context)
-                InferenceResult.Local(command = command)
+                InferenceResult.Local(command = command, responseText = response)
             },
             onFailure = { error ->
                 Logger.e(tag, "Local engine failed", error)

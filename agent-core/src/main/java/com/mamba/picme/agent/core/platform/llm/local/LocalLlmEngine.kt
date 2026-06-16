@@ -203,13 +203,43 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
 
                 val messages = request.messages
                 val systemMessage = messages.filterIsInstance<SystemMessage>().lastOrNull()?.text
-                val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.text
-                    ?: messages.lastOrNull()?.let { extractText(it) }
-                    ?: throw IllegalArgumentException("ChatRequest must contain at least one message")
+
+                // 检测是否有历史消息（消息数量 > system+user 或有中间 assistant 消息）
+                val nonSystemMessages = messages.filter { it !is SystemMessage }
+                val historyMessages = nonSystemMessages.dropLast(1) // 除去当前 user 消息
+                val hasHistory = historyMessages.isNotEmpty()
+
+                val maxTokens = if (request.toolSpecifications.isNotEmpty()) 256 else 128
 
                 try {
-                    val response = if (systemMessage != null) {
-                        val maxTokens = if (request.toolSpecifications.isNotEmpty()) 256 else 128
+                    val response = if (hasHistory && systemMessage != null) {
+                        // 多轮对话：将完整历史转换为 (role, content) 列表传给 native
+                        val historyPairs = messages.map { message ->
+                            when (message) {
+                                is SystemMessage -> "system" to message.text
+                                is UserMessage -> "user" to message.text
+                                is AiMessage -> "assistant" to message.text
+                                is ToolExecutionResultMessage -> "tool" to message.text
+                            }
+                        }
+                        val result = client.generateWithHistory(historyPairs, maxTokens)
+                        if (result.error != null) {
+                            throw RuntimeException(result.error)
+                        }
+                        lastGenerationMetrics = LlmGenerationMetrics(
+                            promptLen = result.promptLen,
+                            decodeLen = result.decodeLen,
+                            prefillTime = result.prefillTime,
+                            decodeTime = result.decodeTime,
+                            prefillSpeed = result.prefillSpeed,
+                            decodeSpeed = result.decodeSpeed
+                        )
+                        result.response
+                    } else if (systemMessage != null) {
+                        // 单轮 system + user
+                        val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.text
+                            ?: messages.lastOrNull()?.let { extractText(it) }
+                            ?: throw IllegalArgumentException("ChatRequest must contain at least one message")
                         val result = client.generateWithSystem(
                             systemPrompt = systemMessage,
                             userPrompt = userMessage,
@@ -228,9 +258,10 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                         )
                         result.response
                     } else {
+                        // 无 system prompt：拼接所有消息为纯文本 prompt
                         client.generate(
                             prompt = buildPromptFromMessages(messages),
-                            maxNewTokens = 128
+                            maxNewTokens = maxTokens
                         )
                     }
 

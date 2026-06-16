@@ -486,7 +486,135 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateSt
     return hashMap;
 }
 
-// ── 多轮对话流式生成（新增）─────────────────────────────
+// ── 多轮对话同步生成（含性能指标）───────────────────────
+JNIEXPORT jobject JNICALL
+Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithHistory(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jobject historyList,  // List<Pair<String, String>>
+        jint maxNewTokens) {
+
+    auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
+    if (llm == nullptr) {
+        LOGE("LLM handle is null");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed, LLM handle is null"));
+        return hashMap;
+    }
+
+    // 解析 Java List<Pair<String, String>> 到 C++ ChatMessages
+    MNN::Transformer::ChatMessages messages;
+
+    jclass listClass = env->GetObjectClass(historyList);
+    jmethodID sizeMethod = env->GetMethodID(listClass, "size", "()I");
+    jmethodID getMethod = env->GetMethodID(listClass, "get", "(I)Ljava/lang/Object;");
+    jint listSize = env->CallIntMethod(historyList, sizeMethod);
+
+    jclass pairClass = env->FindClass("android/util/Pair");
+    jfieldID firstField = env->GetFieldID(pairClass, "first", "Ljava/lang/Object;");
+    jfieldID secondField = env->GetFieldID(pairClass, "second", "Ljava/lang/Object;");
+
+    for (jint i = 0; i < listSize; i++) {
+        jobject pairObj = env->CallObjectMethod(historyList, getMethod, i);
+        if (pairObj == nullptr) continue;
+
+        jobject roleObj = env->GetObjectField(pairObj, firstField);
+        jobject contentObj = env->GetObjectField(pairObj, secondField);
+
+        const char *role = nullptr;
+        const char *content = nullptr;
+        if (roleObj != nullptr) {
+            role = env->GetStringUTFChars((jstring) roleObj, nullptr);
+        }
+        if (contentObj != nullptr) {
+            content = env->GetStringUTFChars((jstring) contentObj, nullptr);
+        }
+
+        if (role && content) {
+            messages.emplace_back(std::string(role), std::string(content));
+        }
+
+        if (role) env->ReleaseStringUTFChars((jstring) roleObj, role);
+        if (content) env->ReleaseStringUTFChars((jstring) contentObj, content);
+        env->DeleteLocalRef(pairObj);
+        if (roleObj) env->DeleteLocalRef(roleObj);
+        if (contentObj) env->DeleteLocalRef(contentObj);
+    }
+
+    env->DeleteLocalRef(listClass);
+    env->DeleteLocalRef(pairClass);
+
+    LOGD("Generating with history (sync), messages=%zu", messages.size());
+
+    LlmMetrics metrics;
+    std::ostringstream oss;
+    auto start = std::chrono::high_resolution_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_llm_mutex);
+        restoreLlmStatusIfNeeded(llm);
+        llm->response(messages, &oss, nullptr, maxNewTokens);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            end - start).count();
+
+    auto* ctx = llm->getContext();
+    if (ctx != nullptr) {
+        metrics.prompt_len = ctx->prompt_len;
+        metrics.decode_len = ctx->gen_seq_len;
+        metrics.vision_time = ctx->vision_us;
+        metrics.audio_time = ctx->audio_us;
+    }
+
+    std::string result = oss.str();
+    const size_t LOG_CHUNK_SIZE = 1024;
+    if (result.length() <= LOG_CHUNK_SIZE) {
+        LOGD("History sync generated (len=%zu): %s", result.length(), result.c_str());
+    } else {
+        LOGD("History sync generated (len=%zu, chunked):", result.length());
+        for (size_t i = 0; i < result.length(); i += LOG_CHUNK_SIZE) {
+            size_t len = (i + LOG_CHUNK_SIZE <= result.length()) ? LOG_CHUNK_SIZE : (result.length() - i);
+            std::string chunk = result.substr(i, len);
+            LOGD("  [chunk %zu/%zu]: %s", i / LOG_CHUNK_SIZE + 1,
+                 (result.length() + LOG_CHUNK_SIZE - 1) / LOG_CHUNK_SIZE, chunk.c_str());
+        }
+    }
+
+    // 构建返回 HashMap
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longInit = env->GetMethodID(longClass, "<init>", "(J)V");
+
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("response"),
+                          env->NewStringUTF(result.c_str()));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prompt_len"),
+                          env->NewObject(longClass, longInit, metrics.prompt_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_len"),
+                          env->NewObject(longClass, longInit, metrics.decode_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("vision_time"),
+                          env->NewObject(longClass, longInit, metrics.vision_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("audio_time"),
+                          env->NewObject(longClass, longInit, metrics.audio_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prefill_time"),
+                          env->NewObject(longClass, longInit, metrics.prefill_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_time"),
+                          env->NewObject(longClass, longInit, metrics.decode_time));
+
+    return hashMap;
+}
+
+// ── 多轮对话流式生成（已有）─────────────────────────────
 JNIEXPORT jobject JNICALL
 Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithHistoryStream(
         JNIEnv *env,
