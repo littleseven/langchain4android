@@ -13,9 +13,7 @@ import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.runtime.inference.AdaptiveStrategySelector
-import com.mamba.picme.agent.core.runtime.inference.InferenceStrategy
-import com.mamba.picme.agent.core.runtime.parsing.PromptBuilder
+import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
@@ -90,7 +88,7 @@ class AiAgentUseCase(
         RemoteOrchestrator(
             context = context,
             remoteConfig = effectiveRemoteConfig,
-            promptBuilder = PromptBuilder(SceneManager.getInstance())
+            promptBuilder = RemotePromptBuilder(SceneManager.getInstance())
         )
     }
 
@@ -98,11 +96,6 @@ class AiAgentUseCase(
      * 是否使用兜底 Gateway（用于限频检测）
      */
     private val isUsingFallbackGateway: Boolean = userRemoteConfig == null
-
-    /**
-     * 自适应策略选择器（L1 缓存 + 输入特征分析）
-     */
-    private val strategySelector = AdaptiveStrategySelector()
 
     /**
      * 当前 Agent 模式
@@ -183,7 +176,7 @@ class AiAgentUseCase(
      *
      * 分层自适应推理策略：
      * - LOCAL/OFF 模式：默认本地推理，forceRemote 时走远程
-     * - REMOTE 模式：使用 AdaptiveStrategySelector 选择 L1/L2/L3/L4
+     * - REMOTE 模式：直接调用 processBatch
      *
      * @param userInput 用户自然语言输入
      * @param currentState 当前相机状态快照，用于上下文感知
@@ -214,7 +207,7 @@ class AiAgentUseCase(
                     return@withContext processRemote(userInput, agentContext, currentState)
                 }
 
-                // 本地推理：优先使用 InferenceRouter 的 L2 本地快速通道（支持 JSON 数组）
+                // 本地推理：优先使用 processInputWithRouter 的 L2 本地快速通道（支持 JSON 数组）
                 Logger.i(tag, "[UseCase] LOCAL mode, calling processInputWithRouter for input='$userInput'")
                 val inferenceResult = orchestrator.processInputWithRouter(
                     input = userInput,
@@ -279,106 +272,43 @@ class AiAgentUseCase(
     }
 
     /**
-     * 远程推理入口（分层自适应）
+     * 远程推理入口（简化版：直接调用 processBatch）
      */
     private suspend fun processRemote(
         userInput: String,
         agentContext: AgentContext,
         currentState: CameraStateSnapshot
     ): Result<AiAgentCommand> {
-        // 1. 选择推理策略
-        val strategy = strategySelector.selectStrategy(userInput, agentContext)
-        Logger.d(REMOTE_TAG, "[STRATEGY] selected=${strategy::class.simpleName}, input=\"$userInput\"")
-
-        val result = when (strategy) {
-            is InferenceStrategy.L1_Cached -> {
-                val command = mapAgentCommandToLegacy(strategy.command)
-                Logger.d(REMOTE_TAG, "[L1] cache hit → ${strategy.command::class.simpleName}")
-                Result.success(command)
-            }
-
-            is InferenceStrategy.L1_5_Template -> {
-                Logger.d(REMOTE_TAG, "[L1.5] template matched → ${strategy.commands.size} commands")
-                val command = when {
-                    strategy.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
-                    strategy.commands.size == 1 -> mapAgentCommandToLegacy(strategy.commands.first())
-                    else -> AiAgentCommand.BatchExecute(strategy.commands.map { mapAgentCommandToLegacy(it) })
+        Logger.d(REMOTE_TAG, "[REMOTE] processRemote for input=\"$userInput\"")
+    
+        return try {
+            val batchResult = remoteOrchestrator.processBatch(
+                userInput = userInput,
+                context = agentContext
+            )
+            val commands = batchResult.commands
+            Result.success(
+                when {
+                    commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
+                    commands.size == 1 -> mapAgentCommandToLegacy(commands.first())
+                    else -> AiAgentCommand.BatchExecute(commands.map { mapAgentCommandToLegacy(it) })
                 }
-                Result.success(command)
-            }
-
-            is InferenceStrategy.L2_BatchFC -> {
-                val result = remoteOrchestrator.processBatch(
-                    userInput = userInput,
-                    context = agentContext
-                )
+            )
+        } catch (error: Exception) {
+            val isRateLimited = error.message?.let { msg ->
+                msg.contains("429") || msg.contains("433")
+            } == true
+            if (isUsingFallbackGateway && isRateLimited) {
+                Logger.w(REMOTE_TAG, "Fallback gateway rate limited")
                 Result.success(
-                    when (result) {
-                        is InferenceResult.Batch -> {
-                            when {
-                                result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
-                                result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
-                                else -> AiAgentCommand.BatchExecute(result.commands.map { mapAgentCommandToLegacy(it) })
-                            }
-                        }
-                        else -> AiAgentCommand.TextReply("推理结果类型不匹配")
-                    }
+                    AiAgentCommand.TextReply(
+                        "请求太频繁了，请稍后再试。免费额度每分钟有限制次数，如需无限次使用请在设置中配置自己的远程模型 API Key。"
+                    )
                 )
-            }
-
-            is InferenceStrategy.L3_PlanExecute -> {
-                Logger.d(REMOTE_TAG, "[L3] plan mode → fallback to L2 batch")
-                val result = remoteOrchestrator.processBatch(
-                    userInput = userInput,
-                    context = agentContext
-                )
-                Result.success(
-                    when (result) {
-                        is InferenceResult.Batch -> {
-                            when {
-                                result.commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
-                                result.commands.size == 1 -> mapAgentCommandToLegacy(result.commands.first())
-                                else -> AiAgentCommand.BatchExecute(result.commands.map { mapAgentCommandToLegacy(it) })
-                            }
-                        }
-                        else -> AiAgentCommand.TextReply("推理结果类型不匹配")
-                    }
-                )
-            }
-
-            is InferenceStrategy.L4_ReAct -> {
-                val result = remoteOrchestrator.processChat(
-                    userInput = userInput,
-                    context = agentContext
-                )
-                Result.success(
-                    when (result) {
-                        is InferenceResult.Chat -> AiAgentCommand.TextReply(result.message)
-                        else -> AiAgentCommand.TextReply("推理结果类型不匹配")
-                    }
-                )
+            } else {
+                Result.failure(error)
             }
         }
-
-        // 兜底 Gateway 限频检测：如果返回 429/433，提示用户配置自己的 API Key
-        return result.fold(
-            onSuccess = { Result.success(it) },
-            onFailure = { error ->
-                val isRateLimited = error.message?.let { msg ->
-                    msg.contains("429") || msg.contains("433")
-                } == true
-                if (isUsingFallbackGateway && isRateLimited) {
-                    Logger.w(REMOTE_TAG, "Fallback gateway rate limited")
-                    Result.success(
-                        AiAgentCommand.TextReply(
-                            "请求太频繁了，请稍后再试。免费额度每分钟有限制次数，如需无限次使用请在设置中配置自己的远程模型 API Key。"
-                        )
-                    )
-                } else {
-                    Result.failure(error)
-                }
-            }
-        )
     }
 
     /**
@@ -507,21 +437,6 @@ class AiAgentUseCase(
         val captureMode: MediaType = MediaType.PHOTO,
         val isRecording: Boolean = false
     )
-
-    private fun buildSystemPrompt(state: CameraStateSnapshot): String {
-        val promptBuilder = PromptBuilder(SceneManager.getInstance())
-        val context = AgentContext(
-            scene = AgentScene.CAMERA,
-            beautySettings = state.beautySettings,
-            filterType = state.filterType,
-            styleFilter = state.styleFilter,
-            zoomRatio = state.zoomRatio,
-            exposureCompensation = state.exposureCompensation,
-            captureMode = state.captureMode,
-            isRecording = state.isRecording
-        )
-        return promptBuilder.buildSystemPrompt(emptyList(), context)
-    }
 
     companion object {
         private const val REMOTE_TAG = "RemoteInference"

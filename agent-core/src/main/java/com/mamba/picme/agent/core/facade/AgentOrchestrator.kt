@@ -18,7 +18,7 @@ import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.runtime.parsing.AgentCommandParser
+import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -26,17 +26,12 @@ import kotlinx.coroutines.withContext
 /**
  * Agent 编排器（统一入口）
  *
- * 合并 V1 + V2 后的唯一编排器。负责：
+ * 负责：
  * 1. 处理用户输入的完整生命周期
- * 2. 推理引擎选择与调用（本地/远程）
+ * 2. 推理引擎选择与调用（本地/远程管道）
  * 3. LLM 响应解析与命令分发
  * 4. 对话历史管理
  * 5. 场景驱动的模型策略
- *
- * 重构后职责拆分：
- * - AgentOrchestrator：纯编排逻辑（输入处理 → 推理 → 解析 → 分发）
- * - AgentConfigurator：平台特定组件创建与配置管理
- * - CapabilityRegistry：命令路由与执行
  */
 class AgentOrchestrator private constructor(context: Context) {
 
@@ -58,7 +53,7 @@ class AgentOrchestrator private constructor(context: Context) {
     private val localLlmEngine get() = configurator.localLlmEngine
     private val memoryManager get() = configurator.memoryManager
     private val sceneManager get() = configurator.sceneManager
-    private val promptBuilder get() = configurator.promptBuilder
+    private val promptBuilder get() = configurator.localPromptBuilder
     private val _capabilityRegistry get() = configurator.capabilityRegistry
     private val intentCache get() = configurator.intentCache
     private val privacyGuard get() = configurator.privacyGuard
@@ -84,8 +79,6 @@ class AgentOrchestrator private constructor(context: Context) {
 
     /**
      * 获取最近一次本地 LLM 生成的性能指标。
-     *
-     * 仅在本地模型成功生成后有效，供 Chat UI 展示性能数据。
      */
     fun getLastLocalGenerationMetrics(): com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics? {
         return localLlmEngine.lastGenerationMetrics
@@ -152,9 +145,6 @@ class AgentOrchestrator private constructor(context: Context) {
 
     /**
      * 场景驱动的模型加载策略
-     *
-     * - CAMERA 场景：清理 KV Cache 和历史记录，降低内存占用
-     * - 其他场景：按需加载模型
      */
     private fun applySceneDrivenModelPolicy() {
         val currentScene = sceneManager.currentScene.value
@@ -165,18 +155,14 @@ class AgentOrchestrator private constructor(context: Context) {
                     localLlmEngine.trimMemory()
                 }
             }
-            else -> {
-                // 非相机场景：如果本地模式且模型未加载，保持当前状态
-                // 实际加载在 processUserInput 中按需触发
-            }
+            else -> { /* 非相机场景：保持当前状态 */ }
         }
     }
 
     /**
-     * 使用 InferenceRouter 处理输入（支持 L2 本地快速通道）
+     * 使用 LocalPipeline 处理输入（支持 L2 本地快速通道）
      *
-     * 统一走 InferenceRouter 路由，LOCAL 模式下优先尝试 L2 本地快速通道，
-     * 超时或失败时自动降级到远程推理。
+     * 统一走 LocalPipeline 路由，LOCAL 模式下优先尝试 L2 本地快速通道。
      *
      * @param input 用户自然语言输入
      * @param agentContext 当前 Agent 上下文
@@ -188,19 +174,12 @@ class AgentOrchestrator private constructor(context: Context) {
         agentContext: AgentContext,
         pageContext: PageContext? = null
     ): InferenceResult = withContext(Dispatchers.IO) {
-        Logger.d(tag, "Processing input via InferenceRouter: '$input'")
+        Logger.d(tag, "Processing input via LocalPipeline: '$input'")
 
         // 场景驱动的模型管理
         applySceneDrivenModelPolicy()
 
         Logger.i(tag, "[RouterEntry] mode=${configurator.getAgentMode()}, input='$input', modelLoaded=${localLlmEngine.isLoaded}")
-
-        // 0. L1 缓存查询（本地高频指令快速响应，零 LLM 开销）
-        val cachedCommand = intentCache.match(input)
-        if (cachedCommand != null) {
-            Logger.i(tag, "L1 cache hit for input='$input' -> ${cachedCommand::class.simpleName}")
-            return@withContext InferenceResult.Local(command = cachedCommand)
-        }
 
         // 确保本地模型已加载（LOCAL 模式）
         if (configurator.getAgentMode() == AiAgentMode.LOCAL || configurator.getAgentMode() == AiAgentMode.OFF) {
@@ -208,7 +187,7 @@ class AgentOrchestrator private constructor(context: Context) {
                 Logger.i(tag, "[RouterEntry] Local model not loaded, attempting load")
                 val loadResult = tryLoadModel()
                 if (loadResult.isFailure) {
-                    Logger.e(tag, "[RouterEntry] Local model load failed, falling back to remote via router")
+                    Logger.e(tag, "[RouterEntry] Local model load failed")
                 } else {
                     Logger.i(tag, "[RouterEntry] Local model loaded successfully")
                 }
@@ -219,18 +198,22 @@ class AgentOrchestrator private constructor(context: Context) {
             Logger.i(tag, "[RouterEntry] Mode is ${configurator.getAgentMode()}, skip local model load check")
         }
 
-        // 通过 InferenceRouter 路由
-        Logger.i(tag, "[RouterEntry] Calling InferenceRouter.processInput")
+        // 通过推理管道路由
+        Logger.i(tag, "[RouterEntry] Calling pipeline processInput")
         val inferenceResult = try {
-            configurator.getInferenceRouter().processInput(input, agentContext, configurator.toolProvider, configurator.toolCallingConfig)
+            when (configurator.getAgentMode()) {
+                AiAgentMode.LOCAL -> configurator.getLocalPipeline().processInput(input, agentContext)
+                AiAgentMode.REMOTE -> configurator.getRemotePipeline().processInput(input, agentContext)
+                AiAgentMode.OFF -> InferenceResult.Chat(message = "AI Agent 已关闭")
+            }
         } catch (exception: Exception) {
-            Logger.e(tag, "InferenceRouter failed", exception)
+            Logger.e(tag, "Pipeline routing failed", exception)
             InferenceResult.Local(
                 command = AgentCommand.Error(reason = "推理路由失败：${exception.message ?: "未知错误"}")
             )
         }
 
-        Logger.i(tag, "[RouterEntry] InferenceRouter result: ${inferenceResult::class.simpleName}")
+        Logger.i(tag, "[RouterEntry] Pipeline result: ${inferenceResult::class.simpleName}")
 
         // 学习：解析成功且非错误命令时写入 L1 缓存
         if (inferenceResult is InferenceResult.Local &&
@@ -246,10 +229,6 @@ class AgentOrchestrator private constructor(context: Context) {
 
     /**
      * 处理用户输入（原始入口，保留兼容）
-     *
-     * 根据当前 agentMode 选择推理引擎：
-     * - LOCAL: 本地 MNN-LLM（默认，符合隐私红线）
-     * - REMOTE: 远程 Kimi/Moonshot API（兼容旧模式）
      *
      * @param input 用户自然语言输入
      * @param agentContext 当前 Agent 上下文
@@ -268,7 +247,7 @@ class AgentOrchestrator private constructor(context: Context) {
         // 场景驱动的模型管理
         applySceneDrivenModelPolicy()
 
-        // 0. L1 缓存查询（本地高频指令快速响应，零 LLM 开销）
+        // 0. L1 缓存查询
         val cachedCommand = intentCache.match(input)
         if (cachedCommand != null) {
             Logger.i(tag, "L1 cache hit for input='$input' -> ${cachedCommand::class.simpleName}")
@@ -289,26 +268,15 @@ class AgentOrchestrator private constructor(context: Context) {
             )
         }
 
-        // 2. 构建 system prompt（优先使用自定义，否则用 PromptBuilder 生成）
+        // 2. 构建 system prompt（仅 LOCAL 模式使用）
         val systemPrompt = customSystemPrompt
-            ?: promptBuilder.buildSystemPrompt(capabilities, agentContext)
+            ?: configurator.localPromptBuilder.buildSystemPrompt(capabilities, agentContext)
 
         val userPrompt = buildString {
             appendLine("用户输入: $input")
             appendLine()
             appendLine("请只输出一行JSON，不要其他内容:")
         }
-
-        // 打印完整 prompt 用于调试
-        val totalPromptLength = systemPrompt.length + userPrompt.length
-        val estimatedTokens = totalPromptLength / 2
-        Logger.d(tag, "===== SYSTEM PROMPT ===== [len=${systemPrompt.length}, estTokens~${systemPrompt.length / 2}]")
-        systemPrompt.lineSequence().forEach { line ->
-            Logger.d(tag, line)
-        }
-        Logger.d(tag, "===== USER PROMPT ===== [len=${userPrompt.length}, estTokens~${userPrompt.length / 2}]")
-        Logger.d(tag, userPrompt)
-        Logger.d(tag, "===== END PROMPT ===== [totalLen=$totalPromptLength, totalEstTokens~$estimatedTokens, maxTokens=128]")
 
         // 3. 根据模式选择推理引擎
         val inferenceResult = when (configurator.getAgentMode()) {
@@ -352,10 +320,10 @@ class AgentOrchestrator private constructor(context: Context) {
                 )
             }
             AiAgentMode.REMOTE -> {
-                // 远程模式：通过 InferenceRouter 进行混合编排
-                Logger.d(tag, "Using InferenceRouter for REMOTE mode")
+                // 远程模式：通过 RemotePipeline 进行编排
+                Logger.d(tag, "Using RemotePipeline for REMOTE mode")
                 try {
-                    configurator.getInferenceRouter().processInput(input, agentContext, configurator.toolProvider, configurator.toolCallingConfig)
+                    configurator.getRemotePipeline().processInput(input, agentContext)
                 } catch (exception: Exception) {
                     Logger.e(tag, "Remote inference failed, falling back to local", exception)
                     // 远程失败时回退到本地
@@ -452,24 +420,20 @@ class AgentOrchestrator private constructor(context: Context) {
         pageContext: PageContext?,
         memorySessionId: String
     ): Result<AgentAction> {
-        // 保留原始输出给解析器，避免提前清理 think 标签导致 JSON/关键词信息丢失。
         val responseForHistory = filterThinkTags(rawResponse)
         Logger.i(tag, "LLM raw response: ${rawResponse.replace("\n", "\\n")}")
 
-        // 解析命令
-        val command = AgentCommandParser.parseLlmResponse(rawResponse, agentContext)
+        // 解析命令（使用 LocalCommandParser）
+        val command = LocalCommandParser.parseLlmResponse(rawResponse, agentContext)
         Logger.i(tag, "Parsed command: ${command::class.simpleName}")
 
-        // L1 缓存学习：解析成功且非错误命令时写入缓存
+        // L1 缓存学习
         if (command !is AgentCommand.Error && command !is AgentCommand.TextReply) {
             intentCache.put(userInput, command)
             Logger.d(tag, "L1 cache learned: '$userInput' -> ${command::class.simpleName}")
         }
 
-        // 保存对话历史
         saveConversation(memorySessionId, userInput, command, responseForHistory)
-
-        // 分发到 Capability 执行
         return _capabilityRegistry.dispatch(command, agentContext, pageContext)
     }
 
@@ -518,7 +482,7 @@ class AgentOrchestrator private constructor(context: Context) {
      * 解析 LLM 响应（暴露给测试使用）
      */
     fun parseLlmResponse(response: String, context: AgentContext): AgentCommand {
-        return AgentCommandParser.parseLlmResponse(response, context)
+        return LocalCommandParser.parseLlmResponse(response, context)
     }
 
     /**
@@ -530,33 +494,7 @@ class AgentOrchestrator private constructor(context: Context) {
         context: AgentContext,
         fallbackText: String
     ): AgentCommand {
-        return AgentCommandParser.parseCommandByMethod(method, json, context, fallbackText)
-    }
-
-    /**
-     * 相机场景回退到远程推理
-     */
-    private suspend fun fallbackToRemote(
-        input: String,
-        systemPrompt: String,
-        userPrompt: String,
-        agentContext: AgentContext,
-        pageContext: PageContext?
-    ): Result<AgentAction> {
-        Logger.d(tag, "Falling back to remote inference in camera scene")
-        return try {
-            val result = configurator.getInferenceRouter().processInput(input, agentContext, configurator.toolProvider, configurator.toolCallingConfig)
-            handleInferenceResult(result, input, agentContext, pageContext)
-        } catch (exception: Exception) {
-            Logger.e(tag, "Remote fallback failed", exception)
-            Result.success(
-                AgentAction.Error(
-                    commandId = AgentIdGenerator.nextId(),
-                    errorCode = AgentErrorCode.INTERNAL_ERROR,
-                    message = "相机场景下本地模型已卸载，远程推理失败：${exception.message ?: "未知错误"}"
-                )
-            )
-        }
+        return LocalCommandParser.parseCommandByMethod(method, json, context, fallbackText)
     }
 
     /**
@@ -587,7 +525,6 @@ class AgentOrchestrator private constructor(context: Context) {
                         )
                     )
                 } else {
-                    // 批量执行：将第一个命令作为主结果，其余通过 BatchExecute 包装
                     val firstCommand = inferenceResult.commands.first()
                     val remainingCommands = inferenceResult.commands.drop(1)
                     val finalCommand = if (remainingCommands.isNotEmpty()) {
@@ -621,5 +558,3 @@ class AgentOrchestrator private constructor(context: Context) {
         }
     }
 }
-
-

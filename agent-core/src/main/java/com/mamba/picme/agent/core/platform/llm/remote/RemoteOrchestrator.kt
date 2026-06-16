@@ -7,7 +7,7 @@ import com.mamba.picme.agent.core.api.execution.WaitCondition
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
 import com.mamba.picme.agent.core.platform.logging.Logger
-import com.mamba.picme.agent.core.runtime.parsing.PromptBuilder
+import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
@@ -78,7 +78,7 @@ object RemoteLlmConfig {
 class RemoteOrchestrator(
     private val context: Context,
     private val remoteConfig: RemoteModelConfig,
-    private val promptBuilder: PromptBuilder,
+    private val promptBuilder: RemotePromptBuilder,
     val chatLanguageModel: ChatLanguageModel = UnifiedRemoteClient(remoteConfig)
 ) {
 
@@ -331,34 +331,6 @@ class RemoteOrchestrator(
                 if (requests.isNotEmpty()) {
                     return parseToolCalls(requests, context)
                 }
-            }
-        } catch (_: Exception) {}
-
-        // 尝试 2: 解析为 method/params JSON 数组（兼容旧格式）
-        try {
-            val jsonArray = JSONArray(cleaned)
-            if (jsonArray.length() > 0) {
-                val commands = mutableListOf<AgentCommand>()
-                for (i in 0 until jsonArray.length()) {
-                    try {
-                        val item = jsonArray.getJSONObject(i)
-                        commands.add(parseAgentCommand(item, context))
-                    } catch (e: Exception) {
-                        Logger.e(tag, "[Fallback] Failed to parse array item #$i", e)
-                    }
-                }
-                if (commands.isNotEmpty()) {
-                    return commands
-                }
-            }
-        } catch (_: Exception) {}
-
-        // 尝试 3: 单个 JSON 对象
-        try {
-            val jsonObj = JSONObject(cleaned)
-            val method = jsonObj.optString("method", jsonObj.optString("name", ""))
-            if (method.isNotBlank()) {
-                return listOf(parseAgentCommand(jsonObj, context))
             }
         } catch (_: Exception) {}
 

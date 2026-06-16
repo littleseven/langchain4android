@@ -9,7 +9,7 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
-import com.mamba.picme.agent.core.runtime.parsing.AgentCommandParser
+import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -26,10 +26,10 @@ import org.junit.Test
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
 
 /**
- * AgentCommandParser 响应解析逻辑单元测试
+ * LocalCommandParser 响应解析逻辑单元测试
  *
- * 直接测试生产方法 [AgentCommandParser.parseLlmResponse] 和
- * [AgentCommandParser.parseCommandByMethod]，确保测试能够真实反映生产代码行为。
+ * 直接测试生产方法 [LocalCommandParser.parseLlmResponse] 和
+ * [LocalCommandParser.parseCommandByMethod]，确保测试能够真实反映生产代码行为。
  *
  * 提取为独立 object 的原因：避免实例化 [AgentOrchestrator] 时触发
  * [LocalLlmEngine] -> [MnnLlmClient] 的 JNI 加载，导致纯 JVM 单元测试失败。
@@ -67,35 +67,35 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse removes closed think tags`() {
         val input = "<thinking>思考中</thinking>\n{\"action\":\"capture\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse removes qwen3 think tags`() {
         val input = "<think>用户想拍照，触发capture</think>\n{\"action\":\"capture\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse removes nested think and thinking tags`() {
         val input = "<think>思考1</think>\n<thinking>思考2</thinking>\n{\"action\":\"capture\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse removes multiple think tags`() {
         val input = "<thinking>1</thinking>\n<thinking>2</thinking>\n{\"action\":\"capture\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse truncates orphan think tag`() {
         val input = "你好。<thinking>未结束"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.TextReply)
         assertEquals("你好。", (command as AgentCommand.TextReply).message)
     }
@@ -103,28 +103,28 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse removes markdown code block`() {
         val input = "```json\n{\"action\":\"capture\"}\n```"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse handles free chat without method`() {
         val input = "你好！我是小觅，有什么可以帮你的吗？"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.TextReply)
     }
 
     @Test
     fun `parseLlmResponse full pipeline with think tags and markdown`() {
         val input = "<thinking>用户想拍照</thinking>\n```json\n{\"action\":\"capture\"}\n```"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse full pipeline with qwen3 think tags and markdown`() {
         val input = "<think>用户说拍照，需要触发相机快门</think>\n```json\n{\"action\":\"capture\"}\n```"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
@@ -135,7 +135,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `readme scenario paiZhangZhao maps to CapturePhoto via keyword`() {
         val input = "拍张照"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "「拍张照」应解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
@@ -145,7 +145,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `readme scenario diaoGaoMeiYan maps to AdjustBeauty via keyword`() {
         val input = "调高美颜"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "「调高美颜」应解析为 AdjustBeauty",
             command is AgentCommand.AdjustBeauty
@@ -159,7 +159,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `readme scenario huanLengDiaoLvJing maps to SwitchFilter COOL via keyword`() {
         val input = "换个冷调滤镜"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "「换个冷调滤镜」应解析为 SwitchFilter",
             command is AgentCommand.SwitchFilter
@@ -173,7 +173,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `readme scenario daKaiQianZhi maps to FlipCamera via keyword`() {
         val input = "打开前置"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "「打开前置」应解析为 FlipCamera",
             command is AgentCommand.FlipCamera
@@ -193,7 +193,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse qwen3 unclosed think tag extracts json after`() {
         val input = "<think>用户想拍照\n{\"action\":\"capture\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         // 修复后：从未闭合 think 标签后提取 JSON
         assertTrue(
             "未闭合 think 标签后包含 JSON 时应正确解析",
@@ -204,14 +204,14 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse orphan think tag with json after is cleaned`() {
         val input = "<think>思考过程...\n{\"action\":\"capture\"}\n</think>\n{\"action\":\"capture\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(command is AgentCommand.CapturePhoto)
     }
 
     @Test
     fun `parseLlmResponse real qwen3 response with unclosed think and json`() {
         val input = "<think>\n好的，用户发来的\"拍照\"指令。根据规则，当用户想要控制相机时，直接输出JSON。因此，生成对应的拍照指令。\n\n{\"action\":\"capture\"}\n```"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         // 修复后：从未闭合 think 标签后提取 JSON，并清理 markdown
         assertTrue(
             "真实 Qwen3 响应应正确提取 capture 指令",
@@ -223,7 +223,7 @@ class AgentOrchestratorParseTest {
     fun `parseLlmResponse extracts json inside think tag when no json outside`() {
         // 模拟 Qwen3-0.6B 真实输出：JSON 藏在 think 标签内部，外部没有 JSON
         val input = "<think>\n好的，用户说\"去相册\"，我需要按照规则处理。正确的做法是生成对应的 JSON 对象。\n\n{\"action\":\"navigate_to\",\"destination\":\"gallery\"}\n</think>"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "think 标签内部包含 JSON 时应正确提取",
             command is AgentCommand.NavigateTo
@@ -235,7 +235,7 @@ class AgentOrchestratorParseTest {
     fun `parseLlmResponse think tag with only thinking no json falls back to keywords`() {
         // think 标签内没有 JSON，外部也没有，但包含关键词
         val input = "<think>\n用户说去相册，我应该导航到相册页面\n</think>"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "think 标签内无 JSON 时应走关键词兜底",
             command is AgentCommand.NavigateTo
@@ -251,7 +251,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse photo alias maps to CapturePhoto`() {
         val input = "{\"action\":\"photo\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "LLM 输出 method=photo 时必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
@@ -261,7 +261,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse photo alias with think tags`() {
         val input = "<think>用户说拍照</think>\n{\"action\":\"photo\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "photo 别名在 think 标签清理后必须正确解析",
             command is AgentCommand.CapturePhoto
@@ -271,7 +271,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse photo alias with markdown block`() {
         val input = "```json\n{\"action\":\"photo\"}\n```"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "markdown 包裹的 photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
@@ -284,7 +284,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `parseCommandByMethod capture returns CapturePhoto`() {
-        val command = AgentCommandParser.parseCommandByMethod(
+        val command = LocalCommandParser.parseCommandByMethod(
             method = "capture",
             json = "{\"action\":\"capture\"}",
             context = defaultContext,
@@ -295,7 +295,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `parseCommandByMethod photo returns CapturePhoto`() {
-        val command = AgentCommandParser.parseCommandByMethod(
+        val command = LocalCommandParser.parseCommandByMethod(
             method = "photo",
             json = "{\"action\":\"photo\"}",
             context = defaultContext,
@@ -309,7 +309,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `parseCommandByMethod flip_camera returns FlipCamera`() {
-        val command = AgentCommandParser.parseCommandByMethod(
+        val command = LocalCommandParser.parseCommandByMethod(
             method = "flip_camera",
             json = "{\"action\":\"flip_camera\"}",
             context = defaultContext,
@@ -320,7 +320,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `parseCommandByMethod adjust_beauty returns AdjustBeauty`() {
-        val command = AgentCommandParser.parseCommandByMethod(
+        val command = LocalCommandParser.parseCommandByMethod(
             method = "adjust_beauty",
             json = "{\"action\":\"adjust_beauty\",\"smoothing\":0.8}",
             context = defaultContext,
@@ -333,7 +333,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `parseCommandByMethod switch_filter returns SwitchFilter`() {
-        val command = AgentCommandParser.parseCommandByMethod(
+        val command = LocalCommandParser.parseCommandByMethod(
             method = "switch_filter",
             json = "{\"action\":\"switch_filter\",\"filter\":\"VINTAGE\"}",
             context = defaultContext,
@@ -345,7 +345,7 @@ class AgentOrchestratorParseTest {
 
     @Test
     fun `parseCommandByMethod unknown method returns TextReply`() {
-        val command = AgentCommandParser.parseCommandByMethod(
+        val command = LocalCommandParser.parseCommandByMethod(
             method = "unknown_action",
             json = "{\"action\":\"unknown_action\"}",
             context = defaultContext,
@@ -405,7 +405,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `end to end qwen3 real response with photo method`() {
         val input = "<think>\n用户说\"拍照\"，需要触发相机拍照。\n\n{\"action\":\"photo\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         // 修复后：从未闭合 think 标签后提取 JSON
         assertTrue(
             "未闭合 think + photo method 必须解析为 CapturePhoto",
@@ -416,7 +416,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `end to end qwen3 closed think with photo method`() {
         val input = "<think>用户说拍照</think>\n{\"action\":\"photo\"}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "闭合 think 标签 + photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
@@ -426,7 +426,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `end to end markdown wrapped photo method`() {
         val input = "```json\n{\"action\":\"photo\"}\n```"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "markdown 包裹的 photo method 必须解析为 CapturePhoto",
             command is AgentCommand.CapturePhoto
@@ -440,7 +440,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse parses json array with filter and capture`() {
         val input = "[{\"method\":\"switch_filter\",\"params\":{\"filter\":\"COOL\"}},{\"method\":\"capture\",\"params\":{}}]"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "JSON 数组应解析为 BatchExecute",
             command is AgentCommand.BatchExecute
@@ -455,7 +455,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse parses json array with beauty and capture`() {
         val input = "[{\"method\":\"adjust_beauty\",\"params\":{\"smoothing\":60,\"whitening\":30}},{\"method\":\"capture\",\"params\":{}}]"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "美颜+拍照 JSON 数组应解析为 BatchExecute",
             command is AgentCommand.BatchExecute
@@ -469,7 +469,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse parses json array with delay filter and capture`() {
         val input = "[{\"method\":\"delay\",\"params\":{\"delay_ms\":3000}},{\"method\":\"switch_filter\",\"params\":{\"filter\":\"WARM\"}},{\"method\":\"capture\",\"params\":{}}]"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "延迟+滤镜+拍照 JSON 数组应解析为 BatchExecute",
             command is AgentCommand.BatchExecute
@@ -484,7 +484,7 @@ class AgentOrchestratorParseTest {
     @Test
     fun `parseLlmResponse single json object still works`() {
         val input = "{\"method\":\"capture\",\"params\":{}}"
-        val command = AgentCommandParser.parseLlmResponse(input, defaultContext)
+        val command = LocalCommandParser.parseLlmResponse(input, defaultContext)
         assertTrue(
             "单个 JSON 对象仍应正常解析",
             command is AgentCommand.CapturePhoto

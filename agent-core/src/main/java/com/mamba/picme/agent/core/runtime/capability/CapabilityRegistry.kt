@@ -16,7 +16,7 @@ import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
-import com.mamba.picme.agent.core.runtime.parsing.AgentCommandParser
+import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.CoroutineScope
 import org.json.JSONObject
@@ -342,7 +342,7 @@ class CapabilityRegistry private constructor(
                     put("params", params)
                 }.toString()
                 val context = AgentContext(scene = AgentScene.CHAT)
-                val command = AgentCommandParser.parseCommandByMethod(
+                val command = LocalCommandParser.parseCommandByMethod(
                     method = toolName,
                     json = commandJson,
                     context = context,

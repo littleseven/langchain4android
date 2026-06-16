@@ -1,4 +1,4 @@
-package com.mamba.picme.agent.core.runtime.tool
+package com.mamba.picme.agent.core.remote.parser
 
 import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.platform.logging.Logger
@@ -7,14 +7,17 @@ import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.util.UUID
 
-object ToolCallingOutputParser {
+/**
+ * 远程 LLM Tool Calls 解析器
+ *
+ * 将远程 LLM 输出的标准 OpenAI tool_calls 格式解析为 [ToolExecutionRequest] 列表。
+ * 协议格式：{"tool_calls":[{"id":"call_x","type":"function","function":{"name":"...","arguments":"..."}}]}
+ *
+ * 仅支持 OpenAI tool_calls 协议，不支持 REACT，不支持 method/params 兜底。
+ */
+object ToolCallParser {
 
-    private const val TAG = "ToolCallingOutputParser"
-
-    private data class SimpleToolCall(
-        val name: String,
-        val arguments: Map<String, Any?>?
-    )
+    private const val TAG = "ToolCallParser"
 
     private data class OpenAiToolCallFunction(
         val name: String,
@@ -35,16 +38,12 @@ object ToolCallingOutputParser {
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    private val simpleAdapter = moshi.adapter(SimpleToolCall::class.java)
-    private val simpleListAdapter = moshi.adapter<List<SimpleToolCall>>(
-        Types.newParameterizedType(List::class.java, SimpleToolCall::class.java)
-    )
     private val openAiWrapperAdapter = moshi.adapter(OpenAiToolCallsWrapper::class.java)
     private val flexibleMapAdapter = moshi.adapter<Map<String, Any?>>(
         Types.newParameterizedType(Map::class.java, String::class.java, Any::class.java)
     )
 
-    fun parse(text: String, config: ToolCallingConfig = ToolCallingConfig()): List<ToolExecutionRequest> {
+    fun parse(text: String): List<ToolExecutionRequest> {
         if (text.isBlank()) return emptyList()
 
         val repaired = repairJson(text)
@@ -52,10 +51,7 @@ object ToolCallingOutputParser {
             Logger.d(TAG, "Repaired JSON: '${text.replace("\n", "\\n")}' -> '${repaired.replace("\n", "\\n")}'")
         }
 
-        return when (config.mode) {
-            ToolCallingMode.OPENAI_TOOLS -> parseOpenAiTools(repaired)
-            ToolCallingMode.REACT -> parseReAct(repaired)
-        }
+        return parseOpenAiTools(repaired)
     }
 
     private fun parseOpenAiTools(text: String): List<ToolExecutionRequest> {
@@ -63,7 +59,6 @@ object ToolCallingOutputParser {
 
         if (trimmed.contains("\"tool_calls\"")) {
             // 1. 宽松解析优先：兼容 arguments 为对象（推荐）或字符串两种格式
-            // OpenAI 标准中 arguments 是字符串，但端侧小模型输出对象更可靠
             runCatching {
                 parseOpenAiToolsLoosely(trimmed)
             }.getOrNull()?.let { if (it.isNotEmpty()) return it }
@@ -79,35 +74,24 @@ object ToolCallingOutputParser {
             }.getOrNull()?.let { if (it.isNotEmpty()) return it }
         }
 
-        // 2. <tool_call>...</tool_call> 标签（兼容旧格式）
-        val tagRegex = Regex("<tool_call>(.*?)</tool_call>", RegexOption.DOT_MATCHES_ALL)
-        val tagRequests = tagRegex.findAll(text).mapNotNull { match ->
-            parseSimple(match.groupValues[1].trim())
-        }.toList()
-        if (tagRequests.isNotEmpty()) return tagRequests
-
-        // 3. JSON 数组 [{"name":"...","arguments":{}}]
+        // 2. JSON 数组 [{"name":"...","arguments":{}}]
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
             runCatching {
-                simpleListAdapter.fromJson(trimmed)?.map { it.toRequest() }
+                parseSimpleArray(trimmed)
             }.getOrNull()?.let { if (it.isNotEmpty()) return it }
         }
 
-        // 4. 单个 JSON 对象
+        // 3. 单个 JSON 对象
         val singleResult = parseSimple(trimmed)?.let { listOf(it) } ?: emptyList()
         if (singleResult.isNotEmpty()) return singleResult
 
-        // 5. 终极模糊提取：直接扫描已知工具名，完全不依赖 JSON 结构
+        // 4. 终极模糊提取
         Logger.d(TAG, "All structured parsing failed, trying fuzzy extraction")
         return fuzzyExtractToolCall(trimmed)
     }
 
     /**
      * 宽松解析 OpenAI tool_calls：兼容 arguments 为对象或字符串的情况。
-     *
-     * 部分端侧/远程模型会把 arguments 直接输出为 JSON 对象（如
-     * {"destination":"gallery"}），而非标准字符串 "{\"destination\":\"gallery\"}"。
-     * 这里把对象重新序列化为字符串，保证下游统一按字符串处理。
      */
     @Suppress("UNCHECKED_CAST")
     private fun parseOpenAiToolsLoosely(text: String): List<ToolExecutionRequest> {
@@ -132,42 +116,20 @@ object ToolCallingOutputParser {
         }
     }
 
-    private fun parseReAct(text: String): List<ToolExecutionRequest> {
-        // Thought: ... Action: {"name":"...","arguments":{}}
-        val actionRegex = Regex("""Action:\s*(\{.*?\})\s*$""", RegexOption.DOT_MATCHES_ALL)
-        val matches = actionRegex.findAll(text).toList()
-        if (matches.isEmpty()) return emptyList()
-
-        return matches.mapNotNull { match ->
-            parseSimple(match.groupValues[1].trim())
-        }
-    }
-
     /**
-     * 正则兜底解析：当 JSON 被截断时（如 maxNewTokens 不足导致 "]} 缺失），
-     * 或有多余字符时，从原始文本中提取 function name 和 arguments。
-     *
-     * 截断示例：
-     * {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"navigate_to","arguments":"{\"destination\":\"camera\"}"}]}
-     *                                                                                          ↑ 缺少 }]
-     *
-     * 多余字符示例（小模型常见）：
-     * {"tool_calls":[{"id":"call_1","type":"function","function":{"name":"navigate_to","arguments":{"destination":"camera"}}]}}
-     *                                                                                             ↑ 多一个 }
+     * 正则兜底解析：当 JSON 被截断时从原始文本中提取 function name 和 arguments。
      */
     private fun parseOpenAiToolsByRegex(text: String): List<ToolExecutionRequest> {
         val trimmed = text.trim()
         val results = mutableListOf<ToolExecutionRequest>()
-    
-        // 用括号匹配精确提取 function 块，替代 [^}]+（不能处理嵌套对象）
+
         val funcStartRegex = Regex(""""function"\s*:\s*\{""")
         var searchFrom = 0
-    
+
         while (true) {
             val match = funcStartRegex.find(trimmed, searchFrom) ?: break
             val funcBlockStart = match.range.last + 1
-    
-            // 括号匹配找到 function 块的闭合 }
+
             var depth = 1
             var inStr = false
             var funcBlockEnd = -1
@@ -191,11 +153,10 @@ object ToolCallingOutputParser {
                 }
                 i++
             }
-    
+
             if (funcBlockEnd > 0) {
                 val functionBlock = trimmed.substring(match.range.first, funcBlockEnd)
-    
-                // 提取 name
+
                 val name = Regex(""""name"\s*:\s*"([^"]+)"""").find(functionBlock)?.groupValues?.get(1)
                 if (name != null) {
                     val argumentsString = extractArgumentsFromFunctionBlock(functionBlock)
@@ -206,23 +167,22 @@ object ToolCallingOutputParser {
                     ))
                 }
             }
-    
+
             searchFrom = if (funcBlockEnd > 0) funcBlockEnd else match.range.last + 1
         }
-    
+
         return results
     }
-    
+
     /**
      * 从 function 块中提取 arguments（兼容对象和字符串两种格式）。
-     * 使用括号匹配确保嵌套对象正确提取。
      */
     private fun extractArgumentsFromFunctionBlock(functionBlock: String): String {
         val argStartRegex = Regex(""""arguments"\s*:\s*""")
         val argStartMatch = argStartRegex.find(functionBlock) ?: return "{}"
         val afterKey = argStartMatch.range.last + 1
         if (afterKey >= functionBlock.length) return "{}"
-    
+
         return when (functionBlock[afterKey]) {
             '"' -> {
                 // 字符串格式："arguments":"{\"destination\":\"camera\"}"
@@ -240,7 +200,6 @@ object ToolCallingOutputParser {
             }
             '{' -> {
                 // 对象格式："arguments":{"destination":"camera"}
-                // 括号匹配精确提取完整对象
                 var objDepth = 1
                 var inObjStr = false
                 for (j in afterKey + 1 until functionBlock.length) {
@@ -266,9 +225,28 @@ object ToolCallingOutputParser {
         }
     }
 
+    /**
+     * 解析简单 JSON 对象：{"name":"...","arguments":{...}}
+     */
+    private data class SimpleToolCall(
+        val name: String,
+        val arguments: Map<String, Any?>?
+    )
+
+    private val simpleAdapter = moshi.adapter(SimpleToolCall::class.java)
+    private val simpleListAdapter = moshi.adapter<List<SimpleToolCall>>(
+        Types.newParameterizedType(List::class.java, SimpleToolCall::class.java)
+    )
+
     private fun parseSimple(json: String): ToolExecutionRequest? {
         return runCatching {
             simpleAdapter.fromJson(json)?.toRequest()
+        }.getOrNull()
+    }
+
+    private fun parseSimpleArray(text: String): List<ToolExecutionRequest>? {
+        return runCatching {
+            simpleListAdapter.fromJson(text)?.map { it.toRequest() }
         }.getOrNull()
     }
 
@@ -297,14 +275,6 @@ object ToolCallingOutputParser {
 
     /**
      * 自动修复小模型输出的不合法 JSON，在解析前执行。
-     *
-     * 端侧小模型（Qwen3-1.7B/2B）输出的 JSON 常见问题：
-     * 1. 多余/缺少闭合括号（{}、[]）
-     * 2. 末尾有多余字符
-     * 3. <think> 标签未闭合
-     * 4. 字符串使用单引号
-     * 5. 末尾多余逗号
-     * 6. key 缺少引号
      */
     private fun repairJson(raw: String): String {
         var s = raw.trim()
@@ -312,8 +282,8 @@ object ToolCallingOutputParser {
         // 1. 移除 <think>...</think> 和 <thinking>...</thinking>（含未闭合）
         s = s.replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "").trim()
         s = s.replace(Regex("<thinking>.*?</thinking>", RegexOption.DOT_MATCHES_ALL), "").trim()
-        s = s.replace(Regex("<think>.*"), "").trim()  // 未闭合
-        s = s.replace(Regex("<thinking>.*"), "").trim()  // 未闭合
+        s = s.replace(Regex("<think>.*"), "").trim()
+        s = s.replace(Regex("<thinking>.*"), "").trim()
         s = s.replace("</think>", "").trim()
         s = s.replace("</thinking>", "").trim()
 
@@ -336,19 +306,18 @@ object ToolCallingOutputParser {
         }
         s = s.substring(jsonStart)
 
-        // 5. 定位 JSON 结束位置（找到主结构完全闭合后的位置）
+        // 5. 定位 JSON 结束位置
         val endPos = findJsonEnd(s)
         if (endPos > 0 && endPos < s.length) {
             s = s.substring(0, endPos).trim()
         }
 
-        // 6. 单引号转双引号（只在 JSON 上下文中）
-        // 用 " " 替换 ' ' 时小心不要破坏内部转义的 ' 。
+        // 6. 单引号转双引号
         s = s.replace("\\'", "\u0000_ESC_SQ")
         s = s.replace("'", "\"")
         s = s.replace("\u0000_ESC_SQ", "\\'")
 
-        // 7. 移除末尾逗号（在 } 或 ] 之前）
+        // 7. 移除末尾逗号
         s = s.replace(Regex(",\\s*\\}"), "}")
         s = s.replace(Regex(",\\s*\\]"), "]")
 
@@ -360,8 +329,6 @@ object ToolCallingOutputParser {
 
     /**
      * 找到 JSON 主结构完全闭合的位置。
-     * 遍历字符串，跟踪括号深度，当深度回到 0 时记录为可能的结束点。
-     * 返回主结构最后一次完全闭合后的位置。
      */
     private fun findJsonEnd(s: String): Int {
         var depth = 0
@@ -382,7 +349,6 @@ object ToolCallingOutputParser {
                 '}', ']' -> {
                     depth--
                     if (depth == 0) {
-                        // 记录 JSON 主结构闭合位置
                         lastEnd = i + 1
                     }
                 }
@@ -394,7 +360,6 @@ object ToolCallingOutputParser {
 
     /**
      * 补充括号使 JSON 平衡。
-     * 统计 { } [ ] 数量，在末尾追加缺失的括号。
      */
     private fun balanceBraces(s: String): String {
         var inString = false
@@ -418,11 +383,9 @@ object ToolCallingOutputParser {
             }
         }
 
-        // 如果括号不平衡，在末尾添加缺失的
         val sb = StringBuilder(s)
         while (braceCount > 0) { sb.append('}'); braceCount-- }
         while (braceCount < 0 && sb.length > 0 && sb.last() == '}') {
-            // 如果有多余的 } 在末尾，移除
             val startPos = sb.length - 1
             var pos = startPos
             while (pos >= 0 && sb[pos] == '}') pos--
@@ -449,17 +412,11 @@ object ToolCallingOutputParser {
 
     /**
      * 终极模糊提取：当所有结构化解析都失败时，
-     * 直接扫描文本中的已知工具名和参数，完全不依赖 JSON 结构。
-     *
-     * 处理场景：
-     * - JSON 格式严重损坏，Moshi 和正则都失败
-     * - 模型在 JSON 周围输出了大量自然语言
-     * - 只有零散的工具名可辨认
+     * 直接扫描文本中的已知工具名和参数。
      */
     private fun fuzzyExtractToolCall(text: String): List<ToolExecutionRequest> {
         val results = mutableListOf<ToolExecutionRequest>()
 
-        // 已知工具名列表（需要保持与注册的工具一致）
         val knownTools = setOf(
             "navigate_to", "navigateTo",
             "launch_app", "launchApp",
@@ -469,7 +426,7 @@ object ToolCallingOutputParser {
             "switch_camera", "switchCamera"
         )
 
-        // 模式1: 搜索 "name":"xxx" 模式（key value 格式）
+        // 模式1: 搜索 "name":"xxx" 模式
         val nameValueRegex = Regex(""""name"\s*[:=]\s*"([^"]+)"""")
         for (match in nameValueRegex.findAll(text)) {
             val name = match.groupValues[1]
@@ -489,7 +446,7 @@ object ToolCallingOutputParser {
             return results
         }
 
-        // 模式2: 搜索 name=xxx 或 name:xxx 格式（非 JSON）
+        // 模式2: 搜索 name=xxx 或 name:xxx 格式
         val simpleNameRegex = Regex("""name\s*[:=]\s*([a-zA-Z_]+""")
         for (match in simpleNameRegex.findAll(text)) {
             val name = match.groupValues[1].trimEnd('"', '\'', ' ')
@@ -509,7 +466,7 @@ object ToolCallingOutputParser {
             return results
         }
 
-        // 模式3: 在文本中直接搜索已知工具名（如 "navigate_to" 出现在任何位置）
+        // 模式3: 直接搜索已知工具名
         for (toolName in knownTools) {
             if (text.contains(toolName, ignoreCase = true)) {
                 val request = ToolExecutionRequest(
@@ -532,35 +489,27 @@ object ToolCallingOutputParser {
 
     /**
      * 在文本中工具名附近搜索 arguments 参数。
-     * 尝试多种格式：
-     * - JSON 对象: "destination":"camera","source":"chat"
-     * - 简单键值: destination=camera
      */
     private fun extractArgumentsNearby(text: String, aroundPosition: Int): String {
-        // 在工具名前后 200 字符内搜索
         val searchStart = maxOf(0, aroundPosition - 100)
         val searchEnd = minOf(text.length, aroundPosition + 200)
         val context = text.substring(searchStart, searchEnd)
 
-        // 尝试提取 JSON 对象格式的 arguments
         val argObjectRegex = Regex(""""arguments"\s*[:=]\s*(\{.*\})""")
         val argMatch = argObjectRegex.find(context)
         if (argMatch != null) {
             val objStr = argMatch.groupValues[1].trim()
-            // 验证是不是完整的 JSON 对象
             if (objStr.startsWith("{") && objStr.endsWith("}")) {
                 return objStr
             }
         }
 
-        // 尝试提取字符串格式的 arguments
         val argStringRegex = Regex(""""arguments"\s*[:=]\s*"(.*?)"""")
         val strMatch = argStringRegex.find(context)
         if (strMatch != null) {
             return strMatch.groupValues[1]
         }
 
-        // 尝试提取 destination 等常见参数
         val destRegex = Regex(""""destination"\s*[:=]\s*"([^"]+)"""")
         val destMatch = destRegex.find(context)
         if (destMatch != null) {

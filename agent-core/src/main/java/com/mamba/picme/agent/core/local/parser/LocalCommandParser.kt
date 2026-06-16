@@ -1,25 +1,28 @@
-package com.mamba.picme.agent.core.runtime.parsing
+package com.mamba.picme.agent.core.local.parser
 
-import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentIdGenerator
+import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
-import com.mamba.picme.agent.core.api.context.MediaType
 
 /**
- * Agent 命令解析器
+ * 本地 LLM 命令解析器
  *
- * 将 LLM 文本响应解析为结构化 [AgentCommand]。
- * 支持精简 JSON 格式（method + params）。
+ * 将本地 LLM 输出的 method/params JSON 数组响应解析为结构化 [AgentCommand]。
+ * 协议格式：
+ * - JSON 数组：[{"method":"capture","params":{}}, ...]
+ * - 单个 JSON：{"method":"capture","params":{}}
+ *
  * 提取为独立 object 以便在纯 JVM 单元测试中直接调用，
- * 避免实例化 [AgentOrchestrator] 时触发 JNI/MNN 加载。
+ * 避免实例化 [com.mamba.picme.agent.core.facade.AgentOrchestrator] 时触发 JNI/MNN 加载。
  */
-object AgentCommandParser {
+object LocalCommandParser {
 
-    private const val TAG = "AgentCommandParser"
+    private const val TAG = "LocalCommandParser"
 
     /**
      * 解析 LLM 响应为 AgentCommand
@@ -208,7 +211,7 @@ object AgentCommandParser {
         }
 
         // 2. 移除代码块标记 (``json ... ``` 或 ``` ... ```)
-        cleaned = cleaned.replace(Regex("^```\\w*\\n?"), "").replace(Regex("\\n?```\\s*$"), "").trim()
+        cleaned = cleaned.replace(Regex("^```\\w*\\n?"), "").replace(Regex("\\n?```\\s*\$"), "").trim()
 
         Logger.i(TAG, "Cleaned response: '$cleaned'")
 
@@ -279,15 +282,6 @@ object AgentCommandParser {
         }
     }
 
-    /**
-     * 解析 LLM 响应为 AgentCommand（兼容旧版单命令入口）
-     *
-     * 支持精简 JSON 格式：{"method":"...","params":{...}}。
-     *
-     * @param response LLM 原始文本输出
-     * @param context 当前 Agent 上下文
-     * @return 解析后的命令
-     */
     /**
      * 根据 method 字段解析为具体命令
      *
@@ -506,7 +500,7 @@ object AgentCommandParser {
      *
      * 用于提取 params 对象。
      */
-    private fun extractJsonObject(json: String, key: String): String? {
+    fun extractJsonObject(json: String, key: String): String? {
         val keyIndex = json.indexOf("\"$key\"")
         if (keyIndex == -1) return null
 
@@ -622,7 +616,6 @@ object AgentCommandParser {
                 lower.contains("后退") || lower.contains("回退") ->
                 AgentCommand.GoBack()
             // 复合指令：延迟 + 滤镜/美颜 + 拍照
-            // 例如："5秒后换暖色滤镜拍照" -> [Delay, SwitchFilter(WARM), CapturePhoto]
             (lower.contains("延迟") || lower.contains("延时") || lower.contains("倒计时") ||
                 lower.contains("几秒后") || lower.contains("秒后") || lower.contains("稍后")) &&
                 (lower.contains("拍") || lower.contains("照")) &&
@@ -646,7 +639,7 @@ object AgentCommandParser {
                 commands.add(AgentCommand.CapturePhoto())
                 AgentCommand.BatchExecute(commands = commands)
             }
-            // 纯延迟拍摄（关键词兜底：解析为 BatchExecute([Delay, CapturePhoto])）
+            // 纯延迟拍摄
             (lower.contains("延迟") || lower.contains("延时") || lower.contains("倒计时") ||
                 lower.contains("几秒后") || lower.contains("秒后") || lower.contains("稍后")) &&
                 (lower.contains("拍") || lower.contains("照")) -> {
@@ -669,9 +662,6 @@ object AgentCommandParser {
 
     /**
      * 将 LLM 输出的 filter 名称解析为 FilterType
-     *
-     * 支持别名映射和模糊匹配，增强对小模型输出偏差的容错。
-     * 例如 LLM 输出 LEICA_MONOCHROME/RETRO/VIVID 等旧名称或近似名称时也能正确映射。
      */
     private fun resolveFilterType(name: String): FilterType {
         val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
@@ -706,7 +696,7 @@ object AgentCommandParser {
     }
 
     private fun extractJsonField(json: String, key: String): String? {
-        val regex = """"$key"\s*:\s*"([^"]*)""".toRegex()
+        val regex = """"$key"\s*:\s*"([^"]*)"""".toRegex()
         return regex.find(json)?.groupValues?.get(1)
     }
 
@@ -727,7 +717,6 @@ object AgentCommandParser {
 
     /**
      * 提取字符串列表
-     * 支持格式: "key": ["item1", "item2"] 或 "key": "item1,item2"
      */
     private fun extractJsonStringList(json: String, key: String): List<String> {
         // 尝试解析数组格式
@@ -748,12 +737,7 @@ object AgentCommandParser {
     }
 
     /**
-     * 提取 Float 类型的 Map
-     */
-    /**
      * 从文本中提取延迟秒数
-     *
-     * 支持 "3秒后"、"5秒"、"十秒后" 等说法，默认 3 秒。
      */
     private fun extractDelaySeconds(text: String): Int {
         val numberMap = mapOf(
@@ -761,14 +745,14 @@ object AgentCommandParser {
             "五" to 5, "六" to 6, "七" to 7, "八" to 8, "九" to 9, "十" to 10
         )
         // 先尝试匹配阿拉伯数字
-        val digitRegex = "(\\d+)\\s*[秒s]".toRegex()
+        val digitRegex = "(\\d+)\\s*[\\u79d2s]".toRegex()
         val digitMatch = digitRegex.find(text)
         if (digitMatch != null) {
             return digitMatch.groupValues[1].toIntOrNull()?.coerceIn(1, 30) ?: 3
         }
         // 再尝试匹配中文数字
         for ((cn, num) in numberMap) {
-            if (text.contains(cn + "秒") || text.contains(cn + "秒后")) {
+            if (text.contains(cn + "\u79d2") || text.contains(cn + "\u79d2\u540e")) {
                 return num.coerceIn(1, 30)
             }
         }
@@ -776,7 +760,7 @@ object AgentCommandParser {
     }
 
     /**
-     * 解析简单字符串键值对对象，例如 {"text":"hello","hint":"search"}
+     * 解析简单字符串键值对对象
      */
     private fun parseStringMap(json: String): Map<String, String> {
         val result = mutableMapOf<String, String>()

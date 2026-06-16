@@ -5,16 +5,16 @@ import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.api.ToolProvider
+import com.mamba.picme.agent.core.local.pipeline.LocalInferencePipeline
+import com.mamba.picme.agent.core.local.prompt.LocalPromptBuilder
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
-import com.mamba.picme.agent.core.runtime.tool.ToolCallingConfig
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
-import com.mamba.picme.agent.core.runtime.inference.AdaptiveStrategySelector
-import com.mamba.picme.agent.core.runtime.inference.InferenceRouter
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
-import com.mamba.picme.agent.core.runtime.parsing.PromptBuilder
+import com.mamba.picme.agent.core.remote.pipeline.RemoteInferencePipeline
+import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
@@ -38,10 +38,10 @@ class AgentConfigurator(private val context: Context) {
     val memoryManager = MemoryManager(context)
     val privacyGuard = PrivacyGuard()
     val sceneManager = SceneManager.getInstance()
-    val promptBuilder = PromptBuilder(sceneManager)
+    val localPromptBuilder = LocalPromptBuilder(sceneManager)
+    val remotePromptBuilder = RemotePromptBuilder(sceneManager)
     val capabilityRegistry = CapabilityRegistry.getInstance()
     val intentCache = IntentCache()
-    val strategySelector = AdaptiveStrategySelector(intentCache)
 
     /**
      * Tool Provider（LangChain4j 风格 Tool Calling）。
@@ -51,54 +51,59 @@ class AgentConfigurator(private val context: Context) {
         private set
 
     /**
-     * Tool Calling 配置（默认 OpenAI tools 格式）。
-     */
-    var toolCallingConfig: ToolCallingConfig = ToolCallingConfig()
-        private set
-
-    /**
      * 设置 Tool Provider。传入 null 可关闭 Tool Calling。
      */
     fun setToolProvider(provider: ToolProvider?) {
         toolProvider = provider
     }
 
-    /**
-     * 设置 Tool Calling 配置，例如切到 ReAct 模式用于调试。
-     */
-    fun setToolCallingConfig(config: ToolCallingConfig) {
-        toolCallingConfig = config
-    }
-
-
     // 配置状态
     private var agentMode: AiAgentMode = AiAgentMode.LOCAL
     private var currentModelId: String = "qwen3_5_2b"
     private var userRemoteConfig: RemoteModelConfig? = null
-    private var inferenceRouterConfig: RemoteModelConfig? = null
-    private var inferenceRouter: InferenceRouter? = null
+    private var pipelineRemoteConfig: RemoteModelConfig? = null
+    private var localInferencePipeline: LocalInferencePipeline? = null
+    private var remoteInferencePipeline: RemoteInferencePipeline? = null
     private var localUseOpencl: Boolean = false
 
     /**
-     * 获取或创建 InferenceRouter
-     * 如果配置变化，会重新创建以确保使用最新远程配置
+     * 获取或创建本地推理管道
      */
-    fun getInferenceRouter(): InferenceRouter {
+    fun getLocalPipeline(): LocalInferencePipeline {
+        val existing = localInferencePipeline
+        if (existing != null) return existing
+        val pipeline = LocalInferencePipeline(
+            localEngine = localLlmEngine,
+            sceneManager = sceneManager,
+            capabilityRegistry = capabilityRegistry,
+            intentCache = intentCache,
+            privacyGuard = privacyGuard
+        )
+        localInferencePipeline = pipeline
+        return pipeline
+    }
+
+    /**
+     * 获取或创建远程推理管道
+     */
+    fun getRemotePipeline(): RemoteInferencePipeline {
         val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
-        val existing = inferenceRouter
-        if (existing != null && inferenceRouterConfig == currentConfig) {
+        val existing = remoteInferencePipeline
+        if (existing != null && pipelineRemoteConfig == currentConfig) {
             return existing
         }
         val remoteOrchestrator = createRemoteOrchestrator(currentConfig)
-        val newRouter = InferenceRouter(
-            localEngine = localLlmEngine,
+        val pipeline = RemoteInferencePipeline(
             remoteOrchestrator = remoteOrchestrator,
-            strategySelector = strategySelector,
+            localEngine = localLlmEngine,
+            sceneManager = sceneManager,
+            capabilityRegistry = capabilityRegistry,
+            intentCache = intentCache,
             privacyGuard = privacyGuard
         )
-        inferenceRouter = newRouter
-        inferenceRouterConfig = currentConfig
-        return newRouter
+        remoteInferencePipeline = pipeline
+        pipelineRemoteConfig = currentConfig
+        return pipeline
     }
 
     /**
@@ -109,7 +114,7 @@ class AgentConfigurator(private val context: Context) {
         return RemoteOrchestrator(
             context = context,
             remoteConfig = config,
-            promptBuilder = promptBuilder
+            promptBuilder = remotePromptBuilder
         )
     }
 
@@ -128,8 +133,9 @@ class AgentConfigurator(private val context: Context) {
         this.localUseOpencl = localUseOpencl
         if (remoteConfig != null && remoteConfig.baseUrl.isNotBlank() && remoteConfig.modelId.isNotBlank()) {
             this.userRemoteConfig = remoteConfig
-            inferenceRouter = null
-            inferenceRouterConfig = null
+            localInferencePipeline = null
+            remoteInferencePipeline = null
+            pipelineRemoteConfig = null
         }
         privacyGuard.updateConfig(privacyLevel, mode)
         Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +

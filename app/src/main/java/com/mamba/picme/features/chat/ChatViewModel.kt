@@ -276,7 +276,7 @@ class ChatViewModel(
     }
 
     /**
-     * 统一处理用户输入：本地/远程模型都走 InferenceRouter。
+     * 统一处理用户输入：本地/远程模型都走 processInputWithRouter。
      *
      * 本地 Qwen3-2B 已做过 OpenAI tool_calls 训练，因此 chat 页面统一通过 Tool Calling
      * 路径输出 OpenAI 格式指令；远程模型同样走此路径。

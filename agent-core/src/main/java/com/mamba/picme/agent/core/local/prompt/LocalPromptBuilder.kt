@@ -1,23 +1,19 @@
-package com.mamba.picme.agent.core.runtime.parsing
+package com.mamba.picme.agent.core.local.prompt
 
 import com.mamba.picme.agent.core.api.capability.Capability
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
 /**
- * Prompt 构建器
+ * 本地 LLM Prompt 构建器
  *
+ * 面向端侧小模型（Qwen3-1.7B/2B）优化，使用自定义 method/params JSON 数组格式。
  * 分层构建 system prompt：
  * - Base: 通用规则（JSON 格式、回复风格等）
  * - Scene: 场景特定能力和约束
  * - Capability: 各 Capability 的自描述
- *
- * 同时支持远程 LLM 编排所需的三种 Prompt 模板：
- * - Batch: L2 批量命令解析（JSON 数组）
- * - Plan: L3 计划执行（ExecutionPlan JSON）
- * - Chat: L4 纯文本对话
  */
-class PromptBuilder(
+class LocalPromptBuilder(
     private val sceneManager: SceneManager
 ) {
 
@@ -123,7 +119,7 @@ class PromptBuilder(
      * 场景特定提示
      */
     private val scenePrompts = mapOf(
-        SceneManager.Scene.CHAT to "当前聊天页：优先回答用户问题；只有当用户明确要求执行操作时，才输出系统/导航命令。", 
+        SceneManager.Scene.CHAT to "当前聊天页：优先回答用户问题；只有当用户明确要求执行操作时，才输出系统/导航命令。",
         SceneManager.Scene.CAMERA to "当前相机页：优先相机控制。仅当用户明确说去相册/去设置/返回时再导航。",
         SceneManager.Scene.GALLERY to "当前相册页：优先相册操作。用户说去相机/去拍照时必须导航到 camera。",
         SceneManager.Scene.SETTINGS to "当前设置页：优先设置操作。用户说去相机/回相机/打开相机时必须导航到 camera，不可导航到 gallery。",
@@ -268,8 +264,6 @@ class PromptBuilder(
         }
     }
 
-    // ── 远程 LLM Prompt 模板（L2/L3/L4）────────────────────────────
-
     /**
      * 构建 L2 本地快速通道专用简化 Prompt
      *
@@ -366,111 +360,6 @@ class PromptBuilder(
             appendLine("打开WiFi设置 -> [{\"method\":\"open_system_settings\",\"params\":{\"setting\":\"wifi\"}}]")
             appendLine("点击通讯录 -> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}]")
             appendLine("输入 1234 -> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"input\",\"target\":{\"type\":\"class_name\",\"value\":\"android.widget.EditText\"},\"params\":{\"text\":\"1234\"}}}] ")
-        }
-    }
-
-    /**
-     * 构建 L2 Batch 模式 Prompt（远程 LLM 使用）
-     *
-     * 模型通过 tools 参数中的 ToolSpecifications 定义以 tool_calls 协议输出命令。
-     * 禁止输出 method/params 格式的文本 JSON，只接受标准 OpenAI tool_calls。
-     */
-    fun buildBatchPrompt(userInput: String, context: AgentContext): String {
-        return buildString {
-            appendLine("你是 PicMe 的指令解析器。使用 function calling（tool_calls）调用工具来响应用户指令。")
-            appendLine()
-            appendLine("规则：")
-            appendLine("1. 使用 tool_calls 协议输出命令；如果需要先执行 A 再执行 B，在同一个 tool_calls 数组中输出多个工具调用。")
-            appendLine("2. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，delay 必须在数组第一个位置，后面跟后续函数。")
-            appendLine("3. 用户说多个美颜参数（如\"美白50磨皮30\"）时，只调用一次 adjust_beauty，传入所有参数。")
-            appendLine("4. 用户输入以\"拍照\"结尾时，最后一次调用必须是 capture。")
-            appendLine("5. 用户要求拍多张时（如\"拍三张\"、\"连拍\"），调用多次 capture，中间可以插入 delay。")
-            appendLine("6. 如果用户是闲聊或无法用现有函数表达，调用 text_reply 回复。")
-            appendLine("7. 不要输出文字解释，不要使用<think>标签。")
-            appendLine("8. 禁止输出 method/params 格式的 JSON 数组（如 [{\"method\":\"...\",\"params\":{}}]），必须使用标准 tool_calls 格式。")
-            appendLine()
-            appendLine("【当前状态】")
-            appendLine(buildStateSection(context, sceneManager.currentScene.value))
-            appendLine()
-            appendLine("可用函数列表请参考 tools 参数中的定义。")
-            appendLine()
-            appendLine("【输出格式】")
-            appendLine("在 tool_calls 数组中按顺序排列多个工具调用即可实现连续指令：")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"工具名1\",\"arguments\":{...}}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"工具名2\",\"arguments\":{...}}}]}")
-            appendLine()
-            appendLine("【示例】")
-            appendLine("用户: 3秒后拍照")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"delay\",\"arguments\":{\"delay_ms\":3000}}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"capture\",\"arguments\":{}}}]}")
-            appendLine("用户: 5秒后换暖色滤镜拍照")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"delay\",\"arguments\":{\"delay_ms\":5000}}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"switch_filter\",\"arguments\":{\"filter\":\"WARM\"}}},{\"id\":\"call_3\",\"type\":\"function\",\"function\":{\"name\":\"capture\",\"arguments\":{}}}]}")
-            appendLine("用户: 你好")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"text_reply\",\"arguments\":{\"message\":\"你好呀，我是小觅\"}}}]}")
-            appendLine("用户: 磨皮50美白30")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"adjust_beauty\",\"arguments\":{\"smoothing\":50,\"whitening\":30}}}]}")
-        }
-    }
-
-    /**
-     * 构建 L3 Plan 模式 Prompt
-     *
-     * 输出格式为 ExecutionPlan JSON，steps 中的命令使用精简 JSON 风格（method + params）。
-     */
-    fun buildPlanPrompt(userInput: String, context: AgentContext): String {
-        return buildString {
-            appendLine("你是 PicMe 的任务编排器。把用户复杂请求转成 ExecutionPlan JSON。")
-            appendLine()
-            appendLine("输出硬规则：")
-            appendLine("1. 只能输出一个 JSON 对象，禁止解释、禁止 markdown、禁止 <think>。")
-            appendLine("2. 顶层字段固定：plan_id, description, steps。")
-            appendLine("3. steps 每项字段固定：step, method, params, condition, wait_condition, repeat_count, description, delayMs。")
-            appendLine("4. method 字段是命令名，params 是命令参数对象。")
-            appendLine("5. wait_condition 仅支持：duration(delay_ms), face_detected(timeout_ms), smile_detected(timeout_ms), user_confirm(prompt)。")
-            appendLine("6. repeat_count >= 1，delayMs >= 0。")
-            appendLine("7. 导航动作严格使用 navigate_to/go_back。")
-            appendLine()
-            appendLine("【当前状态】")
-            appendLine(buildStateSection(context, sceneManager.currentScene.value))
-            appendLine()
-            appendLine("【命令全集】")
-            appendLine(buildCapabilitiesSection(scene = null, forPlan = true))
-            appendLine()
-            appendLine("【示例】")
-            appendLine("用户: 去相机后等1秒连拍3张")
-            appendLine("-> {plan_id:plan_1,description:切到相机后连拍,steps:[{step:1,method:navigate_to,params:{destination:camera},condition:null,wait_condition:null,repeat_count:1,description:切换到相机,delayMs:0},{step:2,method:text_reply,params:{message:准备连拍},condition:null,wait_condition:{type:duration,delay_ms:1000},repeat_count:1,description:等待1秒,delayMs:0},{step:3,method:capture,params:{},condition:null,wait_condition:null,repeat_count:3,description:连拍3张,delayMs:500}]}")
-            appendLine("用户: 3秒后调暖色调拍照")
-            appendLine("-> {plan_id:plan_2,description:延迟后调暖色调拍照,steps:[{step:1,method:delay,params:{delay_ms:3000},condition:null,wait_condition:null,repeat_count:1,description:等待3秒,delayMs:0},{step:2,method:switch_filter,params:{filter:WARM},condition:null,wait_condition:null,repeat_count:1,description:切换暖色调,delayMs:0},{step:3,method:capture,params:{},condition:null,wait_condition:null,repeat_count:1,description:拍照,delayMs:0}]}")
-        }
-    }
-
-    /**
-     * 构建 L4 Chat 模式 Prompt
-     *
-     * 纯文本对话，不输出 JSON。
-     */
-    fun buildChatPrompt(
-        userInput: String,
-        context: AgentContext,
-        history: List<String> = emptyList()
-    ): String {
-        return buildString {
-            appendLine("你是 PicMe 的摄影助手小觅。当前是聊天模式。")
-            appendLine()
-            appendLine("回复规则：")
-            appendLine("1. 只输出中文自然语言，不要 JSON，不要 markdown。")
-            appendLine("2. 语气简洁友好，优先给出可执行建议。")
-            appendLine("3. 用户问能力范围时，聚焦相机/相册/设置可控能力。")
-            appendLine("4. 与产品无关的问题，礼貌引导回拍摄与编辑场景。")
-            appendLine()
-            appendLine("【当前状态】")
-            appendLine(buildStateSection(context, sceneManager.currentScene.value))
-
-            if (history.isNotEmpty()) {
-                appendLine()
-                appendLine("【最近对话】")
-                history.takeLast(5).forEachIndexed { index, message ->
-                    appendLine("${index + 1}. $message")
-                }
-            }
         }
     }
 

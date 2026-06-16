@@ -3,7 +3,7 @@ package com.mamba.picme.testing.agent.bridge
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.mamba.picme.agent.core.runtime.parsing.AgentCommandParser
+import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.agent.core.api.context.AgentAction
@@ -204,7 +204,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
      * V2.1: 处理 JSON 格式命令（与 Agent 命令格式完全对齐）
      *
      * PC 端不做任何解析，直接把 action JSON 透传过来。
-     * 应用端复用 AgentCommandParser 解析为 AgentCommand，再分发执行。
+     * 应用端复用 LocalCommandParser 解析为 AgentCommand，再分发执行。
      *
      * JSON 格式示例：
      * {"method":"switch_filter","params":{"filter":"leica_vibrant"}}
@@ -214,7 +214,7 @@ class AgentTestBroadcastReceiver : BroadcastReceiver() {
         Logger.i(TAG, "V2.1 JSON command: $json")
 
         val registry = CapabilityRegistry.getInstance()
-        val command = AgentCommandParser.parseLlmResponse(
+        val command = LocalCommandParser.parseLlmResponse(
             json,
             AgentContext(scene = AgentScene.CAMERA)
         )
