@@ -2,11 +2,9 @@ package com.mamba.picme.agent.core.facade
 
 import android.content.Context
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.capability.Capability
-import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.mamba.picme.agent.core.langchain4j.ToolProvider
+import com.mamba.picme.agent.core.api.ToolProvider
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.runtime.tool.ToolCallingConfig
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator

@@ -1,6 +1,6 @@
 package com.mamba.picme.agent.core.runtime.tool
 
-import com.mamba.picme.agent.core.langchain4j.ToolSpecification
+import com.mamba.picme.agent.core.api.ToolSpecification
 
 object ToolPromptBuilder {
 

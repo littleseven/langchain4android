@@ -1,9 +1,9 @@
 package com.mamba.picme.agent.core.runtime.tool
 
-import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
-import com.mamba.picme.agent.core.langchain4j.ChatRequest
-import com.mamba.picme.agent.core.langchain4j.ChatResponse
-import com.mamba.picme.agent.core.langchain4j.SystemMessage
+import com.mamba.picme.agent.core.api.ChatLanguageModel
+import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.SystemMessage
 
 class ToolCallingChatLanguageModel(
     private val delegate: ChatLanguageModel,

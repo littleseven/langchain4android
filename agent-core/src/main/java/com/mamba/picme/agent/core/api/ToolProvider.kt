@@ -1,4 +1,4 @@
-package com.mamba.picme.agent.core.langchain4j
+package com.mamba.picme.agent.core.api
 
 interface ToolProvider {
     suspend fun getToolSpecifications(): List<ToolSpecification>

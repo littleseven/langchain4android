@@ -11,9 +11,9 @@ import com.mamba.picme.agent.core.api.context.AgentIdGenerator
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.mamba.picme.agent.core.langchain4j.ChatRequest
-import com.mamba.picme.agent.core.langchain4j.SystemMessage
-import com.mamba.picme.agent.core.langchain4j.UserMessage
+import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.SystemMessage
+import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry

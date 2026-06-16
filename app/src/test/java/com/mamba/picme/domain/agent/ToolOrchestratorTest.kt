@@ -1,14 +1,14 @@
 package com.mamba.picme.domain.agent
 
-import com.mamba.picme.agent.core.langchain4j.AiMessage
-import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
-import com.mamba.picme.agent.core.langchain4j.ChatRequest
-import com.mamba.picme.agent.core.langchain4j.ChatResponse
-import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
-import com.mamba.picme.agent.core.langchain4j.ToolExecutor
-import com.mamba.picme.agent.core.langchain4j.ToolProvider
-import com.mamba.picme.agent.core.langchain4j.ToolSpecification
-import com.mamba.picme.agent.core.langchain4j.UserMessage
+import com.mamba.picme.agent.core.api.AiMessage
+import com.mamba.picme.agent.core.api.ChatLanguageModel
+import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.ToolExecutionRequest
+import com.mamba.picme.agent.core.api.ToolExecutor
+import com.mamba.picme.agent.core.api.ToolProvider
+import com.mamba.picme.agent.core.api.ToolSpecification
+import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.runtime.tool.ToolOrchestrator
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals

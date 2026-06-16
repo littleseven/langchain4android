@@ -4,7 +4,7 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.PageContext
-import com.mamba.picme.agent.core.langchain4j.ToolParameters
+import com.mamba.picme.agent.core.api.ToolParameters
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
 /**

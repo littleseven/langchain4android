@@ -1,6 +1,6 @@
 package com.mamba.picme.agent.core.runtime.tool
 
-import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
+import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types

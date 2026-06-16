@@ -12,8 +12,8 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentErrorCode
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.context.PageContext
-import com.mamba.picme.agent.core.langchain4j.JsonSchemaProperty
-import com.mamba.picme.agent.core.langchain4j.ToolParameters
+import com.mamba.picme.agent.core.api.JsonSchemaProperty
+import com.mamba.picme.agent.core.api.ToolParameters
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType

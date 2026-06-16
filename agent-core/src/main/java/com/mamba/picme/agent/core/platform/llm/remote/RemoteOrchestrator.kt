@@ -13,10 +13,10 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
-import com.mamba.picme.agent.core.langchain4j.ChatRequest
-import com.mamba.picme.agent.core.langchain4j.SystemMessage
-import com.mamba.picme.agent.core.langchain4j.UserMessage
+import com.mamba.picme.agent.core.api.ChatLanguageModel
+import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.SystemMessage
+import com.mamba.picme.agent.core.api.UserMessage
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -114,7 +114,9 @@ class RemoteOrchestrator(
                 messages = listOf(
                     SystemMessage(systemPrompt),
                     UserMessage(userInput)
-                )
+                ),
+                temperature = remoteLlmConfig.l2Temperature,
+                maxTokens = remoteLlmConfig.l2MaxTokens
             )
 
             val content = try {
@@ -167,7 +169,9 @@ class RemoteOrchestrator(
                 messages = listOf(
                     SystemMessage(systemPrompt),
                     UserMessage(userInput)
-                )
+                ),
+                temperature = remoteLlmConfig.l3Temperature,
+                maxTokens = remoteLlmConfig.l3MaxTokens
             )
 
             val content = try {
@@ -228,7 +232,9 @@ class RemoteOrchestrator(
                 messages = listOf(
                     SystemMessage(systemPrompt),
                     UserMessage(userInput)
-                )
+                ),
+                temperature = remoteLlmConfig.l4Temperature,
+                maxTokens = remoteLlmConfig.l4MaxTokens
             )
 
             val content = try {

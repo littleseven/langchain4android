@@ -1,10 +1,10 @@
 package com.mamba.picme.agent.core.runtime.tool
 
-import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
-import com.mamba.picme.agent.core.langchain4j.ChatRequest
-import com.mamba.picme.agent.core.langchain4j.ChatResponse
-import com.mamba.picme.agent.core.langchain4j.ToolExecutionResultMessage
-import com.mamba.picme.agent.core.langchain4j.ToolProvider
+import com.mamba.picme.agent.core.api.ChatLanguageModel
+import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
+import com.mamba.picme.agent.core.api.ToolProvider
 import kotlinx.coroutines.runBlocking
 
 class ToolOrchestrator(

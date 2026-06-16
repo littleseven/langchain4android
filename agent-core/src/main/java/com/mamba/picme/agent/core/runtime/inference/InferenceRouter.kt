@@ -5,12 +5,13 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentIdGenerator
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
 import com.mamba.picme.agent.core.api.execution.PlanStep
-import com.mamba.picme.agent.core.langchain4j.ChatLanguageModel
-import com.mamba.picme.agent.core.langchain4j.ChatRequest
-import com.mamba.picme.agent.core.langchain4j.SystemMessage
-import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
-import com.mamba.picme.agent.core.langchain4j.ToolProvider
-import com.mamba.picme.agent.core.langchain4j.UserMessage
+import com.mamba.picme.agent.core.api.ChatLanguageModel
+import com.mamba.picme.agent.core.api.ToolSpecification
+import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.SystemMessage
+import com.mamba.picme.agent.core.api.ToolExecutionRequest
+import com.mamba.picme.agent.core.api.ToolProvider
+import com.mamba.picme.agent.core.api.UserMessage
 import org.json.JSONObject
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
@@ -24,8 +25,6 @@ import com.mamba.picme.agent.core.runtime.policy.PrivacyLevel
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.agent.core.runtime.tool.ToolCallingChatLanguageModel
 import com.mamba.picme.agent.core.runtime.tool.ToolCallingConfig
-import com.mamba.picme.agent.core.runtime.tool.ToolOrchestrator
-import com.mamba.picme.agent.core.runtime.tool.ToolPromptBuilder
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -184,7 +183,7 @@ class InferenceRouter(
         userInput: String,
         context: AgentContext,
         toolProvider: ToolProvider,
-        toolSpecifications: List<com.mamba.picme.agent.core.langchain4j.ToolSpecification>,
+        toolSpecifications: List<ToolSpecification>,
         toolCallingConfig: ToolCallingConfig
     ): InferenceResult {
         val sceneDescription = SceneManager.getInstance().getSceneDescription(

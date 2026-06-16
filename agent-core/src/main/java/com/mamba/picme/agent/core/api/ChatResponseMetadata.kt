@@ -1,4 +1,4 @@
-package com.mamba.picme.agent.core.langchain4j
+package com.mamba.picme.agent.core.api
 
 data class ChatResponseMetadata(
     val promptTokens: Long = 0,

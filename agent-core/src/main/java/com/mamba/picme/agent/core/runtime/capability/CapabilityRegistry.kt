@@ -9,10 +9,10 @@ import com.mamba.picme.agent.core.api.context.AgentErrorCode
 import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.execution.StepResult
-import com.mamba.picme.agent.core.langchain4j.ToolExecutionRequest
-import com.mamba.picme.agent.core.langchain4j.ToolExecutor
-import com.mamba.picme.agent.core.langchain4j.ToolProvider
-import com.mamba.picme.agent.core.langchain4j.ToolSpecification
+import com.mamba.picme.agent.core.api.ToolExecutionRequest
+import com.mamba.picme.agent.core.api.ToolExecutor
+import com.mamba.picme.agent.core.api.ToolProvider
+import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
