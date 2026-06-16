@@ -77,7 +77,8 @@ class AgentConfigurator(private val context: Context) {
             sceneManager = sceneManager,
             capabilityRegistry = capabilityRegistry,
             intentCache = intentCache,
-            privacyGuard = privacyGuard
+            privacyGuard = privacyGuard,
+            memoryManager = memoryManager
         )
         localInferencePipeline = pipeline
         return pipeline

@@ -12,8 +12,6 @@ import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
@@ -224,7 +222,48 @@ class AgentOrchestrator private constructor(context: Context) {
             Logger.d(tag, "L1 cache learned: '$input' -> ${inferenceResult.command::class.simpleName}")
         }
 
+        // 保存对话到 MemoryManager（供后续历史上下文使用）
+        saveInferenceResultToMemory(input, inferenceResult, agentContext.memorySessionId)
+
         inferenceResult
+    }
+
+    /**
+     * 将 InferenceResult 保存到 MemoryManager
+     */
+    private suspend fun saveInferenceResultToMemory(
+        userInput: String,
+        result: InferenceResult,
+        sessionId: String
+    ) {
+        when (result) {
+            is InferenceResult.Local -> {
+                val responseText = when (val cmd = result.command) {
+                    is AgentCommand.TextReply -> cmd.message
+                    else -> ""
+                }
+                saveConversation(sessionId, userInput, result.command, responseText)
+            }
+            is InferenceResult.Batch -> {
+                val firstCommand = result.commands.firstOrNull()
+                if (firstCommand != null) {
+                    val finalCommand = if (result.commands.size > 1) {
+                        AgentCommand.BatchExecute(commands = result.commands)
+                    } else {
+                        firstCommand
+                    }
+                    saveConversation(sessionId, userInput, finalCommand, "")
+                }
+            }
+            is InferenceResult.Plan -> {
+                val planCommand = AgentCommand.ExecutePlan(plan = result.plan)
+                saveConversation(sessionId, userInput, planCommand, result.plan.description)
+            }
+            is InferenceResult.Chat -> {
+                val textCommand = AgentCommand.TextReply(message = result.message)
+                saveConversation(sessionId, userInput, textCommand, result.message)
+            }
+        }
     }
 
     /**
@@ -272,12 +311,6 @@ class AgentOrchestrator private constructor(context: Context) {
         val systemPrompt = customSystemPrompt
             ?: configurator.localPromptBuilder.buildSystemPrompt(capabilities, agentContext)
 
-        val userPrompt = buildString {
-            appendLine("用户输入: $input")
-            appendLine()
-            appendLine("请只输出一行JSON，不要其他内容:")
-        }
-
         // 3. 根据模式选择推理引擎
         val inferenceResult = when (configurator.getAgentMode()) {
             AiAgentMode.LOCAL -> {
@@ -289,14 +322,15 @@ class AgentOrchestrator private constructor(context: Context) {
                     }
                 }
                 Logger.d(tag, "Using local LLM (MNN-LLM)")
+                // 构建带历史上下文的 messages
+                val localMessages = memoryManager.buildContextMessages(
+                    agentContext.memorySessionId, systemPrompt, input
+                )
                 val responseResult = try {
                     Result.success(
                         localLlmEngine.chat(
                             ChatRequest(
-                                messages = listOf(
-                                    SystemMessage(systemPrompt),
-                                    UserMessage(userPrompt)
-                                )
+                                messages = localMessages
                             )
                         ).aiMessage.text
                     )
@@ -334,13 +368,14 @@ class AgentOrchestrator private constructor(context: Context) {
                         }
                     }
                     val fallbackResult = try {
+                        // 构建带历史上下文的 messages
+                        val fallbackMessages = memoryManager.buildContextMessages(
+                            agentContext.memorySessionId, systemPrompt, input
+                        )
                         Result.success(
                             localLlmEngine.chat(
                                 ChatRequest(
-                                    messages = listOf(
-                                        SystemMessage(systemPrompt),
-                                        UserMessage(userPrompt)
-                                    )
+                                    messages = fallbackMessages
                                 )
                             ).aiMessage.text
                         )

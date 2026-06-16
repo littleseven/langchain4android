@@ -11,6 +11,7 @@ import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.local.prompt.LocalPromptBuilder
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.logging.Logger
+import com.mamba.picme.agent.core.platform.storage.MemoryManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
@@ -36,7 +37,8 @@ class LocalInferencePipeline(
     private val sceneManager: SceneManager,
     private val capabilityRegistry: CapabilityRegistry,
     private val intentCache: IntentCache,
-    private val privacyGuard: PrivacyGuard
+    private val privacyGuard: PrivacyGuard,
+    private val memoryManager: MemoryManager
 ) {
 
     private val tag = "LocalInferencePipeline"
@@ -141,20 +143,15 @@ class LocalInferencePipeline(
     ): InferenceResult {
         val capabilities = capabilityRegistry.getCapabilitiesForCurrentScene()
         val systemPrompt = promptBuilder.buildL2SystemPrompt(capabilities, context)
-        val userPrompt = buildString {
-            appendLine("用户输入: $userInput")
-            appendLine()
-            appendLine("请输出 JSON 数组，不要其他内容:")
-        }
+
+        // 构建带历史上下文的 messages
+        val messages = memoryManager.buildContextMessages(context.memorySessionId, systemPrompt, userInput)
 
         val result = try {
             Result.success(
                 localEngine.chat(
                     ChatRequest(
-                        messages = listOf(
-                            SystemMessage(systemPrompt),
-                            UserMessage(userPrompt)
-                        )
+                        messages = messages
                     )
                 ).aiMessage.text
             )
@@ -213,20 +210,15 @@ class LocalInferencePipeline(
     ): InferenceResult {
         val capabilities = capabilityRegistry.getCapabilitiesForCurrentScene()
         val systemPrompt = promptBuilder.buildL2SystemPrompt(capabilities, context)
-        val userPrompt = buildString {
-            appendLine("用户输入: $userInput")
-            appendLine()
-            appendLine("请输出 JSON 数组，不要其他内容:")
-        }
+
+        // 构建带历史上下文的 messages
+        val messages = memoryManager.buildContextMessages(context.memorySessionId, systemPrompt, userInput)
 
         val result = try {
             Result.success(
                 localEngine.chat(
                     ChatRequest(
-                        messages = listOf(
-                            SystemMessage(systemPrompt),
-                            UserMessage(userPrompt)
-                        )
+                        messages = messages
                     )
                 ).aiMessage.text
             )
@@ -295,20 +287,15 @@ class LocalInferencePipeline(
     ): InferenceResult {
         val capabilities = capabilityRegistry.getCapabilitiesForCurrentScene()
         val systemPrompt = promptBuilder.buildSystemPrompt(capabilities, context)
-        val userPrompt = buildString {
-            appendLine("用户输入: $userInput")
-            appendLine()
-            appendLine("请只输出一行JSON，不要其他内容:")
-        }
+
+        // 构建带历史上下文的 messages
+        val messages = memoryManager.buildContextMessages(context.memorySessionId, systemPrompt, userInput)
 
         val result = try {
             Result.success(
                 localEngine.chat(
                     ChatRequest(
-                        messages = listOf(
-                            SystemMessage(systemPrompt),
-                            UserMessage(userPrompt)
-                        )
+                        messages = messages
                     )
                 ).aiMessage.text
             )
