@@ -237,11 +237,19 @@ class LangChain4jOpenAiClient(
         for (i in 0 until toolCalls.length()) {
             val tc = toolCalls.getJSONObject(i)
             val func = tc.optJSONObject("function") ?: continue
+            // arguments 可能是 JSON 字符串如 "{"delay_ms":5000}" 或 JSON 对象 {"delay_ms":5000}
+            // 使用 opt() 获取原始值，然后统一转为字符串
+            val arguments = when (val raw = func.opt("arguments")) {
+                is JSONObject -> raw.toString()
+                is String -> raw
+                else -> "{}"
+            }
+            Logger.d(tag, "Tool call #$i: name=${func.optString("name", "")}, arguments=$arguments")
             requests.add(
                 ToolExecutionRequest(
                     id = tc.optString("id", ""),
                     name = func.optString("name", ""),
-                    arguments = func.optString("arguments", "{}")
+                    arguments = arguments
                 )
             )
         }

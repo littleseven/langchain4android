@@ -135,7 +135,7 @@ class RemoteOrchestrator(
             }
 
             val latencyMs = System.currentTimeMillis() - startTime
-
+            
             // 优先使用 tool_calls（标准 OpenAI 协议）
             val toolRequests = response.aiMessage.toolExecutionRequests
             if (toolRequests.isNotEmpty()) {
@@ -146,13 +146,26 @@ class RemoteOrchestrator(
                 )
                 return InferenceResult.Batch(commands = commands)
             }
-
-            // 降级：解析文本 JSON（LLM 未使用 tool_calls 时）
+            
+            // 没有 tool_calls：尝试从文本内容中回退解析 tool_calls JSON
             val textContent = response.aiMessage.text
-            Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$textContent\"")
-            val commands = parseCommandArray(textContent, context)
-            Logger.d(tag, "[L2-BATCH] text parsed ${commands.size} commands")
-            return InferenceResult.Batch(commands = commands)
+            if (textContent.isNotBlank()) {
+                val fallbackCommands = parseFallbackToolCalls(textContent, context)
+                if (fallbackCommands.isNotEmpty()) {
+                    Logger.w(tag, "[L2-BATCH] tool_calls missing in API response, fallback parsed ${fallbackCommands.size} commands from content")
+                    return InferenceResult.Batch(commands = fallbackCommands)
+                }
+                Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$textContent\", treating as text reply")
+            } else {
+                Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content is blank AND no tool_calls — possible proxy/cors stripping")
+            }
+            return InferenceResult.Batch(
+                commands = listOf(
+                    AgentCommand.TextReply(
+                        message = textContent.ifBlank { "收到，有什么其他需要帮忙的吗？" }
+                    )
+                )
+            )
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${exception.message}", exception)
@@ -279,6 +292,78 @@ class RemoteOrchestrator(
     }
 
     // ── 解析器 ─────────────────────────────────────────────────
+
+    /**
+     * 当 API 响应缺少 tool_calls 字段时，尝试从文本内容中回退解析
+     *
+     * 某些代理/网关（如 SCF）可能剥离 tool_calls 字段，仅保留文本内容。
+     * 如果 LLM 产出的 tool_calls JSON 被输出到 content 字段中，此方法可以兜底恢复。
+     */
+    private fun parseFallbackToolCalls(
+        content: String,
+        context: AgentContext
+    ): List<AgentCommand> {
+        val cleaned = cleanJsonContent(content)
+
+        // 尝试 1: 解析为 {tool_calls: [...]} 结构
+        try {
+            val jsonObj = JSONObject(cleaned)
+            val toolCallsArray = jsonObj.optJSONArray("tool_calls")
+            if (toolCallsArray != null && toolCallsArray.length() > 0) {
+                val requests = mutableListOf<ToolExecutionRequest>()
+                for (i in 0 until toolCallsArray.length()) {
+                    val tc = toolCallsArray.getJSONObject(i)
+                    val func = tc.optJSONObject("function") ?: continue
+                    val arguments = when (val raw = func.opt("arguments")) {
+                        is JSONObject -> raw.toString()
+                        is String -> raw
+                        else -> "{}"
+                    }
+                    Logger.d(tag, "[Fallback] Tool call #$i: name=${func.optString("name", "")}, arguments=$arguments")
+                    requests.add(
+                        ToolExecutionRequest(
+                            id = tc.optString("id", "fallback_$i"),
+                            name = func.optString("name", ""),
+                            arguments = arguments
+                        )
+                    )
+                }
+                if (requests.isNotEmpty()) {
+                    return parseToolCalls(requests, context)
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 尝试 2: 解析为 method/params JSON 数组（兼容旧格式）
+        try {
+            val jsonArray = JSONArray(cleaned)
+            if (jsonArray.length() > 0) {
+                val commands = mutableListOf<AgentCommand>()
+                for (i in 0 until jsonArray.length()) {
+                    try {
+                        val item = jsonArray.getJSONObject(i)
+                        commands.add(parseAgentCommand(item, context))
+                    } catch (e: Exception) {
+                        Logger.e(tag, "[Fallback] Failed to parse array item #$i", e)
+                    }
+                }
+                if (commands.isNotEmpty()) {
+                    return commands
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 尝试 3: 单个 JSON 对象
+        try {
+            val jsonObj = JSONObject(cleaned)
+            val method = jsonObj.optString("method", jsonObj.optString("name", ""))
+            if (method.isNotBlank()) {
+                return listOf(parseAgentCommand(jsonObj, context))
+            }
+        } catch (_: Exception) {}
+
+        return emptyList()
+    }
 
     /**
      * 构建 L2 Batch 模式的 ToolSpecifications
@@ -498,8 +583,10 @@ class RemoteOrchestrator(
         context: AgentContext
     ): List<AgentCommand> {
         val commands = mutableListOf<AgentCommand>()
-        for (req in toolRequests) {
+        Logger.d(tag, "[parseToolCalls] Processing ${toolRequests.size} tool calls")
+        for ((index, req) in toolRequests.withIndex()) {
             try {
+                Logger.d(tag, "[parseToolCalls] #$index: name=${req.name}, arguments=${req.arguments}")
                 // 构建 {method, params...} 格式供 parseAgentCommand 使用
                 val json = JSONObject().apply {
                     put("method", req.name)
@@ -507,51 +594,19 @@ class RemoteOrchestrator(
                     try {
                         val args = JSONObject(req.arguments)
                         put("params", args)
+                        Logger.d(tag, "[parseToolCalls] #$index: parsed params keys=${args.keys().asSequence().toList()}")
                     } catch (_: Exception) {
-                        // arguments 不是有效 JSON，按空处理
+                        Logger.w(tag, "[parseToolCalls] #$index: arguments not valid JSON: ${req.arguments}")
                     }
                 }
-                commands.add(parseAgentCommand(json, context))
+                val command = parseAgentCommand(json, context)
+                commands.add(command)
+                Logger.d(tag, "[parseToolCalls] #$index: -> ${command::class.simpleName}")
             } catch (e: Exception) {
-                Logger.e(tag, "Failed to parse tool_call: name=${req.name}, args=${req.arguments}", e)
+                Logger.e(tag, "[parseToolCalls] FAILED: name=${req.name}, args=${req.arguments}", e)
             }
         }
         return commands
-    }
-
-    /**
-     * 解析 L2 Batch 的命令数组
-     */
-    private fun parseCommandArray(
-        content: String,
-        context: AgentContext
-    ): List<AgentCommand> {
-        val cleaned = cleanJsonContent(content)
-
-        return try {
-            when {
-                cleaned.startsWith("[") && cleaned.endsWith("]") -> {
-                    val jsonArray = JSONArray(cleaned)
-                    val commands = mutableListOf<AgentCommand>()
-                    for (index in 0 until jsonArray.length()) {
-                        val jsonObject = jsonArray.getJSONObject(index)
-                        val command = parseAgentCommand(jsonObject, context)
-                        commands.add(command)
-                    }
-                    commands
-                }
-                cleaned.startsWith("{") && cleaned.endsWith("}") -> {
-                    val jsonObject = JSONObject(cleaned)
-                    listOf(parseAgentCommand(jsonObject, context))
-                }
-                else -> {
-                    listOf(AgentCommand.TextReply(message = cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
-                }
-            }
-        } catch (exception: Exception) {
-            Logger.e(tag, "Failed to parse command array: $cleaned", exception)
-            listOf(AgentCommand.TextReply(message = cleaned.ifBlank { "收到，有什么其他需要帮忙的吗？" }))
-        }
     }
 
     /**
@@ -756,7 +811,7 @@ class RemoteOrchestrator(
     // ── 辅助方法 ───────────────────────────────────────────────
 
     /**
-     * 清理 JSON 内容，移除 think 标签和 markdown 代码块
+     * 清理 JSON 内容，移除 think 标签和代码块
      */
     private fun cleanJsonContent(content: String): String {
         var cleaned = content.trim()
@@ -777,9 +832,9 @@ class RemoteOrchestrator(
             cleaned = cleaned.substring(0, orphanThinkStart).trim()
         }
 
-        // 移除 markdown 代码块
+        // 移除代码块
         cleaned = cleaned.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-
+        
         return cleaned
     }
 
