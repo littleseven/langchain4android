@@ -17,6 +17,10 @@ import com.mamba.picme.agent.core.api.ChatLanguageModel
 import com.mamba.picme.agent.core.api.ChatRequest
 import com.mamba.picme.agent.core.api.SystemMessage
 import com.mamba.picme.agent.core.api.UserMessage
+import com.mamba.picme.agent.core.api.ToolSpecification
+import com.mamba.picme.agent.core.api.ToolParameters
+import com.mamba.picme.agent.core.api.JsonSchemaProperty
+import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -115,12 +119,13 @@ class RemoteOrchestrator(
                     SystemMessage(systemPrompt),
                     UserMessage(userInput)
                 ),
+                toolSpecifications = buildL2ToolSpecifications(),
                 temperature = remoteLlmConfig.l2Temperature,
                 maxTokens = remoteLlmConfig.l2MaxTokens
             )
 
-            val content = try {
-                chatLanguageModel.chat(chatRequest).aiMessage.text
+            val response = try {
+                chatLanguageModel.chat(chatRequest)
             } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
@@ -130,10 +135,23 @@ class RemoteOrchestrator(
             }
 
             val latencyMs = System.currentTimeMillis() - startTime
-            Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$content\"")
 
-            val commands = parseCommandArray(content, context)
-            Logger.d(tag, "[L2-BATCH] parsed ${commands.size} commands")
+            // 优先使用 tool_calls（标准 OpenAI 协议）
+            val toolRequests = response.aiMessage.toolExecutionRequests
+            if (toolRequests.isNotEmpty()) {
+                val commands = parseToolCalls(toolRequests, context)
+                Logger.d(
+                    tag,
+                    "[L2-BATCH] tool_calls OK latency=${latencyMs}ms, ${toolRequests.size} calls -> ${commands.size} commands"
+                )
+                return InferenceResult.Batch(commands = commands)
+            }
+
+            // 降级：解析文本 JSON（LLM 未使用 tool_calls 时）
+            val textContent = response.aiMessage.text
+            Logger.d(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$textContent\"")
+            val commands = parseCommandArray(textContent, context)
+            Logger.d(tag, "[L2-BATCH] text parsed ${commands.size} commands")
             return InferenceResult.Batch(commands = commands)
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
@@ -261,6 +279,245 @@ class RemoteOrchestrator(
     }
 
     // ── 解析器 ─────────────────────────────────────────────────
+
+    /**
+     * 构建 L2 Batch 模式的 ToolSpecifications
+     *
+     * 将可用命令映射为标准 OpenAI function calling tools，
+     * 使远程 LLM 以 tool_calls 协议返回命令，而非文本 JSON。
+     */
+    private fun buildL2ToolSpecifications(): List<ToolSpecification> {
+        return listOf(
+            ToolSpecification(
+                name = "capture",
+                description = "拍照",
+                parameters = ToolParameters()
+            ),
+            ToolSpecification(
+                name = "toggle_recording",
+                description = "切换录像（开始/停止）",
+                parameters = ToolParameters()
+            ),
+            ToolSpecification(
+                name = "flip_camera",
+                description = "切换前后摄像头",
+                parameters = ToolParameters()
+            ),
+            ToolSpecification(
+                name = "adjust_beauty",
+                description = "调整美颜参数（磨皮、美白、瘦脸、大眼等）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "smoothing" to JsonSchemaProperty(type = "integer", description = "磨皮 0-100"),
+                        "whitening" to JsonSchemaProperty(type = "integer", description = "美白 0-100"),
+                        "slim_face" to JsonSchemaProperty(type = "integer", description = "瘦脸 -50-50"),
+                        "big_eyes" to JsonSchemaProperty(type = "integer", description = "大眼 0-100"),
+                        "lip_color" to JsonSchemaProperty(type = "integer", description = "唇色 0-100"),
+                        "blush" to JsonSchemaProperty(type = "integer", description = "腮红 0-100"),
+                        "eyebrow" to JsonSchemaProperty(type = "integer", description = "眉毛 0-100")
+                    )
+                )
+            ),
+            ToolSpecification(
+                name = "switch_filter",
+                description = "切换滤镜（冷色/暖色/复古/胶片金等）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "filter" to JsonSchemaProperty(
+                            type = "string",
+                            description = "滤镜名称",
+                            enum = listOf("NONE", "LEICA_CLASSIC", "LEICA_VIBRANT", "LEICA_BW", "FILM_GOLD", "FILM_FUJI", "VINTAGE", "COOL", "WARM")
+                        )
+                    ),
+                    required = listOf("filter")
+                )
+            ),
+            ToolSpecification(
+                name = "switch_style",
+                description = "切换艺术风格（漫画/素描/海报等）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "style" to JsonSchemaProperty(
+                            type = "string",
+                            description = "风格名称",
+                            enum = listOf("NONE", "TOON", "SKETCH", "POSTERIZE", "EMBOSS", "CROSSHATCH")
+                        )
+                    ),
+                    required = listOf("style")
+                )
+            ),
+            ToolSpecification(
+                name = "switch_scene",
+                description = "切换场景模式（夜景/月亮/普通）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "scene" to JsonSchemaProperty(
+                            type = "string",
+                            description = "场景名称",
+                            enum = listOf("night", "moon", "none")
+                        )
+                    ),
+                    required = listOf("scene")
+                )
+            ),
+            ToolSpecification(
+                name = "switch_ratio",
+                description = "切换画面比例",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "ratio" to JsonSchemaProperty(
+                            type = "string",
+                            description = "比例",
+                            enum = listOf("4:3", "16:9", "full")
+                        )
+                    ),
+                    required = listOf("ratio")
+                )
+            ),
+            ToolSpecification(
+                name = "adjust_exposure",
+                description = "调整曝光补偿",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "exposure" to JsonSchemaProperty(type = "integer", description = "曝光值 -2 到 2")
+                    ),
+                    required = listOf("exposure")
+                )
+            ),
+            ToolSpecification(
+                name = "adjust_zoom",
+                description = "调整变焦倍数",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "zoom" to JsonSchemaProperty(type = "number", description = "变焦倍数 0.5-10")
+                    ),
+                    required = listOf("zoom")
+                )
+            ),
+            ToolSpecification(
+                name = "switch_mode",
+                description = "切换拍摄模式",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "mode" to JsonSchemaProperty(
+                            type = "string",
+                            description = "拍摄模式",
+                            enum = listOf("PHOTO", "VIDEO", "PRO", "DOCUMENT")
+                        )
+                    ),
+                    required = listOf("mode")
+                )
+            ),
+            ToolSpecification(
+                name = "delay",
+                description = "延迟执行（必须先执行delay，再执行后续命令）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "delay_ms" to JsonSchemaProperty(type = "integer", description = "延迟毫秒数")
+                    ),
+                    required = listOf("delay_ms")
+                )
+            ),
+            ToolSpecification(
+                name = "navigate_to",
+                description = "导航到指定页面",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "destination" to JsonSchemaProperty(
+                            type = "string",
+                            description = "目标页面",
+                            enum = listOf("camera", "gallery", "settings", "debug")
+                        )
+                    ),
+                    required = listOf("destination")
+                )
+            ),
+            ToolSpecification(
+                name = "go_back",
+                description = "返回上一页",
+                parameters = ToolParameters()
+            ),
+            ToolSpecification(
+                name = "text_reply",
+                description = "文本回复（闲聊/问答/无法执行时使用）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "message" to JsonSchemaProperty(type = "string", description = "回复内容")
+                    ),
+                    required = listOf("message")
+                )
+            ),
+            ToolSpecification(
+                name = "launch_app",
+                description = "打开本机应用",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "package_name" to JsonSchemaProperty(type = "string", description = "应用包名"),
+                        "app_name" to JsonSchemaProperty(type = "string", description = "应用名称")
+                    )
+                )
+            ),
+            ToolSpecification(
+                name = "open_system_settings",
+                description = "打开系统设置页面",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "setting" to JsonSchemaProperty(
+                            type = "string",
+                            description = "设置项",
+                            enum = listOf("wifi", "bluetooth", "accessibility", "display", "location", "app_notifications")
+                        )
+                    ),
+                    required = listOf("setting")
+                )
+            ),
+            ToolSpecification(
+                name = "perform_accessibility_action",
+                description = "在其他应用执行无障碍操作（点击/长按/输入/滑动/返回/主页/最近任务）",
+                parameters = ToolParameters(
+                    properties = mapOf(
+                        "action" to JsonSchemaProperty(
+                            type = "string",
+                            description = "操作类型",
+                            enum = listOf("click", "long_click", "input", "scroll_forward", "scroll_backward", "back", "home", "recent")
+                        ),
+                        "target" to JsonSchemaProperty(type = "object", description = "目标元素 {type, value}"),
+                        "text" to JsonSchemaProperty(type = "string", description = "输入文本")
+                    ),
+                    required = listOf("action")
+                )
+            )
+        )
+    }
+
+    /**
+     * 将 tool_execution_requests 转换为 AgentCommand 列表
+     */
+    private fun parseToolCalls(
+        toolRequests: List<ToolExecutionRequest>,
+        context: AgentContext
+    ): List<AgentCommand> {
+        val commands = mutableListOf<AgentCommand>()
+        for (req in toolRequests) {
+            try {
+                // 构建 {method, params...} 格式供 parseAgentCommand 使用
+                val json = JSONObject().apply {
+                    put("method", req.name)
+                    // 解析 arguments JSON 字符串为 params 对象
+                    try {
+                        val args = JSONObject(req.arguments)
+                        put("params", args)
+                    } catch (_: Exception) {
+                        // arguments 不是有效 JSON，按空处理
+                    }
+                }
+                commands.add(parseAgentCommand(json, context))
+            } catch (e: Exception) {
+                Logger.e(tag, "Failed to parse tool_call: name=${req.name}, args=${req.arguments}", e)
+            }
+        }
+        return commands
+    }
 
     /**
      * 解析 L2 Batch 的命令数组

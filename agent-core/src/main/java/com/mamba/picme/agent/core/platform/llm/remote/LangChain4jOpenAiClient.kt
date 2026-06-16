@@ -185,8 +185,29 @@ class LangChain4jOpenAiClient(
             put("function", JSONObject().apply {
                 put("name", spec.name)
                 put("description", spec.description)
-                // 简化处理：不传递完整 JSON Schema，仅传递 description
-                // Android 端 LLM 通常不需要完整 JSON Schema 即可生成参数
+                // 串联 JSON Schema parameters
+                val params = spec.parameters
+                if (params.properties.isNotEmpty() || params.required.isNotEmpty()) {
+                    put("parameters", JSONObject().apply {
+                        put("type", params.type)
+                        if (params.properties.isNotEmpty()) {
+                            val props = JSONObject()
+                            for ((key, prop) in params.properties) {
+                                props.put(key, JSONObject().apply {
+                                    put("type", prop.type)
+                                    prop.description?.let { put("description", it) }
+                                    prop.enum?.let {
+                                        put("enum", JSONArray(it))
+                                    }
+                                })
+                            }
+                            put("properties", props)
+                        }
+                        if (params.required.isNotEmpty()) {
+                            put("required", JSONArray(params.required))
+                        }
+                    })
+                }
             })
         }
     }
