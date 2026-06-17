@@ -16,6 +16,7 @@ PicMe 是一个元实验（meta-experiment），同时探索三个层次：
 | **架构层** | Agent First 客户端框架 | 什么样的架构让 Agent 最高效？ |
 | **流程层** | Agent First 研发流程 | Agent 如何通过编排 Tools 完成开发？ |
 | **2026-06 方向更新** | 觅影相机→觅影相册 | 产品重心迁移至相册与图片编辑，验证 AI 相册技术路线 |
+| **2026-06-17 IM远程控制新增** | 飞书/IM 远程控制 | 通过 IM + LLM 实现 App 远程控制，融合相册编辑能力 |
 
 **核心假设**：当基础设施原子化为 Tools 层后，Agent 可以从「辅助工具」进化为「主导力量」。
 
@@ -239,12 +240,12 @@ FEATURES.md (How: 交互与体验)
 代码实现
 ```
 
-### 5.2 任务标记规范 `[kimi-task]`
+### 5.2 任务标记规范 `[agent-task]`
 
 AI 可直接解析 Spec 中的任务标记，生成执行计划：
 
 ```markdown
-### 调节美颜参数 [kimi-task:beauty-001]
+### 调节美颜参数 [agent-task:beauty-001]
 - **Assignee**: RD
 - **Scope**: `domain/agent/capability/AdjustBeautyCapability.kt`
 - **Expected Change**:
@@ -304,6 +305,7 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 | **AI 协作角色** | `agents/README.md`, `agents/co_agent.md`, `agents/rd_agent.md`, `agents/pm_agent.md`, `agents/review_agent.md`, `agents/qa_agent.md` |
 | **模块规范** | 各模块 `AGENTS.md`（`app/`、`beauty-engine/`、`agent-core/`、`app/src/.../features/camera/` 等） |
 | **技术专项** | `docs/*.md` |
+| **IM 远程控制技术规格（新增）** | `docs/03-TECHNICAL-SPECS/IM_REMOTE_CONTROL_TECH_SPEC.md` |
 
 > **架构说明（2026-06-15）**：
 > - **本地/远程推理协议已分离**（ADR-005）：本地使用自定义 JSON 数组协议，远程使用标准 OpenAI Chat Completions API 协议（含 tool_calls、流式、多轮对话）。两条链路完全独立，无共享路由逻辑。
@@ -326,5 +328,5 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 ---
 
 > **维护者**：CO Agent
-> **最后更新**：2026-06-15
-> **实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + 冗余清理 + 相册/编辑产品重心迁移）
+> **最后更新**：2026-06-17
+> **实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + 冗余清理 + 相册/编辑产品重心迁移 + IM 远程控制产品线新增）

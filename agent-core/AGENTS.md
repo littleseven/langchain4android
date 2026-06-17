@@ -42,7 +42,7 @@
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |
 | `voice/` | `AsrEngine`, `VadDetector`, `MnnAsrClient`, `AudioRecorder`, `SherpaMnnAsrEngine` | 语音交互 |
-| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `IntentCache`, `ExecutionPlan` + `kimi/` (KimiCodingApiClient 等) + `openai/` (OpenAiApiClient 等) | 远程推理编排（标准 OpenAI Chat Completions 协议） |
+| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `IntentCache`, `ExecutionPlan` + `claude/` (ClaudeCodingApiClient 等) + `openai/` (OpenAiApiClient 等) | 远程推理编排（标准 OpenAI Chat Completions 协议） |
 
 > **2026-06-15 架构更新（ADR-005）**：
 > - 移除 `InferenceRouter`（拆分为 `LocalInferencePipeline` + `RemoteInferencePipeline`）
@@ -140,9 +140,9 @@
 - `UnifiedRemoteClient.kt` — 统一远程客户端（OpenAI 标准协议）
 - `IntentCache.kt` — 意图缓存
 - `ExecutionPlan.kt` — 执行计划
-- `kimi/KimiCodingModels.kt` — Kimi 模型定义
-- `kimi/KimiCodingApiClient.kt` — Kimi API 客户端
-- `kimi/KimiCodingApiService.kt` — Kimi API 服务
+- `claude/ClaudeCodingModels.kt` — Claude 模型定义
+- `claude/ClaudeCodingApiClient.kt` — Claude API 客户端
+- `claude/ClaudeCodingApiService.kt` — Claude API 服务
 - `openai/OpenAiModels.kt` — OpenAI 模型定义
 - `openai/OpenAiApiClient.kt` — OpenAI API 客户端
 - `openai/OpenAiApiService.kt` — OpenAI API 服务

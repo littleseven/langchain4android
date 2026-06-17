@@ -1,21 +1,21 @@
-package com.mamba.picme.data.remote.kimi
+package com.mamba.picme.agent.core.platform.llm.remote.claude
 
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 /**
- * Kimi Coding API 请求/响应数据模型
+ * Claude Coding API 请求/响应数据模型
  *
  * 基于 Claude API 格式设计，兼容 Kimi Coding 服务。
- * Endpoint: https://api.kimi.com/coding/v1/messages
+ * Endpoint: https://api.anthropic.com/v1/messages
  *
- * @see <a href="https://platform.moonshot.cn">Kimi 开放平台</a>
+ * @see <a href="https://docs.anthropic.com/en/api/getting-started">Claude API 文档</a>
  */
 
 /**
- * Kimi Coding 消息请求
+ * Claude Coding 消息请求
  *
- * @property model 模型 ID，如 "kimi-for-coding"
+ * @property model 模型 ID
  * @property messages 消息列表（必须包含至少一条 user 消息）
  * @property system 系统提示词（可选，Claude 格式支持顶层 system 字段）
  * @property maxTokens 最大生成 token 数
@@ -23,9 +23,9 @@ import com.squareup.moshi.JsonClass
  * @property stream 是否开启流式响应
  */
 @JsonClass(generateAdapter = true)
-data class KimiCodingRequest(
+data class ClaudeCodingRequest(
     val model: String,
-    val messages: List<KimiCodingMessage>,
+    val messages: List<ClaudeCodingMessage>,
     val system: String? = null,
     @Json(name = "max_tokens")
     val maxTokens: Int = 1024,
@@ -34,36 +34,36 @@ data class KimiCodingRequest(
 )
 
 @JsonClass(generateAdapter = true)
-data class KimiCodingMessage(
+data class ClaudeCodingMessage(
     val role: String,
     val content: String
 )
 
 /**
- * Kimi Coding 消息响应（非流式）
+ * Claude Coding 消息响应（非流式）
  *
  * 与 Claude API 格式一致。
  */
 @JsonClass(generateAdapter = true)
-data class KimiCodingResponse(
+data class ClaudeCodingResponse(
     val id: String,
     val type: String,
     val role: String,
-    val content: List<KimiCodingContentBlock>,
+    val content: List<ClaudeCodingContentBlock>,
     val model: String,
     @Json(name = "stop_reason")
     val stopReason: String?,
-    val usage: KimiCodingUsage?
+    val usage: ClaudeCodingUsage?
 )
 
 @JsonClass(generateAdapter = true)
-data class KimiCodingContentBlock(
+data class ClaudeCodingContentBlock(
     val type: String,
     val text: String
 )
 
 @JsonClass(generateAdapter = true)
-data class KimiCodingUsage(
+data class ClaudeCodingUsage(
     @Json(name = "input_tokens")
     val inputTokens: Int,
     @Json(name = "output_tokens")
@@ -73,15 +73,15 @@ data class KimiCodingUsage(
 )
 
 /**
- * Kimi Coding 错误响应
+ * Claude Coding 错误响应
  */
 @JsonClass(generateAdapter = true)
-data class KimiCodingErrorResponse(
-    val error: KimiCodingErrorDetail?
+data class ClaudeCodingErrorResponse(
+    val error: ClaudeCodingErrorDetail?
 )
 
 @JsonClass(generateAdapter = true)
-data class KimiCodingErrorDetail(
+data class ClaudeCodingErrorDetail(
     val message: String,
     val type: String?
 )
