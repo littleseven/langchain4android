@@ -25,8 +25,10 @@ import com.mamba.picme.agent.core.api.JsonSchemaProperty
 import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
+import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -77,6 +79,13 @@ object RemoteLlmConfig {
  * 负责执行 L2 Batch FC、L3 Plan-and-Execute、L4 Chat 三种远程推理模式。
  * 通过 [UnifiedRemoteClient] 自动适配 Claude/OpenAI 协议。
  *
+ * **线程模型**：
+ * - **网络线程**（PicMe-Network-Thread）：由 [ThreadPoolManager] 集中管理的专用单线程，
+ *   负责所有 HTTP API 调用。与编排线程、DataStore 线程和 LLM 推理线程完全隔离。
+ * - 同步 HTTP 调用（OkHttp `execute()` / Retrofit）在此网络线程上执行，
+ *   不阻塞编排线程。
+ * - 异步 HTTP 调用（OkHttp `enqueue()` 流式）由 OkHttp 内部线程池处理。
+ *
  * @param context Application Context，用于加载本地配置
  * @param remoteConfig 远程模型配置
  * @param promptBuilder Prompt 构建器
@@ -89,6 +98,8 @@ class RemoteOrchestrator(
 ) {
 
     private val tag = "RemoteOrchestrator"
+
+    private val networkDispatcher = ThreadPoolManager.getInstance().networkDispatcher
 
     /**
      * 流式聊天语言模型（兼容层）
@@ -138,7 +149,9 @@ class RemoteOrchestrator(
             )
 
             val response = try {
-                chatLanguageModel.chat(chatRequest)
+                withContext(networkDispatcher) {
+                    chatLanguageModel.chat(chatRequest)
+                }
             } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L2-BATCH] ERR: latency=${latencyMs}ms, ${error.message}", error)
@@ -219,7 +232,9 @@ class RemoteOrchestrator(
             )
 
             val content = try {
-                chatLanguageModel.chat(chatRequest).aiMessage.text
+                withContext(networkDispatcher) {
+                    chatLanguageModel.chat(chatRequest)
+                }.aiMessage.text
             } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
@@ -282,7 +297,9 @@ class RemoteOrchestrator(
             )
 
             val content = try {
-                chatLanguageModel.chat(chatRequest).aiMessage.text
+                withContext(networkDispatcher) {
+                    chatLanguageModel.chat(chatRequest)
+                }.aiMessage.text
             } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${error.message}", error)

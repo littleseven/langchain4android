@@ -13,8 +13,12 @@ import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
 import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.platform.logging.Logger
+import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -25,6 +29,9 @@ private val Context.agentMemoryDataStore: DataStore<Preferences> by preferencesD
  *
  * 负责对话历史的持久化、上下文窗口管理和记忆隔离。
  * 按场景分 session 存储，支持跨会话记忆恢复。
+ * **线程模型**：所有 DataStore 读写操作由 [ThreadPoolManager] 集中管理的专用单线程
+ *（PicMe-DataStore-Thread）串行执行，与本地 LLM 推理和网络请求完全隔离，
+ * 不会相互阻塞或竞争。
  *
  * @param context Application Context
  */
@@ -32,6 +39,8 @@ class MemoryManager(private val context: Context) {
 
     private val tag = "MemoryManager"
     private val dataStore = context.agentMemoryDataStore
+
+    private val dataStoreDispatcher = ThreadPoolManager.getInstance().dataStoreDispatcher
 
     /**
      * 每个 session 的最大消息数
@@ -49,18 +58,23 @@ class MemoryManager(private val context: Context) {
      * @param sessionId 会话 ID（如 "camera", "gallery"）
      * @return 消息列表
      */
-    suspend fun loadHistory(sessionId: String): List<ChatMessage> {
-        return try {
+    suspend fun loadHistory(sessionId: String): List<ChatMessage> = withContext(dataStoreDispatcher) {
+        return@withContext try {
             val key = stringPreferencesKey("memory_$sessionId")
-            val jsonStr = dataStore.data.map { preferences ->
-                preferences[key] ?: "[]"
-            }.first()
+            val jsonStr = withTimeout(5000) {
+                dataStore.data.map { preferences ->
+                    preferences[key] ?: "[]"
+                }.first()
+            }
 
             if (jsonStr == "[]") {
                 emptyList()
             } else {
                 parseMessagesFromJson(jsonStr)
             }
+        } catch (exception: TimeoutCancellationException) {
+            Logger.w(tag, "Timeout loading history for session $sessionId")
+            emptyList()
         } catch (exception: Exception) {
             Logger.w(tag, "Failed to load history for session $sessionId", exception)
             emptyList()
@@ -73,16 +87,20 @@ class MemoryManager(private val context: Context) {
      * @param sessionId 会话 ID
      * @param messages 消息列表
      */
-    suspend fun saveHistory(sessionId: String, messages: List<ChatMessage>) {
-        try {
+    suspend fun saveHistory(sessionId: String, messages: List<ChatMessage>) = withContext(dataStoreDispatcher) {
+        return@withContext try {
             val trimmed = trimToMaxSize(messages)
             val key = stringPreferencesKey("memory_$sessionId")
             val jsonStr = encodeMessagesToJson(trimmed)
 
-            dataStore.edit { preferences ->
-                preferences[key] = jsonStr
+            withTimeout(5000) {
+                dataStore.edit { preferences ->
+                    preferences[key] = jsonStr
+                }
             }
             Logger.d(tag, "Saved ${trimmed.size} messages to session $sessionId")
+        } catch (exception: TimeoutCancellationException) {
+            Logger.w(tag, "Timeout saving history for session $sessionId")
         } catch (exception: Exception) {
             Logger.e(tag, "Failed to save history for session $sessionId", exception)
         }
@@ -123,13 +141,17 @@ class MemoryManager(private val context: Context) {
      *
      * @param sessionId 会话 ID
      */
-    suspend fun clearHistory(sessionId: String) {
-        try {
+    suspend fun clearHistory(sessionId: String) = withContext(dataStoreDispatcher) {
+        return@withContext try {
             val key = stringPreferencesKey("memory_$sessionId")
-            dataStore.edit { preferences ->
-                preferences.remove(key)
+            withTimeout(5000) {
+                dataStore.edit { preferences ->
+                    preferences.remove(key)
+                }
             }
             Logger.i(tag, "Cleared history for session $sessionId")
+        } catch (exception: TimeoutCancellationException) {
+            Logger.w(tag, "Timeout clearing history for session $sessionId")
         } catch (exception: Exception) {
             Logger.e(tag, "Failed to clear history for session $sessionId", exception)
         }
@@ -138,15 +160,19 @@ class MemoryManager(private val context: Context) {
     /**
      * 清空所有 session 的对话历史
      */
-    suspend fun clearAllHistory() {
-        try {
-            dataStore.edit { preferences ->
-                preferences.asMap().keys.filter { it.name.startsWith("memory_") }
-                    .forEach { key ->
-                        preferences.remove(key)
-                    }
+    suspend fun clearAllHistory() = withContext(dataStoreDispatcher) {
+        return@withContext try {
+            withTimeout(5000) {
+                dataStore.edit { preferences ->
+                    preferences.asMap().keys.filter { it.name.startsWith("memory_") }
+                        .forEach { key ->
+                            preferences.remove(key)
+                        }
+                }
             }
             Logger.i(tag, "Cleared all conversation history")
+        } catch (exception: TimeoutCancellationException) {
+            Logger.w(tag, "Timeout clearing all history")
         } catch (exception: Exception) {
             Logger.e(tag, "Failed to clear all history", exception)
         }
@@ -166,7 +192,7 @@ class MemoryManager(private val context: Context) {
         sessionId: String,
         systemPrompt: String,
         userInput: String
-    ): List<ChatMessage> {
+    ): List<ChatMessage> = withContext(dataStoreDispatcher) {
         val history = loadHistory(sessionId)
         val trimmedHistory = trimToRounds(history, maxHistoryRounds)
 
@@ -175,7 +201,7 @@ class MemoryManager(private val context: Context) {
         messages.addAll(trimmedHistory)
         messages.add(UserMessage(userInput))
 
-        return messages
+        return@withContext messages
     }
 
     /**

@@ -13,6 +13,9 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.CoilConfig
 import com.mamba.picme.di.AppContainer
 import com.mamba.picme.di.AppContainerImpl
+import com.mamba.picme.agent.core.api.policy.AiAgentMode
+import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
@@ -146,6 +149,10 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 注册网络状态变化监听：网络恢复时自动重连飞书
         registerFeishuNetworkMonitor()
+
+        // 同步 AI Agent 模式到 AgentOrchestrator，确保飞书远程控制
+        // 的路由遵循用户在设置中选定的推理模式（LOCAL/REMOTE/OFF）
+        syncAgentModeToOrchestrator()
     }
 
     /**
@@ -206,6 +213,45 @@ class PicMeApplication : Application(), ImageLoaderFactory {
             Logger.i(TAG, "网络状态监听已注册")
         } catch (e: Exception) {
             Logger.e(TAG, "注册网络状态监听失败", e)
+        }
+    }
+
+    /**
+     * 同步 AI Agent 模式到 AgentOrchestrator
+     *
+     * **为什么需要这个方法**：
+     * - [AgentOrchestrator] 是单例，其内部 [AgentConfigurator.agentMode] 默认值为 [AiAgentMode.LOCAL]
+     * - [RemoteCommandDispatcher] 直接使用此单例，但从不调用 [AgentOrchestrator.configure]
+     * - 如果用户在设置中切换了推理模式，而飞书路径没有收到通知，
+     *   飞书消息会继续走旧的模式（或默认 LOCAL），与用户期望不符
+     * - 此方法在启动时读取用户的设置，并在设置变化时自动同步
+     *
+     * **注意**：此方法只同步核心模式选择（LOCAL/REMOTE/OFF）。
+     * 飞书远程控制走 SCF 默认兜底配置，远程模型详情由 [AiAgentUseCase] 管理。
+     */
+    private fun syncAgentModeToOrchestrator() {
+        applicationScope.launch {
+            try {
+                val repository = container.userPreferencesRepository
+                combine(
+                    repository.aiAgentModeFlow,
+                    repository.aiAgentLocalModelFlow,
+                    repository.aiAgentPrivacyLevelFlow
+                ) { mode, localModel, privacyLevel ->
+                    Triple(mode, localModel, privacyLevel)
+                }.collect { (mode, localModel, privacyLevel) ->
+                    val orchestrator = AgentOrchestrator.getInstance(this@PicMeApplication)
+                    val effectiveModel = localModel.takeIf { it.isNotBlank() } ?: "qwen3_5_2b"
+                    orchestrator.configure(
+                        mode = mode,
+                        modelId = effectiveModel,
+                        privacyLevel = privacyLevel
+                    )
+                    Logger.i(TAG, "Agent orchestrator synced: mode=$mode, model=$effectiveModel")
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Agent mode sync failed", e)
+            }
         }
     }
 

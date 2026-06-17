@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
+import java.util.Properties
+
 // Release signing config from environment variables (secure)
 // 本地构建时请在 ~/.gradle/gradle.properties 中配置：
 //   PICME_RELEASE_STORE_FILE=/path/to/keystore
@@ -17,10 +19,18 @@ val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD")
 val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: ""
 val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: ""
 
-// 飞书远程控制 AppId/AppSecret（编译时从环境变量注入默认值）
-// 构建命令示例：PICME_FEISHU_APP_ID=cli_xxxxx PICME_FEISHU_APP_SECRET=yyyyy ./gradlew :app:assembleDebug
-val feishuAppId: String = System.getenv("PICME_FEISHU_APP_ID") ?: ""
-val feishuAppSecret: String = System.getenv("PICME_FEISHU_APP_SECRET") ?: ""
+// 飞书远程控制 AppId/AppSecret（编译时从 local.properties 或环境变量注入。默认空字符串）
+// local.properties: picme.feishu.app.id=cli_xxxxx, picme.feishu.app.secret=yyyyy
+// 环境变量: PICME_FEISHU_APP_ID=cli_xxxxx PICME_FEISHU_APP_SECRET=yyyyy
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val feishuAppId: String = localProperties.getProperty("picme.feishu.app.id")
+    ?: System.getenv("PICME_FEISHU_APP_ID") ?: ""
+val feishuAppSecret: String = localProperties.getProperty("picme.feishu.app.secret")
+    ?: System.getenv("PICME_FEISHU_APP_SECRET") ?: ""
 
 detekt {
     buildUponDefaultConfig = true

@@ -23,8 +23,12 @@ import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.local.parser.LocalCommandParser
+import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import com.mamba.picme.agent.core.runtime.state.SceneManager
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -32,12 +36,15 @@ import kotlin.coroutines.suspendCoroutine
 /**
  * Agent 编排器（统一入口）
  *
- * 负责：
- * 1. 处理用户输入的完整生命周期
- * 2. 推理引擎选择与调用（本地/远程管道）
- * 3. LLM 响应解析与命令分发
- * 4. 对话历史管理
- * 5. 场景驱动的模型策略
+ * **线程模型**：
+ * 所有专有线程池由 [ThreadPoolManager] 集中管理，四线程池完全隔离：
+ * - **编排线程**（PicMe-Orchestrator-Thread）：双线程，处理用户输入的整个生命周期
+ * - **LLM 推理线程**（PicMe-LLM-Model-Thread）：单线程，模型加载和推理
+ * - **DataStore 线程**（PicMe-DataStore-Thread）：单线程，对话历史持久化
+ * - **网络线程**（PicMe-Network-Thread）：单线程，远程 HTTP API 调用
+ *
+ * 各线程池完全隔离，无直接依赖关系。数据持久化为 fire-and-forget 异步操作，
+ * 不阻塞推理与编排流程。
  */
 class AgentOrchestrator private constructor(context: Context) {
 
@@ -54,6 +61,14 @@ class AgentOrchestrator private constructor(context: Context) {
 
     private val tag = "AgentOrchestrator"
     private val configurator = AgentConfigurator(context)
+
+    private val orchestratorDispatcher = ThreadPoolManager.getInstance().orchestratorDispatcher
+
+    /**
+     * 后台作用域：用于 fire-and-forget 异步操作（如对话历史保存）。
+     * SupervisorJob 确保单个后台任务失败不影响其他任务。
+     */
+    private val backgroundScope = CoroutineScope(SupervisorJob())
 
     // 便捷访问器
     private val localLlmEngine get() = configurator.localLlmEngine
@@ -179,7 +194,7 @@ class AgentOrchestrator private constructor(context: Context) {
         input: String,
         agentContext: AgentContext,
         pageContext: PageContext? = null
-    ): InferenceResult = withContext(Dispatchers.IO) {
+    ): InferenceResult = withContext(orchestratorDispatcher) {
         Logger.d(tag, "Processing input via LocalPipeline: '$input'")
 
         // 场景驱动的模型管理
@@ -410,7 +425,7 @@ class AgentOrchestrator private constructor(context: Context) {
         agentContext: AgentContext,
         pageContext: PageContext? = null,
         customSystemPrompt: String? = null
-    ): Result<AgentAction> = withContext(Dispatchers.IO) {
+    ): Result<AgentAction> = withContext(orchestratorDispatcher) {
         Logger.d(tag, "Processing input: '$input', scene=${sceneManager.currentScene.value}, mode=${configurator.getAgentMode()}")
 
         // 场景驱动的模型管理
@@ -605,7 +620,13 @@ class AgentOrchestrator private constructor(context: Context) {
     /**
      * 保存对话
      */
-    private suspend fun saveConversation(
+    /**
+     * 异步保存对话历史（fire-and-forget）。
+     *
+     * 不阻塞调用方，对话历史在后台 DataStore 线程上异步持久化。
+     * 即使保存失败也不影响当前推理响应。
+     */
+    private fun saveConversation(
         sessionId: String,
         userInput: String,
         command: AgentCommand,
@@ -616,7 +637,9 @@ class AgentOrchestrator private constructor(context: Context) {
         } else {
             rawResponse
         }
-        memoryManager.appendConversation(sessionId, userInput, assistantResponse)
+        backgroundScope.launch {
+            memoryManager.appendConversation(sessionId, userInput, assistantResponse)
+        }
     }
 
     /**

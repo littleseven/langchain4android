@@ -16,16 +16,16 @@ import com.mamba.picme.agent.core.platform.llm.local.MnnLlmClient.NativeReleaseT
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
+import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -55,21 +55,13 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
     private val engineMutex = Mutex()
     private val resourceManager = MnnResourceManager.getInstance(context)
 
+    private val modelDispatcher: CoroutineDispatcher = ThreadPoolManager.getInstance().modelDispatcher
+
     /**
-     * 专用单线程调度器，用于串行化所有模型操作。
-     *
-     * 关键设计：
-     * 1. 单一明确线程：所有 load/unload/generate/trimMemory 都在此线程上串行执行
-     * 2. 不外溢：不切换到 Dispatchers.IO 或其他线程池
-     * 3. 不受 Compose 重组影响：该调度器独立于任何 Compose CoroutineScope
-     * 4. 生命周期跟随 LocalLlmEngine 实例（通常由 AgentOrchestrator 单例持有）
+     * 后台协程作用域，用于 fire-and-forget 异步任务（如 trimMemory、unload 投递）。
+     * 所有任务在 [modelDispatcher] 上串行执行。
      */
-    private val modelExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "PicMe-LLM-Model-Thread").apply {
-            isDaemon = true
-        }
-    }
-    private val modelDispatcher: CoroutineDispatcher = modelExecutor.asCoroutineDispatcher()
+    private val backgroundScope = CoroutineScope(SupervisorJob() + modelDispatcher)
 
     /**
      * 当前加载的模型 ID
@@ -397,10 +389,10 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
      * 将 trimMemory 任务投递到专用线程执行
      */
     private fun enqueueTrimMemory() {
-        modelExecutor.execute {
+        backgroundScope.launch {
             if (!engineMutex.tryLock()) {
                 Logger.w(tag, "Skip trimMemory: engine is busy")
-                return@execute
+                return@launch
             }
             try {
                 if (client.isLoaded) {
@@ -420,10 +412,10 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
      * 使用 MnnGlobalReleaseLock 串行化 MNN native 释放。
      */
     private fun enqueueUnload() {
-        modelExecutor.execute {
+        backgroundScope.launch {
             if (!engineMutex.tryLock()) {
                 Logger.w(tag, "Skip unload: engine is busy, will retry on next operation")
-                return@execute
+                return@launch
             }
             try {
                 if (client.isLoaded) {
@@ -457,17 +449,31 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
      *
      * 注意：此回调已在 MnnGlobalReleaseLock 保护下执行，直接同步卸载即可。
      * 不要投递到 modelExecutor，否则真正的释放会脱离锁保护。
+     *
+     * 必须使用 engineMutex.tryLock() 保护，防止与 chat() 并发执行时
+     * 在 chat() 检查 client.isLoaded 为 true 后、实际推理前将模型销毁，
+     * 导致 IllegalStateException("LLM model not loaded")。
+     * 若 engine 正忙（chat 进行中），则跳过本次卸载，模型保持加载。
      */
     private fun onSafeUnload() {
-        if (client.isLoaded) {
-            try {
-                // 同步卸载，确保在 MnnGlobalReleaseLock 保护下完成
-                client.releaseNative(NativeReleaseTarget.WEIGHTS_INTERPRETER_TENSORS)
-                currentModelId = null
-                Logger.i(tag, "LLM fully unloaded (sync)")
-            } catch (e: Exception) {
-                Logger.e(tag, "LLM sync unload failed", e)
-            }
+        if (!client.isLoaded) {
+            isRegistered.set(false)
+            return
+        }
+
+        if (!engineMutex.tryLock()) {
+            Logger.w(tag, "Skip sync unload: engine is busy (chat in progress), model stays loaded")
+            return
+        }
+
+        try {
+            client.releaseNative(NativeReleaseTarget.WEIGHTS_INTERPRETER_TENSORS)
+            currentModelId = null
+            Logger.i(tag, "LLM fully unloaded (sync)")
+        } catch (e: Exception) {
+            Logger.e(tag, "LLM sync unload failed", e)
+        } finally {
+            engineMutex.unlock()
         }
         isRegistered.set(false)
     }
