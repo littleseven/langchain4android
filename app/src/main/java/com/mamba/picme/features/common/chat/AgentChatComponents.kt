@@ -523,8 +523,8 @@ fun rememberAgentChatConfig(
     }
 
     // 读取 Agent 模式与远程配置
-    val aiAgentMode by settingsRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.LOCAL)
-    val aiAgentInferencePreference by settingsRepository.aiAgentInferencePreferenceFlow.collectAsState(initial = AiAgentInferencePreference.FORCE_LOCAL)
+    val aiAgentMode by settingsRepository.aiAgentModeFlow.collectAsState(initial = AiAgentMode.REMOTE)
+    val aiAgentInferencePreference by settingsRepository.aiAgentInferencePreferenceFlow.collectAsState(initial = AiAgentInferencePreference.FORCE_REMOTE)
     val aiAgentLocalUseOpencl by settingsRepository.aiAgentLocalUseOpenclFlow.collectAsState(initial = false)
     val aiAgentRemoteModelConfigs by settingsRepository.aiAgentRemoteModelConfigsFlow.collectAsState(initial = "")
     val aiAgentSelectedRemoteModel by settingsRepository.aiAgentSelectedRemoteModelFlow.collectAsState(initial = "deepseek-v4-flash")

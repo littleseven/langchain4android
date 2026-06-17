@@ -13,6 +13,7 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.CoilConfig
 import com.mamba.picme.di.AppContainer
 import com.mamba.picme.di.AppContainerImpl
+import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
@@ -102,6 +103,18 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 注册应用级 Capability（只注册一次，永不注销）
         initializeCapabilities()
+
+        // 预配置 AgentOrchestrator 默认远程推理配置（含网关 Token）
+        // 必须在飞书通道初始化之前执行，确保远程推理管道在首次使用时已有可用认证凭证
+        AgentOrchestrator.getInstance(this).configure(
+            mode = AiAgentMode.REMOTE,
+            modelId = "qwen3_5_2b",
+            privacyLevel = AiAgentPrivacyLevel.STRICT,
+            remoteConfig = RemoteModelConfig.TENCENT_SCF_DEFAULT.copy(
+                gatewayToken = BuildConfig.TENCENT_SCF_APP_TOKEN
+            )
+        )
+        Logger.i(TAG, "Orchestrator pre-configured with fallback remote config")
 
         // 注册 Activity 生命周期回调，跟踪当前活跃 Activity
         registerActivityLifecycleCallbacks(ActivityTracker())

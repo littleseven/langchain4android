@@ -50,8 +50,8 @@ internal fun AiAgentModeSelection(
     onModeSelected: (AiAgentMode) -> Unit
 ) {
     val options = listOf(
-        AiAgentMode.LOCAL to stringResource(R.string.ai_agent_mode_local),
-        AiAgentMode.REMOTE to stringResource(R.string.ai_agent_mode_remote)
+        AiAgentMode.REMOTE to stringResource(R.string.ai_agent_mode_remote),
+        AiAgentMode.LOCAL to stringResource(R.string.ai_agent_mode_local)
     )
 
     Column(

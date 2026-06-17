@@ -28,12 +28,18 @@ import kotlinx.coroutines.withContext
  * AI Agent 核心用例（Facade）
  *
  * 向后兼容的入口类。内部委托给 [AgentOrchestrator]，保留原有接口不变。
- * 核心变更：删除自动远程 API 回退逻辑，默认 100% 本地执行。
+ *
+ * **远程推理优先策略（2026-06-17）**：
+ * - 默认 agentMode 从 LOCAL 改为 REMOTE
+ * - 所有新功能先保证远程推理链路可用，再适配本地模型
+ * - 本地推理链路保留作为离线兜底
+ * - 远程控制能力参考 apkClaw（/Users/guoshuai/code/ApkClaw）的 DefaultAgentService
+ *   使用 langchain4j tool_calls 机制实现 IM 远程控制
  *
  * @param context Application Context
- * @param agentMode Agent 运行模式，默认 LOCAL
- * @param privacyLevel 隐私级别，默认 STRICT
- * @param localModelId 本地模型 ID，默认 qwen3_5_2b（下划线格式）
+ * @param agentMode Agent 运行模式，默认 REMOTE（远程推理优先）
+ * @param privacyLevel 隐私级别，默认 PERMISSIVE（远程推理优先策略下允许远程调用）
+ * @param localModelId 本地模型 ID，默认 qwen3_5_2b（下划线格式，离线兜底用）
  * @param localUseOpencl 本地模型是否启用 OpenCL 后端
  * @param remoteConfig 用户自定义远程模型配置（完整配置，包含 modelId/apiKey/baseUrl/gatewayToken）
  * @param forceRemote 是否强制使用远程模型（绕过本地模型检查）
@@ -41,7 +47,7 @@ import kotlinx.coroutines.withContext
  */
 class AiAgentUseCase(
     context: Context,
-    agentMode: AiAgentMode = AiAgentMode.LOCAL,
+    agentMode: AiAgentMode = AiAgentMode.REMOTE,
     privacyLevel: AiAgentPrivacyLevel = AiAgentPrivacyLevel.STRICT,
     localModelId: String = "qwen3_5_2b", // 下划线格式，与 ModelManager 注册表一致
     localUseOpencl: Boolean = false,

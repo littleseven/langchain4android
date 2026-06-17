@@ -549,9 +549,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            val modeName = preferences[PreferencesKeys.AI_AGENT_MODE] ?: AiAgentMode.LOCAL.name
+            val modeName = preferences[PreferencesKeys.AI_AGENT_MODE] ?: AiAgentMode.REMOTE.name
             runCatching { AiAgentMode.valueOf(modeName) }
-                .getOrDefault(AiAgentMode.LOCAL)
+                .getOrDefault(AiAgentMode.REMOTE)
         }
 
     override suspend fun updateAiAgentMode(mode: AiAgentMode) {
@@ -685,9 +685,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         }
         .map { preferences ->
             val prefName = preferences[PreferencesKeys.AI_AGENT_INFERENCE_PREFERENCE]
-                ?: AiAgentInferencePreference.FORCE_LOCAL.name
+                ?: AiAgentInferencePreference.FORCE_REMOTE.name
             runCatching { AiAgentInferencePreference.valueOf(prefName) }
-                .getOrDefault(AiAgentInferencePreference.FORCE_LOCAL)
+                .getOrDefault(AiAgentInferencePreference.FORCE_REMOTE)
         }
 
     override suspend fun updateAiAgentInferencePreference(preference: AiAgentInferencePreference) {

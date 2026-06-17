@@ -4,6 +4,7 @@ import android.content.Context
 import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentScene
+import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.core.common.Logger
@@ -66,24 +67,33 @@ class RemoteCommandDispatcher(
                 // 2. 创建 AgentContext（远程命令使用 CHAT 场景）
                 val agentContext = AgentContext(scene = AgentScene.CHAT)
 
-                // 3. 转发给 AgentOrchestrator 进行 LLM 推理（本地/远程）
-                //    设置超时保护，防止 LLM 推理长时间占用 CPU 导致主线程 ANR
-                val result = withTimeout(TIMEOUT_MS) {
-                    orchestrator.processUserInput(
-                        input = text,
-                        agentContext = agentContext,
-                        pageContext = PageContext.None
+                // 3. ⚡ 强制远程推理模式：飞书远程命令始终走 REMOTE 链路
+                //    无论用户在设置中选择 LOCAL/REMOTE，飞书消息都应使用远程 LLM
+                orchestrator.pushModeOverride(AiAgentMode.REMOTE)
+
+                try {
+                    // 4. 转发给 AgentOrchestrator 进行 LLM 推理（本地/远程）
+                    //    设置超时保护，防止 LLM 推理长时间占用 CPU 导致主线程 ANR
+                    val result = withTimeout(TIMEOUT_MS) {
+                        orchestrator.processUserInput(
+                            input = text,
+                            agentContext = agentContext,
+                            pageContext = PageContext.None
+                        )
+                    }
+
+                    // 5. 格式化回复
+                    val reply = result.fold(
+                        onSuccess = { action -> formatActionReply(action) },
+                        onFailure = { error -> "❌ 处理失败: ${error.message ?: "未知错误"}" }
                     )
+
+                    Logger.i(tag, "远程命令执行完毕，回复：$reply")
+                    channelHandler.sendMessage(reply, messageId)
+                } finally {
+                    // 6. 恢复用户设置的推理模式
+                    orchestrator.popModeOverride()
                 }
-
-                // 4. 格式化回复
-                val reply = result.fold(
-                    onSuccess = { action -> formatActionReply(action) },
-                    onFailure = { error -> "❌ 处理失败: ${error.message ?: "未知错误"}" }
-                )
-
-                Logger.i(tag, "远程命令执行完毕，回复：$reply")
-                channelHandler.sendMessage(reply, messageId)
 
             } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                 Logger.e(tag, "远程命令超时(${TIMEOUT_MS}ms)", e)

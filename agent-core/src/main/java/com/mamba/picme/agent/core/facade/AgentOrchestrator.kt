@@ -134,6 +134,25 @@ class AgentOrchestrator private constructor(context: Context) {
     }
 
     /**
+     * 压入模式临时覆盖。
+     * 此后所有推理路由将强制使用 [mode]，直到 [popModeOverride] 被调用。
+     *
+     * 典型场景：飞书远程控制强制使用 REMOTE 模式，无论用户本地设置如何。
+     * 支持嵌套：多次压入需要对应次数弹出。
+     */
+    fun pushModeOverride(mode: AiAgentMode) {
+        configurator.pushModeOverride(mode)
+    }
+
+    /**
+     * 弹出模式临时覆盖。
+     * 恢复栈为空时返回持久化模式。
+     */
+    fun popModeOverride() {
+        configurator.popModeOverride()
+    }
+
+    /**
      * 加载本地模型
      */
     suspend fun loadModel(modelId: String? = null): Result<Unit> {
@@ -441,8 +460,10 @@ class AgentOrchestrator private constructor(context: Context) {
 
         // 1. 获取当前场景的 Capability 列表
         val capabilities = _capabilityRegistry.getCapabilitiesForCurrentScene()
-        if (capabilities.isEmpty()) {
-            Logger.w(tag, "No capabilities available for current scene")
+
+        // 仅 LOCAL 模式需要 Capability 列表；REMOTE 模式通过云端 LLM 自主编排，不需要本地 Capability
+        if (configurator.getAgentMode() == AiAgentMode.LOCAL && capabilities.isEmpty()) {
+            Logger.w(tag, "No capabilities available for current scene in LOCAL mode")
             return@withContext Result.success(
                 AgentAction.Error(
                     commandId = AgentIdGenerator.nextId(),

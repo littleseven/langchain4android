@@ -144,16 +144,21 @@ data class StageConfig(
 /**
  * AI Agent 推理模式（领域模型）
  * 控制使用本地 MNN-LLM 模型还是远程 API
+ *
+ * 自 2026-06-17 起默认切换为 REMOTE（远程推理优先策略）。
+ * 参考：apkClaw（/Users/guoshuai/code/ApkClaw）的 DefaultAgentService 设计，
+ *       远程控制链路使用 langchain4j 的 tool_calls 机制编排。
  */
 enum class AiAgentMode {
     OFF,     // 完全关闭 Agent
-    LOCAL,   // 本地 MNN-LLM 模型（默认，符合隐私红线）
-    REMOTE   // 远程 Kimi/Moonshot API（开发者/高级用户选项）
+    LOCAL,   // 本地 MNN-LLM 模型（离线兜底）
+    REMOTE   // 远程 API 推理（默认，优先使用，langchain4j + OpenAI 协议）
 }
 
 /**
  * AI Agent 隐私级别（领域模型）
  * 控制是否允许远程 API 调用
+ * 远程推理优先策略下，PERMISSIVE 为实际默认行为。
  */
 enum class AiAgentPrivacyLevel {
     STRICT,      // 绝对本地，禁止任何远程调用

@@ -57,8 +57,20 @@ class AgentConfigurator(private val context: Context) {
         toolProvider = provider
     }
 
+    /**
+     * 模式临时覆盖栈（用于飞书远程控制等场景强制使用特定推理模式）。
+     *
+     * - [pushModeOverride] 压入覆盖模式
+     * - [popModeOverride] 弹出恢复
+     * - [getAgentMode] 优先返回栈顶覆盖模式，栈空时返回持久化模式
+     *
+     * 使用场景：RemoteCommandDispatcher 在处理飞书消息时压入 REMOTE，
+     * 处理完成后弹出，不影响用户设置的持久化模式。
+     */
+    private val modeOverrideStack = ArrayDeque<AiAgentMode>()
+
     // 配置状态
-    private var agentMode: AiAgentMode = AiAgentMode.LOCAL
+    private var agentMode: AiAgentMode = AiAgentMode.REMOTE
     private var currentModelId: String = "qwen3_5_2b"
     private var userRemoteConfig: RemoteModelConfig? = null
     private var pipelineRemoteConfig: RemoteModelConfig? = null
@@ -163,8 +175,37 @@ class AgentConfigurator(private val context: Context) {
 
     /**
      * 当前 Agent 运行模式
+     *
+     * 优先返回临时覆盖模式（[modeOverrideStack] 栈顶），
+     * 栈空时返回持久化模式（[agentMode]）。
      */
-    fun getAgentMode(): AiAgentMode = agentMode
+    fun getAgentMode(): AiAgentMode = modeOverrideStack.lastOrNull() ?: agentMode
+
+    /**
+     * 压入模式临时覆盖。
+     * 此后 [getAgentMode] 将返回 [mode]，直到 [popModeOverride] 被调用。
+     *
+     * 支持嵌套：多次压入需要对应次数弹出。
+     */
+    fun pushModeOverride(mode: AiAgentMode) {
+        modeOverrideStack.addLast(mode)
+        Logger.d(tag, "Mode override pushed: $mode (stack size=${modeOverrideStack.size})")
+    }
+
+    /**
+     * 弹出模式临时覆盖。
+     * 恢复栈为空时返回持久化模式。
+     *
+     * @throws NoSuchElementException 栈已空时调用
+     */
+    fun popModeOverride() {
+        val popped = modeOverrideStack.removeLastOrNull()
+        if (popped != null) {
+            Logger.d(tag, "Mode override popped: $popped (stack size=${modeOverrideStack.size})")
+        } else {
+            Logger.w(tag, "popModeOverride called on empty stack")
+        }
+    }
 
     /**
      * 当前模型 ID
