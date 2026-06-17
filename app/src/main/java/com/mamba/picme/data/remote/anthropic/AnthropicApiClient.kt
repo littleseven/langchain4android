@@ -1,4 +1,4 @@
-package com.mamba.picme.data.remote.claude
+package com.mamba.picme.data.remote.anthropic
 
 import com.mamba.picme.core.common.Logger
 import okhttp3.OkHttpClient
@@ -32,9 +32,9 @@ class ClaudeCodingApiClient(
         private const val WRITE_TIMEOUT_SECONDS = 30L
     }
 
-    val service: ClaudeCodingApiService by lazy { createService() }
+    val service: AnthropicApiService by lazy { createService() }
 
-    private fun createService(): ClaudeCodingApiService {
+    private fun createService(): AnthropicApiService {
         val clientBuilder = OkHttpClient.Builder()
             .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -64,7 +64,7 @@ class ClaudeCodingApiClient(
             .build()
 
         Logger.i(TAG, "ClaudeCodingApiClient initialized, baseUrl=$baseUrl")
-        return retrofit.create(ClaudeCodingApiService::class.java)
+        return retrofit.create(AnthropicApiService::class.java)
     }
 
 

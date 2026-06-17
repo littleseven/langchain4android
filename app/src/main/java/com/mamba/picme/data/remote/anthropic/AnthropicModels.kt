@@ -1,4 +1,4 @@
-package com.mamba.picme.data.remote.claude
+package com.mamba.picme.data.remote.anthropic
 
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass

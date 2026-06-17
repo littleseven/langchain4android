@@ -121,8 +121,28 @@ android {
     defaultConfig {
         buildConfigField(
             "String",
+            "FEISHU_APP_ID",
+            "\"${project.findProperty("feishu.app.id") ?: ""}\"",
+        )
+        buildConfigField(
+            "String",
+            "FEISHU_APP_SECRET",
+            "\"${project.findProperty("feishu.app.secret") ?: ""}\"",
+        )
+        buildConfigField(
+            "String",
             "TENCENT_SCF_APP_TOKEN",
             "\"${project.findProperty("tencent.scf.app.token") ?: ""}\"",
+        )
+        buildConfigField(
+            "String",
+            "FEISHU_APP_ID",
+            "\"${project.findProperty("feishu.app.id") ?: ""}\"",
+        )
+        buildConfigField(
+            "String",
+            "FEISHU_APP_SECRET",
+            "\"${project.findProperty("feishu.app.secret") ?: ""}\"",
         )
     }
 
@@ -173,6 +193,7 @@ dependencies {
     implementation(libs.moshi.kotlin)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.material)
+    implementation(libs.oapi.sdk)
 
     // Media3 dependencies
     implementation(libs.androidx.media3.exoplayer)

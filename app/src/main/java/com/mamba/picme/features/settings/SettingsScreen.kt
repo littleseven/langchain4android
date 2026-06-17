@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -118,6 +121,10 @@ fun SettingsScreen(
     val logModuleConfig by viewModel.logModuleConfig.collectAsState()
     val downloadStates by viewModel.downloadStates.collectAsState()
     val allModels by viewModel.allModels.collectAsState()
+
+    // 飞书远程控制
+    val feishuAppId by viewModel.feishuAppId.collectAsState()
+    val feishuAppSecret by viewModel.feishuAppSecret.collectAsState()
 
     val agentChatConfig = rememberAgentChatConfig(
         context = context,
@@ -254,6 +261,10 @@ fun SettingsScreen(
             allModels = allModels,
             logModuleConfig = logModuleConfig,
             onLogModuleConfigChange = viewModel::setLogModuleConfig,
+            feishuAppId = feishuAppId,
+            feishuAppSecret = feishuAppSecret,
+            onFeishuAppIdChange = viewModel::setFeishuAppId,
+            onFeishuAppSecretChange = viewModel::setFeishuAppSecret,
             onNavigateBack = onNavigateBack
         )
 
@@ -322,6 +333,10 @@ private fun SettingsContent(
     allModels: List<ModelConfig>,
     logModuleConfig: LogModuleConfig,
     onLogModuleConfigChange: (LogModuleConfig) -> Unit,
+    feishuAppId: String,
+    feishuAppSecret: String,
+    onFeishuAppIdChange: (String) -> Unit,
+    onFeishuAppSecretChange: (String) -> Unit,
     onNavigateBack: () -> Unit
 ) {
     Scaffold(
@@ -737,6 +752,45 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            // 飞书远程控制
+            SettingsSection(
+                title = "飞书远程控制",
+                description = "配置飞书应用凭证以启用 IM 远程控制"
+            ) {
+                var showSecret by remember { mutableStateOf(false) }
+
+                OutlinedTextField(
+                    value = feishuAppId,
+                    onValueChange = onFeishuAppIdChange,
+                    label = { Text("App ID") },
+                    placeholder = { Text("cli_xxxxxxxxxxxx") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+
+                OutlinedTextField(
+                    value = feishuAppSecret,
+                    onValueChange = onFeishuAppSecretChange,
+                    label = { Text("App Secret") },
+                    placeholder = { Text("xxxxxxxxxxxxxxxxxxxx") },
+                    singleLine = true,
+                    visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+
+                DebugOptionRow(
+                    title = "显示 App Secret",
+                    checked = showSecret,
+                    onCheckedChange = { showSecret = it }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             // 日志模块管理
             SettingsSection(
                 title = stringResource(R.string.log_management),
@@ -745,6 +799,28 @@ private fun SettingsContent(
                 LogModuleConfigSection(
                     config = logModuleConfig,
                     onConfigChange = onLogModuleConfigChange
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 飞书远程控制
+            SettingsSection(
+                title = "飞书远程控制",
+                description = "配置飞书自建应用的 App ID 和 App Secret，启用 IM 远程控制"
+            ) {
+                SettingsTextInputRow(
+                    title = "App ID",
+                    value = feishuAppId,
+                    onValueChange = onFeishuAppIdChange,
+                    placeholder = "飞书应用的 App ID"
+                )
+                SettingsTextInputRow(
+                    title = "App Secret",
+                    value = feishuAppSecret,
+                    onValueChange = onFeishuAppSecretChange,
+                    placeholder = "飞书应用的 App Secret",
+                    isPassword = true
                 )
             }
         }
@@ -986,6 +1062,10 @@ fun SettingsScreenPreview() {
             allModels = emptyList(),
             logModuleConfig = LogModuleConfig.default(),
             onLogModuleConfigChange = {},
+            feishuAppId = "",
+            feishuAppSecret = "",
+            onFeishuAppIdChange = {},
+            onFeishuAppSecretChange = {},
             onNavigateBack = {}
         )
     }

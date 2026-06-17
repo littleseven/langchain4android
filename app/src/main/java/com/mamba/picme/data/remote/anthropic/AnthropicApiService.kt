@@ -1,4 +1,4 @@
-package com.mamba.picme.data.remote.claude
+package com.mamba.picme.data.remote.anthropic
 
 import retrofit2.Response
 import retrofit2.http.Body
@@ -11,7 +11,7 @@ import retrofit2.http.POST
  *
  * 提供 Claude API 兼容的 LLM 推理能力。
  */
-interface ClaudeCodingApiService {
+interface AnthropicApiService {
 
     @POST("messages")
     suspend fun messages(

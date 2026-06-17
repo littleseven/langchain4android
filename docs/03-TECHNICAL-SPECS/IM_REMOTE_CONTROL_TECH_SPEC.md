@@ -1,0 +1,466 @@
+# IM 远程控制技术规格
+
+> **新增产品线（2026-06-17）**：通过飞书等 IM 即时通讯 + LLM 实现 App 远程控制的技术架构设计。
+>
+> **方案变更（2026-06-17）**：从 SCF Relay Server 架构变更为设备端直连飞书 WebSocket，参考 [ApkClaw](https://github.com/apkclaw-team/ApkClaw) 的 Feishu OAPI SDK 集成方案，去除云端中转服务，架构更简洁、零基础设施成本。
+>
+> 产品定义见 [`../../docs/01-PRODUCT/FEATURES.md#5-im-远程控制融合入口`](../../docs/01-PRODUCT/FEATURES.md#5-im-远程控制融合入口)
+
+---
+
+## 1. 架构总览
+
+### 1.1 核心拓扑
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌─────────────────────────┐
+│  用户(飞书)   │────→│  飞书开放平台     │←───→│  PicMe 设备端           │
+│  发送消息     │     │  (Bot网关)       │     │  (Android)              │
+└──────────────┘     └──────────────────┘     │                         │
+      ↑                                       │  ┌───────────────────┐  │
+      │                                       │  │ FeishuChannel     │  │
+      └───────────────────────────────────────┤  │ Handler           │  │
+             飞书 Bot API 回复结果              │  │ (WS+OAPI Client)  │  │
+                                               │  └────────┬──────────┘  │
+                                               │           │              │
+                                               │  ┌────────▼──────────┐  │
+                                               │  │ RemoteCommand     │  │
+                                               │  │ Dispatcher        │  │
+                                               │  │ (LLM+Capability)  │  │
+                                               │  └────────┬──────────┘  │
+                                               │           │              │
+                                               │  ┌────────▼──────────┐  │
+                                               │  │ CapabilityRegistry │  │
+                                               │  └───────────────────┘  │
+                                               └─────────────────────────┘
+```
+
+### 1.2 关键变化：去除 SCF Relay Server
+
+| 之前（SCF 方案） | 之后（直连方案） |
+|----------------|----------------|
+| 飞书 Webhook → SCF → 设备 WebSocket | 设备直连飞书 WebSocket（出站连接） |
+| 图片经 SCF 临时存储中转 | 设备直接上传到飞书 OAPI |
+| SCF 管理设备在线状态 | 飞书 SDK 内置 WS 连接管理 |
+| 需维护 SCF/Workers 云函数 | 零云端基础设施 |
+
+### 1.3 消息流转路径
+
+```
+用户 → 飞书消息 → 飞书开放平台 → WebSocket 推送 → PicMe 设备端
+    → FeishuChannelHandler → RemoteCommandDispatcher
+        → LLM 解析意图 → CapabilityRegistry.dispatch()
+        → 结果 → 飞书 OAPI HTTP 回复 → 用户
+```
+
+### 1.4 组件职责
+
+| 组件 | 位置 | 职责 | 技术选型 |
+|------|------|------|----------|
+| **FeishuChannelHandler** | Android 端 (`domain/agent/remote/`) | 飞书 WebSocket 连接、消息接收/回复、图片上传 | 飞书 OAPI SDK (`com.larksuite.oapi:oapi-sdk:2.5.3`) |
+| **RemoteCommandDispatcher** | Android 端 (`domain/agent/remote/`) | 命令解析、LLM 意图理解、Capability 分派 | Kotlin + 现有 LLM 链路 |
+| **RemoteControlCapability** | Android 端 (`domain/agent/capability/`) | 设备绑定状态管理、操作审计 | Kotlin + Capability 接口 |
+| **RemoteInferencePipeline** | Android 端（复用现有） | 复杂意图的 LLM 解析 | 现有远程推理链路 |
+
+---
+
+## 2. 飞书 SDK 集成
+
+### 2.1 依赖引入
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("com.larksuite.oapi:oapi-sdk:2.5.3")
+}
+
+// packaging 配置（避免 META-INF 冲突）
+packaging {
+    resources {
+        excludes += setOf(
+            "META-INF/DEPENDENCIES",
+            "META-INF/LICENSE",
+            "META-INF/LICENSE.txt",
+            "META-INF/NOTICE",
+            "META-INF/NOTICE.txt",
+        )
+    }
+}
+```
+
+### 2.2 FeishuChannelHandler
+
+```kotlin
+class FeishuChannelHandler(
+    private val scope: CoroutineScope,
+    private var appId: String,
+    private var appSecret: String,
+) {
+    // 飞书 OAPI HTTP 客户端（用于回复消息/上传图片）
+    private var apiClient: com.lark.oapi.Client? = null
+    // 飞书 WebSocket 客户端（接收消息事件）
+    private var wsClient: com.lark.oapi.ws.Client? = null
+
+    // 事件分发器
+    private val eventHandler: EventDispatcher by lazy {
+        EventDispatcher.newBuilder("", "")
+            .onP2MessageReceiveV1 { event ->
+                handleMessageEvent(event)
+            }
+            .build()
+    }
+
+    fun init() {
+        apiClient = com.lark.oapi.Client.newBuilder(appId, appSecret).build()
+        wsClient = com.lark.oapi.ws.Client.Builder(appId, appSecret)
+            .eventHandler(eventHandler)
+            .build()
+        scope.launch { wsClient?.start() }
+    }
+
+    // 回复文本消息（经飞书 OAPI HTTP）
+    fun sendMessage(content: String, messageId: String) {
+        scope.launch {
+            apiClient?.im()?.message()?.reply(
+                ReplyMessageReq.newBuilder()
+                    .messageId(messageId)
+                    .replyMessageReqBody(/* ... */)
+                    .build()
+            )
+        }
+    }
+
+    // 回复图片（直接上传到飞书 OAPI）
+    fun sendImage(imageBytes: ByteArray, messageId: String) { /* ... */ }
+
+    fun disconnect() { wsClient?.let { /* 关闭连接 */ } }
+}
+```
+
+**机制说明**：
+- **WebSocket 接收**：设备通过飞书 SDK 的 `ws.Client` 与飞书平台建立长连接，接收 `P2MessageReceiveV1` 事件
+- **OAPI HTTP 回复**：通过飞书 REST API 回复消息、上传图片
+- **连接方向**：出站连接（设备 → 飞书），无需公网 IP，不受 NAT 限制
+
+### 2.3 飞书 Bot 配置
+
+| 配置项 | 说明 |
+|-------|------|
+| **App ID / App Secret** | 飞书开放平台自建应用 -> 凭证与基础信息 |
+| **事件订阅** | 无需配置 Webhook URL（使用 WebSocket 模式） |
+| **事件类型** | 订阅 `im.message.receive_v1` |
+| **Bot 权限** | `im:message`、`im:resource`（发送/接收消息、上传/下载图片） |
+
+---
+
+## 3. 设备端组件设计
+
+### 3.1 组件架构
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   Android 端                              │
+│                                                          │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │  FeishuChannelHandler                                │  │
+│  │  ├── ws.Client (飞书 WS, 接收消息事件)               │  │
+│  │  └── apiClient (飞书 OAPI HTTP, 回复/上传)           │  │
+│  └──────────────────────┬──────────────────────────────┘  │
+│                         │                                  │
+│  ┌──────────────────────▼──────────────────────────────┐  │
+│  │  RemoteCommandDispatcher                             │  │
+│  │  (命令解析/LLM意图理解/分派到Capability)              │  │
+│  └──────────────────────┬──────────────────────────────┘  │
+│                         │                                  │
+│  ┌──────────────────────▼──────────────────────────────┐  │
+│  │  CapabilityRegistry                                  │  │
+│  │  (GalleryCapability/EditorCapability/SystemCapability)│  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  RemoteControlCapability (设备绑定/状态管理)          │  │
+│  └──────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 3.2 RemoteCommandDispatcher
+
+```kotlin
+class RemoteCommandDispatcher(
+    private val channelHandler: FeishuChannelHandler,
+    private val capabilityRegistry: CapabilityRegistry,
+    private val remoteLlmClient: UnifiedRemoteClient,
+) {
+    /**
+     * 接收飞书消息并分派执行
+     */
+    suspend fun dispatch(message: FeishuMessage)
+
+    /**
+     * 执行流程：
+     * 1. 解析消息意图（直接映射 / LLM 解析）
+     * 2. 逐条调用 Capability 执行
+     * 3. 收集结果 → 通过 FeishuChannelHandler 回复
+     */
+}
+```
+
+**命令解析策略**：
+
+| 命令类型 | 解析方式 | 示例 |
+|----------|----------|------|
+| **明确动作** | 直接映射 | `action: "browse_recent"` → GalleryCapability |
+| **自然语言** | LLM 解析 | `"帮我优化这张照片"` → LLM → `edit_image / ai_optimize` |
+| **组合命令** | LLM 分解 | `"裁剪成1:1再调亮"` → LLM → `[crop(1:1), brightness(+20)]` |
+
+### 3.3 RemoteControlCapability
+
+与现有实现一致（见 [RemoteControlCapability.kt](file:///Users/guoshuai/AndroidStudioProjects/PicMe/app/src/main/java/com/mamba/picme/domain/agent/capability/RemoteControlCapability.kt)），管理设备绑定状态、自动确认模式，不通过 AgentCommand 密封类分发。
+
+### 3.4 图片回传流程
+
+```
+命令执行完成 → 生成结果图片 → 直接通过飞书 OAPI uploadImage()
+    → 获取 imageKey → ReplyMessage with msgType="image" → 用户可见
+```
+
+无需经过任何云端中转，图片直接从设备上传到飞书平台。
+
+---
+
+## 4. 设备绑定流程
+
+```
+1. App 内生成绑定码 → 在飞书 Bot 中输入绑定码（或扫码）
+2. FeishuChannelHandler 收到绑定消息 → RemoteControlCapability.updateBinding()
+3. RemoteControlCapability 记录绑定状态
+4. 通过飞书回复 "设备 Xiaomi 15 Ultra 已绑定成功 ✅"
+```
+
+**首次绑定的安全性**：
+- 绑定码在 App 内生成，有效期内可配对
+- 解绑操作需设备端确认（自动确认模式关闭时）
+- 支持远程解绑（双重确认）
+
+---
+
+## 5. 飞书 Bot 设计
+
+### 5.1 Bot 能力
+
+| 能力 | 说明 |
+|------|------|
+| **消息接收** | 通过 WebSocket 接收文本/图片消息 |
+| **消息发送** | 通过 OAPI HTTP 发送文本/图片/卡片消息 |
+| **交互式卡片** | 按钮点击、下拉选择、滑块（卡片回调通过 WS 接收） |
+| **文件上传** | 设备端直接上传图片到飞书（不走云端中转） |
+| **事件订阅** | 消息事件通过 WebSocket 实时推送 |
+
+### 5.2 交互式卡片设计
+
+与之前方案一致（见飞书卡片设计部分），通过 OAPI 发送 `interactive` 消息卡片，回调事件经 WebSocket 返回设备处理。
+
+### 5.3 命令确认流程
+
+```
+用户发送: "删除模糊的照片"
+    ↓ LLM 解析意图 → 需要确认
+    ↓ RemoteCommandDispatcher → 发送确认卡片
+用户点击确认 → 卡片回调经 WS 返回 → 执行删除 → 结果回复
+    ↓
+用户未操作 30s → 自动超时取消
+```
+
+**确认策略矩阵**：
+
+| 操作类型 | 确认要求 | 实现 |
+|----------|----------|------|
+| 浏览/搜索 | 不要求 | 直接执行 |
+| 图片编辑（非人像）| 不要求 | 直接执行 |
+| 图片编辑（人像）| 确认 | 发送交互式卡片 |
+| 批量操作 | 确认 | 发送交互式卡片 |
+| 删除操作 | 确认 | 发送交互式卡片 |
+| 设备解绑 | 双重确认 | App 内确认 + 飞书确认 |
+| 系统设置修改 | 确认 | 发送交互式卡片 |
+
+---
+
+## 6. 离线与异常处理
+
+### 6.1 设备离线场景
+
+```
+用户发送命令 → 飞书平台 → WebSocket 推送
+    ↓ 设备在线？
+    ├── 是 → 立即执行
+    └── 否 → 飞书 WebSocket 连接断开
+        ↓
+    用户收到 "设备离线，请稍后再试"
+    ↓
+    设备上线后：飞书 SDK 自动重连 → 恢复可用
+```
+
+- 飞书 SDK 内置重连机制（指数退避）
+- 无离线命令队列（相比 SCF 方案，这是唯一的能力损失：设备离线期间的命令不会缓冲）
+- 可通过本地通知提醒用户打开 App
+
+### 6.2 命令超时
+
+- 简单命令（浏览/搜索）：超时 15s
+- 编辑命令（单张）：超时 60s
+- 批量编辑命令：超时 5min + 每张加 30s
+- 超时后回复 "处理超时，请稍后重试"
+
+### 6.3 图片大小限制
+
+| 阶段 | 限制 | 处理 |
+|------|------|------|
+| 飞书接收 | 20MB | 飞书平台限制 |
+| 设备回复 | 20MB | 设备端自动压缩（> 10MB 压缩到 80% 质量） |
+
+---
+
+## 7. 隐私与安全
+
+### 7.1 数据生命周期
+
+```
+图片 → 飞书平台 → 设备下载(经飞书) → 设备端处理 → 结果直接上传飞书
+                                                        ↓
+                                               飞书平台管理存储生命周期
+```
+
+- **不再需要**：额外的云端临时存储、24h TTL 清理逻辑
+- **所有图片**直接经飞书平台流转，不经过任何第三方服务器
+- 人脸数据强制设备端执行，不上传
+
+### 7.2 安全红线
+
+| 红线 | 实现方式 |
+|------|----------|
+| **人脸数据不离开设备** | 人脸检测/美颜强制设备端执行 |
+| **传输加密** | 飞书平台全程 HTTPS + TLS |
+| **身份认证** | App ID + App Secret，飞书平台标准鉴权 |
+| **设备授权** | 首次绑定需 App 内配对码确认 |
+| **操作审计** | 所有远程命令记录本地日志 |
+
+---
+
+## 8. 集成与扩展
+
+### 8.1 多 IM 平台适配层（规划中）
+
+```
+┌──────────────────────────────────────────┐
+│           IM Platform Adapter           │
+│  ├── FeishuAdapter (飞书) ✅ 首批       │
+│  ├── WecomAdapter (企业微信 - 规划中)    │
+│  └── DingtalkAdapter (钉钉 - 规划中)    │
+│                                          │
+│  统一接口：                                │
+│  interface ImPlatform {                  │
+│    fun connect(appId, appSecret)         │
+│    fun sendMessage(chatId, content)      │
+│    fun sendCard(chatId, card)            │
+│    fun uploadMedia(file)                 │
+│    fun disconnect()                      │
+│  }                                       │
+└──────────────────────────────────────────┘
+```
+
+### 8.2 与现有远程推理链路的协同
+
+```
+飞书消息 → FeishuChannelHandler → RemoteCommandDispatcher
+    → LLM 解析意图（复用 UnifiedRemoteClient）
+    → CapabilityRegistry.dispatch()
+    → 结果 → FeishuChannelHandler.sendMessage/sendImage
+```
+
+- IM 远程的 LLM 调用与 App 内共享同一 `UnifiedRemoteClient`
+- 使用独立 System Prompt（IM 场景上下文不同）
+- Capability 执行层完全复用
+
+---
+
+## 9. 任务拆分 [agent-task]
+
+### Phase 1: 飞书集成与基础能力 (RD)
+
+- [ ] `agent-task:im-remote-001` 引入飞书 OAPI SDK 依赖，配置 packaging exclude
+- [ ] `agent-task:im-remote-002` 实现 FeishuChannelHandler（WebSocket 连接 + OAPI 客户端）
+- [ ] `agent-task:im-remote-003` 实现飞书消息接收与文本/图片回复
+- [ ] `agent-task:im-remote-004` 实现 RemoteCommandDispatcher（命令接收/LLM解析/分派）
+- [ ] `agent-task:im-remote-005` 实现设备绑定流程（配对码 + 状态管理）
+
+### Phase 2: 核心命令执行 (RD)
+
+- [ ] `agent-task:im-remote-006` 实现远程相册浏览/搜索命令
+- [ ] `agent-task:im-remote-007` 实现远程图片编辑命令（单张）
+- [ ] `agent-task:im-remote-008` 实现结果图片直接上传飞书并回复
+- [ ] `agent-task:im-remote-009` 实现远程相册管理命令（创建/移动/删除）
+
+### Phase 3: 进阶功能 (RD)
+
+- [ ] `agent-task:im-remote-010` 实现交互式卡片模板与确认流程
+- [ ] `agent-task:im-remote-011` 实现多设备管理与@指定
+- [ ] `agent-task:im-remote-012` 实现批量编辑命令
+- [ ] `agent-task:im-remote-013` 实现操作审计日志
+
+### Phase 4: 集成与测试 (QA)
+
+- [ ] `agent-task:im-remote-014` 端到端测试：飞书消息 → 设备执行 → 结果回传
+- [ ] `agent-task:im-remote-015` 性能基准：命令响应延迟、图片处理耗时
+- [ ] `agent-task:im-remote-016` 异常场景测试：设备离线、命令超时、网络断开
+
+---
+
+## 10. 验收标准 (AC)
+
+| ID | 验收项 | 优先级 |
+|----|--------|--------|
+| AC-IM-1 | 飞书发送"最近有什么照片" → 返回设备相册结果卡片 | P0 |
+| AC-IM-2 | 飞书发送图片 + "帮我优化" → 设备端执行 AI 优化 → 返回处理后图片 | P0 |
+| AC-IM-3 | 设备离线时返回友好提示，不阻塞后续命令 | P0 |
+| AC-IM-4 | 飞书发送"黑白滤镜" → 设备端执行滤镜 → 返回效果图 | P1 |
+| AC-IM-5 | 多设备绑定后，支持@指定设备执行命令 | P1 |
+| AC-IM-6 | 编辑参数交互式卡片支持增减调节 | P2 |
+| AC-IM-7 | 删除操作需用户确认后执行 | P1 |
+| AC-IM-8 | 操作审计日志正确记录所有远程命令 | P2 |
+| AC-IM-9 | 飞书命令响应 < 3s（含 LLM 推理 + 设备执行） | P0 |
+| AC-IM-10 | 图片处理 < 5s @1080p | P1 |
+| AC-IM-11 | **零云端基础设施**：无需部署任何云函数/Relay Server | P0 |
+
+---
+
+## 11. 与 ApkClaw 方案对比
+
+| 维度 | ApkClaw | PicMe 方案 |
+|-------|---------|-----------|
+| **消息接收** | 飞书 WS SDK | 飞书 WS SDK（相同） |
+| **消息回复** | 飞书 OAPI HTTP | 飞书 OAPI HTTP（相同） |
+| **命令执行** | AccessibilityService + ToolRegistry | **Capability 系统**（复用现有架构） |
+| **LLM 集成** | LangChain4j (OpenAI/Anthropic) | **UnifiedRemoteClient**（复用现有链路） |
+| **目标** | 通用 Android 自动化 | **专注相册+图片编辑**（核心能力更深） |
+
+**核心差异**：PicMe 不需要 AccessibilityService 来做通用 UI 自动化。我们的 Capability 系统直接操作相册/编辑内核，稳定性和响应速度优于无障碍节点遍历。
+
+---
+
+## 12. 相关文档
+
+| 文档 | 说明 |
+|------|------|
+| `../../docs/01-PRODUCT/FEATURES.md#5-im-远程控制融合入口` | 产品交互规范 |
+| `../../PRODUCT.md` | 产品路线图与里程碑 |
+| `../../docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` | Agent 架构详细设计 |
+| `../../docs/03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md` | 远程推理架构（LLM 复用层） |
+| `../../app/.../domain/agent/remote/FeishuChannelHandler.kt` | 飞书通道实现（待实现） |
+| `../../app/.../domain/agent/capability/RemoteControlCapability.kt` | 远程控制管理 Capability |
+
+---
+
+> **维护者**：RD Agent
+> **最后更新**：2026-06-17
+> **方案变更**：~~SCF Relay Server~~ → 设备端直连飞书 WebSocket（参考 ApkClaw 方案）
+> **状态**：设计阶段 · 待实现

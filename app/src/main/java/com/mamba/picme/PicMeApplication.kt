@@ -12,11 +12,14 @@ import com.mamba.picme.di.AppContainerImpl
 import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
+import com.mamba.picme.domain.agent.remote.FeishuChannelHandler
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.mamba.picme.beauty.log.BeautyLogProxy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -33,6 +36,8 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
     val repository: MediaRepository
         get() = container.repository
+
+    val feishuChannelHandler: FeishuChannelHandler by lazy { FeishuChannelHandler(applicationScope) }
 
     /**
      * 当前活跃的 Activity（用于测试截屏等场景）
@@ -79,6 +84,39 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 注册 Activity 生命周期回调，跟踪当前活跃 Activity
         registerActivityLifecycleCallbacks(ActivityTracker())
+
+        // 初始化飞书远程控制通道
+        applicationScope.launch {
+            try {
+                val appId = container.userPreferencesRepository.feishuAppIdFlow.first()
+                val appSecret = container.userPreferencesRepository.feishuAppSecretFlow.first()
+                if (appId.isNotBlank() && appSecret.isNotBlank()) {
+                    feishuChannelHandler.init(appId, appSecret)
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "飞书通道初始化失败", e)
+            }
+        }
+
+        // 监听飞书配置变化，自动重连
+        applicationScope.launch {
+            try {
+                combine(
+                    container.userPreferencesRepository.feishuAppIdFlow,
+                    container.userPreferencesRepository.feishuAppSecretFlow
+                ) { appId, appSecret -> Pair(appId, appSecret) }
+                    .drop(1) // 跳过初始值，避免重复 init
+                    .collect { (appId, appSecret) ->
+                        if (appId.isNotBlank() && appSecret.isNotBlank()) {
+                            feishuChannelHandler.reinit(appId, appSecret)
+                        } else {
+                            feishuChannelHandler.disconnect()
+                        }
+                    }
+            } catch (e: Exception) {
+                Logger.e(TAG, "飞书配置监听失败", e)
+            }
+        }
     }
 
     /**

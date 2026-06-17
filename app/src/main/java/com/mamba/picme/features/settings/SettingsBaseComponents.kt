@@ -14,11 +14,18 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -185,5 +192,36 @@ internal fun SettingsClickableRow(
                 color = MaterialTheme.colorScheme.primary
             )
         }
+    }
+}
+
+@Composable
+internal fun SettingsTextInputRow(
+    title: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String = "",
+    isPassword: Boolean = false
+) {
+    var showSecret by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(title) },
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        visualTransformation = if (isPassword && !showSecret) PasswordVisualTransformation() else VisualTransformation.None,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    )
+
+    if (isPassword) {
+        DebugOptionRow(
+            title = "显示 $title",
+            checked = showSecret,
+            onCheckedChange = { showSecret = it }
+        )
     }
 }
