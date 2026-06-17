@@ -12,11 +12,16 @@ import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
 import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.api.ToolSpecification
+import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.logging.Logger
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -31,7 +36,7 @@ import java.util.concurrent.TimeUnit
  */
 class LangChain4jOpenAiClient(
     private val config: RemoteModelConfig
-) : ChatLanguageModel {
+) : ChatLanguageModel, StreamingChatLanguageModel {
 
     private val tag = "LangChain4jOpenAi"
 
@@ -109,6 +114,113 @@ class LangChain4jOpenAiClient(
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.e(tag, "Chat FAILED latency=${latencyMs}ms: ${e.message}", e)
             throw e
+        }
+    }
+
+    // ── 流式聊天（SSE） ───────────────────────────────────────────
+
+    override fun chat(request: ChatRequest, handler: StreamingChatResponseHandler) {
+        val startTime = System.currentTimeMillis()
+        try {
+            val requestBody = buildOpenAiRequest(request).apply {
+                put("stream", true)
+                put("stream_options", JSONObject().apply { put("include_usage", true) })
+            }
+
+            val httpRequest = Request.Builder()
+                .url("${baseUrl}chat/completions")
+                .post(requestBody.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            httpClient.newCall(httpRequest).enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    val body = response.body ?: run {
+                        handler.onError(RuntimeException("Empty response body"))
+                        return
+                    }
+                    val fullContent = StringBuilder()
+                    var promptTokens = 0L
+                    var completionTokens = 0L
+
+                    try {
+                        val source = body.source()
+                        while (!source.exhausted()) {
+                            val line = source.readUtf8Line() ?: continue
+                            if (!line.startsWith("data: ")) continue
+
+                            val data = line.removePrefix("data: ").trim()
+                            if (data == "[DONE]") continue
+
+                            try {
+                                val json = JSONObject(data)
+                                // 解析 usage（最后一个 chunk 可能携带）
+                                json.optJSONObject("usage")?.let { usage ->
+                                    promptTokens = usage.optLong("prompt_tokens", 0)
+                                    completionTokens = usage.optLong("completion_tokens", 0)
+                                }
+
+                                val choices = json.optJSONArray("choices")
+                                if (choices == null || choices.length() == 0) continue
+
+                                val delta = choices.optJSONObject(0)?.optJSONObject("delta")
+                                val content = delta?.optString("content", null)
+                                if (content != null) {
+                                    fullContent.append(content)
+                                    handler.onPartialResponse(content)
+                                }
+
+                                val finishReason = choices.optJSONObject(0)?.optString("finish_reason", null)
+                                if (finishReason != null && finishReason != "null") {
+                                    val latencyMs = System.currentTimeMillis() - startTime
+                                    Logger.d(tag, "Stream OK latency=${latencyMs}ms, tokens=${completionTokens}")
+                                    handler.onCompleteResponse(
+                                        ChatResponse(
+                                            aiMessage = AiMessage(text = fullContent.toString()),
+                                            metadata = ChatResponseMetadata(
+                                                promptTokens = promptTokens,
+                                                completionTokens = completionTokens
+                                            )
+                                        )
+                                    )
+                                    return
+                                }
+                            } catch (e: Exception) {
+                                Logger.w(tag, "SSE parse error: ${e.message}, line=$data")
+                            }
+                        }
+                        // 流结束但未收到 finish_reason（某些 API 行为）
+                        if (fullContent.isNotEmpty()) {
+                            val latencyMs = System.currentTimeMillis() - startTime
+                            Logger.d(tag, "Stream EOF latency=${latencyMs}ms, tokens=${completionTokens}")
+                            handler.onCompleteResponse(
+                                ChatResponse(
+                                    aiMessage = AiMessage(text = fullContent.toString()),
+                                    metadata = ChatResponseMetadata(
+                                        promptTokens = promptTokens,
+                                        completionTokens = completionTokens
+                                    )
+                                )
+                            )
+                        } else {
+                            handler.onError(RuntimeException("Stream ended with empty content"))
+                        }
+                    } catch (e: Exception) {
+                        val latencyMs = System.currentTimeMillis() - startTime
+                        Logger.e(tag, "Stream FAILED latency=${latencyMs}ms: ${e.message}", e)
+                        handler.onError(e)
+                    }
+                }
+
+                override fun onFailure(call: Call, e: java.io.IOException) {
+                    val latencyMs = System.currentTimeMillis() - startTime
+                    Logger.e(tag, "Stream HTTP FAILED latency=${latencyMs}ms: ${e.message}", e)
+                    handler.onError(e)
+                }
+            })
+        } catch (e: Exception) {
+            val latencyMs = System.currentTimeMillis() - startTime
+            Logger.e(tag, "Stream setup FAILED latency=${latencyMs}ms: ${e.message}", e)
+            handler.onError(e)
         }
     }
 

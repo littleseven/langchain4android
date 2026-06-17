@@ -64,6 +64,7 @@ class AgentConfigurator(private val context: Context) {
     private var pipelineRemoteConfig: RemoteModelConfig? = null
     private var localInferencePipeline: LocalInferencePipeline? = null
     private var remoteInferencePipeline: RemoteInferencePipeline? = null
+    private var cachedRemoteOrchestrator: RemoteOrchestrator? = null
     private var localUseOpencl: Boolean = false
 
     /**
@@ -105,6 +106,21 @@ class AgentConfigurator(private val context: Context) {
         remoteInferencePipeline = pipeline
         pipelineRemoteConfig = currentConfig
         return pipeline
+    }
+
+    /**
+     * 获取缓存的远程编排器
+     */
+    fun getRemoteOrchestrator(): RemoteOrchestrator {
+        val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
+        val existing = cachedRemoteOrchestrator
+        if (existing != null && pipelineRemoteConfig == currentConfig) {
+            return existing
+        }
+        val orchestrator = createRemoteOrchestrator(currentConfig)
+        cachedRemoteOrchestrator = orchestrator
+        pipelineRemoteConfig = currentConfig
+        return orchestrator
     }
 
     /**

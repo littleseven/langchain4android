@@ -15,14 +15,20 @@ import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.ChatLanguageModel
 import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.ChatResponseMetadata
 import com.mamba.picme.agent.core.api.SystemMessage
 import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.api.ToolParameters
 import com.mamba.picme.agent.core.api.JsonSchemaProperty
 import com.mamba.picme.agent.core.api.ToolExecutionRequest
+import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 /**
  * 远程 LLM 推理参数配置
@@ -83,6 +89,13 @@ class RemoteOrchestrator(
 ) {
 
     private val tag = "RemoteOrchestrator"
+
+    /**
+     * 流式聊天语言模型（兼容层）
+     */
+    private val streamingChatModel: StreamingChatLanguageModel
+        get() = chatLanguageModel as? StreamingChatLanguageModel
+            ?: error("StreamingChatLanguageModel not supported")
 
     /**
      * 远程推理参数配置
@@ -291,7 +304,96 @@ class RemoteOrchestrator(
         }
     }
 
+    // ── L4 Streaming Chat ─────────────────────────────────────
+
+    /**
+     * L4 流式聊天
+     *
+     * 通过 SSE 流式输出 token，适用开放自由聊天场景。
+     * 使用 suspendCoroutine 将回调式流桥接到协程。
+     *
+     * @param userInput 用户输入
+     * @param context 当前 Agent 上下文
+     * @param onToken 每收到一个 token 的回调
+     * @return 流式结果（完整文本 + 性能指标）
+     */
+    suspend fun processChatStreaming(
+        userInput: String,
+        context: AgentContext,
+        onToken: (String) -> Unit
+    ): Result<StreamChatResult> {
+        val startTime = System.currentTimeMillis()
+        return try {
+            val systemPrompt = promptBuilder.buildChatPrompt(userInput, context)
+
+            Logger.d(tag, "[L4-STREAM] REQ: input=\"$userInput\"")
+
+            val chatRequest = ChatRequest(
+                messages = listOf(
+                    SystemMessage(systemPrompt),
+                    UserMessage(userInput)
+                ),
+                temperature = remoteLlmConfig.l4Temperature,
+                maxTokens = remoteLlmConfig.l4MaxTokens
+            )
+
+            val result = suspendCoroutine<Result<StreamChatResult>> { continuation ->
+                streamingChatModel.chat(chatRequest, object : StreamingChatResponseHandler {
+                    override fun onPartialResponse(partialResponse: String) {
+                        onToken(partialResponse)
+                    }
+
+                    override fun onCompleteResponse(completeResponse: ChatResponse) {
+                        val latencyMs = System.currentTimeMillis() - startTime
+                        Logger.d(tag, "[L4-STREAM] OK latency=${latencyMs}ms, tokens=${completeResponse.metadata?.completionTokens ?: "?"}")
+                        continuation.resume(
+                            Result.success(
+                                StreamChatResult(
+                                    fullResponse = completeResponse.aiMessage.text,
+                                    metrics = StreamMetrics(
+                                        latencyMs = latencyMs,
+                                        promptTokens = completeResponse.metadata?.promptTokens,
+                                        completionTokens = completeResponse.metadata?.completionTokens
+                                    )
+                                )
+                            )
+                        )
+                    }
+
+                    override fun onError(error: Throwable) {
+                        val latencyMs = System.currentTimeMillis() - startTime
+                        Logger.e(tag, "[L4-STREAM] ERR: latency=${latencyMs}ms", error)
+                        continuation.resume(Result.failure(error))
+                    }
+                })
+            }
+
+            result
+        } catch (exception: Exception) {
+            val latencyMs = System.currentTimeMillis() - startTime
+            Logger.e(tag, "[L4-STREAM] SETUP ERR: latency=${latencyMs}ms", exception)
+            Result.failure(exception)
+        }
+    }
+
     // ── 解析器 ─────────────────────────────────────────────────
+
+    /**
+     * 从文本内容中提取命令（公开方法，供流式完成后解析使用）
+     *
+     * 在流式场景中，LLM 可能将 tool_calls JSON 输出到文本 content 中（而非标准
+     * tool_calls 协议）。此方法从文本中回退解析命令。
+     *
+     * @param content LLM 返回的完整文本内容
+     * @param context 当前 Agent 上下文
+     * @return 解析出的命令列表（空列表表示未找到命令）
+     */
+    fun parseCommandsFromText(
+        content: String,
+        context: AgentContext
+    ): List<AgentCommand> {
+        return parseFallbackToolCalls(content, context)
+    }
 
     /**
      * 当 API 响应缺少 tool_calls 字段时，尝试从文本内容中回退解析
@@ -845,3 +947,27 @@ class RemoteOrchestrator(
         }
     }
 }
+
+// ── 流式聊天结果类型 ────────────────────────────────────────────
+
+/**
+ * 流式聊天结果
+ *
+ * @property fullResponse LLM 返回的完整文本内容（可能包含 tool_calls JSON）
+ * @property commands 从响应文本中提取的命令列表（空列表表示纯文本回复）
+ * @property metrics 流式性能指标
+ */
+data class StreamChatResult(
+    val fullResponse: String,
+    val commands: List<AgentCommand> = emptyList(),
+    val metrics: StreamMetrics? = null
+)
+
+/**
+ * 流式聊天的性能指标
+ */
+data class StreamMetrics(
+    val latencyMs: Long = 0L,
+    val promptTokens: Long? = null,
+    val completionTokens: Long? = null
+)

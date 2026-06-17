@@ -6,8 +6,11 @@ import com.mamba.picme.agent.core.api.AiMessage
 import com.mamba.picme.agent.core.api.ChatLanguageModel
 import com.mamba.picme.agent.core.api.ChatRequest
 import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.ChatResponseMetadata
 import com.mamba.picme.agent.core.api.SystemMessage
 import com.mamba.picme.agent.core.api.UserMessage
+import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingApiClient
 import com.mamba.picme.agent.core.platform.llm.remote.kimi.KimiCodingMessage
@@ -27,7 +30,7 @@ import retrofit2.Response
  */
 class UnifiedRemoteClient(
     private val config: RemoteModelConfig
-) : ChatLanguageModel {
+) : ChatLanguageModel, StreamingChatLanguageModel {
 
     private val tag = "UnifiedRemote"
 
@@ -53,25 +56,41 @@ class UnifiedRemoteClient(
         } else null
     }
 
-    /**
-     * 发送聊天请求，返回 LangChain4j 风格的 [ChatResponse]。
-     *
-     * - OpenAI 协议：委托给 [LangChain4jOpenAiClient]
-     * - Claude/Kimi 协议：沿用 Retrofit 实现
-     */
+    // ── 非流式 ──────────────────────────────────────────────────
+
     override fun chat(request: ChatRequest): ChatResponse {
         return when {
             langChain4jClient != null -> {
-                // OpenAI 路径：使用 langchain4j 标准协议
                 Logger.d(tag, "Using LangChain4jOpenAiClient for model=${config.modelId}")
                 langChain4jClient!!.chat(request)
             }
             kimiClient != null -> {
-                // Kimi/Claude 路径：沿用现有实现
                 Logger.d(tag, "Using KimiCodingApiClient for model=${config.modelId}")
                 chatKimi(request)
             }
             else -> throw IllegalStateException("No client available for model ${config.modelId}")
+        }
+    }
+
+    // ── 流式 ────────────────────────────────────────────────────
+
+    override fun chat(request: ChatRequest, handler: StreamingChatResponseHandler) {
+        when {
+            langChain4jClient != null -> {
+                Logger.d(tag, "Streaming with LangChain4jOpenAiClient for model=${config.modelId}")
+                langChain4jClient!!.chat(request, handler)
+            }
+            kimiClient != null -> {
+                // Kimi/Claude 不支持流式，回退为非流式一次返回
+                Logger.d(tag, "Kimi/Claude fallback to non-streaming for model=${config.modelId}")
+                try {
+                    val response = chatKimi(request)
+                    handler.onCompleteResponse(response)
+                } catch (e: Exception) {
+                    handler.onError(e)
+                }
+            }
+            else -> handler.onError(IllegalStateException("No client available for model ${config.modelId}"))
         }
     }
 

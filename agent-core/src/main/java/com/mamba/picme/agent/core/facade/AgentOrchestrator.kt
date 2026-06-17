@@ -12,7 +12,13 @@ import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.api.ChatRequest
+import com.mamba.picme.agent.core.api.UserMessage
+import com.mamba.picme.agent.core.api.SystemMessage
+import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
+import com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics
 import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
+import com.mamba.picme.agent.core.platform.llm.remote.StreamChatResult
+import com.mamba.picme.agent.core.platform.llm.remote.StreamMetrics
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
@@ -20,6 +26,8 @@ import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 /**
  * Agent 编排器（统一入口）
@@ -226,6 +234,128 @@ class AgentOrchestrator private constructor(context: Context) {
         saveInferenceResultToMemory(input, inferenceResult, agentContext.memorySessionId)
 
         inferenceResult
+    }
+
+    // ── 流式自由聊天 ─────────────────────────────────────────────
+
+    /**
+     * 流式自由聊天
+     *
+     * 跳过 L1/L2/L3/L4 指令路由，直接进行纯文本流式生成。
+     * LOCAL 模式：使用 [LocalLlmEngine.chat] 流式接口
+     * REMOTE 模式：使用 [RemoteOrchestrator.processChatStreaming]
+     *
+     * @param input 用户输入
+     * @param agentContext Agent 上下文
+     * @param onToken 每个 token 的回调
+     * @return 流式结果
+     */
+    suspend fun streamChat(
+        input: String,
+        agentContext: AgentContext,
+        onToken: (String) -> Unit
+    ): Result<StreamChatResult> {
+        Logger.d(tag, "streamChat: mode=${configurator.getAgentMode()}, input='$input'")
+
+        return when (configurator.getAgentMode()) {
+            AiAgentMode.LOCAL, AiAgentMode.OFF -> {
+                streamChatLocal(input, agentContext, onToken)
+            }
+            AiAgentMode.REMOTE -> {
+                streamChatRemote(input, agentContext, onToken)
+            }
+        }
+    }
+
+    private suspend fun streamChatLocal(
+        input: String,
+        agentContext: AgentContext,
+        onToken: (String) -> Unit
+    ): Result<StreamChatResult> {
+        // 确保模型已加载
+        if (!localLlmEngine.isLoaded) {
+            val loadResult = tryLoadModel()
+            if (loadResult.isFailure) {
+                return Result.failure(
+                    RuntimeException("本地模型未加载：${loadResult.exceptionOrNull()?.message ?: "未知错误"}")
+                )
+            }
+        }
+
+        // 使用 L2 命令 prompt，让模型能输出指令（如 navigate_to、switch_filter 等）
+        val capabilities = _capabilityRegistry.getCapabilitiesForCurrentScene()
+        val systemPrompt = promptBuilder.buildL2SystemPrompt(capabilities, agentContext)
+        val messages = memoryManager.buildContextMessages(
+            agentContext.memorySessionId, systemPrompt, input
+        )
+
+        val startTime = System.currentTimeMillis()
+
+        return try {
+            val result = suspendCoroutine<Result<StreamChatResult>> { continuation ->
+                localLlmEngine.chat(
+                    ChatRequest(messages = messages),
+                    object : StreamingChatResponseHandler {
+                        private val accumulatedText = StringBuilder()
+
+                        override fun onPartialResponse(partialResponse: String) {
+                            accumulatedText.append(partialResponse)
+                            onToken(partialResponse)
+                        }
+
+                        override fun onCompleteResponse(completeResponse: com.mamba.picme.agent.core.api.ChatResponse) {
+                            val latencyMs = System.currentTimeMillis() - startTime
+                            val metrics = completeResponse.metadata
+                            Logger.d(tag, "streamChatLocal OK latency=${latencyMs}ms")
+                            continuation.resume(
+                                Result.success(
+                                    StreamChatResult(
+                                        fullResponse = completeResponse.aiMessage.text,
+                                        metrics = StreamMetrics(
+                                            latencyMs = latencyMs,
+                                            promptTokens = metrics?.promptTokens,
+                                            completionTokens = metrics?.completionTokens
+                                        )
+                                    )
+                                )
+                            )
+                        }
+
+                        override fun onError(error: Throwable) {
+                            val latencyMs = System.currentTimeMillis() - startTime
+                            Logger.e(tag, "streamChatLocal ERR latency=${latencyMs}ms", error)
+                            continuation.resume(Result.failure(error))
+                        }
+                    }
+                )
+            }
+            // 流式完成后，从响应文本中解析命令
+            result.map { streamResult ->
+                val commands = LocalCommandParser.parseL2BatchResponse(
+                    streamResult.fullResponse, agentContext
+                )
+                Logger.d(tag, "streamChatLocal: parsed ${commands.size} commands from response")
+                streamResult.copy(commands = commands)
+            }
+        } catch (e: Exception) {
+            Logger.e(tag, "streamChatLocal setup failed", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun streamChatRemote(
+        input: String,
+        agentContext: AgentContext,
+        onToken: (String) -> Unit
+    ): Result<StreamChatResult> {
+        return try {
+            configurator.getRemoteOrchestrator()
+                .processChatStreaming(input, agentContext, onToken)
+        } catch (e: Exception) {
+            Logger.e(tag, "streamChatRemote failed, falling back to local", e)
+            // 远程失败回退到本地
+            streamChatLocal(input, agentContext, onToken)
+        }
     }
 
     /**

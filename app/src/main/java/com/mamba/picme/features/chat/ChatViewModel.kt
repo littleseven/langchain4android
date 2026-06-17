@@ -223,17 +223,17 @@ class ChatViewModel(
      * 流程：
      * 1. 保存用户消息到 Room
      * 2. 构建 Agent 上下文
-     * 3. 根据当前模型选择本地/远程推理，解析为 AgentCommand
-     * 4. 分发到 Capability 执行，并将结果保存到 Room
+     * 3. 创建流式占位消息，实时展示 token
+     * 4. 调用 [AgentOrchestrator.streamChat] 流式推理
+     * 5. 推理完成后保存完整结果到 Room
      */
     fun sendMessage(text: String) {
         if (text.isBlank()) return
 
         viewModelScope.launch {
+            val sessionId = _currentSessionId.value
             try {
-                val sessionId = _currentSessionId.value
-
-                // 0. 确保会话元数据存在（兼容旧数据或 default）
+                // 0. 确保会话元数据存在
                 ensureSessionExists(sessionId)
 
                 // 1. 保存用户消息
@@ -245,33 +245,123 @@ class ChatViewModel(
                     modelUsed = null
                 )
                 chatMessageDao.insertMessage(userMessage)
-
-                // 刷新会话活跃时间，确保线程列表排序正确
                 chatSessionDao.touchSession(sessionId)
 
                 // 2. 触发处理状态
                 _isProcessing.value = true
 
-                // 3. 调用 Agent 编排器
-                processAgentInput(text, sessionId)
+                // 3. 创建流式占位消息
+                val streamingId = "streaming_${System.currentTimeMillis()}"
+                _streamingMessage.value = ChatMessageUi(
+                    id = streamingId,
+                    type = ChatMessageType.AGENT_TEXT,
+                    content = "",
+                    modelUsed = currentModelLabel()
+                )
 
-                // 4. 清理超限消息
+                // 4. 构建 Agent 上下文
+                val agentContext = AgentContext(
+                    scene = AgentScene.CHAT,
+                    memorySessionId = sessionId
+                )
+
+                // 5. 调用流式推理
+                val accumulatedContent = StringBuilder()
+                val isLocalModel = _currentModel.value is ChatModelOption.Local
+                val result = orchestrator.streamChat(
+                    input = text,
+                    agentContext = agentContext,
+                    onToken = { token ->
+                        accumulatedContent.append(token)
+                        val current = _streamingMessage.value
+                        if (current != null && current.id == streamingId) {
+                            // LOCAL 模式输出 JSON 命令，流式期间展示友好提示而非原始 JSON
+                            val displayText = if (isLocalModel) {
+                                "正在处理请求..."
+                            } else {
+                                accumulatedContent.toString()
+                            }
+                            _streamingMessage.value = current.copy(content = displayText)
+                        }
+                    }
+                )
+
+                // 6. 处理结果
+                result.fold(
+                    onSuccess = { streamResult ->
+                        // 清除流式占位
+                        _streamingMessage.value = null
+
+                        if (streamResult.commands.isNotEmpty()) {
+                            // 有命令需要执行：通过 CapabilityRegistry 分发
+                            Logger.i(TAG, "Executing ${streamResult.commands.size} commands from streaming response")
+                            val commands = streamResult.commands
+                            val finalCommand = if (commands.size > 1) {
+                                AgentCommand.BatchExecute(commands = commands)
+                            } else {
+                                commands.first()
+                            }
+                            val action = orchestrator.getCapabilityRegistry()
+                                .dispatch(finalCommand, agentContext)
+                            handleAgentAction(action.getOrNull(), sessionId, currentModelLabel(), null)
+                        } else {
+                            // 纯文本回复：保存到 Room（REMOTE 场景或 LOCAL 的 text_reply）
+                            val performance = streamResult.metrics?.let { metrics ->
+                                LlmPerformance(
+                                    promptLen = metrics.promptTokens ?: 0,
+                                    decodeLen = metrics.completionTokens ?: 0,
+                                    prefillTimeMs = 0,
+                                    decodeTimeMs = metrics.latencyMs,
+                                    prefillSpeed = 0f,
+                                    decodeSpeed = if (metrics.latencyMs > 0 && (metrics.completionTokens ?: 0) > 0)
+                                        (metrics.completionTokens!!.toFloat() / metrics.latencyMs * 1000) else 0f
+                                )
+                            }
+                            insertAgentMessage(
+                                sessionId = sessionId,
+                                content = streamResult.fullResponse,
+                                modelUsed = currentModelLabel(),
+                                performance = performance
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        // 清除流式占位
+                        _streamingMessage.value = null
+                        // 保存错误消息
+                        insertAgentMessage(
+                            sessionId = sessionId,
+                            content = "推理出错：${error.message ?: "未知错误"}",
+                            modelUsed = "error"
+                        )
+                    }
+                )
+
+                // 7. 清理超限消息
                 cleanupIfNeeded(sessionId)
             } catch (e: Exception) {
                 Logger.e(TAG, "Failed to send message", e)
+                _streamingMessage.value = null
                 // 保存错误提示
                 val errorMessage = ChatMessageEntity(
                     id = UUID.randomUUID().toString(),
-                    sessionId = _currentSessionId.value,
+                    sessionId = sessionId,
                     type = "agent_text",
                     content = "推理出错：${e.message ?: "未知错误"}",
                     modelUsed = "error"
                 )
                 chatMessageDao.insertMessage(errorMessage)
-                chatSessionDao.touchSession(_currentSessionId.value)
+                chatSessionDao.touchSession(sessionId)
             } finally {
                 _isProcessing.value = false
             }
+        }
+    }
+
+    private fun currentModelLabel(): String {
+        return when (_currentModel.value) {
+            is ChatModelOption.Local -> "local_qwen3.5_2b"
+            is ChatModelOption.Remote -> "remote_deepseek"
         }
     }
 

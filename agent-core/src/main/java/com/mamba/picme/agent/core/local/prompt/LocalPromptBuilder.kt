@@ -265,6 +265,33 @@ class LocalPromptBuilder(
     }
 
     /**
+     * 构建流式聊天的自然语言 prompt
+     *
+     * 与 [buildL2SystemPrompt] / [buildSystemPrompt] 不同，
+     * 此方法生成的 prompt 只要求输出自然语言，不输出任何 JSON 命令。
+     * 专用于自由聊天模式的流式显示。
+     *
+     * @param context Agent 上下文
+     * @return 自然语言聊天 prompt
+     */
+    fun buildStreamChatPrompt(
+        context: AgentContext
+    ): String {
+        return buildString {
+            appendLine("你是 PicMe 的摄影助手小觅，当前是聊天模式。")
+            appendLine()
+            appendLine("回复规则：")
+            appendLine("1. 只输出自然语言，不要 JSON，不要 markdown。")
+            appendLine("2. 语气简洁友好，优先给出可执行建议。")
+            appendLine("3. 用户问能力范围时，聚焦相机/相册/设置可控能力。")
+            appendLine("4. 与产品无关的问题，礼貌引导回拍摄与编辑场景。")
+            appendLine()
+            appendLine("【当前状态】")
+            appendLine(buildStateSection(context, sceneManager.currentScene.value))
+        }
+    }
+
+    /**
      * 构建 L2 本地快速通道专用简化 Prompt
      *
      * 面向端侧小模型（Qwen3-1.7B/2B）优化，减少 token 数，提升推理速度：
