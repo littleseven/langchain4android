@@ -115,7 +115,7 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
      * - 多线程并发竞争（两个线程同时进入 loadModel）
      * - IO 线程池分散执行导致的状态不一致
      *
-     * @param modelId 模型注册表中的 key，如 "qwen3_1_7b" 或 "qwen3_0_6b"
+     * @param modelId 模型注册表中的 key，如 "qwen3_5_2b" 或 "qwen3_0_6b"
      * @return 加载结果，失败时返回具体错误原因
      */
     suspend fun loadModel(modelId: String, useOpencl: Boolean = false): Result<Unit> = withContext(modelDispatcher) {

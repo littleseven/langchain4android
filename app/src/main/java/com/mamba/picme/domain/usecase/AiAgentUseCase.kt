@@ -33,7 +33,7 @@ import kotlinx.coroutines.withContext
  * @param context Application Context
  * @param agentMode Agent 运行模式，默认 LOCAL
  * @param privacyLevel 隐私级别，默认 STRICT
- * @param localModelId 本地模型 ID，默认 qwen3_1_7b（下划线格式）
+ * @param localModelId 本地模型 ID，默认 qwen3_5_2b（下划线格式）
  * @param localUseOpencl 本地模型是否启用 OpenCL 后端
  * @param remoteConfig 用户自定义远程模型配置（完整配置，包含 modelId/apiKey/baseUrl/gatewayToken）
  * @param forceRemote 是否强制使用远程模型（绕过本地模型检查）

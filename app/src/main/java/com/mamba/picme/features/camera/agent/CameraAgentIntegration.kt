@@ -90,7 +90,7 @@ fun rememberCameraAgentIntegration(
             // 加载配置
             configure(
                 mode = AiAgentMode.LOCAL,
-                modelId = "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
+                modelId = "qwen3_5_2b", // 下划线格式，与 ModelManager 注册表一致
                 privacyLevel = AiAgentPrivacyLevel.STRICT
             )
         }

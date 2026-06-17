@@ -13,10 +13,10 @@
 
 | 模型 | 文件大小 | 运行时内存 | 配置路径 |
 |------|---------|-----------|---------|
-| **Qwen3-1.7B** | weight 1.2GB | ~3.5GB | `files/llm_models/qwen3-1.7b/config.json` |
+| **Qwen3.5-2B** | weight 1.8GB | ~4.2GB | `files/llm_models/qwen3.5-2b/config.json` |
 | Qwen3.5-0.8B | weight 470MB | ~1.5GB（预估） | `files/llm_models/qwen3.5-0.8b/config.json` |
 
-### 1.2 当前 config.json（Qwen3-1.7B）
+### 1.2 当前 config.json（Qwen3.5-2B）
 
 ```json
 {
@@ -40,10 +40,10 @@
 
 | 问题 | 现象 | 根因 |
 |------|------|------|
-| 内存占用过高 | Native Heap 3.61GB | 1.7B 模型 weight 1.2GB + KV Cache + 激活值 |
-| 应用被 OOM Kill | 相机预览 + LLM 同时运行时被杀 | 总 PSS 6.24GB 超过 LMK 阈值 |
-| 渲染卡顿 | Janky frames 18.42% | 内存压力导致 Swap 换页，GPU 竞争 |
-| 高温 | GPU 81°C | CPU 后端推理，未使用 GPU/NPU |
+| 内存占用过高 | Native Heap ~4.2GB | 2B 模型 weight 1.8GB + KV Cache + 激活值 |
+| 应用被 OOM Kill | 相机预览 + LLM 同时运行时可能被杀 | 总 PSS 可能超过 LMK 阈值 |
+| 渲染卡顿 | Janky frames 增加 | 内存压力导致 Swap 换页，GPU 竞争 |
+| 高温 | CPU/GPU 可能发热 | CPU 后端推理，未使用 GPU/NPU |
 
 ---
 
@@ -87,25 +87,25 @@ interpreter->setHint(MNN::Interpreter::USE_CACHED_MMAP, 1);
 
 ### 3.1 P0：模型量化（效果最显著）
 
-**当前模型**：Qwen3-1.7B FP16/FP32（weight 1.2GB）
-**目标**：INT4 量化（weight ~350MB，减少 70%）
+**当前模型**：Qwen3.5-2B FP16/FP32（weight 1.8GB）
+**目标**：INT4 量化（weight ~600MB，减少 65%）
 
 | 量化级别 | 模型大小 | 运行时内存 | 质量损失 | 适用场景 |
 |---------|---------|-----------|---------|---------|
-| FP16（当前） | 1.2GB | ~3.5GB | 无 | 高端设备 |
-| INT8 | ~600MB | ~1.8GB | 轻微 | 中端设备 |
-| **INT4** | **~350MB** | **~1.0GB** | 可接受 | **推荐** |
+| FP16（当前） | 1.8GB | ~4.2GB | 无 | 高端设备 |
+| INT8 | ~900MB | ~2.5GB | 轻微 | 中端设备 |
+| **INT4** | **~600MB** | **~1.5GB** | 可接受 | **推荐** |
 
 **操作步骤**：
-1. 从 ModelScope 下载 Qwen3-1.7B-INT4-MNN 或自行转换
+1. 从 ModelScope 下载 Qwen3.5-2B-INT4-MNN 或自行转换
 2. 替换 `llm.mnn` + `llm.mnn.weight`
 3. 更新 `config.json` 中的 `precision: "low"`
 
 **MNN 转换命令参考**：
 ```bash
 # INT4 量化转换（需 MNN 工具链）
-mnnconvert -f ONNX --modelFile qwen3-1.7b.onnx \
-  --MNNModel qwen3-1.7b-int4.mnn \
+mnnconvert -f ONNX --modelFile qwen3.5-2b.onnx \
+  --MNNModel qwen3.5-2b-int4.mnn \
   --weightQuantBits 4 \
   --weightQuantAsymmetric
 ```
@@ -114,16 +114,16 @@ mnnconvert -f ONNX --modelFile qwen3-1.7b.onnx \
 
 **备选模型**：Qwen3.5-0.8B（已下载，weight 470MB）
 
-| 对比 | Qwen3-1.7B | Qwen3.5-0.8B |
+| 对比 | Qwen3.5-2B | Qwen3.5-0.8B |
 |------|-----------|-------------|
-| Weight | 1.2GB | 470MB |
-| 预估运行时 | ~3.5GB | ~1.5GB |
+| Weight | 1.8GB | 470MB |
+| 预估运行时 | ~4.2GB | ~1.5GB |
 | 推理质量 | 较高 | 中等 |
 | 适用场景 | 纯聊天页 | 相机预览共存 |
 
 **建议**：
 - 相机预览场景自动切换到 0.8B 模型
-- 聊天页可手动选择 1.7B 模型
+- 聊天页可使用 2B 模型提供更强推理能力
 
 ### 3.3 P1：GPU 后端切换
 
@@ -160,7 +160,7 @@ class CameraViewModel {
 class ChatViewModel {
     fun onEnter() {
         viewModelScope.launch {
-            agentOrchestrator.loadModel("qwen3_1_7b")
+            agentOrchestrator.loadModel("qwen3_5_2b")
         }
     }
     
@@ -300,15 +300,15 @@ class MemoryMonitor {
 
 ---
 
-## 6. 预期收益
+## 6. 预期收益（基于 Qwen3.5-2B）
 
 | 优化项 | 当前 | 目标 | 收益 |
 |--------|------|------|------|
-| 模型量化（INT4） | 3.61GB | ~1.2GB | 内存减少 67% |
-| 切换 0.8B 模型 | 3.61GB | ~1.5GB | 内存减少 58% |
-| 动态加载 | 常驻 | 按需 | 相机场景释放 3.5GB |
-| GPU 后端 | CPU 40% | GPU 承担 | CPU 占用降低 |
-| 综合优化 | OOM 被杀 | 稳定运行 | 可用性提升 |
+| 模型量化（INT4） | ~4.2GB | ~1.5GB | 内存减少 64% |
+| 切换 0.8B 模型 | ~4.2GB | ~1.5GB | 内存减少 64% |
+| 动态加载 | 常驻 | 按需 | 相机场景释放 ~4.2GB |
+| GPU 后端 | CPU 高负载 | GPU 承担 | CPU 占用降低 |
+| 综合优化 | 可能 LMK 被杀 | 稳定运行 | 可用性提升 |
 
 ---
 

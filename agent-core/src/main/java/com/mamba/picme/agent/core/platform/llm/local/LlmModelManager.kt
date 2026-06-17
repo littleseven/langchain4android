@@ -38,7 +38,7 @@ class LlmModelManager(private val context: Context) {
      *
      * 优先从下载目录 (llm_models/) 加载，其次从 assets 复制。
      *
-     * @param modelKey 模型注册表中的 key，如 "qwen3_1_7b"
+     * @param modelKey 模型注册表中的 key，如 "qwen3_5_2b"
      * @return 模型目录绝对路径
      * @throws IllegalArgumentException 如果 key 不存在
      */

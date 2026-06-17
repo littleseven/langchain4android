@@ -2,6 +2,10 @@ package com.mamba.picme
 
 import android.app.Activity
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -13,11 +17,14 @@ import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
 import com.mamba.picme.domain.agent.remote.FeishuChannelHandler
+import com.mamba.picme.domain.agent.remote.RemoteCommandDispatcher
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
 import com.mamba.picme.beauty.log.BeautyLogProxy
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -39,6 +46,10 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
     val feishuChannelHandler: FeishuChannelHandler by lazy { FeishuChannelHandler(applicationScope) }
 
+    val remoteCommandDispatcher: RemoteCommandDispatcher by lazy {
+        RemoteCommandDispatcher(feishuChannelHandler, this)
+    }
+
     /**
      * 当前活跃的 Activity（用于测试截屏等场景）
      *
@@ -47,6 +58,13 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     @Volatile
     var currentActivity: Activity? = null
         private set
+
+    /**
+     * 当前飞书消息处理 Job，用于新消息到达时取消旧任务
+     * 防止多个 LLM 推理同时运行吃满 CPU 导致 ANR
+     */
+    @Volatile
+    private var feishuDispatchJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -92,6 +110,14 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                 val appSecret = container.userPreferencesRepository.feishuAppSecretFlow.first()
                 if (appId.isNotBlank() && appSecret.isNotBlank()) {
                     feishuChannelHandler.init(appId, appSecret)
+                    // 绑定消息处理回调：飞书消息 → RemoteCommandDispatcher
+                    // 前一个推理任务未完成时自动取消，防止多个 LLM 线程吃满 CPU
+                    feishuChannelHandler.onMessageReceived = { text, messageId ->
+                        feishuDispatchJob?.cancel()
+                        feishuDispatchJob = applicationScope.launch {
+                            remoteCommandDispatcher.dispatch(text, messageId)
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "飞书通道初始化失败", e)
@@ -117,6 +143,70 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                 Logger.e(TAG, "飞书配置监听失败", e)
             }
         }
+
+        // 注册网络状态变化监听：网络恢复时自动重连飞书
+        registerFeishuNetworkMonitor()
+    }
+
+    /**
+     * 注册网络状态监听，网络恢复时自动重连飞书通道
+     */
+    private fun registerFeishuNetworkMonitor() {
+        try {
+            val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager
+            if (connectivityManager == null) {
+                Logger.w(TAG, "无法获取 ConnectivityManager")
+                return
+            }
+
+            val networkCallback = object : ConnectivityManager.NetworkCallback() {
+                private var wasUnavailable = true
+
+                override fun onAvailable(network: Network) {
+                    if (wasUnavailable) {
+                        wasUnavailable = false
+                        Logger.i(TAG, "网络恢复可用，触发飞书重连")
+                        // 延迟 2 秒等待网络稳定后再重连
+                        applicationScope.launch {
+                            delay(2000)
+                            feishuChannelHandler.reconnectIfNeeded()
+                        }
+                    }
+                }
+
+                override fun onLost(network: Network) {
+                    wasUnavailable = true
+                    Logger.w(TAG, "网络连接丢失")
+                }
+
+                override fun onCapabilitiesChanged(
+                    network: Network,
+                    capabilities: NetworkCapabilities
+                ) {
+                    val hasInternet = capabilities.hasCapability(
+                        NetworkCapabilities.NET_CAPABILITY_INTERNET
+                    )
+                    if (hasInternet && wasUnavailable) {
+                        wasUnavailable = false
+                        Logger.i(TAG, "网络能力恢复，触发飞书重连")
+                        applicationScope.launch {
+                            delay(2000)
+                            feishuChannelHandler.reconnectIfNeeded()
+                        }
+                    }
+                }
+            }
+
+            connectivityManager.registerNetworkCallback(
+                NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build(),
+                networkCallback
+            )
+            Logger.i(TAG, "网络状态监听已注册")
+        } catch (e: Exception) {
+            Logger.e(TAG, "注册网络状态监听失败", e)
+        }
     }
 
     /**
@@ -131,7 +221,13 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
         override fun onActivityStarted(activity: Activity) {
             if (activityCount == 0) {
+                Logger.i(TAG, "App 回到前台")
                 MnnResourceManager.getInstance(this@PicMeApplication).onAppForeground()
+                // App 回到前台时检查飞书连接，断开则自动重连
+                applicationScope.launch {
+                    delay(1000) // 等待系统稳定
+                    feishuChannelHandler.reconnectIfNeeded()
+                }
             }
             activityCount++
         }
@@ -199,7 +295,7 @@ class PicMeApplication : Application(), ImageLoaderFactory {
             System.loadLibrary("sherpa-mnn-jni")
             Logger.d(TAG, "Native library loaded: sherpa-mnn-jni")
         } catch (e: UnsatisfiedLinkError) {
-            Logger.e(TAG, "Failed to load sherpa-mnn-jni", e)
+            Logger.e(TAG, "Failed to load sherpa-onnx-jni", e)
         }
     }
 }

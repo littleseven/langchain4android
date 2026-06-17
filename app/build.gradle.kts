@@ -17,6 +17,11 @@ val releaseStorePassword: String = System.getenv("PICME_RELEASE_STORE_PASSWORD")
 val releaseKeyAlias: String = System.getenv("PICME_RELEASE_KEY_ALIAS") ?: ""
 val releaseKeyPassword: String = System.getenv("PICME_RELEASE_KEY_PASSWORD") ?: ""
 
+// 飞书远程控制 AppId/AppSecret（编译时从环境变量注入默认值）
+// 构建命令示例：PICME_FEISHU_APP_ID=cli_xxxxx PICME_FEISHU_APP_SECRET=yyyyy ./gradlew :app:assembleDebug
+val feishuAppId: String = System.getenv("PICME_FEISHU_APP_ID") ?: ""
+val feishuAppSecret: String = System.getenv("PICME_FEISHU_APP_SECRET") ?: ""
+
 detekt {
     buildUponDefaultConfig = true
     allRules = false
@@ -56,6 +61,12 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+
+        // 飞书远程控制默认值（从环境变量注入）
+        buildConfigField("String", "FEISHU_APP_ID", "\"${feishuAppId}\"")
+        buildConfigField("String", "FEISHU_APP_SECRET", "\"${feishuAppSecret}\"")
+        buildConfigField("String", "TENCENT_SCF_APP_TOKEN", "\"${System.getenv("TENCENT_SCF_APP_TOKEN") ?: ""}\"")
+        buildConfigField("String", "CLOUDFLARE_GATEWAY_TOKEN", "\"${System.getenv("CLOUDFLARE_GATEWAY_TOKEN") ?: ""}\"")
     }
 
     androidResources {
@@ -116,34 +127,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-
-    defaultConfig {
-        buildConfigField(
-            "String",
-            "FEISHU_APP_ID",
-            "\"${project.findProperty("feishu.app.id") ?: ""}\"",
-        )
-        buildConfigField(
-            "String",
-            "FEISHU_APP_SECRET",
-            "\"${project.findProperty("feishu.app.secret") ?: ""}\"",
-        )
-        buildConfigField(
-            "String",
-            "TENCENT_SCF_APP_TOKEN",
-            "\"${project.findProperty("tencent.scf.app.token") ?: ""}\"",
-        )
-        buildConfigField(
-            "String",
-            "FEISHU_APP_ID",
-            "\"${project.findProperty("feishu.app.id") ?: ""}\"",
-        )
-        buildConfigField(
-            "String",
-            "FEISHU_APP_SECRET",
-            "\"${project.findProperty("feishu.app.secret") ?: ""}\"",
-        )
     }
 
     sourceSets {

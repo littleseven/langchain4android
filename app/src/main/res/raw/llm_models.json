@@ -35,22 +35,22 @@
     "tags": ["KWS", "wake-word", "keyword", "always-on", "onnx"]
   },
   {
-    "id": "qwen3_1_7b",
-    "name": "Qwen3-1.7B-MNN",
-    "description": "阿里通义千问 3 1.7B 平衡版，更强的推理能力，适合中端设备本地运行",
-    "type": "LLM",
-    "size": 980000000,
+    "id": "sherpa-onnx-kws-zipformer-wenetspeech",
+    "name": "Sherpa-ONNX KWS 唤醒词",
+    "description": "轻量级关键词识别模型，~14MB，支持自定义唤醒词（always-on 超低功耗）",
+    "type": "KWS",
+    "size": 14000000,
     "sources": {
-      "HuggingFace": "taobao-mnn/Qwen3-1.7B-MNN",
-      "ModelScope": "MNN/Qwen3-1.7B-MNN"
+      "ModelScope": "budaoshou/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01"
     },
     "files": [
-      "config.json",
-      "llm.mnn",
-      "llm.mnn.weight",
-      "tokenizer.txt"
+      "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+      "tokens.txt",
+      "keywords.txt"
     ],
-    "tags": ["chat", "reasoning", "multilingual"]
+    "tags": ["KWS", "wake-word", "keyword", "always-on", "onnx"]
   },
   {
     "id": "qwen3_5_0_8b",

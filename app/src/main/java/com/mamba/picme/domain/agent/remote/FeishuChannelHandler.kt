@@ -47,16 +47,30 @@ class FeishuChannelHandler(
     private var appSecret: String = ""
 
     /**
-     * 连接状态
+     * 连接状态标志
+     * 用于 UI 展示和 reconnectIfNeeded 决策
      */
     @Volatile
     var isConnected: Boolean = false
         private set
 
     /**
+     * 最近一次成功收发消息的时间戳（毫秒）
+     * 用于检测连接是否在合理时间内有过活动
+     */
+    @Volatile
+    private var lastActivityTimeMs: Long = 0L
+
+    /**
+     * 连接状态回调（供 UI/日志使用）
+     */
+    var onConnectionStateChanged: ((connected: Boolean) -> Unit)? = null
+
+    /**
      * 消息接收回调（供 RemoteCommandDispatcher 使用）
      */
     var onMessageReceived: ((text: String, messageId: String) -> Unit)? = null
+
 
     private val eventHandler: EventDispatcher by lazy {
         EventDispatcher.newBuilder("", "")
@@ -90,9 +104,12 @@ class FeishuChannelHandler(
             try {
                 wsClient?.start()
                 isConnected = true
+                lastActivityTimeMs = System.currentTimeMillis()
+                onConnectionStateChanged?.invoke(true)
                 Logger.i(TAG, "飞书 WebSocket 客户端已启动")
             } catch (e: Exception) {
                 isConnected = false
+                onConnectionStateChanged?.invoke(false)
                 Logger.e(TAG, "飞书 WebSocket 启动失败", e)
             }
         }
@@ -107,6 +124,7 @@ class FeishuChannelHandler(
         wsClient = null
         apiClient = null
         isConnected = false
+        onConnectionStateChanged?.invoke(false)
 
         try {
             // 禁用自动重连
@@ -145,6 +163,48 @@ class FeishuChannelHandler(
         init(newAppId, newAppSecret)
     }
 
+    /**
+     * 检查连接状态，必要时重建连接。
+     *
+     * 参考 ApkClaw ChannelManager.reconnectIfNeeded()。
+     * 在网络变化恢复或 App 从后台切回前台时调用。
+     */
+    fun reconnectIfNeeded() {
+        if (appId.isEmpty() || appSecret.isEmpty()) {
+            Logger.w(TAG, "reconnectIfNeeded 跳过：AppId/AppSecret 未配置")
+            return
+        }
+
+        if (isConnected && apiClient != null) {
+            Logger.d(TAG, "reconnectIfNeeded 跳过：连接正常")
+            return
+        }
+
+        Logger.i(TAG, "reconnectIfNeeded：连接丢失，准备重建")
+        // 调用前清理旧连接
+        val oldWsClient = wsClient
+        if (oldWsClient != null) {
+            wsClient = null
+            apiClient = null
+            isConnected = false
+            try {
+                val autoReconnectField = oldWsClient.javaClass.getDeclaredField("autoReconnect")
+                autoReconnectField.isAccessible = true
+                autoReconnectField.set(oldWsClient, false)
+            } catch (e: Exception) {
+                Logger.w(TAG, "禁用自动重连失败", e)
+            }
+            try {
+                val disconnectMethod = oldWsClient.javaClass.getDeclaredMethod("disconnect")
+                disconnectMethod.isAccessible = true
+                disconnectMethod.invoke(oldWsClient)
+            } catch (e: Exception) {
+                Logger.w(TAG, "调用 disconnect 失败", e)
+            }
+        }
+        init(appId, appSecret)
+    }
+
     // ==================== 消息发送 ====================
 
     /**
@@ -176,6 +236,9 @@ class FeishuChannelHandler(
                         )
                         .build()
                 )
+                if (resp.code == 0) {
+                    lastActivityTimeMs = System.currentTimeMillis()
+                }
                 Logger.i(TAG, "飞书回复消息: code=${resp.code}, type=$msgType")
             } catch (e: Exception) {
                 Logger.e(TAG, "飞书回复失败", e)
@@ -310,6 +373,7 @@ class FeishuChannelHandler(
                 } catch (e: Exception) {
                     rawContent
                 }
+                lastActivityTimeMs = System.currentTimeMillis()
                 onMessageReceived?.invoke(text, messageId)
             }
         } catch (e: Exception) {

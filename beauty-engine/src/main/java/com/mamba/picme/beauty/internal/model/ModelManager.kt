@@ -127,11 +127,6 @@ object ModelManager {
             assetDir = "models/llm/Qwen3-0.6B-MNN",
             cacheDirName = "qwen3_0_6b",
             version = "1.0"
-        ),
-        "qwen3_1_7b" to LlmModelInfo(
-            assetDir = "models/llm/Qwen3-1.7B-MNN",
-            cacheDirName = "qwen3_1_7b",
-            version = "1.0"
         )
     )
 
@@ -272,7 +267,7 @@ object ModelManager {
      *
      * 规则：代码 key（下划线格式）→ 存储目录（ModelScope 发布源格式）
      *
-     * @param key LLM 模型注册表中的 key，如 "qwen3_1_7b"
+     * @param key LLM 模型注册表中的 key，如 "qwen3_5_2b"
      * @param context Context
      * @return 模型目录绝对路径
      * @throws IllegalArgumentException 如果 key 不存在

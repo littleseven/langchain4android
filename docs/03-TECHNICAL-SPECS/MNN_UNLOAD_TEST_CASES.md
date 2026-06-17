@@ -12,7 +12,7 @@
 
 - Android 设备（API 24+）
 - 已安装 PicMe 调试版 APK
-- LLM 模型（qwen3_1_7b）已下载
+- LLM 模型（qwen3_5_2b）已下载
 - ASR 模型（sherpa-mnn-zipformer-zh-en）已下载
 
 ### 1.2 ADB 日志准备

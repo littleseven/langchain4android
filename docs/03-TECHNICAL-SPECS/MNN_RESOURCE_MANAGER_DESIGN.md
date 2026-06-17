@@ -14,7 +14,7 @@ PicMe 使用 MNN 3.5.0 统一构建的 `libMNN.so`，同时承载两个独立子
 
 | 子系统 | MNN API | 内存占用 | 生命周期 |
 |--------|---------|----------|----------|
-| **LLM** | `MNN::Transformer::Llm` | Qwen3-1.7B 约 1-2GB | 加载后常驻，无自动卸载 |
+| **LLM** | `MNN::Transformer::Llm` | Qwen3.5-2B 约 1.5-2.5GB | 加载后常驻，无自动卸载 |
 | **ASR** | `MNN::Express::Module` (via Sherpa-MNN) | Zipformer 约 100-300MB | 相机页初始化，页面退出不释放 |
 
 ### 1.2 核心冲突

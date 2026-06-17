@@ -25,7 +25,7 @@
 
 | 组件 | 状态 | 说明 |
 |------|------|------|
-| `LocalLlmEngine` | ✅ 已落地 | Qwen3-1.7B (MNN-LLM)，单指令意图识别 |
+| `LocalLlmEngine` | ✅ 已落地 | Qwen3.5-2B (MNN-LLM)，单指令意图识别 |
 | `RemoteInferenceEngine` | 📝 骨架存在 | L2/L3/L4 概念设计，未完全实现 |
 | `ExecutionPlan` | 📝 数据类存在 | PlanStep、StepResult、ExecutionResult 已定义 |
 | `AdaptiveStrategySelector` | 📝 骨架存在 | 输入特征分析 + 策略选择逻辑已定义 |
@@ -62,7 +62,7 @@
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  InferenceRouter（本地决策，零延迟）                          │
-│  ├─ 单指令高频词 → L1 本地缓存（Qwen3-1.7B）                  │
+│  ├─ 单指令高频词 → L1 本地缓存（Qwen3.5-2B）                  │
 │  ├─ 多指令/条件/步骤词 → L2/L3 远程（Kimi）                  │
 │  └─ 开放式问题 → L4 远程对话                                   │
 └─────────────────────────────────────────────────────────────┘
@@ -71,7 +71,7 @@
               ▼                               ▼
 ┌─────────────────────────────┐   ┌─────────────────────────────┐
 │   LocalLlmEngine            │   │   RemoteOrchestrator        │
-│   (Qwen3-1.7B / MNN)        │   │   (kimi-for-coding)         │
+│   (Qwen3.5-2B / MNN)        │   │   (kimi-for-coding)         │
 │                             │   │                             │
 │   输出: AgentCommand        │   │   模式:                     │
 │                             │   │   ├─ Batch → [commands]     │

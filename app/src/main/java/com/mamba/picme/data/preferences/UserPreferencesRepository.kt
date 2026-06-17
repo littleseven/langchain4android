@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mamba.picme.BuildConfig
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
@@ -941,7 +942,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            preferences[PreferencesKeys.FEISHU_APP_ID] ?: ""
+            preferences[PreferencesKeys.FEISHU_APP_ID] ?: BuildConfig.FEISHU_APP_ID
         }
 
     override val feishuAppSecretFlow: Flow<String> = context.dataStore.data
@@ -953,7 +954,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
             }
         }
         .map { preferences ->
-            preferences[PreferencesKeys.FEISHU_APP_SECRET] ?: ""
+            preferences[PreferencesKeys.FEISHU_APP_SECRET] ?: BuildConfig.FEISHU_APP_SECRET
         }
 
     override suspend fun updateFeishuAppId(appId: String) {

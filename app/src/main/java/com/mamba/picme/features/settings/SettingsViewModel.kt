@@ -50,7 +50,7 @@ class SettingsViewModel(
 // 必要模型（LLM + ASR + KWS），检测到缺少时提示一键下载
 // 仅保留核心模型以节省用户首次进入时间
 private val ESSENTIAL_MODEL_IDS = listOf(
-    "qwen3_1_7b", // 下划线格式，与 ModelManager 注册表一致
+    "qwen3_5_2b", // 下划线格式，与 ModelManager 注册表一致
     "sherpa-onnx-zipformer-zh-en", // ASR 模型
     "sherpa-onnx-kws-zipformer-wenetspeech" // KWS 唤醒词模型
 )

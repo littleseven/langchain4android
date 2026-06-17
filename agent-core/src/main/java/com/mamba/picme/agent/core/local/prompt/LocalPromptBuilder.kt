@@ -7,7 +7,7 @@ import com.mamba.picme.agent.core.runtime.state.SceneManager
 /**
  * 本地 LLM Prompt 构建器
  *
- * 面向端侧小模型（Qwen3-1.7B/2B）优化，使用自定义 method/params JSON 数组格式。
+ * 面向端侧小模型（Qwen3.5-2B/0.8B）优化，使用自定义 method/params JSON 数组格式。
  * 分层构建 system prompt：
  * - Base: 通用规则（JSON 格式、回复风格等）
  * - Scene: 场景特定能力和约束
@@ -20,7 +20,7 @@ class LocalPromptBuilder(
     /**
      * 基础 Prompt 模板
      *
-     * 面向端侧小模型（Qwen3-1.7B/2B）优化：
+     * 面向端侧小模型（Qwen3.5-2B/0.8B）优化：
      * - 统一输出格式：始终 JSON 数组，单指令也包成 [{...}]
      * - Schema 显式表达：每个命令的字段结构用伪 Schema 定义
      * - 示例覆盖边界：20+ 示例含正反对比、相对调整、多参数合并、否定指令
@@ -294,7 +294,7 @@ class LocalPromptBuilder(
     /**
      * 构建 L2 本地快速通道专用简化 Prompt
      *
-     * 面向端侧小模型（Qwen3-1.7B/2B）优化，减少 token 数，提升推理速度：
+     * 面向端侧小模型（Qwen3.5-2B/0.8B）优化，减少 token 数，提升推理速度：
      * - 只保留核心命令和格式约束
      * - 省略详细场景描述和状态信息
      * - 输出格式为 JSON 数组

@@ -557,7 +557,7 @@ fun rememberAgentChatConfig(
         AiAgentUseCase(
             context = context,
             agentMode = aiAgentMode,
-            localModelId = "qwen3_1_7b",
+            localModelId = "qwen3_5_2b",
             localUseOpencl = aiAgentLocalUseOpencl,
             remoteConfig = remoteConfig,
             forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE,

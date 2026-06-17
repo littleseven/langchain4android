@@ -680,7 +680,7 @@ fun CameraContent(
         AiAgentUseCase(
             context = context,
             agentMode = aiAgentMode,
-            localModelId = "qwen3_1_7b", // 初始默认值，LaunchedEffect 中会更新为实际值
+            localModelId = "qwen3_5_2b", // 初始默认值，LaunchedEffect 中会更新为实际值
             localUseOpencl = aiAgentLocalUseOpencl,
             remoteConfig = remoteConfig,
             forceRemote = aiAgentInferencePreference == AiAgentInferencePreference.FORCE_REMOTE,
@@ -690,7 +690,7 @@ fun CameraContent(
 
     // LLM 按需加载：仅在 AI Chat 打开或语音控制打开时加载本地模型。
     val resolvedModelId = remember(aiAgentLocalModel) {
-        aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_1_7b"
+        aiAgentLocalModel.takeIf { it.isNotBlank() } ?: "qwen3_5_2b"
     }
     val shouldLoadLocalLlm = remember(
         aiAgentChatVisible,
