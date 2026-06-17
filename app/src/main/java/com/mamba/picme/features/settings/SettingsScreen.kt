@@ -752,45 +752,6 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 飞书远程控制
-            SettingsSection(
-                title = "飞书远程控制",
-                description = "配置飞书应用凭证以启用 IM 远程控制"
-            ) {
-                var showSecret by remember { mutableStateOf(false) }
-
-                OutlinedTextField(
-                    value = feishuAppId,
-                    onValueChange = onFeishuAppIdChange,
-                    label = { Text("App ID") },
-                    placeholder = { Text("cli_xxxxxxxxxxxx") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                OutlinedTextField(
-                    value = feishuAppSecret,
-                    onValueChange = onFeishuAppSecretChange,
-                    label = { Text("App Secret") },
-                    placeholder = { Text("xxxxxxxxxxxxxxxxxxxx") },
-                    singleLine = true,
-                    visualTransformation = if (showSecret) VisualTransformation.None else PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                DebugOptionRow(
-                    title = "显示 App Secret",
-                    checked = showSecret,
-                    onCheckedChange = { showSecret = it }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
             // 日志模块管理
             SettingsSection(
                 title = stringResource(R.string.log_management),

@@ -151,6 +151,16 @@ android {
             jniLibs.srcDirs("src/main/jniLibs")
         }
     }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/LICENSE.txt"
+            excludes += "/META-INF/NOTICE"
+            excludes += "/META-INF/NOTICE.txt"
+        }
+    }
 }
 
 // Modern way to set the base name for the compiled APKs

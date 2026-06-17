@@ -60,9 +60,11 @@ class FeishuChannelHandler(
 
     private val eventHandler: EventDispatcher by lazy {
         EventDispatcher.newBuilder("", "")
-            .onP2MessageReceiveV1 { event ->
-                handleMessageEvent(event)
-            }
+            .onP2MessageReceiveV1(object : com.lark.oapi.service.im.ImService.P2MessageReceiveV1Handler() {
+                override fun handle(event: P2MessageReceiveV1) {
+                    handleMessageEvent(event)
+                }
+            })
             .build()
     }
 
