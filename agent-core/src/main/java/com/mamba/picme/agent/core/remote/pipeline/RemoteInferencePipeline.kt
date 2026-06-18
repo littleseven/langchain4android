@@ -1,22 +1,11 @@
 package com.mamba.picme.agent.core.remote.pipeline
 
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.UserMessage
-import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentIdGenerator
-import com.mamba.picme.agent.core.local.parser.LocalCommandParser
-import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger
-import com.mamba.picme.agent.core.remote.parser.ToolCallParser
-import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
-import com.mamba.picme.agent.core.runtime.state.SceneManager
-import org.json.JSONObject
 
 /**
  * 远程推理管道
@@ -28,13 +17,12 @@ import org.json.JSONObject
  * - L3: 计划执行（Plan-and-Execute）
  * - L4: 纯文本对话
  *
+ * 历史记录由 [RemoteOrchestrator] 通过 langchain4j MessageWindowChatMemory 自动管理。
+ *
  * 与本地管道完全独立，无共享路由逻辑。
  */
 class RemoteInferencePipeline(
     private val remoteOrchestrator: RemoteOrchestrator,
-    private val localEngine: LocalLlmEngine,
-    private val sceneManager: SceneManager,
-    private val capabilityRegistry: CapabilityRegistry,
     private val intentCache: IntentCache,
     private val privacyGuard: PrivacyGuard
 ) {
@@ -47,7 +35,7 @@ class RemoteInferencePipeline(
      * 路由逻辑：
      * 1. L1 缓存查询
      * 2. 隐私分级检查
-     * 3. 按策略路由到 L2/L3/L4
+     * 3. 委托给 RemoteOrchestrator（自动管理 langchain4j ChatMemory 历史）
      *
      * @param userInput 用户自然语言输入
      * @param context 当前 Agent 上下文
@@ -71,6 +59,7 @@ class RemoteInferencePipeline(
         Logger.d(tag, "Privacy level: $privacyLevel")
 
         // 3. L2 Batch（默认远程入口）
+        // 历史记录由 RemoteOrchestrator 通过 langchain4j MessageWindowChatMemory 自动管理
         Logger.i(tag, "[L2-BATCH] Remote L2 Batch FC")
         return remoteOrchestrator.processBatch(userInput, context)
     }

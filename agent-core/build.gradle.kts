@@ -38,8 +38,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }
 
@@ -59,6 +59,15 @@ dependencies {
     // sherpa-onnx v1.10.46（2025-02，匹配 2024-01 的 KWS 模型）
     // compileOnly + app 直接依赖：规避 Library 模块打包 AAR 时禁止直接依赖本地 .aar 限制
     compileOnly(files("libs/sherpa-onnx-1.10.46.aar"))
+
+    // LangChain4j ChatMemory（历史对话管理）
+    implementation(libs.langchain4j.core)
+
+    // RecyclerView（ScrollTool 滚动检测）
+    implementation(libs.androidx.recyclerview)
+
+    // Activity（BackTool 的 ComponentActivity / onBackPressedDispatcher）
+    implementation(libs.androidx.activity.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

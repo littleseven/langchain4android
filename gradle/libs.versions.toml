@@ -43,10 +43,12 @@ mlkitTextRecognition = "16.0.1"
 mediapipeFaceLandmarker = "0.10.14"
 onnxRuntimeAndroid = "1.18.0"
 kotlinxCoroutinesPlayServices = "1.10.2"
+recyclerView = "1.4.0"
 mockk = "1.13.8"
 oapi = "2.5.3"
 ktlint = "1.3.1"
 detekt = "1.23.6"
+langchain4j = "1.12.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -104,6 +106,8 @@ onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime
 google-mlkit-text-recognition-chinese = { group = "com.google.mlkit", name = "text-recognition-chinese", version.ref = "mlkitTextRecognition" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutinesPlayServices" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+langchain4j-core = { group = "dev.langchain4j", name = "langchain4j-core", version.ref = "langchain4j" }
+androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerView" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 ktlint-cli = { group = "com.pinterest.ktlint", name = "ktlint-cli", version.ref = "ktlint" }
 detekt-formatting = { group = "io.gitlab.arturbosch.detekt", name = "detekt-formatting", version.ref = "detekt" }

@@ -109,9 +109,6 @@ class AgentConfigurator(private val context: Context) {
         val remoteOrchestrator = createRemoteOrchestrator(currentConfig)
         val pipeline = RemoteInferencePipeline(
             remoteOrchestrator = remoteOrchestrator,
-            localEngine = localLlmEngine,
-            sceneManager = sceneManager,
-            capabilityRegistry = capabilityRegistry,
             intentCache = intentCache,
             privacyGuard = privacyGuard
         )

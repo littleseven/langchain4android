@@ -17,8 +17,11 @@ import com.mamba.picme.agent.core.api.ChatLanguageModel
 import com.mamba.picme.agent.core.api.ChatRequest
 import com.mamba.picme.agent.core.api.ChatResponse
 import com.mamba.picme.agent.core.api.ChatResponseMetadata
+import com.mamba.picme.agent.core.api.AiMessage
 import com.mamba.picme.agent.core.api.SystemMessage
+import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
 import com.mamba.picme.agent.core.api.UserMessage
+import com.mamba.picme.agent.core.api.ChatMessage
 import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.api.ToolParameters
 import com.mamba.picme.agent.core.api.JsonSchemaProperty
@@ -28,6 +31,14 @@ import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import org.json.JSONArray
 import org.json.JSONObject
+import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
+import dev.langchain4j.data.message.AiMessage as LcAiMessage
+import dev.langchain4j.data.message.ChatMessage as LcChatMessage
+import dev.langchain4j.data.message.SystemMessage as LcSystemMessage
+import dev.langchain4j.data.message.UserMessage as LcUserMessage
+import dev.langchain4j.data.message.ToolExecutionResultMessage as LcToolExecutionResultMessage
+import dev.langchain4j.memory.ChatMemory
+// MessageWindowChatMemory 不在 langchain4j-core 1.12.2 中，使用自定义 DataStoreChatMemory 实现
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -100,6 +111,89 @@ class RemoteOrchestrator(
     private val tag = "RemoteOrchestrator"
 
     private val networkDispatcher = ThreadPoolManager.getInstance().networkDispatcher
+    private val chatMemoryStore = DataStoreChatMemoryStore(context)
+
+    /**
+     * 每个 session 最多保留最近 10 轮对话（5 个 user+assistant 对）
+     */
+    private val maxMemoryMessages = 10
+
+    /**
+     * sessionId → ChatMemory 缓存
+     */
+    private val sessionMemories = mutableMapOf<String, ChatMemory>()
+
+    /**
+     * 获取或创建指定 session 的 ChatMemory
+     */
+    private fun getOrCreateMemory(sessionId: String): ChatMemory {
+        return sessionMemories.getOrPut(sessionId) {
+            DataStoreChatMemory(
+                memoryId = sessionId,
+                store = chatMemoryStore,
+                maxMessages = maxMemoryMessages
+            )
+        }
+    }
+
+    /**
+     * 将 langchain4j 的 ChatMessage 列表转换为 PicMe 的 ChatMessage 列表
+     */
+    private fun convertLcToPicMe(lcMessages: List<LcChatMessage>): List<ChatMessage> {
+        return lcMessages.map { msg ->
+            when (msg) {
+                is LcUserMessage -> UserMessage(msg.singleText())
+                is LcAiMessage -> AiMessage(
+                    text = msg.text() ?: "",
+                    toolExecutionRequests = emptyList()
+                )
+                is LcSystemMessage -> SystemMessage(msg.text())
+                is LcToolExecutionResultMessage -> ToolExecutionResultMessage(
+                    toolExecutionRequest = ToolExecutionRequest(
+                        id = msg.id() ?: "",
+                        name = msg.toolName() ?: "",
+                        arguments = "{}"
+                    ),
+                    text = msg.text()
+                )
+                else -> UserMessage(msg.toString())
+            }
+        }
+    }
+
+    /**
+     * 从 ChatMemory 构建带历史上下文的 messages 列表
+     * 格式：[System, History..., User]
+     */
+    private fun buildMessagesWithHistory(
+        systemPrompt: String,
+        userInput: String,
+        sessionId: String
+    ): List<ChatMessage> {
+        val memory = getOrCreateMemory(sessionId)
+        val historyMessages = memory.messages()
+        
+        val messages = mutableListOf<ChatMessage>()
+        messages.add(SystemMessage(systemPrompt))
+        if (historyMessages.isNotEmpty()) {
+            val picMeHistory = convertLcToPicMe(historyMessages)
+            Logger.d(tag, "Inserting ${picMeHistory.size} history messages from ChatMemory (session=$sessionId)")
+            messages.addAll(picMeHistory)
+        }
+        messages.add(UserMessage(userInput))
+        return messages
+    }
+
+    /**
+     * 将用户输入和助手回复保存到 ChatMemory
+     */
+    private fun saveToMemory(sessionId: String, userInput: String, assistantResponse: String) {
+        if (assistantResponse.isBlank()) return
+        val memory = getOrCreateMemory(sessionId)
+        memory.add(LcUserMessage.from(userInput))
+        memory.add(LcAiMessage.from(assistantResponse))
+        Logger.d(tag, "Saved exchange to ChatMemory (session=$sessionId)")
+    }
 
     /**
      * 流式聊天语言模型（兼容层）
@@ -135,14 +229,11 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = promptBuilder.buildBatchPrompt(userInput, context)
-
+    
             Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
-
+    
             val chatRequest = ChatRequest(
-                messages = listOf(
-                    SystemMessage(systemPrompt),
-                    UserMessage(userInput)
-                ),
+                messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 toolSpecifications = buildL2ToolSpecifications(),
                 temperature = remoteLlmConfig.l2Temperature,
                 maxTokens = remoteLlmConfig.l2MaxTokens
@@ -170,6 +261,8 @@ class RemoteOrchestrator(
                     tag,
                     "[L2-BATCH] tool_calls OK latency=${latencyMs}ms, ${toolRequests.size} calls -> ${commands.size} commands"
                 )
+                // 保存 user input 到 ChatMemory（tool_calls 无文本回复也保留交互记录）
+                saveToMemory(context.memorySessionId, userInput, "[tool_calls: ${toolRequests.size}]")
                 return InferenceResult.Batch(commands = commands)
             }
             
@@ -179,12 +272,14 @@ class RemoteOrchestrator(
                 val fallbackCommands = parseFallbackToolCalls(textContent, context)
                 if (fallbackCommands.isNotEmpty()) {
                     Logger.w(tag, "[L2-BATCH] tool_calls missing in API response, fallback parsed ${fallbackCommands.size} commands from content")
+                    saveToMemory(context.memorySessionId, userInput, textContent)
                     return InferenceResult.Batch(commands = fallbackCommands)
                 }
                 Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$textContent\", treating as text reply")
             } else {
                 Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content is blank AND no tool_calls — possible proxy/cors stripping")
             }
+            saveToMemory(context.memorySessionId, userInput, textContent.ifBlank { "收到，有什么其他需要帮忙的吗？" })
             return InferenceResult.Batch(
                 commands = listOf(
                     AgentCommand.TextReply(
@@ -219,14 +314,11 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = promptBuilder.buildPlanPrompt(userInput, context)
-
+    
             Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
-
+    
             val chatRequest = ChatRequest(
-                messages = listOf(
-                    SystemMessage(systemPrompt),
-                    UserMessage(userInput)
-                ),
+                messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 temperature = remoteLlmConfig.l3Temperature,
                 maxTokens = remoteLlmConfig.l3MaxTokens
             )
@@ -252,6 +344,7 @@ class RemoteOrchestrator(
 
             val plan = parseExecutionPlan(content, context)
             Logger.d(tag, "[L3-PLAN] parsed plan with ${plan.steps.size} steps")
+            saveToMemory(context.memorySessionId, userInput, content)
             return InferenceResult.Plan(plan = plan)
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
@@ -284,14 +377,11 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         try {
             val systemPrompt = promptBuilder.buildChatPrompt(userInput, context)
-
+    
             Logger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
-
+    
             val chatRequest = ChatRequest(
-                messages = listOf(
-                    SystemMessage(systemPrompt),
-                    UserMessage(userInput)
-                ),
+                messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 temperature = remoteLlmConfig.l4Temperature,
                 maxTokens = remoteLlmConfig.l4MaxTokens
             )
@@ -311,6 +401,7 @@ class RemoteOrchestrator(
             val latencyMs = System.currentTimeMillis() - startTime
             Logger.d(tag, "[L4-CHAT] RSP: latency=${latencyMs}ms, content=\"$content\"")
 
+            saveToMemory(context.memorySessionId, userInput, content)
             return InferenceResult.Chat(message = content)
         } catch (exception: Exception) {
             val latencyMs = System.currentTimeMillis() - startTime
@@ -342,14 +433,11 @@ class RemoteOrchestrator(
         val startTime = System.currentTimeMillis()
         return try {
             val systemPrompt = promptBuilder.buildChatPrompt(userInput, context)
-
+    
             Logger.d(tag, "[L4-STREAM] REQ: input=\"$userInput\"")
-
+    
             val chatRequest = ChatRequest(
-                messages = listOf(
-                    SystemMessage(systemPrompt),
-                    UserMessage(userInput)
-                ),
+                messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 temperature = remoteLlmConfig.l4Temperature,
                 maxTokens = remoteLlmConfig.l4MaxTokens
             )
@@ -362,7 +450,9 @@ class RemoteOrchestrator(
 
                     override fun onCompleteResponse(completeResponse: ChatResponse) {
                         val latencyMs = System.currentTimeMillis() - startTime
+                        val fullText = completeResponse.aiMessage.text
                         Logger.d(tag, "[L4-STREAM] OK latency=${latencyMs}ms, tokens=${completeResponse.metadata?.completionTokens ?: "?"}")
+                        saveToMemory(context.memorySessionId, userInput, fullText)
                         continuation.resume(
                             Result.success(
                                 StreamChatResult(
@@ -988,3 +1078,42 @@ data class StreamMetrics(
     val promptTokens: Long? = null,
     val completionTokens: Long? = null
 )
+
+/**
+ * 基于 DataStore 的 ChatMemory 实现
+ *
+ * 实现 [dev.langchain4j.memory.ChatMemory] 接口，
+ * 使用 [DataStoreChatMemoryStore] 作为后端持久化器。
+ * 支持最大消息数限制（滑动窗口）。
+ *
+ * @property memoryId 会话 ID
+ * @property store DataStore 持久化器
+ * @property maxMessages 最大消息数（超出时丢弃最早的消息）
+ */
+private class DataStoreChatMemory(
+    private val memoryId: String,
+    private val store: DataStoreChatMemoryStore,
+    private val maxMessages: Int = 10
+) : ChatMemory {
+
+    override fun id(): Any = memoryId
+
+    override fun messages(): MutableList<LcChatMessage> {
+        return store.getMessages(memoryId)
+    }
+
+    override fun add(message: LcChatMessage) {
+        val messages = store.getMessages(memoryId)
+        messages.add(message)
+        if (messages.size > maxMessages) {
+            val trimmed = messages.takeLast(maxMessages).toMutableList()
+            store.updateMessages(memoryId, trimmed)
+        } else {
+            store.updateMessages(memoryId, messages)
+        }
+    }
+
+    override fun clear() {
+        store.deleteMessages(memoryId)
+    }
+}
