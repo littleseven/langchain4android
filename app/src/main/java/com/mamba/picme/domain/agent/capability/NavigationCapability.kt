@@ -43,8 +43,15 @@ class NavigationCapability(
     override val description: String = "页面导航：切换页面、返回上一页"
 
     override fun isAvailable(): Boolean {
-        // NavigationCapability 只要有 NavController 就可用
-        return true
+        // NavigationCapability 必须检查 NavController 是否已绑定
+        // 否则 CapabilityRegistry 会认为导航可用并直接执行命令，
+        // 导致 IllegalStateException: 导航系统未初始化
+        return try {
+            navController.currentDestination != null
+        } catch (e: Exception) {
+            Logger.w(tag, "NavController not available: ${e.message}")
+            false
+        }
     }
 
     override fun activeScenes(): List<SceneManager.Scene> {

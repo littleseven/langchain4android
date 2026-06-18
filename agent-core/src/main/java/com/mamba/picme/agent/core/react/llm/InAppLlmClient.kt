@@ -88,6 +88,8 @@ class InAppLlmClient(
                 toolsArray.put(convertToolSpec(spec))
             }
             json.put("tools", toolsArray)
+            // 强制模型使用工具调用（如果支持）
+            json.put("tool_choice", "auto")
         }
 
         return json.toString()
@@ -107,8 +109,9 @@ class InAppLlmClient(
             is AiMessage -> {
                 val aiMsg = msg
                 json.put("role", "assistant")
-                if (!aiMsg.text().isNullOrEmpty()) {
-                    json.put("content", aiMsg.text())
+                val textContent = aiMsg.text()
+                if (!textContent.isNullOrBlank()) {
+                    json.put("content", textContent)
                 }
                 val toolCalls = aiMsg.toolExecutionRequests()
                 if (!toolCalls.isNullOrEmpty()) {
@@ -193,7 +196,12 @@ class InAppLlmClient(
         val choice = json.getJSONArray("choices").getJSONObject(0)
         val message = choice.getJSONObject("message")
 
-        val text = message.optString("content", null)
+        val text = if (message.has("content") && !message.isNull("content")) {
+            val content = message.optString("content", "")
+            if (content.isNotBlank()) content else null
+        } else {
+            null
+        }
 
         val toolCalls = mutableListOf<ToolExecutionRequest>()
         if (message.has("tool_calls")) {
@@ -210,8 +218,46 @@ class InAppLlmClient(
             }
         }
 
+        // 回退机制：如果 API 没有返回 tool_calls 但 content 中包含 tool_calls JSON，尝试解析
+        if (toolCalls.isEmpty() && text != null) {
+            val extracted = extractToolCallsFromContent(text)
+            if (extracted.isNotEmpty()) {
+                toolCalls.addAll(extracted)
+            }
+        }
+
         val totalTokens = json.optJSONObject("usage")?.optInt("total_tokens", 0) ?: 0
 
         return LlmResponse(text, toolCalls, totalTokens)
+    }
+
+    /**
+     * 从 content 文本中提取嵌入的 tool_calls JSON。
+     * 某些模型会把 tool_calls 输出到 content 中而不是使用原生 function calling。
+     */
+    private fun extractToolCallsFromContent(content: String): List<ToolExecutionRequest> {
+        val result = mutableListOf<ToolExecutionRequest>()
+        try {
+            // 尝试匹配 {"tool_calls":[...]} 格式
+            val toolCallsRegex = Regex("""\{\s*"tool_calls"\s*:\s*(\[.*?\])\s*\}""", RegexOption.DOT_MATCHES_ALL)
+            val match = toolCallsRegex.find(content)
+            if (match != null) {
+                val toolCallsJson = match.groupValues[1]
+                val array = JSONArray(toolCallsJson)
+                for (i in 0 until array.length()) {
+                    val tc = array.getJSONObject(i)
+                    val func = tc.getJSONObject("function")
+                    val request = ToolExecutionRequest.builder()
+                        .id(tc.optString("id", "call_$i"))
+                        .name(func.getString("name"))
+                        .arguments(func.optString("arguments", "{}"))
+                        .build()
+                    result.add(request)
+                }
+            }
+        } catch (e: Exception) {
+            // 解析失败，忽略
+        }
+        return result
     }
 }

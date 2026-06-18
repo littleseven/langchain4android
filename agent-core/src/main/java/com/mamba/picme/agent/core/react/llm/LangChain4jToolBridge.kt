@@ -71,7 +71,7 @@ object LangChain4jToolBridge {
 
         return ToolSpecification.builder()
             .name(tool.getName())
-            .description(tool.getName())
+            .description(tool.getName() + " - " + tool.getParameters().joinToString { it.name + "(" + it.type + ")" })
             .parameters(parametersSchema)
             .build()
     }

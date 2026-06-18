@@ -175,8 +175,8 @@ class InAppAgentService(
             }
             messages.add(aiMessage)
 
-            // 4. 推送思考内容
-            if (!llmResponse.text.isNullOrEmpty()) {
+            // 4. 推送思考内容（仅当 text 非空且有实质内容时）
+            if (!llmResponse.text.isNullOrBlank()) {
                 cb.onContent(iterations, llmResponse.text)
                 Log.d(TAG, "思考: ${llmResponse.text.take(200)}")
             }
@@ -184,7 +184,7 @@ class InAppAgentService(
             // 5. 如果没有工具调用 → 任务完成，保存对话历史
             if (llmResponse.toolExecutionRequests.isEmpty()) {
                 cb.onComplete(iterations, llmResponse.text ?: "任务完成", totalTokens)
-                Log.i(TAG, "任务完成，共 $iterations 轮，$totalTokens tokens")
+                Log.i(TAG, "任务完成（无工具调用），共 $iterations 轮，$totalTokens tokens")
                 saveConversationToMemory(messages)
                 return
             }

@@ -724,34 +724,16 @@ class AgentOrchestrator private constructor(context: Context) {
     ): Result<String> = withContext(Dispatchers.IO) {
         Logger.d(tag, "processFeishuInput: input='$input', timeout=${timeoutMs}ms")
 
-        val reply = CompletableDeferred<String>()
-        val callback = object : InAppAgentCallback {
-            override fun onLoopStart(iteration: Int) {
-                Logger.d(tag, "Feishu ReAct iteration #$iteration")
-            }
-            override fun onContent(iteration: Int, content: String) {
-                Logger.d(tag, "Feishu ReAct content: ${content.take(200)}")
-            }
-            override fun onToolCall(iteration: Int, toolName: String, args: String) {
-                Logger.d(tag, "Feishu ReAct toolCall: $toolName(${args.take(100)})")
-            }
-            override fun onToolResult(iteration: Int, toolName: String, result: String) {
-                Logger.d(tag, "Feishu ReAct toolResult: $toolName → ${result.take(80)}")
-            }
-            override fun onComplete(iteration: Int, summary: String, totalTokens: Int) {
-                Logger.i(tag, "Feishu ReAct complete: $iteration rounds, $totalTokens tokens")
-                reply.complete("✅ $summary")
-            }
-            override fun onError(iteration: Int, error: Throwable, totalTokens: Int) {
-                Logger.e(tag, "Feishu ReAct error: ${error.message}")
-                reply.complete("❌ ${error.message ?: "未知错误"}")
-            }
-        }
-
-        val agent = configurator.getFeishuAgent(windowManager, callback)
-            ?: return@withContext Result.failure(
-                IllegalStateException("Feishu ReAct Agent 初始化失败")
-            )
+        val agent = configurator.getFeishuAgent(windowManager, object : InAppAgentCallback {
+            override fun onLoopStart(iteration: Int) {}
+            override fun onContent(iteration: Int, content: String) {}
+            override fun onToolCall(iteration: Int, toolName: String, args: String) {}
+            override fun onToolResult(iteration: Int, toolName: String, result: String) {}
+            override fun onComplete(iteration: Int, summary: String, totalTokens: Int) {}
+            override fun onError(iteration: Int, error: Throwable, totalTokens: Int) {}
+        }) ?: return@withContext Result.failure(
+            IllegalStateException("Feishu ReAct Agent 初始化失败")
+        )
 
         if (agent.isRunning()) {
             return@withContext Result.failure(
@@ -760,13 +742,53 @@ class AgentOrchestrator private constructor(context: Context) {
         }
 
         return@withContext try {
-            agent.executeTask(input)
-            val result = withTimeout(timeoutMs) { reply.await() }
+            val job = coroutineContext[kotlinx.coroutines.Job]
+
+            val result = withTimeout(timeoutMs) {
+                suspendCoroutine<String> { continuation ->
+                    val callback = object : InAppAgentCallback {
+                        override fun onLoopStart(iteration: Int) {
+                            Logger.d(tag, "Feishu ReAct iteration #$iteration")
+                        }
+                        override fun onContent(iteration: Int, content: String) {
+                            Logger.d(tag, "Feishu ReAct content: ${content.take(200)}")
+                        }
+                        override fun onToolCall(iteration: Int, toolName: String, args: String) {
+                            Logger.d(tag, "Feishu ReAct toolCall: $toolName(${args.take(100)})")
+                        }
+                        override fun onToolResult(iteration: Int, toolName: String, result: String) {
+                            Logger.d(tag, "Feishu ReAct toolResult: $toolName → ${result.take(80)}")
+                        }
+                        override fun onComplete(iteration: Int, summary: String, totalTokens: Int) {
+                            Logger.i(tag, "Feishu ReAct complete: $iteration rounds, $totalTokens tokens")
+                            continuation.resume("✅ $summary")
+                        }
+                        override fun onError(iteration: Int, error: Throwable, totalTokens: Int) {
+                            Logger.e(tag, "Feishu ReAct error: ${error.message}")
+                            continuation.resume("❌ ${error.message ?: "未知错误"}")
+                        }
+                    }
+
+                    // 协程取消时自动取消 Agent
+                    job?.invokeOnCompletion { cause ->
+                        if (cause != null) {
+                            Logger.d(tag, "Feishu ReAct coroutine cancelled: ${cause.message}")
+                            agent.cancel()
+                        }
+                    }
+
+                    agent.executeTask(input, callback)
+                    Logger.d(tag, "executeTask submitted, waiting for callback...")
+                }
+            }
+            Logger.d(tag, "processFeishuInput got result: ${result.take(100)}")
             Result.success(result)
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            Logger.e(tag, "processFeishuInput timeout after ${timeoutMs}ms")
             agent.cancel()
             Result.failure(RuntimeException("⏰ 处理超时（${timeoutMs / 1000}秒），请稍后重试"))
         } catch (e: Exception) {
+            Logger.e(tag, "processFeishuInput error", e)
             Result.failure(e)
         }
     }

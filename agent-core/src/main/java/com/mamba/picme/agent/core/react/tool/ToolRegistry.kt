@@ -6,6 +6,7 @@ import com.mamba.picme.agent.core.react.tool.impl.ClickTool
 import com.mamba.picme.agent.core.react.tool.impl.FinishTool
 import com.mamba.picme.agent.core.react.tool.impl.GetScreenInfoTool
 import com.mamba.picme.agent.core.react.tool.impl.InputTextTool
+import com.mamba.picme.agent.core.react.tool.impl.NavigateToTool
 import com.mamba.picme.agent.core.react.tool.impl.ScrollTool
 
 /**
@@ -24,6 +25,7 @@ object ToolRegistry {
         register(ClickTool(windowManager))
         register(InputTextTool())
         register(ScrollTool())
+        register(NavigateToTool())
         register(BackTool())
         register(FinishTool())
     }
