@@ -8,6 +8,7 @@ import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
+import com.mamba.picme.agent.core.remote.parser.ToolCallCommandParser
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
@@ -740,36 +741,16 @@ class RemoteOrchestrator(
 
     /**
      * 将 tool_execution_requests 转换为 AgentCommand 列表
+     *
+     * 使用 [ToolCallCommandParser] 直接解析，不经过 method/params 中间格式。
+     * 远程推理链路与本地 LLM 的 method/params 协议完全隔离。
      */
     private fun parseToolCalls(
         toolRequests: List<ToolExecutionRequest>,
         context: AgentContext
     ): List<AgentCommand> {
-        val commands = mutableListOf<AgentCommand>()
-        Logger.d(tag, "[parseToolCalls] Processing ${toolRequests.size} tool calls")
-        for ((index, req) in toolRequests.withIndex()) {
-            try {
-                Logger.d(tag, "[parseToolCalls] #$index: name=${req.name}, arguments=${req.arguments}")
-                // 构建 {method, params...} 格式供 parseAgentCommand 使用
-                val json = JSONObject().apply {
-                    put("method", req.name)
-                    // 解析 arguments JSON 字符串为 params 对象
-                    try {
-                        val args = JSONObject(req.arguments)
-                        put("params", args)
-                        Logger.d(tag, "[parseToolCalls] #$index: parsed params keys=${args.keys().asSequence().toList()}")
-                    } catch (_: Exception) {
-                        Logger.w(tag, "[parseToolCalls] #$index: arguments not valid JSON: ${req.arguments}")
-                    }
-                }
-                val command = parseAgentCommand(json, context)
-                commands.add(command)
-                Logger.d(tag, "[parseToolCalls] #$index: -> ${command::class.simpleName}")
-            } catch (e: Exception) {
-                Logger.e(tag, "[parseToolCalls] FAILED: name=${req.name}, args=${req.arguments}", e)
-            }
-        }
-        return commands
+        Logger.d(tag, "[parseToolCalls] Processing ${toolRequests.size} tool calls via ToolCallCommandParser")
+        return ToolCallCommandParser.parseAll(toolRequests, context)
     }
 
     /**
@@ -801,24 +782,37 @@ class RemoteOrchestrator(
                     // 解析等待条件
                     val waitCondition = parseWaitCondition(stepObject.optJSONObject("wait_condition"))
 
-                    // 解析命令：method 字符串 + params 对象合并为统一格式
-                    val methodName = stepObject.optString("method", "")
-                    val paramsObject = stepObject.optJSONObject("params")
-                    val commandJson = if (paramsObject != null) {
-                        // 将 params 合并到以 method 为顶层的对象中
-                        val merged = JSONObject()
-                        merged.put("method", methodName)
-                        paramsObject.keys().forEach { key ->
-                            merged.put(key, paramsObject.get(key))
+                    // 解析命令：L3 plan 使用 command 字段，格式为 {name, arguments}
+                    // 标准 tool_calls 格式，与 L2 Batch 保持一致
+                    val commandObj = stepObject.optJSONObject("command")
+                    val action = if (commandObj != null) {
+                        val name = commandObj.optString("name", "")
+                        val args = commandObj.optJSONObject("arguments")?.toString() ?: "{}"
+                        if (name.isNotBlank()) {
+                            val request = ToolExecutionRequest(
+                                id = "plan_step_$stepNum",
+                                name = name,
+                                arguments = args
+                            )
+                            ToolCallCommandParser.parse(request, context)
+                        } else {
+                            AgentCommand.TextReply(message = "步骤解析失败：command 缺少 name 字段")
                         }
-                        merged
                     } else {
-                        JSONObject().apply { put("method", methodName) }
-                    }
-                    val action = if (methodName.isNotBlank()) {
-                        parseAgentCommand(commandJson, context)
-                    } else {
-                        AgentCommand.TextReply(message = "步骤解析失败：缺少 method 字段")
+                        // 兼容旧格式：method + params（逐步迁移期间保留）
+                        val methodName = stepObject.optString("method", "")
+                        val paramsObject = stepObject.optJSONObject("params")
+                        if (methodName.isNotBlank()) {
+                            val args = paramsObject?.toString() ?: "{}"
+                            val request = ToolExecutionRequest(
+                                id = "plan_step_$stepNum",
+                                name = methodName,
+                                arguments = args
+                            )
+                            ToolCallCommandParser.parse(request, context)
+                        } else {
+                            AgentCommand.TextReply(message = "步骤解析失败：缺少 command 或 method 字段")
+                        }
                     }
 
                     steps.add(
@@ -872,103 +866,6 @@ class RemoteOrchestrator(
             )
             else -> null
         }
-    }
-
-    /**
-     * 从 JSON 对象解析单个 [AgentCommand]
-     *
-     * @param jsonObject JSON 对象
-     * @param context 当前 Agent 上下文（用于获取默认值）
-     * @return 解析后的 AgentCommand
-     */
-    private fun parseAgentCommand(
-        jsonObject: JSONObject,
-        context: AgentContext
-    ): AgentCommand {
-        val normalizedCommand = mergeParamsIntoRoot(jsonObject)
-        val method = normalizedCommand.optString("method", "")
-
-        return when (method) {
-            "adjust_beauty" -> {
-                val smoothing = normalizedCommand.optDouble("smoothing", context.beautySettings.smoothing.toDouble()).toFloat()
-                val whitening = normalizedCommand.optDouble("whitening", context.beautySettings.whitening.toDouble()).toFloat()
-                val slimFace = normalizedCommand.optDouble("slim_face", context.beautySettings.slimFace.toDouble()).toFloat()
-                val bigEyes = normalizedCommand.optDouble("big_eyes", context.beautySettings.bigEyes.toDouble()).toFloat()
-                val lipColor = normalizedCommand.optDouble("lip_color", context.beautySettings.lipColor.toDouble()).toFloat()
-                val blush = normalizedCommand.optDouble("blush", context.beautySettings.blush.toDouble()).toFloat()
-                val eyebrow = normalizedCommand.optDouble("eyebrow", context.beautySettings.eyebrow.toDouble()).toFloat()
-                AgentCommand.AdjustBeauty(
-                    settings = context.beautySettings.copy(
-                        enabled = true,
-                        smoothing = smoothing,
-                        whitening = whitening,
-                        slimFace = slimFace,
-                        bigEyes = bigEyes,
-                        lipColor = lipColor,
-                        blush = blush,
-                        eyebrow = eyebrow
-                    )
-                )
-            }
-            "switch_filter" -> {
-                val filterName = normalizedCommand.optString("filter", "NONE")
-                AgentCommand.SwitchFilter(filterType = resolveFilterType(filterName))
-            }
-            "switch_style" -> {
-                val styleName = normalizedCommand.optString("style", "NONE")
-                AgentCommand.SwitchStyle(styleFilter = resolveStyleFilter(styleName))
-            }
-            "switch_scene" -> {
-                val scene = normalizedCommand.optString("scene", "none")
-                AgentCommand.SwitchScene(sceneName = scene)
-            }
-            "switch_ratio" -> {
-                val ratio = normalizedCommand.optString("ratio", "full")
-                AgentCommand.SwitchRatio(ratio = ratio)
-            }
-            "adjust_exposure" -> {
-                val exposure = normalizedCommand.optInt("exposure", 0)
-                AgentCommand.AdjustExposure(exposure = exposure.coerceIn(-2, 2))
-            }
-            "adjust_zoom" -> {
-                val zoom = normalizedCommand.optDouble("zoom", 1.0).toFloat()
-                AgentCommand.AdjustZoom(zoomRatio = zoom.coerceAtLeast(0.5f))
-            }
-            "flip_camera" -> AgentCommand.FlipCamera()
-            "capture", "photo" -> AgentCommand.CapturePhoto()
-            "toggle_recording" -> AgentCommand.ToggleRecording()
-            "delay" -> {
-                val delayMs = normalizedCommand.optLong("delay_ms", 3000)
-                AgentCommand.Delay(delayMs = delayMs.coerceIn(1, 300000))
-            }
-            "switch_mode" -> {
-                val modeName = normalizedCommand.optString("mode", "PHOTO")
-                val mode = runCatching { MediaType.valueOf(modeName) }
-                    .getOrDefault(MediaType.PHOTO)
-                AgentCommand.SwitchMode(mode = mode)
-            }
-            "text_reply" -> {
-                val message = normalizedCommand.optString("message", "收到")
-                AgentCommand.TextReply(message = message)
-            }
-            "navigate_to" -> {
-                val destination = normalizedCommand.optString("destination", "")
-                AgentCommand.NavigateTo(destination = destination)
-            }
-            "go_back" -> AgentCommand.GoBack()
-            else -> AgentCommand.TextReply(message = "收到，有什么其他需要帮忙的吗？")
-        }
-    }
-
-    private fun mergeParamsIntoRoot(jsonObject: JSONObject): JSONObject {
-        val paramsObject = jsonObject.optJSONObject("params") ?: return jsonObject
-        val merged = JSONObject(jsonObject.toString())
-        paramsObject.keys().forEach { key ->
-            if (!merged.has(key) || merged.isNull(key)) {
-                merged.put(key, paramsObject.opt(key))
-            }
-        }
-        return merged
     }
 
     // ── 辅助方法 ───────────────────────────────────────────────

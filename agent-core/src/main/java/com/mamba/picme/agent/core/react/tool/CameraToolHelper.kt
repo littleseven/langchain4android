@@ -4,7 +4,7 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentScene
-import com.mamba.picme.agent.core.local.parser.LocalCommandParser
+import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.state.SceneManager
@@ -13,7 +13,6 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
-import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -39,11 +38,107 @@ object CameraToolHelper {
     private const val CAPABILITY_WAIT_MS = 300L
 
     /**
+     * 根据方法名和参数构建对应的 AgentCommand
+     *
+     * 直接构建命令对象，不经过 method/params JSON 解析。
+     */
+    private fun buildAgentCommand(method: String, params: Map<String, Any>): AgentCommand {
+        return when (method) {
+            "capture" -> AgentCommand.CapturePhoto()
+            "flip_camera" -> AgentCommand.FlipCamera()
+            "toggle_recording" -> AgentCommand.ToggleRecording()
+            "switch_mode" -> {
+                val modeName = params["mode"] as? String ?: "PHOTO"
+                val mode = runCatching { MediaType.valueOf(modeName) }.getOrDefault(MediaType.PHOTO)
+                AgentCommand.SwitchMode(mode = mode)
+            }
+            "adjust_beauty" -> {
+                // 从 params 中提取美颜参数，使用默认值
+                val smoothing = (params["smoothing"] as? Number)?.toFloat() ?: 0f
+                val whitening = (params["whitening"] as? Number)?.toFloat() ?: 0f
+                val slimFace = (params["slim_face"] as? Number)?.toFloat() ?: 0f
+                val bigEyes = (params["big_eyes"] as? Number)?.toFloat() ?: 0f
+                val lipColor = (params["lip_color"] as? Number)?.toFloat() ?: 0f
+                val blush = (params["blush"] as? Number)?.toFloat() ?: 0f
+                val eyebrow = (params["eyebrow"] as? Number)?.toFloat() ?: 0f
+                AgentCommand.AdjustBeauty(
+                    settings = com.mamba.picme.beauty.api.BeautySettings(
+                        enabled = true,
+                        smoothing = smoothing,
+                        whitening = whitening,
+                        slimFace = slimFace,
+                        bigEyes = bigEyes,
+                        lipColor = lipColor,
+                        blush = blush,
+                        eyebrow = eyebrow
+                    )
+                )
+            }
+            "adjust_exposure" -> {
+                val exposure = (params["exposure"] as? Number)?.toInt() ?: 0
+                AgentCommand.AdjustExposure(exposure = exposure.coerceIn(-2, 2))
+            }
+            "adjust_zoom" -> {
+                val zoom = (params["zoom"] as? Number)?.toFloat() ?: 1f
+                AgentCommand.AdjustZoom(zoomRatio = zoom.coerceAtLeast(0.5f))
+            }
+            "switch_filter" -> {
+                val filterName = params["filter"] as? String ?: "NONE"
+                AgentCommand.SwitchFilter(filterType = resolveFilterType(filterName))
+            }
+            "switch_style" -> {
+                val styleName = params["style"] as? String ?: "NONE"
+                AgentCommand.SwitchStyle(styleFilter = resolveStyleFilter(styleName))
+            }
+            "switch_scene" -> {
+                val scene = params["scene"] as? String ?: "none"
+                AgentCommand.SwitchScene(sceneName = scene)
+            }
+            "switch_ratio" -> {
+                val ratio = params["ratio"] as? String ?: "full"
+                AgentCommand.SwitchRatio(ratio = ratio)
+            }
+            else -> AgentCommand.TextReply(message = "Unknown camera command: $method")
+        }
+    }
+
+    private fun resolveFilterType(name: String): com.mamba.picme.beauty.api.FilterType {
+        val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
+        return when (normalized) {
+            "NONE" -> com.mamba.picme.beauty.api.FilterType.NONE
+            "LEICA_CLASSIC" -> com.mamba.picme.beauty.api.FilterType.LEICA_CLASSIC
+            "LEICA_VIBRANT", "VIBRANT" -> com.mamba.picme.beauty.api.FilterType.LEICA_VIBRANT
+            "LEICA_BW", "BW" -> com.mamba.picme.beauty.api.FilterType.LEICA_BW
+            "FILM_GOLD" -> com.mamba.picme.beauty.api.FilterType.FILM_GOLD
+            "FILM_FUJI" -> com.mamba.picme.beauty.api.FilterType.FILM_FUJI
+            "VINTAGE", "RETRO" -> com.mamba.picme.beauty.api.FilterType.VINTAGE
+            "COOL", "COLD" -> com.mamba.picme.beauty.api.FilterType.COOL
+            "WARM" -> com.mamba.picme.beauty.api.FilterType.WARM
+            else -> runCatching { com.mamba.picme.beauty.api.FilterType.valueOf(normalized) }
+                .getOrDefault(com.mamba.picme.beauty.api.FilterType.NONE)
+        }
+    }
+
+    private fun resolveStyleFilter(name: String): com.mamba.picme.beauty.api.StyleFilter {
+        val normalized = name.trim().uppercase().replace(" ", "_").replace("-", "_")
+        return when (normalized) {
+            "NONE" -> com.mamba.picme.beauty.api.StyleFilter.NONE
+            "TOON" -> com.mamba.picme.beauty.api.StyleFilter.TOON
+            "SKETCH" -> com.mamba.picme.beauty.api.StyleFilter.SKETCH
+            "POSTERIZE" -> com.mamba.picme.beauty.api.StyleFilter.POSTERIZE
+            "EMBOSS" -> com.mamba.picme.beauty.api.StyleFilter.EMBOSS
+            "CROSSHATCH" -> com.mamba.picme.beauty.api.StyleFilter.CROSSHATCH
+            else -> runCatching { com.mamba.picme.beauty.api.StyleFilter.valueOf(normalized) }
+                .getOrDefault(com.mamba.picme.beauty.api.StyleFilter.NONE)
+        }
+    }
+
+    /**
      * 执行相机命令，确保在相机场景下执行。
      *
      * @param method 命令方法名（如 "capture", "switch_filter"）
      * @param params 命令参数 Map
-     * @param buildCommandJson 构建命令 JSON 的 lambda
+     * @param buildCommandJson 构建命令 JSON 的 lambda（已废弃，保留参数避免破坏调用方）
      * @param onSuccess 成功时的结果消息
      * @param onError 失败时的错误消息前缀
      * @return ToolResult
@@ -65,20 +160,8 @@ object CameraToolHelper {
             if (currentScene != SceneManager.Scene.CAMERA) {
                 Logger.i(TAG, "Current scene is $currentScene, navigating to CAMERA first")
 
-                val navCommandJson = JSONObject().apply {
-                    put("method", "navigate_to")
-                    put("params", JSONObject().apply {
-                        put("destination", "camera")
-                    })
-                }.toString()
-
+                val navCommand = AgentCommand.NavigateTo(destination = "camera")
                 val navContext = AgentContext(scene = AgentScene.CAMERA)
-                val navCommand = LocalCommandParser.parseCommandByMethod(
-                    method = "navigate_to",
-                    json = navCommandJson,
-                    context = navContext,
-                    fallbackText = ""
-                )
 
                 val navDeferred = GlobalScope.future {
                     registry.dispatch(navCommand, navContext, null)
@@ -112,14 +195,8 @@ object CameraToolHelper {
             }
 
             // 4. 构建并执行目标命令
-            val commandJson = buildCommandJson()
             val context = AgentContext(scene = AgentScene.CAMERA)
-            val command = LocalCommandParser.parseCommandByMethod(
-                method = method,
-                json = commandJson,
-                context = context,
-                fallbackText = ""
-            )
+            val command = buildAgentCommand(method, params)
 
             val deferred = GlobalScope.future {
                 registry.dispatch(command, context, null)

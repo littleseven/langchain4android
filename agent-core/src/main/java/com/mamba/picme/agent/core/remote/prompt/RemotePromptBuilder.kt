@@ -60,20 +60,22 @@ class RemotePromptBuilder(
     /**
      * 构建 L3 Plan 模式 Prompt
      *
-     * 输出格式为 ExecutionPlan JSON，steps 中的命令使用精简 JSON 风格（method + params）。
+     * 输出格式为 ExecutionPlan JSON，steps 中的命令使用标准 tool_calls 格式（name + arguments）。
+     * 与 L2 Batch 保持一致，统一使用 OpenAI tool_calls 协议，不混合 method/params 格式。
      */
     fun buildPlanPrompt(userInput: String, context: AgentContext): String {
         return buildString {
             appendLine("你是 PicMe 的任务编排器。把用户复杂请求转成 ExecutionPlan JSON。")
             appendLine()
             appendLine("输出硬规则：")
-            appendLine("1. 只能输出一个 JSON 对象，禁止解释、禁止 markdown、禁止 <think>。")
+            appendLine("1. 只能输出一个 JSON 对象，禁止解释、禁止 markdown、禁止 <thinking>。")
             appendLine("2. 顶层字段固定：plan_id, description, steps。")
-            appendLine("3. steps 每项字段固定：step, method, params, condition, wait_condition, repeat_count, description, delayMs。")
-            appendLine("4. method 字段是命令名，params 是命令参数对象。")
-            appendLine("5. wait_condition 仅支持：duration(delay_ms), face_detected(timeout_ms), smile_detected(timeout_ms), user_confirm(prompt)。")
-            appendLine("6. repeat_count >= 1，delayMs >= 0。")
-            appendLine("7. 导航动作严格使用 navigate_to/go_back。")
+            appendLine("3. steps 每项字段固定：step, command, condition, wait_condition, repeat_count, description, delayMs。")
+            appendLine("4. command 字段是标准 tool_calls 格式：{name: 命令名, arguments: 参数对象}。")
+            appendLine("5. 禁止在 command 中使用 method/params 格式，必须使用 name/arguments 格式。")
+            appendLine("6. wait_condition 仅支持：duration(delay_ms), face_detected(timeout_ms), smile_detected(timeout_ms), user_confirm(prompt)。")
+            appendLine("7. repeat_count >= 1，delayMs >= 0。")
+            appendLine("8. 导航动作严格使用 navigate_to/go_back。")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, sceneManager.currentScene.value))
@@ -83,9 +85,9 @@ class RemotePromptBuilder(
             appendLine()
             appendLine("【示例】")
             appendLine("用户: 去相机后等1秒连拍3张")
-            appendLine("-> {plan_id:plan_1,description:切到相机后连拍,steps:[{step:1,method:navigate_to,params:{destination:camera},condition:null,wait_condition:null,repeat_count:1,description:切换到相机,delayMs:0},{step:2,method:text_reply,params:{message:准备连拍},condition:null,wait_condition:{type:duration,delay_ms:1000},repeat_count:1,description:等待1秒,delayMs:0},{step:3,method:capture,params:{},condition:null,wait_condition:null,repeat_count:3,description:连拍3张,delayMs:500}]}")
+            appendLine("-> {plan_id:plan_1,description:切到相机后连拍,steps:[{step:1,command:{name:navigate_to,arguments:{destination:camera}},condition:null,wait_condition:null,repeat_count:1,description:切换到相机,delayMs:0},{step:2,command:{name:text_reply,arguments:{message:准备连拍}},condition:null,wait_condition:{type:duration,delay_ms:1000},repeat_count:1,description:等待1秒,delayMs:0},{step:3,command:{name:capture,arguments:{}},condition:null,wait_condition:null,repeat_count:3,description:连拍3张,delayMs:500}]}")
             appendLine("用户: 3秒后调暖色调拍照")
-            appendLine("-> {plan_id:plan_2,description:延迟后调暖色调拍照,steps:[{step:1,method:delay,params:{delay_ms:3000},condition:null,wait_condition:null,repeat_count:1,description:等待3秒,delayMs:0},{step:2,method:switch_filter,params:{filter:WARM},condition:null,wait_condition:null,repeat_count:1,description:切换暖色调,delayMs:0},{step:3,method:capture,params:{},condition:null,wait_condition:null,repeat_count:1,description:拍照,delayMs:0}]}")
+            appendLine("-> {plan_id:plan_2,description:延迟后调暖色调拍照,steps:[{step:1,command:{name:delay,arguments:{delay_ms:3000}},condition:null,wait_condition:null,repeat_count:1,description:等待3秒,delayMs:0},{step:2,command:{name:switch_filter,arguments:{filter:WARM}},condition:null,wait_condition:null,repeat_count:1,description:切换暖色调,delayMs:0},{step:3,command:{name:capture,arguments:{}},condition:null,wait_condition:null,repeat_count:1,description:拍照,delayMs:0}]}")
         }
     }
 
@@ -172,13 +174,13 @@ class RemotePromptBuilder(
         val includeSystem = scene == null || scene == SceneManager.Scene.CHAT || scene == SceneManager.Scene.UNKNOWN
 
         return buildString {
-            appendLine("method 白名单（只能从下列 method 选择，参数放在 params 对象中）：")
+            appendLine("命令白名单（只能从下列 name 选择，参数放在 arguments 对象中）：")
 
             if (includeCamera) {
                 appendLine("- camera: capture, toggle_recording, flip_camera, switch_mode")
                 appendLine("- camera_adjust: adjust_beauty, adjust_exposure, adjust_zoom")
                 appendLine("- camera_style: switch_filter, switch_style, switch_scene, switch_ratio")
-                appendLine("- delay: delay(params.delay_ms) — 通用延迟原语，必须与其他命令组合使用。用户说\"X秒后做某事\"时，delay 必须是数组第一个元素。例：3秒后拍照 -> [{method:delay,params:{delay_ms:3000}},{method:capture,params:{}}]；5秒后换暖色滤镜拍照 -> [{method:delay,params:{delay_ms:5000}},{method:switch_filter,params:{filter:WARM}},{method:capture,params:{}}]")
+                appendLine("- delay: delay(arguments.delay_ms) — 通用延迟原语，必须与其他命令组合使用。用户说\"X秒后做某事\"时，delay 必须是数组第一个元素。例：3秒后拍照 -> [{name:delay,arguments:{delay_ms:3000}},{name:capture,arguments:{}}]；5秒后换暖色滤镜拍照 -> [{name:delay,arguments:{delay_ms:5000}},{name:switch_filter,arguments:{filter:WARM}},{name:capture,arguments:{}}]")
             }
 
             if (includeGallery) {
@@ -190,25 +192,25 @@ class RemotePromptBuilder(
             }
 
             if (includeSystem) {
-                appendLine("- system: launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
-                appendLine("- accessibility: perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text})")
+                appendLine("- system: launch_app(arguments.package_name|app_name), open_system_settings(arguments.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
+                appendLine("- accessibility: perform_accessibility_action(arguments.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, arguments.target={type,value}, arguments.params={text})")
             }
 
-            appendLine("- navigation: navigate_to(params.destination=camera|gallery|settings|debug), go_back")
-            appendLine("- fallback: text_reply(params.message)")
-            appendLine("params 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
+            appendLine("- navigation: navigate_to(arguments.destination=camera|gallery|settings|debug), go_back")
+            appendLine("- fallback: text_reply(arguments.message)")
+            appendLine("arguments 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
             appendLine("滤镜: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
             appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
             appendLine("滤镜映射: 冷调/冷色/冷滤镜->COOL; 暖调/暖色/暖滤镜->WARM; 复古/怀旧->VINTAGE; 胶片金->FILM_GOLD; 胶片富士/富士->FILM_FUJI")
-            appendLine("导航映射: 去相机/回相机/打开相机/去拍照->params.destination=camera; 去相册/打开相册->params.destination=gallery; 去设置/打开设置->params.destination=settings; 返回/上一页/后退->go_back")
+            appendLine("导航映射: 去相机/回相机/打开相机/去拍照->arguments.destination=camera; 去相册/打开相册->arguments.destination=gallery; 去设置/打开设置->arguments.destination=settings; 返回/上一页/后退->go_back")
             appendLine("系统映射: 打开微信/启动支付宝/打开淘宝->launch_app(app_name=...); 打开WiFi设置/蓝牙设置/通知设置->open_system_settings(setting=wifi|bluetooth|app_notifications)")
             appendLine("无障碍映射: 点击目标文本->perform_accessibility_action(action=click,target={type:text,value:目标}); 输入内容->perform_accessibility_action(action=input,target={type:class_name,value:android.widget.EditText},params={text:内容}); 返回/主页/最近任务->perform_accessibility_action(action=back|home|recent)")
-            appendLine("导航示例: {\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}")
-            appendLine("系统示例: {\"method\":\"launch_app\",\"params\":{\"app_name\":\"微信\"}}")
-            appendLine("无障碍示例: {\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}")
+            appendLine("导航示例: {\"name\":\"navigate_to\",\"arguments\":{\"destination\":\"camera\"}}")
+            appendLine("系统示例: {\"name\":\"launch_app\",\"arguments\":{\"app_name\":\"微信\"}}")
+            appendLine("无障碍示例: {\"name\":\"perform_accessibility_action\",\"arguments\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}")
 
             if (forPlan) {
-                appendLine("Plan 字段约束: step(Int), method(String), params(Object), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")
+                appendLine("Plan 字段约束: step(Int), command(Object{name,arguments}), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")
                 appendLine("wait_condition 示例: {\"type\":\"duration\",\"delay_ms\":1000}")
             }
         }
