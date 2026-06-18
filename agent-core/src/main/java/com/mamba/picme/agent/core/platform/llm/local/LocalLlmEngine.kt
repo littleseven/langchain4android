@@ -1,22 +1,22 @@
 package com.mamba.picme.agent.core.platform.llm.local
 
 import android.content.Context
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.ChatLanguageModel
-import com.mamba.picme.agent.core.api.ChatMessage
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.ChatResponse
 import com.mamba.picme.agent.core.api.ChatResponseMetadata
-import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import com.mamba.picme.agent.core.api.LlmChatResponse
+import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
-import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.platform.llm.local.MnnLlmClient.NativeReleaseTarget
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.ChatMessage
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.ToolExecutionResultMessage
+import dev.langchain4j.data.message.UserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -48,7 +48,7 @@ class LlmModelNotFoundException(
  *
  * @param context Application Context
  */
-class LocalLlmEngine(private val context: Context) : ChatLanguageModel, StreamingChatLanguageModel {
+class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, StreamingLlmChatLanguageModel {
 
     private val tag = "LocalLlmEngine"
     private val client = MnnLlmClient(context)
@@ -186,7 +186,7 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
      * - 仅 UserMessage → 直接 generate
      * - 多轮历史 → 拼接为纯文本 prompt 后 generate
      */
-    override fun chat(request: ChatRequest): ChatResponse {
+    override fun chat(request: LlmChatRequest): LlmChatResponse {
         return runBlocking(modelDispatcher) {
             engineMutex.withLock {
                 if (!client.isLoaded) {
@@ -194,7 +194,7 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                 }
 
                 val messages = request.messages
-                val systemMessage = messages.filterIsInstance<SystemMessage>().lastOrNull()?.text
+                val systemMessage = messages.filterIsInstance<SystemMessage>().lastOrNull()?.text()
 
                 // 检测是否有历史消息（消息数量 > system+user 或有中间 assistant 消息）
                 val nonSystemMessages = messages.filter { it !is SystemMessage }
@@ -208,10 +208,11 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                         // 多轮对话：将完整历史转换为 (role, content) 列表传给 native
                         val historyPairs = messages.map { message ->
                             when (message) {
-                                is SystemMessage -> "system" to message.text
-                                is UserMessage -> "user" to message.text
-                                is AiMessage -> "assistant" to message.text
-                                is ToolExecutionResultMessage -> "tool" to message.text
+                                is SystemMessage -> "system" to message.text()
+                                is UserMessage -> "user" to message.singleText()
+                                is AiMessage -> "assistant" to message.text()
+                                is ToolExecutionResultMessage -> "tool" to message.text()
+                                else -> "unknown" to message.toString()
                             }
                         }
                         val result = client.generateWithHistory(historyPairs, maxTokens)
@@ -229,7 +230,7 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                         result.response
                     } else if (systemMessage != null) {
                         // 单轮 system + user
-                        val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.text
+                        val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.singleText()
                             ?: messages.lastOrNull()?.let { extractText(it) }
                             ?: throw IllegalArgumentException("ChatRequest must contain at least one message")
                         val result = client.generateWithSystem(
@@ -261,8 +262,8 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                         throw RuntimeException("Empty LLM response")
                     }
 
-                    ChatResponse(
-                        aiMessage = AiMessage(response),
+                    LlmChatResponse(
+                        aiMessage = AiMessage.from(response),
                         metadata = lastGenerationMetrics?.let {
                             ChatResponseMetadata(
                                 promptTokens = it.promptLen,
@@ -287,7 +288,7 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
     /**
      * 使用 LangChain4j 风格 API 进行流式对话。
      */
-    override fun chat(request: ChatRequest, handler: StreamingChatResponseHandler) {
+    override fun chat(request: LlmChatRequest, handler: StreamingChatResponseHandler) {
         CoroutineScope(modelDispatcher).launch {
             engineMutex.withLock {
                 if (!client.isLoaded) {
@@ -312,8 +313,8 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                     val streamResult = client.generateStream(prompt, 128, listener)
                     if (streamResult.isSuccess) {
                         handler.onCompleteResponse(
-                            ChatResponse(
-                                aiMessage = AiMessage(streamResult.response),
+                            LlmChatResponse(
+                                aiMessage = AiMessage.from(streamResult.response),
                                 metadata = ChatResponseMetadata(
                                     promptTokens = streamResult.promptLen,
                                     completionTokens = streamResult.decodeLen,
@@ -336,10 +337,11 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
     }
 
     private fun extractText(message: ChatMessage): String = when (message) {
-        is UserMessage -> message.text
-        is SystemMessage -> message.text
-        is AiMessage -> message.text
-        is ToolExecutionResultMessage -> message.text
+        is UserMessage -> message.singleText()
+        is SystemMessage -> message.text()
+        is AiMessage -> message.text()
+        is ToolExecutionResultMessage -> message.text()
+        else -> message.toString()
     }
 
     /**
@@ -492,22 +494,22 @@ class LocalLlmEngine(private val context: Context) : ChatLanguageModel, Streamin
                 when (message) {
                     is SystemMessage -> {
                         appendLine("system:")
-                        appendLine(message.text)
+                        appendLine(message.text())
                         appendLine()
                     }
                     is UserMessage -> {
                         appendLine("user:")
-                        appendLine(message.text)
+                        appendLine(message.singleText())
                         appendLine()
                     }
                     is AiMessage -> {
                         appendLine("assistant:")
-                        appendLine(message.text)
+                        appendLine(message.text())
                         appendLine()
                     }
                     is ToolExecutionResultMessage -> {
                         appendLine("tool:")
-                        appendLine(message.text)
+                        appendLine(message.text())
                         appendLine()
                     }
                 }

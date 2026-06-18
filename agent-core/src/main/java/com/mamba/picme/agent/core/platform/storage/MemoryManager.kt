@@ -6,14 +6,14 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.ChatMessage
-import com.mamba.picme.agent.core.api.SystemMessage
 import com.mamba.picme.agent.core.api.ToolExecutionRequest
-import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
-import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.ChatMessage
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.ToolExecutionResultMessage
+import dev.langchain4j.data.message.UserMessage
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -131,15 +131,13 @@ class MemoryManager(private val context: Context) {
         assistantResponse: String
     ) {
         val history = loadHistory(sessionId).toMutableList()
-        history.add(UserMessage(userInput))
-        history.add(AiMessage(assistantResponse))
+        history.add(UserMessage.from(userInput))
+        history.add(AiMessage.from(assistantResponse))
         saveHistory(sessionId, history)
     }
 
     /**
      * 清空指定 session 的对话历史
-     *
-     * @param sessionId 会话 ID
      */
     suspend fun clearHistory(sessionId: String) = withContext(dataStoreDispatcher) {
         return@withContext try {
@@ -197,9 +195,9 @@ class MemoryManager(private val context: Context) {
         val trimmedHistory = trimToRounds(history, maxHistoryRounds)
 
         val messages = mutableListOf<ChatMessage>()
-        messages.add(SystemMessage(systemPrompt))
+        messages.add(SystemMessage.from(systemPrompt))
         messages.addAll(trimmedHistory)
-        messages.add(UserMessage(userInput))
+        messages.add(UserMessage.from(userInput))
 
         return@withContext messages
     }
@@ -257,10 +255,11 @@ class MemoryManager(private val context: Context) {
         val array = JSONArray()
         messages.forEach { message ->
             val (role, content) = when (message) {
-                is SystemMessage -> "system" to message.text
-                is UserMessage -> "user" to message.text
-                is AiMessage -> "assistant" to message.text
-                is ToolExecutionResultMessage -> "tool" to message.text
+                is SystemMessage -> "system" to message.text()
+                is UserMessage -> "user" to message.singleText()
+                is AiMessage -> "assistant" to message.text()
+                is ToolExecutionResultMessage -> "tool" to message.text()
+                else -> "unknown" to message.toString()
             }
             val obj = JSONObject().apply {
                 put("role", role)
@@ -282,17 +281,17 @@ class MemoryManager(private val context: Context) {
                 val roleName = obj.getString("role")
                 val content = obj.getString("content")
                 when (roleName) {
-                    "system" -> SystemMessage(content)
-                    "assistant" -> AiMessage(content)
-                    "tool" -> ToolExecutionResultMessage(
-                        toolExecutionRequest = ToolExecutionRequest(
-                            id = "",
-                            name = "",
-                            arguments = "{}"
-                        ),
-                        text = content
+                    "system" -> SystemMessage.from(content)
+                    "assistant" -> AiMessage.from(content)
+                    "tool" -> ToolExecutionResultMessage.from(
+                        dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                            .id("")
+                            .name("")
+                            .arguments("{}")
+                            .build(),
+                        content
                     )
-                    else -> UserMessage(content)
+                    else -> UserMessage.from(content)
                 }
             }
         } catch (exception: Exception) {

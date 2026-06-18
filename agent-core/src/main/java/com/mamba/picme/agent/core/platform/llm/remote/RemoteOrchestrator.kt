@@ -13,21 +13,16 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.ChatLanguageModel
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.LlmChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.ChatResponseMetadata
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
-import com.mamba.picme.agent.core.api.UserMessage
-import com.mamba.picme.agent.core.api.ChatMessage
+import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
+import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
+import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.api.ToolParameters
 import com.mamba.picme.agent.core.api.JsonSchemaProperty
-import com.mamba.picme.agent.core.api.ToolExecutionRequest
-import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
-import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import org.json.JSONArray
 import org.json.JSONObject
@@ -105,7 +100,7 @@ class RemoteOrchestrator(
     private val context: Context,
     private val remoteConfig: RemoteModelConfig,
     private val promptBuilder: RemotePromptBuilder,
-    val chatLanguageModel: ChatLanguageModel = UnifiedRemoteClient(remoteConfig)
+    val chatLanguageModel: LlmChatLanguageModel = UnifiedRemoteClient(remoteConfig)
 ) {
 
     private val tag = "RemoteOrchestrator"
@@ -137,28 +132,10 @@ class RemoteOrchestrator(
     }
 
     /**
-     * 将 langchain4j 的 ChatMessage 列表转换为 PicMe 的 ChatMessage 列表
+     * 将 langchain4j 的 ChatMessage 列表转换为标准格式
      */
-    private fun convertLcToPicMe(lcMessages: List<LcChatMessage>): List<ChatMessage> {
-        return lcMessages.map { msg ->
-            when (msg) {
-                is LcUserMessage -> UserMessage(msg.singleText())
-                is LcAiMessage -> AiMessage(
-                    text = msg.text() ?: "",
-                    toolExecutionRequests = emptyList()
-                )
-                is LcSystemMessage -> SystemMessage(msg.text())
-                is LcToolExecutionResultMessage -> ToolExecutionResultMessage(
-                    toolExecutionRequest = ToolExecutionRequest(
-                        id = msg.id() ?: "",
-                        name = msg.toolName() ?: "",
-                        arguments = "{}"
-                    ),
-                    text = msg.text()
-                )
-                else -> UserMessage(msg.toString())
-            }
-        }
+    private fun normalizeMessages(lcMessages: List<LcChatMessage>): List<LcChatMessage> {
+        return lcMessages
     }
 
     /**
@@ -169,18 +146,17 @@ class RemoteOrchestrator(
         systemPrompt: String,
         userInput: String,
         sessionId: String
-    ): List<ChatMessage> {
+    ): List<LcChatMessage> {
         val memory = getOrCreateMemory(sessionId)
         val historyMessages = memory.messages()
         
-        val messages = mutableListOf<ChatMessage>()
-        messages.add(SystemMessage(systemPrompt))
+        val messages = mutableListOf<LcChatMessage>()
+        messages.add(LcSystemMessage.from(systemPrompt))
         if (historyMessages.isNotEmpty()) {
-            val picMeHistory = convertLcToPicMe(historyMessages)
-            Logger.d(tag, "Inserting ${picMeHistory.size} history messages from ChatMemory (session=$sessionId)")
-            messages.addAll(picMeHistory)
+            Logger.d(tag, "Inserting ${historyMessages.size} history messages from ChatMemory (session=$sessionId)")
+            messages.addAll(historyMessages)
         }
-        messages.add(UserMessage(userInput))
+        messages.add(LcUserMessage.from(userInput))
         return messages
     }
 
@@ -198,9 +174,9 @@ class RemoteOrchestrator(
     /**
      * 流式聊天语言模型（兼容层）
      */
-    private val streamingChatModel: StreamingChatLanguageModel
-        get() = chatLanguageModel as? StreamingChatLanguageModel
-            ?: error("StreamingChatLanguageModel not supported")
+    private val streamingChatModel: StreamingLlmChatLanguageModel
+        get() = chatLanguageModel as? StreamingLlmChatLanguageModel
+            ?: error("StreamingLlmChatLanguageModel not supported")
 
     /**
      * 远程推理参数配置
@@ -232,7 +208,7 @@ class RemoteOrchestrator(
     
             Logger.d(tag, "[L2-BATCH] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
     
-            val chatRequest = ChatRequest(
+            val chatRequest = LlmChatRequest(
                 messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 toolSpecifications = buildL2ToolSpecifications(),
                 temperature = remoteLlmConfig.l2Temperature,
@@ -254,7 +230,13 @@ class RemoteOrchestrator(
             val latencyMs = System.currentTimeMillis() - startTime
             
             // 优先使用 tool_calls（标准 OpenAI 协议）
-            val toolRequests = response.aiMessage.toolExecutionRequests
+            val toolRequests = response.aiMessage.toolExecutionRequests().map {
+                com.mamba.picme.agent.core.api.ToolExecutionRequest(
+                    id = it.id(),
+                    name = it.name(),
+                    arguments = it.arguments()
+                )
+            }
             if (toolRequests.isNotEmpty()) {
                 val commands = parseToolCalls(toolRequests, context)
                 Logger.d(
@@ -267,7 +249,7 @@ class RemoteOrchestrator(
             }
             
             // 没有 tool_calls：尝试从文本内容中回退解析 tool_calls JSON
-            val textContent = response.aiMessage.text
+            val textContent = response.aiMessage.text()
             if (textContent.isNotBlank()) {
                 val fallbackCommands = parseFallbackToolCalls(textContent, context)
                 if (fallbackCommands.isNotEmpty()) {
@@ -317,7 +299,7 @@ class RemoteOrchestrator(
     
             Logger.d(tag, "[L3-PLAN] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
     
-            val chatRequest = ChatRequest(
+            val chatRequest = LlmChatRequest(
                 messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 temperature = remoteLlmConfig.l3Temperature,
                 maxTokens = remoteLlmConfig.l3MaxTokens
@@ -326,7 +308,7 @@ class RemoteOrchestrator(
             val content = try {
                 withContext(networkDispatcher) {
                     chatLanguageModel.chat(chatRequest)
-                }.aiMessage.text
+                }.aiMessage.text()
             } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L3-PLAN] ERR: latency=${latencyMs}ms, ${error.message}", error)
@@ -380,7 +362,7 @@ class RemoteOrchestrator(
     
             Logger.d(tag, "[L4-CHAT] REQ: input=\"$userInput\", model=${remoteConfig.modelId}")
     
-            val chatRequest = ChatRequest(
+            val chatRequest = LlmChatRequest(
                 messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 temperature = remoteLlmConfig.l4Temperature,
                 maxTokens = remoteLlmConfig.l4MaxTokens
@@ -389,7 +371,7 @@ class RemoteOrchestrator(
             val content = try {
                 withContext(networkDispatcher) {
                     chatLanguageModel.chat(chatRequest)
-                }.aiMessage.text
+                }.aiMessage.text()
             } catch (error: Exception) {
                 val latencyMs = System.currentTimeMillis() - startTime
                 Logger.e(tag, "[L4-CHAT] ERR: latency=${latencyMs}ms, ${error.message}", error)
@@ -436,7 +418,7 @@ class RemoteOrchestrator(
     
             Logger.d(tag, "[L4-STREAM] REQ: input=\"$userInput\"")
     
-            val chatRequest = ChatRequest(
+            val chatRequest = LlmChatRequest(
                 messages = buildMessagesWithHistory(systemPrompt, userInput, context.memorySessionId),
                 temperature = remoteLlmConfig.l4Temperature,
                 maxTokens = remoteLlmConfig.l4MaxTokens
@@ -447,16 +429,16 @@ class RemoteOrchestrator(
                     override fun onPartialResponse(partialResponse: String) {
                         onToken(partialResponse)
                     }
-
-                    override fun onCompleteResponse(completeResponse: ChatResponse) {
+                
+                    override fun onCompleteResponse(completeResponse: LlmChatResponse) {
                         val latencyMs = System.currentTimeMillis() - startTime
-                        val fullText = completeResponse.aiMessage.text
+                        val fullText = completeResponse.aiMessage.text()
                         Logger.d(tag, "[L4-STREAM] OK latency=${latencyMs}ms, tokens=${completeResponse.metadata?.completionTokens ?: "?"}")
                         saveToMemory(context.memorySessionId, userInput, fullText)
                         continuation.resume(
                             Result.success(
                                 StreamChatResult(
-                                    fullResponse = completeResponse.aiMessage.text,
+                                    fullResponse = completeResponse.aiMessage.text(),
                                     metrics = StreamMetrics(
                                         latencyMs = latencyMs,
                                         promptTokens = completeResponse.metadata?.promptTokens,

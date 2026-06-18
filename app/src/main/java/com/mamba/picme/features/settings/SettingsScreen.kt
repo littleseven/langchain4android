@@ -420,6 +420,14 @@ private fun SettingsContent(
                             onSelectedModelChange = onAiAgentSelectedRemoteModelChange
                         )
                     }
+                    AiAgentMode.FEISHU -> {
+                        Text(
+                            text = "飞书远程控制模式：通过飞书消息远程控制应用",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
 
                 DebugOptionRow(

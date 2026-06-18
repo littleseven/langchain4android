@@ -11,7 +11,8 @@ package com.mamba.picme.agent.core.api.policy
 enum class AiAgentMode {
     OFF,     // 完全关闭 Agent
     LOCAL,   // 本地 MNN-LLM 模型（离线兜底，不再默认）
-    REMOTE   // 远程 API 推理（默认，优先使用，支持 OpenAI/Claude 协议）
+    REMOTE,  // 远程 API 推理（默认，优先使用，支持 OpenAI/Claude 协议）
+    FEISHU   // 飞书远程控制专用模式（ReAct 循环，应用内 UI 自动化）
 }
 
 /**

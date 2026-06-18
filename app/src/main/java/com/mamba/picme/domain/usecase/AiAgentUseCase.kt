@@ -227,6 +227,11 @@ class AiAgentUseCase(
                 Logger.i(tag, "[UseCase] REMOTE mode, calling processRemote for input='$userInput'")
                 return@withContext processRemote(userInput, agentContext, currentState)
             }
+            AiAgentMode.FEISHU -> {
+                // FEISHU 模式：相机场景不支持，回退到文本回复
+                Logger.w(tag, "[UseCase] FEISHU mode not supported in camera scene")
+                return@withContext Result.success(AiAgentCommand.TextReply("FEISHU 模式仅支持远程控制，请在飞书中使用"))
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package com.mamba.picme.agent.core.facade
 
 import android.content.Context
+import android.view.WindowManager
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
@@ -11,6 +12,9 @@ import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
 import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
+import com.mamba.picme.agent.core.react.InAppAgentCallback
+import com.mamba.picme.agent.core.react.InAppAgentConfig
+import com.mamba.picme.agent.core.react.InAppAgentService
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
 import com.mamba.picme.agent.core.remote.pipeline.RemoteInferencePipeline
@@ -224,4 +228,45 @@ class AgentConfigurator(private val context: Context) {
      */
     val isModelLoaded: Boolean
         get() = localLlmEngine.isLoaded
+
+    // ── 飞书 ReAct Agent（懒创建）────────────────────────────────────
+
+    private var cachedFeishuAgent: InAppAgentService? = null
+
+    /**
+     * 获取或创建飞书 ReAct Agent。
+     * 使用腾讯 SCF 默认配置作为远程模型。
+     */
+    fun getFeishuAgent(windowManager: WindowManager, callback: InAppAgentCallback): InAppAgentService? {
+        val existing = cachedFeishuAgent
+        if (existing != null) return existing
+
+        val cfg = try {
+            val remoteCfg = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
+            InAppAgentConfig.Builder()
+                .apiKey(remoteCfg.apiKey)
+                .baseUrl(remoteCfg.baseUrl)
+                .modelName(remoteCfg.modelId)
+                .gatewayToken("")
+                .build()
+        } catch (e: Exception) {
+            Logger.w("AgentConfigurator", "Failed to build FeishuAgent config", e)
+            return null
+        }
+
+        val agent = InAppAgentService(cfg, windowManager, callback, context)
+        agent.initialize()
+        cachedFeishuAgent = agent
+        Logger.i("AgentConfigurator", "Feishu ReAct Agent created: model=${cfg.modelName}")
+        return agent
+    }
+
+    /**
+     * 清除飞书 ReAct Agent 缓存（用于配置变更后重建）
+     */
+    fun clearFeishuAgent() {
+        cachedFeishuAgent?.shutdown()
+        cachedFeishuAgent = null
+        Logger.i("AgentConfigurator", "Feishu ReAct Agent cleared")
+    }
 }

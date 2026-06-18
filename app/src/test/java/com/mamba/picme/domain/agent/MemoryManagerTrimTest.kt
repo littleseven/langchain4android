@@ -1,9 +1,9 @@
 package com.mamba.picme.domain.agent
 
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.ChatMessage
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.UserMessage
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.ChatMessage
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.UserMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -55,18 +55,18 @@ class MemoryManagerTrimTest {
     @Test
     fun `trimToMaxSize keeps last N messages`() {
         val messages = (1..60).map { i ->
-            if (i % 2 == 1) UserMessage("msg$i") else AiMessage("msg$i")
+            if (i % 2 == 1) UserMessage.from("msg$i") else AiMessage.from("msg$i")
         }
         val trimmed = trimToMaxSize(messages, 50)
         assertEquals(50, trimmed.size)
-        assertEquals("msg11", (trimmed.first() as UserMessage).text)
-        assertEquals("msg60", (trimmed.last() as AiMessage).text)
+        assertEquals("msg11", (trimmed.first() as UserMessage).text())
+        assertEquals("msg60", (trimmed.last() as AiMessage).text())
     }
 
     @Test
     fun `trimToMaxSize preserves small list`() {
         val messages = listOf(
-            UserMessage("hi")
+            UserMessage.from("hi")
         )
         assertEquals(1, trimToMaxSize(messages).size)
     }
@@ -75,33 +75,33 @@ class MemoryManagerTrimTest {
     fun `trimToRounds keeps recent rounds`() {
         val messages = mutableListOf<ChatMessage>()
         repeat(15) { i ->
-            messages.add(UserMessage("u$i"))
-            messages.add(AiMessage("a$i"))
+            messages.add(UserMessage.from("u$i"))
+            messages.add(AiMessage.from("a$i"))
         }
         val trimmed = trimToRounds(messages, 5)
         assertEquals(10, trimmed.size)
-        assertEquals("u10", (trimmed[0] as UserMessage).text)
-        assertEquals("a14", (trimmed.last() as AiMessage).text)
+        assertEquals("u10", (trimmed[0] as UserMessage).text())
+        assertEquals("a14", (trimmed.last() as AiMessage).text())
     }
 
     @Test
     fun `trimToRounds handles incomplete last round`() {
         val messages = listOf(
-            UserMessage("u1"),
-            AiMessage("a1"),
-            UserMessage("u2")
+            UserMessage.from("u1"),
+            AiMessage.from("a1"),
+            UserMessage.from("u2")
         )
         val trimmed = trimToRounds(messages, 1)
         assertEquals(1, trimmed.size)
-        assertEquals("u2", (trimmed[0] as UserMessage).text)
+        assertEquals("u2", (trimmed[0] as UserMessage).text())
     }
 
     @Test
     fun `trimToRounds ignores system messages`() {
         val messages = listOf(
-            SystemMessage("sys"),
-            UserMessage("u1"),
-            AiMessage("a1")
+            SystemMessage.from("sys"),
+            UserMessage.from("u1"),
+            AiMessage.from("a1")
         )
         val trimmed = trimToRounds(messages, 1)
         assertEquals(2, trimmed.size)
@@ -111,8 +111,8 @@ class MemoryManagerTrimTest {
     @Test
     fun `trimToRounds with zero rounds returns empty`() {
         val messages = listOf(
-            UserMessage("u1"),
-            AiMessage("a1")
+            UserMessage.from("u1"),
+            AiMessage.from("a1")
         )
         assertEquals(0, trimToRounds(messages, 0).size)
     }

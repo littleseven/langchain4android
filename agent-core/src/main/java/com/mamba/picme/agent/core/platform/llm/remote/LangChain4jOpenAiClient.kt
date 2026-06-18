@@ -1,20 +1,20 @@
 package com.mamba.picme.agent.core.platform.llm.remote
 
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.ChatLanguageModel
-import com.mamba.picme.agent.core.api.ChatMessage
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.ChatResponse
 import com.mamba.picme.agent.core.api.ChatResponseMetadata
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.ToolExecutionRequest
-import com.mamba.picme.agent.core.api.ToolExecutionResultMessage
-import com.mamba.picme.agent.core.api.UserMessage
-import com.mamba.picme.agent.core.api.ToolSpecification
-import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import com.mamba.picme.agent.core.api.LlmChatResponse
+import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
+import dev.langchain4j.agent.tool.ToolExecutionRequest
+import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.ChatMessage
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.ToolExecutionResultMessage
+import dev.langchain4j.data.message.UserMessage
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit
  */
 class LangChain4jOpenAiClient(
     private val config: RemoteModelConfig
-) : ChatLanguageModel, StreamingChatLanguageModel {
+) : LlmChatLanguageModel, StreamingLlmChatLanguageModel {
 
     private val tag = "LangChain4jOpenAi"
 
@@ -71,7 +71,7 @@ class LangChain4jOpenAiClient(
 
     private val baseUrl: String = normalizeBaseUrl(config.baseUrl)
 
-    override fun chat(request: ChatRequest): ChatResponse {
+    override fun chat(request: LlmChatRequest): LlmChatResponse {
         val startTime = System.currentTimeMillis()
         try {
             // 1. 构建请求 JSON
@@ -103,10 +103,10 @@ class LangChain4jOpenAiClient(
                 "Chat OK latency=${latencyMs}ms, tokens=${metadata?.completionTokens ?: "?"}, tools=${result.second.size}"
             )
 
-            return ChatResponse(
+            return LlmChatResponse(
                 aiMessage = AiMessage(
-                    text = result.first ?: "",
-                    toolExecutionRequests = result.second
+                    result.first ?: "",
+                    result.second
                 ),
                 metadata = metadata
             )
@@ -119,7 +119,7 @@ class LangChain4jOpenAiClient(
 
     // ── 流式聊天（SSE） ───────────────────────────────────────────
 
-    override fun chat(request: ChatRequest, handler: StreamingChatResponseHandler) {
+    override fun chat(request: LlmChatRequest, handler: StreamingChatResponseHandler) {
         val startTime = System.currentTimeMillis()
         try {
             val requestBody = buildOpenAiRequest(request).apply {
@@ -174,8 +174,8 @@ class LangChain4jOpenAiClient(
                                     val latencyMs = System.currentTimeMillis() - startTime
                                     Logger.d(tag, "Stream OK latency=${latencyMs}ms, tokens=${completionTokens}")
                                     handler.onCompleteResponse(
-                                        ChatResponse(
-                                            aiMessage = AiMessage(text = fullContent.toString()),
+                                        LlmChatResponse(
+                                            aiMessage = AiMessage(fullContent.toString()),
                                             metadata = ChatResponseMetadata(
                                                 promptTokens = promptTokens,
                                                 completionTokens = completionTokens
@@ -193,8 +193,8 @@ class LangChain4jOpenAiClient(
                             val latencyMs = System.currentTimeMillis() - startTime
                             Logger.d(tag, "Stream EOF latency=${latencyMs}ms, tokens=${completionTokens}")
                             handler.onCompleteResponse(
-                                ChatResponse(
-                                    aiMessage = AiMessage(text = fullContent.toString()),
+                                LlmChatResponse(
+                                    aiMessage = AiMessage(fullContent.toString()),
                                     metadata = ChatResponseMetadata(
                                         promptTokens = promptTokens,
                                         completionTokens = completionTokens
@@ -226,7 +226,7 @@ class LangChain4jOpenAiClient(
 
     // ── 构建请求 ────────────────────────────────────────────────
 
-    private fun buildOpenAiRequest(request: ChatRequest): JSONObject {
+    private fun buildOpenAiRequest(request: LlmChatRequest): JSONObject {
         val json = JSONObject()
         json.put("model", config.modelId)
 
@@ -257,25 +257,25 @@ class LangChain4jOpenAiClient(
         return when (msg) {
             is SystemMessage -> JSONObject().apply {
                 put("role", "system")
-                put("content", msg.text)
+                put("content", msg.text())
             }
             is UserMessage -> JSONObject().apply {
                 put("role", "user")
-                put("content", msg.text)
+                put("content", msg.singleText())
             }
             is AiMessage -> JSONObject().apply {
                 put("role", "assistant")
-                put("content", msg.text.ifBlank { null })
-                if (msg.toolExecutionRequests.isNotEmpty()) {
+                put("content", msg.text().ifBlank { null })
+                if (msg.toolExecutionRequests().isNotEmpty()) {
                     val toolCalls = JSONArray()
-                    for ((index, req) in msg.toolExecutionRequests.withIndex()) {
+                    for ((index, req) in msg.toolExecutionRequests().withIndex()) {
                         toolCalls.put(JSONObject().apply {
                             put("index", index)
-                            put("id", req.id)
+                            put("id", req.id())
                             put("type", "function")
                             put("function", JSONObject().apply {
-                                put("name", req.name)
-                                put("arguments", req.arguments)
+                                put("name", req.name())
+                                put("arguments", req.arguments())
                             })
                         })
                     }
@@ -284,8 +284,8 @@ class LangChain4jOpenAiClient(
             }
             is ToolExecutionResultMessage -> JSONObject().apply {
                 put("role", "tool")
-                put("tool_call_id", msg.toolExecutionRequest.id)
-                put("content", msg.text)
+                put("tool_call_id", msg.id())
+                put("content", msg.text())
             }
             else -> throw IllegalArgumentException("Unknown message type: ${msg::class.simpleName}")
         }
@@ -358,11 +358,11 @@ class LangChain4jOpenAiClient(
             }
             Logger.d(tag, "Tool call #$i: name=${func.optString("name", "")}, arguments=$arguments")
             requests.add(
-                ToolExecutionRequest(
-                    id = tc.optString("id", ""),
-                    name = func.optString("name", ""),
-                    arguments = arguments
-                )
+                ToolExecutionRequest.builder()
+                    .id(tc.optString("id", ""))
+                    .name(func.optString("name", ""))
+                    .arguments(arguments)
+                    .build()
             )
         }
 

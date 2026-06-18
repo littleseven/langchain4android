@@ -1,15 +1,15 @@
 package com.mamba.picme.domain.agent
 
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.ChatLanguageModel
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.ChatResponse
+import com.mamba.picme.agent.core.api.LlmChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.ToolExecutor
 import com.mamba.picme.agent.core.api.ToolProvider
 import com.mamba.picme.agent.core.api.ToolSpecification
-import com.mamba.picme.agent.core.api.UserMessage
 import com.mamba.picme.agent.core.runtime.tool.ToolOrchestrator
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.UserMessage
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -31,12 +31,12 @@ class ToolOrchestratorTest {
             }
         }
 
-        val fakeModel = object : ChatLanguageModel {
+        val fakeModel = object : LlmChatLanguageModel {
             var callCount = 0
-            override fun chat(request: ChatRequest): ChatResponse {
+            override fun chat(request: LlmChatRequest): LlmChatResponse {
                 callCount++
                 return if (callCount == 1) {
-                    ChatResponse(
+                    LlmChatResponse(
                         aiMessage = AiMessage(
                             text = "",
                             toolExecutionRequests = listOf(
@@ -45,13 +45,13 @@ class ToolOrchestratorTest {
                         )
                     )
                 } else {
-                    ChatResponse(aiMessage = AiMessage(text = "final answer"))
+                    LlmChatResponse(aiMessage = AiMessage(text = "final answer"))
                 }
             }
         }
 
         val orchestrator = ToolOrchestrator(fakeModel, fakeProvider)
-        val response = orchestrator.chat(ChatRequest(messages = listOf(UserMessage("hi"))))
-        assertEquals("final answer", response.aiMessage.text)
+        val response = orchestrator.chat(LlmChatRequest(messages = listOf(UserMessage.from("hi"))))
+        assertEquals("final answer", response.aiMessage.text())
     }
 }

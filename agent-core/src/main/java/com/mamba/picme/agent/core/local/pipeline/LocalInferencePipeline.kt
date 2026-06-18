@@ -1,8 +1,8 @@
 package com.mamba.picme.agent.core.local.pipeline
 
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.UserMessage
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.UserMessage
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan
@@ -150,10 +150,10 @@ class LocalInferencePipeline(
         val result = try {
             Result.success(
                 localEngine.chat(
-                    ChatRequest(
+                    LlmChatRequest(
                         messages = messages
                     )
-                ).aiMessage.text
+                ).aiMessage.text()
             )
         } catch (e: Exception) {
             Result.failure(e)
@@ -217,10 +217,10 @@ class LocalInferencePipeline(
         val result = try {
             Result.success(
                 localEngine.chat(
-                    ChatRequest(
+                    LlmChatRequest(
                         messages = messages
                     )
-                ).aiMessage.text
+                ).aiMessage.text()
             )
         } catch (e: Exception) {
             Result.failure(e)
@@ -294,10 +294,10 @@ class LocalInferencePipeline(
         val result = try {
             Result.success(
                 localEngine.chat(
-                    ChatRequest(
+                    LlmChatRequest(
                         messages = messages
                     )
-                ).aiMessage.text
+                ).aiMessage.text()
             )
         } catch (e: Exception) {
             Result.failure(e)

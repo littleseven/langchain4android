@@ -2,20 +2,19 @@ package com.mamba.picme.agent.core.platform.llm.remote
 
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.android.RemoteProtocol
-import com.mamba.picme.agent.core.api.AiMessage
-import com.mamba.picme.agent.core.api.ChatLanguageModel
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.ChatResponse
-import com.mamba.picme.agent.core.api.ChatResponseMetadata
-import com.mamba.picme.agent.core.api.SystemMessage
-import com.mamba.picme.agent.core.api.UserMessage
-import com.mamba.picme.agent.core.api.StreamingChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatLanguageModel
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import com.mamba.picme.agent.core.api.LlmChatResponse
+import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingApiClient
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingMessage
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingRequest
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingResponse
+import dev.langchain4j.data.message.AiMessage
+import dev.langchain4j.data.message.SystemMessage
+import dev.langchain4j.data.message.UserMessage
 import kotlinx.coroutines.runBlocking
 import retrofit2.Response
 
@@ -30,7 +29,7 @@ import retrofit2.Response
  */
 class UnifiedRemoteClient(
     private val config: RemoteModelConfig
-) : ChatLanguageModel, StreamingChatLanguageModel {
+) : LlmChatLanguageModel, StreamingLlmChatLanguageModel {
 
     private val tag = "UnifiedRemote"
 
@@ -58,7 +57,7 @@ class UnifiedRemoteClient(
 
     // ── 非流式 ──────────────────────────────────────────────────
 
-    override fun chat(request: ChatRequest): ChatResponse {
+    override fun chat(request: LlmChatRequest): LlmChatResponse {
         return when {
             langChain4jClient != null -> {
                 Logger.d(tag, "Using LangChain4jOpenAiClient for model=${config.modelId}")
@@ -74,7 +73,7 @@ class UnifiedRemoteClient(
 
     // ── 流式 ────────────────────────────────────────────────────
 
-    override fun chat(request: ChatRequest, handler: StreamingChatResponseHandler) {
+    override fun chat(request: LlmChatRequest, handler: StreamingChatResponseHandler) {
         when {
             langChain4jClient != null -> {
                 Logger.d(tag, "Streaming with LangChain4jOpenAiClient for model=${config.modelId}")
@@ -97,11 +96,11 @@ class UnifiedRemoteClient(
     /**
      * Claude API 聊天
      */
-    private fun chatClaude(request: ChatRequest): ChatResponse {
+    private fun chatClaude(request: LlmChatRequest): LlmChatResponse {
         return runBlocking {
-            val systemPrompt = request.messages.filterIsInstance<SystemMessage>().lastOrNull()?.text
-            val userInput = request.messages.filterIsInstance<UserMessage>().lastOrNull()?.text
-                ?: throw IllegalArgumentException("ChatRequest must contain a UserMessage")
+            val systemPrompt = request.messages.filterIsInstance<SystemMessage>().lastOrNull()?.text()
+            val userInput = request.messages.filterIsInstance<UserMessage>().lastOrNull()?.singleText()
+                ?: throw IllegalArgumentException("LlmChatRequest must contain a UserMessage")
 
             try {
                 val client = claudeClient ?: throw IllegalStateException("Claude client not initialized")
@@ -119,7 +118,7 @@ class UnifiedRemoteClient(
                     body.content.firstOrNull()?.text?.trim()
                 }.getOrThrow()
 
-                ChatResponse(aiMessage = AiMessage(text = content))
+                LlmChatResponse(aiMessage = AiMessage(content))
             } catch (e: Exception) {
                 Logger.e(tag, "Claude chat failed for model=${config.modelId}", e)
                 throw e

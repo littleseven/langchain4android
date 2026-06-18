@@ -11,9 +11,8 @@ import com.mamba.picme.agent.core.api.context.AgentIdGenerator
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.mamba.picme.agent.core.api.ChatRequest
-import com.mamba.picme.agent.core.api.UserMessage
-import com.mamba.picme.agent.core.api.SystemMessage
+import com.mamba.picme.agent.core.api.LlmChatRequest
+import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics
 import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
@@ -24,12 +23,16 @@ import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
 import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
+import com.mamba.picme.agent.core.react.InAppAgentCallback
+import com.mamba.picme.agent.core.react.InAppAgentService
 import com.mamba.picme.agent.core.runtime.state.SceneManager
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -245,6 +248,7 @@ class AgentOrchestrator private constructor(context: Context) {
                 AiAgentMode.LOCAL -> configurator.getLocalPipeline().processInput(input, agentContext)
                 AiAgentMode.REMOTE -> configurator.getRemotePipeline().processInput(input, agentContext)
                 AiAgentMode.OFF -> InferenceResult.Chat(message = "AI Agent 已关闭")
+                AiAgentMode.FEISHU -> InferenceResult.Chat(message = "FEISHU 模式请使用 processFeishuInput()")
             }
         } catch (exception: Exception) {
             Logger.e(tag, "Pipeline routing failed", exception)
@@ -298,6 +302,9 @@ class AgentOrchestrator private constructor(context: Context) {
             AiAgentMode.REMOTE -> {
                 streamChatRemote(input, agentContext, onToken)
             }
+            AiAgentMode.FEISHU -> {
+                Result.failure(RuntimeException("FEISHU 模式不支持 streamChat，请使用 processFeishuInput()"))
+            }
         }
     }
 
@@ -328,7 +335,7 @@ class AgentOrchestrator private constructor(context: Context) {
         return try {
             val result = suspendCoroutine<Result<StreamChatResult>> { continuation ->
                 localLlmEngine.chat(
-                    ChatRequest(messages = messages),
+                    LlmChatRequest(messages = messages),
                     object : StreamingChatResponseHandler {
                         private val accumulatedText = StringBuilder()
 
@@ -337,14 +344,14 @@ class AgentOrchestrator private constructor(context: Context) {
                             onToken(partialResponse)
                         }
 
-                        override fun onCompleteResponse(completeResponse: com.mamba.picme.agent.core.api.ChatResponse) {
+                        override fun onCompleteResponse(completeResponse: LlmChatResponse) {
                             val latencyMs = System.currentTimeMillis() - startTime
                             val metrics = completeResponse.metadata
                             Logger.d(tag, "streamChatLocal OK latency=${latencyMs}ms")
                             continuation.resume(
                                 Result.success(
                                     StreamChatResult(
-                                        fullResponse = completeResponse.aiMessage.text,
+                                        fullResponse = completeResponse.aiMessage.text(),
                                         metrics = StreamMetrics(
                                             latencyMs = latencyMs,
                                             promptTokens = metrics?.promptTokens,
@@ -495,10 +502,10 @@ class AgentOrchestrator private constructor(context: Context) {
                 val responseResult = try {
                     Result.success(
                         localLlmEngine.chat(
-                            ChatRequest(
+                            LlmChatRequest(
                                 messages = localMessages
                             )
-                        ).aiMessage.text
+                        ).aiMessage.text()
                     )
                 } catch (e: Exception) {
                     Result.failure(e)
@@ -540,10 +547,10 @@ class AgentOrchestrator private constructor(context: Context) {
                         )
                         Result.success(
                             localLlmEngine.chat(
-                                ChatRequest(
+                                LlmChatRequest(
                                     messages = fallbackMessages
                                 )
-                            ).aiMessage.text
+                            ).aiMessage.text()
                         )
                     } catch (e: Exception) {
                         Result.failure(e)
@@ -572,6 +579,16 @@ class AgentOrchestrator private constructor(context: Context) {
                         commandId = AgentIdGenerator.nextId(),
                         errorCode = AgentErrorCode.INVALID_REQUEST,
                         message = "AI Agent 已关闭"
+                    )
+                )
+            }
+            AiAgentMode.FEISHU -> {
+                Logger.w(tag, "FEISHU mode should use processFeishuInput(), not processUserInput()")
+                return@withContext Result.success(
+                    AgentAction.Error(
+                        commandId = AgentIdGenerator.nextId(),
+                        errorCode = AgentErrorCode.INVALID_REQUEST,
+                        message = "FEISHU 模式请使用 processFeishuInput()"
                     )
                 )
             }
@@ -685,6 +702,73 @@ class AgentOrchestrator private constructor(context: Context) {
      */
     suspend fun clearMemory(sessionId: String) {
         memoryManager.clearHistory(sessionId)
+    }
+
+    // ── 飞书 ReAct 入口 ─────────────────────────────────────────────
+
+    /**
+     * 处理飞书远程控制输入（ReAct 循环）。
+     *
+     * 使用 [InAppAgentService] 执行多轮 Observe→Think→Act→Verify 循环，
+     * 通过应用内 UI 自动化工具完成用户请求。
+     *
+     * @param input 用户自然语言输入
+     * @param windowManager 用于获取屏幕信息的 WindowManager
+     * @param timeoutMs 超时时间（毫秒），默认 120 秒
+     * @return 任务完成摘要或错误信息
+     */
+    suspend fun processFeishuInput(
+        input: String,
+        windowManager: android.view.WindowManager,
+        timeoutMs: Long = 120_000L
+    ): Result<String> = withContext(Dispatchers.IO) {
+        Logger.d(tag, "processFeishuInput: input='$input', timeout=${timeoutMs}ms")
+
+        val reply = CompletableDeferred<String>()
+        val callback = object : InAppAgentCallback {
+            override fun onLoopStart(iteration: Int) {
+                Logger.d(tag, "Feishu ReAct iteration #$iteration")
+            }
+            override fun onContent(iteration: Int, content: String) {
+                Logger.d(tag, "Feishu ReAct content: ${content.take(200)}")
+            }
+            override fun onToolCall(iteration: Int, toolName: String, args: String) {
+                Logger.d(tag, "Feishu ReAct toolCall: $toolName(${args.take(100)})")
+            }
+            override fun onToolResult(iteration: Int, toolName: String, result: String) {
+                Logger.d(tag, "Feishu ReAct toolResult: $toolName → ${result.take(80)}")
+            }
+            override fun onComplete(iteration: Int, summary: String, totalTokens: Int) {
+                Logger.i(tag, "Feishu ReAct complete: $iteration rounds, $totalTokens tokens")
+                reply.complete("✅ $summary")
+            }
+            override fun onError(iteration: Int, error: Throwable, totalTokens: Int) {
+                Logger.e(tag, "Feishu ReAct error: ${error.message}")
+                reply.complete("❌ ${error.message ?: "未知错误"}")
+            }
+        }
+
+        val agent = configurator.getFeishuAgent(windowManager, callback)
+            ?: return@withContext Result.failure(
+                IllegalStateException("Feishu ReAct Agent 初始化失败")
+            )
+
+        if (agent.isRunning()) {
+            return@withContext Result.failure(
+                IllegalStateException("Agent 正在执行其他任务")
+            )
+        }
+
+        return@withContext try {
+            agent.executeTask(input)
+            val result = withTimeout(timeoutMs) { reply.await() }
+            Result.success(result)
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            agent.cancel()
+            Result.failure(RuntimeException("⏰ 处理超时（${timeoutMs / 1000}秒），请稍后重试"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**

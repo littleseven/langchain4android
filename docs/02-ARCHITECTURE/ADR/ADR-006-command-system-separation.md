@@ -1,7 +1,8 @@
 # ADR-006: 本地/远程指令体系包级隔离
 
-**状态**: 提议 (Proposed)  
+**状态**: 已实施 (Implemented)  
 **日期**: 2026-06-16  
+**更新日期**: 2026-06-18  
 **决策**: RD  
 **依赖**: ADR-005（本地/远程推理协议分离）
 
@@ -384,32 +385,96 @@ agent.core
 │                      remote/LangChain4jOpenAiClient.kt
 ```
 
-### 4.2 变更后
+### 4.2 变更后（已实施）
 
 ```
 agent.core
-├── api/command/            AgentCommands.kt
-├── local/                  ★ 本地指令体系
+├── api/                    ★ 共享 API 层
+│   ├── command/            AgentCommands.kt（PicMe 业务命令）
+│   ├── context/            AgentContext, AgentAction, AgentScene
+│   ├── android/            RemoteModelConfig
+│   └── policy/             AiAgentMode, AiAgentPrivacyLevel
+├── local/                  ★ 本地推理链路（MNN-LLM + 自定义 JSON 协议）
 │   ├── prompt/             LocalPromptBuilder.kt
-│   ├── parser/             LocalCommandParser.kt
+│   ├── parser/             LocalCommandParser.kt（method/params → AgentCommand）
 │   └── pipeline/           LocalInferencePipeline.kt
-├── remote/                 ★ 远程指令体系
-│   ├── model/              OpenAiToolCall.kt
+├── remote/                 ★ 远程推理链路（OpenAI API + tool_calls）
 │   ├── prompt/             RemotePromptBuilder.kt
-│   ├── parser/             ToolCallParser.kt
+│   ├── parser/             ToolCallParser.kt（tool_calls → AgentCommand）
 │   ├── client/             UnifiedRemoteClient.kt
 │   └── pipeline/           RemoteInferencePipeline.kt
-│                            ToolOrchestrator.kt
-├── runtime/
-│   ├── capability/         （不变）
-│   ├── execution/          （不变）
-│   ├── policy/             （不变）
-│   └── state/              （不变）
+├── react/                  ★ 飞书 ReAct 循环（独立指令体系）
+│   ├── InAppAgentService.kt
+│   └── tool/               ReAct 专用 Tool（apkclaw 风格）
+├── runtime/                ★ 运行时基础设施
+│   ├── capability/         CapabilityRegistry, CapabilityHost
+│   ├── execution/          InferenceResult, ExecutionPlan
+│   ├── inference/          IntentCache（L1 缓存，本地/远程共用）
+│   ├── policy/             PrivacyGuard
+│   └── state/            SceneManager
 ├── platform/llm/
-│   ├── local/              LocalLlmEngine.kt（不变）
-│   └── remote/             RemoteOrchestrator.kt（简化）
-│                            LangChain4jOpenAiClient.kt（不变）
-└── facade/                 AgentOrchestrator.kt（简化路由）
+│   ├── local/              LocalLlmEngine.kt（MNN-LLM 引擎）
+│   └── remote/             RemoteOrchestrator.kt（精简版）
+│                            LangChain4jOpenAiClient.kt
+└── facade/                 AgentOrchestrator.kt（顶层路由）
+```
+
+### 4.3 物理隔离架构图
+
+```mermaid
+graph TB
+    subgraph Shared["共享层 (api/ + runtime/)"]
+        API["api/command/<br/>AgentCommands.kt"]
+        CTX["api/context/<br/>AgentContext, AgentAction"]
+        CAP["runtime/capability/<br/>CapabilityRegistry"]
+        CACHE["runtime/inference/<br/>IntentCache"]
+    end
+
+    subgraph LocalChain["本地推理链路 (local/)"]
+        LP["local/prompt/<br/>LocalPromptBuilder"]
+        LC["local/parser/<br/>LocalCommandParser"]
+        LI["local/pipeline/<br/>LocalInferencePipeline"]
+        MNN["platform/llm/local/<br/>LocalLlmEngine<br/>(MNN-LLM)"]
+    end
+
+    subgraph RemoteChain["远程推理链路 (remote/)"]
+        RP["remote/prompt/<br/>RemotePromptBuilder"]
+        RC["remote/parser/<br/>ToolCallParser"]
+        RI["remote/pipeline/<br/>RemoteInferencePipeline"]
+        UNI["remote/client/<br/>UnifiedRemoteClient"]
+        REM["platform/llm/remote/<br/>RemoteOrchestrator"]
+    end
+
+    subgraph ReActChain["飞书 ReAct 链路 (react/)"]
+        REACT["react/<br/>InAppAgentService"]
+        TOOL["react/tool/<br/>ReAct Tools"]
+    end
+
+    subgraph Facade["门面层 (facade/)"]
+        ORCH["AgentOrchestrator"]
+    end
+
+    ORCH -->|LOCAL 模式| LI
+    ORCH -->|REMOTE 模式| RI
+    ORCH -->|FEISHU 模式| REACT
+
+    LI -->|method/params JSON| LC
+    LC -->|AgentCommand| API
+    LP -->|精简 System Prompt| MNN
+    MNN -->|JSON 数组输出| LC
+
+    RI -->|tool_calls| RC
+    RC -->|AgentCommand| API
+    RP -->|Tool Schema + Prompt| REM
+    REM -->|OpenAI Chat Completions| UNI
+    UNI -->|tool_calls JSON| RC
+
+    REACT -->|LangChain4j<br/>ToolExecutionRequest| TOOL
+    TOOL -.->|独立执行<br/>不经过 CapabilityRegistry| CAP
+
+    API -->|命令分发| CAP
+    CACHE -->|L1 缓存| LI
+    CACHE -->|L1 缓存| RI
 ```
 
 ---
@@ -477,10 +542,10 @@ agent.core
 
 | 阶段 | 状态 | 日期 |
 |------|------|------|
-| 提议 | ⏳ 待评审 | 2026-06-16 |
-| Phase 1: 包结构重组 | ⏳ 待开始 | - |
-| Phase 2: 冗余删除 | ⏳ 待开始 | - |
-| Phase 3: Pipeline 重构 | ⏳ 待开始 | - |
+| 提议 | ✅ 已实施 | 2026-06-18 |
+| Phase 1: 包结构重组 | ✅ 已完成 | 2026-06-18 |
+| Phase 2: 冗余删除 | ✅ 已完成 | 2026-06-18 |
+| Phase 3: Pipeline 重构 | ✅ 已完成 | 2026-06-18 |
 
 ---
 
