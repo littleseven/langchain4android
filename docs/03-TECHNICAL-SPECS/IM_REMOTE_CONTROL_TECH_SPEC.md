@@ -461,6 +461,137 @@ class RemoteCommandDispatcher(
 ---
 
 > **维护者**：RD Agent
-> **最后更新**：2026-06-17
+> **最后更新**：2026-06-18
 > **方案变更**：~~SCF Relay Server~~ → 设备端直连飞书 WebSocket（参考 ApkClaw 方案）
-> **状态**：设计阶段 · 待实现
+> **状态**：Phase 1 实现中 · ReAct Agent 工具调用已验证
+
+---
+
+## 13. ReAct Agent 工具调用实现指引
+
+> **来源**：2026-06-18 飞书远程控制"打开相机"导航失败问题复盘
+>
+> 本章节总结 ToolSpec 实现过程中的关键陷阱与最佳实践，供后续批量补充工具时参考。
+
+### 13.1 问题复盘
+
+**现象**：用户通过飞书发送"打开相机"，LLM 输出了正确的 `navigate_to` 指令 JSON，但手机端未执行导航，而是把 JSON 文本直接回复给了飞书。
+
+**日志特征**：
+```
+content: {"tool_calls":[{"id":"call_1",...}]}  ← 工具调用 JSON 出现在 content 中
+task complete (no tool calls)                    ← 走了无工具调用路径
+```
+
+### 13.2 根因分析（三层陷阱）
+
+| 层级 | 问题 | 影响 | 修复文件 |
+|------|------|------|----------|
+| **Prompt 误导** | System Prompt 提供了完整的 `{"tool_calls":[...]}` JSON 示例，模型把这个 JSON 当作应该在 `content` 中输出的文本 | LLM 把 tool_calls 输出到 content 字段而非原生 function calling | `InAppAgentConfig.kt` |
+| **空字符串陷阱** | API 返回的 `content` 为空字符串 `""`（而非 `null`），`isNullOrEmpty()` 判断失效 | 空字符串被序列化到消息历史，污染后续推理；API 看到 content 存在可能忽略 tool_calls | `InAppLlmClient.kt`, `InAppAgentService.kt` |
+| **解析缺失** | `parseResponse` 只检查原生 `tool_calls` 字段，没有处理嵌入 content 的情况 | 即使 content 中有正确 JSON，也走"无工具调用"路径直接返回文本 | `InAppLlmClient.kt` |
+
+### 13.3 修复方案
+
+#### 13.3.1 Prompt 设计原则
+
+**禁止**：在 Prompt 中提供具体的 tool_calls JSON 格式示例
+```
+❌ 错误示例（会导致模型模仿输出到 content）：
+正确格式：
+```json
+{"tool_calls":[{"id":"call_1","type":"function",...}]}
+```
+```
+
+**正确**：描述 function calling 机制，让模型使用原生 API
+```
+✅ 正确示例：
+本系统支持 OpenAI 格式的函数调用（function calling）。
+当你需要执行工具时，直接发起函数调用，系统会自动解析并执行。
+不要在回复文本中输出 JSON 格式的 tool_calls。
+```
+
+#### 13.3.2 空字符串处理规范
+
+所有涉及 `content` 字段解析/序列化的位置必须使用 `isNotBlank()`：
+
+| 位置 | 方法 | 修复前 | 修复后 |
+|------|------|--------|--------|
+| 解析响应 | `parseResponse` | `optString("content")` | `optString("content", "").isNotBlank()` |
+| 序列化消息 | `convertMessage` | `!isNullOrEmpty()` | `!isNullOrBlank()` |
+| 推送思考 | `runAgentLoop` | `!isNullOrEmpty()` | `!isNullOrBlank()` |
+
+**关键区别**：
+- `isNullOrEmpty()`：`null` → true, `""` → true, `" "` → false ❌
+- `isNullOrBlank()`：`null` → true, `""` → true, `" "` → true ✅
+
+#### 13.3.3 Content 回退解析机制
+
+当 API 未返回原生 `tool_calls` 但 `content` 中包含 `{"tool_calls":[...]}` 时，使用正则表达式提取并解析：
+
+```kotlin
+private fun extractToolCallsFromContent(content: String): List<ToolExecutionRequest> {
+    val result = mutableListOf<ToolExecutionRequest>()
+    try {
+        val toolCallsRegex = Regex("""\{\s*"tool_calls"\s*:\s*(\[.*?\])\s*\}""", RegexOption.DOT_MATCHES_ALL)
+        val match = toolCallsRegex.find(content)
+        if (match != null) {
+            val toolCallsJson = match.groupValues[1]
+            val array = JSONArray(toolCallsJson)
+            for (i in 0 until array.length()) {
+                val tc = array.getJSONObject(i)
+                val func = tc.getJSONObject("function")
+                val request = ToolExecutionRequest.builder()
+                    .id(tc.optString("id", "call_$i"))
+                    .name(func.getString("name"))
+                    .arguments(func.optString("arguments", "{}"))
+                    .build()
+                result.add(request)
+            }
+        }
+    } catch (e: Exception) {
+        // 解析失败，忽略
+    }
+    return result
+}
+```
+
+在 `parseResponse` 中调用：
+```kotlin
+// 回退机制：如果 API 没有返回 tool_calls 但 content 中包含 tool_calls JSON，尝试解析
+if (toolCalls.isEmpty() && text != null) {
+    val extracted = extractToolCallsFromContent(text)
+    if (extracted.isNotEmpty()) {
+        toolCalls.addAll(extracted)
+    }
+}
+```
+
+### 13.4 新增 ToolSpec 的 checklist
+
+每实现一个新工具时，按以下清单检查：
+
+- [ ] **工具名称唯一**：在 `ToolRegistry` 中检查无重名
+- [ ] **参数描述清晰**：`description` 说明参数类型、取值范围、示例
+- [ ] **参数类型正确**：`string`/`integer`/`number`/`boolean`，与 `execute()` 中解析一致
+- [ ] **必填参数标记**：`isRequired = true` 的参数在 `execute()` 中校验
+- [ ] **destination 枚举一致**：导航类工具 `validDestinations` 与 `NavigationCapability` 路由表一致
+- [ ] **错误处理完整**：参数缺失/非法值返回 `ToolResult.error()` 而非抛异常
+- [ ] **Capability 注册**：新页面导航需在 `NavigationCapability.navigateTo()` 添加路由分支
+- [ ] **测试覆盖**：验证工具在 ReAct 循环中能被正确调用和执行
+
+### 13.5 相关文件
+
+| 文件 | 职责 |
+|------|------|
+| `InAppAgentConfig.kt` | System Prompt 定义，工具描述 |
+| `InAppLlmClient.kt` | API 请求/响应解析，content 回退解析 |
+| `InAppAgentService.kt` | ReAct 主循环，消息历史管理 |
+| `LangChain4jToolBridge.kt` | ToolSpec ↔ LangChain4j 转换，工具执行分发 |
+| `ToolRegistry.kt` | 工具注册中心 |
+| `BaseUiTool.kt` | 工具基类，参数辅助方法 |
+| `NavigateToTool.kt` | 导航工具示例（参考实现） |
+| `NavigationCapability.kt` | 页面路由 Capability |
+
+---

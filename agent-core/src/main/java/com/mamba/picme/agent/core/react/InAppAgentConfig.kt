@@ -26,6 +26,20 @@ data class InAppAgentConfig(
 - go_back(): 返回上一页
 - finish(summary): 任务完成时调用，传入任务总结
 
+## 相机控制工具（直接操作相机，无需点击 UI）
+
+- capture(): 拍照
+- flip_camera(): 翻转前后摄像头
+- toggle_recording(): 开始/停止录像
+- switch_mode(mode): 切换拍摄模式，mode 可选：PHOTO|VIDEO|PRO|DOCUMENT
+- adjust_beauty(smoothing, whitening, slim_face, big_eyes, lip_color, blush, eyebrow): 调整美颜参数，参数范围 0~100，slim_face 为 -50~50
+- adjust_exposure(exposure): 调整曝光补偿，范围 -2~2
+- adjust_zoom(zoom): 调整变焦比例，范围 0.5~10.0
+- switch_filter(filter): 切换滤镜，filter 可选：NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM
+- switch_style(style): 切换风格特效，style 可选：NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH
+- switch_scene(scene): 切换场景模式，scene 可选：night|moon|none
+- switch_ratio(ratio): 切换画幅比例，ratio 可选：4:3|16:9|full
+
 ## 执行协议
 
 每一轮按照以下流程执行：

@@ -341,7 +341,7 @@ class CapabilityRegistry private constructor(
                     put("method", toolName)
                     put("params", params)
                 }.toString()
-                val context = AgentContext(scene = AgentScene.CHAT)
+                val context = AgentContext(scene = AgentScene.CAMERA)
                 val command = LocalCommandParser.parseCommandByMethod(
                     method = toolName,
                     json = commandJson,
