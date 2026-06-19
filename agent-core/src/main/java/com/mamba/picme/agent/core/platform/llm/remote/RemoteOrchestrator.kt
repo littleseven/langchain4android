@@ -480,7 +480,8 @@ class RemoteOrchestrator(
      * 当 API 响应缺少 tool_calls 字段时，尝试从文本内容中回退解析
      *
      * 某些代理/网关（如 SCF）可能剥离 tool_calls 字段，仅保留文本内容。
-     * 如果 LLM 产出的 tool_calls JSON 被输出到 content 字段中，此方法可以兜底恢复。
+     * DeepSeek 等模型在特定情况下也可能将 tool_calls 输出到 content 字段中。
+     * 此方法作为兜底恢复机制，与 [LangChain4jOpenAiClient.parseToolCallsFromContent] 保持一致。
      */
     private fun parseFallbackToolCalls(
         content: String,

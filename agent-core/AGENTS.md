@@ -50,6 +50,15 @@
 > - 移除 `AdaptiveStrategySelector`（本地不再需要策略分级）
 > - 拆分 `PromptBuilder` 为 `LocalPromptBuilder` + `RemotePromptBuilder`
 > - 移除所有不再需要的 Tool Calling 包装层代码，共 ~1500 行
+>
+> **2026-06-19 DeepSeek tool_calls 适配**：
+> - `RemotePromptBuilder`：移除 Prompt 中的具体 tool_calls JSON 示例，避免模型将 JSON 输出到 content 字段
+> - `LangChain4jOpenAiClient`：
+>   - DeepSeek 模型自动禁用 thinking 模式（`thinking: {"type": "disabled"}`）
+>   - ToolSpec 自动添加 `additionalProperties: false` 以兼容 strict 模式
+>   - `tool_choice: REQUIRED` 正确映射为 `"required"`（之前错误映射为 `"auto"`）
+>   - 增强 content fallback 解析注释，说明 DeepSeek 兼容需求
+> - 参考文档：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
 
 ## 设计原则
 

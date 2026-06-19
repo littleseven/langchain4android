@@ -19,6 +19,9 @@ import org.json.JSONObject
  * - tool_calls[i].function.name → 命令类型映射
  * - tool_calls[i].function.arguments → 命令参数（标准 JSON 对象）
  *
+ * 注意：tool_calls 是 assistant message 的独立字段，与 content 互斥。
+ * 当存在 tool_calls 时，content 必须为 null。
+ *
  * 例如：
  * ```
  * {"name":"switch_filter","arguments":"{\"filter\":\"WARM\"}"}

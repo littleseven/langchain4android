@@ -91,11 +91,12 @@ class InAppLlmClient(
         }
         json.put("messages", messagesArray)
 
-        // 注意：不使用 OpenAI function calling API（tools/tool_choice）
-        // 而是使用文本 ReAct 模式：LLM 在 content 中输出 Thought/Action 格式
-        // 这种方式兼容所有模型，包括不支持 function calling 的模型
+        // 注意：InAppLlmClient 使用文本 ReAct 模式（Thought/Action），
+        // 不通过 OpenAI function calling API（tools/tool_choice）传递工具定义。
+        // 这种方式兼容所有模型，包括不支持 function calling 的本地小模型。
 
-        // DeepSeek V4: 禁用 thinking 模式以确保输出格式稳定
+        // DeepSeek 适配：禁用 thinking 模式以确保输出格式稳定
+        // 参考：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
         if (modelName.contains("deepseek", ignoreCase = true)) {
             val thinking = JSONObject()
             thinking.put("type", "disabled")
@@ -105,6 +106,19 @@ class InAppLlmClient(
         return json.toString()
     }
 
+    /**
+     * 将 langchain4j ChatMessage 转换为 OpenAI API 请求中的 message JSON。
+     *
+     * 标准格式：
+     * - system: {role: "system", content: "..."}
+     * - user: {role: "user", content: "..."}
+     * - assistant: {role: "assistant", content: null, tool_calls: [...]}  // 有 tool_calls 时
+     * - assistant: {role: "assistant", content: "..."}  // 纯文本回复时
+     * - tool: {role: "tool", tool_call_id: "...", content: "..."}
+     *
+     * 注意：tool_calls 是 assistant message 的独立字段，与 content 互斥。
+     * 当存在 tool_calls 时，content 必须为 null（不设置或显式设为 null）。
+     */
     private fun convertMessage(msg: ChatMessage): JSONObject {
         val json = JSONObject()
         when (msg) {
@@ -119,9 +133,13 @@ class InAppLlmClient(
             is AiMessage -> {
                 val aiMsg = msg
                 json.put("role", "assistant")
-                json.put("content", aiMsg.text().ifBlank { "" })
                 val toolCalls = aiMsg.toolExecutionRequests()
-                if (!toolCalls.isNullOrEmpty()) {
+                val hasToolCalls = !toolCalls.isNullOrEmpty()
+                // 当存在 tool_calls 时，content 必须为 null（OpenAI / DeepSeek 标准）
+                if (!hasToolCalls) {
+                    json.put("content", aiMsg.text().ifBlank { "" })
+                }
+                if (hasToolCalls) {
                     val toolCallsArray = JSONArray()
                     for ((i, tc) in toolCalls.withIndex()) {
                         val tcJson = JSONObject()

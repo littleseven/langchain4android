@@ -258,17 +258,24 @@ class LangChain4jOpenAiClient(
             }
             json.put("tools", tools)
             // tool_choice: 优先使用请求中的配置，否则默认 auto
-            // 注意：某些模型（如 deepseek-v4-flash）不支持 "required"，使用 "auto" 更兼容
             val toolChoice = request.toolChoice
             if (toolChoice != null) {
                 when (toolChoice) {
-                    ToolChoice.REQUIRED -> json.put("tool_choice", "auto")
+                    ToolChoice.REQUIRED -> json.put("tool_choice", "required")
                     ToolChoice.AUTO -> json.put("tool_choice", "auto")
                     ToolChoice.NONE -> json.put("tool_choice", "none")
                 }
             } else {
                 json.put("tool_choice", "auto")
             }
+        }
+
+        // DeepSeek 适配：禁用 thinking 模式以确保 function calling 格式稳定
+        // 参考：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
+        if (config.modelId.contains("deepseek", ignoreCase = true)) {
+            val thinking = JSONObject()
+            thinking.put("type", "disabled")
+            json.put("thinking", thinking)
         }
 
         // 可选参数
@@ -278,6 +285,19 @@ class LangChain4jOpenAiClient(
         return json
     }
 
+    /**
+     * 将 langchain4j ChatMessage 转换为 OpenAI API 请求中的 message JSON。
+     *
+     * 标准格式：
+     * - system: {role: "system", content: "..."}
+     * - user: {role: "user", content: "..."}
+     * - assistant: {role: "assistant", content: null, tool_calls: [...]}  // 有 tool_calls 时
+     * - assistant: {role: "assistant", content: "..."}  // 纯文本回复时
+     * - tool: {role: "tool", tool_call_id: "...", content: "..."}
+     *
+     * 注意：tool_calls 是 assistant message 的独立字段，与 content 互斥。
+     * 当存在 tool_calls 时，content 必须为 null（不设置或显式设为 null）。
+     */
     private fun messageToJson(msg: ChatMessage): JSONObject {
         return when (msg) {
             is SystemMessage -> JSONObject().apply {
@@ -290,7 +310,7 @@ class LangChain4jOpenAiClient(
             }
             is AiMessage -> JSONObject().apply {
                 put("role", "assistant")
-                // 当有 tool_calls 时，content 必须为 null（OpenAI 标准）
+                // 当有 tool_calls 时，content 必须为 null（OpenAI / DeepSeek 标准）
                 // 否则模型可能会在 content 中输出文本而非使用 tool_calls 字段
                 val hasToolCalls = msg.toolExecutionRequests().isNotEmpty()
                 val text = msg.text()
@@ -325,6 +345,15 @@ class LangChain4jOpenAiClient(
         }
     }
 
+    /**
+     * 将 ToolSpecification 转换为 OpenAI / DeepSeek 兼容的 JSON 格式。
+     *
+     * DeepSeek strict 模式要求（Beta）：
+     * - 所有 object 类型必须设置 additionalProperties: false
+     * - 所有 properties 必须出现在 required 数组中
+     *
+     * 当前实现默认添加 additionalProperties: false，以最大化兼容 strict 模式。
+     */
     private fun toolSpecToJson(spec: ToolSpecification): JSONObject {
         return JSONObject().apply {
             put("type", "function")
@@ -375,6 +404,8 @@ class LangChain4jOpenAiClient(
                     if (required != null && required.isNotEmpty()) {
                         schema.put("required", JSONArray(required))
                     }
+                    // DeepSeek strict 模式要求 additionalProperties: false
+                    schema.put("additionalProperties", false)
                     put("parameters", schema)
                 }
             })
@@ -441,11 +472,15 @@ class LangChain4jOpenAiClient(
     }
 
     /**
-     * 从 content 文本中解析 tool_calls（某些模型将 tool_calls 放在文本中而非标准字段）。
-     * 支持格式：
-     * ```json
-     * {"tool_calls": [{"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}]}
-     * ```
+     * 从 content 文本中解析 tool_calls（DeepSeek 等模型可能将 tool_calls 放在 content 中）。
+     *
+     * 支持格式（按优先级）：
+     * 1. 标准 OpenAI tool_calls JSON: {"tool_calls": [{"id":"...","type":"function","function":{"name":"...","arguments":"..."}}]}
+     * 2. ```json 代码块包裹的 tool_calls
+     * 3. 纯文本中的 JSON 对象（从第一个 '{' 开始提取）
+     *
+     * DeepSeek 文档提示：某些情况下模型会将工具调用信息放入 content 字段，
+     * 需要客户端实现 fallback 解析。
      */
     private fun parseToolCallsFromContent(content: String): List<ToolExecutionRequest> {
         try {

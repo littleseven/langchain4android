@@ -536,9 +536,14 @@ class RemoteCommandDispatcher(
 ---
 
 > **维护者**：RD Agent
-> **最后更新**：2026-06-18
+> **最后更新**：2026-06-19
 > **方案变更**：~~SCF Relay Server~~ → 设备端直连飞书 WebSocket（参考 ApkClaw 方案）
 > **协议隔离**：远程 tool_calls 与本地 method/params 已彻底解耦
+> **DeepSeek 适配**：
+> - Prompt 移除具体 tool_calls JSON 示例，避免模型输出到 content 字段
+> - API 请求自动禁用 thinking 模式（DeepSeek V4 系列）
+> - ToolSpec 自动添加 `additionalProperties: false` 以兼容 strict 模式
+> - 参考文档：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
 > **状态**：Phase 1 实现中 · ReAct Agent 工具调用已验证
 
 ---
@@ -569,7 +574,16 @@ task complete (no tool calls)                    ← 走了无工具调用路径
 
 ### 13.3 修复方案
 
-#### 13.3.1 Prompt 设计原则
+#### 13.3.1 Prompt 设计原则（DeepSeek 适配）
+
+**核心认知**：tool_calls 是 `message` 对象的独立字段，与 `content` 互斥。标准响应格式为：
+```
+choices[0].message: {
+  "role": "assistant",
+  "content": null,
+  "tool_calls": [...]
+}
+```
 
 **禁止**：在 Prompt 中提供具体的 tool_calls JSON 格式示例
 ```
@@ -588,6 +602,11 @@ task complete (no tool calls)                    ← 走了无工具调用路径
 不要在回复文本中输出 JSON 格式的 tool_calls。
 ```
 
+**DeepSeek 特殊要求**：
+- 使用 DeepSeek V4 系列模型时，API 请求必须禁用 thinking 模式（`thinking: {"type": "disabled"}`）
+- 参考文档：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
+- 禁用 thinking 可避免模型在 reasoning 中分析工具调用但最终不输出 tool_calls 字段的问题
+
 #### 13.3.2 空字符串处理规范
 
 所有涉及 `content` 字段解析/序列化的位置必须使用 `isNotBlank()`：
@@ -602,9 +621,13 @@ task complete (no tool calls)                    ← 走了无工具调用路径
 - `isNullOrEmpty()`：`null` → true, `""` → true, `" "` → false ❌
 - `isNullOrBlank()`：`null` → true, `""` → true, `" "` → true ✅
 
-#### 13.3.3 Content 回退解析机制
+#### 13.3.3 Content 回退解析机制（DeepSeek 兼容）
 
-当 API 未返回原生 `tool_calls` 但 `content` 中包含 `{"tool_calls":[...]}` 时，使用正则表达式提取并解析：
+当 API 未返回原生 `tool_calls` 但 `content` 中包含 `{"tool_calls":[...]}` 时，使用正则表达式提取并解析。
+
+**DeepSeek 文档提示**：某些情况下模型会将工具调用信息放入 content 字段，客户端需实现 fallback 解析。
+
+实现代码：
 
 ```kotlin
 private fun extractToolCallsFromContent(content: String): List<ToolExecutionRequest> {
@@ -644,7 +667,7 @@ if (toolCalls.isEmpty() && text != null) {
 }
 ```
 
-### 13.4 新增 ToolSpec 的 checklist
+### 13.4 新增 ToolSpec 的 checklist（含 DeepSeek strict 模式要求）
 
 每实现一个新工具时，按以下清单检查：
 
@@ -656,6 +679,8 @@ if (toolCalls.isEmpty() && text != null) {
 - [ ] **错误处理完整**：参数缺失/非法值返回 `ToolResult.error()` 而非抛异常
 - [ ] **Capability 注册**：新页面导航需在 `NavigationCapability.navigateTo()` 添加路由分支
 - [ ] **测试覆盖**：验证工具在 ReAct 循环中能被正确调用和执行
+- [ ] **DeepSeek strict 模式兼容**：`parameters` 中设置 `additionalProperties: false`（已由 `LangChain4jOpenAiClient.toolSpecToJson()` 自动处理）
+- [ ] **DeepSeek thinking 禁用**：使用 DeepSeek V4 时 API 请求自动附加 `thinking: {"type": "disabled"}`（已由 `LangChain4jOpenAiClient.buildOpenAiRequest()` 自动处理）
 
 ### 13.5 相关文件
 

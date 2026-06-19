@@ -11,7 +11,17 @@ import java.util.UUID
  * 远程 LLM Tool Calls 解析器
  *
  * 将远程 LLM 输出的标准 OpenAI tool_calls 格式解析为 [ToolExecutionRequest] 列表。
- * 协议格式：{"tool_calls":[{"id":"call_x","type":"function","function":{"name":"...","arguments":"..."}}]}
+ *
+ * 标准协议中，tool_calls 是 assistant message 的独立字段（与 content 互斥）：
+ * ```
+ * message: {
+ *   "role": "assistant",
+ *   "content": null,
+ *   "tool_calls": [
+ *     {"id":"call_x","type":"function","function":{"name":"...","arguments":"..."}}
+ *   ]
+ * }
+ * ```
  *
  * 仅支持 OpenAI tool_calls 协议，不支持 REACT，不支持 method/params 兜底。
  */

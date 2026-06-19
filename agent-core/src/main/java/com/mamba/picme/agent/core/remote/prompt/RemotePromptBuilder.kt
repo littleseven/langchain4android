@@ -21,39 +21,37 @@ class RemotePromptBuilder(
      *
      * 模型通过 tools 参数中的 ToolSpecifications 定义以 tool_calls 协议输出命令。
      * 禁止输出 method/params 格式的文本 JSON，只接受标准 OpenAI tool_calls。
+     *
+     * **DeepSeek 适配要点**：
+     * - 不在 Prompt 中提供具体的 tool_calls JSON 示例，避免模型将 JSON 模仿输出到 content 字段
+     * - 依赖原生 function calling 机制，由 API 自动处理 tool_calls 字段
+     * - 若使用 DeepSeek V4，API 请求会自动禁用 thinking 模式以确保格式稳定
      */
     fun buildBatchPrompt(userInput: String, context: AgentContext): String {
         return buildString {
-            appendLine("你是 PicMe 的指令解析器。使用 function calling（tool_calls）调用工具来响应用户指令。")
+            appendLine("你是 PicMe 的指令解析器。使用 function calling 调用工具来响应用户指令。")
             appendLine()
             appendLine("规则：")
-            appendLine("1. 使用 tool_calls 协议输出命令；如果需要先执行 A 再执行 B，在同一个 tool_calls 数组中输出多个工具调用。")
-            appendLine("2. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，delay 必须在数组第一个位置，后面跟后续函数。")
-            appendLine("3. 用户说多个美颜参数（如\"美白50磨皮30\"）时，只调用一次 adjust_beauty，传入所有参数。")
-            appendLine("4. 用户输入以\"拍照\"结尾时，最后一次调用必须是 capture。")
-            appendLine("5. 用户要求拍多张时（如\"拍三张\"、\"连拍\"），调用多次 capture，中间可以插入 delay。")
-            appendLine("6. 如果用户是闲聊或无法用现有函数表达，调用 text_reply 回复。")
-            appendLine("7. 不要输出文字解释，不要使用<think>标签。")
-            appendLine("8. 禁止输出 method/params 格式的 JSON 数组（如 [{\"method\":\"...\",\"params\":{}}]），必须使用标准 tool_calls 格式。")
+            appendLine("1. 当需要执行工具时，直接发起函数调用（function calling），系统会自动解析并执行。")
+            appendLine("2. 如果需要先执行 A 再执行 B，在同一个响应中输出多个工具调用。")
+            appendLine("3. 用户说包含时间/延迟的指令（如\"3秒后拍照\"、\"5秒后换滤镜\"）时，delay 必须在工具调用列表的第一个位置，后面跟后续函数。")
+            appendLine("4. 用户说多个美颜参数（如\"美白50磨皮30\"）时，只调用一次 adjust_beauty，传入所有参数。")
+            appendLine("5. 用户输入以\"拍照\"结尾时，最后一次调用必须是 capture。")
+            appendLine("6. 用户要求拍多张时（如\"拍三张\"、\"连拍\"），调用多次 capture，中间可以插入 delay。")
+            appendLine("7. 如果用户是闲聊或无法用现有函数表达，调用 text_reply 回复。")
+            appendLine("8. 不要在回复文本中输出 JSON 格式的工具调用，也不要使用 \u003Cthink\u003E 标签。")
+            appendLine("9. 禁止输出 method/params 格式的 JSON 数组（如 [{\"method\":\"...\",\"params\":{}}]）。")
             appendLine()
             appendLine("【当前状态】")
             appendLine(buildStateSection(context, sceneManager.currentScene.value))
             appendLine()
             appendLine("可用函数列表请参考 tools 参数中的定义。")
             appendLine()
-            appendLine("【输出格式】")
-            appendLine("在 tool_calls 数组中按顺序排列多个工具调用即可实现连续指令：")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"工具名1\",\"arguments\":{...}}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"工具名2\",\"arguments\":{...}}}]}")
-            appendLine()
-            appendLine("【示例】")
-            appendLine("用户: 3秒后拍照")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"delay\",\"arguments\":{\"delay_ms\":3000}}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"capture\",\"arguments\":{}}}]}")
-            appendLine("用户: 5秒后换暖色滤镜拍照")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"delay\",\"arguments\":{\"delay_ms\":5000}}},{\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"switch_filter\",\"arguments\":{\"filter\":\"WARM\"}}},{\"id\":\"call_3\",\"type\":\"function\",\"function\":{\"name\":\"capture\",\"arguments\":{}}}]}")
-            appendLine("用户: 你好")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"text_reply\",\"arguments\":{\"message\":\"你好呀，我是小觅\"}}}]}")
-            appendLine("用户: 磨皮50美白30")
-            appendLine("{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"adjust_beauty\",\"arguments\":{\"smoothing\":50,\"whitening\":30}}}]}")
+            appendLine("【示例说明】")
+            appendLine("用户: 3秒后拍照 -> 调用 delay(delay_ms=3000) + capture()")
+            appendLine("用户: 5秒后换暖色滤镜拍照 -> 调用 delay(delay_ms=5000) + switch_filter(filter=WARM) + capture()")
+            appendLine("用户: 你好 -> 调用 text_reply(message=\"你好呀，我是小觅\")")
+            appendLine("用户: 磨皮50美白30 -> 调用 adjust_beauty(smoothing=50, whitening=30)")
         }
     }
 
