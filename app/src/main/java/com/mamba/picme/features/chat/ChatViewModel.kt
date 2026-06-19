@@ -142,6 +142,7 @@ class ChatViewModel(
     private fun resolveThreadTitle(session: ChatSessionEntity): String {
         return when {
             session.sessionId == "default" && session.title == "default" -> "New Chat"
+            session.sessionId == "feishu" -> "飞书远程控制"
             session.title.isBlank() -> "Chat"
             else -> session.title
         }

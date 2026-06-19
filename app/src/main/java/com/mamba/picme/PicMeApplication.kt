@@ -53,7 +53,13 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     val feishuChannelHandler: FeishuChannelHandler by lazy { FeishuChannelHandler(applicationScope) }
 
     val remoteCommandDispatcher: RemoteCommandDispatcher by lazy {
-        RemoteCommandDispatcher(feishuChannelHandler, this)
+        val database = com.mamba.picme.data.local.AppDatabase.getDatabase(this)
+        RemoteCommandDispatcher(
+            feishuChannelHandler,
+            this,
+            database.chatMessageDao(),
+            database.chatSessionDao()
+        )
     }
 
     /**

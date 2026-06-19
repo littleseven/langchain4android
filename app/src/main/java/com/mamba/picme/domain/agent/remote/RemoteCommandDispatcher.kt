@@ -9,10 +9,15 @@ import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.core.common.Logger
+import com.mamba.picme.data.local.ChatMessageDao
+import com.mamba.picme.data.local.ChatMessageEntity
+import com.mamba.picme.data.local.ChatSessionDao
+import com.mamba.picme.data.local.ChatSessionEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.util.UUID
 
 /**
  * 远程命令调度器
@@ -25,6 +30,10 @@ import kotlinx.coroutines.withTimeout
  * - [AgentOrchestrator] 提供统一的 `processFeishuInput()` 入口
  * - 本调度器仅负责：消息接收 → 调用 Orchestrator → 结果回复
  *
+ * **聊天记录同步（2026-06-19）**：
+ * - 飞书消息收发同步写入本地 Room 数据库（sessionId = "feishu"）
+ * - 用户可在 App 内聊天页面查看与飞书的完整对话历史
+ *
  * **ANR 防护**：
  * - 前一个任务未完成时收到新消息，自动取消旧任务
  * - 超时保护（120 秒），避免 LLM 推理长时间占用 CPU
@@ -32,12 +41,17 @@ import kotlinx.coroutines.withTimeout
  */
 class RemoteCommandDispatcher(
     private val channelHandler: FeishuChannelHandler,
-    context: Context
+    context: Context,
+    private val chatMessageDao: ChatMessageDao,
+    private val chatSessionDao: ChatSessionDao
 ) {
 
     private val tag = "RemoteDispatcher"
     private val appContext = context.applicationContext
     private val orchestrator = AgentOrchestrator.getInstance(context)
+
+    /** 飞书会话固定 ID */
+    private val feishuSessionId = "feishu"
 
     /** 当前正在执行的 Job，用于新消息到达时取消旧任务 */
     @Volatile
@@ -51,10 +65,17 @@ class RemoteCommandDispatcher(
      *
      * 统一通过 [AgentOrchestrator.processFeishuInput] 执行 ReAct 循环，
      * 当 Agent 不可用时回退到原有 [AgentOrchestrator.processUserInput] 路径。
+     * 所有收发消息同步写入本地聊天记录。
      */
     suspend fun dispatch(text: String, messageId: String) {
         Logger.i(tag, "远程命令: text='$text', messageId=$messageId")
         currentJob?.cancel()
+
+        // 确保飞书会话元数据存在
+        ensureFeishuSession()
+
+        // 持久化收到的飞书用户消息
+        saveUserMessage(text)
 
         withContext(Dispatchers.IO) {
             channelHandler.sendMessage("⏳ 正在处理您的请求...", messageId)
@@ -71,9 +92,13 @@ class RemoteCommandDispatcher(
                         onFailure = { error -> "❌ ${error.message ?: "未知错误"}" }
                     )
                     Logger.i(tag, "远程命令执行完毕，回复：$reply")
+                    // 持久化 Agent 回复
+                    saveAgentMessage(reply)
                     channelHandler.sendMessage(reply, messageId)
                 } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                    channelHandler.sendMessage("⏰ 处理超时（${TIMEOUT_MS / 1000}秒），请稍后重试", messageId)
+                    val timeoutMsg = "⏰ 处理超时（${TIMEOUT_MS / 1000}秒），请稍后重试"
+                    saveAgentMessage(timeoutMsg)
+                    channelHandler.sendMessage(timeoutMsg, messageId)
                 }
             } else {
                 // ── 回退路径 ──
@@ -102,16 +127,23 @@ class RemoteCommandDispatcher(
                     onSuccess = { action -> formatActionReply(action) },
                     onFailure = { error -> "❌ 处理失败: ${error.message ?: "未知错误"}" }
                 )
+                saveAgentMessage(reply)
                 channelHandler.sendMessage(reply, messageId)
             } finally {
                 orchestrator.popModeOverride()
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            channelHandler.sendMessage("⏰ 处理超时，请稍后重试", messageId)
+            val timeoutMsg = "⏰ 处理超时，请稍后重试"
+            saveAgentMessage(timeoutMsg)
+            channelHandler.sendMessage(timeoutMsg, messageId)
         } catch (e: kotlinx.coroutines.CancellationException) {
-            channelHandler.sendMessage("⏹️ 上一个任务已取消，正在处理新请求...", messageId)
+            val cancelMsg = "⏹️ 上一个任务已取消，正在处理新请求..."
+            saveAgentMessage(cancelMsg)
+            channelHandler.sendMessage(cancelMsg, messageId)
         } catch (e: Exception) {
-            channelHandler.sendMessage("❌ 处理异常: ${e.message ?: "未知错误"}", messageId)
+            val errorMsg = "❌ 处理异常: ${e.message ?: "未知错误"}"
+            saveAgentMessage(errorMsg)
+            channelHandler.sendMessage(errorMsg, messageId)
         }
     }
 
@@ -131,6 +163,59 @@ class RemoteCommandDispatcher(
                 }
                 "📋 批量执行结果:\n${parts.joinToString("\n")}"
             }
+        }
+    }
+
+    // ── 聊天记录持久化 ─────────────────────────────────────────────
+
+    private suspend fun ensureFeishuSession() {
+        try {
+            val existing = chatSessionDao.getSession(feishuSessionId)
+            if (existing == null) {
+                chatSessionDao.insertSession(
+                    ChatSessionEntity(
+                        sessionId = feishuSessionId,
+                        title = "飞书远程控制"
+                    )
+                )
+                Logger.i(tag, "Created feishu chat session")
+            }
+        } catch (e: Exception) {
+            Logger.w(tag, "Failed to ensure feishu session", e)
+        }
+    }
+
+    private suspend fun saveUserMessage(content: String) {
+        try {
+            chatMessageDao.insertMessage(
+                ChatMessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    sessionId = feishuSessionId,
+                    type = "user_text",
+                    content = content,
+                    modelUsed = null
+                )
+            )
+            chatSessionDao.touchSession(feishuSessionId)
+        } catch (e: Exception) {
+            Logger.w(tag, "Failed to save user message", e)
+        }
+    }
+
+    private suspend fun saveAgentMessage(content: String) {
+        try {
+            chatMessageDao.insertMessage(
+                ChatMessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    sessionId = feishuSessionId,
+                    type = "agent_text",
+                    content = content,
+                    modelUsed = "feishu_remote"
+                )
+            )
+            chatSessionDao.touchSession(feishuSessionId)
+        } catch (e: Exception) {
+            Logger.w(tag, "Failed to save agent message", e)
         }
     }
 }
