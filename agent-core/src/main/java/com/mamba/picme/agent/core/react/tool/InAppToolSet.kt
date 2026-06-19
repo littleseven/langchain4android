@@ -167,7 +167,7 @@ class InAppToolSet(
 
     @Tool(
         name = "get_screen_info",
-        value = ["获取当前屏幕的 UI 层级树信息，包含所有可见元素的坐标、文本、可点击状态等"]
+        value = ["获取当前屏幕的 UI 层级树信息（纯文本描述），包含所有可见元素的 class/id/text/bounds/clickable/scrollable 等属性。由于模型不支持图像输入，这是感知 UI 状态的唯一途径。"]
     )
     fun getScreenInfo(): String {
         val rootView = GetScreenInfoTool.currentRootView

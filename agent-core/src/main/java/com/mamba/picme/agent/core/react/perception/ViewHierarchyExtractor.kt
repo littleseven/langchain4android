@@ -35,6 +35,177 @@ object ViewHierarchyExtractor {
         return root.toString(2)
     }
 
+    /**
+     * 提取当前屏幕的语义化摘要，供 LLM 快速理解页面结构。
+     * 包含：页面标题、可交互元素列表、关键状态信息。
+     */
+    fun extractSemanticSummary(rootView: View, screenWidth: Int, screenHeight: Int): String {
+        val summary = StringBuilder()
+        summary.appendLine("=== 页面结构摘要 ===")
+
+        // 尝试提取页面标题（从 Toolbar/ActionBar 或顶部 TextView）
+        val title = findTitleText(rootView)
+        if (title != null) {
+            summary.appendLine("页面标题: $title")
+        }
+
+        // 提取所有可交互元素的语义描述
+        val interactiveElements = mutableListOf<String>()
+        collectInteractiveElements(rootView, interactiveElements, screenWidth, screenHeight)
+
+        if (interactiveElements.isNotEmpty()) {
+            summary.appendLine("可交互元素 (${interactiveElements.size}个):")
+            interactiveElements.forEach { summary.appendLine("  - $it") }
+        } else {
+            summary.appendLine("可交互元素: 无")
+        }
+
+        // 提取关键状态（如选中状态、开关状态等）
+        val states = mutableListOf<String>()
+        collectKeyStates(rootView, states)
+        if (states.isNotEmpty()) {
+            summary.appendLine("关键状态:")
+            states.forEach { summary.appendLine("  - $it") }
+        }
+
+        summary.appendLine("=== 完整层级树 ===")
+        summary.appendLine(extract(rootView, screenWidth, screenHeight))
+
+        return summary.toString()
+    }
+
+    /**
+     * 查找页面标题文本
+     */
+    private fun findTitleText(view: View): String? {
+        // 优先查找 Toolbar/ActionBar 标题
+        if (view.javaClass.simpleName.contains("Toolbar", ignoreCase = true)) {
+            // Toolbar 的子 View 中可能有标题 TextView
+            if (view is ViewGroup) {
+                for (i in 0 until view.childCount) {
+                    val child = view.getChildAt(i)
+                    if (child is TextView) {
+                        val text = child.text?.toString()?.trim()
+                        if (!text.isNullOrEmpty()) return text
+                    }
+                }
+            }
+        }
+
+        // 递归查找顶部区域的大标题 TextView
+        if (view is TextView) {
+            val text = view.text?.toString()?.trim()
+            if (!text.isNullOrEmpty() && view.textSize >= 40f) { // 大字体视为标题
+                return text
+            }
+        }
+
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val found = findTitleText(view.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    /**
+     * 收集所有可交互元素的语义描述
+     */
+    private fun collectInteractiveElements(
+        view: View,
+        out: MutableList<String>,
+        screenWidth: Int,
+        screenHeight: Int,
+        parentDesc: String = ""
+    ) {
+        if (view.visibility != View.VISIBLE) return
+
+        val desc = buildSemanticDescription(view, screenWidth, screenHeight)
+        if (desc != null) {
+            out.add("$parentDesc$desc")
+        }
+
+        if (view is ViewGroup) {
+            val childPrefix = if (desc != null) "$desc > " else ""
+            for (i in 0 until view.childCount) {
+                collectInteractiveElements(view.getChildAt(i), out, screenWidth, screenHeight, childPrefix)
+            }
+        }
+    }
+
+    /**
+     * 构建单个 View 的语义描述
+     */
+    private fun buildSemanticDescription(view: View, screenWidth: Int, screenHeight: Int): String? {
+        val className = view.javaClass.simpleName
+
+        // 提取文本内容
+        val text = when (view) {
+            is TextView -> view.text?.toString()?.trim()
+            else -> view.contentDescription?.toString()?.trim()
+        }
+
+        // 提取坐标信息
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        val x = location[0]
+        val y = location[1]
+        val xPct = if (screenWidth > 0) String.format("%.1f", x * 100.0 / screenWidth) else "0"
+        val yPct = if (screenHeight > 0) String.format("%.1f", y * 100.0 / screenHeight) else "0"
+
+        // 判断可交互性
+        val isClickable = view.isClickable
+        val isFocusable = view.isFocusable
+        val isEditable = view is EditText
+        val isScrollable = view is ViewGroup && (view.canScrollVertically(1) || view.canScrollVertically(-1))
+
+        // 只保留有意义的可交互元素
+        if (!isClickable && !isFocusable && !isEditable && !isScrollable && text.isNullOrEmpty()) {
+            return null
+        }
+
+        val id = if (view.id != View.NO_ID) {
+            try { view.resources.getResourceEntryName(view.id) } catch (_: Exception) { null }
+        } else null
+
+        val parts = mutableListOf<String>()
+        parts.add(className)
+        if (id != null) parts.add("id=$id")
+        if (!text.isNullOrEmpty()) parts.add("text=\"$text\"")
+        if (isClickable) parts.add("clickable")
+        if (isEditable) parts.add("editable")
+        if (isScrollable) parts.add("scrollable")
+        if (view is Checkable && view.isChecked) parts.add("checked")
+        if (view.isSelected) parts.add("selected")
+        if (!view.isEnabled) parts.add("disabled")
+        parts.add("bounds=(${x},${y} ${view.width}x${view.height} ~${xPct}%,${yPct}%)")
+
+        return parts.joinToString(" ")
+    }
+
+    /**
+     * 收集关键状态信息
+     */
+    private fun collectKeyStates(view: View, out: MutableList<String>) {
+        if (view.visibility != View.VISIBLE) return
+
+        if (view is Checkable) {
+            val text = (view as? TextView)?.text?.toString()?.trim() ?: view.contentDescription?.toString() ?: ""
+            out.add("${text.ifEmpty { view.javaClass.simpleName }}: checked=${view.isChecked}")
+        }
+
+        if (view is android.widget.AbsListView) {
+            out.add("ListView: selectedPosition=${view.selectedItemPosition}")
+        }
+
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                collectKeyStates(view.getChildAt(i), out)
+            }
+        }
+    }
+
     private fun visitNode(
         view: View,
         out: JSONObject,
