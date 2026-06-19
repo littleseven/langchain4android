@@ -91,6 +91,7 @@ import com.mamba.picme.features.chat.ChatMessageType
 import com.mamba.picme.features.chat.ChatMessageUi
 import com.mamba.picme.features.chat.ChatModelOption
 import com.mamba.picme.features.chat.ChatViewModel
+import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.launch
 
 /**
@@ -734,12 +735,20 @@ private fun FloatingChatMessageItem(message: ChatMessageUi) {
                     )
                 }
         ) {
-            Text(
-                text = message.content,
-                color = textColor,
-                modifier = Modifier.padding(10.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            if (isUser) {
+                Text(
+                    text = message.content,
+                    color = textColor,
+                    modifier = Modifier.padding(10.dp),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                MarkdownText(
+                    markdown = message.content,
+                    color = textColor,
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
         }
     }
 }

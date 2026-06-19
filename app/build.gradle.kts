@@ -179,6 +179,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    implementation(libs.compose.markdown)
     implementation(libs.retrofit)
     implementation(libs.converter.moshi)
     implementation(libs.kotlinx.coroutines.android)

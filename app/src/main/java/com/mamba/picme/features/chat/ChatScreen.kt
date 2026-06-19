@@ -83,6 +83,7 @@ import androidx.activity.compose.BackHandler
 import com.mamba.picme.features.chat.ChatThreadSidebar
 import com.mamba.picme.features.chat.components.ModelSelector
 import com.mamba.picme.features.chat.components.QuickActionBar
+import dev.jeziellago.compose.markdowntext.MarkdownText
 
 private const val TAG = "ChatScreen"
 
@@ -338,12 +339,21 @@ private fun ChatMessageItem(message: ChatMessageUi) {
                     )
                 }
         ) {
-            Text(
-                text = message.content,
-                color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
-                lineHeight = 20.sp
-            )
+            if (isUser) {
+                Text(
+                    text = message.content,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            } else {
+                MarkdownText(
+                    markdown = message.content,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            }
             if (message.modelUsed != null) {
                 Text(
                     text = message.modelUsed,
