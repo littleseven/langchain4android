@@ -147,6 +147,12 @@ class LangChain4jOpenAiClient(
 
             httpClient.newCall(httpRequest).enqueue(object : Callback {
                 override fun onResponse(call: Call, response: Response) {
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string()?.take(500) ?: "no body"
+                        Logger.e(tag, "Stream HTTP ${response.code}: $errorBody")
+                        handler.onError(RuntimeException("HTTP ${response.code}: $errorBody"))
+                        return
+                    }
                     val body = response.body ?: run {
                         handler.onError(RuntimeException("Empty response body"))
                         return
@@ -154,16 +160,51 @@ class LangChain4jOpenAiClient(
                     val fullContent = StringBuilder()
                     var promptTokens = 0L
                     var completionTokens = 0L
+                    var lineCount = 0
+                    var chunkCount = 0
 
                     try {
                         val source = body.source()
                         while (!source.exhausted()) {
                             val line = source.readUtf8Line() ?: continue
-                            if (!line.startsWith("data: ")) continue
+                            lineCount++
+
+                            // 兜底：某些网关返回非流式 JSON（裸 JSON 而非 SSE data: 格式）
+                            if (!line.startsWith("data: ")) {
+                                if (line.isNotBlank() && line.startsWith("{")) {
+                                    try {
+                                        val json = JSONObject(line)
+                                        val result = parseOpenAiResponse(json)
+                                        val metadata = parseTokenUsage(json)
+                                        val content = result.first
+                                        if (!content.isNullOrBlank()) {
+                                            val latencyMs = System.currentTimeMillis() - startTime
+                                            Logger.d(tag, "Non-SSE JSON response parsed, contentLen=${content.length}")
+                                            handler.onCompleteResponse(
+                                                LlmChatResponse(
+                                                    aiMessage = AiMessage(content),
+                                                    metadata = metadata
+                                                )
+                                            )
+                                            return
+                                        }
+                                    } catch (e: Exception) {
+                                        Logger.d(tag, "SSE non-data line: $line")
+                                    }
+                                } else if (line.isNotBlank()) {
+                                    Logger.d(tag, "SSE non-data line: $line")
+                                }
+                                continue
+                            }
 
                             val data = line.removePrefix("data: ").trim()
-                            if (data == "[DONE]") continue
+                            if (data == "[DONE]") {
+                                Logger.d(tag, "SSE [DONE] received")
+                                continue
+                            }
+                            if (data.isBlank()) continue
 
+                            chunkCount++
                             try {
                                 val json = JSONObject(data)
                                 // 解析 usage（最后一个 chunk 可能携带）
@@ -173,19 +214,23 @@ class LangChain4jOpenAiClient(
                                 }
 
                                 val choices = json.optJSONArray("choices")
-                                if (choices == null || choices.length() == 0) continue
+                                if (choices == null || choices.length() == 0) {
+                                    Logger.d(tag, "SSE chunk #$chunkCount: no choices")
+                                    continue
+                                }
 
-                                val delta = choices.optJSONObject(0)?.optJSONObject("delta")
+                                val choice0 = choices.optJSONObject(0)
+                                val delta = choice0?.optJSONObject("delta")
                                 val content = delta?.optString("content")
                                 if (content != null && content != "null") {
                                     fullContent.append(content)
                                     handler.onPartialResponse(content)
                                 }
 
-                                val finishReason = choices.optJSONObject(0)?.optString("finish_reason")
+                                val finishReason = choice0?.optString("finish_reason")
                                 if (finishReason != null && finishReason != "null") {
                                     val latencyMs = System.currentTimeMillis() - startTime
-                                    Logger.d(tag, "Stream OK latency=${latencyMs}ms, tokens=${completionTokens}")
+                                    Logger.d(tag, "Stream OK latency=${latencyMs}ms, tokens=${completionTokens}, chunks=$chunkCount")
                                     handler.onCompleteResponse(
                                         LlmChatResponse(
                                             aiMessage = AiMessage(fullContent.toString()),
@@ -202,6 +247,7 @@ class LangChain4jOpenAiClient(
                             }
                         }
                         // 流结束但未收到 finish_reason（某些 API 行为）
+                        Logger.d(tag, "SSE stream ended: lines=$lineCount, chunks=$chunkCount, contentLen=${fullContent.length}")
                         if (fullContent.isNotEmpty()) {
                             val latencyMs = System.currentTimeMillis() - startTime
                             Logger.d(tag, "Stream EOF latency=${latencyMs}ms, tokens=${completionTokens}")
@@ -215,6 +261,7 @@ class LangChain4jOpenAiClient(
                                 )
                             )
                         } else {
+                            Logger.e(tag, "Stream ended with empty content (lines=$lineCount, chunks=$chunkCount)")
                             handler.onError(RuntimeException("Stream ended with empty content"))
                         }
                     } catch (e: Exception) {

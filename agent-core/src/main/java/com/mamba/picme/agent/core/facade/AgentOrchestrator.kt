@@ -248,7 +248,7 @@ class AgentOrchestrator private constructor(context: Context) {
                 AiAgentMode.LOCAL -> configurator.getLocalPipeline().processInput(input, agentContext)
                 AiAgentMode.REMOTE -> configurator.getRemotePipeline().processInput(input, agentContext)
                 AiAgentMode.OFF -> InferenceResult.Chat(message = "AI Agent 已关闭")
-                AiAgentMode.FEISHU -> InferenceResult.Chat(message = "FEISHU 模式请使用 processFeishuInput()")
+                AiAgentMode.FEISHU -> configurator.getRemotePipeline().processInput(input, agentContext)
             }
         } catch (exception: Exception) {
             Logger.e(tag, "Pipeline routing failed", exception)
@@ -293,9 +293,10 @@ class AgentOrchestrator private constructor(context: Context) {
         agentContext: AgentContext,
         onToken: (String) -> Unit
     ): Result<StreamChatResult> {
-        Logger.d(tag, "streamChat: mode=${configurator.getAgentMode()}, input='$input'")
+        val mode = configurator.getAgentMode()
+        Logger.d(tag, "streamChat: mode=$mode, input='$input'")
 
-        return when (configurator.getAgentMode()) {
+        return when (mode) {
             AiAgentMode.LOCAL, AiAgentMode.OFF -> {
                 streamChatLocal(input, agentContext, onToken)
             }
@@ -303,7 +304,8 @@ class AgentOrchestrator private constructor(context: Context) {
                 streamChatRemote(input, agentContext, onToken)
             }
             AiAgentMode.FEISHU -> {
-                Result.failure(RuntimeException("FEISHU 模式不支持 streamChat，请使用 processFeishuInput()"))
+                // FEISHU 模式：聊天页走远程流式推理，与 REMOTE 模式一致
+                streamChatRemote(input, agentContext, onToken)
             }
         }
     }
@@ -583,14 +585,48 @@ class AgentOrchestrator private constructor(context: Context) {
                 )
             }
             AiAgentMode.FEISHU -> {
-                Logger.w(tag, "FEISHU mode should use processFeishuInput(), not processUserInput()")
-                return@withContext Result.success(
-                    AgentAction.Error(
-                        commandId = AgentIdGenerator.nextId(),
-                        errorCode = AgentErrorCode.INVALID_REQUEST,
-                        message = "FEISHU 模式请使用 processFeishuInput()"
+                // FEISHU 模式：聊天页等场景走远程推理，与 REMOTE 模式一致
+                Logger.d(tag, "Using RemotePipeline for FEISHU mode (chat fallback)")
+                try {
+                    configurator.getRemotePipeline().processInput(input, agentContext)
+                } catch (exception: Exception) {
+                    Logger.e(tag, "Remote inference failed for FEISHU mode, falling back to local", exception)
+                    if (!localLlmEngine.isLoaded) {
+                        val loadResult = tryLoadModel()
+                        if (loadResult.isFailure) {
+                            return@withContext handleModelLoadError(loadResult)
+                        }
+                    }
+                    val fallbackResult = try {
+                        val fallbackMessages = memoryManager.buildContextMessages(
+                            agentContext.memorySessionId, systemPrompt, input
+                        )
+                        Result.success(
+                            localLlmEngine.chat(
+                                LlmChatRequest(
+                                    messages = fallbackMessages
+                                )
+                            ).aiMessage.text()
+                        )
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                    return@withContext fallbackResult.fold(
+                        onSuccess = { rawResponse ->
+                            handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
+                        },
+                        onFailure = { error ->
+                            Logger.e(tag, "Fallback local inference also failed", error)
+                            Result.success(
+                                AgentAction.Error(
+                                    commandId = AgentIdGenerator.nextId(),
+                                    errorCode = AgentErrorCode.INTERNAL_ERROR,
+                                    message = "推理失败：${error.message ?: "未知错误"}"
+                                )
+                            )
+                        }
                     )
-                )
+                }
             }
         }
 
