@@ -1,10 +1,10 @@
 package com.mamba.picme.agent.core.remote.parser
 
-import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import dev.langchain4j.agent.tool.ToolExecutionRequest
 import java.util.UUID
 
 /**
@@ -108,11 +108,11 @@ object ToolCallParser {
                 is Map<*, *> -> mapToJsonString(arguments as Map<String, Any?>)
                 else -> "{}"
             }
-            ToolExecutionRequest(
-                id = id,
-                name = name,
-                arguments = argumentsString
-            )
+            ToolExecutionRequest.builder()
+                .id(id)
+                .name(name)
+                .arguments(argumentsString)
+                .build()
         }
     }
 
@@ -160,11 +160,11 @@ object ToolCallParser {
                 val name = Regex(""""name"\s*:\s*"([^"]+)"""").find(functionBlock)?.groupValues?.get(1)
                 if (name != null) {
                     val argumentsString = extractArgumentsFromFunctionBlock(functionBlock)
-                    results.add(ToolExecutionRequest(
-                        id = UUID.randomUUID().toString(),
-                        name = name,
-                        arguments = argumentsString
-                    ))
+                    results.add(ToolExecutionRequest.builder()
+                        .id(UUID.randomUUID().toString())
+                        .name(name)
+                        .arguments(argumentsString)
+                        .build())
                 }
             }
 
@@ -251,19 +251,19 @@ object ToolCallParser {
     }
 
     private fun SimpleToolCall.toRequest(): ToolExecutionRequest {
-        return ToolExecutionRequest(
-            id = UUID.randomUUID().toString(),
-            name = name,
-            arguments = arguments?.let { mapToJsonString(it) } ?: "{}"
-        )
+        return ToolExecutionRequest.builder()
+            .id(UUID.randomUUID().toString())
+            .name(name)
+            .arguments(arguments?.let { mapToJsonString(it) } ?: "{}")
+            .build()
     }
 
     private fun OpenAiToolCall.toRequest(): ToolExecutionRequest {
-        return ToolExecutionRequest(
-            id = id,
-            name = function.name,
-            arguments = function.arguments
-        )
+        return ToolExecutionRequest.builder()
+            .id(id)
+            .name(function.name)
+            .arguments(function.arguments)
+            .build()
     }
 
     private fun mapToJsonString(map: Map<String, Any?>): String {
@@ -431,18 +431,18 @@ object ToolCallParser {
         for (match in nameValueRegex.findAll(text)) {
             val name = match.groupValues[1]
             if (name in knownTools) {
-                val request = ToolExecutionRequest(
-                    id = UUID.randomUUID().toString(),
-                    name = name,
-                    arguments = extractArgumentsNearby(text, match.range.last)
-                )
-                if (results.none { it.name == request.name }) {
+                val request = ToolExecutionRequest.builder()
+                    .id(UUID.randomUUID().toString())
+                    .name(name)
+                    .arguments(extractArgumentsNearby(text, match.range.last))
+                    .build()
+                if (results.none { it.name() == request.name() }) {
                     results.add(request)
                 }
             }
         }
         if (results.isNotEmpty()) {
-            Logger.d(TAG, "Fuzzy extracted: ${results.map { "${it.name}(${it.arguments})" }}")
+            Logger.d(TAG, "Fuzzy extracted: ${results.map { "${it.name()}(${it.arguments()})" }}")
             return results
         }
 
@@ -451,36 +451,36 @@ object ToolCallParser {
         for (match in simpleNameRegex.findAll(text)) {
             val name = match.groupValues[1].trimEnd('"', '\'', ' ')
             if (name in knownTools) {
-                val request = ToolExecutionRequest(
-                    id = UUID.randomUUID().toString(),
-                    name = name,
-                    arguments = extractArgumentsNearby(text, match.range.last)
-                )
-                if (results.none { it.name == request.name }) {
+                val request = ToolExecutionRequest.builder()
+                    .id(UUID.randomUUID().toString())
+                    .name(name)
+                    .arguments(extractArgumentsNearby(text, match.range.last))
+                    .build()
+                if (results.none { it.name() == request.name() }) {
                     results.add(request)
                 }
             }
         }
         if (results.isNotEmpty()) {
-            Logger.d(TAG, "Fuzzy extracted (simple): ${results.map { "${it.name}(${it.arguments})" }}")
+            Logger.d(TAG, "Fuzzy extracted (simple): ${results.map { "${it.name()}(${it.arguments()})" }}")
             return results
         }
 
         // 模式3: 直接搜索已知工具名
         for (toolName in knownTools) {
             if (text.contains(toolName, ignoreCase = true)) {
-                val request = ToolExecutionRequest(
-                    id = UUID.randomUUID().toString(),
-                    name = toolName,
-                    arguments = extractArgumentsNearby(text, text.indexOf(toolName))
-                )
-                if (results.none { it.name == request.name }) {
+                val request = ToolExecutionRequest.builder()
+                    .id(UUID.randomUUID().toString())
+                    .name(toolName)
+                    .arguments(extractArgumentsNearby(text, text.indexOf(toolName)))
+                    .build()
+                if (results.none { it.name() == request.name() }) {
                     results.add(request)
                 }
             }
         }
         if (results.isNotEmpty()) {
-            Logger.d(TAG, "Fuzzy extracted (keyword): ${results.map { "${it.name}(${it.arguments})" }}")
+            Logger.d(TAG, "Fuzzy extracted (keyword): ${results.map { "${it.name()}(${it.arguments()})" }}")
             return results
         }
 

@@ -17,7 +17,7 @@ PicMe 存在两种完全不同的指令体系，分别服务于本地 LLM 和远
 | 维度 | 自定义指令体系（本地） | OpenAI tool_calls 体系（远程） |
 |------|----------------------|-------------------------------|
 | **协议格式** | `[{"method":"...","params":{...}}]` JSON 数组 | `{"tool_calls":[{"id":"call_x","type":"function","function":{"name":"...","arguments":{...}}}]}` |
-| **LLM 型号** | Qwen3.5-2B（端侧 MNN-LLM） | DeepSeek/Kimi（云端 API） |
+| **LLM 型号** | Qwen3.5-2B（端侧 MNN-LLM） | 云端 LLM（OpenAI 兼容 API） |
 | **约束方式** | GBNF Grammar + 精简 System Prompt | OpenAI 原生协议约束 |
 | **核心解析器** | `AgentCommandParser`（method/params → AgentCommand） | `ToolCallingOutputParser`（tool_calls → ToolExecutionRequest） |
 | **Prompt 构造** | `PromptBuilder.buildSystemPrompt/buildL2SystemPrompt` | `PromptBuilder.buildBatchPrompt` + `ToolPromptBuilder` |

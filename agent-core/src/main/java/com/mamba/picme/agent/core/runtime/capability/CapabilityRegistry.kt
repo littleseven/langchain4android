@@ -9,15 +9,15 @@ import com.mamba.picme.agent.core.api.context.AgentErrorCode
 import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.execution.StepResult
-import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.ToolExecutor
 import com.mamba.picme.agent.core.api.ToolProvider
-import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
 import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
+import dev.langchain4j.agent.tool.ToolExecutionRequest
+import dev.langchain4j.agent.tool.ToolSpecification
 import kotlinx.coroutines.CoroutineScope
 import org.json.JSONObject
 
@@ -321,11 +321,11 @@ class CapabilityRegistry private constructor(
         return getCapabilitiesForCurrentScene()
             .flatMap { capability ->
                 capability.supportedCommands().map { command ->
-                    ToolSpecification(
-                        name = command,
-                        description = capability.getCommandDescription(command),
-                        parameters = capability.getCommandParameterSchema(command)
-                    )
+                    ToolSpecification.builder()
+                        .name(command)
+                        .description(capability.getCommandDescription(command))
+                        .parameters(capability.getCommandParameterSchema(command))
+                        .build()
                 }
             }
     }
@@ -336,7 +336,7 @@ class CapabilityRegistry private constructor(
 
         return object : ToolExecutor {
             override suspend fun execute(request: ToolExecutionRequest): String {
-                val params = runCatching { JSONObject(request.arguments) }.getOrDefault(JSONObject())
+                val params = runCatching { JSONObject(request.arguments()) }.getOrDefault(JSONObject())
                 val commandJson = JSONObject().apply {
                     put("method", toolName)
                     put("params", params)

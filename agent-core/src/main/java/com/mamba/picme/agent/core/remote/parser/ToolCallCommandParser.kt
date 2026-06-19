@@ -1,12 +1,12 @@
 package com.mamba.picme.agent.core.remote.parser
 
-import com.mamba.picme.agent.core.api.ToolExecutionRequest
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
+import dev.langchain4j.agent.tool.ToolExecutionRequest
 import org.json.JSONObject
 
 /**
@@ -37,16 +37,16 @@ object ToolCallCommandParser {
      * @return 解析后的 AgentCommand
      */
     fun parse(request: ToolExecutionRequest, context: AgentContext): AgentCommand {
-        Logger.d(TAG, "Parsing tool call: name=${request.name}, arguments=${request.arguments}")
+        Logger.d(TAG, "Parsing tool call: name=${request.name()}, arguments=${request.arguments()}")
 
         val args = try {
-            JSONObject(request.arguments)
+            JSONObject(request.arguments())
         } catch (e: Exception) {
-            Logger.w(TAG, "Invalid arguments JSON for ${request.name}: ${request.arguments}")
+            Logger.w(TAG, "Invalid arguments JSON for ${request.name()}: ${request.arguments()}")
             JSONObject()
         }
 
-        return when (request.name) {
+        return when (request.name()) {
             "adjust_beauty" -> parseAdjustBeauty(args, context)
             "switch_filter" -> parseSwitchFilter(args)
             "switch_style" -> parseSwitchStyle(args)
@@ -80,8 +80,8 @@ object ToolCallCommandParser {
             "switch_face_engine" -> parseSwitchFaceEngine(args)
             "toggle_setting" -> parseToggleSetting(args)
             else -> {
-                Logger.w(TAG, "Unknown tool name: ${request.name}, treating as text reply")
-                AgentCommand.TextReply(message = "未知命令: ${request.name}")
+                Logger.w(TAG, "Unknown tool name: ${request.name()}, treating as text reply")
+                AgentCommand.TextReply(message = "未知命令: ${request.name()}")
             }
         }
     }
@@ -94,7 +94,7 @@ object ToolCallCommandParser {
             try {
                 parse(req, context)
             } catch (e: Exception) {
-                Logger.e(TAG, "Failed to parse tool call: ${req.name}", e)
+                Logger.e(TAG, "Failed to parse tool call: ${req.name()}", e)
                 null
             }
         }

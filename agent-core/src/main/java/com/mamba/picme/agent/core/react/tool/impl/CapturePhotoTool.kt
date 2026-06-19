@@ -16,6 +16,8 @@ class CapturePhotoTool : BaseUiTool() {
 
     override fun getName(): String = "capture"
 
+    override fun getDescription(): String = "拍照并保存到相册"
+
     override fun getParameters(): List<ToolParameter> = emptyList()
 
     override fun execute(params: Map<String, Any>): ToolResult {

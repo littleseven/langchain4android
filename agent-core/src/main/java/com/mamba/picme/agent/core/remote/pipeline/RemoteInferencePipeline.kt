@@ -10,7 +10,7 @@ import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 /**
  * 远程推理管道
  *
- * 负责使用远程 LLM（DeepSeek/Kimi via cloud API）进行推理，
+ * 负责使用远程 LLM（通过 OpenAI 兼容 API）进行推理，
  * 使用标准 OpenAI tool_calls 协议。
  * 提供三个层级：
  * - L2: 批量命令（Batch Function Calling）

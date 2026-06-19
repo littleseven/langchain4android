@@ -108,6 +108,7 @@ kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "ko
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 langchain4j-bom = { group = "dev.langchain4j", name = "langchain4j-bom", version.ref = "langchain4j" }
 langchain4j-core = { group = "dev.langchain4j", name = "langchain4j-core" }
+langchain4j = { group = "dev.langchain4j", name = "langchain4j" }
 androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerView" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 ktlint-cli = { group = "com.pinterest.ktlint", name = "ktlint-cli", version.ref = "ktlint" }

@@ -21,6 +21,8 @@ class BackTool : BaseUiTool() {
 
     override fun getName(): String = "go_back"
 
+    override fun getDescription(): String = "返回上一页"
+
     override fun getParameters(): List<ToolParameter> = emptyList()
 
     override fun execute(params: Map<String, Any>): ToolResult {

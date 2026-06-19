@@ -14,6 +14,8 @@ class InputTextTool : BaseUiTool() {
 
     override fun getName(): String = "input_text"
 
+    override fun getDescription(): String = "在输入框中输入文本"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("text", "string", "The text to input", true),
         ToolParameter("clear_first", "boolean", "Whether to clear existing text first (default: true)", false)

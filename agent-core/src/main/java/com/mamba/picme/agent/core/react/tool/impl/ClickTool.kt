@@ -16,6 +16,8 @@ class ClickTool(
 
     override fun getName(): String = "click"
 
+    override fun getDescription(): String = "点击屏幕上的元素。支持通过坐标(x,y)或文本(text)定位目标。"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("x", "integer", "X coordinate to tap (use with y, mutually exclusive with text)", false),
         ToolParameter("y", "integer", "Y coordinate to tap (use with x, mutually exclusive with text)", false),

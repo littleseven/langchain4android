@@ -16,6 +16,8 @@ class SwitchFilterTool : BaseUiTool() {
 
     override fun getName(): String = "switch_filter"
 
+    override fun getDescription(): String = "切换相机滤镜。可选值：NONE（无）、LEICA_CLASSIC（徕卡经典）、LEICA_VIBRANT（徕卡鲜艳）、LEICA_BW（徕卡黑白）、FILM_GOLD（胶片金）、FILM_FUJI（胶片富士）、VINTAGE（复古）、COOL（冷色）、WARM（暖色）"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("filter", "string", "滤镜名称: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM", true)
     )

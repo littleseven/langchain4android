@@ -21,6 +21,7 @@ abstract class BaseUiTool {
     }
 
     abstract fun getName(): String
+    abstract fun getDescription(): String
     abstract fun getParameters(): List<ToolParameter>
     abstract fun execute(params: Map<String, Any>): ToolResult
 

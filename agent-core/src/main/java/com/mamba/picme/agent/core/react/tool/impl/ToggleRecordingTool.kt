@@ -16,6 +16,8 @@ class ToggleRecordingTool : BaseUiTool() {
 
     override fun getName(): String = "toggle_recording"
 
+    override fun getDescription(): String = "切换录像状态（开始或停止录像）"
+
     override fun getParameters(): List<ToolParameter> = emptyList()
 
     override fun execute(params: Map<String, Any>): ToolResult {

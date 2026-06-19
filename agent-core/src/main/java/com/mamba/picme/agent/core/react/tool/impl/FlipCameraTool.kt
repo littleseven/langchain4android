@@ -16,6 +16,8 @@ class FlipCameraTool : BaseUiTool() {
 
     override fun getName(): String = "flip_camera"
 
+    override fun getDescription(): String = "切换前后摄像头"
+
     override fun getParameters(): List<ToolParameter> = emptyList()
 
     override fun execute(params: Map<String, Any>): ToolResult {

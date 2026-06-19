@@ -32,6 +32,8 @@ class GetScreenInfoTool(
 
     override fun getName(): String = "get_screen_info"
 
+    override fun getDescription(): String = "获取当前屏幕的 UI 层级树信息，包含所有可见元素的坐标、文本、可点击状态等"
+
     override fun getParameters(): List<ToolParameter> = emptyList()
 
     override fun execute(params: Map<String, Any>): ToolResult {

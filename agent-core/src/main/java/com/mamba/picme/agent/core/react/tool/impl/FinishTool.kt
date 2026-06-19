@@ -12,6 +12,8 @@ class FinishTool : BaseUiTool() {
 
     override fun getName(): String = "finish"
 
+    override fun getDescription(): String = "当任务完成时调用此工具，提供任务完成摘要"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("summary", "string", "Summary of what was accomplished", true)
     )

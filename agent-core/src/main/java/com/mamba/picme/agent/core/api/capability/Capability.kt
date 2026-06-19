@@ -4,8 +4,8 @@ import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.PageContext
-import com.mamba.picme.agent.core.api.ToolParameters
 import com.mamba.picme.agent.core.runtime.state.SceneManager
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema
 
 /**
  * Capability 接口 —— Agent 可执行能力的抽象契约
@@ -44,7 +44,7 @@ interface Capability {
     }
 
     /** 获取命令的参数 JSON Schema（用于 Tool Calling） */
-    fun getCommandParameterSchema(command: String): ToolParameters = ToolParameters()
+    fun getCommandParameterSchema(command: String): JsonObjectSchema = JsonObjectSchema.builder().build()
 
     /** 构建 Capability 描述文本（用于 system prompt） */
     fun buildCapabilityDescription(): String {

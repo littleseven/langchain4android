@@ -247,7 +247,7 @@ class AgentConfigurator(private val context: Context) {
                 .apiKey(remoteCfg.apiKey)
                 .baseUrl(remoteCfg.baseUrl)
                 .modelName(remoteCfg.modelId)
-                .gatewayToken("")
+                .gatewayToken(remoteCfg.gatewayToken)
                 .build()
         } catch (e: Exception) {
             Logger.w("AgentConfigurator", "Failed to build FeishuAgent config", e)

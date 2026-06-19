@@ -59,8 +59,10 @@ class MemoryManagerTrimTest {
         }
         val trimmed = trimToMaxSize(messages, 50)
         assertEquals(50, trimmed.size)
-        assertEquals("msg11", (trimmed.first() as UserMessage).text())
-        assertEquals("msg60", (trimmed.last() as AiMessage).text())
+        val firstUser = trimmed.first() as UserMessage
+        val lastAi = trimmed.last() as AiMessage
+        assertEquals("msg11", firstUser.singleText())
+        assertEquals("msg60", lastAi.text())
     }
 
     @Test
@@ -80,8 +82,10 @@ class MemoryManagerTrimTest {
         }
         val trimmed = trimToRounds(messages, 5)
         assertEquals(10, trimmed.size)
-        assertEquals("u10", (trimmed[0] as UserMessage).text())
-        assertEquals("a14", (trimmed.last() as AiMessage).text())
+        val firstUser2 = trimmed[0] as UserMessage
+        val lastAi2 = trimmed.last() as AiMessage
+        assertEquals("u10", firstUser2.singleText())
+        assertEquals("a14", lastAi2.text())
     }
 
     @Test
@@ -93,7 +97,8 @@ class MemoryManagerTrimTest {
         )
         val trimmed = trimToRounds(messages, 1)
         assertEquals(1, trimmed.size)
-        assertEquals("u2", (trimmed[0] as UserMessage).text())
+        val userMsg = trimmed[0] as UserMessage
+        assertEquals("u2", userMsg.singleText())
     }
 
     @Test

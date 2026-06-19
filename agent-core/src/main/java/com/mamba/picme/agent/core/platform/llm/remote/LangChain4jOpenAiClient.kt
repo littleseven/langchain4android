@@ -8,13 +8,26 @@ import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import dev.langchain4j.agent.tool.ToolExecutionRequest
-import com.mamba.picme.agent.core.api.ToolSpecification
+import dev.langchain4j.agent.tool.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
 import dev.langchain4j.data.message.AiMessage
 import dev.langchain4j.data.message.ChatMessage
 import dev.langchain4j.data.message.SystemMessage
 import dev.langchain4j.data.message.ToolExecutionResultMessage
 import dev.langchain4j.data.message.UserMessage
+import dev.langchain4j.model.ModelProvider
+import dev.langchain4j.model.chat.ChatModel
+import dev.langchain4j.model.chat.request.ChatRequest
+import dev.langchain4j.model.chat.request.ChatRequestParameters
+import dev.langchain4j.model.chat.request.DefaultChatRequestParameters
+import dev.langchain4j.model.chat.request.ToolChoice
+import dev.langchain4j.model.chat.request.json.JsonBooleanSchema
+import dev.langchain4j.model.chat.request.json.JsonEnumSchema
+import dev.langchain4j.model.chat.request.json.JsonIntegerSchema
+import dev.langchain4j.model.chat.request.json.JsonNumberSchema
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema
+import dev.langchain4j.model.chat.request.json.JsonStringSchema
+import dev.langchain4j.model.chat.response.ChatResponse
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -36,7 +49,7 @@ import java.util.concurrent.TimeUnit
  */
 class LangChain4jOpenAiClient(
     private val config: RemoteModelConfig
-) : LlmChatLanguageModel, StreamingLlmChatLanguageModel {
+) : LlmChatLanguageModel, StreamingLlmChatLanguageModel, ChatModel {
 
     private val tag = "LangChain4jOpenAi"
 
@@ -244,6 +257,18 @@ class LangChain4jOpenAiClient(
                 tools.put(toolSpecToJson(spec))
             }
             json.put("tools", tools)
+            // tool_choice: 优先使用请求中的配置，否则默认 auto
+            // 注意：某些模型（如 deepseek-v4-flash）不支持 "required"，使用 "auto" 更兼容
+            val toolChoice = request.toolChoice
+            if (toolChoice != null) {
+                when (toolChoice) {
+                    ToolChoice.REQUIRED -> json.put("tool_choice", "auto")
+                    ToolChoice.AUTO -> json.put("tool_choice", "auto")
+                    ToolChoice.NONE -> json.put("tool_choice", "none")
+                }
+            } else {
+                json.put("tool_choice", "auto")
+            }
         }
 
         // 可选参数
@@ -265,8 +290,17 @@ class LangChain4jOpenAiClient(
             }
             is AiMessage -> JSONObject().apply {
                 put("role", "assistant")
-                put("content", msg.text().ifBlank { null })
-                if (msg.toolExecutionRequests().isNotEmpty()) {
+                // 当有 tool_calls 时，content 必须为 null（OpenAI 标准）
+                // 否则模型可能会在 content 中输出文本而非使用 tool_calls 字段
+                val hasToolCalls = msg.toolExecutionRequests().isNotEmpty()
+                val text = msg.text()
+                if (!hasToolCalls && !text.isNullOrBlank()) {
+                    put("content", text)
+                } else if (!hasToolCalls) {
+                    put("content", "")
+                }
+                // 如果 hasToolCalls 为 true，不设置 content 字段（即为 null）
+                if (hasToolCalls) {
                     val toolCalls = JSONArray()
                     for ((index, req) in msg.toolExecutionRequests().withIndex()) {
                         toolCalls.put(JSONObject().apply {
@@ -295,30 +329,53 @@ class LangChain4jOpenAiClient(
         return JSONObject().apply {
             put("type", "function")
             put("function", JSONObject().apply {
-                put("name", spec.name)
-                put("description", spec.description)
+                put("name", spec.name())
+                put("description", spec.description())
                 // 串联 JSON Schema parameters
-                val params = spec.parameters
-                if (params.properties.isNotEmpty() || params.required.isNotEmpty()) {
-                    put("parameters", JSONObject().apply {
-                        put("type", params.type)
-                        if (params.properties.isNotEmpty()) {
-                            val props = JSONObject()
-                            for ((key, prop) in params.properties) {
-                                props.put(key, JSONObject().apply {
-                                    put("type", prop.type)
-                                    prop.description?.let { put("description", it) }
-                                    prop.enum?.let {
-                                        put("enum", JSONArray(it))
+                val params = spec.parameters()
+                if (params != null) {
+                    val schema = JSONObject()
+                    schema.put("type", "object")
+                    val properties = JSONObject()
+
+                    val props = params.properties()
+                    if (props != null) {
+                        for ((key, value) in props) {
+                            val propSchema = JSONObject()
+                            when (value) {
+                                is JsonStringSchema -> {
+                                    propSchema.put("type", "string")
+                                }
+                                is JsonIntegerSchema -> {
+                                    propSchema.put("type", "integer")
+                                }
+                                is JsonNumberSchema -> {
+                                    propSchema.put("type", "number")
+                                }
+                                is JsonBooleanSchema -> {
+                                    propSchema.put("type", "boolean")
+                                }
+                                is JsonEnumSchema -> {
+                                    propSchema.put("type", "string")
+                                    val enumValues = value.enumValues()
+                                    if (enumValues != null) {
+                                        propSchema.put("enum", JSONArray(enumValues))
                                     }
-                                })
+                                }
                             }
-                            put("properties", props)
+                            val desc = value.description()
+                            if (desc != null) {
+                                propSchema.put("description", desc)
+                            }
+                            properties.put(key, propSchema)
                         }
-                        if (params.required.isNotEmpty()) {
-                            put("required", JSONArray(params.required))
-                        }
-                    })
+                    }
+                    schema.put("properties", properties)
+                    val required = params.required()
+                    if (required != null && required.isNotEmpty()) {
+                        schema.put("required", JSONArray(required))
+                    }
+                    put("parameters", schema)
                 }
             })
         }
@@ -338,8 +395,22 @@ class LangChain4jOpenAiClient(
         val choice = choices.getJSONObject(0)
         val message = choice.optJSONObject("message") ?: return null to emptyList()
 
-        val content = message.optString("content")
-        val toolCalls = message.optJSONArray("tool_calls")
+        // 处理 content 字段：可能为 null、"null" 字符串、或实际文本
+        val rawContent = message.opt("content")
+        val content = when (rawContent) {
+            is String -> if (rawContent == "null" || rawContent.isBlank()) null else rawContent
+            else -> null
+        }
+        var toolCalls = message.optJSONArray("tool_calls")
+
+        // Fallback: 某些模型将 tool_calls 放在 content 文本中而非标准字段
+        if ((toolCalls == null || toolCalls.length() == 0) && content != null && content.isNotBlank()) {
+            val parsedFromContent = parseToolCallsFromContent(content)
+            if (parsedFromContent.isNotEmpty()) {
+                Logger.d(tag, "从 content 解析到 ${parsedFromContent.size} 个 tool_calls")
+                return content to parsedFromContent
+            }
+        }
 
         if (toolCalls == null || toolCalls.length() == 0) {
             return content to emptyList()
@@ -369,6 +440,56 @@ class LangChain4jOpenAiClient(
         return content to requests
     }
 
+    /**
+     * 从 content 文本中解析 tool_calls（某些模型将 tool_calls 放在文本中而非标准字段）。
+     * 支持格式：
+     * ```json
+     * {"tool_calls": [{"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}]}
+     * ```
+     */
+    private fun parseToolCallsFromContent(content: String): List<ToolExecutionRequest> {
+        try {
+            // 尝试提取 ```json ... ``` 中的 JSON（支持多行嵌套 JSON）
+            val jsonRegex = Regex("```json\\s*([\\s\\S]*?)\\s*```", RegexOption.DOT_MATCHES_ALL)
+            val match = jsonRegex.find(content)
+            val jsonStr = match?.groupValues?.get(1)?.trim() ?: content.trim()
+
+            // 如果提取的内容不是以 { 开头，尝试从整个 content 中找到 JSON 对象
+            val effectiveJsonStr = if (jsonStr.startsWith("{")) {
+                jsonStr
+            } else {
+                // 尝试找到 content 中的第一个 { 开始的 JSON 对象
+                val startIndex = content.indexOf('{')
+                if (startIndex >= 0) content.substring(startIndex) else jsonStr
+            }
+
+            val json = JSONObject(effectiveJsonStr)
+            val toolCalls = json.optJSONArray("tool_calls") ?: return emptyList()
+
+            val requests = mutableListOf<ToolExecutionRequest>()
+            for (i in 0 until toolCalls.length()) {
+                val tc = toolCalls.getJSONObject(i)
+                val func = tc.optJSONObject("function") ?: continue
+                val arguments = when (val raw = func.opt("arguments")) {
+                    is JSONObject -> raw.toString()
+                    is String -> raw
+                    else -> "{}"
+                }
+                requests.add(
+                    ToolExecutionRequest.builder()
+                        .id(tc.optString("id", "call_$i"))
+                        .name(func.optString("name", ""))
+                        .arguments(arguments)
+                        .build()
+                )
+            }
+            return requests
+        } catch (e: Exception) {
+            Logger.d(tag, "从 content 解析 tool_calls 失败: ${e.message}")
+            return emptyList()
+        }
+    }
+
     private fun parseTokenUsage(json: JSONObject): ChatResponseMetadata? {
         val usage = json.optJSONObject("usage") ?: return null
         return ChatResponseMetadata(
@@ -388,6 +509,65 @@ class LangChain4jOpenAiClient(
         } else {
             "$trimmed/v1/"
         }
+    }
+
+    // ── ChatModel 接口实现（LangChain4j 官方 ReAct Agent 使用）────────────────
+
+    /**
+     * 实现 ChatModel 接口的 chat(ChatRequest, ChatRequestOptions) 方法。
+     *
+     * LangChain4j 1.16.3 中 ChatModel 接口要求实现此方法。
+     * 我们直接调用 doChat，并传入 ChatRequestOptions 中的参数。
+     */
+    override fun chat(chatRequest: ChatRequest, chatRequestOptions: dev.langchain4j.model.chat.ChatRequestOptions?): ChatResponse {
+        return doChat(chatRequest)
+    }
+
+    override fun doChat(chatRequest: ChatRequest): ChatResponse {
+        // 获取工具规格（从 ChatRequest 和 ChatRequestParameters 两个位置获取）
+        val toolSpecs = chatRequest.toolSpecifications()
+            .takeIf { it.isNotEmpty() }
+            ?: chatRequest.parameters()?.toolSpecifications()
+            ?: emptyList()
+
+        Logger.d(tag, "doChat: toolSpecs=${toolSpecs.size}, messages=${chatRequest.messages().size}")
+
+        // 强制 toolChoice 为 REQUIRED（确保模型必须使用工具）
+        val toolChoice = if (toolSpecs.isNotEmpty()) {
+            ToolChoice.REQUIRED
+        } else {
+            chatRequest.parameters()?.toolChoice()
+        }
+
+        // 将 LangChain4j ChatRequest 转换为我们的 LlmChatRequest
+        val request = LlmChatRequest(
+            messages = chatRequest.messages(),
+            toolSpecifications = toolSpecs,
+            temperature = chatRequest.parameters()?.temperature(),
+            maxTokens = chatRequest.parameters()?.maxOutputTokens(),
+            toolChoice = toolChoice
+        )
+
+        // 调用现有实现
+        val response = chat(request)
+
+        Logger.d(tag, "doChat response: content='${response.aiMessage.text().take(50)}', hasTools=${response.aiMessage.hasToolExecutionRequests()}")
+
+        // 将 LlmChatResponse 转换为 LangChain4j ChatResponse
+        return ChatResponse.builder()
+            .aiMessage(response.aiMessage)
+            .build()
+    }
+
+    override fun defaultRequestParameters(): ChatRequestParameters {
+        return DefaultChatRequestParameters.builder()
+            .modelName(config.modelId)
+            .temperature(0.7)
+            .build()
+    }
+
+    override fun provider(): ModelProvider {
+        return ModelProvider.OTHER
     }
 
     companion object {

@@ -16,6 +16,8 @@ class SwitchRatioTool : BaseUiTool() {
 
     override fun getName(): String = "switch_ratio"
 
+    override fun getDescription(): String = "切换画面比例。可选值：4:3、16:9、full（全屏）"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("ratio", "string", "画幅比例: 4:3|16:9|full", true)
     )

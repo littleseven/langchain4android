@@ -15,6 +15,8 @@ class ScrollTool : BaseUiTool() {
 
     override fun getName(): String = "scroll"
 
+    override fun getDescription(): String = "在屏幕上滑动滚动。支持按方向（up/down/left/right）或坐标滑动"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("direction", "string", "Scroll direction: 'down' or 'up'", true),
         ToolParameter("distance", "string", "Scroll distance: 'page' (default) or 'small'", false)

@@ -112,7 +112,7 @@
 
 **Agent 模式设置**
 - **本地模式**：仅使用本地模型（默认 Qwen3.5-2B）
-- **远程模式**：仅使用 Kimi API
+- **远程模式**：仅使用云端 LLM API（OpenAI 兼容协议）
 - **关闭模式**：禁用 Agent
 - **隐私级别**：`STRICT` / `PERMISSIVE`；运行时输入分级为 `PUBLIC` / `SENSITIVE` / `RESTRICTED`
 

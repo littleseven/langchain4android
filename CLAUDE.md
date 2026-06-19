@@ -139,7 +139,7 @@ User Input ("找出去年夏天的照片" / "磨皮50")
 - **Privacy**: `PrivacyGuard` grades operations; RESTRICTED/SENSITIVE → local only.
 - **Memory**: `MemoryManager` maintains conversation context for multi-turn dialogue.
 - **Voice**: Voice interaction support via `voice/` sub-package (ASR, VAD, AudioRecorder, SherpaMnnAsrEngine).
-- **Remote**: Remote LLM orchestration via `remote/` sub-package (OpenAI/Kimi API, IntentCache).
+- **Remote**: Remote LLM orchestration via `remote/` sub-package (OpenAI-compatible API, IntentCache).
 - **ADR-005 (2026-06-15)**: Local/Remote protocols formally separated. Unified `InferenceRouter` removed. ~1500 lines of redundant Tool Calling wrappers removed.
 
 ### Zero-Copy GPU Pipeline (Preview)

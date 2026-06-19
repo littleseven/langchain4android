@@ -7,6 +7,8 @@ import dev.langchain4j.data.message.ChatMessage
 import dev.langchain4j.data.message.SystemMessage
 import dev.langchain4j.data.message.ToolExecutionResultMessage
 import dev.langchain4j.data.message.UserMessage
+import dev.langchain4j.model.chat.request.json.JsonEnumSchema
+import com.mamba.picme.agent.core.platform.logging.Logger
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -54,7 +56,13 @@ class InAppLlmClient(
      * 返回 AiMessage（可能包含 ToolExecutionRequest）。
      */
     fun chat(messages: List<ChatMessage>, toolSpecs: List<ToolSpecification>): LlmResponse {
+        Logger.d("InAppLlmClient", "chat called with ${toolSpecs.size} tools")
+        toolSpecs.forEach { spec ->
+            Logger.d("InAppLlmClient", "Tool: ${spec.name()} - ${spec.description()}")
+        }
+        
         val requestBody = buildJsonRequest(messages, toolSpecs)
+        Logger.d("InAppLlmClient", "Request body: ${requestBody.take(3000)}")
         val request = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/chat/completions")
             .post(requestBody.toRequestBody(jsonMediaType))
@@ -68,6 +76,7 @@ class InAppLlmClient(
             throw RuntimeException("LLM API error ${response.code}: $responseBody")
         }
 
+        Logger.d("InAppLlmClient", "Response body: ${responseBody.take(3000)}")
         return parseResponse(responseBody)
     }
 
@@ -82,14 +91,15 @@ class InAppLlmClient(
         }
         json.put("messages", messagesArray)
 
-        if (toolSpecs.isNotEmpty()) {
-            val toolsArray = JSONArray()
-            for (spec in toolSpecs) {
-                toolsArray.put(convertToolSpec(spec))
-            }
-            json.put("tools", toolsArray)
-            // 强制模型使用工具调用（如果支持）
-            json.put("tool_choice", "auto")
+        // 注意：不使用 OpenAI function calling API（tools/tool_choice）
+        // 而是使用文本 ReAct 模式：LLM 在 content 中输出 Thought/Action 格式
+        // 这种方式兼容所有模型，包括不支持 function calling 的模型
+
+        // DeepSeek V4: 禁用 thinking 模式以确保输出格式稳定
+        if (modelName.contains("deepseek", ignoreCase = true)) {
+            val thinking = JSONObject()
+            thinking.put("type", "disabled")
+            json.put("thinking", thinking)
         }
 
         return json.toString()
@@ -109,10 +119,7 @@ class InAppLlmClient(
             is AiMessage -> {
                 val aiMsg = msg
                 json.put("role", "assistant")
-                val textContent = aiMsg.text()
-                if (!textContent.isNullOrBlank()) {
-                    json.put("content", textContent)
-                }
+                json.put("content", aiMsg.text().ifBlank { "" })
                 val toolCalls = aiMsg.toolExecutionRequests()
                 if (!toolCalls.isNullOrEmpty()) {
                     val toolCallsArray = JSONArray()
@@ -172,6 +179,13 @@ class InAppLlmClient(
                         is dev.langchain4j.model.chat.request.json.JsonBooleanSchema -> {
                             propSchema.put("type", "boolean")
                         }
+                        is JsonEnumSchema -> {
+                            propSchema.put("type", "string")
+                            val enumValues = value.enumValues()
+                            if (enumValues != null) {
+                                propSchema.put("enum", JSONArray(enumValues))
+                            }
+                        }
                     }
                     val desc = value.description()
                     if (desc != null) {
@@ -203,27 +217,11 @@ class InAppLlmClient(
             null
         }
 
-        val toolCalls = mutableListOf<ToolExecutionRequest>()
-        if (message.has("tool_calls")) {
-            val toolCallsArray = message.getJSONArray("tool_calls")
-            for (i in 0 until toolCallsArray.length()) {
-                val tc = toolCallsArray.getJSONObject(i)
-                val func = tc.getJSONObject("function")
-                val request = ToolExecutionRequest.builder()
-                    .id(tc.optString("id", "call_$i"))
-                    .name(func.getString("name"))
-                    .arguments(func.optString("arguments", "{}"))
-                    .build()
-                toolCalls.add(request)
-            }
-        }
-
-        // 回退机制：如果 API 没有返回 tool_calls 但 content 中包含 tool_calls JSON，尝试解析
-        if (toolCalls.isEmpty() && text != null) {
-            val extracted = extractToolCallsFromContent(text)
-            if (extracted.isNotEmpty()) {
-                toolCalls.addAll(extracted)
-            }
+        // 从文本内容中解析 Thought/Action 格式的工具调用
+        val toolCalls = if (text != null) {
+            extractActionsFromText(text)
+        } else {
+            emptyList()
         }
 
         val totalTokens = json.optJSONObject("usage")?.optInt("total_tokens", 0) ?: 0
@@ -232,31 +230,56 @@ class InAppLlmClient(
     }
 
     /**
-     * 从 content 文本中提取嵌入的 tool_calls JSON。
-     * 某些模型会把 tool_calls 输出到 content 中而不是使用原生 function calling。
+     * 从 ReAct 格式的文本中提取 Action 工具调用。
+     * 格式：Action: tool_name({"param":"value"})
      */
-    private fun extractToolCallsFromContent(content: String): List<ToolExecutionRequest> {
+    private fun extractActionsFromText(content: String): List<ToolExecutionRequest> {
         val result = mutableListOf<ToolExecutionRequest>()
         try {
-            // 尝试匹配 {"tool_calls":[...]} 格式
-            val toolCallsRegex = Regex("""\{\s*"tool_calls"\s*:\s*(\[.*?\])\s*\}""", RegexOption.DOT_MATCHES_ALL)
-            val match = toolCallsRegex.find(content)
-            if (match != null) {
-                val toolCallsJson = match.groupValues[1]
-                val array = JSONArray(toolCallsJson)
-                for (i in 0 until array.length()) {
-                    val tc = array.getJSONObject(i)
-                    val func = tc.getJSONObject("function")
-                    val request = ToolExecutionRequest.builder()
-                        .id(tc.optString("id", "call_$i"))
-                        .name(func.getString("name"))
-                        .arguments(func.optString("arguments", "{}"))
-                        .build()
-                    result.add(request)
+            // 匹配 Action: tool_name({"param":"value"}) 格式
+            // 支持无参工具如 Action: capture()
+            val actionRegex = Regex("""Action:\s*(\w+)\((.*?)\)""", RegexOption.MULTILINE)
+            val matches = actionRegex.findAll(content)
+
+            for ((index, match) in matches.withIndex()) {
+                val toolName = match.groupValues[1]
+                val argsStr = match.groupValues[2].trim()
+
+                // 解析参数：如果括号内有内容，应该是 JSON 格式
+                val arguments = if (argsStr.isNotBlank()) {
+                    // 尝试解析为 JSON，如果不是合法 JSON，包装为 JSON
+                    try {
+                        JSONObject(argsStr)
+                        argsStr
+                    } catch (_: Exception) {
+                        // 不是合法 JSON，尝试包装
+                        try {
+                            // 可能是 "value" 格式（字符串参数）
+                            if (argsStr.startsWith("\"") && argsStr.endsWith("\"")) {
+                                "{\"text\":$argsStr}"
+                            } else {
+                                // 尝试作为简单值处理
+                                "{\"value\":\"$argsStr\"}"
+                            }
+                        } catch (_: Exception) {
+                            "{}"
+                        }
+                    }
+                } else {
+                    "{}"
                 }
+
+                Logger.d("InAppLlmClient", "Parsed Action: $toolName($arguments)")
+                result.add(
+                    ToolExecutionRequest.builder()
+                        .id("react_call_$index")
+                        .name(toolName)
+                        .arguments(arguments)
+                        .build()
+                )
             }
         } catch (e: Exception) {
-            // 解析失败，忽略
+            Logger.w("InAppLlmClient", "Failed to parse actions from text: ${e.message}")
         }
         return result
     }

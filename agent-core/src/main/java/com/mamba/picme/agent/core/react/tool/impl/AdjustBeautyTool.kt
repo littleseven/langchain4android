@@ -16,6 +16,8 @@ class AdjustBeautyTool : BaseUiTool() {
 
     override fun getName(): String = "adjust_beauty"
 
+    override fun getDescription(): String = "调整美颜参数。支持磨皮、美白、瘦脸、大眼、唇色、腮红、眉毛。只传入需要调整的参数，未传入的参数保持不变。"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("smoothing", "number", "磨皮程度 0~100", false),
         ToolParameter("whitening", "number", "美白程度 0~100", false),

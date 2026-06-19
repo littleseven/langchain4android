@@ -19,13 +19,13 @@ import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.ChatResponseMetadata
 import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
-import com.mamba.picme.agent.core.api.ToolExecutionRequest
-import com.mamba.picme.agent.core.api.ToolSpecification
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import org.json.JSONArray
 import org.json.JSONObject
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
-import dev.langchain4j.agent.tool.ToolSpecifications
+import dev.langchain4j.model.chat.request.json.JsonObjectSchema
+import dev.langchain4j.agent.tool.ToolExecutionRequest
+import dev.langchain4j.agent.tool.ToolSpecification
 import dev.langchain4j.data.message.AiMessage as LcAiMessage
 import dev.langchain4j.data.message.ChatMessage as LcChatMessage
 import dev.langchain4j.data.message.SystemMessage as LcSystemMessage
@@ -228,13 +228,7 @@ class RemoteOrchestrator(
             val latencyMs = System.currentTimeMillis() - startTime
             
             // 优先使用 tool_calls（标准 OpenAI 协议）
-            val toolRequests = response.aiMessage.toolExecutionRequests().map {
-                com.mamba.picme.agent.core.api.ToolExecutionRequest(
-                    id = it.id(),
-                    name = it.name(),
-                    arguments = it.arguments()
-                )
-            }
+            val toolRequests = response.aiMessage.toolExecutionRequests()
             if (toolRequests.isNotEmpty()) {
                 val commands = parseToolCalls(toolRequests, context)
                 Logger.d(
@@ -510,11 +504,11 @@ class RemoteOrchestrator(
                     }
                     Logger.d(tag, "[Fallback] Tool call #$i: name=${func.optString("name", "")}, arguments=$arguments")
                     requests.add(
-                        ToolExecutionRequest(
-                            id = tc.optString("id", "fallback_$i"),
-                            name = func.optString("name", ""),
-                            arguments = arguments
-                        )
+                        ToolExecutionRequest.builder()
+                            .id(tc.optString("id", "fallback_$i"))
+                            .name(func.optString("name", ""))
+                            .arguments(arguments)
+                            .build()
                     )
                 }
                 if (requests.isNotEmpty()) {
@@ -529,53 +523,171 @@ class RemoteOrchestrator(
     /**
      * 构建 L2 Batch 模式的 ToolSpecifications
      *
-     * 使用 langchain4j 的 @Tool 注解自动提取工具规格，替代手动构建。
-     * RemoteCameraTools 中的 @Tool 方法会被自动扫描并转换为 ToolSpecification。
+     * 手动构建 ToolSpecification 列表，避免使用 ToolSpecifications.toolSpecificationsFrom()
+     * 因为后者在 Android 上会触发 Jackson 的 PolymorphicTypes.isSealed() 调用（Java 17 API，Android 不支持）。
      */
-    private fun buildL2ToolSpecifications(): List<com.mamba.picme.agent.core.api.ToolSpecification> {
-        val lcSpecs = ToolSpecifications.toolSpecificationsFrom(RemoteCameraTools())
-        return lcSpecs.map { lcSpec ->
-            com.mamba.picme.agent.core.api.ToolSpecification(
-                name = lcSpec.name(),
-                description = lcSpec.description() ?: "",
-                parameters = convertToolParameters(lcSpec.parameters())
-            )
-        }
-    }
+    private fun buildL2ToolSpecifications(): List<ToolSpecification> {
+        return listOf(
+            // capture: 无参数
+            ToolSpecification.builder()
+                .name("capture")
+                .description("拍照并保存到相册")
+                .build(),
 
-    /**
-     * 将 langchain4j 的 ToolParameters 转换为自定义 ToolParameters
-     */
-    private fun convertToolParameters(lcParams: dev.langchain4j.model.chat.request.json.JsonObjectSchema?): com.mamba.picme.agent.core.api.ToolParameters {
-        if (lcParams == null) return com.mamba.picme.agent.core.api.ToolParameters()
+            // toggle_recording: 无参数
+            ToolSpecification.builder()
+                .name("toggle_recording")
+                .description("切换录像状态（开始或停止录像）")
+                .build(),
 
-        val properties = mutableMapOf<String, com.mamba.picme.agent.core.api.JsonSchemaProperty>()
-        val required = lcParams.required() ?: emptyList()
+            // flip_camera: 无参数
+            ToolSpecification.builder()
+                .name("flip_camera")
+                .description("切换前后摄像头")
+                .build(),
 
-        lcParams.properties()?.forEach { (key, schema) ->
-            val type = when (schema) {
-                is dev.langchain4j.model.chat.request.json.JsonStringSchema -> "string"
-                is dev.langchain4j.model.chat.request.json.JsonIntegerSchema -> "integer"
-                is dev.langchain4j.model.chat.request.json.JsonNumberSchema -> "number"
-                is dev.langchain4j.model.chat.request.json.JsonBooleanSchema -> "boolean"
-                is dev.langchain4j.model.chat.request.json.JsonObjectSchema -> "object"
-                is dev.langchain4j.model.chat.request.json.JsonArraySchema -> "array"
-                else -> "string"
-            }
-            val enum = when (schema) {
-                is dev.langchain4j.model.chat.request.json.JsonEnumSchema -> schema.enumValues()
-                else -> null
-            }
-            properties[key] = com.mamba.picme.agent.core.api.JsonSchemaProperty(
-                type = type,
-                description = schema.description(),
-                enum = enum
-            )
-        }
+            // adjust_beauty: 7个可选整数参数
+            ToolSpecification.builder()
+                .name("adjust_beauty")
+                .description("调整美颜参数。支持磨皮、美白、瘦脸、大眼、唇色、腮红、眉毛。只传入需要调整的参数，未传入的参数保持不变。")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addIntegerProperty("smoothing", "磨皮强度，范围 0-100，默认不调整")
+                        .addIntegerProperty("whitening", "美白强度，范围 0-100，默认不调整")
+                        .addIntegerProperty("slim_face", "瘦脸强度，范围 -50 到 50，默认不调整")
+                        .addIntegerProperty("big_eyes", "大眼强度，范围 0-100，默认不调整")
+                        .addIntegerProperty("lip_color", "唇色强度，范围 0-100，默认不调整")
+                        .addIntegerProperty("blush", "腮红强度，范围 0-100，默认不调整")
+                        .addIntegerProperty("eyebrow", "眉毛强度，范围 0-100，默认不调整")
+                        .build()
+                )
+                .build(),
 
-        return com.mamba.picme.agent.core.api.ToolParameters(
-            properties = properties,
-            required = required
+            // switch_filter: 枚举字符串
+            ToolSpecification.builder()
+                .name("switch_filter")
+                .description("切换相机滤镜。可选值：NONE（无）、LEICA_CLASSIC（徕卡经典）、LEICA_VIBRANT（徕卡鲜艳）、LEICA_BW（徕卡黑白）、FILM_GOLD（胶片金）、FILM_FUJI（胶片富士）、VINTAGE（复古）、COOL（冷色）、WARM（暖色）")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addEnumProperty("filter", listOf("NONE", "LEICA_CLASSIC", "LEICA_VIBRANT", "LEICA_BW", "FILM_GOLD", "FILM_FUJI", "VINTAGE", "COOL", "WARM"), "滤镜名称")
+                        .required("filter")
+                        .build()
+                )
+                .build(),
+
+            // switch_style: 枚举字符串
+            ToolSpecification.builder()
+                .name("switch_style")
+                .description("切换艺术风格。可选值：NONE（无）、TOON（漫画）、SKETCH（素描）、POSTERIZE（海报）、EMBOSS（浮雕）、CROSSHATCH（交叉线）")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addEnumProperty("style", listOf("NONE", "TOON", "SKETCH", "POSTERIZE", "EMBOSS", "CROSSHATCH"), "风格名称")
+                        .required("style")
+                        .build()
+                )
+                .build(),
+
+            // switch_scene: 枚举字符串
+            ToolSpecification.builder()
+                .name("switch_scene")
+                .description("切换场景模式。可选值：night（夜景）、moon（月亮）、none（普通）")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addEnumProperty("scene", listOf("night", "moon", "none"), "场景名称")
+                        .required("scene")
+                        .build()
+                )
+                .build(),
+
+            // switch_ratio: 枚举字符串
+            ToolSpecification.builder()
+                .name("switch_ratio")
+                .description("切换画面比例。可选值：4:3、16:9、full（全屏）")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addEnumProperty("ratio", listOf("4:3", "16:9", "full"), "画面比例")
+                        .required("ratio")
+                        .build()
+                )
+                .build(),
+
+            // adjust_exposure: 整数参数
+            ToolSpecification.builder()
+                .name("adjust_exposure")
+                .description("调整曝光补偿，范围 -2 到 2")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addIntegerProperty("exposure", "曝光补偿值，范围 -2 到 2，0 为默认曝光")
+                        .required("exposure")
+                        .build()
+                )
+                .build(),
+
+            // adjust_zoom: 数字参数
+            ToolSpecification.builder()
+                .name("adjust_zoom")
+                .description("调整变焦倍数，最小 0.5x")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addNumberProperty("zoom", "变焦倍数，范围 0.5-10，1.0 为默认无变焦")
+                        .required("zoom")
+                        .build()
+                )
+                .build(),
+
+            // switch_mode: 枚举字符串
+            ToolSpecification.builder()
+                .name("switch_mode")
+                .description("切换拍摄模式。可选值：PHOTO（拍照）、VIDEO（录像）、PRO（专业模式）、DOCUMENT（文档模式）")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addEnumProperty("mode", listOf("PHOTO", "VIDEO", "PRO", "DOCUMENT"), "拍摄模式")
+                        .required("mode")
+                        .build()
+                )
+                .build(),
+
+            // delay: 长整数参数
+            ToolSpecification.builder()
+                .name("delay")
+                .description("延迟指定毫秒数后执行后续操作")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addIntegerProperty("delay_ms", "延迟毫秒数，范围 1-300000（5分钟）")
+                        .required("delay_ms")
+                        .build()
+                )
+                .build(),
+
+            // navigate_to: 枚举字符串
+            ToolSpecification.builder()
+                .name("navigate_to")
+                .description("导航到指定页面。可选值：camera（相机）、gallery（相册）、settings（设置）、debug（调试）")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addEnumProperty("destination", listOf("camera", "gallery", "settings", "debug"), "目标页面")
+                        .required("destination")
+                        .build()
+                )
+                .build(),
+
+            // go_back: 无参数
+            ToolSpecification.builder()
+                .name("go_back")
+                .description("返回上一页")
+                .build(),
+
+            // text_reply: 字符串参数
+            ToolSpecification.builder()
+                .name("text_reply")
+                .description("当用户输入是闲聊、问答或无法使用现有工具执行时，使用此工具回复用户")
+                .parameters(
+                    JsonObjectSchema.builder()
+                        .addStringProperty("message", "回复给用户的文本内容")
+                        .required("message")
+                        .build()
+                )
+                .build()
         )
     }
 
@@ -629,11 +741,11 @@ class RemoteOrchestrator(
                         val name = commandObj.optString("name", "")
                         val args = commandObj.optJSONObject("arguments")?.toString() ?: "{}"
                         if (name.isNotBlank()) {
-                            val request = ToolExecutionRequest(
-                                id = "plan_step_$stepNum",
-                                name = name,
-                                arguments = args
-                            )
+                            val request = ToolExecutionRequest.builder()
+                                .id("plan_step_$stepNum")
+                                .name(name)
+                                .arguments(args)
+                                .build()
                             ToolCallCommandParser.parse(request, context)
                         } else {
                             AgentCommand.TextReply(message = "步骤解析失败：command 缺少 name 字段")
@@ -644,11 +756,11 @@ class RemoteOrchestrator(
                         val paramsObject = stepObject.optJSONObject("params")
                         if (methodName.isNotBlank()) {
                             val args = paramsObject?.toString() ?: "{}"
-                            val request = ToolExecutionRequest(
-                                id = "plan_step_$stepNum",
-                                name = methodName,
-                                arguments = args
-                            )
+                            val request = ToolExecutionRequest.builder()
+                                .id("plan_step_$stepNum")
+                                .name(methodName)
+                                .arguments(args)
+                                .build()
                             ToolCallCommandParser.parse(request, context)
                         } else {
                             AgentCommand.TextReply(message = "步骤解析失败：缺少 command 或 method 字段")

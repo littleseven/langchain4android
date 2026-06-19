@@ -6,7 +6,7 @@ import com.mamba.picme.agent.core.runtime.state.SceneManager
 /**
  * 远程 LLM Prompt 构建器
  *
- * 面向远程大模型（DeepSeek/Kimi via cloud API），使用标准 OpenAI tool_calls 协议。
+ * 面向远程大模型（通过 OpenAI 兼容 API），使用标准 OpenAI tool_calls 协议。
  * 提供三种 Prompt 模板：
  * - Batch: L2 批量命令解析（tool_calls）
  * - Plan: L3 计划执行（ExecutionPlan JSON，内部步使用 method/params 格式）

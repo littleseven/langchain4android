@@ -16,6 +16,8 @@ class AdjustZoomTool : BaseUiTool() {
 
     override fun getName(): String = "adjust_zoom"
 
+    override fun getDescription(): String = "调整变焦倍数，最小 0.5x"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("zoom", "number", "变焦比例 0.5~10.0", true)
     )

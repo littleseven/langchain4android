@@ -16,6 +16,8 @@ class AdjustExposureTool : BaseUiTool() {
 
     override fun getName(): String = "adjust_exposure"
 
+    override fun getDescription(): String = "调整曝光补偿，范围 -2 到 2"
+
     override fun getParameters(): List<ToolParameter> = listOf(
         ToolParameter("exposure", "integer", "曝光补偿 -2~2", true)
     )
