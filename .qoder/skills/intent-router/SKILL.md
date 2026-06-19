@@ -129,8 +129,9 @@ tags:
 | 美颜参数 | 美颜调整 / AdjustBeauty | `BeautyCapability.AdjustBeauty` | domain/agent |
 | 场景模式 | 场景切换 / SwitchScene | `CameraCapability.SwitchScene` | domain/agent |
 | 语音唤醒 | 唤醒词 / Wake Word | `WakeWordEngine` | camera (app) |
-| 推理模式 | 推理模式 / Inference Mode | `AdaptiveStrategySelector` | domain/agent |
-| 本地模型 | 端侧 LLM / On-device LLM | `LocalLlmEngine / MnnLlmClient` | domain/agent |
+| 推理模式 | 推理模式 / Inference Mode | `AgentOrchestrator` (LOCAL/REMOTE) | agent-core |
+| 本地模型 | 端侧 LLM / On-device LLM | `LocalLlmEngine / MnnLlmClient` | agent-core |
+| 远程模型 | 远程 LLM / Remote LLM | `RemoteOrchestrator / UnifiedRemoteClient` | agent-core |
 | Capability | 能力接口 | `Capability` | domain/agent |
 
 ### 全局红线术语

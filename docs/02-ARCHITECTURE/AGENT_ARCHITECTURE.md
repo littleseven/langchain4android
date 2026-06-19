@@ -4,17 +4,17 @@
 > - 本文档定义 PicMe AI Agent 的运行时架构、Capability 模型与推理模式选型。
 > - 产品目标与验收口径以 [`../01-PRODUCT/FEATURES.md`](./01-PRODUCT/FEATURES.md) 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 [`AGENTS.md`](../../AGENTS.md) 为准。
-> - 模块级实现细节以 `agent-core/src/main/java/com/picme/agent/core/` 源码为准。注意：Agent Runtime 核心组件已从 `app/domain/agent/` 迁移至独立的 `:agent-core` 模块。
+> - 模块级实现细节以 `agent-core/src/main/java/com/mamba/picme/agent/core/` 源码为准。注意：Agent Runtime 核心组件已从 `app/domain/agent/` 迁移至独立的 `:agent-core` 模块。
 
-**模块定位**: PicMe 相机 AI 助手"小觅"的 Runtime 架构与推理模式选型  
+**模块定位**: PicMe AI 助手"小觅"的 Runtime 架构与推理模式选型  
 **主要维护者**: [RD] 全栈工程师  
 **阅读对象**: RD、AI Agent  
-**版本**: 2.0 (合并 V2+MEMO)  
-**最后更新**: 2026-05-29  
+**版本**: 3.0 (ADR-005 协议分离后)  
+**最后更新**: 2026-06-19
 
 ---
 
-## 📋 目录
+## 目录
 
 1. [核心产品逻辑](#1-核心产品逻辑-core-product-logic)
 2. [架构图](#2-架构图)
@@ -34,29 +34,44 @@
 | 约束 | 定义 | 验证方式 |
 |------|------|----------|
 | **[PRIVACY]** | 敏感数据强制本地推理，人脸/对话数据严禁上云 | PrivacyGuard 拦截数据流 |
-| **[PERF]** | 交互反馈 < 100ms，LLM 推理后台完成 | 端侧 Qwen3-1.7B 首 token 目标 < 600ms |
+| **[PERF]** | 交互反馈 < 100ms，LLM 推理后台完成 | 端侧 Qwen3.5-2B 首 token 目标 < 600ms |
 | **[I18N]** | System Prompt 及用户可见回复禁止硬编码中文 | 接入 string 资源 |
 | **[OFFLINE]** | 本地模型未下载时提供明确引导 | 非静默失败 |
 | **[TYPE_SAFE]** | AgentCommand / AgentAction 必须使用 Sealed Class | 禁止字符串魔法值 |
 
-### 1.2 当前架构模式
+### 1.2 当前架构模式（ADR-005 后）
 
-**单轮 Function Calling（指令解析 - 执行模式）**，非 ReAct 模式。
+**本地链路**：单轮 Function Calling（自定义 JSON 数组协议）  
+**远程链路**：标准 OpenAI Chat Completions API（原生 tool_calls + 流式 + 多轮对话）
+
+两条链路完全独立，无共享路由逻辑。
 
 ```
-用户输入 → 构建 System Prompt → LLM 一次性生成 → 解析为 AgentCommand → Capability 执行
+用户输入 → AgentOrchestrator.dispatch() → 模式选择
+    ├── LOCAL → LocalInferencePipeline → LocalLlmEngine → JSON 数组解析 → Capability 执行
+    └── REMOTE → RemoteInferencePipeline → RemoteOrchestrator → OpenAI tool_calls → Capability 执行
 ```
 
 **核心组件状态**:
 
 | 组件 | 职责 | 状态 |
 |------|------|------|
-| `AgentOrchestrator` | Prompt 构建、LLM 推理、响应解析、命令路由 | 🔄 部分实现 |
-| `LocalLlmEngine` | 封装 MNN-LLM 客户端，支持多模型切换 | ✅ 已落地 |
-| `MemoryManager` | DataStore 持久化对话历史，按 session 隔离 | ✅ 已落地 |
-| `CapabilityRegistry` | Capability 注册与命令分发 | ✅ 已落地 |
-| `Capability` | 领域能力抽象（相机控制、相册管理等） | 🔄 部分实现 |
-| `PrivacyGuard` | 输入内容隐私分级与本地优先约束 | ✅ 已落地 |
+| `AgentOrchestrator` | 统一入口，管理本地/远程两条独立推理链路 | 已落地 |
+| `LocalInferencePipeline` | 本地推理链路：L1 Cache + L2 Batch（自定义 JSON 数组协议） | 已落地 |
+| `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式·多轮） | 已落地 |
+| `LocalLlmEngine` | 封装 MNN-LLM 客户端，Qwen3.5-2B 本地推理 | 已落地 |
+| `RemoteOrchestrator` | 远程推理编排：langchain4j OpenAiChatModel + ChatMemory | 已落地 |
+| `CapabilityRegistry` | Capability 注册与命令分发 | 已落地 |
+| `Capability` | 领域能力抽象（相机控制、相册管理等） | 部分实现 |
+| `PrivacyGuard` | 输入内容隐私分级与本地优先约束 | 已落地 |
+| `MemoryManager` | DataStore 持久化对话历史，按 session 隔离 | 已落地 |
+
+**已移除组件（ADR-005）**：
+- `InferenceRouter` — 拆分为两条独立链路
+- `ToolCallingChatLanguageModel` — 远程直接使用 langchain4j 原生 OpenAI 客户端
+- `ToolCallingOutputParser` — 远程使用标准 OpenAI 响应格式
+- `ToolPromptBuilder` — 远程使用 ToolSpecifications，本地使用简单能力列表
+- `AdaptiveStrategySelector` — 本地不再需要策略分级
 
 ---
 
@@ -66,7 +81,8 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              UI Layer                                        │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ CameraScreen │  │GalleryScreen │  │SettingsScreen│  │ImageEditScreen│    │
+│  │ ChatScreen   │  │GalleryScreen │  │SettingsScreen│  │ImageEditScreen│    │
+│  │ (首页)       │  │              │  │              │  │              │    │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
 │         │                 │                 │                 │              │
 │         └─────────────────┴────────┬────────┴─────────────────┘              │
@@ -86,8 +102,22 @@
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                    AgentOrchestrator (编排器)                         │   │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │   │
-│  │  │SceneManager │  │PromptBuilder│  │MemoryManager│  │PrivacyGuard │ │   │
+│  │  │SceneManager │  │LocalPrompt  │  │MemoryManager│  │PrivacyGuard │ │   │
+│  │  │             │  │Builder      │  │             │  │             │ │   │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                       │                                     │
+│                                       ▼                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │              LocalInferencePipeline / RemoteInferencePipeline        │   │
+│  │                                                                      │   │
+│  │   ┌────────────────────┐          ┌────────────────────────────┐    │   │
+│  │   │ LocalLlmEngine     │          │ RemoteOrchestrator         │    │   │
+│  │   │ (Qwen3.5-2B MNN)   │          │ (OpenAI Chat Completions)  │    │   │
+│  │   │ 自定义 JSON 数组    │          │ tool_calls · streaming     │    │   │
+│  │   │ GBNF 约束           │          │ langchain4j ChatMemory     │    │   │
+│  │   └────────────────────┘          └────────────────────────────┘    │   │
+│  │                                                                      │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                       │                                     │
 │                                       ▼                                     │
@@ -102,15 +132,10 @@
 │  │   └──────────────┘  └──────────────┘  └──────────────┘              │   │
 │  │                                                                      │   │
 │  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
-│  │   │NavigationCapability │  │  (预留扩展)        │  │                  │  │   │
-│  │   │ • 页面切换         │  │                  │  │                  │  │   │
-│  │   │ • 返回/退出        │  │                  │  │                  │  │   │
+│  │   │NavigationCapability │  │EditorCapability  │  │RemoteControlCapability│  │   │
+│  │   │ • 页面切换         │  │ • 图片编辑        │  │ • 飞书远程控制      │  │   │
+│  │   │ • 返回/退出        │  │ • AI 优化         │  │ • 设备绑定          │  │   │
 │  │   └──────────────┘  └──────────────┘  └──────────────┘              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                       │                                     │
-│                                       ▼                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    LocalLlmEngine (本地推理引擎)                       │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                        │
@@ -142,6 +167,7 @@
 class SceneManager {
     
     enum class Scene {
+        CHAT,        // 聊天首页（默认）
         CAMERA,      // 相机页
         GALLERY,     // 相册页
         SETTINGS,    // 设置页
@@ -149,7 +175,7 @@ class SceneManager {
         DEBUG        // 调试页
     }
     
-    private val _currentScene = MutableStateFlow(Scene.CAMERA)
+    private val _currentScene = MutableStateFlow(Scene.CHAT)
     val currentScene: StateFlow<Scene> = _currentScene.asStateFlow()
     
     fun transitionTo(scene: Scene) {
@@ -160,6 +186,7 @@ class SceneManager {
      * 获取场景对应的 Capability 列表
      */
     fun getCapabilitiesForScene(scene: Scene): List<String> = when (scene) {
+        Scene.CHAT -> listOf("chat", "navigation", "gallery", "editor")
         Scene.CAMERA -> listOf("camera", "navigation")
         Scene.GALLERY -> listOf("gallery", "navigation")
         Scene.SETTINGS -> listOf("settings", "navigation")
@@ -169,48 +196,50 @@ class SceneManager {
 }
 ```
 
-### 3.2 分层 Prompt 构建器
+### 3.2 分层 Prompt 构建器（ADR-005 后）
+
+本地和远程使用独立的 Prompt 构建器：
 
 ```kotlin
-/**
- * Prompt 构建器
- * 
- * 分层构建 system prompt：
- * - Base: 通用规则（JSON 格式、回复风格等）
- * - Scene: 场景特定能力
- * - Capability: 各 Capability 的自描述
- */
-class PromptBuilder(private val sceneManager: SceneManager) {
-    
-    private val basePrompt = """
-        你是 PicMe 的 AI 助手，帮助用户控制相机和照片管理。
-        
-        输出规则：
-        1. 控制设备时只输出 JSON，不要任何解释
-        2. 格式：{"action": "action_name", "param": "value"}
-        3. 闲聊时用 text_reply action
-        4. 不要输出 <think> 标签
+// 本地 Prompt — 精简、结构化、GBNF 约束
+class LocalPromptBuilder {
+    fun buildSystemPrompt(capabilities: List<Capability>, context: AgentContext): String = """
+        你是 PicMe AI 助手，运行在端侧设备。
+        请根据用户输入，输出 JSON 数组格式的命令。
+
+        可用命令：
+        ${capabilities.joinToString("\n") { "- ${it.name}: ${it.description}" }}
+
+        输出格式：
+        [{"method":"命令名称","args":{"参数名":值}}]
+        如果无法理解，输出：{"method":"text_reply","args":{"text":"回复内容"}}
     """.trimIndent()
-    
-    fun buildSystemPrompt(
-        capabilities: List<Capability>,
-        context: AgentContext
-    ): String {
-        val scene = sceneManager.currentScene.value
-        
-        return buildString {
-            appendLine(basePrompt)
-            appendLine()
-            appendLine("当前页面：${scene.name}")
-            appendLine()
-            appendLine("可用功能:")
-            capabilities.forEach { cap ->
-                appendLine("- ${cap.name}: ${cap.description}")
-                cap.supportedCommands().forEach { cmd ->
-                    appendLine("  • $cmd")
-                }
-            }
+}
+
+// 远程 Prompt — 标准 OpenAI 协议格式
+// 通过 langchain4j 构建 ChatRequest，SDK 自动序列化为 OpenAI Chat Completions 请求体
+class RemotePromptBuilder {
+    fun buildChatRequest(
+        systemPrompt: String,
+        userInput: String,
+        capabilities: List<Capability>
+    ): ChatRequest {
+        val toolSpecs = capabilities.map { cap ->
+            ToolSpecification.builder()
+                .name(cap.name)
+                .description(cap.description)
+                .build()
         }
+        return ChatRequest.builder()
+            .messages(
+                SystemMessage(systemPrompt),
+                UserMessage(userInput)
+            )
+            .toolSpecifications(toolSpecs)
+            .build()
+        // langchain4j 自动序列化为:
+        // POST /v1/chat/completions
+        // {"model":"...","messages":[...],"tools":[...]}
     }
 }
 ```
@@ -290,7 +319,7 @@ class GalleryCapability(
     override val name = "gallery"
     override val description = "查看、删除、分享、搜索照片和视频"
     
-    override fun activeScenes() = listOf(SceneManager.Scene.GALLERY)
+    override fun activeScenes() = listOf(SceneManager.Scene.GALLERY, SceneManager.Scene.CHAT)
     
     override fun supportedCommands() = listOf(
         "view_media",
@@ -366,6 +395,7 @@ class NavigationCapability(
                     "gallery", "相册" -> Screen.Gallery
                     "settings", "设置" -> Screen.Settings
                     "editor", "编辑" -> Screen.Editor
+                    "chat", "聊天" -> Screen.Chat
                     else -> return Result.success(AgentAction.Error("未知页面：${command.destination}"))
                 }
                 onNavigate(screen)
@@ -387,69 +417,55 @@ class NavigationCapability(
 
 ## 4. 推理模式选型
 
-### 4.1 与 ReAct 模式的区别
+### 4.1 本地 vs 远程推理
 
-| 维度 | 当前架构 | ReAct |
-|------|---------|-------|
-| **推理步骤** | 单轮：输入 → 输出 | 多轮 Thought-Action-Observation 循环 |
-| **LLM 调用次数** | 1 次 | 多次（每步一次） |
-| **中间观察** | 无，执行结果直接返回用户 | 工具结果反馈给 LLM 继续推理 |
-| **决策深度** | 单步指令 | 多步骤规划、条件判断、错误恢复 |
-| **延迟** | 低（单次推理） | 高（多轮 RTT） |
+| 维度 | 本地推理 | 远程推理 |
+|------|---------|---------|
+| **协议** | 自定义 JSON 数组 | 标准 OpenAI Chat Completions API |
+| **Library** | 无第三方依赖 | langchain4j 1.13.0 (OpenAiChatModel) |
+| **Prompt** | 精简、结构化、GBNF 约束 | 自然语言 + Tool Schema |
+| **输出解析** | 简单 JSON 数组解析 | 标准 JSON 反序列化（tool_calls） |
+| **约束方式** | GBNF Grammar 强制格式 | OpenAI 原生协议约束 |
+| **聊天/闲聊** | 通过 GBNF text_reply 兜底 | 原生支持（流式 + 多轮） |
+| **Strategy** | L1 Cache / L2 Batch | L2 Batch / L3 Plan / L4 Chat |
+| **延迟** | < 600ms | 500ms-2s |
+| **隐私** | 100% 端侧 | 非敏感数据允许上云 |
 
-### 4.2 端侧推理模式选型（Qwen3-1.7B）
+### 4.2 端侧推理模式选型（Qwen3.5-2B）
 
 **不推荐完整 ReAct**，原因：
 - 2B 模型 COT（链式思考）能力弱，Thought 质量不稳定
-- 相机场景要求 < 100ms 反馈，多轮推理无法满足 `[PERF]` 红线
+- 聊天首页要求 < 500ms 首字延迟，多轮推理无法满足 `[PERF]` 红线
 - 端侧电池/发热敏感
 
 **端侧能力边界（2026-06-12 验证）**：
 | 能力 | 端侧支持 | 说明 |
 |------|----------|------|
-| 单条 Function Calling | ✅ | 明确意图→JSON 命令，准确率 > 90% |
-| 简单 Batch FC（2-3 条） | ⚠️ | JSON 数组格式需强 prompt 约束，偶有格式错误 |
-| 复杂组合指令（含条件/延迟） | ❌ | 超出 2B 模型理解范围 |
-| 上下文推理（隐式引用） | ❌ | "再亮一点"类指令需规则兜底 |
-| 开放式闲聊 | ❌ | 生成质量差，应路由到远程 L4 |
+| 单条 Function Calling | 已验证 | 明确意图→JSON 命令，准确率 > 90% |
+| 简单 Batch FC（2-3 条） | 部分支持 | JSON 数组格式需强 prompt 约束，偶有格式错误 |
+| 复杂组合指令（含条件/延迟） | 不支持 | 超出 2B 模型理解范围，明确走远程 |
+| 上下文推理（隐式引用） | 不支持 | "再亮一点"类指令需规则兜底 |
+| 开放式闲聊 | 不支持 | 生成质量差，应路由到远程 L4 |
 
-**推荐演进路径（已调整）**:
+### 4.3 远程推理模式选型
 
-```
-Phase 1（当前）: 单轮 Function Calling ✅ 已落地
-       ↓
-Phase 2: 多指令批量执行（Batch Function Calling）⚠️ 端侧仅限简单组合，复杂组合上云
-       ↓
-Phase 3: Plan-and-Execute（预定义模板）📋 端侧用规则模板替代 LLM 规划
-       ↓
-Phase 4: 轻量 ReAct（限 2-3 步，仅复杂场景）📋 仅远程模式支持
-```
+远程模式下**减少 LLM 调用次数**比端侧更重要（RTT 成本主导）。
 
-### 4.3 远端推理模式选型
+**推荐分层自适应模式**：
 
-远端模式下**减少 LLM 调用次数**比端侧更重要（RTT 成本主导）。
-
-**推荐分层自适应模式**:
-
-| 层级 | 模式 | 适用场景 | RTT 次数 | 执行位置 |
-|------|------|---------|---------|----------|
+| 层级 | 模式 | 适用场景 | 协议 | 执行位置 |
+|------|------|---------|------|----------|
 | Layer 1 | 本地规则缓存 | "拍照"等高频指令 | 0 | 端侧 |
-| Layer 2 | Batch Function Calling | 简单连续动作指令（2-3 步） | 1 | 端侧优先，失败降级远程 |
-| Layer 3 | Plan-and-Execute / 规则模板 | 条件/多步任务 | 1（规划）+ 本地执行 | 远程规划或端侧预定义模板 |
-| Layer 4 | ReAct（限步）/ 纯文本 | 极少数动态推理场景、闲聊 | N（≤3，超时熔断） | 远程专属 |
+| Layer 2 | Batch Function Calling | 简单连续动作指令（2-3 步） | OpenAI tool_calls | 远程 |
+| Layer 3 | Plan-and-Execute | 条件/多步任务 | OpenAI tool_calls + ExecutionPlan | 远程规划 + 本地执行 |
+| Layer 4 | 流式 Chat | 开放式对话、闲聊 | OpenAI streaming | 远程 |
 
-**远端优化策略**:
+**远程优化策略**：
 - 连接池 + Keep-Alive 复用 TCP
 - 100ms 防抖窗口合并请求
 - 2s 超时降级到本地规则或文本提示
 - 常见意图响应缓存（LruCache）
 - **隐私分级**：敏感数据（人脸/对话内容）强制本地；非敏感指令（天气/通用闲聊）允许远程
-
-### 4.4 Qwen3-1.7B Prompt 工程建议
-
-- 使用模型原生 `tools` 参数定义相机控制函数，替代手写 JSON format prompt
-- System Prompt 精简：只传关键状态，大模型理解力强无需冗长描述
-- 历史裁剪更激进：`maxHistoryRounds = 5`（端侧 10）
 
 ---
 
@@ -500,46 +516,39 @@ sealed class AgentCommand {
 
 ### 5.1 功能覆盖矩阵
 
-#### 当前已接入功能（✅）
+#### 当前已接入功能（已验证）
 
 | 功能域 | 具体功能 | 命令类型 | Capability | 状态 |
 |--------|----------|----------|------------|------|
-| **相机控制** | 拍照 | `CapturePhoto` | CameraCapability | ✅ |
-| | 开始/停止录像 | `ToggleRecording` | CameraCapability | ✅ |
-| | 翻转摄像头 | `FlipCamera` | CameraCapability | ✅ |
-| | 变焦调节 | `AdjustZoom` | CameraCapability | ✅ |
-| | 曝光调节 | `AdjustExposure` | CameraCapability | ✅ |
-| | 切换拍摄模式 | `SwitchMode` | CameraCapability | ✅ |
-| **美颜** | 磨皮/美白调节 | `AdjustBeauty` | CameraCapability | ✅ |
-| | 瘦脸/大眼调节 | `AdjustBeauty` | CameraCapability | ✅ |
-| | 唇色/腮红调节 | `AdjustBeauty` | CameraCapability | ✅ |
-| **滤镜/风格** | 切换滤镜 | `SwitchFilter` | CameraCapability | ✅ |
-| | 切换风格特效 | `SwitchStyle` | CameraCapability | ✅ |
-| | 切换场景模式 | `SwitchScene` | CameraCapability | ✅ |
-| | 切换画幅比例 | `SwitchRatio` | CameraCapability | ✅ |
-| **对话** | 文本回复/聊天 | `TextReply` | CameraCapability | ✅ |
+| **相机控制** | 拍照 | `CapturePhoto` | CameraCapability | 已验证 |
+| | 开始/停止录像 | `ToggleRecording` | CameraCapability | 已验证 |
+| | 翻转摄像头 | `FlipCamera` | CameraCapability | 已验证 |
+| | 变焦调节 | `AdjustZoom` | CameraCapability | 已验证 |
+| | 曝光调节 | `AdjustExposure` | CameraCapability | 已验证 |
+| | 切换拍摄模式 | `SwitchMode` | CameraCapability | 已验证 |
+| **美颜** | 磨皮/美白调节 | `AdjustBeauty` | CameraCapability | 已验证 |
+| | 瘦脸/大眼调节 | `AdjustBeauty` | CameraCapability | 已验证 |
+| | 唇色/腮红调节 | `AdjustBeauty` | CameraCapability | 已验证 |
+| **滤镜/风格** | 切换滤镜 | `SwitchFilter` | CameraCapability | 已验证 |
+| | 切换风格特效 | `SwitchStyle` | CameraCapability | 已验证 |
+| | 切换场景模式 | `SwitchScene` | CameraCapability | 已验证 |
+| | 切换画幅比例 | `SwitchRatio` | CameraCapability | 已验证 |
+| **对话** | 文本回复/聊天 | `TextReply` | CameraCapability | 已验证 |
+| **远程控制** | 飞书消息处理 | 多种 | RemoteControlCapability | 开发中 |
 
-#### V2 新增功能（🆕）
+#### V2 新增功能（开发中）
 
 | 功能域 | 具体功能 | 命令类型 | Capability | 优先级 |
 |--------|----------|----------|------------|--------|
 | **Gallery** | 查看照片 | `ViewMedia` | GalleryCapability | P0 |
 | | 删除照片 | `DeleteMedia` | GalleryCapability | P0 |
 | | 分享照片 | `ShareMedia` | GalleryCapability | P1 |
-| | 收藏照片 | `FavoriteMedia` | GalleryCapability | P2 |
 | | 照片搜索 | `SearchMedia` | GalleryCapability | P2 |
-| | 批量选择 | `SelectMedia` | GalleryCapability | P2 |
-| | 切换视图模式 | `SwitchViewMode` | GalleryCapability | P2 |
 | **设置** | 切换主题 | `ChangeTheme` | SettingsCapability | P1 |
 | | 切换语言 | `ChangeLanguage` | SettingsCapability | P1 |
-| | 下载模型 | `DownloadModel` | SettingsCapability | P1 |
-| | 切换人脸引擎 | `SwitchFaceEngine` | SettingsCapability | P2 |
-| | 开关调试模式 | `ToggleSetting` | SettingsCapability | P2 |
 | **导航** | 切换页面 | `NavigateTo` | NavigationCapability | P0 |
 | | 返回上一页 | `GoBack` | NavigationCapability | P0 |
-| **编辑** | 进入编辑 | 预留 | 待后续独立 Capability 落地 | P2 |
-| | 保存编辑 | 预留 | 待后续独立 Capability 落地 | P2 |
-| | 撤销/重做 | 预留 | 待后续独立 Capability 落地 | P2 |
+| **编辑** | 进入编辑 | 预留 | EditorCapability | P2 |
 
 ---
 
@@ -553,7 +562,8 @@ sealed class AgentCommand {
 - **线程安全**: `AgentOrchestrator` 的 `agentMode` / `currentModelId` 需同步控制，禁止并发修改
 - **模型加载**: 快速连续调用需加并发锁，避免触发多次加载
 - **隐私拦截**: `PrivacyGuard` 必须接入 LLM 输入输出流和 Capability 执行链路，禁止仅做断言
-- **日志规范**: 统一使用 `PicMe:Agent` 前缀，禁止各组件标签不一致
+- **日志规范**: 统一使用 `PicMe:[Module]` 前缀，禁止各组件标签不一致
+- **协议隔离**: 远程 tool_calls 与本地 method/params 必须彻底隔离，禁止混用
 
 ---
 
@@ -569,6 +579,9 @@ sealed class AgentCommand {
 - [ ] PrivacyGuard 是否实际拦截了数据流？（当前仅断言，未接入 LLM 和 Capability）
 - [ ] 用户可见文案是否硬编码中文？（需接入 strings.xml 支持多语言）
 - [ ] AgentAction.Success 是否携带了语义冗余？（应携带执行结果数据，而非原命令）
+- [ ] 远程 Prompt 是否包含 tool_calls JSON 示例？（会导致模型输出到 content 字段）
+- [ ] content 字段是否处理了空字符串陷阱？（需使用 `isNotBlank()` 而非 `isNullOrEmpty()`）
+- [ ] DeepSeek 请求是否禁用了 thinking 模式？（V4 系列必须禁用）
 
 ---
 
@@ -578,26 +591,28 @@ sealed class AgentCommand {
 ┌─────────────────────────────────────────────────────────────────┐
 │                        端侧推理演进路线                           │
 ├─────────────────────────────────────────────────────────────────┤
-│  P0（立即）:                                                    │
+│  P0（已完成）:                                                    │
 │  1. JSON 解析改用 kotlinx.serialization                         │
-│  2. System Prompt 提取为 PromptBuilder 接口                      │
+│  2. System Prompt 提取为 LocalPromptBuilder / RemotePromptBuilder │
 │  3. MemoryManager 引入内存缓存 + 批量刷盘                         │
-│  4. 端侧能力边界明确化：L2 简单 Batch FC 支持，L3/L4 明确远程或规则模板    │
+│  4. 本地/远程协议彻底分离（ADR-005）                              │
+│  5. 远程推理引入 langchain4j 标准化                               │
+│  6. DeepSeek 适配（thinking 禁用、strict 兼容）                   │
 │                                                                 │
 │  P1（近期）:                                                    │
-│  5. 支持 Batch Function Calling（JSON 数组输出）— 端侧仅限 2-3 步简单组合  │
-│  6. ChatFormat 抽象，支持多模型切换                              │
-│  7. Capability 命令映射改为注解驱动或属性声明                      │
-│  8. 本地意图缓存（高频指令 0ms 响应）                              │
+│  7. 支持 Batch Function Calling（tool_calls 数组）               │
+│  8. ChatFormat 抽象，支持多模型切换                              │
+│  9. Capability 命令映射改为注解驱动或属性声明                      │
+│  10. 本地意图缓存（高频指令 0ms 响应）                              │
 │                                                                 │
 │  P2（中期）:                                                    │
-│  9. Plan-and-Execute 规则模板引擎（端侧不用 LLM 做规划）              │
-│  10. Token 预算管理与上下文压缩                                    │
-│  11. 隐私分级路由完善：敏感强制本地，非敏感允许远程                    │
+│  11. Plan-and-Execute 规则模板引擎（端侧不用 LLM 做规划）           │
+│  12. Token 预算管理与上下文压缩                                    │
+│  13. 隐私分级路由完善：敏感强制本地，非敏感允许远程                    │
 │                                                                 │
 │  P3（远期）:                                                    │
-│  12. 轻量 ReAct（限 2-3 步，超时熔断）— 仅远程模式                   │
-│  13. 记忆摘要（长期对话不丢失上下文）                               │
+│  14. 记忆摘要（长期对话不丢失上下文）                               │
+│  15. 多会话管理                                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -608,5 +623,6 @@ sealed class AgentCommand {
 - [AGENTS.md](../../AGENTS.md) — 顶层治理规则
 - [FEATURES.md](../01-PRODUCT/FEATURES.md) — 功能交互细节
 - [COMMAND_REFERENCE.md](../04-AGENT-CAPABILITIES/COMMAND_REFERENCE.md) — 命令参考手册
-- `agent-core/src/main/java/com/picme/agent/core/` — 源码目录（Agent Runtime 核心）
-- `app/src/main/java/com/picme/domain/usecase/AiAgentUseCase.kt` — Facade 桥接层
+- [REMOTE_INFERENCE_ARCHITECTURE.md](REMOTE_INFERENCE_ARCHITECTURE.md) — 远程推理架构详细设计
+- `agent-core/src/main/java/com/mamba/picme/agent/core/` — 源码目录（Agent Runtime 核心）
+- `app/src/main/java/com/mamba/picme/domain/usecase/AiAgentUseCase.kt` — Facade 桥接层

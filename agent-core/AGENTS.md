@@ -14,18 +14,18 @@
 |------|------|--------|
 | `AgentOrchestrator` | 应用级单例，统一入口，管理本地/远程两条独立推理链路 | `agent.core` |
 | `LocalInferencePipeline` | 本地推理链路：L1 Cache + L2 Batch（自定义 JSON 数组协议） | `agent.core` |
-| `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式） | `agent.core` |
+| `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式·多轮） | `agent.core` |
 | `CapabilityRegistry` | Capability 注册/查询/命令分发，跨页面命令队列 | `agent.core` |
 | `LocalLlmEngine` | 本地 Qwen3.5-2B MNN-LLM 推理封装 | `agent.core` |
-| `AgentCommandParser` | LLM 响应解析为 AgentCommand | `agent.core` |
+| `AgentCommandParser` | LLM 响应解析为 AgentCommand（本地/远程独立解析器） | `agent.core` |
 | `ExecutionEngine` | 顺序执行 ExecutionPlan | `agent.core` |
 | `ExecutionReporter` | 执行过程报告，结构化日志 | `agent.core` |
 | `MemoryManager` | 对话历史管理 | `agent.core` |
 | `PrivacyGuard` | 输入内容隐私分级 | `agent.core` |
 | `LocalPromptBuilder` | 本地模型 System prompt 构建（精简结构化） | `agent.core` |
-| `RemotePromptBuilder` | 远程模型 Tool Schema + ChatRequest 构建 | `agent.core` |
+| `RemotePromptBuilder` | 远程模型 Tool Schema + ChatRequest 构建（标准 OpenAI 协议） | `agent.core` |
 | `SceneManager` | 页面场景状态管理 | `agent.core` |
-| `AgentConfigurator` | Agent 配置管理（提供独立 Local/Remote 实例，不再创建 InferenceRouter） | `agent.core` |
+| `AgentConfigurator` | Agent 配置管理（提供独立 Local/Remote 实例） | `agent.core` |
 | `Capability<T,C,P,A>` | 泛型 Capability 接口 | `agent.core` |
 | `CapabilityHost` | Capability 宿主绑定 | `agent.core` |
 | `CommandExecutor<T,C,P,A>` | 命令执行器（超时+异常） | `agent.core` |
@@ -37,12 +37,12 @@
 
 | 子包 | 内容 | 说明 |
 |------|------|------|
-| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolParameters`, `JsonSchemaProperty`, `ToolExecutionRequest`, `ToolExecutionResultMessage`, `ToolExecutor`, `ToolProvider` | 与 LangChain4j 对齐的模型 API 层（远程推理链路接入层） |
+| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolParameters`, `JsonSchemaProperty`, `ToolExecutionRequest`, `ToolExecutionResultMessage`, `ToolExecutor`, `ToolProvider` | 与 LangChain4j 对齐的模型 API 层（远程推理链路 SDK 接入层） |
 | `llm/` | `MnnLlmClient`, `LlmModelManager`, `LocalLlmEngine` | MNN LLM 客户端、模型管理与本地推理引擎 |
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |
 | `voice/` | `AsrEngine`, `VadDetector`, `MnnAsrClient`, `AudioRecorder`, `SherpaMnnAsrEngine` | 语音交互 |
-| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `IntentCache`, `ExecutionPlan` + `claude/` (ClaudeCodingApiClient 等) + `openai/` (OpenAiApiClient 等) | 远程推理编排（标准 OpenAI Chat Completions 协议） |
+| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `LangChain4jOpenAiClient`, `IntentCache`, `ExecutionPlan` + `claude/` (ClaudeCodingApiClient 等) + `openai/` (OpenAiApiClient 等) + `parser/` (ToolCallCommandParser, ToolCallParser) + `tool/` (RemoteCameraTools) | 远程推理编排（标准 OpenAI Chat Completions 协议） |
 
 > **2026-06-15 架构更新（ADR-005）**：
 > - 移除 `InferenceRouter`（拆分为 `LocalInferencePipeline` + `RemoteInferencePipeline`）
@@ -57,8 +57,16 @@
 >   - DeepSeek 模型自动禁用 thinking 模式（`thinking: {"type": "disabled"}`）
 >   - ToolSpec 自动添加 `additionalProperties: false` 以兼容 strict 模式
 >   - `tool_choice: REQUIRED` 正确映射为 `"required"`（之前错误映射为 `"auto"`）
->   - 增强 content fallback 解析注释，说明 DeepSeek 兼容需求
+>   - 增强 content fallback 解析，支持从 content 字段回退提取 tool_calls JSON
+> - `InAppLlmClient` / `InAppAgentService`：空字符串处理统一使用 `isNotBlank()`
 > - 参考文档：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
+>
+> **2026-06-19 远程推理链路扩展**：
+> - 新增 `LangChain4jOpenAiClient`：使用 `OpenAiChatModel` 消费标准 OpenAI 协议
+> - 新增 `UnifiedRemoteClient`：根据协议自动路由（OPENAI → langchain4j / CLAUDE → Retrofit）
+> - 新增 `RemoteCameraTools`：远程推理 `@Tool` 注解工具集
+> - 新增 `ToolCallCommandParser` / `ToolCallParser`：标准 tool_calls 解析器
+> - `RemoteOrchestrator` 支持 L2 Batch / L3 Plan / L4 Stream Chat 三层模式
 
 ## 设计原则
 
@@ -145,18 +153,24 @@
 - `SherpaMnnAsrEngine.kt` — Sherpa MNN ASR 引擎
 
 ### `remote/`
-- `RemoteOrchestrator.kt` — 远程编排器
-- `UnifiedRemoteClient.kt` — 统一远程客户端（OpenAI 标准协议）
+- `RemoteOrchestrator.kt` — 远程编排器（L2/L3/L4 三层模式）
+- `UnifiedRemoteClient.kt` — 统一远程客户端（协议自动路由：OPENAI → langchain4j / CLAUDE → Retrofit）
+- `LangChain4jOpenAiClient.kt` — langchain4j OpenAiChatModel 标准协议客户端
 - `IntentCache.kt` — 意图缓存
 - `ExecutionPlan.kt` — 执行计划
+- `RemotePromptBuilder.kt` — 远程 Prompt 构建（ToolSpecification 格式）
 - `claude/ClaudeCodingModels.kt` — Claude 模型定义
-- `claude/ClaudeCodingApiClient.kt` — Claude API 客户端
+- `claude/ClaudeCodingApiClient.kt` — Claude API 客户端（Retrofit）
 - `claude/ClaudeCodingApiService.kt` — Claude API 服务
 - `openai/OpenAiModels.kt` — OpenAI 模型定义
-- `openai/OpenAiApiClient.kt` — OpenAI API 客户端
+- `openai/OpenAiApiClient.kt` — OpenAI API 客户端（Retrofit，保留兼容）
 - `openai/OpenAiApiService.kt` — OpenAI API 服务
+- `parser/ToolCallCommandParser.kt` — tool_calls 命令解析器（name + arguments → AgentCommand）
+- `parser/ToolCallParser.kt` — tool_calls JSON 解析器（OpenAI 格式 → ToolExecutionRequest）
+- `tool/RemoteCameraTools.kt` — 远程推理 @Tool 注解工具集
 
 > **已移除（ADR-005）**：`AdaptiveStrategySelector.kt`
+> **新增（2026-06-19）**：`LangChain4jOpenAiClient.kt`, `ToolCallCommandParser.kt`, `ToolCallParser.kt`, `RemoteCameraTools.kt`
 
 ## 编译验证
 

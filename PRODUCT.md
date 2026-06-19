@@ -3,13 +3,13 @@
 > **试验性应用** | 以 AI Agent 对话为核心，以相册+图像编辑为技术试验场  
 > **版本**：3.0（觅影相册）  
 > **状态**：生效中  
-**最后更新**：2026-06-15
+**最后更新**：2026-06-19
 **维护者**：PM Agent（产品定义）+ RD Agent（技术实现）
-**实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 · 产品重心迁移至相册+图片编辑）
+**实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + langchain4j 标准化 + DeepSeek 适配 · 产品重心迁移至相册+图片编辑）
 
 > **2026-06-17 IM 远程控制产品线新增**：新增 IM 远程控制产品线，通过飞书等 IM + LLM 实现 App 远程控制。智能相册功能全量规划完成（智能分类、相册管理、AI 编辑进阶、视频管理等）。
 
-> **2026-06-15 架构升级（ADR-005）**：本地/远程推理协议正式分离。本地模型使用精简自定义 JSON 数组协议；远程模型使用标准 OpenAI Chat Completions API 协议（含 tool_calls、流式、多轮对话）。同时产品重心从相机迁移至相册与图片编辑。
+> **2026-06-19 架构升级（ADR-005）**：本地/远程推理协议正式分离。本地模型使用精简自定义 JSON 数组协议；远程模型使用标准 OpenAI Chat Completions API 协议（含原生 tool_calls、流式、多轮对话）。远程链路引入 langchain4j 1.13.0 标准化，`LangChain4jOpenAiClient` 使用 `OpenAiChatModel` 消费标准 OpenAI 协议。DeepSeek 适配完成（禁用 thinking、strict 模式兼容）。同时产品重心从相机迁移至相册与图片编辑。
 
 PicMe 不是面向市场的商业化产品，而是一个技术探索实验场。我们的核心命题是：**当端侧 AI Agent 成为应用的中枢神经系统时，传统的 App 架构和交互范式将如何演进？**
 
@@ -55,11 +55,12 @@ PicMe 的实验目标是探索**右侧范式的工程可行性**。
 
 **当前聚焦**：从「相机工具」向「AI 对话助手」转型，以聊天首页为核心入口，相册/编辑作为核心能力被 Agent 调度。
 
-**关键架构更新（2026-06-15）**：
-1. **本地/远程推理协议分离**（ADR-005）：本地使用自定义 JSON 数组协议（method + args 平铺），远程使用标准 OpenAI Chat Completions API 协议（tool_calls·流式·多轮对话）。两条链路完全独立，无共享路由逻辑。
-2. **LangChain4j 定位重述**：作为消费 OpenAI 协议的 SDK 接入层（可替换），不是协议本身。
-3. **冗余代码清理**：移除 InferenceRouter、ToolCallingChatLanguageModel、ToolCallingOutputParser 等 ~1500 行代码。
-4. **产品重心迁移**：相册（Gallery）和图片编辑（Editor）从「能力验证」升级为「核心产品」，相机降级为「辅助入口」。
+**关键架构更新（2026-06-19）**：
+1. **本地/远程推理协议彻底分离**（ADR-005）：本地使用自定义 JSON 数组协议（method + args 平铺），远程使用标准 OpenAI Chat Completions API 协议（原生 tool_calls·流式·多轮对话）。两条链路完全独立，无共享路由逻辑。
+2. **LangChain4j 标准化**：远程推理链路引入 langchain4j 1.13.0，`LangChain4jOpenAiClient` 使用 `OpenAiChatModel` 消费标准 OpenAI 协议。`UnifiedRemoteClient` 根据协议自动路由（OPENAI → langchain4j / CLAUDE → Retrofit）。
+3. **DeepSeek 适配**：API 请求自动禁用 thinking 模式；ToolSpec 自动添加 `additionalProperties: false` 兼容 strict 模式；`tool_choice: REQUIRED` 正确映射为 `"required"`。
+4. **冗余代码清理**：移除 InferenceRouter、ToolCallingChatLanguageModel、ToolCallingOutputParser、ToolPromptBuilder、ToolCallingMode、ToolCallingConfig、AdaptiveStrategySelector、ToolOrchestrator 等 ~1500 行代码。
+5. **产品重心迁移**：相册（Gallery）和图片编辑（Editor）从「能力验证」升级为「核心产品」，相机降级为「辅助入口」。
 
 **关键认知更新（2026-06-12，保留）**：
 1. 端侧 Qwen3.5-2B 模型验证结果表明，其能力边界为「指令路由器+轻量对话」而非「深度推理引擎」。Function Calling、简单指令翻译、基础闲聊胜任，但复杂推理、多步规划、上下文推理超出能力范围。

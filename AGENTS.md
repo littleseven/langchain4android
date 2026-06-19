@@ -307,10 +307,12 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 | **技术专项** | `docs/*.md` |
 | **IM 远程控制技术规格（新增）** | `docs/03-TECHNICAL-SPECS/IM_REMOTE_CONTROL_TECH_SPEC.md` |
 
-> **架构说明（2026-06-15）**：
-> - **本地/远程推理协议已分离**（ADR-005）：本地使用自定义 JSON 数组协议，远程使用标准 OpenAI Chat Completions API 协议（含 tool_calls、流式、多轮对话）。两条链路完全独立，无共享路由逻辑。
-> - `AiAgentUseCase` 作为 Facade 兼容层存在，内部委托给 `AgentOrchestrator` 执行。
-> - 冗余组件已清理：`InferenceRouter`、`ToolCallingChatLanguageModel`、`ToolCallingOutputParser`、`ToolPromptBuilder` 等 ~1500 行代码已删除。
+> **架构说明（2026-06-19）**：
+> - **本地/远程推理协议已彻底分离**（ADR-005）：本地使用自定义 JSON 数组协议（method + params），远程使用标准 OpenAI Chat Completions API 协议（含原生 tool_calls、流式、多轮对话）。两条链路完全独立，无共享路由逻辑。
+> - **远程推理链路已引入 langchain4j 1.13.0 标准化**：`LangChain4jOpenAiClient` 使用 `OpenAiChatModel` 消费标准 OpenAI 协议，`UnifiedRemoteClient` 根据协议自动路由（OPENAI → langchain4j / CLAUDE → Retrofit）。
+> - **DeepSeek 适配**：API 请求自动禁用 thinking 模式；ToolSpec 自动添加 `additionalProperties: false` 兼容 strict 模式；`tool_choice: REQUIRED` 正确映射为 `"required"`。
+> - `AiAgentUseCase` 作为 Facade 兼容层存在，内部委托给 `AgentOrchestrator` 执行。默认 agentMode 已从 LOCAL 改为 REMOTE（远程推理优先策略）。
+> - 冗余组件已清理：`InferenceRouter`、`ToolCallingChatLanguageModel`、`ToolCallingOutputParser`、`ToolPromptBuilder`、`ToolCallingMode`、`ToolCallingConfig`、`AdaptiveStrategySelector`、`ToolOrchestrator` 等 ~1500 行代码已删除。
 
 ---
 
@@ -328,5 +330,5 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 ---
 
 > **维护者**：CO Agent
-> **最后更新**：2026-06-17
-> **实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + 冗余清理 + 相册/编辑产品重心迁移 + IM 远程控制产品线新增）
+> **最后更新**：2026-06-19
+> **实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + langchain4j 标准化 + DeepSeek 适配 + 相册/编辑产品重心迁移 + IM 远程控制产品线新增）
