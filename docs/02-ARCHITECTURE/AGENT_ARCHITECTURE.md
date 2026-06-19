@@ -72,6 +72,7 @@
 - `ToolCallingOutputParser` — 远程使用标准 OpenAI 响应格式
 - `ToolPromptBuilder` — 远程使用 ToolSpecifications，本地使用简单能力列表
 - `AdaptiveStrategySelector` — 本地不再需要策略分级
+- `RemoteCameraTools` — 相机工具已统一迁移至 `ToolRegistry`（`BaseUiTool` 体系），由 `ToolRegistry.buildToolSpecifications()` 统一生成 LangChain4j `ToolSpecification`
 
 ---
 

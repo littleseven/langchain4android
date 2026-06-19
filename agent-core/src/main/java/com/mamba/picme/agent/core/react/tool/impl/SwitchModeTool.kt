@@ -19,7 +19,7 @@ class SwitchModeTool : BaseUiTool() {
     override fun getDescription(): String = "切换拍摄模式。可选值：PHOTO（拍照）、VIDEO（录像）、PRO（专业模式）、DOCUMENT（文档模式）"
 
     override fun getParameters(): List<ToolParameter> = listOf(
-        ToolParameter("mode", "string", "拍摄模式: PHOTO|VIDEO|PRO|DOCUMENT", true)
+        ToolParameter("mode", "enum", "拍摄模式: PHOTO|VIDEO|PRO|DOCUMENT", true)
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {

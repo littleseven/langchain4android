@@ -19,7 +19,7 @@ class SwitchStyleTool : BaseUiTool() {
     override fun getDescription(): String = "切换艺术风格。可选值：NONE（无）、TOON（漫画）、SKETCH（素描）、POSTERIZE（海报）、EMBOSS（浮雕）、CROSSHATCH（交叉线）"
 
     override fun getParameters(): List<ToolParameter> = listOf(
-        ToolParameter("style", "string", "风格特效名称: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH", true)
+        ToolParameter("style", "enum", "风格特效名称: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH", true)
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {

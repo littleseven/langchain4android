@@ -19,7 +19,7 @@ class SwitchSceneTool : BaseUiTool() {
     override fun getDescription(): String = "切换场景模式。可选值：night（夜景）、moon（月亮）、none（普通）"
 
     override fun getParameters(): List<ToolParameter> = listOf(
-        ToolParameter("scene", "string", "场景模式: night|moon|none", true)
+        ToolParameter("scene", "enum", "场景模式: night|moon|none", true)
     )
 
     override fun execute(params: Map<String, Any>): ToolResult {

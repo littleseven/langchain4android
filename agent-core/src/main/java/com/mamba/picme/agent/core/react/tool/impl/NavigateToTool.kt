@@ -26,7 +26,7 @@ class NavigateToTool : BaseUiTool() {
     override fun getDescription(): String = "导航到指定页面。可选值：camera（相机）、gallery（相册）、settings（设置）、debug（调试）"
 
     override fun getParameters(): List<ToolParameter> = listOf(
-        ToolParameter("destination", "string", "目标页面: camera|gallery|settings|debug", true)
+        ToolParameter("destination", "enum", "目标页面: camera|gallery|settings|debug", true)
     )
 
     @OptIn(DelicateCoroutinesApi::class)

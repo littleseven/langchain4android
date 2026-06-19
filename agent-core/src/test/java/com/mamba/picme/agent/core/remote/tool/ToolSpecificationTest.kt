@@ -1,5 +1,6 @@
 package com.mamba.picme.agent.core.remote.tool
 
+import com.mamba.picme.agent.core.react.tool.ToolRegistry
 import dev.langchain4j.agent.tool.ToolSpecifications
 import org.junit.Test
 
@@ -13,7 +14,8 @@ class ToolSpecificationTest {
 
     @Test
     fun `verify switch_filter parameter names`() {
-        val specs = ToolSpecifications.toolSpecificationsFrom(RemoteCameraTools())
+        // ToolRegistry 已注册所有工具，从中获取 ToolSpecification 验证参数名
+        val specs = ToolRegistry.buildToolSpecifications()
         val switchFilterSpec = specs.find { it.name() == "switch_filter" }
             ?: throw AssertionError("switch_filter spec not found")
 
@@ -33,7 +35,7 @@ class ToolSpecificationTest {
 
     @Test
     fun `verify all tool parameter names`() {
-        val specs = ToolSpecifications.toolSpecificationsFrom(RemoteCameraTools())
+        val specs = ToolRegistry.buildToolSpecifications()
         for (spec in specs) {
             val props = spec.parameters()?.properties()
             println("Tool '${spec.name()}' parameters: ${props?.keys}")

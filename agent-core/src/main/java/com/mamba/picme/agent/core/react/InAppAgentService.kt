@@ -63,8 +63,7 @@ class InAppAgentService(
             gatewayToken = config.gatewayToken ?: ""
         )
     )
-    private val toolSet = InAppToolSet(windowManager)
-    private val toolSpecs = LangChain4jToolBridge.buildToolSpecifications(toolSet)
+    private val toolSpecs = LangChain4jToolBridge.buildToolSpecifications()
     private val running = AtomicBoolean(false)
     private val cancelled = AtomicBoolean(false)
     private val executor = Executors.newSingleThreadExecutor()

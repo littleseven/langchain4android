@@ -39,7 +39,7 @@ class RemotePromptBuilder(
             appendLine("5. 用户输入以\"拍照\"结尾时，最后一次调用必须是 capture。")
             appendLine("6. 用户要求拍多张时（如\"拍三张\"、\"连拍\"），调用多次 capture，中间可以插入 delay。")
             appendLine("7. 如果用户是闲聊或无法用现有函数表达，调用 text_reply 回复。")
-            appendLine("8. 不要在回复文本中输出 JSON 格式的工具调用，也不要使用 \u003Cthink\u003E 标签。")
+            appendLine("8. 不要在回复文本中输出 JSON 格式的工具调用，也不要使用 <think> 标签。")
             appendLine("9. 禁止输出 method/params 格式的 JSON 数组（如 [{\"method\":\"...\",\"params\":{}}]）。")
             appendLine()
             appendLine("【当前状态】")
@@ -47,11 +47,11 @@ class RemotePromptBuilder(
             appendLine()
             appendLine("可用函数列表请参考 tools 参数中的定义。")
             appendLine()
-            appendLine("【示例说明】")
-            appendLine("用户: 3秒后拍照 -> 调用 delay(delay_ms=3000) + capture()")
-            appendLine("用户: 5秒后换暖色滤镜拍照 -> 调用 delay(delay_ms=5000) + switch_filter(filter=WARM) + capture()")
-            appendLine("用户: 你好 -> 调用 text_reply(message=\"你好呀，我是小觅\")")
-            appendLine("用户: 磨皮50美白30 -> 调用 adjust_beauty(smoothing=50, whitening=30)")
+            appendLine("【示例说明】（仅描述意图，禁止模仿输出 JSON）")
+            appendLine("用户: 3秒后拍照 -> 先调用 delay 等待 3000ms，再调用 capture 拍照")
+            appendLine("用户: 5秒后换暖色滤镜拍照 -> 先调用 delay 等待 5000ms，再调用 switch_filter 切换 WARM 滤镜，最后调用 capture 拍照")
+            appendLine("用户: 你好 -> 调用 text_reply 回复问候")
+            appendLine("用户: 磨皮50美白30 -> 调用 adjust_beauty 同时传入 smoothing=50 和 whitening=30")
         }
     }
 
