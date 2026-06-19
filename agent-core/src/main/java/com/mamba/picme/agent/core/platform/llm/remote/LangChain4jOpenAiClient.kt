@@ -163,13 +163,13 @@ class LangChain4jOpenAiClient(
                                 if (choices == null || choices.length() == 0) continue
 
                                 val delta = choices.optJSONObject(0)?.optJSONObject("delta")
-                                val content = delta?.optString("content", null)
-                                if (content != null) {
+                                val content = delta?.optString("content")
+                                if (content != null && content != "null") {
                                     fullContent.append(content)
                                     handler.onPartialResponse(content)
                                 }
 
-                                val finishReason = choices.optJSONObject(0)?.optString("finish_reason", null)
+                                val finishReason = choices.optJSONObject(0)?.optString("finish_reason")
                                 if (finishReason != null && finishReason != "null") {
                                     val latencyMs = System.currentTimeMillis() - startTime
                                     Logger.d(tag, "Stream OK latency=${latencyMs}ms, tokens=${completionTokens}")
@@ -338,7 +338,7 @@ class LangChain4jOpenAiClient(
         val choice = choices.getJSONObject(0)
         val message = choice.optJSONObject("message") ?: return null to emptyList()
 
-        val content = message.optString("content", null)
+        val content = message.optString("content")
         val toolCalls = message.optJSONArray("tool_calls")
 
         if (toolCalls == null || toolCalls.length() == 0) {

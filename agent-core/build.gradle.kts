@@ -60,7 +60,8 @@ dependencies {
     // compileOnly + app 直接依赖：规避 Library 模块打包 AAR 时禁止直接依赖本地 .aar 限制
     compileOnly(files("libs/sherpa-onnx-1.10.46.aar"))
 
-    // LangChain4j ChatMemory（历史对话管理）
+    // LangChain4j BOM 管理依赖
+    implementation(platform(libs.langchain4j.bom))
     implementation(libs.langchain4j.core)
 
     // RecyclerView（ScrollTool 滚动检测）

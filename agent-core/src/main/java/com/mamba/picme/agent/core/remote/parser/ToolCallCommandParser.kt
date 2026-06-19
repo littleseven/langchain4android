@@ -172,13 +172,13 @@ object ToolCallCommandParser {
     // ==================== 系统/外部 App 命令解析 ====================
 
     private fun parseLaunchApp(args: JSONObject): AgentCommand.LaunchApp {
-        val packageName = args.optString("package_name", null as String?)
-        val appName = args.optString("app_name", null as String?)
-        val activityClass = args.optString("activity_class", null as String?)
+        val packageName = args.optString("package_name", "").takeIf { it.isNotEmpty() }
+        val appName = args.optString("app_name", "").takeIf { it.isNotEmpty() }
+        val activityClass = args.optString("activity_class", "").takeIf { it.isNotEmpty() }
         return AgentCommand.LaunchApp(
-            packageName = packageName?.ifEmpty { null },
-            appName = appName?.ifEmpty { null },
-            activityClass = activityClass?.ifEmpty { null }
+            packageName = packageName,
+            appName = appName,
+            activityClass = activityClass
         )
     }
 
@@ -213,8 +213,8 @@ object ToolCallCommandParser {
     // ==================== Gallery 命令解析 ====================
 
     private fun parseViewMedia(args: JSONObject): AgentCommand.ViewMedia {
-        val mediaId = args.optString("media_id", null as String?)
-        return AgentCommand.ViewMedia(mediaId = mediaId?.ifEmpty { null })
+        val mediaId = args.optString("media_id", "").takeIf { it.isNotEmpty() }
+        return AgentCommand.ViewMedia(mediaId = mediaId)
     }
 
     private fun parseDeleteMedia(args: JSONObject): AgentCommand.DeleteMedia {
