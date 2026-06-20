@@ -114,8 +114,8 @@ app/
 |--------|--------|
 | `dev.langchain4j` | `com.mamba.agent` |
 | `dev.langchain4j.service.AiServices` | `com.mamba.agent.service.AiServices` |
-| `dev.langchain4j.agent.tool.Tool` | `com.mamba.agent.agent.tool.Tool` |
-| `dev.langchain4j.model.chat.ChatLanguageModel` | `com.mamba.agent.model.chat.ChatLanguageModel` |
+| `dev.langchain4j.agent.tool.Tool` | `com.mamba.tool.Tool` |
+| `dev.langchain4j.model.chat.ChatLanguageModel` | `com.mamba.model.chat.ChatLanguageModel` |
 
 ### 5.2 替换范围
 
@@ -521,8 +521,8 @@ dependencies {
 ### 13.2 定义 Tool
 
 ```kotlin
-import com.mamba.agent.agent.tool.Tool
-import com.mamba.agent.agent.tool.P
+import com.mamba.tool.Tool
+import com.mamba.tool.P
 
 class WeatherTool {
     @Tool("获取指定城市的当前天气")
@@ -548,7 +548,7 @@ interface WeatherAgent {
 ### 13.4 构建并使用
 
 ```kotlin
-import com.mamba.agent.android.AgentFactory
+import com.mamba.android.AgentFactory
 
 class ChatViewModel : ViewModel() {
     private lateinit var agent: WeatherAgent
@@ -591,7 +591,7 @@ package com.mamba.agent.service;
 
 import com.mamba.agent.json.GsonJsonCodec;
 import com.mamba.agent.json.JsonCodec;
-import com.mamba.agent.model.chat.ChatLanguageModel;
+import com.mamba.model.chat.ChatLanguageModel;
 // ... 其他 import
 
 public class AiServices<T> {
@@ -605,15 +605,15 @@ public class AiServices<T> {
         // 强制检查：所有组件必须显式传入
         if (builder.chatLanguageModel == null) {
             throw new IllegalStateException(
-                "chatLanguageModel must be explicitly provided"
+                    "chatLanguageModel must be explicitly provided"
             );
         }
         this.chatLanguageModel = builder.chatLanguageModel;
         this.tools = builder.tools != null ? builder.tools : new Object[0];
         this.chatMemory = builder.chatMemory != null ?
-            builder.chatMemory : MessageWindowChatMemory.withMaxMessages(20);
+                builder.chatMemory : MessageWindowChatMemory.withMaxMessages(20);
         this.jsonCodec = builder.jsonCodec != null ?
-            builder.jsonCodec : new GsonJsonCodec();
+                builder.jsonCodec : new GsonJsonCodec();
     }
 
     public static <T> Builder<T> builder(Class<T> assistantClass) {
@@ -658,11 +658,11 @@ public class AiServices<T> {
 ### AgentFactory.kt
 
 ```kotlin
-package com.mamba.agent.android
+package com.mamba.android
 
-import com.mamba.agent.model.openai.OpenAiChatModel
+import com.mamba.model.openai.OpenAiChatModel
 import com.mamba.agent.service.AiServices
-import com.mamba.agent.memory.chat.MessageWindowChatMemory
+import com.mamba.memory.chat.MessageWindowChatMemory
 
 object AgentFactory {
 

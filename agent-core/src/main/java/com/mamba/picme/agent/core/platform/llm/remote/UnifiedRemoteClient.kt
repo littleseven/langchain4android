@@ -12,9 +12,9 @@ import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingApiClie
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingMessage
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingRequest
 import com.mamba.picme.agent.core.platform.llm.remote.claude.ClaudeCodingResponse
-import com.mamba.agent.data.message.AiMessage
-import com.mamba.agent.data.message.SystemMessage
-import com.mamba.agent.data.message.UserMessage
+import com.mamba.data.message.AiMessage
+import com.mamba.data.message.SystemMessage
+import com.mamba.data.message.UserMessage
 import kotlinx.coroutines.runBlocking
 import retrofit2.Response
 

@@ -142,7 +142,7 @@ mamba-agent/
 
 | 问题 | 修复方式 |
 |------|----------|
-| `loadFactories` 方法找不到 | 添加 `import static com.mamba.agent.spi.ServiceHelper.loadFactories;` 或使用 `ServiceHelper.loadFactories(...)` |
+| `loadFactories` 方法找不到 | 添加 `import static com.mamba.spi.ServiceHelper.loadFactories;` 或使用 `ServiceHelper.loadFactories(...)` |
 | `BatchPage` 类找不到 | 从 langchain4j-core 复制 `BatchPage.java` 和 `BatchPagination.java` |
 | `ModelType` 类找不到 | 从 langchain4j-core 复制 `ModelType.java` |
 | `JacksonJsonCodec` 类找不到 | 从 langchain4j-core 复制 `JacksonJsonCodec.java` |
@@ -206,7 +206,7 @@ dependencies {
 
 ```kotlin
 // 使用 OpenAI ChatModel
-import com.mamba.agent.model.openai.OpenAiChatModel
+import com.mamba.model.openai.OpenAiChatModel
 
 val chatModel = OpenAiChatModel.builder()
     .apiKey(apiKey)

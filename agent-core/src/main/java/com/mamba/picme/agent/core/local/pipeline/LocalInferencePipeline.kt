@@ -1,8 +1,6 @@
 package com.mamba.picme.agent.core.local.pipeline
 
 import com.mamba.picme.agent.core.api.LlmChatRequest
-import com.mamba.agent.data.message.SystemMessage
-import com.mamba.agent.data.message.UserMessage
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.execution.ExecutionPlan

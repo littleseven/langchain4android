@@ -11,28 +11,23 @@ import com.mamba.picme.agent.core.remote.parser.ToolCallCommandParser
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.LlmChatLanguageModel
 import com.mamba.picme.agent.core.api.LlmChatRequest
 import com.mamba.picme.agent.core.api.LlmChatResponse
-import com.mamba.picme.agent.core.api.ChatResponseMetadata
 import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
-import org.json.JSONArray
 import org.json.JSONObject
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
 import com.mamba.picme.agent.core.react.tool.ToolRegistry
-import com.mamba.agent.model.chat.request.json.JsonObjectSchema
-import com.mamba.agent.agent.tool.ToolExecutionRequest
-import com.mamba.agent.agent.tool.ToolSpecification
-import com.mamba.agent.data.message.AiMessage as LcAiMessage
-import com.mamba.agent.data.message.ChatMessage as LcChatMessage
-import com.mamba.agent.data.message.SystemMessage as LcSystemMessage
-import com.mamba.agent.data.message.UserMessage as LcUserMessage
-import com.mamba.agent.data.message.ToolExecutionResultMessage as LcToolExecutionResultMessage
-import com.mamba.agent.memory.ChatMemory
+import com.mamba.tool.ToolExecutionRequest
+import com.mamba.tool.ToolSpecification
+import com.mamba.data.message.AiMessage as LcAiMessage
+import com.mamba.data.message.ChatMessage as LcChatMessage
+import com.mamba.data.message.SystemMessage as LcSystemMessage
+import com.mamba.data.message.UserMessage as LcUserMessage
+import com.mamba.memory.ChatMemory
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -719,7 +714,7 @@ data class StreamMetrics(
 /**
  * 基于 DataStore 的 ChatMemory 实现
  *
- * 实现 [com.mamba.agent.memory.ChatMemory] 接口，
+ * 实现 [com.mamba.memory.ChatMemory] 接口，
  * 使用 [DataStoreChatMemoryStore] 作为后端持久化器。
  * 支持最大消息数限制（滑动窗口）。
  *

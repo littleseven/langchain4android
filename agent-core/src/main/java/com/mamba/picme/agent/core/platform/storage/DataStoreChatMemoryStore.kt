@@ -7,12 +7,12 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mamba.picme.agent.core.platform.logging.Logger
-import com.mamba.agent.data.message.AiMessage
-import com.mamba.agent.data.message.ChatMessage
-import com.mamba.agent.data.message.SystemMessage
-import com.mamba.agent.data.message.ToolExecutionResultMessage
-import com.mamba.agent.data.message.UserMessage
-import com.mamba.agent.store.memory.chat.ChatMemoryStore
+import com.mamba.data.message.AiMessage
+import com.mamba.data.message.ChatMessage
+import com.mamba.data.message.SystemMessage
+import com.mamba.data.message.ToolExecutionResultMessage
+import com.mamba.data.message.UserMessage
+import com.mamba.chat.ChatMemoryStore
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -25,7 +25,7 @@ private val Context.chatMemoryDataStore: DataStore<Preferences> by preferencesDa
  * LangChain4j ChatMemoryStore 的 DataStore 持久化实现
  *
  * 将对话历史以 JSON 格式持久化到 Android DataStore。
- * 充当 [com.mamba.agent.store.memory.chat.MessageWindowChatMemory] 的后端存储层。
+ * 充当 [com.mamba.chat.MessageWindowChatMemory] 的后端存储层。
  *
  * **线程模型**：使用 runBlocking 桥接同步 → 异步，内部由 DataStore 保证原子性。
  */
@@ -117,7 +117,7 @@ class DataStoreChatMemoryStore(private val context: Context) : ChatMemoryStore {
                     "system" -> messages.add(SystemMessage.from(content))
                     "tool" -> messages.add(
                         ToolExecutionResultMessage.from(
-                            com.mamba.agent.agent.tool.ToolExecutionRequest.builder()
+                            com.mamba.tool.ToolExecutionRequest.builder()
                                 .id("")
                                 .name("")
                                 .arguments("{}")

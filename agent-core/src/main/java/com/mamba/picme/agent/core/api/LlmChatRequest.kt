@@ -1,8 +1,8 @@
 package com.mamba.picme.agent.core.api
 
-import com.mamba.agent.agent.tool.ToolSpecification
-import com.mamba.agent.data.message.ChatMessage
-import com.mamba.agent.model.chat.request.ToolChoice
+import com.mamba.tool.ToolSpecification
+import com.mamba.data.message.ChatMessage
+import com.mamba.model.chat.request.ToolChoice
 
 /**
  * LLM 聊天请求

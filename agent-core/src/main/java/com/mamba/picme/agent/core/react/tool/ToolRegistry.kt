@@ -19,12 +19,8 @@ import com.mamba.picme.agent.core.react.tool.impl.SwitchSceneTool
 import com.mamba.picme.agent.core.react.tool.impl.SwitchStyleTool
 import com.mamba.picme.agent.core.react.tool.impl.ToggleRecordingTool
 import com.mamba.picme.agent.core.react.tool.impl.SwitchModeTool
-import com.mamba.agent.agent.tool.ToolSpecification
-import com.mamba.agent.model.chat.request.json.JsonEnumSchema
-import com.mamba.agent.model.chat.request.json.JsonIntegerSchema
-import com.mamba.agent.model.chat.request.json.JsonNumberSchema
-import com.mamba.agent.model.chat.request.json.JsonObjectSchema
-import com.mamba.agent.model.chat.request.json.JsonStringSchema
+import com.mamba.tool.ToolSpecification
+import com.mamba.model.chat.request.json.JsonObjectSchema
 
 /**
  * 应用内 UI Agent Tool 注册中心。

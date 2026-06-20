@@ -12,11 +12,11 @@ import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
-import com.mamba.agent.data.message.AiMessage
-import com.mamba.agent.data.message.ChatMessage
-import com.mamba.agent.data.message.SystemMessage
-import com.mamba.agent.data.message.ToolExecutionResultMessage
-import com.mamba.agent.data.message.UserMessage
+import com.mamba.data.message.AiMessage
+import com.mamba.data.message.ChatMessage
+import com.mamba.data.message.SystemMessage
+import com.mamba.data.message.ToolExecutionResultMessage
+import com.mamba.data.message.UserMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope

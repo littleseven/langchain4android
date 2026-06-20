@@ -1,7 +1,6 @@
 package com.mamba.picme.agent.core.remote.tool
 
 import com.mamba.picme.agent.core.react.tool.ToolRegistry
-import com.mamba.agent.agent.tool.ToolSpecifications
 import org.junit.Test
 
 /**

@@ -17,7 +17,7 @@ import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
 import com.mamba.picme.core.common.Logger
-import com.mamba.agent.model.chat.request.json.JsonObjectSchema
+import com.mamba.model.chat.request.json.JsonObjectSchema
 
 /**
  * 相机控制 Capability（页面级）

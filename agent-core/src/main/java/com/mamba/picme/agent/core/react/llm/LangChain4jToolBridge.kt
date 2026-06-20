@@ -1,8 +1,8 @@
 package com.mamba.picme.agent.core.react.llm
 
 import com.mamba.picme.agent.core.react.tool.ToolRegistry
-import com.mamba.agent.agent.tool.ToolExecutionRequest
-import com.mamba.agent.agent.tool.ToolSpecification
+import com.mamba.tool.ToolExecutionRequest
+import com.mamba.tool.ToolSpecification
 import org.json.JSONObject
 
 /**
