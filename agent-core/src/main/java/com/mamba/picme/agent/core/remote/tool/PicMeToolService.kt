@@ -52,7 +52,7 @@ class PicMeToolService(
 
     // ==================== UI 感知工具 ====================
 
-    @Tool("获取当前屏幕的 UI 层级树信息（纯文本描述），包含所有可见元素的 class/id/text/bounds/clickable/scrollable 等属性。这是感知 UI 状态的唯一途径。")
+    @Tool(name = "get_screen_info", value = ["获取当前屏幕的 UI 层级树信息（纯文本描述），包含所有可见元素的 class/id/text/bounds/clickable/scrollable 等属性。这是感知 UI 状态的唯一途径。"])
     fun getScreenInfo(): String {
         val rootView = currentRootView
             ?: return "Error: No activity root view available"
@@ -72,7 +72,7 @@ class PicMeToolService(
         }
     }
 
-    @Tool("点击屏幕上的元素。支持通过坐标(x,y)或文本(text)定位目标。")
+    @Tool(name = "click", value = ["点击屏幕上的元素。支持通过坐标(x,y)或文本(text)定位目标。"])
     fun click(
         @P("X coordinate (use with y, mutually exclusive with text)") x: Int? = null,
         @P("Y coordinate (use with x, mutually exclusive with text)") y: Int? = null,
@@ -117,7 +117,7 @@ class PicMeToolService(
         }
     }
 
-    @Tool("在输入框中输入文本")
+    @Tool(name = "input_text", value = ["在输入框中输入文本"])
     fun inputText(
         @P("要输入的文本内容") text: String,
         @P("是否先清空现有文本，默认 true") clearFirst: Boolean = true
@@ -148,7 +148,7 @@ class PicMeToolService(
         return "Error: No EditText found on current screen"
     }
 
-    @Tool("在屏幕上滑动滚动。支持按方向（up/down）滑动。")
+    @Tool(name = "scroll", value = ["在屏幕上滑动滚动。支持按方向（up/down）滑动。"])
     fun scroll(
         @P("滚动方向: up|down") direction: String,
         @P("滚动距离: page|small，默认 page") distance: String = "page"
@@ -177,7 +177,7 @@ class PicMeToolService(
         return "Error: No scrollable container found on current screen"
     }
 
-    @Tool("返回上一页")
+    @Tool(name = "go_back", value = ["返回上一页"])
     fun goBack(): String {
         val activity = currentActivity ?: return "Error: No current activity reference available"
         return try {
@@ -194,7 +194,7 @@ class PicMeToolService(
 
     // ==================== 导航工具 ====================
 
-    @Tool("导航到指定页面。可选值：camera（相机）、gallery（相册）、settings（设置）、debug（调试）")
+    @Tool(name = "navigate_to", value = ["导航到指定页面。可选值：camera（相机）、gallery（相册）、settings（设置）、debug（调试）"])
     fun navigateTo(
         @P("目标页面: camera|gallery|settings|debug") destination: String
     ): String {
@@ -207,22 +207,22 @@ class PicMeToolService(
 
     // ==================== 相机控制工具 ====================
 
-    @Tool("拍照并保存到相册")
+    @Tool(name = "capture", value = ["拍照并保存到相册"])
     fun capture(): String {
         return executeCameraCommand("capture", emptyMap())
     }
 
-    @Tool("切换前后摄像头")
+    @Tool(name = "flip_camera", value = ["切换前后摄像头"])
     fun flipCamera(): String {
         return executeCameraCommand("flip_camera", emptyMap())
     }
 
-    @Tool("切换录像状态（开始或停止录像）")
+    @Tool(name = "toggle_recording", value = ["切换录像状态（开始或停止录像）"])
     fun toggleRecording(): String {
         return executeCameraCommand("toggle_recording", emptyMap())
     }
 
-    @Tool("切换拍摄模式。可选值：PHOTO（拍照）、VIDEO（录像）、PRO（专业模式）、DOCUMENT（文档模式）")
+    @Tool(name = "switch_mode", value = ["切换拍摄模式。可选值：PHOTO（拍照）、VIDEO（录像）、PRO（专业模式）、DOCUMENT（文档模式）"])
     fun switchMode(
         @P("拍摄模式: PHOTO|VIDEO|PRO|DOCUMENT") mode: String
     ): String {
@@ -233,7 +233,7 @@ class PicMeToolService(
         return executeCameraCommand("switch_mode", mapOf("mode" to mode.uppercase()))
     }
 
-    @Tool("调整美颜参数。只传入需要调整的参数，未传入的参数保持不变。")
+    @Tool(name = "adjust_beauty", value = ["调整美颜参数。只传入需要调整的参数，未传入的参数保持不变。"])
     fun adjustBeauty(
         @P("磨皮程度 0~100") smoothing: Double? = null,
         @P("美白程度 0~100") whitening: Double? = null,
@@ -254,21 +254,21 @@ class PicMeToolService(
         return executeCameraCommand("adjust_beauty", params)
     }
 
-    @Tool("调整曝光补偿，范围 -2 到 2")
+    @Tool(name = "adjust_exposure", value = ["调整曝光补偿，范围 -2 到 2"])
     fun adjustExposure(
         @P("曝光补偿 -2~2") exposure: Int
     ): String {
         return executeCameraCommand("adjust_exposure", mapOf("exposure" to exposure.coerceIn(-2, 2)))
     }
 
-    @Tool("调整变焦倍数，最小 0.5x，最大 10.0x")
+    @Tool(name = "adjust_zoom", value = ["调整变焦倍数，最小 0.5x，最大 10.0x"])
     fun adjustZoom(
         @P("变焦比例 0.5~10.0") zoom: Double
     ): String {
         return executeCameraCommand("adjust_zoom", mapOf("zoom" to zoom.coerceIn(0.5, 10.0)))
     }
 
-    @Tool("切换相机滤镜。可选值：NONE、LEICA_CLASSIC、LEICA_VIBRANT、LEICA_BW、FILM_GOLD、FILM_FUJI、VINTAGE、COOL、WARM")
+    @Tool(name = "switch_filter", value = ["切换相机滤镜。可选值：NONE、LEICA_CLASSIC、LEICA_VIBRANT、LEICA_BW、FILM_GOLD、FILM_FUJI、VINTAGE、COOL、WARM"])
     fun switchFilter(
         @P("滤镜名称: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM") filter: String
     ): String {
@@ -279,7 +279,7 @@ class PicMeToolService(
         return executeCameraCommand("switch_filter", mapOf("filter" to filter.uppercase()))
     }
 
-    @Tool("切换艺术风格。可选值：NONE、TOON、SKETCH、POSTERIZE、EMBOSS、CROSSHATCH")
+    @Tool(name = "switch_style", value = ["切换艺术风格。可选值：NONE、TOON、SKETCH、POSTERIZE、EMBOSS、CROSSHATCH"])
     fun switchStyle(
         @P("风格特效名称: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH") style: String
     ): String {
@@ -290,7 +290,7 @@ class PicMeToolService(
         return executeCameraCommand("switch_style", mapOf("style" to style.uppercase()))
     }
 
-    @Tool("切换场景模式。可选值：night（夜景）、moon（月亮）、none（普通）")
+    @Tool(name = "switch_scene", value = ["切换场景模式。可选值：night（夜景）、moon（月亮）、none（普通）"])
     fun switchScene(
         @P("场景模式: night|moon|none") scene: String
     ): String {
@@ -301,7 +301,7 @@ class PicMeToolService(
         return executeCameraCommand("switch_scene", mapOf("scene" to scene.lowercase()))
     }
 
-    @Tool("切换画面比例。可选值：4:3、16:9、full（全屏）")
+    @Tool(name = "switch_ratio", value = ["切换画面比例。可选值：4:3、16:9、full（全屏）"])
     fun switchRatio(
         @P("画幅比例: 4:3|16:9|full") ratio: String
     ): String {
@@ -312,7 +312,7 @@ class PicMeToolService(
         return executeCameraCommand("switch_ratio", mapOf("ratio" to ratio))
     }
 
-    @Tool("当任务完成时调用此工具，提供任务完成摘要")
+    @Tool(name = "finish", value = ["当任务完成时调用此工具，提供任务完成摘要"])
     fun finish(
         @P("任务完成摘要") summary: String
     ): String {

@@ -11,8 +11,8 @@ import com.mamba.data.message.ToolExecutionResultMessage
 import com.mamba.data.message.UserMessage
 import com.mamba.memory.ChatMemory
 import com.mamba.model.chat.request.ChatRequest
-import com.mamba.model.chat.request.DefaultChatRequestParameters
 import com.mamba.model.chat.request.ToolChoice
+import com.mamba.model.openai.OpenAiChatRequestParameters
 import com.mamba.model.chat.response.ChatResponse
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
@@ -188,8 +188,9 @@ class InAppAgentService(
                     .messages(messages)
                     .toolSpecifications(toolSpecs)
                     .parameters(
-                        DefaultChatRequestParameters.builder()
+                        OpenAiChatRequestParameters.builder()
                             .toolChoice(ToolChoice.AUTO)
+                            .customParameters(mapOf("thinking" to mapOf("type" to "disabled")))
                             .build()
                     )
                     .build()
