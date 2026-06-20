@@ -27,7 +27,7 @@ public class AudioFile {
 
         if (audio.base64Data() != null) {
             try {
-                return java.util.Base64.getDecoder().decode(audio.base64Data());
+                return android.util.Base64.decode(audio.base64Data(), android.util.Base64.DEFAULT);
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid base64 audio data provided", e);
             }

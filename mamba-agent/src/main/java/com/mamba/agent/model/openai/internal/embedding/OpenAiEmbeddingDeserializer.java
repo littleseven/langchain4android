@@ -1,5 +1,7 @@
 package com.mamba.agent.model.openai.internal.embedding;
 
+import android.util.Base64;
+
 import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
@@ -10,7 +12,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
 class OpenAiEmbeddingDeserializer extends JsonDeserializer<List<Float>> {
@@ -24,7 +25,7 @@ class OpenAiEmbeddingDeserializer extends JsonDeserializer<List<Float>> {
             return jsonParser.readValueAs(FLOAT_LIST_TYPE_REFERENCE);
         } else if (token == JsonToken.VALUE_STRING) {
             String base64 = jsonParser.getValueAsString();
-            byte[] decodedBytes = Base64.getDecoder().decode(base64);
+            byte[] decodedBytes = Base64.decode(base64, Base64.DEFAULT);
 
             ByteBuffer byteBuffer = ByteBuffer.wrap(decodedBytes);
             byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
