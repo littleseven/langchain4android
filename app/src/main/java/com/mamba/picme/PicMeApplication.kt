@@ -80,6 +80,10 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
 
+        // 显式指定 SLF4J Provider，绕过 SPI 扫描机制。
+        // 必须在任何 SLF4J Logger 首次使用前设置，否则不生效。
+        System.setProperty("slf4j.provider", "com.mamba.android.slf4j.AndroidSLF4JServiceProvider")
+
         // 预加载 Native 库（agent-core 模块依赖这些库，但 agent-core 不直接依赖 beauty-engine
         // 的 aar，因此需要在 Application 中统一加载，确保类加载器命名空间可见）
         loadNativeLibraries()

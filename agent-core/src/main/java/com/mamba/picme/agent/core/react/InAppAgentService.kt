@@ -10,7 +10,10 @@ import com.mamba.data.message.SystemMessage
 import com.mamba.data.message.ToolExecutionResultMessage
 import com.mamba.data.message.UserMessage
 import com.mamba.memory.ChatMemory
+import com.mamba.model.chat.request.ChatRequest
+import com.mamba.model.chat.request.DefaultChatRequestParameters
 import com.mamba.model.chat.request.ToolChoice
+import com.mamba.model.chat.response.ChatResponse
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
 import com.mamba.picme.agent.core.remote.tool.PicMeToolService
@@ -50,6 +53,8 @@ class InAppAgentService(
             .baseUrl(config.baseUrl)
             .model(config.modelName)
             .temperature(config.temperature)
+            .logRequests(true)
+            .logResponses(true)
 
         config.gatewayToken?.let {
             builder.customHeader("X-Gateway-Token", it)
@@ -177,14 +182,54 @@ class InAppAgentService(
                 val messages = memory.messages()
                 Logger.d(TAG, "Current message count: ${messages.size}")
 
-                // 使用 MambaChatHelper 调用 LLM（带工具）
-                Logger.d(TAG, "Calling LLM chatWithTools, toolSpecs=${toolSpecs.size}")
-                val response = chatHelper.chat(
-                    messages
-                )
+                // 使用 ChatModel 直接调用 LLM（必须传入 toolSpecifications）
+                Logger.d(TAG, "Calling LLM with tools, toolSpecs=${toolSpecs.size}")
+                val request = ChatRequest.builder()
+                    .messages(messages)
+                    .toolSpecifications(toolSpecs)
+                    .parameters(
+                        DefaultChatRequestParameters.builder()
+                            .toolChoice(ToolChoice.AUTO)
+                            .build()
+                    )
+                    .build()
+
+                // 打印 Request 详情（用于诊断）
+                val requestLog = buildString {
+                    appendLine("=== LLM Request ===")
+                    appendLine("model=${config.modelName}, tools=${toolSpecs.size}")
+                    messages.forEachIndexed { idx, msg ->
+                        val type = msg::class.simpleName?.replace("Message", "") ?: "Unknown"
+                        val text = when (msg) {
+                            is UserMessage -> msg.singleText()
+                            is SystemMessage -> msg.text()
+                            is AiMessage -> msg.text()?.take(200) ?: ""
+                            is ToolExecutionResultMessage -> msg.text().take(200)
+                            else -> msg.toString().take(200)
+                        }
+                        appendLine("  [$idx] $type: $text")
+                    }
+                    appendLine("===================")
+                }
+                Logger.d(TAG, requestLog)
+
+                val response = chatModel.chat(request)
                 val aiMessage = response.aiMessage()
 
-                Logger.d(TAG, "LLM response: content='${aiMessage.text().take(100)}', hasTools=${aiMessage.hasToolExecutionRequests()}")
+                // 打印 Response 详情（用于诊断）
+                val responseLog = buildString {
+                    appendLine("=== LLM Response ===")
+                    appendLine("content='${aiMessage.text()?.take(200) ?: ""}'")
+                    appendLine("hasToolCalls=${aiMessage.hasToolExecutionRequests()}")
+                    val toolRequests = aiMessage.toolExecutionRequests()
+                    if (toolRequests != null && toolRequests.isNotEmpty()) {
+                        toolRequests.forEach { req ->
+                            appendLine("  tool: ${req.name()}(${req.arguments()?.take(100) ?: ""})")
+                        }
+                    }
+                    appendLine("====================")
+                }
+                Logger.d(TAG, responseLog)
 
                 // 将 AI 响应添加到 ChatMemory
                 memory.add(aiMessage)
