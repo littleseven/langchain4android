@@ -1,0 +1,85 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.0.21'
+}
+
+android {
+    namespace = 'com.mamba.agent'
+    compileSdk = 35
+
+    defaultConfig {
+        minSdk = 24
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles(
+                getDefaultProguardFile('proguard-android-optimize.txt'),
+                'proguard-rules.pro'
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
+    }
+}
+
+dependencies {
+    // ─── 核心依赖（原 langchain4j-core + open-ai + http-client-okhttp 合并） ───
+
+    // JSON 序列化（替换 Jackson）
+    api 'com.google.code.gson:gson:2.11.0'
+
+    // HTTP 客户端（OkHttp）
+    api 'com.squareup.okhttp3:okhttp:4.12.0'
+    api 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    api 'com.squareup.okhttp3:okhttp-sse:4.12.0'
+
+    // 日志（保留 SLF4J API，由调用方选择桥接实现）
+    api 'org.slf4j:slf4j-api:2.0.16'
+
+    // JSpecify（空安全注解）
+    api 'org.jspecify:jspecify:1.0.0'
+
+    // Jackson（OpenAI DTO 序列化/反序列化需要）
+    api 'com.fasterxml.jackson.core:jackson-databind:2.14.3'
+    api 'com.fasterxml.jackson.core:jackson-core:2.14.3'
+    api 'com.fasterxml.jackson.core:jackson-annotations:2.14.3'
+
+    // ─── Android 生态（原 mamba-agent-android 合并） ───
+
+    // Lifecycle
+    api 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7'
+    api 'androidx.lifecycle:lifecycle-common:2.8.7'
+    api 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+
+    // Room（可选，用于 ChatMemory 持久化）
+    api 'androidx.room:room-runtime:2.6.1'
+    api 'androidx.room:room-ktx:2.6.1'
+
+    // Coroutines
+    api 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
+    // ─── 测试 ───
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.mockito:mockito-core:5.14.0'
+    testImplementation 'com.google.truth:truth:1.4.4'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+
+    // ─── 已删除的依赖 ───
+    // ❌ jackson-databind / jackson-core / jackson-annotations
+    // ❌ opennlp-tools
+    // ❌ java.net.http.HttpClient（JDK 11+）
+    // ❌ ServiceLoader SPI 相关
+}
