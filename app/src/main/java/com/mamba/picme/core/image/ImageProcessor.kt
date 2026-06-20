@@ -70,6 +70,7 @@ interface ImageProcessor {
         cachedFaces: List<Face>,
         beautyStrategy: BeautyStrategy,
         coroutineScope: CoroutineScope?,
+        source: String? = null,
         onPhotoFinished: (success: Boolean) -> Unit = {}
     )
 
@@ -84,6 +85,7 @@ interface ImageProcessor {
         cachedFaces: List<Face>,
         beautyStrategy: BeautyStrategy,
         executor: Executor,
+        source: String? = null,
         onPhotoFinished: (success: Boolean) -> Unit = {}
     )
 
@@ -162,6 +164,7 @@ class ImageProcessorImpl(
         cachedFaces: List<Face>,
         beautyStrategy: BeautyStrategy,
         coroutineScope: CoroutineScope?,
+        source: String?,
         onPhotoFinished: (success: Boolean) -> Unit
     ) {
         takePhoto(
@@ -182,6 +185,7 @@ class ImageProcessorImpl(
                 Logger.w(TAG, "CameraThreadRegistry not initialized, falling back to MainExecutor")
                 ContextCompat.getMainExecutor(context)
             },
+            source = source,
             onPhotoFinished = onPhotoFinished
         )
     }
@@ -197,9 +201,10 @@ class ImageProcessorImpl(
         cachedFaces: List<Face>,
         beautyStrategy: BeautyStrategy,
         executor: Executor,
+        source: String?,
         onPhotoFinished: (success: Boolean) -> Unit
     ) {
-        Logger.d(TAG, "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy")
+        Logger.d(TAG, "takePhoto called with filter=$filter, beauty=$beauty, lensFacing=$lensFacing, cachedFaces=${cachedFaces.size}, beautyStrategy=$beautyStrategy, source=$source")
 
         val name = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(System.currentTimeMillis())
 
@@ -254,7 +259,7 @@ class ImageProcessorImpl(
                             val emergencyBitmapForSave = applyCaptureFallbackEffects(stableOriginalForSave, filter)
                             Handler(Looper.getMainLooper()).post {
                                 val saved = saveBitmapToMediaStore(
-                                    context, emergencyBitmapForSave, name, viewModel, false, null, mode
+                                    context, emergencyBitmapForSave, name, viewModel, false, null, mode, source
                                 )
                                 onPhotoFinished(saved)
                             }
@@ -287,7 +292,7 @@ class ImageProcessorImpl(
                         }
                         Handler(Looper.getMainLooper()).post {
                             val saved = saveBitmapToMediaStore(
-                                context, bitmapForSave, name, viewModel, hasFace, faceId, mode
+                                context, bitmapForSave, name, viewModel, hasFace, faceId, mode, source
                             )
                             if (bitmapForSave !== stableOriginalForSave && !stableOriginalForSave.isRecycled) {
                                 stableOriginalForSave.recycle()
@@ -304,7 +309,7 @@ class ImageProcessorImpl(
                         )
                         Handler(Looper.getMainLooper()).post {
                             val saved = saveBitmapToMediaStore(
-                                context, fallbackBitmapForSave, name, viewModel, false, null, mode
+                                context, fallbackBitmapForSave, name, viewModel, false, null, mode, source
                             )
                             if (fallbackBitmapForSave !== stableOriginalForSave && !stableOriginalForSave.isRecycled) {
                                 stableOriginalForSave.recycle()
@@ -431,7 +436,8 @@ class ImageProcessorImpl(
         viewModel: MediaViewModel,
         hasFace: Boolean,
         faceId: String?,
-        mode: MediaType
+        mode: MediaType,
+        source: String? = null
     ): Boolean {
         if (bitmap.isRecycled) {
             Logger.e(TAG, "Skip saving image: bitmap already recycled")
@@ -466,8 +472,10 @@ class ImageProcessorImpl(
                 captureDate = System.currentTimeMillis(),
                 fileName = name,
                 hasFace = hasFace,
-                faceId = faceId
+                faceId = faceId,
+                source = source
             )
+            Logger.i(TAG, "保存照片到媒体库: uri=${it}, source=$source, hasFace=$hasFace")
             viewModel.insertMedia(asset)
             saveSucceeded = true
         } ?: Logger.e(TAG, "Failed to insert image into MediaStore")

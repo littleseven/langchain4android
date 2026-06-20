@@ -22,6 +22,7 @@ import com.mamba.picme.core.image.ImageProcessor
 import com.mamba.picme.domain.model.BeautyStrategy
 import com.mamba.picme.agent.core.api.context.MediaAsset
 import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.domain.agent.remote.FeishuPhotoTracker
 import com.mamba.picme.features.camera.state.CameraStateMachine
 import com.mamba.picme.features.camera.state.CameraStateManager
 import com.mamba.picme.features.gallery.MediaViewModel
@@ -85,12 +86,30 @@ internal fun handleCaptureClick(
         val capture = imageCapture
         if (capture == null) {
             Logger.w(TAG, "Capture skipped: ImageCapture is null")
+            // [飞书远程拍照] ImageCapture 未就绪时，通知用户拍照失败
+            if (FeishuPhotoTracker.hasPendingCapture()) {
+                val pendingMessageId = FeishuPhotoTracker.consumePendingMessageId()
+                if (pendingMessageId != null) {
+                    Logger.w(TAG, "Feishu photo capture failed: ImageCapture not ready, messageId=$pendingMessageId")
+                    try {
+                        val app = context.applicationContext as? com.mamba.picme.PicMeApplication
+                        app?.feishuChannelHandler?.sendMessage(
+                            "抱歉，相机还没准备好，请稍等片刻再试",
+                            pendingMessageId
+                        )
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "Failed to send feishu error notification", e)
+                    }
+                }
+            }
             cameraStateManager?.forceSetState(
                 CameraStateMachine.Previewing(lensFacing, captureMode.ordinal)
             )
             return
         }
 
+        val photoSource = if (FeishuPhotoTracker.hasPendingCapture()) "feishu_remote" else null
+        Logger.i(TAG, "开始拍照: hasPendingCapture=${FeishuPhotoTracker.hasPendingCapture()}, source=$photoSource")
         imageProcessor.takePhoto(
             context = context,
             imageCapture = capture,
@@ -102,10 +121,28 @@ internal fun handleCaptureClick(
             cachedFaces = cachedFaces,
             beautyStrategy = beautyStrategy,
             coroutineScope = coroutineScope,
+            source = photoSource,
             onPhotoFinished = { success ->
                 cameraStateManager?.let { manager ->
                     if (!success) {
                         Logger.w(TAG, "Photo processing failed, recovering to Previewing")
+                        // [飞书远程拍照] 拍照失败时，如果有 pendingMessageId，发送失败通知
+                        if (photoSource != null) {
+                            val pendingMessageId = FeishuPhotoTracker.consumePendingMessageId()
+                            if (pendingMessageId != null) {
+                                Logger.w(TAG, "Feishu photo capture failed, notifying user: messageId=$pendingMessageId")
+                                // 通知飞书用户拍照失败 - 通过应用容器获取 FeishuChannelHandler
+                                try {
+                                    val app = context.applicationContext as? com.mamba.picme.PicMeApplication
+                                    app?.feishuChannelHandler?.sendMessage(
+                                        "抱歉，拍照失败了，请再试一次",
+                                        pendingMessageId
+                                    )
+                                } catch (e: Exception) {
+                                    Logger.e(TAG, "Failed to send feishu error notification", e)
+                                }
+                            }
+                        }
                     }
                     try {
                         manager.transition(

@@ -66,6 +66,9 @@ class RemoteCommandDispatcher(
      * 统一通过 [AgentOrchestrator.processFeishuInput] 执行 ReAct 循环，
      * 当 Agent 不可用时回退到原有 [AgentOrchestrator.processUserInput] 路径。
      * 所有收发消息同步写入本地聊天记录。
+     *
+     * **飞书拍照追踪**：若命令包含拍照意图，设置 [FeishuPhotoTracker] 状态，
+     * 照片保存完成后自动发送到飞书。
      */
     suspend fun dispatch(text: String, messageId: String) {
         Logger.i(tag, "远程命令: text='$text', messageId=$messageId")
@@ -76,6 +79,12 @@ class RemoteCommandDispatcher(
 
         // 持久化收到的飞书用户消息
         saveUserMessage(text)
+
+        // 若用户请求包含拍照，标记追踪器（照片保存后自动发送）
+        if (text.contains("拍照") || text.contains("拍张") || text.contains("拍照片")) {
+            FeishuPhotoTracker.startCapture(messageId)
+            Logger.i(tag, "飞书拍照追踪已启动: messageId=$messageId")
+        }
 
         withContext(Dispatchers.IO) {
             channelHandler.sendMessage("⏳ 正在处理您的请求...", messageId)
@@ -92,9 +101,25 @@ class RemoteCommandDispatcher(
                         onFailure = { error -> "❌ ${error.message ?: "未知错误"}" }
                     )
                     Logger.i(tag, "远程命令执行完毕，回复：$reply")
+
+                    // [飞书拍照] 如果包含拍照命令，Agent 回复改为"处理中"提示
+                    // 实际拍照成功/失败由 observeFeishuPhotoCapture 通知
+                    val isPhotoCommand = text.contains("拍照") || text.contains("拍张") || text.contains("拍照片")
+                    val finalReply = if (isPhotoCommand) {
+                        // 如果 Agent 已经说了类似"拍好了"的话，保持不变
+                        // 否则替换为处理中提示
+                        if (reply.contains("拍") && (reply.contains("好") || reply.contains("成功") || reply.contains("完成"))) {
+                            "📸 正在拍照，请稍候..."
+                        } else {
+                            reply
+                        }
+                    } else {
+                        reply
+                    }
+
                     // 持久化 Agent 回复
-                    saveAgentMessage(reply)
-                    channelHandler.sendMessage(reply, messageId)
+                    saveAgentMessage(finalReply)
+                    channelHandler.sendMessage(finalReply, messageId)
                 } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                     val timeoutMsg = "⏰ 处理超时（${TIMEOUT_MS / 1000}秒），请稍后重试"
                     saveAgentMessage(timeoutMsg)

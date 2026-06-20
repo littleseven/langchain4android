@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.automirrored.rounded.ShortText
@@ -311,7 +312,8 @@ private fun ChatTopBar(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChatMessageItem(message: ChatMessageUi) {
-    val isUser = message.type == ChatMessageType.USER_TEXT
+    val isUser = message.type == ChatMessageType.USER_TEXT || message.type == ChatMessageType.USER_IMAGE
+    val isImage = message.type == ChatMessageType.AGENT_IMAGE || message.type == ChatMessageType.USER_IMAGE
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
@@ -339,20 +341,34 @@ private fun ChatMessageItem(message: ChatMessageUi) {
                     )
                 }
         ) {
-            if (isUser) {
-                Text(
-                    text = message.content,
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
-            } else {
-                MarkdownText(
-                    markdown = message.content,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp
-                )
+            when {
+                isImage -> {
+                    // 显示图片
+                    AsyncImage(
+                        model = message.content,
+                        contentDescription = "图片",
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    )
+                }
+                isUser -> {
+                    Text(
+                        text = message.content,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                }
+                else -> {
+                    MarkdownText(
+                        markdown = message.content,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 14.sp,
+                        lineHeight = 20.sp
+                    )
+                }
             }
             if (message.modelUsed != null) {
                 Text(

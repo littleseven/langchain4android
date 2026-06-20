@@ -22,6 +22,7 @@ import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 // Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
 import com.mamba.picme.domain.agent.remote.FeishuChannelHandler
+import com.mamba.picme.domain.agent.remote.FeishuPhotoTracker
 import com.mamba.picme.domain.agent.remote.RemoteCommandDispatcher
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.beauty.internal.facedetect.adapter.FaceLandmarkAdapterRegistry
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class PicMeApplication : Application(), ImageLoaderFactory {
 
@@ -177,6 +179,9 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         // 同步 AI Agent 模式到 AgentOrchestrator，确保飞书远程控制
         // 的路由遵循用户在设置中选定的推理模式（LOCAL/REMOTE/OFF）
         syncAgentModeToOrchestrator()
+
+        // 监听媒体库变化：飞书远程拍照完成后自动发送照片到飞书
+        observeFeishuPhotoCapture()
     }
 
     /**
@@ -280,6 +285,103 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     }
 
     /**
+     * 监听媒体库变化，飞书远程拍照完成后自动发送照片到飞书
+     *
+     * 当 [FeishuPhotoTracker] 标记了 pending capture 且照片保存到媒体库后，
+     * 此监听器会检测到 source="feishu_remote" 的新照片，执行以下操作：
+     * 1. 将照片写入飞书聊天记录（agent_image 类型）
+     * 2. 通过飞书通道发送图片文件到飞书
+     */
+    private fun observeFeishuPhotoCapture() {
+        applicationScope.launch {
+            try {
+                val chatMessageDao = com.mamba.picme.data.local.AppDatabase.getDatabase(this@PicMeApplication).chatMessageDao()
+                val chatSessionDao = com.mamba.picme.data.local.AppDatabase.getDatabase(this@PicMeApplication).chatSessionDao()
+                val feishuSessionId = "feishu"
+
+                repository.allMedia.collect { mediaList ->
+                    Logger.d(TAG, "allMedia emit: size=${mediaList.size}, sources=${mediaList.map { it.source }}")
+
+                    // 查找来源为飞书远程控制的新照片
+                    val feishuPhotos = mediaList.filter { it.source == "feishu_remote" && it.type == com.mamba.picme.agent.core.api.context.MediaType.PHOTO }
+                    if (feishuPhotos.isEmpty()) {
+                        Logger.d(TAG, "没有检测到 feishu_remote 来源的照片")
+                        return@collect
+                    }
+                    Logger.d(TAG, "检测到 ${feishuPhotos.size} 张 feishu_remote 照片: ${feishuPhotos.map { it.fileName }}")
+
+                    // 获取待回复的飞书消息 ID
+                    val pendingMessageId = FeishuPhotoTracker.consumePendingMessageId()
+                    if (pendingMessageId == null) {
+                        Logger.d(TAG, "没有 pending messageId，跳过发送（可能已处理或非飞书触发）")
+                        return@collect
+                    }
+
+                    val latestPhoto = feishuPhotos.maxByOrNull { it.captureDate } ?: return@collect
+                    Logger.i(TAG, "检测到飞书远程拍照结果: uri=${latestPhoto.uri}, messageId=$pendingMessageId")
+
+                    // 1. 写入飞书聊天记录（agent_image 类型）
+                    try {
+                        // 确保飞书会话存在
+                        val existingSession = chatSessionDao.getSession(feishuSessionId)
+                        if (existingSession == null) {
+                            chatSessionDao.insertSession(
+                                com.mamba.picme.data.local.ChatSessionEntity(
+                                    sessionId = feishuSessionId,
+                                    title = "飞书远程控制"
+                                )
+                            )
+                        }
+                        chatMessageDao.insertMessage(
+                            com.mamba.picme.data.local.ChatMessageEntity(
+                                id = UUID.randomUUID().toString(),
+                                sessionId = feishuSessionId,
+                                type = "agent_image",
+                                content = latestPhoto.uri,
+                                modelUsed = "feishu_remote"
+                            )
+                        )
+                        chatSessionDao.touchSession(feishuSessionId)
+                        Logger.i(TAG, "飞书拍照结果已写入聊天记录")
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "写入飞书聊天记录失败", e)
+                    }
+
+                    // 2. 发送图片到飞书（压缩到 2K 尺寸，降低文件大小）
+                    try {
+                        val uri = android.net.Uri.parse(latestPhoto.uri)
+                        val compressedBytes = compressImageForFeishu(uri, 2048, 85)
+                        if (compressedBytes != null) {
+                            feishuChannelHandler.sendImage(compressedBytes, pendingMessageId)
+                            Logger.i(TAG, "飞书拍照结果已发送到飞书: messageId=$pendingMessageId, size=${compressedBytes.size / 1024}KB")
+                            // 发送完成通知
+                            feishuChannelHandler.sendMessage("✅ 照片已发送，请查收", pendingMessageId)
+                        } else {
+                            Logger.w(TAG, "图片压缩失败，尝试发送原图: ${latestPhoto.uri}")
+                            // 兜底：发送原图
+                            val parcelFileDescriptor = contentResolver.openFileDescriptor(uri, "r")
+                            if (parcelFileDescriptor != null) {
+                                val fileDescriptor = parcelFileDescriptor.fileDescriptor
+                                val inputStream = java.io.FileInputStream(fileDescriptor)
+                                val imageBytes = inputStream.use { it.readBytes() }
+                                parcelFileDescriptor.close()
+                                feishuChannelHandler.sendImage(imageBytes, pendingMessageId)
+                                Logger.i(TAG, "飞书拍照结果（原图）已发送: messageId=$pendingMessageId")
+                                // 发送完成通知
+                                feishuChannelHandler.sendMessage("✅ 照片已发送，请查收", pendingMessageId)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Logger.e(TAG, "发送照片到飞书失败", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "飞书拍照监听启动失败", e)
+            }
+        }
+    }
+
+    /**
      * Activity 生命周期跟踪器
      *
      * 用于测试框架获取当前前台 Activity 进行截屏等操作，
@@ -347,6 +449,89 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return CoilConfig.createImageLoader(this)
+    }
+
+    /**
+     * 压缩图片用于飞书发送
+     * 将图片缩放到指定最大边长，并以 JPEG 格式压缩
+     *
+     * @param uri 图片 URI
+     * @param maxDimension 最大边长（像素）
+     * @param quality JPEG 压缩质量（0-100）
+     * @return 压缩后的图片字节数组，失败返回 null
+     */
+    private fun compressImageForFeishu(uri: android.net.Uri, maxDimension: Int, quality: Int): ByteArray? {
+        return try {
+            // 1. 解码图片尺寸
+            val options = android.graphics.BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            contentResolver.openInputStream(uri)?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null, options)
+            }
+
+            val (width, height) = options.outWidth to options.outHeight
+            if (width <= 0 || height <= 0) {
+                Logger.w(TAG, "无法获取图片尺寸: $uri")
+                return null
+            }
+
+            // 2. 计算采样率
+            val scaleFactor = if (width > height) {
+                width.toFloat() / maxDimension
+            } else {
+                height.toFloat() / maxDimension
+            }
+
+            val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                inSampleSize = if (scaleFactor > 1) {
+                    kotlin.math.max(1, scaleFactor.toInt())
+                } else {
+                    1
+                }
+            }
+
+            // 3. 解码图片
+            val bitmap = contentResolver.openInputStream(uri)?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
+            } ?: return null
+
+            // 4. 精确缩放到目标尺寸
+            val scaledBitmap = if (bitmap.width > maxDimension || bitmap.height > maxDimension) {
+                val ratio = kotlin.math.min(
+                    maxDimension.toFloat() / bitmap.width,
+                    maxDimension.toFloat() / bitmap.height
+                )
+                val newWidth = (bitmap.width * ratio).toInt()
+                val newHeight = (bitmap.height * ratio).toInt()
+                android.graphics.Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true).also {
+                    if (it != bitmap) bitmap.recycle()
+                }
+            } else {
+                bitmap
+            }
+
+            // 5. 压缩为 JPEG
+            val outputStream = java.io.ByteArrayOutputStream()
+            val compressed = scaledBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, outputStream)
+            val bytes = outputStream.toByteArray()
+            outputStream.close()
+
+            if (!scaledBitmap.isRecycled) {
+                scaledBitmap.recycle()
+            }
+
+            if (compressed) {
+                Logger.i(TAG, "图片压缩成功: ${width}x${height} -> ${bytes.size / 1024}KB")
+                bytes
+            } else {
+                Logger.w(TAG, "Bitmap.compress 返回 false")
+                null
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "图片压缩失败", e)
+            null
+        }
     }
 
     /**
