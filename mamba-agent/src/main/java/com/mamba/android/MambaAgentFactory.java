@@ -5,6 +5,7 @@ import com.mamba.model.chat.request.ToolChoice;
 import com.mamba.model.openai.OpenAiChatModel;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -96,6 +97,7 @@ public class MambaAgentFactory {
         private Map<String, String> customQueryParams;
         private Map<String, Object> customParameters;
         private ToolChoice toolChoice = ToolChoice.AUTO;
+        private List<com.mamba.model.chat.listener.ChatModelListener> listeners;
 
         public Builder apiKey(String apiKey) {
             this.apiKey = apiKey;
@@ -190,6 +192,19 @@ public class MambaAgentFactory {
             return this;
         }
 
+        public Builder listeners(List<com.mamba.model.chat.listener.ChatModelListener> listeners) {
+            this.listeners = listeners;
+            return this;
+        }
+
+        public Builder listeners(com.mamba.model.chat.listener.ChatModelListener... listeners) {
+            if (this.listeners == null) {
+                this.listeners = new java.util.ArrayList<>();
+            }
+            this.listeners.addAll(java.util.Arrays.asList(listeners));
+            return this;
+        }
+
         /**
          * 构建 OpenAiChatModel 实例。
          */
@@ -225,6 +240,9 @@ public class MambaAgentFactory {
             }
             if (customParameters != null && !customParameters.isEmpty()) {
                 builder.customParameters(customParameters);
+            }
+            if (listeners != null && !listeners.isEmpty()) {
+                builder.listeners(listeners);
             }
 
             return builder.build();

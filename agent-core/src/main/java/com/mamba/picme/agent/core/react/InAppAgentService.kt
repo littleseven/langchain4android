@@ -11,6 +11,9 @@ import com.mamba.picme.agent.core.remote.tool.PicMeToolService
 import com.mamba.picme.agent.core.remote.tool.ToolSpecificationExtractor
 import com.mamba.service.AiServices
 import com.mamba.data.message.SystemMessage
+import com.mamba.model.chat.listener.ChatModelListener
+import com.mamba.model.chat.listener.ChatModelResponseContext
+import com.mamba.model.output.TokenUsage
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -55,12 +58,33 @@ class InAppAgentService(
             builder.customHeader("X-Gateway-Token", it)
         }
 
+        builder.listeners(object : ChatModelListener {
+            override fun onResponse(responseContext: ChatModelResponseContext) {
+                val usage = responseContext.chatResponse().metadata()?.tokenUsage()
+                if (usage != null) {
+                    val current = accumulatedTokenUsage
+                    accumulatedTokenUsage = if (current == null) {
+                        usage
+                    } else {
+                        current.add(usage)
+                    }
+                    Logger.d(TAG, "Token usage accumulated: input=${usage.inputTokenCount()}, output=${usage.outputTokenCount()}, total=${usage.totalTokenCount()}")
+                }
+            }
+        })
+
         builder.build()
     }
 
     private val running = AtomicBoolean(false)
     private val cancelled = AtomicBoolean(false)
     private val executor = Executors.newSingleThreadExecutor()
+
+    /** 记录每次执行的性能指标 */
+    private var lastExecutionMetrics: AgentExecutionMetrics? = null
+
+    /** 累计 Token 使用量（多轮工具调用时累加） */
+    private var accumulatedTokenUsage: TokenUsage? = null
 
     /** 每个 session 最多保留最近 10 轮对话（5 个 user+assistant 对） */
     private val maxMemoryMessages = 10
@@ -119,6 +143,11 @@ class InAppAgentService(
         Logger.i(TAG, "AiServices Agent initialized: model=${config.modelName}, tools=${toolSpecs.size}")
     }
 
+    /**
+     * 获取最近一次执行的性能指标
+     */
+    fun getLastExecutionMetrics(): AgentExecutionMetrics? = lastExecutionMetrics
+
     fun executeTask(userPrompt: String, taskCallback: InAppAgentCallback? = null) {
         if (running.get()) {
             (taskCallback ?: callback).onError(0, IllegalStateException("Agent is already running a task"), 0)
@@ -127,6 +156,7 @@ class InAppAgentService(
 
         running.set(true)
         cancelled.set(false)
+        accumulatedTokenUsage = null
 
         executor.submit {
             try {
@@ -159,6 +189,8 @@ class InAppAgentService(
         Logger.d(TAG, "runAgentWithAiServices start: userPrompt='$userPrompt'")
         cb.onLoopStart(1)
 
+        val startTime = System.currentTimeMillis()
+
         try {
             // 获取 AiServices 代理（自动处理工具调用循环）
             val assistant = getOrCreateAssistant()
@@ -170,16 +202,35 @@ class InAppAgentService(
             // 4. 继续循环直到没有 tool calls 或达到 maxIterations
             val result = assistant.chat(userPrompt)
 
-            Logger.i(TAG, "Task complete: result='$result'")
-            cb.onComplete(1, result, 0)
+            val latencyMs = System.currentTimeMillis() - startTime
+            val totalTokens = accumulatedTokenUsage
+            val metrics = AgentExecutionMetrics(
+                latencyMs = latencyMs,
+                promptTokens = totalTokens?.inputTokenCount(),
+                completionTokens = totalTokens?.outputTokenCount(),
+                modelName = config.modelName
+            )
+            lastExecutionMetrics = metrics
+
+            Logger.i(TAG, "Task complete: result='$result', latency=${latencyMs}ms, tokens=$totalTokens")
+            cb.onComplete(1, result, totalTokens?.totalTokenCount() ?: 0, metrics)
 
         } catch (e: Exception) {
+            val latencyMs = System.currentTimeMillis() - startTime
+            val metrics = AgentExecutionMetrics(
+                latencyMs = latencyMs,
+                promptTokens = accumulatedTokenUsage?.inputTokenCount(),
+                completionTokens = accumulatedTokenUsage?.outputTokenCount(),
+                modelName = config.modelName
+            )
+            lastExecutionMetrics = metrics
+
             if (cancelled.get()) {
                 Logger.d(TAG, "Task cancelled")
-                cb.onComplete(0, "Task cancelled", 0)
+                cb.onComplete(0, "Task cancelled", accumulatedTokenUsage?.totalTokenCount() ?: 0, metrics)
             } else {
                 Logger.e(TAG, "Agent execution failed", e)
-                cb.onError(0, e, 0)
+                cb.onError(0, e, accumulatedTokenUsage?.totalTokenCount() ?: 0, metrics)
             }
         }
 

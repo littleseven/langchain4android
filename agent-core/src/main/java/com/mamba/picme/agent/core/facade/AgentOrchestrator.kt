@@ -25,6 +25,7 @@ import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import com.mamba.picme.agent.core.react.InAppAgentCallback
 import com.mamba.picme.agent.core.react.InAppAgentService
+import com.mamba.picme.agent.core.react.AgentExecutionMetrics
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -679,8 +680,8 @@ class AgentOrchestrator private constructor(context: Context) {
             override fun onContent(iteration: Int, content: String) {}
             override fun onToolCall(iteration: Int, toolName: String, args: String) {}
             override fun onToolResult(iteration: Int, toolName: String, result: String) {}
-            override fun onComplete(iteration: Int, summary: String, totalTokens: Int) {}
-            override fun onError(iteration: Int, error: Throwable, totalTokens: Int) {}
+            override fun onComplete(iteration: Int, summary: String, totalTokens: Int, metrics: AgentExecutionMetrics?) {}
+            override fun onError(iteration: Int, error: Throwable, totalTokens: Int, metrics: AgentExecutionMetrics?) {}
         }) ?: return@withContext Result.failure(
             IllegalStateException("Feishu ReAct Agent 初始化失败")
         )
@@ -696,6 +697,7 @@ class AgentOrchestrator private constructor(context: Context) {
 
             val result = withTimeout(timeoutMs) {
                 suspendCoroutine<String> { continuation ->
+                    var executionMetrics: AgentExecutionMetrics? = null
                     val callback = object : InAppAgentCallback {
                         override fun onLoopStart(iteration: Int) {
                             Logger.d(tag, "Feishu ReAct iteration #$iteration")
@@ -709,12 +711,14 @@ class AgentOrchestrator private constructor(context: Context) {
                         override fun onToolResult(iteration: Int, toolName: String, result: String) {
                             Logger.d(tag, "Feishu ReAct toolResult: $toolName → ${result.take(80)}")
                         }
-                        override fun onComplete(iteration: Int, summary: String, totalTokens: Int) {
+                        override fun onComplete(iteration: Int, summary: String, totalTokens: Int, metrics: AgentExecutionMetrics?) {
                             Logger.i(tag, "Feishu ReAct complete: $iteration rounds, $totalTokens tokens")
+                            executionMetrics = metrics
                             continuation.resume("✅ $summary")
                         }
-                        override fun onError(iteration: Int, error: Throwable, totalTokens: Int) {
+                        override fun onError(iteration: Int, error: Throwable, totalTokens: Int, metrics: AgentExecutionMetrics?) {
                             Logger.e(tag, "Feishu ReAct error: ${error.message}")
+                            executionMetrics = metrics
                             continuation.resume("❌ ${error.message ?: "未知错误"}")
                         }
                     }
@@ -731,8 +735,26 @@ class AgentOrchestrator private constructor(context: Context) {
                     Logger.d(tag, "executeTask submitted, waiting for callback...")
                 }
             }
-            Logger.d(tag, "processFeishuInput got result: ${result.take(100)}")
-            Result.success(result)
+            // 将性能指标附加到返回结果
+            val metrics = agent.getLastExecutionMetrics()
+            val finalResult = if (metrics != null) {
+                val perfInfo = buildString {
+                    append("\n\n---\n")
+                    val model = metrics.modelName ?: "未知"
+                    val latency = "${metrics.latencyMs}ms"
+                    val tokens = if (metrics.promptTokens != null && metrics.completionTokens != null) {
+                        "${metrics.promptTokens + metrics.completionTokens} tokens (${metrics.promptTokens} in / ${metrics.completionTokens} out)"
+                    } else {
+                        ""
+                    }
+                    append("$model | $latency | $tokens")
+                }
+                result + perfInfo
+            } else {
+                result
+            }
+            Logger.d(tag, "processFeishuInput got result: ${finalResult.take(100)}")
+            Result.success(finalResult)
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
             Logger.e(tag, "processFeishuInput timeout after ${timeoutMs}ms")
             agent.cancel()
