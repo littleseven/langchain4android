@@ -11,7 +11,6 @@ import com.mamba.model.openai.internal.ParsedAndRawResponse;
 import com.mamba.model.openai.internal.audio.transcription.OpenAiAudioTranscriptionRequest;
 import com.mamba.model.openai.internal.audio.transcription.OpenAiAudioTranscriptionResponse;
 import com.mamba.model.openai.internal.audio.transcription.AudioFile;
-import com.mamba.model.openai.spi.OpenAiAudioTranscriptionModelBuilderFactory;
 import org.slf4j.Logger;
 
 import java.time.Duration;
@@ -19,7 +18,6 @@ import java.time.Duration;
 import static com.mamba.internal.RetryUtils.withRetryMappingExceptions;
 import static com.mamba.internal.Utils.getOrDefault;
 import static com.mamba.model.ModelProvider.OPEN_AI;
-import static com.mamba.spi.ServiceHelper.loadFactories;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_USER_AGENT;
 
@@ -90,9 +88,6 @@ public class OpenAiAudioTranscriptionModel implements AudioTranscriptionModel {
     }
 
     public static Builder builder() {
-        for (OpenAiAudioTranscriptionModelBuilderFactory factory : loadFactories(OpenAiAudioTranscriptionModelBuilderFactory.class)) {
-            return factory.get();
-        }
         return new Builder();
     }
 

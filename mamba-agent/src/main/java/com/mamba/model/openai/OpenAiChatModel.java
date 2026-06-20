@@ -4,7 +4,6 @@ import static com.mamba.internal.RetryUtils.withRetryMappingExceptions;
 import static com.mamba.internal.Utils.copy;
 import static com.mamba.internal.Utils.getOrDefault;
 import static com.mamba.internal.Utils.isNullOrEmpty;
-import static com.mamba.spi.ServiceHelper.loadFactories;
 import static com.mamba.model.ModelProvider.OPEN_AI;
 import static com.mamba.model.chat.Capability.RESPONSE_FORMAT_JSON_SCHEMA;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
@@ -36,7 +35,6 @@ import com.mamba.model.openai.internal.OpenAiClient;
 import com.mamba.model.openai.internal.ParsedAndRawResponse;
 import com.mamba.model.openai.internal.chat.ChatCompletionRequest;
 import com.mamba.model.openai.internal.chat.ChatCompletionResponse;
-import com.mamba.model.openai.spi.OpenAiChatModelBuilderFactory;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
@@ -194,9 +192,6 @@ public class OpenAiChatModel implements ChatModel {
     }
 
     public static OpenAiChatModelBuilder builder() {
-        for (OpenAiChatModelBuilderFactory factory : loadFactories(OpenAiChatModelBuilderFactory.class)) {
-            return factory.get();
-        }
         return new OpenAiChatModelBuilder();
     }
 

@@ -3,7 +3,6 @@ package com.mamba.model.openai;
 import static com.mamba.internal.Utils.getOrDefault;
 import static com.mamba.internal.Utils.isNotNullOrEmpty;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
-import static com.mamba.spi.ServiceHelper.loadFactories;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_USER_AGENT;
 
 import static java.time.Duration.ofSeconds;
@@ -17,7 +16,6 @@ import com.mamba.model.openai.internal.OpenAiClient;
 import com.mamba.model.openai.internal.completion.CompletionChoice;
 import com.mamba.model.openai.internal.completion.CompletionRequest;
 import com.mamba.model.openai.internal.shared.StreamOptions;
-import com.mamba.model.openai.spi.OpenAiStreamingLanguageModelBuilderFactory;
 import com.mamba.model.output.Response;
 import java.time.Duration;
 import java.util.Map;
@@ -96,10 +94,6 @@ public class OpenAiStreamingLanguageModel implements StreamingLanguageModel {
     }
 
     public static OpenAiStreamingLanguageModelBuilder builder() {
-        for (OpenAiStreamingLanguageModelBuilderFactory factory :
-                loadFactories(OpenAiStreamingLanguageModelBuilderFactory.class)) {
-            return factory.get();
-        }
         return new OpenAiStreamingLanguageModelBuilder();
     }
 

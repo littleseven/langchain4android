@@ -2,12 +2,10 @@ package com.mamba.model.input;
 
 import static com.mamba.internal.ValidationUtils.ensureNotBlank;
 import static com.mamba.internal.ValidationUtils.ensureNotNull;
-import static com.mamba.spi.ServiceHelper.loadFactories;
 
 import static java.util.Collections.singletonMap;
 
 import com.mamba.spi.prompt.PromptTemplateFactory;
-
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -25,14 +23,7 @@ import java.util.Map;
  */
 public class PromptTemplate {
 
-    private static final PromptTemplateFactory FACTORY = factory();
-
-    private static PromptTemplateFactory factory() {
-        for (PromptTemplateFactory factory : loadFactories(PromptTemplateFactory.class)) {
-            return factory;
-        }
-        return new DefaultPromptTemplateFactory();
-    }
+    private static final PromptTemplateFactory FACTORY = new DefaultPromptTemplateFactory();
 
     static final String CURRENT_DATE = "current_date";
     static final String CURRENT_TIME = "current_time";

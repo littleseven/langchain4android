@@ -8,8 +8,6 @@ import com.mamba.tool.ToolSpecification;
 import com.mamba.tool.ToolSpecificationJsonCodec;
 import com.mamba.model.chat.request.json.JsonObjectSchema;
 import com.mamba.model.chat.request.json.JsonSchemaElement;
-import com.mamba.spi.ServiceHelper;
-import com.mamba.spi.agent.tool.ToolSpecificationJsonCodecFactory;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -22,14 +20,7 @@ import java.util.Map;
 @Internal
 public class ToolSpecificationJsonUtils {
 
-    private static final ToolSpecificationJsonCodec CODEC = loadCodec();
-
-    private static ToolSpecificationJsonCodec loadCodec() {
-        for (ToolSpecificationJsonCodecFactory factory : ServiceHelper.loadFactories(ToolSpecificationJsonCodecFactory.class)) {
-            return factory.create();
-        }
-        return new JacksonToolSpecificationJsonCodec();
-    }
+    private static final ToolSpecificationJsonCodec CODEC = new JacksonToolSpecificationJsonCodec();
 
     private ToolSpecificationJsonUtils() {}
 

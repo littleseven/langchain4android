@@ -1,12 +1,8 @@
 package com.mamba.internal;
 
 import com.mamba.Internal;
-import com.mamba.spi.ServiceHelper;
-import com.mamba.spi.json.JsonCodecFactory;
 
 import java.lang.reflect.Type;
-
-
 
 /**
  * JSON helper class. It is supposed to be used by "tools" and "structured output" functionalities.
@@ -52,14 +48,7 @@ public class Json {
         <T> T fromJson(String json, Type type);
     }
 
-    private static final JsonCodec CODEC = loadCodec();
-
-    private static JsonCodec loadCodec() {
-        for (JsonCodecFactory factory : ServiceHelper.loadFactories(JsonCodecFactory.class)) {
-            return factory.create();
-        }
-        return new JacksonJsonCodec();
-    }
+    private static final JsonCodec CODEC = new JacksonJsonCodec();
 
     /**
      * Convert the given object to JSON.

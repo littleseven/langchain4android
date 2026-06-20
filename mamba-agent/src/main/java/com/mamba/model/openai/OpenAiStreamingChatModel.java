@@ -11,7 +11,6 @@ import static com.mamba.internal.Utils.getOrDefault;
 import static com.mamba.internal.Utils.isNotNullOrEmpty;
 import static com.mamba.internal.Utils.isNullOrEmpty;
 import static com.mamba.model.ModelProvider.OPEN_AI;
-import static com.mamba.spi.ServiceHelper.loadFactories;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_OPENAI_URL;
 import static com.mamba.model.openai.internal.OpenAiUtils.DEFAULT_USER_AGENT;
 import static com.mamba.model.openai.internal.OpenAiUtils.fromOpenAiResponseFormat;
@@ -45,7 +44,6 @@ import com.mamba.model.openai.internal.chat.ChatCompletionResponse;
 import com.mamba.model.openai.internal.chat.Delta;
 import com.mamba.model.openai.internal.chat.ToolCall;
 import com.mamba.model.openai.internal.shared.StreamOptions;
-import com.mamba.model.openai.spi.OpenAiStreamingChatModelBuilderFactory;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -262,10 +260,6 @@ public class OpenAiStreamingChatModel implements StreamingChatModel {
     }
 
     public static OpenAiStreamingChatModelBuilder builder() {
-        for (OpenAiStreamingChatModelBuilderFactory factory :
-                loadFactories(OpenAiStreamingChatModelBuilderFactory.class)) {
-            return factory.get();
-        }
         return new OpenAiStreamingChatModelBuilder();
     }
 

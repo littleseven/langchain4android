@@ -14,8 +14,6 @@ import com.mamba.model.openai.internal.image.GenerateImagesResponse;
 import com.mamba.model.openai.internal.models.ModelsListResponse;
 import com.mamba.model.openai.internal.moderation.ModerationRequest;
 import com.mamba.model.openai.internal.moderation.ModerationResponse;
-import com.mamba.model.openai.internal.spi.OpenAiClientBuilderFactory;
-import com.mamba.model.openai.internal.spi.ServiceHelper;
 import java.time.Duration;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -43,10 +41,6 @@ public abstract class OpenAiClient {
 
     @SuppressWarnings("rawtypes")
     public static Builder builder() {
-        for (OpenAiClientBuilderFactory factory : ServiceHelper.loadFactories(OpenAiClientBuilderFactory.class)) {
-            return factory.get();
-        }
-        // fallback to the default
         return DefaultOpenAiClient.builder();
     }
 

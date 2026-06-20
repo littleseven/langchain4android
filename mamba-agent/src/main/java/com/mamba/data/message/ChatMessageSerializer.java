@@ -1,21 +1,10 @@
 package com.mamba.data.message;
 
-import com.mamba.spi.data.message.ChatMessageJsonCodecFactory;
-
 import java.util.List;
-
-import static com.mamba.spi.ServiceHelper.loadFactories;
 
 public class ChatMessageSerializer {
 
-    static final ChatMessageJsonCodec CODEC = loadCodec();
-
-    private static ChatMessageJsonCodec loadCodec() {
-        for (ChatMessageJsonCodecFactory factory : loadFactories(ChatMessageJsonCodecFactory.class)) {
-            return factory.create();
-        }
-        return new JacksonChatMessageJsonCodec();
-    }
+    static final ChatMessageJsonCodec CODEC = new JacksonChatMessageJsonCodec();
 
     public static String messageToJson(ChatMessage message) {
         return CODEC.messageToJson(message);
