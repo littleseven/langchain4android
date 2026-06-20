@@ -24,15 +24,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
 import com.mamba.picme.agent.core.react.tool.ToolRegistry
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema
-import dev.langchain4j.agent.tool.ToolExecutionRequest
-import dev.langchain4j.agent.tool.ToolSpecification
-import dev.langchain4j.data.message.AiMessage as LcAiMessage
-import dev.langchain4j.data.message.ChatMessage as LcChatMessage
-import dev.langchain4j.data.message.SystemMessage as LcSystemMessage
-import dev.langchain4j.data.message.UserMessage as LcUserMessage
-import dev.langchain4j.data.message.ToolExecutionResultMessage as LcToolExecutionResultMessage
-import dev.langchain4j.memory.ChatMemory
+import com.mamba.agent.model.chat.request.json.JsonObjectSchema
+import com.mamba.agent.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolSpecification
+import com.mamba.agent.data.message.AiMessage as LcAiMessage
+import com.mamba.agent.data.message.ChatMessage as LcChatMessage
+import com.mamba.agent.data.message.SystemMessage as LcSystemMessage
+import com.mamba.agent.data.message.UserMessage as LcUserMessage
+import com.mamba.agent.data.message.ToolExecutionResultMessage as LcToolExecutionResultMessage
+import com.mamba.agent.memory.ChatMemory
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
@@ -719,7 +719,7 @@ data class StreamMetrics(
 /**
  * 基于 DataStore 的 ChatMemory 实现
  *
- * 实现 [dev.langchain4j.memory.ChatMemory] 接口，
+ * 实现 [com.mamba.agent.memory.ChatMemory] 接口，
  * 使用 [DataStoreChatMemoryStore] 作为后端持久化器。
  * 支持最大消息数限制（滑动窗口）。
  *

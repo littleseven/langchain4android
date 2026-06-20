@@ -86,6 +86,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlin {
@@ -231,6 +232,9 @@ dependencies {
     // sherpa-onnx: agent-core 编译期依赖，app 模块提供运行时 AAR 打包
     implementation(files("../agent-core/libs/sherpa-onnx-1.10.46.aar"))
     // GPUPixel 已移除，全部能力由自研引擎提供
+
+    // Core library desugaring（mamba-agent 依赖需要）
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
     "ksp"(libs.androidx.room.compiler)
     "ksp"(libs.moshi.kotlin.codegen)

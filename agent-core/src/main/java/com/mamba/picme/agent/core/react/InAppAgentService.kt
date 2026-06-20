@@ -8,17 +8,17 @@ import com.mamba.picme.agent.core.api.android.RemoteProtocol
 import com.mamba.picme.agent.core.platform.llm.remote.LangChain4jOpenAiClient
 import com.mamba.picme.agent.core.react.llm.LangChain4jToolBridge
 import com.mamba.picme.agent.core.react.tool.InAppToolSet
-import dev.langchain4j.agent.tool.ToolExecutionRequest
-import dev.langchain4j.agent.tool.ToolSpecification
-import dev.langchain4j.data.message.AiMessage
-import dev.langchain4j.data.message.ChatMessage
-import dev.langchain4j.data.message.SystemMessage as DataSystemMessage
-import dev.langchain4j.data.message.ToolExecutionResultMessage
-import dev.langchain4j.data.message.UserMessage as DataUserMessage
-import dev.langchain4j.memory.ChatMemory
-import dev.langchain4j.model.chat.request.ChatRequest
-import dev.langchain4j.model.chat.request.DefaultChatRequestParameters
-import dev.langchain4j.store.memory.chat.ChatMemoryStore
+import com.mamba.agent.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolSpecification
+import com.mamba.agent.data.message.AiMessage
+import com.mamba.agent.data.message.ChatMessage
+import com.mamba.agent.data.message.SystemMessage as DataSystemMessage
+import com.mamba.agent.data.message.ToolExecutionResultMessage
+import com.mamba.agent.data.message.UserMessage as DataUserMessage
+import com.mamba.agent.memory.ChatMemory
+import com.mamba.agent.model.chat.request.ChatRequest
+import com.mamba.agent.model.chat.request.DefaultChatRequestParameters
+import com.mamba.agent.store.memory.chat.ChatMemoryStore
 import java.util.LinkedList
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -418,7 +418,7 @@ class InAppAgentService(
 /**
  * 基于 DataStore 的 ChatMemory 实现
  *
- * 实现 [dev.langchain4j.memory.ChatMemory] 接口，
+ * 实现 [com.mamba.agent.memory.ChatMemory] 接口，
  * 使用 [DataStoreChatMemoryStore] 作为后端持久化器。
  * 支持最大消息数限制（滑动窗口）。
  *

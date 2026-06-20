@@ -16,8 +16,8 @@ import com.mamba.picme.agent.core.react.perception.ViewHierarchyExtractor
 import com.mamba.picme.agent.core.react.tool.impl.BackTool
 import com.mamba.picme.agent.core.react.tool.impl.GetScreenInfoTool
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
-import dev.langchain4j.agent.tool.P
-import dev.langchain4j.agent.tool.Tool
+import com.mamba.agent.agent.tool.P
+import com.mamba.agent.agent.tool.Tool
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.future.future

@@ -1,6 +1,6 @@
 package com.mamba.picme.agent.core.api
 
-import dev.langchain4j.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolExecutionRequest
 
 interface ToolExecutor {
     suspend fun execute(request: ToolExecutionRequest): String

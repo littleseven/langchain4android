@@ -1,9 +1,9 @@
 package com.mamba.picme.domain.agent
 
-import dev.langchain4j.data.message.AiMessage
-import dev.langchain4j.data.message.ChatMessage
-import dev.langchain4j.data.message.SystemMessage
-import dev.langchain4j.data.message.UserMessage
+import com.mamba.agent.data.message.AiMessage
+import com.mamba.agent.data.message.ChatMessage
+import com.mamba.agent.data.message.SystemMessage
+import com.mamba.agent.data.message.UserMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

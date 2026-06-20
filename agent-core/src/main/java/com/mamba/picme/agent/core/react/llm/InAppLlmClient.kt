@@ -1,13 +1,13 @@
 package com.mamba.picme.agent.core.react.llm
 
-import dev.langchain4j.agent.tool.ToolExecutionRequest
-import dev.langchain4j.agent.tool.ToolSpecification
-import dev.langchain4j.data.message.AiMessage
-import dev.langchain4j.data.message.ChatMessage
-import dev.langchain4j.data.message.SystemMessage
-import dev.langchain4j.data.message.ToolExecutionResultMessage
-import dev.langchain4j.data.message.UserMessage
-import dev.langchain4j.model.chat.request.json.JsonEnumSchema
+import com.mamba.agent.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolSpecification
+import com.mamba.agent.data.message.AiMessage
+import com.mamba.agent.data.message.ChatMessage
+import com.mamba.agent.data.message.SystemMessage
+import com.mamba.agent.data.message.ToolExecutionResultMessage
+import com.mamba.agent.data.message.UserMessage
+import com.mamba.agent.model.chat.request.json.JsonEnumSchema
 import com.mamba.picme.agent.core.platform.logging.Logger
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -185,16 +185,16 @@ class InAppLlmClient(
                 for ((key, value) in props) {
                     val propSchema = JSONObject()
                     when (value) {
-                        is dev.langchain4j.model.chat.request.json.JsonStringSchema -> {
+                        is com.mamba.agent.model.chat.request.json.JsonStringSchema -> {
                             propSchema.put("type", "string")
                         }
-                        is dev.langchain4j.model.chat.request.json.JsonIntegerSchema -> {
+                        is com.mamba.agent.model.chat.request.json.JsonIntegerSchema -> {
                             propSchema.put("type", "integer")
                         }
-                        is dev.langchain4j.model.chat.request.json.JsonNumberSchema -> {
+                        is com.mamba.agent.model.chat.request.json.JsonNumberSchema -> {
                             propSchema.put("type", "number")
                         }
-                        is dev.langchain4j.model.chat.request.json.JsonBooleanSchema -> {
+                        is com.mamba.agent.model.chat.request.json.JsonBooleanSchema -> {
                             propSchema.put("type", "boolean")
                         }
                         is JsonEnumSchema -> {

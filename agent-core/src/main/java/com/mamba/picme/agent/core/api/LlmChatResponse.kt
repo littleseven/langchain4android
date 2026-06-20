@@ -1,6 +1,6 @@
 package com.mamba.picme.agent.core.api
 
-import dev.langchain4j.data.message.AiMessage
+import com.mamba.agent.data.message.AiMessage
 
 /**
  * LLM 聊天响应

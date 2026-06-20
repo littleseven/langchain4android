@@ -5,7 +5,7 @@ import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema
+import com.mamba.agent.model.chat.request.json.JsonObjectSchema
 
 /**
  * Capability 接口 —— Agent 可执行能力的抽象契约

@@ -4,7 +4,7 @@ import com.mamba.picme.agent.core.platform.logging.Logger
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import dev.langchain4j.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolExecutionRequest
 import java.util.UUID
 
 /**

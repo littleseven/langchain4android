@@ -7,27 +7,27 @@ import com.mamba.picme.agent.core.api.LlmChatRequest
 import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
-import dev.langchain4j.agent.tool.ToolExecutionRequest
-import dev.langchain4j.agent.tool.ToolSpecification
+import com.mamba.agent.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolSpecification
 import com.mamba.picme.agent.core.platform.logging.Logger
-import dev.langchain4j.data.message.AiMessage
-import dev.langchain4j.data.message.ChatMessage
-import dev.langchain4j.data.message.SystemMessage
-import dev.langchain4j.data.message.ToolExecutionResultMessage
-import dev.langchain4j.data.message.UserMessage
-import dev.langchain4j.model.ModelProvider
-import dev.langchain4j.model.chat.ChatModel
-import dev.langchain4j.model.chat.request.ChatRequest
-import dev.langchain4j.model.chat.request.ChatRequestParameters
-import dev.langchain4j.model.chat.request.DefaultChatRequestParameters
-import dev.langchain4j.model.chat.request.ToolChoice
-import dev.langchain4j.model.chat.request.json.JsonBooleanSchema
-import dev.langchain4j.model.chat.request.json.JsonEnumSchema
-import dev.langchain4j.model.chat.request.json.JsonIntegerSchema
-import dev.langchain4j.model.chat.request.json.JsonNumberSchema
-import dev.langchain4j.model.chat.request.json.JsonObjectSchema
-import dev.langchain4j.model.chat.request.json.JsonStringSchema
-import dev.langchain4j.model.chat.response.ChatResponse
+import com.mamba.agent.data.message.AiMessage
+import com.mamba.agent.data.message.ChatMessage
+import com.mamba.agent.data.message.SystemMessage
+import com.mamba.agent.data.message.ToolExecutionResultMessage
+import com.mamba.agent.data.message.UserMessage
+import com.mamba.agent.model.ModelProvider
+import com.mamba.agent.model.chat.ChatModel
+import com.mamba.agent.model.chat.request.ChatRequest
+import com.mamba.agent.model.chat.request.ChatRequestParameters
+import com.mamba.agent.model.chat.request.DefaultChatRequestParameters
+import com.mamba.agent.model.chat.request.ToolChoice
+import com.mamba.agent.model.chat.request.json.JsonBooleanSchema
+import com.mamba.agent.model.chat.request.json.JsonEnumSchema
+import com.mamba.agent.model.chat.request.json.JsonIntegerSchema
+import com.mamba.agent.model.chat.request.json.JsonNumberSchema
+import com.mamba.agent.model.chat.request.json.JsonObjectSchema
+import com.mamba.agent.model.chat.request.json.JsonStringSchema
+import com.mamba.agent.model.chat.response.ChatResponse
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
@@ -601,7 +601,7 @@ class LangChain4jOpenAiClient(
      * LangChain4j 1.16.3 中 ChatModel 接口要求实现此方法。
      * 我们直接调用 doChat，并传入 ChatRequestOptions 中的参数。
      */
-    override fun chat(chatRequest: ChatRequest, chatRequestOptions: dev.langchain4j.model.chat.ChatRequestOptions?): ChatResponse {
+    override fun chat(chatRequest: ChatRequest, chatRequestOptions: com.mamba.agent.model.chat.ChatRequestOptions?): ChatResponse {
         return doChat(chatRequest)
     }
 

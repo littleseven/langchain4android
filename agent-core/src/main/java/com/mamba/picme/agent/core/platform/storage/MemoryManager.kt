@@ -8,11 +8,11 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
-import dev.langchain4j.data.message.AiMessage
-import dev.langchain4j.data.message.ChatMessage
-import dev.langchain4j.data.message.SystemMessage
-import dev.langchain4j.data.message.ToolExecutionResultMessage
-import dev.langchain4j.data.message.UserMessage
+import com.mamba.agent.data.message.AiMessage
+import com.mamba.agent.data.message.ChatMessage
+import com.mamba.agent.data.message.SystemMessage
+import com.mamba.agent.data.message.ToolExecutionResultMessage
+import com.mamba.agent.data.message.UserMessage
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -283,7 +283,7 @@ class MemoryManager(private val context: Context) {
                     "system" -> SystemMessage.from(content)
                     "assistant" -> AiMessage.from(content)
                     "tool" -> ToolExecutionResultMessage.from(
-                        dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                        com.mamba.agent.agent.tool.ToolExecutionRequest.builder()
                             .id("")
                             .name("")
                             .arguments("{}")

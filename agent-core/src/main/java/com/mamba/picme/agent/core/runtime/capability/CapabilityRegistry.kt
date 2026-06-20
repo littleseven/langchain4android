@@ -16,8 +16,8 @@ import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
 import com.mamba.picme.agent.core.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
-import dev.langchain4j.agent.tool.ToolExecutionRequest
-import dev.langchain4j.agent.tool.ToolSpecification
+import com.mamba.agent.agent.tool.ToolExecutionRequest
+import com.mamba.agent.agent.tool.ToolSpecification
 import kotlinx.coroutines.CoroutineScope
 import org.json.JSONObject
 
