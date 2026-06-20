@@ -1,5 +1,8 @@
 package com.mamba.picme.agent.core.platform.llm.remote
 
+import com.mamba.android.MambaAgentFactory
+import com.mamba.model.chat.request.ChatRequest
+import com.mamba.model.chat.request.DefaultChatRequestParameters
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.android.RemoteProtocol
 import com.mamba.picme.agent.core.api.LlmChatLanguageModel
@@ -17,15 +20,16 @@ import com.mamba.data.message.SystemMessage
 import com.mamba.data.message.UserMessage
 import kotlinx.coroutines.runBlocking
 import retrofit2.Response
+import java.time.Duration
 
 /**
  * 统一远程 API 客户端
  *
  * 根据 [RemoteModelConfig.protocol] 自动选择推理引擎：
  * - CLAUDE → Claude API 格式（x-api-key + /messages），沿用 Retrofit 实现
- * - OPENAI → LangChain4j OpenAiChatModel（标准 OpenAI 协议）
+ * - OPENAI → MambaAgentFactory 创建的标准 OpenAI 协议 ChatModel
  *
- * OPENAI 路径已迁移至 langchain4j 标准实现，支持 tool_calls、流式等 OpenAI 协议特性。
+ * OPENAI 路径使用 mamba-agent 的 MambaAgentFactory，支持 tool_calls、流式等 OpenAI 协议特性。
  */
 class UnifiedRemoteClient(
     private val config: RemoteModelConfig
@@ -34,11 +38,24 @@ class UnifiedRemoteClient(
     private val tag = "UnifiedRemote"
 
     /**
-     * LangChain4j 实现的 OpenAI 客户端
+     * OPENAI 协议客户端（通过 MambaAgentFactory 创建）
      */
-    private val langChain4jClient: LangChain4jOpenAiClient? by lazy {
+    private val openAiClient: com.mamba.model.chat.ChatModel? by lazy {
         if (config.protocol == RemoteProtocol.OPENAI) {
-            LangChain4jOpenAiClient(config)
+            try {
+                MambaAgentFactory.builder()
+                    .apiKey(config.apiKey)
+                    .baseUrl(config.baseUrl)
+                    .model(config.modelId)
+                    .temperature(0.7)
+                    .maxTokens(2048)
+                    .timeout(Duration.ofSeconds(60))
+                    .maxRetries(2)
+                    .build()
+            } catch (e: Exception) {
+                Logger.e(tag, "Failed to create OpenAI client", e)
+                null
+            }
         } else null
     }
 
@@ -59,9 +76,9 @@ class UnifiedRemoteClient(
 
     override fun chat(request: LlmChatRequest): LlmChatResponse {
         return when {
-            langChain4jClient != null -> {
-                Logger.d(tag, "Using LangChain4jOpenAiClient for model=${config.modelId}")
-                langChain4jClient!!.chat(request)
+            openAiClient != null -> {
+                Logger.d(tag, "Using OpenAiClient for model=${config.modelId}")
+                chatOpenAi(request)
             }
             claudeClient != null -> {
                 Logger.d(tag, "Using ClaudeCodingApiClient for model=${config.modelId}")
@@ -75,9 +92,9 @@ class UnifiedRemoteClient(
 
     override fun chat(request: LlmChatRequest, handler: StreamingChatResponseHandler) {
         when {
-            langChain4jClient != null -> {
-                Logger.d(tag, "Streaming with LangChain4jOpenAiClient for model=${config.modelId}")
-                langChain4jClient!!.chat(request, handler)
+            openAiClient != null -> {
+                Logger.d(tag, "Streaming with OpenAiClient for model=${config.modelId}")
+                chatOpenAiStreaming(request, handler)
             }
             claudeClient != null -> {
                 // Claude 不支持流式，回退为非流式一次返回
@@ -92,6 +109,39 @@ class UnifiedRemoteClient(
             else -> handler.onError(IllegalStateException("No client available for model ${config.modelId}"))
         }
     }
+
+    // ── OpenAI 协议实现 ─────────────────────────────────────────
+
+    private fun chatOpenAi(request: LlmChatRequest): LlmChatResponse {
+        val client = openAiClient ?: throw IllegalStateException("OpenAI client not initialized")
+
+        val chatRequest = ChatRequest.builder()
+            .messages(request.messages)
+            .parameters(
+                DefaultChatRequestParameters.builder()
+                    .temperature(request.temperature ?: 0.7)
+                    .maxOutputTokens(request.maxTokens ?: 2048)
+                    .build()
+            )
+            .build()
+
+        val response = client.chat(chatRequest)
+        val text = response.aiMessage()?.text() ?: ""
+        return LlmChatResponse(aiMessage = AiMessage(text))
+    }
+
+    private fun chatOpenAiStreaming(request: LlmChatRequest, handler: StreamingChatResponseHandler) {
+        // mamba-agent 的 ChatModel 接口暂不支持流式，回退为非流式
+        Logger.w(tag, "OpenAI streaming not yet supported by mamba-agent ChatModel, falling back to non-streaming")
+        try {
+            val response = chatOpenAi(request)
+            handler.onCompleteResponse(response)
+        } catch (e: Exception) {
+            handler.onError(e)
+        }
+    }
+
+    // ── Claude 协议实现 ─────────────────────────────────────────
 
     /**
      * Claude API 聊天
@@ -160,7 +210,8 @@ class UnifiedRemoteClient(
          * 检测是否为限频/配额错误
          */
         fun isRateLimitError(error: Throwable): Boolean {
-            return LangChain4jOpenAiClient.isRateLimitError(error)
+            val msg = error.message ?: return false
+            return msg.contains("429") || msg.contains("rate limit") || msg.contains("quota")
         }
     }
 }

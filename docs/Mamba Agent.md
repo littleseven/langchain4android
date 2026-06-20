@@ -6,7 +6,7 @@
 在 PicMe 项目中直接 Fork LangChain4j 官方源码，物理删除所有 Android 不兼容代码，输出一个开箱即用的 Android AI Agent 开发框架。作为 PicMe 项目的内部模块存在，不独立拆库。
 
 ### 1.2 项目名称
-**Mamba Agent**（包名：`com.mamba.agent`）
+**Mamba Agent**（包名：`com.mamba`）
 
 ### 1.3 核心理念
 - **不妥协**：不存在"适配"、"兼容"、"workaround"——不兼容的代码直接删掉
@@ -22,7 +22,7 @@
 |------|-----|
 | **上游仓库** | https://github.com/langchain4j/langchain4j |
 | **Fork 版本** | 1.16.3（2026-06-15 发布） |
-| **包名** | `com.mamba.agent`（原 `dev.langchain4j`） |
+| **包名** | `com.mamba`（原 `dev.langchain4j`） |
 | **后续同步策略** | 定期 cherry-pick 上游 bugfix 和安全更新，功能更新评估后选择性合并 |
 | **License** | Apache-2.0（保留原版权声明） |
 
@@ -34,8 +34,8 @@
 
 ```
 mamba-agent/                              # 单一库，合并所有模块
-├── src/main/java/com/mamba/agent/
-│   ├── agent/tool/                       # @Tool 注解 + ToolSpecification（保留）
+├── src/main/java/com/mamba/
+│   ├── tool/                             # @Tool 注解 + ToolSpecification（保留）
 │   ├── service/                          # AiServices（重写，移除 SPI）
 │   ├── model/                            # ChatLanguageModel 接口 + OpenAiChatModel 实现
 │   ├── memory/                           # ChatMemory（保留，新增 Room 实现）
@@ -95,14 +95,14 @@ app/
 
 | 文件 | 功能 | 所在目录 |
 |------|------|---------|
-| `GsonJsonCodec.java` | Gson 实现的 JsonCodec，替换 Jackson 的业务序列化 | `src/main/java/com/mamba/agent/json/` |
-| `AgentFactory.kt` | 统一 Agent 构建，自动配置 OkHttp、日志、生命周期 | `src/main/java/com/mamba/agent/android/` |
-| `AndroidToolRegistry.kt` | 集中注册和管理 @Tool，支持按条件过滤 | `src/main/java/com/mamba/agent/android/` |
-| `ViewModelAgentDelegate.kt` | ViewModel 生命周期感知，自动保存/恢复对话 | `src/main/java/com/mamba/agent/android/` |
-| `RoomChatMemoryStore.kt` | 使用 Room 持久化 ChatMemory | `src/main/java/com/mamba/agent/android/` |
-| `AndroidLogger.kt` | 桥接 SLF4J → Android Logcat | `src/main/java/com/mamba/agent/android/` |
-| `NetworkMonitor.kt` | 网络状态监听，断网自动暂停/恢复 | `src/main/java/com/mamba/agent/android/` |
-| `ExceptionHandler.kt` | 统一异常处理，区分网络/认证/限流错误 | `src/main/java/com/mamba/agent/android/` |
+| `GsonJsonCodec.java` | Gson 实现的 JsonCodec，替换 Jackson 的业务序列化 | `src/main/java/com/mamba/json/` |
+| `AgentFactory.kt` | 统一 Agent 构建，自动配置 OkHttp、日志、生命周期 | `src/main/java/com/mamba/android/` |
+| `AndroidToolRegistry.kt` | 集中注册和管理 @Tool，支持按条件过滤 | `src/main/java/com/mamba/android/` |
+| `ViewModelAgentDelegate.kt` | ViewModel 生命周期感知，自动保存/恢复对话 | `src/main/java/com/mamba/android/` |
+| `RoomChatMemoryStore.kt` | 使用 Room 持久化 ChatMemory | `src/main/java/com/mamba/android/` |
+| `AndroidLogger.kt` | 桥接 SLF4J → Android Logcat | `src/main/java/com/mamba/android/` |
+| `NetworkMonitor.kt` | 网络状态监听，断网自动暂停/恢复 | `src/main/java/com/mamba/android/` |
+| `ExceptionHandler.kt` | 统一异常处理，区分网络/认证/限流错误 | `src/main/java/com/mamba/android/` |
 
 ---
 
@@ -112,8 +112,8 @@ app/
 
 | 原包名 | 新包名 |
 |--------|--------|
-| `dev.langchain4j` | `com.mamba.agent` |
-| `dev.langchain4j.service.AiServices` | `com.mamba.agent.service.AiServices` |
+| `dev.langchain4j` | `com.mamba` |
+| `dev.langchain4j.service.AiServices` | `com.mamba.service.AiServices` |
 | `dev.langchain4j.agent.tool.Tool` | `com.mamba.tool.Tool` |
 | `dev.langchain4j.model.chat.ChatLanguageModel` | `com.mamba.model.chat.ChatLanguageModel` |
 
@@ -121,13 +121,13 @@ app/
 
 | 文件类型 | 改动内容 |
 |---------|---------|
-| Java/Kotlin 源文件 | `package dev.langchain4j` → `package com.mamba.agent` |
-| 所有 `import` 语句 | `import dev.langchain4j.*` → `import com.mamba.agent.*` |
-| `build.gradle.kts` | `namespace = "com.mamba.agent"` |
-| ProGuard 规则 | `-keep class com.mamba.agent.**` |
+| Java/Kotlin 源文件 | `package dev.langchain4j` → `package com.mamba` |
+| 所有 `import` 语句 | `import dev.langchain4j.*` → `import com.mamba.*` |
+| `build.gradle.kts` | `namespace = "com.mamba"` |
+| ProGuard 规则 | `-keep class com.mamba.**` |
 | 文档 | 示例代码里的 import |
 
-> **注意**：包名替换范围仅限 `mamba-agent` 模块内部源码。PicMe app 模块中引用 `mamba-agent` 时使用新包名 `com.mamba.agent.*`，不影响 PicMe 其他业务代码。
+> **注意**：包名替换范围仅限 `mamba-agent` 模块内部源码。PicMe app 模块中引用 `mamba-agent` 时使用新包名 `com.mamba.*`，不影响 PicMe 其他业务代码。
 
 ---
 
@@ -143,12 +143,12 @@ app/
 
 ### 6.2 GsonJsonCodec 实现
 
-```java
+```
 // mamba-agent/src/main/java/com/mamba/agent/json/GsonJsonCodec.java
-package com.mamba.agent.json;
+package com.mamba.json;
 
 import com.google.gson.Gson;
-import com.mamba.agent.json.JsonCodec;
+import com.mamba.json.JsonCodec;
 
 public class GsonJsonCodec implements JsonCodec {
 
@@ -168,7 +168,7 @@ public class GsonJsonCodec implements JsonCodec {
 
 ### 6.3 HTTP 层改动
 
-```java
+```
 // OpenAiClientBase.java（Fork 版）
 // 原来（Jackson）
 // ObjectMapper mapper = new ObjectMapper();
@@ -187,7 +187,7 @@ RequestBody body = RequestBody.create(
 
 ### 6.4 AiServices 默认注入
 
-```java
+```
 // AiServices.java（Fork 版）
 if (this.jsonCodec == null) {
     this.jsonCodec = new GsonJsonCodec();
@@ -200,7 +200,7 @@ if (this.jsonCodec == null) {
 
 ### 7.1 PicMe 根 build.gradle.kts（在现有项目新增 mamba-agent 模块）
 
-```kotlin
+```
 plugins {
     id("com.android.application") version "8.7.0" apply false
     id("com.android.library") version "8.7.0" apply false
@@ -211,7 +211,7 @@ plugins {
 
 ### 7.4 settings.gradle.kts（注册模块）
 
-```kotlin
+```
 pluginManagement {
     // ... 现有配置
 }
@@ -234,7 +234,7 @@ include(":mamba-agent")
 
 ### 7.2 mamba-agent/build.gradle.kts（单一库配置）
 
-```kotlin
+```
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -242,7 +242,7 @@ plugins {
 }
 
 android {
-    namespace = "com.mamba.agent"
+    namespace = "com.mamba"
     compileSdk = 35
 
     defaultConfig {
@@ -316,7 +316,7 @@ dependencies {
 
 ### 7.3 PicMe app/build.gradle.kts（使用 mamba-agent）
 
-```kotlin
+```
 dependencies {
     // 直接引用单一库
     implementation(project(":mamba-agent"))
@@ -327,17 +327,17 @@ dependencies {
 
 ### 7.5 ProGuard 规则
 
-```proguard
+```
 # mamba-agent-proguard.pro
 # Gson
 -keepattributes Signature, InnerClasses, EnclosingMethod
--keepclassmembers class com.mamba.agent.** {
+-keepclassmembers class com.mamba.** {
     <fields>;
 }
 
 # LangChain4j Fork
--keep class com.mamba.agent.** { *; }
--dontwarn com.mamba.agent.**
+-keep class com.mamba.** { *; }
+-dontwarn com.mamba.**
 
 # OkHttp
 -dontwarn okhttp3.**
@@ -355,7 +355,7 @@ dependencies {
 
 - [ ] 在 PicMe 项目中创建 `mamba-agent` 模块目录
 - [ ] 复制 langchain4j 官方源码（core + open-ai + http-client-okhttp）到单一库
-- [ ] 全局替换包名 `dev.langchain4j` → `com.mamba.agent`
+- [ ] 全局替换包名 `dev.langchain4j` → `com.mamba`
 - [ ] 删除 `langchain4j-http-client-jdk` 相关代码
 - [ ] 删除所有 `ServiceLoader.load()` 调用
 - [ ] 删除所有 SPI Provider 类
@@ -511,7 +511,7 @@ mamba-agent-1.16.3.0
 
 ### 13.1 添加依赖
 
-```kotlin
+```
 // PicMe app/build.gradle.kts
 dependencies {
     implementation(project(":mamba-agent"))
@@ -520,7 +520,7 @@ dependencies {
 
 ### 13.2 定义 Tool
 
-```kotlin
+```
 import com.mamba.tool.Tool
 import com.mamba.tool.P
 
@@ -534,9 +534,9 @@ class WeatherTool {
 
 ### 13.3 定义 Agent 接口
 
-```kotlin
-import com.mamba.agent.service.SystemMessage
-import com.mamba.agent.service.UserMessage
+```
+import com.mamba.service.SystemMessage
+import com.mamba.service.UserMessage
 
 @SystemMessage("你是一个有用的天气助手")
 interface WeatherAgent {
@@ -547,7 +547,7 @@ interface WeatherAgent {
 
 ### 13.4 构建并使用
 
-```kotlin
+```
 import com.mamba.android.AgentFactory
 
 class ChatViewModel : ViewModel() {
@@ -586,11 +586,11 @@ class ChatViewModel : ViewModel() {
 
 ### AiServices.java（Fork 版核心改动）
 
-```java
-package com.mamba.agent.service;
+```
+package com.mamba.service;
 
-import com.mamba.agent.json.GsonJsonCodec;
-import com.mamba.agent.json.JsonCodec;
+import com.mamba.json.GsonJsonCodec;
+import com.mamba.json.JsonCodec;
 import com.mamba.model.chat.ChatLanguageModel;
 // ... 其他 import
 
@@ -657,11 +657,11 @@ public class AiServices<T> {
 
 ### AgentFactory.kt
 
-```kotlin
+```
 package com.mamba.android
 
 import com.mamba.model.openai.OpenAiChatModel
-import com.mamba.agent.service.AiServices
+import com.mamba.service.AiServices
 import com.mamba.memory.chat.MessageWindowChatMemory
 
 object AgentFactory {

@@ -1,0 +1,529 @@
+package com.mamba.picme.agent.core.remote.tool
+
+import android.app.Activity
+import android.view.WindowManager
+import android.widget.EditText
+import androidx.activity.ComponentActivity
+import androidx.recyclerview.widget.RecyclerView
+import com.mamba.picme.agent.core.api.command.AgentCommand
+import com.mamba.picme.agent.core.api.context.AgentContext
+import com.mamba.picme.agent.core.api.context.AgentScene
+import com.mamba.picme.agent.core.platform.logging.Logger
+import com.mamba.picme.agent.core.react.perception.ViewHierarchyExtractor
+import com.mamba.picme.agent.core.react.tool.CameraToolHelper
+import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
+import com.mamba.picme.beauty.api.BeautySettings
+import com.mamba.picme.beauty.api.FilterType
+import com.mamba.picme.beauty.api.StyleFilter
+import com.mamba.tool.P
+import com.mamba.tool.Tool
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.future
+import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+/**
+ * PicMe 应用工具服务。
+ *
+ * 使用 @Tool 注解定义所有可被远程 LLM 调用的工具。
+ * 替代旧的 BaseUiTool 继承体系，直接通过方法签名生成 ToolSpecification。
+ */
+class PicMeToolService(
+    private val windowManager: WindowManager
+) {
+
+    companion object {
+        private const val TAG = "PicMeToolService"
+
+        /** 当前 Activity rootView，由外部设置 */
+        @JvmStatic
+        var currentRootView: android.view.View? = null
+
+        /** 当前 Activity 引用 */
+        @JvmStatic
+        var currentActivity: Activity? = null
+
+        private var screenWidth = 0
+        private var screenHeight = 0
+    }
+
+    // ==================== UI 感知工具 ====================
+
+    @Tool("获取当前屏幕的 UI 层级树信息（纯文本描述），包含所有可见元素的 class/id/text/bounds/clickable/scrollable 等属性。这是感知 UI 状态的唯一途径。")
+    fun getScreenInfo(): String {
+        val rootView = currentRootView
+            ?: return "Error: No activity root view available"
+
+        if (screenWidth <= 0 || screenHeight <= 0) {
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealMetrics(dm)
+            screenWidth = dm.widthPixels
+            screenHeight = dm.heightPixels
+        }
+
+        return try {
+            ViewHierarchyExtractor.extract(rootView, screenWidth, screenHeight)
+        } catch (e: Exception) {
+            "Error: Failed to extract screen info: ${e.message}"
+        }
+    }
+
+    @Tool("点击屏幕上的元素。支持通过坐标(x,y)或文本(text)定位目标。")
+    fun click(
+        @P("X coordinate (use with y, mutually exclusive with text)") x: Int? = null,
+        @P("Y coordinate (use with x, mutually exclusive with text)") y: Int? = null,
+        @P("Click element by visible text (mutually exclusive with x/y)") text: String? = null
+    ): String {
+        val rootView = currentRootView ?: return "Error: No activity root view available"
+
+        if (text != null) {
+            return clickByText(rootView, text)
+        }
+
+        if (x == null || y == null) {
+            return "Error: Either provide (x, y) coordinates or text parameter"
+        }
+
+        val size = getScreenSize()
+        if (x < 0 || x >= size[0] || y < 0 || y >= size[1]) {
+            return "Error: Coordinates ($x, $y) out of screen bounds (${size[0]}x${size[1]})"
+        }
+
+        return try {
+            val targetView = findViewAtPosition(rootView, x, y)
+            if (targetView != null && targetView.isClickable) {
+                targetView.performClick()
+                "Clicked at ($x, $y) on ${targetView.javaClass.simpleName}"
+            } else if (targetView != null) {
+                var parent = targetView.parent
+                while (parent is android.view.View) {
+                    if (parent.isClickable) {
+                        parent.performClick()
+                        return "Clicked parent at ($x, $y) on ${parent.javaClass.simpleName}"
+                    }
+                    parent = parent.parent
+                }
+                dispatchTap(targetView, x, y)
+                "Dispatched tap at ($x, $y) on ${targetView.javaClass.simpleName}"
+            } else {
+                "Error: No clickable view found at ($x, $y)"
+            }
+        } catch (e: Exception) {
+            "Error: Click failed: ${e.message}"
+        }
+    }
+
+    @Tool("在输入框中输入文本")
+    fun inputText(
+        @P("要输入的文本内容") text: String,
+        @P("是否先清空现有文本，默认 true") clearFirst: Boolean = true
+    ): String {
+        val rootView = currentRootView ?: return "Error: No activity root view available"
+
+        val focusedEditText = findFocusedEditText(rootView)
+        if (focusedEditText != null) {
+            focusedEditText.post {
+                if (clearFirst) focusedEditText.setText("")
+                focusedEditText.append(text)
+                focusedEditText.setSelection(focusedEditText.text?.length ?: 0)
+            }
+            return "Input text '$text' into focused EditText"
+        }
+
+        val firstEditText = findFirstEditText(rootView)
+        if (firstEditText != null) {
+            firstEditText.post {
+                firstEditText.requestFocus()
+                if (clearFirst) firstEditText.setText("")
+                firstEditText.append(text)
+                firstEditText.setSelection(firstEditText.text?.length ?: 0)
+            }
+            return "Input text '$text' into first available EditText"
+        }
+
+        return "Error: No EditText found on current screen"
+    }
+
+    @Tool("在屏幕上滑动滚动。支持按方向（up/down）滑动。")
+    fun scroll(
+        @P("滚动方向: up|down") direction: String,
+        @P("滚动距离: page|small，默认 page") distance: String = "page"
+    ): String {
+        val rootView = currentRootView ?: return "Error: No activity root view available"
+        val dir = direction.lowercase()
+        if (dir !in listOf("up", "down")) {
+            return "Error: Invalid direction: '$direction'. Must be 'up' or 'down'"
+        }
+        val isPage = distance != "small"
+
+        val recyclerView = findRecyclerView(rootView)
+        if (recyclerView != null) {
+            val d = if (isPage) recyclerView.height else recyclerView.height / 3
+            recyclerView.post { recyclerView.smoothScrollBy(0, if (dir == "down") d else -d) }
+            return "Scrolled $direction in RecyclerView"
+        }
+
+        val scrollView = findScrollView(rootView)
+        if (scrollView != null) {
+            val d = if (isPage) scrollView.height else scrollView.height / 3
+            scrollView.post { scrollView.smoothScrollBy(0, if (dir == "down") d else -d) }
+            return "Scrolled $direction in ScrollView"
+        }
+
+        return "Error: No scrollable container found on current screen"
+    }
+
+    @Tool("返回上一页")
+    fun goBack(): String {
+        val activity = currentActivity ?: return "Error: No current activity reference available"
+        return try {
+            if (activity is ComponentActivity) {
+                activity.runOnUiThread { activity.onBackPressedDispatcher.onBackPressed() }
+            } else {
+                activity.runOnUiThread { @Suppress("DEPRECATION") activity.onBackPressed() }
+            }
+            "Navigated back"
+        } catch (e: Exception) {
+            "Error: Back navigation failed: ${e.message}"
+        }
+    }
+
+    // ==================== 导航工具 ====================
+
+    @Tool("导航到指定页面。可选值：camera（相机）、gallery（相册）、settings（设置）、debug（调试）")
+    fun navigateTo(
+        @P("目标页面: camera|gallery|settings|debug") destination: String
+    ): String {
+        val valid = setOf("camera", "gallery", "settings", "debug")
+        if (destination !in valid) {
+            return "Error: Invalid destination: '$destination'. Must be one of: ${valid.joinToString()}"
+        }
+        return dispatchCommand(AgentCommand.NavigateTo(destination = destination))
+    }
+
+    // ==================== 相机控制工具 ====================
+
+    @Tool("拍照并保存到相册")
+    fun capture(): String {
+        return executeCameraCommand("capture", emptyMap())
+    }
+
+    @Tool("切换前后摄像头")
+    fun flipCamera(): String {
+        return executeCameraCommand("flip_camera", emptyMap())
+    }
+
+    @Tool("切换录像状态（开始或停止录像）")
+    fun toggleRecording(): String {
+        return executeCameraCommand("toggle_recording", emptyMap())
+    }
+
+    @Tool("切换拍摄模式。可选值：PHOTO（拍照）、VIDEO（录像）、PRO（专业模式）、DOCUMENT（文档模式）")
+    fun switchMode(
+        @P("拍摄模式: PHOTO|VIDEO|PRO|DOCUMENT") mode: String
+    ): String {
+        val valid = setOf("PHOTO", "VIDEO", "PRO", "DOCUMENT")
+        if (mode.uppercase() !in valid) {
+            return "Error: Invalid mode: '$mode'"
+        }
+        return executeCameraCommand("switch_mode", mapOf("mode" to mode.uppercase()))
+    }
+
+    @Tool("调整美颜参数。只传入需要调整的参数，未传入的参数保持不变。")
+    fun adjustBeauty(
+        @P("磨皮程度 0~100") smoothing: Double? = null,
+        @P("美白程度 0~100") whitening: Double? = null,
+        @P("瘦脸 -50~50") slimFace: Double? = null,
+        @P("大眼 0~100") bigEyes: Double? = null,
+        @P("唇色 0~100") lipColor: Double? = null,
+        @P("腮红 0~100") blush: Double? = null,
+        @P("眉毛 0~100") eyebrow: Double? = null
+    ): String {
+        val params = mutableMapOf<String, Any>()
+        smoothing?.let { params["smoothing"] = it }
+        whitening?.let { params["whitening"] = it }
+        slimFace?.let { params["slim_face"] = it }
+        bigEyes?.let { params["big_eyes"] = it }
+        lipColor?.let { params["lip_color"] = it }
+        blush?.let { params["blush"] = it }
+        eyebrow?.let { params["eyebrow"] = it }
+        return executeCameraCommand("adjust_beauty", params)
+    }
+
+    @Tool("调整曝光补偿，范围 -2 到 2")
+    fun adjustExposure(
+        @P("曝光补偿 -2~2") exposure: Int
+    ): String {
+        return executeCameraCommand("adjust_exposure", mapOf("exposure" to exposure.coerceIn(-2, 2)))
+    }
+
+    @Tool("调整变焦倍数，最小 0.5x，最大 10.0x")
+    fun adjustZoom(
+        @P("变焦比例 0.5~10.0") zoom: Double
+    ): String {
+        return executeCameraCommand("adjust_zoom", mapOf("zoom" to zoom.coerceIn(0.5, 10.0)))
+    }
+
+    @Tool("切换相机滤镜。可选值：NONE、LEICA_CLASSIC、LEICA_VIBRANT、LEICA_BW、FILM_GOLD、FILM_FUJI、VINTAGE、COOL、WARM")
+    fun switchFilter(
+        @P("滤镜名称: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM") filter: String
+    ): String {
+        val valid = setOf("NONE", "LEICA_CLASSIC", "LEICA_VIBRANT", "LEICA_BW", "FILM_GOLD", "FILM_FUJI", "VINTAGE", "COOL", "WARM")
+        if (filter.uppercase() !in valid) {
+            return "Error: Invalid filter: '$filter'"
+        }
+        return executeCameraCommand("switch_filter", mapOf("filter" to filter.uppercase()))
+    }
+
+    @Tool("切换艺术风格。可选值：NONE、TOON、SKETCH、POSTERIZE、EMBOSS、CROSSHATCH")
+    fun switchStyle(
+        @P("风格特效名称: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH") style: String
+    ): String {
+        val valid = setOf("NONE", "TOON", "SKETCH", "POSTERIZE", "EMBOSS", "CROSSHATCH")
+        if (style.uppercase() !in valid) {
+            return "Error: Invalid style: '$style'"
+        }
+        return executeCameraCommand("switch_style", mapOf("style" to style.uppercase()))
+    }
+
+    @Tool("切换场景模式。可选值：night（夜景）、moon（月亮）、none（普通）")
+    fun switchScene(
+        @P("场景模式: night|moon|none") scene: String
+    ): String {
+        val valid = setOf("night", "moon", "none")
+        if (scene.lowercase() !in valid) {
+            return "Error: Invalid scene: '$scene'"
+        }
+        return executeCameraCommand("switch_scene", mapOf("scene" to scene.lowercase()))
+    }
+
+    @Tool("切换画面比例。可选值：4:3、16:9、full（全屏）")
+    fun switchRatio(
+        @P("画幅比例: 4:3|16:9|full") ratio: String
+    ): String {
+        val valid = setOf("4:3", "16:9", "full")
+        if (ratio !in valid) {
+            return "Error: Invalid ratio: '$ratio'"
+        }
+        return executeCameraCommand("switch_ratio", mapOf("ratio" to ratio))
+    }
+
+    @Tool("当任务完成时调用此工具，提供任务完成摘要")
+    fun finish(
+        @P("任务完成摘要") summary: String
+    ): String {
+        return summary
+    }
+
+    // ==================== 内部方法 ====================
+
+    private fun dispatchCommand(command: AgentCommand): String {
+        return try {
+            @OptIn(DelicateCoroutinesApi::class)
+            val deferred = GlobalScope.future {
+                CapabilityRegistry.getInstance().dispatch(command, AgentContext(scene = AgentScene.CHAT), null)
+            }
+            val result = deferred.get(5, TimeUnit.SECONDS)
+            result.fold(
+                onSuccess = { "OK: ${it::class.simpleName}" },
+                onFailure = { "Error: ${it.message}" }
+            )
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    private fun executeCameraCommand(method: String, params: Map<String, Any>): String {
+        return try {
+            CameraToolHelper.executeCameraCommand(
+                method = method,
+                params = params,
+                buildCommandJson = { "" }, // 不再使用 JSON 中间格式
+                onSuccess = { "OK: $method executed" },
+                onError = { "Error: $method failed: $it" }
+            )
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    /**
+     * 根据工具名和 JSON 参数调用对应工具方法。
+     * 用于 InAppAgentService 等外部调用者通过字符串方式调用工具。
+     */
+    fun callTool(toolName: String, argsJson: String): String {
+        val args = try {
+            org.json.JSONObject(argsJson)
+        } catch (_: Exception) {
+            org.json.JSONObject()
+        }
+
+        return when (toolName) {
+            "get_screen_info" -> getScreenInfo()
+            "click" -> click(
+                x = args.optInt("x", -1).takeIf { it >= 0 },
+                y = args.optInt("y", -1).takeIf { it >= 0 },
+                text = args.optString("text", "").takeIf { it.isNotBlank() }
+            )
+            "input_text" -> inputText(
+                text = args.optString("text", ""),
+                clearFirst = args.optBoolean("clear_first", true)
+            )
+            "scroll" -> scroll(
+                direction = args.optString("direction", "down"),
+                distance = args.optString("distance", "page")
+            )
+            "navigate_to" -> navigateTo(args.optString("destination", ""))
+            "go_back" -> goBack()
+            "capture" -> capture()
+            "flip_camera" -> flipCamera()
+            "toggle_recording" -> toggleRecording()
+            "switch_mode" -> switchMode(args.optString("mode", "PHOTO"))
+            "adjust_beauty" -> adjustBeauty(
+                smoothing = args.optDouble("smoothing", -1.0).takeIf { it >= 0 },
+                whitening = args.optDouble("whitening", -1.0).takeIf { it >= 0 },
+                slimFace = args.optDouble("slim_face", -100.0).takeIf { it >= -50 },
+                bigEyes = args.optDouble("big_eyes", -1.0).takeIf { it >= 0 },
+                lipColor = args.optDouble("lip_color", -1.0).takeIf { it >= 0 },
+                blush = args.optDouble("blush", -1.0).takeIf { it >= 0 },
+                eyebrow = args.optDouble("eyebrow", -1.0).takeIf { it >= 0 }
+            )
+            "adjust_exposure" -> adjustExposure(args.optInt("exposure", 0))
+            "adjust_zoom" -> adjustZoom(args.optDouble("zoom", 1.0))
+            "switch_filter" -> switchFilter(args.optString("filter", "NONE"))
+            "switch_style" -> switchStyle(args.optString("style", "NONE"))
+            "switch_scene" -> switchScene(args.optString("scene", "none"))
+            "switch_ratio" -> switchRatio(args.optString("ratio", "full"))
+            "finish" -> finish(args.optString("summary", "任务完成"))
+            else -> "Error: Unknown tool: $toolName"
+        }
+    }
+
+    // ==================== UI 辅助方法 ====================
+
+    private fun getScreenSize(): IntArray {
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(dm)
+        return intArrayOf(dm.widthPixels, dm.heightPixels)
+    }
+
+    private fun clickByText(root: android.view.View, text: String): String {
+        val found = findViewByText(root, text)
+        if (found != null) {
+            if (found.isClickable) {
+                found.performClick()
+                return "Clicked element with text: '$text'"
+            }
+            var parent = found.parent
+            while (parent is android.view.View) {
+                if (parent.isClickable) {
+                    parent.performClick()
+                    return "Clicked parent of text '$text'"
+                }
+                parent = parent.parent
+            }
+            val location = IntArray(2)
+            found.getLocationOnScreen(location)
+            dispatchTap(found, location[0] + found.width / 2, location[1] + found.height / 2)
+            return "Dispatched tap on text '$text' at center coordinate"
+        }
+        return "Error: No view found with text containing: '$text'"
+    }
+
+    private fun findViewAtPosition(root: android.view.View, x: Int, y: Int): android.view.View? {
+        if (root is android.view.ViewGroup) {
+            for (i in root.childCount - 1 downTo 0) {
+                val child = root.getChildAt(i)
+                val location = IntArray(2)
+                child.getLocationOnScreen(location)
+                if (x >= location[0] && x <= location[0] + child.width &&
+                    y >= location[1] && y <= location[1] + child.height
+                ) {
+                    val found = findViewAtPosition(child, x, y)
+                    if (found != null) return found
+                    return child
+                }
+            }
+        }
+        return if (root.visibility == android.view.View.VISIBLE) root else null
+    }
+
+    private fun findViewByText(root: android.view.View, text: String): android.view.View? {
+        if (root is android.widget.TextView) {
+            val viewText = root.text?.toString() ?: ""
+            if (viewText.contains(text, ignoreCase = true)) return root
+        }
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findViewByText(root.getChildAt(i), text)
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    private fun dispatchTap(view: android.view.View, x: Int, y: Int) {
+        val downTime = android.os.SystemClock.uptimeMillis()
+        val down = android.view.MotionEvent.obtain(
+            downTime, downTime, android.view.MotionEvent.ACTION_DOWN, x.toFloat(), y.toFloat(), 0
+        )
+        view.dispatchTouchEvent(down)
+        down.recycle()
+
+        val upTime = android.os.SystemClock.uptimeMillis()
+        val up = android.view.MotionEvent.obtain(
+            downTime, upTime, android.view.MotionEvent.ACTION_UP, x.toFloat(), y.toFloat(), 0
+        )
+        view.dispatchTouchEvent(up)
+        up.recycle()
+    }
+
+    private fun findFocusedEditText(root: android.view.View): EditText? {
+        if (root is EditText && root.isFocused) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findFocusedEditText(root.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    private fun findFirstEditText(root: android.view.View): EditText? {
+        if (root is EditText && root.visibility == android.view.View.VISIBLE) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findFirstEditText(root.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    private fun findRecyclerView(root: android.view.View): RecyclerView? {
+        if (root is RecyclerView) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findRecyclerView(root.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
+    private fun findScrollView(root: android.view.View): android.widget.ScrollView? {
+        if (root is android.widget.ScrollView) return root
+        if (root is android.view.ViewGroup) {
+            for (i in 0 until root.childCount) {
+                val found = findScrollView(root.getChildAt(i))
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+}

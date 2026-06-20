@@ -141,7 +141,7 @@ object CameraToolHelper {
      * @param buildCommandJson 构建命令 JSON 的 lambda（已废弃，保留参数避免破坏调用方）
      * @param onSuccess 成功时的结果消息
      * @param onError 失败时的错误消息前缀
-     * @return ToolResult
+     * @return 执行结果字符串（成功或错误信息）
      */
     @OptIn(DelicateCoroutinesApi::class)
     fun executeCameraCommand(
@@ -150,7 +150,7 @@ object CameraToolHelper {
         buildCommandJson: () -> String,
         onSuccess: (String) -> String,
         onError: (String) -> String
-    ): ToolResult {
+    ): String {
         return try {
             val registry = CapabilityRegistry.getInstance()
             val sceneManager = SceneManager.getInstance()
@@ -169,7 +169,7 @@ object CameraToolHelper {
                 val navResult = navDeferred.get(NAVIGATION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
 
                 if (navResult.isFailure) {
-                    return ToolResult.error("Navigation to camera failed: ${navResult.exceptionOrNull()?.message}")
+                    return "Error: Navigation to camera failed: ${navResult.exceptionOrNull()?.message}"
                 }
 
                 // 2. 等待场景切换为 CAMERA
@@ -186,7 +186,7 @@ object CameraToolHelper {
 
                 val elapsed = System.currentTimeMillis() - waitStart
                 if (sceneManager.currentScene.value != SceneManager.Scene.CAMERA) {
-                    return ToolResult.error("Timeout waiting for CAMERA scene after ${elapsed}ms")
+                    return "Error: Timeout waiting for CAMERA scene after ${elapsed}ms"
                 }
                 Logger.i(TAG, "Scene switched to CAMERA after ${elapsed}ms")
 
@@ -205,20 +205,19 @@ object CameraToolHelper {
 
             result.fold(
                 onSuccess = { action ->
-                    val message = when (action) {
+                    when (action) {
                         is AgentAction.Success -> onSuccess(method)
                         is AgentAction.TextReply -> action.message
                         else -> onSuccess(method)
                     }
-                    ToolResult.success(message)
                 },
                 onFailure = { error ->
-                    ToolResult.error(onError(error.message ?: "Unknown error"))
+                    "Error: ${onError(error.message ?: "Unknown error")}"
                 }
             )
         } catch (e: Exception) {
             Logger.e(TAG, "Camera command execution error", e)
-            ToolResult.error("Camera command error: ${e.message}")
+            "Error: Camera command error: ${e.message}"
         }
     }
 }

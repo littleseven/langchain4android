@@ -16,7 +16,7 @@
 | `langchain4j-open-ai` | langchain4j 1.13.0 | 源码复制 |
 | `langchain4j-http-client-okhttp` | langchain4j 1.13.0 | 源码复制 |
 
-**包名迁移**：`dev.langchain4j` → `com.mamba.agent`
+**包名迁移**：`dev.langchain4j` → `com.mamba`（去掉冗余的 `.agent` 层级）
 
 ---
 
@@ -26,7 +26,7 @@
 mamba-agent/
 ├── build.gradle                          # Android Library 构建配置
 ├── consumer-rules.pro                    # ProGuard 规则
-├── src/main/java/com/mamba/agent/
+├── src/main/java/com/mamba/
 │   ├── Experimental.java                 # @Experimental 注解
 │   ├── Internal.java                     # @Internal 注解
 │   ├── agent/
@@ -76,7 +76,7 @@ mamba-agent/
 
 ### 3.1 包名全局替换
 
-- 使用 `sed` 将 `dev.langchain4j` 替换为 `com.mamba.agent`
+- 使用 `sed` 将 `dev.langchain4j` 替换为 `com.mamba`
 - 涉及文件：所有从 langchain4j 复制的 `.java` 文件
 
 ### 3.2 删除的非核心模块
@@ -234,6 +234,6 @@ val response = chatModel.chat("Hello")
 
 - 如需升级 langchain4j 版本，需重新执行以下步骤：
   1. 从新版 langchain4j 复制 `core`、`open-ai`、`http-client-okhttp` 源码
-  2. 执行包名替换 `dev.langchain4j` → `com.mamba.agent`
+  2. 执行包名替换 `dev.langchain4j` → `com.mamba`
   3. 应用本记录的精简策略（删除非核心模块）
   4. 修复编译错误（参考第 3.5 节）

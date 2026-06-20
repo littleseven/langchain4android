@@ -1,6 +1,6 @@
 package com.mamba.client;
 
-import static com.mamba.spi.ServiceHelper.loadFactories;
+import com.mamba.client.okhttp.OkHttpClientBuilderFactory;
 
 import java.util.Collection;
 import java.util.Set;
@@ -31,17 +31,21 @@ public class HttpClientBuilderLoader {
             }
         }
 
+        // Android fallback: ServiceLoader may fail on ART, explicitly use OkHttp
         if (effectiveFactory == null) {
-            if ((selectedClassName == null) || factories.isEmpty()) {
-                throw new IllegalStateException("No HTTP client has been found in the classpath");
-            } else {
-                throw new IllegalStateException(String.format(
-                        "The value of the `langchain4j.http.clientBuilderFactory` system property does not match any of the available HTTP Clients in the classpath: %s.",
-                        factoryNames(factories)));
-            }
+            effectiveFactory = new OkHttpClientBuilderFactory();
         }
 
         return effectiveFactory.create();
+    }
+
+    private static Collection<HttpClientBuilderFactory> loadFactories(Class<HttpClientBuilderFactory> clazz) {
+        try {
+            return com.mamba.spi.ServiceHelper.loadFactories(clazz);
+        } catch (Exception e) {
+            // ServiceLoader may fail on Android, return empty collection
+            return java.util.Collections.emptyList();
+        }
     }
 
     private static Set<String> factoryNames(Collection<HttpClientBuilderFactory> factories) {

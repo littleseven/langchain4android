@@ -7,6 +7,8 @@ import com.mamba.picme.agent.core.api.execution.WaitCondition
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.remote.parser.ToolCallCommandParser
+import com.mamba.picme.agent.core.remote.tool.PicMeToolService
+import com.mamba.picme.agent.core.remote.tool.ToolSpecificationExtractor
 
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
@@ -20,7 +22,6 @@ import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import org.json.JSONObject
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
-import com.mamba.picme.agent.core.react.tool.ToolRegistry
 import com.mamba.tool.ToolExecutionRequest
 import com.mamba.tool.ToolSpecification
 import com.mamba.data.message.AiMessage as LcAiMessage
@@ -113,6 +114,11 @@ class RemoteOrchestrator(
     private val sessionMemories = mutableMapOf<String, ChatMemory>()
 
     /**
+     * PicMe 工具服务（用于 ToolSpecification 提取）
+     */
+    private val toolService by lazy { PicMeToolService(context.getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager) }
+
+    /**
      * 获取或创建指定 session 的 ChatMemory
      */
     private fun getOrCreateMemory(sessionId: String): ChatMemory {
@@ -126,13 +132,6 @@ class RemoteOrchestrator(
     }
 
     /**
-     * 将 langchain4j 的 ChatMessage 列表转换为标准格式
-     */
-    private fun normalizeMessages(lcMessages: List<LcChatMessage>): List<LcChatMessage> {
-        return lcMessages
-    }
-
-    /**
      * 从 ChatMemory 构建带历史上下文的 messages 列表
      * 格式：[System, History..., User]
      */
@@ -143,7 +142,7 @@ class RemoteOrchestrator(
     ): List<LcChatMessage> {
         val memory = getOrCreateMemory(sessionId)
         val historyMessages = memory.messages()
-        
+
         val messages = mutableListOf<LcChatMessage>()
         messages.add(LcSystemMessage.from(systemPrompt))
         if (historyMessages.isNotEmpty()) {
@@ -235,20 +234,10 @@ class RemoteOrchestrator(
                 saveToMemory(context.memorySessionId, userInput, "[tool_calls: ${toolRequests.size}]")
                 return InferenceResult.Batch(commands = commands)
             }
-            
-            // 没有 tool_calls：尝试从文本内容中回退解析 tool_calls JSON
+
+            // 没有 tool_calls：直接作为文本回复处理（不兜底解析）
             val textContent = response.aiMessage.text()
-            if (textContent.isNotBlank()) {
-                val fallbackCommands = parseFallbackToolCalls(textContent, context)
-                if (fallbackCommands.isNotEmpty()) {
-                    Logger.w(tag, "[L2-BATCH] tool_calls missing in API response, fallback parsed ${fallbackCommands.size} commands from content")
-                    saveToMemory(context.memorySessionId, userInput, textContent)
-                    return InferenceResult.Batch(commands = fallbackCommands)
-                }
-                Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content=\"$textContent\", treating as text reply")
-            } else {
-                Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, content is blank AND no tool_calls — possible proxy/cors stripping")
-            }
+            Logger.w(tag, "[L2-BATCH] RSP: latency=${latencyMs}ms, no tool_calls, content=\"${textContent.take(200)}\"")
             saveToMemory(context.memorySessionId, userInput, textContent.ifBlank { "收到，有什么其他需要帮忙的吗？" })
             return InferenceResult.Batch(
                 commands = listOf(
@@ -456,75 +445,13 @@ class RemoteOrchestrator(
     // ── 解析器 ─────────────────────────────────────────────────
 
     /**
-     * 从文本内容中提取命令（公开方法，供流式完成后解析使用）
-     *
-     * 在流式场景中，LLM 可能将 tool_calls JSON 输出到文本 content 中（而非标准
-     * tool_calls 协议）。此方法从文本中回退解析命令。
-     *
-     * @param content LLM 返回的完整文本内容
-     * @param context 当前 Agent 上下文
-     * @return 解析出的命令列表（空列表表示未找到命令）
-     */
-    fun parseCommandsFromText(
-        content: String,
-        context: AgentContext
-    ): List<AgentCommand> {
-        return parseFallbackToolCalls(content, context)
-    }
-
-    /**
-     * 当 API 响应缺少 tool_calls 字段时，尝试从文本内容中回退解析
-     *
-     * 某些代理/网关（如 SCF）可能剥离 tool_calls 字段，仅保留文本内容。
-     * DeepSeek 等模型在特定情况下也可能将 tool_calls 输出到 content 字段中。
-     * 此方法作为兜底恢复机制，与 [LangChain4jOpenAiClient.parseToolCallsFromContent] 保持一致。
-     */
-    private fun parseFallbackToolCalls(
-        content: String,
-        context: AgentContext
-    ): List<AgentCommand> {
-        val cleaned = cleanJsonContent(content)
-
-        // 尝试 1: 解析为 {tool_calls: [...]} 结构
-        try {
-            val jsonObj = JSONObject(cleaned)
-            val toolCallsArray = jsonObj.optJSONArray("tool_calls")
-            if (toolCallsArray != null && toolCallsArray.length() > 0) {
-                val requests = mutableListOf<ToolExecutionRequest>()
-                for (i in 0 until toolCallsArray.length()) {
-                    val tc = toolCallsArray.getJSONObject(i)
-                    val func = tc.optJSONObject("function") ?: continue
-                    val arguments = when (val raw = func.opt("arguments")) {
-                        is JSONObject -> raw.toString()
-                        is String -> raw
-                        else -> "{}"
-                    }
-                    Logger.d(tag, "[Fallback] Tool call #$i: name=${func.optString("name", "")}, arguments=$arguments")
-                    requests.add(
-                        ToolExecutionRequest.builder()
-                            .id(tc.optString("id", "fallback_$i"))
-                            .name(func.optString("name", ""))
-                            .arguments(arguments)
-                            .build()
-                    )
-                }
-                if (requests.isNotEmpty()) {
-                    return parseToolCalls(requests, context)
-                }
-            }
-        } catch (_: Exception) {}
-
-        return emptyList()
-    }
-
-    /**
      * 构建 L2 Batch 模式的 ToolSpecifications。
      *
-     * 从 [ToolRegistry] 统一生成，消除手动重复定义。
-     * ToolRegistry 是 Tool 的单一事实来源（Single Source of Truth）。
+     * 从 [PicMeToolService] 的 @Tool 注解方法自动生成，
+     * 使用 [ToolSpecificationExtractor] 提取。
      */
     private fun buildL2ToolSpecifications(): List<ToolSpecification> {
-        return ToolRegistry.buildToolSpecifications()
+        return ToolSpecificationExtractor.extract(toolService)
     }
 
     /**
@@ -587,20 +514,7 @@ class RemoteOrchestrator(
                             AgentCommand.TextReply(message = "步骤解析失败：command 缺少 name 字段")
                         }
                     } else {
-                        // 兼容旧格式：method + params（逐步迁移期间保留）
-                        val methodName = stepObject.optString("method", "")
-                        val paramsObject = stepObject.optJSONObject("params")
-                        if (methodName.isNotBlank()) {
-                            val args = paramsObject?.toString() ?: "{}"
-                            val request = ToolExecutionRequest.builder()
-                                .id("plan_step_$stepNum")
-                                .name(methodName)
-                                .arguments(args)
-                                .build()
-                            ToolCallCommandParser.parse(request, context)
-                        } else {
-                            AgentCommand.TextReply(message = "步骤解析失败：缺少 command 或 method 字段")
-                        }
+                        AgentCommand.TextReply(message = "步骤解析失败：缺少 command 字段")
                     }
 
                     steps.add(
@@ -681,7 +595,7 @@ class RemoteOrchestrator(
         }
 
         // 移除代码块
-        cleaned = cleaned.removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+        cleaned = cleaned.removePrefix("``json").removePrefix("```").removeSuffix("```").trim()
         
         return cleaned
     }

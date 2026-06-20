@@ -391,14 +391,8 @@ class AgentOrchestrator private constructor(context: Context) {
         agentContext: AgentContext,
         onToken: (String) -> Unit
     ): Result<StreamChatResult> {
-        return try {
-            configurator.getRemoteOrchestrator()
-                .processChatStreaming(input, agentContext, onToken)
-        } catch (e: Exception) {
-            Logger.e(tag, "streamChatRemote failed, falling back to local", e)
-            // 远程失败回退到本地
-            streamChatLocal(input, agentContext, onToken)
-        }
+        return configurator.getRemoteOrchestrator()
+            .processChatStreaming(input, agentContext, onToken)
     }
 
     /**
@@ -531,48 +525,7 @@ class AgentOrchestrator private constructor(context: Context) {
             AiAgentMode.REMOTE -> {
                 // 远程模式：通过 RemotePipeline 进行编排
                 Logger.d(tag, "Using RemotePipeline for REMOTE mode")
-                try {
-                    configurator.getRemotePipeline().processInput(input, agentContext)
-                } catch (exception: Exception) {
-                    Logger.e(tag, "Remote inference failed, falling back to local", exception)
-                    // 远程失败时回退到本地
-                    if (!localLlmEngine.isLoaded) {
-                        val loadResult = tryLoadModel()
-                        if (loadResult.isFailure) {
-                            return@withContext handleModelLoadError(loadResult)
-                        }
-                    }
-                    val fallbackResult = try {
-                        // 构建带历史上下文的 messages
-                        val fallbackMessages = memoryManager.buildContextMessages(
-                            agentContext.memorySessionId, systemPrompt, input
-                        )
-                        Result.success(
-                            localLlmEngine.chat(
-                                LlmChatRequest(
-                                    messages = fallbackMessages
-                                )
-                            ).aiMessage.text()
-                        )
-                    } catch (e: Exception) {
-                        Result.failure(e)
-                    }
-                    return@withContext fallbackResult.fold(
-                        onSuccess = { rawResponse ->
-                            handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
-                        },
-                        onFailure = { error ->
-                            Logger.e(tag, "Fallback local inference also failed", error)
-                            Result.success(
-                                AgentAction.Error(
-                                    commandId = AgentIdGenerator.nextId(),
-                                    errorCode = AgentErrorCode.INTERNAL_ERROR,
-                                    message = "推理失败：${error.message ?: "未知错误"}"
-                                )
-                            )
-                        }
-                    )
-                }
+                configurator.getRemotePipeline().processInput(input, agentContext)
             }
             AiAgentMode.OFF -> {
                 Logger.w(tag, "Agent is OFF")
@@ -586,47 +539,8 @@ class AgentOrchestrator private constructor(context: Context) {
             }
             AiAgentMode.FEISHU -> {
                 // FEISHU 模式：聊天页等场景走远程推理，与 REMOTE 模式一致
-                Logger.d(tag, "Using RemotePipeline for FEISHU mode (chat fallback)")
-                try {
-                    configurator.getRemotePipeline().processInput(input, agentContext)
-                } catch (exception: Exception) {
-                    Logger.e(tag, "Remote inference failed for FEISHU mode, falling back to local", exception)
-                    if (!localLlmEngine.isLoaded) {
-                        val loadResult = tryLoadModel()
-                        if (loadResult.isFailure) {
-                            return@withContext handleModelLoadError(loadResult)
-                        }
-                    }
-                    val fallbackResult = try {
-                        val fallbackMessages = memoryManager.buildContextMessages(
-                            agentContext.memorySessionId, systemPrompt, input
-                        )
-                        Result.success(
-                            localLlmEngine.chat(
-                                LlmChatRequest(
-                                    messages = fallbackMessages
-                                )
-                            ).aiMessage.text()
-                        )
-                    } catch (e: Exception) {
-                        Result.failure(e)
-                    }
-                    return@withContext fallbackResult.fold(
-                        onSuccess = { rawResponse ->
-                            handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
-                        },
-                        onFailure = { error ->
-                            Logger.e(tag, "Fallback local inference also failed", error)
-                            Result.success(
-                                AgentAction.Error(
-                                    commandId = AgentIdGenerator.nextId(),
-                                    errorCode = AgentErrorCode.INTERNAL_ERROR,
-                                    message = "推理失败：${error.message ?: "未知错误"}"
-                                )
-                            )
-                        }
-                    )
-                }
+                Logger.d(tag, "Using RemotePipeline for FEISHU mode")
+                configurator.getRemotePipeline().processInput(input, agentContext)
             }
         }
 
