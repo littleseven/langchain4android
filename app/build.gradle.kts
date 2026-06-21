@@ -209,6 +209,8 @@ dependencies {
     implementation(libs.google.mlkit.text.recognition.chinese)
     implementation(libs.google.mlkit.image.labeling)
     implementation(libs.google.mlkit.image.labeling.common)
+    implementation(libs.google.mlkit.vision.common)
+    implementation(libs.google.mlkit.vision.interfaces)
 
     // MediaPipe Face Landmarker（Gallery 调试用，直接显示 468 点原始数据）
     implementation(libs.mediapipe.face.landmarker)
