@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.PointF
 import android.graphics.RectF
+import android.hardware.camera2.CameraCharacteristics
 import android.media.Image
 import android.os.SystemClock
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
@@ -554,7 +555,11 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                             Logger.w(TAG, "MediaPipe landmark detector not available in pipeline for photo")
                             return null
                         }
-                        val mediaPipeResult = detector.detectLandmarks(bitmap, lensFacing, null)
+                        // [关键修复] 拍照 Bitmap 已预镜像（postScale(-1f, 1f)），
+                        // 适配器应跳过镜像，使用 LENS_FACING_BACK 确保不镜像。
+                        val mediaPipeResult = detector.detectLandmarks(
+                            bitmap, CameraCharacteristics.LENS_FACING_BACK, null
+                        )
                         lastProcessTimeMs = SystemClock.elapsedRealtime() - startTime
                         if (mediaPipeResult != null) {
                             lastDetectionSource = FaceDetectionSource.MEDIAPIPE
@@ -564,7 +569,10 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                         }
                     }
                     else -> {
-                        detectPipeline(bitmap, lensFacing, config, startTime)
+                        // [关键修复] 拍照 Bitmap 已经过旋转和镜像预处理（由 ImageProcessorImpl.takePhoto
+                        // 中的 postRotate + postScale(-1f, 1f) 完成），因此检测器内部的 adapter 不应再做
+                        // x = 1f - x 镜像。使用 1 (LENS_FACING_BACK) 让 adapter 跳过镜像逻辑。
+                        detectPipeline(bitmap, 1, config, startTime)
                     }
                 }
             }

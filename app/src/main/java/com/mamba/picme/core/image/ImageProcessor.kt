@@ -56,7 +56,8 @@ interface ImageProcessor {
         filter: FilterType,
         beauty: BeautySettings,
         faces: List<Face>,
-        lensFacing: Int = CameraSelector.LENS_FACING_BACK
+        lensFacing: Int = CameraSelector.LENS_FACING_BACK,
+        preDetectedFaceData: FaceData? = null
     ): Bitmap
 
     fun takePhoto(
@@ -112,15 +113,16 @@ class ImageProcessorImpl(
         filter: FilterType,
         beauty: BeautySettings,
         faces: List<Face>,
-        lensFacing: Int
+        lensFacing: Int,
+        preDetectedFaceData: FaceData?
     ): Bitmap {
-        Logger.d(TAG, "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}")
+        Logger.d(TAG, "processPhoto called: enabled=${beauty.enabled}, smoothing=${beauty.smoothing}, whitening=${beauty.whitening}, slimFace=${beauty.slimFace}, bigEyes=${beauty.bigEyes}, faces=${faces.size}, hasPreDetected=${preDetectedFaceData != null}")
 
         // 拍照路径始终在当前帧重新检测人脸，避免复用预览帧导致坐标偏移。
-        var photoFaceData: FaceData? = null
+        var photoFaceData: FaceData? = preDetectedFaceData
         val detector = faceDetectorManager
         // Shader 管线中的多项效果依赖人脸参数，尽量保证拍照路径有人脸检测结果。
-        if (detector != null) {
+        if (detector != null && preDetectedFaceData == null) {
             Logger.d(TAG, "Re-detecting face on photo bitmap for makeup/skin effects")
             val detectionResult = detector.detectPhoto(source, lensFacing)
             if (detectionResult != null) {
@@ -130,7 +132,6 @@ class ImageProcessorImpl(
                 Logger.w(TAG, "Photo face detection failed, falling back to cached faces")
             }
         }
-
         // [GPU路径] 大美丽模式下优先使用 GPU 离屏渲染，确保预览/拍照效果一致
         val gpuProcessor = photoProcessor
         if (gpuProcessor != null) {
@@ -219,7 +220,12 @@ class ImageProcessorImpl(
                     val cropRect = image.cropRect
                     Logger.d(TAG, "ImageProxy cropRect: $cropRect, imageSize: ${image.width}x${image.height}")
 
-                    val originalBitmap = image.toBitmap()
+                    // [关键修复] toBitmap() 可能与底层 HardwareBuffer 共享 native 内存，
+                    // 调用 image.close() 后缓冲区被回收会导致 Bitmap 变为无效（recycled）。
+                    // 必须在 close() 前深拷贝一份拥有独立内存的副本。
+                    val proxyBitmap = image.toBitmap()
+                    val safeConfig = proxyBitmap.config ?: Bitmap.Config.ARGB_8888
+                    val originalBitmap = proxyBitmap.copy(safeConfig, false)
                     image.close()
 
                     val croppedBitmap = if (cropRect.width() != originalBitmap.width || cropRect.height() != originalBitmap.height) {
@@ -266,12 +272,28 @@ class ImageProcessorImpl(
                             return
                         }
 
+                        // [优化: CR-PHOTO-001] 人脸检测使用独立副本，防止 MediaPipe 回收 processingInput
+                        var preDetectedFaceData: FaceData? = null
+                        if (faceDetectorManager != null) {
+                            val detectInput = prepareBitmapForSaving(rotatedBitmap)
+                            if (detectInput != null) {
+                                val result = faceDetectorManager!!.detectPhoto(detectInput, lensFacing)
+                                if (result != null) {
+                                    preDetectedFaceData = result.landmarks106.toFaceDataFromLandmarks106(
+                                        processingInput.width, processingInput.height
+                                    )
+                                }
+                                if (!detectInput.isRecycled) detectInput.recycle()
+                            }
+                        }
+
                         val finalBitmap = processPhoto(
                             source = processingInput,
                             filter = filter,
                             beauty = beauty,
                             faces = emptyList(),
-                            lensFacing = lensFacing
+                            lensFacing = lensFacing,
+                            preDetectedFaceData = preDetectedFaceData
                         )
 
                         val hasFace = cachedFaces.isNotEmpty()

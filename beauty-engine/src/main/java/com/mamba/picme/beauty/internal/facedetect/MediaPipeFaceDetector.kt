@@ -141,6 +141,10 @@ class MediaPipeFaceDetector(context: Context) {
 
     /**
      * 拍照路径检测（IMAGE 模式）
+     *
+     * [关键修复] Bitmap 已经过旋转和镜像预处理（由 ImageProcessorImpl.takePhoto 中的
+     * postRotate + postScale(-1f, 1f) 完成），因此适配器不应再做 x = 1f - x 镜像。
+     * 使用 LENS_FACING_BACK 确保 isFrontCamera=false，跳过镜像逻辑。
      */
     fun detectForPhoto(bitmap: Bitmap, lensFacing: Int): FloatArray? {
         val landmarker = imageLandmarker ?: return null
@@ -157,7 +161,11 @@ class MediaPipeFaceDetector(context: Context) {
                 as? MediaPipe468Adapter
                 ?: return null
 
-            adapter.adapt(result.faceLandmarks()[0], lensFacing).getOrNull()
+            // [拍照路径] 适配器需要根据实际 lensFacing 做镜像
+            // 注意: 此方法同时被预览 Bitmap 降级路径 (need mirror) 和
+            // 拍照路径 (bitmap 已预镜像, no mirror) 共用。调用方应负责传入正确的 lensFacing。
+            adapter.adapt(result.faceLandmarks()[0], lensFacing)
+                .getOrNull()
         } catch (e: Exception) {
             Logger.e("MediaPipeDetector", "MediaPipe photo detection failed", e)
             null
