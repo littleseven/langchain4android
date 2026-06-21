@@ -50,7 +50,7 @@ data class RemoteModelConfig(
          * 腾讯云 SCF AI Gateway 默认配置
          */
         val TENCENT_SCF_DEFAULT = RemoteModelConfig(
-            modelId = "deepseek-v4-flash",
+            modelId = "kimi-k2.6",
             protocol = RemoteProtocol.OPENAI,
             baseUrl = "https://1412656811-f92agkf1y7.ap-guangzhou.tencentscf.com/"
             // baseUrl = "https://1412656811-m5kw2dftdi.ap-beijing.tencentscf.com/"

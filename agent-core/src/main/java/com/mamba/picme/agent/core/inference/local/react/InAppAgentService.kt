@@ -42,11 +42,18 @@ class InAppAgentService(
 
     private val chatModel by lazy {
         val effectiveApiKey = config.apiKey.ifEmpty { "gateway-auth" }
+        val modelName = config.modelName
+
+        /**
+         * Kimi K2.6 仅支持 temperature=1，其他值会返回 400001 错误。
+         */
+        val clampedTemperature = if (modelName.contains("kimi-k2.6", ignoreCase = true)) 1.0 else config.temperature
+
         val builder = MambaAgentFactory.builder()
             .apiKey(effectiveApiKey)
             .baseUrl(config.baseUrl)
-            .model(config.modelName)
-            .temperature(config.temperature)
+            .model(modelName)
+            .temperature(clampedTemperature)
             .logRequests(true)
             .logResponses(true)
 

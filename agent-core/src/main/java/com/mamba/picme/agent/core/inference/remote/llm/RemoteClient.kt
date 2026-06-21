@@ -26,6 +26,19 @@ class RemoteClient(
     private val tag = "RemoteClient"
 
     /**
+     * Kimi K2.6 仅支持 temperature=1，其他值会返回 400001 错误。
+     * 根据模型 ID 自动适配合法 temperature 值。
+     *
+     * 注意：此规则同时应用于客户端初始化默认值和每次请求的动态覆盖值。
+     */
+    private val isKimiK26: Boolean
+        get() = config.modelId.contains("kimi-k2.6", ignoreCase = true)
+
+    private fun clampTemperature(requested: Double?): Double {
+        return if (isKimiK26) 1.0 else (requested ?: 0.7)
+    }
+
+    /**
      * OPENAI 协议客户端（通过 MambaAgentFactory 创建）
      */
     private val openAiClient: com.mamba.model.chat.ChatModel? by lazy {
@@ -34,7 +47,7 @@ class RemoteClient(
                 .apiKey(config.apiKey)
                 .baseUrl(config.baseUrl)
                 .model(config.modelId)
-                .temperature(0.7)
+                .temperature(clampTemperature(null))
                 .maxTokens(2048)
                 .timeout(Duration.ofSeconds(60))
                 .maxRetries(2)
@@ -54,7 +67,7 @@ class RemoteClient(
             .messages(request.messages)
             .parameters(
                 DefaultChatRequestParameters.builder()
-                    .temperature(request.temperature ?: 0.7)
+                    .temperature(clampTemperature(request.temperature))
                     .maxOutputTokens(request.maxTokens ?: 2048)
                     .build()
             )
