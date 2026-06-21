@@ -8,6 +8,7 @@ import com.mamba.picme.agent.core.model.context.AgentErrorCode
 import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.core.common.Logger
+import com.mamba.picme.domain.search.MediaSearchEngine
 import java.lang.ref.WeakReference
 
 /**
@@ -38,6 +39,11 @@ class GalleryCapability : BaseCapability() {
 
     override val name: String = "gallery"
     override val description: String = "相册操作：查看、删除、分享、搜索、选择照片和视频"
+
+    /**
+     * 搜索引擎（由 AppContainer 注入）
+     */
+    var searchEngine: MediaSearchEngine? = null
 
     /**
      * 相册操作委托接口
@@ -236,21 +242,36 @@ class GalleryCapability : BaseCapability() {
         }
     }
 
-    private fun handleSearchMedia(
+    private suspend fun handleSearchMedia(
         command: AgentCommand.SearchMedia,
         d: Delegate
     ): Result<AgentAction> {
-        return if (command.query.isNotBlank()) {
-            d.onSearch(command.query)
-            Result.success(AgentAction.Success(commandId = command.commandId, command = command))
-        } else {
-            Result.success(
+        if (command.query.isBlank()) {
+            return Result.success(
                 AgentAction.Error(
                     commandId = command.commandId,
                     errorCode = AgentErrorCode.INVALID_PARAMS,
                     message = "搜索关键词不能为空"
                 )
             )
+        }
+
+        val engine = searchEngine
+        if (engine != null) {
+            val result = engine.search(command.query)
+            Logger.i(tag, "Search '${command.query}' → ${result.resultCount} results")
+            d.onSearch(command.query)
+            return Result.success(
+                AgentAction.TextReply(
+                    commandId = command.commandId,
+                    message = "找到 ${result.resultCount} 张匹配 '${command.query}' 的照片"
+                )
+            )
+        } else {
+            // 回退到旧行为（搜索引擎未初始化）
+            Logger.w(tag, "Search engine not initialized, falling back to delegate")
+            d.onSearch(command.query)
+            return Result.success(AgentAction.Success(commandId = command.commandId, command = command))
         }
     }
 

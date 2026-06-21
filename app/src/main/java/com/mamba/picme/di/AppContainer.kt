@@ -18,6 +18,7 @@ import com.mamba.picme.data.preferences.UserPreferencesRepository
 import com.mamba.picme.data.repository.MediaRepositoryImpl
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.domain.repository.UserSettingsRepository
+import com.mamba.picme.domain.search.MediaSearchEngine
 import com.mamba.picme.data.download.LlmModelDownloadManager
 import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase
@@ -77,6 +78,7 @@ interface AppContainer {
     val faceDetector: FaceDetector
     val llmModelDownloadManager: LlmModelDownloadManager
     val kwsEngine: KeywordSpotterEngine?  // 【新增】KWS 唤醒词引擎（可选）
+    val mediaSearchEngine: MediaSearchEngine  // 媒体搜索引擎（自然语言图片搜索）
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
     fun createChatViewModelFactory(): ViewModelProvider.Factory
@@ -85,6 +87,11 @@ interface AppContainer {
 class AppContainerImpl(private val context: Context) : AppContainer {
 
     private val database by lazy { AppDatabase.getDatabase(context) }
+
+    /** 媒体搜索引擎（自然语言图片搜索） */
+    override val mediaSearchEngine: MediaSearchEngine by lazy {
+        MediaSearchEngine(database.mediaDao())
+    }
 
     /**
      * 静态 Bitmap 美颜处理器（拍照后 CPU 路径）。

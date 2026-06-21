@@ -15,5 +15,12 @@ data class MediaEntity(
     val duration: Long? = null,
     val hasFace: Boolean = false,
     val faceId: String? = null,
-    val source: String? = null
+    val source: String? = null,
+    // 元数据索引字段（Phase 1 自然语言搜索）
+    val labels: String? = null,           // JSON 数组：["猫","户外","食物"]
+    val ocrText: String? = null,          // OCR 提取的文字
+    val latitude: Double? = null,         // GPS 纬度
+    val longitude: Double? = null,        // GPS 经度
+    val locationName: String? = null,     // 逆地理编码地名
+    val indexedAt: Long? = null           // 索引完成时间戳（null=未索引）
 )

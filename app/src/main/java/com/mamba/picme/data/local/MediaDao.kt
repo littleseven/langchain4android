@@ -27,4 +27,66 @@ interface MediaDao {
 
     @Query("SELECT * FROM media_assets WHERE id IN (:ids)")
     suspend fun getMediaByIds(ids: List<Long>): List<MediaEntity>
+
+    // ── 搜索查询 ─────────────────────────────────────────────
+
+    /** 按标签搜索（labels JSON 数组模糊匹配） */
+    @Query("SELECT * FROM media_assets WHERE labels LIKE '%' || :label || '%' ORDER BY captureDate DESC")
+    suspend fun searchByLabel(label: String): List<MediaEntity>
+
+    /** 按 OCR 文本搜索 */
+    @Query("SELECT * FROM media_assets WHERE ocrText LIKE '%' || :query || '%' ORDER BY captureDate DESC")
+    suspend fun searchByOcrText(query: String): List<MediaEntity>
+
+    /** 按地名搜索 */
+    @Query("SELECT * FROM media_assets WHERE locationName LIKE '%' || :place || '%' ORDER BY captureDate DESC")
+    suspend fun searchByLocation(place: String): List<MediaEntity>
+
+    /** 按文件名搜索 */
+    @Query("SELECT * FROM media_assets WHERE fileName LIKE '%' || :name || '%' ORDER BY captureDate DESC")
+    suspend fun searchByFileName(name: String): List<MediaEntity>
+
+    /** 按时间范围搜索 */
+    @Query("SELECT * FROM media_assets WHERE captureDate BETWEEN :startMs AND :endMs ORDER BY captureDate DESC")
+    suspend fun searchByTimeRange(startMs: Long, endMs: Long): List<MediaEntity>
+
+    /** 综合搜索：标签 + OCR + 地名 + 文件名 */
+    @Query(
+        """
+        SELECT * FROM media_assets WHERE
+            labels LIKE '%' || :query || '%' OR
+            ocrText LIKE '%' || :query || '%' OR
+            locationName LIKE '%' || :query || '%' OR
+            fileName LIKE '%' || :query || '%'
+        ORDER BY captureDate DESC
+        """
+    )
+    suspend fun searchAll(query: String): List<MediaEntity>
+
+    /** 获取未索引的媒体（indexed_at IS NULL） */
+    @Query("SELECT * FROM media_assets WHERE indexedAt IS NULL ORDER BY captureDate DESC")
+    suspend fun getUnindexedMedia(): List<MediaEntity>
+
+    /** 更新索引结果 */
+    @Query(
+        """
+        UPDATE media_assets SET
+            labels = :labels,
+            ocrText = :ocrText,
+            latitude = :latitude,
+            longitude = :longitude,
+            locationName = :locationName,
+            indexedAt = :indexedAt
+        WHERE id = :mediaId
+        """
+    )
+    suspend fun updateIndexResult(
+        mediaId: Long,
+        labels: String?,
+        ocrText: String?,
+        latitude: Double?,
+        longitude: Double?,
+        locationName: String?,
+        indexedAt: Long
+    )
 }

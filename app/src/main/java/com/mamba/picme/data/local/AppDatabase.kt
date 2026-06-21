@@ -8,7 +8,7 @@ import com.mamba.picme.data.model.MediaEntity
 
 @Database(
     entities = [MediaEntity::class, ChatMessageEntity::class, ChatSessionEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,7 +28,10 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
-                    .addMigrations(ChatDatabaseMigrations.MIGRATION_4_5)
+                    .addMigrations(
+                        ChatDatabaseMigrations.MIGRATION_4_5,
+                        ChatDatabaseMigrations.MIGRATION_5_6
+                    )
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

@@ -12,7 +12,14 @@ data class MediaAsset(
     val duration: Long? = null,
     val hasFace: Boolean = false,
     val faceId: String? = null,
-    val source: String? = null
+    val source: String? = null,
+    // 元数据索引字段（自然语言搜索）
+    val labels: String? = null,
+    val ocrText: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationName: String? = null,
+    val indexedAt: Long? = null
 )
 
 enum class MediaType {

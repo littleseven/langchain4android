@@ -21,7 +21,8 @@ import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
-// Capability 导入已移除：页面级 Capability 由各 Screen 自行创建
+import com.mamba.picme.features.gallery.capability.GalleryCapability
+// 其他页面级 Capability 由各 Screen 自行创建
 import com.mamba.picme.domain.agent.remote.FeishuChannelHandler
 import com.mamba.picme.domain.agent.remote.FeishuPhotoTracker
 import com.mamba.picme.domain.agent.remote.RemoteCommandDispatcher
@@ -92,6 +93,9 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         loadNativeLibraries()
 
         container = AppContainerImpl(this)
+
+        // 注入媒体搜索引擎到 GalleryCapability（自然语言图片搜索）
+        GalleryCapability.getInstance().searchEngine = container.mediaSearchEngine
 
         // 初始化人脸关键点适配器注册表
         FaceLandmarkAdapterRegistry.initDefaults()

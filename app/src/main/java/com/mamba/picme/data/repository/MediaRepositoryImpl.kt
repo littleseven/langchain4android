@@ -239,7 +239,9 @@ class MediaRepositoryImpl(
             MediaStore.Images.Media._ID,
             MediaStore.Images.Media.DISPLAY_NAME,
             MediaStore.Images.Media.DATE_TAKEN,
-            MediaStore.Images.Media.DATE_ADDED
+            MediaStore.Images.Media.DATE_ADDED,
+            MediaStore.Images.Media.LATITUDE,
+            MediaStore.Images.Media.LONGITUDE
         )
         return runCatching {
             appContext.contentResolver.query(
@@ -253,6 +255,8 @@ class MediaRepositoryImpl(
                 val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
                 val dateTakenIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
                 val dateAddedIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+                val latIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.LATITUDE)
+                val lonIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.LONGITUDE)
                 buildList {
                     while (cursor.moveToNext()) {
                         val mediaStoreId = cursor.getLong(idIndex)
@@ -260,6 +264,8 @@ class MediaRepositoryImpl(
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                             mediaStoreId
                         )
+                        val lat = if (cursor.isNull(latIndex)) null else cursor.getDouble(latIndex)
+                        val lon = if (cursor.isNull(lonIndex)) null else cursor.getDouble(lonIndex)
                         add(
                             MediaAsset(
                                 id = syntheticMediaId(mediaStoreId, MediaType.PHOTO),
@@ -269,7 +275,9 @@ class MediaRepositoryImpl(
                                     dateTakenMs = cursor.getLong(dateTakenIndex),
                                     dateAddedSeconds = cursor.getLong(dateAddedIndex)
                                 ),
-                                fileName = cursor.getString(nameIndex) ?: uri.lastPathSegment.orEmpty()
+                                fileName = cursor.getString(nameIndex) ?: uri.lastPathSegment.orEmpty(),
+                                latitude = lat,
+                                longitude = lon
                             )
                         )
                     }
@@ -438,7 +446,13 @@ class MediaRepositoryImpl(
         duration = duration,
         hasFace = hasFace,
         faceId = faceId,
-        source = source
+        source = source,
+        labels = labels,
+        ocrText = ocrText,
+        latitude = latitude,
+        longitude = longitude,
+        locationName = locationName,
+        indexedAt = indexedAt
     )
 
     private fun MediaAsset.toEntity(): MediaEntity = MediaEntity(
@@ -450,6 +464,12 @@ class MediaRepositoryImpl(
         duration = duration,
         hasFace = hasFace,
         faceId = faceId,
-        source = source
+        source = source,
+        labels = labels,
+        ocrText = ocrText,
+        latitude = latitude,
+        longitude = longitude,
+        locationName = locationName,
+        indexedAt = indexedAt
     )
 }
