@@ -40,7 +40,6 @@ import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.platform.voice.AsrEngine
-import com.mamba.picme.agent.core.platform.voice.MnnAsrClient
 import com.mamba.picme.agent.core.platform.voice.SherpaOnnxAsrEngine
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.preferences.UserPreferencesRepository
@@ -103,14 +102,8 @@ fun createAsrEngine(
             SystemAsrEngine(context)
         }
     } else {
-        val mnnAsr = MnnAsrClient(context, localAsrModel)
-        if (mnnAsr.isAvailable()) {
-            Logger.i(logTag, "Using MNN ASR engine")
-            mnnAsr
-        } else {
-            Logger.w(logTag, "MNN ASR not available, fallback to system ASR")
-            SystemAsrEngine(context)
-        }
+        Logger.w(logTag, "Unsupported ASR model: $localAsrModel, fallback to system ASR")
+        SystemAsrEngine(context)
     }
 }
 

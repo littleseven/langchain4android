@@ -77,14 +77,14 @@ object MnnGlobalReleaseLock {
  * 解决 LLM (MNN::Transformer::Llm) 与人脸检测 (MNN::Interpreter 备选路径)
  * 共享 libMNN.so 时的全局状态冲突和内存压力问题。
  *
- * 注意：sherpa-onnx 迁移后，ASR/KWS 使用 ONNX Runtime，不再依赖 MNN，
- * 因此不再需要 ASR 维度的资源协调。ASR 相关 API 已标记为 @Deprecated。
+ * 注意：sherpa-onnx 迁移后，ASR/KWS 使用 ONNX Runtime，不再依赖 MNN。
+ * ASR 相关 API 已全部移除。
  *
  * 核心策略：
- * 1. 引用计数：LLM、ASR、FaceDetection 分别持有独立引用
+ * 1. 引用计数：LLM、FaceDetection 分别持有独立引用
  * 2. 场景状态机：根据当前页面（相机/聊天/设置）决定哪些模型需要常驻
  * 3. 协调释放：仅当所有相关方均同意释放时才执行真正的 native unload
- * 4. 软释放：单方释放时仅做状态清理（trimMemory / stopStreaming），保留模型
+ * 4. 软释放：单方释放时仅做状态清理（trimMemory），保留模型
  * 5. 内存阈值：Native Heap 超过阈值时自动卸载非必要模型
  * 6. 生命周期感知：自动响应 App 前后台切换和系统内存压力
  *
@@ -122,32 +122,16 @@ class MnnResourceManager private constructor(context: Context) {
     // ── 引用计数 ─────────────────────────────────────────────
 
     private val llmRefCount = AtomicInteger(0)
-    private val asrRefCount = AtomicInteger(0)
     private val faceDetectionRefCount = AtomicInteger(0)
 
-    /**
-     * LLM 是否被请求保持加载
-     */
     val isLlmRequested: Boolean
         get() = llmRefCount.get() > 0
 
-    /**
-     * ASR 是否被请求保持加载
-     */
-    val isAsrRequested: Boolean
-        get() = asrRefCount.get() > 0
-
-    /**
-     * 人脸检测是否被请求保持加载
-     */
     val isFaceDetectionRequested: Boolean
         get() = faceDetectionRefCount.get() > 0
 
-    /**
-     * 是否有任何一方请求保持 MNN 资源
-     */
     val isAnyRequested: Boolean
-        get() = isLlmRequested || isAsrRequested || isFaceDetectionRequested
+        get() = isLlmRequested || isFaceDetectionRequested
 
     // ── 场景状态 ─────────────────────────────────────────────
 
@@ -164,20 +148,14 @@ class MnnResourceManager private constructor(context: Context) {
     }
 
     private val llmModelState = AtomicInteger(ModelState.UNLOADED.ordinal)
-    private val asrModelState = AtomicInteger(ModelState.UNLOADED.ordinal)
     private val faceModelState = AtomicInteger(ModelState.UNLOADED.ordinal)
 
     val llmState: ModelState get() = ModelState.entries[llmModelState.get()]
-    val asrState: ModelState get() = ModelState.entries[asrModelState.get()]
     val faceState: ModelState get() = ModelState.entries[faceModelState.get()]
 
-    /**
-     * 更新指定模型的状态
-     */
     fun setModelState(module: String, newState: ModelState) {
         val oldState = when (module.lowercase()) {
             "llm" -> ModelState.entries[llmModelState.getAndSet(newState.ordinal)]
-            "asr" -> ModelState.entries[asrModelState.getAndSet(newState.ordinal)]
             "face" -> ModelState.entries[faceModelState.getAndSet(newState.ordinal)]
             else -> {
                 Logger.w(TAG, "Unknown module for setModelState: $module")
@@ -194,7 +172,7 @@ class MnnResourceManager private constructor(context: Context) {
      */
     enum class Scene {
         CAMERA,      // 相机预览页：需要人脸检测，不需要 LLM
-        CHAT,        // 聊天页：需要 LLM/ASR，不需要人脸检测
+        CHAT,        // 聊天页：需要 LLM，不需要人脸检测
         SETTINGS,    // 设置页：可能需要下载/切换模型
         BACKGROUND,  // 后台：所有模型可卸载
         OTHER        // 其他页面：按需保留
@@ -256,7 +234,7 @@ class MnnResourceManager private constructor(context: Context) {
      *
      * 场景切换会触发模型的自动加载/卸载：
      * - CAMERA: 保留人脸检测，LLM 不受场景切换影响（跨页面保活）
-     * - CHAT: 保留 LLM/ASR，强制卸载人脸检测
+     * - CHAT: 保留 LLM，强制卸载人脸检测
      * - BACKGROUND: 延迟卸载所有模型
      *
      * [Agent First] LLM 永不被场景切换触发卸载，仅响应内存压力。
@@ -300,7 +278,7 @@ class MnnResourceManager private constructor(context: Context) {
     /**
      * [P0-4] 统一释放等级
      *
-     * - SOFT: 清缓存（如 LLM KV cache、ASR stop streaming），保留模型和 Session
+     * - SOFT: 清缓存（如 LLM KV cache），保留模型和 Session
      * - SESSION: 释放 Session/Tensor，保留模型权重（可快速恢复）
      * - FULL: 释放一切（权重 + Interpreter + Tensor），彻底卸载
      */
@@ -310,44 +288,21 @@ class MnnResourceManager private constructor(context: Context) {
         FULL
     }
 
-    // 各模型释放等级对应的回调注册
     private val llmReleaseCallbacks = mutableMapOf<ReleaseLevel, () -> Unit>()
-    private val asrReleaseCallbacks = mutableMapOf<ReleaseLevel, () -> Unit>()
     private val faceReleaseCallbacks = mutableMapOf<ReleaseLevel, () -> Unit>()
 
-    /**
-     * 注册 LLM 在各释放等级的回调
-     */
     fun registerLlmReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
         llmReleaseCallbacks[level] = callback
     }
 
-    /**
-     * @Deprecated sherpa-onnx 迁移后，ASR 使用 ONNX Runtime，不再需要 MNN 资源协调。
-     */
-    @Deprecated("ASR migrated to sherpa-onnx (ONNX Runtime), no longer needs MNN coordination")
-    fun registerAsrReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
-        asrReleaseCallbacks[level] = callback
-    }
-
-    /**
-     * 注册人脸检测在各释放等级的回调
-     */
     fun registerFaceReleaseCallback(level: ReleaseLevel, callback: () -> Unit) {
         faceReleaseCallbacks[level] = callback
     }
 
-    /**
-     * 统一释放入口：按模块和等级执行释放
-     *
-     * @param module "llm" / "asr" / "face"
-     * @param level 释放等级
-     */
     fun releaseAtLevel(module: String, level: ReleaseLevel) {
         Logger.i(TAG, "releaseAtLevel: module=$module, level=$level")
         val callback = when (module.lowercase()) {
             "llm" -> llmReleaseCallbacks[level]
-            "asr" -> asrReleaseCallbacks[level]
             "face" -> faceReleaseCallbacks[level]
             else -> {
                 Logger.w(TAG, "Unknown module for release: $module")
@@ -357,13 +312,9 @@ class MnnResourceManager private constructor(context: Context) {
         callback?.invoke()
     }
 
-    /**
-     * 注销模块的所有释放回调
-     */
     fun unregisterReleaseCallbacks(module: String) {
         when (module.lowercase()) {
             "llm" -> llmReleaseCallbacks.clear()
-            "asr" -> asrReleaseCallbacks.clear()
             "face" -> faceReleaseCallbacks.clear()
         }
     }
@@ -405,45 +356,6 @@ class MnnResourceManager private constructor(context: Context) {
                     MnnGlobalReleaseLock.withLock { onSafeUnload() }
                 } else {
                     Logger.i(TAG, "LLM soft release (other references active)")
-                    onSoftRelease()
-                }
-            }
-        }
-    }
-
-    /**
-     * 请求保持 ASR 加载
-     * @Deprecated sherpa-onnx 迁移后，ASR 使用 ONNX Runtime，不再需要 MNN 资源协调。
-     */
-    @Deprecated("ASR migrated to sherpa-onnx (ONNX Runtime), no longer needs MNN coordination")
-    fun acquireAsr(owner: String) {
-        val count = asrRefCount.incrementAndGet()
-        Logger.d(TAG, "ASR acquired by $owner, refCount=$count")
-        cancelBackgroundUnload()
-    }
-
-    /**
-     * 释放 ASR 引用
-     * @Deprecated sherpa-onnx 迁移后，ASR 使用 ONNX Runtime，不再需要 MNN 资源协调。
-     */
-    @Deprecated("ASR migrated to sherpa-onnx (ONNX Runtime), no longer needs MNN coordination")
-    fun releaseAsr(
-        owner: String,
-        onSafeUnload: () -> Unit,
-        onSoftRelease: () -> Unit
-    ) {
-        val count = asrRefCount.decrementAndGet()
-        Logger.d(TAG, "ASR released by $owner, refCount=$count")
-
-        if (count <= 0) {
-            synchronized(this) {
-                asrRefCount.set(0)
-                if (!hasOtherReferences(excludeAsr = true)) {
-                    Logger.i(TAG, "ASR safe to unload (no other references)")
-                    // 使用 MNN 全局锁串行化 native 释放
-                    MnnGlobalReleaseLock.withLock { onSafeUnload() }
-                } else {
-                    Logger.i(TAG, "ASR soft release (other references active)")
                     onSoftRelease()
                 }
             }
@@ -753,17 +665,15 @@ class MnnResourceManager private constructor(context: Context) {
      */
     private fun hasOtherReferences(
         excludeLlm: Boolean = false,
-        excludeAsr: Boolean = false,
         excludeFaceDetection: Boolean = false
     ): Boolean {
         val llmActive = !excludeLlm && llmRefCount.get() > 0
-        val asrActive = !excludeAsr && asrRefCount.get() > 0
         val faceActive = !excludeFaceDetection && faceDetectionRefCount.get() > 0
-        return llmActive || asrActive || faceActive
+        return llmActive || faceActive
     }
 
     /**
-     * 当前是否可以安全卸载 LLM（不影响 ASR / FaceDetection）。
+     * 当前是否可以安全卸载 LLM（不影响 FaceDetection）。
      */
     fun canSafelyUnloadLlm(): Boolean {
         synchronized(this) {
@@ -784,7 +694,6 @@ class MnnResourceManager private constructor(context: Context) {
 
         return MemoryStats(
             llmRefCount = llmRefCount.get(),
-            asrRefCount = asrRefCount.get(),
             faceDetectionRefCount = faceDetectionRefCount.get(),
             currentScene = scene.name,
             appInForeground = isAppInForeground,
@@ -798,7 +707,6 @@ class MnnResourceManager private constructor(context: Context) {
 
     data class MemoryStats(
         val llmRefCount: Int,
-        val asrRefCount: Int,
         val faceDetectionRefCount: Int,
         val currentScene: String,
         val appInForeground: Boolean,
