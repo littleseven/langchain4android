@@ -14,10 +14,10 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.CoilConfig
 import com.mamba.picme.di.AppContainer
 import com.mamba.picme.di.AppContainerImpl
-import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.android.RemoteModelConfigs
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfigs
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
@@ -355,7 +355,7 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                     Logger.d(TAG, "allMedia emit: size=${mediaList.size}, sources=${mediaList.map { it.source }}")
 
                     // 查找来源为飞书远程控制的新照片
-                    val feishuPhotos = mediaList.filter { it.source == "feishu_remote" && it.type == com.mamba.picme.agent.core.api.context.MediaType.PHOTO }
+                    val feishuPhotos = mediaList.filter { it.source == "feishu_remote" && it.type == com.mamba.picme.agent.core.model.context.MediaType.PHOTO }
                     if (feishuPhotos.isEmpty()) {
                         Logger.d(TAG, "没有检测到 feishu_remote 来源的照片")
                         return@collect

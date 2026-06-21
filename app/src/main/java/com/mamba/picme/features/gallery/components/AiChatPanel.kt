@@ -6,7 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.mamba.picme.agent.core.api.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.features.common.chat.AgentMessage
 import com.mamba.picme.features.common.chat.AiChatScreen
 

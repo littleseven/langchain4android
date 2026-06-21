@@ -1,9 +1,9 @@
 package com.mamba.picme.agent.core.runtime.capability
 
-import com.mamba.picme.agent.core.api.capability.Capability
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.capability.Capability
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.CoroutineScope

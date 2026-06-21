@@ -6,9 +6,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.domain.usecase.AiAgentUseCase
 import com.mamba.picme.features.agent.GlobalAgentPanel

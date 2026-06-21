@@ -47,7 +47,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.agent.core.platform.voice.AudioRecorder
 import com.mamba.picme.agent.core.platform.voice.InputAudioDevice
 import com.mamba.picme.beauty.api.facedetect.FaceDetectionSource

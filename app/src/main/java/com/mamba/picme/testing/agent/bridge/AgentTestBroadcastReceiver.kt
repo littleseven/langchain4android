@@ -6,11 +6,11 @@ import android.content.Intent
 import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.state.SceneManager
-import com.mamba.picme.agent.core.api.context.AgentAction
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentScene
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.AgentAction
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentScene
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter

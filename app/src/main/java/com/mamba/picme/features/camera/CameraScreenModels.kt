@@ -1,8 +1,8 @@
 package com.mamba.picme.features.camera
 
 import androidx.compose.ui.geometry.Offset
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter

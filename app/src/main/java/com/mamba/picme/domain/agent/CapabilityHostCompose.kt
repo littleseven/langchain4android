@@ -4,8 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import com.mamba.picme.agent.core.api.capability.Capability
-import com.mamba.picme.agent.core.api.capability.CapabilityHost
+import com.mamba.picme.agent.core.capability.Capability
+import com.mamba.picme.agent.core.capability.CapabilityHost
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 

@@ -2,7 +2,7 @@ package com.mamba.picme.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 
 @Entity(tableName = "media_assets")
 data class MediaEntity(

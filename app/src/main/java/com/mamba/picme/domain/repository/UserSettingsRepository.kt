@@ -1,8 +1,8 @@
 package com.mamba.picme.domain.repository
 
-import com.mamba.picme.agent.core.api.policy.AiAgentInferencePreference
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.domain.model.AppLanguage
 import com.mamba.picme.domain.model.BeautyStrategy
 import com.mamba.picme.domain.model.CameraMemoryState

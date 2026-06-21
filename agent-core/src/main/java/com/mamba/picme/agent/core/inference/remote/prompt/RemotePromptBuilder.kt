@@ -1,6 +1,6 @@
 package com.mamba.picme.agent.core.inference.remote.prompt
 
-import com.mamba.picme.agent.core.api.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
 /**

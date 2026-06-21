@@ -7,9 +7,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.runtime.state.SceneManager
-import com.mamba.picme.agent.core.api.context.AgentScene
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.model.context.AgentScene
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.features.camera.voice.VoiceCommandCoordinator
 import com.mamba.picme.features.common.chat.AgentChatPanel

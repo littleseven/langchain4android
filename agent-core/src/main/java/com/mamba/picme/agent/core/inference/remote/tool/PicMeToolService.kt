@@ -5,12 +5,12 @@ import android.view.WindowManager
 import android.widget.EditText
 import androidx.activity.ComponentActivity
 import androidx.recyclerview.widget.RecyclerView
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentScene
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentScene
 import com.mamba.picme.agent.core.platform.logging.Logger
-import com.mamba.picme.agent.core.inference.local.react.perception.ViewHierarchyExtractor
-import com.mamba.picme.agent.core.inference.local.react.tool.CameraToolHelper
+import com.mamba.picme.agent.core.tool.perception.ViewHierarchyExtractor
+import com.mamba.picme.agent.core.tool.CameraToolHelper
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType

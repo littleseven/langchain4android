@@ -1,7 +1,7 @@
 package com.mamba.picme.features.common.chat
 
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.mamba.picme.agent.core.api.execution.ExecutionPlan
+import com.mamba.picme.agent.core.model.plan.ExecutionPlan
 
 /**
  * Agent 消息类型定义

@@ -3,8 +3,8 @@ package com.mamba.picme.agent.core.inference.remote.react
 import android.view.WindowManager
 import com.mamba.memory.ChatMemory
 import com.mamba.model.chat.request.ToolChoice
-import com.mamba.picme.agent.core.api.RemoteModelFactory
-import com.mamba.picme.agent.core.api.android.RemoteModelConfig
+import com.mamba.picme.agent.core.remote.config.RemoteModelFactory
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
 import com.mamba.picme.agent.core.inference.remote.tool.PicMeToolService

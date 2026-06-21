@@ -2,7 +2,7 @@ package com.mamba.picme.testing.agent.engine
 
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
-import com.mamba.picme.agent.core.api.command.AgentCommand
+import com.mamba.picme.agent.core.model.command.AgentCommand
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.delay
 import kotlin.time.Duration

@@ -15,7 +15,7 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.ImageProcessor
 import com.mamba.picme.domain.model.AiAgentCommand
 import com.mamba.picme.domain.model.BeautyStrategy
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.features.camera.state.CameraStateMachine
 import com.mamba.picme.features.camera.state.CameraStateManager
 import com.mamba.picme.features.gallery.MediaViewModel

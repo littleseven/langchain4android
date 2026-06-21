@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mamba.picme.R
 import com.mamba.picme.beauty.api.BeautySettings
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.features.camera.GridType
 import com.mamba.picme.features.camera.ScenePreset
 import com.mamba.picme.beauty.api.FilterType

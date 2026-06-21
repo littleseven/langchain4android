@@ -1,7 +1,7 @@
 package com.mamba.picme.agent.core.runtime.execution
 
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.execution.ExecutionPlan
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.plan.ExecutionPlan
 
 /**
  * 推理结果密封类

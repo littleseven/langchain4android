@@ -1,12 +1,12 @@
 package com.mamba.picme.agent.core.inference.local.llm
 
 import android.content.Context
-import com.mamba.picme.agent.core.api.ChatResponseMetadata
-import com.mamba.picme.agent.core.api.LlmChatLanguageModel
-import com.mamba.picme.agent.core.api.LlmChatRequest
-import com.mamba.picme.agent.core.api.LlmChatResponse
-import com.mamba.picme.agent.core.api.StreamingLlmChatLanguageModel
-import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
+import com.mamba.picme.agent.core.local.llm.ChatResponseMetadata
+import com.mamba.picme.agent.core.local.llm.LlmChatLanguageModel
+import com.mamba.picme.agent.core.local.llm.LlmChatRequest
+import com.mamba.picme.agent.core.local.llm.LlmChatResponse
+import com.mamba.picme.agent.core.local.llm.StreamingLlmChatLanguageModel
+import com.mamba.picme.agent.core.local.llm.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.inference.local.llm.MnnLlmClient.NativeReleaseTarget
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock

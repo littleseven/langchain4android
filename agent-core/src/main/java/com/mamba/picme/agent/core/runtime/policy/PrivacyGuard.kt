@@ -1,7 +1,7 @@
 package com.mamba.picme.agent.core.runtime.policy
 
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 
 /**
  * 隐私级别枚举

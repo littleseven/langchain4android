@@ -100,8 +100,8 @@ import coil.compose.AsyncImage
 import com.mamba.picme.R
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.core.common.Logger
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.features.camera.components.BeautySelector
 import com.mamba.picme.features.gallery.MediaViewModel
 import com.mamba.picme.features.common.chat.AgentMessage

@@ -1,6 +1,6 @@
 package com.mamba.picme.service.accessibility
 
-import com.mamba.picme.agent.core.api.command.AgentCommand
+import com.mamba.picme.agent.core.model.command.AgentCommand
 
 /**
  * 无障碍动作任务

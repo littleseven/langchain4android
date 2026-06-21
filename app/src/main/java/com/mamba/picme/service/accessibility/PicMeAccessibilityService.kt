@@ -6,7 +6,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.mamba.picme.agent.core.api.command.AgentCommand
+import com.mamba.picme.agent.core.model.command.AgentCommand
 import com.mamba.picme.agent.core.platform.logging.Logger
 
 /**

@@ -2,12 +2,12 @@ package com.mamba.picme.domain.agent.capability
 
 import androidx.navigation.NavController
 import androidx.navigation.navOptions
-import com.mamba.picme.agent.core.api.capability.BaseCapability
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentAction
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentErrorCode
-import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.capability.BaseCapability
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentAction
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentErrorCode
+import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.core.common.Logger
 import kotlinx.coroutines.Dispatchers

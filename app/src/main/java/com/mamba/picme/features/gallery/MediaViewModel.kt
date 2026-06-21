@@ -16,7 +16,7 @@ import com.mamba.picme.beauty.internal.facedetect.Face106ToWarpParams
 import com.mamba.picme.domain.model.DuplicateGroup
 import com.mamba.picme.domain.model.GroupedMedia
 import com.mamba.picme.domain.model.GroupingMode
-import com.mamba.picme.agent.core.api.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase
 import com.mamba.picme.domain.usecase.GetGroupedMediaUseCase

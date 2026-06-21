@@ -2,9 +2,9 @@ package com.mamba.picme.agent.core.facade
 
 import android.content.Context
 import android.view.WindowManager
-import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
 import com.mamba.picme.agent.core.inference.local.pipeline.LocalInferencePipeline
 import com.mamba.picme.agent.core.inference.local.prompt.LocalPromptBuilder
@@ -14,7 +14,7 @@ import com.mamba.picme.agent.core.inference.remote.react.RemoteReActAgent
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
-import com.mamba.picme.agent.core.runtime.inference.IntentCache
+import com.mamba.picme.agent.core.runtime.cache.IntentCache
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 

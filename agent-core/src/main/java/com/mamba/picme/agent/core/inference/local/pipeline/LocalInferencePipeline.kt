@@ -1,10 +1,10 @@
 package com.mamba.picme.agent.core.inference.local.pipeline
 
-import com.mamba.picme.agent.core.api.LlmChatRequest
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.execution.ExecutionPlan
-import com.mamba.picme.agent.core.api.execution.PlanStep
+import com.mamba.picme.agent.core.local.llm.LlmChatRequest
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.plan.ExecutionPlan
+import com.mamba.picme.agent.core.model.plan.PlanStep
 import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.inference.local.prompt.LocalPromptBuilder
 import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
@@ -12,7 +12,7 @@ import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.runtime.inference.IntentCache
+import com.mamba.picme.agent.core.runtime.cache.IntentCache
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.policy.PrivacyLevel
 import com.mamba.picme.agent.core.runtime.state.SceneManager

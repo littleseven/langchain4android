@@ -16,9 +16,9 @@ import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
 import com.mamba.picme.core.common.Logger
-import com.mamba.picme.agent.core.api.policy.AiAgentInferencePreference
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.domain.model.AppLanguage
 import com.mamba.picme.domain.model.BeautyStrategy
 import com.mamba.picme.domain.model.CameraAspectRatioMode
@@ -31,7 +31,7 @@ import com.mamba.picme.domain.model.FaceDetectIntervalProfile
 import com.mamba.picme.domain.model.FaceDetectionEngineMode
 import com.mamba.picme.domain.model.InferenceDevicePreference
 import com.mamba.picme.domain.model.InferenceEngineType
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.domain.model.StageConfig
 import com.mamba.picme.domain.model.ThemeMode
 import com.mamba.picme.domain.model.VoiceCommandMode
@@ -45,7 +45,7 @@ import java.io.IOException
 import com.mamba.picme.domain.model.LogModuleConfig
 import com.mamba.picme.domain.model.ProviderConfig
 import com.mamba.picme.domain.model.ProviderConfigs
-import com.mamba.picme.agent.core.api.android.RemoteModelConfigs
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfigs
 
 // 枚举已迁移至 domain.model.UserPreferences，调用方请从 com.mamba.picme.domain.model 导入
 

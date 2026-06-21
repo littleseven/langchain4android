@@ -2,8 +2,8 @@ package com.mamba.picme.domain.usecase
 
 import com.mamba.picme.domain.model.GroupTitleType
 import com.mamba.picme.domain.model.GroupingMode
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 import org.junit.Assert.*
 import org.junit.Test
 

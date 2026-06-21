@@ -1,6 +1,6 @@
 package com.mamba.picme.domain.model
 
-import com.mamba.picme.agent.core.api.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaAsset
 
 enum class GroupingMode {
     NONE,

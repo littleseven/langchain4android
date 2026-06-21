@@ -20,8 +20,8 @@ import com.mamba.picme.beauty.recorder.BeautyVideoRecorder
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.ImageProcessor
 import com.mamba.picme.domain.model.BeautyStrategy
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.domain.agent.remote.FeishuPhotoTracker
 import com.mamba.picme.features.camera.state.CameraStateMachine
 import com.mamba.picme.features.camera.state.CameraStateManager

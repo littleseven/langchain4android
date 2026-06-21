@@ -6,8 +6,8 @@ import androidx.core.net.toUri
 import com.mamba.picme.R
 import com.mamba.picme.domain.model.GroupTitleType
 import com.mamba.picme.domain.model.GroupedMedia
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 
 fun resolveGroupTitle(context: Context, group: GroupedMedia): String {
     return when (group.titleType) {

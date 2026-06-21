@@ -19,7 +19,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.LifecycleOwner
 import com.google.common.util.concurrent.ListenableFuture
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.beauty.api.facedetect.EngineType
 import com.mamba.picme.beauty.api.facedetect.FaceDetector
 import com.mamba.picme.beauty.api.facedetect.FaceWarpParams

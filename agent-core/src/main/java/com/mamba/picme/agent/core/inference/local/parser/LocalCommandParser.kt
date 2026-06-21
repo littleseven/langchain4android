@@ -1,9 +1,9 @@
 package com.mamba.picme.agent.core.inference.local.parser
 
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentIdGenerator
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentIdGenerator
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType

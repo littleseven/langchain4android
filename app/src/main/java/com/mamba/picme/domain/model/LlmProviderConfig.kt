@@ -1,7 +1,7 @@
 package com.mamba.picme.domain.model
 
-import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.android.RemoteProtocol
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
+import com.mamba.picme.agent.core.remote.config.RemoteProtocol
 
 /**
  * LLM 供应商枚举

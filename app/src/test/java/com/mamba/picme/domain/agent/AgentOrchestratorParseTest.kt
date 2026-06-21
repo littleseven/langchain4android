@@ -3,11 +3,11 @@ package com.mamba.picme.domain.agent
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
-import com.mamba.picme.agent.core.api.context.AgentAction
-import com.mamba.picme.agent.core.api.command.AgentCommand
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentScene
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.AgentAction
+import com.mamba.picme.agent.core.model.command.AgentCommand
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentScene
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import com.mamba.picme.agent.core.runtime.inference.IntentCache
+import com.mamba.picme.agent.core.runtime.cache.IntentCache
 
 /**
  * LocalCommandParser 响应解析逻辑单元测试

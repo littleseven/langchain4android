@@ -1,7 +1,7 @@
 package com.mamba.picme.agent.core.runtime.execution
 
-import com.mamba.picme.agent.core.api.execution.ExecutionResult
-import com.mamba.picme.agent.core.api.execution.StepResult
+import com.mamba.picme.agent.core.model.plan.ExecutionResult
+import com.mamba.picme.agent.core.model.plan.StepResult
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow

@@ -2,11 +2,11 @@ package com.mamba.picme.domain.agent.remote
 
 import android.content.Context
 import android.view.WindowManager
-import com.mamba.picme.agent.core.api.context.AgentAction
-import com.mamba.picme.agent.core.api.context.AgentContext
-import com.mamba.picme.agent.core.api.context.AgentScene
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.context.PageContext
+import com.mamba.picme.agent.core.model.context.AgentAction
+import com.mamba.picme.agent.core.model.context.AgentContext
+import com.mamba.picme.agent.core.model.context.AgentScene
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.ChatMessageDao

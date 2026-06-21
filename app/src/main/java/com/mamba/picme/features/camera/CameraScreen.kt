@@ -79,10 +79,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.mamba.picme.R
-import com.mamba.picme.agent.core.api.android.RemoteModelConfigs
-import com.mamba.picme.agent.core.api.context.MediaType
-import com.mamba.picme.agent.core.api.policy.AiAgentInferencePreference
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfigs
+import com.mamba.picme.agent.core.model.context.MediaType
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
+import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 import com.mamba.picme.agent.core.platform.voice.AsrEngine
 import com.mamba.picme.agent.core.platform.voice.SherpaOnnxAsrEngine

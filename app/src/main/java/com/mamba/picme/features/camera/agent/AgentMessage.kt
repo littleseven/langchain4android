@@ -1,8 +1,8 @@
 package com.mamba.picme.features.camera.agent
 
 import com.mamba.picme.agent.core.runtime.execution.ExecutionState
-import com.mamba.picme.agent.core.api.execution.ExecutionPlan
-import com.mamba.picme.agent.core.api.execution.ExecutionResult
+import com.mamba.picme.agent.core.model.plan.ExecutionPlan
+import com.mamba.picme.agent.core.model.plan.ExecutionResult
 
 /**
  * Agent 消息密封类

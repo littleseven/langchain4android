@@ -23,8 +23,8 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.beauty.api.BeautyProcessor
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.Face

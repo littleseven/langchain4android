@@ -70,8 +70,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.mamba.picme.R
 import com.mamba.picme.core.designsystem.PicMeTheme
-import com.mamba.picme.agent.core.api.context.MediaAsset
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaAsset
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.features.gallery.MediaViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

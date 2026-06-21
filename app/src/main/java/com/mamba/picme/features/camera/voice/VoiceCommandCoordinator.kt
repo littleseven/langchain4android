@@ -1,6 +1,6 @@
 package com.mamba.picme.features.camera.voice
 
-import com.mamba.picme.agent.core.api.context.MediaType
+import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.agent.core.platform.voice.AsrEngine
 import com.mamba.picme.agent.core.platform.voice.InputAudioDevice
 import com.mamba.picme.agent.core.platform.voice.KeywordSpotterEngine

@@ -1,7 +1,7 @@
 package com.mamba.picme.agent.core.inference.local.prompt
 
-import com.mamba.picme.agent.core.api.capability.Capability
-import com.mamba.picme.agent.core.api.context.AgentContext
+import com.mamba.picme.agent.core.capability.Capability
+import com.mamba.picme.agent.core.model.context.AgentContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 
 /**

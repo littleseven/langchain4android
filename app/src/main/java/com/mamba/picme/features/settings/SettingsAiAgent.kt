@@ -38,10 +38,10 @@ import androidx.compose.ui.unit.dp
 import com.mamba.picme.R
 import com.mamba.picme.data.download.LlmModelDownloadManager
 import com.mamba.picme.data.download.ModelConfig
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.android.RemoteModelConfig
-import com.mamba.picme.agent.core.api.android.RemoteModelConfigs
-import com.mamba.picme.agent.core.api.android.RemoteProtocol
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
+import com.mamba.picme.agent.core.remote.config.RemoteModelConfigs
+import com.mamba.picme.agent.core.remote.config.RemoteProtocol
 import java.util.Locale
 
 @Composable

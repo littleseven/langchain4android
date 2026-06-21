@@ -19,8 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mamba.picme.agent.core.api.execution.ExecutionPlan
-import com.mamba.picme.agent.core.api.execution.PlanStep
+import com.mamba.picme.agent.core.model.plan.ExecutionPlan
+import com.mamba.picme.agent.core.model.plan.PlanStep
 
 @Composable
 fun PlanPreviewBubble(

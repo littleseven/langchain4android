@@ -4,10 +4,10 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.mamba.picme.agent.core.api.policy.AiAgentInferencePreference
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
-import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.mamba.picme.agent.core.runtime.inference.L1CacheSettings
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.runtime.cache.L1CacheSettings
 import com.mamba.picme.beauty.internal.facedetect.mnn.MnnFaceDetector
 import com.mamba.picme.beauty.internal.facedetect.ncnn.NcnnFaceDetector
 import com.mamba.picme.core.common.Logger

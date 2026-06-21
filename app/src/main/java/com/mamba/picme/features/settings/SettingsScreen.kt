@@ -45,8 +45,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.mamba.picme.R
-import com.mamba.picme.agent.core.api.policy.AiAgentInferencePreference
-import com.mamba.picme.agent.core.api.policy.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
+import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.designsystem.PicMeTheme
 import com.mamba.picme.data.download.DownloadState
