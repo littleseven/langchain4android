@@ -368,9 +368,39 @@ public class AiServices<T> {
                         )
                         .build();
 
+                // [DEBUG] 打印即将发送的消息类型和数量
+                for (ChatMessage msg : messages) {
+                    if (msg instanceof ToolExecutionResultMessage) {
+                        ToolExecutionResultMessage tm = (ToolExecutionResultMessage) msg;
+                        log.warn("AiServices REQ MSG: type=TOOL_RESULT, toolCallId='{}', toolName='{}', text='{}'",
+                                tm.id(), tm.toolName(), tm.text());
+                    } else if (msg instanceof AiMessage && ((AiMessage)msg).hasToolExecutionRequests()) {
+                        AiMessage am = (AiMessage) msg;
+                        for (ToolExecutionRequest ter : am.toolExecutionRequests()) {
+                            log.warn("AiServices REQ MSG: type=ASSISTANT_TOOL_CALL, id='{}', name='{}'",
+                                    ter.id(), ter.name());
+                        }
+                    } else if (msg instanceof AiMessage) {
+                        log.warn("AiServices REQ MSG: type=ASSISTANT_TEXT, text='{}'",
+                                ((AiMessage) msg).text());
+                    }
+                }
+
                 // 调用 LLM
                 ChatResponse response = chatModel.chat(request);
                 AiMessage aiMessage = response.aiMessage();
+
+                // [DEBUG] 打印 LLM 响应中的 tool_calls ID
+                if (aiMessage.hasToolExecutionRequests()) {
+                    for (ToolExecutionRequest ter : aiMessage.toolExecutionRequests()) {
+                        log.warn("AiServices LLM RESP: tool_call id='{}', name='{}', args='{}'",
+                                ter.id() != null ? ter.id() : "<NULL>",
+                                ter.name(),
+                                ter.arguments());
+                    }
+                } else {
+                    log.warn("AiServices LLM RESP: text='{}'", aiMessage.text());
+                }
 
                 // 添加 AI 消息到 memory
                 if (chatMemory != null) {
@@ -391,8 +421,15 @@ public class AiServices<T> {
                 for (ToolExecutionRequest toolRequest : toolRequests) {
                     String toolResult = executeTool(toolRequest);
 
+                    // [DEBUG] 检查 tool call ID 是否为空
+                    String toolCallId = toolRequest.id();
+                    log.warn("AiServices: tool call result - id='{}', name='{}', args='{}'",
+                            toolCallId != null ? toolCallId : "<NULL>",
+                            toolRequest.name(),
+                            toolRequest.arguments());
+
                     ToolExecutionResultMessage resultMessage = ToolExecutionResultMessage.builder()
-                            .id(toolRequest.id())
+                            .id(toolCallId)
                             .toolName(toolRequest.name())
                             .text(toolResult)
                             .build();
