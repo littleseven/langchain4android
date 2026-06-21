@@ -154,6 +154,16 @@ android {
             excludes += "/META-INF/NOTICE"
             excludes += "/META-INF/NOTICE.txt"
         }
+        // Sherpa-ONNX 已内置 libonnxruntime.so，避免与 onnxruntime-android 冲突
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirsts += listOf(
+                "lib/arm64-v8a/libonnxruntime.so",
+                "lib/armeabi-v7a/libonnxruntime.so",
+                "lib/x86_64/libonnxruntime.so",
+                "lib/x86/libonnxruntime.so"
+            )
+        }
     }
 }
 
