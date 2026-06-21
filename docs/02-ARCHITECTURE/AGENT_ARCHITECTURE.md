@@ -9,8 +9,8 @@
 **模块定位**: PicMe AI 助手"小觅"的 Runtime 架构与推理模式选型  
 **主要维护者**: [RD] 全栈工程师  
 **阅读对象**: RD、AI Agent  
-**版本**: 3.0 (ADR-005 协议分离后)  
-**最后更新**: 2026-06-19
+**版本**: 3.1 (2026-06 架构更新)  
+**最后更新**: 2026-06-21
 
 ---
 
@@ -56,98 +56,180 @@
 
 | 组件 | 职责 | 状态 |
 |------|------|------|
-| `AgentOrchestrator` | 统一入口，管理本地/远程两条独立推理链路 | 已落地 |
-| `LocalInferencePipeline` | 本地推理链路：L1 Cache + L2 Batch（自定义 JSON 数组协议） | 已落地 |
-| `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式·多轮） | 已落地 |
-| `LocalLlmEngine` | 封装 MNN-LLM 客户端，Qwen3.5-2B 本地推理 | 已落地 |
-| `RemoteOrchestrator` | 远程推理编排：langchain4j OpenAiChatModel + ChatMemory | 已落地 |
-| `CapabilityRegistry` | Capability 注册与命令分发 | 已落地 |
-| `Capability` | 领域能力抽象（相机控制、相册管理等） | 部分实现 |
-| `PrivacyGuard` | 输入内容隐私分级与本地优先约束 | 已落地 |
-| `MemoryManager` | DataStore 持久化对话历史，按 session 隔离 | 已落地 |
+| `AgentOrchestrator` | 统一入口，管理本地/远程两条独立推理链路 | ✅ 已落地 |
+| `LocalInferencePipeline` | 本地推理链路：L1 Cache + L2 Batch（自定义 JSON 数组协议） | ✅ 已落地 |
+| `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式·多轮） | ✅ 已落地 |
+| `LocalLlmEngine` | 封装 MNN-LLM 客户端，Qwen3.5-2B 本地推理 | ✅ 已落地 |
+| `RemoteOrchestrator` | 远程推理编排：langchain4j OpenAiChatModel + ChatMemory | ✅ 已落地 |
+| `:mamba-agent` (模块) | langchain4j 1.13 合并单库模块（core + open-ai + okhttp），提供 ChatLanguageModel、ToolSpecification、OkHttp SSE 流式 HTTP 客户端 | ✅ 已落地 |
+| `CapabilityRegistry` | Capability 注册与命令分发 | ✅ 已落地 |
+| `PrivacyGuard` | 输入内容隐私分级与本地优先约束 | ✅ 已落地 |
+| `MemoryManager` | DataStore 持久化对话历史，按 session 隔离 | ✅ 已落地 |
+| `KeywordSpotterEngine` | KWS 常驻低功耗唤醒词检测（Sherpa-ONNX，~14MB） | ✅ 已落地 |
+| `SherpaOnnxAsrEngine` | ASR 按需加载语音转录（Sherpa-ONNX，~282MB） | ✅ 已落地 |
+| `FeishuRemoteChannel` | 飞书 WebSocket 直连，IM 远程控制入口 | 🔄 迭代中 |
+| `IntentCache` | L1 远程意图缓存，高频指令直接返回 | ✅ 已落地 |
 
-**已移除组件（ADR-005）**：
-- `InferenceRouter` — 拆分为两条独立链路
-- `ToolCallingChatLanguageModel` — 远程直接使用 langchain4j 原生 OpenAI 客户端
-- `ToolCallingOutputParser` — 远程使用标准 OpenAI 响应格式
-- `ToolPromptBuilder` — 远程使用 ToolSpecifications，本地使用简单能力列表
+**已移除组件（ADR-005/006，2026-06）**：
+- `InferenceRouter` — 拆分为 `LocalInferencePipeline` + `RemoteInferencePipeline` 两条独立链路
+- `ToolCallingChatLanguageModel` — 远程直接使用 langchain4j 原生 `OpenAiChatModel`
+- `ToolCallingOutputParser` — 远程使用标准 OpenAI `tool_calls` 响应格式
+- `ToolPromptBuilder` — 拆分为 `LocalPromptBuilder` + `RemotePromptBuilder`
 - `AdaptiveStrategySelector` — 本地不再需要策略分级
-- `RemoteCameraTools` — 相机工具已统一迁移至 `ToolRegistry`（`BaseUiTool` 体系），由 `ToolRegistry.buildToolSpecifications()` 统一生成 LangChain4j `ToolSpecification`
+- `ToolOrchestrator` — 编排逻辑合并入 `RemoteOrchestrator`
+- `SherpaMnnAsrEngine` + `com.k2fsa.sherpa.mnn.*` — 已迁移至 Sherpa-ONNX（`SherpaOnnxAsrEngine`）
+- `MnnAsrClient` — 占位死代码，同步移除
+- 共清理 ~2,600 行冗余代码
 
 ---
 
 ## 2. 架构图
 
+### 2.1 系统全景架构
+
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              UI Layer                                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ ChatScreen   │  │GalleryScreen │  │SettingsScreen│  │ImageEditScreen│    │
-│  │ (首页)       │  │              │  │              │  │              │    │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
-│         │                 │                 │                 │              │
-│         └─────────────────┴────────┬────────┴─────────────────┘              │
-│                                    ▼                                        │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                     GlobalAgentPanel (全局 Agent 面板)                  │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │   │
-│  │  │  ChatView   │  │VoiceButton  │  │ QuickActions│  │StatusIndicator│  │   │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Agent Runtime Layer                                │
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                               UI Layer (Compose)                               │
+│                                                                               │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐               │
+│  │   ChatScreen    │  │  GalleryScreen  │  │   CameraScreen  │               │
+│  │  🏠 默认首页     │  │  📸 智能相册     │  │  📷 辅助入口     │               │
+│  │  AI对话·模型切换  │  │  媒体浏览·AI搜索 │  │  美颜·滤镜·语音  │               │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘               │
+│           │                    │                    │                         │
+│           └────────────────────┼────────────────────┘                         │
+│                                ▼                                              │
+│  ┌──────────────────────────────────────────────────────────────────────┐    │
+│  │                   GlobalAgentPanel / AiAgentUseCase (Facade)           │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │    │
+│  │  │ Chat UI  │ │Voice Btn │ │QuickActs │ │Model Sel │ │StatusBar │   │    │
+│  │  │(多线程)   │ │(KWS唤醒) │ │(快捷入口) │ │(本地/远程)│ │(推理状态) │   │    │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘   │    │
+│  └──────────────────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                       Agent Runtime Layer (:agent-core)                        │
+│                                                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                      AgentOrchestrator (编排器)                          │  │
+│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐          │  │
+│  │  │SceneManager│ │PrivacyGuard│ │MemoryManager│ │IntentCache │          │  │
+│  │  │(场景感知)   │ │(隐私分级)   │ │(对话持久化)  │ │(L1远程缓存) │          │  │
+│  │  └────────────┘ └────────────┘ └────────────┘ └────────────┘          │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                    │                              │                           │
+│          LOCAL mode│                              │REMOTE mode                │
+│                    ▼                              ▼                           │
+│  ┌────────────────────────────┐  ┌──────────────────────────────────────┐   │
+│  │  LocalInferencePipeline    │  │  RemoteInferencePipeline              │   │
+│  │  ┌──────────────────────┐  │  │  ┌────────────────────────────────┐  │   │
+│  │  │ LocalLlmEngine       │  │  │  │ RemoteOrchestrator             │  │   │
+│  │  │ Qwen3.5-2B (MNN)     │  │  │  │ langchain4j OpenAiChatModel    │  │   │
+│  │  │ 自定义 JSON 数组协议   │  │  │  │ OpenAI Chat Completions API   │  │   │
+│  │  │ L1 Cache → L2 Batch  │  │  │  │ DeepSeek V4 适配               │  │   │
+│  │  └──────────────────────┘  │  │  │ L2 Batch / L3 Plan / L4 Chat   │  │   │
+│  └────────────────────────────┘  │  └────────────────────────────────┘  │   │
+│                                  │                                      │   │
+│  ┌──────────────────────────┐    │                                      │   │
+│  │   Voice Pipeline (ONNX)  │    │  ┌────────────────────────────────┐  │   │
+│  │  ┌────────────────────┐  │    │  │ FeishuRemoteChannel            │  │   │
+│  │  │KeywordSpotterEngine│  │    │  │ 飞书 WebSocket 直连             │  │   │
+│  │  │ KWS always-on      │  │    │  │ IM消息→AgentCommand            │  │   │
+│  │  │ ~14MB · 50mW       │  │    │  │ 拍照回传·设备绑定·确认机制      │  │   │
+│  │  └─────────┬──────────┘  │    │  └────────────────────────────────┘  │   │
+│  │            │ 唤醒        │    │                                      │   │
+│  │  ┌─────────▼──────────┐  │    │  ┌────────────────────────────────┐  │   │
+│  │  │SherpaOnnxAsrEngine │  │    │  │ Cloudflare AI Gateway           │  │   │
+│  │  │ ASR on-demand      │  │    │  │ API Key 保护 · 速率限制          │  │   │
+│  │  │ ~282MB · 按需加载   │  │    │  │ DeepSeek / Claude 多模型路由    │  │   │
+│  │  └────────────────────┘  │    │  └────────────────────────────────┘  │   │
+│  └──────────────────────────┘    └──────────────────────────────────────┘   │
+│                                      │                                       │
+│                                      ▼                                       │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                    CapabilityRegistry (能力注册表)                      │   │
+│  │                                                                       │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │   │
+│  │  │ Camera   │ │ Gallery  │ │ Settings │ │ Navigate │ │ Editor   │  │   │
+│  │  │拍照/录像  │ │查看/删除  │ │主题/语言  │ │页面切换   │ │图片编辑  │  │   │
+│  │  │美颜/滤镜  │ │分享/搜索  │ │模型管理  │ │返回/退出  │ │AI 优化   │  │   │
+│  │  │变焦/曝光  │ │批量操作   │ │语音配置  │ │          │ │          │  │   │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │   │
+│  │  ┌──────────┐                                                        │   │
+│  │  │ IMRemote │ 飞书远程控制 · 设备绑定 · 命令确认                        │   │
+│  │  └──────────┘                                                        │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          Domain / Data / Infra                                │
 │                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    AgentOrchestrator (编排器)                         │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │   │
-│  │  │SceneManager │  │LocalPrompt  │  │MemoryManager│  │PrivacyGuard │ │   │
-│  │  │             │  │Builder      │  │             │  │             │ │   │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                       │                                     │
-│                                       ▼                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │              LocalInferencePipeline / RemoteInferencePipeline        │   │
-│  │                                                                      │   │
-│  │   ┌────────────────────┐          ┌────────────────────────────┐    │   │
-│  │   │ LocalLlmEngine     │          │ RemoteOrchestrator         │    │   │
-│  │   │ (Qwen3.5-2B MNN)   │          │ (OpenAI Chat Completions)  │    │   │
-│  │   │ 自定义 JSON 数组    │          │ tool_calls · streaming     │    │   │
-│  │   │ GBNF 约束           │          │ langchain4j ChatMemory     │    │   │
-│  │   └────────────────────┘          └────────────────────────────┘    │   │
-│  │                                                                      │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                       │                                     │
-│                                       ▼                                     │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    CapabilityRegistry (能力注册表)                     │   │
-│  │                                                                      │   │
-│  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
-│  │   │  CameraCapability   │  │ GalleryCapability  │  │SettingsCapability  │  │   │
-│  │   │  • 拍照/录像        │  │ • 查看/删除        │  │ • 主题切换         │  │   │
-│  │   │  • 美颜/滤镜        │  │ • 分享/搜索        │  │ • 语言切换         │  │   │
-│  │   │  • 变焦/曝光        │  │ • 批量操作         │  │ • 模型管理         │  │   │
-│  │   └──────────────┘  └──────────────┘  └──────────────┘              │   │
-│  │                                                                      │   │
-│  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │   │
-│  │   │NavigationCapability │  │EditorCapability  │  │RemoteControlCapability│  │   │
-│  │   │ • 页面切换         │  │ • 图片编辑        │  │ • 飞书远程控制      │  │   │
-│  │   │ • 返回/退出        │  │ • AI 优化         │  │ • 设备绑定          │  │   │
-│  │   └──────────────┘  └──────────────┘  └──────────────┘              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           Domain/Data Layer                                  │
+│  ┌────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
+│  │MediaRepo   │ │SettingsRepo  │ │ BeautyEngine │ │ MNN-LLM (本地模型)    │ │
+│  │(Room DB)   │ │(DataStore)   │ │ (OpenGL ES)  │ │ Qwen3.5-2B · 端侧推理 │ │
+│  └────────────┘ └──────────────┘ └──────────────┘ └──────────────────────┘ │
 │                                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │MediaRepository │ │SettingsRepository│ │ BeautyEngine   │ │  MNN-LLM    │    │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘     │
-└─────────────────────────────────────────────────────────────────────────────┘
+│  ┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────────┐ │
+│  │ :mamba-agent (SDK)   │ │LlmModelDownloadManager│ │ FaceDetect Pipeline  │ │
+│  │ langchain4j 合并模块  │ │前台服务·断点续传       │ │ MediaPipe·MNN·NCNN   │ │
+│  │ ChatModel·ToolSpec   │ └──────────────────────┘ └──────────────────────┘ │
+│  │ OkHttp Streaming     │ ┌──────────────────────┐                           │
+│  └──────────────────────┘ │ Network Monitor      │                           │
+│                           │ 飞书重连·心跳保持     │                           │
+│                           └──────────────────────┘                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 推理链路数据流（ADR-005 后）
+
+```
+用户输入 "找出去年夏天的照片" / "磨皮50"
+        │
+        ▼
+AgentOrchestrator.dispatch(input)
+        │
+        ├── PrivacyGuard.assess(input) → 敏感? → 强制 LOCAL
+        │
+        ├── LOCAL mode (默认端侧模型)
+        │   │
+        │   ├── IntentCache.lookup(input) → HIT? → 直接返回 (L1)
+        │   │
+        │   └── LocalLlmEngine.generate(messages)
+        │       └── MNN-LLM (Qwen3.5-2B) → JSON 数组解析 → Capability 执行
+        │
+        └── REMOTE mode (用户手动切换或隐私允许)
+            │
+            ├── IntentCache.lookup(input) → HIT? → 直接返回 (L1)
+            │
+            └── RemoteOrchestrator.chat(messages, tools)
+                └── :mamba-agent (langchain4j 1.13 合并)
+                    ├── OpenAiChatModel (ChatLanguageModel)
+                    ├── ToolSpecification (tool_calls 构建)
+                    └── OkHttp SSE Streaming (流式响应)
+                        └── Cloudflare Gateway → DeepSeek / Claude API
+                            → tool_calls 解析 → Capability 执行
+```
+
+### 2.3 语音交互管线（Sherpa-ONNX 双引擎）
+
+```
+[休眠态] Always-on KWS (~14MB · 50mW)
+    │
+    │ 用户说"小觅拍张照"
+    ▼
+KWS 检测到唤醒词 → 暂停 KWS
+    │
+    ▼
+加载 ASR (~282MB · ~500mW) → 转录 "拍张照"
+    │
+    ▼
+AgentOrchestrator.dispatch("拍张照") → Capability 执行
+    │
+    ▼
+释放 ASR → 恢复 KWS always-on
 ```
 
 ---
@@ -202,7 +284,7 @@ class SceneManager {
 本地和远程使用独立的 Prompt 构建器：
 
 ```kotlin
-// 本地 Prompt — 精简、结构化、GBNF 约束
+// 本地 Prompt — 精简、结构化
 class LocalPromptBuilder {
     fun buildSystemPrompt(capabilities: List<Capability>, context: AgentContext): String = """
         你是 PicMe AI 助手，运行在端侧设备。
@@ -424,10 +506,10 @@ class NavigationCapability(
 |------|---------|---------|
 | **协议** | 自定义 JSON 数组 | 标准 OpenAI Chat Completions API |
 | **Library** | 无第三方依赖 | langchain4j 1.13.0 (OpenAiChatModel) |
-| **Prompt** | 精简、结构化、GBNF 约束 | 自然语言 + Tool Schema |
+| **Prompt** | 精简、结构化 | 自然语言 + Tool Schema |
 | **输出解析** | 简单 JSON 数组解析 | 标准 JSON 反序列化（tool_calls） |
-| **约束方式** | GBNF Grammar 强制格式 | OpenAI 原生协议约束 |
-| **聊天/闲聊** | 通过 GBNF text_reply 兜底 | 原生支持（流式 + 多轮） |
+| **约束方式** | JSON 数组格式 Prompt 约束 | OpenAI 原生协议约束 |
+| **聊天/闲聊** | 通过 text_reply 命令兜底 | 原生支持（流式 + 多轮） |
 | **Strategy** | L1 Cache / L2 Batch | L2 Batch / L3 Plan / L4 Chat |
 | **延迟** | < 600ms | 500ms-2s |
 | **隐私** | 100% 端侧 | 非敏感数据允许上云 |
@@ -599,21 +681,24 @@ sealed class AgentCommand {
 │  4. 本地/远程协议彻底分离（ADR-005）                              │
 │  5. 远程推理引入 langchain4j 标准化                               │
 │  6. DeepSeek 适配（thinking 禁用、strict 兼容）                   │
+│  7. Sherpa-MNN 语音栈清理，迁至 Sherpa-ONNX                      │
+│  8. 唤醒词引擎 Phase 1 完成（21 词 + 动态轮询 + VAD 稳定性）       │
 │                                                                 │
-│  P1（近期）:                                                    │
-│  7. 支持 Batch Function Calling（tool_calls 数组）               │
-│  8. ChatFormat 抽象，支持多模型切换                              │
-│  9. Capability 命令映射改为注解驱动或属性声明                      │
-│  10. 本地意图缓存（高频指令 0ms 响应）                              │
+│  P1（进行中）:                                                   │
+│  9. KWS always-on 迁移（Sherpa-ONNX KWS，Phase 2）               │
+│  10. 支持 Batch Function Calling（tool_calls 数组）               │
+│  11. ChatFormat 抽象，支持多模型切换                              │
+│  12. Capability 命令映射改为注解驱动或属性声明                      │
+│  13. IM 远程控制（飞书 WebSocket）全链路打通                       │
 │                                                                 │
 │  P2（中期）:                                                    │
-│  11. Plan-and-Execute 规则模板引擎（端侧不用 LLM 做规划）           │
-│  12. Token 预算管理与上下文压缩                                    │
-│  13. 隐私分级路由完善：敏感强制本地，非敏感允许远程                    │
+│  14. Plan-and-Execute 规则模板引擎（端侧不用 LLM 做规划）           │
+│  15. Token 预算管理与上下文压缩                                    │
+│  16. 隐私分级路由完善：敏感强制本地，非敏感允许远程                    │
 │                                                                 │
 │  P3（远期）:                                                    │
-│  14. 记忆摘要（长期对话不丢失上下文）                               │
-│  15. 多会话管理                                                   │
+│  17. 记忆摘要（长期对话不丢失上下文）                               │
+│  18. 多会话管理                                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -624,6 +709,9 @@ sealed class AgentCommand {
 - [AGENTS.md](../../AGENTS.md) — 顶层治理规则
 - [FEATURES.md](../01-PRODUCT/FEATURES.md) — 功能交互细节
 - [COMMAND_REFERENCE.md](../04-AGENT-CAPABILITIES/COMMAND_REFERENCE.md) — 命令参考手册
-- [REMOTE_INFERENCE_ARCHITECTURE.md](REMOTE_INFERENCE_ARCHITECTURE.md) — 远程推理架构详细设计
+- [REMOTE_INFERENCE_ARCHITECTURE.md](../03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md) — 远程推理架构详细设计
+- [IM_REMOTE_CONTROL_TECH_SPEC.md](../03-TECHNICAL-SPECS/IM_REMOTE_CONTROL_TECH_SPEC.md) — IM 远程控制技术规范
+- [KWS_MIGRATION_TECH_SPEC.md](../03-TECHNICAL-SPECS/KWS_MIGRATION_TECH_SPEC.md) — KWS 唤醒词迁移方案
+- [REMOTE_REACT_ARCHITECTURE_REVIEW.md](../03-TECHNICAL-SPECS/REMOTE_REACT_ARCHITECTURE_REVIEW.md) — ReAct 架构审查
 - `agent-core/src/main/java/com/mamba/picme/agent/core/` — 源码目录（Agent Runtime 核心）
 - `app/src/main/java/com/mamba/picme/domain/usecase/AiAgentUseCase.kt` — Facade 桥接层
