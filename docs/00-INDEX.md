@@ -89,6 +89,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 - `ADR-004-gpu-contention-resolution.md` - GPU 争用解决方案
 - `ADR-005-local-remote-inference-split.md` - 本地/远程推理协议分离
 - `ADR-006-command-system-separation.md` - 命令系统包隔离
+- `ADR-007-natural-language-photo-search.md` - 端侧自然语言相册搜索
 
 ---
 

@@ -13,6 +13,7 @@
 ## 架构层
 - [Agent 运行时架构](../02-ARCHITECTURE/AGENT_ARCHITECTURE.md)
 - [架构决策记录](../02-ARCHITECTURE/ADR/)
+- [ADR-007: 相册搜索](../02-ARCHITECTURE/ADR/ADR-007-natural-language-photo-search.md)
 
 ## 技术规范
 - [美颜引擎规格](../03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md)
