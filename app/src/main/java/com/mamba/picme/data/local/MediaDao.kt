@@ -89,4 +89,12 @@ interface MediaDao {
         locationName: String?,
         indexedAt: Long
     )
+
+    /** 获取已索引媒体数量 */
+    @Query("SELECT COUNT(*) FROM media_assets WHERE indexedAt IS NOT NULL AND indexedAt > 0")
+    suspend fun getIndexedCount(): Int
+
+    /** 获取媒体总数 */
+    @Query("SELECT COUNT(*) FROM media_assets")
+    suspend fun getTotalCount(): Int
 }

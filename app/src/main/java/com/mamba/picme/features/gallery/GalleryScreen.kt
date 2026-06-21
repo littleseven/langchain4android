@@ -17,6 +17,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -159,6 +160,28 @@ fun GalleryScreen(
     LaunchedEffect(hasMediaPermission) {
         if (hasMediaPermission) {
             viewModel.refreshMediaLibrary()
+        }
+    }
+
+    // 首次进入 Gallery 时触发后台图片标签索引
+    val app = context.applicationContext as com.mamba.picme.PicMeApplication
+    val indexingWorker = remember { app.container.mediaIndexingWorker }
+    var isIndexing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(allFlatMedia.size) {
+        if (hasMediaPermission && allFlatMedia.isNotEmpty() && !isIndexing) {
+            indexingWorker.start()
+            isIndexing = true
+        }
+    }
+
+    // 定期刷新索引状态
+    LaunchedEffect(isIndexing) {
+        if (isIndexing) {
+            while (indexingWorker.isRunning) {
+                kotlinx.coroutines.delay(3000)
+            }
+            isIndexing = false
         }
     }
 
@@ -369,6 +392,13 @@ fun GalleryScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
+            // 索引状态指示器
+            if (isIndexing) {
+                androidx.compose.material3.LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
             when {
                 isSearchActive && searchQuery.isNotBlank() -> {
                     if (searchResultMedia.isEmpty()) {
