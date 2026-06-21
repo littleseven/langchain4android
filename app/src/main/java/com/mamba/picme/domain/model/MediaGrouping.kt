@@ -20,7 +20,8 @@ enum class GroupTitleType {
     PERSON,
     LANDSCAPE,
     SWIMWEAR,
-    SEXY
+    SEXY,
+    SEARCH
 }
 
 data class GroupedMedia(

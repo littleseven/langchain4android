@@ -130,9 +130,10 @@ fun ChatThreadSidebar(
                 }
 
                 // 搜索框
-                SearchField(
+                com.mamba.picme.features.common.SearchField(
                     query = searchQuery,
                     onQueryChange = onSearchQueryChange,
+                    placeholder = stringResource(R.string.search_history),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -154,48 +155,6 @@ fun ChatThreadSidebar(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SearchField(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Search,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            modifier = Modifier.padding(end = 8.dp)
-        )
-        BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
-            textStyle = TextStyle(
-                color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp
-            ),
-            decorationBox = { innerTextField ->
-                if (query.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.search_history),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                        fontSize = 14.sp
-                    )
-                }
-                innerTextField()
-            },
-            modifier = Modifier.weight(1f)
-        )
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.DropdownMenu
@@ -47,7 +48,8 @@ fun GalleryTopBar(
     onShareSelected: () -> Unit,
     onGroupingModeSelected: (GroupingMode) -> Unit,
     onManageDuplicates: () -> Unit,
-    onOpenTestDataTools: () -> Unit
+    onOpenTestDataTools: () -> Unit,
+    onSearchClick: () -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -82,6 +84,12 @@ fun GalleryTopBar(
                     Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete))
                 }
             } else {
+                IconButton(onClick = onSearchClick) {
+                    Icon(
+                        Icons.Rounded.Search,
+                        contentDescription = "搜索照片"
+                    )
+                }
                 IconButton(onClick = onOpenTestDataTools) {
                     Icon(
                         Icons.Rounded.CloudDownload,

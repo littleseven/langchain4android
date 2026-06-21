@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -56,6 +57,8 @@ import com.mamba.picme.features.gallery.agent.GalleryAgentPanel
 import com.mamba.picme.features.common.chat.rememberAgentChatConfig
 import android.app.Activity
 import com.mamba.picme.features.gallery.capability.GalleryCapability
+import com.mamba.picme.features.common.SearchField
+import kotlinx.coroutines.launch
 
 private const val TAG = "Gallery"
 private const val TAG_AGENT = "GalleryAgent"
@@ -76,6 +79,13 @@ fun GalleryScreen(
     var selectedMediaIndex by remember { mutableStateOf<Int?>(null) }
     var isSelectionMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<Long>() }
+
+    // 搜索状态
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var searchResultMedia by remember { mutableStateOf<List<com.mamba.picme.agent.core.model.context.MediaAsset>>(emptyList()) }
+    val searchEngine = remember { GalleryCapability.getInstance().searchEngine }
+    val searchScope = rememberCoroutineScope()
 
     val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { group -> group.items } }
     val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { it.id } }
@@ -281,45 +291,76 @@ fun GalleryScreen(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            if (selectedMediaIndex == null && !showDuplicateManager) {
-                GalleryTopBar(
-                    isSelectionMode = isSelectionMode,
-                    selectedCount = selectedIds.size,
-                    groupingMode = groupingMode,
-                    onNavigateBack = onNavigateBack,
-                    onToggleSelectionMode = {
-                        isSelectionMode = false
-                        selectedIds.clear()
-                    },
-                    onSelectAll = {
-                        if (selectedIds.size == allFlatMedia.size) {
+            when {
+                isSearchActive -> {
+                    // 搜索模式：显示搜索框
+                    com.mamba.picme.features.gallery.components.SearchTopBar(
+                        searchQuery = searchQuery,
+                        onQueryChange = { query ->
+                            searchQuery = query
+                            if (query.isNotBlank()) {
+                                searchScope.launch {
+                                    val engine = searchEngine ?: return@launch
+                                    val result = engine.search(query)
+                                    searchResultMedia = result.media
+                                }
+                            } else {
+                                searchResultMedia = emptyList()
+                            }
+                        },
+                        onClose = {
+                            searchQuery = ""
+                            searchResultMedia = emptyList()
+                            isSearchActive = false
+                        },
+                        resultCount = if (searchQuery.isNotBlank()) searchResultMedia.size else null
+                    )
+                }
+                selectedMediaIndex == null && !showDuplicateManager -> {
+                    GalleryTopBar(
+                        isSelectionMode = isSelectionMode,
+                        selectedCount = selectedIds.size,
+                        groupingMode = groupingMode,
+                        onNavigateBack = onNavigateBack,
+                        onToggleSelectionMode = {
+                            isSelectionMode = false
                             selectedIds.clear()
-                        } else {
+                        },
+                        onSelectAll = {
+                            if (selectedIds.size == allFlatMedia.size) {
+                                selectedIds.clear()
+                            } else {
+                                selectedIds.clear()
+                                selectedIds.addAll(allFlatMedia.map { it.id })
+                            }
+                        },
+                        onDeleteSelected = {
+                            val idsToDelete = selectedIds.toList()
+                            viewModel.deleteMediaByIds(idsToDelete)
+                            isSelectionMode = false
                             selectedIds.clear()
-                            selectedIds.addAll(allFlatMedia.map { it.id })
+                        },
+                        onShareSelected = {
+                            val selectedAssets = selectedIds.mapNotNull { mediaById[it] }
+                            shareMediaAssets(context, selectedAssets)
+                        },
+                        onGroupingModeSelected = { mode -> viewModel.setGroupingMode(mode) },
+                        onManageDuplicates = { viewModel.toggleDuplicateManager(true) },
+                        onOpenTestDataTools = onNavigateToDebug,
+                        onSearchClick = {
+                            isSearchActive = true
+                            searchResultMedia = emptyList()
                         }
-                    },
-                    onDeleteSelected = {
-                        val idsToDelete = selectedIds.toList()
-                        viewModel.deleteMediaByIds(idsToDelete)
-                        isSelectionMode = false
-                        selectedIds.clear()
-                    },
-                    onShareSelected = {
-                        val selectedAssets = selectedIds.mapNotNull { mediaById[it] }
-                        shareMediaAssets(context, selectedAssets)
-                    },
-                    onGroupingModeSelected = { mode -> viewModel.setGroupingMode(mode) },
-                    onManageDuplicates = { viewModel.toggleDuplicateManager(true) },
-                    onOpenTestDataTools = onNavigateToDebug
-                )
-            } else if (showDuplicateManager) {
-                DuplicateManagerTopBar(
-                    onNavigateBack = { viewModel.toggleDuplicateManager(false) },
-                    onDeleteAllDuplicates = {
-                        viewModel.deleteAllDuplicatesExceptOne()
-                    }
-                )
+                    )
+                }
+                showDuplicateManager -> {
+                    DuplicateManagerTopBar(
+                        onNavigateBack = { viewModel.toggleDuplicateManager(false) },
+                        onDeleteAllDuplicates = {
+                            viewModel.deleteAllDuplicatesExceptOne()
+                        }
+                    )
+                }
             }
         }
     ) { padding ->
@@ -329,6 +370,35 @@ fun GalleryScreen(
                 .fillMaxSize()
         ) {
             when {
+                isSearchActive && searchQuery.isNotBlank() -> {
+                    if (searchResultMedia.isEmpty()) {
+                        EmptyGalleryMessage(message = "未找到匹配 \"$searchQuery\" 的照片")
+                    } else {
+                        val searchGroup = com.mamba.picme.domain.model.GroupedMedia(
+                            titleType = com.mamba.picme.domain.model.GroupTitleType.SEARCH,
+                            titleValue = "\"$searchQuery\"",
+                            items = searchResultMedia
+                        )
+                        MediaGrid(
+                            context = context,
+                            groupedMedia = listOf(searchGroup),
+                            selectedIds = selectedIds,
+                            isSelectionMode = false,
+                            thumbnailPositions = thumbnailPositions,
+                            mediaById = searchResultMedia.associateBy { it.id },
+                            onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
+                            onMediaClick = { asset ->
+                                val index = searchResultMedia.indexOfFirst { it.id == asset.id }
+                                if (index >= 0) selectedMediaIndex = index
+                            },
+                            onMediaLongClick = { },
+                            onDragSelectionStart = { },
+                            onDragSelectionItem = { },
+                            onDragSelectionEnd = { }
+                        )
+                    }
+                }
+
                 showDuplicateManager -> {
                     DuplicateManagerScreen(
                         duplicateGroups = duplicateGroups,

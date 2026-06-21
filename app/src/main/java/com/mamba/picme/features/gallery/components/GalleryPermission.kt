@@ -94,10 +94,10 @@ fun GalleryPermissionMessage(
 }
 
 @Composable
-fun EmptyGalleryMessage() {
+fun EmptyGalleryMessage(message: String? = null) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = stringResource(R.string.no_media),
+            text = message ?: stringResource(R.string.no_media),
             style = MaterialTheme.typography.bodyLarge
         )
     }

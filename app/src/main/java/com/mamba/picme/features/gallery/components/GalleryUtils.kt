@@ -19,6 +19,7 @@ fun resolveGroupTitle(context: Context, group: GroupedMedia): String {
         GroupTitleType.LANDSCAPE -> context.getString(R.string.landscape)
         GroupTitleType.SWIMWEAR -> context.getString(R.string.swimwear)
         GroupTitleType.SEXY -> context.getString(R.string.sexy)
+        GroupTitleType.SEARCH -> "搜索 ${group.titleValue}（${group.items.size} 张）"
     }
 }
 
