@@ -15,6 +15,7 @@ import com.mamba.picme.core.image.CoilConfig
 import com.mamba.picme.di.AppContainer
 import com.mamba.picme.di.AppContainerImpl
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
+import com.mamba.picme.agent.core.api.android.RemoteModelConfigs
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
@@ -180,6 +181,9 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         // 的路由遵循用户在设置中选定的推理模式（LOCAL/REMOTE/OFF）
         syncAgentModeToOrchestrator()
 
+        // 同步远程模型配置到 AgentOrchestrator，确保用户修改 API Token 后即时生效
+        syncRemoteModelConfigToOrchestrator()
+
         // 监听媒体库变化：飞书远程拍照完成后自动发送照片到飞书
         observeFeishuPhotoCapture()
     }
@@ -254,9 +258,6 @@ class PicMeApplication : Application(), ImageLoaderFactory {
      * - 如果用户在设置中切换了推理模式，而飞书路径没有收到通知，
      *   飞书消息会继续走旧的模式（或默认 LOCAL），与用户期望不符
      * - 此方法在启动时读取用户的设置，并在设置变化时自动同步
-     *
-     * **注意**：此方法只同步核心模式选择（LOCAL/REMOTE/OFF）。
-     * 飞书远程控制走 SCF 默认兜底配置，远程模型详情由 [AiAgentUseCase] 管理。
      */
     private fun syncAgentModeToOrchestrator() {
         applicationScope.launch {
@@ -271,15 +272,66 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                 }.collect { (mode, localModel, privacyLevel) ->
                     val orchestrator = AgentOrchestrator.getInstance(this@PicMeApplication)
                     val effectiveModel = localModel.takeIf { it.isNotBlank() } ?: "qwen3_5_2b"
+                    // 保留已有的远程配置，避免覆盖 gatewayToken 导致远程推理失败
+                    val existingRemoteConfig = orchestrator.getUserRemoteConfig()
                     orchestrator.configure(
                         mode = mode,
                         modelId = effectiveModel,
-                        privacyLevel = privacyLevel
+                        privacyLevel = privacyLevel,
+                        remoteConfig = existingRemoteConfig
                     )
-                    Logger.i(TAG, "Agent orchestrator synced: mode=$mode, model=$effectiveModel")
+                    Logger.i(TAG, "Agent orchestrator synced: mode=$mode, model=$effectiveModel, remoteConfig=${existingRemoteConfig?.modelId ?: "null"}")
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Agent mode sync failed", e)
+            }
+        }
+    }
+
+    /**
+     * 同步远程模型配置到 AgentOrchestrator
+     *
+     * 当用户在设置中添加/修改/删除远程模型配置时，
+     * 自动解析并同步到 AgentOrchestrator，确保远程推理使用最新配置。
+     *
+     * **注意**：DataStore 中存储的是新版 ProviderConfigs 格式（{"provider":"DEEPSEEK","modelId":"...","apiKey":"..."}），
+     * 需先解析为 ProviderConfigs，再转换为 RemoteModelConfig 供推理引擎使用。
+     */
+    private fun syncRemoteModelConfigToOrchestrator() {
+        applicationScope.launch {
+            try {
+                val repository = container.userPreferencesRepository
+                combine(
+                    repository.aiAgentRemoteModelConfigsFlow,
+                    repository.aiAgentSelectedRemoteModelFlow
+                ) { configsJson, selectedModelId ->
+                    Pair(configsJson, selectedModelId)
+                }.collect { (configsJson, selectedModelId) ->
+                    val orchestrator = AgentOrchestrator.getInstance(this@PicMeApplication)
+
+                    // 使用新版 ProviderConfigs 格式解析（DataStore 已迁移到新格式）
+                    val providerConfigs = com.mamba.picme.domain.model.ProviderConfigs.fromJson(configsJson)
+                    val selectedProviderConfig = providerConfigs.configs
+                        .find { it.modelId == selectedModelId && it.isConfigured }
+                        ?: providerConfigs.configs.firstOrNull { it.isConfigured }
+
+                    if (selectedProviderConfig != null && selectedProviderConfig.isConfigured) {
+                        val remoteConfig = selectedProviderConfig.toRemoteModelConfig()
+                        orchestrator.configure(
+                            mode = orchestrator.getAgentMode(),
+                            modelId = orchestrator.getCurrentModelId(),
+                            privacyLevel = AiAgentPrivacyLevel.STRICT,
+                            remoteConfig = remoteConfig
+                        )
+                        // 配置变更后清除 Feishu Agent 缓存，确保下次使用新配置重建
+                        orchestrator.clearFeishuAgent()
+                        Logger.i(TAG, "Remote model config synced: model=${remoteConfig.modelId}, provider=${remoteConfig.providerId}, baseUrl=${remoteConfig.baseUrl.take(40)}")
+                    } else {
+                        Logger.d(TAG, "No configured remote model found, using fallback")
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Remote model config sync failed", e)
             }
         }
     }

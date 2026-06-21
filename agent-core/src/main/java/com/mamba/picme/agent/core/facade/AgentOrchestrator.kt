@@ -157,6 +157,28 @@ class AgentOrchestrator private constructor(context: Context) {
     }
 
     /**
+     * 获取当前用户远程模型配置（用于模式同步时保留 gatewayToken 等认证信息）
+     */
+    fun getUserRemoteConfig(): RemoteModelConfig? = configurator.getUserRemoteConfig()
+
+    /**
+     * 获取当前 Agent 运行模式（含临时覆盖）
+     */
+    fun getAgentMode(): AiAgentMode = configurator.getAgentMode()
+
+    /**
+     * 获取当前模型 ID
+     */
+    fun getCurrentModelId(): String = configurator.getCurrentModelId()
+
+    /**
+     * 清除飞书 ReAct Agent 缓存（配置变更后强制重建）
+     */
+    fun clearFeishuAgent() {
+        configurator.clearFeishuAgent()
+    }
+
+    /**
      * 加载本地模型
      */
     suspend fun loadModel(modelId: String? = null): Result<Unit> {
@@ -247,9 +269,9 @@ class AgentOrchestrator private constructor(context: Context) {
         val inferenceResult = try {
             when (configurator.getAgentMode()) {
                 AiAgentMode.LOCAL -> configurator.getLocalPipeline().processInput(input, agentContext)
-                AiAgentMode.REMOTE -> configurator.getRemotePipeline().processInput(input, agentContext)
+                AiAgentMode.REMOTE -> configurator.getRemoteOrchestrator().processBatch(input, agentContext)
                 AiAgentMode.OFF -> InferenceResult.Chat(message = "AI Agent 已关闭")
-                AiAgentMode.FEISHU -> configurator.getRemotePipeline().processInput(input, agentContext)
+                AiAgentMode.FEISHU -> configurator.getRemoteOrchestrator().processBatch(input, agentContext)
             }
         } catch (exception: Exception) {
             Logger.e(tag, "Pipeline routing failed", exception)
@@ -524,9 +546,9 @@ class AgentOrchestrator private constructor(context: Context) {
                 )
             }
             AiAgentMode.REMOTE -> {
-                // 远程模式：通过 RemotePipeline 进行编排
-                Logger.d(tag, "Using RemotePipeline for REMOTE mode")
-                configurator.getRemotePipeline().processInput(input, agentContext)
+                // 远程模式：直接调用 RemoteOrchestrator
+                Logger.d(tag, "Using RemoteOrchestrator for REMOTE mode")
+                configurator.getRemoteOrchestrator().processBatch(input, agentContext)
             }
             AiAgentMode.OFF -> {
                 Logger.w(tag, "Agent is OFF")
@@ -540,8 +562,8 @@ class AgentOrchestrator private constructor(context: Context) {
             }
             AiAgentMode.FEISHU -> {
                 // FEISHU 模式：聊天页等场景走远程推理，与 REMOTE 模式一致
-                Logger.d(tag, "Using RemotePipeline for FEISHU mode")
-                configurator.getRemotePipeline().processInput(input, agentContext)
+                Logger.d(tag, "Using RemoteOrchestrator for FEISHU mode")
+                configurator.getRemoteOrchestrator().processBatch(input, agentContext)
             }
         }
 

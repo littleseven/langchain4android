@@ -5,7 +5,6 @@ import android.view.WindowManager
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.mamba.picme.agent.core.api.ToolProvider
 import com.mamba.picme.agent.core.local.pipeline.LocalInferencePipeline
 import com.mamba.picme.agent.core.local.prompt.LocalPromptBuilder
 import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
@@ -17,7 +16,6 @@ import com.mamba.picme.agent.core.react.InAppAgentConfig
 import com.mamba.picme.agent.core.react.InAppAgentService
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
-import com.mamba.picme.agent.core.remote.pipeline.RemoteInferencePipeline
 import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.state.SceneManager
@@ -48,20 +46,6 @@ class AgentConfigurator(private val context: Context) {
     val intentCache = IntentCache()
 
     /**
-     * Tool Provider（LangChain4j 风格 Tool Calling）。
-     * 默认使用 [CapabilityRegistry]，未注册 Capability 时工具列表为空，自动回退到原有推理链路。
-     */
-    var toolProvider: ToolProvider? = capabilityRegistry
-        private set
-
-    /**
-     * 设置 Tool Provider。传入 null 可关闭 Tool Calling。
-     */
-    fun setToolProvider(provider: ToolProvider?) {
-        toolProvider = provider
-    }
-
-    /**
      * 模式临时覆盖栈（用于飞书远程控制等场景强制使用特定推理模式）。
      *
      * - [pushModeOverride] 压入覆盖模式
@@ -79,7 +63,6 @@ class AgentConfigurator(private val context: Context) {
     private var userRemoteConfig: RemoteModelConfig? = null
     private var pipelineRemoteConfig: RemoteModelConfig? = null
     private var localInferencePipeline: LocalInferencePipeline? = null
-    private var remoteInferencePipeline: RemoteInferencePipeline? = null
     private var cachedRemoteOrchestrator: RemoteOrchestrator? = null
     private var localUseOpencl: Boolean = false
 
@@ -102,27 +85,7 @@ class AgentConfigurator(private val context: Context) {
     }
 
     /**
-     * 获取或创建远程推理管道
-     */
-    fun getRemotePipeline(): RemoteInferencePipeline {
-        val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
-        val existing = remoteInferencePipeline
-        if (existing != null && pipelineRemoteConfig == currentConfig) {
-            return existing
-        }
-        val remoteOrchestrator = createRemoteOrchestrator(currentConfig)
-        val pipeline = RemoteInferencePipeline(
-            remoteOrchestrator = remoteOrchestrator,
-            intentCache = intentCache,
-            privacyGuard = privacyGuard
-        )
-        remoteInferencePipeline = pipeline
-        pipelineRemoteConfig = currentConfig
-        return pipeline
-    }
-
-    /**
-     * 获取缓存的远程编排器
+     * 获取或创建远程编排器（直接返回，不再经过 RemoteInferencePipeline 包装）
      */
     fun getRemoteOrchestrator(): RemoteOrchestrator {
         val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
@@ -164,7 +127,7 @@ class AgentConfigurator(private val context: Context) {
         if (remoteConfig != null && remoteConfig.baseUrl.isNotBlank() && remoteConfig.modelId.isNotBlank()) {
             this.userRemoteConfig = remoteConfig
             localInferencePipeline = null
-            remoteInferencePipeline = null
+            cachedRemoteOrchestrator = null
             pipelineRemoteConfig = null
         }
         privacyGuard.updateConfig(privacyLevel, mode)
@@ -233,21 +196,44 @@ class AgentConfigurator(private val context: Context) {
 
     private var cachedFeishuAgent: InAppAgentService? = null
 
+    /** 缓存的 Feishu Agent 对应的配置，用于检测配置变更 */
+    private var cachedFeishuAgentConfig: RemoteModelConfig? = null
+
     /**
      * 获取或创建飞书 ReAct Agent。
-     * 使用腾讯 SCF 默认配置作为远程模型。
+     * 优先使用用户配置的远程模型，未配置时使用腾讯 SCF 默认兜底。
+     *
+     * 当用户配置发生变更时（cachedFeishuAgentConfig != userRemoteConfig），
+     * 自动重建 Agent 以确保使用最新的 API Key / baseUrl / model。
      */
     fun getFeishuAgent(windowManager: WindowManager, callback: InAppAgentCallback): InAppAgentService? {
         val existing = cachedFeishuAgent
-        if (existing != null) return existing
+        val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
+
+        // 配置变更检测：如果用户修改了远程模型配置，重建 Agent
+        if (existing != null && cachedFeishuAgentConfig != null) {
+            val configChanged = cachedFeishuAgentConfig?.modelId != currentConfig.modelId
+                || cachedFeishuAgentConfig?.baseUrl != currentConfig.baseUrl
+                || cachedFeishuAgentConfig?.apiKey != currentConfig.apiKey
+                || cachedFeishuAgentConfig?.gatewayToken != currentConfig.gatewayToken
+            if (configChanged) {
+                Logger.i("AgentConfigurator", "Remote config changed (model=${currentConfig.modelId}), rebuilding Feishu Agent")
+                existing.shutdown()
+                cachedFeishuAgent = null
+                cachedFeishuAgentConfig = null
+            } else {
+                return existing
+            }
+        } else if (existing != null) {
+            return existing
+        }
 
         val cfg = try {
-            val remoteCfg = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
             InAppAgentConfig.Builder()
-                .apiKey(remoteCfg.apiKey)
-                .baseUrl(remoteCfg.baseUrl)
-                .modelName(remoteCfg.modelId)
-                .gatewayToken(remoteCfg.gatewayToken)
+                .apiKey(currentConfig.apiKey)
+                .baseUrl(currentConfig.baseUrl)
+                .modelName(currentConfig.modelId)
+                .gatewayToken(currentConfig.gatewayToken)
                 .build()
         } catch (e: Exception) {
             Logger.w("AgentConfigurator", "Failed to build FeishuAgent config", e)
@@ -257,7 +243,8 @@ class AgentConfigurator(private val context: Context) {
         val agent = InAppAgentService(cfg, windowManager, callback, context)
         agent.initialize()
         cachedFeishuAgent = agent
-        Logger.i("AgentConfigurator", "Feishu ReAct Agent created: model=${cfg.modelName}")
+        cachedFeishuAgentConfig = currentConfig
+        Logger.i("AgentConfigurator", "Feishu ReAct Agent created: model=${cfg.modelName}, baseUrl=${currentConfig.baseUrl.take(40)}")
         return agent
     }
 
@@ -267,6 +254,7 @@ class AgentConfigurator(private val context: Context) {
     fun clearFeishuAgent() {
         cachedFeishuAgent?.shutdown()
         cachedFeishuAgent = null
+        cachedFeishuAgentConfig = null
         Logger.i("AgentConfigurator", "Feishu ReAct Agent cleared")
     }
 }

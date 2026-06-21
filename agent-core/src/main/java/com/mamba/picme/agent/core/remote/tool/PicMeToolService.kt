@@ -74,9 +74,9 @@ class PicMeToolService(
 
     @Tool(name = "click", value = ["点击屏幕上的元素。支持通过坐标(x,y)或文本(text)定位目标。"])
     fun click(
-        @P("X coordinate (use with y, mutually exclusive with text)") x: Int? = null,
-        @P("Y coordinate (use with x, mutually exclusive with text)") y: Int? = null,
-        @P("Click element by visible text (mutually exclusive with x/y)") text: String? = null
+        @P(name = "x", value = "X coordinate (use with y, mutually exclusive with text)") x: Int? = null,
+        @P(name = "y", value = "Y coordinate (use with x, mutually exclusive with text)") y: Int? = null,
+        @P(name = "text", value = "Click element by visible text (mutually exclusive with x/y)") text: String? = null
     ): String {
         val rootView = currentRootView ?: return "Error: No activity root view available"
 
@@ -119,8 +119,8 @@ class PicMeToolService(
 
     @Tool(name = "input_text", value = ["在输入框中输入文本"])
     fun inputText(
-        @P("要输入的文本内容") text: String,
-        @P("是否先清空现有文本，默认 true") clearFirst: Boolean = true
+        @P(name = "text", value = "要输入的文本内容") text: String,
+        @P(name = "clear_first", value = "是否先清空现有文本，默认 true") clearFirst: Boolean = true
     ): String {
         val rootView = currentRootView ?: return "Error: No activity root view available"
 
@@ -150,8 +150,8 @@ class PicMeToolService(
 
     @Tool(name = "scroll", value = ["在屏幕上滑动滚动。支持按方向（up/down）滑动。"])
     fun scroll(
-        @P("滚动方向: up|down") direction: String,
-        @P("滚动距离: page|small，默认 page") distance: String = "page"
+        @P(name = "direction", value = "滚动方向: up|down") direction: String,
+        @P(name = "distance", value = "滚动距离: page|small，默认 page") distance: String = "page"
     ): String {
         val rootView = currentRootView ?: return "Error: No activity root view available"
         val dir = direction.lowercase()
@@ -196,7 +196,7 @@ class PicMeToolService(
 
     @Tool(name = "navigate_to", value = ["导航到指定页面。可选值：camera（相机）、gallery（相册）、settings（设置）、debug（调试）"])
     fun navigateTo(
-        @P("目标页面: camera|gallery|settings|debug") destination: String
+        @P(name = "destination", value = "目标页面: camera|gallery|settings|debug") destination: String
     ): String {
         val valid = setOf("camera", "gallery", "settings", "debug")
         if (destination !in valid) {
@@ -224,7 +224,7 @@ class PicMeToolService(
 
     @Tool(name = "switch_mode", value = ["切换拍摄模式。可选值：PHOTO（拍照）、VIDEO（录像）、PRO（专业模式）、DOCUMENT（文档模式）"])
     fun switchMode(
-        @P("拍摄模式: PHOTO|VIDEO|PRO|DOCUMENT") mode: String
+        @P(name = "mode", value = "拍摄模式: PHOTO|VIDEO|PRO|DOCUMENT") mode: String
     ): String {
         val valid = setOf("PHOTO", "VIDEO", "PRO", "DOCUMENT")
         if (mode.uppercase() !in valid) {
@@ -235,13 +235,13 @@ class PicMeToolService(
 
     @Tool(name = "adjust_beauty", value = ["调整美颜参数。只传入需要调整的参数，未传入的参数保持不变。"])
     fun adjustBeauty(
-        @P("磨皮程度 0~100") smoothing: Double? = null,
-        @P("美白程度 0~100") whitening: Double? = null,
-        @P("瘦脸 -50~50") slimFace: Double? = null,
-        @P("大眼 0~100") bigEyes: Double? = null,
-        @P("唇色 0~100") lipColor: Double? = null,
-        @P("腮红 0~100") blush: Double? = null,
-        @P("眉毛 0~100") eyebrow: Double? = null
+        @P(name = "smoothing", value = "磨皮程度 0~100") smoothing: Double? = null,
+        @P(name = "whitening", value = "美白程度 0~100") whitening: Double? = null,
+        @P(name = "slim_face", value = "瘦脸 -50~50") slimFace: Double? = null,
+        @P(name = "big_eyes", value = "大眼 0~100") bigEyes: Double? = null,
+        @P(name = "lip_color", value = "唇色 0~100") lipColor: Double? = null,
+        @P(name = "blush", value = "腮红 0~100") blush: Double? = null,
+        @P(name = "eyebrow", value = "眉毛 0~100") eyebrow: Double? = null
     ): String {
         val params = mutableMapOf<String, Any>()
         smoothing?.let { params["smoothing"] = it }
@@ -256,21 +256,21 @@ class PicMeToolService(
 
     @Tool(name = "adjust_exposure", value = ["调整曝光补偿，范围 -2 到 2"])
     fun adjustExposure(
-        @P("曝光补偿 -2~2") exposure: Int
+        @P(name = "exposure", value = "曝光补偿 -2~2") exposure: Int
     ): String {
         return executeCameraCommand("adjust_exposure", mapOf("exposure" to exposure.coerceIn(-2, 2)))
     }
 
     @Tool(name = "adjust_zoom", value = ["调整变焦倍数，最小 0.5x，最大 10.0x"])
     fun adjustZoom(
-        @P("变焦比例 0.5~10.0") zoom: Double
+        @P(name = "zoom", value = "变焦比例 0.5~10.0") zoom: Double
     ): String {
         return executeCameraCommand("adjust_zoom", mapOf("zoom" to zoom.coerceIn(0.5, 10.0)))
     }
 
     @Tool(name = "switch_filter", value = ["切换相机滤镜。可选值：NONE、LEICA_CLASSIC、LEICA_VIBRANT、LEICA_BW、FILM_GOLD、FILM_FUJI、VINTAGE、COOL、WARM"])
     fun switchFilter(
-        @P("滤镜名称: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM") filter: String
+        @P(name = "filter", value = "滤镜名称: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM") filter: String
     ): String {
         val valid = setOf("NONE", "LEICA_CLASSIC", "LEICA_VIBRANT", "LEICA_BW", "FILM_GOLD", "FILM_FUJI", "VINTAGE", "COOL", "WARM")
         if (filter.uppercase() !in valid) {
@@ -281,7 +281,7 @@ class PicMeToolService(
 
     @Tool(name = "switch_style", value = ["切换艺术风格。可选值：NONE、TOON、SKETCH、POSTERIZE、EMBOSS、CROSSHATCH"])
     fun switchStyle(
-        @P("风格特效名称: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH") style: String
+        @P(name = "style", value = "风格特效名称: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH") style: String
     ): String {
         val valid = setOf("NONE", "TOON", "SKETCH", "POSTERIZE", "EMBOSS", "CROSSHATCH")
         if (style.uppercase() !in valid) {
@@ -292,7 +292,7 @@ class PicMeToolService(
 
     @Tool(name = "switch_scene", value = ["切换场景模式。可选值：night（夜景）、moon（月亮）、none（普通）"])
     fun switchScene(
-        @P("场景模式: night|moon|none") scene: String
+        @P(name = "scene", value = "场景模式: night|moon|none") scene: String
     ): String {
         val valid = setOf("night", "moon", "none")
         if (scene.lowercase() !in valid) {
@@ -303,7 +303,7 @@ class PicMeToolService(
 
     @Tool(name = "switch_ratio", value = ["切换画面比例。可选值：4:3、16:9、full（全屏）"])
     fun switchRatio(
-        @P("画幅比例: 4:3|16:9|full") ratio: String
+        @P(name = "ratio", value = "画幅比例: 4:3|16:9|full") ratio: String
     ): String {
         val valid = setOf("4:3", "16:9", "full")
         if (ratio !in valid) {
@@ -314,7 +314,7 @@ class PicMeToolService(
 
     @Tool(name = "finish", value = ["当任务完成时调用此工具，提供任务完成摘要"])
     fun finish(
-        @P("任务完成摘要") summary: String
+        @P(name = "summary", value = "任务完成摘要") summary: String
     ): String {
         return summary
     }

@@ -8,7 +8,7 @@ import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.remote.parser.ToolCallCommandParser
 import com.mamba.picme.agent.core.remote.tool.PicMeToolService
-import com.mamba.picme.agent.core.remote.tool.ToolSpecificationExtractor
+import com.mamba.service.internal.ToolSpecExtractor
 
 import com.mamba.picme.agent.core.api.command.AgentCommand
 import com.mamba.picme.agent.core.api.context.AgentContext
@@ -448,10 +448,10 @@ class RemoteOrchestrator(
      * 构建 L2 Batch 模式的 ToolSpecifications。
      *
      * 从 [PicMeToolService] 的 @Tool 注解方法自动生成，
-     * 使用 [ToolSpecificationExtractor] 提取。
+     * 使用 [ToolSpecExtractor] 提取。
      */
     private fun buildL2ToolSpecifications(): List<ToolSpecification> {
-        return ToolSpecificationExtractor.extract(toolService)
+        return ToolSpecExtractor.extract(toolService)
     }
 
     /**

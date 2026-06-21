@@ -1,45 +1,81 @@
 package com.mamba.picme.agent.core.remote.tool
 
-import android.view.WindowManager
+import com.mamba.tool.P
 import org.junit.Test
+import org.junit.Assert.*
 
 /**
- * 验证 ToolSpecifications 从 @Tool 注解提取的参数名是否正确
+ * 验证 Kotlin 编译后的 @P 注解参数名是否正确保留
  *
- * 问题背景：Kotlin 编译器默认会剥离参数名（变为 arg0, arg1...），
- * 导致 LLM 收到的参数名与实际解析时使用的 key 不一致。
+ * 问题背景：@P("description") 简写形式只设置 value，不设置 name，
+ * 导致 ToolSpecExtractor fallback 到 param_type 作为参数名，产生重复。
  */
 class ToolSpecificationTest {
 
     @Test
-    fun `verify switch_filter parameter names`() {
-        // 使用 ToolSpecificationExtractor 从 PicMeToolService 提取 ToolSpecification
-        val toolService = PicMeToolService(null as WindowManager)
-        val specs = ToolSpecificationExtractor.extract(toolService)
-        val switchFilterSpec = specs.find { it.name() == "switch_filter" }
-            ?: throw AssertionError("switch_filter spec not found")
+    fun `verify click method parameter annotations`() {
+        val method = PicMeToolService::class.java.getDeclaredMethod(
+            "click",
+            Integer::class.java, Integer::class.java, String::class.java
+        )
 
-        val props = switchFilterSpec.parameters()?.properties()
-        println("switch_filter parameters: ${props?.keys}")
-        println("switch_filter required: ${switchFilterSpec.parameters()?.required()}")
+        val params = method.parameters
+        assertEquals("click should have 3 parameters", 3, params.size)
 
-        // 检查参数名是否为 "filter" 而不是 "arg0"
-        assert(props?.containsKey("filter") == true) {
-            "Expected parameter 'filter' but found: ${props?.keys}"
+        // 验证每个参数都有 @P 注解且 name 不为空
+        val expectedNames = listOf("x", "y", "text")
+        for (i in params.indices) {
+            val pAnnotation = params[i].getAnnotation(P::class.java)
+            assertNotNull("Parameter $i should have @P annotation", pAnnotation)
+            assertEquals(
+                "Parameter $i name should be '${expectedNames[i]}'",
+                expectedNames[i],
+                pAnnotation!!.name
+            )
+            println("Param ${expectedNames[i]}: name='${pAnnotation.name}', value='${pAnnotation.value}'")
         }
-
-        // 检查参数描述
-        val filterSchema = props?.get("filter")
-        println("filter schema: $filterSchema")
     }
 
     @Test
-    fun `verify all tool parameter names`() {
-        val toolService = PicMeToolService(null as WindowManager)
-        val specs = ToolSpecificationExtractor.extract(toolService)
-        for (spec in specs) {
-            val props = spec.parameters()?.properties()
-            println("Tool '${spec.name()}' parameters: ${props?.keys}")
+    fun `verify adjust_beauty method parameter annotations`() {
+        val method = PicMeToolService::class.java.getDeclaredMethod(
+            "adjustBeauty",
+            Double::class.java, Double::class.java, Double::class.java,
+            Double::class.java, Double::class.java, Double::class.java, Double::class.java
+        )
+
+        val params = method.parameters
+        assertEquals("adjustBeauty should have 7 parameters", 7, params.size)
+
+        val expectedNames = listOf("smoothing", "whitening", "slim_face", "big_eyes", "lip_color", "blush", "eyebrow")
+        for (i in params.indices) {
+            val pAnnotation = params[i].getAnnotation(P::class.java)
+            assertNotNull("Parameter $i should have @P annotation", pAnnotation)
+            assertEquals(
+                "Parameter $i name should be '${expectedNames[i]}'",
+                expectedNames[i],
+                pAnnotation!!.name
+            )
+        }
+    }
+
+    @Test
+    fun `verify no param_ fallback names exist`() {
+        // 检查所有 @Tool 注解方法的参数，确保没有使用 param_ 前缀的 fallback 名称
+        val methods = PicMeToolService::class.java.declaredMethods
+        for (method in methods) {
+            if (method.getAnnotation(com.mamba.tool.Tool::class.java) == null) continue
+
+            for (param in method.parameters) {
+                val pAnnotation = param.getAnnotation(P::class.java)
+                if (pAnnotation != null) {
+                    // 如果 @P 注解存在，name 不应该为空
+                    assertTrue(
+                        "Method '${method.name}' parameter should have non-empty @P.name, found: '${pAnnotation.name}'",
+                        pAnnotation.name.isNotEmpty()
+                    )
+                }
+            }
         }
     }
 }

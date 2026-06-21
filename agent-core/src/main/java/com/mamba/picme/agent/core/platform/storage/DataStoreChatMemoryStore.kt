@@ -88,6 +88,19 @@ class DataStoreChatMemoryStore(private val context: Context) : ChatMemoryStore {
                 is AiMessage -> {
                     obj.put("type", "assistant")
                     obj.put("content", message.text() ?: "")
+                    // 完整序列化 toolExecutionRequests，否则反序列化后丢失 toolCalls
+                    // 会导致 OpenAI API 报错：tool message 没有对应的 tool_calls
+                    if (message.hasToolExecutionRequests()) {
+                        val toolCallsArray = JSONArray()
+                        message.toolExecutionRequests().forEach { req ->
+                            val reqObj = JSONObject()
+                            reqObj.put("id", req.id())
+                            reqObj.put("name", req.name())
+                            reqObj.put("arguments", req.arguments())
+                            toolCallsArray.put(reqObj)
+                        }
+                        obj.put("toolCalls", toolCallsArray)
+                    }
                 }
                 is SystemMessage -> {
                     obj.put("type", "system")
@@ -96,6 +109,9 @@ class DataStoreChatMemoryStore(private val context: Context) : ChatMemoryStore {
                 is ToolExecutionResultMessage -> {
                     obj.put("type", "tool")
                     obj.put("content", message.text())
+                    // 序列化 tool id 和 name，确保反序列化后 tool message 能正确配对
+                    obj.put("toolId", message.id())
+                    obj.put("toolName", message.toolName())
                 }
             }
             array.put(obj)
@@ -113,18 +129,32 @@ class DataStoreChatMemoryStore(private val context: Context) : ChatMemoryStore {
                 val content = obj.optString("content", "")
                 when (type) {
                     "user" -> messages.add(UserMessage.from(content))
-                    "assistant" -> messages.add(AiMessage.from(content))
+                    "assistant" -> {
+                        val aiBuilder = AiMessage.builder().text(content)
+                        // 反序列化 toolExecutionRequests
+                        if (obj.has("toolCalls")) {
+                            val toolCallsArray = obj.getJSONArray("toolCalls")
+                            val requests = mutableListOf<com.mamba.tool.ToolExecutionRequest>()
+                            for (j in 0 until toolCallsArray.length()) {
+                                val reqObj = toolCallsArray.getJSONObject(j)
+                                val req = com.mamba.tool.ToolExecutionRequest.builder()
+                                    .id(reqObj.optString("id", ""))
+                                    .name(reqObj.optString("name", ""))
+                                    .arguments(reqObj.optString("arguments", "{}"))
+                                    .build()
+                                requests.add(req)
+                            }
+                            aiBuilder.toolExecutionRequests(requests)
+                        }
+                        messages.add(aiBuilder.build())
+                    }
                     "system" -> messages.add(SystemMessage.from(content))
-                    "tool" -> messages.add(
-                        ToolExecutionResultMessage.from(
-                            com.mamba.tool.ToolExecutionRequest.builder()
-                                .id("")
-                                .name("")
-                                .arguments("{}")
-                                .build(),
-                            content
-                        )
-                    )
+                    "tool" -> {
+                        // 反序列化 tool result message，保留 id 和 name 用于正确配对
+                        val toolId = obj.optString("toolId", "")
+                        val toolName = obj.optString("toolName", "")
+                        messages.add(ToolExecutionResultMessage.from(toolId, toolName, content))
+                    }
                 }
             }
             messages

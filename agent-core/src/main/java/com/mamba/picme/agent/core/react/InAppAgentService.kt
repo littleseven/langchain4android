@@ -6,9 +6,7 @@ import com.mamba.memory.ChatMemory
 import com.mamba.model.chat.request.ToolChoice
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
-import com.mamba.picme.agent.core.remote.PicMeAssistant
 import com.mamba.picme.agent.core.remote.tool.PicMeToolService
-import com.mamba.picme.agent.core.remote.tool.ToolSpecificationExtractor
 import com.mamba.service.AiServices
 import com.mamba.data.message.SystemMessage
 import com.mamba.model.chat.listener.ChatModelListener
@@ -28,7 +26,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   <li>无 SPI/ServiceLoader 依赖</li>
  * </ul>
  *
- * @see PicMeAssistant
  * @see AiServices
  */
 class InAppAgentService(
@@ -42,7 +39,6 @@ class InAppAgentService(
     }
 
     private val toolService = PicMeToolService(windowManager)
-    private val toolSpecs by lazy { ToolSpecificationExtractor.extract(toolService) }
 
     private val chatModel by lazy {
         val effectiveApiKey = config.apiKey.ifEmpty { "gateway-auth" }
@@ -106,6 +102,13 @@ class InAppAgentService(
     private var assistant: PicMeAssistant? = null
 
     /**
+     * PicMe AI 助手接口契约（内联，避免单独文件）。
+     */
+    private interface PicMeAssistant {
+        fun chat(message: String): String
+    }
+
+    /**
      * 获取或创建指定 session 的 ChatMemory
      */
     private fun getOrCreateMemory(sessionId: String): ChatMemory {
@@ -129,7 +132,6 @@ class InAppAgentService(
                 .chatModel(chatModel)
                 .chatMemory(memory)
                 .tools(toolService)
-                .toolSpecifications(toolSpecs)
                 .systemMessageProvider { SystemMessage.from(config.systemPrompt) }
                 .toolChoice(ToolChoice.AUTO)
                 .maxIterations(config.maxIterations)
@@ -140,7 +142,7 @@ class InAppAgentService(
     }
 
     fun initialize() {
-        Logger.i(TAG, "AiServices Agent initialized: model=${config.modelName}, tools=${toolSpecs.size}")
+        Logger.i(TAG, "AiServices Agent initialized: model=${config.modelName}")
     }
 
     /**

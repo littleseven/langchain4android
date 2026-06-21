@@ -9,8 +9,6 @@ import com.mamba.picme.agent.core.api.context.AgentErrorCode
 import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.api.context.PageContext
 import com.mamba.picme.agent.core.api.execution.StepResult
-import com.mamba.picme.agent.core.api.ToolExecutor
-import com.mamba.picme.agent.core.api.ToolProvider
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
@@ -43,7 +41,7 @@ import org.json.JSONObject
 class CapabilityRegistry private constructor(
     private val sceneManager: SceneManager,
     private val externalScope: CoroutineScope? = null
-) : ToolProvider {
+) {
 
     companion object {
         @Volatile
@@ -314,51 +312,8 @@ class CapabilityRegistry private constructor(
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // ToolProvider 实现（LangChain4j 风格 Tool Calling）
+    // 命令可用性检查
     // ─────────────────────────────────────────────────────────────────────────────
-
-    override suspend fun getToolSpecifications(): List<ToolSpecification> {
-        return getCapabilitiesForCurrentScene()
-            .flatMap { capability ->
-                capability.supportedCommands().map { command ->
-                    ToolSpecification.builder()
-                        .name(command)
-                        .description(capability.getCommandDescription(command))
-                        .parameters(capability.getCommandParameterSchema(command))
-                        .build()
-                }
-            }
-    }
-
-    override suspend fun findExecutor(toolName: String): ToolExecutor? {
-        val capability = findCapabilityForCommandName(toolName)
-            ?: return null
-
-        return object : ToolExecutor {
-            override suspend fun execute(request: ToolExecutionRequest): String {
-                val params = runCatching { JSONObject(request.arguments()) }.getOrDefault(JSONObject())
-                val commandJson = JSONObject().apply {
-                    put("method", toolName)
-                    put("params", params)
-                }.toString()
-                val context = AgentContext(scene = AgentScene.CAMERA)
-                val command = LocalCommandParser.parseCommandByMethod(
-                    method = toolName,
-                    json = commandJson,
-                    context = context,
-                    fallbackText = "",
-                    commandId = com.mamba.picme.agent.core.api.context.AgentIdGenerator.nextId()
-                )
-                val result = dispatch(command, context, null)
-                val action = result.getOrNull()
-                return if (action != null) {
-                    action.toString()
-                } else {
-                    "Error: ${result.exceptionOrNull()?.message}"
-                }
-            }
-        }
-    }
 
     /**
      * 获取指定命令在当前场景是否可用
