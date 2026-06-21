@@ -44,7 +44,7 @@ class MetadataExtractor(private val context: Context) {
     /**
      * ML Kit 图像标注：返回前 5 个置信度最高的标签
      */
-    private fun extractLabels(inputImage: InputImage): List<String> {
+    internal fun extractLabels(inputImage: InputImage): List<String> {
         return try {
             val result = Tasks.await(labeler.process(inputImage))
             result
@@ -53,6 +53,14 @@ class MetadataExtractor(private val context: Context) {
                 .filter { label -> label.confidence >= 0.5f }
                 .map { label -> label.text }
                 .also { Logger.d(tag, "Labels extracted: $it") }
+        } catch (e: com.google.mlkit.common.MlKitException) {
+            // 模型尚未下载，跳过（Play Services 后台下载后下次索引会重试）
+            if (e.message?.contains("download") == true || e.message?.contains("optional module") == true) {
+                Logger.w(tag, "ML Kit label model not ready yet, skipping (will retry later)")
+            } else {
+                Logger.e(tag, "ML Kit label error", e)
+            }
+            emptyList()
         } catch (e: Exception) {
             Logger.e(tag, "Label extraction failed", e)
             emptyList()

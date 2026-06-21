@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -50,6 +51,51 @@ class MediaIndexingWorker(private val context: Context) {
     }
 
     /**
+     * 等待 ML Kit 标注模型就绪
+     * Play Services thin client 首次使用时需要下载模型（~5MB），
+     * 最多等待 30 秒，每 3 秒重试一次。
+     */
+    private suspend fun waitForModelReady(): Boolean {
+        val db = AppDatabase.getDatabase(context)
+        val dao = db.mediaDao()
+        val tempExtractor = MetadataExtractor(context)
+        try {
+            // 找一张真实图片来触发模型下载
+            val firstMedia = dao.getUnindexedMedia().firstOrNull() ?: return true
+            val uri = Uri.parse(firstMedia.uri)
+            val image = try {
+                InputImage.fromFilePath(context, uri)
+            } catch (e: Exception) {
+                return true // 无法读取图片，跳过预热
+            }
+
+            repeat(10) { attempt ->
+                try {
+                    tempExtractor.extractLabels(image)
+                    Logger.i(TAG, "ML Kit model ready (attempt ${attempt + 1})")
+                    return true
+                } catch (e: Exception) {
+                    val msg = e.message ?: ""
+                    val causeMsg = e.cause?.message ?: ""
+                    if (msg.contains("download") || msg.contains("optional module") ||
+                        causeMsg.contains("download") || causeMsg.contains("optional module")
+                    ) {
+                        Logger.d(TAG, "Waiting for model download (attempt ${attempt + 1}/10)...")
+                        delay(3000)
+                    } else {
+                        Logger.w(TAG, "Model warm-up failed: $msg")
+                        return false
+                    }
+                }
+            }
+            Logger.w(TAG, "ML Kit model not ready after 10 attempts")
+            return false
+        } finally {
+            tempExtractor.close()
+        }
+    }
+
+    /**
      * 取消正在运行的索引
      */
     fun cancel() {
@@ -60,8 +106,14 @@ class MediaIndexingWorker(private val context: Context) {
     private suspend fun doIndex() {
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
-        val extractor = MetadataExtractor(context)
 
+        // 预加载 ML Kit 模型（Play Services 可能需要后台下载）
+        if (!waitForModelReady()) {
+            Logger.w(TAG, "ML Kit model not ready, deferring indexing")
+            return
+        }
+
+        val extractor = MetadataExtractor(context)
         try {
             var indexedCount = 0
             var cancelled = false
