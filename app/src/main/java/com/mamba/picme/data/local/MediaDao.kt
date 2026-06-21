@@ -116,6 +116,10 @@ interface MediaDao {
     @Query("UPDATE media_assets SET faceId = :faceId WHERE id = :mediaId")
     suspend fun updateFaceId(mediaId: Long, faceId: String)
 
+    /** 按 hasFace 搜索 */
+    @Query("SELECT * FROM media_assets WHERE hasFace = 1 ORDER BY captureDate DESC")
+    suspend fun searchByHasFace(): List<MediaEntity>
+
     /** 按 faceId 分组统计数据 */
     @Query("SELECT faceId, COUNT(*) as cnt FROM media_assets WHERE faceId IS NOT NULL AND faceId != '' GROUP BY faceId ORDER BY cnt DESC")
     suspend fun getFaceGroups(): List<FaceGroupCount>

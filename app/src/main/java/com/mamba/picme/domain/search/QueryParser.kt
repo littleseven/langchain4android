@@ -228,7 +228,7 @@ object QueryParser {
 
         // 移除常见停用词
         val stopWords = listOf(
-            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一",
+            "的", "了", "在", "是", "我", "有", "和", "就", "不", "都", "一", "把",
             "一个", "上面", "下面", "可以", "这个", "那个", "拍", "照片", "图片",
             "找", "搜索", "显示", "查看", "包含", "给我", "帮我"
         )
@@ -241,6 +241,17 @@ object QueryParser {
             .map { it.trim() }
             .filter { it.isNotEmpty() && it.length >= 1 }
             .distinct()
+    }
+
+    /**
+     * 判断是否是"人物"相关搜索
+     */
+    fun isPeopleSearch(query: String): Boolean {
+        val peopleKeywords = listOf(
+            "人", "人物", "人脸", "合照", "合影", "people", "person",
+            "face", "portrait", "selfie", "自拍", "头像"
+        )
+        return peopleKeywords.any { query.contains(it, ignoreCase = true) }
     }
 
     private fun removeTimeWords(query: String): String {

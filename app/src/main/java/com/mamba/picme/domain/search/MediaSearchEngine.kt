@@ -17,6 +17,14 @@ class MediaSearchEngine(
     private val mediaDao: MediaDao
 ) {
 
+    companion object {
+        /** 人物语义搜索关键词 */
+        val PEOPLE_SEARCH_KEYWORDS = setOf(
+            "人", "人物", "人脸", "合照", "合影", "自拍", "头像",
+            "people", "person", "face", "portrait", "selfie"
+        )
+    }
+
     /**
      * 执行搜索
      *
@@ -47,8 +55,14 @@ class MediaSearchEngine(
         }
 
         // 回退：全字段模糊搜索
-        val results = mediaDao.searchAll(query).map { it.toDomain() }
-        return SearchResult(results, query)
+        val results = mediaDao.searchAll(query).map { it.toDomain() }.toMutableList()
+
+        // 人物关键词回退：加入有人脸的照片
+        if (QueryParser.isPeopleSearch(query)) {
+            results.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
+        }
+
+        return SearchResult(results.distinct(), query)
     }
 
     /**
@@ -70,15 +84,24 @@ class MediaSearchEngine(
 
         // 关键词搜索（标签 + OCR + 地名 + 文件名）
         if (filter.keywords.isNotEmpty()) {
+            // 检查是否包含人物语义关键词
+            val hasPeopleKeyword = filter.keywords.any { it in PEOPLE_SEARCH_KEYWORDS }
+
             for (keyword in filter.keywords) {
                 val labelResults = mediaDao.searchByLabel(keyword)
                 val ocrResults = mediaDao.searchByOcrText(keyword)
                 val locationResults = mediaDao.searchByLocation(keyword)
+                val nameResults = mediaDao.searchByFileName(keyword)
 
-                // 标签匹配优先级最高
                 resultSet.addAll(labelResults.map { it.toDomain() })
                 resultSet.addAll(ocrResults.map { it.toDomain() })
                 resultSet.addAll(locationResults.map { it.toDomain() })
+                resultSet.addAll(nameResults.map { it.toDomain() })
+            }
+
+            // 人物语义关键词：额外返回所有有人脸的照片
+            if (hasPeopleKeyword) {
+                resultSet.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
             }
         }
 
