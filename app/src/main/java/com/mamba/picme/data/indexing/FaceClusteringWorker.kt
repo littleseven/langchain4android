@@ -174,7 +174,7 @@ class FaceClusteringWorker(private val context: Context) {
      */
     private fun clusterEmbeddings(
         embeddings: Map<Long, FloatArray>,
-        eps: Float = 0.45f,
+        eps: Float = 0.55f,
         minPts: Int = 1
     ): Map<Int, List<Long>> {
         val ids = embeddings.keys.toList()
