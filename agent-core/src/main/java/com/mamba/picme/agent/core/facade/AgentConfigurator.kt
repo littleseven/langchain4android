@@ -5,18 +5,18 @@ import android.view.WindowManager
 import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
-import com.mamba.picme.agent.core.local.pipeline.LocalInferencePipeline
-import com.mamba.picme.agent.core.local.prompt.LocalPromptBuilder
-import com.mamba.picme.agent.core.platform.llm.local.LocalLlmEngine
-import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
+import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
+import com.mamba.picme.agent.core.inference.local.pipeline.LocalInferencePipeline
+import com.mamba.picme.agent.core.inference.local.prompt.LocalPromptBuilder
+import com.mamba.picme.agent.core.inference.local.react.InAppAgentCallback
+import com.mamba.picme.agent.core.inference.local.react.InAppAgentConfig
+import com.mamba.picme.agent.core.inference.local.react.InAppAgentService
+import com.mamba.picme.agent.core.inference.remote.llm.RemoteOrchestrator
+import com.mamba.picme.agent.core.inference.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
-import com.mamba.picme.agent.core.react.InAppAgentCallback
-import com.mamba.picme.agent.core.react.InAppAgentConfig
-import com.mamba.picme.agent.core.react.InAppAgentService
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.inference.IntentCache
-import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 

@@ -11,9 +11,9 @@ import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
-import com.mamba.picme.agent.core.platform.llm.remote.RemoteOrchestrator
+import com.mamba.picme.agent.core.inference.remote.llm.RemoteOrchestrator
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.remote.prompt.RemotePromptBuilder
+import com.mamba.picme.agent.core.inference.remote.prompt.RemotePromptBuilder
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType

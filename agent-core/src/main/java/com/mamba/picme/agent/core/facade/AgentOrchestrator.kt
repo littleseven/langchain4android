@@ -14,18 +14,18 @@ import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.api.LlmChatRequest
 import com.mamba.picme.agent.core.api.LlmChatResponse
 import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
-import com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics
-import com.mamba.picme.agent.core.platform.llm.local.LlmModelNotFoundException
-import com.mamba.picme.agent.core.platform.llm.remote.StreamChatResult
-import com.mamba.picme.agent.core.platform.llm.remote.StreamMetrics
+import com.mamba.picme.agent.core.inference.local.llm.LlmGenerationMetrics
+import com.mamba.picme.agent.core.inference.local.llm.LlmModelNotFoundException
+import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
+import com.mamba.picme.agent.core.inference.local.react.InAppAgentCallback
+import com.mamba.picme.agent.core.inference.local.react.InAppAgentService
+import com.mamba.picme.agent.core.inference.local.react.AgentExecutionMetrics
+import com.mamba.picme.agent.core.inference.remote.llm.StreamChatResult
+import com.mamba.picme.agent.core.inference.remote.llm.StreamMetrics
 import com.mamba.picme.agent.core.platform.logging.Logger
+import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.local.parser.LocalCommandParser
-import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
-import com.mamba.picme.agent.core.react.InAppAgentCallback
-import com.mamba.picme.agent.core.react.InAppAgentService
-import com.mamba.picme.agent.core.react.AgentExecutionMetrics
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -105,7 +105,7 @@ class AgentOrchestrator private constructor(context: Context) {
     /**
      * 获取最近一次本地 LLM 生成的性能指标。
      */
-    fun getLastLocalGenerationMetrics(): com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics? {
+    fun getLastLocalGenerationMetrics(): com.mamba.picme.agent.core.inference.local.llm.LlmGenerationMetrics? {
         return localLlmEngine.lastGenerationMetrics
     }
 

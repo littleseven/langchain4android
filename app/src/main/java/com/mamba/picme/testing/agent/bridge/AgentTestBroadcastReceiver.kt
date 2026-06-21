@@ -3,7 +3,7 @@ package com.mamba.picme.testing.agent.bridge
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.mamba.picme.agent.core.local.parser.LocalCommandParser
+import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.agent.core.api.context.AgentAction

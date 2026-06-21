@@ -9,7 +9,7 @@ import android.net.NetworkRequest
 import android.os.Bundle
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import com.mamba.picme.agent.core.remote.tool.PicMeToolService
+import com.mamba.picme.agent.core.inference.remote.tool.PicMeToolService
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.CoilConfig
 import com.mamba.picme.di.AppContainer

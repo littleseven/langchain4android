@@ -12,7 +12,7 @@ import com.mamba.picme.agent.core.api.execution.StepResult
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.runtime.execution.ExecutionEngine
 import com.mamba.picme.agent.core.runtime.execution.ExecutionReporterImpl
-import com.mamba.picme.agent.core.local.parser.LocalCommandParser
+import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.tool.ToolExecutionRequest
 import com.mamba.tool.ToolSpecification

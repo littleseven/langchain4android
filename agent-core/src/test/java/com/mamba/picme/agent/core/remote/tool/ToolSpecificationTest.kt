@@ -1,4 +1,4 @@
-package com.mamba.picme.agent.core.remote.tool
+package com.mamba.picme.agent.core.inference.remote.tool
 
 import com.mamba.tool.P
 import org.junit.Test

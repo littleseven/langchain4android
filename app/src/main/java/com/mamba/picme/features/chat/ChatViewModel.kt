@@ -8,7 +8,7 @@ import com.mamba.picme.agent.core.api.context.AgentAction
 import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
-import com.mamba.picme.agent.core.platform.llm.local.LlmGenerationMetrics
+import com.mamba.picme.agent.core.inference.local.llm.LlmGenerationMetrics
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.ChatMessageDao
 import com.mamba.picme.data.local.ChatMessageEntity

@@ -9,7 +9,7 @@ import com.mamba.picme.agent.core.api.context.AgentContext
 import com.mamba.picme.agent.core.api.context.AgentScene
 import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
-import com.mamba.picme.agent.core.local.parser.LocalCommandParser
+import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
