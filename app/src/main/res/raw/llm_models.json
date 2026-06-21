@@ -163,6 +163,20 @@
     "tags": ["face", "detection", "mnn"]
   },
   {
+    "id": "picme-face-embedding-onnx",
+    "name": "MobileFaceNet ONNX",
+    "description": "MobileFaceNet 人脸特征提取模型 (ONNX 格式)，512 维 embedding，用于人脸聚类和识别，~4.5MB",
+    "type": "FACE_EMBEDDING",
+    "size": 4500000,
+    "sources": {
+      "ModelScope": "budaoshou/InsightFace-MobileFaceNet-ONNX"
+    },
+    "files": [
+      "w600k_mbf.onnx"
+    ],
+    "tags": ["face", "embedding", "onnx", "mobilefacenet"]
+  },
+  {
     "id": "picme-face-det-500m-ncnn",
     "name": "RetinaFace Det500M",
     "description": "RetinaFace-MobileNet0.25 人脸检测模型 (NCNN 格式)，用于 ROI 区域检测，轻量高效",

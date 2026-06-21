@@ -8,7 +8,9 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.mamba.picme.core.common.Logger
+import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.data.local.AppDatabase
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,13 +55,11 @@ class FaceClusteringWorker(private val context: Context) {
         val dao = db.mediaDao()
 
         // Step 0: 确保 MobileFaceNet 模型就绪
-        val embedder = MobileFaceNetEmbedder(context)
-        if (!embedder.ensureModel()) {
-            Logger.w(TAG, "MobileFaceNet model not found. Please place mobilefacenet.onnx at: " +
-                    "${context.filesDir}/models/face_embedding/")
-            Logger.w(TAG, "获取方式: pip install insightface → " +
-                    "insightface.model_zoo.get_model('mobilefacenet') → " +
-                    "将导出的 onnx 放到上述路径")
+        val modelDir = ModelPathConfig.getModelDir(context, "picme-face-embedding-onnx")
+        val embedder = MobileFaceNetEmbedder(File(modelDir, "w600k_mbf.onnx"))
+        if (!embedder.isModelReady) {
+            Logger.w(TAG, "Face embedding model not found. Download from 设置 > 模型中心 > 人脸特征提取")
+            Logger.w(TAG, "Expected at: ${modelDir}/w600k_mbf.onnx")
             return
         }
         if (!embedder.initialize()) {
