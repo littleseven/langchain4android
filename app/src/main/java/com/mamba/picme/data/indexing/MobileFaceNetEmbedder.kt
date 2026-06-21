@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import com.mamba.picme.core.common.Logger
 import java.io.File
-import java.io.FileOutputStream
-import java.net.URL
 import java.nio.FloatBuffer
 
 /**
@@ -14,28 +12,24 @@ import java.nio.FloatBuffer
  * 使用 ONNX Runtime 运行 MobileFaceNet 模型，
  * 将人脸图片转换为 512 维 embedding 向量。
  *
- * 模型来源: InsightFace 开源模型（w600k_mbf / MobileFaceNet）
- * 输入: 112x112 RGB 人脸图像
+ * 模型输入: 112x112 RGB 人脸图像
  * 输出: 512 维 float32 特征向量
  * 大小: ~4.5MB
  *
- * 参考: https://github.com/deepinsight/insightface/tree/master/model_zoo
+ * 模型来源: 使用 PyTorch ArcFace 实现的 MobileFaceNet 导出为 ONNX。
+ * 也可从以下项目获取预转换模型:
+ * - OpenCV Zoo: https://github.com/opencv/opencv_zoo/tree/master/models/face_recognition/mobilefacenet
+ * - InsightFace: https://github.com/deepinsight/insightface/tree/master/model_zoo
+ * - 注意: model_zoo 中的模型需通过 Python SDK 下载 (insightface.model_zoo.get_model)
+ *   无法直接通过 HTTP 下载，请手动将 .onnx 文件放入指定路径。
  */
 class MobileFaceNetEmbedder(private val context: Context) {
 
     companion object {
         private const val TAG = "PicMe:MobileFaceNet"
-        private const val MODEL_FILENAME = "w600k_mbf.onnx"
+        private const val MODEL_FILENAME = "mobilefacenet.onnx"
         private const val INPUT_SIZE = 112
         private const val EMBEDDING_DIM = 512
-
-        /** 模型下载地址（InsightFace 官方） */
-        private const val MODEL_URL =
-            "https://github.com/deepinsight/insightface/releases/download/v0.7/w600k_mbf.zip"
-
-        /** 备用模型源（Glint360K 版本） */
-        private const val MODEL_URL_FALLBACK =
-            "https://github.com/deepinsight/insightface/releases/download/v0.7/mobilefacenet.onnx"
     }
 
     private val modelDir: File
@@ -175,39 +169,25 @@ class MobileFaceNetEmbedder(private val context: Context) {
     }
 
     /**
-     * 下载模型（首次运行时）
+     * 检查模型就绪（如需下载请手动操作）
+     *
+     * 模型获取方式：
+     * 1. InsightFace 模型（推荐）：pip install insightface，运行 Python 代码：
+     *    import insightface
+     *    insightface.model_zoo.get_model('model_zoo/mobilefacenet.onnx')
+     *    导出的模型文件在 ~/.insightface/models/ 目录下
+     *
+     * 2. OpenCV Zoo:
+     *    https://github.com/opencv/opencv_zoo/blob/master/models/face_recognition/mobilefacenet/
+     *
+     * 3. 将下载好的 .onnx 文件放到以下路径（自动识别）:
+     *    {app_files_dir}/models/face_embedding/mobilefacenet.onnx
      */
-    fun downloadModel(): Boolean {
+    fun ensureModel(): Boolean {
         if (isModelReady) return true
-        return try {
-            modelDir.mkdirs()
-            Logger.i(TAG, "Downloading MobileFaceNet model from $MODEL_URL_FALLBACK")
-
-            // 简化：尝试直接下载 .onnx 文件（release 页面提供 zip，备用 URL 是直接 onnx）
-            try {
-                URL(MODEL_URL_FALLBACK).openStream().use { input ->
-                    FileOutputStream(modelFile).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            } catch (e: Exception) {
-                Logger.w(TAG, "Fallback URL failed, trying primary URL: ${e.message}")
-                // 主 URL 是 zip，需要解压，暂不处理，用户可手动放置模型
-                return false
-            }
-
-            if (modelFile.exists() && modelFile.length() > 100_000) {
-                Logger.i(TAG, "Model downloaded: ${modelFile.length()} bytes")
-                true
-            } else {
-                Logger.w(TAG, "Downloaded model seems invalid")
-                modelFile.delete()
-                false
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Failed to download model", e)
-            false
-        }
+        modelDir.mkdirs()
+        Logger.i(TAG, "Model file expected at: ${modelFile.absolutePath}")
+        return false
     }
 
     fun close() {

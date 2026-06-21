@@ -54,13 +54,13 @@ class FaceClusteringWorker(private val context: Context) {
 
         // Step 0: 确保 MobileFaceNet 模型就绪
         val embedder = MobileFaceNetEmbedder(context)
-        if (!embedder.isModelReady) {
-            Logger.i(TAG, "MobileFaceNet model not found, downloading...")
-            if (!embedder.downloadModel()) {
-                Logger.w(TAG, "Model download failed. Place ${FACE_INPUT_SIZE}x${FACE_INPUT_SIZE} onnx model at " +
-                        "${context.filesDir}/models/face_embedding/")
-                return
-            }
+        if (!embedder.ensureModel()) {
+            Logger.w(TAG, "MobileFaceNet model not found. Please place mobilefacenet.onnx at: " +
+                    "${context.filesDir}/models/face_embedding/")
+            Logger.w(TAG, "获取方式: pip install insightface → " +
+                    "insightface.model_zoo.get_model('mobilefacenet') → " +
+                    "将导出的 onnx 放到上述路径")
+            return
         }
         if (!embedder.initialize()) {
             Logger.e(TAG, "Failed to initialize MobileFaceNet")
