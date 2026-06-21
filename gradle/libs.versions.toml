@@ -39,10 +39,7 @@ datastorePreferences = "1.1.7"
 material = "1.4.0"
 media3 = "1.5.1"
 mlkitFaceDetection = "16.1.7"
-mlkitImageLabeling = "17.0.1"
-mlkitImageLabelingCommon = "18.1.0"
-mlkitVisionCommon = "17.3.0"
-mlkitVisionInterfaces = "16.3.0"
+mlkitImageLabeling = "17.0.9"
 mlkitTextRecognition = "16.0.1"
 mediapipeFaceLandmarker = "0.10.14"
 onnxRuntimeAndroid = "1.18.0"
@@ -108,9 +105,6 @@ google-mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recog
 mediapipe-face-landmarker = { group = "com.google.mediapipe", name = "tasks-vision", version.ref = "mediapipeFaceLandmarker" }
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxRuntimeAndroid" }
 google-mlkit-image-labeling = { group = "com.google.mlkit", name = "image-labeling", version.ref = "mlkitImageLabeling" }
-google-mlkit-image-labeling-common = { group = "com.google.mlkit", name = "image-labeling-common", version.ref = "mlkitImageLabelingCommon" }
-google-mlkit-vision-common = { group = "com.google.mlkit", name = "vision-common", version.ref = "mlkitVisionCommon" }
-google-mlkit-vision-interfaces = { group = "com.google.mlkit", name = "vision-interfaces", version.ref = "mlkitVisionInterfaces" }
 google-mlkit-text-recognition-chinese = { group = "com.google.mlkit", name = "text-recognition-chinese", version.ref = "mlkitTextRecognition" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutinesPlayServices" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
