@@ -36,14 +36,18 @@ data class FaceFeatureVector(
      * 各维度加权：位置特征权重高，角度特征权重低
      */
     fun distanceTo(other: FaceFeatureVector): Float {
-        val wEyeDist = 3f
-        val wNoseMouth = 2f
-        val wAspect = 1f
-        val wLeftEye = 2f
-        val wRightEye = 2f
-        val wMouth = 2f
-        val wYaw = 0.5f
-        val wRoll = 0.5f
+        // 结构比例权重高（角度稳定），五官位置权重低（角度敏感）
+        // 头部姿态角权重最低（容忍多角度）
+        val wEyeDist = 4f
+        val wNoseMouth = 3f
+        val wAspect = 2f
+        val wLeftEye = 1f
+        val wRightEye = 1f
+        val wMouth = 1f
+        val wYaw = 0.3f
+        val wRoll = 0.3f
+
+        val totalWeight = wEyeDist + wNoseMouth + wAspect + wLeftEye * 2 + wRightEye * 2 + wMouth * 2 + wYaw + wRoll
 
         val sum = wEyeDist * (eyeDistanceRatio - other.eyeDistanceRatio).pow(2) +
                 wNoseMouth * (noseToMouthRatio - other.noseToMouthRatio).pow(2) +
@@ -54,7 +58,7 @@ data class FaceFeatureVector(
                 wYaw * (headYaw - other.headYaw).pow(2) +
                 wRoll * (headRoll - other.headRoll).pow(2)
 
-        return sqrt(sum / (wEyeDist + wNoseMouth + wAspect + wLeftEye * 2 + wRightEye * 2 + wMouth + wYaw + wRoll))
+        return sqrt(sum / totalWeight)
     }
 }
 

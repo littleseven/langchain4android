@@ -117,7 +117,9 @@ class FaceClusteringWorker(private val context: Context) {
                 return
             }
 
-            val clusters = FaceClusteringEngine.cluster(features)
+            // eps 越大分组越宽松（同人不同角度越容易归为一组）
+            // 0.28 = 严格（适合正面照），0.45 = 宽松（适合日常多角度）
+            val clusters = FaceClusteringEngine.cluster(features, eps = 0.45f)
             Logger.i(TAG, "DBSCAN: ${clusters.size} clusters (including noise)")
 
             var assignedCount = 0
