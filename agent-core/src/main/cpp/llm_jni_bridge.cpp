@@ -105,7 +105,7 @@ static void streamTokensToJava(
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeCreate(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeCreate(
         JNIEnv *env,
         jclass clazz,
         jstring configPath) {
@@ -133,7 +133,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeDestroy(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeDestroy(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -146,7 +146,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeDestroy(
 }
 
 JNIEXPORT void JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeReset(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeReset(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
@@ -160,7 +160,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeReset(
 
 // ── 同步生成（保留原有实现）─────────────────────────────
 JNIEXPORT jstring JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerate(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerate(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -205,7 +205,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerate(
 }
 
 JNIEXPORT jobject JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithSystem(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateWithSystem(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -307,7 +307,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
 
 // ── 流式生成 + 性能指标（新增）──────────────────────────
 JNIEXPORT jobject JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateStream(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateStream(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -488,7 +488,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateSt
 
 // ── 多轮对话同步生成（含性能指标）───────────────────────
 JNIEXPORT jobject JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithHistory(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateWithHistory(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -616,7 +616,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
 
 // ── 多轮对话流式生成（已有）─────────────────────────────
 JNIEXPORT jobject JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWithHistoryStream(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateWithHistoryStream(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -830,7 +830,7 @@ Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeGenerateWi
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_mamba_picme_agent_core_platform_llm_local_MnnLlmClient_nativeIsLoaded(
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeIsLoaded(
         JNIEnv *env,
         jclass clazz,
         jlong handle) {
