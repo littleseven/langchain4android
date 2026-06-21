@@ -40,21 +40,19 @@ class ModelDownloadForegroundService : Service() {
 
             ACTION_START_OR_UPDATE -> {
                 // Android 要求 startForegroundService() 后必须在 5 秒内调用 startForeground()
-                // 因此无论是否有下载任务，都先立即启动前台通知，避免 ForegroundServiceDidNotStartInTimeException
-                val states = manager.snapshotDownloadingStates()
-                val notification = if (states.isEmpty()) {
-                    buildEmptyNotification()
-                } else {
-                    buildNotification(states)
-                }
-                startForeground(NOTIFICATION_ID, notification)
+                // 因此先立即启动前台通知，再进行任何 I/O 操作，避免 ForegroundServiceDidNotStartInTimeException
+                startForeground(NOTIFICATION_ID, buildEmptyNotification())
 
-                // 如果没有下载任务，立即停止服务
+                val states = manager.snapshotDownloadingStates()
                 if (states.isEmpty()) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return START_NOT_STICKY
                 }
+
+                // 更新通知为真实下载进度
+                val nm = getSystemService(NotificationManager::class.java)
+                nm.notify(NOTIFICATION_ID, buildNotification(states))
             }
 
             else -> {

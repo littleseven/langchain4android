@@ -278,9 +278,39 @@ private class DataStoreChatMemory(
 
     override fun add(message: com.mamba.data.message.ChatMessage) {
         val messages = store.getMessages(memoryId)
-        messages.add(message)
+
+        // System message 必须始终位于对话开头
+        if (message is com.mamba.data.message.SystemMessage) {
+            // 如果已有 SystemMessage，先移除旧的再插入到开头
+            val existingSystem = messages.indexOfFirst { it is com.mamba.data.message.SystemMessage }
+            if (existingSystem >= 0) {
+                messages.removeAt(existingSystem)
+            }
+            messages.add(0, message)
+        } else {
+            messages.add(message)
+        }
+
         if (messages.size > maxMessages) {
+            // 保留 SystemMessage（如果存在）确保对话结构有效
+            val systemMsg = messages.filterIsInstance<com.mamba.data.message.SystemMessage>().firstOrNull()
             val trimmed = messages.takeLast(maxMessages).toMutableList()
+            if (systemMsg != null && trimmed.firstOrNull() !is com.mamba.data.message.SystemMessage) {
+                trimmed.add(0, systemMsg)
+            }
+
+            // 清理孤立的 tool result：删除找不到对应 assistant tool_calls 的 ToolExecutionResultMessage
+            val assistantToolCallIds = trimmed.filterIsInstance<com.mamba.data.message.AiMessage>()
+                .filter { it.hasToolExecutionRequests() }
+                .flatMap { it.toolExecutionRequests() }
+                .map { it.id() }
+                .toSet()
+            trimmed.removeAll { msg ->
+                msg is com.mamba.data.message.ToolExecutionResultMessage &&
+                    msg.id() != null &&
+                    msg.id() !in assistantToolCallIds
+            }
+
             store.updateMessages(memoryId, trimmed)
         } else {
             store.updateMessages(memoryId, messages)
