@@ -41,8 +41,8 @@
 | `llm/` | `MnnLlmClient`, `LlmModelManager`, `LocalLlmEngine` | MNN LLM 客户端、模型管理与本地推理引擎 |
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |
-| `voice/` | `AsrEngine`, `VadDetector`, `MnnAsrClient`, `AudioRecorder`, `SherpaMnnAsrEngine` | 语音交互 |
-| `remote/` | `RemoteOrchestrator`, `UnifiedRemoteClient`, `LangChain4jOpenAiClient`, `IntentCache`, `ExecutionPlan` + `claude/` (ClaudeCodingApiClient 等) + `openai/` (OpenAiApiClient 等) + `parser/` (ToolCallCommandParser, ToolCallParser) + `tool/` (RemoteCameraTools) | 远程推理编排（标准 OpenAI Chat Completions 协议） |
+| `voice/` | `AsrEngine`, `VadDetector`, `AudioRecorder`, `SherpaOnnxAsrEngine`, `KeywordSpotterEngine` | 语音交互（Sherpa-ONNX） |
+| `remote/` | `RemoteReActAgent`, `RemoteReActAgentConfig`, `RemoteModelConfig`, `RemoteModelFactory`, `RemotePromptBuilder`, `ToolCallCommandParser`, `PicMeToolService` | 远程推理编排（标准 OpenAI Chat Completions 协议 + ReAct 模式） |
 
 > **2026-06-15 架构更新（ADR-005）**：
 > - 移除 `InferenceRouter`（拆分为 `LocalInferencePipeline` + `RemoteInferencePipeline`）
@@ -53,20 +53,15 @@
 >
 > **2026-06-19 DeepSeek tool_calls 适配**：
 > - `RemotePromptBuilder`：移除 Prompt 中的具体 tool_calls JSON 示例，避免模型将 JSON 输出到 content 字段
-> - `LangChain4jOpenAiClient`：
+> - `RemoteReActAgent`：
 >   - DeepSeek 模型自动禁用 thinking 模式（`thinking: {"type": "disabled"}`）
 >   - ToolSpec 自动添加 `additionalProperties: false` 以兼容 strict 模式
 >   - `tool_choice: REQUIRED` 正确映射为 `"required"`（之前错误映射为 `"auto"`）
 >   - 增强 content fallback 解析，支持从 content 字段回退提取 tool_calls JSON
-> - `InAppLlmClient` / `InAppAgentService`：空字符串处理统一使用 `isNotBlank()`
-> - 参考文档：https://api-docs.deepseek.com/zh-cn/guides/tool_calls
->
-> **2026-06-19 远程推理链路扩展**：
-> - 新增 `LangChain4jOpenAiClient`：使用 `OpenAiChatModel` 消费标准 OpenAI 协议
-> - 新增 `UnifiedRemoteClient`：根据协议自动路由（OPENAI → langchain4j / CLAUDE → Retrofit）
-> - 新增 `RemoteCameraTools`：远程推理 `@Tool` 注解工具集
-> - 新增 `ToolCallCommandParser` / `ToolCallParser`：标准 tool_calls 解析器
-> - `RemoteOrchestrator` 支持 L2 Batch / L3 Plan / L4 Stream Chat 三层模式
+> - 空字符串处理统一使用 `isNotBlank()`
+> - 远程推理通过 `:mamba-agent`（langchain4j 合并单库）消费标准 OpenAI 协议
+> - 新增 `ToolCallCommandParser`：标准 tool_calls 解析器
+> - 远程推理支持 L2 Batch / L3 Plan / L4 ReAct Chat 分层模式
 
 ## 设计原则
 
@@ -148,29 +143,25 @@
 ### `voice/`
 - `AsrEngine.kt` — ASR 引擎接口
 - `VadDetector.kt` — VAD 检测器
-- `MnnAsrClient.kt` — MNN ASR 客户端
 - `AudioRecorder.kt` — 音频录制器
-- `SherpaMnnAsrEngine.kt` — Sherpa MNN ASR 引擎
+- `SherpaOnnxAsrEngine.kt` — Sherpa-ONNX ASR 引擎（当前主力）
+- `KeywordSpotterEngine.kt` — ONNX KWS 唤醒词检测
 
-### `remote/`
-- `RemoteOrchestrator.kt` — 远程编排器（L2/L3/L4 三层模式）
-- `UnifiedRemoteClient.kt` — 统一远程客户端（协议自动路由：OPENAI → langchain4j / CLAUDE → Retrofit）
-- `LangChain4jOpenAiClient.kt` — langchain4j OpenAiChatModel 标准协议客户端
-- `IntentCache.kt` — 意图缓存
-- `ExecutionPlan.kt` — 执行计划
+### `inference/remote/`
+- `RemoteReActAgent.kt` — 远程 ReAct Agent（通过 :mamba-agent 消费标准 OpenAI 协议）
+- `RemoteReActAgentConfig.kt` — ReAct 配置
+- `RemoteReActAgentCallback.kt` — ReAct 回调
 - `RemotePromptBuilder.kt` — 远程 Prompt 构建（ToolSpecification 格式）
-- `claude/ClaudeCodingModels.kt` — Claude 模型定义
-- `claude/ClaudeCodingApiClient.kt` — Claude API 客户端（Retrofit）
-- `claude/ClaudeCodingApiService.kt` — Claude API 服务
-- `openai/OpenAiModels.kt` — OpenAI 模型定义
-- `openai/OpenAiApiClient.kt` — OpenAI API 客户端（Retrofit，保留兼容）
-- `openai/OpenAiApiService.kt` — OpenAI API 服务
 - `parser/ToolCallCommandParser.kt` — tool_calls 命令解析器（name + arguments → AgentCommand）
-- `parser/ToolCallParser.kt` — tool_calls JSON 解析器（OpenAI 格式 → ToolExecutionRequest）
-- `tool/RemoteCameraTools.kt` — 远程推理 @Tool 注解工具集
+- `tool/PicMeToolService.kt` — 远程推理 @Tool 注解工具集
 
-> **已移除（ADR-005）**：`AdaptiveStrategySelector.kt`
-> **新增（2026-06-19）**：`LangChain4jOpenAiClient.kt`, `ToolCallCommandParser.kt`, `ToolCallParser.kt`, `RemoteCameraTools.kt`
+> **已移除（ADR-005 + 2026-06 清理）**：
+> - `InferenceRouter.kt`, `AdaptiveStrategySelector.kt`, `ToolCallingChatLanguageModel.kt`
+> - `ToolCallingOutputParser.kt`, `ToolPromptBuilder.kt`, `ToolCallingConfig.kt`, `ToolCallingMode.kt`, `ToolOrchestrator.kt`
+> - `RemoteOrchestrator.kt`, `UnifiedRemoteClient.kt`, `LangChain4jOpenAiClient.kt`, `RemoteCameraTools.kt`（功能已整合入 `RemoteReActAgent` + `PicMeToolService`）
+> - `SherpaMnnAsrEngine.kt`, `MnnAsrClient.kt`, `com.k2fsa.sherpa.mnn.*`（已迁移至 Sherpa-ONNX）
+> - `ToolCallParser.kt`（合并入 `ToolCallCommandParser.kt`）
+> - 累计清理 ~2,600 行冗余代码
 
 ## 编译验证
 

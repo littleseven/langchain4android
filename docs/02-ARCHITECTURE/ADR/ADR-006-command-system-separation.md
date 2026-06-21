@@ -18,13 +18,15 @@ PicMe 存在两种完全不同的指令体系，分别服务于本地 LLM 和远
 |------|----------------------|-------------------------------|
 | **协议格式** | `[{"method":"...","params":{...}}]` JSON 数组 | `{"tool_calls":[{"id":"call_x","type":"function","function":{"name":"...","arguments":{...}}}]}` |
 | **LLM 型号** | Qwen3.5-2B（端侧 MNN-LLM） | 云端 LLM（OpenAI 兼容 API） |
-| **约束方式** | GBNF Grammar + 精简 System Prompt | OpenAI 原生协议约束 |
+| **约束方式** | JSON 数组 Prompt 约束 + 精简 System Prompt | OpenAI 原生协议约束 |
 | **核心解析器** | `AgentCommandParser`（method/params → AgentCommand） | `ToolCallingOutputParser`（tool_calls → ToolExecutionRequest） |
 | **Prompt 构造** | `PromptBuilder.buildSystemPrompt/buildL2SystemPrompt` | `PromptBuilder.buildBatchPrompt` + `ToolPromptBuilder` |
 
-### 1.2 当前混用问题
+### 1.2 混用问题（ADR-005 已解决）
 
-尽管 ADR-005 已从推理链路层面分离了本地/远程，但**指令体系层面仍然存在严重混用**：
+> **2026-06 更新**：下述混用问题已在 ADR-005 Phase 1 中全部解决。`InferenceRouter`、`ToolCallingOutputParser`、`ToolCallingChatLanguageModel`、`ToolPromptBuilder`、`ToolOrchestrator`、`ToolCallingConfig`、`ToolCallingMode` 均已删除。
+
+尽管 ADR-005 已从推理链路层面分离了本地/远程，但**指令体系层面曾存在严重混用**：
 
 ```
 agent-core/.../runtime/
@@ -546,6 +548,13 @@ graph TB
 | Phase 1: 包结构重组 | ✅ 已完成 | 2026-06-18 |
 | Phase 2: 冗余删除 | ✅ 已完成 | 2026-06-18 |
 | Phase 3: Pipeline 重构 | ✅ 已完成 | 2026-06-18 |
+
+> **实现差异说明（2026-06-21）**：本 ADR 的核心原则（本地/远程包物理隔离）已完全落实，但实际实现与提议的目标包结构存在以下差异：
+> - **包路径**：实际使用 `inference/local/` 和 `inference/remote/` 而非提议的 `local/` 和 `remote/` 直铺（保留 `inference/` 父级以便代码导航）
+> - **文件名**：`ToolCallParser.kt` → 实际为 `ToolCallCommandParser.kt`
+> - **简化实现**：`UnifiedRemoteClient.kt`、`OpenAiProtocol.kt`、`LangChain4jOpenAiClient.kt` 未作为独立文件创建，远程编排逻辑集中在 `RemoteReActAgent.kt`
+> - **react 包**：位于 `inference/remote/react/` 而非提议的 `react/` 顶层包
+> - **GBNF Grammar**：提议中列为本地约束方式，实际已尝试后放弃
 
 ---
 

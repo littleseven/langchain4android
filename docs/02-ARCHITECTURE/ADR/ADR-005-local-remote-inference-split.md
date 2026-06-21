@@ -82,8 +82,8 @@
 | **Library** | 无第三方依赖 | LangChain4j 作为 SDK 接入层（可替换） |
 | **Prompt** | 精简、结构化、约束严格 | 自然语言 + Tool Schema |
 | **输出解析** | 简单 JSON 数组解析 | 标准 JSON 反序列化（按 `choices[0].message` 结构解析） |
-| **约束方式** | GBNF Grammar 强制格式 | OpenAI 原生协议约束 |
-| **聊天/闲聊** | 通过 GBNF text_reply 兜底 | 原生支持 |
+| **约束方式** | JSON 数组格式 Prompt 约束 | OpenAI 原生协议约束 |
+| **聊天/闲聊** | 通过 text_reply 命令兜底 | 原生支持 |
 | **Strategy** | L1 Cache / L2 Batch | L3 Plan / L4 ReAct Chat |
 
 #### 移除的耦合组件
@@ -93,7 +93,7 @@
 - [x] `ToolCallingOutputParser` — 多格式兼容的复杂解析器（移除 Open AI / ReAct / Tag / Regex 四种解析分支）
 - [x] `ToolPromptBuilder` — 将 Tool schema 转为 Prompt 字符串的工具
 - [x] `AdaptiveStrategySelector` — L1/L2/L3/L4 策略选择器（本地不再需要策略分级）
-- [x] `IntentCache` L1 缓存（移入本地链路专属模块）
+- [x] `IntentCache` L1 缓存（移入共享缓存模块 `runtime/cache/`，本地/远程共用）
 
 ---
 
@@ -271,7 +271,7 @@ User Input
 ### 3.3 Prompt 系统拆分
 
 ```kotlin
-// 本地 Prompt — 精简、结构化、GBNF 约束
+// 本地 Prompt — 精简、结构化
 class LocalPromptBuilder {
     fun buildSystemPrompt(capabilities: List<Capability>, context: AgentContext): String = """
         你是 PicMe AI 助手，运行在端侧设备。
@@ -367,12 +367,12 @@ class AgentOrchestrator {
 ### 正面影响
 
 - ✅ **协议清晰**：本地用自定义 JSON 数组（高效、可控），远程用标准 OpenAI Chat Completions API 格式（完整、标准），各取所长
-- ✅ **代码量显著减少**：预计减少 ~1500 行冗余代码（`InferenceRouter` ~600 + `ToolCallingOutputParser` ~570 + `ToolCallingChatLanguageModel` ~200 + `ToolPromptBuilder` ~100 + 配置类 ~100）
+- ✅ **代码量显著减少**：实际减少 ~1,500 行冗余代码（`InferenceRouter` ~600 + `ToolCallingOutputParser` ~570 + `ToolCallingChatLanguageModel` ~200 + `ToolPromptBuilder` ~100 + 配置类 ~100）。后续 2026-06 清理中额外移除 ~1,100 行（SherpaMnnAsrEngine + sherpa.mnn 包 + MnnAsrClient 等），累计 ~2,600 行
 - ✅ **测试维护大幅降低**：删除不可编译测试后，测试套件聚焦于真正的业务逻辑
 - ✅ **远程模型能力充分释放**：原生支持 tool_calls、流式输出、多轮对话、显式 system prompt，完整 OpenAI 协议兼容
 - ✅ **产品定位更清晰**：相册 + 图片编辑是 AI 最能创造价值的场景
 - ✅ **美颜引擎资产最大化复用**：`PhotoProcessorImpl` 的 GPU 离屏渲染管线直接服务图片编辑
-- ✅ **本地模型负担显著降低**：不再需要为本地小模型注入复杂的 tool_calls Prompt，GBNF Grammar 也更简单
+- ✅ **本地模型负担显著降低**：不再需要为本地小模型注入复杂的 tool_calls Prompt，JSON 数组解析也更简单
 
 ### 负面影响
 
@@ -384,7 +384,7 @@ class AgentOrchestrator {
 
 | 风险 | 概率 | 影响 | 缓解措施 |
 |------|------|------|---------|
-| 协议分离导致本地模型输出不稳定 | 低 | 高 | 保留 GBNF Grammar 约束，离线回归验证 |
+| 协议分离导致本地模型输出不稳定 | 低 | 高 | JSON 数组格式 Prompt 约束 + 离线回归验证（GBNF Grammar 已尝试后放弃） |
 | 删除测试遗漏了仍然有效的用例 | 中 | 中 | 逐文件确认，保留 Capability + 美颜引擎测试 |
 | 用户对照片编辑 AI 期望过高 | 中 | 低 | 分阶段交付，MVP 仅支持基本美颜命令 |
 | 远程模型延迟影响相册流畅度 | 中 | 中 | 本地优先策略：基础编辑本地推理，复杂查询走远程 |
@@ -396,15 +396,17 @@ class AgentOrchestrator {
 | 阶段 | 状态 | 日期 |
 |------|------|------|
 | Phase 1: 协议分离 + 代码清理 | ✅ 已完成 | 2026-06-18 |
-| Phase 2: 图片编辑 AI 集成 | ⏳ 待开始 | - |
+| Phase 2: 图片编辑 AI 集成 | 🔄 进行中 | 2026-06 |
 | Phase 3: 相机场景精简 | ⏳ 待开始 | - |
 
 ---
 
 ## 7. 相关文档
 
-- `docs/01-PRODUCT/FEATURES.md` — 交互规范（待更新）
-- `docs/03-TECHNICAL-SPECS/CAPABILITY_LIFECYCLE_DESIGN.md` — Capability 生命周期
-- `agent-core/AGENTS.md` — Agent Core 模块规范（待更新）
+- `docs/01-PRODUCT/FEATURES.md` — 交互规范
+- `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` — Agent 运行时架构
+- `docs/03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md` — 远程推理架构详细设计
+- `agent-core/AGENTS.md` — Agent Core 模块规范
 - `ADR-001` — 美颜引擎分层架构（图片编辑复用基础）
 - `ADR-003` — 坐标系统管理（图片编辑关键点定位基础）
+- `ADR-006` — 命令系统包隔离
