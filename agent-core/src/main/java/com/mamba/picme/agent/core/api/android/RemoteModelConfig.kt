@@ -52,7 +52,8 @@ data class RemoteModelConfig(
         val TENCENT_SCF_DEFAULT = RemoteModelConfig(
             modelId = "deepseek-v4-flash",
             protocol = RemoteProtocol.OPENAI,
-            baseUrl = "https://1412656811-m5kw2dftdi.ap-beijing.tencentscf.com/"
+            baseUrl = "https://1412656811-f92agkf1y7.ap-guangzhou.tencentscf.com/"
+            // baseUrl = "https://1412656811-m5kw2dftdi.ap-beijing.tencentscf.com/"
         )
 
         /**
