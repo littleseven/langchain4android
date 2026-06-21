@@ -4,15 +4,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
-import com.google.mlkit.vision.face.FaceLandmark
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.AppDatabase
-import com.mamba.picme.domain.search.FaceClusteringEngine
-import com.mamba.picme.domain.search.FaceFeatureVector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -22,16 +18,16 @@ import kotlinx.coroutines.launch
 /**
  * 人脸聚类 Worker
  *
- * 扫描所有照片，用 ML Kit Face Detection 检测人脸，
- * 提取面部几何特征（眼距、鼻嘴距、宽高比、五官位置），
- * 使用 DBSCAN 聚类并按人物分配 faceId。
- *
- * 使用 ML Kit Face Detection（CPU，无需 GPU 上下文）。
+ * 流程:
+ * 1. ML Kit Face Detection → 人脸 ROI
+ * 2. MobileFaceNet (ONNX Runtime) → 512维 embedding
+ * 3. DBSCAN 聚类（embedding 空间）→ faceId
  */
 class FaceClusteringWorker(private val context: Context) {
 
     companion object {
         private const val TAG = "PicMe:FaceCluster"
+        private const val FACE_INPUT_SIZE = 112
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -56,89 +52,229 @@ class FaceClusteringWorker(private val context: Context) {
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
 
-        val options = FaceDetectorOptions.Builder()
-            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-            .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
-            .build()
+        // Step 0: 确保 MobileFaceNet 模型就绪
+        val embedder = MobileFaceNetEmbedder(context)
+        if (!embedder.isModelReady) {
+            Logger.i(TAG, "MobileFaceNet model not found, downloading...")
+            if (!embedder.downloadModel()) {
+                Logger.w(TAG, "Model download failed. Place ${FACE_INPUT_SIZE}x${FACE_INPUT_SIZE} onnx model at " +
+                        "${context.filesDir}/models/face_embedding/")
+                return
+            }
+        }
+        if (!embedder.initialize()) {
+            Logger.e(TAG, "Failed to initialize MobileFaceNet")
+            return
+        }
 
-        val faceDetector = FaceDetection.getClient(options)
+        // Step 1: 人脸检测（ML Kit，CPU）
+        val faceDetector = FaceDetection.getClient(
+            FaceDetectorOptions.Builder()
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
+                .build()
+        )
 
         try {
             val allMedia = dao.getAllMediaNow()
-            Logger.i(TAG, "Scanning ${allMedia.size} photos for faces")
+            Logger.i(TAG, "Processing ${allMedia.size} photos for face clustering")
 
-            val features = mutableMapOf<Long, FaceFeatureVector>()
+            val embeddings = mutableMapOf<Long, FloatArray>()
             var faceCount = 0
 
             for (entity in allMedia) {
                 if (!currentJob?.isActive!!) break
 
                 val uri = Uri.parse(entity.uri)
-                val bitmap = tryLoadBitmap(uri)
-                if (bitmap == null) {
-                    Logger.d(TAG, "Skipping unreadable image ${entity.id}")
-                    continue
-                }
+                val original = loadBitmap(uri) ?: continue
 
                 try {
-                    val inputImage = InputImage.fromBitmap(bitmap, 0)
-                    val faces = Tasks.await(faceDetector.process(inputImage))
+                    // 人脸检测
+                    val inputImage = InputImage.fromBitmap(original, 0)
+                    val faces = com.google.android.gms.tasks.Tasks.await(
+                        faceDetector.process(inputImage)
+                    )
 
-                    if (faces.isNotEmpty()) {
-                        if (!entity.hasFace) {
-                            dao.updateHasFace(entity.id, true)
-                        }
-                        faceCount++
-                        val ft = extractFeature(faces[0])
-                        if (ft != null) {
-                            features[entity.id] = ft
-                        }
+                    if (faces.isEmpty()) {
+                        Logger.d(TAG, "No face in ${entity.id}")
+                        continue
                     }
+                    faceCount++
+
+                    if (!entity.hasFace) {
+                        dao.updateHasFace(entity.id, true)
+                    }
+
+                    // 取第一张人脸 ROI
+                    val face = faces[0]
+                    val faceBbox = face.boundingBox
+
+                    // 裁剪人脸区域（扩展 20% 确保包含完整面部）
+                    val crop = safeCropFace(original, faceBbox)
+                    if (crop == null) {
+                        Logger.d(TAG, "Face crop failed for ${entity.id}")
+                        continue
+                    }
+
+                    // MobileFaceNet embedding
+                    val emb = embedder.extractEmbedding(crop)
+                    if (emb != null) {
+                        embeddings[entity.id] = emb
+                    }
+                    crop.recycle()
                 } catch (e: Exception) {
                     Logger.w(TAG, "Failed to process ${entity.id}: ${e.message}")
                 } finally {
-                    bitmap.recycle()
+                    original.recycle()
                 }
             }
 
-            if (faceCount == 0) {
-                Logger.i(TAG, "No faces detected")
-                return
-            }
-            Logger.i(TAG, "Detected faces: $faceCount, with features: ${features.size}")
+            Logger.i(TAG, "Detected faces: $faceCount, embeddings extracted: ${embeddings.size}")
 
-            if (features.size < 2) {
-                Logger.i(TAG, "Too few faces, assigning single cluster")
-                for ((mediaId) in features) {
+            if (embeddings.size < 2) {
+                Logger.i(TAG, "Too few faces (${embeddings.size}), assigning single cluster")
+                for ((mediaId) in embeddings) {
                     dao.updateFaceId(mediaId, "1")
                 }
                 return
             }
 
-            // eps 越大分组越宽松（同人不同角度越容易归为一组）
-            // 0.28 = 严格（适合正面照），0.45 = 宽松（适合日常多角度）
-            val clusters = FaceClusteringEngine.cluster(features, eps = 0.45f)
-            Logger.i(TAG, "DBSCAN: ${clusters.size} clusters (including noise)")
+            // Step 3: embedding 空间 DBSCAN 聚类
+            val clusters = clusterEmbeddings(embeddings)
+            Logger.i(TAG, "DBSCAN: ${clusters.size} clusters")
 
             var assignedCount = 0
-            for ((clusterId, mediaIds) in clusters) {
-                if (clusterId == -1) continue
-                for (mediaId in mediaIds) {
-                    dao.updateFaceId(mediaId, clusterId.toString())
+            // 按簇大小排序，簇 ID 从 1 开始
+            val sorted = clusters.entries
+                .filter { it.key != -1 }
+                .sortedByDescending { it.value.size }
+
+            for ((index, entry) in sorted.withIndex()) {
+                val clusterId = (index + 1).toString()
+                for (mediaId in entry.value) {
+                    dao.updateFaceId(mediaId, clusterId)
                     assignedCount++
                 }
             }
-            Logger.i(TAG, "Face clustering done: $assignedCount photos clustered")
+
+            val noiseCount = clusters[-1]?.size ?: 0
+            Logger.i(TAG, "Face clustering done: $assignedCount clustered, $noiseCount unclustered")
         } catch (e: Exception) {
             Logger.e(TAG, "Face clustering failed", e)
         } finally {
             faceDetector.close()
+            embedder.close()
         }
     }
 
-    private fun tryLoadBitmap(uri: Uri): Bitmap? {
+    /**
+     * DBSCAN 聚类（embedding 空间）
+     */
+    private fun clusterEmbeddings(
+        embeddings: Map<Long, FloatArray>,
+        eps: Float = 0.45f,
+        minPts: Int = 1
+    ): Map<Int, List<Long>> {
+        val ids = embeddings.keys.toList()
+        val n = ids.size
+        val labels = IntArray(n) { 0 }
+        var clusterId = 0
+
+        for (i in 0 until n) {
+            if (labels[i] != 0) continue
+
+            val neighbors = findNeighborIndices(embeddings, ids, i, eps)
+            if (neighbors.size < minPts) {
+                labels[i] = -1
+                continue
+            }
+
+            clusterId++
+            labels[i] = clusterId
+            val seedSet = neighbors.toMutableList()
+            seedSet.remove(i)
+
+            var idx = 0
+            while (idx < seedSet.size) {
+                val q = seedSet[idx]
+                if (labels[q] == -1) labels[q] = clusterId
+                if (labels[q] == 0) {
+                    labels[q] = clusterId
+                    val qn = findNeighborIndices(embeddings, ids, q, eps)
+                    if (qn.size >= minPts) {
+                        for (ni in qn) {
+                            if (ni !in seedSet) seedSet.add(ni)
+                        }
+                    }
+                }
+                idx++
+            }
+        }
+
+        val result = mutableMapOf<Int, MutableList<Long>>()
+        for (i in 0 until n) {
+            val l = labels[i]
+            result.getOrPut(l) { mutableListOf() }.add(ids[i])
+        }
+        result.remove(-1)?.let { result[-1] = it }
+        return result
+    }
+
+    private fun findNeighborIndices(
+        embeddings: Map<Long, FloatArray>,
+        ids: List<Long>,
+        centerIdx: Int,
+        eps: Float
+    ): List<Int> {
+        val centerEmb = embeddings[ids[centerIdx]] ?: return listOf(centerIdx)
+        val neighbors = mutableListOf(centerIdx)
+        for (i in ids.indices) {
+            if (i == centerIdx) continue
+            val other = embeddings[ids[i]] ?: continue
+            if (cosineDistance(centerEmb, other) <= eps) {
+                neighbors.add(i)
+            }
+        }
+        return neighbors
+    }
+
+    /** 余弦距离: 1 - cosine_similarity，范围 [0, 2] */
+    private fun cosineDistance(a: FloatArray, b: FloatArray): Float {
+        var dot = 0f
+        var normA = 0f
+        var normB = 0f
+        for (i in a.indices) {
+            dot += a[i] * b[i]
+            normA += a[i] * a[i]
+            normB += b[i] * b[i]
+        }
+        val similarity = dot / (kotlin.math.sqrt(normA) * kotlin.math.sqrt(normB))
+        return (1f - similarity).coerceAtLeast(0f)
+    }
+
+    /**
+     * 安全裁剪人脸区域（扩大 20% 边界）
+     */
+    private fun safeCropFace(bitmap: Bitmap, rect: android.graphics.Rect): Bitmap? {
+        val marginW = (rect.width() * 0.2f).toInt().coerceAtLeast(10)
+        val marginH = (rect.height() * 0.2f).toInt().coerceAtLeast(10)
+
+        val x = (rect.left - marginW).coerceIn(0, bitmap.width)
+        val y = (rect.top - marginH).coerceIn(0, bitmap.height)
+        val w = (rect.width() + marginW * 2).coerceAtMost(bitmap.width - x)
+        val h = (rect.height() + marginH * 2).coerceAtMost(bitmap.height - y)
+
+        if (w <= 0 || h <= 0) return null
+
+        val cropped = Bitmap.createBitmap(bitmap, x, y, w, h)
+        return Bitmap.createScaledBitmap(cropped, FACE_INPUT_SIZE, FACE_INPUT_SIZE, true).also {
+            if (it !== cropped) cropped.recycle()
+        }
+    }
+
+    private fun loadBitmap(uri: Uri): Bitmap? {
         return try {
             context.contentResolver.openInputStream(uri)?.use { stream ->
                 val opts = BitmapFactory.Options().apply {
@@ -151,40 +287,5 @@ class FaceClusteringWorker(private val context: Context) {
             Logger.w(TAG, "Failed to load bitmap: $uri", e)
             null
         }
-    }
-
-    private fun extractFeature(face: com.google.mlkit.vision.face.Face): FaceFeatureVector? {
-        val bbox = face.boundingBox
-        val faceW = bbox.width().toFloat()
-        val faceH = bbox.height().toFloat()
-        if (faceW <= 0 || faceH <= 0) return null
-
-        val leftEye = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
-        val rightEye = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
-        val noseBase = face.getLandmark(FaceLandmark.NOSE_BASE)?.position
-        val mouthBottom = face.getLandmark(FaceLandmark.MOUTH_BOTTOM)?.position
-        if (leftEye == null || rightEye == null || noseBase == null || mouthBottom == null) return null
-
-        val eyeDist = distance(leftEye, rightEye)
-        val noseMouthDist = distance(noseBase, mouthBottom)
-
-        return FaceFeatureVector(
-            eyeDistanceRatio = (eyeDist / faceW).coerceIn(0f, 1f),
-            noseToMouthRatio = (noseMouthDist / faceH).coerceIn(0f, 1f),
-            faceAspectRatio = (faceW / faceH).coerceIn(0.5f, 2f),
-            leftEyeX = ((leftEye.x - bbox.left) / faceW).coerceIn(0f, 1f),
-            leftEyeY = ((leftEye.y - bbox.top) / faceH).coerceIn(0f, 1f),
-            rightEyeX = ((rightEye.x - bbox.left) / faceW).coerceIn(0f, 1f),
-            rightEyeY = ((rightEye.y - bbox.top) / faceH).coerceIn(0f, 1f),
-            mouthY = ((mouthBottom.y - bbox.top) / faceH).coerceIn(0f, 1f),
-            headYaw = face.headEulerAngleY,
-            headRoll = face.headEulerAngleZ
-        )
-    }
-
-    private fun distance(a: android.graphics.PointF, b: android.graphics.PointF): Float {
-        val dx = a.x - b.x
-        val dy = a.y - b.y
-        return kotlin.math.sqrt(dx * dx + dy * dy)
     }
 }

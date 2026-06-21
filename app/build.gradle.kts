@@ -227,6 +227,7 @@ dependencies {
     // image-labeling:17.0.9 自动传递 image-labeling-common/vision-common/vision-interfaces
     implementation(libs.google.mlkit.image.labeling)
     implementation(libs.google.mlkit.face.detection)
+    implementation(libs.onnxruntime.android)
 
     // MediaPipe Face Landmarker（Gallery 调试用，直接显示 468 点原始数据）
     implementation(libs.mediapipe.face.landmarker)
