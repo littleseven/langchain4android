@@ -143,6 +143,9 @@ android {
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
+            // 运行时加入 onnxruntime-android 的 libonnxruntime.so 路径
+            //（由 extractOnnxRuntimeNative 任务在 build/intermediates/onnx-runtime-jni/ 下生成）
+            jniLibs.srcDirs(File(project.buildDir, "intermediates/onnx-runtime-jni"))
         }
     }
 
@@ -154,20 +157,29 @@ android {
             excludes += "/META-INF/NOTICE"
             excludes += "/META-INF/NOTICE.txt"
         }
-        // Sherpa-ONNX 已内置 libonnxruntime.so，避免与 onnxruntime-android 冲突
-        jniLibs {
-            useLegacyPackaging = true
-            pickFirsts += listOf(
-                "lib/arm64-v8a/libonnxruntime.so",
-                "lib/armeabi-v7a/libonnxruntime.so",
-                "lib/x86_64/libonnxruntime.so",
-                "lib/x86/libonnxruntime.so"
-            )
-        }
     }
 }
 
-// Modern way to set the base name for the compiled APKs
+// onnxruntime-android 和 sherpa-onnx 都带 libonnxruntime.so（版本不兼容），
+// 用单独 configuration 解析 onnxruntime-android AAR 并提取 libonnxruntime.so，
+// 通过 sourceSet jniLibs 优先使用，覆盖 sherpa-onnx 的版本。
+configurations.create("onnxNativeLibs")
+val onnxNativeDir = file("${project.buildDir}/intermediates/onnx-runtime-jni")
+dependencies {
+    add("onnxNativeLibs", "com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
+}
+val extractOnnxTask = tasks.register<Copy>("extractOnnxRuntimeNative") {
+    from({ configurations.getByName("onnxNativeLibs").map { zipTree(it) } }) {
+        include("jni/**/libonnxruntime.so")
+    }
+    into(onnxNativeDir)
+}
+tasks.matching {
+    it.name.contains("merge", ignoreCase = true) && it.name.contains("JniLib", ignoreCase = true)
+}.configureEach {
+    dependsOn(extractOnnxTask)
+}
+
 base {
     archivesName.set("picme")
 }
@@ -237,6 +249,8 @@ dependencies {
     // image-labeling:17.0.9 自动传递 image-labeling-common/vision-common/vision-interfaces
     implementation(libs.google.mlkit.image.labeling)
     implementation(libs.google.mlkit.face.detection)
+    // onnxruntime-android 必须在 sherpa-onnx 之前声明，确保 pickFirsts 优先使用其 libonnxruntime.so
+    //（sherpa-onnx 自带不同版本的 libonnxruntime.so，两个不兼容）
     implementation(libs.onnxruntime.android)
 
     // MediaPipe Face Landmarker（Gallery 调试用，直接显示 468 点原始数据）
