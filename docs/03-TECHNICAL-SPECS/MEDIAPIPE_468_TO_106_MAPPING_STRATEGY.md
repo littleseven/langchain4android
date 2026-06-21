@@ -214,4 +214,4 @@
 - [VOLCANO_106_POINTS.md](./VOLCANO_106_POINTS.md) - 火山引擎 106 点标准定义
 - [MEDIAPIPE_468_REFERENCE.md](./MEDIAPIPE_468_REFERENCE.md) - MediaPipe 468 点完整参考（语义定义 + 对称关系）
 - [BEAUTY_ENGINE_TECH_SPEC.md](./BEAUTY_ENGINE_TECH_SPEC.md) - 大美丽技术规格
-- [INSIGHTFACE_106_MAPPING.md](./INSIGHTFACE_106_MAPPING.md) - InsightFace 106 点映射关系说明
+- InsightFace 106 点映射关系（已移除，InsightFace ONNX 路径已于 2026-05 删除）

@@ -1,8 +1,8 @@
 # PicMe 文档导航索引
 
 > **维护者**: CO Agent  
-> **最后更新**: 2026-06-08
-> **版本**: 1.1
+> **最后更新**: 2026-06-21
+> **版本**: 1.2
 
 ---
 
@@ -86,6 +86,9 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 - `ADR-001-beauty-engine-architecture.md` - 美颜引擎架构演进
 - `ADR-002-opengl-offscreen-unified-pipeline.md` - 离屏渲染统一管线
 - `ADR-003-coordinate-system-management.md` - 坐标系管理规范
+- `ADR-004-gpu-contention-resolution.md` - GPU 争用解决方案
+- `ADR-005-local-remote-inference-split.md` - 本地/远程推理协议分离
+- `ADR-006-command-system-separation.md` - 命令系统包隔离
 
 ---
 
@@ -98,8 +101,12 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`CAMERA_PREVIEW_TECH_SPEC.md`](./03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) | 相机预览管线技术约束 | RD |
 | [`CHAT_UI_UNIFICATION.md`](./03-TECHNICAL-SPECS/CHAT_UI_UNIFICATION.md) | Chat UI 统一化改造 | RD |
 | [`AGENT_UI_DESIGN.md`](./03-TECHNICAL-SPECS/AGENT_UI_DESIGN.md) | Agent UI 层设计（Plan 消息气泡） | RD |
-| [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](./03-TECHNICAL-SPECS/REMOTE_LLM_ORCHESTRATION_DESIGN.md) | 远程 LLM 混合编排架构设计 | RD |
 | [`REMOTE_INFERENCE_ARCHITECTURE.md`](./03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md) | 远程推理架构（含 IntentCache L1 缓存） | RD |
+| [`REMOTE_REACT_ARCHITECTURE_REVIEW.md`](./03-TECHNICAL-SPECS/REMOTE_REACT_ARCHITECTURE_REVIEW.md) | 远程推理 ReAct 模式架构审查 | RD |
+| [`KWS_MIGRATION_TECH_SPEC.md`](./03-TECHNICAL-SPECS/KWS_MIGRATION_TECH_SPEC.md) | KWS 唤醒词 + 语音栈迁移技术方案 | RD |
+| [`WAKE_WORD_OPTIMIZATION.md`](./03-TECHNICAL-SPECS/WAKE_WORD_OPTIMIZATION.md) | 语音唤醒词引擎优化方案 | RD |
+| [`IM_REMOTE_CONTROL_TECH_SPEC.md`](./03-TECHNICAL-SPECS/IM_REMOTE_CONTROL_TECH_SPEC.md) | IM（飞书）远程控制技术规范 | RD |
+| [`AGENT_BASED_AUTOMATION_TEST.md`](./03-TECHNICAL-SPECS/AGENT_BASED_AUTOMATION_TEST.md) | Agent 驱动的自动化测试架构 | QA/RD |
 | [`MNN_LANDMARK_DIAGNOSIS.md`](./03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
 
 **核心内容**：
@@ -108,7 +115,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 - FrameId 体系、FrameSyncManager、预测补偿算法
 - MNN/NCNN 双引擎人脸检测（InsightFace ONNX 路径已移除）
 - ROC 关键点映射、MNN 维度类型修复
-- 远程推理架构：IntentCache（L1 缓存）、AdaptiveStrategySelector
+- 远程推理架构：IntentCache（L1 缓存）、本地/远程协议分离（ADR-005）、命令系统包隔离（ADR-006）
 
 ---
 
@@ -137,7 +144,7 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`TASK_MARKUP_SPEC.md`](./05-DEVELOPMENT/TASK_MARKUP_SPEC.md) | `[kimi-task]` 标记语法与解析规则 | PM/CO |
 | [`CODE_REVIEW_CHECKLIST.md`](./05-DEVELOPMENT/CODE_REVIEW_CHECKLIST.md) | CR 检查项与一票否决项 | CR/RD |
 | [`PLAN-AGENT-UI.md`](./05-DEVELOPMENT/PLAN-AGENT-UI.md) | Agent UI 层实现计划（含 Plan 消息气泡） | RD |
-| [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](../03-TECHNICAL-SPECS/REMOTE_LLM_ORCHESTRATION_DESIGN.md) | 远程 LLM 混合编排架构设计（详见技术规范） | RD |
+| [`REMOTE_INFERENCE_ARCHITECTURE.md`](../03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md) | 远程推理架构详细设计 | RD |
 
 **核心内容**：
 - Spec ↔ Code 双向演进规则

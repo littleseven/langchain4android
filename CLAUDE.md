@@ -6,8 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PicMe is a technology research project exploring two main tracks: **(1) AI Coding paradigm** — on-device Agent mechanisms and Agent-centric application architecture, and **(2) Audio/Video technology** — self-developed real-time beauty/filter/makeup engine ("BIG_BEAUTY") via OpenGL ES + EGL. The camera app serves as a concrete case study at the intersection of these two tracks. This project does not pursue commercialization; its core value lies in technical exploration and engineering practice.
 
+**Current focus (2026-06)** has shifted from camera-first to **remote inference framework + smart gallery** (相册/图片编辑为主入口, camera as auxiliary). See `PRODUCT.md` for the latest product roadmap.
+
 Key technological decisions:
 - **On-device Agent**: `agent-core/` implements an Agent Runtime (AgentOrchestrator, LocalLlmEngine, CapabilityRegistry, etc.) that maps natural language to device capabilities via Qwen3.5-2B running on MNN-LLM.
+- **Remote inference**: Standard OpenAI Chat Completions API protocol via langchain4j, with DeepSeek adapter support. Local/remote pipelines fully separated per ADR-005.
 - **Privacy-first**: All sensitive AI processing (LLM inference, face detection, OCR) runs locally; non-sensitive commands may use remote orchestration in REMOTE mode.
 - **Self-developed Engine**: Full OpenGL ES + EGL pipeline (no third-party beauty SDKs); GPUPixel has been completely removed.
 

@@ -99,6 +99,61 @@ VAD(RMS 25dB) → 录音(最长4s) → ASR 全量转录(282MB) → 文本匹配"
 | `MnnGlobalReleaseLock` | **删除** | ONNX RT 无此全局状态问题 |
 | `MnnResourceManager` | `ModelResourceCoordinator` | **简化**：仅管理 LLM 生命周期 |
 
+### 2.3 双引擎工作流程
+
+```
+【待机阶段】
+KWS 常驻监听 (50mW)
+    ↓ (100ms chunk 推理)
+检测到唤醒词 (如"小觅")
+    ↓
+【唤醒阶段】
+加载 ASR 模型 (~282MB, ~500mW)
+    ↓
+完整转录音频 (获取指令: "打开前置")
+    ↓
+识别完毕立即释放 ASR
+    ↓
+LLM 处理指令 (执行操作)
+    ↓
+【回到待机】
+KWS 继续监听
+```
+
+### 2.4 KWS 集成代码示例
+
+```kotlin
+// VoiceCommandCoordinator.kt
+class VoiceCommandCoordinator(...) {
+    fun startWakeWordListening() {
+        kwsWakeWordEngine.start {
+            Logger.i(tag, "KWS wake word detected, loading ASR...")
+            voiceCommandCoordinator.startPushToTalk { transcript ->
+                Logger.i(tag, "ASR transcript: $transcript")
+                processCommand(transcript)  // LLM 处理指令
+            }
+        }
+    }
+}
+```
+
+### 2.5 配置选项
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `keywordsScore` | 1.5f | 置信度阈值（1.0-2.0） |
+| `keywordsThreshold` | 0.5f | 识别概率阈值（0.0-1.0） |
+| `WAKE_COOLDOWN_MS` | 1200L | 冷却期（防重复触发） |
+
+### 2.6 常见故障排查
+
+| 问题 | 原因 | 解决方案 |
+|------|------|---------|
+| KWS 引擎不可用 | 模型文件缺失 | 检查 `/data/data/com.mamba.picme/llm/sherpa-onnx-kws/` |
+| 无法检测到唤醒词 | 阈值过高 | 降低 `keywordsThreshold` (如 0.3) |
+| 误触发频繁 | 阈值过低 | 提高 `keywordsThreshold` (如 0.7) |
+| 冷却期内被跳过 | 正常防重复 | 预期行为，非故障 |
+
 ---
 
 ## 3. 生命周期状态机
@@ -437,7 +492,7 @@ dependencies {
 
 ## 10. 相关文档
 
-- `docs/03-TECHNICAL-SPECS/SHERPA_MNN_COMPARISON_ANALYSIS.md` — 当前 Sherpa-MNN 实现分析
+- `docs/03-TECHNICAL-SPECS/WAKE_WORD_OPTIMIZATION.md` — 当前 ASR-based 唤醒词优化方案（Phase 1）
 - `AGENTS.md` — 顶层治理文档
 - `agent-core/AGENTS.md` — Agent Core 模块规范
 - `app/src/main/java/com/picme/features/camera/voice/WakeWordEngine.kt` — 当前唤醒词引擎

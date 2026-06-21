@@ -392,7 +392,7 @@ grep -r "leftEye\|rightEye" app/src/ --include="*.kt" | grep -v "imageLeft\|imag
 #### 优先级 1: 技术文档（最高）
 
 **文件列表**：
-- `docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
+- InsightFace 106 映射文档（已移除，2026-05）
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`
 - `docs/03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md`
 - `.qoder/skills/av-gl-expert/SKILL.md`
@@ -695,7 +695,7 @@ exit 0
 ## 📚 参考资源
 
 ### 内部文档
-- [INSIGHTFACE_106_MAPPING.md](../03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md) - 需要按新标准修订
+- InsightFace 106 映射文档（已移除，2026-05；坐标系规范不受影响）
 - [CAMERA_PREVIEW_TECH_SPEC.md](../03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 坐标转换章节
 - [BEAUTY_ENGINE_TECH_SPEC.md](../03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md) - 人脸关键点使用
 

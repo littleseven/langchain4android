@@ -631,7 +631,7 @@ scripts/check-doc-coordinate-annotation.sh # ✅ 通过
 
 - [COORDINATE_SYSTEM.md](../../07-STANDARDS/COORDINATE_SYSTEM.md) - 坐标系规范详细说明
 - [CAMERA_PREVIEW_TECH_SPEC.md](../../03-TECHNICAL-SPECS/CAMERA_PREVIEW_TECH_SPEC.md) - 相机预览技术规范
-- [INSIGHTFACE_106_MAPPING.md](../../03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md) - ⚠️ 已废弃（InsightFace 路径移除，见历史存档）
+- InsightFace 106 映射文档（已移除，InsightFace ONNX 路径已于 2026-05 删除）
 
 ### 7.2 技术文档
 

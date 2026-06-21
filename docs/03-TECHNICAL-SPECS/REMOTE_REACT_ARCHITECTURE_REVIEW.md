@@ -6,6 +6,8 @@
 
 ---
 
+> **文档状态注记（2026-06-21）**：本审查报告中引用的 `REMOTE_LLM_ORCHESTRATION_DESIGN.md` 已被 ADR-005/006 取代并移除。该文档描述的 `InferenceRouter`、`AdaptiveStrategySelector`、`ToolOrchestrator` 等组件已从代码中完全删除。当前远程推理架构以 `docs/02-ARCHITECTURE/ADR/ADR-005-local-remote-inference-split.md` 和 `docs/02-ARCHITECTURE/ADR/ADR-006-command-system-separation.md` 为准。
+
 ## 1. 架构全景图
 
 ```mermaid

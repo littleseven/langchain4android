@@ -38,7 +38,7 @@ PicMe 的实验目标是探索**右侧范式的工程可行性**。
                        ▲
                        │
     OpenGL ES/EGL    ──┼──  实时美颜渲染管线
-    多引擎人脸检测   ──┼──  ONNX/NCNN/MNN/MediaPipe 统一抽象
+    多引擎人脸检测   ──┼──  MediaPipe/NCNN/MNN 统一抽象
     帧同步系统       ──┼──  检测-渲染时序对齐
                        │
     ═══════════════════╪═══════════════════
@@ -178,7 +178,7 @@ AgentOrchestrator (agent-core/)
 ### 4.3 端侧优先
 
 - **LLM**：当前默认 Qwen3.5-2B（Qwen3-1.7B 已升级），通过 MNN-LLM 本地运行
-- 人脸检测：InsightFace/MediaPipe 端侧模型
+- 人脸检测：MediaPipe Face Mesh / MNN / NCNN 端侧模型（106 点统一输出）
 - OCR：ML Kit 端侧识别
 - 图像编辑：100% 端侧 GPU 处理
 - **隐私敏感数据强制本地处理**是硬性约束
@@ -195,7 +195,7 @@ AgentOrchestrator (agent-core/)
 | 自然语言→命令 | ✅ | Qwen3.5-2B 解析意图，映射到设备操作 |
 | 实时美颜 | ✅ | OpenGL ES 管线，支持磨皮/美白/瘦脸/大眼/唇色/腮红 |
 | GPU 拍照 | ✅ | 离屏渲染，预览/输出一致性 |
-| 多引擎人脸检测 | ✅ | InsightFace(ONNX) 为主，MediaPipe 备选 |
+| 多引擎人脸检测 | ✅ | MediaPipe Face Mesh 468→106 默认，MNN/NCNN 备选（InsightFace ONNX 已移除） |
 | 对话记忆 | ✅ | 多轮上下文维护 |
 | 统一聊天界面 | ✅ | Camera/Gallery/Settings 共享 Chat UI，支持折叠/展开 |
 | 帧同步美妆 | ✅ | 解决快速移动时的妆容甩飞问题 |

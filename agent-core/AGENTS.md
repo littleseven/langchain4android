@@ -37,7 +37,7 @@
 
 | 子包 | 内容 | 说明 |
 |------|------|------|
-| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolParameters`, `JsonSchemaProperty`, `ToolExecutionRequest`, `ToolExecutionResultMessage`, `ToolExecutor`, `ToolProvider` | 与 LangChain4j 对齐的模型 API 层（远程推理链路 SDK 接入层） |
+| `langchain4j/` | `ChatLanguageModel`, `StreamingChatLanguageModel`, `ChatMessage`, `ChatRequest`, `ChatResponse`, `ToolSpecification`, `ToolParameters`, `JsonSchemaProperty`, `ToolExecutionRequest`, `ToolExecutionResultMessage`, `ToolExecutor`, `ToolProvider` | 与 LangChain4j API 对齐的自定义纯 Kotlin 模型层（非直接 SDK 依赖，为远程推理提供标准化接口） |
 | `llm/` | `MnnLlmClient`, `LlmModelManager`, `LocalLlmEngine` | MNN LLM 客户端、模型管理与本地推理引擎 |
 | `mnn/` | `MnnResourceManager` | MNN 资源管理 |
 | `model/` | `AgentCommands`, `AgentModels`, `AiAgentConfig`, `ExecutionState`, `InferenceResult`, `MediaAsset`, `PageContext`, `SceneContext`, `RemoteModelConfig` | 数据模型 |

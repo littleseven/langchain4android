@@ -163,7 +163,7 @@ Landmark 检测器：
 
 由 `NcnnLandmarkAdapter` 实现：使用 FULL_REMAP 对 106 点完整重排。前置镜头：`x = 1 - x`。
 
-> **⚠️ 已废弃（2026-06）**：原 `InsightFaceAdapter.kt` 已删除。历史存档 — InsightFace 原生 106 -> 统一 106 映射参考：`docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`（已标记废弃）。如需恢复 InsightFace 支持，需从模型仓库重新引入 ONNX 模型并重新实现适配器。
+> **⚠️ 已废弃（2026-06）**：原 `InsightFaceAdapter.kt` 及所有 InsightFace ONNX 相关代码已删除。如需恢复 InsightFace 支持，需从模型仓库重新引入 ONNX 模型并重新实现适配器。
 
 ## 6. 当前行为边界（避免文档误读）
 
@@ -211,7 +211,7 @@ Landmark 检测器：
 ## 8. 相关文档
 
 - `docs/03-TECHNICAL-SPECS/MEDIAPIPE_468_TO_106_MAPPING_STRATEGY.md`
-- `docs/03-TECHNICAL-SPECS/INSIGHTFACE_106_MAPPING.md`
+- InsightFace 106 映射文档（已移除，2026-05）
 - `docs/03-TECHNICAL-SPECS/VOLCANO_106_POINTS.md`
 - `docs/07-STANDARDS/COORDINATE_SYSTEM.md`
 - `docs/03-TECHNICAL-SPECS/BEAUTY_ENGINE_TECH_SPEC.md`

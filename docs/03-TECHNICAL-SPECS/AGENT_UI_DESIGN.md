@@ -4,7 +4,7 @@
 > **作者**: Claude  
 > **日期**: 2026-05-29  
 > **关联文档**:
-> - [`REMOTE_LLM_ORCHESTRATION_DESIGN.md`](./REMOTE_LLM_ORCHESTRATION_DESIGN.md)
+> - 远程 LLM 编排设计（已被 ADR-005/006 取代，详见 `docs/02-ARCHITECTURE/ADR/`）
 > - [`docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md`](../../02-ARCHITECTURE/AGENT_ARCHITECTURE.md)
 
 ---
