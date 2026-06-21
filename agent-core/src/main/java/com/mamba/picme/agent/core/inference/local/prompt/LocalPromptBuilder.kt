@@ -451,7 +451,9 @@ class LocalPromptBuilder(
             }
 
             if (includeGallery) {
-                appendLine("- gallery: view_media, delete_media, share_media, select_media, search_media, switch_view_mode, favorite_media")
+                appendLine("- gallery: view_media, delete_media, share_media, select_media, search_media(params.query), switch_view_mode, favorite_media")
+                appendLine("  search_media: 自然语言搜索照片。用户说\"找出去年夏天的照片\"\"猫的照片\"\"上海的合照\"时，直接用原话作为 query 参数。")
+                appendLine("    例：\"找出去年夏天的猫\" -> {\"method\":\"search_media\",\"params\":{\"query\":\"去年夏天的猫\"}}")
             }
 
             if (includeSettings) {
@@ -465,7 +467,7 @@ class LocalPromptBuilder(
 
             appendLine("- navigation: navigate_to(params.destination=camera|gallery|settings|debug), go_back")
             appendLine("- fallback: text_reply(params.message)")
-            appendLine("params 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT")
+            appendLine("params 约束: exposure=-2..2, zoom=0.5..10, ratio=4:3|16:9|full, mode=PHOTO|VIDEO|PRO|DOCUMENT, query=任意中文搜索短语")
             appendLine("滤镜: NONE|LEICA_CLASSIC|LEICA_VIBRANT|LEICA_BW|FILM_GOLD|FILM_FUJI|VINTAGE|COOL|WARM")
             appendLine("风格: NONE|TOON|SKETCH|POSTERIZE|EMBOSS|CROSSHATCH")
             appendLine("滤镜映射: 冷调/冷色/冷滤镜->COOL; 暖调/暖色/暖滤镜->WARM; 复古/怀旧->VINTAGE; 胶片金->FILM_GOLD; 胶片富士/富士->FILM_FUJI")

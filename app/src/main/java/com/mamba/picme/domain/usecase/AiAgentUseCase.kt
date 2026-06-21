@@ -290,7 +290,7 @@ class AiAgentUseCase(
             is AgentCommand.DeleteMedia -> AiAgentCommand.TextReply("请在相册中删除照片")
             is AgentCommand.ShareMedia -> AiAgentCommand.TextReply("请在相册中分享照片")
             is AgentCommand.SelectMedia -> AiAgentCommand.TextReply("请在相册中选择照片")
-            is AgentCommand.SearchMedia -> AiAgentCommand.TextReply("搜索照片: ${command.query}")
+            is AgentCommand.SearchMedia -> AiAgentCommand.SearchMedia(command.query)
             is AgentCommand.SwitchViewMode -> AiAgentCommand.TextReply("切换相册视图")
             is AgentCommand.FavoriteMedia -> AiAgentCommand.TextReply("收藏照片")
             // 设置命令

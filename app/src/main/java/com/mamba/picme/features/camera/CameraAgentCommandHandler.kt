@@ -174,6 +174,9 @@ internal class CameraAgentCommandHandler(
             is AiAgentCommand.BatchExecute -> {
                 Logger.w(TAG, "BatchExecute should be handled at top level, not in agentCommandHandler")
             }
+            is AiAgentCommand.SearchMedia -> {
+                Logger.d(TAG, "SearchMedia handled by Gallery, not Camera")
+            }
         }
     }
 

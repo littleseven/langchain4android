@@ -122,4 +122,14 @@ sealed class AiAgentCommand {
     data class BatchExecute(
         val commands: List<AiAgentCommand>
     ) : AiAgentCommand()
+
+    /**
+     * 自然语言搜索照片
+     *
+     * 将用户的自然语言查询转发到搜索引擎（CV 标签 + LLM 语义解析）。
+     * 搜索结果在 Gallery 中展示。
+     */
+    data class SearchMedia(
+        val query: String
+    ) : AiAgentCommand()
 }

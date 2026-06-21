@@ -65,6 +65,7 @@ internal fun getCommandDisplayName(command: AiAgentCommand): String = when (comm
     is AiAgentCommand.GoBack -> "返回"
     is AiAgentCommand.BatchExecute -> "批量执行"
     is AiAgentCommand.TextReply -> "文本回复"
+    is AiAgentCommand.SearchMedia -> "搜索照片"
 }
 
 /**
@@ -87,6 +88,7 @@ internal fun resolveCommandIcon(command: AiAgentCommand): ImageVector = when (co
     is AiAgentCommand.GoBack -> Icons.AutoMirrored.Rounded.ArrowBack
     is AiAgentCommand.BatchExecute -> Icons.AutoMirrored.Rounded.FactCheck
     is AiAgentCommand.TextReply -> Icons.AutoMirrored.Rounded.ShortText
+    is AiAgentCommand.SearchMedia -> Icons.Rounded.Search
 }
 
 internal fun getCommandDetail(command: AiAgentCommand): String = when (command) {

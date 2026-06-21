@@ -182,7 +182,9 @@ class RemotePromptBuilder(
             }
 
             if (includeGallery) {
-                appendLine("- gallery: view_media, delete_media, share_media, select_media, search_media, switch_view_mode, favorite_media")
+                appendLine("- gallery: view_media, delete_media, share_media, select_media, search_media(params.query), switch_view_mode, favorite_media")
+                appendLine("  search_media: 自然语言搜索照片。用户说\"找出去年夏天的照片\"\"猫的照片\"\"上海的合照\"时，直接用原话作为 query 参数。")
+                appendLine("    例：\"找出去年夏天的猫\" -> {\"method\":\"search_media\",\"params\":{\"query\":\"去年夏天的猫\"}}")
             }
 
             if (includeSettings) {
