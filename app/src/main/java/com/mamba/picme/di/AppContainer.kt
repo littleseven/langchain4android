@@ -14,6 +14,7 @@ import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.beauty.api.facedetect.FaceDetector
 import com.mamba.picme.beauty.api.facedetect.FaceDetectorFactory
 import com.mamba.picme.data.local.MlKitOcrProcessor
+import com.mamba.picme.data.indexing.FaceClusteringWorker
 import com.mamba.picme.data.indexing.MediaIndexingWorker
 import com.mamba.picme.data.preferences.UserPreferencesRepository
 import com.mamba.picme.data.repository.MediaRepositoryImpl
@@ -81,6 +82,7 @@ interface AppContainer {
     val kwsEngine: KeywordSpotterEngine?  // 【新增】KWS 唤醒词引擎（可选）
     val mediaSearchEngine: MediaSearchEngine  // 媒体搜索引擎（自然语言图片搜索）
     val mediaIndexingWorker: MediaIndexingWorker  // 媒体元数据索引器
+    val faceClusteringWorker: FaceClusteringWorker  // 人脸聚类
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
     fun createChatViewModelFactory(): ViewModelProvider.Factory
@@ -98,6 +100,11 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     /** 媒体元数据索引器（ML Kit 标签+OCR+EXIF） */
     override val mediaIndexingWorker: MediaIndexingWorker by lazy {
         MediaIndexingWorker(context)
+    }
+
+    /** 人脸聚类器（面部几何特征 + DBSCAN） */
+    override val faceClusteringWorker: FaceClusteringWorker by lazy {
+        FaceClusteringWorker(context)
     }
 
     /**

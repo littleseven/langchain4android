@@ -163,15 +163,20 @@ fun GalleryScreen(
         }
     }
 
-    // 首次进入 Gallery 时触发后台图片标签索引
+    // 首次进入 Gallery 时触发后台图片标签索引 + 人脸聚类
     val app = context.applicationContext as com.mamba.picme.PicMeApplication
     val indexingWorker = remember { app.container.mediaIndexingWorker }
+    val faceClusteringWorker = remember { app.container.faceClusteringWorker }
     var isIndexing by remember { mutableStateOf(false) }
+    var isFaceClustering by remember { mutableStateOf(false) }
 
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty() && !isIndexing) {
             indexingWorker.start()
             isIndexing = true
+            // 人脸聚类在索引完成后自动触发
+            faceClusteringWorker.start()
+            isFaceClustering = true
         }
     }
 

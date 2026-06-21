@@ -97,4 +97,35 @@ interface MediaDao {
     /** 获取媒体总数 */
     @Query("SELECT COUNT(*) FROM media_assets")
     suspend fun getTotalCount(): Int
+
+    // ── 人脸聚类查询 ──────────────────────────────────────────
+
+    /** 获取所有媒体（非 Flow，用于后台） */
+    @Query("SELECT * FROM media_assets ORDER BY captureDate DESC")
+    suspend fun getAllMediaNow(): List<MediaEntity>
+
+    /** 更新 hasFace */
+    @Query("UPDATE media_assets SET hasFace = :hasFace WHERE id = :mediaId")
+    suspend fun updateHasFace(mediaId: Long, hasFace: Boolean)
+
+    /** 获取有脸但未聚类的媒体 */
+    @Query("SELECT * FROM media_assets WHERE hasFace = 1 AND (faceId IS NULL OR faceId = '') ORDER BY captureDate DESC")
+    suspend fun getMediaWithFaces(): List<MediaEntity>
+
+    /** 更新 faceId */
+    @Query("UPDATE media_assets SET faceId = :faceId WHERE id = :mediaId")
+    suspend fun updateFaceId(mediaId: Long, faceId: String)
+
+    /** 按 faceId 分组统计数据 */
+    @Query("SELECT faceId, COUNT(*) as cnt FROM media_assets WHERE faceId IS NOT NULL AND faceId != '' GROUP BY faceId ORDER BY cnt DESC")
+    suspend fun getFaceGroups(): List<FaceGroupCount>
+
+    /** 获取某个 faceId 下的所有媒体 */
+    @Query("SELECT * FROM media_assets WHERE faceId = :faceId ORDER BY captureDate DESC")
+    suspend fun getMediaByFaceId(faceId: Int): List<MediaEntity>
 }
+
+data class FaceGroupCount(
+    val faceId: Int,
+    val cnt: Int
+)
