@@ -54,12 +54,12 @@ class FaceClusteringWorker(private val context: Context) {
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
 
-        // Step 0: 确保 MobileFaceNet 模型就绪
-        val modelDir = ModelPathConfig.getModelDir(context, "picme-face-embedding-onnx")
-        val embedder = MobileFaceNetEmbedder(File(modelDir, "w600k_mbf.onnx"))
+        // Step 0: 确保 MobileFaceNet MNN 模型就绪
+        val modelDir = ModelPathConfig.getModelDir(context, "picme-face-embedding-mnn")
+        val embedder = MnnEmbeddingExtractor(File(modelDir, "w600k_mbf.mnn"))
         if (!embedder.isModelReady) {
-            Logger.w(TAG, "Face embedding model not found. Download from 设置 > 模型中心 > 人脸特征提取")
-            Logger.w(TAG, "Expected at: ${modelDir}/w600k_mbf.onnx")
+            Logger.w(TAG, "Face embedding model not found. Download from 设置 > 模型中心 > MobileFaceNet")
+            Logger.w(TAG, "Expected at: ${modelDir}/w600k_mbf.mnn")
             return
         }
         if (!embedder.initialize()) {

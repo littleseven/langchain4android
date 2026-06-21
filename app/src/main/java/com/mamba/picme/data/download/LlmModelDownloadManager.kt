@@ -108,9 +108,9 @@ class LlmModelDownloadManager(context: Context) {
         private val FACE_DETECTION_ROI_500M_MNN_FILES = listOf("det_500m.mnn")
 
         /**
-         * MobileFaceNet 人脸嵌入 ONNX 模型文件列表（模型中心统一下载）
+         * MobileFaceNet 人脸嵌入 MNN 模型文件列表（模型中心统一下载）
          */
-        private val FACE_EMBEDDING_ONNX_FILES = listOf("w600k_mbf.onnx")
+        private val FACE_EMBEDDING_MNN_FILES = listOf("w600k_mbf.mnn")
 
         /**
          * 人脸检测 ROI Det500M NCNN 模型文件列表
@@ -476,7 +476,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-det-500m-mnn" -> FACE_DETECTION_ROI_500M_MNN_FILES
             modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
-            modelId == "picme-face-embedding-onnx" -> FACE_EMBEDDING_ONNX_FILES
+            modelId == "picme-face-embedding-mnn" -> FACE_EMBEDDING_MNN_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }
