@@ -8,11 +8,9 @@ import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
 import com.mamba.picme.agent.core.inference.local.pipeline.LocalInferencePipeline
 import com.mamba.picme.agent.core.inference.local.prompt.LocalPromptBuilder
-import com.mamba.picme.agent.core.inference.local.react.InAppAgentCallback
-import com.mamba.picme.agent.core.inference.local.react.InAppAgentConfig
-import com.mamba.picme.agent.core.inference.local.react.InAppAgentService
-import com.mamba.picme.agent.core.inference.remote.llm.RemoteOrchestrator
-import com.mamba.picme.agent.core.inference.remote.prompt.RemotePromptBuilder
+import com.mamba.picme.agent.core.inference.remote.react.RemoteReActAgentCallback
+import com.mamba.picme.agent.core.inference.remote.react.RemoteReActAgentConfig
+import com.mamba.picme.agent.core.inference.remote.react.RemoteReActAgent
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.MemoryManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
@@ -41,7 +39,6 @@ class AgentConfigurator(private val context: Context) {
     val privacyGuard = PrivacyGuard()
     val sceneManager = SceneManager.getInstance()
     val localPromptBuilder = LocalPromptBuilder(sceneManager)
-    val remotePromptBuilder = RemotePromptBuilder(sceneManager)
     val capabilityRegistry = CapabilityRegistry.getInstance()
     val intentCache = IntentCache()
 
@@ -61,9 +58,7 @@ class AgentConfigurator(private val context: Context) {
     private var agentMode: AiAgentMode = AiAgentMode.REMOTE
     private var currentModelId: String = "qwen3_5_2b"
     private var userRemoteConfig: RemoteModelConfig? = null
-    private var pipelineRemoteConfig: RemoteModelConfig? = null
     private var localInferencePipeline: LocalInferencePipeline? = null
-    private var cachedRemoteOrchestrator: RemoteOrchestrator? = null
     private var localUseOpencl: Boolean = false
 
     /**
@@ -85,33 +80,6 @@ class AgentConfigurator(private val context: Context) {
     }
 
     /**
-     * 获取或创建远程编排器（直接返回，不再经过 RemoteInferencePipeline 包装）
-     */
-    fun getRemoteOrchestrator(): RemoteOrchestrator {
-        val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
-        val existing = cachedRemoteOrchestrator
-        if (existing != null && pipelineRemoteConfig == currentConfig) {
-            return existing
-        }
-        val orchestrator = createRemoteOrchestrator(currentConfig)
-        cachedRemoteOrchestrator = orchestrator
-        pipelineRemoteConfig = currentConfig
-        return orchestrator
-    }
-
-    /**
-     * 创建远程编排器
-     */
-    private fun createRemoteOrchestrator(config: RemoteModelConfig): RemoteOrchestrator {
-        Logger.i(tag, "Creating RemoteOrchestrator with model=${config.modelId}, baseUrl=${config.baseUrl}")
-        return RemoteOrchestrator(
-            context = context,
-            remoteConfig = config,
-            promptBuilder = remotePromptBuilder
-        )
-    }
-
-    /**
      * 配置 Agent 运行参数
      */
     fun configure(
@@ -127,8 +95,6 @@ class AgentConfigurator(private val context: Context) {
         if (remoteConfig != null && remoteConfig.baseUrl.isNotBlank() && remoteConfig.modelId.isNotBlank()) {
             this.userRemoteConfig = remoteConfig
             localInferencePipeline = null
-            cachedRemoteOrchestrator = null
-            pipelineRemoteConfig = null
         }
         privacyGuard.updateConfig(privacyLevel, mode)
         Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +
@@ -194,7 +160,7 @@ class AgentConfigurator(private val context: Context) {
 
     // ── 飞书 ReAct Agent（懒创建）────────────────────────────────────
 
-    private var cachedFeishuAgent: InAppAgentService? = null
+    private var cachedFeishuAgent: RemoteReActAgent? = null
 
     /** 缓存的 Feishu Agent 对应的配置，用于检测配置变更 */
     private var cachedFeishuAgentConfig: RemoteModelConfig? = null
@@ -206,7 +172,7 @@ class AgentConfigurator(private val context: Context) {
      * 当用户配置发生变更时（cachedFeishuAgentConfig != userRemoteConfig），
      * 自动重建 Agent 以确保使用最新的 API Key / baseUrl / model。
      */
-    fun getFeishuAgent(windowManager: WindowManager, callback: InAppAgentCallback): InAppAgentService? {
+    fun getFeishuAgent(windowManager: WindowManager, callback: RemoteReActAgentCallback): RemoteReActAgent? {
         val existing = cachedFeishuAgent
         val currentConfig = userRemoteConfig ?: RemoteModelConfig.TENCENT_SCF_DEFAULT
 
@@ -229,7 +195,7 @@ class AgentConfigurator(private val context: Context) {
         }
 
         val cfg = try {
-            InAppAgentConfig.Builder()
+            RemoteReActAgentConfig.Builder()
                 .apiKey(currentConfig.apiKey)
                 .baseUrl(currentConfig.baseUrl)
                 .modelName(currentConfig.modelId)
@@ -240,7 +206,7 @@ class AgentConfigurator(private val context: Context) {
             return null
         }
 
-        val agent = InAppAgentService(cfg, windowManager, callback, context)
+        val agent = RemoteReActAgent(cfg, windowManager, callback, context)
         agent.initialize()
         cachedFeishuAgent = agent
         cachedFeishuAgentConfig = currentConfig

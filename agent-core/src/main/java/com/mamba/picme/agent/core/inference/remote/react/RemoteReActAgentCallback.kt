@@ -1,6 +1,6 @@
-package com.mamba.picme.agent.core.inference.local.react
+package com.mamba.picme.agent.core.inference.remote.react
 
-interface InAppAgentCallback {
+interface RemoteReActAgentCallback {
     /** Agent 开始新的循环轮次 */
     fun onLoopStart(iteration: Int)
 

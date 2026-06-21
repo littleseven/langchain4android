@@ -1,9 +1,10 @@
-package com.mamba.picme.agent.core.inference.local.react
+package com.mamba.picme.agent.core.inference.remote.react
 
 import android.view.WindowManager
-import com.mamba.android.MambaAgentFactory
 import com.mamba.memory.ChatMemory
 import com.mamba.model.chat.request.ToolChoice
+import com.mamba.picme.agent.core.api.RemoteModelFactory
+import com.mamba.picme.agent.core.api.android.RemoteModelConfig
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.storage.DataStoreChatMemoryStore
 import com.mamba.picme.agent.core.inference.remote.tool.PicMeToolService
@@ -16,7 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 应用内 ReAct Agent 服务（AiServices 版本）。
+ * 远程 ReAct Agent（AiServices 版本）。
  *
  * <p>使用 AiServices 模式替代手动 ReAct loop：
  * <ul>
@@ -28,32 +29,27 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * @see AiServices
  */
-class InAppAgentService(
-    private val config: InAppAgentConfig,
+class RemoteReActAgent(
+    private val config: RemoteReActAgentConfig,
     private val windowManager: WindowManager,
-    private val callback: InAppAgentCallback,
+    private val callback: RemoteReActAgentCallback,
     private val appContext: android.content.Context? = null
 ) {
     companion object {
-        private const val TAG = "InAppAgent"
+        private const val TAG = "RemoteReActAgent"
     }
 
     private val toolService = PicMeToolService(windowManager)
 
     private val chatModel by lazy {
-        val effectiveApiKey = config.apiKey.ifEmpty { "gateway-auth" }
-        val modelName = config.modelName
+        val remoteModelConfig = RemoteModelConfig(
+            modelId = config.modelName,
+            apiKey = config.apiKey,
+            baseUrl = config.baseUrl,
+            gatewayToken = config.gatewayToken ?: ""
+        )
 
-        /**
-         * Kimi K2.6 仅支持 temperature=1，其他值会返回 400001 错误。
-         */
-        val clampedTemperature = if (modelName.contains("kimi-k2.6", ignoreCase = true)) 1.0 else config.temperature
-
-        val builder = MambaAgentFactory.builder()
-            .apiKey(effectiveApiKey)
-            .baseUrl(config.baseUrl)
-            .model(modelName)
-            .temperature(clampedTemperature)
+        val builder = RemoteModelFactory.createBuilder(remoteModelConfig)
             .logRequests(true)
             .logResponses(true)
 
@@ -149,7 +145,7 @@ class InAppAgentService(
     }
 
     fun initialize() {
-        Logger.i(TAG, "AiServices Agent initialized: model=${config.modelName}")
+        Logger.i(TAG, "Remote ReAct Agent initialized: model=${config.modelName}")
     }
 
     /**
@@ -157,7 +153,7 @@ class InAppAgentService(
      */
     fun getLastExecutionMetrics(): AgentExecutionMetrics? = lastExecutionMetrics
 
-    fun executeTask(userPrompt: String, taskCallback: InAppAgentCallback? = null) {
+    fun executeTask(userPrompt: String, taskCallback: RemoteReActAgentCallback? = null) {
         if (running.get()) {
             (taskCallback ?: callback).onError(0, IllegalStateException("Agent is already running a task"), 0)
             return
@@ -192,7 +188,7 @@ class InAppAgentService(
 
     // ==================== AiServices 代理调用（替代手动 ReAct loop）====================
 
-    private fun runAgentWithAiServices(userPrompt: String, taskCallback: InAppAgentCallback? = null) {
+    private fun runAgentWithAiServices(userPrompt: String, taskCallback: RemoteReActAgentCallback? = null) {
         val cb = taskCallback ?: callback
 
         Logger.d(TAG, "runAgentWithAiServices start: userPrompt='$userPrompt'")

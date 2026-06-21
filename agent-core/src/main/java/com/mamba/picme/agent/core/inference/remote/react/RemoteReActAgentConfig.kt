@@ -1,6 +1,6 @@
-package com.mamba.picme.agent.core.inference.local.react
+package com.mamba.picme.agent.core.inference.remote.react
 
-data class InAppAgentConfig(
+data class RemoteReActAgentConfig(
     val apiKey: String,
     val baseUrl: String,
     val modelName: String = "",
@@ -154,9 +154,9 @@ data class InAppAgentConfig(
         fun streaming(streaming: Boolean) = apply { this.streaming = streaming }
         fun gatewayToken(token: String) = apply { this.gatewayToken = token }
 
-        fun build(): InAppAgentConfig {
+        fun build(): RemoteReActAgentConfig {
             require(apiKey.isNotEmpty() || gatewayToken != null) { "API key or gateway token is required" }
-            return InAppAgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, streaming, gatewayToken)
+            return RemoteReActAgentConfig(apiKey, baseUrl, modelName, systemPrompt, maxIterations, temperature, streaming, gatewayToken)
         }
     }
 }

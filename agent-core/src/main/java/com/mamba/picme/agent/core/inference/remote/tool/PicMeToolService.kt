@@ -352,7 +352,7 @@ class PicMeToolService(
 
     /**
      * 根据工具名和 JSON 参数调用对应工具方法。
-     * 用于 InAppAgentService 等外部调用者通过字符串方式调用工具。
+     * 用于 RemoteReActAgent 等外部调用者通过字符串方式调用工具。
      */
     fun callTool(toolName: String, argsJson: String): String {
         val args = try {

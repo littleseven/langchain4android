@@ -11,10 +11,7 @@ import com.mamba.picme.agent.core.api.context.MediaType
 import com.mamba.picme.agent.core.api.policy.AiAgentMode
 import com.mamba.picme.agent.core.api.policy.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
-import com.mamba.picme.agent.core.inference.remote.llm.RemoteOrchestrator
 import com.mamba.picme.agent.core.runtime.execution.InferenceResult
-import com.mamba.picme.agent.core.inference.remote.prompt.RemotePromptBuilder
-import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.beauty.api.FilterType
 import com.mamba.picme.beauty.api.StyleFilter
@@ -87,23 +84,6 @@ class AiAgentUseCase(
         get() = userRemoteConfig ?: fallbackRemoteConfig
 
     /**
-     * 远程编排器（L2/L3/L4）
-     * 使用 PromptBuilder 统一构建 prompt
-     */
-    private val remoteOrchestrator: RemoteOrchestrator by lazy {
-        RemoteOrchestrator(
-            context = context,
-            remoteConfig = effectiveRemoteConfig,
-            promptBuilder = RemotePromptBuilder(SceneManager.getInstance())
-        )
-    }
-
-    /**
-     * 是否使用兜底 Gateway（用于限频检测）
-     */
-    private val isUsingFallbackGateway: Boolean = userRemoteConfig == null
-
-    /**
      * 当前 Agent 模式
      */
     val currentMode: AiAgentMode = agentMode
@@ -126,7 +106,7 @@ class AiAgentUseCase(
             "localUseOpencl=$localUseOpencl, " +
             "gatewayToken=${if (remoteConfig?.gatewayToken.isNullOrBlank()) "empty" else "set"}, " +
             "effectiveBaseUrl=${effectiveRemoteConfig.baseUrl.take(40)}, " +
-            "isUsingFallbackGateway=$isUsingFallbackGateway")
+            "isUsingFallbackGateway=${userRemoteConfig == null}")
         orchestrator.configure(
             mode = agentMode,
             modelId = localModelId,
@@ -207,13 +187,7 @@ class AiAgentUseCase(
         // 根据模式选择推理路径
         when (currentMode) {
             AiAgentMode.LOCAL, AiAgentMode.OFF -> {
-                // 强制远程模式：直接走远程推理
-                if (forceRemoteMode) {
-                    Logger.d(tag, "[REMOTE] Force remote enabled, bypassing local model")
-                    return@withContext processRemote(userInput, agentContext, currentState)
-                }
-
-                // 本地推理：优先使用 processInputWithRouter 的 L2 本地快速通道（支持 JSON 数组）
+                // 本地推理：优先使用 processInputWithRouter 的 L2 本地快速通道
                 Logger.i(tag, "[UseCase] LOCAL mode, calling processInputWithRouter for input='$userInput'")
                 val inferenceResult = orchestrator.processInputWithRouter(
                     input = userInput,
@@ -223,9 +197,14 @@ class AiAgentUseCase(
                 return@withContext handleInferenceResult(inferenceResult, userInput, agentContext, currentState)
             }
             AiAgentMode.REMOTE -> {
-                // REMOTE 模式：使用分层自适应推理
-                Logger.i(tag, "[UseCase] REMOTE mode, calling processRemote for input='$userInput'")
-                return@withContext processRemote(userInput, agentContext, currentState)
+                // REMOTE 模式：统一走本地推理（已不再需要远程推理链路）
+                Logger.i(tag, "[UseCase] REMOTE mode, using local inference for input='$userInput'")
+                val inferenceResult = orchestrator.processInputWithRouter(
+                    input = userInput,
+                    agentContext = agentContext
+                )
+                Logger.i(tag, "[UseCase] processInputWithRouter returned: ${inferenceResult::class.simpleName}")
+                return@withContext handleInferenceResult(inferenceResult, userInput, agentContext, currentState)
             }
             AiAgentMode.FEISHU -> {
                 // FEISHU 模式：相机场景不支持，回退到文本回复
@@ -278,46 +257,6 @@ class AiAgentUseCase(
             is InferenceResult.Chat -> {
                 Logger.d(tag, "Chat result: ${inferenceResult.message}")
                 Result.success(AiAgentCommand.TextReply(inferenceResult.message))
-            }
-        }
-    }
-
-    /**
-     * 远程推理入口（简化版：直接调用 processBatch）
-     */
-    private suspend fun processRemote(
-        userInput: String,
-        agentContext: AgentContext,
-        currentState: CameraStateSnapshot
-    ): Result<AiAgentCommand> {
-        Logger.d(REMOTE_TAG, "[REMOTE] processRemote for input=\"$userInput\"")
-    
-        return try {
-            val batchResult = remoteOrchestrator.processBatch(
-                userInput = userInput,
-                context = agentContext
-            )
-            val commands = batchResult.commands
-            Result.success(
-                when {
-                    commands.isEmpty() -> AiAgentCommand.TextReply("未识别到有效命令")
-                    commands.size == 1 -> mapAgentCommandToLegacy(commands.first())
-                    else -> AiAgentCommand.BatchExecute(commands.map { mapAgentCommandToLegacy(it) })
-                }
-            )
-        } catch (error: Exception) {
-            val isRateLimited = error.message?.let { msg ->
-                msg.contains("429") || msg.contains("433")
-            } == true
-            if (isUsingFallbackGateway && isRateLimited) {
-                Logger.w(REMOTE_TAG, "Fallback gateway rate limited")
-                Result.success(
-                    AiAgentCommand.TextReply(
-                        "请求太频繁了，请稍后再试。免费额度每分钟有限制次数，如需无限次使用请在设置中配置自己的远程模型 API Key。"
-                    )
-                )
-            } else {
-                Result.failure(error)
             }
         }
     }
@@ -450,7 +389,6 @@ class AiAgentUseCase(
     )
 
     companion object {
-        private const val REMOTE_TAG = "RemoteInference"
         private const val CODING_DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1/"
     }
 }

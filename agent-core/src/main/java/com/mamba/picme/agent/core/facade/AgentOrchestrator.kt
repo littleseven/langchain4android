@@ -17,11 +17,11 @@ import com.mamba.picme.agent.core.api.StreamingChatResponseHandler
 import com.mamba.picme.agent.core.inference.local.llm.LlmGenerationMetrics
 import com.mamba.picme.agent.core.inference.local.llm.LlmModelNotFoundException
 import com.mamba.picme.agent.core.inference.local.parser.LocalCommandParser
-import com.mamba.picme.agent.core.inference.local.react.InAppAgentCallback
-import com.mamba.picme.agent.core.inference.local.react.InAppAgentService
-import com.mamba.picme.agent.core.inference.local.react.AgentExecutionMetrics
-import com.mamba.picme.agent.core.inference.remote.llm.StreamChatResult
-import com.mamba.picme.agent.core.inference.remote.llm.StreamMetrics
+import com.mamba.picme.agent.core.inference.remote.react.RemoteReActAgentCallback
+import com.mamba.picme.agent.core.inference.remote.react.RemoteReActAgent
+import com.mamba.picme.agent.core.inference.remote.react.AgentExecutionMetrics
+import com.mamba.picme.agent.core.api.StreamChatResult
+import com.mamba.picme.agent.core.api.StreamMetrics
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
@@ -247,8 +247,8 @@ class AgentOrchestrator private constructor(context: Context) {
 
         Logger.i(tag, "[RouterEntry] mode=${configurator.getAgentMode()}, input='$input', modelLoaded=${localLlmEngine.isLoaded}")
 
-        // 确保本地模型已加载（LOCAL 模式）
-        if (configurator.getAgentMode() == AiAgentMode.LOCAL || configurator.getAgentMode() == AiAgentMode.OFF) {
+        // 确保本地模型已加载（所有非 OFF 模式）
+        if (configurator.getAgentMode() != AiAgentMode.OFF) {
             if (!localLlmEngine.isLoaded) {
                 Logger.i(tag, "[RouterEntry] Local model not loaded, attempting load")
                 val loadResult = tryLoadModel()
@@ -268,10 +268,8 @@ class AgentOrchestrator private constructor(context: Context) {
         Logger.i(tag, "[RouterEntry] Calling pipeline processInput")
         val inferenceResult = try {
             when (configurator.getAgentMode()) {
-                AiAgentMode.LOCAL -> configurator.getLocalPipeline().processInput(input, agentContext)
-                AiAgentMode.REMOTE -> configurator.getRemoteOrchestrator().processBatch(input, agentContext)
                 AiAgentMode.OFF -> InferenceResult.Chat(message = "AI Agent 已关闭")
-                AiAgentMode.FEISHU -> configurator.getRemoteOrchestrator().processBatch(input, agentContext)
+                else -> configurator.getLocalPipeline().processInput(input, agentContext)
             }
         } catch (exception: Exception) {
             Logger.e(tag, "Pipeline routing failed", exception)
@@ -303,8 +301,7 @@ class AgentOrchestrator private constructor(context: Context) {
      * 流式自由聊天
      *
      * 跳过 L1/L2/L3/L4 指令路由，直接进行纯文本流式生成。
-     * LOCAL 模式：使用 [LocalLlmEngine.chat] 流式接口
-     * REMOTE 模式：使用 [RemoteOrchestrator.processChatStreaming]
+     * 所有模式统一使用 [LocalLlmEngine.chat] 流式接口（已不再需要远程推理）
      *
      * @param input 用户输入
      * @param agentContext Agent 上下文
@@ -320,15 +317,12 @@ class AgentOrchestrator private constructor(context: Context) {
         Logger.d(tag, "streamChat: mode=$mode, input='$input'")
 
         return when (mode) {
-            AiAgentMode.LOCAL, AiAgentMode.OFF -> {
+            AiAgentMode.OFF -> {
                 streamChatLocal(input, agentContext, onToken)
             }
-            AiAgentMode.REMOTE -> {
-                streamChatRemote(input, agentContext, onToken)
-            }
-            AiAgentMode.FEISHU -> {
-                // FEISHU 模式：聊天页走远程流式推理，与 REMOTE 模式一致
-                streamChatRemote(input, agentContext, onToken)
+            else -> {
+                // LOCAL/REMOTE/FEISHU 统一走本地流式推理
+                streamChatLocal(input, agentContext, onToken)
             }
         }
     }
@@ -409,15 +403,6 @@ class AgentOrchestrator private constructor(context: Context) {
         }
     }
 
-    private suspend fun streamChatRemote(
-        input: String,
-        agentContext: AgentContext,
-        onToken: (String) -> Unit
-    ): Result<StreamChatResult> {
-        return configurator.getRemoteOrchestrator()
-            .processChatStreaming(input, agentContext, onToken)
-    }
-
     /**
      * 将 InferenceResult 保存到 MemoryManager
      */
@@ -487,7 +472,7 @@ class AgentOrchestrator private constructor(context: Context) {
         // 1. 获取当前场景的 Capability 列表
         val capabilities = _capabilityRegistry.getCapabilitiesForCurrentScene()
 
-        // 仅 LOCAL 模式需要 Capability 列表；REMOTE 模式通过云端 LLM 自主编排，不需要本地 Capability
+        // 仅 LOCAL 模式需要 Capability 列表；REMOTE/FEISHU 也使用本地推理
         if (configurator.getAgentMode() == AiAgentMode.LOCAL && capabilities.isEmpty()) {
             Logger.w(tag, "No capabilities available for current scene in LOCAL mode")
             return@withContext Result.success(
@@ -503,7 +488,7 @@ class AgentOrchestrator private constructor(context: Context) {
         val systemPrompt = customSystemPrompt
             ?: configurator.localPromptBuilder.buildSystemPrompt(capabilities, agentContext)
 
-        // 3. 根据模式选择推理引擎
+        // 3. 根据模式选择推理引擎（所有模式统一走本地推理）
         val inferenceResult = when (configurator.getAgentMode()) {
             AiAgentMode.LOCAL -> {
                 // 本地模式：使用 MNN-LLM
@@ -545,11 +530,6 @@ class AgentOrchestrator private constructor(context: Context) {
                     }
                 )
             }
-            AiAgentMode.REMOTE -> {
-                // 远程模式：直接调用 RemoteOrchestrator
-                Logger.d(tag, "Using RemoteOrchestrator for REMOTE mode")
-                configurator.getRemoteOrchestrator().processBatch(input, agentContext)
-            }
             AiAgentMode.OFF -> {
                 Logger.w(tag, "Agent is OFF")
                 return@withContext Result.success(
@@ -560,14 +540,48 @@ class AgentOrchestrator private constructor(context: Context) {
                     )
                 )
             }
-            AiAgentMode.FEISHU -> {
-                // FEISHU 模式：聊天页等场景走远程推理，与 REMOTE 模式一致
-                Logger.d(tag, "Using RemoteOrchestrator for FEISHU mode")
-                configurator.getRemoteOrchestrator().processBatch(input, agentContext)
+            else -> {
+                // REMOTE/FEISHU 模式统一使用本地推理
+                Logger.d(tag, "Using local LLM for ${configurator.getAgentMode()} mode")
+                if (!localLlmEngine.isLoaded) {
+                    val loadResult = tryLoadModel()
+                    if (loadResult.isFailure) {
+                        return@withContext handleModelLoadError(loadResult)
+                    }
+                }
+                val localMessages = memoryManager.buildContextMessages(
+                    agentContext.memorySessionId, systemPrompt, input
+                )
+                val responseResult = try {
+                    Result.success(
+                        localLlmEngine.chat(
+                            LlmChatRequest(
+                                messages = localMessages
+                            )
+                        ).aiMessage.text()
+                    )
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+                return@withContext responseResult.fold(
+                    onSuccess = { rawResponse ->
+                        handleLlmResponse(rawResponse, input, agentContext, pageContext, agentContext.memorySessionId)
+                    },
+                    onFailure = { error ->
+                        Logger.e(tag, "LLM inference failed (mode=${configurator.getAgentMode()})", error)
+                        Result.success(
+                            AgentAction.Error(
+                                commandId = AgentIdGenerator.nextId(),
+                                errorCode = AgentErrorCode.INTERNAL_ERROR,
+                                message = "推理失败：${error.message ?: "未知错误"}"
+                            )
+                        )
+                    }
+                )
             }
         }
 
-        // 4. 处理 InferenceResult（REMOTE 模式）
+        // 4. 处理 InferenceResult
         return@withContext handleInferenceResult(inferenceResult, input, agentContext, pageContext)
     }
 
@@ -682,7 +696,7 @@ class AgentOrchestrator private constructor(context: Context) {
     /**
      * 处理飞书远程控制输入（ReAct 循环）。
      *
-     * 使用 [InAppAgentService] 执行多轮 Observe→Think→Act→Verify 循环，
+     * 使用 [RemoteReActAgent] 执行多轮 Observe→Think→Act→Verify 循环，
      * 通过应用内 UI 自动化工具完成用户请求。
      *
      * @param input 用户自然语言输入
@@ -697,7 +711,7 @@ class AgentOrchestrator private constructor(context: Context) {
     ): Result<String> = withContext(Dispatchers.IO) {
         Logger.d(tag, "processFeishuInput: input='$input', timeout=${timeoutMs}ms")
 
-        val agent = configurator.getFeishuAgent(windowManager, object : InAppAgentCallback {
+        val agent = configurator.getFeishuAgent(windowManager, object : RemoteReActAgentCallback {
             override fun onLoopStart(iteration: Int) {}
             override fun onContent(iteration: Int, content: String) {}
             override fun onToolCall(iteration: Int, toolName: String, args: String) {}
@@ -720,7 +734,7 @@ class AgentOrchestrator private constructor(context: Context) {
             val result = withTimeout(timeoutMs) {
                 suspendCoroutine<String> { continuation ->
                     var executionMetrics: AgentExecutionMetrics? = null
-                    val callback = object : InAppAgentCallback {
+                    val callback = object : RemoteReActAgentCallback {
                         override fun onLoopStart(iteration: Int) {
                             Logger.d(tag, "Feishu ReAct iteration #$iteration")
                         }
