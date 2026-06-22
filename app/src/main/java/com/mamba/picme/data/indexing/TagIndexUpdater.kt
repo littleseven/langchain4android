@@ -58,10 +58,18 @@ class TagIndexUpdater(private val tagDao: TagDao) {
             if (label.isBlank()) continue
             try {
                 val category = classifyTag(label)
-                val tagId = tagDao.insertTag(TagEntity(name = label, category = category))
-                tagDao.insertMediaTag(
-                    MediaTagCrossRef(mediaId = mediaId, tagId = tagId)
-                )
+                // 先查是否已存在，避免 INSERT OR IGNORE 返回 0 导致 FK 约束失败
+                val existing = tagDao.getTagByName(label)
+                val tagId = if (existing != null) {
+                    existing.tagId
+                } else {
+                    tagDao.insertTag(TagEntity(name = label, category = category))
+                }
+                if (tagId > 0) {
+                    tagDao.insertMediaTag(
+                        MediaTagCrossRef(mediaId = mediaId, tagId = tagId)
+                    )
+                }
             } catch (e: Exception) {
                 Logger.w(TAG, "Failed to insert tag '$label': ${e.message}")
             }
