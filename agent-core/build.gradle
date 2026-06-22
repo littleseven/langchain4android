@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.library'
+    id 'maven-publish'
 }
 
 android {
@@ -81,4 +82,17 @@ dependencies {
     // ❌ opennlp-tools
     // ❌ java.net.http.HttpClient（JDK 11+）
     // ❌ ServiceLoader SPI 相关
+}
+
+// ─── Maven Publish（JitPack 需要） ───
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.github.littleseven.langchain4android'
+                artifactId = 'agent-core'
+            }
+        }
+    }
 }
