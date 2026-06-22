@@ -53,8 +53,7 @@ class LocalPromptBuilder(
 - navigate_to: {"method":"navigate_to","params":{"destination":"camera|gallery|settings|debug"}}
 - go_back: {"method":"go_back","params":{}}
 - launch_app: {"method":"launch_app","params":{"package_name":"com.example.app","app_name":"微信"}}
-- open_system_settings: {"method":"open_system_settings","params":{"setting":"wifi|bluetooth|accessibility|display|location|app_notifications"}}
-- perform_accessibility_action: {"method":"perform_accessibility_action","params":{"action":"click|long_click|input|scroll_forward|scroll_backward|back|home|recent","target":{"type":"text|content_desc|resource_id","value":"..."},"params":{"text":"..."}}}
+- open_system_settings: {"method":"open_system_settings","params":{"setting":"wifi|bluetooth|display|location|app_notifications"}}
 - text_reply: {"method":"text_reply","params":{"message":"中文回复"}}
 
 【字段约束】
@@ -69,9 +68,6 @@ class LocalPromptBuilder(
 - 返回/上一页/后退 → go_back
 - 打开微信/启动支付宝/打开淘宝 → launch_app(app_name=应用名)
 - 打开WiFi设置/打开蓝牙设置/打开通知设置 → open_system_settings(setting=wifi|bluetooth|app_notifications)
-- 点击通讯录/点击搜索框/点击发送 → perform_accessibility_action(action=click,target={type:text,value:目标文本})
-- 输入 1234 → perform_accessibility_action(action=input,target={type:class_name,value:android.widget.EditText},params={text:1234})
-- 返回/主页/最近任务 → perform_accessibility_action(action=back|home|recent)
 - 冷调/冷色/冷滤镜/冷调滤镜/冷色滤镜 → filter="COOL"
 - 暖调/暖色/暖滤镜/暖色滤镜/暖调滤镜 → filter="WARM"
 - 复古/怀旧 → filter="VINTAGE"
@@ -111,8 +107,6 @@ class LocalPromptBuilder(
 「你好」→ [{"method":"text_reply","params":{"message":"你好呀，我是小觅"}}]
 「打开微信」→ [{"method":"launch_app","params":{"app_name":"微信"}}]
 「打开WiFi设置」→ [{"method":"open_system_settings","params":{"setting":"wifi"}}]
-「点击通讯录」→ [{"method":"perform_accessibility_action","params":{"action":"click","target":{"type":"text","value":"通讯录"}}}]
-「输入 1234」→ [{"method":"perform_accessibility_action","params":{"action":"input","target":{"type":"class_name","value":"android.widget.EditText"},"params":{"text":"1234"}}}]
 """.trimIndent()
 
     /**
@@ -131,7 +125,7 @@ class LocalPromptBuilder(
      * 聊天/未知场景专用精简 Prompt
      *
      * 避免把相机页的大量美颜/滤镜 schema 和示例塞进小模型上下文，
-     * 让自由聊天和系统控制（打开应用、无障碍等）更稳定。
+     * 让自由聊天和系统控制（打开应用等）更稳定。
      */
     private val chatBasePrompt = """
 你是 PicMe 的 AI 助手小觅（端侧小模型）。
@@ -150,11 +144,10 @@ class LocalPromptBuilder(
 - navigate_to(params.destination=camera|gallery|settings|debug): 页面导航
 - go_back: 返回上一页
 - launch_app(params.package_name|app_name): 打开本机应用
-- open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications): 打开系统设置
-- perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text}): 在其他应用执行无障碍操作
+- open_system_settings(params.setting=wifi|bluetooth|display|location|app_notifications): 打开系统设置
 
 【字段约束】
-- params 只允许：destination, package_name, app_name, setting, action, target, text, message。
+- params 只允许：destination, package_name, app_name, setting, message。
 - 不要输出未定义字段；不需要的参数不要输出。
 - 数字不要加引号，字符串必须加引号。
 
@@ -167,8 +160,6 @@ class LocalPromptBuilder(
 「返回」→ [{"method":"go_back","params":{}}]
 「打开微信」→ [{"method":"launch_app","params":{"app_name":"微信"}}]
 「打开WiFi设置」→ [{"method":"open_system_settings","params":{"setting":"wifi"}}]
-「点击通讯录」→ [{"method":"perform_accessibility_action","params":{"action":"click","target":{"type":"text","value":"通讯录"}}}]
-「输入 1234」→ [{"method":"perform_accessibility_action","params":{"action":"input","target":{"type":"class_name","value":"android.widget.EditText"},"params":{"text":"1234"}}}]
 """.trimIndent()
 
     /**
@@ -321,9 +312,8 @@ class LocalPromptBuilder(
             appendLine("6. 【强制规则】用户输入以'拍照'结尾时，数组最后一个元素必须是{\"method\":\"capture\",\"params\":{} }，绝对不要漏掉。")
             appendLine("7. 闲聊时：[{\"method\":\"text_reply\",\"params\":{\"message\":\"...\"}}]")
             appendLine("8. 导航：navigate_to(params.destination=camera|gallery|settings|debug) 或 go_back")
-            appendLine("9. 系统：launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
-            appendLine("10. 无障碍：perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text})")
-            appendLine("11. 延迟：delay(params.delay_ms)，必须放数组第一个")
+            appendLine("9. 系统：launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|display|location|app_notifications)")
+            appendLine("10. 延迟：delay(params.delay_ms)，必须放数组第一个")
             appendLine()
             appendLine("【语义映射】")
             appendLine("冷色/冷色调/冷滤镜/冷色滤镜/冷调滤镜 -> filter=COOL")
@@ -385,8 +375,6 @@ class LocalPromptBuilder(
             appendLine("拍照 -> [{\"method\":\"capture\",\"params\":{}}]")
             appendLine("打开微信 -> [{\"method\":\"launch_app\",\"params\":{\"app_name\":\"微信\"}}]")
             appendLine("打开WiFi设置 -> [{\"method\":\"open_system_settings\",\"params\":{\"setting\":\"wifi\"}}]")
-            appendLine("点击通讯录 -> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}]")
-            appendLine("输入 1234 -> [{\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"input\",\"target\":{\"type\":\"class_name\",\"value\":\"android.widget.EditText\"},\"params\":{\"text\":\"1234\"}}}] ")
         }
     }
 
@@ -461,8 +449,7 @@ class LocalPromptBuilder(
             }
 
             if (includeSystem) {
-                appendLine("- system: launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
-                appendLine("- accessibility: perform_accessibility_action(params.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, params.target={type,value}, params.params={text})")
+                appendLine("- system: launch_app(params.package_name|app_name), open_system_settings(params.setting=wifi|bluetooth|display|location|app_notifications)")
             }
 
             appendLine("- navigation: navigate_to(params.destination=camera|gallery|settings|debug), go_back")
@@ -473,10 +460,8 @@ class LocalPromptBuilder(
             appendLine("滤镜映射: 冷调/冷色/冷滤镜->COOL; 暖调/暖色/暖滤镜->WARM; 复古/怀旧->VINTAGE; 胶片金->FILM_GOLD; 胶片富士/富士->FILM_FUJI")
             appendLine("导航映射: 去相机/回相机/打开相机/去拍照->params.destination=camera; 去相册/打开相册->params.destination=gallery; 去设置/打开设置->params.destination=settings; 返回/上一页/后退->go_back")
             appendLine("系统映射: 打开微信/启动支付宝/打开淘宝->launch_app(app_name=...); 打开WiFi设置/蓝牙设置/通知设置->open_system_settings(setting=wifi|bluetooth|app_notifications)")
-            appendLine("无障碍映射: 点击目标文本->perform_accessibility_action(action=click,target={type:text,value:目标}); 输入内容->perform_accessibility_action(action=input,target={type:class_name,value:android.widget.EditText},params={text:内容}); 返回/主页/最近任务->perform_accessibility_action(action=back|home|recent)")
             appendLine("导航示例: {\"method\":\"navigate_to\",\"params\":{\"destination\":\"camera\"}}")
             appendLine("系统示例: {\"method\":\"launch_app\",\"params\":{\"app_name\":\"微信\"}}")
-            appendLine("无障碍示例: {\"method\":\"perform_accessibility_action\",\"params\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}")
 
             if (forPlan) {
                 appendLine("Plan 字段约束: step(Int), method(String), params(Object), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")

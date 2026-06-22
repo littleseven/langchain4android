@@ -67,7 +67,6 @@ object ToolCallCommandParser {
             "text_reply" -> parseTextReply(args)
             "launch_app" -> parseLaunchApp(args)
             "open_system_settings" -> parseOpenSystemSettings(args)
-            "perform_accessibility_action" -> parsePerformAccessibilityAction(args)
             // Gallery 命令
             "view_media" -> parseViewMedia(args)
             "delete_media" -> parseDeleteMedia(args)
@@ -188,29 +187,6 @@ object ToolCallCommandParser {
     private fun parseOpenSystemSettings(args: JSONObject): AgentCommand.OpenSystemSettings {
         val setting = args.optString("setting", "")
         return AgentCommand.OpenSystemSettings(setting = setting)
-    }
-
-    private fun parsePerformAccessibilityAction(args: JSONObject): AgentCommand.PerformAccessibilityAction {
-        val action = args.optString("action", "")
-        val targetJson = args.optJSONObject("target")
-        val target = if (targetJson != null) {
-            AgentCommand.AccessibilityTarget(
-                type = targetJson.optString("type", ""),
-                value = targetJson.optString("value", ""),
-                index = targetJson.optInt("index", 0)
-            )
-        } else null
-        val params = mutableMapOf<String, String>()
-        args.optJSONObject("params")?.let { paramsObj ->
-            paramsObj.keys().forEach { key ->
-                params[key] = paramsObj.optString(key, "")
-            }
-        }
-        return AgentCommand.PerformAccessibilityAction(
-            action = action,
-            target = target,
-            params = params
-        )
     }
 
     // ==================== Gallery 命令解析 ====================

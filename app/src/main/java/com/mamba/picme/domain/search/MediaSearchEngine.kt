@@ -2,7 +2,10 @@ package com.mamba.picme.domain.search
 
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.data.local.MediaDao
-import com.mamba.picme.domain.model.AiAgentCommand
+import com.mamba.picme.data.local.dao.LocationDao
+import com.mamba.picme.data.local.dao.OcrWordDao
+import com.mamba.picme.data.local.dao.TagDao
+import com.mamba.picme.domain.model.StructuredFilter
 
 /**
  * 媒体搜索引擎
@@ -14,17 +17,11 @@ import com.mamba.picme.domain.model.AiAgentCommand
  * 搜索结果按匹配相关性排序：标签匹配 > OCR 匹配 > 地名匹配 > 文件名匹配
  */
 class MediaSearchEngine(
-    private val mediaDao: MediaDao
+    private val mediaDao: MediaDao,
+    private val tagDao: TagDao? = null,
+    private val ocrWordDao: OcrWordDao? = null,
+    private val locationDao: LocationDao? = null
 ) {
-
-    companion object {
-        /** 人物语义搜索关键词 */
-        val PEOPLE_SEARCH_KEYWORDS = setOf(
-            "人", "人物", "人脸", "合照", "合影", "自拍", "头像",
-            "people", "person", "face", "portrait", "selfie"
-        )
-    }
-
     /**
      * 执行搜索
      *
@@ -57,7 +54,7 @@ class MediaSearchEngine(
         // 回退：全字段模糊搜索
         val results = mediaDao.searchAll(query).map { it.toDomain() }.toMutableList()
 
-        // 人物关键词回退：加入有人脸的照片
+        // 人物关键词回退
         if (QueryParser.isPeopleSearch(query)) {
             results.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
         }
@@ -66,10 +63,10 @@ class MediaSearchEngine(
     }
 
     /**
-     * 执行结构化过滤
+     * 执行结构化过滤（支持新 DAO 的多维度查询）
      */
     private suspend fun executeFilter(filter: StructuredFilter): List<MediaAsset> {
-        val resultSet = mutableSetOf<MediaAsset>()
+        val resultMap = mutableMapOf<Long, MediaAsset>()
 
         // 时间过滤
         if (filter.timeRange != null) {
@@ -77,51 +74,69 @@ class MediaSearchEngine(
                 filter.timeRange.startMs,
                 filter.timeRange.endMs
             )
-            resultSet.addAll(timeResults.map { it.toDomain() })
-            // 如果时间匹配结果为空，提前返回
-            if (resultSet.isEmpty() && filter.keywords.isEmpty()) return emptyList()
-        }
-
-        // 关键词搜索（标签 + OCR + 地名 + 文件名）
-        if (filter.keywords.isNotEmpty()) {
-            // 检查是否包含人物语义关键词
-            val hasPeopleKeyword = filter.keywords.any { it in PEOPLE_SEARCH_KEYWORDS }
-
-            for (keyword in filter.keywords) {
-                val labelResults = mediaDao.searchByLabel(keyword)
-                val ocrResults = mediaDao.searchByOcrText(keyword)
-                val locationResults = mediaDao.searchByLocation(keyword)
-                val nameResults = mediaDao.searchByFileName(keyword)
-
-                resultSet.addAll(labelResults.map { it.toDomain() })
-                resultSet.addAll(ocrResults.map { it.toDomain() })
-                resultSet.addAll(locationResults.map { it.toDomain() })
-                resultSet.addAll(nameResults.map { it.toDomain() })
-            }
-
-            // 人物语义关键词：额外返回所有有人脸的照片
-            if (hasPeopleKeyword) {
-                resultSet.addAll(mediaDao.searchByHasFace().map { it.toDomain() })
+            for (entity in timeResults) {
+                resultMap[entity.id] = entity.toDomain()
             }
         }
 
-        // 如果只有关键词没有时间范围 → 纯关键词匹配
-        if (filter.timeRange == null) {
-            return resultSet
-                .sortedByDescending { it.captureDate }
+        // 内容关键词搜索（标签 + OCR + 文件名）
+        for (keyword in filter.keywords) {
+            // 新 DAO 路径（优先）
+            if (tagDao != null) {
+                val tagResults = tagDao.searchByExactTag(keyword)
+                for (entity in tagResults) { resultMap[entity.id] = entity.toDomain() }
+            }
+            if (ocrWordDao != null) {
+                val wordResults = ocrWordDao.searchByWordPrefix(keyword.lowercase())
+                for (entity in wordResults) { resultMap[entity.id] = entity.toDomain() }
+            }
+
+            // Legacy LIKE 路径（兼容）
+            val labelResults = mediaDao.searchByLabel(keyword)
+            val ocrResults = mediaDao.searchByOcrText(keyword)
+            val nameResults = mediaDao.searchByFileName(keyword)
+            for (entity in labelResults + ocrResults + nameResults) {
+                resultMap[entity.id] = entity.toDomain()
+            }
         }
 
-        // 时间 + 关键词组合：取交集（都有结果时）或关键词优先
-        val keywordResults = resultSet
-            .sortedByDescending { it.captureDate }
+        // OCR 关键词（来自 LLM 的独立 OCR 维度）
+        for (keyword in filter.ocrKeywords) {
+            if (ocrWordDao != null) {
+                val wordResults = ocrWordDao.searchByExactWord(keyword.lowercase())
+                for (entity in wordResults) { resultMap[entity.id] = entity.toDomain() }
+            }
+            val ocrResults = mediaDao.searchByOcrText(keyword)
+            for (entity in ocrResults) { resultMap[entity.id] = entity.toDomain() }
+        }
 
-        return keywordResults
+        // 地点关键词搜索
+        for (keyword in filter.locationKeywords) {
+            if (locationDao != null) {
+                val locResults = locationDao.searchByPlace(keyword)
+                for (entity in locResults) { resultMap[entity.id] = entity.toDomain() }
+            }
+            val locResults = mediaDao.searchByLocation(keyword)
+            for (entity in locResults) { resultMap[entity.id] = entity.toDomain() }
+        }
+
+        // 人脸过滤
+        if (filter.hasFaces == true) {
+            val faceResults = mediaDao.searchByHasFace()
+            for (entity in faceResults) { resultMap[entity.id] = entity.toDomain() }
+        }
+
+        // 人物关键词回退
+        if (filter.keywords.any { it in PEOPLE_SEARCH_KEYWORDS }) {
+            val faceResults = mediaDao.searchByHasFace()
+            for (entity in faceResults) { resultMap[entity.id] = entity.toDomain() }
+        }
+
+        return resultMap.values.sortedByDescending { it.captureDate }
     }
 
     /**
      * LLM 结构化查询模板
-     *
-     * 发送给 LLM 的 prompt，要求将 NL 转为结构化过滤条件
      */
     fun buildLlmSearchPrompt(query: String): String {
         return """
@@ -133,6 +148,9 @@ class MediaSearchEngine(
 {
   "timeRange": {"startMs": 开始时间戳毫秒, "endMs": 结束时间戳毫秒} 或 null,
   "keywords": ["关键词1", "关键词2"],
+  "ocrKeywords": ["OCR文字关键词"],
+  "locationKeywords": ["地点关键词"],
+  "hasFaces": true/false/null,
   "explanation": "解释你是如何理解这个查询的"
 }
 
@@ -140,7 +158,9 @@ class MediaSearchEngine(
 
 注意：
 - 时间词示例："去年"→${QueryParser.currentYear - 1}年，"夏天"→6-8月
-- 关键词应为具体的物体、地点、人物等
+- keywords 是场景/物体/标签关键词
+- ocrKeywords 是图片中可能出现的文字
+- locationKeywords 是地名（城市、区域）
 - 只返回 JSON，不要其他文字
 """.trimIndent()
     }
@@ -159,7 +179,7 @@ class MediaSearchEngine(
 
             val timeObj = obj.optJSONObject("timeRange")
             val timeRange = if (timeObj != null) {
-                TimeRange(
+                com.mamba.picme.domain.model.TimeRange(
                     startMs = timeObj.optLong("startMs", 0),
                     endMs = timeObj.optLong("endMs", 0)
                 )
@@ -170,15 +190,37 @@ class MediaSearchEngine(
                 (0 until keywordsArr.length()).map { keywordsArr.getString(it) }
             } else emptyList()
 
+            val ocrArr = obj.optJSONArray("ocrKeywords")
+            val ocrKeywords = if (ocrArr != null) {
+                (0 until ocrArr.length()).map { ocrArr.getString(it) }
+            } else emptyList()
+
+            val locArr = obj.optJSONArray("locationKeywords")
+            val locationKeywords = if (locArr != null) {
+                (0 until locArr.length()).map { locArr.getString(it) }
+            } else emptyList()
+
+            val hasFaces = if (obj.has("hasFaces")) obj.optBoolean("hasFaces") else null
+
             StructuredFilter(
                 timeRange = timeRange,
                 keywords = keywords,
-                originalQuery = llmResponse,
+                ocrKeywords = ocrKeywords,
+                locationKeywords = locationKeywords,
+                hasFaces = hasFaces,
                 needsLlm = false
             )
         } catch (e: Exception) {
             null
         }
+    }
+
+    companion object {
+        /** 人物语义搜索关键词 */
+        val PEOPLE_SEARCH_KEYWORDS = setOf(
+            "人", "人物", "人脸", "合照", "合影", "自拍", "头像",
+            "people", "person", "face", "portrait", "selfie"
+        )
     }
 }
 

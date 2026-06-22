@@ -9,6 +9,7 @@ import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.domain.search.MediaSearchEngine
+import com.mamba.picme.domain.search.QueryBuilder
 import java.lang.ref.WeakReference
 
 /**
@@ -44,6 +45,11 @@ class GalleryCapability : BaseCapability() {
      * 搜索引擎（由 AppContainer 注入）
      */
     var searchEngine: MediaSearchEngine? = null
+
+    /**
+     * 跨维度查询构建器（由 AppContainer 注入）
+     */
+    var queryBuilder: QueryBuilder? = null
 
     /**
      * 相册操作委托接口

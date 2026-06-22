@@ -66,8 +66,6 @@ import com.mamba.picme.features.common.chat.rememberAgentChatConfig
 import com.mamba.picme.features.settings.agent.SettingsAgentPanel
 import com.mamba.picme.features.settings.agent.rememberSettingsAgentIntegration
 import com.mamba.picme.features.settings.capability.SettingsCapability
-import com.mamba.picme.service.accessibility.AccessibilityController
-import com.mamba.picme.service.accessibility.PicMeAccessibilityService
 import com.mamba.picme.service.chat.FloatingChatBubbleService
 import com.mamba.picme.util.permission.BatteryOptimizationUtils
 import com.mamba.picme.util.permission.MiuiPermissionUtils
@@ -445,66 +443,8 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // AI 跨应用控制（无障碍）
-            val context = LocalContext.current
-            var isAccessibilityEnabled by remember {
-                mutableStateOf(AccessibilityController.isServiceConnected())
-            }
-            var showAccessibilityPrivacyDialog by remember { mutableStateOf(false) }
-
-            LaunchedEffect(Unit) {
-                while (true) {
-                    isAccessibilityEnabled = AccessibilityController.isServiceConnected()
-                    kotlinx.coroutines.delay(1000)
-                }
-            }
-
-            SettingsSection(
-                title = stringResource(R.string.settings_accessibility_title),
-                description = stringResource(R.string.settings_accessibility_summary)
-            ) {
-                SettingsClickableRow(
-                    title = stringResource(R.string.settings_accessibility_title),
-                    subtitle = stringResource(R.string.settings_accessibility_summary),
-                    valueText = stringResource(
-                        if (isAccessibilityEnabled) R.string.settings_accessibility_enabled else R.string.settings_accessibility_disabled
-                    ),
-                    onClick = {
-                        if (!isAccessibilityEnabled) {
-                            showAccessibilityPrivacyDialog = true
-                        } else {
-                            context.startActivity(PicMeAccessibilityService.openSettingsIntent())
-                        }
-                    }
-                )
-            }
-
-            if (showAccessibilityPrivacyDialog) {
-                AlertDialog(
-                    onDismissRequest = { showAccessibilityPrivacyDialog = false },
-                    title = { Text(stringResource(R.string.dialog_accessibility_privacy_title)) },
-                    text = { Text(stringResource(R.string.dialog_accessibility_privacy_message)) },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showAccessibilityPrivacyDialog = false
-                                context.startActivity(PicMeAccessibilityService.openSettingsIntent())
-                            }
-                        ) {
-                            Text(stringResource(R.string.ok))
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showAccessibilityPrivacyDialog = false }) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
             // 全局悬浮聊天入口
+            val context = LocalContext.current
             var isFloatingChatRunning by remember {
                 mutableStateOf(FloatingChatBubbleService.isRunning(context))
             }

@@ -58,7 +58,6 @@ import com.mamba.picme.agent.core.runtime.state.SceneManager
 import com.mamba.picme.domain.agent.ComposeCapabilityHost
 import com.mamba.picme.domain.agent.GlobalCapabilityHost
 import com.mamba.picme.domain.agent.LocalCapabilityHost
-import com.mamba.picme.domain.agent.capability.AccessibilityCapability
 import com.mamba.picme.domain.agent.capability.NavigationCapability
 import com.mamba.picme.domain.agent.capability.SystemCapability
 import com.mamba.picme.testing.agent.bridge.TestEntryPoint
@@ -130,15 +129,13 @@ class MainActivity : ComponentActivity() {
                 PicMeTheme(themeMode = themeMode) {
                     val navController = rememberNavController()
 
-                    // 创建 Activity 级 CapabilityHost，注入 NavigationCapability、SystemCapability、AccessibilityCapability
+                    // 创建 Activity 级 CapabilityHost，注入 NavigationCapability、SystemCapability
                     val navigationCapability = remember { NavigationCapability(navController) }
                     val systemCapability = remember { SystemCapability(applicationContext) }
-                    val accessibilityCapability = remember { AccessibilityCapability() }
                     val rootCapabilityHost = remember {
                         ComposeCapabilityHost().apply {
                             register(navigationCapability)
                             register(systemCapability)
-                            register(accessibilityCapability)
                         }
                     }
 

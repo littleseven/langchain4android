@@ -192,8 +192,7 @@ class RemotePromptBuilder(
             }
 
             if (includeSystem) {
-                appendLine("- system: launch_app(arguments.package_name|app_name), open_system_settings(arguments.setting=wifi|bluetooth|accessibility|display|location|app_notifications)")
-                appendLine("- accessibility: perform_accessibility_action(arguments.action=click|long_click|input|scroll_forward|scroll_backward|back|home|recent, arguments.target={type,value}, arguments.params={text})")
+                appendLine("- system: launch_app(arguments.package_name|app_name), open_system_settings(arguments.setting=wifi|bluetooth|display|location|app_notifications)")
             }
 
             appendLine("- navigation: navigate_to(arguments.destination=camera|gallery|settings|debug), go_back")
@@ -204,10 +203,8 @@ class RemotePromptBuilder(
             appendLine("滤镜映射: 冷调/冷色/冷滤镜->COOL; 暖调/暖色/暖滤镜->WARM; 复古/怀旧->VINTAGE; 胶片金->FILM_GOLD; 胶片富士/富士->FILM_FUJI")
             appendLine("导航映射: 去相机/回相机/打开相机/去拍照->arguments.destination=camera; 去相册/打开相册->arguments.destination=gallery; 去设置/打开设置->arguments.destination=settings; 返回/上一页/后退->go_back")
             appendLine("系统映射: 打开微信/启动支付宝/打开淘宝->launch_app(app_name=...); 打开WiFi设置/蓝牙设置/通知设置->open_system_settings(setting=wifi|bluetooth|app_notifications)")
-            appendLine("无障碍映射: 点击目标文本->perform_accessibility_action(action=click,target={type:text,value:目标}); 输入内容->perform_accessibility_action(action=input,target={type:class_name,value:android.widget.EditText},params={text:内容}); 返回/主页/最近任务->perform_accessibility_action(action=back|home|recent)")
             appendLine("导航示例: {\"name\":\"navigate_to\",\"arguments\":{\"destination\":\"camera\"}}")
             appendLine("系统示例: {\"name\":\"launch_app\",\"arguments\":{\"app_name\":\"微信\"}}")
-            appendLine("无障碍示例: {\"name\":\"perform_accessibility_action\",\"arguments\":{\"action\":\"click\",\"target\":{\"type\":\"text\",\"value\":\"通讯录\"}}}")
 
             if (forPlan) {
                 appendLine("Plan 字段约束: step(Int), command(Object{name,arguments}), condition(String|null), wait_condition(Object|null), repeat_count(Int>=1), description(String), delayMs(Long>=0)")

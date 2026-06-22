@@ -4,11 +4,36 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.mamba.picme.data.local.dao.FtsSearchDao
+import com.mamba.picme.data.local.dao.LocationDao
+import com.mamba.picme.data.local.dao.OcrWordDao
+import com.mamba.picme.data.local.dao.PersonDao
+import com.mamba.picme.data.local.dao.TagDao
+import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
+import com.mamba.picme.data.local.entity.LocationHierarchyEntity
+import com.mamba.picme.data.local.entity.MediaLocationEntity
+import com.mamba.picme.data.local.entity.MediaTagCrossRef
+import com.mamba.picme.data.local.entity.OcrWordEntity
+import com.mamba.picme.data.local.entity.OcrWordOccurrence
+import com.mamba.picme.data.local.entity.PersonEntity
+import com.mamba.picme.data.local.entity.TagEntity
 import com.mamba.picme.data.model.MediaEntity
 
 @Database(
-    entities = [MediaEntity::class, ChatMessageEntity::class, ChatSessionEntity::class],
-    version = 6,
+    entities = [
+        MediaEntity::class,
+        ChatMessageEntity::class,
+        ChatSessionEntity::class,
+        PersonEntity::class,
+        FaceEmbeddingEntity::class,
+        TagEntity::class,
+        MediaTagCrossRef::class,
+        OcrWordEntity::class,
+        OcrWordOccurrence::class,
+        LocationHierarchyEntity::class,
+        MediaLocationEntity::class
+    ],
+    version = 1,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -16,6 +41,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun chatSessionDao(): ChatSessionDao
+    abstract fun tagDao(): TagDao
+    abstract fun ocrWordDao(): OcrWordDao
+    abstract fun personDao(): PersonDao
+    abstract fun locationDao(): LocationDao
+    abstract fun ftsSearchDao(): FtsSearchDao
 
     companion object {
         @Volatile
@@ -28,10 +58,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "picme_database"
                 )
-                    .addMigrations(
-                        ChatDatabaseMigrations.MIGRATION_4_5,
-                        ChatDatabaseMigrations.MIGRATION_5_6
-                    )
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

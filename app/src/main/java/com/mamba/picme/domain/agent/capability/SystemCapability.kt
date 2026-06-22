@@ -41,7 +41,7 @@ class SystemCapability(
 
     override fun getCommandDescription(command: String): String = when (command) {
         "launch_app" -> "启动应用，参数: package_name (可选), app_name (可选)"
-        "open_system_settings" -> "打开系统设置，参数: setting (wifi|bluetooth|accessibility|display|location|app_notifications)"
+        "open_system_settings" -> "打开系统设置，参数: setting (wifi|bluetooth|display|location|app_notifications)"
         else -> "未知命令"
     }
 
@@ -192,7 +192,6 @@ class SystemCapability(
         val intent = when (command.setting.lowercase()) {
             "wifi" -> Intent(Settings.ACTION_WIFI_SETTINGS)
             "bluetooth" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-            "accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             "display" -> Intent(Settings.ACTION_DISPLAY_SETTINGS)
             "location" -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
             "app_notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {

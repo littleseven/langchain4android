@@ -85,7 +85,6 @@ import com.mamba.picme.MainActivity
 import com.mamba.picme.PicMeApplication
 import com.mamba.picme.R
 import com.mamba.picme.core.common.Logger
-import com.mamba.picme.domain.agent.capability.AccessibilityCapability
 import com.mamba.picme.domain.agent.capability.SystemCapability
 import com.mamba.picme.features.chat.ChatMessageType
 import com.mamba.picme.features.chat.ChatMessageUi
@@ -102,7 +101,7 @@ import kotlinx.coroutines.launch
  * 职责：
  * - 以 Foreground Service 形式持有悬浮窗（气泡 + 可展开面板）
  * - 复用 [ChatViewModel] 与 Agent 编排器，保持与 Chat 页面一致的体验
- * - 注册系统/无障碍 Capability，使用户可通过自然语言控制本机应用
+ * - 注册系统 Capability，使用户可通过自然语言控制本机设置
  *
  * 注意：
  * - 需要 [Settings.ACTION_MANAGE_OVERLAY_PERMISSION] 权限
@@ -167,13 +166,12 @@ class FloatingChatBubbleService : Service() {
     }
 
     /**
-     * 注册全局 Capability，确保悬浮窗外也能执行系统/无障碍命令。
+     * 注册全局 Capability，确保悬浮窗外也能执行系统命令。
      */
     private fun registerCapabilities() {
         val orchestrator = com.mamba.picme.agent.core.facade.AgentOrchestrator.getInstance(this)
         orchestrator.registerCapability(SystemCapability(this))
-        orchestrator.registerCapability(AccessibilityCapability())
-        Logger.d(TAG, "Registered system + accessibility capabilities for floating chat")
+        Logger.d(TAG, "Registered system capability for floating chat")
     }
 
     /**

@@ -10,17 +10,21 @@ import com.mamba.picme.core.image.GpuBeautyProcessor
 import com.mamba.picme.core.image.ImageProcessor
 import com.mamba.picme.core.image.ImageProcessorImpl
 import com.mamba.picme.core.common.Logger
+import com.mamba.picme.core.image.ThumbnailPrefetcher
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.beauty.api.facedetect.FaceDetector
 import com.mamba.picme.beauty.api.facedetect.FaceDetectorFactory
 import com.mamba.picme.data.local.MlKitOcrProcessor
 import com.mamba.picme.data.indexing.FaceClusteringWorker
+import com.mamba.picme.data.indexing.IndexingTaskQueue
 import com.mamba.picme.data.indexing.MediaIndexingWorker
+import com.mamba.picme.data.indexing.MediaStoreObserver
 import com.mamba.picme.data.preferences.UserPreferencesRepository
 import com.mamba.picme.data.repository.MediaRepositoryImpl
 import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.domain.repository.UserSettingsRepository
 import com.mamba.picme.domain.search.MediaSearchEngine
+import com.mamba.picme.domain.search.QueryBuilder
 import com.mamba.picme.data.download.LlmModelDownloadManager
 import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase
@@ -79,13 +83,20 @@ interface AppContainer {
     val imageProcessor: ImageProcessor
     val faceDetector: FaceDetector
     val llmModelDownloadManager: LlmModelDownloadManager
-    val kwsEngine: KeywordSpotterEngine?  // 【新增】KWS 唤醒词引擎（可选）
-    val mediaSearchEngine: MediaSearchEngine  // 媒体搜索引擎（自然语言图片搜索）
-    val mediaIndexingWorker: MediaIndexingWorker  // 媒体元数据索引器
-    val faceClusteringWorker: FaceClusteringWorker  // 人脸聚类
+    val kwsEngine: KeywordSpotterEngine?
+    val mediaSearchEngine: MediaSearchEngine
+    val mediaIndexingWorker: MediaIndexingWorker
+    val faceClusteringWorker: FaceClusteringWorker
+    /** 跨维度查询构建器（LLM 意图 → Room 查询） */
+    val queryBuilder: QueryBuilder
+    /** 缩略图预加载器 */
+    val thumbnailPrefetcher: ThumbnailPrefetcher
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
     fun createChatViewModelFactory(): ViewModelProvider.Factory
+
+    /** 创建 MediaStoreObserver（需要 ContentResolver，按需创建） */
+    fun createMediaStoreObserver(onChange: (List<com.mamba.picme.data.indexing.MediaChangeEvent>) -> Unit): MediaStoreObserver
 }
 
 class AppContainerImpl(private val context: Context) : AppContainer {
@@ -94,7 +105,26 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     /** 媒体搜索引擎（自然语言图片搜索） */
     override val mediaSearchEngine: MediaSearchEngine by lazy {
-        MediaSearchEngine(database.mediaDao())
+        MediaSearchEngine(database.mediaDao(), database.tagDao(), database.ocrWordDao(), database.locationDao())
+    }
+
+    /** 跨维度查询构建器 */
+    override val queryBuilder: QueryBuilder by lazy {
+        QueryBuilder(
+            mediaDao = database.mediaDao(),
+            tagDao = database.tagDao(),
+            ocrWordDao = database.ocrWordDao(),
+            personDao = database.personDao(),
+            locationDao = database.locationDao()
+        )
+    }
+
+    /** 缩略图预加载器 */
+    override val thumbnailPrefetcher: ThumbnailPrefetcher by lazy {
+        ThumbnailPrefetcher(
+            imageLoader = coil.Coil.imageLoader(context),
+            context = context
+        )
     }
 
     /** 媒体元数据索引器（ML Kit 标签+OCR+EXIF） */
@@ -105,6 +135,19 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     /** 人脸聚类器（面部几何特征 + DBSCAN） */
     override val faceClusteringWorker: FaceClusteringWorker by lazy {
         FaceClusteringWorker(context)
+    }
+
+    /**
+     * 创建 MediaStoreObserver。
+     * 每次调用创建新实例，生命周期由调用方管理。
+     */
+    override fun createMediaStoreObserver(
+        onChange: (List<com.mamba.picme.data.indexing.MediaChangeEvent>) -> Unit
+    ): MediaStoreObserver {
+        return MediaStoreObserver(
+            contentResolver = context.contentResolver,
+            onChange = onChange
+        )
     }
 
     /**
@@ -141,7 +184,7 @@ class AppContainerImpl(private val context: Context) : AppContainer {
     }
 
     /**
-     * 【新增】KWS 唤醒词引擎（sherpa-onnx 版）
+     * KWS 唤醒词引擎（sherpa-onnx 版）
      *
      * 用于低功耗的 always-on 唤醒词检测。
      * 【重要】不允许自动降级，如果 KWS 初始化失败就直接抛异常！
@@ -151,17 +194,10 @@ class AppContainerImpl(private val context: Context) : AppContainer {
      * 支持灵活扩展新模型，只需在 ModelPathConfig 中添加配置。
      */
     override val kwsEngine: KeywordSpotterEngine? by lazy {
-        // KWS 引擎初始化：必须成功，否则抛异常
-        // 【强制要求】不允许任何自动降级或 fallback
-
         val kwsModelDir = ModelPathConfig.getKwsModelDir(context)
         Logger.i("AppContainer", "【KWS 初始化】Starting KWS engine initialization...")
         Logger.i("AppContainer", "  Model path: ${kwsModelDir.absolutePath}")
 
-        // 【安全保护】在调用 native 构造前，先验证模型文件完整性
-        // KeywordSpotter(null, config) 内部会启动 ONNX Runtime 线程池，
-        // 如果模型不兼容或损坏，native 层会触发 FORTIFY pthread_mutex_lock
-        // on destroyed mutex 崩溃（SIGABRT），此崩溃不可被 Kotlin try-catch 捕获。
         val missingFiles = ModelPathConfig.getMissingFiles(kwsModelDir, ModelPathConfig.KWS_MODEL_FILES)
         if (missingFiles.isNotEmpty()) {
             val errorMsg = buildString {
@@ -176,7 +212,6 @@ class AppContainerImpl(private val context: Context) : AppContainer {
             return@lazy null
         }
 
-        // 【安全保护】验证模型文件非空（损坏文件可能导致 native crash）
         val emptyFiles = ModelPathConfig.KWS_MODEL_FILES.filter { fileName ->
             val file = java.io.File(kwsModelDir, fileName)
             file.exists() && file.length() == 0L
@@ -195,7 +230,6 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         Logger.i("AppContainer", "✓ KWS model files validated, creating KeywordSpotterEngine...")
         val kwsEngine = KeywordSpotterEngine(kwsModelDir.absolutePath)
 
-        // 检查模型可用性（内部调用 KeywordSpotter native 构造）
         if (!kwsEngine.isAvailable()) {
             val errorMsg = buildString {
                 append("❌ KWS 引擎初始化失败 - native 构造返回不可用\n")

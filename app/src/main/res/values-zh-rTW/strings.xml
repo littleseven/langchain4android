@@ -392,15 +392,6 @@
     <string name="essential_models_download_later">暫不下載</string>
     <string name="essential_models_download_progress">正在下載…</string>
 
-    <!-- 無障礙服務 -->
-    <string name="accessibility_service_label">PicMe AI 助手</string>
-    <string name="accessibility_service_description">僅用於執行你在其他 App 中明確要求的操作，例如點擊、輸入、滑動、返回。不會記錄或上傳任何螢幕內容。</string>
-    <string name="settings_accessibility_title">AI 跨應用控制</string>
-    <string name="settings_accessibility_summary">開啟後，AI 助手可在其他 App 中執行點擊、輸入、滑動等操作。</string>
-    <string name="settings_accessibility_enabled">已開啟</string>
-    <string name="settings_accessibility_disabled">未開啟</string>
-    <string name="dialog_accessibility_privacy_title">無障礙權限說明</string>
-    <string name="dialog_accessibility_privacy_message">PicMe 僅在你主動發出指令時，使用無障礙服務在其他 App 中執行操作。我們不會讀取或上傳你的密碼、聊天記錄等敏感內容。你可以隨時在系統設定中關閉該服務。</string>
 
     <!-- 懸浮聊天入口 -->
     <string name="floating_chat_title">AI 聊天</string>
@@ -427,5 +418,24 @@
     <string name="settings_miui_permission_editor_title">MIUI 應用權限管理</string>
     <string name="settings_miui_permission_editor_summary">為 PicMe 開啟「顯示懸浮窗」和「背景彈出介面」。</string>
     <string name="settings_miui_action_open">去開啟</string>
+
+    <!-- 智慧型相簿索引 -->
+    <string name="gallery_group_tag">按標籤</string>
+    <string name="gallery_group_location">按地點</string>
+    <string name="gallery_group_ocr">按文字</string>
+    <string name="gallery_group_person">按人物</string>
+    <string name="gallery_index_status">已索引 %1$d / 共 %2$d 張</string>
+    <string name="gallery_index_in_progress">正在索引照片…</string>
+    <string name="gallery_index_complete">索引完成</string>
+    <string name="gallery_search_hint">按內容、地點、文字搜尋…</string>
+    <string name="gallery_search_no_results">未找到相關照片</string>
+    <string name="gallery_tag_category_scene">場景</string>
+    <string name="gallery_tag_category_animal">動物</string>
+    <string name="gallery_tag_category_food">食物</string>
+    <string name="gallery_tag_category_person">人物</string>
+    <string name="gallery_tag_category_object">物體</string>
+    <string name="gallery_tag_category_other">其他</string>
+    <string name="gallery_face_clustering">正在分群人臉…</string>
+    <string name="gallery_face_clustering_done">發現 %1$d 個人物</string>
 
 </resources>

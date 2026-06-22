@@ -96,6 +96,8 @@ class PicMeApplication : Application(), ImageLoaderFactory {
 
         // 注入媒体搜索引擎到 GalleryCapability（自然语言图片搜索）
         GalleryCapability.getInstance().searchEngine = container.mediaSearchEngine
+        // 注入跨维度查询构建器（LLM 意图 → 多维度 Room 查询）
+        GalleryCapability.getInstance().queryBuilder = container.queryBuilder
 
         // 初始化人脸关键点适配器注册表
         FaceLandmarkAdapterRegistry.initDefaults()

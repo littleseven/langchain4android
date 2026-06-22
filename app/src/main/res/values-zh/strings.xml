@@ -203,15 +203,6 @@
     <string name="essential_models_download_later">暂不下载</string>
     <string name="essential_models_download_progress">正在下载…</string>
 
-    <!-- 无障碍服务 -->
-    <string name="accessibility_service_label">PicMe AI 助手</string>
-    <string name="accessibility_service_description">仅用于执行你在其他 App 中明确要求的操作，例如点击、输入、滑动、返回。不会记录或上传任何屏幕内容。</string>
-    <string name="settings_accessibility_title">AI 跨应用控制</string>
-    <string name="settings_accessibility_summary">开启后，AI 助手可在其他 App 中执行点击、输入、滑动等操作。</string>
-    <string name="settings_accessibility_enabled">已开启</string>
-    <string name="settings_accessibility_disabled">未开启</string>
-    <string name="dialog_accessibility_privacy_title">无障碍权限说明</string>
-    <string name="dialog_accessibility_privacy_message">PicMe 仅在你主动发出指令时，使用无障碍服务在其他 App 中执行操作。我们不会读取或上传你的密码、聊天记录等敏感内容。你可以随时在系统设置中关闭该服务。</string>
 
     <!-- 悬浮聊天入口 -->
     <string name="floating_chat_title">AI 聊天</string>

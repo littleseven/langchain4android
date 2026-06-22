@@ -440,29 +440,6 @@ object LocalCommandParser {
                 AgentCommand.OpenSystemSettings(commandId = commandId, setting = setting)
             }
 
-            // ===== 无障碍动作命令 =====
-            "perform_accessibility_action" -> {
-                val action = extractJsonField(json, "action") ?: ""
-                val targetJson = extractJsonObject(json, "target")
-                val target = if (targetJson != null) {
-                    AgentCommand.AccessibilityTarget(
-                        type = extractJsonField(targetJson, "type") ?: "",
-                        value = extractJsonField(targetJson, "value") ?: "",
-                        index = extractJsonInt(targetJson, "index") ?: 0
-                    )
-                } else {
-                    null
-                }
-                val paramsJson = extractJsonObject(json, "params")
-                val params = if (paramsJson != null) parseStringMap(paramsJson) else emptyMap()
-                AgentCommand.PerformAccessibilityAction(
-                    commandId = commandId,
-                    action = action,
-                    target = target,
-                    params = params
-                )
-            }
-
             // ===== 默认文本回复 =====
             else -> {
                 val message = extractJsonField(json, "message")

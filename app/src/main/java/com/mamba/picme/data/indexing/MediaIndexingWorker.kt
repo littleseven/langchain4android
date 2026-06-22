@@ -5,6 +5,9 @@ import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.AppDatabase
+import com.mamba.picme.data.local.dao.LocationDao
+import com.mamba.picme.data.local.dao.OcrWordDao
+import com.mamba.picme.data.local.dao.TagDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,7 +21,11 @@ import kotlinx.coroutines.launch
  * 后台扫描未索引的图片（indexedAt IS NULL），
  * 提取 ML Kit 标签、OCR 文字、GPS 位置并写入 Room DB。
  *
- * 批量处理（每批 20 张），支持断点续扫（indexedAt 字段保证）。
+ * 支持两种模式：
+ * - 全量模式：扫描所有 indexedAt IS NULL 的记录
+ * - 增量模式：处理指定的 URI 列表（由 [MediaStoreObserver] 触发）
+ *
+ * 批量处理（每批 20 张），支持断点续扫。
  * 使用协程后台执行，不阻塞主线程。
  */
 class MediaIndexingWorker(private val context: Context) {
@@ -36,7 +43,7 @@ class MediaIndexingWorker(private val context: Context) {
         get() = currentJob?.isActive == true
 
     /**
-     * 启动后台索引（如已有任务运行则忽略）
+     * 启动全量后台索引（如已有任务运行则忽略）
      */
     fun start() {
         if (currentJob?.isActive == true) {
@@ -44,29 +51,203 @@ class MediaIndexingWorker(private val context: Context) {
             return
         }
         currentJob = scope.launch {
-            Logger.i(TAG, "Indexing started")
-            doIndex()
-            Logger.i(TAG, "Indexing completed")
+            Logger.i(TAG, "Full indexing started")
+            doFullIndex()
+            Logger.i(TAG, "Full indexing completed")
         }
     }
 
     /**
-     * 等待 ML Kit 标注模型就绪
-     * Play Services thin client 首次使用时需要下载模型（~5MB），
-     * 最多等待 30 秒，每 3 秒重试一次。
+     * 增量索引：处理 [MediaStoreObserver] 捕获的变更事件
+     *
+     * @param uris 变更的媒体 URI 列表
      */
+    fun indexIncremental(uris: List<Uri>) {
+        scope.launch {
+            Logger.d(TAG, "Incremental indexing: ${uris.size} URIs")
+            for (uri in uris) {
+                if (currentJob?.isActive != true && currentJob != null) break
+                try {
+                    indexSingleUri(uri)
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Incremental index failed for $uri: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * 取消正在运行的索引
+     */
+    fun cancel() {
+        currentJob?.cancel()
+        Logger.i(TAG, "Indexing cancelled")
+    }
+
+    // ── 全量索引 ──────────────────────────────────────────
+
+    private suspend fun doFullIndex() {
+        val db = AppDatabase.getDatabase(context)
+        val dao = db.mediaDao()
+
+        if (!waitForModelReady()) {
+            Logger.w(TAG, "ML Kit model not ready, deferring indexing")
+            return
+        }
+
+        val extractor = MetadataExtractor(context)
+        val ocrIndexUpdater = OcrIndexUpdater(db.ocrWordDao())
+        val tagIndexUpdater = TagIndexUpdater(db.tagDao())
+        val locationIndexUpdater = LocationIndexUpdater(db.locationDao())
+
+        try {
+            var indexedCount = 0
+            var cancelled = false
+            while (!cancelled) {
+                val batch = dao.getUnindexedMedia().take(BATCH_SIZE)
+                if (batch.isEmpty()) {
+                    Logger.i(TAG, "All media indexed, total: $indexedCount")
+                    break
+                }
+
+                for (entity in batch) {
+                    if (currentJob?.isActive != true) {
+                        cancelled = true
+                        break
+                    }
+
+                    try {
+                        val uri = Uri.parse(entity.uri)
+                        val inputImage = InputImage.fromFilePath(context, uri)
+                        val result = extractor.extract(uri, inputImage)
+
+                        val now = System.currentTimeMillis()
+                        dao.updateIndexResult(
+                            mediaId = entity.id,
+                            labels = result.labelsJson,
+                            ocrText = result.ocrText,
+                            latitude = result.latitude,
+                            longitude = result.longitude,
+                            locationName = result.locationName,
+                            indexedAt = now
+                        )
+
+                        // 同步更新规范化索引表
+                        tagIndexUpdater.updateIndex(entity.id, result.labelsJson)
+                        locationIndexUpdater.updateIndex(
+                            mediaId = entity.id,
+                            latitude = result.latitude,
+                            longitude = result.longitude,
+                            locationName = result.locationName
+                        )
+                        if (!result.ocrText.isNullOrBlank()) {
+                            ocrIndexUpdater.updateIndex(entity.id, result.ocrText)
+                        }
+
+                        indexedCount++
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Index failed for media ${entity.id}: ${e.message}")
+                        dao.updateIndexResult(
+                            mediaId = entity.id,
+                            labels = entity.labels,
+                            ocrText = entity.ocrText,
+                            latitude = entity.latitude,
+                            longitude = entity.longitude,
+                            locationName = entity.locationName,
+                            indexedAt = -1L
+                        )
+                    }
+                }
+
+                Logger.d(TAG, "Batch complete: $indexedCount indexed")
+            }
+        } catch (e: Exception) {
+            Logger.e(TAG, "Indexing failed", e)
+        } finally {
+            extractor.close()
+        }
+    }
+
+    // ── 增量索引 ──────────────────────────────────────────
+
+    private suspend fun indexSingleUri(uri: Uri) {
+        val db = AppDatabase.getDatabase(context)
+        val dao = db.mediaDao()
+
+        val extractor = MetadataExtractor(context)
+        val ocrIdxUpdater = OcrIndexUpdater(db.ocrWordDao())
+        val tagIdxUpdater = TagIndexUpdater(db.tagDao())
+        val locationIdxUpdater = LocationIndexUpdater(db.locationDao())
+
+        try {
+            val inputImage = InputImage.fromFilePath(context, uri)
+            val result = extractor.extract(uri, inputImage)
+            val now = System.currentTimeMillis()
+
+            // 查找或创建 Room 记录
+            val existingMedia = dao.getAllMediaNow().find { it.uri == uri.toString() }
+            val mediaId: Long = if (existingMedia != null) {
+                dao.updateIndexResult(
+                    mediaId = existingMedia.id,
+                    labels = result.labelsJson,
+                    ocrText = result.ocrText,
+                    latitude = result.latitude,
+                    longitude = result.longitude,
+                    locationName = result.locationName,
+                    indexedAt = now
+                )
+                existingMedia.id
+            } else {
+                // 新文件：创建基础记录
+                val fileName = uri.lastPathSegment ?: "unknown"
+                val entity = com.mamba.picme.data.model.MediaEntity(
+                    uri = uri.toString(),
+                    type = com.mamba.picme.agent.core.model.context.MediaType.PHOTO,
+                    captureDate = now,
+                    fileName = fileName,
+                    labels = result.labelsJson,
+                    ocrText = result.ocrText,
+                    latitude = result.latitude,
+                    longitude = result.longitude,
+                    locationName = result.locationName,
+                    indexedAt = now
+                )
+                dao.insertMedia(entity)
+            }
+
+            // 同步更新规范化索引表
+            tagIdxUpdater.updateIndex(mediaId, result.labelsJson)
+            locationIdxUpdater.updateIndex(
+                mediaId = mediaId,
+                latitude = result.latitude,
+                longitude = result.longitude,
+                locationName = result.locationName
+            )
+            if (!result.ocrText.isNullOrBlank()) {
+                ocrIdxUpdater.updateIndex(mediaId, result.ocrText)
+            }
+
+            Logger.d(TAG, "Incremental index complete for: $uri")
+        } catch (e: Exception) {
+            Logger.w(TAG, "Incremental index failed for $uri: ${e.message}")
+        } finally {
+            extractor.close()
+        }
+    }
+
+    // ── 模型预热 ──────────────────────────────────────────
+
     private suspend fun waitForModelReady(): Boolean {
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
         val tempExtractor = MetadataExtractor(context)
         try {
-            // 找一张真实图片来触发模型下载
             val firstMedia = dao.getUnindexedMedia().firstOrNull() ?: return true
             val uri = Uri.parse(firstMedia.uri)
             val image = try {
                 InputImage.fromFilePath(context, uri)
             } catch (e: Exception) {
-                return true // 无法读取图片，跳过预热
+                return true
             }
 
             repeat(10) { attempt ->
@@ -92,81 +273,6 @@ class MediaIndexingWorker(private val context: Context) {
             return false
         } finally {
             tempExtractor.close()
-        }
-    }
-
-    /**
-     * 取消正在运行的索引
-     */
-    fun cancel() {
-        currentJob?.cancel()
-        Logger.i(TAG, "Indexing cancelled")
-    }
-
-    private suspend fun doIndex() {
-        val db = AppDatabase.getDatabase(context)
-        val dao = db.mediaDao()
-
-        // 预加载 ML Kit 模型（Play Services 可能需要后台下载）
-        if (!waitForModelReady()) {
-            Logger.w(TAG, "ML Kit model not ready, deferring indexing")
-            return
-        }
-
-        val extractor = MetadataExtractor(context)
-        try {
-            var indexedCount = 0
-            var cancelled = false
-            while (!cancelled) {
-                val batch = dao.getUnindexedMedia().take(BATCH_SIZE)
-                if (batch.isEmpty()) {
-                    Logger.i(TAG, "All media indexed, total: $indexedCount")
-                    break
-                }
-
-                for (entity in batch) {
-                    // 检查是否被取消
-                    if (currentJob?.isActive != true) {
-                        cancelled = true
-                        break
-                    }
-
-                    try {
-                        val uri = Uri.parse(entity.uri)
-                        val inputImage = InputImage.fromFilePath(context, uri)
-                        val result = extractor.extract(uri, inputImage)
-
-                        dao.updateIndexResult(
-                            mediaId = entity.id,
-                            labels = result.labelsJson,
-                            ocrText = result.ocrText,
-                            latitude = result.latitude,
-                            longitude = result.longitude,
-                            locationName = result.locationName,
-                            indexedAt = System.currentTimeMillis()
-                        )
-                        indexedCount++
-                    } catch (e: Exception) {
-                        Logger.w(TAG, "Index failed for media ${entity.id}: ${e.message}")
-                        // 标记为已尝试，避免死循环
-                        dao.updateIndexResult(
-                            mediaId = entity.id,
-                            labels = entity.labels,
-                            ocrText = entity.ocrText,
-                            latitude = entity.latitude,
-                            longitude = entity.longitude,
-                            locationName = entity.locationName,
-                            indexedAt = -1L
-                        )
-                    }
-                }
-
-                Logger.d(TAG, "Batch complete: $indexedCount indexed")
-            }
-        } catch (e: Exception) {
-            Logger.e(TAG, "Indexing failed", e)
-        } finally {
-            extractor.close()
         }
     }
 }

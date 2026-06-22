@@ -371,7 +371,6 @@ private fun getAgentCommandDisplayName(command: AgentCommand): String =
         is AgentCommand.FavoriteMedia -> "收藏照片"
         is AgentCommand.LaunchApp -> "打开应用"
         is AgentCommand.OpenSystemSettings -> "打开设置"
-        is AgentCommand.PerformAccessibilityAction -> "自动操作"
         is AgentCommand.Unknown -> "未知命令"
         is AgentCommand.Error -> "执行错误"
     }
@@ -411,7 +410,6 @@ private fun resolveCommandIcon(command: AgentCommand): ImageVector = when (comma
     is AgentCommand.FavoriteMedia -> Icons.Rounded.Favorite
     is AgentCommand.LaunchApp -> Icons.AutoMirrored.Rounded.Launch
     is AgentCommand.OpenSystemSettings -> Icons.Rounded.Settings
-    is AgentCommand.PerformAccessibilityAction -> Icons.Rounded.TouchApp
     is AgentCommand.Unknown -> Icons.AutoMirrored.Rounded.Help
     is AgentCommand.Error -> Icons.Rounded.Error
 }
@@ -444,7 +442,6 @@ private fun getAgentCommandDetail(command: AgentCommand): String =
         is AgentCommand.Delay -> "延迟: ${command.delayMs}ms"
         is AgentCommand.LaunchApp -> command.appName ?: command.packageName ?: ""
         is AgentCommand.OpenSystemSettings -> command.setting
-        is AgentCommand.PerformAccessibilityAction -> command.action
         else -> ""
     }
 

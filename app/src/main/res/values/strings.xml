@@ -409,15 +409,6 @@
     <string name="essential_models_download_later">Not Now</string>
     <string name="essential_models_download_progress">Downloading…</string>
 
-    <!-- Accessibility Service -->
-    <string name="accessibility_service_label">PicMe AI Assistant</string>
-    <string name="accessibility_service_description">Used only to execute actions you explicitly request in other apps, such as tap, type, scroll, or go back. No screen content is recorded or uploaded.</string>
-    <string name="settings_accessibility_title">Cross-App AI Control</string>
-    <string name="settings_accessibility_summary">Enable to let the AI assistant tap, type, and scroll in other apps.</string>
-    <string name="settings_accessibility_enabled">Enabled</string>
-    <string name="settings_accessibility_disabled">Disabled</string>
-    <string name="dialog_accessibility_privacy_title">Accessibility Permission</string>
-    <string name="dialog_accessibility_privacy_message">PicMe uses Accessibility Service only to perform actions you explicitly request in other apps. We do not read or upload your passwords, chat history, or other sensitive content. You can disable it anytime in system Settings.</string>
 
     <!-- Floating Chat Bubble -->
     <string name="floating_chat_title">AI Chat</string>
@@ -444,5 +435,24 @@
     <string name="settings_miui_permission_editor_title">MIUI App Permissions</string>
     <string name="settings_miui_permission_editor_summary">Enable "Display pop-up window" and "Background pop-up" for PicMe.</string>
     <string name="settings_miui_action_open">Open</string>
+
+    <!-- Smart Gallery Index -->
+    <string name="gallery_group_tag">By Tag</string>
+    <string name="gallery_group_location">By Location</string>
+    <string name="gallery_group_ocr">By Text</string>
+    <string name="gallery_group_person">By Person</string>
+    <string name="gallery_index_status">%1$d indexed, %2$d total</string>
+    <string name="gallery_index_in_progress">Indexing photos…</string>
+    <string name="gallery_index_complete">Index complete</string>
+    <string name="gallery_search_hint">Search by content, location, text…</string>
+    <string name="gallery_search_no_results">No photos found</string>
+    <string name="gallery_tag_category_scene">Scene</string>
+    <string name="gallery_tag_category_animal">Animal</string>
+    <string name="gallery_tag_category_food">Food</string>
+    <string name="gallery_tag_category_person">Person</string>
+    <string name="gallery_tag_category_object">Object</string>
+    <string name="gallery_tag_category_other">Other</string>
+    <string name="gallery_face_clustering">Clustering faces…</string>
+    <string name="gallery_face_clustering_done">%1$d people found</string>
 
 </resources>
