@@ -5,8 +5,6 @@ package com.mamba.tool;
  * and a JSON string.
  * <p>
  * The default implementation uses a dedicated Jackson {@code ObjectMapper}.
- * A custom implementation can be provided via SPI using
- * {@link com.mamba.spi.agent.tool.ToolSpecificationJsonCodecFactory}.
  */
 public interface ToolSpecificationJsonCodec {
 

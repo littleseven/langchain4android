@@ -5,13 +5,15 @@ import static com.mamba.internal.ValidationUtils.ensureNotBlank;
 import static com.mamba.internal.ValidationUtils.ensureNotNull;
 
 import com.mamba.Internal;
-import com.mamba.spi.prompt.PromptTemplateFactory;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Default implementation of {@link PromptTemplateFactory}.
+ */
 @Internal
 class DefaultPromptTemplateFactory implements PromptTemplateFactory {
 
@@ -20,7 +22,7 @@ class DefaultPromptTemplateFactory implements PromptTemplateFactory {
         return new DefaultTemplate(input.getTemplate());
     }
 
-    static class DefaultTemplate implements Template {
+    static class DefaultTemplate implements PromptTemplateFactory.Template {
 
         /**
          * A regular expression pattern for identifying variable placeholders within double curly braces in a template string.

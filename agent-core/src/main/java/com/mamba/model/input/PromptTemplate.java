@@ -5,7 +5,7 @@ import static com.mamba.internal.ValidationUtils.ensureNotNull;
 
 import static java.util.Collections.singletonMap;
 
-import com.mamba.spi.prompt.PromptTemplateFactory;
+// PromptTemplateFactory is now in the same package, no import needed
 
 import java.time.Clock;
 import java.time.LocalDate;

@@ -11,7 +11,7 @@ import static com.mamba.internal.ValidationUtils.ensureNotNull;
  * <p>
  * This uses its own {@link ObjectMapper} instance, separate from the shared one in {@link Json},
  * to ensure that tool specification serialization is not affected by customizations applied
- * to the general-purpose codec via {@link com.mamba.spi.json.JsonCodecFactory}.
+ * to the general-purpose codec.
  */
 class JacksonToolSpecificationJsonCodec implements ToolSpecificationJsonCodec {
 
