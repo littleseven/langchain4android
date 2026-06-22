@@ -68,8 +68,8 @@ dependencies {
     // compileOnly + app 直接依赖：规避 Library 模块打包 AAR 时禁止直接依赖本地 .aar 限制
     compileOnly(files("libs/sherpa-onnx-1.10.46.aar"))
 
-    // mamba-agent: 合并后的 langchain4j 单库模块（core + open-ai + okhttp）
-    api(project(":mamba-agent"))
+    // agent-core: 合并后的 langchain4j 单库模块（core + open-ai + okhttp）
+    api(project(":agent-core"))
 
     // 强制降级 Jackson 到 2.14.3，避免 Android 上 Java 17 API 兼容问题
     api("com.fasterxml.jackson.core:jackson-databind:2.14.3")
