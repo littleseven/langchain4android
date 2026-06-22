@@ -64,7 +64,22 @@ class FaceClusteringWorker(private val context: Context) {
             Logger.w(TAG, "Will run face detection only (hasFace=true). Download model for person clustering.")
         }
 
-        // Step 1: 人脸检测（ML Kit，CPU）—— 无论是否有 embedding 模型都会执行
+        // Step 1: 按处理状态分离媒体
+        val allMedia = dao.getAllMediaNow()
+        val needDetection = allMedia.filter { !it.hasFace }
+        val needClustering = allMedia.filter { it.hasFace && it.faceId.isNullOrEmpty() }
+        val completed = allMedia.size - needDetection.size - needClustering.size
+
+        Logger.i(TAG, "Media: ${needDetection.size} need detection, " +
+            "${needClustering.size} need clustering, $completed already done")
+
+        // 无增量工作
+        if (needDetection.isEmpty() && (!hasEmbeddingModel || needClustering.isEmpty())) {
+            Logger.i(TAG, "All media already processed, nothing to do")
+            return
+        }
+
+        // Step 2: 处理
         val faceDetector = FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
@@ -75,47 +90,29 @@ class FaceClusteringWorker(private val context: Context) {
         )
 
         try {
-            val allMedia = dao.getAllMediaNow()
-            Logger.i(TAG, "Processing ${allMedia.size} photos for face detection" +
-                if (hasEmbeddingModel) " + clustering" else " (detection only)")
-
             val embeddings = mutableMapOf<Long, FloatArray>()
-            var faceCount = 0
+            var newFaces = 0
 
-            for (entity in allMedia) {
+            // Phase A: 新照片 — 人脸检测 + hasFace + embedding（如有模型）
+            for (entity in needDetection) {
                 if (!currentJob?.isActive!!) break
-
                 val uri = Uri.parse(entity.uri)
                 val original = loadBitmap(uri) ?: continue
-
                 try {
-                    // 人脸检测（始终执行）
                     val inputImage = InputImage.fromBitmap(original, 0)
                     val faces = com.google.android.gms.tasks.Tasks.await(
                         faceDetector.process(inputImage)
                     )
+                    if (faces.isEmpty()) continue
 
-                    if (faces.isEmpty()) {
-                        continue
-                    }
-                    faceCount++
+                    newFaces++
+                    dao.updateHasFace(entity.id, true)
 
-                    // 设置 hasFace，使"人物"搜索立即可用
-                    if (!entity.hasFace) {
-                        dao.updateHasFace(entity.id, true)
-                    }
-
-                    // 如果有 embedding 模型，提取特征用于聚类
                     if (hasEmbeddingModel) {
-                        val face = faces[0]
-                        val faceBbox = face.boundingBox
-
-                        val crop = safeCropFace(original, faceBbox)
+                        val crop = safeCropFace(original, faces[0].boundingBox)
                         if (crop != null) {
                             val emb = embedder.extractEmbedding(crop)
-                            if (emb != null) {
-                                embeddings[entity.id] = emb
-                            }
+                            if (emb != null) embeddings[entity.id] = emb
                             crop.recycle()
                         }
                     }
@@ -126,18 +123,41 @@ class FaceClusteringWorker(private val context: Context) {
                 }
             }
 
-            Logger.i(TAG, "Face detection done: $faceCount faces found" +
-                if (hasEmbeddingModel) ", ${embeddings.size} embeddings extracted" else "")
-
-            // Step 2: DBSCAN 聚类（仅在有 embedding 模型时执行）
-            if (!hasEmbeddingModel || embeddings.size < 2) {
-                if (hasEmbeddingModel && embeddings.size == 1) {
-                    Logger.i(TAG, "Only 1 embedding, assigning single cluster")
-                    for ((mediaId) in embeddings) {
-                        dao.updateFaceId(mediaId, "1")
+            // Phase B: 已检测未聚类 — 重新检测（获取 bbox）+ embedding（需模型）
+            if (hasEmbeddingModel && needClustering.isNotEmpty()) {
+                Logger.i(TAG, "Re-processing ${needClustering.size} detected photos for embedding")
+                for (entity in needClustering) {
+                    if (!currentJob?.isActive!!) break
+                    val uri = Uri.parse(entity.uri)
+                    val original = loadBitmap(uri) ?: continue
+                    try {
+                        val inputImage = InputImage.fromBitmap(original, 0)
+                        val faces = com.google.android.gms.tasks.Tasks.await(
+                            faceDetector.process(inputImage)
+                        )
+                        if (faces.isNotEmpty()) {
+                            val crop = safeCropFace(original, faces[0].boundingBox)
+                            if (crop != null) {
+                                val emb = embedder.extractEmbedding(crop)
+                                if (emb != null) embeddings[entity.id] = emb
+                                crop.recycle()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Logger.w(TAG, "Failed to re-process ${entity.id}: ${e.message}")
+                    } finally {
+                        original.recycle()
                     }
                 }
-                // 模型不可用或 embedding 不足：搜索"人物"已可用（hasFace 已设置）
+            }
+
+            Logger.i(TAG, "Processing done: $newFaces new faces, ${embeddings.size} total embeddings")
+
+            // Step 3: DBSCAN 聚类
+            if (!hasEmbeddingModel || embeddings.size < 2) {
+                if (hasEmbeddingModel && embeddings.size == 1) {
+                    dao.updateFaceId(embeddings.keys.first(), "1")
+                }
                 return
             }
 
@@ -158,14 +178,12 @@ class FaceClusteringWorker(private val context: Context) {
             }
 
             val noiseCount = clusters[-1]?.size ?: 0
-            Logger.i(TAG, "Face clustering done: $assignedCount clustered, $noiseCount unclustered")
+            Logger.i(TAG, "Clustering done: $assignedCount clustered, $noiseCount unclustered")
         } catch (e: Exception) {
             Logger.e(TAG, "Face clustering failed", e)
         } finally {
             faceDetector.close()
-            if (hasEmbeddingModel) {
-                embedder.close()
-            }
+            if (hasEmbeddingModel) embedder.close()
         }
     }
 

@@ -166,19 +166,24 @@ fun GalleryScreen(
         }
     }
 
-    // 首次进入 Gallery 时触发后台图片标签索引 + 人脸聚类
+    // 进入 Gallery 时触发后台图片标签索引 + 人脸聚类
+    // Workers 内部有 isActive 守卫，可安全重复调用
     val indexingWorker = remember { app.container.mediaIndexingWorker }
     val faceClusteringWorker = remember { app.container.faceClusteringWorker }
     var isIndexing by remember { mutableStateOf(false) }
-    var isFaceClustering by remember { mutableStateOf(false) }
 
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty() && !isIndexing) {
             indexingWorker.start()
             isIndexing = true
-            // 人脸聚类在索引完成后自动触发
+        }
+    }
+
+    // 人脸聚类与索引独立，每次进入相册都触发
+    // 内部自动跳过已完成的媒体，只处理增量
+    LaunchedEffect(hasMediaPermission) {
+        if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
             faceClusteringWorker.start()
-            isFaceClustering = true
         }
     }
 
