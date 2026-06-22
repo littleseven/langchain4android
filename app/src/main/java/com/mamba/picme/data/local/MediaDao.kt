@@ -127,6 +127,10 @@ interface MediaDao {
     /** 获取某个 faceId 下的所有媒体 */
     @Query("SELECT * FROM media_assets WHERE faceId = :faceId ORDER BY captureDate DESC")
     suspend fun getMediaByFaceId(faceId: Int): List<MediaEntity>
+
+    /** 重置所有人脸数据（用于强制重新聚类） */
+    @Query("UPDATE media_assets SET hasFace = 0, faceId = NULL")
+    suspend fun resetAllFaceData()
 }
 
 data class FaceGroupCount(

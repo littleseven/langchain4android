@@ -171,6 +171,19 @@ fun GalleryScreen(
     val indexingWorker = remember { app.container.mediaIndexingWorker }
     val faceClusteringWorker = remember { app.container.faceClusteringWorker }
     var isIndexing by remember { mutableStateOf(false) }
+    // 人脸聚类状态
+    var isReclustering by remember { mutableStateOf(false) }
+
+    // 监听聚类完成
+    LaunchedEffect(isReclustering) {
+        if (isReclustering) {
+            while (faceClusteringWorker.isRunning) {
+                kotlinx.coroutines.delay(1000)
+            }
+            isReclustering = false
+            viewModel.refreshMediaLibrary()
+        }
+    }
 
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty() && !isIndexing) {
@@ -356,6 +369,7 @@ fun GalleryScreen(
                         isSelectionMode = isSelectionMode,
                         selectedCount = selectedIds.size,
                         groupingMode = groupingMode,
+                        isReclustering = isReclustering,
                         onNavigateBack = onNavigateBack,
                         onToggleSelectionMode = {
                             isSelectionMode = false
@@ -385,6 +399,10 @@ fun GalleryScreen(
                         onSearchClick = {
                             isSearchActive = true
                             searchResultMedia = emptyList()
+                        },
+                        onRecluster = {
+                            isReclustering = true
+                            faceClusteringWorker.forceRecluster()
                         }
                     )
                 }

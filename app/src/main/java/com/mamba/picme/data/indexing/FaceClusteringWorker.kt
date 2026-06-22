@@ -50,6 +50,26 @@ class FaceClusteringWorker(private val context: Context) {
         }
     }
 
+    /**
+     * 强制重新聚类所有照片
+     * 先重置所有人脸数据（hasFace=false, faceId=null），再全量重新处理。
+     */
+    fun forceRecluster() {
+        if (currentJob?.isActive == true) {
+            Logger.w(TAG, "Clustering in progress, cancelling and restarting in force mode")
+            currentJob?.cancel()
+        }
+        currentJob = scope.launch {
+            Logger.i(TAG, "Force recluster started — resetting all face data")
+            val db = AppDatabase.getDatabase(context)
+            val dao = db.mediaDao()
+            dao.resetAllFaceData()
+            Logger.i(TAG, "All face data reset, starting full clustering")
+            doCluster()
+            Logger.i(TAG, "Force recluster completed")
+        }
+    }
+
     private suspend fun doCluster() {
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
