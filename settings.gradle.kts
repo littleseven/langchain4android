@@ -19,7 +19,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PicMe"
+rootProject.name = "langchain4android"
 include(":app")
 include(":beauty-api")
 include(":beauty-engine")

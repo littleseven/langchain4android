@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = 'com.mamba.agent'
+    namespace = 'com.mamba'
     compileSdk = 35
 
     defaultConfig {

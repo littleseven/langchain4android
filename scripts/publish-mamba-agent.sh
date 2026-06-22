@@ -1,18 +1,18 @@
 #!/bin/bash
 #
 # publish-mamba-agent.sh
-# PicMe → JitPack 自动发布脚本
+# langchain4android → JitPack 自动发布脚本
 #
 # 用法:
-#   ./scripts/publish-mamba-agent.sh v1.0.0          # 构建 + 打 tag + 推送到 GitHub 触发 JitPack
-#   ./scripts/publish-mamba-agent.sh v1.0.0 --dry    # 试运行，不执行推送
-#   ./scripts/publish-mamba-agent.sh v1.0.0 --build-only  # 仅本地编译验证
+#   ./scripts/publish-mamba-agent.sh 1.0.0          # 构建 + 打 tag + 推送到 GitHub 触发 JitPack
+#   ./scripts/publish-mamba-agent.sh 1.0.0 --dry    # 试运行，不执行推送
+#   ./scripts/publish-mamba-agent.sh 1.0.0 --build-only  # 仅本地编译验证
 #
 # 依赖: git, gh (GitHub CLI, 可选用于查 JitPack 状态), gradle wrapper
 #
 # JitPack 对应关系:
-#   tag: v1.0.0 → https://jitpack.io/#littleseven/PicMe/mamba-agent/v1.0.0
-#   使用: implementation 'com.github.littleseven.PicMe:mamba-agent:v1.0.0'
+#   tag: 1.0.0 → https://jitpack.io/#littleseven/langchain4android/agent-core/1.0.0
+#   使用: implementation 'com.github.littleseven.langchain4android:agent-core:1.0.0'
 
 set -euo pipefail
 
@@ -24,9 +24,9 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # ─── 配置 ───
-MODULE="mamba-agent"
+MODULE="agent-core"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-JITPACK_BASE="https://jitpack.io/#littleseven/PicMe"
+JITPACK_BASE="https://jitpack.io/#littleseven/langchain4android"
 JITPACK_API_BASE="https://jitpack.io/api/build"
 
 # ─── 辅助函数 ───
@@ -35,12 +35,12 @@ usage() {
     echo "  $(basename "$0") <tag> [--dry|--build-only]"
     echo ""
     echo -e "${CYAN}示例:${NC}"
-    echo "  $(basename "$0") v1.0.0              # 正式发布"
-    echo "  $(basename "$0") v1.0.0-beta1 --dry  # 试运行"
-    echo "  $(basename "$0") v1.0.0 --build-only # 仅本地编译"
+    echo "  $(basename "$0") 1.0.0              # 正式发布"
+    echo "  $(basename "$0") 1.0.0-beta1 --dry  # 试运行"
+    echo "  $(basename "$0") 1.0.0 --build-only # 仅本地编译"
     echo ""
     echo -e "${CYAN}发布后使用:${NC}"
-    echo "  implementation('com.github.GuoShuai-Mr.PicMe:${MODULE}:${1:-<tag>}')"
+    echo "  implementation('com.github.littleseven.langchain4android:${MODULE}:${1:-<tag>}')"
     exit 1
 }
 
@@ -56,8 +56,8 @@ if [ -z "$TAG" ]; then
     usage
 fi
 
-if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-    log_error "Tag 格式必须为 vX.Y.Z（如 v1.0.0），当前: $TAG"
+if [[ ! "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+    log_error "Tag 格式必须为 X.Y.Z（如 1.0.0），当前: $TAG"
     exit 1
 fi
 
@@ -65,7 +65,7 @@ cd "$PROJECT_ROOT"
 
 echo ""
 echo "════════════════════════════════════════════════"
-echo "  PicMe JitPack 发布"
+echo "  langchain4android JitPack 发布"
 echo "  模块: ${MODULE}"
 echo "  版本: ${TAG}"
 echo "  模式: ${MODE}"
@@ -160,7 +160,7 @@ if [ "$MODE" = "dry" ]; then
     exit 0
 fi
 
-git tag -a "$TAG" -m "mamba-agent: release ${TAG}"
+git tag -a "$TAG" -m "agent-core: release ${TAG}"
 log_info "Tag ${TAG} 已创建"
 
 git push origin "$TAG"
@@ -171,7 +171,7 @@ echo ""
 log_info "Step 4/4: 检查 JitPack 构建状态..."
 
 JITPACK_URL="${JITPACK_BASE}/${TAG}"
-JITPACK_API_URL="${JITPACK_API_BASE}/littleseven/PicMe/${TAG#v}"
+JITPACK_API_URL="${JITPACK_API_BASE}/littleseven/langchain4android/${TAG}"
 
 log_info "JitPack 构建页面: ${JITPACK_URL}"
 log_info "JitPack API:       ${JITPACK_API_URL}"
@@ -204,8 +204,8 @@ echo "  JitPack 页面: ${JITPACK_URL}"
 echo "  构建日志:    ${JITPACK_API_URL}/log"
 echo ""
 echo "  Gradle 引用:"
-echo "    implementation('com.github.littleseven:PicMe:${MODULE}:${TAG}')"
+echo "    implementation('com.github.littleseven.langchain4android:${MODULE}:${TAG}')"
 echo ""
 echo "  或使用最新版本:"
-echo "    implementation('com.github.littleseven:PicMe:${MODULE}:main-SNAPSHOT')"
+echo "    implementation('com.github.littleseven.langchain4android:${MODULE}:main-SNAPSHOT')"
 echo "════════════════════════════════════════════════"
