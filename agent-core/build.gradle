@@ -85,6 +85,14 @@ dependencies {
 }
 
 // ─── Maven Publish（JitPack 需要） ───
+android {
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+        }
+    }
+}
+
 afterEvaluate {
     publishing {
         publications {
