@@ -23,5 +23,5 @@ rootProject.name = "PicMe"
 include(":app")
 include(":beauty-api")
 include(":beauty-engine")
-include(":agent-core")
+include(":runtime-core")
 include(":mamba-agent")
