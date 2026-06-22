@@ -14,11 +14,21 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CameraAlt
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -60,6 +70,9 @@ import com.mamba.picme.features.common.chat.rememberAgentChatConfig
 import android.app.Activity
 import com.mamba.picme.features.gallery.capability.GalleryCapability
 import com.mamba.picme.features.common.SearchField
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.mamba.picme.R
 import kotlinx.coroutines.launch
 
 private const val TAG = "Gallery"
@@ -69,6 +82,7 @@ private const val TAG_AGENT = "GalleryAgent"
 fun GalleryScreen(
     viewModel: MediaViewModel,
     onNavigateBack: () -> Unit,
+    onNavigateToCamera: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToDebug: () -> Unit
 ) {
@@ -544,6 +558,29 @@ fun GalleryScreen(
 
             val activeMedia = selectedMediaIndex?.let { allFlatMedia.getOrNull(it) }
             val rect = activeMedia?.let { thumbnailPositions[it.id] }
+
+            // Camera FAB — 在 chat 入口上方
+            if (selectedMediaIndex == null && !showDuplicateManager) {
+                val cameraModifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 84.dp)
+                    .navigationBarsPadding()
+                Box(modifier = cameraModifier) {
+                    FloatingActionButton(
+                        onClick = onNavigateToCamera,
+                        modifier = Modifier.size(56.dp),
+                        shape = CircleShape,
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(
+                            Icons.Rounded.CameraAlt,
+                            contentDescription = stringResource(R.string.camera),
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
 
             // Agent Chat 入口 - 右下角浮动按钮
             if (selectedMediaIndex == null && !showDuplicateManager) {
