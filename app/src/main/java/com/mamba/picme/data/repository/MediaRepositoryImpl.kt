@@ -220,7 +220,30 @@ class MediaRepositoryImpl(
     }
 
     override suspend fun refreshMediaLibrary() {
+        withContext(Dispatchers.IO) {
+            syncSystemMediaToDb()
+        }
         refreshVersion.value = refreshVersion.value + 1
+    }
+
+    /**
+     * 将系统媒体库中的照片/视频同步到 Room 数据库。
+     * 只插入新照片，不覆盖已有数据（保护 hasFace/faceId 等聚类结果）。
+     */
+    private suspend fun syncSystemMediaToDb() {
+        val dbMedia = mediaDao.getAllMediaNow()
+        val dbUriSet = dbMedia.map { it.uri }.toSet()
+        val systemMedia = loadSystemMedia()
+        var inserted = 0
+        for (asset in systemMedia) {
+            if (asset.uri !in dbUriSet) {
+                mediaDao.insertMedia(asset.toEntity())
+                inserted++
+            }
+        }
+        if (inserted > 0) {
+            Logger.i(TAG, "Synced $inserted new media to database (total system: ${systemMedia.size})")
+        }
     }
 
     private suspend fun loadSystemMedia(): List<MediaAsset> = withContext(Dispatchers.IO) {

@@ -25,7 +25,10 @@ import kotlinx.coroutines.launch
  * 2. MobileFaceNet (ONNX Runtime) → 512维 embedding
  * 3. DBSCAN 聚类（embedding 空间）→ faceId
  */
-class FaceClusteringWorker(private val context: Context) {
+class FaceClusteringWorker(
+    private val context: Context,
+    private val onSyncMedia: (suspend () -> Unit)? = null
+) {
 
     companion object {
         private const val TAG = "PicMe:FaceCluster"
@@ -51,8 +54,8 @@ class FaceClusteringWorker(private val context: Context) {
     }
 
     /**
-     * 强制重新聚类所有照片
-     * 先重置所有人脸数据（hasFace=false, faceId=null），再全量重新处理。
+     * 强制重新聚类所有照片。
+     * 先同步系统媒体库到 Room，再重置人脸数据，最后全量重聚。
      */
     fun forceRecluster() {
         if (currentJob?.isActive == true) {
@@ -60,7 +63,13 @@ class FaceClusteringWorker(private val context: Context) {
             currentJob?.cancel()
         }
         currentJob = scope.launch {
-            Logger.i(TAG, "Force recluster started — resetting all face data")
+            // Step 0: 同步系统媒体到 Room（确保所有照片都在 DB 中）
+            if (onSyncMedia != null) {
+                Logger.i(TAG, "Syncing system media to database...")
+                onSyncMedia.invoke()
+            }
+
+            Logger.i(TAG, "Force recluster — resetting all face data")
             val db = AppDatabase.getDatabase(context)
             val dao = db.mediaDao()
             dao.resetAllFaceData()

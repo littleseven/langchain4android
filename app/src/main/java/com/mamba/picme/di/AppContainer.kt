@@ -134,7 +134,9 @@ class AppContainerImpl(private val context: Context) : AppContainer {
 
     /** 人脸聚类器（面部几何特征 + DBSCAN） */
     override val faceClusteringWorker: FaceClusteringWorker by lazy {
-        FaceClusteringWorker(context)
+        FaceClusteringWorker(context) {
+            repository.refreshMediaLibrary()
+        }
     }
 
     /**
