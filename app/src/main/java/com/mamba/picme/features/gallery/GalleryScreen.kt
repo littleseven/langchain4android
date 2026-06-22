@@ -179,9 +179,9 @@ fun GalleryScreen(
         }
     }
 
-    // 人脸聚类与索引独立，每次进入相册都触发
+    // 人脸聚类与索引独立，在媒体数据加载完成后触发
     // 内部自动跳过已完成的媒体，只处理增量
-    LaunchedEffect(hasMediaPermission) {
+    LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
             faceClusteringWorker.start()
         }
