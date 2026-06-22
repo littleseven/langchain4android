@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -88,9 +89,11 @@ fun GalleryScreen(
     val searchEngine = remember { GalleryCapability.getInstance().searchEngine }
     val searchScope = rememberCoroutineScope()
 
-    val allFlatMedia = remember(groupedMedia) { groupedMedia.flatMap { group -> group.items } }
+    val allFlatMedia by remember { derivedStateOf { groupedMedia.flatMap { group -> group.items } } }
     val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { it.id } }
     val context = LocalContext.current
+    val app = context.applicationContext as com.mamba.picme.PicMeApplication
+    val thumbnailPrefetcher = remember { app.container.thumbnailPrefetcher }
     val deleteAuthRequest by viewModel.deleteAuthRequest.collectAsState()
 
     var hasMediaPermission by remember { mutableStateOf(hasGalleryPermission(context)) }
@@ -164,7 +167,6 @@ fun GalleryScreen(
     }
 
     // 首次进入 Gallery 时触发后台图片标签索引 + 人脸聚类
-    val app = context.applicationContext as com.mamba.picme.PicMeApplication
     val indexingWorker = remember { app.container.mediaIndexingWorker }
     val faceClusteringWorker = remember { app.container.faceClusteringWorker }
     var isIndexing by remember { mutableStateOf(false) }
@@ -464,6 +466,7 @@ fun GalleryScreen(
                         isSelectionMode = isSelectionMode,
                         thumbnailPositions = thumbnailPositions,
                         mediaById = mediaById,
+                        thumbnailPrefetcher = thumbnailPrefetcher,
                         onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                         onMediaClick = { asset ->
                             if (isSelectionMode) {

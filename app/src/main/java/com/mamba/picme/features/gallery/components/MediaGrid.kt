@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.mamba.picme.core.image.ThumbnailPrefetcher
 import com.mamba.picme.domain.model.GroupedMedia
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.agent.core.model.context.MediaType
@@ -55,6 +58,7 @@ fun MediaGrid(
     isSelectionMode: Boolean,
     thumbnailPositions: Map<Long, Rect>,
     mediaById: Map<Long, MediaAsset>,
+    thumbnailPrefetcher: ThumbnailPrefetcher? = null,
     onThumbnailPositioned: (Long, Rect) -> Unit,
     onMediaClick: (MediaAsset) -> Unit,
     onMediaLongClick: (MediaAsset) -> Unit,
@@ -72,7 +76,38 @@ fun MediaGrid(
         return hitId?.let { mediaById[it] }
     }
 
+    val gridState = rememberLazyGridState()
+
+    // 预加载可视区域附近的缩略图，减少滚动白屏
+    if (thumbnailPrefetcher != null && groupedMedia.isNotEmpty()) {
+        LaunchedEffect(gridState.firstVisibleItemIndex, gridState.layoutInfo.visibleItemsInfo.size) {
+            val visibleItems = gridState.layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) return@LaunchedEffect
+
+            val totalItems = groupedMedia.sumOf { it.items.size }
+            val firstVisible = visibleItems.first().index
+            val lastVisible = visibleItems.last().index
+            val pageSize = (lastVisible - firstVisible + 1).coerceAtLeast(1)
+            val prefetchStart = (firstVisible - pageSize * 3).coerceAtLeast(0)
+            val prefetchEnd = (lastVisible + pageSize * 3).coerceAtMost(totalItems - 1)
+
+            val prefetchUris = buildList {
+                var idx = 0
+                for (group in groupedMedia) {
+                    for (item in group.items) {
+                        if (idx in prefetchStart..prefetchEnd) {
+                            add(item.uri)
+                        }
+                        idx++
+                    }
+                }
+            }
+            thumbnailPrefetcher.prefetchWindow(prefetchUris)
+        }
+    }
+
     LazyVerticalGrid(
+        state = gridState,
         modifier = Modifier
             .onGloballyPositioned { coordinates ->
                 gridPositionInWindow = coordinates.positionInWindow()
@@ -158,6 +193,7 @@ fun MediaItem(
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(asset.uri)
+                .size(360)
                 .crossfade(true)
                 .build(),
             contentDescription = null,

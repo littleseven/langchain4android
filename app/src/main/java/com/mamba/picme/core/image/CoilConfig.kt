@@ -18,7 +18,8 @@ object CoilConfig {
             .crossfade(true)
             .memoryCache {
                 MemoryCache.Builder(context)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.35)
+                    .strongReferencesEnabled(true)
                     .build()
             }
             .diskCache {
