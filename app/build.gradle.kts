@@ -246,10 +246,10 @@ dependencies {
     implementation(project(":beauty-api"))
     // 美颜引擎模块
     implementation(project(":beauty-engine"))
+    implementation(project(":runtime-core"))
+    // sherpa-onnx: runtime-core 编译期依赖，app 模块提供运行时 AAR 打包
+    implementation(files("../runtime-core/libs/sherpa-onnx-1.10.46.aar"))
     // Agent 核心模块（将来提取独立库）
-    implementation(project(":agent-core"))
-    // sherpa-onnx: agent-core 编译期依赖，app 模块提供运行时 AAR 打包
-    implementation(files("../agent-core/libs/sherpa-onnx-1.10.46.aar"))
     // GPUPixel 已移除，全部能力由自研引擎提供
 
     // Core library desugaring（mamba-agent 依赖需要）
