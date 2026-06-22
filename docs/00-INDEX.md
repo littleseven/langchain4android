@@ -1,4 +1,4 @@
-# PicMe 文档导航索引
+# langchain4android 文档导航索引
 
 > **维护者**: CO Agent  
 > **最后更新**: 2026-06-21
@@ -8,7 +8,7 @@
 
 ## 📚 文档体系总览
 
-PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
+langchain4android 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -111,7 +111,8 @@ PicMe 采用**四层文档架构**，遵循 AGENTS.md 顶层治理规则：
 | [`MNN_LANDMARK_DIAGNOSIS.md`](./03-TECHNICAL-SPECS/MNN_LANDMARK_DIAGNOSIS.md) | MNN 人脸关键点对齐问题诊断 | RD |
 
 **核心内容**：
-- Agent 运行时核心组件已迁移至 `:agent-core` 模块
+- Agent 运行时基础库（`:agent-core`，Java）提供 ChatModel、Tool、AiServices
+- Agent 编排层（`:app`，Kotlin）包含 AgentOrchestrator、CapabilityRegistry、PrivacyGuard
 - EGL 上下文管理、Shader 编译、资源释放
 - FrameId 体系、FrameSyncManager、预测补偿算法
 - MNN/NCNN 双引擎人脸检测（InsightFace ONNX 路径已移除）

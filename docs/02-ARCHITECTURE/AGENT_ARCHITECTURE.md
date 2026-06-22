@@ -1,12 +1,12 @@
-# PicMe Agent 架构设计 (Agent Architecture)
+# langchain4android Agent 架构设计
 
 > **边界声明（Boundary Statement）**
-> - 本文档定义 PicMe AI Agent 的运行时架构、Capability 模型与推理模式选型。
+> - 本文档定义 Agent 的运行时架构、Capability 模型与推理模式选型。
 > - 产品目标与验收口径以 [`../01-PRODUCT/FEATURES.md`](./01-PRODUCT/FEATURES.md) 为准。
 > - 顶层治理规则（角色协作、全局红线、文档流程）以根目录 [`AGENTS.md`](../../AGENTS.md) 为准。
-> - 模块级实现细节以 `agent-core/src/main/java/com/mamba/picme/agent/core/` 源码为准。注意：Agent Runtime 核心组件已从 `app/domain/agent/` 迁移至独立的 `:agent-core` 模块。
+> - **重要：`:agent-core` 是 Java 基础库**（ChatModel、Tool、AiServices），Agent 编排层（AgentOrchestrator、CapabilityRegistry 等）在 `:app` 模块的 `app/src/main/java/com/mamba/picme/domain/` 目录下。
 
-**模块定位**: PicMe AI 助手"小觅"的 Runtime 架构与推理模式选型  
+**模块定位**: AI Agent 运行时架构与推理模式选型（基础库 langchain4android + Demo 工程 PicMe）
 **主要维护者**: [RD] 全栈工程师  
 **阅读对象**: RD、AI Agent  
 **版本**: 3.1 (2026-06 架构更新)  
@@ -60,8 +60,8 @@
 | `LocalInferencePipeline` | 本地推理链路：L1 Cache + L2 Batch（自定义 JSON 数组协议） | ✅ 已落地 |
 | `RemoteInferencePipeline` | 远程推理链路：OpenAI Chat Completions API（tool_calls·流式·多轮） | ✅ 已落地 |
 | `LocalLlmEngine` | 封装 MNN-LLM 客户端，Qwen3.5-2B 本地推理 | ✅ 已落地 |
-| `RemoteOrchestrator` | 远程推理编排：langchain4j OpenAiChatModel + ChatMemory | ✅ 已落地 |
-| `:mamba-agent` (模块) | langchain4j 1.13 合并单库模块（core + open-ai + okhttp），提供 ChatLanguageModel、ToolSpecification、OkHttp SSE 流式 HTTP 客户端 | ✅ 已落地 |
+| `RemoteOrchestrator` | 远程推理编排：:agent-core OpenAiChatModel + ChatMemory | ✅ 已落地 |
+| `:agent-core` (模块) | Java Android Library，提供 LangChain4j 风格 API：ChatModel、@Tool、AiServices、ChatMemory、OpenAiChatModel、OkHttp SSE 流式客户端 | ✅ 已落地 |
 | `CapabilityRegistry` | Capability 注册与命令分发 | ✅ 已落地 |
 | `PrivacyGuard` | 输入内容隐私分级与本地优先约束 | ✅ 已落地 |
 | `MemoryManager` | DataStore 持久化对话历史，按 session 隔离 | ✅ 已落地 |
@@ -110,7 +110,7 @@
                                       │
                                       ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│                       Agent Runtime Layer (:agent-core)                        │
+│                       Agent Orchestration Layer (:app · Kotlin)                  │
 │                                                                               │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
 │  │                      AgentOrchestrator (编排器)                          │  │
@@ -125,9 +125,9 @@
 │  ┌────────────────────────────┐  ┌──────────────────────────────────────┐   │
 │  │  LocalInferencePipeline    │  │  RemoteInferencePipeline              │   │
 │  │  ┌──────────────────────┐  │  │  ┌────────────────────────────────┐  │   │
-│  │  │ LocalLlmEngine       │  │  │  │ RemoteOrchestrator             │  │   │
-│  │  │ Qwen3.5-2B (MNN)     │  │  │  │ langchain4j OpenAiChatModel    │  │   │
-│  │  │ 自定义 JSON 数组协议   │  │  │  │ OpenAI Chat Completions API   │  │   │
+│  ┌──────────────────────┐  │  │  │ RemoteOrchestrator             │  │   │
+│  │  │ LocalLlmEngine       │  │  │  │ :agent-core OpenAiChatModel   │  │   │
+│  │  │ Qwen3.5-2B (MNN)     │  │  │  │ OpenAI Chat Completions API   │  │   │
 │  │  │ L1 Cache → L2 Batch  │  │  │  │ DeepSeek V4 适配               │  │   │
 │  │  └──────────────────────┘  │  │  │ L2 Batch / L3 Plan / L4 Chat   │  │   │
 │  └────────────────────────────┘  │  └────────────────────────────────┘  │   │
@@ -173,10 +173,10 @@
 │  └────────────┘ └──────────────┘ └──────────────┘ └──────────────────────┘ │
 │                                                                              │
 │  ┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────────┐ │
-│  │ :mamba-agent (SDK)   │ │LlmModelDownloadManager│ │ FaceDetect Pipeline  │ │
-│  │ langchain4j 合并模块  │ │前台服务·断点续传       │ │ MediaPipe·MNN·NCNN   │ │
-│  │ ChatModel·ToolSpec   │ └──────────────────────┘ └──────────────────────┘ │
-│  │ OkHttp Streaming     │ ┌──────────────────────┐                           │
+│  │ :agent-core (SDK)    │ │LlmModelDownloadManager│ │ FaceDetect Pipeline  │ │
+│  │ Java Library          │ │前台服务·断点续传       │ │ MediaPipe·MNN·NCNN   │ │
+│  │ ChatModel·@Tool      │ └──────────────────────┘ └──────────────────────┘ │
+│  │ AiServices·SSE       │ ┌──────────────────────┐                           │
 │  └──────────────────────┘ │ Network Monitor      │                           │
 │                           │ 飞书重连·心跳保持     │                           │
 │                           └──────────────────────┘                           │
@@ -205,7 +205,7 @@ AgentOrchestrator.dispatch(input)
             ├── IntentCache.lookup(input) → HIT? → 直接返回 (L1)
             │
             └── RemoteOrchestrator.chat(messages, tools)
-                └── :mamba-agent (langchain4j 1.13 合并)
+                └── :agent-core (Java Library)
                     ├── OpenAiChatModel (ChatLanguageModel)
                     ├── ToolSpecification (tool_calls 构建)
                     └── OkHttp SSE Streaming (流式响应)
@@ -505,7 +505,7 @@ class NavigationCapability(
 | 维度 | 本地推理 | 远程推理 |
 |------|---------|---------|
 | **协议** | 自定义 JSON 数组 | 标准 OpenAI Chat Completions API |
-| **Library** | 无第三方依赖 | langchain4j 1.13.0 (OpenAiChatModel) |
+| **Library** | 无第三方依赖 | :agent-core (OpenAiChatModel) |
 | **Prompt** | 精简、结构化 | 自然语言 + Tool Schema |
 | **输出解析** | 简单 JSON 数组解析 | 标准 JSON 反序列化（tool_calls） |
 | **约束方式** | JSON 数组格式 Prompt 约束 | OpenAI 原生协议约束 |
@@ -713,5 +713,6 @@ sealed class AgentCommand {
 - [IM_REMOTE_CONTROL_TECH_SPEC.md](../03-TECHNICAL-SPECS/IM_REMOTE_CONTROL_TECH_SPEC.md) — IM 远程控制技术规范
 - [KWS_MIGRATION_TECH_SPEC.md](../03-TECHNICAL-SPECS/KWS_MIGRATION_TECH_SPEC.md) — KWS 唤醒词迁移方案
 - [REMOTE_REACT_ARCHITECTURE_REVIEW.md](../03-TECHNICAL-SPECS/REMOTE_REACT_ARCHITECTURE_REVIEW.md) — ReAct 架构审查
-- `agent-core/src/main/java/com/mamba/picme/agent/core/` — 源码目录（Agent Runtime 核心）
+- `app/src/main/java/com/mamba/picme/domain/` — 源码目录（Agent 编排层：AgentOrchestrator、CapabilityRegistry、PrivacyGuard 等）
+- `agent-core/src/main/java/com/mamba/` — 源码目录（Java 基础库：ChatModel、OpenAiChatModel、Tool、AiServices 等）
 - `app/src/main/java/com/mamba/picme/domain/usecase/AiAgentUseCase.kt` — Facade 桥接层

@@ -1,22 +1,21 @@
-# PicMe AI Agent 系统：唯一事实来源 (SSOT)
+# langchain4android AI Agent 系统：唯一事实来源 (SSOT)
 
 > 本文档为**顶层治理文档**，定义 Agent First 的研发流程与协作规范。
 >
-> PicMe 的核心实验目标之一是**验证 Agent First 的工程范式**：基础设施原子化为 Tools 层，Agent 通过编排 Tools 完成开发任务。
+> **langchain4android** 是面向 Android 的 AI Agent 基础库（Java），Demo 工程 **PicMe（觅影相册）** 验证其在真实场景中的可行性。
 
 ---
 
 ## 1. 项目背景：Agent First 三重实验
 
-PicMe 是一个元实验（meta-experiment），同时探索三个层次：
+langchain4android 是一个元实验（meta-experiment），同时探索三个层次：
 
 | 层次 | 实验对象 | 核心问题 |
 |------|----------|----------|
-| **运行时** | 端侧 Agent 架构 | LLM 能否成为应用的中枢神经系统？ |
+| **基础库** | langchain4android（:agent-core） | LangChain4j 风格 API 能否在 Android 高效运行？ |
+| **运行时** | PicMe Agent 编排层（:app） | LLM 能否成为应用的中枢神经系统？ |
 | **架构层** | Agent First 客户端框架 | 什么样的架构让 Agent 最高效？ |
 | **流程层** | Agent First 研发流程 | Agent 如何通过编排 Tools 完成开发？ |
-| **2026-06 方向更新** | 觅影相机→觅影相册 | 产品重心迁移至相册与图片编辑，验证 AI 相册技术路线 |
-| **2026-06-17 IM远程控制新增** | 飞书/IM 远程控制 | 通过 IM + LLM 实现 App 远程控制，融合相册编辑能力 |
 
 **核心假设**：当基础设施原子化为 Tools 层后，Agent 可以从「辅助工具」进化为「主导力量」。
 
@@ -24,7 +23,7 @@ PicMe 是一个元实验（meta-experiment），同时探索三个层次：
 
 ## 2. Agent First 的代码架构原则
 
-PicMe 的所有代码遵循以下原则，确保 Agent 能高效理解、修改、验证：
+langchain4android 的所有代码遵循以下原则，确保 Agent 能高效理解、修改、验证：
 
 ### 2.1 显式优于隐式（Explicit > Implicit）
 
@@ -185,7 +184,7 @@ PicMe 采用**角色化协作模型**：每个 Agent 角色有明确的职责边
 
 ## 4. Self-Heal 与自动化工具链
 
-PicMe 的核心创新是赋予 RD **闭环验证能力**——不仅能写代码，还能通过 Tools 自动验证正确性。
+langchain4android 的核心创新是赋予 RD **闭环验证能力**——不仅能写代码，还能通过 Tools 自动验证正确性。
 
 ### 4.1 自愈工作流
 
@@ -228,7 +227,7 @@ object RdAgent {
 
 ## 5. 文档体系（AI 可解析）
 
-PicMe 的文档设计为**机器可读、交叉引用完整**，AI 可直接解析为执行计划。
+langchain4android 的文档设计为**机器可读、交叉引用完整**，AI 可直接解析为执行计划。
 
 ### 5.1 文档层级
 
@@ -278,7 +277,7 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 
 ### 7.1 待验证的假设
 
-1. **AI 可处理代码规模上限**：当前 PicMe 约 3 万行 Kotlin（含 Agent Runtime、语音交互、远程编排），上限是多少？
+1. **AI 可处理代码规模上限**：当前项目含 agent-core（Java）+ Demo 工程（Kotlin）共约 3 万行代码，上限是多少？
 2. **AI 重构能力**：AI 能否主导跨模块架构重构？
 3. **Self-Heal 成功率**：RD Agent 自动修复编译/运行时错误的成功率？
 4. **文档驱动开发的效率**：相比传统流程，AI 协作的效率提升？
@@ -309,12 +308,12 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 | **技术专项** | `docs/*.md` |
 | **IM 远程控制技术规格（新增）** | `docs/03-TECHNICAL-SPECS/IM_REMOTE_CONTROL_TECH_SPEC.md` |
 
-> **架构说明（2026-06-19）**：
-> - **本地/远程推理协议已彻底分离**（ADR-005）：本地使用自定义 JSON 数组协议（method + params），远程使用标准 OpenAI Chat Completions API 协议（含原生 tool_calls、流式、多轮对话）。两条链路完全独立，无共享路由逻辑。
-> - **远程推理链路已引入 langchain4j 1.13.0 标准化**：`LangChain4jOpenAiClient` 使用 `OpenAiChatModel` 消费标准 OpenAI 协议，`UnifiedRemoteClient` 根据协议自动路由（OPENAI → langchain4j / CLAUDE → Retrofit）。
-> - **DeepSeek 适配**：API 请求自动禁用 thinking 模式；ToolSpec 自动添加 `additionalProperties: false` 兼容 strict 模式；`tool_choice: REQUIRED` 正确映射为 `"required"`。
-> - `AiAgentUseCase` 作为 Facade 兼容层存在，内部委托给 `AgentOrchestrator` 执行。默认 agentMode 已从 LOCAL 改为 REMOTE（远程推理优先策略）。
-> - 冗余组件已清理：`InferenceRouter`、`ToolCallingChatLanguageModel`、`ToolCallingOutputParser`、`ToolPromptBuilder`、`ToolCallingMode`、`ToolCallingConfig`、`AdaptiveStrategySelector`、`ToolOrchestrator` 等 ~1500 行代码已删除。
+> **架构说明（2026-06-22）**：
+> - **`:agent-core` 是 Java Android Library**（非 Kotlin），提供 LangChain4j 风格的 ChatModel、@Tool、AiServices、ChatMemory 等 API
+> - **Agent 编排层在 `:app` 模块**（Kotlin）：`AgentOrchestrator`、`CapabilityRegistry`、`PrivacyGuard`、`MemoryManager`、`SceneManager` 等均位于 `app/src/main/java/com/mamba/picme/domain/`
+> - **OpenAI 协议兼容**：`OpenAiChatModel` / `OpenAiStreamingChatModel` 支持所有兼容 OpenAI API 的服务（DeepSeek、通义千问等），含 tool_calls、流式、多轮对话
+> - **DeepSeek 适配**：API 请求自动禁用 thinking 模式；ToolSpec 自动添加 `additionalProperties: false` 兼容 strict 模式；`tool_choice: REQUIRED` 正确映射为 `"required"`
+> - `AiAgentUseCase` 作为 Facade 兼容层存在（:app 模块），内部委托给 `AgentOrchestrator` 执行。默认 agentMode 已从 LOCAL 改为 REMOTE（远程推理优先策略）
 
 ---
 
@@ -332,5 +331,5 @@ AI 可直接解析 Spec 中的任务标记，生成执行计划：
 ---
 
 > **维护者**：CO Agent
-> **最后更新**：2026-06-19
-> **实验状态**：进行中 · Phase 4 架构升级（本地/远程推理协议分离 + langchain4j 标准化 + DeepSeek 适配 + 相册/编辑产品重心迁移 + IM 远程控制产品线新增）
+> **最后更新**：2026-06-22
+> **实验状态**：进行中 · Phase 5（agent-core Java 库独立发布 + PicMe Demo 验证 + IM 远程控制）

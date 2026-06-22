@@ -19,7 +19,7 @@
 
 **核心问题（已解决）**：远程模型具备长上下文、强推理、原生 Function Calling 能力，但旧架构将其与本地模型等同对待——都走 `processInput() → 单条 JSON → 单命令执行` 路径，浪费了远程模型的核心优势。
 
-**2026-06-19 状态**：ADR-005 已完成协议分离。远程推理链路引入 langchain4j 1.13.0 标准化，直接使用标准 OpenAI Chat Completions API（含原生 tool_calls、流式、多轮对话）。本地链路保持自定义 JSON 数组协议不变。两条链路完全独立。
+**2026-06-22 状态**：ADR-005 已完成协议分离。远程推理链路使用 `:agent-core` 的 `OpenAiChatModel` 标准化，直接使用标准 OpenAI Chat Completions API（含原生 tool_calls、流式、多轮对话）。本地链路保持自定义 JSON 数组协议不变。两条链路完全独立。
 
 ---
 
@@ -168,10 +168,10 @@ POST /v1/chat/completions
 ### 4.2 langchain4j 标准化实现
 
 ```
-// LangChain4jOpenAiClient — 使用 langchain4j OpenAiChatModel 消费标准协议
-class LangChain4jOpenAiClient(config: RemoteModelConfig) : LlmChatLanguageModel {
+// :agent-core OpenAiChatModel — 消费标准 OpenAI 协议
+class RemoteOrchestrator(config: RemoteModelConfig) {
     
-    private val openAiChatModel = OpenAiChatModel.builder()
+    private val openAiChatModel = OpenAiChatModel.builder()  // :agent-core
         .baseUrl(config.baseUrl)
         .apiKey(config.apiKey)
         .modelName(config.modelId)
@@ -179,21 +179,17 @@ class LangChain4jOpenAiClient(config: RemoteModelConfig) : LlmChatLanguageModel 
         .maxTokens(config.maxTokens)
         .build()
     
-    override fun chat(request: ChatRequest): ChatResponse {
-        // 内部将 ChatRequest 序列化为标准 OpenAI 请求体
-        // 反序列化响应为 ChatResponse（含 ToolExecutionRequest 列表）
+    fun chat(request: ChatRequest): ChatResponse {
+        // 直接使用 :agent-core OpenAiChatModel，支持 tool_calls、流式、多轮
     }
 }
 ```
 
-**协议路由**：
+**协议说明**：
 ```
-class UnifiedRemoteClient(config: RemoteModelConfig) : LlmChatLanguageModel {
-    private val client = when (config.protocol) {
-        RemoteProtocol.OPENAI -> LangChain4jOpenAiClient(config)
-        RemoteProtocol.CLAUDE -> ClaudeCodingApiClient(config) // Retrofit 保留
-    }
-}
+// 远程推理直接使用 :agent-core OpenAiChatModel
+// OpenAiChatModel 支持所有兼容 OpenAI API 的服务（DeepSeek、通义千问等）
+// 通过 AiServices 代理构建器 + ChatMemory 实现多轮对话
 ```
 
 ### 4.3 命令解析（ToolCallCommandParser）
@@ -230,9 +226,9 @@ object ToolCallCommandParser {
 
 | 适配项 | 实现 | 位置 |
 |--------|------|------|
-| 禁用 thinking | API 请求自动附加 `thinking: {"type": "disabled"}` | `LangChain4jOpenAiClient.buildOpenAiRequest()` |
-| strict 模式兼容 | ToolSpec 自动添加 `additionalProperties: false` | `LangChain4jOpenAiClient.toolSpecToJson()` |
-| tool_choice 修复 | `REQUIRED` 正确映射为 `"required"`（非 `"auto"`） | `LangChain4jOpenAiClient.buildOpenAiRequest()` |
+| 禁用 thinking | API 请求自动附加 `thinking: {"type": "disabled"}` | `OpenAiChatModel` 内部处理 |
+| strict 模式兼容 | ToolSpec 自动添加 `additionalProperties: false` | `OpenAiChatModel` 内部处理 |
+| tool_choice 修复 | `REQUIRED` 正确映射为 `"required"`（非 `"auto"`） | `OpenAiChatModel` 内部处理 |
 | content 回退解析 | 当 API 未返回 tool_calls 但 content 含 tool_calls JSON 时，正则提取解析 | `RemoteOrchestrator.parseFallbackToolCalls()` |
 | Prompt 规范 | 禁止在 Prompt 中提供具体 tool_calls JSON 示例，避免模型输出到 content | `RemotePromptBuilder` |
 
@@ -260,7 +256,7 @@ class RemoteInferencePipeline {
         // 2. 构建 ChatRequest（含 ToolSpecifications）
         val request = remotePromptBuilder.buildBatchRequest(userInput, context)
         
-        // 3. 调用 UnifiedRemoteClient（标准 OpenAI 协议）
+        // 3. 调用 OpenAiChatModel（标准 OpenAI 协议）
         val response = chatLanguageModel.chat(request)
         
         // 4. 解析 tool_calls
@@ -439,11 +435,11 @@ class AiAgentUseCase(
 
 ### 7.2 IM 远程控制集成
 
-飞书远程控制复用同一 `UnifiedRemoteClient` 和 `RemoteInferencePipeline`：
+飞书远程控制复用同一 `RemoteOrchestrator` 和 `RemoteInferencePipeline`：
 
 ```
 飞书消息 → FeishuChannelHandler → RemoteCommandDispatcher
-    → LLM 解析意图（复用 UnifiedRemoteClient，独立 System Prompt）
+    → LLM 解析意图（复用 RemoteOrchestrator，独立 System Prompt）
     → CapabilityRegistry.dispatch()
     → 结果 → FeishuChannelHandler.sendMessage/sendImage
 ```
@@ -499,7 +495,7 @@ class AiAgentUseCase(
 
 ### Phase 1: 基础设施 (RD) — 已完成
 - [x] `agent-task:remote-infra-001` 实现 `RemoteInferencePipeline`（标准 OpenAI 协议）
-- [x] `agent-task:remote-infra-002` 引入 langchain4j 1.13.0，`LangChain4jOpenAiClient` 标准化
+- [x] `agent-task:remote-infra-002` 引入 :agent-core OpenAiChatModel 标准化
 - [x] `agent-task:remote-infra-003` 实现 `ToolCallCommandParser`（tool_calls → AgentCommand）
 - [x] `agent-task:remote-infra-004` 删除 `InferenceRouter`、`AdaptiveStrategySelector` 等冗余组件
 
@@ -540,10 +536,10 @@ class AiAgentUseCase(
 
 ### B. 相关代码
 - [AiAgentUseCase.kt](../../app/src/main/java/com/mamba/picme/domain/usecase/AiAgentUseCase.kt)
-- [AgentOrchestrator.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/AgentOrchestrator.kt)
-- [RemoteInferencePipeline.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/remote/pipeline/RemoteInferencePipeline.kt)
-- [RemoteOrchestrator.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/remote/pipeline/RemoteOrchestrator.kt)
-- [LangChain4jOpenAiClient.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/platform/llm/remote/LangChain4jOpenAiClient.kt)
-- [UnifiedRemoteClient.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/platform/llm/remote/UnifiedRemoteClient.kt)
-- [ToolCallCommandParser.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/remote/parser/ToolCallCommandParser.kt)
-- [RemotePromptBuilder.kt](../../agent-core/src/main/java/com/mamba/picme/agent/core/remote/pipeline/RemotePromptBuilder.kt)
+- [AgentOrchestrator.kt](../../app/src/main/java/com/mamba/picme/domain/agent/AgentOrchestrator.kt)
+- [RemoteInferencePipeline.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemoteInferencePipeline.kt)
+- [RemoteOrchestrator.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemoteOrchestrator.kt)
+- [OpenAiChatModel.java](../../agent-core/src/main/java/com/mamba/model/openai/OpenAiChatModel.java) — :agent-core OpenAI 兼容聊天模型
+- [AiServices.java](../../agent-core/src/main/java/com/mamba/service/AiServices.java) — :agent-core AI 服务代理构建器
+- [ToolCallCommandParser.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/ToolCallCommandParser.kt)
+- [RemotePromptBuilder.kt](../../app/src/main/java/com/mamba/picme/domain/agent/remote/RemotePromptBuilder.kt)

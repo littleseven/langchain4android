@@ -1,5 +1,7 @@
 # PicMe 远程推理 ReAct 模式架构审查报告
 
+> **⚠️ 历史审查文档（2026-06-22）**：本报告生成于 2026-06-19，文中引用的 `LangChain4jOpenAiClient`、`UnifiedRemoteClient` 等类已在后续重构中被移除。当前远程推理架构为：`:agent-core`（Java 库）提供 `OpenAiChatModel`/`OpenAiStreamingChatModel`，`:app` 模块的 `RemoteOrchestrator` 直接使用 `:agent-core` API 编排。最新架构以 `docs/02-ARCHITECTURE/AGENT_ARCHITECTURE.md` 和 `docs/03-TECHNICAL-SPECS/REMOTE_INFERENCE_ARCHITECTURE.md` 为准。
+
 > 生成时间：2026-06-19
 > 审查范围：agent-core 远程推理链路（ReAct / L2-L4 / 飞书远程控制）
 > 版本基线：langchain4j 1.13.0+，OpenAI Chat Completions API 协议

@@ -187,6 +187,8 @@ agent-core/src/main/java/com/mamba/picme/agent/core/
 
 **理由**：ADR-005 已决策删除此包装层。远程链路直接通过 `UnifiedRemoteClient`（LangChain4j SDK）发出标准 OpenAI 请求并接收标准响应，SDK 原生支持 `tool_calls`。
 
+> **实现说明（2026-06-22）**：`UnifiedRemoteClient` 已在后续重构中被移除，当前远程链路通过 `:agent-core` 的 `OpenAiChatModel` 直接调用 OpenAI API。
+
 #### 2.4 `ToolPromptBuilder.kt` → 并入 RemotePromptBuilder
 
 | 原文件 | 处置 |
@@ -549,10 +551,10 @@ graph TB
 | Phase 2: 冗余删除 | ✅ 已完成 | 2026-06-18 |
 | Phase 3: Pipeline 重构 | ✅ 已完成 | 2026-06-18 |
 
-> **实现差异说明（2026-06-21）**：本 ADR 的核心原则（本地/远程包物理隔离）已完全落实，但实际实现与提议的目标包结构存在以下差异：
+> **实现差异说明（2026-06-22）**：本 ADR 的核心原则（本地/远程包物理隔离）已完全落实，但实际实现与提议的目标包结构存在以下差异：
 > - **包路径**：实际使用 `inference/local/` 和 `inference/remote/` 而非提议的 `local/` 和 `remote/` 直铺（保留 `inference/` 父级以便代码导航）
 > - **文件名**：`ToolCallParser.kt` → 实际为 `ToolCallCommandParser.kt`
-> - **简化实现**：`UnifiedRemoteClient.kt`、`OpenAiProtocol.kt`、`LangChain4jOpenAiClient.kt` 未作为独立文件创建，远程编排逻辑集中在 `RemoteReActAgent.kt`
+> - **已移除的类**：本 ADR 中引用的 `UnifiedRemoteClient`、`LangChain4jOpenAiClient` 已不存在。当前远程推理架构为：`:agent-core`（Java 库）提供 `OpenAiChatModel`/`OpenAiStreamingChatModel`，`:app` 模块的 `RemoteOrchestrator` 直接使用 `:agent-core` API 编排，无独立的客户端包装层
 > - **react 包**：位于 `inference/remote/react/` 而非提议的 `react/` 顶层包
 > - **GBNF Grammar**：提议中列为本地约束方式，实际已尝试后放弃
 

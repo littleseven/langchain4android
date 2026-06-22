@@ -1,4 +1,12 @@
-# LangChain4Android 技术规划 v3.0 —— Fork 源码直改方案
+> **ℹ️ 历史文档声明（2026-06-22）**：本文档为 Mamba Agent 的早期技术规划，已随项目演进被取代。
+> - 模块名已从 `mamba-agent` 更改为 `:agent-core`
+> - 包名已从 `dev.langchain4j` Fork 改为 `com.mamba` 自研实现
+> - 项目已重定位为 **langchain4android**，agent-core 已发布到 JitPack
+> - 当前实现请参考 [`README.md`](../README.md) 和 [`AGENT_ARCHITECTURE.md`](./02-ARCHITECTURE/AGENT_ARCHITECTURE.md)
+
+---
+
+# LangChain4Android 技术规划 v3.0 —— Fork 源码直改方案（历史文档）
 
 ## 1. 项目概述
 
@@ -30,10 +38,10 @@
 
 ## 3. 模块架构
 
-> **设计原则**：所有代码合并到单一库 `mamba-agent` 中，无需拆分为多个子模块。Demo 直接使用 PicMe 现有 app 模块，无需额外创建 sample-app。
+> **设计原则**：所有代码合并到单一库 `agent-core` 中，无需拆分为多个子模块。Demo 直接使用 PicMe 现有 app 模块，无需额外创建 sample-app。
 
 ```
-mamba-agent/                              # 单一库，合并所有模块
+agent-core/                              # 单一库，合并所有模块
 ├── src/main/java/com/mamba/
 │   ├── tool/                             # @Tool 注解 + ToolSpecification（保留）
 │   ├── service/                          # AiServices（重写，移除 SPI）
@@ -60,8 +68,8 @@ mamba-agent/                              # 单一库，合并所有模块
 # Demo：直接使用 PicMe 现有 app 模块
 app/
 ├── src/main/java/com/mamba/picme/
-│   └── ...                               # 现有 PicMe 业务代码，直接集成 mamba-agent
-└── build.gradle.kts                      # 添加 implementation(project(":mamba-agent"))
+│   └── ...                               # 现有 PicMe 业务代码，直接集成 agent-core
+└── build.gradle.kts                      # 添加 implementation(project(":agent-core"))
 ```
 
 ---
@@ -127,7 +135,7 @@ app/
 | ProGuard 规则 | `-keep class com.mamba.**` |
 | 文档 | 示例代码里的 import |
 
-> **注意**：包名替换范围仅限 `mamba-agent` 模块内部源码。PicMe app 模块中引用 `mamba-agent` 时使用新包名 `com.mamba.*`，不影响 PicMe 其他业务代码。
+> **注意**：包名替换范围仅限 `agent-core` 模块内部源码。PicMe app 模块中引用 `agent-core` 时使用新包名 `com.mamba.*`，不影响 PicMe 其他业务代码。
 
 ---
 
@@ -144,7 +152,7 @@ app/
 ### 6.2 GsonJsonCodec 实现
 
 ```
-// mamba-agent/src/main/java/com/mamba/agent/json/GsonJsonCodec.java
+// agent-core/src/main/java/com/mamba/agent/json/GsonJsonCodec.java
 package com.mamba.json;
 
 import com.google.gson.Gson;
@@ -198,7 +206,7 @@ if (this.jsonCodec == null) {
 
 ## 7. 构建配置
 
-### 7.1 PicMe 根 build.gradle.kts（在现有项目新增 mamba-agent 模块）
+### 7.1 PicMe 根 build.gradle.kts（在现有项目新增 agent-core 模块）
 
 ```
 plugins {
@@ -227,12 +235,9 @@ include(":app")
 include(":beauty-api")
 include(":beauty-engine")
 include(":agent-core")
-
-// 新增：mamba-agent 单一库
-include(":mamba-agent")
 ```
 
-### 7.2 mamba-agent/build.gradle.kts（单一库配置）
+### 7.2 agent-core/build.gradle.kts（单一库配置）
 
 ```
 plugins {
@@ -271,7 +276,7 @@ android {
 }
 
 dependencies {
-    // ─── 核心依赖（原 mamba-agent-core + open-ai + http-client-okhttp 合并） ───
+    // ─── 核心依赖（原 langchain4j-core + open-ai + http-client-okhttp 合并） ───
 
     // JSON 序列化（替换 Jackson）
     api("com.google.code.gson:gson:2.11.0")
@@ -284,7 +289,7 @@ dependencies {
     // 日志（保留 SLF4J API，由调用方选择桥接实现）
     api("org.slf4j:slf4j-api:2.0.16")
 
-    // ─── Android 生态（原 mamba-agent-android 合并） ───
+    // ─── Android 生态（原 langchain4j-android 合并） ───
 
     // Lifecycle
     api("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
@@ -314,12 +319,12 @@ dependencies {
 }
 ```
 
-### 7.3 PicMe app/build.gradle.kts（使用 mamba-agent）
+### 7.3 PicMe app/build.gradle.kts（使用 agent-core）
 
 ```
 dependencies {
     // 直接引用单一库
-    implementation(project(":mamba-agent"))
+    implementation(project(":agent-core"))
 
     // PicMe 现有依赖保持不变...
 }
@@ -328,7 +333,7 @@ dependencies {
 ### 7.5 ProGuard 规则
 
 ```
-# mamba-agent-proguard.pro
+# agent-core-proguard.pro
 # Gson
 -keepattributes Signature, InnerClasses, EnclosingMethod
 -keepclassmembers class com.mamba.** {
@@ -353,7 +358,7 @@ dependencies {
 
 ### Phase 1：Fork 与清理（1 周）
 
-- [ ] 在 PicMe 项目中创建 `mamba-agent` 模块目录
+- [ ] 在 PicMe 项目中创建 `agent-core` 模块目录
 - [ ] 复制 langchain4j 官方源码（core + open-ai + http-client-okhttp）到单一库
 - [ ] 全局替换包名 `dev.langchain4j` → `com.mamba`
 - [ ] 删除 `langchain4j-http-client-jdk` 相关代码
@@ -385,12 +390,12 @@ dependencies {
 
 ### Phase 4：PicMe 集成（1 周）
 
-- [ ] 在 PicMe app 模块中集成 mamba-agent（`implementation(project(":mamba-agent"))`）
-- [ ] 替换现有远程推理实现为 mamba-agent 的 OpenAiChatModel
+- [ ] 在 PicMe app 模块中集成 agent-core（`implementation(project(":agent-core"))`）
+- [ ] 替换现有远程推理实现为 agent-core 的 OpenAiChatModel
 - [ ] 验证 Tool Calling 端到端流程（DeepSeek / OpenAI）
 - [ ] 验证流式对话功能
 - [ ] 验证对话历史持久化
-- [ ] 性能对比：mamba-agent vs 现有实现
+- [ ] 性能对比：agent-core vs 现有实现
 
 ### Phase 5：测试与发布（1 周）
 
@@ -443,7 +448,7 @@ dependencies {
 ### 10.1 版本命名
 
 ```
-mamba-agent-1.16.3.0
+agent-core-1.16.3.0
              ↑ ↑ ↑ ↑
              │ │ │ └─ 补丁号（bugfix）
              │ │ └─── 小版本（新功能）
@@ -459,9 +464,9 @@ mamba-agent-1.16.3.0
 
 | 场景 | 策略 |
 |------|------|
-| PicMe 内部使用 | 作为 `project(":mamba-agent")` 本地模块依赖 |
+| PicMe 内部使用 | 作为 `project(":agent-core")` 本地模块依赖 |
 | 未来独立发布 | 评估后提取为独立仓库，发布到 Maven Central（groupId: `com.mamba`） |
-| 上游 bugfix | cherry-pick 到 `mamba-agent` 模块 |
+| 上游 bugfix | cherry-pick 到 `agent-core` 模块 |
 
 ### 10.3 发布检查清单
 
@@ -514,7 +519,7 @@ mamba-agent-1.16.3.0
 ```
 // PicMe app/build.gradle.kts
 dependencies {
-    implementation(project(":mamba-agent"))
+    implementation(project(":agent-core"))
 }
 ```
 

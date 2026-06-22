@@ -189,7 +189,7 @@ class FeishuChannelHandler(
 class RemoteCommandDispatcher(
     private val channelHandler: FeishuChannelHandler,
     private val capabilityRegistry: CapabilityRegistry,
-    private val remoteLlmClient: UnifiedRemoteClient,
+    private val remoteOrchestrator: RemoteOrchestrator,  // 使用 :agent-core OpenAiChatModel
 ) {
     /**
      * 接收飞书消息并分派执行
@@ -372,12 +372,12 @@ class RemoteCommandDispatcher(
 
 ```
 飞书消息 → FeishuChannelHandler → RemoteCommandDispatcher
-    → LLM 解析意图（复用 UnifiedRemoteClient）
+    → LLM 解析意图（复用 :agent-core OpenAiChatModel）
     → CapabilityRegistry.dispatch()
     → 结果 → FeishuChannelHandler.sendMessage/sendImage
 ```
 
-- IM 远程的 LLM 调用与 App 内共享同一 `UnifiedRemoteClient`
+- IM 远程的 LLM 调用与 App 内共享同一 `:agent-core OpenAiChatModel`
 - 使用独立 System Prompt（IM 场景上下文不同）
 - Capability 执行层完全复用
 
@@ -440,7 +440,7 @@ class RemoteCommandDispatcher(
 | **消息接收** | 飞书 WS SDK | 飞书 WS SDK（相同） |
 | **消息回复** | 飞书 OAPI HTTP | 飞书 OAPI HTTP（相同） |
 | **命令执行** | AccessibilityService + ToolRegistry | **Capability 系统**（复用现有架构） |
-| **LLM 集成** | LangChain4j (OpenAI/Anthropic) | **UnifiedRemoteClient**（复用现有链路） |
+| **LLM 集成** | LangChain4j (OpenAI/Anthropic) | **:agent-core OpenAiChatModel**（复用现有链路） |
 | **目标** | 通用 Android 自动化 | **专注相册+图片编辑**（核心能力更深） |
 
 **核心差异**：PicMe 不需要 AccessibilityService 来做通用 UI 自动化。我们的 Capability 系统直接操作相册/编辑内核，稳定性和响应速度优于无障碍节点遍历。
@@ -679,8 +679,8 @@ if (toolCalls.isEmpty() && text != null) {
 - [ ] **错误处理完整**：参数缺失/非法值返回 `ToolResult.error()` 而非抛异常
 - [ ] **Capability 注册**：新页面导航需在 `NavigationCapability.navigateTo()` 添加路由分支
 - [ ] **测试覆盖**：验证工具在 ReAct 循环中能被正确调用和执行
-- [ ] **DeepSeek strict 模式兼容**：`parameters` 中设置 `additionalProperties: false`（已由 `LangChain4jOpenAiClient.toolSpecToJson()` 自动处理）
-- [ ] **DeepSeek thinking 禁用**：使用 DeepSeek V4 时 API 请求自动附加 `thinking: {"type": "disabled"}`（已由 `LangChain4jOpenAiClient.buildOpenAiRequest()` 自动处理）
+- [ ] **DeepSeek strict 模式兼容**：`parameters` 中设置 `additionalProperties: false`（已由 `:agent-core OpenAiChatModel` 内部自动处理）
+- [ ] **DeepSeek thinking 禁用**：使用 DeepSeek V4 时 API 请求自动附加 `thinking: {"type": "disabled"}`（已由 `:agent-core OpenAiChatModel` 内部自动处理）
 
 ### 13.5 相关文件
 
