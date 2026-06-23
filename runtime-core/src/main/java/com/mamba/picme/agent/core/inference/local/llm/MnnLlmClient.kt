@@ -1,6 +1,7 @@
 package com.mamba.picme.agent.core.inference.local.llm
 
 import android.content.Context
+import android.graphics.Bitmap
 import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.mnn.MnnGlobalReleaseLock
 import org.json.JSONObject
@@ -128,6 +129,44 @@ class MnnLlmClient(private val context: Context) {
         } catch (exception: Exception) {
             Logger.e(tag, "Generation failed", exception)
             ""
+        }
+    }
+
+    /**
+     * 使用图片 + system prompt + user prompt 进行多模态生成（同步阻塞）。
+     *
+     * 图片被转换为 RGB float 数据，通过 MultimodalPrompt 传给 MNN-LLM vision encoder。
+     *
+     * **注意**：此方法应在专用线程上调用（由 [LocalLlmEngine] 统一调度）。
+     *
+     * @param systemPrompt 系统提示词
+     * @param userPrompt   用户提示词（不含图片标记，native 层自动拼接）
+     * @param bitmap       输入图片，建议尺寸 ≤ 1024px
+     * @param maxNewTokens 最大生成 token 数，默认 256
+     * @return 包含完整回复和性能指标的 StreamResult
+     */
+    fun generateWithImage(
+        systemPrompt: String,
+        userPrompt: String,
+        bitmap: Bitmap,
+        maxNewTokens: Int = 256
+    ): StreamResult {
+        if (!isLoaded) {
+            Logger.w(tag, "LLM not loaded, cannot generate with image")
+            return StreamResult(error = "LLM not loaded")
+        }
+
+        return try {
+            val resultMap = MnnGlobalReleaseLock.withOperation {
+                nativeGenerateWithImage(nativeHandle, systemPrompt, userPrompt, bitmap, maxNewTokens)
+            }
+            val result = StreamResult.fromHashMap(resultMap)
+            Logger.d(tag, "[Vision] result: ${result.response.take(200)}, " +
+                "vision=${result.visionTime}us, decode=${result.decodeTime}us")
+            result
+        } catch (exception: Exception) {
+            Logger.e(tag, "Image generation failed", exception)
+            StreamResult(error = exception.message ?: "Unknown error")
         }
     }
 
@@ -329,6 +368,14 @@ class MnnLlmClient(private val context: Context) {
     private external fun nativeDestroy(handle: Long)
     private external fun nativeReset(handle: Long)
     private external fun nativeGenerate(handle: Long, prompt: String, maxNewTokens: Int): String
+    private external fun nativeGenerateWithImage(
+        handle: Long,
+        systemPrompt: String,
+        userPrompt: String,
+        bitmap: Bitmap,
+        maxNewTokens: Int
+    ): HashMap<String, Any>
+
     private external fun nativeGenerateWithSystem(
         handle: Long,
         systemPrompt: String,
