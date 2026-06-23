@@ -429,31 +429,35 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
 
     // Android Bitmap ARGB_8888 像素转为 RGB uint8 NHWC
     //
-    // 【颜色通道顺序说明】
-    // Android Bitmap.Config.ARGB_8888 的 32 位像素值为 0xAARRGGBB。
-    // 在 ARM little-endian 内存中，字节排列为 [B, G, R, A]（低地址→高地址）。
-    // pixels[0]=B, pixels[1]=G, pixels[2]=R, pixels[3]=A
+    // 【设计决策】使用 uint32_t 位运算提取通道，而非直接按字节索引。
     //
-    // Qwen 视觉编码器期望 RGB 格式（见 MNN issue #3326: cv::COLOR_BGR2RGB）。
-    // 因此从 Bitmap 提取时必须正确映射：pixels[2]→R, pixels[1]→G, pixels[0]→B。
+    // Android Bitmap.Config.ARGB_8888 的每个像素是一个 32 位值:
+    //   0xAARRGGBB  (A=Alpha, R=Red, G=Green, B=Blue)
+    //
+    // AndroidBitmap_lockPixels 返回的 uint32_t* 已经解析为 host 字节序,
+    // C 语言的位运算 (pixel >> 16) & 0xFF 在逻辑层面提取 Red 分量,
+    // 完全不受底层内存的 big/little-endian 影响。
+    //
+    // 对比按字节索引的方式 (pixels[offset+0], pixels[offset+1], ...):
+    // 字节索引依赖 ARM little-endian 的物理排列 [B,G,R,A]，
+    // 可读性差且平台相关。位运算方案语义明确、跨平台安全。
     //
     // MNN 视觉编码器使用 _Input + writeMap<uint8_t>，传入 uint8 原始像素
     // 编码器内部自行处理归一化 (mean=[127.5], norm=[1/127.5])
     // 参考 MNN Demo: video/video_processor.cpp CreateTensorFromRgb()
     //
-    // 注意：之前代码错误地将 pixels[0] 映射为 R、pixels[2] 映射为 B，
-    //       导致 R↔B 通道交换（橙黄色→蓝色，蓝色→橙黄色）。
-    //       已于 2026-06-23 修复。
+    // 注意：之前代码按字节索引错误地交换了 R↔B 通道, 已于 2026-06-23 修复。
     std::vector<uint8_t> rgbData(height * width * 3);  // HWC: H × W × 3
-    uint8_t *pixels = static_cast<uint8_t *>(bitmapPixels);
+    uint32_t *pixels = static_cast<uint32_t *>(bitmapPixels);
+    int pixelStride = bitmapInfo.stride / 4;  // stride 按字节, 除以 4 得到 uint32_t 步长
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            int srcIdx = y * bitmapInfo.stride + x * 4;
+            uint32_t pixel = pixels[y * pixelStride + x];
             int dstIdx = (y * width + x) * 3;
-            // ARGB_8888 little-endian: pixels[0]=B, pixels[1]=G, pixels[2]=R, pixels[3]=A
-            rgbData[dstIdx]     = pixels[srcIdx + 2];  // R (保持 uint8 0-255)
-            rgbData[dstIdx + 1] = pixels[srcIdx + 1];  // G
-            rgbData[dstIdx + 2] = pixels[srcIdx];      // B
+            // 0xAARRGGBB → 位运算提取, 不受字节序影响
+            rgbData[dstIdx]     = (pixel >> 16) & 0xFF;  // R
+            rgbData[dstIdx + 1] = (pixel >>  8) & 0xFF;  // G
+            rgbData[dstIdx + 2] =  pixel        & 0xFF;  // B
         }
     }
     AndroidBitmap_unlockPixels(env, bitmap);
