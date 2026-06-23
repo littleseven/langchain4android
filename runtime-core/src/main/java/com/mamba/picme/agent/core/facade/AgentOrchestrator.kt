@@ -12,6 +12,7 @@ import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
 import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
+import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
 import com.mamba.picme.agent.core.local.llm.LlmChatRequest
 import com.mamba.picme.agent.core.local.llm.LlmChatResponse
 import com.mamba.picme.agent.core.local.llm.StreamingChatResponseHandler
@@ -102,6 +103,14 @@ class AgentOrchestrator private constructor(context: Context) {
     fun getCapabilityRegistry(): CapabilityRegistry {
         return _capabilityRegistry
     }
+
+    /**
+     * 获取本地 LLM 推理引擎。
+     *
+     * 供非 Agent 消费者（如后台标签索引 Worker）直接使用模型进行推理。
+     * **注意**：调用方应确保模型已加载后再使用。
+     */
+    fun getLocalLlmEngine(): LocalLlmEngine = localLlmEngine
 
     /**
      * 获取最近一次本地 LLM 生成的性能指标。
