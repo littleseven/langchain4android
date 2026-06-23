@@ -131,6 +131,18 @@ interface MediaDao {
     /** 重置所有人脸数据（用于强制重新聚类） */
     @Query("UPDATE media_assets SET hasFace = 0, faceId = NULL")
     suspend fun resetAllFaceData()
+
+    /** 获取未标记 AI 标签的媒体 */
+    @Query("SELECT * FROM media_assets WHERE labels IS NULL OR labels = '' ORDER BY captureDate DESC")
+    suspend fun getUnlabeledMedia(): List<MediaEntity>
+
+    /** 更新媒体的 AI 标签 */
+    @Query("UPDATE media_assets SET labels = :labels WHERE id = :mediaId")
+    suspend fun updateLabels(mediaId: Long, labels: String)
+
+    /** 重置所有 AI 标签（用于强制重新标记） */
+    @Query("UPDATE media_assets SET labels = NULL")
+    suspend fun resetAllLabels()
 }
 
 data class FaceGroupCount(
