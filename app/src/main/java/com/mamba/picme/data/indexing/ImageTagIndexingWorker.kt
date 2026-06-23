@@ -34,7 +34,9 @@ import org.json.JSONArray
  */
 class ImageTagIndexingWorker(
     private val context: Context,
-    private val localLlmEngine: LocalLlmEngine
+    private val localLlmEngine: LocalLlmEngine,
+    private val modelKey: String = "qwen3_5_2b",
+    private val useOpencl: Boolean = false
 ) {
 
     companion object {
@@ -97,6 +99,12 @@ class ImageTagIndexingWorker(
     }
 
     private suspend fun doBatchTagging() {
+        // 0. 确保模型已加载
+        if (!ensureModelLoaded()) {
+            Logger.w(TAG, "Cannot start tagging: LLM model not loaded and could not be loaded")
+            return
+        }
+
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
         val tagDao = db.tagDao()
@@ -167,6 +175,32 @@ class ImageTagIndexingWorker(
         }
 
         Logger.i(TAG, "Tag indexing done: $taggedCount/${unlabeledMedia.size} tagged")
+    }
+
+    /**
+     * 确保 LLM 模型已加载。未加载时尝试自动加载。
+     * @return true 如果模型已加载或加载成功
+     */
+    private suspend fun ensureModelLoaded(): Boolean {
+        if (localLlmEngine.isLoaded) {
+            Logger.d(TAG, "LLM model already loaded")
+            return true
+        }
+
+        if (!localLlmEngine.isModelAvailable(modelKey, context)) {
+            Logger.w(TAG, "LLM model not downloaded: $modelKey, skipping AI tagging")
+            return false
+        }
+
+        Logger.i(TAG, "Loading LLM model: $modelKey (opencl=$useOpencl)...")
+        val result = localLlmEngine.loadModel(modelKey, useOpencl)
+        return if (result.isSuccess) {
+            Logger.i(TAG, "LLM model loaded successfully")
+            true
+        } else {
+            Logger.w(TAG, "Failed to load LLM model: ${result.exceptionOrNull()?.message}")
+            false
+        }
     }
 
     /**
