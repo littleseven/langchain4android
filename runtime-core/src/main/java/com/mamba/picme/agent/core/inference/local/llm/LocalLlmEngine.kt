@@ -1,6 +1,7 @@
 package com.mamba.picme.agent.core.inference.local.llm
 
 import android.content.Context
+import android.graphics.Bitmap
 import com.mamba.picme.agent.core.local.llm.ChatResponseMetadata
 import com.mamba.picme.agent.core.local.llm.LlmChatLanguageModel
 import com.mamba.picme.agent.core.local.llm.LlmChatRequest
@@ -342,6 +343,63 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
         is AiMessage -> message.text()
         is ToolExecutionResultMessage -> message.text()
         else -> message.toString()
+    }
+
+    /**
+     * 使用本地多模态模型对图片进行推理。
+     *
+     * 将 [systemPrompt] 和 [userPrompt] 与 [bitmap] 一起发送给 MNN-LLM 视觉编码器，
+     * 返回模型生成的文本回复。
+     *
+     * **注意**：此方法在 [modelDispatcher] 上阻塞执行，调用方应在 IO 协程中调用。
+     *
+     * @param bitmap       输入图片（建议最长边 ≤ 512px）
+     * @param systemPrompt 系统提示词（定义任务，如 "简短描述图片内容"）
+     * @param userPrompt   用户提示词（具体问题）
+     * @param maxTokens    最大生成 token 数，默认 128
+     * @return 模型生成的文本回复，失败时返回空字符串
+     */
+    suspend fun imageInference(
+        bitmap: Bitmap,
+        systemPrompt: String,
+        userPrompt: String = "请描述这张图片",
+        maxTokens: Int = 128
+    ): String = withContext(modelDispatcher) {
+        engineMutex.withLock {
+            if (!client.isLoaded) {
+                Logger.w(tag, "LLM not loaded, cannot do image inference")
+                return@withLock ""
+            }
+
+            try {
+                val result = client.generateWithImage(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    bitmap = bitmap,
+                    maxNewTokens = maxTokens
+                )
+                if (result.error != null) {
+                    Logger.w(tag, "Image inference error: ${result.error}")
+                    return@withLock ""
+                }
+                lastGenerationMetrics = LlmGenerationMetrics(
+                    promptLen = result.promptLen,
+                    decodeLen = result.decodeLen,
+                    prefillTime = result.prefillTime,
+                    decodeTime = result.decodeTime,
+                    prefillSpeed = result.prefillSpeed,
+                    decodeSpeed = result.decodeSpeed
+                )
+                Logger.d(tag, "[Vision] inference done: ${result.response.take(100)}, " +
+                    "vision=${result.visionTime}us, decode=${result.decodeTime}us")
+                result.response
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                Logger.e(tag, "Image inference failed", exception)
+                ""
+            }
+        }
     }
 
     /**
