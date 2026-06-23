@@ -370,7 +370,12 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
 
     LOGD("[Vision] Image: %dx%d, format=%d, stride=%d", width, height, bitmapInfo.format, bitmapInfo.stride);
 
-    // 将 RGBA_8888 像素转换为 float32 RGB NCHW 格式
+    // 手动 RGBA_8888 → RGB float32 NCHW 转换 + Qwen-VL 标准归一化
+    // 归一化参数: mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711]
+    // 未归一化的 [0,1] 像素值导致 vision encoder 极端激活值 → KV cache 损坏 → native crash
+    constexpr float MEAN_R = 0.48145466f, MEAN_G = 0.4578275f,  MEAN_B = 0.40821073f;
+    constexpr float STD_R  = 0.26862954f, STD_G  = 0.26130258f, STD_B  = 0.27577711f;
+
     std::vector<float> rgbData(3 * height * width);
     uint8_t *pixels = static_cast<uint8_t *>(bitmapPixels);
     for (int y = 0; y < height; y++) {
@@ -379,14 +384,14 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
             int dstR = 0 * height * width + y * width + x;
             int dstG = 1 * height * width + y * width + x;
             int dstB = 2 * height * width + y * width + x;
-            rgbData[dstR] = pixels[srcIdx] / 255.0f;
-            rgbData[dstG] = pixels[srcIdx + 1] / 255.0f;
-            rgbData[dstB] = pixels[srcIdx + 2] / 255.0f;
+            rgbData[dstR] = (pixels[srcIdx]     / 255.0f - MEAN_R) / STD_R;
+            rgbData[dstG] = (pixels[srcIdx + 1] / 255.0f - MEAN_G) / STD_G;
+            rgbData[dstB] = (pixels[srcIdx + 2] / 255.0f - MEAN_B) / STD_B;
         }
     }
     AndroidBitmap_unlockPixels(env, bitmap);
 
-    // 创建 MNN VARP
+    // 创建 MNN VARP: _Const(data, {1,3,H,W}, NCHW, float32)
     std::vector<int> imageShape = {1, 3, height, width};
     auto imageVar = MNN::Express::_Const(
         rgbData.data(), imageShape, MNN::Express::NCHW, halide_type_of<float>());
