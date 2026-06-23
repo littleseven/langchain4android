@@ -659,7 +659,8 @@ fun GalleryScreen(
                         onClearEditState = {
                             viewModel.clearPhotoEditState()
                         },
-                        voiceCoordinator = voiceCoordinator
+                        voiceCoordinator = voiceCoordinator,
+                        onReTag = { imageTagWorker.forceReTag() }
                     )
                 }
             }

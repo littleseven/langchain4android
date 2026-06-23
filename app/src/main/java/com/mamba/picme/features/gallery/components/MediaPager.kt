@@ -40,6 +40,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -50,11 +52,15 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -153,7 +159,8 @@ fun MediaPager(
     onProcessPhoto: (Bitmap, BeautySettings) -> Unit,
     onSavePhoto: (Bitmap) -> Unit,
     onClearEditState: () -> Unit,
-    voiceCoordinator: VoiceCommandCoordinator? = null
+    voiceCoordinator: VoiceCommandCoordinator? = null,
+    onReTag: () -> Unit = {}
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { assets.size })
     var showInfo by remember { mutableStateOf(false) }
@@ -162,6 +169,7 @@ fun MediaPager(
     var showBigBeauty106 by remember { mutableStateOf(false) }
     var currentPageZoomed by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }
+    var showBarsVisible by remember { mutableStateOf(true) }
     var editSettings by remember { mutableStateOf(BeautySettings()) }
     var processedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var loadedBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -281,8 +289,8 @@ fun MediaPager(
                         uri = asset.uri,
                         onClick = {
                             if (!isEditing) {
-                                Log.d(TAG, "Toggle info visibility via click")
-                                showInfo = !showInfo
+                                Log.d(TAG, "Toggle bars visibility via click")
+                                showBarsVisible = !showBarsVisible
                             }
                         },
                         onLongClick = {
@@ -302,88 +310,122 @@ fun MediaPager(
             }
         }
 
-        // Top Controls
-        mediaPagerTopControls(
-            onClose = {
-                if (isEditing) {
-                    isEditing = false
-                    editSettings = BeautySettings()
-                    processedBitmap = null
-                    onClearEditState()
-                } else if (showAiChatPanel) {
-                    showAiChatPanel = false
-                } else {
-                    onClose()
-                }
-            },
-            showInfo = showInfo && !isEditing,
-            showLandmarkAction = currentAsset?.type == MediaType.PHOTO && !isEditing,
-            showLandmarkOverlay = showLandmarkOverlay,
-            isEditing = isEditing,
-            onToggleInfo = {
-                Log.d("Gallery", "Toggle info visibility via button")
-                showInfo = !showInfo
-            },
-            onToggleLandmarks = {
-                showLandmarkOverlay = !showLandmarkOverlay
-            },
-            onStartEdit = startPhotoEdit,
-            onDelete = {
-                val selectedAsset = assets.getOrNull(pagerState.currentPage)
-                if (selectedAsset != null) {
-                    Log.d("Gallery", "Request delete media: ${selectedAsset.id}")
-                    onDelete(selectedAsset)
-                }
-            },
-            onShare = {
-                val selectedAsset = assets.getOrNull(pagerState.currentPage)
-                Log.d("Gallery", "Share media from pager: ${selectedAsset?.id}")
-                selectedAsset?.let { asset ->
-                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                        putExtra(Intent.EXTRA_STREAM, asset.uri.toUri())
-                        type = if (asset.type == MediaType.VIDEO) "video/*" else "image/*"
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // 格式化日期
+        val dateText = remember(currentAsset) {
+            currentAsset?.captureDate?.let {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                sdf.format(Date(it))
+            } ?: ""
+        }
+
+        // Top Controls with animated visibility
+        AnimatedVisibility(
+            visible = showBarsVisible && !currentPageZoomed,
+            enter = fadeIn() + slideInVertically(),
+            exit = fadeOut() + slideOutVertically(),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            mediaPagerTopControls(
+                onClose = {
+                    if (isEditing) {
+                        isEditing = false
+                        editSettings = BeautySettings()
+                        processedBitmap = null
+                        onClearEditState()
+                    } else if (showAiChatPanel) {
+                        showAiChatPanel = false
+                    } else {
+                        onClose()
                     }
-                    context.startActivity(Intent.createChooser(shareIntent, null))
-                }
-            },
-            onStartOcr = {
-                val selectedAsset = assets.getOrNull(pagerState.currentPage)
-                Log.d("Gallery", "Trigger OCR via toolbar button for asset: ${selectedAsset?.id}")
-                selectedAsset?.let { onStartOcr(it.uri) }
-            },
-            onStartVision = {
-                val asset = assets.getOrNull(pagerState.currentPage)
-                if (asset?.type != MediaType.PHOTO) return@mediaPagerTopControls
-                Log.d("Gallery", "Trigger vision inference for asset: ${asset.id}")
-                visionResult = null
-                isVisionLoading = true
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
-                            BitmapFactory.decodeStream(it)
+                },
+                isEditing = isEditing,
+                dateText = dateText,
+                onToggleInfo = {
+                    Log.d("Gallery", "Toggle info visibility via top bar")
+                    showInfo = !showInfo
+                },
+                onReTag = onReTag
+            )
+        }
+
+        // Bottom Bar with animated visibility
+        if (!isEditing && currentAsset?.type == MediaType.PHOTO) {
+            AnimatedVisibility(
+                visible = showBarsVisible && !currentPageZoomed,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                mediaPagerBottomBar(
+                    showLandmarkAction = currentAsset?.type == MediaType.PHOTO,
+                    showLandmarkOverlay = showLandmarkOverlay,
+                    showInfo = showInfo,
+                onShare = {
+                    val selectedAsset = assets.getOrNull(pagerState.currentPage)
+                    Log.d("Gallery", "Share media from pager: ${selectedAsset?.id}")
+                    selectedAsset?.let { asset ->
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            putExtra(Intent.EXTRA_STREAM, asset.uri.toUri())
+                            type = if (asset.type == MediaType.VIDEO) "video/*" else "image/*"
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-                        if (bitmap != null) {
-                            val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
-                            val result = engine.imageInference(
-                                bitmap = bitmap,
-                                systemPrompt = "你是一个图像内容分析助手。请用中文简短描述图片的内容。",
-                                userPrompt = "请用一句话描述这张图片中有什么",
-                                maxTokens = 64
-                            )
-                            visionResult = result.ifEmpty { "模型返回了空结果" }
-                            bitmap.recycle()
-                        } else {
-                            visionResult = "无法加载图片"
-                        }
-                    } catch (e: Exception) {
-                        Log.e("Gallery", "Vision inference failed", e)
-                        visionResult = "推理失败: ${e.message}"
+                        context.startActivity(Intent.createChooser(shareIntent, null))
                     }
-                    isVisionLoading = false
+                },
+                onStartEdit = startPhotoEdit,
+                onStartVision = {
+                    val asset = assets.getOrNull(pagerState.currentPage)
+                    if (asset?.type != MediaType.PHOTO) return@mediaPagerBottomBar
+                    Log.d("Gallery", "Trigger vision inference for asset: ${asset.id}")
+                    visionResult = null
+                    isVisionLoading = true
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
+                                BitmapFactory.decodeStream(it)
+                            }
+                            if (bitmap != null) {
+                                val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
+                                val result = engine.imageInference(
+                                    bitmap = bitmap,
+                                    systemPrompt = "你是一个图像内容分析助手。请用中文简短描述图片的内容。",
+                                    userPrompt = "请用一句话描述这张图片中有什么",
+                                    maxTokens = 64
+                                )
+                                visionResult = result.ifEmpty { "模型返回了空结果" }
+                                bitmap.recycle()
+                            } else {
+                                visionResult = "无法加载图片"
+                            }
+                        } catch (e: Exception) {
+                            Log.e("Gallery", "Vision inference failed", e)
+                            visionResult = "推理失败: ${e.message}"
+                        }
+                        isVisionLoading = false
+                    }
+                },
+                onToggleLandmarks = {
+                    showLandmarkOverlay = !showLandmarkOverlay
+                },
+                onToggleInfo = {
+                    Log.d("Gallery", "Toggle info visibility via button")
+                    showInfo = !showInfo
+                },
+                onStartOcr = {
+                    val selectedAsset = assets.getOrNull(pagerState.currentPage)
+                    Log.d("Gallery", "Trigger OCR via toolbar button for asset: ${selectedAsset?.id}")
+                    selectedAsset?.let { onStartOcr(it.uri) }
+                },
+                onDelete = {
+                    val selectedAsset = assets.getOrNull(pagerState.currentPage)
+                    if (selectedAsset != null) {
+                        Log.d("Gallery", "Request delete media: ${selectedAsset.id}")
+                        onDelete(selectedAsset)
+                    }
                 }
+            )
             }
-        )
+        }
 
         if (showLandmarkOverlay && currentAsset?.type == MediaType.PHOTO && !isEditing) {
             FaceLandmarkCanvasOverlay(
@@ -461,7 +503,7 @@ fun MediaPager(
                     onClick = { showAiChatPanel = true },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp)
+                        .padding(end = 16.dp, bottom = 80.dp)
                         .navigationBarsPadding(),
                     shape = CircleShape,
                     containerColor = MaterialTheme.colorScheme.primary
@@ -941,142 +983,297 @@ private fun VisionResultOverlay(
 @Composable
 private fun mediaPagerTopControls(
     onClose: () -> Unit,
-    showInfo: Boolean,
-    showLandmarkAction: Boolean,
-    showLandmarkOverlay: Boolean,
     isEditing: Boolean,
+    dateText: String,
     onToggleInfo: () -> Unit,
-    onToggleLandmarks: () -> Unit,
-    onStartEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onShare: () -> Unit,
-    onStartOcr: () -> Unit,
-    onStartVision: () -> Unit
+    onReTag: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = Color.Black.copy(alpha = 0.85f)
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(
-                onClick = {
-                    Log.d("Gallery", if (isEditing) "Cancel editing mode" else "Close MediaPager")
-                    onClose()
-                },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
-                )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left: Back + Date
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    imageVector = if (isEditing) Icons.Rounded.Close else Icons.Rounded.Close,
-                    contentDescription = stringResource(R.string.close),
-                    tint = Color.White
-                )
-            }
-
-            IconButton(
-                onClick = { onStartOcr() },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
-                )
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.TextSnippet,
-                    contentDescription = stringResource(R.string.ocr_action_label),
-                    tint = Color.White
-                )
-            }
-
-            IconButton(
-                onClick = onStartVision,
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
-                )
-            ) {
-                Icon(
-                    Icons.Rounded.AutoAwesome,
-                    contentDescription = "图像理解",
-                    tint = Color.White
-                )
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (showLandmarkAction) {
                 IconButton(
-                    onClick = onToggleLandmarks,
+                    onClick = {
+                        Log.d("Gallery", if (isEditing) "Cancel editing mode" else "Close MediaPager")
+                        onClose()
+                    },
                     colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = if (showLandmarkOverlay) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                        } else {
-                            Color.Black.copy(alpha = 0.5f)
-                        }
+                        containerColor = Color.Transparent
                     )
                 ) {
                     Icon(
-                        Icons.Rounded.Face,
-                        contentDescription = stringResource(R.string.landmark_overlay),
-                        tint = if (showLandmarkOverlay) Color.Black else Color.White
-                    )
-                }
-            }
-
-            if (!isEditing) {
-                IconButton(
-                    onClick = onStartEdit,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color.Black.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Icon(
-                        Icons.Rounded.AutoFixHigh,
-                        contentDescription = stringResource(R.string.edit),
+                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = stringResource(R.string.close),
                         tint = Color.White
                     )
                 }
+
+                if (dateText.isNotEmpty()) {
+                    Text(
+                        text = dateText,
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
 
+            // Right: Info + Refresh TAG
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(
+                    onClick = onToggleInfo,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Transparent
+                    )
+                ) {
+                    Icon(
+                        Icons.Rounded.Info,
+                        contentDescription = "图片信息",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onReTag,
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Transparent
+                    )
+                ) {
+                    Icon(
+                        Icons.Rounded.Refresh,
+                        contentDescription = "重新生成TAG",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun mediaPagerBottomBar(
+    showLandmarkAction: Boolean,
+    showLandmarkOverlay: Boolean,
+    showInfo: Boolean,
+    onShare: () -> Unit,
+    onStartEdit: () -> Unit,
+    onStartVision: () -> Unit,
+    onToggleLandmarks: () -> Unit,
+    onToggleInfo: () -> Unit,
+    onStartOcr: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showMoreMenu by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+        color = Color.Black.copy(alpha = 0.85f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 发送
             IconButton(
-                onClick = { onToggleInfo() },
+                onClick = onShare,
                 colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = if (showInfo) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                    } else {
-                        Color.Black.copy(alpha = 0.5f)
+                    containerColor = Color.Transparent
+                )
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.Send,
+                        contentDescription = "发送",
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        "发送",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // 编辑
+            IconButton(
+                onClick = onStartEdit,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent
+                )
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Rounded.AutoFixHigh,
+                        contentDescription = stringResource(R.string.edit),
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        "编辑",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // 图片理解
+            IconButton(
+                onClick = onStartVision,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent
+                )
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Rounded.AutoAwesome,
+                        contentDescription = "图像理解",
+                        tint = Color.White.copy(alpha = 0.9f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        "理解",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // 更多
+            Box {
+                IconButton(
+                    onClick = { showMoreMenu = true },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = Color.Transparent
+                    )
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Rounded.MoreHoriz,
+                            contentDescription = "更多",
+                            tint = Color.White.copy(alpha = 0.9f),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text(
+                            "更多",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 10.sp
+                        )
                     }
-                )
-            ) {
-                Icon(
-                    Icons.Rounded.Info,
-                    contentDescription = null,
-                    tint = if (showInfo) Color.Black else Color.White
-                )
-            }
+                }
 
-            IconButton(
-                onClick = { onShare() },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
-                )
-            ) {
-                Icon(
-                    Icons.Rounded.Share,
-                    contentDescription = stringResource(R.string.ocr_share),
-                    tint = Color.White
-                )
-            }
+                DropdownMenu(
+                    expanded = showMoreMenu,
+                    onDismissRequest = { showMoreMenu = false },
+                    modifier = Modifier.background(Color.DarkGray.copy(alpha = 0.95f))
+                ) {
+                    // OCR
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.TextSnippet,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("OCR 文字识别", color = Color.White, fontSize = 14.sp)
+                            }
+                        },
+                        onClick = {
+                            showMoreMenu = false
+                            onStartOcr()
+                        }
+                    )
 
-            IconButton(
-                onClick = { onDelete() },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
-                )
-            ) {
-                Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.delete), tint = Color.White)
+                    // 人脸关键点
+                    if (showLandmarkAction) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Icon(
+                                        Icons.Rounded.Face,
+                                        contentDescription = null,
+                                        tint = if (showLandmarkOverlay) Color(0xFF4FC3F7) else Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        if (showLandmarkOverlay) "人脸关键点 (已开启)" else "人脸关键点",
+                                        color = Color.White,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onToggleLandmarks()
+                            }
+                        )
+                    }
+
+                    // 图片信息
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(
+                                    Icons.Rounded.Info,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("图片信息", color = Color.White, fontSize = 14.sp)
+                            }
+                        },
+                        onClick = {
+                            showMoreMenu = false
+                            onToggleInfo()
+                        }
+                    )
+
+                    // 删除
+                    DropdownMenuItem(
+                        text = {
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(
+                                    Icons.Rounded.Delete,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF5252),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("删除", color = Color(0xFFFF5252), fontSize = 14.sp)
+                            }
+                        },
+                        onClick = {
+                            showMoreMenu = false
+                            onDelete()
+                        }
+                    )
+                }
             }
         }
     }
