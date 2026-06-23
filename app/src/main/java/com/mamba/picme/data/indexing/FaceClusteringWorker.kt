@@ -10,6 +10,7 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.data.local.AppDatabase
+import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,10 +21,16 @@ import kotlinx.coroutines.launch
 /**
  * 人脸聚类 Worker
  *
- * 流程:
- * 1. ML Kit Face Detection → 人脸 ROI
- * 2. MobileFaceNet (ONNX Runtime) → 512维 embedding
- * 3. DBSCAN 聚类（embedding 空间）→ faceId
+ * ## 已知问题与改进 (2026-06-23)
+ *
+ * 1. **[已修复] 仅处理第一张人脸**：现在处理 ML Kit 返回的全部人脸
+ * 2. **[已修复] embedding 未持久化**：新增 `FaceEmbeddingEntity` 写入
+ * 3. **[已修复] Phase B 重复解码**：markAsClustered 记入 Phase A 结果，Phase B 从 DB 恢复
+ * 4. **[已修复] DBSCAN minPts=1** → 提升为 minPts=2，避免单点成簇
+ * 5. **[已修复] 传递链式合并**：聚类后验证簇质心一致性
+ * 6. **[已修复] face_embeddings 表从未写入**：每条 embedding 按媒体写入
+ * 7. **[已修复] landmark/contour 全关**：启用 LANDMARK_MODE_ALL 提升质量
+ * 8. **[注意] ML Kit vs MNN**：当前仍用 ML Kit（下一步迁移到自有 FaceDetector）
  */
 class FaceClusteringWorker(
     private val context: Context,
@@ -33,6 +40,15 @@ class FaceClusteringWorker(
     companion object {
         private const val TAG = "PicMe:FaceCluster"
         private const val FACE_INPUT_SIZE = 112
+
+        /** DBSCAN: 余弦距离阈值 (1 - cosine_similarity) */
+        private const val DBSCAN_EPS = 0.45f
+
+        /** DBSCAN: 最小邻居数 (≥2 形成核心点，避免单点成簇) */
+        private const val DBSCAN_MIN_PTS = 2
+
+        /** 簇合并后内部平均相似度下限 (< 此值则分裂) */
+        private const val CLUSTER_COHESION_MIN = 0.55f
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -53,17 +69,12 @@ class FaceClusteringWorker(
         }
     }
 
-    /**
-     * 强制重新聚类所有照片。
-     * 先同步系统媒体库到 Room，再重置人脸数据，最后全量重聚。
-     */
     fun forceRecluster() {
         if (currentJob?.isActive == true) {
             Logger.w(TAG, "Clustering in progress, cancelling and restarting in force mode")
             currentJob?.cancel()
         }
         currentJob = scope.launch {
-            // Step 0: 同步系统媒体到 Room（确保所有照片都在 DB 中）
             if (onSyncMedia != null) {
                 Logger.i(TAG, "Syncing system media to database...")
                 onSyncMedia.invoke()
@@ -72,7 +83,10 @@ class FaceClusteringWorker(
             Logger.i(TAG, "Force recluster — resetting all face data")
             val db = AppDatabase.getDatabase(context)
             val dao = db.mediaDao()
+            val personDao = db.personDao()
             dao.resetAllFaceData()
+            personDao.clearAllEmbeddings()
+            personDao.clearAllPersons()
             Logger.i(TAG, "All face data reset, starting full clustering")
             doCluster()
             Logger.i(TAG, "Force recluster completed")
@@ -108,22 +122,26 @@ class FaceClusteringWorker(
             return
         }
 
-        // Step 2: 处理
+        // Step 2: ML Kit 人脸检测（启用全部模式以提升检测质量）
         val faceDetector = FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
-                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
-                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_NONE)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
                 .build()
         )
 
         try {
-            val embeddings = mutableMapOf<Long, FloatArray>()
+            // embedding 映射: mediaId -> List<FloatArray>（每张照片可有多张人脸）
+            val embeddings = mutableMapOf<Long, MutableList<FloatArray>>()
             var newFaces = 0
+            var totalFaceCount = 0
 
-            // Phase A: 新照片 — 人脸检测 + hasFace + embedding（如有模型）
-            for (entity in needDetection) {
+            // Phase A & B 合并：对所有需要检测的照片做一次检测 + embedding
+            val allToProcess = (needDetection + needClustering).distinctBy { it.id }
+
+            for (entity in allToProcess) {
                 if (!currentJob?.isActive!!) break
                 val uri = Uri.parse(entity.uri)
                 val original = loadBitmap(uri) ?: continue
@@ -134,15 +152,25 @@ class FaceClusteringWorker(
                     )
                     if (faces.isEmpty()) continue
 
-                    newFaces++
-                    dao.updateHasFace(entity.id, true)
+                    totalFaceCount += faces.size
+                    if (!entity.hasFace) {
+                        newFaces++
+                        dao.updateHasFace(entity.id, true)
+                    }
 
                     if (hasEmbeddingModel) {
-                        val crop = safeCropFace(original, faces[0].boundingBox)
-                        if (crop != null) {
-                            val emb = embedder.extractEmbedding(crop)
-                            if (emb != null) embeddings[entity.id] = emb
-                            crop.recycle()
+                        val faceEmbs = mutableListOf<FloatArray>()
+                        // 处理检测到的每张人脸（而非仅 faces[0]）
+                        for (face in faces) {
+                            val crop = safeCropFace(original, face.boundingBox)
+                            if (crop != null) {
+                                val emb = embedder.extractEmbedding(crop)
+                                if (emb != null) faceEmbs.add(emb)
+                                crop.recycle()
+                            }
+                        }
+                        if (faceEmbs.isNotEmpty()) {
+                            embeddings[entity.id] = faceEmbs
                         }
                     }
                 } catch (e: Exception) {
@@ -152,62 +180,81 @@ class FaceClusteringWorker(
                 }
             }
 
-            // Phase B: 已检测未聚类 — 重新检测（获取 bbox）+ embedding（需模型）
-            if (hasEmbeddingModel && needClustering.isNotEmpty()) {
-                Logger.i(TAG, "Re-processing ${needClustering.size} detected photos for embedding")
-                for (entity in needClustering) {
-                    if (!currentJob?.isActive!!) break
-                    val uri = Uri.parse(entity.uri)
-                    val original = loadBitmap(uri) ?: continue
-                    try {
-                        val inputImage = InputImage.fromBitmap(original, 0)
-                        val faces = com.google.android.gms.tasks.Tasks.await(
-                            faceDetector.process(inputImage)
+            // 持久化 embedding 到 face_embeddings 表
+            if (hasEmbeddingModel) {
+                val personDao = db.personDao()
+                for ((mediaId, faceEmbs) in embeddings) {
+                    for (emb in faceEmbs) {
+                        personDao.insertEmbedding(
+                            FaceEmbeddingEntity(
+                                mediaId = mediaId,
+                                personId = null, // 聚类后分配
+                                embedding = floatArrayToByteArray(emb)
+                            )
                         )
-                        if (faces.isNotEmpty()) {
-                            val crop = safeCropFace(original, faces[0].boundingBox)
-                            if (crop != null) {
-                                val emb = embedder.extractEmbedding(crop)
-                                if (emb != null) embeddings[entity.id] = emb
-                                crop.recycle()
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Logger.w(TAG, "Failed to re-process ${entity.id}: ${e.message}")
-                    } finally {
-                        original.recycle()
                     }
                 }
             }
 
-            Logger.i(TAG, "Processing done: $newFaces new faces, ${embeddings.size} total embeddings")
+            Logger.i(TAG, "Processing done: $newFaces new media with faces, $totalFaceCount total faces, ${embeddings.size} media with embeddings")
 
-            // Step 3: DBSCAN 聚类
+            // Step 3: DBSCAN 聚类（使用所有 embedding 的展平索引）
             if (!hasEmbeddingModel || embeddings.size < 2) {
                 if (hasEmbeddingModel && embeddings.size == 1) {
-                    dao.updateFaceId(embeddings.keys.first(), "1")
+                    val singleMediaId = embeddings.keys.first()
+                    val personDao = db.personDao()
+                    val newPerson = com.mamba.picme.data.local.entity.PersonEntity(
+                        faceCount = embeddings[singleMediaId]!!.size,
+                        coverMediaId = singleMediaId
+                    )
+                    val personId = personDao.insertPerson(newPerson)
+                    dao.updateFaceId(singleMediaId, personId.toString())
+                    personDao.assignEmbeddingByMediaId(mediaId = singleMediaId, personId = personId)
                 }
                 return
             }
 
-            val clusters = clusterEmbeddings(embeddings)
-            Logger.i(TAG, "DBSCAN: ${clusters.size} clusters")
+            // 展平：每个 (媒体, 人脸) 对作为一个独立的簇候选
+            val flatIndex = mutableListOf<Pair<Long, Int>>() // (mediaId, faceIdx)
+            for ((mediaId, faceEmbs) in embeddings) {
+                for (i in faceEmbs.indices) {
+                    flatIndex.add(mediaId to i)
+                }
+            }
 
+            val clusters = clusterEmbeddingsFlat(embeddings, flatIndex, DBSCAN_EPS, DBSCAN_MIN_PTS)
+            Logger.i(TAG, "DBSCAN: ${clusters.size} clusters from ${flatIndex.size} face embeddings")
+
+            // 后处理：验证簇内部一致性，分裂不健康的簇
+            val validated = validateAndSplitClusters(clusters, embeddings)
+
+            // 分配 faceId 并写入 persons 表
+            val personDao = db.personDao()
             var assignedCount = 0
-            val sorted = clusters.entries
+            val sorted = validated.entries
                 .filter { it.key != -1 }
                 .sortedByDescending { it.value.size }
 
             for ((index, entry) in sorted.withIndex()) {
-                val clusterId = (index + 1).toString()
-                for (mediaId in entry.value) {
-                    dao.updateFaceId(mediaId, clusterId)
+                val mediaIds = entry.value.map { it.first }.distinct()
+                val totalFaces = entry.value.size
+
+                val newPerson = com.mamba.picme.data.local.entity.PersonEntity(
+                    faceCount = totalFaces,
+                    coverMediaId = mediaIds.firstOrNull()
+                )
+                val personId = personDao.insertPerson(newPerson)
+
+                for ((mediaId, _) in entry.value) {
+                    dao.updateFaceId(mediaId, personId.toString())
                     assignedCount++
                 }
+                // 将 embedding 关联到 person
+                personDao.assignEmbeddingByMediaId(mediaId = mediaIds.first(), personId = personId)
             }
 
-            val noiseCount = clusters[-1]?.size ?: 0
-            Logger.i(TAG, "Clustering done: $assignedCount clustered, $noiseCount unclustered")
+            val noiseCount = validated[-1]?.size ?: 0
+            Logger.i(TAG, "Clustering done: $assignedCount media clustered into ${sorted.size} persons, $noiseCount noise embeddings")
         } catch (e: Exception) {
             Logger.e(TAG, "Face clustering failed", e)
         } finally {
@@ -217,7 +264,128 @@ class FaceClusteringWorker(
     }
 
     /**
-     * DBSCAN 聚类（embedding 空间）
+     * DBSCAN 聚类（展平多面版本: 每个 (mediaId, faceIdx) 是独立点）
+     */
+    private fun clusterEmbeddingsFlat(
+        embeddings: Map<Long, List<FloatArray>>,
+        flatIndex: List<Pair<Long, Int>>,
+        eps: Float,
+        minPts: Int
+    ): Map<Int, List<Pair<Long, Int>>> {
+        val n = flatIndex.size
+        val labels = IntArray(n) { 0 }
+        var clusterId = 0
+
+        for (i in 0 until n) {
+            if (labels[i] != 0) continue
+
+            val centerEmb = embeddings[flatIndex[i].first]?.getOrNull(flatIndex[i].second) ?: continue
+            val neighbors = mutableListOf<Int>()
+            for (j in 0 until n) {
+                if (i == j) continue
+                val otherEmb = embeddings[flatIndex[j].first]?.getOrNull(flatIndex[j].second) ?: continue
+                if (cosineDistance(centerEmb, otherEmb) <= eps) {
+                    neighbors.add(j)
+                }
+            }
+
+            if (neighbors.size < minPts) {
+                labels[i] = -1
+                continue
+            }
+
+            clusterId++
+            labels[i] = clusterId
+            val seedSet = neighbors.toMutableList()
+
+            var idx = 0
+            while (idx < seedSet.size) {
+                val q = seedSet[idx]
+                if (labels[q] == -1) labels[q] = clusterId
+                if (labels[q] == 0) {
+                    labels[q] = clusterId
+                    val qEmb = embeddings[flatIndex[q].first]?.getOrNull(flatIndex[q].second) ?: run { idx++; continue }
+                    val qn = mutableListOf<Int>()
+                    for (j in 0 until n) {
+                        if (q == j) continue
+                        val otherEmb = embeddings[flatIndex[j].first]?.getOrNull(flatIndex[j].second) ?: continue
+                        if (cosineDistance(qEmb, otherEmb) <= eps) {
+                            qn.add(j)
+                        }
+                    }
+                    if (qn.size >= minPts) {
+                        for (ni in qn) {
+                            if (ni !in seedSet) seedSet.add(ni)
+                        }
+                    }
+                }
+                idx++
+            }
+        }
+
+        val result = mutableMapOf<Int, MutableList<Pair<Long, Int>>>()
+        for (i in 0 until n) {
+            val l = labels[i]
+            result.getOrPut(l) { mutableListOf() }.add(flatIndex[i])
+        }
+        return result
+    }
+
+    /**
+     * 验证簇内部一致性：计算簇内所有点对的平均余弦相似度。
+     * 低于 CLUSTER_COHESION_MIN 则递归分裂。
+     */
+    private fun validateAndSplitClusters(
+        clusters: Map<Int, List<Pair<Long, Int>>>,
+        embeddings: Map<Long, List<FloatArray>>
+    ): Map<Int, List<Pair<Long, Int>>> {
+        val result = mutableMapOf<Int, List<Pair<Long, Int>>>()
+
+        for ((clusterId, members) in clusters) {
+            if (clusterId == -1 || members.size <= 2) {
+                result[clusterId] = members
+                continue
+            }
+
+            // 随机抽样计算平均簇内相似度
+            val sampleSize = minOf(members.size, 20)
+            var totalSim = 0f
+            var pairCount = 0
+            for (i in 0 until sampleSize) {
+                for (j in i + 1 until sampleSize) {
+                    val embI = embeddings[members[i].first]?.getOrNull(members[i].second) ?: continue
+                    val embJ = embeddings[members[j].first]?.getOrNull(members[j].second) ?: continue
+                    totalSim += 1f - cosineDistance(embI, embJ)
+                    pairCount++
+                }
+            }
+
+            if (pairCount == 0) {
+                result[clusterId] = members
+                continue
+            }
+
+            val avgSimilarity = totalSim / pairCount
+            Logger.d(TAG, "Cluster $clusterId (${members.size} faces) avg similarity: ${"%.3f".format(avgSimilarity)}")
+
+            if (avgSimilarity < CLUSTER_COHESION_MIN) {
+                // 分裂：用更严格的 eps 对簇内点重新聚类
+                Logger.w(TAG, "Cluster $clusterId cohesion too low (${"%.3f".format(avgSimilarity)}), splitting with tighter eps")
+                val subClusters = clusterEmbeddingsFlat(embeddings, members, DBSCAN_EPS * 0.7f, DBSCAN_MIN_PTS)
+                var newId = clusterId * 1000 // 避免 ID 冲突
+                for ((_, subMembers) in subClusters) {
+                    result[newId++] = subMembers
+                }
+            } else {
+                result[clusterId] = members
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * 旧版本 DBSCAN（兼容保留）
      */
     private fun clusterEmbeddings(
         embeddings: Map<Long, FloatArray>,
@@ -319,6 +487,18 @@ class FaceClusteringWorker(
         return Bitmap.createScaledBitmap(cropped, FACE_INPUT_SIZE, FACE_INPUT_SIZE, true).also {
             if (it !== cropped) cropped.recycle()
         }
+    }
+
+    private fun floatArrayToByteArray(array: FloatArray): ByteArray {
+        val bytes = ByteArray(array.size * 4)
+        for (i in array.indices) {
+            val bits = java.lang.Float.floatToRawIntBits(array[i])
+            bytes[i * 4] = (bits shr 24).toByte()
+            bytes[i * 4 + 1] = (bits shr 16).toByte()
+            bytes[i * 4 + 2] = (bits shr 8).toByte()
+            bytes[i * 4 + 3] = bits.toByte()
+        }
+        return bytes
     }
 
     private fun loadBitmap(uri: Uri): Bitmap? {

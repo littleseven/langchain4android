@@ -68,4 +68,15 @@ interface PersonDao {
 
     @Query("DELETE FROM face_embeddings WHERE mediaId = :mediaId")
     suspend fun deleteEmbeddingsByMedia(mediaId: Long)
+
+    /** 按 mediaId 批量更新 personId（用于聚类后分配） */
+    @Query("UPDATE face_embeddings SET personId = :personId WHERE mediaId = :mediaId")
+    suspend fun assignEmbeddingByMediaId(mediaId: Long, personId: Long)
+
+    /** 清空 face_embeddings 和 persons 表（不删除 trigger 依赖的表） */
+    @Query("DELETE FROM face_embeddings")
+    suspend fun clearAllEmbeddings()
+
+    @Query("DELETE FROM persons")
+    suspend fun clearAllPersons()
 }

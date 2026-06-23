@@ -473,7 +473,7 @@ fun GalleryScreen(
                             thumbnailCache = thumbnailCache,
                             onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                             onMediaClick = { asset ->
-                                val index = searchResultMedia.indexOfFirst { it.id == asset.id }
+                                val index = allFlatMedia.indexOfFirst { it.id == asset.id }
                                 if (index >= 0) selectedMediaIndex = index
                             },
                             onMediaLongClick = { },

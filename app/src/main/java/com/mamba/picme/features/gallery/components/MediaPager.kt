@@ -117,10 +117,24 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.height
 import java.io.IOException
+import android.graphics.Paint
+import android.graphics.Rect
+import org.json.JSONArray
+import org.json.JSONObject
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 
 private const val TAG = "Gallery"
 
@@ -387,11 +401,13 @@ fun MediaPager(
             )
         }
 
-        // Source Info Overlay (Bottom Left)
-        SourceInfoOverlay(
-            visible = showInfo && currentAsset?.source != null && !showLandmarkOverlay && !isEditing,
-            source = currentAsset?.source
-        )
+        // Photo Info Dialog (取代旧的 SourceInfoOverlay)
+        if (showInfo && currentAsset != null && !showLandmarkOverlay && !isEditing) {
+            PhotoInfoDialog(
+                asset = currentAsset,
+                onDismiss = { showInfo = false }
+            )
+        }
 
         // OCR Result Overlay
         OcrResultOverlay(
@@ -1067,42 +1083,324 @@ private fun mediaPagerTopControls(
 }
 
 @Composable
-private fun SourceInfoOverlay(
-    visible: Boolean,
-    source: String?
+private fun PhotoInfoDialog(
+    asset: MediaAsset,
+    onDismiss: () -> Unit
 ) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn() + slideInVertically(initialOffsetY = { height -> height }),
-        exit = fadeOut() + slideOutVertically(targetOffsetY = { height -> height }),
-        modifier = Modifier
-            .padding(16.dp)
-            .navigationBarsPadding()
-    ) {
-        Surface(
-            color = Color.Black.copy(alpha = 0.6f),
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = stringResource(R.string.media_source, source?.uppercase(Locale.getDefault()) ?: ""),
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var infoBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var faceRects by remember { mutableStateOf<List<Rect>>(emptyList()) }
+
+    // 解析标签
+    val tags = remember(asset.labels) {
+        parseLabelsToHumanReadable(asset.labels)
+    }
+
+    // 加载图片并检测人脸（用于绘制人脸框）
+    LaunchedEffect(asset.uri) {
+        if (asset.type != MediaType.PHOTO) return@LaunchedEffect
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
+                    val opts = BitmapFactory.Options().apply {
+                        inSampleSize = 4
+                        inPreferredConfig = Bitmap.Config.RGB_565
+                    }
+                    BitmapFactory.decodeStream(it, null, opts)
+                }
+                infoBitmap = bitmap
+
+                // 尝试人脸检测获取 ROI
+                if (asset.hasFace && bitmap != null) {
+                    try {
+                        val inputImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                        val detector = com.google.mlkit.vision.face.FaceDetection.getClient(
+                            com.google.mlkit.vision.face.FaceDetectorOptions.Builder()
+                                .setPerformanceMode(com.google.mlkit.vision.face.FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                                .setLandmarkMode(com.google.mlkit.vision.face.FaceDetectorOptions.LANDMARK_MODE_NONE)
+                                .setClassificationMode(com.google.mlkit.vision.face.FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+                                .setContourMode(com.google.mlkit.vision.face.FaceDetectorOptions.CONTOUR_MODE_NONE)
+                                .build()
+                        )
+                        val faces = com.google.android.gms.tasks.Tasks.await(detector.process(inputImage))
+                        faceRects = faces.map { Rect(it.boundingBox) }
+                        detector.close()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Face detection for info dialog failed: ${e.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load bitmap for info: ${e.message}")
             }
         }
+    }
+
+    // 格式化拍摄日期
+    val dateStr = remember(asset.captureDate) {
+        try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+            sdf.format(Date(asset.captureDate))
+        } catch (e: Exception) { "未知" }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.7f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { onDismiss() }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF2D2D2D)),
+            modifier = Modifier
+                .widthIn(max = 400.dp)
+                .heightIn(max = 560.dp)
+                .padding(horizontal = 16.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { /* stop propagation */ }
+                )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 标题栏
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "照片信息",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "关闭",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 图片预览（带人脸框）
+                if (infoBitmap != null) {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                            Image(
+                                bitmap = infoBitmap!!.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit
+                            )
+                            // 人脸框选 overlay
+                            if (faceRects.isNotEmpty()) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                    val canvasW = size.width
+                                    val canvasH = size.height
+                                    val imgW = infoBitmap!!.width.toFloat()
+                                    val imgH = infoBitmap!!.height.toFloat()
+                                    val scale = minOf(canvasW / imgW, canvasH / imgH)
+                                    val offsetX = (canvasW - imgW * scale) / 2
+                                    val offsetY = (canvasH - imgH * scale) / 2
+
+                                    for (rect in faceRects) {
+                                        val left = offsetX + rect.left.toFloat() * scale
+                                        val top = offsetY + rect.top.toFloat() * scale
+                                        val right = offsetX + rect.right.toFloat() * scale
+                                        val bottom = offsetY + rect.bottom.toFloat() * scale
+                                        drawRect(
+                                            color = Color(0xFF4CAF50),
+                                            topLeft = Offset(left, top),
+                                            size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
+                                            style = Stroke(width = 2.5f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // 基本信息
+                InfoRow("文件名", asset.fileName)
+                InfoRow("类型", if (asset.type == MediaType.PHOTO) "照片" else "视频")
+                InfoRow("拍摄日期", dateStr)
+                if (asset.duration != null && asset.duration!! > 0) {
+                    InfoRow("时长", "${asset.duration!! / 1000} 秒")
+                }
+                if (asset.source != null) {
+                    InfoRow("来源", asset.source!!.replaceFirstChar { it.uppercase() })
+                }
+                if (asset.locationName != null) {
+                    InfoRow("位置", asset.locationName!!)
+                } else if (asset.latitude != null && asset.longitude != null) {
+                    InfoRow("GPS", "${String.format("%.4f", asset.latitude)}, ${String.format("%.4f", asset.longitude)}")
+                }
+
+                // 人脸信息
+                if (asset.hasFace) {
+                    Divider(
+                        modifier = Modifier.padding(vertical = 6.dp),
+                        color = Color.White.copy(alpha = 0.1f)
+                    )
+                    Text(
+                        text = "人脸信息",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                    )
+                    InfoRow("包含人脸", "是 (${faceRects.size} 张)")
+                    if (asset.faceId != null) {
+                        InfoRow("人物分组", "ID: ${asset.faceId}")
+                    }
+                }
+
+                // 标签
+                if (tags.isNotEmpty()) {
+                    Divider(
+                        modifier = Modifier.padding(vertical = 6.dp),
+                        color = Color.White.copy(alpha = 0.1f)
+                    )
+                    Text(
+                        text = "标签 (${tags.size})",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    )
+                    // 标签列表
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        tags.forEach { tag ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = tag,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // OCR 文本
+                if (!asset.ocrText.isNullOrBlank()) {
+                    Divider(
+                        modifier = Modifier.padding(vertical = 6.dp),
+                        color = Color.White.copy(alpha = 0.1f)
+                    )
+                    Text(
+                        text = "识别文字",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
+                    )
+                    Text(
+                        text = asset.ocrText!!.take(200),
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+/** 解析 labels JSON 为人可读的标签列表 */
+private fun parseLabelsToHumanReadable(labels: String?): List<String> {
+    if (labels.isNullOrBlank()) return emptyList()
+    return try {
+        val trimmed = labels.trim()
+        when {
+            trimmed.startsWith("[") -> {
+                // 旧格式: JSON 数组 ["tag1","tag2"]
+                val arr = JSONArray(trimmed)
+                (0 until arr.length()).map { arr.getString(it) }
+            }
+            trimmed.startsWith("{") -> {
+                // 新格式: QwenTags JSON 对象
+                val obj = JSONObject(trimmed)
+                val result = mutableListOf<String>()
+                if (obj.has("scene") && obj.getString("scene").isNotBlank())
+                    result.add("场景: ${obj.getString("scene")}")
+                if (obj.has("activity") && obj.getString("activity").isNotBlank())
+                    result.add("活动: ${obj.getString("activity")}")
+                if (obj.has("tags")) {
+                    val tagsArr = obj.getJSONArray("tags")
+                    for (i in 0 until tagsArr.length())
+                        result.add(tagsArr.getString(i))
+                }
+                if (obj.has("summary") && obj.getString("summary").isNotBlank())
+                    result.add(obj.getString("summary"))
+                result
+            }
+            else -> listOf(trimmed)
+        }
+    } catch (e: Exception) {
+        listOf(labels.take(100))
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = Color.Gray,
+            modifier = Modifier.weight(0.35f)
+        )
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            color = Color.White,
+            modifier = Modifier.weight(0.65f)
+        )
     }
 }
 
