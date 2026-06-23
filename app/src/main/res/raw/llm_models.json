@@ -76,19 +76,23 @@
   {
     "id": "qwen3_5_2b",
     "name": "Qwen3.5-2B-MNN",
-    "description": "阿里通义千问 3.5 2B 版本，更强的推理能力，适合高端设备本地运行",
+    "description": "阿里通义千问 3.5 2B 多模态版，支持图片理解与推理，适合高端设备本地运行",
     "type": "LLM",
-    "size": 1200000000,
+    "size": 1320000000,
     "sources": {
       "ModelScope": "budaoshou/Qwen3.5-2B-MNN"
     },
     "files": [
       "config.json",
+      "llm_config.json",
       "llm.mnn",
+      "llm.mnn.json",
       "llm.mnn.weight",
-      "tokenizer.txt"
+      "tokenizer.txt",
+      "visual.mnn",
+      "visual.mnn.weight"
     ],
-    "tags": ["chat", "reasoning", "multilingual"]
+    "tags": ["chat", "reasoning", "multilingual", "vision"]
   },
   {
     "id": "picme-face-det-mnn",
