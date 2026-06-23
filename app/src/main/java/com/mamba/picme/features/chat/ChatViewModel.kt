@@ -545,12 +545,19 @@ class ChatViewModel(
                 ensureSessionExists(sessionId)
                 _isProcessing.value = true
 
-                // 1. 保存用户图片消息到 Room
+                // 0. 将图片复制到内部存储（content:// URI 权限在进程重启后失效）
+                val persistedUri = persistImage(imageUri)
+                if (persistedUri == null) {
+                    insertAgentMessage(sessionId, "无法保存图片", "error")
+                    return@launch
+                }
+
+                // 1. 保存用户图片消息到 Room（使用内部存储路径）
                 val userMessage = ChatMessageEntity(
                     id = UUID.randomUUID().toString(),
                     sessionId = sessionId,
                     type = "user_image",
-                    content = imageUri.toString(),
+                    content = persistedUri,
                     modelUsed = null
                 )
                 chatMessageDao.insertMessage(userMessage)
@@ -744,5 +751,27 @@ class ChatViewModel(
             prefillSpeed = prefillSpeed,
             decodeSpeed = decodeSpeed
         )
+    }
+
+    /**
+     * 将 content:// URI 图片复制到内部存储，返回持久化路径
+     * 解决 content picker 临时权限在进程重启后失效导致图片不显示的问题
+     */
+    private fun persistImage(sourceUri: Uri): String? {
+        return try {
+            val imagesDir = java.io.File(context.filesDir, "picme_images")
+            if (!imagesDir.exists()) imagesDir.mkdirs()
+
+            val destFile = java.io.File(imagesDir, "img_${UUID.randomUUID()}.jpg")
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                java.io.FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            destFile.absolutePath
+        } catch (e: Exception) {
+            Logger.e(TAG, "Failed to persist image", e)
+            null
+        }
     }
 }

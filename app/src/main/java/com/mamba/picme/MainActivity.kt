@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
                                     viewModel = chatViewModel,
                                     onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToGallery = { navController.navigate(Screen.Gallery.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToEditor = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToModelCenter = { navController.navigate(Screen.ModelCenter.createRoute("llm"), navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) }
                                 )
                             }

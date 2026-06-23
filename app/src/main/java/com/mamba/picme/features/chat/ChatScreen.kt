@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,6 +37,17 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import android.provider.MediaStore
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.automirrored.rounded.ShortText
@@ -44,12 +56,15 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -92,8 +107,8 @@ import com.mamba.picme.R
 import com.mamba.picme.core.common.Logger
 import androidx.compose.material.icons.rounded.Menu
 import androidx.activity.compose.BackHandler
+import androidx.core.net.toUri
 import com.mamba.picme.features.chat.ChatThreadSidebar
-import com.mamba.picme.features.chat.components.ModelSelector
 import com.mamba.picme.features.chat.components.QuickActionBar
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
@@ -114,7 +129,7 @@ fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
     onNavigateToCamera: () -> Unit,
     onNavigateToGallery: () -> Unit,
-    onNavigateToEditor: () -> Unit,
+    onNavigateToModelCenter: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
@@ -241,9 +256,9 @@ fun ChatScreen(
                         showQuickActions = false
                         onNavigateToGallery()
                     },
-                    onEditorClick = {
+                    onModelDownloadClick = {
                         showQuickActions = false
-                        onNavigateToEditor()
+                        onNavigateToModelCenter()
                     },
                     onDismiss = { showQuickActions = false },
                     modifier = Modifier.align(Alignment.BottomEnd)
@@ -369,19 +384,20 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
             when {
                 isImage -> {
                     // 显示图片（可点击进入全屏预览）
-                    // 宽度自适应图片比例，最大 260dp，高度不设限由 Coil 按比例计算
+                    // 高度固定 200dp，宽度按原始比例自适应，不超 260dp
                     AsyncImage(
                         model = message.content,
                         contentDescription = "图片",
-                        contentScale = ContentScale.FillWidth,
+                        contentScale = ContentScale.FillHeight,
                         modifier = Modifier
+                            .height(200.dp)
                             .widthIn(max = 260.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
                                 val uri = Uri.parse(message.content)
-                                if (uri.scheme != null) {
-                                    onImageClick(uri)
-                                }
+                                val resolvedUri = if (uri.scheme != null) uri
+                                    else java.io.File(message.content).toUri()
+                                onImageClick(resolvedUri)
                             }
                     )
                 }
@@ -483,6 +499,7 @@ private fun PerformanceMetric(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatInputArea(
     currentModel: ChatModelOption,
@@ -493,11 +510,10 @@ private fun ChatInputArea(
     onToggleQuickActions: () -> Unit = {}
 ) {
     var text by remember { mutableStateOf("") }
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let { onImagePicked(it) }
-    }
+    var showModelMenu by remember { mutableStateOf(false) }
+    var showPhotoPicker by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState()
 
     Column(
         modifier = Modifier
@@ -508,26 +524,67 @@ private fun ChatInputArea(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // 模型选择器
-            ModelSelector(
-                currentModel = currentModel,
-                onModelSelected = onModelSwitch
-            )
-
-            // 图片选择按钮
-            IconButton(
-                onClick = { imagePickerLauncher.launch("image/*") },
-                enabled = !isProcessing,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.PhotoLibrary,
-                    contentDescription = "选择图片",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
-                )
+            // 模型切换图标（点击展开下拉菜单）
+            Box {
+                IconButton(
+                    onClick = { showModelMenu = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(currentModel.indicatorColor)
+                    )
+                }
+                DropdownMenu(
+                    expanded = showModelMenu,
+                    onDismissRequest = { showModelMenu = false },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(ChatModelOption.Local.indicatorColor)
+                                )
+                                Text("本地模型 (Qwen3.5-2B)")
+                            }
+                        },
+                        onClick = {
+                            onModelSwitch(ChatModelOption.Local)
+                            showModelMenu = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(ChatModelOption.Remote.indicatorColor)
+                                )
+                                Text("远程模型 (DeepSeek)")
+                            }
+                        },
+                        onClick = {
+                            onModelSwitch(ChatModelOption.Remote)
+                            showModelMenu = false
+                        }
+                    )
+                }
             }
 
             // 输入框
@@ -550,6 +607,23 @@ private fun ChatInputArea(
                 )
             )
 
+            // 图片选择按钮（打开内置相册选取）
+            IconButton(
+                onClick = { showPhotoPicker = true },
+                enabled = !isProcessing,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PhotoLibrary,
+                    contentDescription = "选择图片",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             // 发送按钮
             IconButton(
                 onClick = {
@@ -560,7 +634,7 @@ private fun ChatInputArea(
                 },
                 enabled = text.isNotBlank() && !isProcessing,
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(
                         if (text.isNotBlank() && !isProcessing) {
@@ -579,6 +653,19 @@ private fun ChatInputArea(
             }
         }
     }
+
+    // 内置相册选取底部弹窗
+    if (showPhotoPicker) {
+        InAppPhotoPicker(
+            sheetState = sheetState,
+            context = context,
+            onImageSelected = { uri ->
+                onImagePicked(uri)
+                showPhotoPicker = false
+            },
+            onDismiss = { showPhotoPicker = false }
+        )
+    }
 }
 
 /**
@@ -588,7 +675,7 @@ private fun ChatInputArea(
 private fun QuickActionPanel(
     onCameraClick: () -> Unit,
     onGalleryClick: () -> Unit,
-    onEditorClick: () -> Unit,
+    onModelDownloadClick: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -616,9 +703,9 @@ private fun QuickActionPanel(
                 onClick = onGalleryClick
             )
             QuickActionFabItem(
-                label = "编辑",
-                icon = Icons.Rounded.Edit,
-                onClick = onEditorClick
+                label = "模型下载",
+                icon = Icons.Rounded.Download,
+                onClick = onModelDownloadClick
             )
         }
     }
@@ -749,5 +836,90 @@ private fun ImagePreviewOverlay(
                 )
             }
         }
+    }
+}
+
+/**
+ * 内置相册选取器 — 底部弹出网格，从 MediaStore 加载最近照片
+ *
+ * 替代系统图片选择器，保持应用内一致的视觉体验。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InAppPhotoPicker(
+    sheetState: androidx.compose.material3.SheetState,
+    context: android.content.Context,
+    onImageSelected: (Uri) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // 加载最近照片
+    val photos = remember {
+        val uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DATE_ADDED
+        )
+        val cursor = context.contentResolver.query(
+            uri,
+            projection,
+            null,
+            null,
+            "${MediaStore.Images.Media.DATE_ADDED} DESC"
+        )
+        val uris = mutableListOf<Uri>()
+        cursor?.use {
+            val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            while (it.moveToNext()) {
+                val id = it.getLong(idCol)
+                uris.add(Uri.withAppendedPath(uri, id.toString()))
+            }
+        }
+        uris
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Text(
+            text = "选择图片",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(320.dp)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            items(photos) { photoUri ->
+                Card(
+                    modifier = Modifier
+                        .aspectRatio(1f)
+                        .clickable { onImageSelected(photoUri) },
+                    shape = RoundedCornerShape(6.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(photoUri)
+                            .size(256)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
