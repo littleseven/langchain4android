@@ -44,11 +44,15 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.mamba.picme.core.image.ThumbnailPrefetcher
+import com.mamba.picme.core.image.ThumbnailCache
 import com.mamba.picme.domain.model.GroupedMedia
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.agent.core.model.context.MediaType
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.unit.Dp
 
 @Composable
 fun MediaGrid(
@@ -58,7 +62,7 @@ fun MediaGrid(
     isSelectionMode: Boolean,
     thumbnailPositions: Map<Long, Rect>,
     mediaById: Map<Long, MediaAsset>,
-    thumbnailPrefetcher: ThumbnailPrefetcher? = null,
+    thumbnailCache: ThumbnailCache? = null,
     onThumbnailPositioned: (Long, Rect) -> Unit,
     onMediaClick: (MediaAsset) -> Unit,
     onMediaLongClick: (MediaAsset) -> Unit,
@@ -78,8 +82,8 @@ fun MediaGrid(
 
     val gridState = rememberLazyGridState()
 
-    // 预加载可视区域附近的缩略图，减少滚动白屏
-    if (thumbnailPrefetcher != null && groupedMedia.isNotEmpty()) {
+    // 预加载可视区域附近的缩略图到 ThumbnailCache（L1 LRU + L2 磁盘）
+    if (thumbnailCache != null && groupedMedia.isNotEmpty()) {
         LaunchedEffect(gridState.firstVisibleItemIndex, gridState.layoutInfo.visibleItemsInfo.size) {
             val visibleItems = gridState.layoutInfo.visibleItemsInfo
             if (visibleItems.isEmpty()) return@LaunchedEffect
@@ -102,7 +106,7 @@ fun MediaGrid(
                     }
                 }
             }
-            thumbnailPrefetcher.prefetchWindow(prefetchUris)
+            thumbnailCache.preload(prefetchUris)
         }
     }
 
@@ -175,6 +179,11 @@ fun MediaGrid(
 
 private fun IntSize.toSize() = Size(width.toFloat(), height.toFloat())
 
+private val ThumbnailCornerRadius: Dp = 2.dp
+
+/** 缩略图加载失败或加载中时显示的背景色，避免脏数据/无效引用显示为纯黑块 */
+private val ThumbnailPlaceholderPainter = ColorPainter(Color(0xFF2A2A2A))
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaItem(
@@ -188,6 +197,7 @@ fun MediaItem(
     Box(
         modifier = modifier
             .aspectRatio(1f)
+            .clip(RoundedCornerShape(ThumbnailCornerRadius))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         AsyncImage(
@@ -198,7 +208,9 @@ fun MediaItem(
                 .build(),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            placeholder = ThumbnailPlaceholderPainter,
+            error = ThumbnailPlaceholderPainter
         )
 
         if (asset.type == MediaType.VIDEO) {

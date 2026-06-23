@@ -10,7 +10,7 @@ import com.mamba.picme.core.image.GpuBeautyProcessor
 import com.mamba.picme.core.image.ImageProcessor
 import com.mamba.picme.core.image.ImageProcessorImpl
 import com.mamba.picme.core.common.Logger
-import com.mamba.picme.core.image.ThumbnailPrefetcher
+import com.mamba.picme.core.image.ThumbnailCache
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.beauty.api.facedetect.FaceDetector
 import com.mamba.picme.beauty.api.facedetect.FaceDetectorFactory
@@ -89,8 +89,8 @@ interface AppContainer {
     val faceClusteringWorker: FaceClusteringWorker
     /** 跨维度查询构建器（LLM 意图 → Room 查询） */
     val queryBuilder: QueryBuilder
-    /** 缩略图预加载器 */
-    val thumbnailPrefetcher: ThumbnailPrefetcher
+    /** 双级缩略图缓存（LRU 内存 + 磁盘） */
+    val thumbnailCache: ThumbnailCache
 
     fun createMediaViewModelFactory(): ViewModelProvider.Factory
     fun createChatViewModelFactory(): ViewModelProvider.Factory
@@ -99,7 +99,10 @@ interface AppContainer {
     fun createMediaStoreObserver(onChange: (List<com.mamba.picme.data.indexing.MediaChangeEvent>) -> Unit): MediaStoreObserver
 }
 
-class AppContainerImpl(private val context: Context) : AppContainer {
+class AppContainerImpl(
+    private val context: Context,
+    private val thumbnailCacheParam: ThumbnailCache
+) : AppContainer {
 
     private val database by lazy { AppDatabase.getDatabase(context) }
 
@@ -119,13 +122,8 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         )
     }
 
-    /** 缩略图预加载器 */
-    override val thumbnailPrefetcher: ThumbnailPrefetcher by lazy {
-        ThumbnailPrefetcher(
-            imageLoader = coil.Coil.imageLoader(context),
-            context = context
-        )
-    }
+    /** 双级缩略图缓存（LRU 内存 + 磁盘） */
+    override val thumbnailCache: ThumbnailCache = thumbnailCacheParam
 
     /** 媒体元数据索引器（ML Kit 标签+OCR+EXIF） */
     override val mediaIndexingWorker: MediaIndexingWorker by lazy {

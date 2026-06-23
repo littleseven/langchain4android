@@ -12,6 +12,7 @@ import coil.ImageLoaderFactory
 import com.mamba.picme.agent.core.inference.remote.tool.PicMeToolService
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.core.image.CoilConfig
+import com.mamba.picme.core.image.ThumbnailCache
 import com.mamba.picme.di.AppContainer
 import com.mamba.picme.di.AppContainerImpl
 import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
@@ -49,6 +50,10 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     val applicationScope = CoroutineScope(SupervisorJob())
 
     lateinit var container: AppContainer
+        private set
+
+    /** 双级缩略图缓存：在 ImageLoader 创建前初始化，供 Coil Fetcher 和 Container 共用 */
+    lateinit var thumbnailCache: ThumbnailCache
         private set
 
     val repository: MediaRepository
@@ -93,7 +98,8 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         // 的 aar，因此需要在 Application 中统一加载，确保类加载器命名空间可见）
         loadNativeLibraries()
 
-        container = AppContainerImpl(this)
+        thumbnailCache = ThumbnailCache(this)
+        container = AppContainerImpl(this, thumbnailCache)
 
         // 注入媒体搜索引擎到 GalleryCapability（自然语言图片搜索）
         GalleryCapability.getInstance().searchEngine = container.mediaSearchEngine
@@ -509,7 +515,7 @@ class PicMeApplication : Application(), ImageLoaderFactory {
     }
 
     override fun newImageLoader(): ImageLoader {
-        return CoilConfig.createImageLoader(this)
+        return CoilConfig.createImageLoader(this, thumbnailCache)
     }
 
     /**

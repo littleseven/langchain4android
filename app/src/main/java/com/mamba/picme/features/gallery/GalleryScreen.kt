@@ -107,7 +107,7 @@ fun GalleryScreen(
     val mediaById = remember(allFlatMedia) { allFlatMedia.associateBy { it.id } }
     val context = LocalContext.current
     val app = context.applicationContext as com.mamba.picme.PicMeApplication
-    val thumbnailPrefetcher = remember { app.container.thumbnailPrefetcher }
+    val thumbnailCache = remember { app.container.thumbnailCache }
     val deleteAuthRequest by viewModel.deleteAuthRequest.collectAsState()
 
     var hasMediaPermission by remember { mutableStateOf(hasGalleryPermission(context)) }
@@ -460,6 +460,7 @@ fun GalleryScreen(
                             isSelectionMode = false,
                             thumbnailPositions = thumbnailPositions,
                             mediaById = searchResultMedia.associateBy { it.id },
+                            thumbnailCache = thumbnailCache,
                             onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                             onMediaClick = { asset ->
                                 val index = searchResultMedia.indexOfFirst { it.id == asset.id }
@@ -503,7 +504,7 @@ fun GalleryScreen(
                         isSelectionMode = isSelectionMode,
                         thumbnailPositions = thumbnailPositions,
                         mediaById = mediaById,
-                        thumbnailPrefetcher = thumbnailPrefetcher,
+                        thumbnailCache = thumbnailCache,
                         onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                         onMediaClick = { asset ->
                             if (isSelectionMode) {
