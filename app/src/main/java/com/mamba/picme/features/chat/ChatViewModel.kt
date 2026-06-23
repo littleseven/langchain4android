@@ -1,6 +1,8 @@
 package com.mamba.picme.features.chat
 
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mamba.picme.agent.core.model.command.AgentCommand
@@ -531,6 +533,101 @@ class ChatViewModel(
             )
         )
         chatSessionDao.touchSession(sessionId)
+    }
+
+    /**
+     * 发送图片消息，通过本地 LLM 视觉模型进行图像理解
+     */
+    fun sendImageMessage(imageUri: Uri) {
+        viewModelScope.launch {
+            val sessionId = _currentSessionId.value
+            try {
+                ensureSessionExists(sessionId)
+                _isProcessing.value = true
+
+                // 1. 保存用户图片消息到 Room
+                val userMessage = ChatMessageEntity(
+                    id = UUID.randomUUID().toString(),
+                    sessionId = sessionId,
+                    type = "user_image",
+                    content = imageUri.toString(),
+                    modelUsed = null
+                )
+                chatMessageDao.insertMessage(userMessage)
+                chatSessionDao.touchSession(sessionId)
+
+                // 2. 创建流式占位
+                val streamingId = "streaming_${System.currentTimeMillis()}"
+                _streamingMessage.value = ChatMessageUi(
+                    id = streamingId,
+                    type = ChatMessageType.AGENT_TEXT,
+                    content = "正在分析图片...",
+                    modelUsed = currentModelLabel()
+                )
+
+                // 3. 确保本地 LLM 模型已加载（图像推理必须走本地模型）
+                if (!orchestrator.isModelLoaded) {
+                    _streamingMessage.value = ChatMessageUi(
+                        id = streamingId,
+                        type = ChatMessageType.AGENT_TEXT,
+                        content = "正在加载模型...",
+                        modelUsed = currentModelLabel()
+                    )
+                    val loadResult = orchestrator.loadModel()
+                    if (loadResult.isFailure) {
+                        _streamingMessage.value = null
+                        insertAgentMessage(
+                            sessionId,
+                            "模型未加载：${loadResult.exceptionOrNull()?.message ?: "未知错误"}",
+                            "error"
+                        )
+                        return@launch
+                    }
+                }
+
+                val engine = orchestrator.getLlmEngine()
+
+                // 加载 Bitmap
+                val bitmap = context.contentResolver.openInputStream(imageUri)?.use {
+                    BitmapFactory.decodeStream(it)
+                }
+                if (bitmap == null) {
+                    _streamingMessage.value = null
+                    insertAgentMessage(sessionId, "无法加载图片", "error")
+                    return@launch
+                }
+
+                // 调用图像推理
+                val response = engine.imageInference(
+                    systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
+                    userPrompt = "请描述这张图片",
+                    bitmap = bitmap,
+                    maxTokens = 128
+                )
+
+                // 清除流式占位
+                _streamingMessage.value = null
+
+                if (response.isBlank()) {
+                    insertAgentMessage(sessionId, "(模型未返回结果)", "error")
+                } else {
+                    insertAgentMessage(
+                        sessionId = sessionId,
+                        content = response,
+                        modelUsed = currentModelLabel(),
+                        performance = orchestrator.getLastLocalGenerationMetrics()?.toLlmPerformance()
+                    )
+                }
+
+                cleanupIfNeeded(sessionId)
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to send image message", e)
+                _streamingMessage.value = null
+                insertAgentMessage(sessionId, "图像处理出错：${e.message ?: "未知错误"}", "error")
+            } finally {
+                _isProcessing.value = false
+            }
+        }
     }
 
     /**

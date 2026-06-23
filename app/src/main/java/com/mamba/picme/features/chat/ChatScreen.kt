@@ -1,9 +1,17 @@
 package com.mamba.picme.features.chat
 
 import android.app.Activity
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -34,6 +43,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -63,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -119,6 +130,8 @@ fun ChatScreen(
 
     var showQuickActions by remember { mutableStateOf(false) }
     var isSidebarOpen by remember { mutableStateOf(false) }
+    // 图片预览状态
+    var previewImageUri by remember { mutableStateOf<Uri?>(null) }
 
     BackHandler(enabled = isSidebarOpen) {
         isSidebarOpen = false
@@ -176,7 +189,10 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(messages, key = { it.id }) { message ->
-                        ChatMessageItem(message = message)
+                        ChatMessageItem(
+                            message = message,
+                            onImageClick = { imageUri -> previewImageUri = imageUri }
+                        )
                     }
                 }
 
@@ -187,6 +203,9 @@ fun ChatScreen(
                     onModelSwitch = { viewModel.switchModel(it) },
                     onSendMessage = { text ->
                         viewModel.sendMessage(text)
+                    },
+                    onImagePicked = { uri ->
+                        viewModel.sendImageMessage(uri)
                     },
                     onToggleQuickActions = { showQuickActions = !showQuickActions }
                 )
@@ -254,6 +273,12 @@ fun ChatScreen(
                 },
                 onDismiss = { isSidebarOpen = false }
             )
+
+            // 图片全屏预览
+            ImagePreviewOverlay(
+                imageUri = previewImageUri,
+                onDismiss = { previewImageUri = null }
+            )
         }
     }
 }
@@ -311,7 +336,7 @@ private fun ChatTopBar(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ChatMessageItem(message: ChatMessageUi) {
+private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit = {}) {
     val isUser = message.type == ChatMessageType.USER_TEXT || message.type == ChatMessageType.USER_IMAGE
     val isImage = message.type == ChatMessageType.AGENT_IMAGE || message.type == ChatMessageType.USER_IMAGE
     val clipboardManager = LocalClipboardManager.current
@@ -343,14 +368,21 @@ private fun ChatMessageItem(message: ChatMessageUi) {
         ) {
             when {
                 isImage -> {
-                    // 显示图片
+                    // 显示图片（可点击进入全屏预览）
+                    // 宽度自适应图片比例，最大 260dp，高度不设限由 Coil 按比例计算
                     AsyncImage(
                         model = message.content,
                         contentDescription = "图片",
+                        contentScale = ContentScale.FillWidth,
                         modifier = Modifier
-                            .fillMaxWidth(0.7f)
-                            .height(200.dp)
+                            .widthIn(max = 260.dp)
                             .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                val uri = Uri.parse(message.content)
+                                if (uri.scheme != null) {
+                                    onImageClick(uri)
+                                }
+                            }
                     )
                 }
                 isUser -> {
@@ -457,9 +489,15 @@ private fun ChatInputArea(
     isProcessing: Boolean,
     onModelSwitch: (ChatModelOption) -> Unit,
     onSendMessage: (String) -> Unit,
+    onImagePicked: (Uri) -> Unit = {},
     onToggleQuickActions: () -> Unit = {}
 ) {
     var text by remember { mutableStateOf("") }
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { onImagePicked(it) }
+    }
 
     Column(
         modifier = Modifier
@@ -477,6 +515,20 @@ private fun ChatInputArea(
                 currentModel = currentModel,
                 onModelSelected = onModelSwitch
             )
+
+            // 图片选择按钮
+            IconButton(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                enabled = !isProcessing,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PhotoLibrary,
+                    contentDescription = "选择图片",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
             // 输入框
             OutlinedTextField(
@@ -643,4 +695,59 @@ enum class ChatMessageType {
 sealed class ChatModelOption(val label: String, val indicatorColor: Color) {
     data object Local : ChatModelOption("本地", Color(0xFF4CAF50))
     data object Remote : ChatModelOption("远程", Color(0xFF2196F3))
+}
+
+/**
+ * 图片全屏预览浮层
+ */
+@Composable
+private fun ImagePreviewOverlay(
+    imageUri: Uri?,
+    onDismiss: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = imageUri != null,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = imageUri,
+                contentDescription = "图片预览",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentScale = ContentScale.Fit
+            )
+
+            // 关闭按钮
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(16.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f))
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = "关闭",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
 }
