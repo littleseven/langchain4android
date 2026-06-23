@@ -50,15 +50,16 @@ class ThumbnailCache(
 
     // L1: LRU memory cache — access-order = true，最近访问的条目排到最后
     //     使用 @Synchronized 保证线程安全（操作均为 O(1) HashMap 访问，无挂起）
+    //
+    //     注意：驱逐时仅移除 Map 引用，不调用 bitmap.recycle()。
+    //     ThumbnailCacheFetcher 通过 BitmapDrawable 将同一个 Bitmap 实例传递给 Coil/Compose，
+    //     若此处 recycle 则 Compose 绘制时遇到 "Canvas: trying to use a recycled bitmap" 崩溃。
+    //     evict()/clear() 中的显式 recycle 保留（调用方确认 Bitmap 不再被引用）。
     private val memoryCache = object : LinkedHashMap<String, Bitmap>(
         16, 0.75f, true
     ) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?): Boolean {
-            val shouldRemove = size > maxMemoryEntries
-            if (shouldRemove && eldest != null && !eldest.value.isRecycled) {
-                eldest.value.recycle()
-            }
-            return shouldRemove
+            return size > maxMemoryEntries
         }
     }
 

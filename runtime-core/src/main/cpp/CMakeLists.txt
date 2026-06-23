@@ -67,6 +67,7 @@ add_library(agent_native SHARED ${NATIVE_SOURCES})
 # 查找 Android 基础库
 find_library(log-lib log)
 find_library(android-lib android)
+find_library(jnigraphics-lib jnigraphics)
 
 # 编译定义
 target_compile_definitions(agent_native PRIVATE
@@ -78,6 +79,7 @@ set(LINK_LIBRARIES
     mnn
     ${log-lib}
     ${android-lib}
+    ${jnigraphics-lib}
 )
 
 if(TARGET mnn_llm)

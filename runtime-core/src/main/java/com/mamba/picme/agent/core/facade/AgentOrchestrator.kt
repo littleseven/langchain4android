@@ -110,7 +110,7 @@ class AgentOrchestrator private constructor(context: Context) {
      * 供非 Agent 消费者（如后台标签索引 Worker）直接使用模型进行推理。
      * **注意**：调用方应确保模型已加载后再使用。
      */
-    fun getLocalLlmEngine(): LocalLlmEngine = localLlmEngine
+    fun getLlmEngine(): LocalLlmEngine = localLlmEngine
 
     /**
      * 获取最近一次本地 LLM 生成的性能指标。
