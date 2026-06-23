@@ -19,8 +19,13 @@ import java.io.IOException
  *
  * 为单张图片提取：ML Kit 标签、OCR 文字、EXIF GPS、逆地理编码地名。
  * 所有提取均为端侧执行，不上传任何数据。
+ *
+ * @param idCardRecognizer 身份证智能识别器，null 时降级为纯 ML Kit OCR
  */
-class MetadataExtractor(private val context: Context) {
+class MetadataExtractor(
+    private val context: Context,
+    private val idCardRecognizer: IdCardRecognizer? = null
+) {
 
     private val tag = "PicMe:MetadataExtractor"
 
@@ -35,7 +40,7 @@ class MetadataExtractor(private val context: Context) {
      */
     suspend fun extract(imageUri: Uri, inputImage: InputImage): ExtractionResult {
         val labels = extractLabels(inputImage)
-        val ocrText = extractOcrText(inputImage)
+        val ocrText = extractOcrWithIdCardFallback(inputImage)
         val (latitude, longitude, locationName) = extractLocation(imageUri)
 
         return ExtractionResult(labels, ocrText, latitude, longitude, locationName)
@@ -68,9 +73,32 @@ class MetadataExtractor(private val context: Context) {
     }
 
     /**
-     * OCR 文字提取：从图片中提取所有可见文字
+     * OCR 文字提取（含身份证智能识别 fallback）
+     *
+     * 流程：
+     * 1. 标准 ML Kit ChineseTextRecognizer → 正常图片快速产出
+     * 2. 若产出极少（< 20 字符，身份证正面 OCR 失败信号）→ IdCardRecognizer 介入
+     *    - Pass 2: Qwen3.5-2B 多模态直接"看"图提取结构化字段（优先）
+     *    - Pass 3: 图像增强（灰度化+对比度增强）后重试 ML Kit（备用）
      */
-    private fun extractOcrText(inputImage: InputImage): String? {
+    private suspend fun extractOcrWithIdCardFallback(inputImage: InputImage): String? {
+        // Pass 1: 标准 ML Kit OCR
+        val standardResult = extractOcrWithMlKit(inputImage)
+
+        // 无 IdCardRecognizer 或文字充足 → 直接返回
+        if (idCardRecognizer == null || !idCardRecognizer.shouldTrigger(standardResult)) {
+            return standardResult
+        }
+
+        // 可能为身份证正面 OCR 失败 → 智能识别
+        Logger.d(tag, "OCR text too short (${standardResult?.length ?: 0} chars), trying ID card recognition")
+        return idCardRecognizer.enhanceOcr(inputImage, standardResult) ?: standardResult
+    }
+
+    /**
+     * 标准 ML Kit OCR（原有逻辑）
+     */
+    private fun extractOcrWithMlKit(inputImage: InputImage): String? {
         return try {
             val result = Tasks.await(textRecognizer.process(inputImage))
             val text = result.textBlocks.joinToString(" ") { block -> block.text }.trim()

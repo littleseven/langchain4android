@@ -8,6 +8,7 @@ import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.dao.LocationDao
 import com.mamba.picme.data.local.dao.OcrWordDao
 import com.mamba.picme.data.local.dao.TagDao
+import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,7 +29,10 @@ import kotlinx.coroutines.launch
  * 批量处理（每批 20 张），支持断点续扫。
  * 使用协程后台执行，不阻塞主线程。
  */
-class MediaIndexingWorker(private val context: Context) {
+class MediaIndexingWorker(
+    private val context: Context,
+    private val llmEngine: LocalLlmEngine? = null
+) {
 
     companion object {
         private const val TAG = "PicMe:MediaIndex"
@@ -37,6 +41,10 @@ class MediaIndexingWorker(private val context: Context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var currentJob: Job? = null
+
+    /** 身份证识别器（Qwen 多模态 + 图像增强），null 降级为纯 ML Kit */
+    private val idCardRecognizer: IdCardRecognizer? =
+        if (llmEngine != null) IdCardRecognizer(context, llmEngine) else null
 
     /** 索引是否正在运行 */
     val isRunning: Boolean
@@ -95,7 +103,7 @@ class MediaIndexingWorker(private val context: Context) {
             return
         }
 
-        val extractor = MetadataExtractor(context)
+        val extractor = MetadataExtractor(context, idCardRecognizer)
         val ocrIndexUpdater = OcrIndexUpdater(db.ocrWordDao())
         val tagIndexUpdater = TagIndexUpdater(db.tagDao())
         val locationIndexUpdater = LocationIndexUpdater(db.locationDao())
@@ -174,7 +182,7 @@ class MediaIndexingWorker(private val context: Context) {
         val db = AppDatabase.getDatabase(context)
         val dao = db.mediaDao()
 
-        val extractor = MetadataExtractor(context)
+        val extractor = MetadataExtractor(context, idCardRecognizer)
         val ocrIdxUpdater = OcrIndexUpdater(db.ocrWordDao())
         val tagIdxUpdater = TagIndexUpdater(db.tagDao())
         val locationIdxUpdater = LocationIndexUpdater(db.locationDao())
