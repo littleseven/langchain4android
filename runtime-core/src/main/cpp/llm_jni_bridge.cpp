@@ -7,6 +7,8 @@
 #include <dlfcn.h>
 #include <chrono>
 #include <vector>
+#include <signal.h>
+#include <setjmp.h>
 #include <android/bitmap.h>
 
 #include <MNN/llm/llm.hpp>
@@ -18,6 +20,70 @@
 extern "C" {
 
 static std::mutex g_llm_mutex;
+
+// ════════════════════════════════════════════════════════════
+// SIGSEGV 崩溃容错保护
+// ════════════════════════════════════════════════════════════
+// MNN-LLM 的 response(multimodal) 在多模态推理时可能触发
+// SIGSEGV（libMNN.so 内部 generate() 中的内存越界）。
+// 此机制捕获崩溃并返回错误，防止进程被彻底杀死。
+
+static thread_local sigjmp_buf g_mnn_jmp_buf;
+static thread_local bool g_mnn_jmp_active = false;
+
+/** SIGSEGV 信号处理函数 */
+static void mnn_sigsegv_handler(int /*sig*/) {
+    if (g_mnn_jmp_active) {
+        siglongjmp(g_mnn_jmp_buf, 1);
+    }
+}
+
+/**
+ * 安装 MNN 崩溃容错的信号处理器。
+ * 与 [MnnCrashGuard] 配对使用。
+ */
+static void installCrashGuard(struct sigaction* old_action) {
+    struct sigaction crash_action;
+    memset(&crash_action, 0, sizeof(crash_action));
+    crash_action.sa_handler = mnn_sigsegv_handler;
+    sigemptyset(&crash_action.sa_mask);
+    crash_action.sa_flags = 0;
+    sigaction(SIGSEGV, &crash_action, old_action);
+    g_mnn_jmp_active = true;
+}
+
+/**
+ * 卸载 MNN 崩溃容错的信号处理器。
+ * 与 [installCrashGuard] 配对使用。
+ */
+static void uninstallCrashGuard(const struct sigaction* old_action) {
+    g_mnn_jmp_active = false;
+    sigaction(SIGSEGV, old_action, nullptr);
+}
+
+// ── 常数定义 ──────────────────────────────────────────
+
+// 图像推理时最大允许的边长（像素）
+// 超过此值应提前缩放，防止 OOM / SIGSEGV
+// Qwen3.5-VL 视觉编码器 image_size=420，输入最长边必须 ≤ 420
+static constexpr int MAX_IMAGE_DIM = 420;
+
+// ── 辅助函数 ──────────────────────────────────────────
+
+/**
+ * 创建一个包含错误信息的 HashMap（JNI）
+ * 用于替代重复的 15+ 行 error hashmap 创建代码
+ */
+static jobject createErrorHashMap(JNIEnv* env, const char* errorMsg) {
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                          env->NewStringUTF(errorMsg));
+    return hashMap;
+}
 
 // ── 性能指标结构 ──────────────────────────────────────
 struct LlmMetrics {
@@ -320,14 +386,7 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
     auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
     if (llm == nullptr) {
         LOGE("LLM handle is null");
-        jclass hashMapClass = env->FindClass("java/util/HashMap");
-        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
-        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
-        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
-                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
-                              env->NewStringUTF("Failed, LLM handle is null"));
-        return hashMap;
+        return createErrorHashMap(env, "LLM handle is null");
     }
 
     // 1. 获取 system / user prompt
@@ -342,80 +401,128 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
     AndroidBitmapInfo bitmapInfo;
     if (AndroidBitmap_getInfo(env, bitmap, &bitmapInfo) < 0) {
         LOGE("Failed to get bitmap info");
-        jclass hashMapClass = env->FindClass("java/util/HashMap");
-        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
-        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
-        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
-                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
-                              env->NewStringUTF("Failed to get bitmap info"));
-        return hashMap;
+        return createErrorHashMap(env, "Failed to get bitmap info");
+    }
+
+    // ── 图像尺寸检查 ────────────────────────────────────
+    int width = bitmapInfo.width;
+    int height = bitmapInfo.height;
+    if (width <= 0 || height <= 0 || width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM) {
+        LOGE("[Vision] Image dimensions %dx%d exceed limit %d or invalid",
+             width, height, MAX_IMAGE_DIM);
+        return createErrorHashMap(env, "Image too large, max 420px per side");
+    }
+
+    // ── Bitmap 格式检查 ─────────────────────────────────
+    if (bitmapInfo.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        LOGE("[Vision] Unsupported bitmap format: %d (require RGBA_8888)", bitmapInfo.format);
+        return createErrorHashMap(env, "Unsupported bitmap format, require RGBA_8888");
     }
 
     void *bitmapPixels;
     if (AndroidBitmap_lockPixels(env, bitmap, &bitmapPixels) < 0) {
         LOGE("Failed to lock bitmap pixels");
-        jclass hashMapClass = env->FindClass("java/util/HashMap");
-        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
-        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
-        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
-                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
-                              env->NewStringUTF("Failed to lock bitmap pixels"));
-        return hashMap;
+        return createErrorHashMap(env, "Failed to lock bitmap pixels");
     }
-
-    int width = bitmapInfo.width;
-    int height = bitmapInfo.height;
 
     LOGD("[Vision] Image: %dx%d, format=%d, stride=%d", width, height, bitmapInfo.format, bitmapInfo.stride);
 
-    // 手动 RGBA_8888 → RGB float32 NCHW 转换 + Qwen3.5 归一化
-    // 参数来自 llm_config.json: image_mean=[127.5], image_norm=[1/127.5]
-    // 公式: (pixel - 127.5) / 127.5 → 范围 [-1.0, 1.0]
-    constexpr float MEAN  = 127.5f;
-    constexpr float NORM  = 0.00784313725490196f;  // 1/127.5
-
-    std::vector<float> rgbData(3 * height * width);
+    // RGBA_8888 → RGB uint8 NHWC 转换
+    // MNN 视觉编码器使用 _Input + writeMap<uint8_t>，传入 uint8 原始像素
+    // 编码器内部自行处理归一化 (mean=[127.5], norm=[1/127.5])
+    // 参考 MNN Demo: video/video_processor.cpp CreateTensorFromRgb()
+    //
+    // 注意：之前我们使用 _Const + float32 + 预归一化，导致视觉编码器
+    // 收到错误的像素数据（float32 位模式被解释为 uint8），颜色通道错乱
+    std::vector<uint8_t> rgbData(height * width * 3);  // HWC: H × W × 3
     uint8_t *pixels = static_cast<uint8_t *>(bitmapPixels);
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int srcIdx = y * bitmapInfo.stride + x * 4;
-            int dstR = 0 * height * width + y * width + x;
-            int dstG = 1 * height * width + y * width + x;
-            int dstB = 2 * height * width + y * width + x;
-            rgbData[dstR] = (static_cast<float>(pixels[srcIdx])     - MEAN) * NORM;
-            rgbData[dstG] = (static_cast<float>(pixels[srcIdx + 1]) - MEAN) * NORM;
-            rgbData[dstB] = (static_cast<float>(pixels[srcIdx + 2]) - MEAN) * NORM;
+            int dstIdx = (y * width + x) * 3;
+            // RGBA_8888: bytes are R, G, B, A in order
+            rgbData[dstIdx]     = pixels[srcIdx];      // R (保持 uint8 0-255)
+            rgbData[dstIdx + 1] = pixels[srcIdx + 1];  // G
+            rgbData[dstIdx + 2] = pixels[srcIdx + 2];  // B
         }
     }
     AndroidBitmap_unlockPixels(env, bitmap);
 
-    // 创建 MNN VARP: _Const(data, {1,3,H,W}, NCHW, float32)
-    std::vector<int> imageShape = {1, 3, height, width};
-    auto imageVar = MNN::Express::_Const(
-        rgbData.data(), imageShape, MNN::Express::NCHW, halide_type_of<float>());
+    // 创建 MNN VARP: _Input({H,W,3}, NHWC, uint8) + writeMap + memcpy
+    // 严格匹配 MNN Demo: video_processor.cpp CreateTensorFromRgb() 第 254-260 行
+    auto imageVar = MNN::Express::_Input({height, width, 3}, MNN::Express::NHWC,
+                                         halide_type_of<uint8_t>());
+    auto ptr = imageVar->writeMap<uint8_t>();
+    memcpy(ptr, rgbData.data(), height * width * 3);
 
-    // 3. 构建 MultimodalPrompt（Qwen-VL chat template）
+    // 3. 构建 MultimodalPrompt
+    //
+    // 重要：prompt_template 必须使用 <img>...</img> 标签作为图片占位符，
+    // MNN 的 tokenizer_encode(MultimodalPrompt) 通过该标签定位图片嵌入的插入位置。
+    // 不能使用 Qwen 的特殊 token（<|vision_start|> 等），MNN 内部会自行处理这些。
+    //
+    // 参考：MNN 官方 Demo processor.cpp HandleImageTags()
     MNN::Transformer::MultimodalPrompt multimodal;
     multimodal.prompt_template =
         "<|im_start|>system\n" + systemStr + "<|im_end|>\n"
         "<|im_start|>user\n"
-        "<|vision_start|><|image_pad|><|vision_end|>" + userStr + "<|im_end|>\n"
+        "<img>image_0</img>" + userStr + "<|im_end|>\n"
         "<|im_start|>assistant\n";
-    multimodal.images["image"] = {imageVar, width, height};
+    multimodal.images["image_0"] = {imageVar, 0, 0};
 
     LOGD("[Vision] Generating: system=%zu chars, user=%zu chars, maxTokens=%d",
          systemStr.size(), userStr.size(), maxNewTokens);
 
-    // 4. 调用 MNN-LLM multimodal response
+    // 4. 两阶段多模态生成（匹配 MNN 官方 Demo 模式）
+    //    官方 Demo: llm->response(multimodal, &oss, "<eop>", 0) → prefill
+    //              循环 llm->generate(1) → decode one token at a time
+    //    
+    //    使用 "<eop>" 作为结束标记，避免 nullptr 触发默认换行符行为。
+    //    此模式在 Android 预编译 libMNN.so 上更稳定。
+    //
+    //    [重要] imageVar（_Input 的 writeMap 数据）必须在此作用域内保持有效，
+    //    直到所有 generate() 返回，因为 MNN Express 可能延迟评估。
+    //
+    //    SIGSEGV 容错：使用 sigsetjmp/siglongjmp 捕获崩溃。
     LlmMetrics metrics;
     std::ostringstream oss;
     auto start = std::chrono::high_resolution_clock::now();
-    {
-        std::lock_guard<std::mutex> lock(g_llm_mutex);
-        restoreLlmStatusIfNeeded(llm);
-        llm->response(multimodal, &oss, nullptr, maxNewTokens);
+    bool mnn_crashed = false;
+
+    g_llm_mutex.lock();
+    restoreLlmStatusIfNeeded(llm);
+
+    struct sigaction old_action;
+    if (sigsetjmp(g_mnn_jmp_buf, 1) == 0) {
+        installCrashGuard(&old_action);
+
+        // 阶段 1: Prefill（max_new_tokens=0 + "<eop>" 结束标记）
+        llm->response(multimodal, &oss, "<eop>", 0);
+
+        // 阶段 2: Decode loop（逐 token 生成）
+        for (int gen_i = 0; gen_i < maxNewTokens; gen_i++) {
+            if (llm->stoped()) break;
+            llm->generate(1);
+        }
+
+        uninstallCrashGuard(&old_action);
+        g_llm_mutex.unlock();
+    } else {
+        // SIGSEGV 已捕获。siglongjmp 跳过 C++ 析构函数，
+        // 需要手动解锁（g_llm_mutex 在 .bss 段，不受栈回退影响）。
+        uninstallCrashGuard(&old_action);
+        g_llm_mutex.unlock();
+        mnn_crashed = true;
+        LOGE("[CRASH] ═══════════════════════════════════════════");
+        LOGE("[CRASH] SIGSEGV in llm->response(multimodal) / generate()!");
+        LOGE("[CRASH] Image: %dx%d, prompt: system=%zu, user=%zu",
+             width, height, systemStr.size(), userStr.size());
+        LOGE("[CRASH] ═══════════════════════════════════════════");
+    }
+
+    if (mnn_crashed) {
+        // rgbData 和 multimodal 仍在作用域内（栈上变量）
+        return createErrorHashMap(env, "MNN LLM crashed: SIGSEGV in multimodal inference");
     }
     auto end = std::chrono::high_resolution_clock::now();
     metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -430,6 +537,12 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
     }
 
     std::string result = oss.str();
+
+    // 移除 <eop> 结束标记（MNN 通过 ostream 输出时可能包含该标记）
+    size_t eopPos = result.find("<eop>");
+    if (eopPos != std::string::npos) {
+        result.erase(eopPos, 5);  // strlen("<eop>") == 5
+    }
 
     // 日志：打印识别结果 + 性能指标
     LOGD("═══════════════════════════════════════════");

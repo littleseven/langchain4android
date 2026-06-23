@@ -42,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.TextSnippet
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -100,6 +101,7 @@ import coil.compose.AsyncImage
 import com.mamba.picme.R
 import com.mamba.picme.beauty.api.BeautySettings
 import com.mamba.picme.core.common.Logger
+import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.features.camera.components.BeautySelector
@@ -150,6 +152,8 @@ fun MediaPager(
     var processedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var loadedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var showAiChatPanel by remember { mutableStateOf(false) }
+    var visionResult by remember { mutableStateOf<String?>(null) }
+    var isVisionLoading by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
@@ -333,6 +337,37 @@ fun MediaPager(
                 val selectedAsset = assets.getOrNull(pagerState.currentPage)
                 Log.d("Gallery", "Trigger OCR via toolbar button for asset: ${selectedAsset?.id}")
                 selectedAsset?.let { onStartOcr(it.uri) }
+            },
+            onStartVision = {
+                val asset = assets.getOrNull(pagerState.currentPage)
+                if (asset?.type != MediaType.PHOTO) return@mediaPagerTopControls
+                Log.d("Gallery", "Trigger vision inference for asset: ${asset.id}")
+                visionResult = null
+                isVisionLoading = true
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val bitmap = context.contentResolver.openInputStream(asset.uri.toUri())?.use {
+                            BitmapFactory.decodeStream(it)
+                        }
+                        if (bitmap != null) {
+                            val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
+                            val result = engine.imageInference(
+                                bitmap = bitmap,
+                                systemPrompt = "你是一个图像内容分析助手。请用中文简短描述图片的内容。",
+                                userPrompt = "请用一句话描述这张图片中有什么",
+                                maxTokens = 64
+                            )
+                            visionResult = result.ifEmpty { "模型返回了空结果" }
+                            bitmap.recycle()
+                        } else {
+                            visionResult = "无法加载图片"
+                        }
+                    } catch (e: Exception) {
+                        Log.e("Gallery", "Vision inference failed", e)
+                        visionResult = "推理失败: ${e.message}"
+                    }
+                    isVisionLoading = false
+                }
             }
         )
 
@@ -364,6 +399,16 @@ fun MediaPager(
             onDismiss = {
                 Log.d("Gallery", "Dismiss OCR result overlay")
                 onDismissOcr()
+            }
+        )
+
+        // Vision (图像理解) Result Overlay
+        VisionResultOverlay(
+            result = visionResult,
+            isLoading = isVisionLoading,
+            onDismiss = {
+                visionResult = null
+                isVisionLoading = false
             }
         )
 
@@ -711,6 +756,173 @@ private fun OcrResultOverlay(
 }
 
 @Composable
+private fun VisionResultOverlay(
+    result: String?,
+    isLoading: Boolean,
+    onDismiss: () -> Unit
+) {
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    AnimatedVisibility(
+        visible = result != null || isLoading,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { onDismiss() }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                color = Color.White,
+                shape = RoundedCornerShape(24.dp),
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .widthIn(max = 400.dp)
+                    .heightIn(max = 500.dp)
+                    .padding(horizontal = 24.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { /* Stop propagation */ }
+                    )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.padding(8.dp))
+                        Text(
+                            text = "图像理解中...",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else if (result != null) {
+                        // Header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Rounded.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "图像理解结果",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDismiss() },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "关闭",
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Divider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        )
+
+                        val scrollState = rememberScrollState()
+                        Text(
+                            text = result,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                                .padding(horizontal = 4.dp),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp,
+                            color = Color.Black,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(result))
+                                    Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ContentCopy,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.ocr_copy),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, result)
+                                        type = "text/plain"
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, null))
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Share,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.ocr_share),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun mediaPagerTopControls(
     onClose: () -> Unit,
     showInfo: Boolean,
@@ -722,7 +934,8 @@ private fun mediaPagerTopControls(
     onStartEdit: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
-    onStartOcr: () -> Unit
+    onStartOcr: () -> Unit,
+    onStartVision: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -732,20 +945,48 @@ private fun mediaPagerTopControls(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(
-            onClick = {
-                Log.d("Gallery", if (isEditing) "Cancel editing mode" else "Close MediaPager")
-                onClose()
-            },
-            colors = IconButtonDefaults.iconButtonColors(
-                containerColor = Color.Black.copy(alpha = 0.5f)
-            )
-        ) {
-            Icon(
-                imageVector = if (isEditing) Icons.Rounded.Close else Icons.Rounded.Close,
-                contentDescription = stringResource(R.string.close),
-                tint = Color.White
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            IconButton(
+                onClick = {
+                    Log.d("Gallery", if (isEditing) "Cancel editing mode" else "Close MediaPager")
+                    onClose()
+                },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f)
+                )
+            ) {
+                Icon(
+                    imageVector = if (isEditing) Icons.Rounded.Close else Icons.Rounded.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = Color.White
+                )
+            }
+
+            IconButton(
+                onClick = { onStartOcr() },
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f)
+                )
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.TextSnippet,
+                    contentDescription = stringResource(R.string.ocr_action_label),
+                    tint = Color.White
+                )
+            }
+
+            IconButton(
+                onClick = onStartVision,
+                colors = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Black.copy(alpha = 0.5f)
+                )
+            ) {
+                Icon(
+                    Icons.Rounded.AutoAwesome,
+                    contentDescription = "图像理解",
+                    tint = Color.White
+                )
+            }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -781,19 +1022,6 @@ private fun mediaPagerTopControls(
                         tint = Color.White
                     )
                 }
-            }
-
-            IconButton(
-                onClick = { onStartOcr() },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Black.copy(alpha = 0.5f)
-                )
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Rounded.TextSnippet,
-                    contentDescription = stringResource(R.string.ocr_action_label),
-                    tint = Color.White
-                )
             }
 
             IconButton(

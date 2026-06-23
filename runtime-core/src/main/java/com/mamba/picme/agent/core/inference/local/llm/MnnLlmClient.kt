@@ -135,13 +135,13 @@ class MnnLlmClient(private val context: Context) {
     /**
      * 使用图片 + system prompt + user prompt 进行多模态生成（同步阻塞）。
      *
-     * 图片被转换为 RGB float 数据，通过 MultimodalPrompt 传给 MNN-LLM vision encoder。
+     * 图片以 uint8 原始像素通过 MultimodalPrompt 传给 MNN-LLM vision encoder。
      *
      * **注意**：此方法应在专用线程上调用（由 [LocalLlmEngine] 统一调度）。
      *
      * @param systemPrompt 系统提示词
      * @param userPrompt   用户提示词（不含图片标记，native 层自动拼接）
-     * @param bitmap       输入图片，建议尺寸 ≤ 1024px
+     * @param bitmap       输入图片，建议尺寸 ≤ 420px
      * @param maxNewTokens 最大生成 token 数，默认 256
      * @return 包含完整回复和性能指标的 StreamResult
      */
@@ -157,8 +157,15 @@ class MnnLlmClient(private val context: Context) {
         }
 
         return try {
+            // ── 图像预处理：确保格式和尺寸安全 ────────────────
+            val safeBitmap = preprocessBitmap(bitmap)
+            if (safeBitmap !== bitmap) {
+                Logger.d(tag, "[Vision] Image preprocessed: ${bitmap.width}x${bitmap.height} " +
+                    "(${bitmap.config}) -> ${safeBitmap.width}x${safeBitmap.height} (${safeBitmap.config})")
+            }
+
             val resultMap = MnnGlobalReleaseLock.withOperation {
-                nativeGenerateWithImage(nativeHandle, systemPrompt, userPrompt, bitmap, maxNewTokens)
+                nativeGenerateWithImage(nativeHandle, systemPrompt, userPrompt, safeBitmap, maxNewTokens)
             }
             val result = StreamResult.fromHashMap(resultMap)
             Logger.d(tag, "[Vision] result: ${result.response.take(200)}, " +
@@ -168,6 +175,52 @@ class MnnLlmClient(private val context: Context) {
             Logger.e(tag, "Image generation failed", exception)
             StreamResult(error = exception.message ?: "Unknown error")
         }
+    }
+
+    /**
+     * 图像预处理：确保 Bitmap 安全可用于 native 推理。
+     *
+     * 1. 格式转换：非 ARGB_8888 的 Bitmap 转换为 ARGB_8888
+     * 2. 尺寸缩放：最长边超过 [MAX_IMAGE_DIM] 时等比缩放
+     *
+     * @param original 原始 Bitmap
+     * @return 处理后的 Bitmap（若无需处理则返回原对象引用）
+     */
+    private fun preprocessBitmap(original: Bitmap): Bitmap {
+        // Step 1: 确保 ARGB_8888 格式
+        val argbBitmap = if (original.config != Bitmap.Config.ARGB_8888) {
+            Logger.d(tag, "[Vision] Converting bitmap from ${original.config} to ARGB_8888")
+            val converted = original.copy(Bitmap.Config.ARGB_8888, false)
+            if (converted == null) {
+                Logger.w(tag, "[Vision] Bitmap format conversion failed, using original")
+                original
+            } else {
+                converted
+            }
+        } else {
+            original
+        }
+
+        // Step 2: 尺寸缩放（最长边不超过 MAX_IMAGE_DIM）
+        val w = argbBitmap.width
+        val h = argbBitmap.height
+        if (w <= MAX_IMAGE_DIM && h <= MAX_IMAGE_DIM) {
+            return argbBitmap  // 无需缩放
+        }
+
+        val scale = MAX_IMAGE_DIM.toFloat() / maxOf(w, h).toFloat()
+        val newW = (w * scale).toInt().coerceAtLeast(1)
+        val newH = (h * scale).toInt().coerceAtLeast(1)
+
+        Logger.d(tag, "[Vision] Scaling image: ${w}x${h} -> ${newW}x${newH} (scale=%.3f)".format(scale))
+        val scaled = Bitmap.createScaledBitmap(argbBitmap, newW, newH, true)
+
+        // 如果创建了中间转换 bitmap，回收之
+        if (argbBitmap !== original) {
+            argbBitmap.recycle()
+        }
+
+        return scaled
     }
 
     /**
@@ -349,7 +402,21 @@ class MnnLlmClient(private val context: Context) {
         // 2. 设置低 temperature 提高 JSON 输出稳定性（Function Calling 场景推荐 0.1-0.2）
         root.put("temperature", root.optDouble("temperature", 0.1))
 
-        // 3. 可选：使用 OpenCL 后端加速
+        // 3. 多模态模型配置（MNN 需要这些字段才能正确加载视觉编码器）
+        //    - visual_model / visual_weight: 视觉编码器路径
+        //    - llm_config: 指向 llm_config.json，其中包含 vision_start/vision_end/image_pad 等 token ID
+        //      缺少此引用时，tokenizer 无法识别图片占位符，视觉输出与文本 embedding 拼接会维度错乱
+        if (!root.has("llm_config")) {
+            root.put("llm_config", "llm_config.json")
+        }
+        if (!root.has("visual_model")) {
+            root.put("visual_model", "visual.mnn")
+        }
+        if (!root.has("visual_weight")) {
+            root.put("visual_weight", "visual.mnn.weight")
+        }
+
+        // 4. 可选：使用 OpenCL 后端加速
         if (useOpencl) {
             root.put("backend_type", "opencl")
             val mllmObject = root.optJSONObject("mllm") ?: JSONObject().also { root.put("mllm", it) }
@@ -406,6 +473,12 @@ class MnnLlmClient(private val context: Context) {
     private external fun nativeIsLoaded(handle: Long): Boolean
 
     companion object {
+        /**
+         * 图像推理最大边长限制（像素）
+         * 超过此值的图片会被等比缩放到该尺寸，防止 native 层 OOM 或 SIGSEGV
+         */
+        private const val MAX_IMAGE_DIM = 420
+
         init {
             System.loadLibrary("agent_native")
         }
