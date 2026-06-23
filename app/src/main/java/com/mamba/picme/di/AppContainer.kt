@@ -15,7 +15,9 @@ import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.beauty.api.facedetect.FaceDetector
 import com.mamba.picme.beauty.api.facedetect.FaceDetectorFactory
 import com.mamba.picme.data.local.MlKitOcrProcessor
+import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.data.indexing.FaceClusteringWorker
+import com.mamba.picme.data.indexing.ImageTagIndexingWorker
 import com.mamba.picme.data.indexing.IndexingTaskQueue
 import com.mamba.picme.data.indexing.MediaIndexingWorker
 import com.mamba.picme.data.indexing.MediaStoreObserver
@@ -87,6 +89,8 @@ interface AppContainer {
     val mediaSearchEngine: MediaSearchEngine
     val mediaIndexingWorker: MediaIndexingWorker
     val faceClusteringWorker: FaceClusteringWorker
+    /** AI 图片标签索引器（本地 Vision LLM → 标签） */
+    val imageTagIndexingWorker: ImageTagIndexingWorker
     /** 跨维度查询构建器（LLM 意图 → Room 查询） */
     val queryBuilder: QueryBuilder
     /** 双级缩略图缓存（LRU 内存 + 磁盘） */
@@ -135,6 +139,12 @@ class AppContainerImpl(
         FaceClusteringWorker(context) {
             repository.refreshMediaLibrary()
         }
+    }
+
+    /** AI 图片标签索引器（本地 Vision LLM → 中文标签） */
+    override val imageTagIndexingWorker: ImageTagIndexingWorker by lazy {
+        val llmEngine = AgentOrchestrator.getInstance(context).getLocalLlmEngine()
+        ImageTagIndexingWorker(context, llmEngine)
     }
 
     /**

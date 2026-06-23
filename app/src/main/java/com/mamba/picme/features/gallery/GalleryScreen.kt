@@ -214,6 +214,16 @@ fun GalleryScreen(
         }
     }
 
+    // AI 图片标签索引 — 在媒体加载完成后触发
+    // Worker 内部自动跳过已标记的媒体，只处理增量
+    // 需要 Vision 模型已加载（由 AgentOrchestrator 管理，未加载时 worker 内部静默跳过）
+    val imageTagWorker = remember { app.container.imageTagIndexingWorker }
+    LaunchedEffect(allFlatMedia.size) {
+        if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
+            imageTagWorker.start()
+        }
+    }
+
     // 定期刷新索引状态
     LaunchedEffect(isIndexing) {
         if (isIndexing) {
