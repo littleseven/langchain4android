@@ -7,6 +7,7 @@
 #include <dlfcn.h>
 #include <chrono>
 #include <vector>
+#include <android/bitmap.h>
 
 #include <MNN/llm/llm.hpp>
 
@@ -278,6 +279,181 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
     }
 
     // 构建返回 HashMap
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longInit = env->GetMethodID(longClass, "<init>", "(J)V");
+
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("response"),
+                          env->NewStringUTF(result.c_str()));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prompt_len"),
+                          env->NewObject(longClass, longInit, metrics.prompt_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_len"),
+                          env->NewObject(longClass, longInit, metrics.decode_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("vision_time"),
+                          env->NewObject(longClass, longInit, metrics.vision_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("audio_time"),
+                          env->NewObject(longClass, longInit, metrics.audio_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prefill_time"),
+                          env->NewObject(longClass, longInit, metrics.prefill_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_time"),
+                          env->NewObject(longClass, longInit, metrics.decode_time));
+
+    return hashMap;
+}
+
+// ── 多模态图片生成 + 性能指标 ─────────────────────────────
+JNIEXPORT jobject JNICALL
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateWithImage(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jstring systemPrompt,
+        jstring userPrompt,
+        jobject bitmap,
+        jint maxNewTokens) {
+
+    auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
+    if (llm == nullptr) {
+        LOGE("LLM handle is null");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed, LLM handle is null"));
+        return hashMap;
+    }
+
+    // 1. 获取 system / user prompt
+    const char *systemCStr = env->GetStringUTFChars(systemPrompt, nullptr);
+    const char *userCStr = env->GetStringUTFChars(userPrompt, nullptr);
+    std::string systemStr(systemCStr);
+    std::string userStr(userCStr);
+    env->ReleaseStringUTFChars(systemPrompt, systemCStr);
+    env->ReleaseStringUTFChars(userPrompt, userCStr);
+
+    // 2. 从 Android Bitmap 提取像素数据
+    AndroidBitmapInfo bitmapInfo;
+    if (AndroidBitmap_getInfo(env, bitmap, &bitmapInfo) < 0) {
+        LOGE("Failed to get bitmap info");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed to get bitmap info"));
+        return hashMap;
+    }
+
+    void *bitmapPixels;
+    if (AndroidBitmap_lockPixels(env, bitmap, &bitmapPixels) < 0) {
+        LOGE("Failed to lock bitmap pixels");
+        jclass hashMapClass = env->FindClass("java/util/HashMap");
+        jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+        jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+        jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                               "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+        env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("error"),
+                              env->NewStringUTF("Failed to lock bitmap pixels"));
+        return hashMap;
+    }
+
+    int width = bitmapInfo.width;
+    int height = bitmapInfo.height;
+
+    LOGD("[Vision] Image: %dx%d, format=%d, stride=%d", width, height, bitmapInfo.format, bitmapInfo.stride);
+
+    // 将 RGBA_8888 像素转换为 float32 RGB NCHW 格式
+    std::vector<float> rgbData(3 * height * width);
+    uint8_t *pixels = static_cast<uint8_t *>(bitmapPixels);
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int srcIdx = y * bitmapInfo.stride + x * 4;
+            int dstR = 0 * height * width + y * width + x;
+            int dstG = 1 * height * width + y * width + x;
+            int dstB = 2 * height * width + y * width + x;
+            rgbData[dstR] = pixels[srcIdx] / 255.0f;
+            rgbData[dstG] = pixels[srcIdx + 1] / 255.0f;
+            rgbData[dstB] = pixels[srcIdx + 2] / 255.0f;
+        }
+    }
+    AndroidBitmap_unlockPixels(env, bitmap);
+
+    // 创建 MNN VARP
+    std::vector<int> imageShape = {1, 3, height, width};
+    auto imageVar = MNN::Express::_Const(
+        rgbData.data(), imageShape, MNN::Express::NCHW, halide_type_of<float>());
+
+    // 3. 构建 MultimodalPrompt（Qwen-VL chat template）
+    MNN::Transformer::MultimodalPrompt multimodal;
+    multimodal.prompt_template =
+        "<|im_start|>system\n" + systemStr + "<|im_end|>\n"
+        "<|im_start|>user\n"
+        "<|vision_start|><|image_pad|><|vision_end|>" + userStr + "<|im_end|>\n"
+        "<|im_start|>assistant\n";
+    multimodal.images["image"] = {imageVar, width, height};
+
+    LOGD("[Vision] Generating: system=%zu chars, user=%zu chars, maxTokens=%d",
+         systemStr.size(), userStr.size(), maxNewTokens);
+
+    // 4. 调用 MNN-LLM multimodal response
+    LlmMetrics metrics;
+    std::ostringstream oss;
+    auto start = std::chrono::high_resolution_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_llm_mutex);
+        restoreLlmStatusIfNeeded(llm);
+        llm->response(multimodal, &oss, nullptr, maxNewTokens);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            end - start).count();
+
+    auto* ctx = llm->getContext();
+    if (ctx != nullptr) {
+        metrics.prompt_len = ctx->prompt_len;
+        metrics.decode_len = ctx->gen_seq_len;
+        metrics.vision_time = ctx->vision_us;
+        metrics.audio_time = ctx->audio_us;
+    }
+
+    std::string result = oss.str();
+
+    // 日志：打印识别结果 + 性能指标
+    LOGD("═══════════════════════════════════════════");
+    LOGD("[Vision] ║ 图片识别结果 (Image Recognition Result)");
+    LOGD("[Vision] ╠═══════════════════════════════════════");
+    const size_t LOG_CHUNK_SIZE = 512;
+    if (result.length() <= LOG_CHUNK_SIZE) {
+        LOGD("[Vision] ║ %s", result.c_str());
+    } else {
+        LOGD("[Vision] ║ (len=%zu chars):", result.length());
+        for (size_t i = 0; i < result.length(); i += LOG_CHUNK_SIZE) {
+            size_t chunkLen = (i + LOG_CHUNK_SIZE <= result.length())
+                ? LOG_CHUNK_SIZE : (result.length() - i);
+            std::string chunk = result.substr(i, chunkLen);
+            LOGD("[Vision] ║   %s", chunk.c_str());
+        }
+    }
+    LOGD("[Vision] ╠═══════════════════════════════════════");
+    LOGD("[Vision] ║ 性能: prompt=%lld tokens, decode=%lld tokens",
+         (long long)metrics.prompt_len, (long long)metrics.decode_len);
+    LOGD("[Vision] ║ 耗时: vision=%lld us, decode=%lld us",
+         (long long)metrics.vision_time, (long long)metrics.decode_time);
+    if (metrics.prompt_len > 0 && metrics.decode_time > 0) {
+        float totalSpeed = (metrics.prompt_len + metrics.decode_len) * 1000000.0f / metrics.decode_time;
+        LOGD("[Vision] ║ 速度: %.1f tokens/s", totalSpeed);
+    }
+    LOGD("═══════════════════════════════════════════");
+
+    // 5. 构建返回 HashMap
     jclass hashMapClass = env->FindClass("java/util/HashMap");
     jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
     jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
