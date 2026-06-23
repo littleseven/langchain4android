@@ -371,7 +371,10 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
                     }
                 )
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(
+                    horizontal = if (isImage) 5.dp else 14.dp,
+                    vertical = if (isImage) 3.dp else 10.dp
+                )
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onLongPress = {
@@ -597,9 +600,12 @@ private fun ChatInputArea(
                         fontSize = 14.sp
                     )
                 },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp, max = 120.dp),
+                minLines = 1,
+                maxLines = 4,
+                textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 shape = RoundedCornerShape(24.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
@@ -607,49 +613,55 @@ private fun ChatInputArea(
                 )
             )
 
-            // 图片选择按钮（打开内置相册选取）
-            IconButton(
-                onClick = { showPhotoPicker = true },
-                enabled = !isProcessing,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            // 图片选择 + 发送按钮组（间距 2dp）
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.PhotoLibrary,
-                    contentDescription = "选择图片",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            // 发送按钮
-            IconButton(
-                onClick = {
-                    if (text.isNotBlank() && !isProcessing) {
-                        onSendMessage(text.trim())
-                        text = ""
-                    }
-                },
-                enabled = text.isNotBlank() && !isProcessing,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (text.isNotBlank() && !isProcessing) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            Color.Gray.copy(alpha = 0.3f)
-                        }
+                // 图片选择按钮（打开内置相册选取）
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .clickable(enabled = !isProcessing) { showPhotoPicker = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.PhotoLibrary,
+                        contentDescription = "选择图片",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
                     )
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.Send,
-                    contentDescription = "Send",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
+                }
+
+                // 发送按钮
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (text.isNotBlank() && !isProcessing) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.Gray.copy(alpha = 0.3f)
+                            }
+                        )
+                        .clickable(enabled = text.isNotBlank() && !isProcessing) {
+                            if (text.isNotBlank() && !isProcessing) {
+                                onSendMessage(text.trim())
+                                text = ""
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.Send,
+                        contentDescription = "Send",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }
