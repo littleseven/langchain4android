@@ -624,6 +624,12 @@ class ChatViewModel(
                         modelUsed = currentModelLabel(),
                         performance = orchestrator.getLastLocalGenerationMetrics()?.toLlmPerformance()
                     )
+                    // 将图片分析结果保存到 MemoryManager，使后续文本消息能引用图片上下文
+                    orchestrator.appendImageChatToMemory(
+                        sessionId = sessionId,
+                        userPrompt = "请描述这张图片",
+                        imageAnalysis = response
+                    )
                 }
 
                 cleanupIfNeeded(sessionId)

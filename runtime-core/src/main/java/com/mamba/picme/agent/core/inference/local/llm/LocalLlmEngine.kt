@@ -15,7 +15,9 @@ import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import com.mamba.data.message.AiMessage
 import com.mamba.data.message.ChatMessage
+import com.mamba.data.message.ImageContent
 import com.mamba.data.message.SystemMessage
+import com.mamba.data.message.TextContent
 import com.mamba.data.message.ToolExecutionResultMessage
 import com.mamba.data.message.UserMessage
 import kotlinx.coroutines.CancellationException
@@ -210,7 +212,7 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
                         val historyPairs = messages.map { message ->
                             when (message) {
                                 is SystemMessage -> "system" to message.text()
-                                is UserMessage -> "user" to message.singleText()
+                                is UserMessage -> "user" to safeExtractUserContent(message)
                                 is AiMessage -> "assistant" to message.text()
                                 is ToolExecutionResultMessage -> "tool" to message.text()
                                 else -> "unknown" to message.toString()
@@ -231,7 +233,7 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
                         result.response
                     } else if (systemMessage != null) {
                         // 单轮 system + user
-                        val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.singleText()
+                        val userMessage = messages.filterIsInstance<UserMessage>().lastOrNull()?.let { safeExtractUserContent(it) }
                             ?: messages.lastOrNull()?.let { extractText(it) }
                             ?: throw IllegalArgumentException("ChatRequest must contain at least one message")
                         val result = client.generateWithSystem(
@@ -338,11 +340,36 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
     }
 
     private fun extractText(message: ChatMessage): String = when (message) {
-        is UserMessage -> message.singleText()
+        is UserMessage -> safeExtractUserContent(message)
         is SystemMessage -> message.text()
         is AiMessage -> message.text()
         is ToolExecutionResultMessage -> message.text()
         else -> message.toString()
+    }
+
+    /**
+     * 安全提取 UserMessage 的文本内容。
+     * 处理含 ImageContent 或其他非文本 Content 的消息。
+     */
+    private fun safeExtractUserContent(message: UserMessage): String {
+        return if (message.hasSingleText()) {
+            message.singleText()
+        } else {
+            message.contents().joinToString(" ") { content ->
+                when (content) {
+                    is TextContent -> content.text()
+                    is ImageContent -> {
+                        val image = content.image()
+                        if (image.url() != null) {
+                            "[图片: ${image.url()}]"
+                        } else {
+                            "[图片]"
+                        }
+                    }
+                    else -> "[${content.type()}]"
+                }
+            }
+        }
     }
 
     /**
@@ -557,7 +584,7 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
                     }
                     is UserMessage -> {
                         appendLine("user:")
-                        appendLine(message.singleText())
+                        appendLine(safeExtractUserContent(message))
                         appendLine()
                     }
                     is AiMessage -> {

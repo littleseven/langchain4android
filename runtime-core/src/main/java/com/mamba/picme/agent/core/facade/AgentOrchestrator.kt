@@ -804,6 +804,28 @@ class AgentOrchestrator private constructor(context: Context) {
         memoryManager.clearHistory(sessionId)
     }
 
+    /**
+     * 将图片对话保存到 MemoryManager，使后续文本消息可以引用图片分析结果。
+     *
+     * 场景：用户在 chat 页面发送一张图片后，后续几轮文本对话都与该图片相关。
+     * 此方法将图片分析的用户提示词和 AI 分析结果存入对话记忆，
+     * 使后续 [buildContextMessages] 能够包含图片上下文。
+     *
+     * @param sessionId    会话 ID
+     * @param userPrompt   用户对图片的提示词（如 "请描述这张图片"）
+     * @param imageAnalysis AI 对图片的分析文本
+     */
+    fun appendImageChatToMemory(
+        sessionId: String,
+        userPrompt: String,
+        imageAnalysis: String
+    ) {
+        backgroundScope.launch {
+            memoryManager.appendConversation(sessionId, userPrompt, imageAnalysis)
+            Logger.d(tag, "Image chat saved to memory: session=$sessionId, analysisLen=${imageAnalysis.length}")
+        }
+    }
+
     // ── 飞书 ReAct 入口 ─────────────────────────────────────────────
 
     /**

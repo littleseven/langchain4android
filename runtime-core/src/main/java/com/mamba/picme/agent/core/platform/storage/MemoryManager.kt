@@ -10,7 +10,9 @@ import com.mamba.picme.agent.core.platform.logging.Logger
 import com.mamba.picme.agent.core.platform.thread.ThreadPoolManager
 import com.mamba.data.message.AiMessage
 import com.mamba.data.message.ChatMessage
+import com.mamba.data.message.ImageContent
 import com.mamba.data.message.SystemMessage
+import com.mamba.data.message.TextContent
 import com.mamba.data.message.ToolExecutionResultMessage
 import com.mamba.data.message.UserMessage
 import kotlinx.coroutines.TimeoutCancellationException
@@ -249,13 +251,18 @@ class MemoryManager(private val context: Context) {
 
     /**
      * 将消息列表编码为 JSON 字符串
+     *
+     * 对 UserMessage 安全提取文本内容：
+     * - 纯文本消息 → 直接取 text
+     * - 包含 ImageContent → 提取图片 URL 或标记为 "[图片]"
+     * - 混合内容 → 拼接所有文本和图片标记
      */
     private fun encodeMessagesToJson(messages: List<ChatMessage>): String {
         val array = JSONArray()
         messages.forEach { message ->
             val (role, content) = when (message) {
                 is SystemMessage -> "system" to message.text()
-                is UserMessage -> "user" to message.singleText()
+                is UserMessage -> "user" to safeExtractUserContent(message)
                 is AiMessage -> "assistant" to message.text()
                 is ToolExecutionResultMessage -> "tool" to message.text()
                 else -> "unknown" to message.toString()
@@ -267,6 +274,31 @@ class MemoryManager(private val context: Context) {
             array.put(obj)
         }
         return array.toString()
+    }
+
+    /**
+     * 安全提取 UserMessage 的文本内容。
+     * 处理含 ImageContent 或其他非文本 Content 的消息。
+     */
+    private fun safeExtractUserContent(message: UserMessage): String {
+        return if (message.hasSingleText()) {
+            message.singleText()
+        } else {
+            message.contents().joinToString(" ") { content ->
+                when (content) {
+                    is TextContent -> content.text()
+                    is ImageContent -> {
+                        val image = content.image()
+                        if (image.url() != null) {
+                            "[图片: ${image.url()}]"
+                        } else {
+                            "[图片]"
+                        }
+                    }
+                    else -> "[${content.type()}]"
+                }
+            }
+        }
     }
 
     /**
