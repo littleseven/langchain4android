@@ -427,23 +427,33 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
 
     LOGD("[Vision] Image: %dx%d, format=%d, stride=%d", width, height, bitmapInfo.format, bitmapInfo.stride);
 
-    // RGBA_8888 → RGB uint8 NHWC 转换
+    // Android Bitmap ARGB_8888 像素转为 RGB uint8 NHWC
+    //
+    // 【颜色通道顺序说明】
+    // Android Bitmap.Config.ARGB_8888 的 32 位像素值为 0xAARRGGBB。
+    // 在 ARM little-endian 内存中，字节排列为 [B, G, R, A]（低地址→高地址）。
+    // pixels[0]=B, pixels[1]=G, pixels[2]=R, pixels[3]=A
+    //
+    // Qwen 视觉编码器期望 RGB 格式（见 MNN issue #3326: cv::COLOR_BGR2RGB）。
+    // 因此从 Bitmap 提取时必须正确映射：pixels[2]→R, pixels[1]→G, pixels[0]→B。
+    //
     // MNN 视觉编码器使用 _Input + writeMap<uint8_t>，传入 uint8 原始像素
     // 编码器内部自行处理归一化 (mean=[127.5], norm=[1/127.5])
     // 参考 MNN Demo: video/video_processor.cpp CreateTensorFromRgb()
     //
-    // 注意：之前我们使用 _Const + float32 + 预归一化，导致视觉编码器
-    // 收到错误的像素数据（float32 位模式被解释为 uint8），颜色通道错乱
+    // 注意：之前代码错误地将 pixels[0] 映射为 R、pixels[2] 映射为 B，
+    //       导致 R↔B 通道交换（橙黄色→蓝色，蓝色→橙黄色）。
+    //       已于 2026-06-23 修复。
     std::vector<uint8_t> rgbData(height * width * 3);  // HWC: H × W × 3
     uint8_t *pixels = static_cast<uint8_t *>(bitmapPixels);
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int srcIdx = y * bitmapInfo.stride + x * 4;
             int dstIdx = (y * width + x) * 3;
-            // RGBA_8888: bytes are R, G, B, A in order
-            rgbData[dstIdx]     = pixels[srcIdx];      // R (保持 uint8 0-255)
+            // ARGB_8888 little-endian: pixels[0]=B, pixels[1]=G, pixels[2]=R, pixels[3]=A
+            rgbData[dstIdx]     = pixels[srcIdx + 2];  // R (保持 uint8 0-255)
             rgbData[dstIdx + 1] = pixels[srcIdx + 1];  // G
-            rgbData[dstIdx + 2] = pixels[srcIdx + 2];  // B
+            rgbData[dstIdx + 2] = pixels[srcIdx];      // B
         }
     }
     AndroidBitmap_unlockPixels(env, bitmap);
