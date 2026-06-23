@@ -41,7 +41,7 @@ class ImageTagIndexingWorker(
 
     companion object {
         private const val TAG = "PicMe:ImageTag"
-        private const val MAX_IMAGE_SIZE = 512
+        private const val MAX_IMAGE_SIZE = 420
         private const val THROTTLE_MS = 200L
 
         /** 图片标签生成的 system prompt */
