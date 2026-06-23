@@ -152,7 +152,7 @@ public class ChatResponse {
 
     private static void validate(Builder builder, String name) {
         if (builder.metadata != null) {
-            throw new IllegalArgumentException("Cannot set both 'metadata' and '%s' on ChatResponse".formatted(name));
+            throw new IllegalArgumentException(String.format("Cannot set both 'metadata' and '%s' on ChatResponse", name));
         }
     }
 }

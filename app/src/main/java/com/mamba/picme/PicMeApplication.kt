@@ -18,6 +18,7 @@ import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
 import com.mamba.picme.agent.core.remote.config.RemoteModelConfigs
 import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.platform.logging.Logger as AgentCoreLogger
 import com.mamba.picme.agent.core.platform.mnn.MnnResourceManager
@@ -272,10 +273,11 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                 combine(
                     repository.aiAgentModeFlow,
                     repository.aiAgentLocalModelFlow,
-                    repository.aiAgentPrivacyLevelFlow
-                ) { mode, localModel, privacyLevel ->
-                    Triple(mode, localModel, privacyLevel)
-                }.collect { (mode, localModel, privacyLevel) ->
+                    repository.aiAgentPrivacyLevelFlow,
+                    repository.aiAgentInferencePreferenceFlow
+                ) { mode, localModel, privacyLevel, inferencePreference ->
+                    SyncConfig(mode, localModel, privacyLevel, inferencePreference)
+                }.collect { (mode, localModel, privacyLevel, inferencePreference) ->
                     val orchestrator = AgentOrchestrator.getInstance(this@PicMeApplication)
                     val effectiveModel = localModel.takeIf { it.isNotBlank() } ?: "qwen3_5_2b"
                     // 保留已有的远程配置，避免覆盖 gatewayToken 导致远程推理失败
@@ -284,9 +286,10 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                         mode = mode,
                         modelId = effectiveModel,
                         privacyLevel = privacyLevel,
-                        remoteConfig = existingRemoteConfig
+                        remoteConfig = existingRemoteConfig,
+                        inferencePreference = inferencePreference
                     )
-                    Logger.i(TAG, "Agent orchestrator synced: mode=$mode, model=$effectiveModel, remoteConfig=${existingRemoteConfig?.modelId ?: "null"}")
+                    Logger.i(TAG, "Agent orchestrator synced: mode=$mode, model=$effectiveModel, inferencePreference=$inferencePreference, remoteConfig=${existingRemoteConfig?.modelId ?: "null"}")
                 }
             } catch (e: Exception) {
                 Logger.e(TAG, "Agent mode sync failed", e)
@@ -608,4 +611,14 @@ class PicMeApplication : Application(), ImageLoaderFactory {
             Logger.e(TAG, "Failed to load sherpa-onnx-jni", e)
         }
     }
+
+    /**
+     * syncAgentModeToOrchestrator 内部使用的同步参数容器
+     */
+    private data class SyncConfig(
+        val mode: AiAgentMode,
+        val localModel: String,
+        val privacyLevel: AiAgentPrivacyLevel,
+        val inferencePreference: AiAgentInferencePreference
+    )
 }

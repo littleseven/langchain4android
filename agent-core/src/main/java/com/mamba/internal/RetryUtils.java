@@ -214,8 +214,9 @@ public final class RetryUtils {
                     }
 
                     log.warn(
-                            "A retriable exception occurred. Remaining retries: %s of %s"
-                                    .formatted(maxRetries - retry, maxRetries),
+                            String.format(
+                                    "A retriable exception occurred. Remaining retries: %s of %s",
+                                    maxRetries - retry, maxRetries),
                             e);
 
                     sleep(retry);

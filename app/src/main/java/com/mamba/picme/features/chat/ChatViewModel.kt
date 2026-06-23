@@ -7,12 +7,16 @@ import com.mamba.picme.agent.core.model.command.AgentCommand
 import com.mamba.picme.agent.core.model.context.AgentAction
 import com.mamba.picme.agent.core.model.context.AgentContext
 import com.mamba.picme.agent.core.model.context.AgentScene
+import com.mamba.picme.agent.core.model.config.AiAgentMode
+import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.inference.local.llm.LlmGenerationMetrics
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.ChatMessageDao
 import com.mamba.picme.data.local.ChatMessageEntity
 import com.mamba.picme.data.local.ChatSessionEntity
+import com.mamba.picme.domain.repository.UserSettingsRepository
 import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,6 +51,7 @@ class ChatViewModel(
     private val context = dependencies.context.applicationContext
     private val chatMessageDao = dependencies.chatMessageDao
     private val chatSessionDao = dependencies.chatSessionDao
+    private val userSettingsRepository = dependencies.userSettingsRepository
 
     private val orchestrator = AgentOrchestrator.getInstance(context)
 
@@ -96,6 +101,20 @@ class ChatViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
+        // 从设置中心同步推理偏好到 UI 的 ModelSelector
+        viewModelScope.launch {
+            try {
+                userSettingsRepository.aiAgentInferencePreferenceFlow.collect { preference ->
+                    _currentModel.value = when (preference) {
+                        AiAgentInferencePreference.FORCE_LOCAL -> ChatModelOption.Local
+                        AiAgentInferencePreference.FORCE_REMOTE,
+                        AiAgentInferencePreference.AUTO -> ChatModelOption.Remote
+                    }
+                }
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to sync inference preference from settings", e)
+            }
+        }
         loadMessages()
         loadThreads()
     }
@@ -268,7 +287,7 @@ class ChatViewModel(
 
                 // 5. 调用流式推理
                 val accumulatedContent = StringBuilder()
-                val isLocalModel = _currentModel.value is ChatModelOption.Local
+                val isLocalInference = orchestrator.getInferencePreference() == AiAgentInferencePreference.FORCE_LOCAL
                 val result = orchestrator.streamChat(
                     input = text,
                     agentContext = agentContext,
@@ -277,7 +296,7 @@ class ChatViewModel(
                         val current = _streamingMessage.value
                         if (current != null && current.id == streamingId) {
                             // LOCAL 模式输出 JSON 命令，流式期间展示友好提示而非原始 JSON
-                            val displayText = if (isLocalModel) {
+                            val displayText = if (isLocalInference) {
                                 "正在处理请求..."
                             } else {
                                 accumulatedContent.toString()
@@ -516,10 +535,34 @@ class ChatViewModel(
 
     /**
      * 切换当前模型
+     *
+     * 将 UI 的 Local/Remote 选择映射到 [AiAgentInferencePreference]，
+     * 同步到 AgentOrchestrator（控制实际推理路由）和 DataStore（设置中心同步更新）。
      */
     fun switchModel(model: ChatModelOption) {
         _currentModel.value = model
-        Logger.i(TAG, "Model switched to: ${model.label}")
+        viewModelScope.launch {
+            try {
+                val preference = when (model) {
+                    is ChatModelOption.Local -> AiAgentInferencePreference.FORCE_LOCAL
+                    is ChatModelOption.Remote -> AiAgentInferencePreference.FORCE_REMOTE
+                }
+                // 同步到 AgentOrchestrator（复用已有的远程配置）
+                val existingRemoteConfig = orchestrator.getUserRemoteConfig()
+                orchestrator.configure(
+                    mode = orchestrator.getAgentMode(),
+                    modelId = orchestrator.getCurrentModelId(),
+                    privacyLevel = AiAgentPrivacyLevel.STRICT,
+                    remoteConfig = existingRemoteConfig,
+                    inferencePreference = preference
+                )
+                // 同步到 DataStore（设置中心会感知变化）
+                userSettingsRepository.updateAiAgentInferencePreference(preference)
+                Logger.i(TAG, "Model switched to: ${model.label}, inferencePreference=$preference")
+            } catch (e: Exception) {
+                Logger.e(TAG, "Failed to sync inference preference switch", e)
+            }
+        }
     }
 
     /**

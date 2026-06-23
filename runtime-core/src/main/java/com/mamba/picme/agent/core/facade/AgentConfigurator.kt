@@ -3,8 +3,10 @@ package com.mamba.picme.agent.core.facade
 import android.content.Context
 import android.view.WindowManager
 import com.mamba.picme.agent.core.remote.config.RemoteModelConfig
+import com.mamba.picme.agent.core.remote.config.RemoteModelFactory
 import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.inference.local.llm.LocalLlmEngine
 import com.mamba.picme.agent.core.inference.local.pipeline.LocalInferencePipeline
 import com.mamba.picme.agent.core.inference.local.prompt.LocalPromptBuilder
@@ -17,6 +19,7 @@ import com.mamba.picme.agent.core.runtime.capability.CapabilityRegistry
 import com.mamba.picme.agent.core.runtime.cache.IntentCache
 import com.mamba.picme.agent.core.runtime.policy.PrivacyGuard
 import com.mamba.picme.agent.core.runtime.state.SceneManager
+import com.mamba.model.chat.ChatModel
 
 /**
  * Agent 配置器
@@ -60,6 +63,7 @@ class AgentConfigurator(private val context: Context) {
     private var userRemoteConfig: RemoteModelConfig? = null
     private var localInferencePipeline: LocalInferencePipeline? = null
     private var localUseOpencl: Boolean = false
+    private var inferencePreference: AiAgentInferencePreference = AiAgentInferencePreference.FORCE_REMOTE
 
     /**
      * 获取或创建本地推理管道
@@ -87,11 +91,15 @@ class AgentConfigurator(private val context: Context) {
         modelId: String,
         privacyLevel: AiAgentPrivacyLevel,
         remoteConfig: RemoteModelConfig? = null,
-        localUseOpencl: Boolean = false
+        localUseOpencl: Boolean = false,
+        inferencePreference: AiAgentInferencePreference? = null
     ) {
         this.agentMode = mode
         this.currentModelId = modelId
         this.localUseOpencl = localUseOpencl
+        if (inferencePreference != null) {
+            this.inferencePreference = inferencePreference
+        }
         if (remoteConfig != null && remoteConfig.baseUrl.isNotBlank() && remoteConfig.modelId.isNotBlank()) {
             this.userRemoteConfig = remoteConfig
             localInferencePipeline = null
@@ -99,6 +107,7 @@ class AgentConfigurator(private val context: Context) {
         privacyGuard.updateConfig(privacyLevel, mode)
         Logger.i(tag, "Configured: mode=$mode, model=$modelId, privacy=$privacyLevel, " +
             "localUseOpencl=$localUseOpencl, " +
+            "inferencePreference=${this.inferencePreference}, " +
             "remoteModel=${remoteConfig?.modelId ?: "default"}, " +
             "effectiveRemoteModel=${userRemoteConfig?.modelId ?: "fallback"}")
     }
@@ -148,6 +157,11 @@ class AgentConfigurator(private val context: Context) {
     fun getLocalUseOpencl(): Boolean = localUseOpencl
 
     /**
+     * 当前推理偏好（FORCE_LOCAL / FORCE_REMOTE / AUTO）
+     */
+    fun getInferencePreference(): AiAgentInferencePreference = inferencePreference
+
+    /**
      * 用户远程配置
      */
     fun getUserRemoteConfig(): RemoteModelConfig? = userRemoteConfig
@@ -157,6 +171,27 @@ class AgentConfigurator(private val context: Context) {
      */
     val isModelLoaded: Boolean
         get() = localLlmEngine.isLoaded
+
+    /**
+     * 创建远程聊天模型（同步，兼容不支持 SSE 的网关）
+     *
+     * 使用同步 [com.mamba.model.chat.ChatModel] 而非流式模型。
+     * SCF AI Gateway 等代理网关通常不支持 SSE 流式传输，
+     * 发送 stream=true 会导致连接被关闭。同步调用已验证可靠（与飞书 RemoteReActAgent 一致）。
+     *
+     * @param config 远程模型配置（baseUrl / apiKey / modelId / gatewayToken）
+     * @return 同步聊天模型实例
+     */
+    fun createRemoteChatModel(config: RemoteModelConfig): ChatModel {
+        val builder = RemoteModelFactory.createBuilder(config)
+            .logRequests(true)
+            .logResponses(true)
+        if (config.gatewayToken.isNotBlank()) {
+            builder.customHeader("X-Gateway-Token", config.gatewayToken)
+        }
+        Logger.i(tag, "RemoteChatModel created: model=${config.modelId}, baseUrl=${config.baseUrl.take(40)}")
+        return builder.build()
+    }
 
     // ── 飞书 ReAct Agent（懒创建）────────────────────────────────────
 

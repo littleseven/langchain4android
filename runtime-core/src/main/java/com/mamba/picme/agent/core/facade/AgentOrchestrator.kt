@@ -11,6 +11,7 @@ import com.mamba.picme.agent.core.model.context.AgentIdGenerator
 import com.mamba.picme.agent.core.model.context.PageContext
 import com.mamba.picme.agent.core.model.config.AiAgentMode
 import com.mamba.picme.agent.core.model.config.AiAgentPrivacyLevel
+import com.mamba.picme.agent.core.model.config.AiAgentInferencePreference
 import com.mamba.picme.agent.core.local.llm.LlmChatRequest
 import com.mamba.picme.agent.core.local.llm.LlmChatResponse
 import com.mamba.picme.agent.core.local.llm.StreamingChatResponseHandler
@@ -132,9 +133,10 @@ class AgentOrchestrator private constructor(context: Context) {
         modelId: String,
         privacyLevel: AiAgentPrivacyLevel,
         remoteConfig: RemoteModelConfig? = null,
-        localUseOpencl: Boolean = false
+        localUseOpencl: Boolean = false,
+        inferencePreference: AiAgentInferencePreference? = null
     ) {
-        configurator.configure(mode, modelId, privacyLevel, remoteConfig, localUseOpencl)
+        configurator.configure(mode, modelId, privacyLevel, remoteConfig, localUseOpencl, inferencePreference)
     }
 
     /**
@@ -165,6 +167,11 @@ class AgentOrchestrator private constructor(context: Context) {
      * 获取当前 Agent 运行模式（含临时覆盖）
      */
     fun getAgentMode(): AiAgentMode = configurator.getAgentMode()
+
+    /**
+     * 获取当前推理偏好（FORCE_LOCAL / FORCE_REMOTE / AUTO）
+     */
+    fun getInferencePreference(): AiAgentInferencePreference = configurator.getInferencePreference()
 
     /**
      * 获取当前模型 ID
@@ -300,8 +307,10 @@ class AgentOrchestrator private constructor(context: Context) {
     /**
      * 流式自由聊天
      *
-     * 跳过 L1/L2/L3/L4 指令路由，直接进行纯文本流式生成。
-     * 所有模式统一使用 [LocalLlmEngine.chat] 流式接口（已不再需要远程推理）
+     * 根据 [AiAgentInferencePreference] 决定使用本地还是远程推理：
+     * - FORCE_LOCAL：本地 MNN-LLM 流式推理
+     * - FORCE_REMOTE：远程 API 流式推理（用户配置优先，无配置时用 TENCENT_SCF_DEFAULT 兜底）
+     * - AUTO：CHAT 场景默认使用远程推理
      *
      * @param input 用户输入
      * @param agentContext Agent 上下文
@@ -313,16 +322,22 @@ class AgentOrchestrator private constructor(context: Context) {
         agentContext: AgentContext,
         onToken: (String) -> Unit
     ): Result<StreamChatResult> {
-        val mode = configurator.getAgentMode()
-        Logger.d(tag, "streamChat: mode=$mode, input='$input'")
+        val preference = configurator.getInferencePreference()
+        Logger.d(tag, "streamChat: preference=$preference, input='$input'")
 
-        return when (mode) {
-            AiAgentMode.OFF -> {
+        return when (preference) {
+            AiAgentInferencePreference.FORCE_LOCAL -> {
+                Logger.i(tag, "streamChat routing to LOCAL (FORCE_LOCAL)")
                 streamChatLocal(input, agentContext, onToken)
             }
-            else -> {
-                // LOCAL/REMOTE/FEISHU 统一走本地流式推理
-                streamChatLocal(input, agentContext, onToken)
+            AiAgentInferencePreference.FORCE_REMOTE -> {
+                Logger.i(tag, "streamChat routing to REMOTE (FORCE_REMOTE)")
+                streamChatRemote(input, agentContext, onToken)
+            }
+            AiAgentInferencePreference.AUTO -> {
+                // CHAT 场景默认使用远程推理
+                Logger.i(tag, "streamChat routing to REMOTE (AUTO, default for CHAT)")
+                streamChatRemote(input, agentContext, onToken)
             }
         }
     }
@@ -401,6 +416,95 @@ class AgentOrchestrator private constructor(context: Context) {
             Logger.e(tag, "streamChatLocal setup failed", e)
             Result.failure(e)
         }
+    }
+
+    /**
+     * 远程聊天（同步调用，非 SSE 流式）
+     *
+     * 通过 OpenAI 兼容 API 进行同步推理，完整响应一次性返回。
+     * 使用同步 [com.mamba.model.chat.ChatModel] 而非流式模型，
+     * 因为 SCF AI Gateway 等代理网关不支持 SSE 流式传输，会直接关闭连接。
+     *
+     * 为保持与 [streamChatLocal] 一致的接口，将完整响应文本通过 [onToken] 一次性回调。
+     *
+     * @param input 用户输入
+     * @param agentContext Agent 上下文
+     * @param onToken 收到响应文本时回调（一次性返回完整文本）
+     * @return 流式结果
+     */
+    private suspend fun streamChatRemote(
+        input: String,
+        agentContext: AgentContext,
+        onToken: (String) -> Unit
+    ): Result<StreamChatResult> {
+        val remoteConfig = resolveRemoteConfig()
+        Logger.d(tag, "streamChatRemote: model=${remoteConfig.modelId}, baseUrl=${remoteConfig.baseUrl.take(40)}")
+
+        val capabilities = _capabilityRegistry.getCapabilitiesForCurrentScene()
+        val systemPrompt = promptBuilder.buildL2SystemPrompt(capabilities, agentContext)
+        val messages = memoryManager.buildContextMessages(
+            agentContext.memorySessionId, systemPrompt, input
+        )
+
+        val startTime = System.currentTimeMillis()
+
+        return try {
+            // ChatModel.chat() 是阻塞网络调用，必须在 IO 线程执行
+            val response = withContext(Dispatchers.IO) {
+                val chatModel = configurator.createRemoteChatModel(remoteConfig)
+                chatModel.chat(messages)
+            }
+            val latencyMs = System.currentTimeMillis() - startTime
+            val responseText = response.aiMessage().text()
+            // 一次性回调完整响应
+            onToken(responseText)
+            val tokenUsage = response.tokenUsage()
+            val promptTokens = tokenUsage?.inputTokenCount()?.toLong()
+            val completionTokens = tokenUsage?.outputTokenCount()?.toLong()
+            Logger.d(tag, "streamChatRemote OK latency=${latencyMs}ms, " +
+                "responseLen=${responseText.length}, promptTokens=$promptTokens, completionTokens=$completionTokens")
+
+            val result = StreamChatResult(
+                fullResponse = responseText,
+                metrics = StreamMetrics(
+                    latencyMs = latencyMs,
+                    promptTokens = promptTokens,
+                    completionTokens = completionTokens
+                )
+            )
+            val commands = LocalCommandParser.parseL2BatchResponse(
+                result.fullResponse, agentContext
+            )
+            Logger.d(tag, "streamChatRemote: parsed ${commands.size} commands from response")
+            Result.success(result.copy(commands = commands))
+        } catch (e: Exception) {
+            val latencyMs = System.currentTimeMillis() - startTime
+            Logger.e(tag, "streamChatRemote ERR latency=${latencyMs}ms", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 解析远程模型配置
+     *
+     * 优先使用已存储的远程配置（可能已被 [PicMeApplication] 预配置了 gatewayToken）。
+     * [RemoteModelConfig.isConfigured] 要求 apiKey 或 gatewayToken 非空，
+     * 但在 debug 构建中 BuildConfig token 可能为空，导致预配置的兜底 config 被误判为无效。
+     * 因此这里只检查 baseUrl 和 modelId，不检查认证字段——认证由 SCF 网关层处理。
+     *
+     * 绝不自定降级到本地推理。
+     */
+    private fun resolveRemoteConfig(): RemoteModelConfig {
+        val userConfig = configurator.getUserRemoteConfig()
+        if (userConfig != null && userConfig.baseUrl.isNotBlank() && userConfig.modelId.isNotBlank()) {
+            Logger.d(tag, "resolveRemoteConfig: using stored config model=${userConfig.modelId}, " +
+                "hasGatewayToken=${userConfig.gatewayToken.isNotBlank()}, " +
+                "hasApiKey=${userConfig.apiKey.isNotBlank()}")
+            return userConfig
+        }
+        // 最终兜底：无任何可用配置时使用 SCF 默认网关
+        Logger.w(tag, "resolveRemoteConfig: no stored config available, falling back to TENCENT_SCF_DEFAULT")
+        return RemoteModelConfig.TENCENT_SCF_DEFAULT
     }
 
     /**

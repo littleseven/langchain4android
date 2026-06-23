@@ -1,8 +1,10 @@
 package com.mamba.android;
 
 import com.mamba.model.chat.ChatModel;
+import com.mamba.model.chat.StreamingChatModel;
 import com.mamba.model.chat.request.ToolChoice;
 import com.mamba.model.openai.OpenAiChatModel;
+import com.mamba.model.openai.OpenAiStreamingChatModel;
 
 import java.time.Duration;
 import java.util.List;
@@ -206,7 +208,7 @@ public class MambaAgentFactory {
         }
 
         /**
-         * 构建 OpenAiChatModel 实例。
+         * 构建 OpenAiChatModel 实例（同步）。
          */
         public ChatModel build() {
             if (apiKey == null || apiKey.isEmpty()) {
@@ -243,6 +245,48 @@ public class MambaAgentFactory {
             }
             if (listeners != null && !listeners.isEmpty()) {
                 builder.listeners(listeners);
+            }
+
+            return builder.build();
+        }
+
+        /**
+         * 构建 OpenAiStreamingChatModel 实例（流式 SSE）。
+         *
+         * <p>与 {@link #build()} 使用相同的配置参数，
+         * 但返回支持 SSE 流式响应的 {@link StreamingChatModel}。</p>
+         *
+         * @return 流式聊天模型实例
+         * @throws IllegalArgumentException 如果 API key 为空
+         */
+        public StreamingChatModel buildStreaming() {
+            if (apiKey == null || apiKey.isEmpty()) {
+                throw new IllegalArgumentException("API key must not be null or empty");
+            }
+
+            OpenAiStreamingChatModel.OpenAiStreamingChatModelBuilder builder = OpenAiStreamingChatModel.builder()
+                    .apiKey(apiKey)
+                    .baseUrl(baseUrl)
+                    .modelName(model)
+                    .temperature(temperature)
+                    .maxTokens(maxTokens)
+                    .timeout(timeout)
+                    .logRequests(logRequests)
+                    .logResponses(logResponses)
+                    .strictTools(strictTools)
+                    .strictJsonSchema(strictJsonSchema);
+
+            if (topP != null) {
+                builder.topP(topP);
+            }
+            if (maxCompletionTokens != null) {
+                builder.maxCompletionTokens(maxCompletionTokens);
+            }
+            if (customHeaders != null && !customHeaders.isEmpty()) {
+                builder.customHeaders(customHeaders);
+            }
+            if (customQueryParams != null && !customQueryParams.isEmpty()) {
+                builder.customQueryParams(customQueryParams);
             }
 
             return builder.build();

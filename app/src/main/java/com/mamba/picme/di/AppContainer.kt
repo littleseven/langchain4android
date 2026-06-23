@@ -271,7 +271,8 @@ class AppContainerImpl(private val context: Context) : AppContainer {
         ChatViewModelDependencies(
             context = context,
             chatMessageDao = database.chatMessageDao(),
-            chatSessionDao = database.chatSessionDao()
+            chatSessionDao = database.chatSessionDao(),
+            userSettingsRepository = userPreferencesRepository
         )
     }
 
