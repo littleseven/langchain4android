@@ -305,7 +305,7 @@ private fun AiChatHeader(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "Close",
+                    contentDescription = stringResource(R.string.close),
                     tint = Color.White.copy(alpha = 0.7f),
                     modifier = Modifier.size(18.dp)
                 )
@@ -357,6 +357,7 @@ private fun UserTextBubble(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    val copySuccessText = stringResource(R.string.copy_success)
 
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -374,7 +375,7 @@ private fun UserTextBubble(
                     detectTapGestures(
                         onLongPress = {
                             clipboardManager.setText(AnnotatedString(message.content))
-                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, copySuccessText, Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -389,6 +390,7 @@ private fun AgentTextBubble(
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    val copySuccessText = stringResource(R.string.copy_success)
 
     Box(
         modifier = modifier.fillMaxWidth(),
@@ -406,7 +408,7 @@ private fun AgentTextBubble(
                     detectTapGestures(
                         onLongPress = {
                             clipboardManager.setText(AnnotatedString(message.content))
-                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, copySuccessText, Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -454,7 +456,7 @@ private fun PlanPreviewBubble(
                     ) {
                         Icon(
                             Icons.Rounded.Check,
-                            contentDescription = "Confirm",
+                            contentDescription = stringResource(R.string.cd_confirm),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
@@ -466,7 +468,7 @@ private fun PlanPreviewBubble(
                     ) {
                         Icon(
                             Icons.Rounded.Close,
-                            contentDescription = "Cancel",
+                            contentDescription = stringResource(R.string.cancel),
                             tint = Color.White,
                             modifier = Modifier.size(24.dp)
                         )
@@ -768,7 +770,7 @@ private fun TextInputMode(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.KeyboardVoice,
-                    contentDescription = "Switch to voice",
+                    contentDescription = stringResource(R.string.cd_switch_to_voice),
                     tint = Color.White.copy(alpha = 0.7f),
                     modifier = Modifier.size(22.dp)
                 )
@@ -829,7 +831,7 @@ private fun TextInputMode(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.Send,
-                contentDescription = "Send",
+                contentDescription = stringResource(R.string.chat_send),
                 tint = Color.White,
                 modifier = Modifier.size(20.dp)
             )
@@ -857,9 +859,9 @@ private fun VoiceInputMode(
         }
     }
     val isVoiceAvailable = voiceCoordinator != null
+    val voiceUnavailableText = stringResource(R.string.voice_unavailable)
 
     LaunchedEffect(isListening, isCancelRecord) {
-        // Track state
     }
 
     Row(
@@ -874,7 +876,7 @@ private fun VoiceInputMode(
         ) {
             Icon(
                 imageVector = Icons.Rounded.Keyboard,
-                contentDescription = "Switch to keyboard",
+                contentDescription = stringResource(R.string.switch_to_keyboard),
                 tint = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.size(22.dp)
             )
@@ -909,7 +911,7 @@ private fun VoiceInputMode(
                                             Handler(Looper.getMainLooper()).post {
                                                 Toast.makeText(
                                                     context,
-                                                    "语音识别未初始化，请检查配置",
+                                                    voiceUnavailableText,
                                                     Toast.LENGTH_SHORT
                                                 ).show()
                                             }
@@ -961,9 +963,9 @@ private fun VoiceInputMode(
         ) {
             Text(
                 text = when {
-                    !isVoiceAvailable -> "语音不可用"
-                    isListening -> "松开结束"
-                    else -> "按住说话"
+                    !isVoiceAvailable -> stringResource(R.string.voice_unavailable)
+                    isListening -> stringResource(R.string.release_to_stop)
+                    else -> stringResource(R.string.hold_to_speak)
                 },
                 color = if (isListening) Color.White else Color.White.copy(alpha = 0.8f),
                 fontSize = 14.sp
@@ -1002,9 +1004,9 @@ private fun HeadsetBadge(
         Icon(
             imageVector = Icons.Rounded.Headphones,
             contentDescription = when (device) {
-                is InputAudioDevice.BluetoothSco -> "蓝牙耳机"
-                is InputAudioDevice.WiredHeadset -> "有线耳机"
-                is InputAudioDevice.BuiltInMic -> "内置麦克风"
+                is InputAudioDevice.BluetoothSco -> stringResource(R.string.asr_input_device_bluetooth)
+                is InputAudioDevice.WiredHeadset -> stringResource(R.string.asr_input_device_wired)
+                is InputAudioDevice.BuiltInMic -> stringResource(R.string.asr_input_device_builtin)
             },
             tint = tintColor,
             modifier = Modifier.size(10.dp)

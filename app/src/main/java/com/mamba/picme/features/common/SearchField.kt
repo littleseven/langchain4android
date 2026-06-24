@@ -21,6 +21,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import com.mamba.picme.R
+import androidx.compose.ui.res.stringResource
 
 /**
  * 通用搜索框组件
@@ -81,7 +84,7 @@ fun SearchField(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Clear,
-                    contentDescription = "清除搜索",
+                    contentDescription = stringResource(R.string.cd_clear_search),
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                     modifier = Modifier.size(16.dp)
                 )

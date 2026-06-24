@@ -45,8 +45,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mamba.picme.R
 import com.mamba.picme.agent.core.model.context.MediaType
 import com.mamba.picme.agent.core.platform.voice.AudioRecorder
 import com.mamba.picme.agent.core.platform.voice.InputAudioDevice
@@ -619,7 +621,7 @@ private fun CameraFloatingActionButtons(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.RecordVoiceOver,
-                    contentDescription = "语音控制",
+                    contentDescription = stringResource(R.string.voice_control),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
@@ -642,7 +644,7 @@ private fun CameraFloatingActionButtons(
         ) {
             Icon(
                 imageVector = Icons.Rounded.KeyboardVoice,
-                contentDescription = "AI Agent",
+                contentDescription = stringResource(R.string.ai_agent),
                 tint = Color.White,
                 modifier = Modifier.size(24.dp)
             )

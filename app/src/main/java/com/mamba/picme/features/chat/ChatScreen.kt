@@ -56,6 +56,7 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardVoice
@@ -239,7 +240,7 @@ fun ChatScreen(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
-                    contentDescription = "Quick Actions",
+                    contentDescription = stringResource(R.string.cd_quick_actions),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )
@@ -319,12 +320,12 @@ private fun ChatTopBar(
             IconButton(onClick = onOpenSidebar) {
                 Icon(
                     imageVector = Icons.Rounded.Menu,
-                    contentDescription = "Open sidebar",
+                    contentDescription = stringResource(R.string.cd_open_sidebar),
                     modifier = Modifier.size(24.dp)
                 )
             }
             Text(
-                text = "PicMe",
+                text = stringResource(R.string.app_name),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -332,16 +333,17 @@ private fun ChatTopBar(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onClearChat) {
-                Text(
-                    text = stringResource(R.string.clear_chat),
-                    fontSize = 13.sp
+            IconButton(onClick = onClearChat) {
+                Icon(
+                    imageVector = Icons.Rounded.Delete,
+                    contentDescription = stringResource(R.string.clear_chat),
+                    modifier = Modifier.size(24.dp)
                 )
             }
             IconButton(onClick = onNavigateToSettings) {
                 Icon(
                     imageVector = Icons.Rounded.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.settings),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -356,6 +358,7 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
     val isImage = message.type == ChatMessageType.AGENT_IMAGE || message.type == ChatMessageType.USER_IMAGE
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    val copySuccess = stringResource(R.string.copy_success)
 
     Box(
         modifier = Modifier.fillMaxWidth(),
@@ -379,7 +382,7 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
                     detectTapGestures(
                         onLongPress = {
                             clipboardManager.setText(AnnotatedString(message.content))
-                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, copySuccess, Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -390,7 +393,7 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
                     // 高度固定 200dp，宽度按原始比例自适应，不超 260dp
                     AsyncImage(
                         model = message.content,
-                        contentDescription = "图片",
+                        contentDescription = stringResource(R.string.photo),
                         contentScale = ContentScale.FillHeight,
                         modifier = Modifier
                             .height(200.dp)
@@ -629,7 +632,7 @@ private fun ChatInputArea(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.PhotoLibrary,
-                        contentDescription = "选择图片",
+                        contentDescription = stringResource(R.string.cd_select_image),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         modifier = Modifier.size(16.dp)
                     )
@@ -657,7 +660,7 @@ private fun ChatInputArea(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Rounded.Send,
-                        contentDescription = "Send",
+                        contentDescription = stringResource(R.string.chat_send),
                         tint = Color.White,
                         modifier = Modifier.size(16.dp)
                     )
@@ -708,17 +711,17 @@ private fun QuickActionPanel(
             horizontalAlignment = Alignment.End
         ) {
             QuickActionFabItem(
-                label = "相册",
+                label = stringResource(R.string.gallery),
                 icon = Icons.Rounded.PhotoLibrary,
                 onClick = onGalleryClick
             )
             QuickActionFabItem(
-                label = "相机",
+                label = stringResource(R.string.camera),
                 icon = Icons.Rounded.CameraAlt,
                 onClick = onCameraClick
             )
             QuickActionFabItem(
-                label = "模型下载",
+                label = stringResource(R.string.model_download),
                 icon = Icons.Rounded.Download,
                 onClick = onModelDownloadClick
             )
@@ -825,7 +828,7 @@ private fun ImagePreviewOverlay(
         ) {
             AsyncImage(
                 model = imageUri,
-                contentDescription = "图片预览",
+                contentDescription = stringResource(R.string.cd_image_preview),
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
@@ -845,7 +848,7 @@ private fun ImagePreviewOverlay(
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "关闭",
+                    contentDescription = stringResource(R.string.close),
                     tint = Color.White,
                     modifier = Modifier.size(24.dp)
                 )

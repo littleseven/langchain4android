@@ -1,5 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">觅影相机</string>
+    <string name="app_name">觅影相册</string>
     <string name="camera">相机</string>
     <string name="gallery">相册</string>
     <string name="settings">设置</string>
@@ -17,26 +18,11 @@
     <string name="delete">删除</string>
     <string name="close">关闭</string>
     <string name="back">返回</string>
-    <string name="beauty_engine">美颜引擎</string>
-<string name="beauty_engine_rplan">大美丽（默认）</string>
-    <string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
-    <string name="face_detection_engine_title">人脸检测引擎</string>
-    <string name="model_det10g_mnn">RetinaFace 500M-MNN</string>
-    <string name="model_det10g_ncnn">RetinaFace 500M-NCNN</string>
-    <string name="model_2d106_mnn">2D106-MNN</string>
-    <string name="model_2d106_ncnn">2D106-NCNN</string>
-<string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
-    <string name="face_detection_engine_mode_mnn">MNN</string>
-    <string name="face_detection_engine_mode_ncnn">NCNN</string>
-    <string name="face_detection_source_none">无</string>
-    <string name="camera_face_debug_requested_label">当前请求引擎</string>
-    <string name="camera_face_debug_active_label">当前实际命中来源</string>
-    <string name="camera_face_debug_source_label">检测来源：%1$s  设定：%2$s</string>
     <string name="photo">照片</string>
-
     <string name="video">视频</string>
+    <string name="document">文档</string>
     <string name="portrait">人像</string>
-    <string name="pro">专业模式</string>
+    <string name="pro">专业</string>
     <string name="flip_camera">翻转相机</string>
     <string name="grant_permissions">授予权限</string>
     <string name="camera_permission_title">相机访问权限</string>
@@ -44,20 +30,91 @@
     <string name="gallery_permission_title">相册访问权限</string>
     <string name="gallery_permission_desc">允许访问以浏览和管理您的照片与视频</string>
     <string name="theme_mode">主题模式</string>
+    <string name="beauty_engine">美颜引擎</string>
+
+    <string name="beauty_engine_rplan">大美丽（默认）</string>
+    <string name="settings_theme_mode_desc">控制应用浅色/深色显示风格。</string>
+    <string name="settings_language_desc">设置界面语言与本地化展示方式。</string>
+    <string name="settings_beauty_engine_desc">默认使用大美丽引擎，兼容模式仅用于回退校验。</string>
+    <string name="settings_beauty_runtime_desc">影响实时性能与人脸分析行为。</string>
+    <string name="face_detection">人脸检测</string>
+    <string name="face_detection_desc">选择人脸检测算法，影响瘦脸、大眼、妆容等效果的定位精度。</string>
+    <string name="settings_face_detection_desc">选择人脸关键点检测引擎，影响瘦脸、大眼、妆容等效果的定位精度。</string>
+    <string name="face_detection_engine_title">人脸检测引擎</string>
+<string name="face_detection_engine_mode_mediapipe">MediaPipe</string>
+    <string name="face_detection_engine_mode_mnn">MNN</string>
+    <string name="face_detection_engine_mode_ncnn">NCNN</string>
+    <string name="face_detection_engine_mode_custom">自定义</string>
+    <string name="face_detection_advanced">人脸检测高级配置</string>
+    <string name="settings_face_detection_advanced_desc">控制人脸关键点和动态检测节奏，平衡性能与精度。</string>
+    <string name="inference_engine">推理引擎</string>
+    <string name="settings_inference_engine_desc">选择人脸检测和关键点处理的底层推理框架。</string>
+    <string name="inference_engine_tflite">TFLite (MediaPipe 默认)</string>
+    <string name="inference_engine_mnn">MNN (支持 CPU/GPU)</string>
+    <string name="inference_engine_ncnn">NCNN (轻量级)</string>
+    <string name="inference_device_preference">设备偏好</string>
+    <string name="settings_inference_device_preference_desc">强制推理引擎使用 CPU 或 GPU，或让其自动选择。</string>
+    <string name="device_preference_auto">自动（默认）</string>
+    <string name="device_preference_force_cpu">强制 CPU</string>
+    <string name="device_preference_force_gpu">强制 GPU</string>
+    <string name="stage_roi_title">ROI 检测</string>
+    <string name="stage_roi_desc">配置 ROI 检测的模型、推理引擎和设备。</string>
+    <string name="stage_landmark_title">关键点检测</string>
+    <string name="stage_landmark_desc">配置关键点检测的模型、推理引擎和设备。</string>
+    <string name="model_type">模型</string>
+    <string name="model_mediapipe">MediaPipe</string>
+    <string name="model_det10g_mnn">RetinaFace 500M-MNN</string>
+    <string name="model_det10g_ncnn">RetinaFace 500M-NCNN</string>
+    <string name="model_2d106_mnn">2D106-MNN</string>
+    <string name="model_2d106_ncnn">2D106-NCNN</string>
+    <string name="model_mnn">MNN</string>
+    <string name="face_detection_source_none">无</string>
+    <string name="camera_face_debug_requested_label">当前请求引擎</string>
+    <string name="camera_face_debug_active_label">当前实际命中来源</string>
+    <string name="camera_face_debug_source_label">检测来源：%1$s  设定：%2$s</string>
+    <string name="settings_debug_tools_desc">仅建议调试环境开启。</string>
     <string name="filters">滤镜</string>
     <string name="beauty">美颜</string>
     <string name="smoothing">磨皮</string>
+    <string name="whitening">美白</string>
     <string name="slim_face">瘦脸</string>
     <string name="big_eyes">大眼</string>
     <string name="youth">年轻化</string>
+    <string name="lip_color">唇色</string>
+    <string name="blush">腮红</string>
+    <string name="blush_color_family">腮红色系</string>
+    <string name="blush_family_pink">粉色</string>
+    <string name="blush_family_orange">橙色</string>
+    <string name="blush_family_plum">梅子色</string>
+    <string name="eyebrow">眉毛</string>
+    <string name="body_enhancement">丰胸</string>
+    <string name="leg_extension">长腿</string>
+    <string name="facial_refinement">面部精修</string>
+    <string name="makeup_adjustment">妆容调节</string>
+    <string name="body_management">身材管理</string>
     <string name="filter_none">原图</string>
     <string name="filter_vintage">复古</string>
     <string name="filter_cool">冷色</string>
     <string name="filter_warm">暖色</string>
     <string name="filter_leica_classic">徕卡经典</string>
     <string name="filter_leica_vibrant">徕卡生动</string>
+    <string name="filter_leica_bw">徕卡黑白</string>
+    <string name="filter_film_gold">胶片金</string>
+    <string name="filter_film_fuji">富士胶片</string>
+
+    <!-- 风格特效滤镜（仅 GPUPixel 模式） -->
+    <string name="style_filter_none">原图</string>
+    <string name="style_filter_toon">卡通</string>
+    <string name="style_filter_sketch">素描</string>
+    <string name="style_filter_posterize">色块</string>
+    <string name="style_filter_emboss">浮雕</string>
+    <string name="style_filter_crosshatch">交叉线</string>
+
     <string name="edit">编辑</string>
     <string name="save">保存</string>
+    <string name="apply">应用</string>
+    <string name="processing">处理中...</string>
+    <string name="analyzing_face">分析人脸中...</string>
     <string name="doodle">涂鸦</string>
     <string name="mosaic">马赛克</string>
     <string name="undo">撤销</string>
@@ -78,18 +135,34 @@
     <string name="debug_tools">调试工具</string>
     <string name="show_debug_tools">显示调试入口</string>
     <string name="test_data_tools">测试数据工具</string>
+    <string name="face_landmark_mode">人脸关键点模式（更快）</string>
+    <string name="adaptive_face_detect_interval">动态人脸检测间隔</string>
+    <string name="face_detect_profile_title">动态间隔强度档位</string>
+    <string name="face_detect_profile_conservative">保守</string>
+    <string name="face_detect_profile_balanced">平衡</string>
+    <string name="face_detect_profile_aggressive">激进</string>
     <string name="data_generation">数据生成</string>
     <string name="person">人像</string>
     <string name="landscape">风景</string>
+    <string name="swimwear">泳装</string>
+    <string name="sexy">性感</string>
     <string name="group_none">全部</string>
     <string name="group_date">日期</string>
-    <string name="group_face">面部</string>
+    <string name="group_face">人脸</string>
     <string name="group_person">人物</string>
-    <string name="with_faces">有面部</string>
-    <string name="no_faces">无面部</string>
+    <string name="group_swimwear">泳装</string>
+    <string name="group_sexy">性感</string>
+    <string name="with_faces">有人脸</string>
+    <string name="no_faces">无人脸</string>
     <string name="unknown">未知</string>
     <string name="person_group">人物分组 %1$s</string>
     <string name="debug">调试</string>
+    <string name="show_camera_info">显示相机信息</string>
+    <string name="show_face_debug">显示人脸调试</string>
+    <string name="show_log_overlay">显示日志浮层</string>
+    <string name="camera_memory">相机状态记忆</string>
+    <string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
+    <string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
     <string name="aspect_ratio">画面比例</string>
     <string name="ratio_4_3">4:3</string>
     <string name="ratio_16_9">16:9</string>
@@ -133,26 +206,15 @@
     <string name="scene">场景</string>
     <string name="scene_none">无</string>
     <string name="scene_night">夜景</string>
-    <string name="scene_moon">拍月亮 (3.2x+)</string>
+    <string name="scene_moon">拍月亮</string>
     <string name="grid">辅助线</string>
     <string name="grid_none">关闭</string>
     <string name="grid_thirds">九宫格</string>
     <string name="grid_golden">黄金比例</string>
     <string name="leveler">水平仪</string>
-    <string name="tip_night">小米15优化：请保持稳定以获得最佳效果。</string>
-    <string name="tip_moon">小米15优化：正在调用3.2x直立长焦镜头。</string>
-
-    <!-- Portrait Guidance -->
-    <string name="tip_portrait_center">尝试将人脸放在中心圆圈内。</string>
-    <string name="tip_portrait_thirds">将眼睛放在上方三分之一交点处。</string>
-    <string name="tip_portrait_headroom">头顶留出适量空间。</string>
-    <string name="tip_portrait_full_body">保持双脚靠近画面底部边缘。</string>
-
-    <!-- HyperOS Specific -->
-    <string name="live_recording">正在录制…</string>
-    <string name="live_stable">设备稳定</string>
-    <string name="live_unstable">请握紧手机</string>
-
+    <string name="tip_night">请保持手机稳定，建议使用三脚架。</string>
+    <string name="tip_moon">建议使用最大变焦，并点击月亮进行对焦。</string>
+    
     <!-- OCR Service (Integrated) -->
     <string name="ocr_action_label">提取文字</string>
     <string name="ocr_progress">正在提取文字…</string>
@@ -169,32 +231,159 @@
     <string name="landmark_no_face_detected">未检测到人脸</string>
 <string name="landmark_big_beauty">大美丽</string>
 <string name="landmark_compatibility">GPUPixel</string>
-<string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
-<string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
-<string name="ai_agent_l1_cache">L1 意图缓存</string>
-<string name="ai_agent_l1_cache_desc">关闭后所有指令都会绕过缓存走 LLM，便于调试推理链路。</string>
-<string name="ai_agent_local_backend">本地 LLM 后端</string>
-<string name="ai_agent_local_backend_cpu">CPU</string>
-<string name="ai_agent_local_backend_opencl">OpenCL（GPU）</string>
-<string name="ai_agent_local_backend_desc">选择本地 LLM 推理后端。OpenCL 依赖设备支持，部分模型或机型稳定性可能较差。</string>
-<string name="face_detection_advanced">人脸检测高级配置</string>
-<string name="settings_face_detection_advanced_desc">控制人脸关键点和动态检测节奏，平衡性能与精度。</string>
-    <string name="asr_model_manager">ASR 模型管理</string>
-    <string name="asr_model_manager_desc">下载和管理端侧语音识别模型。</string>
+
+    <!-- Duplicate Management -->
+    <string name="manage_duplicates">管理重复照片</string>
+    <string name="delete_all_duplicates">删除全部重复</string>
+    <string name="no_duplicates_found">未找到重复图片</string>
+    <string name="duplicate_groups_found">找到 %1$d 组重复图片</string>
+    <string name="exact_duplicate">完全重复</string>
+    <string name="similar_image">相似图片</string>
+    <string name="count_files">%1$d 张</string>
+    <string name="preview_all">预览全部</string>
+    <string name="keep_first_delete_others">保留首张，删除其余</string>
+    <string name="duplicate_preview">重复预览</string>
+    <string name="will_keep_first_file">将保留第一张图片，删除其余：</string>
+    <string name="confirm_delete">确认删除</string>
+    <string name="screenshot">截图</string>
+    <string name="screenshot_saved">截图已保存至 %1$s</string>
+    <string name="screenshot_failed">截图失败</string>
+
+    <!-- 缺失的 I18N 字符串补充 -->
+    <string name="filter_group_color">色调滤镜</string>
+    <string name="filter_group_style">风格特效</string>
+    <string name="downloading">下载中：%1$s</string>
+    <string name="generation_finished">生成完成</string>
+    <string name="live_recording">录制中…</string>
+    <string name="live_stable">画面稳定</string>
+    <string name="live_unstable">保持平稳</string>
+    <string name="searching_for">搜索中：%1$s</string>
+    <string name="tip_portrait_center">尝试将人脸放在中心圆圈内</string>
+    <string name="tip_portrait_thirds">将眼睛放在上三分之一交点处</string>
+    <string name="tip_portrait_headroom">头顶留出一些空间</string>
+    <string name="tip_portrait_full_body">脚部靠近底部边框</string>
+    <string name="ocr_recognize">提取文字</string>
+    <string name="ocr_copy_success">文字已复制到剪贴板</string>
+    <string name="ocr_share_title">分享文字</string>
+    <string name="media_details">详情</string>
+    <string name="media_info_path">路径：%1$s</string>
+    <string name="media_info_size">大小：%1$s</string>
+    <string name="media_info_resolution">分辨率：%1$s</string>
+
+    <!-- AI Agent -->
+    <string name="ai_agent">AI 智能助手</string>
+    <string name="ai_agent_desc">选择本地或远程模型，启用自然语言控制相机功能。</string>
+    <string name="ai_agent_mode">推理模式</string>
+    <string name="ai_agent_mode_off">关闭</string>
+    <string name="ai_agent_mode_local">本地模型</string>
+    <string name="ai_agent_mode_remote">远程模型</string>
+
+    <string name="ai_agent_privacy_level">隐私级别</string>
+    <string name="ai_agent_privacy_strict">严格（仅本地）</string>
+    <string name="ai_agent_privacy_permissive">宽松（允许远程）</string>
+    <string name="ai_agent_local_model">已选模型</string>
+    <string name="ai_agent_local_backend">本地 LLM 后端</string>
+    <string name="ai_agent_local_backend_cpu">CPU</string>
+    <string name="ai_agent_local_backend_opencl">OpenCL（GPU）</string>
+    <string name="ai_agent_local_backend_desc">选择本地 LLM 推理后端。OpenCL 依赖设备支持，部分模型或机型稳定性可能较差。</string>
+    <string name="ai_agent_no_local_model">暂无已下载模型，前往模型管理下载。</string>
+    <string name="remote_models">远程模型</string>
+    <string name="configured">已配置</string>
+    <string name="not_configured">未配置</string>
+    <string name="protocol">协议</string>
+    <string name="model_id">模型 ID</string>
+    <string name="add_model">添加模型</string>
+    <string name="add_custom_model">添加自定义模型</string>
+    <string name="add">添加</string>
+    <string name="log_management">日志管理</string>
+    <string name="log_management_desc">按模块控制日志输出</string>
+    <string name="base_url">基础 URL</string>
+    <string name="base_url_not_set">未设置</string>
+    <string name="api_key">API Key</string>
+    <string name="api_key_hint">输入 API Key</string>
+    <string name="api_key_set">API Key 已配置</string>
+    <string name="api_key_not_set">未配置</string>
+    <string name="ai_agent_inference_preference">推理偏好</string>
+    <string name="ai_agent_inference_auto">自动</string>
+    <string name="ai_agent_inference_auto_desc">根据模型可用性自动选择本地或远程推理。</string>
+    <string name="ai_agent_inference_force_local">强制本地</string>
+    <string name="ai_agent_inference_force_local_desc">始终使用本地模型。模型不可用时回退到文本回复。</string>
+    <string name="ai_agent_inference_force_remote">强制远程</string>
+    <string name="ai_agent_inference_force_remote_desc">始终使用远程 API，绕过本地模型检查。</string>
+    <string name="ai_agent_auto_execute_plans">自动执行多步骤计划</string>
+    <string name="ai_agent_auto_execute_plans_desc">关闭后，Agent 执行多步骤计划前会要求确认。</string>
+    <string name="ai_agent_l1_cache">L1 意图缓存</string>
+    <string name="ai_agent_l1_cache_desc">关闭后所有指令都会绕过缓存走 LLM，便于调试推理链路。</string>
+    <string name="ai_agent_input_hint">向 AI 助手提问...</string>
+    <string name="ai_model_manager">AI 模型管理</string>
+    <string name="ai_model_manager_desc">管理本地 AI 模型。</string>
+    <string name="model_center">模型中心</string>
+    <string name="model_center_desc">统一下载和管理所有本地模型。</string>
+    <string name="downloaded_models">已下载模型</string>
+    <string name="available_models">可下载模型</string>
+    <string name="all_models_downloaded">所有模型已下载。</string>
+    <string name="download">下载</string>
+    <string name="download_failed">下载失败，请重试。</string>
+    <string name="delete_model_title">删除模型</string>
+    <string name="delete_model_confirm">删除 %1$s？此操作不可撤销。</string>
+    <string name="all_models">全部</string>
+    <string name="no_models_for_tag">该分类下暂无可用模型。</string>
+
+    <!-- AI Chat Image Editing -->
+    <string name="ai_chat_edit">AI 编辑</string>
+    <string name="ai_chat_title">AI 图片编辑</string>
+    <string name="ai_chat_input_hint">描述你想如何编辑这张图片，例如：让色彩更鲜艳、应用复古滤镜...</string>
+    <string name="ai_chat_processing">处理中...</string>
+    <string name="ai_chat_apply">应用</string>
+    <string name="ai_chat_cancel">取消</string>
+    <string name="ai_chat_saving">保存中...</string>
+    <string name="ai_chat_success">编辑成功应用</string>
+    <string name="ai_chat_error">处理请求失败</string>
+    <string name="ai_chat_examples">试试：调亮、复古滤镜、增强色彩...</string>
+
+    <!-- Voice Control -->
+    <string name="voice_control">语音控制</string>
+    <string name="voice_control_desc">通过语音指令控制相机拍摄和参数调整。</string>
+    <string name="voice_command_mode">语音交互模式</string>
+    <string name="voice_command_mode_disabled">关闭</string>
+    <string name="voice_command_mode_push_to_talk">按住说话</string>
+    <string name="voice_command_mode_wake_word">唤醒词</string>
     <string name="asr_input_device_bluetooth">已连接蓝牙耳机</string>
     <string name="asr_input_device_wired">已连接有线耳机</string>
     <string name="asr_input_device_builtin">使用手机麦克风</string>
-    <string name="model_center">模型中心</string>
-    <string name="model_center_desc">统一下载和管理所有本地模型。</string>
+    <string name="local_asr_model">本地语音识别模型</string>
+    <string name="local_asr_model_fallback">未下载本地 ASR 模型，将自动回退到系统语音识别。</string>
+<string name="local_kws_model">本地唤醒词模型</string>
+<string name="local_kws_model_fallback">未下载本地 KWS 唤醒词模型，语音唤醒功能将不可用。</string>
+<string name="asr_model_manager">ASR 模型管理</string>
+<string name="asr_model_manager_desc">下载和管理端侧语音识别模型。</string>
     <string name="model_download_notification_title">模型下载进行中</string>
     <string name="model_download_notification_single">正在下载 %1$s（%2$d%%）</string>
     <string name="model_download_notification_multi">正在下载 %1$d 个模型（%2$d%%）</string>
     <string name="model_download_notification_channel_desc">用于在后台持续执行模型下载</string>
     <string name="model_download_preparing">准备下载中…</string>
 
-<string name="camera_memory">相机状态记忆</string>
-<string name="camera_memory_desc">进入相机时恢复上次参数和开关状态。</string>
-<string name="reset_camera_to_default">重置相机为首次安装默认状态</string>
+    <string name="local_face_detection_model">本地人脸检测模型</string>
+    <string name="local_face_detection_model_fallback">未下载本地人脸检测模型，点击下方前往下载。</string>
+    <string name="face_detection_model_manager">人脸检测模型管理</string>
+    <string name="face_detection_model_manager_desc">下载和管理端侧人脸检测模型（MNN/NCNN）。</string>
+    <string name="no_face_detection_models_available">暂无人脸检测模型，请检查网络连接。</string>
+
+    <!-- Model Manager -->
+    <string name="model_type_asr">语音</string>
+    <string name="model_type_llm">对话</string>
+    <string name="model_type_beauty">美颜</string>
+    <string name="model_type_landmark">人脸</string>
+    <string name="model_label_lightweight">轻量版</string>
+    <string name="model_downloaded">已下载</string>
+    <string name="no_models_available">暂无可用模型</string>
+    <string name="no_asr_models_available">暂无 ASR 模型，请检查网络连接</string>
+    <string name="model_properties">模型属性</string>
+    <string name="copy">复制</string>
+    <string name="copied_to_clipboard">已复制到剪贴板</string>
+    <string name="cancel_download">取消下载</string>
+    <string name="pause_download">暂停</string>
+    <string name="resume_download">继续</string>
 
     <!-- Essential Models Download (WiFi) -->
     <string name="essential_models_download_title">下载必要模型</string>
@@ -229,4 +418,66 @@
     <string name="settings_miui_permission_editor_title">MIUI 应用权限管理</string>
     <string name="settings_miui_permission_editor_summary">为 PicMe 开启「显示悬浮窗」和「后台弹出界面」。</string>
     <string name="settings_miui_action_open">去开启</string>
+
+    <!-- 智能相册索引 -->
+    <string name="gallery_group_tag">按标签</string>
+    <string name="gallery_group_location">按地点</string>
+    <string name="gallery_group_ocr">按文字</string>
+    <string name="gallery_group_person">按人物</string>
+    <string name="gallery_index_status">已索引 %1$d / 共 %2$d 张</string>
+    <string name="gallery_index_in_progress">正在索引照片…</string>
+    <string name="gallery_index_complete">索引完成</string>
+    <string name="gallery_search_hint">按内容、地点、文字搜索…</string>
+    <string name="gallery_search_no_results">未找到相关照片</string>
+    <string name="gallery_tag_category_scene">场景</string>
+    <string name="gallery_tag_category_animal">动物</string>
+    <string name="gallery_tag_category_food">食物</string>
+    <string name="gallery_tag_category_person">人物</string>
+    <string name="gallery_tag_category_object">物体</string>
+    <string name="gallery_tag_category_other">其他</string>
+    <string name="gallery_face_clustering">正在聚类人脸…</string>
+    <string name="gallery_face_clustering_done">发现 %1$d 个人物</string>
+
+    <!-- Chat History Sidebar -->
+    <string name="sidebar_title">聊天历史</string>
+    <string name="sidebar_empty">暂无聊天记录</string>
+    <string name="new_chat">新建聊天</string>
+    <string name="search_history">搜索历史</string>
+    <string name="chat_options">聊天选项</string>
+    <string name="rename_chat">重命名</string>
+    <string name="delete_chat">删除聊天</string>
+    <string name="delete_chat_title">删除聊天</string>
+    <string name="delete_chat_confirm">删除「%1$s」？此操作不可撤销。</string>
+    <string name="clear_chat">清空聊天</string>
+    <string name="chat_input_hint">向 AI 助手提问…</string>
+
+    <!-- Tag Generation Notifications -->
+    <string name="tag_gen_notification_title">TAG 生成</string>
+    <string name="tag_gen_notification_progress">%1$d / %2$d 张</string>
+    <string name="tag_gen_notification_starting">准备中…</string>
+    <string name="tag_gen_notification_idle">等待中</string>
+    <string name="tag_gen_notification_channel_desc">显示 TAG 生成进度</string>
+
+    <!-- Accessibility (contentDescription) -->
+    <string name="cd_quick_actions">快捷操作</string>
+    <string name="cd_open_sidebar">打开侧边栏</string>
+    <string name="cd_switch_model">切换模型</string>
+    <string name="cd_editor">编辑器</string>
+    <string name="cd_switch_to_voice">切换到语音</string>
+    <string name="cd_select_image">选择图片</string>
+    <string name="cd_image_preview">图片预览</string>
+    <string name="cd_clear_search">清除搜索</string>
+    <string name="cd_confirm">确认</string>
+    <string name="cd_expand">展开</string>
+    <string name="cd_collapse">折叠</string>
+
+    <!-- Debug Tools -->
+    <string name="shader_debug_mode">着色器调试模式</string>
+    <string name="model_download">模型下载</string>
+    <string name="switch_to_keyboard">切换到键盘</string>
+    <string name="copy_success">已复制</string>
+    <string name="voice_unavailable">语音识别未初始化</string>
+    <string name="hold_to_speak">按住说话</string>
+    <string name="release_to_stop">松开结束</string>
+
 </resources>

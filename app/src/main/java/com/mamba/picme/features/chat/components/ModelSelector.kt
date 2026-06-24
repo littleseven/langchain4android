@@ -26,9 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mamba.picme.R
 import com.mamba.picme.features.chat.ChatModelOption
 
 /**
@@ -72,7 +74,7 @@ fun ModelSelector(
             // 下拉箭头
             Icon(
                 imageVector = Icons.Rounded.KeyboardArrowDown,
-                contentDescription = "Switch model",
+                contentDescription = stringResource(R.string.cd_switch_model),
                 modifier = Modifier.size(16.dp),
                 tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
             )

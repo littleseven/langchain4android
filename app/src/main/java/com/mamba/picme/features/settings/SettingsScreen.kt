@@ -898,7 +898,7 @@ private fun ShaderDebugModeSelection(
     )
 
     Text(
-        text = "Shader Debug Mode",
+        text = stringResource(R.string.shader_debug_mode),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 0.dp)

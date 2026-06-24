@@ -29,7 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.mamba.picme.R
 import com.mamba.picme.agent.core.remote.config.RemoteModelConfigs
 import com.mamba.picme.agent.core.model.command.AgentCommand
 import com.mamba.picme.agent.core.model.context.AgentAction
@@ -190,7 +192,7 @@ fun AgentChatPanel(
         ) {
             Icon(
                 imageVector = Icons.Rounded.KeyboardVoice,
-                contentDescription = "AI Agent",
+                contentDescription = stringResource(R.string.ai_agent),
                 tint = Color.White
             )
         }

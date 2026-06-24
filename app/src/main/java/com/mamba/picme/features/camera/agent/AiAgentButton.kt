@@ -13,7 +13,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.mamba.picme.R
 
 /**
  * AI Agent 悬浮触发按钮
@@ -38,7 +40,7 @@ fun AiAgentButton(
     ) {
         Icon(
             imageVector = Icons.Rounded.AutoAwesome,
-            contentDescription = "AI Agent",
+            contentDescription = stringResource(R.string.ai_agent),
             tint = Color.White,
             modifier = Modifier.size(22.dp)
         )

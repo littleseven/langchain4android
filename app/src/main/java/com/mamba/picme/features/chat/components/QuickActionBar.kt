@@ -19,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.mamba.picme.R
 
 /**
  * 快捷操作栏 — 底部快捷入口
@@ -42,17 +44,17 @@ fun QuickActionBar(
     ) {
         QuickActionButton(
             icon = Icons.Rounded.CameraAlt,
-            contentDescription = "Camera",
+            contentDescription = stringResource(R.string.camera),
             onClick = onCameraClick
         )
         QuickActionButton(
             icon = Icons.Rounded.PhotoLibrary,
-            contentDescription = "Gallery",
+            contentDescription = stringResource(R.string.gallery),
             onClick = onGalleryClick
         )
         QuickActionButton(
             icon = Icons.Rounded.Edit,
-            contentDescription = "Editor",
+            contentDescription = stringResource(R.string.cd_editor),
             onClick = onEditorClick
         )
     }

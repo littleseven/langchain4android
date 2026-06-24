@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">覓影相機</string>
+    <string name="app_name">覓影相冊</string>
     <string name="camera">相機</string>
     <string name="gallery">相簿</string>
     <string name="settings">設定</string>
@@ -437,5 +437,47 @@
     <string name="gallery_tag_category_other">其他</string>
     <string name="gallery_face_clustering">正在分群人臉…</string>
     <string name="gallery_face_clustering_done">發現 %1$d 個人物</string>
+
+    <!-- Chat History Sidebar -->
+    <string name="sidebar_title">聊天歷史</string>
+    <string name="sidebar_empty">暫無聊天記錄</string>
+    <string name="new_chat">新建聊天</string>
+    <string name="search_history">搜尋歷史</string>
+    <string name="chat_options">聊天選項</string>
+    <string name="rename_chat">重新命名</string>
+    <string name="delete_chat">刪除聊天</string>
+    <string name="delete_chat_title">刪除聊天</string>
+    <string name="delete_chat_confirm">刪除「%1$s」？此操作不可復原。</string>
+    <string name="clear_chat">清空聊天</string>
+    <string name="chat_input_hint">向 AI 助手提問…</string>
+
+    <!-- Tag Generation Notifications -->
+    <string name="tag_gen_notification_title">TAG 生成</string>
+    <string name="tag_gen_notification_progress">%1$d / %2$d 張</string>
+    <string name="tag_gen_notification_starting">準備中…</string>
+    <string name="tag_gen_notification_idle">等待中</string>
+    <string name="tag_gen_notification_channel_desc">顯示 TAG 生成進度</string>
+
+    <!-- Accessibility (contentDescription) -->
+    <string name="cd_quick_actions">快捷操作</string>
+    <string name="cd_open_sidebar">開啟側邊欄</string>
+    <string name="cd_switch_model">切換模型</string>
+    <string name="cd_editor">編輯器</string>
+    <string name="cd_switch_to_voice">切換到語音</string>
+    <string name="cd_select_image">選擇圖片</string>
+    <string name="cd_image_preview">圖片預覽</string>
+    <string name="cd_clear_search">清除搜尋</string>
+    <string name="cd_confirm">確認</string>
+    <string name="cd_expand">展開</string>
+    <string name="cd_collapse">摺疊</string>
+
+    <!-- Debug Tools -->
+    <string name="shader_debug_mode">著色器調試模式</string>
+    <string name="model_download">模型下載</string>
+    <string name="switch_to_keyboard">切換到鍵盤</string>
+    <string name="copy_success">已複製</string>
+    <string name="voice_unavailable">語音識別未初始化</string>
+    <string name="hold_to_speak">按住說話</string>
+    <string name="release_to_stop">鬆開結束</string>
 
 </resources>

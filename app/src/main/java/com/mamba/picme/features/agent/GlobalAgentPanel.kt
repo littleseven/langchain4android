@@ -54,8 +54,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mamba.picme.R
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.model.context.AgentAction
@@ -176,7 +178,7 @@ fun GlobalAgentPanel(
         ) {
             Icon(
                 imageVector = Icons.Rounded.KeyboardVoice,
-                contentDescription = "AI Agent",
+                contentDescription = stringResource(R.string.ai_agent),
                 tint = Color.White
             )
         }
@@ -265,7 +267,7 @@ private fun AgentPanelHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "AI 助手",
+            text = stringResource(R.string.ai_agent),
             color = Color.White,
             fontSize = 16.sp,
             style = MaterialTheme.typography.titleMedium
@@ -275,7 +277,7 @@ private fun AgentPanelHeader(
             IconButton(onClick = onToggleExpand) {
                 Icon(
                     imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowUp,
-                    contentDescription = if (isExpanded) "折叠" else "展开",
+                    contentDescription = if (isExpanded) stringResource(R.string.cd_collapse) else stringResource(R.string.cd_expand),
                     tint = Color.White
                 )
             }
@@ -283,7 +285,7 @@ private fun AgentPanelHeader(
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "关闭",
+                    contentDescription = stringResource(R.string.close),
                     tint = Color.White
                 )
             }
@@ -370,7 +372,7 @@ private fun AgentInputArea(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.Send,
-                contentDescription = "发送",
+                contentDescription = stringResource(R.string.chat_send),
                 tint = if (inputText.isNotBlank() && !isProcessing) {
                     MaterialTheme.colorScheme.primary
                 } else {

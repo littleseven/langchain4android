@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">觅影相机</string>
+    <string name="app_name">PicMe</string>
     <string name="camera">Camera</string>
     <string name="gallery">Gallery</string>
     <string name="settings">Settings</string>
@@ -461,5 +461,27 @@
     <string name="tag_gen_notification_starting">准备中…</string>
     <string name="tag_gen_notification_idle">等待中</string>
     <string name="tag_gen_notification_channel_desc">显示 TAG 生成进度</string>
+
+    <!-- Accessibility (contentDescription) -->
+    <string name="cd_quick_actions">Quick Actions</string>
+    <string name="cd_open_sidebar">Open sidebar</string>
+    <string name="cd_switch_model">Switch model</string>
+    <string name="cd_editor">Editor</string>
+    <string name="cd_switch_to_voice">Switch to voice</string>
+    <string name="cd_select_image">Select image</string>
+    <string name="cd_image_preview">Image preview</string>
+    <string name="cd_clear_search">Clear search</string>
+    <string name="cd_confirm">Confirm</string>
+    <string name="cd_expand">Expand</string>
+    <string name="cd_collapse">Collapse</string>
+
+    <!-- Debug Tools -->
+    <string name="shader_debug_mode">Shader Debug Mode</string>
+    <string name="model_download">Model Download</string>
+    <string name="switch_to_keyboard">Switch to keyboard</string>
+    <string name="copy_success">Copied</string>
+    <string name="voice_unavailable">Voice recognition not initialized</string>
+    <string name="hold_to_speak">Hold to speak</string>
+    <string name="release_to_stop">Release to stop</string>
 
 </resources>
