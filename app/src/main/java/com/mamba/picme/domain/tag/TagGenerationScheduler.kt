@@ -57,11 +57,7 @@ class TagGenerationScheduler(
         /** Qwen 模型 ID */
         private const val MODEL_KEY = "qwen3_5_2b"
 
-        /** DBSCAN: 余弦距离阈值 (1 - cosine_similarity) */
-        private const val DBSCAN_EPS = 0.45f
-
-        /** DBSCAN: 最小邻居数 (≥2 形成核心点) */
-        private const val DBSCAN_MIN_PTS = 2
+        // 聚类参数统一引用 ClusteringConfig
     }
 
     /**
@@ -680,8 +676,11 @@ class TagGenerationScheduler(
         }
 
         // DBSCAN
-        val clusters = dbscanCluster(embeddingsMap, flatIndex, DBSCAN_EPS, DBSCAN_MIN_PTS)
+        var clusters = dbscanCluster(embeddingsMap, flatIndex, ClusteringConfig.DBSCAN_EPS, ClusteringConfig.DBSCAN_MIN_PTS)
         Log.i(TAG, "DBSCAN: ${clusters.size} clusters from ${flatIndex.size} face embeddings")
+
+        // 验证簇内部一致性，分裂不健康的簇
+        clusters = validateAndSplitClusters(clusters, embeddingsMap)
 
         // 分配 personId
         val sorted = clusters.entries
@@ -710,6 +709,51 @@ class TagGenerationScheduler(
 
         val noiseCount = clusters[-1]?.size ?: 0
         Log.i(TAG, "DBSCAN done: $assignedCount media clustered into ${sorted.size} persons, $noiseCount noise")
+    }
+
+    /**
+     * 验证簇内部一致性：计算簇内所有点对的平均余弦相似度。
+     * 低于 ClusteringConfig.CLUSTER_COHESION_MIN 则用更严格的 eps 递归分裂。
+     */
+    private fun validateAndSplitClusters(
+        clusters: Map<Int, List<Pair<Long, Int>>>,
+        embeddings: Map<Long, List<FloatArray>>
+    ): Map<Int, List<Pair<Long, Int>>> {
+        val result = mutableMapOf<Int, List<Pair<Long, Int>>>()
+        for ((clusterId, members) in clusters) {
+            if (clusterId == -1 || members.size <= 2) {
+                result[clusterId] = members
+                continue
+            }
+            val sampleSize = minOf(members.size, 20)
+            var totalSim = 0f
+            var pairCount = 0
+            for (i in 0 until sampleSize) {
+                for (j in i + 1 until sampleSize) {
+                    val embI = embeddings[members[i].first]?.getOrNull(members[i].second) ?: continue
+                    val embJ = embeddings[members[j].first]?.getOrNull(members[j].second) ?: continue
+                    totalSim += 1f - cosineDistance(embI, embJ)
+                    pairCount++
+                }
+            }
+            if (pairCount == 0) {
+                result[clusterId] = members
+                continue
+            }
+            val avgSimilarity = totalSim / pairCount
+            Log.d(TAG, "Cluster $clusterId (${members.size} faces) avg similarity: ${String.format("%.3f", avgSimilarity)}")
+            if (avgSimilarity < ClusteringConfig.CLUSTER_COHESION_MIN) {
+                Log.w(TAG, "Cluster $clusterId cohesion too low (${String.format("%.3f", avgSimilarity)}), splitting")
+                val subClusters = dbscanCluster(embeddings, members, ClusteringConfig.DBSCAN_EPS * 0.7f, ClusteringConfig.DBSCAN_MIN_PTS)
+                var newId = clusterId * 1000
+                for ((_, subMembers) in subClusters) {
+                    result[newId++] = subMembers
+                }
+            } else {
+                result[clusterId] = members
+            }
+        }
+        return result
     }
 
     /** DBSCAN 核心算法 */

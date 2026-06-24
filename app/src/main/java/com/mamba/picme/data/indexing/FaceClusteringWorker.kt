@@ -11,6 +11,7 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
+import com.mamba.picme.domain.tag.ClusteringConfig
 import com.mamba.picme.domain.tag.FaceClusterEngine
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -45,14 +46,7 @@ class FaceClusteringWorker(
         private const val TAG = "PicMe:FaceCluster"
         private const val FACE_INPUT_SIZE = 112
 
-        /** DBSCAN: 余弦距离阈值 (1 - cosine_similarity) */
-        private const val DBSCAN_EPS = 0.38f
-
-        /** DBSCAN: 最小邻居数 (≥2 形成核心点，避免单点成簇) */
-        private const val DBSCAN_MIN_PTS = 2
-
-        /** 簇合并后内部平均相似度下限 (< 此值则分裂) */
-        private const val CLUSTER_COHESION_MIN = 0.65f
+        // 聚类参数统一引用 ClusteringConfig（已废弃，实际使用 TagGenerationScheduler）
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -289,7 +283,7 @@ class FaceClusteringWorker(
                 }
             }
 
-            val clusters = clusterEmbeddingsFlat(embeddings, flatIndex, DBSCAN_EPS, DBSCAN_MIN_PTS)
+            val clusters = clusterEmbeddingsFlat(embeddings, flatIndex, ClusteringConfig.DBSCAN_EPS, ClusteringConfig.DBSCAN_MIN_PTS)
             Logger.i(TAG, "DBSCAN: ${clusters.size} clusters from ${flatIndex.size} face embeddings")
 
             // 后处理：验证簇内部一致性，分裂不健康的簇
@@ -527,7 +521,7 @@ class FaceClusteringWorker(
 
     /**
      * 验证簇内部一致性：计算簇内所有点对的平均余弦相似度。
-     * 低于 CLUSTER_COHESION_MIN 则递归分裂。
+     * 低于 ClusteringConfig.CLUSTER_COHESION_MIN 则递归分裂。
      */
     private fun validateAndSplitClusters(
         clusters: Map<Int, List<Pair<Long, Int>>>,
@@ -562,10 +556,10 @@ class FaceClusteringWorker(
             val avgSimilarity = totalSim / pairCount
             Logger.d(TAG, "Cluster $clusterId (${members.size} faces) avg similarity: ${"%.3f".format(avgSimilarity)}")
 
-            if (avgSimilarity < CLUSTER_COHESION_MIN) {
+            if (avgSimilarity < ClusteringConfig.CLUSTER_COHESION_MIN) {
                 // 分裂：用更严格的 eps 对簇内点重新聚类
                 Logger.w(TAG, "Cluster $clusterId cohesion too low (${"%.3f".format(avgSimilarity)}), splitting with tighter eps")
-                val subClusters = clusterEmbeddingsFlat(embeddings, members, DBSCAN_EPS * 0.7f, DBSCAN_MIN_PTS)
+                val subClusters = clusterEmbeddingsFlat(embeddings, members, ClusteringConfig.DBSCAN_EPS * 0.7f, ClusteringConfig.DBSCAN_MIN_PTS)
                 var newId = clusterId * 1000 // 避免 ID 冲突
                 for ((_, subMembers) in subClusters) {
                     result[newId++] = subMembers

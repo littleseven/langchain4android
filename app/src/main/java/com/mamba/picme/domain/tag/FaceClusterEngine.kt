@@ -36,12 +36,6 @@ class FaceClusterEngine(private val context: Context) {
         /** 特征向量维度 */
         const val EMBEDDING_DIM = 512
 
-        /** 余弦相似度阈值：高于此值归入已有簇 */
-        const val COSINE_THRESHOLD = 0.65f
-
-        /** 增量积累达到此数量后触发全量 DBSCAN 重聚 */
-        const val RE_CLUSTER_THRESHOLD = 100
-
         /** 未分配人脸的 personId 标记 */
         const val UNASSIGNED_ID: Long = -1
     }
@@ -139,7 +133,7 @@ class FaceClusterEngine(private val context: Context) {
         if (persons.isEmpty()) return null
 
         var bestPersonId: Long? = null
-        var bestSimilarity = COSINE_THRESHOLD
+        var bestSimilarity = ClusteringConfig.COSINE_THRESHOLD
 
         for (person in persons) {
             val centroid = getPersonCentroid(person.personId) ?: continue
