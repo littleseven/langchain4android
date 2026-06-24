@@ -9,13 +9,20 @@ import com.mamba.picme.domain.model.GroupedMedia
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.agent.core.model.context.MediaType
 
-fun resolveGroupTitle(context: Context, group: GroupedMedia): String {
+fun resolveGroupTitle(
+    context: Context,
+    group: GroupedMedia,
+    personNameMap: Map<String, String>? = null
+): String {
     return when (group.titleType) {
         GroupTitleType.NONE -> group.titleValue
         GroupTitleType.DATE -> group.titleValue
         GroupTitleType.WITH_FACES -> context.getString(R.string.with_faces)
         GroupTitleType.NO_FACES -> context.getString(R.string.no_faces)
-        GroupTitleType.PERSON -> context.getString(R.string.person_group, group.titleValue)
+        GroupTitleType.PERSON -> {
+            val resolvedName = personNameMap?.get(group.titleValue) ?: "人物 ${group.titleValue}"
+            context.getString(R.string.person_group, resolvedName)
+        }
         GroupTitleType.LANDSCAPE -> context.getString(R.string.landscape)
         GroupTitleType.SWIMWEAR -> context.getString(R.string.swimwear)
         GroupTitleType.SEXY -> context.getString(R.string.sexy)

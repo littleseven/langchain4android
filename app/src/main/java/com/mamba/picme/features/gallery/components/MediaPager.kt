@@ -115,6 +115,7 @@ import com.mamba.picme.features.gallery.MediaViewModel
 import com.mamba.picme.features.common.chat.AgentMessage
 import com.mamba.picme.features.common.chat.AiChatScreen
 import com.mamba.picme.features.camera.voice.VoiceCommandCoordinator
+import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.StateFlow
@@ -907,8 +908,8 @@ private fun VisionResultOverlay(
                         )
 
                         val scrollState = rememberScrollState()
-                        Text(
-                            text = result,
+                        MarkdownText(
+                            markdown = result,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()

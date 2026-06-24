@@ -68,7 +68,9 @@ fun MediaGrid(
     onMediaLongClick: (MediaAsset) -> Unit,
     onDragSelectionStart: (MediaAsset) -> Unit,
     onDragSelectionItem: (MediaAsset) -> Unit,
-    onDragSelectionEnd: () -> Unit
+    onDragSelectionEnd: () -> Unit,
+    onGroupTitleClick: ((GroupedMedia) -> Unit)? = null,
+    personNameMap: Map<String, String>? = null
 ) {
     var gridPositionInWindow by remember { mutableStateOf(Offset.Zero) }
 
@@ -149,12 +151,13 @@ fun MediaGrid(
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         groupedMedia.forEach { group ->
-            val groupTitle = resolveGroupTitle(context, group)
+            val groupTitle = resolveGroupTitle(context, group, personNameMap)
             if (groupTitle.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     MediaGroupHeader(
                         title = groupTitle,
-                        count = group.items.size
+                        count = group.items.size,
+                        onClick = { onGroupTitleClick?.invoke(group) }
                     )
                 }
             }

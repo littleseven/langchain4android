@@ -30,6 +30,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +73,15 @@ import com.mamba.picme.features.gallery.capability.GalleryCapability
 import com.mamba.picme.features.common.SearchField
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
+import com.mamba.picme.domain.model.GroupedMedia
+import com.mamba.picme.domain.model.GroupingMode
 import com.mamba.picme.R
+import com.mamba.picme.data.local.AppDatabase
+import com.mamba.picme.data.local.entity.PersonEntity
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import kotlinx.coroutines.launch
 
 private const val TAG = "Gallery"
@@ -110,6 +119,28 @@ fun GalleryScreen(
     val app = context.applicationContext as com.mamba.picme.PicMeApplication
     val thumbnailCache = remember { app.container.thumbnailCache }
     val deleteAuthRequest by viewModel.deleteAuthRequest.collectAsState()
+
+    // 人物分组名称映射（用于 PERSON 分组模式显示名称）
+    val personNameMap = remember { mutableStateMapOf<String, String>() }
+
+    // 人物分组重命名状态
+    var renamingPersonGroup by remember { mutableStateOf<GroupedMedia?>(null) }
+    var renamingPersonName by remember { mutableStateOf("") }
+
+    // 当切换到 PERSON 分组模式时加载所有 person 名称
+    LaunchedEffect(groupingMode) {
+        if (groupingMode == com.mamba.picme.domain.model.GroupingMode.PERSON) {
+            try {
+                val db = AppDatabase.getDatabase(context)
+                val persons = db.personDao().getAllPersons()
+                personNameMap.clear()
+                for (p in persons) {
+                    val displayName = p.name ?: "人物 ${p.personId}"
+                    personNameMap[p.personId.toString()] = displayName
+                }
+            } catch (_: Exception) {}
+        }
+    }
 
     var hasMediaPermission by remember { mutableStateOf(hasGalleryPermission(context)) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -547,7 +578,15 @@ fun GalleryScreen(
                         },
                         onDragSelectionEnd = {
                             dragSelectionVisitedIds.clear()
-                        }
+                        },
+                        onGroupTitleClick = { group ->
+                            if (groupingMode == com.mamba.picme.domain.model.GroupingMode.PERSON) {
+                                val currentName = personNameMap[group.titleValue] ?: "人物 ${group.titleValue}"
+                                renamingPersonGroup = group
+                                renamingPersonName = currentName
+                            }
+                        },
+                        personNameMap = personNameMap
                     )
                 }
             }
@@ -650,5 +689,55 @@ fun GalleryScreen(
                 }
             }
         }
+    }
+
+    // ── 人物分组重命名对话框 ────────────────────────────
+    if (renamingPersonGroup != null) {
+        AlertDialog(
+            onDismissRequest = { renamingPersonGroup = null },
+            title = { Text("编辑分组名称") },
+            text = {
+                OutlinedTextField(
+                    value = renamingPersonName,
+                    onValueChange = { renamingPersonName = it },
+                    label = { Text("分组名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val group = renamingPersonGroup
+                        if (group != null) {
+                            val name = renamingPersonName.trim()
+                            if (name.isNotBlank() && groupingMode == com.mamba.picme.domain.model.GroupingMode.PERSON) {
+                                kotlinx.coroutines.MainScope().launch {
+                                    try {
+                                        val personId = group.titleValue.toLongOrNull()
+                                        if (personId != null) {
+                                            val db = AppDatabase.getDatabase(context)
+                                            db.personDao().updatePersonName(personId, name)
+                                            personNameMap[group.titleValue] = name
+                                            Logger.i(TAG, "Person group $personId renamed to: $name")
+                                        }
+                                    } catch (e: Exception) {
+                                        Logger.e(TAG, "Failed to rename person group", e)
+                                    }
+                                }
+                            }
+                            renamingPersonGroup = null
+                        }
+                    }
+                ) {
+                    Text("保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renamingPersonGroup = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
