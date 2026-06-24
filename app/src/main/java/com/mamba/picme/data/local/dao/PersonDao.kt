@@ -54,6 +54,9 @@ interface PersonDao {
     @Query("UPDATE face_embeddings SET personId = :personId WHERE embeddingId = :embeddingId")
     suspend fun assignEmbedding(embeddingId: Long, personId: Long)
 
+    @Query("SELECT COUNT(*) FROM face_embeddings")
+    suspend fun getAllEmbeddingCount(): Int
+
     @Query("SELECT COUNT(*) FROM face_embeddings WHERE personId = :personId")
     suspend fun getEmbeddingCount(personId: Long): Int
 
@@ -79,4 +82,8 @@ interface PersonDao {
 
     @Query("DELETE FROM persons")
     suspend fun clearAllPersons()
+
+    /** 重置所有 embedding 的 personId 为 NULL（重聚类前调用） */
+    @Query("UPDATE face_embeddings SET personId = NULL")
+    suspend fun resetAllEmbeddingAssignments()
 }

@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
+import com.mamba.picme.beauty.api.facedetect.DetectionPipelineConfig
 import com.mamba.picme.beauty.api.facedetect.FaceDetectorFactory
+import com.mamba.picme.beauty.api.facedetect.InferenceBackendType
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
 import kotlinx.coroutines.CoroutineDispatcher
@@ -83,6 +85,9 @@ class TagGenerationScheduler(
     private val _progress = MutableStateFlow<TagScanProgress?>(null)
     val progress: StateFlow<TagScanProgress?> = _progress.asStateFlow()
 
+    private val _lastScanMessage = MutableStateFlow<String?>(null)
+    val lastScanMessage: StateFlow<String?> = _lastScanMessage.asStateFlow()
+
     private val db = AppDatabase.getDatabase(context)
     private val personDao = db.personDao()
     private val vocab = ControlledVocab.loadFromAssets(context)
@@ -91,6 +96,12 @@ class TagGenerationScheduler(
 
     private val pipeline: TagGenerationPipeline by lazy {
         val faceDetector = FaceDetectorFactory.create(context)
+        // 【关键修复】必须调用 updatePipelineConfig()，否则 FaceDetectorManager
+        // 的 isPipelineInitialized 保持 false，所有 detectPhoto() 静默返回 null
+        faceDetector.updatePipelineConfig(DetectionPipelineConfig(
+            roiEngine = InferenceBackendType.MNN,
+            landmarkEngine = InferenceBackendType.MNN
+        ))
         val llmEngine = AgentOrchestrator.getInstance(context).getLlmEngine()
         TagGenerationPipeline(context, faceDetector, llmEngine, faceClusterEngine, normalizer)
     }
@@ -398,6 +409,201 @@ class TagGenerationScheduler(
                 val finalDone = alreadyDone + pass1Processed
                 _progress.value = TagScanProgress(finalDone, allCount, PipelineStage.COMPLETE)
                 Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, total=${finalDone}/$allCount")
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  独立阶段扫描（分阶段批量控制）
+    // ═══════════════════════════════════════════════════
+
+    /**
+     * [Pass 1 独立执行] 全量人脸检测 + Embedding 提取
+     *
+     * - 遍历所有媒体，重新执行人脸检测和 embedding 提取
+     * - faceRoiResult 写入 media_assets 表（供 Pass 3 使用）
+     * - embedding 写入 face_embeddings 表（personId=null，供 Pass 2 聚类）
+     * - 注意：不会清除旧 embedding，多次执行会产生重复数据
+     */
+    fun scanPass1(
+        progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
+    ) {
+        if (currentJob?.isActive == true) {
+            Log.w(TAG, "Scan already in progress, ignoring")
+            return
+        }
+
+        currentJob = scope.launch {
+            try {
+                _isScanning.value = true
+                Log.i(TAG, "=== Pass 1 Only: Face detection + Embedding ===")
+
+                // Pass 1 使用 InsightFace + MobileFaceNet，由 Pipeline 内部懒加载
+                val dao = db.mediaDao()
+
+                // 清理旧 embedding，确保全量重提取
+                personDao.clearAllEmbeddings()
+                personDao.clearAllPersons()
+
+                val allMedia = dao.getAllMediaNow()
+                val total = allMedia.size
+                var processed = 0
+
+                _progress.value = TagScanProgress(0, total, PipelineStage.FACE_ROI)
+
+                for (entity in allMedia) {
+                    if (!isActive) break
+                    if (!guardCheck()) break
+
+                    try {
+                        val result = pipeline.stage1WithEmbeddings(
+                            uri = entity.uri,
+                            lensFacing = CameraSelector.LENS_FACING_BACK,
+                            mediaId = entity.id
+                        )
+
+                        if (result.faceRoiJson != null) {
+                            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, true)
+                        }
+                        for (embedding in result.embeddings) {
+                            personDao.insertEmbedding(
+                                FaceEmbeddingEntity(
+                                    mediaId = entity.id,
+                                    personId = null,
+                                    embedding = floatArrayToByteArray(embedding)
+                                )
+                            )
+                        }
+
+                        processed++
+                        _progress.value = TagScanProgress(processed, total, PipelineStage.FACE_ROI)
+                        progressCallback(processed, total)
+                        delay(THROTTLE_MS)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Pass 1 failed for media ${entity.id}: ${e.message}")
+                        processed++
+                    }
+                }
+
+                _progress.value = TagScanProgress(processed, total, PipelineStage.COMPLETE)
+                Log.i(TAG, "=== Pass 1 Only completed: $processed/$total ===")
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    /**
+     * [Pass 2 独立执行] DBSCAN 全局聚类
+     *
+     * 清除旧的聚类结果，基于 face_embeddings 表中**所有** embedding
+     * 重新执行 DBSCAN 全量聚类。
+     *
+     * 与 [scanAll] 内部 Pass 2 的区别：
+     * - scanAll 的 Pass 2 仅聚类 Pass 1 刚生成的新 embedding
+     * - 本方法重置所有分配后，对所有 embedding 重新聚类
+     *
+     * 前置条件：face_embeddings 表中已有 embedding（需先执行 Pass 1）
+     */
+    fun scanPass2(
+        progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
+    ) {
+        if (currentJob?.isActive == true) {
+            Log.w(TAG, "Scan already in progress, ignoring")
+            return
+        }
+
+        currentJob = scope.launch {
+            try {
+                _isScanning.value = true
+                Log.i(TAG, "=== Pass 2 Only: Full re-clustering ===")
+
+                val dao = db.mediaDao()
+
+                // 清除旧聚类结果，准备重聚类（保留 hasFace 不变）
+                personDao.clearAllPersons()
+                personDao.resetAllEmbeddingAssignments()
+
+                val allEmbeddings = personDao.getAllEmbeddingCount()
+                _progress.value = TagScanProgress(0, allEmbeddings, PipelineStage.FACE_CLUSTER)
+
+                try {
+                    runDbscanClustering(dao)
+                    val afterPersons = personDao.getAllPersons().size
+                    val afterEmbeddings = personDao.getAllEmbeddingCount()
+                    Log.i(TAG, "Pass 2 Only completed: $afterPersons persons from $afterEmbeddings embeddings")
+                    _lastScanMessage.value = "聚类完成: $afterPersons 个人物簇 (共 $afterEmbeddings 个 embedding)"
+                } catch (e: Exception) {
+                    Log.w(TAG, "Pass 2 Only failed: ${e.message}")
+                    _lastScanMessage.value = "聚类失败: ${e.message}"
+                }
+
+                _progress.value = TagScanProgress(allEmbeddings, allEmbeddings, PipelineStage.COMPLETE)
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    /**
+     * [Pass 3 独立执行] 仅进行 Qwen 图像理解标签生成
+     *
+     * - 遍历所有有 faceRoi 但无 labels 的媒体
+     * - 调用 Qwen 多模态模型生成标签
+     */
+    fun scanPass3(
+        progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
+    ) {
+        if (currentJob?.isActive == true) {
+            Log.w(TAG, "Scan already in progress, ignoring")
+            return
+        }
+
+        currentJob = scope.launch {
+            try {
+                _isScanning.value = true
+                Log.i(TAG, "=== Pass 3 Only: Qwen tagging ===")
+
+                if (!ensureModelLoaded()) return@launch
+
+                val dao = db.mediaDao()
+                val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
+                val total = needTagging.size
+                var processed = 0
+
+                _progress.value = TagScanProgress(0, total, PipelineStage.QWEN_TAGGING)
+
+                for (entity in needTagging) {
+                    if (!isActive) break
+                    if (!guardCheck()) break
+
+                    try {
+                        val faceRoiJson = dao.getFaceRoiResult(entity.id)
+                        val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
+
+                        val unified = UnifiedTagResult(
+                            scene = normalized.scene,
+                            activity = normalized.activity,
+                            objects = normalized.objects,
+                            tags = normalized.tags,
+                            qwenSummary = normalized.summary
+                        )
+                        dao.updateLabels(entity.id, unifiedTagToJson(unified))
+
+                        processed++
+                        _progress.value = TagScanProgress(processed, total, PipelineStage.QWEN_TAGGING)
+                        progressCallback(processed, total)
+                        delay(THROTTLE_MS)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Pass 3 failed for media ${entity.id}: ${e.message}")
+                        processed++
+                    }
+                }
+
+                _progress.value = TagScanProgress(processed, total, PipelineStage.COMPLETE)
+                Log.i(TAG, "=== Pass 3 Only completed: $processed/$total ===")
             } finally {
                 _isScanning.value = false
             }

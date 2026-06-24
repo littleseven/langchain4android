@@ -51,6 +51,8 @@ fun TagGenerationControlScreen(
 
     val isScanning by scheduler.isScanning.collectAsState()
     val scanProgress by scheduler.progress.collectAsState()
+    val lastScanMessage by scheduler.lastScanMessage.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     // 数据库统计（每次进入时刷新）
     var totalMedia by remember { mutableIntStateOf(0) }
@@ -77,6 +79,13 @@ fun TagGenerationControlScreen(
         }
     }
 
+    // 显示扫描完成通知
+    LaunchedEffect(lastScanMessage) {
+        val msg = lastScanMessage ?: return@LaunchedEffect
+        refreshStats()
+        snackbarHostState.showSnackbar(msg)
+    }
+
     // 初始加载统计
     LaunchedEffect(Unit) { refreshStats() }
 
@@ -89,6 +98,7 @@ fun TagGenerationControlScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("TAG 生成控制") },
@@ -205,6 +215,7 @@ fun TagGenerationControlScreen(
                             Text("3-Pass 扫描中...")
                         }
                     } else {
+                        // ── 全量/增量扫描按钮 ─────────────
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -218,7 +229,7 @@ fun TagGenerationControlScreen(
                             ) {
                                 Icon(Icons.Rounded.PlayArrow, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("全量 3-Pass 扫描")
+                                Text("全量扫描")
                             }
                             OutlinedButton(
                                 onClick = {
@@ -230,6 +241,51 @@ fun TagGenerationControlScreen(
                                 Icon(Icons.Rounded.Update, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("增量扫描")
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+
+                        // ── 分阶段独立控制 ────────────────
+                        Text(
+                            "分阶段执行",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    refreshStats()
+                                    scheduler.scanPass1()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Pass 1")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    refreshStats()
+                                    scheduler.scanPass2()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Pass 2")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    refreshStats()
+                                    scheduler.scanPass3()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Pass 3")
                             }
                         }
                     }
