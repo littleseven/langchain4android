@@ -434,7 +434,7 @@ internal fun ModelCardWithBadge(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // 底部信息行：大小 + 轻量版标签
+                    // 底部信息行：大小 + 轻量版标签 + 必须标签
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -448,6 +448,10 @@ internal fun ModelCardWithBadge(
 
                         if (model.isSmallModel) {
                             LightweightBadge()
+                        }
+
+                        if (model.isRequired) {
+                            RequiredBadge()
                         }
                     }
                 }
@@ -540,6 +544,23 @@ internal fun LightweightBadge() {
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
+}
+
+/**
+ * 必须模型标签
+ */
+@Composable
+internal fun RequiredBadge() {
+    Text(
+        text = stringResource(R.string.model_label_required),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = Color.White,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFFE53935))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     )
 }

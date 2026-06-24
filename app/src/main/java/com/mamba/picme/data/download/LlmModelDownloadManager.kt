@@ -131,6 +131,9 @@ class LlmModelDownloadManager(context: Context) {
          * 默认标签翻译（MNN 官方 tagTranslations 的本地回退）
          */
         val DEFAULT_TAG_TRANSLATIONS = mapOf(
+            "face" to "人脸检测",
+            "chat" to "对话",
+            "Chat" to "对话",
             "Vision" to "图像理解",
             "Video" to "视频理解",
             "Audio" to "音频理解",
@@ -139,13 +142,11 @@ class LlmModelDownloadManager(context: Context) {
             "ImageGen" to "文生图",
             "AudioGen" to "音频生成",
             "Think" to "深度思考",
-            "Chat" to "对话",
             "Safety" to "安全",
             "NPU" to "NPU加速",
             "ASR" to "语音识别",
             "KWS" to "唤醒词",
             "TTS" to "语音合成",
-            "face" to "人脸检测",
             "detection" to "人脸检测",
             "mnn" to "MNN模型",
             "ncnn" to "NCNN模型",
@@ -1282,10 +1283,28 @@ data class ModelConfig(
     val files: List<String>,
     val tags: List<String> = emptyList()
 ) {
+    companion object {
+        /**
+         * 必须模型 ID 集合（MNN ROI、MNN 2D106、MNN MobileFaceNet、Qwen3.5-2B）
+         */
+        val REQUIRED_MODEL_IDS = setOf(
+            "picme-face-det-mnn",       // MNN ROI (Det10G)
+            "picme-face-det-500m-mnn",  // MNN ROI (Det500M)
+            "picme-face-landmark-mnn",  // MNN 2D106
+            "picme-face-embedding-mnn", // MNN MobileFaceNet
+            "qwen3_5_2b"                // Qwen3.5-2B
+        )
+    }
+
     /**
      * 便捷属性：判断是否为小模型 (< 50MB)
      */
     val isSmallModel: Boolean get() = size < 50 * 1024 * 1024
+
+    /**
+     * 该模型是否为必须下载的核心模型
+     */
+    val isRequired: Boolean get() = id in REQUIRED_MODEL_IDS
 
     /**
      * 获取模型的第一个分类标签，用于确定所属 Tab

@@ -387,6 +387,7 @@
     <string name="model_type_beauty">BEAUTY</string>
     <string name="model_type_landmark">LANDMARK</string>
     <string name="model_label_lightweight">Lightweight</string>
+    <string name="model_label_required">Must have</string>
     <string name="model_downloaded">Downloaded</string>
     <string name="no_models_available">No models available</string>
     <string name="no_asr_models_available">No ASR models available. Check your network connection.</string>

@@ -375,6 +375,7 @@
     <string name="model_type_beauty">美颜</string>
     <string name="model_type_landmark">人脸</string>
     <string name="model_label_lightweight">轻量版</string>
+    <string name="model_label_required">必须</string>
     <string name="model_downloaded">已下载</string>
     <string name="no_models_available">暂无可用模型</string>
     <string name="no_asr_models_available">暂无 ASR 模型，请检查网络连接</string>

@@ -324,12 +324,6 @@ private fun ChatTopBar(
                     modifier = Modifier.size(24.dp)
                 )
             }
-            Text(
-                text = stringResource(R.string.app_name),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
