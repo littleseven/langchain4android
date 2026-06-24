@@ -691,13 +691,16 @@ private fun QuickActionPanel(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scope = rememberCoroutineScope()
-
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.3f))
-            .padding(end = 16.dp, bottom = 140.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            )
+            .padding(end = 16.dp, bottom = 168.dp)
     ) {
         Column(
             modifier = Modifier.align(Alignment.BottomEnd),
