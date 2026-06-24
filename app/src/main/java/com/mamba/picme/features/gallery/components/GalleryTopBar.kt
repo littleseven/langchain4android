@@ -8,7 +8,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.FaceRetouchingNatural
+import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
@@ -42,7 +42,6 @@ fun GalleryTopBar(
     isSelectionMode: Boolean,
     selectedCount: Int,
     groupingMode: GroupingMode,
-    isReclustering: Boolean = false,
     onNavigateBack: () -> Unit,
     onToggleSelectionMode: () -> Unit,
     onSelectAll: () -> Unit,
@@ -51,8 +50,8 @@ fun GalleryTopBar(
     onGroupingModeSelected: (GroupingMode) -> Unit,
     onManageDuplicates: () -> Unit,
     onOpenTestDataTools: () -> Unit,
-    onRecluster: (() -> Unit)? = null,
-    onSearchClick: () -> Unit = {}
+    onSearchClick: () -> Unit = {},
+    onNavigateToTagControl: (() -> Unit)? = null
 ) {
     TopAppBar(
         title = {
@@ -102,14 +101,11 @@ fun GalleryTopBar(
                 IconButton(onClick = onManageDuplicates) {
                     Icon(Icons.Outlined.FilterDrama, contentDescription = stringResource(R.string.manage_duplicates))
                 }
-                if (onRecluster != null) {
-                    IconButton(
-                        onClick = onRecluster,
-                        enabled = !isReclustering
-                    ) {
+                if (onNavigateToTagControl != null) {
+                    IconButton(onClick = onNavigateToTagControl) {
                         Icon(
-                            Icons.Rounded.FaceRetouchingNatural,
-                            contentDescription = "重新人脸聚类"
+                            Icons.AutoMirrored.Rounded.Label,
+                            contentDescription = "TAG 生成控制"
                         )
                     }
                 }

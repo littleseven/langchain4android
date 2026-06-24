@@ -47,6 +47,7 @@ import com.mamba.picme.features.chat.ChatViewModel
 import com.mamba.picme.features.debug.DebugScreen
 import com.mamba.picme.features.gallery.GalleryScreen
 import com.mamba.picme.features.gallery.MediaViewModel
+import com.mamba.picme.features.gallery.components.TagGenerationControlScreen
 import com.mamba.picme.features.settings.ModelCenterScreen
 import com.mamba.picme.features.settings.SettingsScreen
 import com.mamba.picme.features.settings.SettingsViewModel
@@ -230,7 +231,19 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) }
+                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) },
+                                    onNavigateToTagControl = { navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true }) }
+                                )
+                            }
+                            composable(Screen.TagControl.route) {
+                                DisposableEffect(Unit) {
+                                    SceneManager.getInstance().transitionTo(SceneManager.Scene.GALLERY)
+                                    onDispose {
+                                        SceneManager.getInstance().leaveScene(SceneManager.Scene.GALLERY)
+                                    }
+                                }
+                                TagGenerationControlScreen(
+                                    onNavigateBack = { navController.popBackStack() }
                                 )
                             }
                             composable(Screen.Settings.route) {

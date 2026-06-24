@@ -4,6 +4,7 @@ sealed class Screen(val route: String) {
     data object Chat : Screen("chat")
     data object Camera : Screen("camera")
     data object Gallery : Screen("gallery")
+    data object TagControl : Screen("tag_control")
     data object Settings : Screen("settings")
     data object Debug : Screen("debug")
     data object ModelCenter : Screen("model_center/{categoryTag}") {

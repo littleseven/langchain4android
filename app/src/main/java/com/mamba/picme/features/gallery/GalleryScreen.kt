@@ -84,7 +84,8 @@ fun GalleryScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCamera: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit
+    onNavigateToDebug: () -> Unit,
+    onNavigateToTagControl: () -> Unit = {}
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -183,34 +184,12 @@ fun GalleryScreen(
     // 进入 Gallery 时触发后台图片标签索引 + 人脸聚类
     // Workers 内部有 isActive 守卫，可安全重复调用
     val indexingWorker = remember { app.container.mediaIndexingWorker }
-    val faceClusteringWorker = remember { app.container.faceClusteringWorker }
     var isIndexing by remember { mutableStateOf(false) }
-    // 人脸聚类状态
-    var isReclustering by remember { mutableStateOf(false) }
-
-    // 监听聚类完成
-    LaunchedEffect(isReclustering) {
-        if (isReclustering) {
-            while (faceClusteringWorker.isRunning) {
-                kotlinx.coroutines.delay(1000)
-            }
-            isReclustering = false
-            viewModel.refreshMediaLibrary()
-        }
-    }
 
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty() && !isIndexing) {
             indexingWorker.start()
             isIndexing = true
-        }
-    }
-
-    // 人脸聚类与索引独立，在媒体数据加载完成后触发
-    // 内部自动跳过已完成的媒体，只处理增量
-    LaunchedEffect(allFlatMedia.size) {
-        if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
-            faceClusteringWorker.start()
         }
     }
 
@@ -393,7 +372,6 @@ fun GalleryScreen(
                         isSelectionMode = isSelectionMode,
                         selectedCount = selectedIds.size,
                         groupingMode = groupingMode,
-                        isReclustering = isReclustering,
                         onNavigateBack = onNavigateBack,
                         onToggleSelectionMode = {
                             isSelectionMode = false
@@ -424,10 +402,7 @@ fun GalleryScreen(
                             isSearchActive = true
                             searchResultMedia = emptyList()
                         },
-                        onRecluster = {
-                            isReclustering = true
-                            faceClusteringWorker.forceRecluster()
-                        }
+                        onNavigateToTagControl = onNavigateToTagControl
                     )
                 }
                 showDuplicateManager -> {

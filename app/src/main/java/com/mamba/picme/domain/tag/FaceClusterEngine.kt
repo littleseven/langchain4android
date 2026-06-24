@@ -4,9 +4,12 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.util.Log
+import com.mamba.picme.data.download.ModelPathConfig
+import com.mamba.picme.data.indexing.MnnEmbeddingExtractor
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
 import com.mamba.picme.data.local.entity.PersonEntity
+import java.io.File
 import kotlin.math.sqrt
 
 /**
@@ -14,12 +17,13 @@ import kotlin.math.sqrt
  *
  * 负责 MobileFaceNet 特征提取（Stage 2a/2b）和增量化余弦距离聚类（Stage 2c）。
  *
- * ## 实现状态
- * - **MobileFaceNet 特征提取**：当前为占位实现（返回随机特征向量），
- *   实际模型接入需通过 JNI 桥接到 MNN 推理引擎。
+ * ## 实现状态 (2026-06-24)
+ * - **MobileFaceNet 特征提取**：已集成 [MnnEmbeddingExtractor]，
+ *   使用 MNN 加载 w600k_mbf.mnn 模型提取 512 维 embedding。
+ *   模型缺失时降级为零向量（聚类不生效）。
  * - **聚类算法**：增量式余弦距离匹配已实现。
  *
- * @param context Android Context（用于 Room 数据库访问）
+ * @param context Android Context（用于 Room 数据库访问和模型目录）
  */
 class FaceClusterEngine(private val context: Context) {
 
@@ -44,31 +48,81 @@ class FaceClusterEngine(private val context: Context) {
 
     private val personDao = AppDatabase.getDatabase(context).personDao()
 
+    /** MobileFaceNet 嵌入提取器（懒加载，模型缺失时为 null） */
+    private val embeddingExtractor: MnnEmbeddingExtractor? by lazy {
+        val modelDir = ModelPathConfig.getModelDir(context, "picme-face-embedding-mnn")
+        val modelFile = File(modelDir, "w600k_mbf.mnn")
+        val extractor = MnnEmbeddingExtractor(modelFile)
+        if (extractor.isModelReady && extractor.initialize()) {
+            Log.i(TAG, "MobileFaceNet model loaded: ${modelFile.absolutePath}")
+            extractor
+        } else {
+            Log.w(TAG, "MobileFaceNet model NOT found at ${modelFile.absolutePath}, face clustering will NOT work. Download w600k_mbf.mnn to enable.")
+            null
+        }
+    }
+
+    /** 嵌入提取器是否可用 */
+    val isEmbeddingAvailable: Boolean
+        get() = embeddingExtractor != null
+
     /**
      * 提取人脸特征向量
      *
-     * ## 当前实现
-     * 返回零向量占位。实际 MobileFaceNet 接入后需替换为：
-     * 1. 用 landmarks106 做仿射对齐 → 112×112 标准化人脸图
-     * 2. MobileFaceNet 推理 → 512 维特征向量
+     * 从原始图片中裁剪人脸 ROI、缩放到 112×112，
+     * 通过 MobileFaceNet MNN 模型提取 512 维 L2 归一化 embedding。
+     *
+     * 模型缺失时返回零向量（聚类将退化为全量新建簇）。
      *
      * @param bitmap 原始图片
      * @param roi 人脸 ROI 区域（像素坐标）
-     * @param landmarks106 Stage 1 输出的 106 点归一化坐标
-     * @return 512 维特征向量
+     * @param landmarks106 Stage 1 输出的 106 点归一化坐标（当前未用于对齐，保留接口兼容性）
+     * @return 512 维特征向量（L2 归一化后的真实 embedding，或零向量）
      */
     suspend fun extractFeature(
         bitmap: Bitmap,
         roi: RectF,
         landmarks106: FloatArray
     ): FloatArray {
-        // TODO: Phase 2 - 接入 MobileFaceNet 模型
-        // 1. 用 landmarks106 做仿射变换对齐人脸
-        // 2. 裁剪并缩放到 112×112
-        // 3. MobileFaceNet MNN 推理 → 512 维输出
+        val extractor = embeddingExtractor
+        if (extractor == null) {
+            Log.d(TAG, "extractFeature: no model, returning zero vector. roi=$roi")
+            return FloatArray(EMBEDDING_DIM) { 0f }
+        }
 
-        Log.d(TAG, "extractFeature: placeholder, roi=$roi, landmarkCount=${landmarks106.size}")
-        return FloatArray(EMBEDDING_DIM) { 0f }
+        return try {
+            // 1. 安全裁剪人脸 ROI（带 20% 边距扩展）
+            val marginW = (roi.width() * 0.2f).toInt().coerceAtLeast(10)
+            val marginH = (roi.height() * 0.2f).toInt().coerceAtLeast(10)
+            val cropX = roi.left.toInt().minus(marginW).coerceIn(0, bitmap.width)
+            val cropY = roi.top.toInt().minus(marginH).coerceIn(0, bitmap.height)
+            val cropW = (roi.width().toInt() + marginW * 2).coerceAtMost(bitmap.width - cropX)
+            val cropH = (roi.height().toInt() + marginH * 2).coerceAtMost(bitmap.height - cropY)
+
+            if (cropW <= 0 || cropH <= 0) {
+                Log.w(TAG, "extractFeature: invalid crop region, returning zero vector")
+                return FloatArray(EMBEDDING_DIM) { 0f }
+            }
+
+            val cropped = Bitmap.createBitmap(bitmap, cropX, cropY, cropW, cropH)
+            val faceBitmap = Bitmap.createScaledBitmap(cropped, FACE_INPUT_SIZE, FACE_INPUT_SIZE, true)
+            if (faceBitmap !== cropped) cropped.recycle()
+
+            // 2. MNN 推理提取 embedding
+            val embedding = extractor.extractEmbedding(faceBitmap)
+            faceBitmap.recycle()
+
+            if (embedding != null) {
+                Log.d(TAG, "extractFeature: extracted ${embedding.size}-dim embedding, norm=${sqrt(embedding.map { it*it }.sum().toDouble())}")
+                embedding
+            } else {
+                Log.w(TAG, "extractFeature: MNN inference returned null, falling back to zero vector")
+                FloatArray(EMBEDDING_DIM) { 0f }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "extractFeature: failed with exception, falling back to zero vector", e)
+            FloatArray(EMBEDDING_DIM) { 0f }
+        }
     }
 
     /**
