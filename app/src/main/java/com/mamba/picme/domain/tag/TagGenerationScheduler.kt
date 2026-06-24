@@ -833,20 +833,30 @@ class TagGenerationScheduler(
 
     private suspend fun ensureModelLoaded(): Boolean {
         val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
-        if (engine.isLoaded) return true
 
         if (!engine.isModelAvailable(MODEL_KEY, context)) {
             Log.w(TAG, "Model not downloaded: $MODEL_KEY")
             return false
         }
 
-        Log.i(TAG, "Loading LLM model: $MODEL_KEY")
-        val result = engine.loadModel(MODEL_KEY)
-        return if (result.isSuccess) {
-            Log.i(TAG, "Model loaded successfully")
+        // OpenCL 优先：GPU 加速可提 2-3 倍推理速度
+        // 若设备不支持 OpenCL，自动降级到 CPU
+        Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
+        val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
+        if (openclResult.isSuccess) {
+            Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
+            return true
+        }
+
+        Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
+            "falling back to CPU")
+
+        val cpuResult = engine.loadModel(MODEL_KEY, useOpencl = false)
+        return if (cpuResult.isSuccess) {
+            Log.i(TAG, "Model loaded with CPU (fallback from OpenCL)")
             true
         } else {
-            Log.w(TAG, "Model load failed: ${result.exceptionOrNull()?.message}")
+            Log.w(TAG, "CPU fallback also failed: ${cpuResult.exceptionOrNull()?.message}")
             false
         }
     }
