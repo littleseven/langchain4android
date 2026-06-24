@@ -523,8 +523,10 @@ class TagGenerationScheduler(
                 val dao = db.mediaDao()
 
                 // 清除旧聚类结果，准备重聚类（保留 hasFace 不变）
-                personDao.clearAllPersons()
+                // 注意：先重置 embedding 再删除 persons，利用 SET_NULL 外键约束
+                // 避免由 cascade 或并发问题造成 embedding 意外丢失
                 personDao.resetAllEmbeddingAssignments()
+                personDao.clearAllPersons()
 
                 val allEmbeddings = personDao.getAllEmbeddingCount()
                 _progress.value = TagScanProgress(0, allEmbeddings, PipelineStage.FACE_CLUSTER)
@@ -700,7 +702,10 @@ class TagGenerationScheduler(
                 dao.updateFaceId(mid, personId.toString())
                 assignedCount++
             }
-            personDao.assignEmbeddingByMediaId(mediaId = mediaIds.first(), personId = personId)
+            // 给簇内所有 media 的 embedding 赋 personId
+            for (mid in mediaIds) {
+                personDao.assignEmbeddingByMediaId(mediaId = mid, personId = personId)
+            }
         }
 
         val noiseCount = clusters[-1]?.size ?: 0
