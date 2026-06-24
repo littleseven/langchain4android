@@ -227,10 +227,10 @@ fun GalleryScreen(
     // AI 图片标签索引 — 在媒体加载完成后触发
     // Worker 内部自动跳过已标记的媒体，只处理增量
     // 需要 Vision 模型已加载（由 AgentOrchestrator 管理，未加载时 worker 内部静默跳过）
-    val imageTagWorker = remember { app.container.imageTagIndexingWorker }
+    val tagScheduler = remember { app.container.tagGenerationScheduler }
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
-            imageTagWorker.start()
+            tagScheduler.scanIncremental()
         }
     }
 
@@ -684,7 +684,11 @@ fun GalleryScreen(
                             viewModel.clearPhotoEditState()
                         },
                         voiceCoordinator = voiceCoordinator,
-                        onReTag = { imageTagWorker.forceReTag() }
+                        onReTag = {
+                            searchScope.launch {
+                                tagScheduler.scanPass3Full()
+                            }
+                        }
                     )
                 }
             }

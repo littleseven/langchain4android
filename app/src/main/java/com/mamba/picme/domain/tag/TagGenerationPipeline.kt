@@ -49,27 +49,41 @@ class TagGenerationPipeline(
         /** Qwen 图像推理的图片最长边缩放 */
         private const val MAX_VISION_SIZE = 512
 
-        /** Qwen Stage 3 最大输出 token 数 */
-        private const val QWEN_MAX_TOKENS = 128
+        /** Qwen Stage 3 最大输出 token 数（从 128 增至 256 以支持丰富标签） */
+        private const val QWEN_MAX_TOKENS = 256
     }
 
     // ── Stage 3 Prompt 模板 ──────────────────────────────
 
     private val stage3SystemPrompt = buildString {
-        appendLine("你是一个相册照片标签生成助手。")
-        appendLine("请从以下维度用中文描述这张照片，输出格式为JSON：")
+        appendLine("你是一个相册照片标签生成助手。你的任务是精确描述一张照片的内容。")
+        appendLine("请从以下维度用中文描述，输出格式为JSON：")
         appendLine("{")
-        appendLine("  \"scene\": \"场景(室内/户外/公园/街道/餐厅/海边/城市等)\",")
-        appendLine("  \"activity\": \"活动(吃饭/旅行/运动/会议/购物/聚会等)\",")
+        appendLine("  \"scene\": \"场景\",")
+        appendLine("  \"activity\": \"活动\",")
         appendLine("  \"objects\": [\"物体1\",\"物体2\"],")
-        appendLine("  \"tags\": [\"标签1\",\"标签2\",\"标签3\"],")
+        appendLine("  \"tags\": [\"标签1\",\"标签2\"],")
         appendLine("  \"summary\": \"一句话概括\"")
         appendLine("}")
         appendLine()
+        appendLine("【维度详细说明】")
+        appendLine("1. scene（场景）：照片所在的物理环境，例如：室内、户外、公园、街道、餐厅、海边、城市、乡村、办公室、车内、海滩、雪地、森林、庭院、阳台、教室、商场、地铁、车站")
+        appendLine("2. activity（活动）：照片中人物正在做的事，例如：吃饭、旅行、运动、开会、购物、聚会、散步、遛狗、拍照、自拍、阅读、工作、学习、开车、休息、游泳、爬山、骑行、跑步、野餐、赏花、喝咖啡、聊天")
+        appendLine("3. objects（物体）：照片中**具体可见的物体**，列出2-5个最明显的。例如：手机、眼镜、帽子、蛋糕、花、猫、狗、书、婴儿、背包、气球、风筝、自行车、吉他")
+        appendLine("4. tags（标签）：生成5-8个**常用中文名词**作为标签，让用户能直观搜索到。必须涵盖以下维度：")
+        appendLine("   - 人物特征：如果有人的话，必须标注性别（男/女）和年龄（小孩/老人/成年人/婴儿），以及人数（单人/双人/多人/合影）")
+        appendLine("   - 核心物体：照片中最突出的2-3个物体")
+        appendLine("   - 场景氛围：白天/夜晚/晴天/雨天/室内/户外")
+        appendLine("   - 【关键】标签必须使用最常见的日常名词，例如：男、女、小孩、婴儿、老人、食物、手机、宠物、蛋糕、花、车")
+        appendLine("5. summary（摘要）：用10-15字的一句话概括照片内容，例如：一家人在公园野餐、女孩在咖啡馆看书")
+        appendLine()
         appendLine("【重要规则】")
-        appendLine("1. scene/activity/objects/tags/summary 全部使用中文")
-        appendLine("2. tags字段生成3-5个中文关键词标签")
-        appendLine("3. 不要输出英文，除非是专有名词如 iPhone、Coca-Cola")
+        appendLine("1. 全部使用中文，专有名词（如iPhone、Coca-Cola）除外")
+        appendLine("2. 【特别注意】如果照片中有人，tags字段**必须**包含性别标签（男/女）和年龄标签（小孩/老人/成年人/婴儿）")
+        appendLine("3. tags字段优先使用最常见的中文单字/双字名词，便于用户搜索")
+        appendLine("4. 示例输出：")
+        appendLine("   {\"scene\":\"公园\",\"activity\":\"散步\",\"objects\":[\"婴儿\",\"推车\",\"树\"],\"tags\":[\"女\",\"婴儿\",\"户外\",\"公园\",\"散步\",\"亲子\",\"白天\",\"推车\"],\"summary\":\"妈妈推婴儿车在公园散步\"}")
+        appendLine("5. 不要输出任何解释文字，只输出JSON")
     }
 
     /**

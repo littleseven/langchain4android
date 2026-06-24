@@ -608,6 +608,78 @@ class TagGenerationScheduler(
         }
     }
 
+    /**
+     * [Pass 3 重新生成] 清空已有标签后全量重标
+     *
+     * - 调用 [resetAllLabels] 清空所有已有标签
+     * - 然后对**所有**有 faceRoi 的媒体重新运行 Qwen 标签生成
+     * - 适用于用户更新受控词表或 Prompt 后需要刷新标签
+     */
+    fun scanPass3Full(
+        progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
+    ) {
+        if (currentJob?.isActive == true) {
+            Log.w(TAG, "Scan already in progress, ignoring")
+            return
+        }
+
+        currentJob = scope.launch {
+            try {
+                _isScanning.value = true
+                Log.i(TAG, "=== Pass 3 Full Regeneration started ===")
+
+                if (!ensureModelLoaded()) return@launch
+
+                val dao = db.mediaDao()
+
+                // 1. 清空所有已标签，使 getMediaWithFaceRoiWithoutLabels() 返回全部
+                Log.i(TAG, "Resetting all labels for full regeneration...")
+                dao.resetAllLabels()
+
+                // 2. 现在所有有 faceRoi 的媒体都变回"无标签"状态
+                val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
+                val total = needTagging.size
+                var processed = 0
+
+                _progress.value = TagScanProgress(0, total, PipelineStage.QWEN_TAGGING)
+                Log.i(TAG, "Pass 3 Full: $total media need tagging")
+
+                for (entity in needTagging) {
+                    if (!isActive) break
+                    if (!guardCheck()) break
+
+                    try {
+                        val faceRoiJson = dao.getFaceRoiResult(entity.id)
+                        val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
+
+                        val unified = UnifiedTagResult(
+                            scene = normalized.scene,
+                            activity = normalized.activity,
+                            objects = normalized.objects,
+                            tags = normalized.tags,
+                            qwenSummary = normalized.summary
+                        )
+                        dao.updateLabels(entity.id, unifiedTagToJson(unified))
+
+                        processed++
+                        _progress.value = TagScanProgress(processed, total, PipelineStage.QWEN_TAGGING)
+                        progressCallback(processed, total)
+                        delay(THROTTLE_MS)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Pass 3 Full failed for media ${entity.id}: ${e.message}")
+                        processed++
+                    }
+                }
+
+                _progress.value = TagScanProgress(processed, total, PipelineStage.COMPLETE)
+                Log.i(TAG, "=== Pass 3 Full regeneration completed: $processed/$total ===")
+                _lastScanMessage.value = "Pass 3 重新生成完成: $processed/$total 张"
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
     // ═══════════════════════════════════════════════════
     //  守卫检查
     // ═══════════════════════════════════════════════════

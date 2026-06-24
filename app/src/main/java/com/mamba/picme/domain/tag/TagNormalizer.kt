@@ -6,7 +6,10 @@ import android.util.Log
  * 标签后处理规范化器
  *
  * 将 Qwen 自由文本输出匹配到受控词表，同时保留未匹配的原始文本。
- * 匹配策略：精确匹配 → 包含匹配 → 编辑距离容错 → 保留原始值
+ * 匹配策略：精确匹配 → 包含匹配 → 编辑距离容错 → 同义词映射 → 保留原始值
+ *
+ * 同义词映射（synonyms）用于将非标准口语词映射到标准词表词：
+ * 例如 "帅哥" → "男性"，"美女" → "女性"，"宝宝" → "婴儿"
  */
 class TagNormalizer(private val vocab: ControlledVocab) {
 
@@ -18,40 +21,81 @@ class TagNormalizer(private val vocab: ControlledVocab) {
      * 规范化 Qwen 输出的原始标签
      */
     fun normalize(raw: QwenTags): QwenTagsNormalized {
-        val normalizedTags = raw.tags.map { bestMatchAcrossCategories(it) }
-        val normalizedObjects = raw.objects.map { bestMatchAcrossCategories(it) }
+        val normalizedTags = raw.tags.map { bestMatchWithSynonyms(it) }
+        val normalizedObjects = raw.objects.map { bestMatchWithSynonyms(it) }
 
         val nonStandard = mutableListOf<String>()
 
-        fun track(input: String, output: String) {
-            if (input != output) {
-                Log.d(TAG, "Normalized: '$input' -> '$output'")
-            }
-            // 未匹配的收集到 nonStandard
-        }
-
         // 收集未匹配词
         raw.tags.forEach { tag ->
-            val matched = bestMatchAcrossCategories(tag)
+            val matched = bestMatchWithSynonyms(tag)
             if (matched == tag && matched !in vocab.allCategories) {
                 nonStandard.add(tag)
+            } else if (matched != tag) {
+                Log.d(TAG, "Normalized tag: '$tag' -> '$matched'")
             }
         }
         raw.objects.forEach { obj ->
-            val matched = bestMatchAcrossCategories(obj)
+            val matched = bestMatchWithSynonyms(obj)
             if (matched == obj && matched !in vocab.allCategories) {
                 nonStandard.add(obj)
+            } else if (matched != obj) {
+                Log.d(TAG, "Normalized object: '$obj' -> '$matched'")
             }
         }
 
         return QwenTagsNormalized(
-            scene = bestMatch(raw.scene, vocab.scene),
-            activity = bestMatch(raw.activity, vocab.activity),
+            scene = bestMatchWithSynonyms(raw.scene),
+            activity = bestMatchWithSynonyms(raw.activity),
             objects = normalizedObjects,
             tags = normalizedTags,
             summary = raw.summary,
             nonStandard = nonStandard.distinct()
         )
+    }
+
+    /**
+     * 带同义词映射的最佳匹配
+     * 1. 精确匹配
+     * 2. 包含匹配
+     * 3. 编辑距离 ≤ 1 容错
+     * 4. 同义词查找（synonym → canonical）
+     * 5. 同义词映射后再与词表匹配
+     * 6. 未匹配则返回原始值
+     */
+    private fun bestMatchWithSynonyms(input: String): String {
+        if (input.isBlank()) return input
+        val trimmed = input.trim()
+
+        // Step 1-3: 先尝试直接匹配
+        val directMatch = bestMatch(trimmed, vocab.allCategories)
+        if (directMatch in vocab.allCategories) return directMatch
+
+        // Step 4: 检查输入本身是否是同义词
+        val synonymCanonical = vocab.synonyms[trimmed]
+        if (synonymCanonical != null) {
+            Log.d(TAG, "Synonym match: '$trimmed' -> '$synonymCanonical' (direct)")
+            return synonymCanonical
+        }
+
+        // Step 5: 检查输入是否包含同义词或同义词包含输入
+        for ((synonym, canonical) in vocab.synonyms) {
+            if (trimmed.contains(synonym) || synonym.contains(trimmed)) {
+                Log.d(TAG, "Synonym match: '$trimmed' -> '$canonical' (via synonym '$synonym')")
+                return canonical
+            }
+        }
+
+        // Step 6: 同义词的标准词再试一次词表匹配
+        for ((_, canonical) in vocab.synonyms) {
+            if (canonical in vocab.allCategories &&
+                (trimmed.contains(canonical) || canonical.contains(trimmed))
+            ) {
+                return canonical
+            }
+        }
+
+        return trimmed
     }
 
     /**
