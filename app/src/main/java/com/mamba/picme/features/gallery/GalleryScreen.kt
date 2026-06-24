@@ -448,8 +448,18 @@ fun GalleryScreen(
                             thumbnailCache = thumbnailCache,
                             onThumbnailPositioned = { id, rect -> thumbnailPositions[id] = rect },
                             onMediaClick = { asset ->
-                                val index = allFlatMedia.indexOfFirst { it.id == asset.id }
-                                if (index >= 0) selectedMediaIndex = index
+                                // 搜索结果点击：先按 ID 查找索引
+                                var index = allFlatMedia.indexOfFirst { it.id == asset.id }
+                                // ID 未匹配时按 URI 兜底查找
+                                if (index < 0) {
+                                    Logger.w(TAG, "Search result id='${asset.id}' not in allFlatMedia, fallback to URI")
+                                    index = allFlatMedia.indexOfFirst { it.uri == asset.uri }
+                                }
+                                if (index >= 0) {
+                                    selectedMediaIndex = index
+                                } else {
+                                    Logger.e(TAG, "Search result NOT found: id='${asset.id}' uri='${asset.uri}'")
+                                }
                             },
                             onMediaLongClick = { },
                             onDragSelectionStart = { },
