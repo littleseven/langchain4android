@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.mamba.picme.PicMeApplication
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.domain.tag.PipelineStage
+import com.mamba.picme.data.local.entity.PersonEntity
 import com.mamba.picme.domain.tag.TagScanProgress
 import com.mamba.picme.service.tag.TagGenerationService
 import kotlinx.coroutines.delay
@@ -62,6 +63,11 @@ fun TagGenerationControlScreen(
     var embeddingCount by remember { mutableIntStateOf(0) }
     var isModelAvailable by remember { mutableStateOf(false) }
 
+    // 人物列表
+    var persons by remember { mutableStateOf<List<PersonEntity>>(emptyList()) }
+    var editingPersonId by remember { mutableStateOf<Long?>(null) }
+    var editingPersonName by remember { mutableStateOf("") }
+
     // 刷新统计
     fun refreshStats() {
         coroutineScope.launch {
@@ -69,7 +75,7 @@ fun TagGenerationControlScreen(
                 totalMedia = db.mediaDao().getTotalCount()
                 withFace = db.mediaDao().searchByHasFace().size
                 withLabels = db.mediaDao().getTotalCount() - db.mediaDao().getUnlabeledMedia().size
-                val persons = db.personDao().getAllPersons()
+                persons = db.personDao().getAllPersons()
                 personCount = persons.size
                 embeddingCount = persons.sumOf { db.personDao().getEmbeddingCount(it.personId) }
                 val modelDir = com.mamba.picme.data.download.ModelPathConfig.getModelDir(context, "picme-face-embedding-mnn")
@@ -341,6 +347,103 @@ fun TagGenerationControlScreen(
                         }
                     }
                 }
+            }
+
+            // ── 人物分组列表 ────────────────────────────
+            if (persons.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "人物分组 (${persons.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        persons.forEach { person ->
+                            val defaultName = "人物 ${person.personId}"
+                            val displayName = person.name ?: defaultName
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = "${person.faceCount} 张照片",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        editingPersonId = person.personId
+                                        editingPersonName = person.name ?: defaultName
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Edit,
+                                        contentDescription = "重命名",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            if (person != persons.last()) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── 重命名对话框 ────────────────────────────
+            if (editingPersonId != null) {
+                AlertDialog(
+                    onDismissRequest = { editingPersonId = null },
+                    title = { Text("编辑分组名称") },
+                    text = {
+                        OutlinedTextField(
+                            value = editingPersonName,
+                            onValueChange = { editingPersonName = it },
+                            label = { Text("分组名称") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                val pid = editingPersonId ?: return@TextButton
+                                val name = editingPersonName.trim()
+                                if (name.isNotBlank()) {
+                                    coroutineScope.launch {
+                                        db.personDao().updatePersonName(pid, name)
+                                        refreshStats()
+                                    }
+                                }
+                                editingPersonId = null
+                            }
+                        ) {
+                            Text("保存")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { editingPersonId = null }) {
+                            Text("取消")
+                        }
+                    }
+                )
             }
 
             Spacer(Modifier.height(16.dp))

@@ -388,9 +388,9 @@ fun MediaPager(
                                 val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
                                 val result = engine.imageInference(
                                     bitmap = bitmap,
-                                    systemPrompt = "你是一个图像内容分析助手。请用中文简短描述图片的内容。",
-                                    userPrompt = "请用一句话描述这张图片中有什么",
-                                    maxTokens = 64
+                                    systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
+                                    userPrompt = "请描述这张图片",
+                                    maxTokens = 128
                                 )
                                 visionResult = result.ifEmpty { "模型返回了空结果" }
                                 bitmap.recycle()

@@ -46,7 +46,7 @@ class MediaViewModel(
         private const val TAG = "Gallery"
     }
 
-    private val _groupingMode = MutableStateFlow(GroupingMode.NONE)
+    private val _groupingMode = MutableStateFlow(GroupingMode.DATE)
     val groupingMode = _groupingMode.asStateFlow()
 
     private val _showDuplicateManager = MutableStateFlow(false)

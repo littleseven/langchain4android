@@ -37,7 +37,7 @@ class FaceClusterEngine(private val context: Context) {
         const val EMBEDDING_DIM = 512
 
         /** 余弦相似度阈值：高于此值归入已有簇 */
-        const val COSINE_THRESHOLD = 0.6f
+        const val COSINE_THRESHOLD = 0.65f
 
         /** 增量积累达到此数量后触发全量 DBSCAN 重聚 */
         const val RE_CLUSTER_THRESHOLD = 100

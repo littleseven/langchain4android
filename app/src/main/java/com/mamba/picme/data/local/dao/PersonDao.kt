@@ -17,7 +17,10 @@ interface PersonDao {
     @Update
     suspend fun updatePerson(person: PersonEntity)
 
-    @Query("SELECT * FROM persons ORDER BY faceCount DESC")
+    @Query("UPDATE persons SET name = :name, updatedAt = :now WHERE personId = :personId")
+     suspend fun updatePersonName(personId: Long, name: String, now: Long = System.currentTimeMillis())
+    
+     @Query("SELECT * FROM persons ORDER BY faceCount DESC")
     suspend fun getAllPersons(): List<PersonEntity>
 
     @Query("SELECT * FROM persons WHERE personId = :personId")

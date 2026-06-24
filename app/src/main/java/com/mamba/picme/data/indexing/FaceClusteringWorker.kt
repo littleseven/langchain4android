@@ -46,13 +46,13 @@ class FaceClusteringWorker(
         private const val FACE_INPUT_SIZE = 112
 
         /** DBSCAN: 余弦距离阈值 (1 - cosine_similarity) */
-        private const val DBSCAN_EPS = 0.45f
+        private const val DBSCAN_EPS = 0.38f
 
         /** DBSCAN: 最小邻居数 (≥2 形成核心点，避免单点成簇) */
         private const val DBSCAN_MIN_PTS = 2
 
         /** 簇合并后内部平均相似度下限 (< 此值则分裂) */
-        private const val CLUSTER_COHESION_MIN = 0.55f
+        private const val CLUSTER_COHESION_MIN = 0.65f
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

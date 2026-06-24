@@ -708,14 +708,14 @@ private fun QuickActionPanel(
             horizontalAlignment = Alignment.End
         ) {
             QuickActionFabItem(
-                label = "相机",
-                icon = Icons.Rounded.CameraAlt,
-                onClick = onCameraClick
-            )
-            QuickActionFabItem(
                 label = "相册",
                 icon = Icons.Rounded.PhotoLibrary,
                 onClick = onGalleryClick
+            )
+            QuickActionFabItem(
+                label = "相机",
+                icon = Icons.Rounded.CameraAlt,
+                onClick = onCameraClick
             )
             QuickActionFabItem(
                 label = "模型下载",
