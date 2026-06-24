@@ -19,6 +19,10 @@ import org.json.JSONArray
 /**
  * 图片 AI 标签索引 Worker
  *
+ * ## 废弃说明
+ * 标签生成功能已整合到 [TagGenerationScheduler] 的 3-Pass 混合管道中（Pass 3: Qwen 标签生成）。
+ * 请使用 [TagGenerationScheduler.scanAll] 或 [TagGenerationScheduler.scanIncremental] 替代。
+ *
  * 使用本地多模态 LLM (Qwen3.5-2B-MNN) 理解相册图片内容，
  * 生成中文标签并写入 TagEntity + MediaTagCrossRef 规范化表。
  *
@@ -31,7 +35,10 @@ import org.json.JSONArray
  *
  * 触发时机: Gallery 首次加载、下拉刷新
  * 约束: 需 Vision 模型已加载、节流 THROTTLE_MS/张
+ *
+ * @deprecated 标签生成已整合到 TagGenerationScheduler 的 3-Pass 混合管道中
  */
+@Deprecated("标签生成已整合到 TagGenerationScheduler 的 3-Pass 混合管道中")
 class ImageTagIndexingWorker(
     private val context: Context,
     private val localLlmEngine: LocalLlmEngine,
@@ -65,6 +72,12 @@ class ImageTagIndexingWorker(
 
     val isRunning: Boolean
         get() = currentJob?.isActive == true
+
+    /** 取消当前标签任务 */
+    fun cancel() {
+        currentJob?.cancel()
+        Logger.i(TAG, "Tag indexing cancelled by user")
+    }
 
     /**
      * 启动批量标签索引（如已有任务运行则忽略）。

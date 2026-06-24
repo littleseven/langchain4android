@@ -67,14 +67,25 @@ class MnnEmbeddingExtractor(
         } else faceBitmap
 
         try {
-            val raw = det.detect(resized) ?: return null
+            val raw = det.detect(resized)
+            if (raw == null) {
+                Logger.w(TAG, "extractEmbedding: detect returned null (model fail or output mismatch)")
+                return null
+            }
             if (raw.size < embeddingDim) {
-                Logger.w(TAG, "Output too small: ${raw.size}, expected $embeddingDim")
+                Logger.w(TAG, "extractEmbedding: output too small (${raw.size} < $embeddingDim), model output may not be compatible")
                 return null
             }
 
             // 取前 embeddingDim 个值并 L2 归一化
             val embedding = raw.copyOf(embeddingDim)
+
+            // [诊断] 打印前 5 个值和 L2 norm，用于判断归一化是否正确
+            val previewVals = embedding.take(5).map { "%.4f".format(it) }
+            var sqSum = 0.0
+            for (v in embedding) sqSum += (v * v).toDouble()
+            Logger.d(TAG, "extractEmbedding: dim=${embedding.size}, first5=[${previewVals.joinToString()}], rawL2=%.4f".format(kotlin.math.sqrt(sqSum)))
+
             l2Normalize(embedding)
             return embedding
         } catch (e: Exception) {

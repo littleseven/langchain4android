@@ -11,6 +11,7 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
+import com.mamba.picme.domain.tag.FaceClusterEngine
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,10 @@ import kotlinx.coroutines.launch
  * 6. **[已修复] face_embeddings 表从未写入**：每条 embedding 按媒体写入
  * 7. **[已修复] landmark/contour 全关**：启用 LANDMARK_MODE_ALL 提升质量
  * 8. **[注意] ML Kit vs MNN**：当前仍用 ML Kit（下一步迁移到自有 FaceDetector）
+ *
+ * @deprecated 人脸聚类已整合到 TagGenerationScheduler 的 3-Pass 混合管道中（Pass 2: DBSCAN）
  */
+@Deprecated("人脸聚类已整合到 TagGenerationScheduler 的 3-Pass 混合管道中")
 class FaceClusteringWorker(
     private val context: Context,
     private val onSyncMedia: (suspend () -> Unit)? = null
@@ -57,6 +61,43 @@ class FaceClusteringWorker(
     val isRunning: Boolean
         get() = currentJob?.isActive == true
 
+    /** 取消当前聚类任务 */
+    fun cancel() {
+        currentJob?.cancel()
+        Logger.i(TAG, "Clustering cancelled by user")
+    }
+
+    /**
+     * 流式增量人脸聚类（途中持续产出人物簇）
+     *
+     * 与 [doCluster] 的批量 DBSCAN 不同，本方法每张照片处理完后
+     * 立即通过 [FaceClusterEngine] 匹配已有簇或创建新簇，
+     * 人物簇数量在过程中持续增长，无需等待全量完成。
+     *
+     * @param onProgress 进度回调 (已处理, 总数, 当前人物簇数)，运行在 IO 线程
+     * @param onComplete  完成回调，运行在 Main 线程
+     */
+    fun streamingClusters(
+        onProgress: suspend (processed: Int, total: Int, personCount: Int) -> Unit = { _, _, _ -> },
+        onComplete: () -> Unit = {}
+    ) {
+        if (currentJob?.isActive == true) {
+            Logger.w(TAG, "Clustering already in progress, cancelling first")
+            currentJob?.cancel()
+        }
+        currentJob = scope.launch {
+            try {
+                Logger.i(TAG, "Streaming incremental clustering started")
+                doStreamingCluster(onProgress)
+                Logger.i(TAG, "Streaming clustering completed")
+            } finally {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onComplete()
+                }
+            }
+        }
+    }
+
     fun start() {
         if (currentJob?.isActive == true) {
             Logger.d(TAG, "Clustering already in progress")
@@ -80,14 +121,14 @@ class FaceClusteringWorker(
                 onSyncMedia.invoke()
             }
 
-            Logger.i(TAG, "Force recluster — resetting all face data")
+            Logger.i(TAG, "Force recluster — resetting clustering data (keeping face detection results)")
             val db = AppDatabase.getDatabase(context)
             val dao = db.mediaDao()
             val personDao = db.personDao()
-            dao.resetAllFaceData()
+            dao.resetAllFaceIds()
             personDao.clearAllEmbeddings()
             personDao.clearAllPersons()
-            Logger.i(TAG, "All face data reset, starting full clustering")
+            Logger.i(TAG, "Clustering data reset, starting recluster on ${dao.searchByHasFace().size} media with faces")
             doCluster()
             Logger.i(TAG, "Force recluster completed")
         }
@@ -109,6 +150,7 @@ class FaceClusteringWorker(
 
         // Step 1: 按处理状态分离媒体
         val allMedia = dao.getAllMediaNow()
+        Logger.i(TAG, "[DIAG] Total media in DB: ${allMedia.size}")
         val needDetection = allMedia.filter { !it.hasFace }
         val needClustering = allMedia.filter { it.hasFace && it.faceId.isNullOrEmpty() }
         val completed = allMedia.size - needDetection.size - needClustering.size
@@ -116,10 +158,22 @@ class FaceClusteringWorker(
         Logger.i(TAG, "Media: ${needDetection.size} need detection, " +
             "${needClustering.size} need clustering, $completed already done")
 
-        // 无增量工作
-        if (needDetection.isEmpty() && (!hasEmbeddingModel || needClustering.isEmpty())) {
+        // 无任何工作
+        if (needDetection.isEmpty() && needClustering.isEmpty()) {
             Logger.i(TAG, "All media already processed, nothing to do")
             return
+        }
+
+        // 有需聚类的照片但无 embedding 模型：仅做增量人脸检测
+        if (!hasEmbeddingModel) {
+            if (needClustering.isNotEmpty()) {
+                Logger.w(TAG, "${needClustering.size} photos need clustering but MobileFaceNet model not available")
+                Logger.w(TAG, "Will run face detection only. Download w600k_mbf.mnn for person clustering.")
+            }
+            if (needDetection.isEmpty()) {
+                Logger.i(TAG, "No new faces to detect, and no embedding model for clustering — nothing to do")
+                return
+            }
         }
 
         // Step 2: ML Kit 人脸检测（启用全部模式以提升检测质量）
@@ -138,8 +192,13 @@ class FaceClusteringWorker(
             var newFaces = 0
             var totalFaceCount = 0
 
-            // Phase A & B 合并：对所有需要检测的照片做一次检测 + embedding
-            val allToProcess = (needDetection + needClustering).distinctBy { it.id }
+            // Phase A & B 合并：仅聚类已检测出人脸的照片
+            // 人脸检测是 Stage 1 的职责，Stage 2 不做全量检测
+            val allToProcess = needClustering
+            if (allToProcess.isEmpty()) {
+                Logger.w(TAG, "No photos with face detection results. Run Stage 1 (全量扫描) first to detect faces, then re-run clustering.")
+                return
+            }
 
             for (entity in allToProcess) {
                 if (!currentJob?.isActive!!) break
@@ -150,15 +209,20 @@ class FaceClusteringWorker(
                     val faces = com.google.android.gms.tasks.Tasks.await(
                         faceDetector.process(inputImage)
                     )
-                    if (faces.isEmpty()) continue
+                    if (faces.isEmpty()) {
+                        Logger.d(TAG, "No faces detected by ML Kit for media ${entity.id}")
+                        continue
+                    }
 
                     totalFaceCount += faces.size
+                    Logger.d(TAG, "ML Kit detected ${faces.size} face(s) in media ${entity.id} (total=$totalFaceCount newFaces=$newFaces)")
                     if (!entity.hasFace) {
                         newFaces++
                         dao.updateHasFace(entity.id, true)
                     }
 
                     if (hasEmbeddingModel) {
+                        Logger.d(TAG, "[DIAG] Extracting embeddings for ${faces.size} face(s) in media ${entity.id}")
                         val faceEmbs = mutableListOf<FloatArray>()
                         // 处理检测到的每张人脸（而非仅 faces[0]）
                         for (face in faces) {
@@ -167,8 +231,11 @@ class FaceClusteringWorker(
                                 val emb = embedder.extractEmbedding(crop)
                                 if (emb != null) faceEmbs.add(emb)
                                 crop.recycle()
+                            } else {
+                                Logger.d(TAG, "[DIAG] safeCropFace returned null for media ${entity.id}")
                             }
                         }
+                        Logger.d(TAG, "[DIAG] media ${entity.id}: ${faces.size} faces -> ${faceEmbs.size} embeddings extracted")
                         if (faceEmbs.isNotEmpty()) {
                             embeddings[entity.id] = faceEmbs
                         }
@@ -264,7 +331,134 @@ class FaceClusteringWorker(
     }
 
     /**
+     * 流式增量聚类：每张照片提取 embedding 后立即匹配/创建簇
+     *
+     * 使用 [FaceClusterEngine] 的增量匹配方法，
+     * 在遍历过程中持续产出人物簇，无需等待全量完成。
+     *
+     * @param onProgress 进度回调 (已处理, 总数, 当前人物簇数)
+     */
+    private suspend fun doStreamingCluster(
+        onProgress: suspend (processed: Int, total: Int, personCount: Int) -> Unit
+    ) {
+        val db = AppDatabase.getDatabase(context)
+        val dao = db.mediaDao()
+
+        // 加载 MobileFaceNet 模型
+        val modelDir = ModelPathConfig.getModelDir(context, "picme-face-embedding-mnn")
+        val embedder = MnnEmbeddingExtractor(File(modelDir, "w600k_mbf.mnn"))
+        val hasEmbeddingModel = embedder.isModelReady && embedder.initialize()
+
+        if (!hasEmbeddingModel) {
+            Logger.w(TAG, "[Streaming] Face embedding model not available, cannot cluster")
+            onProgress(0, 0, 0)
+            return
+        }
+
+        // 只处理已检测出人脸但未聚类的照片
+        val needClustering = dao.getMediaWithFaces()
+        if (needClustering.isEmpty()) {
+            Logger.i(TAG, "[Streaming] No photos need clustering")
+            onProgress(0, 0, db.personDao().getAllPersons().size)
+            return
+        }
+
+        Logger.i(TAG, "[Streaming] Processing ${needClustering.size} photos incrementally")
+
+        // 初始化 FaceClusterEngine（增量匹配）
+        val clusterEngine = FaceClusterEngine(context)
+
+        val faceDetector = FaceDetection.getClient(
+            FaceDetectorOptions.Builder()
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+                .build()
+        )
+
+        try {
+            var processed = 0
+            val total = needClustering.size
+
+            for (entity in needClustering) {
+                if (!currentJob?.isActive!!) break
+
+                val uri = Uri.parse(entity.uri)
+                val original = loadBitmap(uri)
+                if (original == null) {
+                    processed++
+                    continue
+                }
+
+                try {
+                    val inputImage = InputImage.fromBitmap(original, 0)
+                    val faces = com.google.android.gms.tasks.Tasks.await(
+                        faceDetector.process(inputImage)
+                    )
+
+                    if (faces.isEmpty()) {
+                        // ML Kit 未检测到人脸，但 Stage 1 标记了 hasFace
+                        // 可能是 InsightFace vs ML Kit 检测结果不一致
+                        Logger.d(TAG, "[Streaming] No ML Kit faces for media ${entity.id} (previously marked hasFace)")
+                        processed++
+                        onProgress(processed, total, db.personDao().getAllPersons().size)
+                        continue
+                    }
+
+                    // 提取每张人脸的 embedding 并立即匹配
+                    for (face in faces) {
+                        val crop = safeCropFace(original, face.boundingBox)
+                        if (crop == null) continue
+
+                        val emb = embedder.extractEmbedding(crop)
+                        crop.recycle()
+
+                        if (emb == null) continue
+
+                        // 增量匹配：尝试归入已有簇
+                        val matchedId = clusterEngine.matchCluster(emb)
+                        val personId: Long
+                        if (matchedId != null) {
+                            clusterEngine.addToCluster(matchedId, emb, entity.id)
+                            personId = matchedId
+                            Logger.d(TAG, "[Streaming] media ${entity.id} matched existing cluster $personId")
+                        } else {
+                            personId = clusterEngine.createCluster(emb, entity.id)
+                            Logger.d(TAG, "[Streaming] media ${entity.id} created new cluster $personId")
+                        }
+
+                        // 标记 faceId（与该 person 关联）
+                        dao.updateFaceId(entity.id, personId.toString())
+                    }
+
+                    processed++
+                    val currentPersonCount = db.personDao().getAllPersons().size
+                    onProgress(processed, total, currentPersonCount)
+                } catch (e: Exception) {
+                    Logger.w(TAG, "[Streaming] Failed media ${entity.id}: ${e.message}")
+                    processed++
+                } finally {
+                    original.recycle()
+                }
+            }
+
+            val finalPersonCount = db.personDao().getAllPersons().size
+            Logger.i(TAG, "[Streaming] Done: $processed/$total photos, $finalPersonCount clusters")
+            onProgress(processed, total, finalPersonCount)
+        } catch (e: Exception) {
+            Logger.e(TAG, "[Streaming] Clustering failed", e)
+        } finally {
+            faceDetector.close()
+            embedder.close()
+        }
+    }
+
+    /**
      * DBSCAN 聚类（展平多面版本: 每个 (mediaId, faceIdx) 是独立点）
+     *
+     * **此方法在当前流式聚类模式下仅作为全量重聚的清理步骤使用。**
+     * 正常增量场景请使用 [doStreamingCluster]。
      */
     private fun clusterEmbeddingsFlat(
         embeddings: Map<Long, List<FloatArray>>,

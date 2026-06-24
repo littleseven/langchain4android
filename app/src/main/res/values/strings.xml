@@ -455,4 +455,11 @@
     <string name="gallery_face_clustering">Clustering faces…</string>
     <string name="gallery_face_clustering_done">%1$d people found</string>
 
+    <!-- Tag Generation Service -->
+    <string name="tag_gen_notification_title">TAG 生成</string>
+    <string name="tag_gen_notification_progress">%1$d / %2$d 张</string>
+    <string name="tag_gen_notification_starting">准备中…</string>
+    <string name="tag_gen_notification_idle">等待中</string>
+    <string name="tag_gen_notification_channel_desc">显示 TAG 生成进度</string>
+
 </resources>

@@ -119,10 +119,62 @@ enum class PipelineStage {
 }
 
 /**
+ * 管道处理阶段（3-Pass 混合模型细化阶段名）
+ */
+enum class PassStage {
+    /** Pass 1: 人脸检测 + Embedding 提取 */
+    FACE_DETECTION,
+    /** Pass 2: 全局 DBSCAN 聚类 */
+    DBSCAN_CLUSTERING,
+    /** Pass 3: Qwen 图像理解标签生成 */
+    QWEN_TAGGING,
+    COMPLETE
+}
+
+/**
  * 扫描进度
  */
 data class TagScanProgress(
     val processed: Int,
     val total: Int,
     val currentStage: PipelineStage = PipelineStage.FACE_ROI
+)
+
+/**
+ * 3-Pass 混合模型扫描进度
+ */
+data class HybridScanProgress(
+    val pass: PassStage = PassStage.FACE_DETECTION,
+    val processed: Int = 0,
+    val total: Int = 0,
+    val currentStage: PipelineStage = PipelineStage.FACE_ROI
+)
+
+/**
+ * Stage 1 结果持久化 JSON 的数据结构
+ */
+data class FaceRoiPersist(
+    val hasFace: Boolean,
+    val faceCount: Int,
+    val isSelfie: Boolean,
+    val isGroupPhoto: Boolean
+)
+
+/**
+ * [Pass 1] 单张照片的人脸检测 + Embedding 提取结果
+ */
+data class Stage1WithEmbeddingsResult(
+    /** faceRoi JSON（null = 解码失败） */
+    val faceRoiJson: String?,
+    /** 每张人脸的 512 维 embedding */
+    val embeddings: List<FloatArray>
+)
+
+/**
+ * 人脸 Embedding 及其关联信息（用于 Pass 1→Pass 2 桥接）
+ */
+data class FaceEmbeddingBatch(
+    val mediaId: Long,
+    val faceIdx: Int,
+    val embedding: FloatArray
 )

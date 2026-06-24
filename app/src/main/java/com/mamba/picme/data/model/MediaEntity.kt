@@ -22,5 +22,7 @@ data class MediaEntity(
     val latitude: Double? = null,         // GPS 纬度
     val longitude: Double? = null,        // GPS 经度
     val locationName: String? = null,     // 逆地理编码地名
-    val indexedAt: Long? = null           // 索引完成时间戳（null=未索引）
+    val indexedAt: Long? = null,          // 索引完成时间戳（null=未索引）
+    // 人脸 ROI 检测结果 JSON（Stage 1 产出持久化，用于 Pass 1→Pass 3 断点续扫）
+    val faceRoiResult: String? = null
 )

@@ -21,7 +21,7 @@ import com.mamba.picme.domain.tag.TagGenerationScheduler
  */
 class AutoTagCapability(
     private val context: Context,
-    private val tagScheduler: TagGenerationScheduler = TagGenerationScheduler(context)
+    private val tagScheduler: TagGenerationScheduler
 ) : Capability {
 
     companion object {

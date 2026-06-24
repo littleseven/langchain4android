@@ -33,7 +33,7 @@ import com.mamba.picme.data.model.MediaEntity
         LocationHierarchyEntity::class,
         MediaLocationEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -128,9 +128,13 @@ interface MediaDao {
     @Query("SELECT * FROM media_assets WHERE faceId = :faceId ORDER BY captureDate DESC")
     suspend fun getMediaByFaceId(faceId: Int): List<MediaEntity>
 
-    /** 重置所有人脸数据（用于强制重新聚类） */
+    /** 重置所有人脸数据（含 hasFace + faceId，用于全量重新检测+聚类） */
     @Query("UPDATE media_assets SET hasFace = 0, faceId = NULL")
     suspend fun resetAllFaceData()
+
+    /** 仅重置人脸聚类结果（保留 hasFace 检测标记，用于仅重新聚类） */
+    @Query("UPDATE media_assets SET faceId = NULL")
+    suspend fun resetAllFaceIds()
 
     /** 获取未标记 AI 标签的媒体 */
     @Query("SELECT * FROM media_assets WHERE labels IS NULL OR labels = '' ORDER BY captureDate DESC")
@@ -143,6 +147,28 @@ interface MediaDao {
     /** 重置所有 AI 标签（用于强制重新标记） */
     @Query("UPDATE media_assets SET labels = NULL")
     suspend fun resetAllLabels()
+
+    // ── 人脸 ROI 结果持久化（3-Pass 混合管道）──────────────────
+
+    /** 获取未检测人脸 ROI 的媒体 */
+    @Query("SELECT * FROM media_assets WHERE faceRoiResult IS NULL ORDER BY captureDate DESC")
+    suspend fun getMediaWithoutFaceRoi(): List<MediaEntity>
+
+    /** 获取已检测人脸 ROI 但未生成标签的媒体 */
+    @Query("SELECT * FROM media_assets WHERE faceRoiResult IS NOT NULL AND (labels IS NULL OR labels = '') ORDER BY captureDate DESC")
+    suspend fun getMediaWithFaceRoiWithoutLabels(): List<MediaEntity>
+
+    /** 更新人脸 ROI 检测结果 */
+    @Query("UPDATE media_assets SET faceRoiResult = :json, hasFace = :hasFace WHERE id = :mediaId")
+    suspend fun updateFaceRoiResult(mediaId: Long, json: String, hasFace: Boolean)
+
+    /** 检查是否有已检测 ROI 但未完成标签的媒体 */
+    @Query("SELECT COUNT(*) > 0 FROM media_assets WHERE faceRoiResult IS NOT NULL AND (labels IS NULL OR labels = '')")
+    suspend fun hasPendingQwenTagging(): Boolean
+
+    /** 获取 faceRoiResult 字段 */
+    @Query("SELECT faceRoiResult FROM media_assets WHERE id = :mediaId")
+    suspend fun getFaceRoiResult(mediaId: Long): String?
 }
 
 data class FaceGroupCount(

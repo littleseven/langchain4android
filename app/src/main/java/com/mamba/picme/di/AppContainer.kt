@@ -19,6 +19,7 @@ import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.data.indexing.FaceClusteringWorker
 import com.mamba.picme.data.indexing.ImageTagIndexingWorker
 import com.mamba.picme.data.indexing.IndexingTaskQueue
+import com.mamba.picme.domain.tag.TagGenerationScheduler
 import com.mamba.picme.data.indexing.MediaIndexingWorker
 import com.mamba.picme.data.indexing.MediaStoreObserver
 import com.mamba.picme.data.preferences.UserPreferencesRepository
@@ -91,6 +92,8 @@ interface AppContainer {
     val faceClusteringWorker: FaceClusteringWorker
     /** AI 图片标签索引器（本地 Vision LLM → 标签） */
     val imageTagIndexingWorker: ImageTagIndexingWorker
+    /** TAG 生成调度器（全量/增量扫描管道，优先使用 Service 实例） */
+    val tagGenerationScheduler: TagGenerationScheduler
     /** 跨维度查询构建器（LLM 意图 → Room 查询） */
     val queryBuilder: QueryBuilder
     /** 双级缩略图缓存（LRU 内存 + 磁盘） */
@@ -145,6 +148,16 @@ class AppContainerImpl(
     override val imageTagIndexingWorker: ImageTagIndexingWorker by lazy {
         val llmEngine = AgentOrchestrator.getInstance(context).getLlmEngine()
         ImageTagIndexingWorker(context, llmEngine)
+    }
+
+    /** TAG 生成调度器（优先使用 Service 实例，支持后台单线程执行） */
+    override val tagGenerationScheduler: TagGenerationScheduler
+        get() = com.mamba.picme.service.tag.TagGenerationService.scheduler
+            ?: fallbackScheduler
+
+    /** 兜底调度器（Service 未启动时使用） */
+    private val fallbackScheduler: TagGenerationScheduler by lazy {
+        TagGenerationScheduler(context)
     }
 
     /**
