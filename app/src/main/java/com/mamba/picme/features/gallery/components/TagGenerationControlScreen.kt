@@ -40,19 +40,16 @@ fun TagGenerationControlScreen(
     val db = remember { AppDatabase.getDatabase(context) }
     val coroutineScope = rememberCoroutineScope()
 
-    // TagGenerationScheduler 从 AppContainer 获取（应用级生命周期，支持后台运行）
-    val scheduler = remember { app.container.tagGenerationScheduler }
-
-    // 启动前台 Service 确保后台执行不中断
-    LaunchedEffect(Unit) {
-        val intent = Intent(context, TagGenerationService::class.java)
-        context.startForegroundService(intent)
-    }
-
-    val isScanning by scheduler.isScanning.collectAsState()
-    val scanProgress by scheduler.progress.collectAsState()
-    val lastScanMessage by scheduler.lastScanMessage.collectAsState()
+    // ── 通过 AppContainer 观察 TAG 生成状态（Service 内部分发） ───
+    val tagGenerationIsScanning by app.container.tagGenerationIsScanning.collectAsState()
+    val tagGenerationProgress by app.container.tagGenerationProgress.collectAsState()
+    val tagGenerationLastMessage by app.container.tagGenerationLastMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // 启动前台 Service（Intent 驱动，无外部 Handle）
+    LaunchedEffect(Unit) {
+        TagGenerationService.startForeground(context)
+    }
 
     // 数据库统计（每次进入时刷新）
     var totalMedia by remember { mutableIntStateOf(0) }
@@ -79,8 +76,8 @@ fun TagGenerationControlScreen(
     }
 
     // 显示扫描完成通知
-    LaunchedEffect(lastScanMessage) {
-        val msg = lastScanMessage ?: return@LaunchedEffect
+    LaunchedEffect(tagGenerationLastMessage) {
+        val msg = tagGenerationLastMessage ?: return@LaunchedEffect
         refreshStats()
         snackbarHostState.showSnackbar(msg)
     }
@@ -89,8 +86,8 @@ fun TagGenerationControlScreen(
     LaunchedEffect(Unit) { refreshStats() }
 
     // 轮询更新（扫描中进行时）
-    LaunchedEffect(isScanning) {
-        while (isScanning) {
+    LaunchedEffect(tagGenerationIsScanning) {
+        while (tagGenerationIsScanning) {
             delay(2000)
             refreshStats()
         }
@@ -118,8 +115,8 @@ fun TagGenerationControlScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── 扫描进度卡片 ────────────────────────────
-            if (isScanning && scanProgress != null) {
-                ScanProgressCard(scanProgress!!)
+            if (tagGenerationIsScanning && tagGenerationProgress != null) {
+                ScanProgressCard(tagGenerationProgress!!)
             }
 
             // ── 数据库统计卡片 ────────────────────────────
@@ -144,10 +141,10 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (withFace > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (withFace > 0 || !tagGenerationIsScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (withFace > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (withFace > 0 || !tagGenerationIsScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
@@ -164,10 +161,10 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (personCount > 0 || !isScanning || !isModelAvailable) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (personCount > 0 || !tagGenerationIsScanning || !isModelAvailable) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (personCount > 0 || !isScanning || !isModelAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (personCount > 0 || !tagGenerationIsScanning || !isModelAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
@@ -185,10 +182,10 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (withLabels > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (withLabels > 0 || !tagGenerationIsScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (withLabels > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (withLabels > 0 || !tagGenerationIsScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
@@ -203,15 +200,39 @@ fun TagGenerationControlScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    if (isScanning) {
-                        Button(
-                            onClick = { },
-                            enabled = false,
-                            modifier = Modifier.fillMaxWidth()
+                    if (tagGenerationIsScanning) {
+                        // ── 扫描中：显示重新生成按钮（可中断旧扫描） ─────
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("3-Pass 扫描中...")
+                            OutlinedButton(
+                                onClick = {
+                                    context.startForegroundService(TagGenerationService.intentCancel(context))
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Rounded.Cancel, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("取消扫描")
+                            }
+                            Button(
+                                onClick = {
+                                    refreshStats()
+                                    context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Pass 3 重新生成")
+                            }
                         }
                     } else {
                         // ── 全量/增量扫描按钮 ─────────────
@@ -222,7 +243,7 @@ fun TagGenerationControlScreen(
                             Button(
                                 onClick = {
                                     refreshStats()
-                                    scheduler.scanAll()
+                                    context.startForegroundService(TagGenerationService.intentScanAll(context))
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -233,7 +254,7 @@ fun TagGenerationControlScreen(
                             OutlinedButton(
                                 onClick = {
                                     refreshStats()
-                                    scheduler.scanIncremental()
+                                    context.startForegroundService(TagGenerationService.intentScanIncremental(context))
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -262,7 +283,7 @@ fun TagGenerationControlScreen(
                             OutlinedButton(
                                 onClick = {
                                     refreshStats()
-                                    scheduler.scanPass1()
+                                    context.startForegroundService(TagGenerationService.intentScanPass1(context))
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -271,7 +292,7 @@ fun TagGenerationControlScreen(
                             OutlinedButton(
                                 onClick = {
                                     refreshStats()
-                                    scheduler.scanPass2()
+                                    context.startForegroundService(TagGenerationService.intentScanPass2(context))
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -280,7 +301,7 @@ fun TagGenerationControlScreen(
                             OutlinedButton(
                                 onClick = {
                                     refreshStats()
-                                    scheduler.scanPass3()
+                                    context.startForegroundService(TagGenerationService.intentScanPass3(context))
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -294,7 +315,7 @@ fun TagGenerationControlScreen(
                         Button(
                             onClick = {
                                 refreshStats()
-                                scheduler.scanPass3Full()
+                                context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.tertiary
@@ -306,21 +327,6 @@ fun TagGenerationControlScreen(
                             Text("Pass 3 重新生成")
                         }
                     }
-                }
-            }
-
-            // ── 取消按钮（扫描中时显示）─────────────────
-            AnimatedVisibility(isScanning) {
-                Button(
-                    onClick = { scheduler.cancel() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Rounded.Cancel, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("取消扫描")
                 }
             }
 

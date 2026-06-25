@@ -960,17 +960,24 @@ class TagGenerationScheduler(
             return false
         }
 
-        // OpenCL 优先：GPU 加速可提 2-3 倍推理速度
-        // 若设备不支持 OpenCL，自动降级到 CPU
-        Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
-        val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
-        if (openclResult.isSuccess) {
-            Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
+        // 如果模型已加载（可能残留前序扫描状态），先清空 KV cache
+        if (engine.isLoaded) {
+            Log.i(TAG, "Model already loaded, trimming memory to clear stale state")
+            engine.trimMemory()
             return true
         }
 
-        Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
-            "falling back to CPU")
+        // OpenCL 优先（libOpenCL.so 已打包进 APK）→ 2-3x GPU 加速
+        // 若设备不支持 OpenCL，自动降级到 CPU
+//        Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
+//        val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
+//        if (openclResult.isSuccess) {
+//            Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
+//            return true
+//        }
+//
+//        Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
+//            "falling back to CPU")
 
         val cpuResult = engine.loadModel(MODEL_KEY, useOpencl = false)
         return if (cpuResult.isSuccess) {

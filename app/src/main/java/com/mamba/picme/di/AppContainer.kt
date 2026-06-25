@@ -19,7 +19,6 @@ import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.data.indexing.FaceClusteringWorker
 import com.mamba.picme.data.indexing.ImageTagIndexingWorker
 import com.mamba.picme.data.indexing.IndexingTaskQueue
-import com.mamba.picme.domain.tag.TagGenerationScheduler
 import com.mamba.picme.data.indexing.MediaIndexingWorker
 import com.mamba.picme.data.indexing.MediaStoreObserver
 import com.mamba.picme.data.preferences.UserPreferencesRepository
@@ -92,8 +91,12 @@ interface AppContainer {
     val faceClusteringWorker: FaceClusteringWorker
     /** AI 图片标签索引器（本地 Vision LLM → 标签） */
     val imageTagIndexingWorker: ImageTagIndexingWorker
-    /** TAG 生成调度器（全量/增量扫描管道，优先使用 Service 实例） */
-    val tagGenerationScheduler: TagGenerationScheduler
+    /** TAG 生成扫描状态（只读，从 TagGenerationService 获取） */
+    val tagGenerationIsScanning: kotlinx.coroutines.flow.StateFlow<Boolean>
+    /** TAG 生成扫描进度 */
+    val tagGenerationProgress: kotlinx.coroutines.flow.StateFlow<com.mamba.picme.domain.tag.TagScanProgress?>
+    /** TAG 生成最后消息 */
+    val tagGenerationLastMessage: kotlinx.coroutines.flow.StateFlow<String?>
     /** 跨维度查询构建器（LLM 意图 → Room 查询） */
     val queryBuilder: QueryBuilder
     /** 双级缩略图缓存（LRU 内存 + 磁盘） */
@@ -150,15 +153,17 @@ class AppContainerImpl(
         ImageTagIndexingWorker(context, llmEngine)
     }
 
-    /** TAG 生成调度器（优先使用 Service 实例，支持后台单线程执行） */
-    override val tagGenerationScheduler: TagGenerationScheduler
-        get() = com.mamba.picme.service.tag.TagGenerationService.scheduler
-            ?: fallbackScheduler
+    /** TAG 生成扫描状态（从 TagGenerationService 获取） */
+    override val tagGenerationIsScanning: kotlinx.coroutines.flow.StateFlow<Boolean>
+        get() = com.mamba.picme.service.tag.TagGenerationService.isScanning
 
-    /** 兜底调度器（Service 未启动时使用） */
-    private val fallbackScheduler: TagGenerationScheduler by lazy {
-        TagGenerationScheduler(context)
-    }
+    /** TAG 生成扫描进度 */
+    override val tagGenerationProgress: kotlinx.coroutines.flow.StateFlow<com.mamba.picme.domain.tag.TagScanProgress?>
+        get() = com.mamba.picme.service.tag.TagGenerationService.progress
+
+    /** TAG 生成最后消息 */
+    override val tagGenerationLastMessage: kotlinx.coroutines.flow.StateFlow<String?>
+        get() = com.mamba.picme.service.tag.TagGenerationService.lastScanMessage
 
     /**
      * 创建 MediaStoreObserver。

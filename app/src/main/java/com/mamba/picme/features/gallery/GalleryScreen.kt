@@ -78,6 +78,7 @@ import com.mamba.picme.domain.model.GroupingMode
 import com.mamba.picme.R
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.PersonEntity
+import com.mamba.picme.service.tag.TagGenerationService
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
@@ -227,10 +228,9 @@ fun GalleryScreen(
     // AI 图片标签索引 — 在媒体加载完成后触发
     // Worker 内部自动跳过已标记的媒体，只处理增量
     // 需要 Vision 模型已加载（由 AgentOrchestrator 管理，未加载时 worker 内部静默跳过）
-    val tagScheduler = remember { app.container.tagGenerationScheduler }
     LaunchedEffect(allFlatMedia.size) {
         if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
-            tagScheduler.scanIncremental()
+            context.startForegroundService(TagGenerationService.intentScanIncremental(context))
         }
     }
 
@@ -686,7 +686,7 @@ fun GalleryScreen(
                         voiceCoordinator = voiceCoordinator,
                         onReTag = {
                             searchScope.launch {
-                                tagScheduler.scanPass3Full()
+                                context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
                             }
                         }
                     )

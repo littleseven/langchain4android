@@ -611,6 +611,12 @@ class PicMeApplication : Application(), ImageLoaderFactory {
      */
     private fun loadNativeLibraries() {
         try {
+            System.loadLibrary("OpenCL")
+            Logger.d(TAG, "Native library loaded: OpenCL")
+        } catch (e: UnsatisfiedLinkError) {
+            Logger.w(TAG, "OpenCL not available, falling back to CPU")
+        }
+        try {
             System.loadLibrary("sherpa-onnx-jni")
             Logger.d(TAG, "Native library loaded: sherpa-onnx-jni")
         } catch (e: UnsatisfiedLinkError) {

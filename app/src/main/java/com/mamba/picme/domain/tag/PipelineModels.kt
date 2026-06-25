@@ -137,7 +137,8 @@ enum class PassStage {
 data class TagScanProgress(
     val processed: Int,
     val total: Int,
-    val currentStage: PipelineStage = PipelineStage.FACE_ROI
+    val currentStage: PipelineStage = PipelineStage.FACE_ROI,
+    val currentItem: Int = 0
 )
 
 /**
