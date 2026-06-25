@@ -22,3 +22,11 @@
 
 # Keep Logger class for reflection binding from beauty-engine module
 -keep class com.mamba.picme.core.common.Logger { public *; }
+
+# R8: javax.lang.model 仅在编译期注解处理时需要，运行时不存在
+-dontwarn javax.lang.model.SourceVersion
+-dontwarn javax.lang.model.element.Element
+-dontwarn javax.lang.model.element.ElementKind
+-dontwarn javax.lang.model.type.TypeMirror
+-dontwarn javax.lang.model.type.TypeVisitor
+-dontwarn javax.lang.model.util.SimpleTypeVisitor8

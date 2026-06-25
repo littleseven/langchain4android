@@ -99,7 +99,10 @@ object ModelPathConfig {
         "config.json",
         "llm.mnn",
         "llm.mnn.weight",
-        "tokenizer.txt"
+        "tokenizer.txt",
+        "llm_config.json",
+        "visual.mnn",
+        "visual.mnn.weight"
     )
 
     /**
