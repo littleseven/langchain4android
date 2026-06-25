@@ -1,20 +1,3 @@
----
-name: mediapipe-landmark-mapping
-description: |
-  MediaPipe 468 点与 106 点人脸关键点映射规范。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - mediapipe
-  - landmark
-  - mapping
-  - face-detection
-  - opengl
----
-
-
 # MediaPipe 关键点映射 Skill
 
 > **定位**：MediaPipe 468 点与 106 点人脸关键点映射规范。

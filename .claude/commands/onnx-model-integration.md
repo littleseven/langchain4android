@@ -1,20 +1,3 @@
----
-name: onnx-model-integration
-description: |
-  ONNX 模型接入专家。预防 AI 在接入 ONNX 模型时重复犯已验证过的错误。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - onnx
-  - model
-  - inference
-  - integration
-  - preprocessing
----
-
-
 # ONNX 模型接入专家 (ONNX Model Integration)
 
 > **定位**：预防 AI 在接入 ONNX 模型时重复犯已验证过的错误（颜色格式、归一化、激活函数等）。

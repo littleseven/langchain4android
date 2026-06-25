@@ -1,21 +1,3 @@
----
-name: error-healer
-description: |
-  PicMe 编译错误自动分类与修复策略。将 Kotlin/Gradle 编译错误映射到标准化修复方案。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - kotlin
-  - gradle
-  - build
-  - error
-  - heal
-  - compile
----
-
-
 # Error Healer - 编译错误自动分类与修复
 
 > **定位**：PicMe 编译错误自动分类与修复策略，将 Kotlin/Gradle 编译错误映射到标准化修复方案。

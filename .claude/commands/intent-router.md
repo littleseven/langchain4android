@@ -1,20 +1,3 @@
----
-name: intent-router
-description: |
-  PicMe 项目意图路由与需求解析 Skill。将用户的自然语言需求转化为 AI 可执行的技术任务。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [PM] 产品经理 + [CO] 协调者
-tags:
-  - requirement
-  - routing
-  - context
-  - module
-  - terminology
----
-
-
 # Intent Router - 意图路由与需求解析
 
 > **定位**：PicMe 项目意图路由与需求解析，将用户的自然语言需求转化为 AI 可执行的技术任务。

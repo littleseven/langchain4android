@@ -1,20 +1,3 @@
----
-name: android-build-debug
-description: |
-  Android 项目编译、安装、日志调试的标准化流程。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - android
-  - gradle
-  - build
-  - debug
-  - apk
----
-
-
 # Android 编译调试 Skill
 
 > **定位**：Android 项目编译、安装、日志调试的标准化流程。

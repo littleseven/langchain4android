@@ -1,22 +1,3 @@
----
-name: compose-ui-expert
-description: |
-  PicMe Jetpack Compose UI 专家。诊断布局异常、状态管理问题、重组性能瓶颈，确保 HyperOS 视觉风格一致。
-version: 1.0.0
-created: 2026-05-25
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - compose
-  - ui
-  - jetpack
-  - layout
-  - state
-  - performance
-  - hyperos
----
-
-
 # Compose UI 专家 (Compose UI Expert)
 
 > **定位**：诊断 Compose 布局、状态管理、重组性能问题，确保符合 HyperOS 视觉规范。

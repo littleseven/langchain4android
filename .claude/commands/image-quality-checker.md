@@ -1,21 +1,3 @@
----
-name: image-quality-checker
-description: |
-  通过 adb 截屏并分析图片质量，检测黑屏、人脸位置、调试信息是否正常。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - adb
-  - image
-  - quality
-  - debug
-  - camera
-  - testing
----
-
-
 # 图片质量验证 Skill
 
 > **定位**：通过 adb 截屏并分析图片质量，检测黑屏、人脸位置、调试信息是否正常。

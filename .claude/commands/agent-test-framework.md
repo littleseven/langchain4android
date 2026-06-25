@@ -1,21 +1,3 @@
----
-name: agent-test-framework
-description: |
-  PicMe Agent 化测试框架。支持声明式 DSL 定义测试用例、AI Agent 远程触发执行、自动截屏/日志收集、失败诊断与报告生成。
-version: 1.0.0
-created: 2026-05-26
-updated: 2026-05-26
-maintainer: [RD] 全栈工程师, [QA] 质量专家
-tags:
-  - android
-  - agent
-  - testing
-  - automation
-  - dsl
-  - device
----
-
-
 # Agent 测试框架 ⚠️ V1 (已由 agent-test-expert V2 替代)
 
 > **⚠️ 已废弃**：V1 测试体系已由 `agent-test-expert`（V2 JSON 驱动 PC 端方案）替代。
@@ -63,32 +45,32 @@ CameraScreen / GalleryScreen
 
 ```bash
 # 一键完整回归（编译→安装→执行→报告）
-.qoder/skills/image-quality-checker/scripts/agent-test.sh interactive
+./scripts/agent-test.sh interactive
 
 # 或仅执行（假设应用已安装）
-.qoder/skills/image-quality-checker/scripts/agent-test.sh suite p0
+./scripts/agent-test.sh suite p0
 ```
 
 ### 2. 运行指定模块
 
 ```bash
 # 相机模块
-.qoder/skills/image-quality-checker/scripts/agent-test.sh suite camera
+./scripts/agent-test.sh suite camera
 
 # 美颜模块
-.qoder/skills/image-quality-checker/scripts/agent-test.sh suite beauty
+./scripts/agent-test.sh suite beauty
 ```
 
 ### 3. 运行单个用例
 
 ```bash
-.qoder/skills/image-quality-checker/scripts/agent-test.sh case TC-CAMERA-01
+./scripts/agent-test.sh case TC-CAMERA-01
 ```
 
 ### 4. 获取报告
 
 ```bash
-.qoder/skills/image-quality-checker/scripts/agent-test.sh report
+./scripts/agent-test.sh report
 ```
 
 ## 测试用例 DSL

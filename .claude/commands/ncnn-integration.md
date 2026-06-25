@@ -1,22 +1,3 @@
----
-name: ncnn-integration
-description: |
-  NCNN 推理引擎接入专家。预防 AI 在接入 NCNN 模型时重复犯已验证过的错误，涵盖模型转换、Vulkan GPU 配置、param 文件修复与线程安全。
-version: 1.0.0
-created: 2026-05-25
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - ncnn
-  - vulkan
-  - gpu
-  - inference
-  - model
-  - android
-  - threading
----
-
-
 # NCNN 集成专家 (NCNN Integration Expert)
 
 > **定位**：预防 AI 在接入 NCNN 模型时重复犯已验证过的错误。

@@ -1,20 +1,3 @@
----
-name: coordinate-system-standard
-description: |
-  人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师 + [CR] 规范守护者
-tags:
-  - coordinate-system
-  - landmark
-  - opengl
-  - rendering
-  - standard
----
-
-
 # Coordinate System Standard Skill
 
 > **定位**：人脸关键点坐标、渲染管线、UI 标注的坐标系规范化标准。

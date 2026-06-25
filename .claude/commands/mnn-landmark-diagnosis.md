@@ -1,21 +1,3 @@
----
-name: mnn-landmark-diagnosis
-description: |
-  诊断和修复 MNN/ONNX 推理引擎在人脸关键点检测中的对齐问题。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - mnn
-  - onnx
-  - landmark
-  - inference
-  - alignment
-  - nchw
----
-
-
 # MNN Landmark 诊断与修复 Skill
 
 > **定位**：诊断和修复 MNN/ONNX 推理引擎在人脸关键点检测中的对齐问题。
@@ -245,7 +227,7 @@ adb logcat -d | grep "MNN vs ONNX"
 ### Step 4: auto-dev-loop 集成
 
 ```bash
-.qoder/skills/image-quality-checker/scripts/auto-dev-loop.sh
+./scripts/auto-dev-loop.sh
 ```
 
 检查输出报告中的：

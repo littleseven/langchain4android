@@ -1,21 +1,3 @@
----
-name: ui-automation-expert
-description: |
-  PicMe UI 自动化测试专家。提供基于 accessibility 节点、坐标系统和 Compose Test 的精准 UI 交互方案，替代脆弱的图像识别点击。用于自动化测试、功能验证和 QA 验收。
-version: 1.0.0
-created: 2026-05-31
-updated: 2026-05-31
-maintainer: [RD] 全栈工程师 + [QA] 质量专家
-tags:
-  - ui
-  - automation
-  - testing
-  - adb
-  - compose
-  - accessibility
----
-
-
 # UI 自动化测试专家
 
 > **定位**：PicMe UI 自动化测试专家，提供基于 accessibility 节点、坐标系统和 Compose Test 的精准 UI 交互方案。

@@ -1,24 +1,3 @@
----
-name: agent-test-expert
-description: |
-  PicMe Agent Test V2 测试专家。通过 PC 端主导的 JSON 数据驱动方案执行自动化测试：
-  运行测试套件/单个用例、发送 JSON 命令、截屏验证、性能采集、报告生成。
-  Use when the user mentions agent testing, automated testing, JSON-driven tests,
-  running test suites, sending adb test commands, or verifying camera/agent features.
-version: 1.0.0
-created: 2026-06-06
-updated: 2026-06-06
-maintainer: [RD] 全栈工程师, [QA] 质量专家
-tags:
-  - android
-  - testing
-  - agent
-  - json
-  - adb
-  - automation
----
-
-
 # Agent Test 专家 (V2 JSON驱动)
 
 > **定位**：PC 端主导的 JSON 数据驱动自动化测试执行与诊断。
@@ -28,9 +7,9 @@ tags:
 
 ## 触发条件
 
-- 运行测试套件：`.qoder/skills/image-quality-checker/scripts/agent-tester suite camera`
-- 发送单个 JSON 命令：`.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"flip_camera"}'`
-- 运行单个 JSON 用例：`.qoder/skills/image-quality-checker/scripts/agent-tester case scripts/tests/camera/xxx.json`
+- 运行测试套件：`./scripts/agent-tester suite camera`
+- 发送单个 JSON 命令：`./scripts/agent-tester cmd '{"method":"flip_camera"}'`
+- 运行单个 JSON 用例：`./scripts/agent-tester case scripts/tests/camera/xxx.json`
 - 截屏验证、性能采集、报告生成
 - 调试测试命令不生效的问题
 
@@ -52,35 +31,35 @@ tags:
 
 ```bash
 # 导航到相机页
-.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"navigate_to","params":{"destination":"camera"}}'
+./scripts/agent-tester cmd '{"method":"navigate_to","params":{"destination":"camera"}}'
 
 # 切换画幅比例
-.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"switch_ratio","params":{"ratio":"16_9"}}'
+./scripts/agent-tester cmd '{"method":"switch_ratio","params":{"ratio":"16_9"}}'
 
 # 切换滤镜
-.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"switch_filter","params":{"filter":"leica_classic"}}'
+./scripts/agent-tester cmd '{"method":"switch_filter","params":{"filter":"leica_classic"}}'
 
 # 拍照
-.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"capture","params":{}}'
+./scripts/agent-tester cmd '{"method":"capture","params":{}}'
 
 # 翻转摄像头
-.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"flip_camera","params":{}}'
+./scripts/agent-tester cmd '{"method":"flip_camera","params":{}}'
 ```
 
 ### 运行测试套件
 
 ```bash
 # 相机套件
-.qoder/skills/image-quality-checker/scripts/agent-tester suite camera
+./scripts/agent-tester suite camera
 
 # 设置页套件
-.qoder/skills/image-quality-checker/scripts/agent-tester suite settings
+./scripts/agent-tester suite settings
 ```
 
 ### 运行单个用例
 
 ```bash
-.qoder/skills/image-quality-checker/scripts/agent-tester case scripts/tests/camera/tc-camera-02-flip.json
+./scripts/agent-tester case scripts/tests/camera/tc-camera-02-flip.json
 ```
 
 ---
@@ -110,7 +89,7 @@ adb shell am start -n com.mamba.picme/.MainActivity
 adb logcat -c
 
 # 发送命令（示例：导航到相机页）
-.qoder/skills/image-quality-checker/scripts/agent-tester cmd '{"method":"navigate_to","params":{"destination":"camera"}}'
+./scripts/agent-tester cmd '{"method":"navigate_to","params":{"destination":"camera"}}'
 
 # 查看 PicMe 相关日志
 adb logcat -d | grep -iE "AgentTestReceiver|NavigationCapability|CapabilityRegistry|CameraCapability|scene"

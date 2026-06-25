@@ -1,20 +1,3 @@
----
-name: rd-reflection
-description: |
-  RD 工程师自我进化系统。结构化复盘模板 + 累积经验资产 + 动态检查清单 + 跨 skill 联动更新。
-version: 1.1.0
-created: 2026-05-10
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师
-tags:
-  - reflection
-  - checklist
-  - evolution
-  - experience
-  - learning
----
-
-
 # RD 自我进化系统 (Self-Evolving Reflection)
 
 > **定位**：不是静态文档，而是活的系统。每次任务后自动生长，下次类似任务自动预警。
@@ -164,16 +147,16 @@ rd-reflection/
 
 ```bash
 # 启动新任务（读取检查清单）
-.qoder/skills/image-quality-checker/scripts/new_task.sh "任务名称"
+./scripts/new_task.sh "任务名称"
 
 # 任务复盘（引导 5 个问题，自动更新清单和日志）
-.qoder/skills/image-quality-checker/scripts/reflect.sh
+./scripts/reflect.sh
 
 # 生成月度进化报告
-.qoder/skills/image-quality-checker/scripts/evolution_report.sh
+./scripts/evolution_report.sh
 
 # 将经验同步到相关 skill
-.qoder/skills/image-quality-checker/scripts/update_skill.sh adb-bot
+./scripts/update_skill.sh adb-bot
 ```
 
 ---

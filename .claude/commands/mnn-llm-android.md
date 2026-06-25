@@ -1,22 +1,3 @@
----
-name: mnn-llm-android
-description: |
-  MNN-LLM Android 端侧大模型推理专家。涵盖模型下载、加载、JNI 桥接、推理调用、ChatMessages 兼容性、Qwen 模型特殊处理等。Use when working with MNN-LLM local inference, Qwen models, empty response debugging, or model loading failures on Android.
-version: 1.0.0
-created: 2026-05-26
-updated: 2026-05-26
-maintainer: [RD] 全栈工程师
-tags:
-  - mnn
-  - llm
-  - android
-  - jni
-  - qwen
-  - local-inference
-  - model-loading
----
-
-
 # MNN-LLM Android 推理专家
 
 > **定位**：预防 AI 在 MNN-LLM 端侧推理中重复犯已验证过的错误。

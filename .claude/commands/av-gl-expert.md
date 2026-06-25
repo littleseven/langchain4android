@@ -1,21 +1,3 @@
----
-name: av-gl-expert
-description: |
-  PicMe OpenGL/CameraX 专家。诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。
-version: 1.1.0
-created: 2026-05-03
-updated: 2026-05-25
-maintainer: [RD] 全栈工程师 + [CR] 规范守护者
-tags:
-  - opengl
-  - camerax
-  - egl
-  - shader
-  - gpu
-  - rendering
----
-
-
 # AV-GL Expert (PicMe)
 
 > **定位**：PicMe OpenGL/CameraX 专家，诊断黑屏、Shader 错误、EGL 上下文及性能瓶颈。

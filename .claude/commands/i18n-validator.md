@@ -1,20 +1,3 @@
----
-name: i18n-validator
-description: |
-  PicMe 多语言同步验证专家。确保用户可见文案同步覆盖英文、简体中文、繁体中文，禁止硬编码字符串。
-version: 1.0.0
-created: 2026-05-25
-updated: 2026-05-25
-maintainer: [CR] 规范守护者
-tags:
-  - i18n
-  - internationalization
-  - strings
-  - localization
-  - validation
----
-
-
 # I18N 验证专家 (Internationalization Validator)
 
 > **定位**：确保所有用户可见文案同步覆盖 EN / zh-CN / zh-TW，禁止硬编码。
@@ -37,7 +20,7 @@ tags:
 
 ```bash
 # 检查 Kotlin 源码中的硬编码中文/英文
-.qoder/skills/image-quality-checker/scripts/check-i18n-hardcode.sh
+./scripts/check-i18n-hardcode.sh
 
 # 手动检查（关键文件）
 grep -rn "\"[a-zA-Z\u4e00-\u9fa5]\{3,\}\"" app/src/main/java/com/mamba/picme/ --include="*.kt" | \
@@ -96,7 +79,7 @@ python3 scripts/check_i18n_sync.py
 - name: I18N Validation
   run: |
     python3 scripts/check_i18n_sync.py
-    .qoder/skills/image-quality-checker/scripts/check-i18n-hardcode.sh
+    ./scripts/check-i18n-hardcode.sh
 ```
 
 ### 快速修复流程
