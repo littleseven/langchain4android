@@ -367,7 +367,7 @@ class PicMeApplication : Application(), ImageLoaderFactory {
                 val feishuSessionId = "feishu"
 
                 repository.allMedia.collect { mediaList ->
-                    Logger.d(TAG, "allMedia emit: size=${mediaList.size}, sources=${mediaList.map { it.source }}")
+                    Logger.d(TAG, "allMedia emit: size=${mediaList.size}")
 
                     // 查找来源为飞书远程控制的新照片
                     val feishuPhotos = mediaList.filter { it.source == "feishu_remote" && it.type == com.mamba.picme.agent.core.model.context.MediaType.PHOTO }
