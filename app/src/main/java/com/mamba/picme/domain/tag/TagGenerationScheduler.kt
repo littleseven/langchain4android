@@ -42,22 +42,24 @@ import kotlin.math.sqrt
 class TagGenerationScheduler(
     private val context: Context,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val guard: suspend () -> GuardResult = { GuardResult.ALLOW }
+    private val guard: suspend () -> GuardResult = { GuardResult.ALLOW },
+    private val getThrottleMs: () -> Long = { 1000L }
 ) {
 
     companion object {
         private const val TAG = "TagScheduler"
 
-        /** 正常运行时节流间隔（ms） */
-        private const val THROTTLE_MS = 500L
-
-        /** 受限运行时节流间隔（ms），用于电池低/过热时 */
-        private const val THROTTLE_RESTRICTED_MS = 3000L
-
         /** Qwen 模型 ID */
         private const val MODEL_KEY = "qwen3_5_2b"
 
-        // 聚类参数统一引用 ClusteringConfig
+        /** 批次大小：每处理此数量照片后强制冷却 */
+        private const val BATCH_SIZE = 10
+
+        /** 批次间强制冷却时间（ms） */
+        private const val BATCH_COOLDOWN_MS = 15_000L
+
+        /** 增量扫描单次最大处理量 */
+        private const val INCREMENTAL_MAX_PHOTOS = 50
     }
 
     /**
@@ -174,7 +176,7 @@ class TagGenerationScheduler(
                         pass1Processed++
                         _progress.value = TagScanProgress(pass1Processed, total, PipelineStage.FACE_ROI)
                         progressCallback(pass1Processed, total)
-                        delay(THROTTLE_MS)
+                        delay(getThrottleMs())
                     } catch (e: Exception) {
                         Log.w(TAG, "Pass 1 failed for media ${entity.id}: ${e.message}")
                     }
@@ -230,7 +232,13 @@ class TagGenerationScheduler(
                         val overallProcessed = pass1Processed + pass3Processed
                         _progress.value = TagScanProgress(overallProcessed, total, PipelineStage.QWEN_TAGGING)
                         progressCallback(overallProcessed, total)
-                        delay(THROTTLE_MS)
+                        delay(getThrottleMs())
+
+                        // 批次冷却：每 BATCH_SIZE 张后强制冷却，防止连续 LLM 推理导致过热
+                        if (pass3Processed % BATCH_SIZE == 0 && pass3Processed < taggingTotal) {
+                            Log.i(TAG, "Pass 3 batch cooldown after $pass3Processed/$taggingTotal")
+                            delay(BATCH_COOLDOWN_MS)
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Pass 3 failed for media ${entity.id}: ${e.message}")
                     }
@@ -241,6 +249,7 @@ class TagGenerationScheduler(
                     "P1=$pass1Processed/$total, P3=$pass3Processed/$taggingTotal ===")
             } finally {
                 _isScanning.value = false
+                unloadLlm()
             }
         }
     }
@@ -281,8 +290,11 @@ class TagGenerationScheduler(
      * - 对未检测 faceRoi 的媒体执行 Pass 1
      * - 若新增 embedding 则执行 Pass 2 DBSCAN
      * - 对已检测但无标签的媒体执行 Pass 3
+     *
+     * @param maxPhotos Pass 3 最大处理量，防止自动触发时连续长时间推理
      */
     fun scanIncremental(
+        maxPhotos: Int = INCREMENTAL_MAX_PHOTOS,
         progressCallback: suspend (processed: Int, total: Int) -> Unit = { _, _ -> }
     ) {
         if (currentJob?.isActive == true) {
@@ -350,7 +362,7 @@ class TagGenerationScheduler(
                             val current = alreadyDone + pass1Processed
                             _progress.value = TagScanProgress(current, allCount, PipelineStage.FACE_ROI)
                             progressCallback(current, allCount)
-                            delay(THROTTLE_MS)
+                            delay(getThrottleMs())
                         } catch (e: Exception) {
                             Log.w(TAG, "Incremental Pass 1 failed for media ${entity.id}: ${e.message}")
                         }
@@ -370,11 +382,17 @@ class TagGenerationScheduler(
                 // ── Pass 3: Qwen 标签生成 ────────────────
                 val needTagging = dao.getMediaWithFaceRoiWithoutLabels()
                 if (needTagging.isNotEmpty()) {
+                    val cappedTagging = if (needTagging.size > maxPhotos) {
+                        Log.i(TAG, "Incremental Pass 3: capping at $maxPhotos/${needTagging.size} to prevent overheating")
+                        needTagging.take(maxPhotos)
+                    } else {
+                        needTagging
+                    }
                     _progress.value = TagScanProgress(alreadyDone + pass1Processed, allCount, PipelineStage.QWEN_TAGGING)
-                    Log.i(TAG, "Incremental Pass 3: ${needTagging.size} media need Qwen tagging")
+                    Log.i(TAG, "Incremental Pass 3: ${cappedTagging.size} media need Qwen tagging")
 
                     var pass3Processed = 0
-                    for (entity in needTagging) {
+                    for (entity in cappedTagging) {
                         if (!isActive) break
                         if (!guardCheck()) break
 
@@ -395,7 +413,13 @@ class TagGenerationScheduler(
                             val current = alreadyDone + pass1Processed + pass3Processed
                             _progress.value = TagScanProgress(current, allCount, PipelineStage.QWEN_TAGGING)
                             progressCallback(current, allCount)
-                            delay(THROTTLE_MS)
+                            delay(getThrottleMs())
+
+                            // 批次冷却
+                            if (pass3Processed % BATCH_SIZE == 0 && pass3Processed < cappedTagging.size) {
+                                Log.i(TAG, "Incremental Pass 3 batch cooldown after $pass3Processed/${cappedTagging.size}")
+                                delay(BATCH_COOLDOWN_MS)
+                            }
                         } catch (e: Exception) {
                             Log.w(TAG, "Incremental Pass 3 failed for media ${entity.id}: ${e.message}")
                         }
@@ -407,6 +431,7 @@ class TagGenerationScheduler(
                 Log.i(TAG, "Incremental scan completed: P1=$pass1Processed, total=${finalDone}/$allCount")
             } finally {
                 _isScanning.value = false
+                unloadLlm()
             }
         }
     }
@@ -476,7 +501,7 @@ class TagGenerationScheduler(
                         processed++
                         _progress.value = TagScanProgress(processed, total, PipelineStage.FACE_ROI)
                         progressCallback(processed, total)
-                        delay(THROTTLE_MS)
+                        delay(getThrottleMs())
                     } catch (e: Exception) {
                         Log.w(TAG, "Pass 1 failed for media ${entity.id}: ${e.message}")
                         processed++
@@ -593,7 +618,13 @@ class TagGenerationScheduler(
                         processed++
                         _progress.value = TagScanProgress(processed, total, PipelineStage.QWEN_TAGGING)
                         progressCallback(processed, total)
-                        delay(THROTTLE_MS)
+                        delay(getThrottleMs())
+
+                        // 批次冷却
+                        if (processed % BATCH_SIZE == 0 && processed < total) {
+                            Log.i(TAG, "Pass 3 batch cooldown after $processed/$total")
+                            delay(BATCH_COOLDOWN_MS)
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Pass 3 failed for media ${entity.id}: ${e.message}")
                         processed++
@@ -604,6 +635,7 @@ class TagGenerationScheduler(
                 Log.i(TAG, "=== Pass 3 Only completed: $processed/$total ===")
             } finally {
                 _isScanning.value = false
+                unloadLlm()
             }
         }
     }
@@ -664,7 +696,13 @@ class TagGenerationScheduler(
                         processed++
                         _progress.value = TagScanProgress(processed, total, PipelineStage.QWEN_TAGGING)
                         progressCallback(processed, total)
-                        delay(THROTTLE_MS)
+                        delay(getThrottleMs())
+
+                        // 批次冷却
+                        if (processed % BATCH_SIZE == 0 && processed < total) {
+                            Log.i(TAG, "Pass 3 Full batch cooldown after $processed/$total")
+                            delay(BATCH_COOLDOWN_MS)
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "Pass 3 Full failed for media ${entity.id}: ${e.message}")
                         processed++
@@ -676,6 +714,7 @@ class TagGenerationScheduler(
                 _lastScanMessage.value = "Pass 3 重新生成完成: $processed/$total 张"
             } finally {
                 _isScanning.value = false
+                unloadLlm()
             }
         }
     }
@@ -692,8 +731,8 @@ class TagGenerationScheduler(
                 return false
             }
             GuardResult.PAUSE -> {
-                Log.d(TAG, "Guard PAUSE, extended throttle")
-                delay(THROTTLE_RESTRICTED_MS)
+                Log.d(TAG, "Guard PAUSE, extended throttle (${getThrottleMs()}ms)")
+                delay(getThrottleMs())
                 // PAUSE 不跳过当前照片，仅增加节流
             }
             GuardResult.ALLOW -> { /* continue */ }
@@ -967,25 +1006,42 @@ class TagGenerationScheduler(
             return true
         }
 
-        // OpenCL 优先（libOpenCL.so 已打包进 APK）→ 2-3x GPU 加速
-        // 若设备不支持 OpenCL，自动降级到 CPU
-//        Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
-//        val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
-//        if (openclResult.isSuccess) {
-//            Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
-//            return true
-//        }
-//
-//        Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
-//            "falling back to CPU")
+        // OpenCL GPU 优先 → CPU 降级
+        // 由 MNN native 层自行判断 OpenCL 是否可用（不依赖 Java 层 System.loadLibrary）
+        Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
+        val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
+        if (openclResult.isSuccess) {
+            Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
+            return true
+        }
+        Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
+            "falling back to CPU")
 
         val cpuResult = engine.loadModel(MODEL_KEY, useOpencl = false)
         return if (cpuResult.isSuccess) {
-            Log.i(TAG, "Model loaded with CPU (fallback from OpenCL)")
+            Log.i(TAG, "Model loaded with CPU")
             true
         } else {
-            Log.w(TAG, "CPU fallback also failed: ${cpuResult.exceptionOrNull()?.message}")
+            Log.w(TAG, "CPU load failed: ${cpuResult.exceptionOrNull()?.message}")
             false
+        }
+    }
+
+    /**
+     * 卸载 LLM 模型释放 ~4GB 内存
+     *
+     * 扫描完成后调用，防止后台服务持续占用内存和散热资源。
+     * 使用 [LocalLlmEngine.trimMemory] 清理 KV cache 并释放模型权重。
+     */
+    private fun unloadLlm() {
+        try {
+            val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
+            if (engine.isLoaded) {
+                Log.i(TAG, "Unloading LLM model to free memory")
+                engine.trimMemory()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unload LLM: ${e.message}")
         }
     }
 }

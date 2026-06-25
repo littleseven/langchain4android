@@ -213,34 +213,24 @@ fun GalleryScreen(
         }
     }
 
-    // 进入 Gallery 时触发后台图片标签索引 + 人脸聚类
-    // Workers 内部有 isActive 守卫，可安全重复调用
-    val indexingWorker = remember { app.container.mediaIndexingWorker }
-    var isIndexing by remember { mutableStateOf(false) }
-
+    // AI 图片标签增量扫描 — 在媒体加载完成后触发
+    // 通过 TagGenerationService 统一管理，每次仅触发一次增量扫描
+    // 仅在充电状态下自动触发，避免非充电时耗电发烫
     LaunchedEffect(allFlatMedia.size) {
-        if (hasMediaPermission && allFlatMedia.isNotEmpty() && !isIndexing) {
-            indexingWorker.start()
-            isIndexing = true
-        }
-    }
-
-    // AI 图片标签索引 — 在媒体加载完成后触发
-    // Worker 内部自动跳过已标记的媒体，只处理增量
-    // 需要 Vision 模型已加载（由 AgentOrchestrator 管理，未加载时 worker 内部静默跳过）
-    LaunchedEffect(allFlatMedia.size) {
-        if (hasMediaPermission && allFlatMedia.isNotEmpty()) {
-            context.startForegroundService(TagGenerationService.intentScanIncremental(context))
-        }
-    }
-
-    // 定期刷新索引状态
-    LaunchedEffect(isIndexing) {
-        if (isIndexing) {
-            while (indexingWorker.isRunning) {
-                kotlinx.coroutines.delay(3000)
+        if (hasMediaPermission && allFlatMedia.isNotEmpty()
+            && !TagGenerationService.isScanning.value) {
+            val isCharging = try {
+                val batteryIntent = context.registerReceiver(
+                    null,
+                    android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+                )
+                val status = batteryIntent?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+                status == android.os.BatteryManager.BATTERY_STATUS_CHARGING
+                        || status == android.os.BatteryManager.BATTERY_STATUS_FULL
+            } catch (_: Exception) { false }
+            if (isCharging) {
+                context.startForegroundService(TagGenerationService.intentScanIncremental(context))
             }
-            isIndexing = false
         }
     }
 
@@ -452,8 +442,8 @@ fun GalleryScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // 索引状态指示器
-            if (isIndexing) {
+            // TAG 扫描状态指示器
+            if (TagGenerationService.isScanning.collectAsState(false).value) {
                 androidx.compose.material3.LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth()
                 )

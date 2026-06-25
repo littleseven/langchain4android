@@ -610,11 +610,13 @@ class PicMeApplication : Application(), ImageLoaderFactory {
      * 在 Application 中提前加载可确保所有依赖 so 在类加载器命名空间中可见。
      */
     private fun loadNativeLibraries() {
+        // 用绝对路径预加载 APK 里的 ICD Loader，让 MNN dlopen 时直接命中跳过搜索
         try {
-            System.loadLibrary("OpenCL")
-            Logger.d(TAG, "Native library loaded: OpenCL")
+            val apkLibDir = applicationInfo.nativeLibraryDir
+            System.load("$apkLibDir/libOpenCL.so")
+            Logger.d(TAG, "OpenCL ICD Loader preloaded")
         } catch (e: UnsatisfiedLinkError) {
-            Logger.w(TAG, "OpenCL not available, falling back to CPU")
+            Logger.d(TAG, "OpenCL ICD Loader preload skipped: ${e.message}")
         }
         try {
             System.loadLibrary("sherpa-onnx-jni")

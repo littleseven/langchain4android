@@ -155,7 +155,8 @@ class TagGenerationService : Service() {
         val sched = TagGenerationScheduler(
             context = this,
             dispatcher = singleThreadDispatcher,
-            guard = { checkGuard() }
+            guard = { checkGuard() },
+            getThrottleMs = { getAdaptiveThrottleMs() }
         )
         scheduler = sched
         schedulerRef = sched  // 用于状态流暴露
@@ -173,7 +174,7 @@ class TagGenerationService : Service() {
         if (intent == null || intent.action == null) {
             // 首次启动，仅显示前台通知
             startForeground(NOTIFICATION_ID, buildNotification(null, false))
-            return START_STICKY
+            return START_NOT_STICKY
         }
 
         // 启动前台通知（任何首次 Intent 都需要）
@@ -190,7 +191,7 @@ class TagGenerationService : Service() {
             ACTION_CANCEL -> scheduler?.cancel()
         }
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -207,6 +208,26 @@ class TagGenerationService : Service() {
         singleThreadDispatcher.cancel()
         android.util.Log.i(TAG, "Service destroyed")
         super.onDestroy()
+    }
+
+    /**
+     * 自适应节流间隔：根据设备热状态分级
+     *
+     * - SEVERE:  30s（触发 ABORT，此值不使用）
+     * - MODERATE: 10s（严重发热，大幅降低推理频率）
+     * - LIGHT:    3s（轻微发热，适度降低）
+     * - NONE:     1s（正常状态，原 500ms 对 CPU 推理过短）
+     */
+    private fun getAdaptiveThrottleMs(): Long {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val pm = getSystemService(PowerManager::class.java)
+            return when (pm.currentThermalStatus) {
+                PowerManager.THERMAL_STATUS_MODERATE -> 10_000L
+                PowerManager.THERMAL_STATUS_LIGHT -> 3_000L
+                else -> 1_000L
+            }
+        }
+        return 1_000L
     }
 
     private fun checkGuard(): TagGenerationScheduler.GuardResult {

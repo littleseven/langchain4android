@@ -25,7 +25,6 @@ class ChatSessionDaoTest {
     fun createDb() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
-            .addMigrations(ChatDatabaseMigrations.MIGRATION_4_5)
             .build()
         sessionDao = db.chatSessionDao()
         messageDao = db.chatMessageDao()
