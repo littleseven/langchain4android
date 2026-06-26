@@ -37,7 +37,8 @@ class TagGenerationPipeline(
     private val faceDetector: FaceDetector,
     private val llmEngine: LocalLlmEngine,
     private val faceClusterEngine: FaceClusterEngine,
-    private val normalizer: TagNormalizer
+    private val normalizer: TagNormalizer,
+    private val openClGuardian: OpenClGuardian? = null
 ) {
 
     companion object {
@@ -255,12 +256,7 @@ class TagGenerationPipeline(
                 append("请分析场景、活动、物体并生成标签。")
             }
 
-            val response = llmEngine.imageInference(
-                bitmap = bitmap,
-                systemPrompt = stage3SystemPrompt,
-                userPrompt = userPrompt,
-                maxTokens = QWEN_MAX_TOKENS
-            )
+            val response = runVisionInference(bitmap, userPrompt)
 
             if (response.isBlank()) {
                 Log.w(TAG, "[Pass 3] empty response from LLM")
@@ -438,12 +434,7 @@ class TagGenerationPipeline(
                 append("请分析场景、活动、物体并生成标签。")
             }
 
-            val response = llmEngine.imageInference(
-                bitmap = bitmap,
-                systemPrompt = stage3SystemPrompt,
-                userPrompt = userPrompt,
-                maxTokens = QWEN_MAX_TOKENS
-            )
+            val response = runVisionInference(bitmap, userPrompt)
 
             if (response.isBlank()) {
                 Log.w(TAG, "Stage 3: empty response from LLM")
@@ -520,6 +511,51 @@ class TagGenerationPipeline(
         return if (start != -1 && end > start) {
             text.substring(start, end + 1)
         } else null
+    }
+
+    /**
+     * 带 OpenCL 守护的多模态推理
+     *
+     * - 若 [openClGuardian] 存在，则使用其超时保护与自动降级逻辑
+     * - 若 OpenCL 路径返回 Timeout，自动降级到 CPU 并立即重试一次
+     * - 若不存在 Guardian，回退到原始 llmEngine.imageInference
+     */
+    private suspend fun runVisionInference(bitmap: Bitmap, userPrompt: String): String {
+        val guardian = openClGuardian
+        if (guardian != null) {
+            val result = guardian.inference(
+                bitmap = bitmap,
+                systemPrompt = stage3SystemPrompt,
+                userPrompt = userPrompt,
+                maxTokens = QWEN_MAX_TOKENS
+            )
+            return when (result) {
+                is OpenClInferenceResult.Success -> result.response
+                is OpenClInferenceResult.Timeout -> {
+                    Log.w(TAG, "OpenCL timeout, falling back to CPU and retry once")
+                    guardian.fallbackToCpu("OpenCL timeout during Pass 3")
+                    val retry = guardian.inference(
+                        bitmap = bitmap,
+                        systemPrompt = stage3SystemPrompt,
+                        userPrompt = userPrompt,
+                        maxTokens = QWEN_MAX_TOKENS
+                    )
+                    when (retry) {
+                        is OpenClInferenceResult.Success -> retry.response
+                        is OpenClInferenceResult.Timeout -> "__ERROR_OPENCL_TIMEOUT__"
+                        is OpenClInferenceResult.Error -> "__ERROR_${retry.message}"
+                    }
+                }
+                is OpenClInferenceResult.Error -> "__ERROR_${result.message}"
+            }
+        }
+
+        return llmEngine.imageInference(
+            bitmap = bitmap,
+            systemPrompt = stage3SystemPrompt,
+            userPrompt = userPrompt,
+            maxTokens = QWEN_MAX_TOKENS
+        )
     }
 
     /**

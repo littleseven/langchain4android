@@ -96,6 +96,9 @@ interface UserSettingsRepository {
     val tagGenerationUseOpencl: Flow<Boolean>
     suspend fun updateTagGenerationUseOpencl(enabled: Boolean)
 
+    val openClDegradedDevices: Flow<String>
+    suspend fun updateOpenClDegradedDevices(devicesJson: String)
+
     // ── 远程模型配置（供应商维度） ────────────────────────────────
     val aiAgentRemoteModelConfigsFlow: Flow<String>
     suspend fun updateAiAgentRemoteModelConfigs(configsJson: String)

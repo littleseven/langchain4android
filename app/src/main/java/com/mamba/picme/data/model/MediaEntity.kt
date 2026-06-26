@@ -24,5 +24,11 @@ data class MediaEntity(
     val locationName: String? = null,     // 逆地理编码地名
     val indexedAt: Long? = null,          // 索引完成时间戳（null=未索引）
     // 人脸 ROI 检测结果 JSON（Stage 1 产出持久化，用于 Pass 1→Pass 3 断点续扫）
-    val faceRoiResult: String? = null
+    val faceRoiResult: String? = null,
+
+    // 最近一次 TAG 扫描成功时间戳（用于增量去重与避重）
+    val lastTagScanAt: Long? = null,
+
+    // 最近一次成功扫描覆盖的 Pass 阶段 JSON，如 {"1":ts,"2":ts,"3":ts}
+    val lastTagScanPasses: String? = null
 )

@@ -94,8 +94,7 @@ fun GalleryScreen(
     onNavigateBack: () -> Unit,
     onNavigateToCamera: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDebug: () -> Unit,
-    onNavigateToTagControl: () -> Unit = {}
+    onNavigateToDebug: () -> Unit
 ) {
     val groupedMedia by viewModel.groupedMedia.collectAsState()
     val groupingMode by viewModel.groupingMode.collectAsState()
@@ -423,7 +422,6 @@ fun GalleryScreen(
                             isSearchActive = true
                             searchResultMedia = emptyList()
                         },
-                        onNavigateToTagControl = onNavigateToTagControl
                     )
                 }
                 showDuplicateManager -> {

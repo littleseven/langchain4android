@@ -75,8 +75,9 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 | 子包 | 内容 | 说明 |
 |------|------|------|
 | `usecase/` | `AiAgentUseCase`, `FindDuplicateMediaUseCase`, `GetGroupedMediaUseCase`, `OcrUseCase` | 业务用例：Agent Facade、去重、分组、OCR |
-| `repository/` | `MediaRepository`, `UserPreferencesRepository` 等接口 | 仓储抽象 |
+| `repository/` | `MediaRepository`, `UserPreferencesRepository`, `UserSettingsRepository` 等接口 | 仓储抽象 |
 | `model/` | `AiAgentCommand`, `LlmProviderConfig`, `MediaAsset`, `UserPreferences` 等 | 领域数据模型 |
+| `tag/` | `TagGenerationScheduler`, `TagScanOrchestrator`, `OpenClGuardian`, `TagCategory` | TAG 生成编排、OpenCL 守护、类别定义 |
 | `preview/` | `BeautyPreviewProvider` | 美颜预览提供者接口 |
 
 ### 2.3 数据层 (`data/`)
@@ -123,6 +124,7 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 | 美颜预览 | `BeautyPreviewProvider` → `BeautyPreviewEngine` | 通过 beauty-api 接口调用 |
 | 人脸检测 | `FaceDetector`（beauty-api 接口） | MediaPipe/MNN/NCNN 多引擎 |
 | 远程推理 | `RemoteOrchestrator`（agent-core） | OpenAI Chat Completions API + langchain4j |
+| TAG 生成 | `TagGenerationService` → `TagScanOrchestrator` | 3-Pass 混合管道，OpenCL 超时自动降级 CPU |
 | 飞书远程控制 | `PicMeApplication` → Feishu SDK | IM 远程命令与照片回传 |
 
 ---
@@ -185,5 +187,5 @@ di/                       ← AppContainer 手动 DI（无 Hilt/Dagger）
 ---
 
 > **维护者**：[RD] 全栈工程师
-> **最后更新**：2026-06-21
+> **最后更新**：2026-06-26
 > **状态**：生效中

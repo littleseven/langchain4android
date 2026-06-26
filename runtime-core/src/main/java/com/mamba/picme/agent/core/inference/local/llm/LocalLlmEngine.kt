@@ -430,6 +430,57 @@ class LocalLlmEngine(private val context: Context) : LlmChatLanguageModel, Strea
     }
 
     /**
+     * 带超时的多模态图片推理。
+     *
+     * @param timeoutMs 最大等待时间（毫秒），默认 30 秒
+     * @return 模型生成的文本回复；超时或失败时返回空字符串
+     */
+    suspend fun imageInferenceWithTimeout(
+        bitmap: Bitmap,
+        systemPrompt: String,
+        userPrompt: String = "请描述这张图片",
+        maxTokens: Int = 128,
+        timeoutMs: Int = 30_000
+    ): String = withContext(modelDispatcher) {
+        engineMutex.withLock {
+            if (!client.isLoaded) {
+                Logger.w(tag, "LLM not loaded, cannot do image inference")
+                return@withLock ""
+            }
+
+            try {
+                val result = client.generateWithImageTimeout(
+                    systemPrompt = systemPrompt,
+                    userPrompt = userPrompt,
+                    bitmap = bitmap,
+                    maxNewTokens = maxTokens,
+                    timeoutMs = timeoutMs
+                )
+                if (result.error != null) {
+                    Logger.w(tag, "Image inference with timeout error: ${result.error}")
+                    return@withLock "__ERROR_${result.error}__"
+                }
+                lastGenerationMetrics = LlmGenerationMetrics(
+                    promptLen = result.promptLen,
+                    decodeLen = result.decodeLen,
+                    prefillTime = result.prefillTime,
+                    decodeTime = result.decodeTime,
+                    prefillSpeed = result.prefillSpeed,
+                    decodeSpeed = result.decodeSpeed
+                )
+                Logger.d(tag, "[Vision] inference with timeout done: ${result.response.take(100)}, " +
+                    "vision=${result.visionTime}us, decode=${result.decodeTime}us")
+                result.response
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                Logger.e(tag, "Image inference with timeout failed", exception)
+                ""
+            }
+        }
+    }
+
+    /**
      * 卸载当前模型，释放内存
      *
      * 通过 ResourceManager 协调释放，避免与 ASR 的 MNN 全局状态冲突。

@@ -10,6 +10,8 @@
 #include <signal.h>
 #include <setjmp.h>
 #include <android/bitmap.h>
+#include <future>
+#include <thread>
 
 #include <MNN/llm/llm.hpp>
 
@@ -94,6 +96,129 @@ struct LlmMetrics {
     int64_t prefill_time = 0;
     int64_t decode_time = 0;
 };
+
+/**
+ * 多模态图片推理结果（C++ 侧，用于 timeout 变体跨线程传递）
+ */
+struct ImageInferenceResult {
+    std::string response;
+    LlmMetrics metrics;
+    std::string error;
+    bool crashed = false;
+};
+
+// 前向声明：在 doLockedImageInference 之前定义，避免 C++ 未声明标识符错误
+static void restoreLlmStatusIfNeeded(MNN::Transformer::Llm* llm);
+
+/**
+ * 在持有 g_llm_mutex 的情况下执行多模态图片推理。
+ * 此函数可在线程中调用，但不涉及 JNIEnv，因此线程安全。
+ */
+static ImageInferenceResult doLockedImageInference(
+        MNN::Transformer::Llm *llm,
+        MNN::Transformer::MultimodalPrompt multimodal,
+        int maxNewTokens,
+        int width,
+        int height,
+        size_t systemLen,
+        size_t userLen) {
+    ImageInferenceResult result;
+    std::ostringstream oss;
+    auto start = std::chrono::high_resolution_clock::now();
+    bool mnn_crashed = false;
+
+    g_llm_mutex.lock();
+    restoreLlmStatusIfNeeded(llm);
+
+    struct sigaction old_action;
+    if (sigsetjmp(g_mnn_jmp_buf, 1) == 0) {
+        installCrashGuard(&old_action);
+
+        // 阶段 1: Prefill（max_new_tokens=0 + "<eop>" 结束标记）
+        llm->response(multimodal, &oss, "<eop>", 0);
+
+        // 阶段 2: Decode loop（逐 token 生成）
+        for (int gen_i = 0; gen_i < maxNewTokens; gen_i++) {
+            if (llm->stoped()) break;
+            llm->generate(1);
+        }
+
+        uninstallCrashGuard(&old_action);
+        g_llm_mutex.unlock();
+    } else {
+        uninstallCrashGuard(&old_action);
+        g_llm_mutex.unlock();
+        mnn_crashed = true;
+        LOGE("[CRASH] ═══════════════════════════════════════════");
+        LOGE("[CRASH] SIGSEGV in llm->response(multimodal) / generate()!");
+        LOGE("[CRASH] Image: %dx%d, prompt: system=%zu, user=%zu",
+             width, height, systemLen, userLen);
+        LOGE("[CRASH] ═══════════════════════════════════════════");
+    }
+
+    if (mnn_crashed) {
+        result.crashed = true;
+        result.error = "MNN LLM crashed: SIGSEGV in multimodal inference";
+        return result;
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    result.metrics.decode_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            end - start).count();
+
+    auto* ctx = llm->getContext();
+    if (ctx != nullptr) {
+        result.metrics.prompt_len = ctx->prompt_len;
+        result.metrics.decode_len = ctx->gen_seq_len;
+        result.metrics.vision_time = ctx->vision_us;
+        result.metrics.audio_time = ctx->audio_us;
+    }
+
+    std::string rawResponse = oss.str();
+    size_t eopPos = rawResponse.find("<eop>");
+    if (eopPos != std::string::npos) {
+        rawResponse.erase(eopPos, 5);
+    }
+    result.response = rawResponse;
+
+    LOGD("[Vision] result: %s...", result.response.substr(0, 100).c_str());
+    return result;
+}
+
+/**
+ * 将 ImageInferenceResult 转换为 Java HashMap
+ */
+static jobject inferenceResultToHashMap(JNIEnv *env, const ImageInferenceResult &result) {
+    if (!result.error.empty()) {
+        return createErrorHashMap(env, result.error.c_str());
+    }
+
+    jclass hashMapClass = env->FindClass("java/util/HashMap");
+    jmethodID hashMapInit = env->GetMethodID(hashMapClass, "<init>", "()V");
+    jmethodID putMethod = env->GetMethodID(hashMapClass, "put",
+                                           "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    jobject hashMap = env->NewObject(hashMapClass, hashMapInit);
+
+    jclass longClass = env->FindClass("java/lang/Long");
+    jmethodID longInit = env->GetMethodID(longClass, "<init>", "(J)V");
+
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("response"),
+                          env->NewStringUTF(result.response.c_str()));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prompt_len"),
+                          env->NewObject(longClass, longInit, result.metrics.prompt_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_len"),
+                          env->NewObject(longClass, longInit, result.metrics.decode_len));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("vision_time"),
+                          env->NewObject(longClass, longInit, result.metrics.vision_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("audio_time"),
+                          env->NewObject(longClass, longInit, result.metrics.audio_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("prefill_time"),
+                          env->NewObject(longClass, longInit, result.metrics.prefill_time));
+    env->CallObjectMethod(hashMap, putMethod, env->NewStringUTF("decode_time"),
+                          env->NewObject(longClass, longInit, result.metrics.decode_time));
+
+    return hashMap;
+}
 
 /**
  * 恢复 Android 预编译 MNN 库的 stepping 状态。
@@ -611,6 +736,118 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
                           env->NewObject(longClass, longInit, metrics.decode_time));
 
     return hashMap;
+}
+
+// ── 多模态图片生成 + 超时守护（新增）────────────────────
+JNIEXPORT jobject JNICALL
+Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateWithImageTimeout(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jstring systemPrompt,
+        jstring userPrompt,
+        jobject bitmap,
+        jint maxNewTokens,
+        jint timeoutMs) {
+
+    auto *llm = reinterpret_cast<MNN::Transformer::Llm *>(handle);
+    if (llm == nullptr) {
+        LOGE("LLM handle is null");
+        return createErrorHashMap(env, "LLM handle is null");
+    }
+
+    // 1. 获取 system / user prompt
+    const char *systemCStr = env->GetStringUTFChars(systemPrompt, nullptr);
+    const char *userCStr = env->GetStringUTFChars(userPrompt, nullptr);
+    std::string systemStr(systemCStr);
+    std::string userStr(userCStr);
+    env->ReleaseStringUTFChars(systemPrompt, systemCStr);
+    env->ReleaseStringUTFChars(userPrompt, userCStr);
+
+    // 2. 从 Android Bitmap 提取像素数据
+    AndroidBitmapInfo bitmapInfo;
+    if (AndroidBitmap_getInfo(env, bitmap, &bitmapInfo) < 0) {
+        LOGE("Failed to get bitmap info");
+        return createErrorHashMap(env, "Failed to get bitmap info");
+    }
+
+    int width = bitmapInfo.width;
+    int height = bitmapInfo.height;
+    if (width <= 0 || height <= 0 || width > MAX_IMAGE_DIM || height > MAX_IMAGE_DIM) {
+        LOGE("[Vision] Image dimensions %dx%d exceed limit %d or invalid",
+             width, height, MAX_IMAGE_DIM);
+        return createErrorHashMap(env, "Image too large, max 420px per side");
+    }
+
+    if (bitmapInfo.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        LOGE("[Vision] Unsupported bitmap format: %d (require RGBA_8888)", bitmapInfo.format);
+        return createErrorHashMap(env, "Unsupported bitmap format, require RGBA_8888");
+    }
+
+    void *bitmapPixels;
+    if (AndroidBitmap_lockPixels(env, bitmap, &bitmapPixels) < 0) {
+        LOGE("Failed to lock bitmap pixels");
+        return createErrorHashMap(env, "Failed to lock bitmap pixels");
+    }
+
+    std::vector<uint8_t> rgbData(height * width * 3);
+    uint32_t *pixels = static_cast<uint32_t *>(bitmapPixels);
+    int pixelStride = bitmapInfo.stride / 4;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            uint32_t pixel = pixels[y * pixelStride + x];
+            int dstIdx = (y * width + x) * 3;
+            rgbData[dstIdx]     = (pixel >> 16) & 0xFF;
+            rgbData[dstIdx + 1] = (pixel >>  8) & 0xFF;
+            rgbData[dstIdx + 2] =  pixel        & 0xFF;
+        }
+    }
+    AndroidBitmap_unlockPixels(env, bitmap);
+
+    // 3. 创建 MNN VARP
+    auto imageVar = MNN::Express::_Input({height, width, 3}, MNN::Express::NHWC,
+                                         halide_type_of<uint8_t>());
+    auto ptr = imageVar->writeMap<uint8_t>();
+    memcpy(ptr, rgbData.data(), height * width * 3);
+
+    // 4. 构建 MultimodalPrompt
+    MNN::Transformer::MultimodalPrompt multimodal;
+    multimodal.prompt_template =
+        "<|im_start|>system\n" + systemStr + "<|im_end|>\n"
+        "<|im_start|>user\n"
+        "<img>image_0</img>" + userStr + "<|im_end|>\n"
+        "<|im_start|>assistant\n";
+    multimodal.images["image_0"] = {imageVar, 0, 0};
+
+    LOGD("[Vision] Generating with timeout: system=%zu chars, user=%zu chars, maxTokens=%d, timeout=%dms",
+         systemStr.size(), userStr.size(), maxNewTokens, timeoutMs);
+
+    // 5. 在 worker 线程中执行推理，主线程 watchdog 等待
+    std::packaged_task<ImageInferenceResult()> task([
+        llm, multimodal = std::move(multimodal), maxNewTokens, width, height,
+        systemLen = systemStr.size(), userLen = userStr.size()]() mutable {
+        return doLockedImageInference(llm, std::move(multimodal), maxNewTokens,
+                                      width, height, systemLen, userLen);
+    });
+
+    auto future = task.get_future();
+    std::thread(std::move(task)).detach();
+
+    auto status = future.wait_for(std::chrono::milliseconds(timeoutMs));
+    if (status == std::future_status::timeout) {
+        LOGE("[Vision] OpenCL inference timed out after %d ms", timeoutMs);
+        return createErrorHashMap(env, "OPENCL_TIMEOUT");
+    }
+
+    ImageInferenceResult result;
+    try {
+        result = future.get();
+    } catch (const std::exception &e) {
+        LOGE("[Vision] Worker exception: %s", e.what());
+        return createErrorHashMap(env, "Worker exception");
+    }
+
+    return inferenceResultToHashMap(env, result);
 }
 
 // ── 流式生成 + 性能指标（新增）──────────────────────────

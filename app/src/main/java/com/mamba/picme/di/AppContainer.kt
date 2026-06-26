@@ -93,10 +93,12 @@ interface AppContainer {
     val imageTagIndexingWorker: ImageTagIndexingWorker
     /** TAG 生成扫描状态（只读，从 TagGenerationService 获取） */
     val tagGenerationIsScanning: kotlinx.coroutines.flow.StateFlow<Boolean>
-    /** TAG 生成扫描进度 */
+    /** TAG 生成扫描进度（旧版兼容） */
     val tagGenerationProgress: kotlinx.coroutines.flow.StateFlow<com.mamba.picme.domain.tag.TagScanProgress?>
     /** TAG 生成最后消息 */
     val tagGenerationLastMessage: kotlinx.coroutines.flow.StateFlow<String?>
+    /** TAG 生成会话级增强进度 */
+    val tagGenerationSessionProgress: kotlinx.coroutines.flow.StateFlow<com.mamba.picme.domain.tag.scan.TagScanSessionProgress?>
     /** 跨维度查询构建器（LLM 意图 → Room 查询） */
     val queryBuilder: QueryBuilder
     /** 双级缩略图缓存（LRU 内存 + 磁盘） */
@@ -157,13 +159,17 @@ class AppContainerImpl(
     override val tagGenerationIsScanning: kotlinx.coroutines.flow.StateFlow<Boolean>
         get() = com.mamba.picme.service.tag.TagGenerationService.isScanning
 
-    /** TAG 生成扫描进度 */
+    /** TAG 生成扫描进度（旧版兼容） */
     override val tagGenerationProgress: kotlinx.coroutines.flow.StateFlow<com.mamba.picme.domain.tag.TagScanProgress?>
         get() = com.mamba.picme.service.tag.TagGenerationService.progress
 
     /** TAG 生成最后消息 */
     override val tagGenerationLastMessage: kotlinx.coroutines.flow.StateFlow<String?>
         get() = com.mamba.picme.service.tag.TagGenerationService.lastScanMessage
+
+    /** TAG 生成会话级增强进度 */
+    override val tagGenerationSessionProgress: kotlinx.coroutines.flow.StateFlow<com.mamba.picme.domain.tag.scan.TagScanSessionProgress?>
+        get() = com.mamba.picme.service.tag.TagGenerationService.sessionProgress
 
     /**
      * 创建 MediaStoreObserver。

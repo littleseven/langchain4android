@@ -1,6 +1,10 @@
 # 相册自动 Tag 生成技术方案
 
 > 利用本地已有工具链（人脸 ROI 检测 + 人脸关键点 → 人脸聚类 + Qwen3.5-2B 多模态模型）为相册照片自动生成结构化标签。
+>
+> **相关文档**：
+> - TAG 扫描状态机：`TAG_SCAN_STATE_MACHINE.md`
+> - OpenCL 超时与降级：`MNN_LLM_PERFORMANCE_OPTIMIZATION.md`
 
 ---
 
@@ -19,8 +23,8 @@
 |------|----------|----------|------|----------|
 | 人脸 ROI 检测 | `beauty-api` → `FaceDetector` | **InsightFace Det10G**（ONNX/MNN 后端）或 **MediaPipe** | `FaceDetector.detectPhoto()` → `FaceDetectionResult?` | ~10-50ms |
 | 人脸关键点检测 | `MnnLandmarkDetector` | **InsightFace 2D106**（106 点，MNN 后端）或 **MediaPipe 468** | `MnnLandmarkDetector.detectLandmarks()` → `FloatArray?` | ~20-80ms |
-| 人脸特征提取 | Room 表 `face_embeddings` 已定义，推理管道待实现 | **MobileFaceNet** → 512 维特征向量 | `FaceClusterEngine.extractFeature()` → `FloatArray`（新增接口） | ~30-60ms |
-| 人脸聚类（人物去重） | Room 表 `persons` 已定义，聚类逻辑待实现 | **增量式余弦距离匹配 + 定期 DBSCAN 重聚** | `FaceClusterEngine.matchCluster()` → `personId`（新增接口） | ~5-20ms/对比 |
+| 人脸特征提取 | **已实现**：`FaceClusterEngine` + `MnnEmbeddingExtractor` 加载 `w600k_mbf.mnn` | **MobileFaceNet** → 512 维特征向量 | `FaceClusterEngine.extractFeature()` → `FloatArray` | ~30-60ms |
+| 人脸聚类（人物去重） | **已实现**：增量式余弦距离匹配 + DBSCAN | **增量式余弦距离匹配 + 定期 DBSCAN 重聚** | `FaceClusterEngine.matchCluster()` → `personId` | ~5-20ms/对比 |
 | Qwen3.5-2B 多模态图像理解 | `LocalLlmEngine` | **Qwen3.5-2B**（MNN-LLM 多模态运行时 `visual.mnn` 视觉编码器） | `LocalLlmEngine.imageInference()` → `String` | ~2-8s |
 
 ### 1.3 管道中各模型的推理后端
@@ -31,10 +35,10 @@
 |------|----------|----------|
 | Det10G（ROI 检测） | ONNX / MNN / NCNN / TFLite | ONNX + AUTO 设备 |
 | InsightFace 2D106（关键点） | ONNX / MNN | ONNX + AUTO 设备 |
-| MobileFaceNet（特征提取） | TBD（需新增） | TBD |
+| MobileFaceNet（特征提取） | MNN（固定） | MNN + CPU（人脸 embedding 模型较小，无需 GPU） |
 | Qwen3.5-2B（图像理解） | MNN-LLM（固定） | GPU（OpenCL）优先 → CPU 降级 |
 
-> **MobileFaceNet 集成说明**：当前代码库已有 `face_embeddings` 和 `persons` 两张 Room 表（含 `embedding: ByteArray` 用于存储 512 维特征向量），但 MobileFaceNet 的加载/推理/特征提取代码尚未实现。这是 Stage 2 需要新增的核心能力。
+> **MobileFaceNet 集成说明**：当前代码库已实现 MobileFaceNet 特征提取。`FaceClusterEngine` 通过 `MnnEmbeddingExtractor` 加载模型中心下载的 `w600k_mbf.mnn`，使用 MNN 后端提取 512 维 L2 归一化 embedding，并存储到 `face_embeddings` 表（`embedding: ByteArray`）。模型缺失时会降级为零向量，聚类将退化为全量新建簇。
 
 ### 1.4 已有数据模型
 

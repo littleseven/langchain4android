@@ -1,0 +1,754 @@
+package com.mamba.picme.domain.tag.scan
+
+import android.content.Context
+import android.util.Log
+import com.mamba.picme.data.local.AppDatabase
+import com.mamba.picme.data.local.dao.StatusCount
+import com.mamba.picme.data.local.entity.TagScanPass
+import com.mamba.picme.data.local.entity.TagScanTaskEntity
+import com.mamba.picme.data.local.entity.TagScanTaskStatus
+import com.mamba.picme.domain.tag.TagCategory
+import com.mamba.picme.domain.tag.TagGenerationScheduler
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+
+/**
+ * TAG 扫描编排器
+ *
+ * 负责：
+ * - 创建并持久化扫描任务队列
+ * - 维护扫描会话状态机（Idle / Running / Paused / Cancelled）
+ * - 轮询任务并调用 TagGenerationScheduler 执行原子任务
+ * - 提供增强进度反馈
+ * - 支持暂停、恢复、取消、失败重试
+ */
+class TagScanOrchestrator(
+    private val context: Context,
+    private val scheduler: TagGenerationScheduler,
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val db: AppDatabase = AppDatabase.getDatabase(context)
+) {
+
+    companion object {
+        private const val TAG = "TagScanOrchestrator"
+
+        /** 轮询任务间隔 */
+        private const val POLL_INTERVAL_MS = 100L
+
+        /** 历史移动平均窗口：用于估算剩余时间 */
+        private const val ESTIMATE_WINDOW_SIZE = 20
+
+        /** 清理已完成任务的最小保留时间 */
+        private const val CLEANUP_RETENTION_MS = 7 * 24 * 60 * 60 * 1000L
+
+        /** 失败重试退避基数 */
+        private const val RETRY_BACKOFF_BASE_MS = 5 * 60 * 1000L
+
+        /**
+         * 判断最近一次扫描覆盖的 Pass 是否包含所有请求的 Pass
+         */
+        fun isPassesCovered(lastTagScanPasses: String?, requested: Set<String>): Boolean {
+            if (requested.isEmpty()) return true
+            if (lastTagScanPasses.isNullOrBlank()) return false
+            val content = lastTagScanPasses.trim()
+            if (content == "{}") return false
+            // 避免在 JVM 单元测试中依赖 Android 的 org.json stub，使用键名正则匹配
+            return requested.all { pass ->
+                Regex(""""$pass"\s*:""").containsMatchIn(content)
+            }
+        }
+
+        /**
+         * Pass 阶段 → 数字编号（与 media_assets.lastTagScanPasses 约定一致）
+         */
+        fun TagScanPass.toPassNumber(): String = when (this) {
+            TagScanPass.FACE_DETECTION -> "1"
+            TagScanPass.DBSCAN -> "2"
+            TagScanPass.QWEN_TAGGING -> "3"
+        }
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private var currentJob: Job? = null
+
+    private val _progress = MutableStateFlow<TagScanSessionProgress?>(null)
+    val progress: StateFlow<TagScanSessionProgress?> = _progress.asStateFlow()
+
+    private val sessionMutex = Mutex()
+    private var activeSessionId: String? = null
+
+    /** 最近 N 次任务耗时，用于估算剩余时间 */
+    private val recentDurationsMs = ArrayDeque<Long>(ESTIMATE_WINDOW_SIZE)
+
+    /** 当前会话消息历史 */
+    private val sessionMessages = mutableListOf<ScanMessage>()
+
+    init {
+        // 启动时恢复被异常中断的 RUNNING 任务
+        scope.launch {
+            db.tagScanTaskDao().resetRunningToPending()
+            maybeResumeOnStartup()
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  公开 API：调度扫描
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * 自动增量扫描：按策略生成任务队列并启动
+     *
+     * 核心去重规则：
+     * 1. 跳过最近一次全量扫描在 [skipRecentlyTaggedMs] 窗口内且覆盖所有请求 Pass 的媒体
+     * 2. 失败项默认 24h 后才允许自动重试
+     * 3. 按 [order] 排序，默认 oldest-first 避免老照片饿死
+     */
+    suspend fun scheduleAutoScan(policy: ScanQueuePolicy = ScanQueuePolicy()): String {
+        val sessionId = newSessionId()
+        logInfo(sessionId, "开始自动增量扫描: $policy")
+
+        val before = System.currentTimeMillis() - policy.skipRecentlyTaggedMs
+        val requestedPassNumbers = policy.passes.map { it.toPassNumber() }.toSet()
+
+        // 先按时间窗口拉取候选，再在内存中精确过滤 pass 覆盖
+        val candidates = db.mediaDao().getMediaForIncrementalScan(before, policy.maxBatchSize * 2)
+        val media = candidates.filter { entity ->
+            !isPassesCovered(entity.lastTagScanPasses, requestedPassNumbers)
+        }.let { filtered ->
+            when (policy.order) {
+                QueueOrder.OLDEST_FIRST -> filtered.sortedWith(
+                    compareBy({ it.lastTagScanAt ?: 0L }, { it.captureDate })
+                )
+                QueueOrder.NEWEST_FIRST -> filtered.sortedByDescending { it.captureDate }
+            }
+        }.take(policy.maxBatchSize)
+
+        if (media.isEmpty()) {
+            logInfo(sessionId, "没有需要增量扫描的媒体")
+            _progress.value = TagScanSessionProgress(
+                sessionId = sessionId,
+                state = ScanSessionState.COMPLETED,
+                messages = listOf(ScanMessage(level = MessageLevel.INFO, text = "没有需要扫描的媒体"))
+            )
+            return sessionId
+        }
+
+        createTasks(sessionId, media.map { it.id }, TagCategory.ALL, policy.passes, policy)
+        startSession(sessionId)
+        return sessionId
+    }
+
+    /**
+     * 对指定媒体重新生成/增量生成指定类别标签
+     *
+     * 手动触发不受 [ScanQueuePolicy.skipRecentlyTaggedMs] 时间窗口限制。
+     */
+    suspend fun scheduleRegenerate(
+        mediaIds: List<Long>,
+        categories: Set<TagCategory> = TagCategory.ALL,
+        mode: ScanMode = ScanMode.FULL,
+        policy: ScanQueuePolicy = ScanQueuePolicy()
+    ): String {
+        val sessionId = newSessionId()
+        logInfo(sessionId, "scheduleRegenerate: ${mediaIds.size} 张, categories=$categories, mode=$mode")
+
+        val passes = TagCategory.toPasses(categories)
+        val entities = db.mediaDao().getMediaByIds(mediaIds)
+        val filteredIds = if (mode == ScanMode.INCREMENTAL) {
+            entities.filter { !hasAllCategories(it.labels, categories) }.map { it.id }
+        } else {
+            entities.map { it.id }
+        }
+
+        if (filteredIds.isEmpty()) {
+            _progress.value = TagScanSessionProgress(
+                sessionId = sessionId,
+                state = ScanSessionState.COMPLETED,
+                messages = listOf(ScanMessage(level = MessageLevel.INFO, text = "没有需要处理的媒体"))
+            )
+            return sessionId
+        }
+
+        createTasks(sessionId, filteredIds, categories, passes, policy)
+        startSession(sessionId)
+        return sessionId
+    }
+
+    /**
+     * 按查询条件批量生成 / 重生成
+     */
+    suspend fun scheduleRegenerateByQuery(
+        query: TagScanQuery,
+        categories: Set<TagCategory> = TagCategory.ALL,
+        mode: ScanMode = ScanMode.FULL
+    ): String {
+        val sessionId = newSessionId()
+        logInfo(sessionId, "scheduleRegenerateByQuery: $query, categories=$categories, mode=$mode")
+
+        val allMedia = db.mediaDao().getAllMediaNow()
+        val filtered = allMedia.filter { entity ->
+            query.mediaIds?.let { entity.id in it } ?: true
+        }.filter { entity ->
+            query.startTimeMs?.let { entity.captureDate >= it } ?: true
+        }.filter { entity ->
+            query.endTimeMs?.let { entity.captureDate <= it } ?: true
+        }.filter { entity ->
+            query.hasFace?.let { entity.hasFace == it } ?: true
+        }.filter { entity ->
+            if (query.missingAnyCategory.isNullOrEmpty()) true
+            else !hasAllCategories(entity.labels, query.missingAnyCategory)
+        }
+
+        val ids = filtered.map { it.id }
+        return scheduleRegenerate(ids, categories, mode)
+    }
+
+    /**
+     * 执行单个 Pass 阶段（用于兼容旧的 Pass 1/2/3 独立控制按钮）
+     */
+    suspend fun schedulePass(
+        pass: TagScanPass,
+        query: TagScanQuery = TagScanQuery(),
+        mode: ScanMode = ScanMode.INCREMENTAL,
+        policy: ScanQueuePolicy = ScanQueuePolicy()
+    ): String {
+        val sessionId = newSessionId()
+        logInfo(sessionId, "schedulePass: $pass, mode=$mode")
+
+        val allMedia = db.mediaDao().getAllMediaNow()
+        val filtered = allMedia.filter { entity ->
+            query.mediaIds?.let { entity.id in it } ?: true
+        }.filter { entity ->
+            query.startTimeMs?.let { entity.captureDate >= it } ?: true
+        }.filter { entity ->
+            query.endTimeMs?.let { entity.captureDate <= it } ?: true
+        }.filter { entity ->
+            query.hasFace?.let { entity.hasFace == it } ?: true
+        }
+
+        var ids = filtered.map { it.id }
+
+        if (pass == TagScanPass.FACE_DETECTION && mode == ScanMode.FULL) {
+            // 全量重跑 Pass 1：清空旧的人脸数据
+            db.mediaDao().resetAllFaceData()
+            db.personDao().clearAllEmbeddings()
+            db.personDao().clearAllPersons()
+        }
+
+        if (pass == TagScanPass.QWEN_TAGGING && mode == ScanMode.FULL) {
+            // 全量重跑 Pass 3：清空已有标签
+            db.mediaDao().resetAllLabels()
+        }
+
+        // 手动 Pass 增量：按阶段特征过滤，不受时间窗口限制
+        if (mode == ScanMode.INCREMENTAL && pass != TagScanPass.DBSCAN) {
+            ids = ids.filter { mediaId ->
+                isPassMissing(mediaId, pass)
+            }
+        }
+
+        if (ids.isEmpty() && pass != TagScanPass.DBSCAN) {
+            _progress.value = TagScanSessionProgress(
+                sessionId = sessionId,
+                state = ScanSessionState.COMPLETED,
+                messages = listOf(ScanMessage(level = MessageLevel.INFO, text = "没有需要处理的媒体"))
+            )
+            return sessionId
+        }
+
+        createTasksForSinglePass(sessionId, ids, pass, policy)
+        startSession(sessionId)
+        return sessionId
+    }
+
+    /**
+     * 暂停当前活跃会话
+     */
+    suspend fun pause(sessionId: String? = null) {
+        val target = sessionId ?: activeSessionId ?: return
+        val currentState = _progress.value?.state
+        if (currentState in setOf(
+                ScanSessionState.PAUSING,
+                ScanSessionState.PAUSED,
+                ScanSessionState.CANCELLING,
+                ScanSessionState.CANCELLED
+            )
+        ) {
+            return
+        }
+        logInfo(target, "暂停扫描")
+        db.tagScanTaskDao().pauseSession(target)
+        updateProgressState(target, ScanSessionState.PAUSING)
+    }
+
+    /**
+     * 恢复指定会话
+     */
+    suspend fun resume(sessionId: String? = null) {
+        val target = sessionId ?: activeSessionId ?: findFirstPausedSession() ?: return
+        val currentState = _progress.value?.state
+        if (currentState == ScanSessionState.CANCELLED || currentState == ScanSessionState.CANCELLING) {
+            logWarning(target, "会话已取消，无法恢复")
+            return
+        }
+        logInfo(target, "恢复扫描")
+        db.tagScanTaskDao().resumeSession(target)
+        startSession(target)
+    }
+
+    /**
+     * 取消指定会话
+     *
+     * 立即把状态置为 [ScanSessionState.CANCELLED]，不再等待当前 JNI 任务返回。
+     * 当前正在执行的任务可能还会继续运行（无法中断 native 推理），但其结果会被忽略。
+     */
+    suspend fun cancel(sessionId: String? = null) {
+        val target = sessionId ?: activeSessionId ?: return
+        val currentState = _progress.value?.state
+        if (currentState in setOf(
+                ScanSessionState.CANCELLING,
+                ScanSessionState.CANCELLED
+            )
+        ) {
+            return
+        }
+        logInfo(target, "取消扫描")
+        db.tagScanTaskDao().cancelSession(target)
+        sessionMutex.withLock { activeSessionId = null }
+        currentJob?.cancel()
+        // 立即反馈终态，避免 JNI 阻塞导致 UI 长时间停留在“取消中”
+        updateProgressState(target, ScanSessionState.CANCELLED)
+    }
+
+    /**
+     * 重试失败任务
+     */
+    suspend fun retryFailed(sessionId: String? = null) {
+        val target = sessionId ?: activeSessionId ?: return
+        logInfo(target, "重试失败任务")
+        val now = System.currentTimeMillis()
+        val failed = db.tagScanTaskDao().getTasksBySession(target)
+            .filter { it.status == TagScanTaskStatus.FAILED }
+            .map { it.copy(status = TagScanTaskStatus.PENDING, scheduledAt = now, errorMessage = null) }
+        db.tagScanTaskDao().insertAll(failed)
+        startSession(target)
+    }
+
+    /**
+     * 清理已完成/已取消的旧任务
+     */
+    suspend fun cleanup() {
+        val before = System.currentTimeMillis() - CLEANUP_RETENTION_MS
+        db.tagScanTaskDao().cleanupOldCompleted(before)
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  内部实现
+    // ═══════════════════════════════════════════════════════════
+
+    private suspend fun createTasks(
+        sessionId: String,
+        mediaIds: List<Long>,
+        categories: Set<TagCategory>,
+        passes: List<TagScanPass>,
+        policy: ScanQueuePolicy
+    ) {
+        val categoriesJson = if (categories == TagCategory.ALL) null
+        else JSONArray(categories.map { it.name }).toString()
+
+        val tasks = mutableListOf<TagScanTaskEntity>()
+
+        // Pass 1: 每张媒体一个独立任务
+        if (passes.contains(TagScanPass.FACE_DETECTION)) {
+            tasks += mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.FACE_DETECTION,
+                    tagCategories = categoriesJson,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+        }
+
+        // Pass 2: 全局 DBSCAN 任务，mediaId = -1 作为标记
+        if (passes.contains(TagScanPass.DBSCAN)) {
+            tasks += TagScanTaskEntity(
+                sessionId = sessionId,
+                mediaId = -1L,
+                pass = TagScanPass.DBSCAN,
+                tagCategories = categoriesJson,
+                status = TagScanTaskStatus.PENDING,
+                priority = 1,
+                createdAt = System.currentTimeMillis()
+            )
+        }
+
+        // Pass 3: 每张媒体一个独立任务
+        if (passes.contains(TagScanPass.QWEN_TAGGING)) {
+            tasks += mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.QWEN_TAGGING,
+                    tagCategories = categoriesJson,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 2,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+        }
+
+        db.tagScanTaskDao().insertAll(tasks)
+        logInfo(sessionId, "创建 ${tasks.size} 个任务 (${mediaIds.size} 媒体, passes=$passes)")
+    }
+
+    private suspend fun createTasksForSinglePass(
+        sessionId: String,
+        mediaIds: List<Long>,
+        pass: TagScanPass,
+        policy: ScanQueuePolicy
+    ) {
+        val tasks = when (pass) {
+            TagScanPass.FACE_DETECTION -> mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.FACE_DETECTION,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+            TagScanPass.DBSCAN -> listOf(
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = -1L,
+                    pass = TagScanPass.DBSCAN,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+            TagScanPass.QWEN_TAGGING -> mediaIds.map { mediaId ->
+                TagScanTaskEntity(
+                    sessionId = sessionId,
+                    mediaId = mediaId,
+                    pass = TagScanPass.QWEN_TAGGING,
+                    status = TagScanTaskStatus.PENDING,
+                    priority = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+        }
+        db.tagScanTaskDao().insertAll(tasks)
+        logInfo(sessionId, "创建 ${tasks.size} 个任务 (pass=$pass)")
+    }
+
+    private suspend fun startSession(sessionId: String) {
+        sessionMutex.withLock {
+            if (activeSessionId == sessionId && currentJob?.isActive == true) {
+                logInfo(sessionId, "会话已在运行中")
+                return
+            }
+            activeSessionId = sessionId
+        }
+
+        currentJob?.cancel()
+        currentJob = scope.launch {
+            runSession(sessionId)
+        }
+    }
+
+    private suspend fun runSession(sessionId: String) {
+        updateProgressState(sessionId, ScanSessionState.RUNNING)
+        logInfo(sessionId, "会话开始运行")
+
+        var qwenModelPrepared = false
+
+        try {
+            while (currentCoroutineContext().isActive) {
+                val task = db.tagScanTaskDao().pollNextPendingBySession(sessionId) ?: break
+
+                if (task.pass == TagScanPass.QWEN_TAGGING && !qwenModelPrepared) {
+                    if (!prepareQwenModel()) {
+                        logError(sessionId, "Qwen 模型加载失败，终止会话")
+                        db.tagScanTaskDao().markFailed(task.id, "LLM model not loaded", null)
+                        break
+                    }
+                    qwenModelPrepared = true
+                }
+
+                val startMs = System.currentTimeMillis()
+                db.tagScanTaskDao().markRunning(task.id)
+                updateProgressState(sessionId, ScanSessionState.RUNNING, task.pass, task.mediaId)
+
+                val success = executeTask(task)
+
+                val durationMs = System.currentTimeMillis() - startMs
+                recordDuration(durationMs)
+
+                if (!success) {
+                    handleTaskFailure(task)
+                } else {
+                    db.tagScanTaskDao().markCompleted(task.id)
+                    maybeUpdateMediaScanRecord(task)
+                }
+
+                delay(POLL_INTERVAL_MS)
+            }
+
+            finalizeSession(sessionId)
+        } catch (e: CancellationException) {
+            logInfo(sessionId, "会话被取消")
+            updateProgressState(sessionId, ScanSessionState.CANCELLED)
+            throw e
+        } catch (e: Exception) {
+            logError(sessionId, "会话异常: ${e.message}")
+            updateProgressState(sessionId, ScanSessionState.PAUSED)
+        }
+    }
+
+    private suspend fun executeTask(task: TagScanTaskEntity): Boolean {
+        return try {
+            when (task.pass) {
+                TagScanPass.FACE_DETECTION -> scheduler.executeFaceDetection(task.mediaId)
+                TagScanPass.DBSCAN -> scheduler.executeDbscan()
+                TagScanPass.QWEN_TAGGING -> scheduler.executeQwenTagging(task.mediaId)
+            }
+            true
+        } catch (e: CancellationException) {
+            // 取消异常必须向上抛，让 runSession 进入取消终态
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Task ${task.id} failed: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * 批量执行前准备：加载 Qwen 模型
+     */
+    suspend fun prepareQwenModel(): Boolean {
+        return scheduler.prepareQwenModel()
+    }
+
+    private suspend fun handleTaskFailure(task: TagScanTaskEntity) {
+        val policy = ScanQueuePolicy() // 默认策略，可扩展为按会话存储策略
+        val nextRetryAt = if (task.attemptCount < policy.maxRetryAttempts) {
+            System.currentTimeMillis() + RETRY_BACKOFF_BASE_MS * (task.attemptCount + 1)
+        } else null
+
+        db.tagScanTaskDao().markFailed(
+            task.id,
+            "Attempt ${task.attemptCount + 1} failed",
+            nextRetryAt
+        )
+        logWarning(task.sessionId, "任务 ${task.id} 失败，第 ${task.attemptCount + 1} 次尝试")
+    }
+
+    private suspend fun maybeUpdateMediaScanRecord(task: TagScanTaskEntity) {
+        // DBSCAN 是全局任务，不更新单媒体记录
+        if (task.mediaId < 0 || task.pass == TagScanPass.DBSCAN) return
+
+        // 仅当该媒体所有同会话任务都完成时更新 lastTagScanAt
+        val sessionTasks = db.tagScanTaskDao().getTasksBySession(task.sessionId)
+        val mediaTasks = sessionTasks.filter { it.mediaId == task.mediaId }
+        val allCompleted = mediaTasks.all { it.status == TagScanTaskStatus.COMPLETED }
+        if (!allCompleted) return
+
+        val now = System.currentTimeMillis()
+        val existingEntity = db.mediaDao().getMediaById(task.mediaId)
+        val existingPasses = existingEntity?.lastTagScanPasses?.let { parsePassesJson(it) } ?: mutableMapOf()
+
+        val passNumber = task.pass.toPassNumber()
+        existingPasses[passNumber] = now
+        val passesJson = JSONObject(existingPasses as Map<*, *>).toString()
+        db.mediaDao().updateLastTagScan(task.mediaId, now, passesJson)
+    }
+
+    private suspend fun finalizeSession(sessionId: String) {
+        val stats = db.tagScanTaskDao().countByStatus(sessionId)
+        val pending = stats.count(TagScanTaskStatus.PENDING)
+        val running = stats.count(TagScanTaskStatus.RUNNING)
+        val paused = stats.count(TagScanTaskStatus.PAUSED)
+        val cancelled = stats.count(TagScanTaskStatus.CANCELLED)
+
+        when {
+            cancelled > 0 && pending == 0 && running == 0 -> {
+                logInfo(sessionId, "会话已取消")
+                updateProgressState(sessionId, ScanSessionState.CANCELLED)
+                cleanup()
+            }
+            paused > 0 -> {
+                logInfo(sessionId, "会话已暂停")
+                updateProgressState(sessionId, ScanSessionState.PAUSED)
+            }
+            pending == 0 && running == 0 -> {
+                logInfo(sessionId, "会话完成")
+                updateProgressState(sessionId, ScanSessionState.COMPLETED)
+                cleanup()
+            }
+            else -> {
+                updateProgressState(sessionId, ScanSessionState.IDLE)
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  进度与日志
+    // ═══════════════════════════════════════════════════════════
+
+    private suspend fun updateProgressState(
+        sessionId: String,
+        state: ScanSessionState,
+        currentPass: TagScanPass? = null,
+        currentMediaId: Long? = null
+    ) {
+        // 一旦进入终态（已取消/已完成），不再接受运行中/暂停等中间态覆盖，
+        // 避免取消后当前 JNI 任务返回又把状态刷回 RUNNING。
+        val current = _progress.value
+        if (current != null &&
+            current.sessionId == sessionId &&
+            current.state in setOf(ScanSessionState.CANCELLED, ScanSessionState.COMPLETED) &&
+            state !in setOf(ScanSessionState.CANCELLED, ScanSessionState.COMPLETED)
+        ) {
+            return
+        }
+
+        val stats = db.tagScanTaskDao().countByStatus(sessionId)
+        val total = stats.sumOf { it.cnt }
+        val processed = stats.count(TagScanTaskStatus.COMPLETED)
+        val pending = stats.count(TagScanTaskStatus.PENDING)
+        val failed = stats.count(TagScanTaskStatus.FAILED)
+
+        val avgMs = recentDurationsMs.average().toLong().takeIf { it > 0 }
+        val estimatedRemainingMs = if (avgMs != null && (pending + failed) > 0) {
+            avgMs * (pending + failed)
+        } else null
+
+        _progress.value = TagScanSessionProgress(
+            sessionId = sessionId,
+            state = state,
+            currentPass = currentPass,
+            currentMediaId = currentMediaId,
+            processed = processed,
+            total = total,
+            pending = pending,
+            failed = failed,
+            estimatedRemainingMs = estimatedRemainingMs,
+            messages = sessionMessages.toList()
+        )
+    }
+
+    private fun logInfo(sessionId: String, text: String) {
+        Log.i(TAG, "[$sessionId] $text")
+        addMessage(MessageLevel.INFO, text)
+    }
+
+    private fun logWarning(sessionId: String, text: String) {
+        Log.w(TAG, "[$sessionId] $text")
+        addMessage(MessageLevel.WARNING, text)
+    }
+
+    private fun logError(sessionId: String, text: String) {
+        Log.e(TAG, "[$sessionId] $text")
+        addMessage(MessageLevel.ERROR, text)
+    }
+
+    private fun addMessage(level: MessageLevel, text: String) {
+        sessionMessages.add(ScanMessage(level = level, text = text))
+        if (sessionMessages.size > 50) {
+            sessionMessages.removeAt(0)
+        }
+    }
+
+    private fun recordDuration(durationMs: Long) {
+        if (recentDurationsMs.size >= ESTIMATE_WINDOW_SIZE) {
+            recentDurationsMs.removeFirst()
+        }
+        recentDurationsMs.addLast(durationMs)
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  辅助
+    // ═══════════════════════════════════════════════════════════
+
+    private suspend fun maybeResumeOnStartup() {
+        // 简单策略：启动时不自动恢复，避免用户不知情时后台运行
+        // 如需自动恢复，可在此处查询活跃会话并 startSession
+    }
+
+    private suspend fun findFirstPausedSession(): String? {
+        // Room 没有直接按状态查 sessionId 的方法，这里简化处理
+        return null
+    }
+
+    private fun newSessionId(): String = "tag-${UUID.randomUUID().toString().substring(0, 8)}"
+
+    private fun parsePassesJson(json: String): MutableMap<String, Long> {
+        return try {
+            val obj = JSONObject(json)
+            val map = mutableMapOf<String, Long>()
+            obj.keys().forEach { key ->
+                map[key] = obj.getLong(key)
+            }
+            map
+        } catch (e: Exception) {
+            mutableMapOf()
+        }
+    }
+
+    /**
+     * 判断指定媒体的某个 Pass 是否缺失（用于手动 Pass 增量）
+     */
+    private suspend fun isPassMissing(mediaId: Long, pass: TagScanPass): Boolean {
+        val entity = db.mediaDao().getMediaById(mediaId) ?: return true
+        return when (pass) {
+            TagScanPass.FACE_DETECTION -> entity.faceRoiResult.isNullOrEmpty()
+            TagScanPass.QWEN_TAGGING -> entity.labels.isNullOrEmpty()
+            TagScanPass.DBSCAN -> false // DBSCAN 是全局任务，不针对单媒体
+        }
+    }
+
+    private fun hasAllCategories(labelsJson: String?, categories: Set<TagCategory>): Boolean {
+        if (labelsJson.isNullOrEmpty()) return false
+        return try {
+            val obj = JSONObject(labelsJson)
+            categories.all { category ->
+                when (category) {
+                    TagCategory.FACE -> obj.has("face")
+                    TagCategory.SCENE -> obj.optString("scene").isNotEmpty()
+                    TagCategory.ACTIVITY -> obj.optString("activity").isNotEmpty()
+                    TagCategory.OBJECTS -> obj.optJSONArray("objects")?.length()?.let { it > 0 } ?: false
+                    TagCategory.TAGS -> obj.optJSONArray("tags")?.length()?.let { it > 0 } ?: false
+                    TagCategory.SUMMARY -> obj.optString("qwenSummary").isNotEmpty()
+                }
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun List<StatusCount>.count(status: TagScanTaskStatus): Int {
+        return find { it.status == status }?.cnt ?: 0
+    }
+}

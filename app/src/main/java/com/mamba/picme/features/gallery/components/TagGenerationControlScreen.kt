@@ -1,7 +1,10 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.mamba.picme.features.gallery.components
 
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,10 +19,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.mamba.picme.PicMeApplication
 import com.mamba.picme.data.local.AppDatabase
-import com.mamba.picme.domain.tag.PipelineStage
-import com.mamba.picme.domain.tag.TagScanProgress
+import com.mamba.picme.data.local.entity.TagScanPass
+import com.mamba.picme.domain.tag.TagCategory
+import com.mamba.picme.domain.tag.scan.ScanSessionState
+import com.mamba.picme.domain.tag.scan.TagScanSessionProgress
 import com.mamba.picme.service.tag.TagGenerationService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -28,7 +34,7 @@ import kotlinx.coroutines.launch
  * TAG 生成精细控制子页面
  *
  * 显示 3-Pass 混合管道的各阶段进度和数据库统计。
- * 所有操作（全量/增量扫描）通过 TagGenerationScheduler 统一管理。
+ * 所有操作通过 TagGenerationService → TagScanOrchestrator 统一管理。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,9 +47,18 @@ fun TagGenerationControlScreen(
     val coroutineScope = rememberCoroutineScope()
 
     // ── 通过 AppContainer 观察 TAG 生成状态（Service 内部分发） ───
-    val tagGenerationIsScanning by app.container.tagGenerationIsScanning.collectAsState()
-    val tagGenerationProgress by app.container.tagGenerationProgress.collectAsState()
-    val tagGenerationLastMessage by app.container.tagGenerationLastMessage.collectAsState()
+    val sessionProgress by app.container.tagGenerationSessionProgress.collectAsState()
+    val currentState = sessionProgress?.state
+    val isScanning = currentState in setOf(
+        ScanSessionState.RUNNING,
+        ScanSessionState.PAUSING,
+        ScanSessionState.CANCELLING
+    )
+    val isRunning = currentState == ScanSessionState.RUNNING
+    val isPausing = currentState == ScanSessionState.PAUSING
+    val isPaused = currentState == ScanSessionState.PAUSED
+    val isCancelling = currentState == ScanSessionState.CANCELLING
+    val isCancelled = currentState == ScanSessionState.CANCELLED
     val snackbarHostState = remember { SnackbarHostState() }
 
     // 启动前台 Service（Intent 驱动，无外部 Handle）
@@ -58,6 +73,11 @@ fun TagGenerationControlScreen(
     var personCount by remember { mutableIntStateOf(0) }
     var embeddingCount by remember { mutableIntStateOf(0) }
     var isModelAvailable by remember { mutableStateOf(false) }
+
+    // 精细控制：类别 / 时间范围 / 模式
+    var selectedCategories by remember { mutableStateOf(setOf<TagCategory>()) }
+    var selectedTimeRange by remember { mutableStateOf(TimeRangePreset.ALL) }
+    var fullRegenerateMode by remember { mutableStateOf(false) }
 
     // 刷新统计
     fun refreshStats() {
@@ -76,18 +96,20 @@ fun TagGenerationControlScreen(
     }
 
     // 显示扫描完成通知
-    LaunchedEffect(tagGenerationLastMessage) {
-        val msg = tagGenerationLastMessage ?: return@LaunchedEffect
-        refreshStats()
-        snackbarHostState.showSnackbar(msg)
+    LaunchedEffect(sessionProgress?.messages?.lastOrNull()?.text) {
+        val msg = sessionProgress?.messages?.lastOrNull()?.text ?: return@LaunchedEffect
+        if (sessionProgress?.state == ScanSessionState.COMPLETED) {
+            refreshStats()
+            snackbarHostState.showSnackbar(msg)
+        }
     }
 
     // 初始加载统计
     LaunchedEffect(Unit) { refreshStats() }
 
     // 轮询更新（扫描中进行时）
-    LaunchedEffect(tagGenerationIsScanning) {
-        while (tagGenerationIsScanning) {
+    LaunchedEffect(isScanning) {
+        while (isScanning) {
             delay(2000)
             refreshStats()
         }
@@ -115,8 +137,8 @@ fun TagGenerationControlScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── 扫描进度卡片 ────────────────────────────
-            if (tagGenerationIsScanning && tagGenerationProgress != null) {
-                ScanProgressCard(tagGenerationProgress!!)
+            AnimatedVisibility(visible = sessionProgress != null) {
+                sessionProgress?.let { ScanProgressCard(it) }
             }
 
             // ── 数据库统计卡片 ────────────────────────────
@@ -141,10 +163,10 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (withFace > 0 || !tagGenerationIsScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (withFace > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (withFace > 0 || !tagGenerationIsScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (withFace > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
@@ -161,10 +183,10 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (personCount > 0 || !tagGenerationIsScanning || !isModelAvailable) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (personCount > 0 || !isScanning || !isModelAvailable) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (personCount > 0 || !tagGenerationIsScanning || !isModelAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (personCount > 0 || !isScanning || !isModelAvailable) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
@@ -182,10 +204,10 @@ fun TagGenerationControlScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            if (withLabels > 0 || !tagGenerationIsScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
+                            if (withLabels > 0 || !isScanning) Icons.Rounded.CheckCircle else Icons.Rounded.HourglassEmpty,
                             null,
                             modifier = Modifier.size(20.dp),
-                            tint = if (withLabels > 0 || !tagGenerationIsScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
+                            tint = if (withLabels > 0 || !isScanning) Color(0xFF4CAF50) else MaterialTheme.colorScheme.outline
                         )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
@@ -200,12 +222,50 @@ fun TagGenerationControlScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    if (tagGenerationIsScanning) {
-                        // ── 扫描中：显示重新生成按钮（可中断旧扫描） ─────
+                    if (isRunning || isPausing || isPaused) {
+                        // ── 运行中/暂停中/已暂停：显示生命周期控制按钮 ─────
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            when {
+                                isRunning -> {
+                                    OutlinedButton(
+                                        onClick = {
+                                            context.startForegroundService(TagGenerationService.intentPause(context))
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Rounded.Pause, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("暂停")
+                                    }
+                                }
+                                isPausing -> {
+                                    OutlinedButton(
+                                        onClick = {},
+                                        enabled = false,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Rounded.Pause, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("暂停中...")
+                                    }
+                                }
+                                isPaused -> {
+                                    Button(
+                                        onClick = {
+                                            context.startForegroundService(TagGenerationService.intentResume(context))
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Rounded.PlayArrow, null, Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("恢复")
+                                    }
+                                }
+                            }
+
                             OutlinedButton(
                                 onClick = {
                                     context.startForegroundService(TagGenerationService.intentCancel(context))
@@ -217,21 +277,20 @@ fun TagGenerationControlScreen(
                             ) {
                                 Icon(Icons.Rounded.Cancel, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("取消扫描")
+                                Text("取消")
                             }
-                            Button(
-                                onClick = {
-                                    refreshStats()
-                                    context.startForegroundService(TagGenerationService.intentScanPass3Full(context))
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiary
-                                ),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Pass 3 重新生成")
+
+                            if ((sessionProgress?.failed ?: 0) > 0) {
+                                OutlinedButton(
+                                    onClick = {
+                                        context.startForegroundService(TagGenerationService.intentRetryFailed(context))
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Rounded.Refresh, null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("重试")
+                                }
                             }
                         }
                     } else {
@@ -326,6 +385,134 @@ fun TagGenerationControlScreen(
                             Spacer(Modifier.width(4.dp))
                             Text("Pass 3 重新生成")
                         }
+
+                        Spacer(Modifier.height(8.dp))
+                        HorizontalDivider()
+                        Spacer(Modifier.height(8.dp))
+
+                        // ── 精细控制：按类别 / 时间范围重新生成 ──────────
+                        Text(
+                            "精细控制",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            "选择 TAG 类别",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            CategoryChip(
+                                label = "人脸",
+                                selected = TagCategory.FACE in selectedCategories,
+                                onClick = {
+                                    selectedCategories = selectedCategories.toggle(TagCategory.FACE)
+                                }
+                            )
+                            CategoryChip(
+                                label = "场景",
+                                selected = TagCategory.SCENE in selectedCategories,
+                                onClick = {
+                                    selectedCategories = selectedCategories.toggle(TagCategory.SCENE)
+                                }
+                            )
+                            CategoryChip(
+                                label = "活动",
+                                selected = TagCategory.ACTIVITY in selectedCategories,
+                                onClick = {
+                                    selectedCategories = selectedCategories.toggle(TagCategory.ACTIVITY)
+                                }
+                            )
+                            CategoryChip(
+                                label = "物体",
+                                selected = TagCategory.OBJECTS in selectedCategories,
+                                onClick = {
+                                    selectedCategories = selectedCategories.toggle(TagCategory.OBJECTS)
+                                }
+                            )
+                            CategoryChip(
+                                label = "标签",
+                                selected = TagCategory.TAGS in selectedCategories,
+                                onClick = {
+                                    selectedCategories = selectedCategories.toggle(TagCategory.TAGS)
+                                }
+                            )
+                            CategoryChip(
+                                label = "摘要",
+                                selected = TagCategory.SUMMARY in selectedCategories,
+                                onClick = {
+                                    selectedCategories = selectedCategories.toggle(TagCategory.SUMMARY)
+                                }
+                            )
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            "时间范围",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            TimeRangePreset.entries.forEach { preset ->
+                                CategoryChip(
+                                    label = preset.label,
+                                    selected = selectedTimeRange == preset,
+                                    onClick = { selectedTimeRange = preset }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "模式: ${if (fullRegenerateMode) "全量重标" else "仅补充缺失"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+                            Switch(
+                                checked = fullRegenerateMode,
+                                onCheckedChange = { fullRegenerateMode = it }
+                            )
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Button(
+                            onClick = {
+                                refreshStats()
+                                val categories = selectedCategories.ifEmpty { TagCategory.ALL }
+                                val startTimeMs = selectedTimeRange.startTimeMs
+                                context.startForegroundService(
+                                    TagGenerationService.intentRegenerateCategories(
+                                        context = context,
+                                        categories = categories.map { it.name },
+                                        startTimeMs = startTimeMs,
+                                        fullMode = fullRegenerateMode
+                                    )
+                                )
+                            },
+                            enabled = selectedCategories.isNotEmpty() || selectedTimeRange != TimeRangePreset.ALL,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Rounded.Tune, null, Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("按选择重新生成")
+                        }
                     }
                 }
             }
@@ -372,23 +559,58 @@ fun TagGenerationControlScreen(
 }
 
 @Composable
-private fun ScanProgressCard(progress: TagScanProgress) {
+private fun ScanProgressCard(progress: TagScanSessionProgress) {
+    val isScanning = progress.state in setOf(
+        ScanSessionState.RUNNING,
+        ScanSessionState.PAUSING,
+        ScanSessionState.CANCELLING
+    )
+    val stateText = when (progress.state) {
+        ScanSessionState.RUNNING -> "扫描中"
+        ScanSessionState.PAUSING -> "暂停中"
+        ScanSessionState.PAUSED -> "已暂停"
+        ScanSessionState.CANCELLING -> "取消中"
+        ScanSessionState.CANCELLED -> "已取消"
+        ScanSessionState.COMPLETED -> "完成"
+        ScanSessionState.IDLE -> "空闲"
+    }
+
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = when (progress.state) {
+                ScanSessionState.PAUSED -> MaterialTheme.colorScheme.secondaryContainer
+                ScanSessionState.CANCELLED -> MaterialTheme.colorScheme.errorContainer
+                else -> MaterialTheme.colorScheme.primaryContainer
+            }
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                if (isScanning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Icon(
+                        Icons.Rounded.Info,
+                        null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
+                val subtitle = when {
+                    progress.state == ScanSessionState.CANCELLING -> "等待当前任务结束"
+                    progress.state == ScanSessionState.CANCELLED -> ""
+                    progress.state == ScanSessionState.COMPLETED -> ""
+                    progress.currentPass == null -> "准备中"
+                    else -> passDisplayName(progress.currentPass)
+                }
                 Text(
-                    "3-Pass 扫描中",
+                    text = if (subtitle.isNotEmpty()) "$stateText · $subtitle" else stateText,
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -404,19 +626,73 @@ private fun ScanProgressCard(progress: TagScanProgress) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "${progress.processed} / ${progress.total} 张 (${passDisplayName(progress.currentStage)})",
+                "${progress.processed} / ${progress.total} 张 · 待处理 ${progress.pending} · 失败 ${progress.failed}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
+            if (progress.estimatedRemainingMs != null && isScanning) {
+                Text(
+                    "预计剩余: ${formatDuration(progress.estimatedRemainingMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+            }
+            if (progress.messages.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    progress.messages.last().text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }
 
-private fun passDisplayName(stage: PipelineStage): String = when (stage) {
-    PipelineStage.FACE_ROI -> "Pass 1: 人脸检测"
-    PipelineStage.FACE_CLUSTER -> "Pass 2: DBSCAN 聚类"
-    PipelineStage.QWEN_TAGGING -> "Pass 3: Qwen 标签"
-    PipelineStage.COMPLETE -> "完成"
+private fun passDisplayName(pass: TagScanPass?): String = when (pass) {
+    TagScanPass.FACE_DETECTION -> "Pass 1: 人脸检测"
+    TagScanPass.DBSCAN -> "Pass 2: DBSCAN 聚类"
+    TagScanPass.QWEN_TAGGING -> "Pass 3: Qwen 标签"
+    null -> "准备中"
+}
+
+private fun formatDuration(ms: Long): String {
+    val seconds = ms / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes % 60}m"
+        minutes > 0 -> "${minutes}m ${seconds % 60}s"
+        else -> "${seconds}s"
+    }
+}
+
+private enum class TimeRangePreset(val label: String, private val startOffsetMs: Long) {
+    ALL("全部", 0),
+    DAYS_7("最近7天", 7 * 24 * 60 * 60 * 1000L),
+    DAYS_30("最近30天", 30 * 24 * 60 * 60 * 1000L),
+    DAYS_90("最近90天", 90 * 24 * 60 * 60 * 1000L);
+
+    val startTimeMs: Long
+        get() = if (startOffsetMs > 0) System.currentTimeMillis() - startOffsetMs else 0L
+}
+
+private fun Set<TagCategory>.toggle(category: TagCategory): Set<TagCategory> {
+    return if (category in this) this - category else this + category
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CategoryChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) }
+    )
 }
 
 @Composable

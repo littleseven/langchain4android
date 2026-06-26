@@ -8,7 +8,6 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.automirrored.rounded.Label
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Share
@@ -50,8 +49,7 @@ fun GalleryTopBar(
     onGroupingModeSelected: (GroupingMode) -> Unit,
     onManageDuplicates: () -> Unit,
     onOpenTestDataTools: () -> Unit,
-    onSearchClick: () -> Unit = {},
-    onNavigateToTagControl: (() -> Unit)? = null
+    onSearchClick: () -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -100,14 +98,6 @@ fun GalleryTopBar(
                 }
                 IconButton(onClick = onManageDuplicates) {
                     Icon(Icons.Outlined.FilterDrama, contentDescription = stringResource(R.string.manage_duplicates))
-                }
-                if (onNavigateToTagControl != null) {
-                    IconButton(onClick = onNavigateToTagControl) {
-                        Icon(
-                            Icons.AutoMirrored.Rounded.Label,
-                            contentDescription = "TAG 生成控制"
-                        )
-                    }
                 }
                 GroupingMenu(
                     currentMode = groupingMode,

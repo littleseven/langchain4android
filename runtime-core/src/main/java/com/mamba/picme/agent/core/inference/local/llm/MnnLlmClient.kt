@@ -178,6 +178,44 @@ class MnnLlmClient(private val context: Context) {
     }
 
     /**
+     * 使用图片 + system prompt + user prompt 进行多模态生成，带超时守护。
+     *
+     * 适用于 Pass 3 批量扫描场景：当 OpenCL 后端死锁/挂起时，
+     * 在 [timeoutMs] 后返回 [StreamResult.error] = "OPENCL_TIMEOUT"，
+     * 避免整个推理线程被永久阻塞。
+     *
+     * @param timeoutMs 最大等待时间（毫秒）
+     */
+    fun generateWithImageTimeout(
+        systemPrompt: String,
+        userPrompt: String,
+        bitmap: Bitmap,
+        maxNewTokens: Int = 256,
+        timeoutMs: Int = 30_000
+    ): StreamResult {
+        if (!isLoaded) {
+            Logger.w(tag, "LLM not loaded, cannot generate with image")
+            return StreamResult(error = "LLM not loaded")
+        }
+
+        return try {
+            val safeBitmap = preprocessBitmap(bitmap)
+            if (safeBitmap !== bitmap) {
+                Logger.d(tag, "[Vision] Image preprocessed: ${bitmap.width}x${bitmap.height} " +
+                    "(${bitmap.config}) -> ${safeBitmap.width}x${safeBitmap.height} (${safeBitmap.config})")
+            }
+
+            val resultMap = MnnGlobalReleaseLock.withOperation {
+                nativeGenerateWithImageTimeout(nativeHandle, systemPrompt, userPrompt, safeBitmap, maxNewTokens, timeoutMs)
+            }
+            StreamResult.fromHashMap(resultMap)
+        } catch (exception: Exception) {
+            Logger.e(tag, "Image generation with timeout failed", exception)
+            StreamResult(error = exception.message ?: "Unknown error")
+        }
+    }
+
+    /**
      * 图像预处理：确保 Bitmap 安全可用于 native 推理。
      *
      * 1. 格式转换：非 ARGB_8888 的 Bitmap 转换为 ARGB_8888
@@ -441,6 +479,15 @@ class MnnLlmClient(private val context: Context) {
         userPrompt: String,
         bitmap: Bitmap,
         maxNewTokens: Int
+    ): HashMap<String, Any>
+
+    private external fun nativeGenerateWithImageTimeout(
+        handle: Long,
+        systemPrompt: String,
+        userPrompt: String,
+        bitmap: Bitmap,
+        maxNewTokens: Int,
+        timeoutMs: Int
     ): HashMap<String, Any>
 
     private external fun nativeGenerateWithSystem(

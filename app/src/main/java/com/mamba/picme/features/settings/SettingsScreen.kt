@@ -80,6 +80,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToModelCenter: (String) -> Unit = {},
+    onNavigateToTagControl: () -> Unit = {},
 ) {
     val view = LocalView.current
     val context = LocalContext.current
@@ -268,7 +269,8 @@ fun SettingsScreen(
             feishuAppSecret = feishuAppSecret,
             onFeishuAppIdChange = viewModel::setFeishuAppId,
             onFeishuAppSecretChange = viewModel::setFeishuAppSecret,
-            onNavigateBack = onNavigateBack
+            onNavigateBack = onNavigateBack,
+            onNavigateToTagControl = onNavigateToTagControl
         )
 
         SettingsAgentPanel(
@@ -342,7 +344,8 @@ private fun SettingsContent(
     feishuAppSecret: String,
     onFeishuAppIdChange: (String) -> Unit,
     onFeishuAppSecretChange: (String) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToTagControl: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -460,6 +463,15 @@ private fun SettingsContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // ── TAG 生成精细控制入口 ──
+                SettingsClickableRow(
+                    title = stringResource(R.string.tag_control_title),
+                    subtitle = stringResource(R.string.tag_control_subtitle),
+                    onClick = onNavigateToTagControl
                 )
             }
 

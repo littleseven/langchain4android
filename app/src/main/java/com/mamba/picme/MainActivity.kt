@@ -231,8 +231,7 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToCamera = { navController.navigate(Screen.Camera.route, navOptions { launchSingleTop = true }) },
                                     onNavigateToSettings = { navController.navigate(Screen.Settings.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) },
-                                    onNavigateToTagControl = { navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true }) }
+                                    onNavigateToDebug = { navController.navigate(Screen.Debug.route, navOptions { launchSingleTop = true }) }
                                 )
                             }
                             composable(Screen.TagControl.route) {
@@ -259,6 +258,9 @@ class MainActivity : ComponentActivity() {
                                     onNavigateBack = { navController.popBackStack() },
                                     onNavigateToModelCenter = { categoryTag ->
                                         navController.navigate(Screen.ModelCenter.createRoute(categoryTag), navOptions { launchSingleTop = true })
+                                    },
+                                    onNavigateToTagControl = {
+                                        navController.navigate(Screen.TagControl.route, navOptions { launchSingleTop = true })
                                     }
                                 )
                             }

@@ -9,6 +9,8 @@ import com.mamba.picme.beauty.api.facedetect.FaceDetectorFactory
 import com.mamba.picme.beauty.api.facedetect.InferenceBackendType
 import com.mamba.picme.data.local.AppDatabase
 import com.mamba.picme.data.local.entity.FaceEmbeddingEntity
+import com.mamba.picme.data.preferences.UserPreferencesRepository
+import com.mamba.picme.domain.repository.UserSettingsRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,9 +20,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.sqrt
@@ -44,7 +48,8 @@ class TagGenerationScheduler(
     private val context: Context,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val guard: suspend () -> GuardResult = { GuardResult.ALLOW },
-    private val getThrottleMs: () -> Long = { 1000L }
+    private val getThrottleMs: () -> Long = { 1000L },
+    private val userSettingsRepository: UserSettingsRepository = UserPreferencesRepository(context)
 ) {
 
     companion object {
@@ -93,6 +98,14 @@ class TagGenerationScheduler(
     private val normalizer = TagNormalizer(vocab)
     private val faceClusterEngine = FaceClusterEngine(context)
 
+    private val openClGuardian: OpenClGuardian by lazy {
+        OpenClGuardian(
+            context = context,
+            engine = AgentOrchestrator.getInstance(context).getLlmEngine(),
+            prefs = userSettingsRepository
+        )
+    }
+
     private val pipeline: TagGenerationPipeline by lazy {
         val faceDetector = FaceDetectorFactory.create(context)
         // 【关键修复】必须调用 updatePipelineConfig()，否则 FaceDetectorManager
@@ -102,7 +115,7 @@ class TagGenerationScheduler(
             landmarkEngine = InferenceBackendType.MNN
         ))
         val llmEngine = AgentOrchestrator.getInstance(context).getLlmEngine()
-        TagGenerationPipeline(context, faceDetector, llmEngine, faceClusterEngine, normalizer)
+        TagGenerationPipeline(context, faceDetector, llmEngine, faceClusterEngine, normalizer, openClGuardian)
     }
 
     /** 触发全量 3-Pass 混合扫描 */
@@ -1000,34 +1013,40 @@ class TagGenerationScheduler(
             return false
         }
 
-        // 读取用户偏好：TAG 生成是否使用 GPU 加速
-        // 默认关闭，因为部分设备 OpenCL 多模态推理会死锁
-        val prefs = com.mamba.picme.data.preferences.UserPreferencesRepository(context)
-        val useOpencl = prefs.tagGenerationUseOpencl.first()
-
         // 如果模型已加载（可能来自 AI Agent 的 OpenCL 加载或其他扫描残留），
-        // 先完整卸载再重新加载，确保后端与设置一致。
+        // 先完整卸载再重新加载，确保后端与 Guardian 策略一致。
         if (engine.isLoaded) {
-            Log.i(TAG, "Model already loaded, unloading before reload (useOpencl=$useOpencl)")
+            Log.i(TAG, "Model already loaded, unloading before reload")
             engine.unload()
             // unload 通过 backgroundScope.launch 投递到 modelDispatcher 异步执行，
             // 给 modelDispatcher 时间处理 unload 后再投递 loadModel
             delay(1000)
         }
 
-        // OpenCL GPU 优先（如果用户启用）→ CPU 降级
-        if (useOpencl) {
+        // 由 OpenClGuardian 决定使用 OpenCL 还是 CPU（含黑名单、降级冷却、用户偏好）
+        val useCpu = openClGuardian.shouldUseCpu()
+
+        // OpenCL GPU 路径（如果允许）→ 失败后降级 CPU
+        if (!useCpu) {
             Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
             val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
             if (openclResult.isSuccess) {
                 Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
-                return true
+                // 加载成功后执行轻量 warmup，验证 OpenCL 可实际推理
+                val health = openClGuardian.warmup()
+                if (health == OpenClHealth.Healthy) {
+                    return true
+                }
+                Log.w(TAG, "OpenCL warmup failed ($health), falling back to CPU")
+                engine.unload()
+                delay(1000)
+            } else {
+                Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
+                    "falling back to CPU")
             }
-            Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
-                "falling back to CPU")
         }
 
-        // CPU 加载（默认路径 + OpenCL 失败降级）
+        // CPU 加载（默认路径 + OpenCL 失败/降级）
         Log.i(TAG, "Loading LLM model with CPU: $MODEL_KEY")
         val cpuResult = engine.loadModel(MODEL_KEY, useOpencl = false)
         return if (cpuResult.isSuccess) {
@@ -1038,6 +1057,84 @@ class TagGenerationScheduler(
             false
         }
     }
+
+    // ═══════════════════════════════════════════════════
+    //  原子任务执行器（供 TagScanOrchestrator 调用）
+    // ═══════════════════════════════════════════════════
+
+    /**
+     * [原子任务] Pass 1：单张媒体的人脸检测 + Embedding 提取
+     */
+    suspend fun executeFaceDetection(mediaId: Long) {
+        val dao = db.mediaDao()
+        val entity = dao.getMediaById(mediaId) ?: return
+
+        val result = pipeline.stage1WithEmbeddings(
+            uri = entity.uri,
+            lensFacing = androidx.camera.core.CameraSelector.LENS_FACING_BACK,
+            mediaId = entity.id
+        )
+
+        // 若任务已被取消，丢弃本次结果，避免取消后仍写入数据库
+        currentCoroutineContext().ensureActive()
+
+        if (result.faceRoiJson != null) {
+            dao.updateFaceRoiResult(entity.id, result.faceRoiJson, true)
+        }
+
+        for (embedding in result.embeddings) {
+            personDao.insertEmbedding(
+                com.mamba.picme.data.local.entity.FaceEmbeddingEntity(
+                    mediaId = entity.id,
+                    personId = null,
+                    embedding = floatArrayToByteArray(embedding)
+                )
+            )
+        }
+
+        delay(getThrottleMs())
+    }
+
+    /**
+     * [原子任务] Pass 2：DBSCAN 全局聚类
+     */
+    suspend fun executeDbscan() {
+        val dao = db.mediaDao()
+        runDbscanClustering(dao)
+    }
+
+    /**
+     * [原子任务] Pass 3：单张媒体的 Qwen 标签生成
+     */
+    suspend fun executeQwenTagging(mediaId: Long) {
+        if (!ensureModelLoaded()) {
+            throw IllegalStateException("LLM model not loaded")
+        }
+
+        val dao = db.mediaDao()
+        val entity = dao.getMediaById(mediaId) ?: return
+        val faceRoiJson = dao.getFaceRoiResult(entity.id)
+        val normalized = pipeline.stage3QwenTagging(entity.uri, faceRoiJson)
+
+        // 若任务已被取消，丢弃本次推理结果
+        currentCoroutineContext().ensureActive()
+
+        val unified = UnifiedTagResult(
+            scene = normalized.scene,
+            activity = normalized.activity,
+            objects = normalized.objects,
+            tags = normalized.tags,
+            qwenSummary = normalized.summary
+        )
+        dao.updateLabels(entity.id, unifiedTagToJson(unified))
+
+        delay(getThrottleMs())
+    }
+
+    /**
+     * 批量 Pass 3 前准备：确保 Qwen 模型已加载
+     */
+    suspend fun prepareQwenModel(): Boolean = ensureModelLoaded()
 
     /**
      * 卸载 LLM 模型释放 ~4GB 内存

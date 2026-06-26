@@ -458,6 +458,8 @@
     <string name="tag_gen_notification_starting">准备中…</string>
     <string name="tag_gen_notification_idle">等待中</string>
     <string name="tag_gen_notification_channel_desc">显示 TAG 生成进度</string>
+    <string name="tag_control_title">TAG 生成控制</string>
+    <string name="tag_control_subtitle">按类别 / 时间范围 / 全量或增量重新生成</string>
 
     <!-- Accessibility (contentDescription) -->
     <string name="cd_quick_actions">快捷操作</string>

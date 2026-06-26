@@ -85,6 +85,7 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
 
         // TAG 生成
         val TAG_GENERATION_USE_OPENCL = booleanPreferencesKey("tag_generation_use_opencl")
+        val OPENCL_DEGRADED_DEVICES = stringPreferencesKey("opencl_degraded_devices")
 
         // 远程模型配置（供应商维度 JSON + 当前选中模型ID）
         val AI_AGENT_REMOTE_MODEL_CONFIGS = stringPreferencesKey("ai_agent_remote_model_configs_v2")
@@ -635,6 +636,24 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateTagGenerationUseOpencl(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.TAG_GENERATION_USE_OPENCL] = enabled
+        }
+    }
+
+    override val openClDegradedDevices: Flow<String> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.OPENCL_DEGRADED_DEVICES] ?: "[]"
+        }
+
+    override suspend fun updateOpenClDegradedDevices(devicesJson: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.OPENCL_DEGRADED_DEVICES] = devicesJson
         }
     }
 

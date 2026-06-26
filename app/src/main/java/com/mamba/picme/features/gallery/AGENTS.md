@@ -241,7 +241,33 @@ override fun onCleared() {
 }
 ```
 
-### 2.6 缩略图缓存策略 (LruCache)
+### 2.7 TAG 生成精细控制（2026-06 新增）
+
+**入口**: `TagGenerationControlScreen`（设置 → AI Agent → TAG 生成控制）
+
+**技术规范**:
+- **3-Pass 混合管道**: Pass 1 人脸检测/Embedding → Pass 2 DBSCAN 聚类 → Pass 3 Qwen 多模态标签
+- **队列编排**: `TagScanOrchestrator` 持久化任务队列，支持暂停/恢复/取消/失败重试
+- **增量去重**: 默认跳过近期已覆盖所有请求 Pass 的媒体，按 `oldest-first` 排序避免老照片饿死
+- **精细控制**: 支持按 `TagCategory`（人脸/场景/活动/物体/标签/摘要）和时间范围（全部/7天/30天/90天）重新生成
+- **OpenCL 守护**: `OpenClGuardian` 在 Pass 3 前 warmup，超时后自动降级 CPU 并记录设备黑名单
+- **模型加载**: `TagGenerationScheduler.ensureModelLoaded()` 优先 OpenCL（用户开启且未降级），失败/warmup 超时后降级 CPU
+- **状态观察**: 通过 `TagGenerationService.sessionProgress` StateFlow 显示进度、预计剩余时间、暂停/恢复按钮
+
+**代码示例**:
+```kotlin
+// 启动按类别重新生成
+context.startForegroundService(
+    TagGenerationService.intentRegenerateCategories(
+        context = context,
+        categories = listOf(TagCategory.SCENE.name, TagCategory.TAGS.name),
+        startTimeMs = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L,
+        fullMode = false
+    )
+)
+```
+
+### 2.8 缩略图缓存策略 (LruCache)
 
 **技术规范**:
 - **内存缓存**: 使用 Coil 的 `MemoryCache`，占可用内存 25%
@@ -273,6 +299,11 @@ MediaPager 集成与 Camera 同源的广播命令体系（`com.mamba.picme.TEST_
 | `toggle_info` | — | 切换信息浮层显示 |
 | `delete_photo` | — | 删除当前照片 |
 | `share_photo` | — | 分享当前照片 |
+| `start_tag_scan_all` | — | 启动 TAG 全量扫描 |
+| `start_tag_scan_incremental` | — | 启动 TAG 增量扫描 |
+| `pause_tag_scan` | — | 暂停当前 TAG 扫描 |
+| `resume_tag_scan` | — | 恢复当前 TAG 扫描 |
+| `cancel_tag_scan` | — | 取消当前 TAG 扫描 |
 
 **adb 示例**:
 ```bash
@@ -291,6 +322,14 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action set_whiten --
 
 # 保存编辑
 adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action save_edit
+
+# 启动 TAG 全量扫描
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action start_tag_scan_all
+
+# 暂停 / 恢复 / 取消 TAG 扫描
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action pause_tag_scan
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action resume_tag_scan
+adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action cancel_tag_scan
 ```
 
 **实现细节**:
@@ -298,6 +337,7 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action save_edit
 - 分发器: `CameraTestCommandDispatcher.commandFlow`（SharedFlow，Camera 与 Gallery 共用）
 - 收集器: `MediaPager` 内通过 `LaunchedEffect(Unit)` 订阅，仅响应 Gallery 相关命令
 - 编辑参数命令（`set_smooth` 等）仅在 `isEditing=true` 时生效，否则返回 Error
+- TAG 扫描命令通过 `TagGenerationService` 对应 Intent 触发，无需 UI 处于前台
 
 ## 4. Agent 执行规约 (Execution Rules)
 
@@ -322,6 +362,9 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action save_edit
 - [ ] 图片加载是否处理了异常？(Coil 的 onError 回调)
 - [ ] 长按触发批选时是否有触感反馈？(HapticFeedback)
 - [ ] 重复扫描是否在后台线程执行？(避免阻塞 UI)
+- [ ] TAG 扫描任务是否正确持久化到 `tag_scan_tasks` 表？(异常恢复)
+- [ ] Pass 3 Qwen 推理是否经过 `OpenClGuardian` 超时保护？(防止 OpenCL 挂起)
+- [ ] 按类别重新生成时是否正确映射到 Pass 阶段？(人脸→Pass 1+2，其他→Pass 3)
 - [ ] 沉浸式模式是否在 DisposableEffect 中正确清理？(onDispose 恢复系统栏)
 - [ ] 缩略图位置记录是否在重组时丢失？(使用 remember)
 
@@ -333,6 +376,7 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action save_edit
 - ✅ 流体动效 → HorizontalPager + ZoomableImage 手势联动
 - ✅ 批量操作 → mutableStateListOf 支持连续批选与全选
 - ✅ OCR 本地识别 → ML Kit 离线引擎，ViewModel 生命周期管理
+- ✅ TAG 生成控制 → 3-Pass 队列 + 类别/时间范围精细控制 + OpenCL 超时降级
 
 **技术决策记录**:
 - 选择 HorizontalPager 而非 ViewPager2：与 Compose 生态无缝集成，手势控制更灵活
@@ -340,3 +384,5 @@ adb shell am broadcast -a com.mamba.picme.TEST_COMMAND --es action save_edit
 - LruCache 上限设为内存 25%：平衡清晰度与内存占用，OOM 风险可控
 - 分组计算放在 UseCase 层：遵循 Clean Architecture，便于单元测试与复用
 - OCR 资源在 onCleared 释放：避免内存泄漏，符合 ViewModel 生命周期规范
+- TAG 扫描使用持久化队列：支持暂停/恢复/取消，避免后台被系统回收后丢失进度
+- OpenCL 推理由 `OpenClGuardian` 守护：warmup + 连续失败降级 CPU，降低设备兼容性风险

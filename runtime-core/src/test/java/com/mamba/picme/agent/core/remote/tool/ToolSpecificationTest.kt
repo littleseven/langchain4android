@@ -40,8 +40,8 @@ class ToolSpecificationTest {
     fun `verify adjust_beauty method parameter annotations`() {
         val method = PicMeToolService::class.java.getDeclaredMethod(
             "adjustBeauty",
-            Double::class.java, Double::class.java, Double::class.java,
-            Double::class.java, Double::class.java, Double::class.java, Double::class.java
+            java.lang.Double::class.java, java.lang.Double::class.java, java.lang.Double::class.java,
+            java.lang.Double::class.java, java.lang.Double::class.java, java.lang.Double::class.java, java.lang.Double::class.java
         )
 
         val params = method.parameters

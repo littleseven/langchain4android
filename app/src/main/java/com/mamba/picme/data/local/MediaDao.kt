@@ -169,6 +169,40 @@ interface MediaDao {
     /** 获取 faceRoiResult 字段 */
     @Query("SELECT faceRoiResult FROM media_assets WHERE id = :mediaId")
     suspend fun getFaceRoiResult(mediaId: Long): String?
+
+    // ── TAG 扫描去重字段（3-Pass 混合管道）────────────────────
+
+    /** 更新最近一次 TAG 扫描成功记录 */
+    @Query(
+        """
+        UPDATE media_assets
+        SET lastTagScanAt = :timestamp, lastTagScanPasses = :passesJson
+        WHERE id = :mediaId
+        """
+    )
+    suspend fun updateLastTagScan(mediaId: Long, timestamp: Long, passesJson: String)
+
+    /** 按最近扫描时间升序获取媒体（oldest-first，避免老照片饿死） */
+    @Query(
+        """
+        SELECT * FROM media_assets
+        WHERE (lastTagScanAt IS NULL OR lastTagScanAt < :before)
+        ORDER BY lastTagScanAt ASC, captureDate ASC
+        LIMIT :limit
+        """
+    )
+    suspend fun getMediaForIncrementalScan(before: Long, limit: Int): List<MediaEntity>
+
+    /** 获取指定 ID 中最近扫描时间早于阈值的照片 */
+    @Query(
+        """
+        SELECT * FROM media_assets
+        WHERE id IN (:ids)
+          AND (lastTagScanAt IS NULL OR lastTagScanAt < :before)
+        ORDER BY lastTagScanAt ASC, captureDate ASC
+        """
+    )
+    suspend fun filterMediaNeedingScan(ids: List<Long>, before: Long): List<MediaEntity>
 }
 
 data class FaceGroupCount(
