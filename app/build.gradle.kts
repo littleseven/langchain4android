@@ -263,3 +263,15 @@ dependencies {
     "ksp"(libs.androidx.room.compiler)
     "ksp"(libs.moshi.kotlin.codegen)
 }
+
+// 修复 KSP 增量缓存损坏（file-to-id.tab is already registered）的根因：
+// 让 clean 任务同时删除 KSP 缓存目录，避免历史损坏状态残留。
+tasks.register<Delete>("cleanKspCaches") {
+    group = "build"
+    description = "Deletes KSP incremental caches to prevent 'file-to-id.tab is already registered' corruption."
+    delete(layout.buildDirectory.dir("kspCaches"))
+}
+
+tasks.named<Delete>("clean").configure {
+    dependsOn("cleanKspCaches")
+}
