@@ -3,11 +3,15 @@ package com.mamba.picme.domain.search
 import com.mamba.picme.core.common.Logger
 import com.mamba.picme.data.local.dao.LocationDao
 import com.mamba.picme.data.local.dao.OcrWordDao
-import com.mamba.picme.data.local.dao.PersonDao
 import com.mamba.picme.data.local.dao.TagDao
 import com.mamba.picme.data.local.MediaDao
 import com.mamba.picme.data.model.MediaEntity
+import com.mamba.picme.domain.model.AppLanguage
 import com.mamba.picme.domain.model.StructuredFilter
+import com.mamba.picme.domain.repository.UserSettingsRepository
+import com.mamba.picme.domain.tag.i18n.BilingualVocab
+import com.mamba.picme.domain.tag.i18n.TagTranslator
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -18,13 +22,16 @@ import kotlinx.coroutines.coroutineScope
  * 合并去重后交由 [SearchRanker] 排序。
  *
  * 这是 Agent 搜索桥接的核心：LLM 意图 → StructuredFilter → QueryBuilder → 排序结果。
+ *
+ * 支持跨语言搜索：通过 [TagTranslator] 把英文查询扩展为中文 canonical 词，命中已有中文 TAG。
  */
 class QueryBuilder(
     private val mediaDao: MediaDao,
     private val tagDao: TagDao,
     private val ocrWordDao: OcrWordDao,
-    private val personDao: PersonDao,
-    private val locationDao: LocationDao
+    private val locationDao: LocationDao,
+    private val userSettingsRepository: UserSettingsRepository? = null,
+    private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty())
 ) {
     companion object {
         private const val TAG = "PicMe:QueryBuilder"
@@ -44,23 +51,52 @@ class QueryBuilder(
      */
     suspend fun search(filter: StructuredFilter): List<ScoredMedia> = coroutineScope {
         val deferredQueries = mutableListOf<kotlinx.coroutines.Deferred<List<MediaEntity>>>()
+        val uiLang = userSettingsRepository?.getAppLanguageBlocking() ?: AppLanguage.CHINESE
 
-        // 标签维度搜索
-        for (keyword in filter.keywords) {
-            deferredQueries += async {
-                tagDao.searchByExactTag(keyword).also {
-                    if (it.isNotEmpty()) Logger.d(TAG, "Tag exact match '$keyword': ${it.size}")
+        addTagQueries(filter.keywords, uiLang, deferredQueries)
+        addOcrQueries(filter.ocrKeywords, deferredQueries)
+        addLegacyLikeQueries(filter.keywords + filter.ocrKeywords, uiLang, deferredQueries)
+        addLocationQueries(filter.locationKeywords, deferredQueries)
+        addPersonQuery(filter.personName, deferredQueries)
+        addFaceFilterQuery(filter.hasFaces, deferredQueries)
+        addTimeRangeQuery(filter.timeRange, deferredQueries)
+
+        val allResults = awaitAllQueries(deferredQueries)
+        val merged = mergeResults(allResults)
+        val filtered = applyTimeFilter(merged, filter.timeRange)
+
+        Logger.i(TAG, "Query complete: ${allResults.size} raw, ${merged.size} unique, " +
+            "${filtered.size} after time filter")
+
+        ranker.rank(results = filtered, filter = filter)
+    }
+
+    private fun CoroutineScope.addTagQueries(
+        keywords: List<String>,
+        uiLang: AppLanguage,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        for (keyword in keywords) {
+            for (candidate in tagTranslator.expandForSearch(keyword, uiLang)) {
+                deferredQueries += async {
+                    tagDao.searchByExactTag(candidate).also {
+                        if (it.isNotEmpty()) Logger.d(TAG, "Tag exact match '$candidate': ${it.size}")
+                    }
                 }
-            }
-            deferredQueries += async {
-                tagDao.searchByTagName(keyword).also {
-                    if (it.isNotEmpty()) Logger.d(TAG, "Tag fuzzy match '$keyword': ${it.size}")
+                deferredQueries += async {
+                    tagDao.searchByTagName(candidate).also {
+                        if (it.isNotEmpty()) Logger.d(TAG, "Tag fuzzy match '$candidate': ${it.size}")
+                    }
                 }
             }
         }
+    }
 
-        // OCR 维度搜索
-        for (keyword in filter.ocrKeywords) {
+    private fun CoroutineScope.addOcrQueries(
+        ocrKeywords: List<String>,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        for (keyword in ocrKeywords) {
             val normalized = keyword.lowercase().trim()
             deferredQueries += async {
                 ocrWordDao.searchByExactWord(normalized).also {
@@ -73,71 +109,94 @@ class QueryBuilder(
                 }
             }
         }
+    }
 
-        // 也搜索 legacy LIKE（兼容未迁移到倒排索引的数据）
-        for (keyword in filter.keywords + filter.ocrKeywords) {
-            deferredQueries += async { mediaDao.searchByOcrText(keyword) }
-            deferredQueries += async { mediaDao.searchByLabel(keyword) }
+    private fun CoroutineScope.addLegacyLikeQueries(
+        keywords: List<String>,
+        uiLang: AppLanguage,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        for (keyword in keywords) {
+            for (candidate in tagTranslator.expandForSearch(keyword, uiLang)) {
+                deferredQueries += async { mediaDao.searchByOcrText(candidate) }
+                deferredQueries += async { mediaDao.searchByLabel(candidate) }
+            }
         }
+    }
 
-        // 地点维度搜索
-        for (keyword in filter.locationKeywords) {
+    private fun CoroutineScope.addLocationQueries(
+        locationKeywords: List<String>,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        for (keyword in locationKeywords) {
             deferredQueries += async {
                 locationDao.searchByPlace(keyword).also {
                     if (it.isNotEmpty()) Logger.d(TAG, "Location match '$keyword': ${it.size}")
                 }
             }
-            // Legacy
             deferredQueries += async { mediaDao.searchByLocation(keyword) }
         }
+    }
 
-        // 人物维度搜索
-        if (filter.personName != null) {
-            deferredQueries += async { mediaDao.searchByFileName(filter.personName) }
+    private fun CoroutineScope.addPersonQuery(
+        personName: String?,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        if (personName != null) {
+            deferredQueries += async { mediaDao.searchByFileName(personName) }
         }
+    }
 
-        // 人脸过滤
-        if (filter.hasFaces == true) {
+    private fun CoroutineScope.addFaceFilterQuery(
+        hasFaces: Boolean?,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        if (hasFaces == true) {
             deferredQueries += async { mediaDao.searchByHasFace() }
         }
+    }
 
-        // 时间范围搜索
-        if (filter.timeRange != null) {
+    private fun CoroutineScope.addTimeRangeQuery(
+        timeRange: com.mamba.picme.domain.model.TimeRange?,
+        deferredQueries: MutableList<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ) {
+        if (timeRange != null) {
             deferredQueries += async {
-                mediaDao.searchByTimeRange(filter.timeRange.startMs, filter.timeRange.endMs)
+                mediaDao.searchByTimeRange(timeRange.startMs, timeRange.endMs)
             }
         }
+    }
 
-        // 收敛所有结果
-        val allResults = deferredQueries.map { deferred ->
-            try {
-                deferred.await()
-            } catch (e: Exception) {
-                Logger.w(TAG, "Query failed: ${e.message}")
-                emptyList()
-            }
-        }.flatten()
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun awaitAllQueries(
+        deferredQueries: List<kotlinx.coroutines.Deferred<List<MediaEntity>>>
+    ): List<MediaEntity> = deferredQueries.map { deferred ->
+        try {
+            deferred.await()
+        } catch (e: Exception) {
+            Logger.w(TAG, "Query failed", e)
+            emptyList()
+        }
+    }.flatten()
 
-        // 合并去重，记录每个 MediaEntity 的命中维度
+    private fun mergeResults(
+        allResults: List<MediaEntity>
+    ): Map<MediaEntity, Set<String>> {
         val merged = mutableMapOf<MediaEntity, MutableSet<String>>()
         for (entity in allResults) {
             merged.getOrPut(entity) { mutableSetOf() }.add("keyword_match")
         }
+        return merged
+    }
 
-        // 如果设置了时间范围，额外过滤
-        val filtered = if (filter.timeRange != null) {
-            merged.filterKeys { entity ->
-                entity.captureDate in filter.timeRange.startMs..filter.timeRange.endMs
-            }
-        } else merged
-
-        Logger.i(TAG, "Query complete: ${allResults.size} raw, ${merged.size} unique, " +
-            "${filtered.size} after time filter")
-
-        ranker.rank(
-            results = filtered.mapValues { it.value.toSet() },
-            filter = filter
-        )
+    private fun applyTimeFilter(
+        merged: Map<MediaEntity, Set<String>>,
+        timeRange: com.mamba.picme.domain.model.TimeRange?
+    ): Map<MediaEntity, Set<String>> {
+        if (timeRange == null) return merged
+        return merged.filterKeys { entity ->
+            entity.captureDate in timeRange.startMs..timeRange.endMs
+        }
     }
 
     /**

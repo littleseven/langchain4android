@@ -22,7 +22,6 @@ import androidx.compose.material.icons.rounded.Label
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -376,7 +375,7 @@ private fun SettingsContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            // 外观与语言（置顶，最常用）
+            // ── 1. 个性化 ─────────────────────────────────────────
             SettingsSection(
                 title = stringResource(R.string.theme_mode),
                 description = stringResource(R.string.settings_theme_mode_desc)
@@ -386,8 +385,6 @@ private fun SettingsContent(
                     onModeSelected = onThemeModeSelected
                 )
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(
                 title = stringResource(R.string.language),
@@ -399,33 +396,7 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // TAG 生成（独立模块，突出显示）
-            SettingsSection(
-                title = stringResource(R.string.tag_gen_notification_title),
-                description = "相册标签扫描与重新生成"
-            ) {
-                TagControlEntry(onClick = onNavigateToTagControl)
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OpenClBackendSelection(
-                    useOpencl = tagGenerationUseOpencl,
-                    onToggle = onTagGenerationUseOpenclChange,
-                    title = stringResource(R.string.tag_gen_use_opencl_title)
-                )
-                Text(
-                    text = stringResource(R.string.tag_gen_use_opencl_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // AI Agent 配置
+            // ── 2. AI 助手（核心功能，高亮）────────────────────────
             SettingsSection(
                 title = stringResource(R.string.ai_agent),
                 description = stringResource(R.string.ai_agent_desc)
@@ -476,20 +447,12 @@ private fun SettingsContent(
                             onNavigateToModelManager = onNavigateToModelCenter
                         )
                     }
-                    AiAgentMode.REMOTE -> {
+                    AiAgentMode.REMOTE, AiAgentMode.FEISHU -> {
                         AiAgentRemoteModelsSection(
                             configsJson = aiAgentRemoteModelConfigs,
                             onConfigsChange = onAiAgentRemoteModelConfigsChange,
                             selectedModelId = aiAgentSelectedRemoteModel,
                             onSelectedModelChange = onAiAgentSelectedRemoteModelChange
-                        )
-                    }
-                    AiAgentMode.FEISHU -> {
-                        Text(
-                            text = "飞书远程控制模式：通过飞书消息远程控制应用",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
                 }
@@ -505,12 +468,131 @@ private fun SettingsContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
-
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // ── 3. 通信通道 ───────────────────────────────────────
+            SettingsSection(
+                title = stringResource(R.string.communication_channel),
+                description = stringResource(R.string.communication_channel_desc)
+            ) {
+                Text(
+                    text = stringResource(R.string.feishu_channel_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+                SettingsTextInputRow(
+                    title = "App ID",
+                    value = feishuAppId,
+                    onValueChange = onFeishuAppIdChange,
+                    placeholder = "飞书应用的 App ID"
+                )
+                SettingsTextInputRow(
+                    title = "App Secret",
+                    value = feishuAppSecret,
+                    onValueChange = onFeishuAppSecretChange,
+                    placeholder = "飞书应用的 App Secret",
+                    isPassword = true
+                )
+            }
 
-            // 全局悬浮聊天入口
+            // ── 4. 语音交互 ───────────────────────────────────────
+            SettingsSection(
+                title = stringResource(R.string.voice_control),
+                description = stringResource(R.string.voice_control_desc)
+            ) {
+                VoiceCommandModeSelection(
+                    currentMode = voiceCommandMode,
+                    onModeSelected = onVoiceCommandModeChange
+                )
+
+                if (voiceCommandMode != VoiceCommandMode.DISABLED) {
+                    LocalAsrModelSelection(
+                        currentModel = localAsrModel,
+                        onModelSelected = onLocalAsrModelChange,
+                        onNavigateToModelCenter = onNavigateToModelCenter
+                    )
+
+                    LocalKwsModelSelection(
+                        currentModel = localKwsModel,
+                        onModelSelected = onLocalKwsModelChange,
+                        onNavigateToModelCenter = onNavigateToModelCenter
+                    )
+                }
+            }
+
+            // ── 4. 相册与标签 ─────────────────────────────────────
+            SettingsSection(
+                title = stringResource(R.string.tag_gen_notification_title),
+                description = "相册标签扫描与重新生成"
+            ) {
+                TagControlEntry(onClick = onNavigateToTagControl)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OpenClBackendSelection(
+                    useOpencl = tagGenerationUseOpencl,
+                    onToggle = onTagGenerationUseOpenclChange,
+                    title = stringResource(R.string.tag_gen_use_opencl_title)
+                )
+                Text(
+                    text = stringResource(R.string.tag_gen_use_opencl_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            // ── 5. 美颜引擎 ─────────────────────────────────────
+            StageConfigSection(
+                stage = DetectionStage.ROI,
+                config = roiStageConfig,
+                onModelTypeSelected = onRoiModelTypeSelected,
+                onDevicePreferenceSelected = onRoiDevicePreferenceSelected,
+                onNavigateToModelManager = onNavigateToModelCenter,
+                isModelDownloaded = isModelDownloaded,
+                getModelId = getModelId,
+                downloadModel = downloadModel,
+                downloadStates = downloadStates,
+                allModels = allModels
+            )
+
+            StageConfigSection(
+                stage = DetectionStage.LANDMARK,
+                config = landmarkStageConfig,
+                onModelTypeSelected = onLandmarkModelTypeSelected,
+                onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected,
+                onNavigateToModelManager = onNavigateToModelCenter,
+                isModelDownloaded = isModelDownloaded,
+                getModelId = getModelId,
+                downloadModel = downloadModel,
+                downloadStates = downloadStates,
+                allModels = allModels
+            )
+
+            SettingsSection(
+                title = stringResource(R.string.face_detection_advanced),
+                description = stringResource(R.string.settings_face_detection_advanced_desc)
+            ) {
+                DebugOptionRow(
+                    title = stringResource(R.string.face_landmark_mode),
+                    checked = faceDetectionLandmarkModeEnabled,
+                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
+                )
+                DebugOptionRow(
+                    title = stringResource(R.string.adaptive_face_detect_interval),
+                    checked = adaptiveFaceDetectionIntervalEnabled,
+                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
+                )
+                if (adaptiveFaceDetectionIntervalEnabled) {
+                    FaceDetectProfileSelection(
+                        currentProfile = faceDetectIntervalProfile,
+                        onProfileSelected = onFaceDetectIntervalProfileSelected
+                    )
+                }
+            }
+
+            // ── 6. 系统与权限 ─────────────────────────────────────
             val context = LocalContext.current
             var isFloatingChatRunning by remember {
                 mutableStateOf(FloatingChatBubbleService.isRunning(context))
@@ -566,9 +648,6 @@ private fun SettingsContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 后台运行权限（国产 ROM 尤其是 MIUI 需要）
             var isIgnoringBatteryOptimizations by remember {
                 mutableStateOf(BatteryOptimizationUtils.isIgnoringBatteryOptimizations(context))
             }
@@ -620,96 +699,11 @@ private fun SettingsContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 语音控制配置
-            SettingsSection(
-                title = stringResource(R.string.voice_control),
-                description = stringResource(R.string.voice_control_desc)
-            ) {
-                VoiceCommandModeSelection(
-                    currentMode = voiceCommandMode,
-                    onModeSelected = onVoiceCommandModeChange
-                )
-
-                if (voiceCommandMode != VoiceCommandMode.DISABLED) {
-                    LocalAsrModelSelection(
-                        currentModel = localAsrModel,
-                        onModelSelected = onLocalAsrModelChange,
-                        onNavigateToModelCenter = onNavigateToModelCenter
-                    )
-
-                    LocalKwsModelSelection(
-                        currentModel = localKwsModel,
-                        onModelSelected = onLocalKwsModelChange,
-                        onNavigateToModelCenter = onNavigateToModelCenter
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // ROI 阶段配置
-            StageConfigSection(
-                stage = DetectionStage.ROI,
-                config = roiStageConfig,
-                onModelTypeSelected = onRoiModelTypeSelected,
-                onDevicePreferenceSelected = onRoiDevicePreferenceSelected,
-                onNavigateToModelManager = onNavigateToModelCenter,
-                isModelDownloaded = isModelDownloaded,
-                getModelId = getModelId,
-                downloadModel = downloadModel,
-                downloadStates = downloadStates,
-                allModels = allModels
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Landmark 阶段配置
-            StageConfigSection(
-                stage = DetectionStage.LANDMARK,
-                config = landmarkStageConfig,
-                onModelTypeSelected = onLandmarkModelTypeSelected,
-                onDevicePreferenceSelected = onLandmarkDevicePreferenceSelected,
-                onNavigateToModelManager = onNavigateToModelCenter,
-                isModelDownloaded = isModelDownloaded,
-                getModelId = getModelId,
-                downloadModel = downloadModel,
-                downloadStates = downloadStates,
-                allModels = allModels
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 人脸检测高级设置
-            SettingsSection(
-                title = stringResource(R.string.face_detection_advanced),
-                description = stringResource(R.string.settings_face_detection_advanced_desc)
-            ) {
-                DebugOptionRow(
-                    title = stringResource(R.string.face_landmark_mode),
-                    checked = faceDetectionLandmarkModeEnabled,
-                    onCheckedChange = onFaceDetectionLandmarkModeEnabledChange
-                )
-                DebugOptionRow(
-                    title = stringResource(R.string.adaptive_face_detect_interval),
-                    checked = adaptiveFaceDetectionIntervalEnabled,
-                    onCheckedChange = onAdaptiveFaceDetectionIntervalEnabledChange
-                )
-                if (adaptiveFaceDetectionIntervalEnabled) {
-                    FaceDetectProfileSelection(
-                        currentProfile = faceDetectIntervalProfile,
-                        onProfileSelected = onFaceDetectIntervalProfileSelected
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 调试工具
-            SettingsSection(
+            // ── 7. 开发者选项（默认折叠）──────────────────────────
+            SettingsExpandableSection(
                 title = stringResource(R.string.debug_tools),
-                description = stringResource(R.string.settings_debug_tools_desc)
+                description = stringResource(R.string.settings_debug_tools_desc),
+                expandedByDefault = debugUiEnabled
             ) {
                 DebugOptionRow(
                     title = stringResource(R.string.debug),
@@ -737,40 +731,18 @@ private fun SettingsContent(
                         onModeSelected = onDebugShaderModeSelected
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // 日志模块管理
-            SettingsSection(
-                title = stringResource(R.string.log_management),
-                description = stringResource(R.string.log_management_desc)
-            ) {
+                Text(
+                    text = stringResource(R.string.log_management),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
+                )
                 LogModuleConfigSection(
                     config = logModuleConfig,
                     onConfigChange = onLogModuleConfigChange
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 飞书远程控制
-            SettingsSection(
-                title = "飞书远程控制",
-                description = "配置飞书自建应用的 App ID 和 App Secret，启用 IM 远程控制"
-            ) {
-                SettingsTextInputRow(
-                    title = "App ID",
-                    value = feishuAppId,
-                    onValueChange = onFeishuAppIdChange,
-                    placeholder = "飞书应用的 App ID"
-                )
-                SettingsTextInputRow(
-                    title = "App Secret",
-                    value = feishuAppSecret,
-                    onValueChange = onFeishuAppSecretChange,
-                    placeholder = "飞书应用的 App Secret",
-                    isPassword = true
                 )
             }
         }

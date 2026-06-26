@@ -115,7 +115,15 @@ class TagGenerationScheduler(
             landmarkEngine = InferenceBackendType.MNN
         ))
         val llmEngine = AgentOrchestrator.getInstance(context).getLlmEngine()
-        TagGenerationPipeline(context, faceDetector, llmEngine, faceClusterEngine, normalizer, openClGuardian)
+        TagGenerationPipeline(
+            context = context,
+            faceDetector = faceDetector,
+            llmEngine = llmEngine,
+            faceClusterEngine = faceClusterEngine,
+            normalizer = normalizer,
+            openClGuardian = openClGuardian,
+            userSettingsRepository = userSettingsRepository
+        )
     }
 
     /** 触发全量 3-Pass 混合扫描 */

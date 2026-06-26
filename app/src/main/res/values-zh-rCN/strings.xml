@@ -277,6 +277,12 @@
     <string name="ai_agent_mode_off">关闭</string>
     <string name="ai_agent_mode_local">本地模型</string>
     <string name="ai_agent_mode_remote">远程模型</string>
+    <string name="ai_agent_mode_feishu">飞书</string>
+
+    <!-- Communication Channel -->
+    <string name="communication_channel">通信通道</string>
+    <string name="communication_channel_desc">配置飞书 IM 集成，实现远程控制。</string>
+    <string name="feishu_channel_desc">连接飞书，通过 IM 消息接收远程指令。</string>
 
     <string name="ai_agent_privacy_level">隐私级别</string>
     <string name="ai_agent_privacy_strict">严格（仅本地）</string>
@@ -484,5 +490,27 @@
     <string name="voice_unavailable">语音识别未初始化</string>
     <string name="hold_to_speak">按住说话</string>
     <string name="release_to_stop">松开结束</string>
+
+    <!-- TAG / AI Labels -->
+    <string name="tag_label_title">标签 (%1$d)</string>
+    <string name="tag_scene_prefix">场景: %1$s</string>
+    <string name="tag_activity_prefix">活动: %1$s</string>
+    <string name="tag_summary_prefix">摘要: %1$s</string>
+
+    <!-- Auto Tag Capability -->
+    <string name="auto_tag_capability_description">相册标签自动生成：触发全量标签扫描、查询照片标签、管理扫描进度</string>
+    <string name="auto_tag_cmd_scan_all_tags">扫描所有照片并自动生成标签</string>
+    <string name="auto_tag_cmd_get_photo_tags">获取指定照片的标签信息</string>
+    <string name="auto_tag_cmd_get_tag_progress">获取标签扫描进度</string>
+    <string name="auto_tag_cmd_cancel_tag_scan">取消正在进行的标签扫描</string>
+    <string name="auto_tag_cmd_fallback">执行 %1$s</string>
+    <string name="auto_tag_unknown_command">未知的标签命令</string>
+    <string name="auto_tag_unsupported_command">不支持的标签命令: %1$s</string>
+    <string name="auto_tag_scan_started">已启动全量标签扫描</string>
+    <string name="auto_tag_missing_photo_id">缺少 photoId 参数，格式: get_photo_tags:photoId</string>
+    <string name="auto_tag_photo_not_found">未找到照片: id=%1$d</string>
+    <string name="auto_tag_scanning_progress">扫描中: %1$d/%2$d</string>
+    <string name="auto_tag_not_scanning">未在扫描</string>
+    <string name="auto_tag_cancelled">已取消</string>
 
 </resources>

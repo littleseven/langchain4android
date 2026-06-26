@@ -196,20 +196,16 @@ class AiAgentUseCase(
                 Logger.i(tag, "[UseCase] processInputWithRouter returned: ${inferenceResult::class.simpleName}")
                 return@withContext handleInferenceResult(inferenceResult, userInput, agentContext, currentState)
             }
-            AiAgentMode.REMOTE -> {
-                // REMOTE 模式：统一走本地推理（已不再需要远程推理链路）
-                Logger.i(tag, "[UseCase] REMOTE mode, using local inference for input='$userInput'")
+            AiAgentMode.REMOTE, AiAgentMode.FEISHU -> {
+                // REMOTE/FEISHU 模式：统一走本地推理（已不再需要远程推理链路）
+                // FEISHU 作为通信通道已独立配置，此处保留兼容性处理
+                Logger.i(tag, "[UseCase] ${currentMode.name} mode, using local inference for input='$userInput'")
                 val inferenceResult = orchestrator.processInputWithRouter(
                     input = userInput,
                     agentContext = agentContext
                 )
                 Logger.i(tag, "[UseCase] processInputWithRouter returned: ${inferenceResult::class.simpleName}")
                 return@withContext handleInferenceResult(inferenceResult, userInput, agentContext, currentState)
-            }
-            AiAgentMode.FEISHU -> {
-                // FEISHU 模式：相机场景不支持，回退到文本回复
-                Logger.w(tag, "[UseCase] FEISHU mode not supported in camera scene")
-                return@withContext Result.success(AiAgentCommand.TextReply("FEISHU 模式仅支持远程控制，请在飞书中使用"))
             }
         }
     }

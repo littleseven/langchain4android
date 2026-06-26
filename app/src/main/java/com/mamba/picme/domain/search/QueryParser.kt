@@ -1,5 +1,6 @@
 package com.mamba.picme.domain.search
 
+import com.mamba.picme.domain.model.AppLanguage
 import com.mamba.picme.domain.model.StructuredFilter
 import com.mamba.picme.domain.model.TimeRange
 import java.util.Calendar
@@ -34,14 +35,16 @@ object QueryParser {
     /**
      * 解析查询，返回结构化过滤条件
      *
+     * @param query 用户输入
+     * @param lang 当前界面语言，影响停用词过滤
      * @return StructuredFilter 如果规则能完全解析；null 表示需要 LLM 协助
      */
-    fun parse(query: String): StructuredFilter? {
+    fun parse(query: String, lang: AppLanguage = AppLanguage.CHINESE): StructuredFilter? {
         val trimmed = query.trim()
         if (trimmed.isEmpty()) return null
 
         val timeRange = extractTimeRange(trimmed)
-        val (contentKeywords, locationKeywords) = extractCategorizedKeywords(trimmed)
+        val (contentKeywords, locationKeywords) = extractCategorizedKeywords(trimmed, lang)
 
         // 只有时间条件且无复杂语义 → 规则匹配
         if (timeRange != null && contentKeywords.isEmpty() && locationKeywords.isEmpty()) {
@@ -185,8 +188,11 @@ object QueryParser {
     /**
      * 从查询中提取关键词，区分内容词和地点词
      */
-    fun extractCategorizedKeywords(query: String): Pair<List<String>, List<String>> {
-        val allKeywords = extractKeywords(query)
+    fun extractCategorizedKeywords(
+        query: String,
+        lang: AppLanguage = AppLanguage.CHINESE
+    ): Pair<List<String>, List<String>> {
+        val allKeywords = extractKeywords(query, lang)
         val locationWords = mutableListOf<String>()
         val contentWords = mutableListOf<String>()
 
@@ -203,17 +209,16 @@ object QueryParser {
     /**
      * 从查询中提取有实体意义的关键词（移除时间词、停用词）
      */
-    fun extractKeywords(query: String): List<String> {
+    fun extractKeywords(query: String, lang: AppLanguage = AppLanguage.CHINESE): List<String> {
         var text = removeTimeWords(query)
 
-        // 移除常见停用词
-        val stopWords = listOf(
-            "的", "了", "在", "是", "我", "有", "和", "就", "不", "都", "一", "把",
-            "一个", "上面", "下面", "可以", "这个", "那个", "拍", "照片", "图片",
-            "找", "搜索", "显示", "查看", "包含", "给我", "帮我"
-        )
+        // 根据当前语言移除停用词
+        val stopWords = when (lang) {
+            AppLanguage.ENGLISH -> ENGLISH_STOP_WORDS
+            else -> CHINESE_STOP_WORDS
+        }
         for (word in stopWords) {
-            text = text.replace(word, " ")
+            text = text.replace(word, " ", ignoreCase = true)
         }
 
         return text
@@ -245,4 +250,20 @@ object QueryParser {
         }
         return text.trim()
     }
+
+    private val CHINESE_STOP_WORDS = listOf(
+        "的", "了", "在", "是", "我", "有", "和", "就", "不", "都", "一", "把",
+        "一个", "上面", "下面", "可以", "这个", "那个", "拍", "照片", "图片",
+        "找", "搜索", "显示", "查看", "包含", "给我", "帮我"
+    )
+
+    private val ENGLISH_STOP_WORDS = listOf(
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+        "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her",
+        "its", "our", "their", "me", "him", "them", "us",
+        "of", "in", "on", "at", "to", "for", "with", "about", "from", "by",
+        "and", "or", "but", "so", "if", "because", "as",
+        "show", "find", "search", "look", "see", "view", "display", "give", "help",
+        "photo", "photos", "picture", "pictures", "image", "images"
+    )
 }

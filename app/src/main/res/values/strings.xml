@@ -284,6 +284,12 @@
     <string name="ai_agent_mode_off">Disabled</string>
     <string name="ai_agent_mode_local">Local Model</string>
     <string name="ai_agent_mode_remote">Remote Model</string>
+    <string name="ai_agent_mode_feishu">Feishu</string>
+
+    <!-- Communication Channel -->
+    <string name="communication_channel">Communication Channel</string>
+    <string name="communication_channel_desc">Configure Feishu IM integration for remote control.</string>
+    <string name="feishu_channel_desc">Connect to Feishu (Lark) to receive remote commands via IM messages.</string>
 
     <string name="ai_agent_privacy_level">Privacy Level</string>
     <string name="ai_agent_privacy_strict">Strict (Local Only)</string>
@@ -489,4 +495,25 @@
     <string name="hold_to_speak">Hold to speak</string>
     <string name="release_to_stop">Release to stop</string>
 
+    <!-- TAG / AI Labels -->
+    <string name="tag_label_title">Tags (%1$d)</string>
+    <string name="tag_scene_prefix">Scene: %1$s</string>
+    <string name="tag_activity_prefix">Activity: %1$s</string>
+    <string name="tag_summary_prefix">Summary: %1$s</string>
+
+    <!-- Auto Tag Capability -->
+    <string name="auto_tag_capability_description">Auto tag generation: trigger full scan, query photo tags, manage scan progress</string>
+    <string name="auto_tag_cmd_scan_all_tags">Scan all photos and auto-generate tags</string>
+    <string name="auto_tag_cmd_get_photo_tags">Get tag info for a specific photo</string>
+    <string name="auto_tag_cmd_get_tag_progress">Get tag scan progress</string>
+    <string name="auto_tag_cmd_cancel_tag_scan">Cancel the ongoing tag scan</string>
+    <string name="auto_tag_cmd_fallback">Execute %1$s</string>
+    <string name="auto_tag_unknown_command">Unknown tag command</string>
+    <string name="auto_tag_unsupported_command">Unsupported tag command: %1$s</string>
+    <string name="auto_tag_scan_started">Full tag scan started</string>
+    <string name="auto_tag_missing_photo_id">Missing photoId parameter, format: get_photo_tags:photoId</string>
+    <string name="auto_tag_photo_not_found">Photo not found: id=%1$d</string>
+    <string name="auto_tag_scanning_progress">Scanning: %1$d/%2$d</string>
+    <string name="auto_tag_not_scanning">Not scanning</string>
+    <string name="auto_tag_cancelled">Cancelled</string>
 </resources>

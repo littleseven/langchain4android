@@ -5,7 +5,13 @@ import com.mamba.picme.data.local.MediaDao
 import com.mamba.picme.data.local.dao.LocationDao
 import com.mamba.picme.data.local.dao.OcrWordDao
 import com.mamba.picme.data.local.dao.TagDao
+import com.mamba.picme.domain.model.AppLanguage
 import com.mamba.picme.domain.model.StructuredFilter
+import com.mamba.picme.domain.repository.UserSettingsRepository
+import com.mamba.picme.core.common.Logger
+import com.mamba.picme.domain.tag.i18n.BilingualVocab
+import com.mamba.picme.domain.tag.i18n.TagTranslator
+import org.json.JSONException
 
 /**
  * 媒体搜索引擎
@@ -15,12 +21,17 @@ import com.mamba.picme.domain.model.StructuredFilter
  * - Layer 2: Agent LLM 解析复杂混合查询
  *
  * 搜索结果按匹配相关性排序：标签匹配 > OCR 匹配 > 地名匹配 > 文件名匹配
+ *
+ * 支持跨语言搜索：通过 [TagTranslator] 把用户输入的英文查询扩展为中文 canonical 词，
+ * 从而命中已有中文 TAG，无需全量重生成。
  */
 class MediaSearchEngine(
     private val mediaDao: MediaDao,
     private val tagDao: TagDao? = null,
     private val ocrWordDao: OcrWordDao? = null,
-    private val locationDao: LocationDao? = null
+    private val locationDao: LocationDao? = null,
+    private val userSettingsRepository: UserSettingsRepository? = null,
+    private val tagTranslator: TagTranslator = TagTranslator(BilingualVocab.empty())
 ) {
     /**
      * 执行搜索
@@ -35,8 +46,10 @@ class MediaSearchEngine(
     ): SearchResult {
         if (query.isBlank()) return SearchResult(emptyList(), query)
 
+        val uiLang = userSettingsRepository?.getAppLanguageBlocking() ?: AppLanguage.CHINESE
+
         // Layer 1: 规则匹配
-        val filter = QueryParser.parse(query)
+        val filter = QueryParser.parse(query, uiLang)
         if (filter != null && !filter.needsLlm) {
             val results = executeFilter(filter)
             return SearchResult(results, query)
@@ -51,8 +64,12 @@ class MediaSearchEngine(
             }
         }
 
-        // 回退：全字段模糊搜索
-        val results = mediaDao.searchAll(query).map { it.toDomain() }.toMutableList()
+        // 回退：全字段模糊搜索（跨语言扩展查询词）
+        val queryCandidates = tagTranslator.expandForSearch(query, uiLang)
+        val results = queryCandidates
+            .flatMap { mediaDao.searchAll(it) }
+            .map { it.toDomain() }
+            .toMutableList()
 
         // 人物关键词回退
         if (QueryParser.isPeopleSearch(query)) {
@@ -67,78 +84,112 @@ class MediaSearchEngine(
      */
     private suspend fun executeFilter(filter: StructuredFilter): List<MediaAsset> {
         val resultMap = mutableMapOf<Long, MediaAsset>()
+        val uiLang = userSettingsRepository?.getAppLanguageBlocking() ?: AppLanguage.CHINESE
 
-        // 时间过滤
-        if (filter.timeRange != null) {
-            val timeResults = mediaDao.searchByTimeRange(
-                filter.timeRange.startMs,
-                filter.timeRange.endMs
-            )
-            for (entity in timeResults) {
-                resultMap[entity.id] = entity.toDomain()
-            }
-        }
-
-        // 内容关键词搜索（标签 + OCR + 文件名）
-        for (keyword in filter.keywords) {
-            // 新 DAO 路径（优先）
-            if (tagDao != null) {
-                val tagResults = tagDao.searchByExactTag(keyword)
-                for (entity in tagResults) { resultMap[entity.id] = entity.toDomain() }
-            }
-            if (ocrWordDao != null) {
-                val wordResults = ocrWordDao.searchByWordPrefix(keyword.lowercase())
-                for (entity in wordResults) { resultMap[entity.id] = entity.toDomain() }
-            }
-
-            // Legacy LIKE 路径（兼容）
-            val labelResults = mediaDao.searchByLabel(keyword)
-            val ocrResults = mediaDao.searchByOcrText(keyword)
-            val nameResults = mediaDao.searchByFileName(keyword)
-            for (entity in labelResults + ocrResults + nameResults) {
-                resultMap[entity.id] = entity.toDomain()
-            }
-        }
-
-        // OCR 关键词（来自 LLM 的独立 OCR 维度）
-        for (keyword in filter.ocrKeywords) {
-            if (ocrWordDao != null) {
-                val wordResults = ocrWordDao.searchByExactWord(keyword.lowercase())
-                for (entity in wordResults) { resultMap[entity.id] = entity.toDomain() }
-            }
-            val ocrResults = mediaDao.searchByOcrText(keyword)
-            for (entity in ocrResults) { resultMap[entity.id] = entity.toDomain() }
-        }
-
-        // 地点关键词搜索
-        for (keyword in filter.locationKeywords) {
-            if (locationDao != null) {
-                val locResults = locationDao.searchByPlace(keyword)
-                for (entity in locResults) { resultMap[entity.id] = entity.toDomain() }
-            }
-            val locResults = mediaDao.searchByLocation(keyword)
-            for (entity in locResults) { resultMap[entity.id] = entity.toDomain() }
-        }
-
-        // 人脸过滤
-        if (filter.hasFaces == true) {
-            val faceResults = mediaDao.searchByHasFace()
-            for (entity in faceResults) { resultMap[entity.id] = entity.toDomain() }
-        }
-
-        // 人物关键词回退
-        if (filter.keywords.any { it in PEOPLE_SEARCH_KEYWORDS }) {
-            val faceResults = mediaDao.searchByHasFace()
-            for (entity in faceResults) { resultMap[entity.id] = entity.toDomain() }
-        }
+        applyTimeRange(filter, resultMap)
+        applyContentKeywords(filter.keywords, uiLang, resultMap)
+        applyOcrKeywords(filter.ocrKeywords, resultMap)
+        applyLocationKeywords(filter.locationKeywords, resultMap)
+        applyFaceFilter(filter.hasFaces, resultMap)
+        applyPeopleFallback(filter.keywords, resultMap)
 
         return resultMap.values.sortedByDescending { it.captureDate }
+    }
+
+    private suspend fun applyTimeRange(
+        filter: StructuredFilter,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        val timeRange = filter.timeRange ?: return
+        val timeResults = mediaDao.searchByTimeRange(timeRange.startMs, timeRange.endMs)
+        timeResults.forEach { resultMap[it.id] = it.toDomain() }
+    }
+
+    /**
+     * 内容关键词搜索（标签 + OCR + 文件名），带跨语言扩展。
+     */
+    private suspend fun applyContentKeywords(
+        keywords: List<String>,
+        uiLang: AppLanguage,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        for (keyword in keywords) {
+            val candidates = tagTranslator.expandForSearch(keyword, uiLang)
+            for (candidate in candidates) {
+                searchByCandidate(candidate, resultMap)
+            }
+        }
+    }
+
+    private suspend fun searchByCandidate(
+        candidate: String,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        if (tagDao != null) {
+            tagDao.searchByExactTag(candidate).forEach { resultMap[it.id] = it.toDomain() }
+        }
+        if (ocrWordDao != null) {
+            ocrWordDao.searchByWordPrefix(candidate.lowercase()).forEach { resultMap[it.id] = it.toDomain() }
+        }
+
+        val labelResults = mediaDao.searchByLabel(candidate)
+        val ocrResults = mediaDao.searchByOcrText(candidate)
+        val nameResults = mediaDao.searchByFileName(candidate)
+        (labelResults + ocrResults + nameResults).forEach { resultMap[it.id] = it.toDomain() }
+    }
+
+    private suspend fun applyOcrKeywords(
+        ocrKeywords: List<String>,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        for (keyword in ocrKeywords) {
+            if (ocrWordDao != null) {
+                ocrWordDao.searchByExactWord(keyword.lowercase()).forEach { resultMap[it.id] = it.toDomain() }
+            }
+            mediaDao.searchByOcrText(keyword).forEach { resultMap[it.id] = it.toDomain() }
+        }
+    }
+
+    private suspend fun applyLocationKeywords(
+        locationKeywords: List<String>,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        for (keyword in locationKeywords) {
+            if (locationDao != null) {
+                locationDao.searchByPlace(keyword).forEach { resultMap[it.id] = it.toDomain() }
+            }
+            mediaDao.searchByLocation(keyword).forEach { resultMap[it.id] = it.toDomain() }
+        }
+    }
+
+    private suspend fun applyFaceFilter(
+        hasFaces: Boolean?,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        if (hasFaces != true) return
+        mediaDao.searchByHasFace().forEach { resultMap[it.id] = it.toDomain() }
+    }
+
+    private suspend fun applyPeopleFallback(
+        keywords: List<String>,
+        resultMap: MutableMap<Long, MediaAsset>
+    ) {
+        if (keywords.none { it in PEOPLE_SEARCH_KEYWORDS }) return
+        mediaDao.searchByHasFace().forEach { resultMap[it.id] = it.toDomain() }
     }
 
     /**
      * LLM 结构化查询模板
      */
-    fun buildLlmSearchPrompt(query: String): String {
+    fun buildLlmSearchPrompt(query: String, lang: AppLanguage = AppLanguage.CHINESE): String {
+        return if (lang == AppLanguage.ENGLISH) {
+            buildEnglishLlmSearchPrompt(query)
+        } else {
+            buildChineseLlmSearchPrompt(query)
+        }
+    }
+
+    private fun buildChineseLlmSearchPrompt(query: String): String {
         return """
 你是一个图片搜索助手。请将用户的自然语言查询转换为结构化过滤条件。
 
@@ -162,6 +213,33 @@ class MediaSearchEngine(
 - ocrKeywords 是图片中可能出现的文字
 - locationKeywords 是地名（城市、区域）
 - 只返回 JSON，不要其他文字
+""".trimIndent()
+    }
+
+    private fun buildEnglishLlmSearchPrompt(query: String): String {
+        return """
+You are a photo search assistant. Convert the user's natural language query into a structured filter.
+
+User query: "$query"
+
+Return a JSON filter in this format:
+{
+  "timeRange": {"startMs": start timestamp in ms, "endMs": end timestamp in ms} or null,
+  "keywords": ["keyword1", "keyword2"],
+  "ocrKeywords": ["ocr text keywords"],
+  "locationKeywords": ["place keywords"],
+  "hasFaces": true/false/null,
+  "explanation": "explain how you understood this query"
+}
+
+Current year: ${QueryParser.currentYear}, current month: ${QueryParser.currentMonth}
+
+Notes:
+- Time words example: "last year" → year ${QueryParser.currentYear - 1}, "summer" → June-August
+- keywords are scene/object/tag keywords
+- ocrKeywords are text that may appear in images
+- locationKeywords are place names (city, district)
+- Return only JSON, no other text
 """.trimIndent()
     }
 
@@ -210,12 +288,15 @@ class MediaSearchEngine(
                 hasFaces = hasFaces,
                 needsLlm = false
             )
-        } catch (e: Exception) {
+        } catch (e: JSONException) {
+            Logger.w(TAG, "Failed to parse LLM search response", e)
             null
         }
     }
 
     companion object {
+        private const val TAG = "MediaSearchEngine"
+
         /** 人物语义搜索关键词 */
         val PEOPLE_SEARCH_KEYWORDS = setOf(
             "人", "人物", "人脸", "合照", "合影", "自拍", "头像",

@@ -277,6 +277,12 @@
     <string name="ai_agent_mode_off">关闭</string>
     <string name="ai_agent_mode_local">本地模型</string>
     <string name="ai_agent_mode_remote">远程模型</string>
+    <string name="ai_agent_mode_feishu">飞书</string>
+
+    <!-- Communication Channel -->
+    <string name="communication_channel">通信通道</string>
+    <string name="communication_channel_desc">配置飞书 IM 集成，实现远程控制。</string>
+    <string name="feishu_channel_desc">连接飞书，通过 IM 消息接收远程指令。</string>
 
     <string name="ai_agent_privacy_level">隐私级别</string>
     <string name="ai_agent_privacy_strict">严格（仅本地）</string>

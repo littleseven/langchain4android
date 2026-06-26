@@ -90,6 +90,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -110,6 +111,9 @@ import com.mamba.picme.core.common.Logger
 import com.mamba.picme.agent.core.facade.AgentOrchestrator
 import com.mamba.picme.agent.core.model.context.MediaAsset
 import com.mamba.picme.agent.core.model.context.MediaType
+import com.mamba.picme.domain.model.AppLanguage
+import com.mamba.picme.domain.tag.i18n.BilingualVocab
+import com.mamba.picme.domain.tag.i18n.TagTranslator
 import com.mamba.picme.features.camera.components.BeautySelector
 import com.mamba.picme.features.gallery.MediaViewModel
 import com.mamba.picme.features.common.chat.AgentMessage
@@ -1286,13 +1290,24 @@ private fun PhotoInfoDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val scope = rememberCoroutineScope()
     var infoBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var faceRects by remember { mutableStateOf<List<Rect>>(emptyList()) }
 
-    // 解析标签
-    val tags = remember(asset.labels) {
-        parseLabelsToHumanReadable(asset.labels)
+    // 解析标签（按当前界面语言翻译）
+    val locale = configuration.locales[0]
+    val appLanguage = remember(locale) { locale.toAppLanguage() }
+    val tagTranslator = remember(context) { TagTranslator(BilingualVocab.loadFromAssets(context)) }
+    val tags = remember(asset.labels, appLanguage) {
+        parseLabelsToHumanReadable(
+            labels = asset.labels,
+            translator = tagTranslator,
+            lang = appLanguage,
+            scenePrefix = context.getString(R.string.tag_scene_prefix),
+            activityPrefix = context.getString(R.string.tag_activity_prefix),
+            summaryPrefix = context.getString(R.string.tag_summary_prefix)
+        )
     }
 
     // 加载图片并检测人脸（用于绘制人脸框）
@@ -1493,7 +1508,7 @@ private fun PhotoInfoDialog(
                         color = Color.White.copy(alpha = 0.1f)
                     )
                     Text(
-                        text = "标签 (${tags.size})",
+                        text = stringResource(R.string.tag_label_title, tags.size),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.8f),
@@ -1544,8 +1559,21 @@ private fun PhotoInfoDialog(
     }
 }
 
-/** 解析 labels JSON 为人可读的标签列表 */
-private fun parseLabelsToHumanReadable(labels: String?): List<String> {
+/** 解析 labels JSON 为人可读的标签列表，并按当前语言翻译 */
+private fun Locale.toAppLanguage(): AppLanguage = when (this.language) {
+    "en" -> AppLanguage.ENGLISH
+    "zh" -> if (this.country == "TW" || this.country == "HK") AppLanguage.TRADITIONAL_CHINESE else AppLanguage.CHINESE
+    else -> AppLanguage.CHINESE
+}
+
+private fun parseLabelsToHumanReadable(
+    labels: String?,
+    translator: TagTranslator,
+    lang: AppLanguage,
+    scenePrefix: String,
+    activityPrefix: String,
+    summaryPrefix: String
+): List<String> {
     if (labels.isNullOrBlank()) return emptyList()
     return try {
         val trimmed = labels.trim()
@@ -1553,29 +1581,33 @@ private fun parseLabelsToHumanReadable(labels: String?): List<String> {
             trimmed.startsWith("[") -> {
                 // 旧格式: JSON 数组 ["tag1","tag2"]
                 val arr = JSONArray(trimmed)
-                (0 until arr.length()).map { arr.getString(it) }
+                (0 until arr.length()).map { translator.display(arr.getString(it), lang) }
             }
             trimmed.startsWith("{") -> {
                 // 新格式: QwenTags JSON 对象
                 val obj = JSONObject(trimmed)
                 val result = mutableListOf<String>()
-                if (obj.has("scene") && obj.getString("scene").isNotBlank())
-                    result.add("场景: ${obj.getString("scene")}")
-                if (obj.has("activity") && obj.getString("activity").isNotBlank())
-                    result.add("活动: ${obj.getString("activity")}")
+                if (obj.has("scene") && obj.getString("scene").isNotBlank()) {
+                    result.add(scenePrefix.format(translator.display(obj.getString("scene"), lang)))
+                }
+                if (obj.has("activity") && obj.getString("activity").isNotBlank()) {
+                    result.add(activityPrefix.format(translator.display(obj.getString("activity"), lang)))
+                }
                 if (obj.has("tags")) {
                     val tagsArr = obj.getJSONArray("tags")
-                    for (i in 0 until tagsArr.length())
-                        result.add(tagsArr.getString(i))
+                    for (i in 0 until tagsArr.length()) {
+                        result.add(translator.display(tagsArr.getString(i), lang))
+                    }
                 }
-                if (obj.has("summary") && obj.getString("summary").isNotBlank())
-                    result.add(obj.getString("summary"))
+                if (obj.has("summary") && obj.getString("summary").isNotBlank()) {
+                    result.add(summaryPrefix.format(translator.display(obj.getString("summary"), lang)))
+                }
                 result
             }
-            else -> listOf(trimmed)
+            else -> listOf(translator.display(trimmed, lang).take(100))
         }
     } catch (e: Exception) {
-        listOf(labels.take(100))
+        listOf(translator.display(labels, lang).take(100))
     }
 }
 

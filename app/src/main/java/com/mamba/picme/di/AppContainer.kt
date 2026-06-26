@@ -27,6 +27,8 @@ import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.domain.repository.UserSettingsRepository
 import com.mamba.picme.domain.search.MediaSearchEngine
 import com.mamba.picme.domain.search.QueryBuilder
+import com.mamba.picme.domain.tag.i18n.BilingualVocab
+import com.mamba.picme.domain.tag.i18n.TagTranslator
 import com.mamba.picme.data.download.LlmModelDownloadManager
 import com.mamba.picme.data.download.ModelPathConfig
 import com.mamba.picme.domain.usecase.FindDuplicateMediaUseCase
@@ -120,7 +122,14 @@ class AppContainerImpl(
 
     /** 媒体搜索引擎（自然语言图片搜索） */
     override val mediaSearchEngine: MediaSearchEngine by lazy {
-        MediaSearchEngine(database.mediaDao(), database.tagDao(), database.ocrWordDao(), database.locationDao())
+        MediaSearchEngine(
+            mediaDao = database.mediaDao(),
+            tagDao = database.tagDao(),
+            ocrWordDao = database.ocrWordDao(),
+            locationDao = database.locationDao(),
+            userSettingsRepository = userPreferencesRepository,
+            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context))
+        )
     }
 
     /** 跨维度查询构建器 */
@@ -129,8 +138,9 @@ class AppContainerImpl(
             mediaDao = database.mediaDao(),
             tagDao = database.tagDao(),
             ocrWordDao = database.ocrWordDao(),
-            personDao = database.personDao(),
-            locationDao = database.locationDao()
+            locationDao = database.locationDao(),
+            userSettingsRepository = userPreferencesRepository,
+            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context))
         )
     }
 
