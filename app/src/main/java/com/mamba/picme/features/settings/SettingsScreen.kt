@@ -3,18 +3,25 @@ package com.mamba.picme.features.settings
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Label
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -369,6 +376,55 @@ private fun SettingsContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
+            // 外观与语言（置顶，最常用）
+            SettingsSection(
+                title = stringResource(R.string.theme_mode),
+                description = stringResource(R.string.settings_theme_mode_desc)
+            ) {
+                ThemeSelection(
+                    currentMode = themeMode,
+                    onModeSelected = onThemeModeSelected
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingsSection(
+                title = stringResource(R.string.language),
+                description = stringResource(R.string.settings_language_desc)
+            ) {
+                LanguageSelection(
+                    currentLanguage = appLanguage,
+                    onLanguageSelected = onAppLanguageSelected
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // TAG 生成（独立模块，突出显示）
+            SettingsSection(
+                title = stringResource(R.string.tag_gen_notification_title),
+                description = "相册标签扫描与重新生成"
+            ) {
+                TagControlEntry(onClick = onNavigateToTagControl)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OpenClBackendSelection(
+                    useOpencl = tagGenerationUseOpencl,
+                    onToggle = onTagGenerationUseOpenclChange,
+                    title = stringResource(R.string.tag_gen_use_opencl_title)
+                )
+                Text(
+                    text = stringResource(R.string.tag_gen_use_opencl_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             // AI Agent 配置
             SettingsSection(
                 title = stringResource(R.string.ai_agent),
@@ -450,29 +506,6 @@ private fun SettingsContent(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                // ── TAG 生成 GPU 加速（独立设置，不依赖 AI Agent 模式） ──
-                OpenClBackendSelection(
-                    useOpencl = tagGenerationUseOpencl,
-                    onToggle = onTagGenerationUseOpenclChange,
-                    title = stringResource(R.string.tag_gen_use_opencl_title)
-                )
-                Text(
-                    text = stringResource(R.string.tag_gen_use_opencl_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // ── TAG 生成精细控制入口 ──
-                SettingsClickableRow(
-                    title = stringResource(R.string.tag_control_title),
-                    subtitle = stringResource(R.string.tag_control_subtitle),
-                    onClick = onNavigateToTagControl
-                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -708,32 +741,6 @@ private fun SettingsContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 主题模式
-            SettingsSection(
-                title = stringResource(R.string.theme_mode),
-                description = stringResource(R.string.settings_theme_mode_desc)
-            ) {
-                ThemeSelection(
-                    currentMode = themeMode,
-                    onModeSelected = onThemeModeSelected
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 语言设置
-            SettingsSection(
-                title = stringResource(R.string.language),
-                description = stringResource(R.string.settings_language_desc)
-            ) {
-                LanguageSelection(
-                    currentLanguage = appLanguage,
-                    onLanguageSelected = onAppLanguageSelected
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
             // 日志模块管理
             SettingsSection(
                 title = stringResource(R.string.log_management),
@@ -890,6 +897,50 @@ private fun LanguageSelection(
         maxLines = 2,
         onSelected = onLanguageSelected
     )
+}
+
+@Composable
+private fun TagControlEntry(
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Label,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.tag_control_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.tag_control_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
+        }
+    }
 }
 
 @Composable
