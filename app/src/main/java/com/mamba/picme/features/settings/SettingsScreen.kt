@@ -15,7 +15,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -113,6 +115,7 @@ fun SettingsScreen(
     val aiAgentInferencePreference by viewModel.aiAgentInferencePreference.collectAsState()
     val aiAgentL1CacheEnabled by viewModel.aiAgentL1CacheEnabled.collectAsState()
     val aiAgentLocalUseOpencl by viewModel.aiAgentLocalUseOpencl.collectAsState()
+    val tagGenerationUseOpencl by viewModel.tagGenerationUseOpencl.collectAsState()
     val voiceCommandMode by viewModel.voiceCommandMode.collectAsState()
     val localAsrModel by viewModel.localAsrModel.collectAsState()
     val localKwsModel by viewModel.localKwsModel.collectAsState()
@@ -245,6 +248,8 @@ fun SettingsScreen(
             onAiAgentL1CacheEnabledChange = { viewModel.setAiAgentL1CacheEnabled(it) },
             aiAgentLocalUseOpencl = aiAgentLocalUseOpencl,
             onAiAgentLocalUseOpenclChange = { viewModel.setAiAgentLocalUseOpencl(it) },
+            tagGenerationUseOpencl = tagGenerationUseOpencl,
+            onTagGenerationUseOpenclChange = { viewModel.setTagGenerationUseOpencl(it) },
             voiceCommandMode = voiceCommandMode,
             onVoiceCommandModeChange = { viewModel.setVoiceCommandMode(it) },
             localAsrModel = localAsrModel,
@@ -303,6 +308,8 @@ private fun SettingsContent(
     onAiAgentL1CacheEnabledChange: (Boolean) -> Unit,
     aiAgentLocalUseOpencl: Boolean,
     onAiAgentLocalUseOpenclChange: (Boolean) -> Unit,
+    tagGenerationUseOpencl: Boolean,
+    onTagGenerationUseOpenclChange: (Boolean) -> Unit,
     voiceCommandMode: VoiceCommandMode,
     onVoiceCommandModeChange: (VoiceCommandMode) -> Unit,
     localAsrModel: String,
@@ -435,6 +442,21 @@ private fun SettingsContent(
                 )
                 Text(
                     text = stringResource(R.string.ai_agent_l1_cache_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // ── TAG 生成 GPU 加速（独立设置，不依赖 AI Agent 模式） ──
+                OpenClBackendSelection(
+                    useOpencl = tagGenerationUseOpencl,
+                    onToggle = onTagGenerationUseOpenclChange,
+                    title = stringResource(R.string.tag_gen_use_opencl_title)
+                )
+                Text(
+                    text = stringResource(R.string.tag_gen_use_opencl_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
@@ -791,7 +813,8 @@ private fun InferencePreferenceSelection(
 @Composable
 private fun OpenClBackendSelection(
     useOpencl: Boolean,
-    onToggle: (Boolean) -> Unit
+    onToggle: (Boolean) -> Unit,
+    title: String = stringResource(R.string.ai_agent_local_backend)
 ) {
     val options = listOf(
         false to stringResource(R.string.ai_agent_local_backend_cpu),
@@ -799,7 +822,7 @@ private fun OpenClBackendSelection(
     )
 
     Text(
-        text = stringResource(R.string.ai_agent_local_backend),
+        text = title,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 0.dp)
@@ -957,6 +980,8 @@ fun SettingsScreenPreview() {
             onAiAgentL1CacheEnabledChange = {},
             aiAgentLocalUseOpencl = false,
             onAiAgentLocalUseOpenclChange = {},
+            tagGenerationUseOpencl = false,
+            onTagGenerationUseOpenclChange = {},
             voiceCommandMode = VoiceCommandMode.DISABLED,
             onVoiceCommandModeChange = {},
             localAsrModel = "",

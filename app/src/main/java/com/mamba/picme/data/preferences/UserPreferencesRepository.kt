@@ -83,6 +83,9 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
         val AI_AGENT_LOCAL_MODEL = stringPreferencesKey("ai_agent_local_model")
         val AI_AGENT_LOCAL_USE_OPENCL = booleanPreferencesKey("ai_agent_local_use_opencl")
 
+        // TAG 生成
+        val TAG_GENERATION_USE_OPENCL = booleanPreferencesKey("tag_generation_use_opencl")
+
         // 远程模型配置（供应商维度 JSON + 当前选中模型ID）
         val AI_AGENT_REMOTE_MODEL_CONFIGS = stringPreferencesKey("ai_agent_remote_model_configs_v2")
         val AI_AGENT_SELECTED_REMOTE_MODEL = stringPreferencesKey("ai_agent_selected_remote_model")
@@ -614,6 +617,24 @@ class UserPreferencesRepository(private val context: Context) : UserSettingsRepo
     override suspend fun updateAiAgentLocalUseOpencl(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AI_AGENT_LOCAL_USE_OPENCL] = enabled
+        }
+    }
+
+    override val tagGenerationUseOpencl: Flow<Boolean> = context.dataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[PreferencesKeys.TAG_GENERATION_USE_OPENCL] ?: false
+        }
+
+    override suspend fun updateTagGenerationUseOpencl(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.TAG_GENERATION_USE_OPENCL] = enabled
         }
     }
 

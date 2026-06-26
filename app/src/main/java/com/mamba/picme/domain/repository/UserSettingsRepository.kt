@@ -92,6 +92,10 @@ interface UserSettingsRepository {
     val aiAgentLocalUseOpenclFlow: Flow<Boolean>
     suspend fun updateAiAgentLocalUseOpencl(enabled: Boolean)
 
+    // ── TAG 生成 ────────────────────────────────────────────
+    val tagGenerationUseOpencl: Flow<Boolean>
+    suspend fun updateTagGenerationUseOpencl(enabled: Boolean)
+
     // ── 远程模型配置（供应商维度） ────────────────────────────────
     val aiAgentRemoteModelConfigsFlow: Flow<String>
     suspend fun updateAiAgentRemoteModelConfigs(configsJson: String)

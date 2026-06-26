@@ -490,7 +490,7 @@ Java_com_mamba_picme_agent_core_inference_local_llm_MnnLlmClient_nativeGenerateW
     // 4. 两阶段多模态生成（匹配 MNN 官方 Demo 模式）
     //    官方 Demo: llm->response(multimodal, &oss, "<eop>", 0) → prefill
     //              循环 llm->generate(1) → decode one token at a time
-    //    
+    //
     //    使用 "<eop>" 作为结束标记，避免 nullptr 触发默认换行符行为。
     //    此模式在 Android 预编译 libMNN.so 上更稳定。
     //

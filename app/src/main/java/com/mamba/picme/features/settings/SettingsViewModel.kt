@@ -203,6 +203,13 @@ private val ESSENTIAL_MODEL_IDS = listOf(
             initialValue = false
         )
 
+    val tagGenerationUseOpencl: StateFlow<Boolean> = repository.tagGenerationUseOpencl
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+
     val voiceCommandMode: StateFlow<VoiceCommandMode> = repository.voiceCommandModeFlow
         .stateIn(
             scope = viewModelScope,
@@ -760,6 +767,13 @@ private val ESSENTIAL_MODEL_IDS = listOf(
         viewModelScope.launch {
             Logger.d("UX", "AI Agent local OpenCL changed: $enabled")
             repository.updateAiAgentLocalUseOpencl(enabled)
+        }
+    }
+
+    fun setTagGenerationUseOpencl(enabled: Boolean) {
+        viewModelScope.launch {
+            Logger.d("UX", "TAG generation OpenCL changed: $enabled")
+            repository.updateTagGenerationUseOpencl(enabled)
         }
     }
 

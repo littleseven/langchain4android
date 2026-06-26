@@ -293,6 +293,8 @@
     <string name="ai_agent_local_backend_cpu">CPU</string>
     <string name="ai_agent_local_backend_opencl">OpenCL (GPU)</string>
     <string name="ai_agent_local_backend_desc">Choose the on-device backend for local LLM inference. OpenCL requires device support and may be less stable on some models.</string>
+    <string name="tag_gen_use_opencl_title">TAG Generation GPU Accel</string>
+    <string name="tag_gen_use_opencl_desc">Use GPU to accelerate batch image tagging. May cause freeze on some devices due to OpenCL driver issues in multimodal inference — disable if Pass 3 hangs.</string>
     <string name="ai_agent_no_local_model">No downloaded models. Go to Model Manager to download.</string>
     <string name="remote_models">Remote Models</string>
     <string name="configured">Configured</string>

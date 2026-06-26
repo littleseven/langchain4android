@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -999,24 +1000,35 @@ class TagGenerationScheduler(
             return false
         }
 
-        // 如果模型已加载（可能残留前序扫描状态），先清空 KV cache
+        // 读取用户偏好：TAG 生成是否使用 GPU 加速
+        // 默认关闭，因为部分设备 OpenCL 多模态推理会死锁
+        val prefs = com.mamba.picme.data.preferences.UserPreferencesRepository(context)
+        val useOpencl = prefs.tagGenerationUseOpencl.first()
+
+        // 如果模型已加载（可能来自 AI Agent 的 OpenCL 加载或其他扫描残留），
+        // 先完整卸载再重新加载，确保后端与设置一致。
         if (engine.isLoaded) {
-            Log.i(TAG, "Model already loaded, trimming memory to clear stale state")
-            engine.trimMemory()
-            return true
+            Log.i(TAG, "Model already loaded, unloading before reload (useOpencl=$useOpencl)")
+            engine.unload()
+            // unload 通过 backgroundScope.launch 投递到 modelDispatcher 异步执行，
+            // 给 modelDispatcher 时间处理 unload 后再投递 loadModel
+            delay(1000)
         }
 
-        // OpenCL GPU 优先 → CPU 降级
-        // 由 MNN native 层自行判断 OpenCL 是否可用（不依赖 Java 层 System.loadLibrary）
-        Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
-        val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
-        if (openclResult.isSuccess) {
-            Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
-            return true
+        // OpenCL GPU 优先（如果用户启用）→ CPU 降级
+        if (useOpencl) {
+            Log.i(TAG, "Loading LLM model with OpenCL (GPU): $MODEL_KEY")
+            val openclResult = engine.loadModel(MODEL_KEY, useOpencl = true)
+            if (openclResult.isSuccess) {
+                Log.i(TAG, "Model loaded with OpenCL (GPU) acceleration")
+                return true
+            }
+            Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
+                "falling back to CPU")
         }
-        Log.w(TAG, "OpenCL load failed: ${openclResult.exceptionOrNull()?.message}, " +
-            "falling back to CPU")
 
+        // CPU 加载（默认路径 + OpenCL 失败降级）
+        Log.i(TAG, "Loading LLM model with CPU: $MODEL_KEY")
         val cpuResult = engine.loadModel(MODEL_KEY, useOpencl = false)
         return if (cpuResult.isSuccess) {
             Log.i(TAG, "Model loaded with CPU")
@@ -1031,7 +1043,9 @@ class TagGenerationScheduler(
      * 卸载 LLM 模型释放 ~4GB 内存
      *
      * 扫描完成后调用，防止后台服务持续占用内存和散热资源。
-     * 使用 [LocalLlmEngine.trimMemory] 清理 KV cache 并释放模型权重。
+     * 使用 [LocalLlmEngine.trimMemory] 清理 KV cache，保留模型权重以
+     * 供后续扫描复用。再次进入 Pass 3 时 [ensureModelLoaded] 会负责
+     * 按用户偏好选择后端重新加载。
      */
     private fun unloadLlm() {
         try {

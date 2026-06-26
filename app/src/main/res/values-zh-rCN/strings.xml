@@ -286,6 +286,8 @@
     <string name="ai_agent_local_backend_cpu">CPU</string>
     <string name="ai_agent_local_backend_opencl">OpenCL（GPU）</string>
     <string name="ai_agent_local_backend_desc">选择本地 LLM 推理后端。OpenCL 依赖设备支持，部分模型或机型稳定性可能较差。</string>
+    <string name="tag_gen_use_opencl_title">TAG 生成 GPU 加速</string>
+    <string name="tag_gen_use_opencl_desc">使用 GPU 加速批量图片标签生成。部分设备 OpenCL 多模态推理可能卡死，如 Pass 3 卡住请关闭此选项。</string>
     <string name="ai_agent_no_local_model">暂无已下载模型，前往模型管理下载。</string>
     <string name="remote_models">远程模型</string>
     <string name="configured">已配置</string>
