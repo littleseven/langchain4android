@@ -390,7 +390,23 @@ fun MediaPager(
                                 BitmapFactory.decodeStream(it)
                             }
                             if (bitmap != null) {
-                                val engine = AgentOrchestrator.getInstance(context).getLlmEngine()
+                                val orchestrator = AgentOrchestrator.getInstance(context)
+                                val engine = orchestrator.getLlmEngine()
+
+                                // 确保模型已加载（参考 TagGenerationScheduler.ensureModelLoaded）
+                                val modelKey = "qwen3_5_2b"
+                                if (!engine.isLoaded) {
+                                    Log.d("Gallery", "LLM not loaded, loading model: $modelKey")
+                                    val loadResult = engine.loadModel(modelKey, useOpencl = false)
+                                    if (loadResult.isFailure) {
+                                        visionResult = "模型加载失败: ${loadResult.exceptionOrNull()?.message}"
+                                        bitmap.recycle()
+                                        isVisionLoading = false
+                                        return@launch
+                                    }
+                                    Log.d("Gallery", "LLM model loaded successfully")
+                                }
+
                                 val result = engine.imageInference(
                                     bitmap = bitmap,
                                     systemPrompt = "你是一个图像理解助手。请用简洁的中文描述这张图片的内容，包括主要对象、场景、颜色和氛围。",
