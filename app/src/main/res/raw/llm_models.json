@@ -214,5 +214,25 @@
       "merges.txt"
     ],
     "tags": ["vision", "clip", "mnn", "semantic"]
+  },
+  {
+    "id": "opus-mt-zh-en",
+    "name": "OPUS-MT 中英翻译",
+    "description": "Helsinki-NLP OPUS-MT 中文→英文翻译模型 (ONNX INT8 量化)，~70MB，用于语义搜索时中文查询翻译",
+    "type": "TRANSLATION",
+    "size": 70000000,
+    "sources": {
+      "ModelScope": "budaoshou/OPUS-MT-Zh-En-ONNX-INT8"
+    },
+    "files": [
+      "encoder_model_quantized.onnx",
+      "decoder_model_quantized.onnx",
+      "decoder_with_past_model_quantized.onnx",
+      "tokenizer.json",
+      "config.json",
+      "source.spm",
+      "target.spm"
+    ],
+    "tags": ["translation", "chinese", "english", "onnx", "nlp"]
   }
 ]

@@ -265,6 +265,14 @@ dependencies {
     // Agent 核心模块（将来提取独立库）
     // GPUPixel 已移除，全部能力由自研引擎提供
 
+    // SentencePiece tokenizer（OPUS-MT 编码解码）
+    implementation(project(":sentencepiece"))
+
+    // ONNX Runtime（OPUS-MT 翻译模型推理后端）
+    // 版本必须与 sherpa-onnx-1.10.46 内置的 ONNX Runtime 一致（1.17.1）
+    // 否则 libonnxruntime4j_jni.so 与 libonnxruntime.so ABI 不匹配
+    implementation(libs.onnxruntime.android)
+
     // Core library desugaring（mamba-agent 依赖需要）
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 

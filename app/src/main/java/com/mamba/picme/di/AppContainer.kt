@@ -27,7 +27,9 @@ import com.mamba.picme.domain.repository.MediaRepository
 import com.mamba.picme.domain.repository.UserSettingsRepository
 import com.mamba.picme.domain.search.MediaSearchEngine
 import com.mamba.picme.domain.search.QueryBuilder
+import com.mamba.picme.domain.search.SemanticSearchEngine
 import com.mamba.picme.domain.tag.i18n.BilingualVocab
+import com.mamba.picme.domain.tag.i18n.ChineseQueryTranslator
 import com.mamba.picme.domain.tag.i18n.TagTranslator
 import com.mamba.picme.data.download.LlmModelDownloadManager
 import com.mamba.picme.data.download.ModelPathConfig
@@ -120,6 +122,14 @@ class AppContainerImpl(
 
     private val database by lazy { AppDatabase.getDatabase(context) }
 
+    /** 语义搜索引擎（MobileCLIP 跨模态检索） */
+    private val semanticSearchEngine: SemanticSearchEngine by lazy {
+        SemanticSearchEngine(
+            context = context,
+            mediaDao = database.mediaDao()
+        )
+    }
+
     /** 媒体搜索引擎（自然语言图片搜索） */
     override val mediaSearchEngine: MediaSearchEngine by lazy {
         MediaSearchEngine(
@@ -128,7 +138,8 @@ class AppContainerImpl(
             ocrWordDao = database.ocrWordDao(),
             locationDao = database.locationDao(),
             userSettingsRepository = userPreferencesRepository,
-            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context))
+            tagTranslator = TagTranslator(BilingualVocab.loadFromAssets(context)),
+            semanticSearchEngine = semanticSearchEngine
         )
     }
 

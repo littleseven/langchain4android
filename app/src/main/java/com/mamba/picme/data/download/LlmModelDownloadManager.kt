@@ -492,6 +492,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
             modelId == "picme-face-embedding-mnn" -> FACE_EMBEDDING_MNN_FILES
             modelId == "mobileclip-mnn" -> MOBILECLIP_MODEL_FILES
+            modelId == "opus-mt-zh-en" -> ModelPathConfig.OPUS_MT_MODEL_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }
@@ -514,6 +515,7 @@ fun isModelDownloaded(modelId: String): Boolean {
             modelId == "picme-face-det-500m-ncnn" -> FACE_DETECTION_ROI_500M_NCNN_FILES
             modelId == "picme-face-landmark-ncnn" -> FACE_DETECTION_LANDMARK_NCNN_FILES
             modelId == "mobileclip-mnn" -> MOBILECLIP_MODEL_FILES
+            modelId == "opus-mt-zh-en" -> ModelPathConfig.OPUS_MT_MODEL_FILES
             modelId.contains("face", ignoreCase = true) -> FACE_DETECTION_ROI_MNN_FILES
             else -> LLM_MODEL_FILES
         }

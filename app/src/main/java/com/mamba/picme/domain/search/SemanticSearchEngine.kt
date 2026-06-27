@@ -9,6 +9,7 @@ import com.mamba.picme.data.model.MediaEntity
 import com.mamba.picme.domain.model.StructuredFilter
 import com.mamba.picme.domain.tag.MobileClipEngine
 import com.mamba.picme.domain.tag.MobileClipTokenizer
+import com.mamba.picme.domain.tag.i18n.ChineseQueryTranslator
 
 /**
  * MobileCLIP 语义搜索引擎
@@ -27,7 +28,8 @@ import com.mamba.picme.domain.tag.MobileClipTokenizer
 class SemanticSearchEngine(
     private val context: Context,
     private val mediaDao: MediaDao,
-    private val mobileClipEngine: MobileClipEngine? = null
+    private val mobileClipEngine: MobileClipEngine? = null,
+    private val queryTranslator: ChineseQueryTranslator? = null
 ) {
     companion object {
         private const val TAG = "SemanticSearchEngine"
@@ -42,6 +44,11 @@ class SemanticSearchEngine(
     /** 本地持有的 MobileClipEngine 实例（如果外部未注入） */
     private val engine: MobileClipEngine by lazy {
         mobileClipEngine ?: MobileClipEngine(context)
+    }
+
+    /** 中文查询翻译器（如果外部未注入） */
+    private val translator: ChineseQueryTranslator by lazy {
+        queryTranslator ?: ChineseQueryTranslator(context)
     }
 
     /** 引擎是否已初始化（含模型加载和 tokenizer 加载） */
@@ -102,9 +109,12 @@ class SemanticSearchEngine(
 
         if (query.isBlank()) return emptyList()
 
-        // 1. 文本编码
-        val textEmbedding = encodeTextQuery(query) ?: run {
-            Log.w(TAG, "Failed to encode text query: $query")
+        // 1. 中文查询翻译（如果含中文）
+        val translatedQuery = translator.translateForClip(query)
+
+        // 2. 文本编码
+        val textEmbedding = encodeTextQuery(translatedQuery) ?: run {
+            Log.w(TAG, "Failed to encode text query: $translatedQuery")
             return emptyList()
         }
 
@@ -125,7 +135,7 @@ class SemanticSearchEngine(
             .sortedByDescending { it.score }
             .take(topK)
             .also {
-                Log.d(TAG, "Semantic search: query='$query', candidates=${candidates.size}, results=${it.size}")
+                Log.d(TAG, "Semantic search: original='$query', translated='$translatedQuery', candidates=${candidates.size}, results=${it.size}")
             }
     }
 
@@ -239,6 +249,10 @@ class SemanticSearchEngine(
         // 仅释放自己创建的 engine，外部注入的不释放
         if (mobileClipEngine == null) {
             engine.release()
+        }
+        // 仅释放自己创建的 translator
+        if (queryTranslator == null) {
+            translator.release()
         }
         Log.i(TAG, "SemanticSearchEngine released")
     }

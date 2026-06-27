@@ -68,6 +68,15 @@ object ModelPathConfig {
     }
 
     /**
+     * 获取 OPUS-MT 翻译模型目录
+     * @param context Android Context
+     * @return OPUS-MT 模型目录路径
+     */
+    fun getOpusMtModelDir(context: Context): File {
+        return getModelDir(context, MODEL_ID_OPUS_MT)
+    }
+
+    /**
      * 检查 MobileCLIP 模型是否完整
      */
     fun isMobileClipModelReady(context: Context): Boolean {
@@ -106,6 +115,7 @@ object ModelPathConfig {
     const val MODEL_ID_ASR = "sherpa-onnx-asr-zipformer"
     const val MODEL_ID_KWS = "sherpa-onnx-kws-zipformer-wenetspeech"
     const val MODEL_ID_MOBILECLIP = "mobileclip-mnn"
+    const val MODEL_ID_OPUS_MT = "opus-mt-zh-en"
 
     // ===== 模型文件列表 =====
 
@@ -154,6 +164,21 @@ object ModelPathConfig {
         "tokenizer_config.json",
         "vocab.txt",
         "merges.txt"
+    )
+
+    /**
+     * OPUS-MT 翻译模型文件列表（ModelScope: budaoshou/OPUS-MT-Zh-En-ONNX-INT8）
+     * decoder_with_past_model_quantized.onnx 为可选优化文件，用于第 2+ 步解码加速
+     * source.spm / target.spm 为 SentencePiece 模型文件（DJL tokenizers 优先使用 tokenizer.json）
+     */
+    val OPUS_MT_MODEL_FILES = listOf(
+        "encoder_model_quantized.onnx",
+        "decoder_model_quantized.onnx",
+        "decoder_with_past_model_quantized.onnx",
+        "tokenizer.json",
+        "config.json",
+        "source.spm",
+        "target.spm"
     )
 
     // ===== 模型验证辅助方法 =====
