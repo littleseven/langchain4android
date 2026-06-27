@@ -30,6 +30,7 @@ import com.mamba.picme.domain.search.QueryBuilder
 import com.mamba.picme.domain.search.SemanticSearchEngine
 import com.mamba.picme.domain.tag.i18n.BilingualVocab
 import com.mamba.picme.domain.tag.i18n.ChineseQueryTranslator
+import com.mamba.picme.domain.tag.i18n.OpusMtTranslator
 import com.mamba.picme.domain.tag.i18n.TagTranslator
 import com.mamba.picme.data.download.LlmModelDownloadManager
 import com.mamba.picme.data.download.ModelPathConfig
@@ -122,11 +123,26 @@ class AppContainerImpl(
 
     private val database by lazy { AppDatabase.getDatabase(context) }
 
-    /** 语义搜索引擎（MobileCLIP 跨模态检索） */
+    /** OPUS-MT 翻译引擎（SentencePiece + ONNX Runtime） */
+    private val opusMtTranslator: OpusMtTranslator by lazy {
+        OpusMtTranslator(context)
+    }
+
+    /** 中文查询翻译器（注入 OPUS-MT 翻译引擎） */
+    private val chineseQueryTranslator: ChineseQueryTranslator by lazy {
+        ChineseQueryTranslator(
+            context = context,
+            vocab = BilingualVocab.loadFromAssets(context),
+            translator = opusMtTranslator
+        )
+    }
+
+    /** 语义搜索引擎（MobileCLIP 跨模态检索，注入翻译器） */
     private val semanticSearchEngine: SemanticSearchEngine by lazy {
         SemanticSearchEngine(
             context = context,
-            mediaDao = database.mediaDao()
+            mediaDao = database.mediaDao(),
+            queryTranslator = chineseQueryTranslator
         )
     }
 
