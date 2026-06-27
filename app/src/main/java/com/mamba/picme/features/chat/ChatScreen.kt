@@ -360,17 +360,23 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
     ) {
         Column(
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
+                .clip(
+                    if (isUser) {
+                        RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp)
+                    } else {
+                        RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp)
+                    }
+                )
                 .background(
                     if (isUser) {
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
                     } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
                     }
                 )
                 .padding(
-                    horizontal = if (isImage) 5.dp else 14.dp,
-                    vertical = if (isImage) 3.dp else 10.dp
+                    horizontal = if (isImage) 6.dp else 16.dp,
+                    vertical = if (isImage) 4.dp else 12.dp
                 )
                 .pointerInput(Unit) {
                     detectTapGestures(
@@ -392,7 +398,7 @@ private fun ChatMessageItem(message: ChatMessageUi, onImageClick: (Uri) -> Unit 
                         modifier = Modifier
                             .height(200.dp)
                             .widthIn(max = 260.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable {
                                 val uri = Uri.parse(message.content)
                                 val resolvedUri = if (uri.scheme != null) uri

@@ -368,9 +368,9 @@ private fun UserTextBubble(
             color = Color.White,
             fontSize = 13.sp,
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp))
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onLongPress = {
@@ -401,9 +401,9 @@ private fun AgentTextBubble(
             color = Color.White,
             fontSize = 13.sp,
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.DarkGray.copy(alpha = 0.8f))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp))
+                .background(Color.DarkGray.copy(alpha = 0.85f))
+                .padding(horizontal = 14.dp, vertical = 10.dp)
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onLongPress = {
@@ -430,9 +430,9 @@ private fun PlanPreviewBubble(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.DarkGray.copy(alpha = 0.8f))
-                .padding(12.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.DarkGray.copy(alpha = 0.85f))
+                .padding(14.dp)
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -486,9 +486,9 @@ private fun PlanPreviewBubble(
                 color = MaterialTheme.colorScheme.primary,
                 fontSize = 12.sp,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.15f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
             )
         }
     }
@@ -508,9 +508,9 @@ private fun PlanProgressBubble(
             color = MaterialTheme.colorScheme.secondary,
             fontSize = 12.sp,
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.1f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
         )
     }
 }
@@ -529,9 +529,9 @@ private fun PlanResultBubble(
             color = MaterialTheme.colorScheme.tertiary,
             fontSize = 13.sp,
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.2f))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         )
     }
 }
@@ -565,9 +565,9 @@ private fun CommandExecutionBubble(
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color.DarkGray.copy(alpha = 0.6f))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.DarkGray.copy(alpha = 0.65f))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
