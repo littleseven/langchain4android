@@ -46,6 +46,7 @@ import com.mamba.picme.features.chat.ChatScreen
 import com.mamba.picme.features.chat.ChatViewModel
 import com.mamba.picme.features.debug.DebugScreen
 import com.mamba.picme.features.gallery.GalleryScreen
+import com.mamba.picme.features.translation.SentencePieceTestScreen
 import com.mamba.picme.features.gallery.MediaViewModel
 import com.mamba.picme.features.gallery.components.TagGenerationControlScreen
 import com.mamba.picme.features.settings.ModelCenterScreen
@@ -297,7 +298,13 @@ class MainActivity : ComponentActivity() {
                                 }
                                 DebugScreen(
                                     onNavigateBack = { navController.popBackStack() },
-                                    mediaViewModel = mediaViewModel
+                                    mediaViewModel = mediaViewModel,
+                                    onNavigateToSentencePieceTest = { navController.navigate(Screen.SentencePieceTest.route, navOptions { launchSingleTop = true }) }
+                                )
+                            }
+                            composable(Screen.SentencePieceTest.route) {
+                                SentencePieceTestScreen(
+                                    onNavigateBack = { navController.popBackStack() }
                                 )
                             }
                             }

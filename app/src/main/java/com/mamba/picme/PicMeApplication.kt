@@ -624,6 +624,13 @@ class PicMeApplication : Application(), ImageLoaderFactory {
         } catch (e: UnsatisfiedLinkError) {
             Logger.e(TAG, "Failed to load sherpa-onnx-jni", e)
         }
+        // 预加载 SentencePiece tokenizer（OPUS-MT 编码解码依赖）
+        try {
+            System.loadLibrary("sentencepiece_android")
+            Logger.d(TAG, "Native library loaded: sentencepiece_android")
+        } catch (e: UnsatisfiedLinkError) {
+            Logger.e(TAG, "Failed to load sentencepiece_android", e)
+        }
     }
 
     /**
