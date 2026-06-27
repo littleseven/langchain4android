@@ -151,6 +151,15 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // 解决 onnxruntime-android 与 sherpa-onnx 的 libonnxruntime.so 冲突
+            // sherpa-onnx-1.10.46 内置 ONNX Runtime 1.17.1，onnxruntime-android 必须与之一致
+            // 否则 libonnxruntime4j_jni.so (1.18.0) 与 libonnxruntime.so (1.17.1) ABI 不匹配
+            // 会导致 UnsatisfiedLinkError: cannot locate symbol "OrtGetApiBase"
+            // 当前 onnxruntime-android 版本已降级至 1.17.1，与 sherpa-onnx 对齐
+            pickFirsts += "lib/arm64-v8a/libonnxruntime.so"
+            pickFirsts += "lib/armeabi-v7a/libonnxruntime.so"
+            pickFirsts += "lib/x86/libonnxruntime.so"
+            pickFirsts += "lib/x86_64/libonnxruntime.so"
         }
         resources {
             excludes += "/META-INF/DEPENDENCIES"
@@ -234,6 +243,9 @@ dependencies {
 
     // MediaPipe Face Landmarker（Gallery 调试用，直接显示 468 点原始数据）
     implementation(libs.mediapipe.face.landmarker)
+
+    // ONNX Runtime（MobileCLIP 推理）
+    implementation(libs.onnxruntime.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
