@@ -756,13 +756,19 @@ private fun TextInputMode(
     val inputDevice = rememberInputAudioDevice(voiceCoordinator)
     val isHeadsetConnected = inputDevice is InputAudioDevice.BluetoothSco ||
         inputDevice is InputAudioDevice.WiredHeadset
+    val hasContent = text.isNotBlank()
 
+    // 单行布局：语音按钮 + 输入框 + 发送按钮，全部在同一行
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White.copy(alpha = 0.1f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Voice switch button with headset indicator
+        // 左侧：语音切换按钮
         Box {
             IconButton(
                 onClick = onSwitchToVoice,
@@ -784,7 +790,7 @@ private fun TextInputMode(
             }
         }
 
-        // Text input
+        // 中间：输入框（占据剩余空间）
         OutlinedTextField(
             value = text,
             onValueChange = onTextChange,
@@ -792,48 +798,52 @@ private fun TextInputMode(
                 Text(
                     stringResource(R.string.ai_agent_input_hint),
                     color = Color.Gray,
-                    fontSize = 13.sp
+                    fontSize = 14.sp
                 )
             },
-            singleLine = true,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 40.dp, max = 120.dp),
+            minLines = 1,
+            maxLines = 4,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(
                 onSend = { onSend() }
             ),
             textStyle = TextStyle(
                 color = Color.White,
-                fontSize = 13.sp
+                fontSize = 14.sp,
+                lineHeight = 20.sp
             ),
-            modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(20.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                focusedContainerColor = Color.White.copy(alpha = 0.08f),
-                unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                focusedContainerColor = Color.White.copy(alpha = 0.06f),
+                unfocusedContainerColor = Color.White.copy(alpha = 0.03f)
             )
         )
 
-        // Send button
-        IconButton(
-            onClick = onSend,
-            enabled = text.isNotBlank() && !isProcessing,
+        // 右侧：发送按钮
+        Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(36.dp)
                 .clip(CircleShape)
                 .background(
-                    if (text.isNotBlank() && !isProcessing) {
+                    if (hasContent && !isProcessing) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        Color.Gray.copy(alpha = 0.5f)
+                        Color.Gray.copy(alpha = 0.3f)
                     }
                 )
+                .clickable(enabled = hasContent && !isProcessing) { onSend() },
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Rounded.Send,
                 contentDescription = stringResource(R.string.chat_send),
-                tint = Color.White,
-                modifier = Modifier.size(20.dp)
+                tint = if (hasContent && !isProcessing) Color.White else Color.White.copy(alpha = 0.4f),
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -864,12 +874,17 @@ private fun VoiceInputMode(
     LaunchedEffect(isListening, isCancelRecord) {
     }
 
+    // 单行布局：键盘切换 + 按住说话按钮 + 可扩展区域
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color.White.copy(alpha = 0.1f))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        // Text switch button
+        // 左侧：键盘切换按钮
         IconButton(
             onClick = onSwitchToText,
             modifier = Modifier.size(36.dp)
@@ -882,7 +897,7 @@ private fun VoiceInputMode(
             )
         }
 
-        // Hold to speak button
+        // 中间：按住说话按钮（占据剩余空间）
         val buttonBackground = when {
             isListening && !isCancelRecord -> MaterialTheme.colorScheme.primary
             isListening && isCancelRecord -> Color(0xFFE53935)
@@ -892,8 +907,8 @@ private fun VoiceInputMode(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(44.dp)
-                .clip(RoundedCornerShape(22.dp))
+                .height(40.dp)
+                .clip(RoundedCornerShape(20.dp))
                 .background(buttonBackground)
                 .pointerInput(Unit) {
                     awaitPointerEventScope {
@@ -972,8 +987,9 @@ private fun VoiceInputMode(
             )
         }
 
-        // Placeholder for balance
-        Box(modifier = Modifier.size(40.dp))
+        // 右侧：占位保持对称（可选，当前留空保持简洁）
+        // 语音模式下暂无额外功能按钮，保持简洁
+        Box(modifier = Modifier.size(36.dp))
     }
 }
 

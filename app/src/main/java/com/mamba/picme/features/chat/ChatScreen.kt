@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardVoice
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
@@ -111,7 +112,14 @@ import androidx.activity.compose.BackHandler
 import androidx.core.net.toUri
 import com.mamba.picme.features.chat.ChatThreadSidebar
 import com.mamba.picme.features.chat.components.QuickActionBar
+import com.mamba.picme.data.preferences.UserPreferencesRepository
 import dev.jeziellago.compose.markdowntext.MarkdownText
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.shadow
 
 private const val TAG = "ChatScreen"
 
@@ -505,6 +513,14 @@ private fun PerformanceMetric(
     }
 }
 
+/**
+ * 输入模式枚举
+ */
+private enum class ChatInputMode {
+    TEXT,
+    VOICE
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ChatInputArea(
@@ -520,151 +536,75 @@ private fun ChatInputArea(
     var showPhotoPicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
+    val settingsRepository = remember { UserPreferencesRepository(context) }
+    val savedInputMode by settingsRepository.chatInputModeFlow.collectAsState(initial = "voice")
+    var inputMode by remember(savedInputMode) {
+        mutableStateOf(
+            if (savedInputMode == "text") ChatInputMode.TEXT else ChatInputMode.VOICE
+        )
+    }
 
+    // DeepSeek 风格：白色大圆角卡片统一包裹输入区域（带阴影增强视觉层次）
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .navigationBarsPadding()
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // 模型切换图标（点击展开下拉菜单）
-            Box {
-                IconButton(
-                    onClick = { showModelMenu = true },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .clip(CircleShape)
-                            .background(currentModel.indicatorColor)
-                    )
-                }
-                DropdownMenu(
-                    expanded = showModelMenu,
-                    onDismissRequest = { showModelMenu = false },
-                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                ) {
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(ChatModelOption.Local.indicatorColor)
-                                )
-                                Text("本地模型 (Qwen3.5-2B)")
-                            }
-                        },
-                        onClick = {
-                            onModelSwitch(ChatModelOption.Local)
-                            showModelMenu = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(ChatModelOption.Remote.indicatorColor)
-                                )
-                                Text("远程模型 (DeepSeek)")
-                            }
-                        },
-                        onClick = {
-                            onModelSwitch(ChatModelOption.Remote)
-                            showModelMenu = false
-                        }
-                    )
-                }
-            }
-
-            // 输入框
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = {
-                    Text(
-                        stringResource(R.string.chat_input_hint),
-                        fontSize = 14.sp
-                    )
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 44.dp, max = 120.dp),
-                minLines = 1,
-                maxLines = 4,
-                textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 4.dp,
+                    shape = RoundedCornerShape(24.dp),
+                    ambientColor = Color.Black.copy(alpha = 0.08f),
+                    spotColor = Color.Black.copy(alpha = 0.12f)
                 )
-            )
+                .clip(RoundedCornerShape(24.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            when (inputMode) {
+                ChatInputMode.TEXT -> ChatTextInputMode(
+                    text = text,
+                    onTextChange = { text = it },
+                    currentModel = currentModel,
+                    isProcessing = isProcessing,
+                    onSend = {
+                        if (text.isNotBlank() && !isProcessing) {
+                            onSendMessage(text.trim())
+                            text = ""
+                            keyboardController?.hide()
+                        }
+                    },
+                    onModelMenuToggle = { showModelMenu = !showModelMenu },
+                    onShowModelMenu = { showModelMenu = true },
+                    onDismissModelMenu = { showModelMenu = false },
+                    showModelMenu = showModelMenu,
+                    onModelSwitch = onModelSwitch,
+                    onSwitchToVoice = {
+                        inputMode = ChatInputMode.VOICE
+                        keyboardController?.hide()
+                        scope.launch {
+                            settingsRepository.updateChatInputMode("voice")
+                        }
+                    },
+                    onShowPhotoPicker = { showPhotoPicker = true },
+                    onToggleQuickActions = onToggleQuickActions
+                )
 
-            // 图片选择 + 发送按钮组（间距 2dp）
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 图片选择按钮（打开内置相册选取）
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .clickable(enabled = !isProcessing) { showPhotoPicker = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.PhotoLibrary,
-                        contentDescription = stringResource(R.string.cd_select_image),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-
-                // 发送按钮
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (text.isNotBlank() && !isProcessing) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                Color.Gray.copy(alpha = 0.3f)
-                            }
-                        )
-                        .clickable(enabled = text.isNotBlank() && !isProcessing) {
-                            if (text.isNotBlank() && !isProcessing) {
-                                onSendMessage(text.trim())
-                                text = ""
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.Send,
-                        contentDescription = stringResource(R.string.chat_send),
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                ChatInputMode.VOICE -> ChatVoiceInputMode(
+                    onSwitchToText = {
+                        inputMode = ChatInputMode.TEXT
+                        keyboardController?.show()
+                        scope.launch {
+                            settingsRepository.updateChatInputMode("text")
+                        }
+                    },
+                    onToggleQuickActions = onToggleQuickActions
+                )
             }
         }
     }
@@ -680,6 +620,314 @@ private fun ChatInputArea(
             },
             onDismiss = { showPhotoPicker = false }
         )
+    }
+}
+
+@Composable
+private fun ChatTextInputMode(
+    text: String,
+    onTextChange: (String) -> Unit,
+    currentModel: ChatModelOption,
+    isProcessing: Boolean,
+    onSend: () -> Unit,
+    onModelMenuToggle: () -> Unit,
+    onShowModelMenu: () -> Unit,
+    onDismissModelMenu: () -> Unit,
+    showModelMenu: Boolean,
+    onModelSwitch: (ChatModelOption) -> Unit,
+    onSwitchToVoice: () -> Unit,
+    onShowPhotoPicker: () -> Unit,
+    onToggleQuickActions: () -> Unit
+) {
+    val hasContent = text.isNotBlank()
+
+    // 输入框内容区域（外层已由 ChatInputArea 统一包裹白色卡片）
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // 第一行：输入框（无独立边框，融入卡片）
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (text.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.chat_input_hint),
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                )
+            }
+            // 使用 BasicTextField 实现无边框输入
+            androidx.compose.foundation.text.BasicTextField(
+                value = text,
+                onValueChange = onTextChange,
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 5,
+                textStyle = TextStyle(
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { if (hasContent && !isProcessing) onSend() })
+            )
+        }
+
+        // 第二行：胶囊形功能按钮 + 圆形图标按钮
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // 左侧：胶囊形按钮组
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 模型切换胶囊按钮
+                Box {
+                    ModelCapsuleButton(
+                        currentModel = currentModel,
+                        onClick = onShowModelMenu
+                    )
+                    DropdownMenu(
+                        expanded = showModelMenu,
+                        onDismissRequest = onDismissModelMenu,
+                        modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(ChatModelOption.Local.indicatorColor)
+                                    )
+                                    Text("本地模型 (Qwen3.5-2B)")
+                                }
+                            },
+                            onClick = {
+                                onModelSwitch(ChatModelOption.Local)
+                                onDismissModelMenu()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(ChatModelOption.Remote.indicatorColor)
+                                    )
+                                    Text("远程模型 (DeepSeek)")
+                                }
+                            },
+                            onClick = {
+                                onModelSwitch(ChatModelOption.Remote)
+                                onDismissModelMenu()
+                            }
+                        )
+                    }
+                }
+
+                // 图片选择胶囊按钮
+                CapsuleButton(
+                    icon = Icons.Rounded.PhotoLibrary,
+                    label = "相册",
+                    onClick = onShowPhotoPicker,
+                    enabled = !isProcessing
+                )
+            }
+
+            // 右侧：圆形图标按钮（语音 + 发送）
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 语音切换按钮
+                CircularIconButton(
+                    icon = Icons.Rounded.KeyboardVoice,
+                    contentDescription = stringResource(R.string.cd_switch_to_voice),
+                    onClick = onSwitchToVoice
+                )
+
+                // 发送按钮（有内容时高亮）
+                if (hasContent && !isProcessing) {
+                    CircularIconButton(
+                        icon = Icons.AutoMirrored.Rounded.Send,
+                        contentDescription = stringResource(R.string.chat_send),
+                        onClick = onSend,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 胶囊形按钮 — DeepSeek 风格（圆角长条，带图标+文字）
+ */
+@Composable
+private fun CapsuleButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    isActive: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(
+                if (isActive) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                }
+            )
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+    }
+}
+
+/**
+ * 模型切换胶囊按钮
+ */
+@Composable
+private fun ModelCapsuleButton(
+    currentModel: ChatModelOption,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(currentModel.indicatorColor)
+        )
+        Text(
+            text = currentModel.label,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        )
+        Icon(
+            imageVector = Icons.Rounded.KeyboardVoice,
+            contentDescription = "切换",
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            modifier = Modifier.size(12.dp)
+        )
+    }
+}
+
+/**
+ * 圆形图标按钮
+ */
+@Composable
+private fun CircularIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun ChatVoiceInputMode(
+    onSwitchToText: () -> Unit,
+    onToggleQuickActions: () -> Unit
+) {
+    // 语音输入内容区域（外层已由 ChatInputArea 统一包裹白色卡片）
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // 单行布局：左侧键盘切换 + 中间按住说话 + 右侧可扩展
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 左侧：键盘切换按钮
+            CircularIconButton(
+                icon = Icons.Rounded.Keyboard,
+                contentDescription = stringResource(R.string.switch_to_keyboard),
+                onClick = onSwitchToText
+            )
+
+            // 中间：按住说话按钮（占据剩余空间）
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .clickable { /* TODO: 集成语音按住说话 */ },
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.KeyboardVoice,
+                        contentDescription = stringResource(R.string.cd_switch_to_voice),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.hold_to_speak),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
     }
 }
 
