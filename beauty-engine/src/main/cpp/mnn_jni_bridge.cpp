@@ -149,8 +149,8 @@ Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect
     return copySize;
 }
 
-JNIEXPORT jboolean JNICALL
-Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetinaFace(
+JNIEXPORT jobjectArray JNICALL
+Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetectRetinaFaces(
         JNIEnv *env,
         jclass clazz,
         jlong handle,
@@ -159,17 +159,16 @@ Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect
         jint height,
         jint channels,
         jfloat confidenceThreshold,
-        jfloat nmsThreshold,
-        jfloatArray outResult) {  // 预分配结果缓冲区 [15 floats]
+        jfloat nmsThreshold) {
     auto *detector = reinterpret_cast<picme::MnnFaceDetector *>(handle);
     if (!detector) {
-        return JNI_FALSE;
+        return nullptr;
     }
 
     unsigned char *data = static_cast<unsigned char *>(env->GetDirectBufferAddress(imageData));
     if (!data) {
-        LOGE("nativeDetectRetinaFace: GetDirectBufferAddress returned null");
-        return JNI_FALSE;
+        LOGE("nativeDetectRetinaFaces: GetDirectBufferAddress returned null");
+        return nullptr;
     }
 
     std::vector<picme::FaceBox> faces = detector->detectRetinaFace(
@@ -177,33 +176,47 @@ Java_com_mamba_picme_beauty_internal_facedetect_mnn_MnnFaceDetector_nativeDetect
             confidenceThreshold, nmsThreshold);
 
     if (faces.empty()) {
-        return JNI_FALSE;
+        return nullptr;
     }
 
-    // 选择置信度 * 面积最大的人脸
-    const picme::FaceBox *selectedFace = &faces[0];
-    float maxScore = faces[0].confidence * faces[0].area();
-    for (size_t i = 1; i < faces.size(); i++) {
-        float score = faces[i].confidence * faces[i].area();
-        if (score > maxScore) {
-            maxScore = score;
-            selectedFace = &faces[i];
+    // 查找 FaceBox Kotlin 类
+    jclass faceBoxClass = env->FindClass("com/mamba/picme/beauty/internal/facedetect/mnn/FaceBox");
+    if (!faceBoxClass) {
+        LOGE("nativeDetectRetinaFaces: FaceBox class not found");
+        return nullptr;
+    }
+
+    jmethodID constructor = env->GetMethodID(faceBoxClass, "<init>",
+        "(FFFFF[F)V");
+    if (!constructor) {
+        LOGE("nativeDetectRetinaFaces: FaceBox constructor not found");
+        return nullptr;
+    }
+
+    jobjectArray result = env->NewObjectArray(static_cast<jsize>(faces.size()), faceBoxClass, nullptr);
+    if (!result) {
+        LOGE("nativeDetectRetinaFaces: failed to create object array");
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < faces.size(); i++) {
+        const picme::FaceBox &face = faces[i];
+        // 创建 landmarks FloatArray
+        jfloatArray landmarksArray = env->NewFloatArray(10);
+        if (landmarksArray) {
+            env->SetFloatArrayRegion(landmarksArray, 0, 10, face.landmarks);
+        }
+
+        jobject faceBox = env->NewObject(faceBoxClass, constructor,
+            face.x1, face.y1, face.x2, face.y2, face.confidence, landmarksArray);
+        env->SetObjectArrayElement(result, static_cast<jsize>(i), faceBox);
+        env->DeleteLocalRef(faceBox);
+        if (landmarksArray) {
+            env->DeleteLocalRef(landmarksArray);
         }
     }
 
-    // 写入预分配的 outResult: [x1, y1, x2, y2, score, landmarks(10)]
-    jfloat output[15];
-    output[0] = selectedFace->x1;
-    output[1] = selectedFace->y1;
-    output[2] = selectedFace->x2;
-    output[3] = selectedFace->y2;
-    output[4] = selectedFace->confidence;
-    for (int i = 0; i < 10; i++) {
-        output[5 + i] = selectedFace->landmarks[i];
-    }
-
-    env->SetFloatArrayRegion(outResult, 0, 15, output);
-    return JNI_TRUE;
+    return result;
 }
 
 JNIEXPORT jboolean JNICALL

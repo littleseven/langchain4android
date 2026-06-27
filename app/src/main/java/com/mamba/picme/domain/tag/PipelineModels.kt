@@ -11,7 +11,15 @@ data class Stage1Result(
     val roiRects: List<RectF> = emptyList()
 ) {
     val isSelfie: Boolean get() = faceCount == 1
-    val isGroupPhoto: Boolean get() = faceCount >= 3
+
+    /**
+     * 合影判定策略：
+     * - 有效人脸数 >= 2 即识别为合影
+     * - 有效人脸定义：已通过 detectFacesOnly 过滤掉面积 < 3% 图片总面积的小脸/误检
+     *
+     * 此逻辑与 FaceDetectorManager.detectFacesOnly 中的过滤策略一致。
+     */
+    val isGroupPhoto: Boolean get() = faceCount >= 2
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

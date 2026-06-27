@@ -152,6 +152,9 @@ class FaceDetectorManager(context: Context) : FaceDetector {
      *
      * 专为 TAG 生成等场景设计，跳过 landmark 模型以节省 ~20-80ms。
      * 直接使用 ROI 检测器（RetinaFace Det500M），返回像素坐标矩形。
+     *
+     * 支持多脸检测：当检测到多个人脸时，过滤掉过小的脸（< 3% 图片面积），
+     * 剩余有效人脸数 >= 2 且至少有一张脸 >= 5% 图片面积时，识别为合影。
      */
     override fun detectFacesOnly(bitmap: Bitmap): List<RectF> {
         if (!isPipelineInitialized) {
@@ -171,14 +174,18 @@ class FaceDetectorManager(context: Context) : FaceDetector {
                     InferenceBackendType.MNN -> {
                         val mnnRoi = roiDetector as? MnnRoiDetector
                         if (mnnRoi != null) {
-                            // MnnRoiDetector 当前只返回单个人脸，需要扩展支持多脸
-                            // 临时方案：复用 detectRoi 的单脸结果
-                            mnnRoi.detectRoi(bitmap)?.let { roiList.add(it) }
+                            // 多脸检测：返回所有有效人脸 ROI
+                            val faces = mnnRoi.detectFaces(bitmap)
+                            roiList.addAll(faces)
                         }
                     }
                     InferenceBackendType.NCNN -> {
                         val ncnnRoi = roiDetector as? NcnnRoiDetector
-                        ncnnRoi?.detectRoi(bitmap)?.let { roiList.add(it) }
+                        if (ncnnRoi != null) {
+                            // 多脸检测：返回所有有效人脸 ROI
+                            val faces = ncnnRoi.detectFaces(bitmap)
+                            roiList.addAll(faces)
+                        }
                     }
                     else -> {
                         // ONNX / TFLite 路径：回退到完整 detectPhoto 提取 ROI

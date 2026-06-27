@@ -182,10 +182,23 @@ class MnnRoiDetector(
     }
 
     override fun detectRoi(bitmap: Bitmap): RectF? {
+        val faces = detectFaces(bitmap)
+        return faces.firstOrNull()
+    }
+
+    /**
+     * 多脸检测：返回所有有效人脸 ROI 列表
+     *
+     * 过滤策略：
+     * - 过滤掉面积 < 3% 图片总面积的脸（过小/误检）
+     * - 按面积从大到小排序
+     * - 返回所有有效脸，供上层判断合影/自拍
+     */
+    fun detectFaces(bitmap: Bitmap): List<RectF> {
         // [优化] 懒加载初始化（CAS 无锁，初始化中的线程直接返回）
         if (!ensureInitialized()) {
             Logger.d(TAG, "[Perf] Skipping ROI detection: detector not ready")
-            return null
+            return emptyList()
         }
 
         val totalStart = SystemClock.elapsedRealtime()
@@ -193,11 +206,11 @@ class MnnRoiDetector(
 
         if (det == null) {
             Logger.w(TAG, "[Perf] MnnRoiDetector not initialized after lazy init, skipping")
-            return null
+            return emptyList()
         }
 
         val engineLabel = if (isGpuEnabled) "MNN-OpenCL" else "MNN-CPU"
-        Logger.d(TAG, "[Perf] MnnRoi START: engine=$engineLabel, original=${bitmap.width}x${bitmap.height}, scaled=$INPUT_SIZE")
+        Logger.d(TAG, "[Perf] MnnRoiFaces START: engine=$engineLabel, original=${bitmap.width}x${bitmap.height}, scaled=$INPUT_SIZE")
 
         return try {
             val scaleStart = SystemClock.elapsedRealtime()
@@ -205,20 +218,18 @@ class MnnRoiDetector(
             val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
             val inferStart = SystemClock.elapsedRealtime()
-            val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
+            val faces = det.detectRetinaFaces(scaledBitmap, CONFIDENCE_THRESHOLD, 0.4f)
             val inferElapsed = SystemClock.elapsedRealtime() - inferStart
             val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
-            if (result == null || result.size < 5) {
-                Logger.d(TAG, "[Perf] MnnRoi DONE (no face): total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
-                return null
+            if (faces.isEmpty()) {
+                Logger.d(TAG, "[Perf] MnnRoiFaces DONE (no face): total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
+                return emptyList()
             }
 
-            Logger.i(TAG, "[Perf] MnnRoi DONE: engine=$engineLabel, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
+            Logger.i(TAG, "[Perf] MnnRoiFaces DONE: engine=$engineLabel, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), rawFaces=${faces.size}")
 
-            // result: [x1, y1, x2, y2, score, landmarks(10)]
-            // [关键修复] MNN native 层输出的是 320x320 letterbox 空间的坐标
-            // 需要逆向 letterbox 变换映射回原图尺寸
+            // 逆向 letterbox 变换映射回原图尺寸
             val origW = bitmap.width.toFloat()
             val origH = bitmap.height.toFloat()
             val scale = INPUT_SIZE.toFloat() / maxOf(origW, origH)
@@ -226,33 +237,48 @@ class MnnRoiDetector(
             val scaledH = (origH * scale).toInt()
             val padLeft = (INPUT_SIZE - scaledW) / 2f
             val padTop = (INPUT_SIZE - scaledH) / 2f
+            val imageArea = origW * origH
 
+            val roiList = mutableListOf<RectF>()
+            for (face in faces) {
+                // 减去 letterbox padding，再除以缩放比例，映射回原图
+                var mappedX1 = ((face.x1 - padLeft) / scale)
+                var mappedY1 = ((face.y1 - padTop) / scale)
+                var mappedX2 = ((face.x2 - padLeft) / scale)
+                var mappedY2 = ((face.y2 - padTop) / scale)
 
-            // [对齐 ONNX] 1. 减去 letterbox padding，再除以缩放比例，映射回原图
-            var mappedX1 = ((result[0] - padLeft) / scale)
-            var mappedY1 = ((result[1] - padTop) / scale)
-            var mappedX2 = ((result[2] - padLeft) / scale)
-            var mappedY2 = ((result[3] - padTop) / scale)
+                // 放大 ROI 区域，以包含更多面部上下文
+                val centerX = (mappedX1 + mappedX2) / 2f
+                val centerY = (mappedY1 + mappedY2) / 2f
+                val faceW = mappedX2 - mappedX1
+                val faceH = mappedY2 - mappedY1
+                val newWidth = faceW * ROI_EXPAND_RATIO
+                val newHeight = faceH * ROI_EXPAND_RATIO
 
-            // [对齐 ONNX] 2. 放大 ROI 区域，以包含更多面部上下文
-            val centerX = (mappedX1 + mappedX2) / 2f
-            val centerY = (mappedY1 + mappedY2) / 2f
-            val width = mappedX2 - mappedX1
-            val height = mappedY2 - mappedY1
-            val newWidth = width * ROI_EXPAND_RATIO
-            val newHeight = height * ROI_EXPAND_RATIO
+                mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+                mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+                mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+                mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
 
-            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
-            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
-            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
-            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+                val faceArea = (mappedX2 - mappedX1) * (mappedY2 - mappedY1)
+                val areaRatio = faceArea / imageArea
 
-            val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
+                // 过滤面积 < 3% 图片总面积的脸（过小/误检）
+                if (areaRatio >= 0.03f) {
+                    roiList.add(RectF(mappedX1, mappedY1, mappedX2, mappedY2))
+                } else {
+                    Logger.d(TAG, "Filtered small face: areaRatio=${String.format("%.2f%%", areaRatio * 100)}")
+                }
+            }
 
-            roi
+            // 按面积从大到小排序
+            roiList.sortByDescending { it.width() * it.height() }
+
+            Logger.d(TAG, "MnnRoiFaces: ${roiList.size} valid faces after filtering (min 3% area)")
+            roiList
         } catch (e: Exception) {
-            Logger.e(TAG, "MnnRoi detection failed", e)
-            null
+            Logger.e(TAG, "MnnRoiFaces detection failed", e)
+            emptyList()
         }
     }
 

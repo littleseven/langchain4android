@@ -176,6 +176,89 @@ Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDete
 #endif
 }
 
+JNIEXPORT jobjectArray JNICALL
+Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFaces(
+        JNIEnv *env,
+        jclass clazz,
+        jlong handle,
+        jobject imageData,      // DirectByteBuffer
+        jint width,
+        jint height,
+        jint channels,
+        jfloat confidenceThreshold,
+        jfloat nmsThreshold) {
+#if NCNN_AVAILABLE
+    auto *detector = reinterpret_cast<picme::NcnnFaceDetector *>(handle);
+    if (!detector) {
+        return nullptr;
+    }
+
+    unsigned char *data = static_cast<unsigned char *>(env->GetDirectBufferAddress(imageData));
+    if (!data) {
+        LOGE("nativeDetectRetinaFaces: GetDirectBufferAddress returned null");
+        return nullptr;
+    }
+
+    std::vector<picme::FaceBox> faces = detector->detectRetinaFace(
+            data, width, height, channels,
+            confidenceThreshold, nmsThreshold);
+
+    if (faces.empty()) {
+        return nullptr;
+    }
+
+    // 查找 FaceBox Kotlin 类（复用 MNN 的 FaceBox 类）
+    jclass faceBoxClass = env->FindClass("com/mamba/picme/beauty/internal/facedetect/mnn/FaceBox");
+    if (!faceBoxClass) {
+        LOGE("nativeDetectRetinaFaces: FaceBox class not found");
+        return nullptr;
+    }
+
+    jmethodID constructor = env->GetMethodID(faceBoxClass, "<init>",
+        "(FFFFF[F)V");
+    if (!constructor) {
+        LOGE("nativeDetectRetinaFaces: FaceBox constructor not found");
+        return nullptr;
+    }
+
+    jobjectArray result = env->NewObjectArray(static_cast<jsize>(faces.size()), faceBoxClass, nullptr);
+    if (!result) {
+        LOGE("nativeDetectRetinaFaces: failed to create object array");
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < faces.size(); i++) {
+        const picme::FaceBox &face = faces[i];
+        // 创建 landmarks FloatArray
+        jfloatArray landmarksArray = env->NewFloatArray(10);
+        if (landmarksArray) {
+            env->SetFloatArrayRegion(landmarksArray, 0, 10, face.landmarks);
+        }
+
+        jobject faceBox = env->NewObject(faceBoxClass, constructor,
+            face.x1, face.y1, face.x2, face.y2, face.confidence, landmarksArray);
+        env->SetObjectArrayElement(result, static_cast<jsize>(i), faceBox);
+        env->DeleteLocalRef(faceBox);
+        if (landmarksArray) {
+            env->DeleteLocalRef(landmarksArray);
+        }
+    }
+
+    return result;
+#else
+    (void)env;
+    (void)clazz;
+    (void)handle;
+    (void)imageData;
+    (void)width;
+    (void)height;
+    (void)channels;
+    (void)confidenceThreshold;
+    (void)nmsThreshold;
+    return nullptr;
+#endif
+}
+
 JNIEXPORT jboolean JNICALL
 Java_com_mamba_picme_beauty_internal_facedetect_ncnn_NcnnFaceDetector_nativeDetectRetinaFace(
         JNIEnv *env,

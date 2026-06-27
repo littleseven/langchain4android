@@ -135,6 +135,19 @@ class NcnnRoiDetector(
     }
 
     override fun detectRoi(bitmap: Bitmap): RectF? {
+        val faces = detectFaces(bitmap)
+        return faces.firstOrNull()
+    }
+
+    /**
+     * 多脸检测：返回所有有效人脸 ROI 列表
+     *
+     * 过滤策略：
+     * - 过滤掉面积 < 3% 图片总面积的脸（过小/误检）
+     * - 按面积从大到小排序
+     * - 返回所有有效脸，供上层判断合影/自拍
+     */
+    fun detectFaces(bitmap: Bitmap): List<RectF> {
         ensureInitialized()
 
         val totalStart = SystemClock.elapsedRealtime()
@@ -142,38 +155,40 @@ class NcnnRoiDetector(
 
         if (det == null) {
             Logger.w(TAG, "[Perf] NcnnRoiDetector not initialized. Reason: ${initFailureReason ?: "unknown"}. Will retry on next call.")
-            return null
+            return emptyList()
         }
 
         // [关键修复] OpenMP 线程亲和性初始化不是线程安全的，
         // 所有 NCNN 调用（包括 ROI 和 Landmark）必须串行化到同一线程
         return synchronized(NCNN_GLOBAL_LOCK) {
             try {
-                detectRoiLocked(bitmap, det, totalStart)
+                detectFacesLocked(bitmap, det, totalStart)
             } catch (e: Exception) {
                 Logger.e(TAG, "NcnnRoi detection failed", e)
-                null
+                emptyList()
             }
         }
     }
 
-    private fun detectRoiLocked(bitmap: Bitmap, det: NcnnFaceDetector, totalStart: Long): RectF? {
+    private fun detectFacesLocked(bitmap: Bitmap, det: NcnnFaceDetector, totalStart: Long): List<RectF> {
         val scaleStart = SystemClock.elapsedRealtime()
         val scaledBitmap = getScaledBitmap(bitmap, INPUT_SIZE)
         val scaleElapsed = SystemClock.elapsedRealtime() - scaleStart
 
-        Logger.d(TAG, "[Perf] NcnnRoi START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
+        Logger.d(TAG, "[Perf] NcnnRoiFaces START: engine=$ENGINE_NAME, gpu=$isGpuEnabled, original=${bitmap.width}x${bitmap.height}, scaled=${scaledBitmap.width}x${scaledBitmap.height}")
 
         val inferStart = SystemClock.elapsedRealtime()
-        val result = det.detectRetinaFace(scaledBitmap, CONFIDENCE_THRESHOLD, 0.3f)
+        val faces = det.detectRetinaFaces(scaledBitmap, CONFIDENCE_THRESHOLD, 0.3f)
         val inferElapsed = SystemClock.elapsedRealtime() - inferStart
 
         val totalElapsed = SystemClock.elapsedRealtime() - totalStart
 
-        if (result == null || result.size < 5) {
-            Logger.d(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), no face")
-            return null
+        if (faces.isEmpty()) {
+            Logger.d(TAG, "[Perf] NcnnRoiFaces DONE (no face): engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
+            return emptyList()
         }
+
+        Logger.i(TAG, "[Perf] NcnnRoiFaces DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms), rawFaces=${faces.size}")
 
         val origW = bitmap.width.toFloat()
         val origH = bitmap.height.toFloat()
@@ -182,32 +197,45 @@ class NcnnRoiDetector(
         val scaledH = (origH * scale).toInt()
         val padLeft = (INPUT_SIZE - scaledW) / 2f
         val padTop = (INPUT_SIZE - scaledH) / 2f
+        val imageArea = origW * origH
 
-        Logger.d(TAG, "[Diag] Letterbox params: scale=$scale, scaledSize=${scaledW}x${scaledH}, pad=($padLeft,$padTop)")
-        Logger.d(TAG, "[Diag] Raw NCNN output: (${result[0]}, ${result[1]}, ${result[2]}, ${result[3]}), score=${result[4]}")
+        val roiList = mutableListOf<RectF>()
+        for (face in faces) {
+            // 减去 letterbox padding，再除以缩放比例，映射回原图
+            var mappedX1 = ((face.x1 - padLeft) / scale)
+            var mappedY1 = ((face.y1 - padTop) / scale)
+            var mappedX2 = ((face.x2 - padLeft) / scale)
+            var mappedY2 = ((face.y2 - padTop) / scale)
 
-        var mappedX1 = ((result[0] - padLeft) / scale)
-        var mappedY1 = ((result[1] - padTop) / scale)
-        var mappedX2 = ((result[2] - padLeft) / scale)
-        var mappedY2 = ((result[3] - padTop) / scale)
+            // 放大 ROI 区域，以包含更多面部上下文
+            val centerX = (mappedX1 + mappedX2) / 2f
+            val centerY = (mappedY1 + mappedY2) / 2f
+            val faceW = mappedX2 - mappedX1
+            val faceH = mappedY2 - mappedY1
+            val newWidth = faceW * ROI_EXPAND_RATIO
+            val newHeight = faceH * ROI_EXPAND_RATIO
 
-        val centerX = (mappedX1 + mappedX2) / 2f
-        val centerY = (mappedY1 + mappedY2) / 2f
-        val width = mappedX2 - mappedX1
-        val height = mappedY2 - mappedY1
-        val newWidth = width * ROI_EXPAND_RATIO
-        val newHeight = height * ROI_EXPAND_RATIO
+            mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
+            mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
+            mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
+            mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
 
-        mappedX1 = (centerX - newWidth / 2f).coerceIn(0f, origW)
-        mappedY1 = (centerY - newHeight / 2f).coerceIn(0f, origH)
-        mappedX2 = (centerX + newWidth / 2f).coerceIn(0f, origW)
-        mappedY2 = (centerY + newHeight / 2f).coerceIn(0f, origH)
+            val faceArea = (mappedX2 - mappedX1) * (mappedY2 - mappedY1)
+            val areaRatio = faceArea / imageArea
 
-        val roi = RectF(mappedX1, mappedY1, mappedX2, mappedY2)
+            // 过滤面积 < 3% 图片总面积的脸（过小/误检）
+            if (areaRatio >= 0.03f) {
+                roiList.add(RectF(mappedX1, mappedY1, mappedX2, mappedY2))
+            } else {
+                Logger.d(TAG, "Filtered small face: areaRatio=${String.format("%.2f%%", areaRatio * 100)}")
+            }
+        }
 
-        Logger.d(TAG, "[Diag] ROI coords: (${roi.left.toInt()},${roi.top.toInt()},${roi.right.toInt()},${roi.bottom.toInt()}), size=${(roi.right-roi.left).toInt()}x${(roi.bottom-roi.top).toInt()}")
-        Logger.i(TAG, "[Perf] NcnnRoi DONE: engine=$ENGINE_NAME, gpu=$isGpuEnabled, total=${totalElapsed}ms (scale=${scaleElapsed}ms, infer=${inferElapsed}ms)")
-        return roi
+        // 按面积从大到小排序
+        roiList.sortByDescending { it.width() * it.height() }
+
+        Logger.d(TAG, "NcnnRoiFaces: ${roiList.size} valid faces after filtering (min 3% area)")
+        return roiList
     }
 
     /**

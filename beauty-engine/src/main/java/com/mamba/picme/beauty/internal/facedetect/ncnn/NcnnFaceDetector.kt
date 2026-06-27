@@ -2,6 +2,7 @@ package com.mamba.picme.beauty.internal.facedetect.ncnn
 
 import android.graphics.Bitmap
 import com.mamba.picme.beauty.api.Logger
+import com.mamba.picme.beauty.internal.facedetect.mnn.FaceBox
 import java.nio.ByteBuffer
 
 /**
@@ -147,7 +148,18 @@ class NcnnFaceDetector private constructor(
             nmsThreshold: Float,
             outResult: FloatArray
         ): Boolean
-
+        
+        @JvmStatic
+        private external fun nativeDetectRetinaFaces(
+            handle: Long,
+            imageData: ByteBuffer,
+            width: Int,
+            height: Int,
+            channels: Int,
+            confidenceThreshold: Float,
+            nmsThreshold: Float
+        ): Array<FaceBox>
+        
         @JvmStatic
         private external fun nativeDetectRetinaFaceFromNv21(
             handle: Long,
@@ -198,9 +210,18 @@ class NcnnFaceDetector private constructor(
      * @return [x1, y1, x2, y2, score, lx1, ly1, lx2, ly2, lx3, ly3, lx4, ly4, lx5, ly5]
      */
     fun detectRetinaFace(bitmap: Bitmap, confidenceThreshold: Float = 0.5f, nmsThreshold: Float = 0.4f): FloatArray? {
+        val faces = detectRetinaFaces(bitmap, confidenceThreshold, nmsThreshold)
+        return faces.firstOrNull()?.toFloatArray()
+    }
+
+    /**
+     * RetinaFace 多脸检测
+     * @return 所有人脸 FaceBox 列表，按置信度从高到低排序
+     */
+    fun detectRetinaFaces(bitmap: Bitmap, confidenceThreshold: Float = 0.5f, nmsThreshold: Float = 0.4f): List<FaceBox> {
         if (nativeHandle == 0L) {
             Logger.w(TAG, "Detector not initialized")
-            return null
+            return emptyList()
         }
 
         val width = bitmap.width
@@ -217,9 +238,7 @@ class NcnnFaceDetector private constructor(
             rgbBuffer.put(i * 3 + 2, (pixel and 0xFF).toByte())
         }
 
-        val outResult = getRetinaResult()
-        val detected = nativeDetectRetinaFace(nativeHandle, rgbBuffer, width, height, 3, confidenceThreshold, nmsThreshold, outResult)
-        return if (detected) outResult.copyOf() else null
+        return nativeDetectRetinaFaces(nativeHandle, rgbBuffer, width, height, 3, confidenceThreshold, nmsThreshold).toList()
     }
 
     /**
